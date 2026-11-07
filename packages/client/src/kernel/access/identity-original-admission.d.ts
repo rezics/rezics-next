@@ -5,7 +5,7 @@ import type { IdentitySourceConsumerMaintenanceContext } from '../semantic/acces
 import type { WorkClient } from '../work/client.ts';
 import { NativeCollectionWork } from '../library/collection-source-work.ts';
 export { IDENTITY_ORIGINAL_DEADLINE_MS, ORIGINAL_WORK_AXES as ORIGINAL_AXES } from './contract/index.ts';
-export { ADDITIONAL_ORIGINAL_TRANSFER_CONTROL, HISTORY_ORIGINAL_CONTROL, HISTORY_ORIGINAL_LOCAL_ALLOWANCE, HISTORY_ORIGINAL_SELECTION, HISTORY_ORIGINAL_SETTLEMENT, HISTORY_ORIGINAL_TRANSFER_CONTROL, HISTORY_ORIGINAL_VALIDATION, HISTORY_SELECTED_LOCAL_CONTROL, ORIGINAL_NATIVE_CONTROL, originalControlWork, originalWorkVector, sumOriginalControl, } from './core/index.ts';
+export { ADDITIONAL_ORIGINAL_TRANSFER_CONTROL, HISTORY_ORIGINAL_CONTROL, HISTORY_ORIGINAL_LOCAL_ALLOWANCE, HISTORY_ORIGINAL_SELECTION, HISTORY_ORIGINAL_SETTLEMENT, HISTORY_ORIGINAL_TRANSFER_CONTROL, HISTORY_ORIGINAL_VALIDATION, HISTORY_SELECTED_LOCAL_CONTROL, ORIGINAL_NATIVE_CONTROL, originalControlWork, originalWorkVector, scaleOriginalControl, sumOriginalControl, } from './core/index.ts';
 export declare const IDENTITY_ORIGINAL_SOURCE_TRANSFER_MISSING = "identity-history-original-source-transfer-unavailable";
 export declare class IdentityOriginalUnavailable extends Error {
     readonly gap: string;
@@ -64,7 +64,8 @@ export declare function consumeSelectedHistoryOriginal(deps: HistoryOriginalDepe
  * actual Source and Library modules before admission. Public call sites supply no price.
  * The source declaration includes all reached History, inventory, receiving, H/G/A,
  * outbox/released/current/final validators, settings, failure and rollback invocations.
- * Library's declaration includes all actual page/verifier/planner/seal/fence bodies. */
+ * Library's declaration includes all actual page/verifier/planner/seal/fence bodies.
+ * Accounts' original-home reader is admitted separately at original/prepare/checkpoint/finish. */
 export type IdentityHistoryOriginalBodyDeclaration = Readonly<{
     work: WorkDimensions;
     engineRequests: 0;

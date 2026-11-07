@@ -19,6 +19,8 @@ import { createLifecycleInternals } from '../../src/access/lifecycle.ts';
 import { createOperatorCommands } from '../../src/access/operator.ts';
 import { createRegistrationProofBindings } from '../../src/access/registration-proof.ts';
 import { newId, routeOf } from '../../src/route/route.ts';
+import { configureTestReceiptKeys } from '../support/receipt-keys.ts';
+import { workerTestEnv } from '../support/worker-env.ts';
 
 const issuer = 'https://operator.auth.test';
 const password = 'correct horse battery staple';
@@ -288,6 +290,8 @@ let subject: string;
 let headers: Headers;
 beforeAll(async () => {
   db = await openGrowthDatabase();
+  process.env.KERNEL_RECEIPT_KEYS ??= workerTestEnv().KERNEL_RECEIPT_KEYS!;
+  configureTestReceiptKeys(db.pool);
   db.pool.options.max = 1;
   f = await fixture(db.pool, db.openPool({ max: 2 }), db.url);
   human = await f.person();

@@ -1,10 +1,15 @@
 import { spawn, spawnSync } from 'node:child_process';
+import { createRequire } from 'node:module';
 import { appendFileSync, mkdirSync, mkdtempSync, readFileSync, rmSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { migrate as migrateKernel } from '../../kernel/scripts/database.ts';
 
 const directory = resolve(dirname(fileURLToPath(import.meta.url)), '..');
+const requireFromAuth = createRequire(import.meta.url);
+/** Loaded only when a kernel template is migrated. Dump CLI copies this file away from the kernel tree. */
+function migrateKernel(url: string): void {
+  (requireFromAuth(resolve(directory, '../kernel/scripts/database.ts')) as { migrate(url: string): void }).migrate(url);
+}
 export const POSTGRES_IMAGE = 'postgres:19rc1@sha256:b3cb7405059fd06f9ebae4aad4780b3788dfdd2acef1ac248ad9d56ced8abb06';
 
 export const TEMPLATE_DATABASE = 'rezics_auth_test';

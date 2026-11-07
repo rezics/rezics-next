@@ -65,8 +65,8 @@ export type CredentialOperation = Pick<
   'subjectAccountId' | 'purpose' | 'operationKey' | 'effectReference' | 'effectDigest'
 > & { kind: 'credential'; subjectEpoch: number; authorization: string };
 type TransferOperation = Extract<ContractAccountOperation, { kind: 'transfer' }> & { acceptance?: string };
-/** The contract's revoke carries no approval reference; this adapter binds one and denies a request without. */
-type RevokeOperation = { kind: 'revoke'; accountId: string; authorization?: string };
+/** Native hosts bind a session revocation to an approval; a callback-only historical host runs it without one. */
+type RevokeOperation = { kind: 'revoke'; accountId: string; authorization?: string; operationKey?: string };
 type TransferAcceptanceOperation = {
   kind: 'transfer-acceptance';
   previous: WorkflowResponsibility;
@@ -74,13 +74,14 @@ type TransferAcceptanceOperation = {
   operatorAccountId: string;
   sourceOperationKey: string;
   authorization: string;
+  operationKey?: string;
 };
-type AccountOperation = (
+/** Same host operation type as Auth workflows: contract variants already carry optional operationKey. */
+type AccountOperation =
   | Exclude<ContractAccountOperation, { kind: 'transfer' | 'revoke' }>
   | RevokeOperation
   | TransferOperation
-  | TransferAcceptanceOperation
-) & { operationKey?: string };
+  | TransferAcceptanceOperation;
 type NativeOperation = AccountOperation | CredentialOperation;
 export type WorkflowApprovalRequest = { operationKey: string; operation: AccountOperation };
 export type WorkflowApprovalBinding = Readonly<{

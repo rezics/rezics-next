@@ -42,15 +42,15 @@ export type TransferAcceptanceOperation = {
   operatorAccountId: string;
   sourceOperationKey: string;
   authorization: string;
+  operationKey?: string;
 };
 /** Native hosts bind a session revocation to an approval; a callback-only historical host runs it without one. */
-export type RevokeOperation = { kind: 'revoke'; accountId: string; authorization?: string };
-export type AccountOperation = (
+export type RevokeOperation = { kind: 'revoke'; accountId: string; authorization?: string; operationKey?: string };
+export type AccountOperation =
   | Exclude<ContractAccountOperation, { kind: 'transfer' | 'revoke' }>
   | RevokeOperation
   | TransferOperation
-  | TransferAcceptanceOperation
-) & { operationKey?: string };
+  | TransferAcceptanceOperation;
 type ExecutableAccountOperation = Exclude<AccountOperation, { kind: 'transfer-acceptance' }>;
 import { createCipheriv, createDecipheriv, createHash, createHmac, hkdfSync, randomBytes } from 'node:crypto';
 import { DBOS, DBOSClient } from '@dbos-inc/dbos-sdk';
@@ -58,6 +58,7 @@ import { authWorkflowLogger } from './diagnostics.ts';
 import {
   installCopyRecorder,
   createCopyWriter,
+  copyTransaction,
   completeCopy,
   finishCopyResult,
   type CopyRole,
@@ -156,8 +157,10 @@ function isWorkflowBoundaryStatus(error: unknown): error is WorkflowBoundaryStat
   return isRefusal(error) || (typeof error === 'object' && error !== null && 'status' in error && error.status === 503);
 }
 let owner: object | undefined;
-function denied(): never {
-  throw new Error('Account workflow denied');
+function denied(cause?: unknown): never {
+  throw cause === undefined
+    ? new Error('Account workflow denied')
+    : Object.assign(new Error('Account workflow denied'), { cause });
 }
 function refused(): never {
   throw Object.assign(new Error('Account workflow denied'), { status: 403 as const });
@@ -286,6 +289,7 @@ export function createAccountWorkflows<Context = WorkflowContext>(options: Accou
     return requestPartyScope(row);
   }
   let started = false;
+  let launched = false;
   let starting: Promise<void> | undefined;
   let closing: Promise<void> | undefined;
   let closed = false;
@@ -506,9 +510,20 @@ export function createAccountWorkflows<Context = WorkflowContext>(options: Accou
     const context = await approved(request);
     return access.stableCommandKey?.(context, phase) ?? commandKey(phase);
   }
+  // The first actual failure of each workflow this process ran. A durable step journals only the generic step message,
+  // so registration reads attach this internal cause instead. Bounded; never persisted or exposed. Forked isolated
+  // Auth helpers report original Access errors on the child stream independently and do not replace this map.
+  const firstFailures = new Map<string, unknown>();
+  const retainFirstFailure = (id: string, error: unknown) => {
+    if (firstFailures.has(id)) return;
+    if (firstFailures.size >= 64) firstFailures.delete(firstFailures.keys().next().value!);
+    firstFailures.set(id, error);
+  };
   const step = <A extends unknown[], R>(name: string, fn: (...args: A) => Promise<R>) => {
     const native = DBOS.registerStep(
       async (...args: A) => {
+        // Capture before the step body: a throw can leave the SDK without workflowID in the handler.
+        const id = DBOS.workflowID;
         try {
           return await fn(...args);
         } catch (error) {
@@ -516,6 +531,7 @@ export function createAccountWorkflows<Context = WorkflowContext>(options: Accou
           // Successful legacy results remain unchanged; legacy untyped errors
           // stay errors and are never inferred to be authorization refusals.
           if (isRefusal(error)) return { authStepOutcome: 'refused-v1', status: error.status } satisfies StepRefusal;
+          if (id !== undefined) retainFirstFailure(id, error);
           const failure = new Error(stepFailureMessage(name));
           // Persist only unavailable status, never the command's
           // secret input, permission context or original error in a durable step.
@@ -740,6 +756,14 @@ export function createAccountWorkflows<Context = WorkflowContext>(options: Accou
         [id, now()],
       );
     });
+    // startAccountErasure admits pending-registration cleanup only after the stage is terminal and the
+    // handle release is recorded. Erasing first made later registration failures report erase-auth-owner 503.
+    const finishExpiredRegistration = async (claim: Reservation, id: string, accountId: string) => {
+      await expire(claim);
+      await release(claim);
+      await expired(id);
+      await erase(accountId);
+    };
     const executeRegistration = async (input: RegistrationInput) => {
       const row = await read(input.registrationId);
       const reserved = await reservePublicRegistration(row);
@@ -761,10 +785,7 @@ export function createAccountWorkflows<Context = WorkflowContext>(options: Accou
       if (first !== 'expire' && !(await isExpired(input.registrationId))) {
         const installed = await provision(input.registrationId, undefined, true);
         if ('conflict' in installed) {
-          await expire(claim);
-          await release(claim);
-          await expired(input.registrationId);
-          await erase(row.account_id);
+          await finishExpiredRegistration(claim, input.registrationId, row.account_id);
           const deniedEvent = { error: 'registration_denied' as const };
           await DBOS.setEvent('credential', deniedEvent);
           return { accountId: row.account_id, error: deniedEvent.error };
@@ -786,10 +807,7 @@ export function createAccountWorkflows<Context = WorkflowContext>(options: Accou
           }
         }
       }
-      await expire(claim);
-      await release(claim);
-      await expired(input.registrationId);
-      await erase(row.account_id);
+      await finishExpiredRegistration(claim, input.registrationId, row.account_id);
       return { accountId: row.account_id, expired: true as const };
     };
     const registrationResult = step('native-registration-result', (id: string, result: unknown) =>
@@ -1330,10 +1348,7 @@ export function createAccountWorkflows<Context = WorkflowContext>(options: Accou
             }
           }
         }
-        await expire(claim);
-        await release(claim);
-        await expired(input.registrationId);
-        await erase(row.account_id);
+        await finishExpiredRegistration(claim, input.registrationId, row.account_id);
         await retireOperator(held);
         await releaseOperator(held);
         denied();
@@ -1393,6 +1408,21 @@ export function createAccountWorkflows<Context = WorkflowContext>(options: Accou
     );
     registered = true;
   }
+  // Why a registration workflow stopped before its event. A durable failure keeps its public status and gains this
+  // process's first actual failure as its cause; a workflow that stalled without failing keeps its stated status.
+  async function stoppedRegistration(id: string): Promise<unknown> {
+    const cause = firstFailures.get(id);
+    const withCause = (error: unknown) => (cause === undefined ? error : Object.assign(error as object, { cause }));
+    const status = await DBOS.getWorkflowStatus(id);
+    if (status?.status !== 'ERROR')
+      return withCause(new Error(`Auth registration ${id} has no pending event (${status?.status ?? 'missing'})`));
+    try {
+      await DBOS.retrieveWorkflow(id).getResult();
+    } catch (durable) {
+      return withCause(durable);
+    }
+    return withCause(new Error(`Auth registration ${id} has no pending event (ERROR)`));
+  }
   async function begin(input: { key: string; handle: string }, credential?: { email: string; password: string }) {
     active();
     const row = await createStage(input, credential);
@@ -1406,13 +1436,9 @@ export function createAccountWorkflows<Context = WorkflowContext>(options: Accou
     );
     const id = workflowId(`registration:${row.request_key}`);
     const result = await DBOS.getEvent<RegistrationStartEvent>(id, 'pending', 30);
-    if (result === null) {
-      // A failed native reservation must disclose its actual producer failure,
-      // rather than losing it behind the missing pending-event assertion.
-      const status = await DBOS.getWorkflowStatus(id);
-      if (status?.status === 'ERROR') await DBOS.retrieveWorkflow(id).getResult();
-      throw new Error(`Auth registration ${id} has no pending event (${status?.status ?? 'missing'})`);
-    }
+    // A failed native reservation must disclose its actual producer failure, rather than losing it behind the missing
+    // pending-event assertion.
+    if (result === null) throw await stoppedRegistration(id);
     if ('error' in result) throw new RegistrationFailure(result.error);
     return result;
   }
@@ -1450,7 +1476,8 @@ export function createAccountWorkflows<Context = WorkflowContext>(options: Accou
     if (!changed.rowCount) throw new RegistrationFailure('registration_denied');
     const ref = reference(row);
     await writer().send(ref.workflowId, 'install', 'credential', `${ref.workflowId}:install`);
-    const result = required(await DBOS.getEvent<RegistrationCredentialEvent>(ref.workflowId, 'credential', 30));
+    const result = await DBOS.getEvent<RegistrationCredentialEvent>(ref.workflowId, 'credential', 30);
+    if (result == null) throw await stoppedRegistration(ref.workflowId);
     if ('error' in result) throw new RegistrationFailure(result.error);
     return result;
   }
@@ -1631,6 +1658,8 @@ export function createAccountWorkflows<Context = WorkflowContext>(options: Accou
           copyClient = undefined;
           copyWriter = undefined;
           if (owner !== token) return;
+          if (!launched) return;
+          launched = false;
           await DBOS.shutdown({ deregister: true });
         }
       } finally {
@@ -1669,6 +1698,7 @@ export function createAccountWorkflows<Context = WorkflowContext>(options: Accou
         logger: authWorkflowLogger,
       });
       await DBOS.launch();
+      launched = true;
       if (closed) throw new Error('Auth workflow host is stopped');
       if (sameDatabase) {
         await installCopyRecorder(database);
@@ -1690,7 +1720,10 @@ export function createAccountWorkflows<Context = WorkflowContext>(options: Accou
             name: Parameters<ReturnType<typeof createCopyWriter>['enqueue']>[0],
             id: string,
             input: unknown,
+            roles: Parameters<ReturnType<typeof createCopyWriter>['enqueue']>[3],
           ) {
+            // Isolated stores still persist the Auth workflow request; copy custody stays native-only.
+            if (typeof roles === 'function') await copyTransaction(database, (connection) => roles(connection));
             const definition =
               name === 'accounts.registration'
                 ? registration
