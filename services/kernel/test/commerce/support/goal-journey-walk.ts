@@ -225,7 +225,7 @@ export type WalkIdentities = {
   entitlementId?: string;
   editionId?: string;
   editionSubjectId?: string;
-  editionSha256?: string;
+  editionSha256?: string | undefined;
   labelId?: string;
   labelRevision?: number;
   sessionId?: string;
@@ -239,13 +239,16 @@ export type WalkIdentities = {
   pinCollectionId?: string;
 };
 
+export type WalkCallOptions = {
+  bearer?: string | undefined;
+  body?: unknown;
+  query?: Record<string, string>;
+  headers?: Record<string, string>;
+};
+
 export type WalkKernel = {
   origin: string;
-  call(
-    method: string,
-    path: string,
-    options?: { bearer?: string; body?: unknown; query?: Record<string, string>; headers?: Record<string, string> },
-  ): Promise<KernelCall>;
+  call(method: string, path: string, options?: WalkCallOptions): Promise<KernelCall>;
 };
 
 export type JourneyContext = {
@@ -357,7 +360,7 @@ class Recorder {
     method: string,
     path: string,
     allowed: readonly number[],
-    options: { body?: unknown; query?: Record<string, string>; bearer?: string; headers?: Record<string, string> } = {},
+    options: WalkCallOptions = {},
   ): Promise<KernelCall> {
     const call = await this.kernel.call(method, path, { ...options, bearer: options.bearer ?? this.bearer });
     const ok = allowed.includes(call.status);
@@ -385,7 +388,7 @@ class Recorder {
     path: string,
     allowed: readonly number[],
     field: string,
-    options: { body?: unknown; query?: Record<string, string>; bearer?: string; headers?: Record<string, string> } = {},
+    options: WalkCallOptions = {},
   ): Promise<{ call: KernelCall; id: string }> {
     const call = await this.expect(name, method, path, allowed, options);
     const id = requireId(nested(call.value, field), `${name} ${field}`);
@@ -531,10 +534,18 @@ const offerManagement: Runner = async (ctx) => {
 const purchase: Runner = async (ctx) => {
   const rec = new Recorder(ctx.kernel, ctx.owner.bearer);
   if (!ctx.identities.offerId || ctx.identities.offerRevision === undefined)
-    throw new JourneyFailure('POST /v1/orders', 'live offer from Offer management', 'offer identity missing', rec.steps);
+    throw new JourneyFailure(
+      'POST /v1/orders',
+      'live offer from Offer management',
+      'offer identity missing',
+      rec.steps,
+    );
   const subject = ctx.identities.editionSubjectId;
-  if (subject) await rec.expect('subject offers', 'GET', `/v1/subjects/${subject}/offers`, [200], { bearer: undefined });
-  await rec.expect('public offer page data', 'GET', `/v1/offers/${ctx.identities.offerId}`, [200], { bearer: undefined });
+  if (subject)
+    await rec.expect('subject offers', 'GET', `/v1/subjects/${subject}/offers`, [200], { bearer: undefined });
+  await rec.expect('public offer page data', 'GET', `/v1/offers/${ctx.identities.offerId}`, [200], {
+    bearer: undefined,
+  });
   const buyer = ctx.other.bearer ? ctx.other : ctx.owner;
   const order = await rec.expect('create order', 'POST', '/v1/orders', [201], {
     bearer: buyer.bearer,
@@ -590,7 +601,9 @@ const paymentRepair: Runner = async (ctx) => {
   if (!ctx.identities.orderId)
     throw new JourneyFailure('POST /v1/orders/:id:reconcile', 'order from Purchase', 'order identity missing');
   await rec.expect('order before repair', 'GET', `/v1/orders/${ctx.identities.orderId}`, [200]);
-  await rec.expect('reconcile', 'POST', `/v1/orders/${ctx.identities.orderId}:reconcile`, [200, 403, 409], { body: {} });
+  await rec.expect('reconcile', 'POST', `/v1/orders/${ctx.identities.orderId}:reconcile`, [200, 403, 409], {
+    body: {},
+  });
   return { persona: 'repair', steps: rec.steps, pages: [`/orders/${ctx.identities.orderId}`] };
 };
 
@@ -621,9 +634,12 @@ const entryFacts: Runner = async (ctx) => {
   });
   const entry = asRecord(written.value.libraryEntry);
   const revision = entry.revision;
-  const personal = await rec.expect('personal facts', 'GET', `/v1/libraryEntries/${ctx.identities.workId}/personal`, [
-    200,
-  ]);
+  const personal = await rec.expect(
+    'personal facts',
+    'GET',
+    `/v1/libraryEntries/${ctx.identities.workId}/personal`,
+    [200],
+  );
   const personalRevision = asRecord(personal.value.personalEntry).revision;
   await rec.expect('set note and priority', 'PUT', `/v1/libraryEntries/${ctx.identities.workId}/annotations`, [200], {
     body: {
@@ -632,12 +648,7 @@ const entryFacts: Runner = async (ctx) => {
       priority: { op: 'set', value: 2 },
     },
   });
-  const afterNote = await rec.expect(
-    'read note',
-    'GET',
-    `/v1/libraryEntries/${ctx.identities.workId}/personal`,
-    [200],
-  );
+  const afterNote = await rec.expect('read note', 'GET', `/v1/libraryEntries/${ctx.identities.workId}/personal`, [200]);
   await rec.expect('clear note', 'PUT', `/v1/libraryEntries/${ctx.identities.workId}/annotations`, [200], {
     body: {
       revision: asRecord(afterNote.value.personalEntry).revision,
@@ -651,7 +662,10 @@ const entryFacts: Runner = async (ctx) => {
     `/v1/libraryEntries/${ctx.identities.workId}`,
     [200],
   );
-  if (asRecord(remaining.value.libraryEntry).state !== 'reading' && asRecord(remaining.value.libraryEntry).state !== entry.state)
+  if (
+    asRecord(remaining.value.libraryEntry).state !== 'reading' &&
+    asRecord(remaining.value.libraryEntry).state !== entry.state
+  )
     throw new JourneyFailure(
       `GET /v1/libraryEntries/${ctx.identities.workId}`,
       'state remains after note clear',
@@ -660,9 +674,15 @@ const entryFacts: Runner = async (ctx) => {
   await rec.expect('library list', 'GET', '/v1/libraryEntries', [200]);
   await rec.expect('anonymous private library', 'GET', '/v1/libraryEntries', [401, 403], { bearer: undefined });
   if (ctx.other.bearer)
-    await rec.expect('other cannot read owner entry', 'GET', `/v1/libraryEntries/${ctx.identities.workId}`, [403, 404], {
-      bearer: ctx.other.bearer,
-    });
+    await rec.expect(
+      'other cannot read owner entry',
+      'GET',
+      `/v1/libraryEntries/${ctx.identities.workId}`,
+      [403, 404],
+      {
+        bearer: ctx.other.bearer,
+      },
+    );
   void revision;
   return { persona: 'owner', steps: rec.steps, pages: [`/subjects/${ctx.identities.workId}`, '/library'] };
 };
@@ -720,7 +740,11 @@ const progress: Runner = async (ctx) => {
 const sessions: Runner = async (ctx) => {
   const rec = new Recorder(ctx.kernel, ctx.owner.bearer);
   if (!ctx.identities.sessionId)
-    throw new JourneyFailure('POST /v1/progressSessions/:id:record', 'session from Progress', 'session identity missing');
+    throw new JourneyFailure(
+      'POST /v1/progressSessions/:id:record',
+      'session from Progress',
+      'session identity missing',
+    );
   const current = await rec.expect('current session', 'GET', `/v1/progressSessions/${ctx.identities.sessionId}`, [200]);
   const revision = asRecord(current.value.progressSession).revision as number;
   const recorded = await rec.expect(
@@ -955,12 +979,7 @@ const following: Runner = async (ctx) => {
 const followerCounts: Runner = async (ctx) => {
   const rec = new Recorder(ctx.kernel, ctx.owner.bearer);
   await rec.expect('outgoing counts', 'GET', '/v1/followCounts/outgoing', [200]);
-  await rec.expect(
-    'subject counts',
-    'GET',
-    `/v1/followCounts/subject/${ctx.identities.workId}`,
-    [200, 403, 404],
-  );
+  await rec.expect('subject counts', 'GET', `/v1/followCounts/subject/${ctx.identities.workId}`, [200, 403, 404]);
   await rec.expect('anonymous counts', 'GET', '/v1/followCounts/outgoing', [401, 403], { bearer: undefined });
   if (ctx.other.bearer)
     await rec.expect('other outgoing counts', 'GET', '/v1/followCounts/outgoing', [200], { bearer: ctx.other.bearer });

@@ -1,5 +1,10 @@
 import { expect, test } from 'bun:test';
-import { FIRST_PUBLIC_JOURNEYS, publicFields, summarizeWalk, type JourneyWalkRow } from './support/goal-journey-walk.ts';
+import {
+  FIRST_PUBLIC_JOURNEYS,
+  publicFields,
+  summarizeWalk,
+  type JourneyWalkRow,
+} from './support/goal-journey-walk.ts';
 
 test('walk evidence keeps all twenty-six first-public rows', () => {
   const rows: JourneyWalkRow[] = FIRST_PUBLIC_JOURNEYS.map((journey) => ({
