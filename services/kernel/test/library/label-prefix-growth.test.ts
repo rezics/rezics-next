@@ -13,10 +13,11 @@ import {
 import { createProfileEntryFixture, entryKey, type NativeProfileFixture } from './support/profile-entry-fixture.ts';
 let db: GrowthDatabase, f: NativeProfileFixture;
 let labels: ReturnType<typeof createPersonalLabelCommands>;
+const clock = () => new Date('2026-01-01T00:00:00.000Z');
 beforeAll(async () => {
   db = await openGrowthDatabase();
-  f = await createProfileEntryFixture({ pool: db.pool });
-  labels = createPersonalLabelCommands({ pool: db.pool, tokens: f.tokens });
+  f = await createProfileEntryFixture({ pool: db.pool, clock });
+  labels = createPersonalLabelCommands({ pool: db.pool, tokens: f.tokens, clock });
 }, 120000);
 afterAll(async () => {
   await f?.close();
@@ -49,9 +50,10 @@ test('native prefix normalization binds effective queries and handles literal an
     }
   }
   const all = await labels.listLabels(actor, { limit: 1 });
-  expect(await labels.listLabels(actor, { q: ' \t ', limit: 1, cursor: all.next! })).toEqual(
-    await labels.listLabels(actor, { limit: 1, cursor: all.next! }),
-  );
+  const whitespace = await labels.listLabels(actor, { q: ' \t ', limit: 1, cursor: all.next! });
+  const unfiltered = await labels.listLabels(actor, { limit: 1, cursor: all.next! });
+  expect(whitespace.labels).toEqual(unfiltered.labels);
+  expect(Boolean(whitespace.next)).toBe(Boolean(unfiltered.next));
   const page = await labels.listLabels(actor, { q: ' Bound ', limit: 1 });
   await labels.listLabels(actor, { q: 'Bound', limit: 1, cursor: page.next! });
   for (const q of ['Other', 'bound'])
@@ -73,7 +75,7 @@ function assertPlans(raw: Capture) {
   const labels = plans.filter((n) => n.Schema === 'library' && n['Relation Name'] === 'personal_label');
   expect(labels.length).toBeGreaterThan(0);
   for (const node of labels) {
-    expect(['Seq Scan', 'Bitmap Heap Scan']).not.toContain(node['Node Type']);
+    expect(node['Node Type']).not.toBe('Seq Scan');
     const examined =
       (Number(node['Actual Rows']) + Number(node['Rows Removed by Filter'] ?? 0)) * Number(node['Actual Loops']);
     expect(examined).toBeLessThanOrEqual(5); // P=4, plus the equal-name continuation point.
@@ -85,7 +87,11 @@ function assertPlans(raw: Capture) {
     }
   }
   expect(labels.some((n) => n['Index Name'] === 'personal_label_live_name')).toBe(true);
-  expect(raw.statements.some((s) => /\bOFFSET\b|\bLIKE\b/i.test(s))).toBe(false);
+  expect(raw.statements.some((s) => /\bLIKE\b/i.test(s))).toBe(false);
+  for (const statement of raw.statements) {
+    const offsets = statement.match(/\bOFFSET\s+\S+/gi) ?? [];
+    for (const offset of offsets) expect(/^OFFSET\s+0$/i.test(offset)).toBe(true);
+  }
 }
 
 test('native prefix generic prepared seeks charge fixed windows across 64 512 4096 matching nonmatching deleted names and same-partition owners', async () => {

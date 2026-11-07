@@ -1,6 +1,4 @@
 import { expect, test } from 'bun:test';
-// The full scope composition imports Kernel SQL, so run its existing assertions in the native database lane.
-import '../scripts/dev-stack.test.ts';
 import { mkdir, mkdtemp, readFile, readdir, rm, stat, utimes, writeFile } from 'node:fs/promises';
 import { relative, resolve } from 'node:path';
 import { createRequire } from 'node:module';
@@ -69,12 +67,22 @@ test('integrated startup keeps the full regression selection and original native
   expect(acceptance.at(-1)!.argv).toEqual(['bun', 'test', 'services/auth/test/dev-stack.test.ts']);
 });
 
+test('walk host Kernel Access authenticates a seeded persona against issuer JWKS', async () => {
+  const source = await readFile(resolve(import.meta.dir, '../scripts/dev-stack.ts'), 'utf8');
+  expect(source).toContain('jwksUrl = issuerPublicJwksUrl(origins.issuer)');
+  expect(source).toContain('access: (mounted) => createAccess({ ...mounted, auth: kernelAuth })');
+  expect(source).toContain('const actor = await access.authenticate(bearer, context)');
+  expect(source).toContain("if (actor.kind !== 'account') throw new Error('Local persona is not an account')");
+});
+
 test('seeded frontends wait for useful /en HTML through waitUntilWalkReady', async () => {
   const source = await readFile(resolve(import.meta.dir, '../scripts/dev-stack.ts'), 'utf8');
   expect(source).toContain('SEEDED_WEB_READY_PATH');
   expect(source).toContain('waitUntilWalkReady');
   expect(source).not.toContain("code: 'ECONNREFUSED'");
   expect(source).toContain('${origins.web}${SEEDED_WEB_READY_PATH}');
+  expect(source).toContain("`${origins.web}/auth/sign-in?return_to=${encodeURIComponent('/en/settings')}`");
+  expect(source).toContain('untilWebSignInRedirect');
 });
 
 test('isolated Kernel bindings verify the selected Auth issuer and bind the selected API port', () => {

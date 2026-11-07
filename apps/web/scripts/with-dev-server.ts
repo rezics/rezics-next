@@ -52,8 +52,17 @@ export function walkViteChildEnvironment(
   return child;
 }
 
+const namedTestFile = /\.test\.[cm]?[jt]sx?$/u;
+const noSharedVite = /(?:^|\/)(?:first-public-journeys-walk|with-dev-server)\.test\.[cm]?[jt]sx?$/u;
+
+/** Source pins and this helper's unit file do not need a shared Vite server. */
 export function commandNeedsSharedDevServer(command: string[]): boolean {
-  return command[0] === 'bun' && command[1] === 'test';
+  if (command[0] !== 'bun' || command[1] !== 'test') return false;
+  const files = command
+    .slice(2)
+    .filter((argument) => !argument.startsWith('-') && namedTestFile.test(argument))
+    .map((argument) => argument.replaceAll('\\', '/'));
+  return files.length === 0 || !files.every((file) => noSharedVite.test(file));
 }
 
 export function privateNetworkCommand(command: string[]): string[] {

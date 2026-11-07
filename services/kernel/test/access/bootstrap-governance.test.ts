@@ -15,9 +15,9 @@ import {
   PLATFORM_RESOURCE,
   PLATFORM_GOVERNANCE_ROLE,
 } from '../../src/access/bootstrap-governance.ts';
-import { createAccess } from '../../src/access/index.ts';
+import { createAccess, INTERNAL_ACTIONS } from '../../src/access/index.ts';
 import { createGrantCommands } from '../../src/access/grant-commands.ts';
-import { resolveResourceRoles } from '../../src/access/resource-roles.ts';
+import { resolveResourceRoles, resourceRoleCatalogue } from '../../src/access/resource-roles.ts';
 import { accessCheck, type AccountActor } from '../../src/request/access.ts';
 import { newId, routeOf } from '../../src/route/route.ts';
 import { createKernel } from '../../src/http/kernel.ts';
@@ -257,6 +257,7 @@ beforeAll(async () => {
     scopes: [
       ...new Set([
         ...actions,
+        ...INTERNAL_ACTIONS.keys(),
         ...[...actionCatalogue(mountedKernel()).keys()].filter((scope) => scope !== 'media:complete'),
         'gate:any',
       ]),
@@ -395,6 +396,41 @@ test.serial(
     for (const action of imports) expect(await allowed(automated, action)).toBe(true);
     expect(await allowed(automated, imports[0]!, PLATFORM_RESOURCE, ['access:grant'])).toBe(false);
     expect(await allowed(automated, 'subject:create')).toBe(false);
+    const definitionGrants = createGrantCommands({ pool, access: semantic, managementAction: 'access:grant' });
+    const definitions = ['definitions:publish', 'definitions:activate'] as const;
+    const governor = await context(person, ['access:grant', ...definitions], semantic);
+    expect(
+      await (
+        await accessCheck(semantic, governor.actor, 'definitions:publish', PLATFORM_RESOURCE, governor)
+      )(pool),
+    ).toBe(true);
+    expect(
+      await (
+        await accessCheck(semantic, governor.actor, 'definitions:activate', PLATFORM_RESOURCE, governor)
+      )(pool),
+    ).toBe(true);
+    await definitionGrants.create(governor, {
+      resource: PLATFORM_RESOURCE,
+      subject: { kind: 'account', id: automated },
+      actions: [...definitions],
+      valid: '(,)',
+      key: 'delegate-definitions',
+    });
+    expect(
+      (
+        await reader.query(
+          'SELECT action FROM access.resource_grant WHERE route=0 AND resource_id=$1 AND subject_id=$2 AND action = ANY($3) ORDER BY action',
+          [PLATFORM_RESOURCE.id, automated, [...definitions]],
+        )
+      ).rows.map((r) => r.action),
+    ).toEqual([...definitions].sort());
+    await definitionGrants.revoke(governor, {
+      resource: PLATFORM_RESOURCE,
+      subject: { kind: 'account', id: automated },
+      actions: [...definitions],
+      valid: '(,)',
+      key: 'revoke-definitions',
+    });
     // The human can revoke delegated rights through the same formula.
     await grants.revoke(await context(person), { ...input, key: 'revoke-imports' });
     expect(
@@ -406,7 +442,8 @@ test.serial(
       ).rows,
     ).toHaveLength(0);
     for (const action of imports) expect(await allowed(automated, action)).toBe(false);
-    await grants.revokeRole(await context(person, [...actions, 'gate:any']), {
+    const revokeScopes = resourceRoleCatalogue(access)!.roles.get(PLATFORM_GOVERNANCE_ROLE)!;
+    await grants.revokeRole(await context(person, [...revokeScopes]), {
       resource: PLATFORM_RESOURCE,
       subject: { kind: 'account', id: person },
       role: PLATFORM_GOVERNANCE_ROLE,

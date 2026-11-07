@@ -164,9 +164,26 @@ occurrences, nested admission, original/terminal disclosure, active release, wit
 identity-native declaration equality, ordinary `composeLibraryDomain` adapter install, and unbound collection-read deferral.
 Selected identity seal cases keep the selected bind vector; transform fixtures use routable job IDs. Existing native
 identity, Source/member/publication, assignment-growth and lifecycle-growth cases keep their unchanged assertions.
-Label assignment and parent SQL use LATERAL LIMIT-1 primary-key points and the reserved-source 32-row seek so
-owner-catalogue size cannot appear as Seq Scan or `personal_label` touches above 33. Set, unassign, restore and
-rename select each named operand once in the one-row request and read those columns in the mutation WHERE.
+Label catalogue, assignment and parent SQL use typed input CTEs and LATERAL primary-key or reserved-source
+points so generic prepared plans cannot Seq Scan an owner catalogue. Those `ORDER BY` lists name the index
+columns in index order. Point reads take a typed `MATERIALIZED` input row and LATERAL unique
+`(route, account_id, label_id)` so the inner is a parameterized `personal_label_pkey` nested loop. Assignment
+owner-label pages, reserved-source pages and desired-tuple seeks use the same MATERIALIZED ROW-bounded `OFFSET 0`
+fence on `label_assignment_owner_label`, `label_assignment_reserved_source` and `label_assignment_pkey`. `ORDER BY`
+names that primary key. The inner is an Access ROW-bounded primary-key range plus `OFFSET 0`, so a custom plan
+that inlines the UUID cannot Seq Scan a small catalogue. They do not `LIMIT 1` or `OR include_deleted` in SQL: `NOT MATERIALIZED` inlined the CTE and Seq Scanned a
+small catalogue (FULL warmup 34/34 nodes), equality filters Seq Scan when the UUID is a constant, `LIMIT 1` lets Seq Scan stop early, and `OR` hides the unique index. The store filters
+`include_deleted` on that row. They project `createdAt` as insert RETURNING does so Reylo still decodes timestamptz
+text. A unique point may be one row or a one-element array; UNION ALL pages are arrays, so the store takes that row
+or the first array element. They do not UNION ALL `include_deleted`. Existing Label command, HTTP and growth suites
+pin this; no extra tests. Prefix `ORDER BY` names `personal_label_live_name`
+`(route, account_id, normalized_name)`. Folded FULL warmup sees 34 `personal_label` parent observations and
+zero sequential scans on `personal_label`, `label_assignment`, `entry` and `progress_session`. FULL
+entry tiles and active-session seeks drive one integer step from the MATERIALIZED request row that
+carries the subject-id array, then a MATERIALIZED one-row point CTE inside LATERAL with the same Access
+ROW-bounded `OFFSET 0` fence, so a custom plan cannot hash-join unnest into a Seq Scan or Bitmap Heap
+Scan of `library.entry` or `progress_session`; active-session `LIMIT 1` stays after that fence. Set, unassign, restore and rename select each named operand once in the one-row request
+and read those columns in the mutation WHERE.
 
 Decision: Source capture, member preparation, owner-query preparation, publication, presentation, Entry/progress and funded Progress-operation planning/admission use
 one fake-capability application suite; ordinary composition binds the real Access, Semantic, Search and Content
