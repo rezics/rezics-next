@@ -121,7 +121,7 @@ Identity Rating repair values stay on `identity-rating-repair-producer.ts`; Sour
 Decision: Community readers, record projection and governance observations are leaves separate from container writes.
 Shared input errors, continuity vocabulary, discovery descriptions and platform-work identity live in Community's
 contract. Cross-domain behavior uses Community-owned typed bindings in `community/domain-ports.ts`; process
-composition and the native test preload install the original owner values before use, preserving overloads,
+composition, contract construction and the native test preload install the original owner values before use, preserving overloads,
 constructor identity and native evidence. Type queries do not load providers. Exact provider leaves are public entries
 for those type references and composition; Community never value-imports their implementation barrels.
 
