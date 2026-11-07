@@ -9,6 +9,7 @@ import {
   commandAccessContext,
   resourceAuthorization,
   readAccount,
+  accessCheck,
 } from './access-port.ts';
 import {
   authoritativeTimeValue,
@@ -23,10 +24,8 @@ import {
   type PrincipalCommandReceipt,
 } from '../command/command.ts';
 import { discardConnection, withConnection } from '../database/pool.ts';
-import { readAccount } from './access-port.ts';
 import { anonymousCommandTarget, anonymousRequestDigest, requestDigest } from '../command/request.ts';
 import { readPartition } from '../partition/partition.ts';
-import { accessCheck } from './access-port.ts';
 import type { Access, AccessClient, AccessCheck, Actor } from '../request/access.ts';
 import { anchorRoute, derivedId, partitionOf, routeOf } from '../route/route.ts';
 import { decodeCursor, encodeCursor, type CursorBinding } from '../tokens/cursor.ts';

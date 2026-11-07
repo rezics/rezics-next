@@ -9,8 +9,7 @@ import {
   type CommandOutcome,
   type CommandTransaction,
 } from '../command/command.ts';
-import { creationDeclares } from './access-port.ts';
-import { accessCommandAuthorization } from './access-port.ts';
+import { creationDeclares, accessCommandAuthorization } from './access-port.ts';
 import type { Access, Actor } from '../request/access.ts';
 import { newId, partitionOf, routeOf } from '../route/route.ts';
 import { ContentNotFoundError } from './commands.ts';

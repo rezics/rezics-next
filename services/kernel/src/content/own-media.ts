@@ -3,7 +3,6 @@ import { readAccount, deadlineClient, within } from './access-port.ts';
 import { encodeCursor, decodeCursor, type CursorBinding } from '../tokens/cursor.ts';
 import type { KeyRing } from '../tokens/seal.ts';
 import { ProblemError } from '../http/problem-error.ts';
-import { deadlineClient, within } from './access-port.ts';
 import { GrantDeniedError } from '../access/contract/index.ts';
 import { readPartition } from '../partition/partition.ts';
 import { partitionOf, routeOf } from '../route/route.ts';

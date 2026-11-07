@@ -1,5 +1,3 @@
-import { fieldErrorCodes, extensionMembers } from './problem-schema.ts';
-export { problemSchema } from './problem-schema.ts';
 import {
   PROBLEM_TYPE_BASE,
   PROBLEMS,
@@ -24,6 +22,9 @@ import { NotFound, ParseError, ValidationError } from 'elysia';
 import { CommandResultErasedError, IdempotencyConflictError, TooManyEventsError } from '../command/command.ts';
 import { AuthenticationError } from '../request/access.ts';
 import { RealmLastOwnerError } from '../access/resource-access-errors.ts';
+
+import { extensionMembers, fieldErrorCodes } from './problem-schema.ts';
+export { problemSchema } from './problem-schema.ts';
 
 function isSafePointer(pointer: string): boolean {
   return /^(?:\/(?:[^~/]|~[01])*)*$/.test(pointer);
