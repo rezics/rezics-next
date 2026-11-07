@@ -27,6 +27,7 @@ import { composeSearchAccess } from './search-access.ts';
 import type { FacetAccessObservationPort } from '../search/facet-access-port.ts';
 
 export type KernelRuntimeDefaults = {
+  /** Bind the complete native application for each Search transport. */
   searchDisclosure: typeof createNativeSearchDisclosure;
   tokens: KeyRing;
   receiptKeys: KeyRing;

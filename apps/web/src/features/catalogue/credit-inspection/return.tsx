@@ -1,8 +1,7 @@
 import { useEffect, useRef, useState, type ReactNode, type RefObject } from 'react';
 import { Button } from '@rezics/ui/shadcn/button';
 import { m } from '../../../paraglide/messages.js';
-import type { Item } from '../../pages/overview';
-import type { CreditVisit } from './model';
+import type { CreditAssertion, CreditVisit } from './model';
 import { creditReturn, creditReturnMatches } from './navigation';
 
 /** Lives inside the association's disclosure gate, including its dialog portal. */
@@ -37,6 +36,13 @@ export function CreditInspectionAction({
   );
 }
 
+export type CreditReturnItem = {
+  credit?: CreditAssertion | undefined;
+  gated: boolean;
+  statement?: string | undefined;
+  label: { text: string };
+};
+
 /** Only a freshly mounted current page can consume a return locator; hash changes never revive a reading. */
 export function CreditVisitReturn({
   visit,
@@ -47,9 +53,9 @@ export function CreditVisitReturn({
   locale,
 }: {
   visit: CreditVisit;
-  items: Item[];
+  items: CreditReturnItem[];
   root: RefObject<HTMLDivElement | null>;
-  open: (item: Item, trigger: HTMLButtonElement) => void;
+  open: (item: CreditReturnItem, trigger: HTMLButtonElement) => void;
   retired: boolean;
   locale: string;
 }) {

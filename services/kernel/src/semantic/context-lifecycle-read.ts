@@ -5,6 +5,7 @@ import { readPartition } from '../partition/partition.ts';
 import {
   CONTEXT_GLOBAL_ID,
   contextAccess,
+  type ContextAccessPort,
   ContextDirectoryPreparingError,
   type ContextAccessHandle,
   type ContextActor,
@@ -26,10 +27,11 @@ export async function readNativeContextMetadata(
   actor: ContextActor,
   at: string,
   deadline: number,
+  accessPort?: ContextAccessPort,
 ): Promise<NativeContextMetadata[]> {
   if (!ids.length) return [];
   if (ids.length > 100 || new Set(ids).size !== ids.length) throw new RangeError('Context metadata page bound');
-  const port = contextAccess();
+  const port = accessPort ?? contextAccess();
   const homes = new Map<number, string[]>();
   for (const id of ids) {
     const route = routeOf(id);
@@ -74,8 +76,7 @@ export async function readNativeContextMetadata(
   return rows;
 }
 
-async function activeOwners(pool: Pool, rows: NativeContextMetadata[], deadline: number) {
-  const port = contextAccess();
+async function activeOwners(pool: Pool, rows: NativeContextMetadata[], deadline: number, port: ContextAccessPort) {
   const groups = new Map<number, string[]>();
   for (const id of new Set(rows.flatMap((row) => row.owners))) {
     const home = partitionOf(routeOf(id)!);
@@ -113,9 +114,10 @@ export async function authorizedContextMetadata(
     deadline: number;
     expected?: ReadonlyMap<string, { version: string; epoch: number }>;
   },
+  accessPort?: ContextAccessPort,
 ): Promise<ContextDirectoryEntry[]> {
   if (!input.ids.length) return [];
-  const port = contextAccess();
+  const port = accessPort ?? contextAccess();
   const context = { pool: deps.pool, deadline: input.deadline };
   const decisions = await port.prepareReadDecisions(deps.access, {
     actor: input.actor,
@@ -125,16 +127,16 @@ export async function authorizedContextMetadata(
   const time = port.viewerActionReadTime(deps.access, context);
   try {
     const at = authoritativeTimeValue(time);
-    const first = await readNativeContextMetadata(deps.pool, input.ids, input.actor, at, input.deadline);
+    const first = await readNativeContextMetadata(deps.pool, input.ids, input.actor, at, input.deadline, port);
     for (const row of first) {
       const expected = input.expected?.get(row.id);
       if (expected && (expected.version !== row.version || expected.epoch !== row.epoch))
         throw new ContextDirectoryPreparingError();
     }
-    const owners = await activeOwners(deps.pool, first, input.deadline);
+    const owners = await activeOwners(deps.pool, first, input.deadline, port);
     const byId = new Map(first.map((row) => [row.id, row]));
     // Final native metadata/grant/current formula revalidation occurs after all foreign anchors are released.
-    const final = await readNativeContextMetadata(deps.pool, input.ids, input.actor, at, input.deadline);
+    const final = await readNativeContextMetadata(deps.pool, input.ids, input.actor, at, input.deadline, port);
     const result: ContextDirectoryEntry[] = [];
     const groups = new Map<number, NativeContextMetadata[]>();
     for (const row of final) {

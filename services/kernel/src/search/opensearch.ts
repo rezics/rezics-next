@@ -1,3 +1,6 @@
+import { SearchUnavailableError } from './operation-outcomes.ts';
+export { SearchUnavailableError } from './operation-outcomes.ts';
+
 export type SearchQuery = Record<string, string | number | boolean>;
 
 /** Internal physical byte reservation and absolute caller deadline. The meter returns no verdict. */
@@ -34,13 +37,6 @@ export class OpenSearchError extends Error {
     this.type = type;
     this.reason = reason;
     this.body = body;
-  }
-}
-
-export class SearchUnavailableError extends Error {
-  constructor(message = 'OpenSearch is unavailable', options?: ErrorOptions) {
-    super(message, options);
-    this.name = 'SearchUnavailableError';
   }
 }
 

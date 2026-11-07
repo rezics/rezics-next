@@ -1,13 +1,31 @@
 // Reylo prepares `.sql` modules against DATABASE_URL. The root typecheck and the Auth check share this
 // preparation so those modules see the kernel schema and the Auth schema.
+// Kernel and Auth helpers load at runtime through a typed dynamic import so control-plane `tsc` does not follow
+// `.sql` modules.
 import { spawn, spawnSync, type SpawnSyncOptions } from 'node:child_process';
 import { createConnection } from 'node:net';
 import { existsSync, mkdirSync, readFileSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
-import { migrate as migrateAuth } from '../services/auth/scripts/database.ts';
-import { migrate as migrateKernel, POSTGRES_IMAGE } from '../services/kernel/scripts/database.ts';
-import { withCommandPhase } from '../services/kernel/scripts/command-phases.ts';
 import type { StartedDatabase } from './typecheck.ts';
+
+/** Matches Kernel/Auth `POSTGRES_IMAGE`; kept local so this module typechecks without Kernel source. */
+const POSTGRES_IMAGE = 'postgres:19rc1@sha256:b3cb7405059fd06f9ebae4aad4780b3788dfdd2acef1ac248ad9d56ced8abb06';
+
+type KernelDatabaseHelpers = {
+  migrate: (url: string, root?: string) => void;
+};
+
+type AuthDatabaseHelpers = {
+  migrate: (url: string, migrationsDirectory?: string) => void;
+};
+
+type CommandPhaseHelpers = {
+  withCommandPhase: <T>(phase: string, work: () => Promise<T> | T, env?: NodeJS.ProcessEnv) => Promise<T>;
+};
+
+function importHelpers<T>(relativePath: string): Promise<T> {
+  return import(new URL(relativePath, import.meta.url).href) as Promise<T>;
+}
 
 const CONTAINER_IDENTITY = /^[A-Za-z0-9][A-Za-z0-9_.-]*$/;
 const NETWORK_NAME = /^[A-Za-z0-9][A-Za-z0-9_.-]*$/;
@@ -622,6 +640,11 @@ export function cleanupStaleCompilerDatabases(dockerCommand: DockerCommand = doc
 
 /** Start a throwaway database and apply the kernel migrations, then the Auth migrations. */
 export async function prepareCompilerDatabase(): Promise<StartedDatabase> {
+  const [{ migrate: migrateKernel }, { migrate: migrateAuth }, { withCommandPhase }] = await Promise.all([
+    importHelpers<KernelDatabaseHelpers>('../services/kernel/scripts/database.ts'),
+    importHelpers<AuthDatabaseHelpers>('../services/auth/scripts/database.ts'),
+    importHelpers<CommandPhaseHelpers>('../services/kernel/scripts/command-phases.ts'),
+  ]);
   process.stdout.write(`Compiler database owner ${ownerProcessIdentity()}\n`);
   if (process.env.KERNEL_CHECK_SKIP_STALE_CLEANUP !== '1' && !process.env.KERNEL_CHECK_ON_REMOTE) {
     cleanupStaleCompilerDatabases();

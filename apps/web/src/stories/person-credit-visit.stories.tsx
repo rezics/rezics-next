@@ -4,6 +4,7 @@ import { expect, userEvent, within } from 'storybook/test';
 import { pickText } from '@rezics/composition';
 import type { Release } from '@rezics/definitions';
 import { CreditInspection } from '../features/catalogue/credit-inspection/view';
+import { CharacterReadingBinding } from '../features/pages/character-reading-binding';
 import { creditAssertion, type CreditVisit } from '../features/catalogue/credit-inspection/model';
 import { CoverList } from '../features/pages/cover-list';
 import { holderItems, type RowValue } from '../features/pages/overview';
@@ -115,35 +116,37 @@ function PersonCreditVisit({ mode = 'normal', signedIn = false }: { mode?: Mode;
         {retired && <p role="status">{m.credit_return_unavailable()}</p>}
         <CoverList items={items} value={value} label={m.subject_works()} />
         {selected !== undefined && (
-          <CreditInspection
-            key={selected}
-            credit={credits[selected]!}
-            visit={visit}
-            title={rows[selected]!.label}
-            locale={locale}
-            propertyLabel={visit.propertyLabel}
-            signedIn={signedIn}
-            onClose={() => setSelected(undefined)}
-            isCurrent={() => live.current}
-            search={async () => []}
-            transport={
-              mode === 'unavailable'
-                ? { ...fixture.transport, read: async () => ({ ok: false, reason: 'unavailable' }) }
-                : fixture.transport
-            }
-            metadata={async () => {
-              setRevisionAttempts((count) => count + 1);
-              if (mode === 'late' || mode === 'replaced') {
-                live.current = false;
-                setSelected(undefined);
-                setRetired(true);
-                if (mode === 'late') await new Promise((resolve) => setTimeout(resolve, 0));
+          <CharacterReadingBinding>
+            <CreditInspection
+              key={selected}
+              credit={credits[selected]!}
+              visit={visit}
+              title={rows[selected]!.label}
+              locale={locale}
+              propertyLabel={visit.propertyLabel}
+              signedIn={signedIn}
+              onClose={() => setSelected(undefined)}
+              isCurrent={() => live.current}
+              search={async () => []}
+              transport={
+                mode === 'unavailable'
+                  ? { ...fixture.transport, read: async () => ({ ok: false, reason: 'unavailable' }) }
+                  : fixture.transport
               }
-              return revisionAttempts > 0 && mode !== 'partial'
-                ? { kind: 'ready', detail: { id: fixture.id, revision: 1, summary: { kind: 'limited' } } }
-                : { kind: 'unavailable' };
-            }}
-          />
+              metadata={async () => {
+                setRevisionAttempts((count) => count + 1);
+                if (mode === 'late' || mode === 'replaced') {
+                  live.current = false;
+                  setSelected(undefined);
+                  setRetired(true);
+                  if (mode === 'late') await new Promise((resolve) => setTimeout(resolve, 0));
+                }
+                return revisionAttempts > 0 && mode !== 'partial'
+                  ? { kind: 'ready', detail: { id: fixture.id, revision: 1, summary: { kind: 'limited' } } }
+                  : { kind: 'unavailable' };
+              }}
+            />
+          </CharacterReadingBinding>
         )}
       </main>
     </ConnectedStory>

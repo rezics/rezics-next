@@ -1581,12 +1581,12 @@ Goal. A local-stack boot failure is recorded and sent to the supermanager with i
 run, skipping Task `$ ` command echoes, retaining the useful log reference, and redacting credentials.
 
 A `control-plane` brief may declare only `tools/goal/` paths; dispatch refuses outside paths and tells the manager to
-split them into a dev task. A control-plane brief without a `target` line, including launch, settle, wake, retry, train
-and emergency changes, starts from `dev` and lands there mechanically like product work, with unlimited retries in the
-same session; [cp-sync](#control-plane-on-dev-cp-sync) is its release gate to `main`. A control-plane brief with
-`target: main` or `target: stabilize` uses the main release path below. It starts from `main`, rebases onto current
-`main`, formats its changes, installs root and `tools/goal/` dependencies, then runs
-`bun run --cwd tools/goal typecheck` and the complete `bun test --timeout 30000 tools/goal/src` suite.
+split them into a dev task. Without a `target` line it starts from `dev` and lands there mechanically, with unlimited
+retries in the same session; [cp-sync](#control-plane-on-dev-cp-sync) is its release gate to `main`. `target: main` or
+`target: stabilize` uses the main release path: start from `main`, rebase, format, install, then
+`bun run --cwd tools/goal typecheck` and `bun test --timeout 30000 tools/goal/src`.
+Decision: that typecheck is database-free `tsc`. `scripts/compiler-database.ts` loads Kernel/Auth helpers with a typed
+dynamic import so the program does not follow `.sql` modules; do not exclude files to hide those errors.
 
 Decision: `launch-smoke.ts` remains the sole executable entry; lazy lifecycle scenarios live in `launch-smoke-scenarios.ts`, bounded evidence/report helpers live in `launch-smoke-evidence.ts`, and the inner child still dispatches through the candidate entry.
 Decision: Promotion command planning, exact-candidate check execution, result persistence/cache identity and infrastructure reruns live in `promotion-checks.ts`; `promotion.ts` remains the phase coordinator and re-exports the existing command API.

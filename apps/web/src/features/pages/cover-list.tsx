@@ -1,8 +1,13 @@
 import { useRef, useState, type ReactNode } from 'react';
-import { creditDestinationHref } from '../catalogue/credit-inspection/destinations';
-import { CreditInspectionAction, CreditVisitReturn } from '../catalogue/credit-inspection/return';
-import { CreditInspectionSession } from '../catalogue/credit-inspection/session';
-import type { CreditAssertion, CreditVisit } from '../catalogue/credit-inspection/model';
+import {
+  creditDestinationHref,
+  CreditInspectionAction,
+  CreditVisitReturn,
+  CreditInspectionSession,
+  type CreditAssertion,
+  type CreditVisit,
+} from '../catalogue/character-reading-application';
+import { withSubjectVisitReturn } from './subject-visit-navigation';
 import {
   fallbackListFactProperties,
   fallbackListPresentation,
@@ -104,7 +109,9 @@ function ItemCard({
   const destination =
     destinationHref ?? item.href ?? relationTargetHref({ id: item.id, label: title }, value.locale, value.context);
   const creditHref = (href: string) =>
-    creditVisit && item.credit ? creditDestinationHref(href, creditVisit, item.credit, value.locale) : href;
+    creditVisit && item.credit
+      ? creditDestinationHref(href, creditVisit, item.credit, value.locale, withSubjectVisitReturn)
+      : href;
   const href = creditHref(destination);
   const creditValue =
     creditVisit && item.credit

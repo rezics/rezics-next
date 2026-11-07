@@ -1,5 +1,5 @@
 import { expect, test } from 'bun:test';
-import { createCurrentTextDisclosure, CURRENT_TEXT_LIMITS } from '../../src/search/disclosure/current-text.ts';
+import { createCurrentTextDisclosure, CURRENT_TEXT_LIMITS } from '../../src/search/current-text-adapter.ts';
 import { CJK_ANALYZER, ENGINE_ANALYSIS_LIMITS, NAME_PREFIX_ANALYZER } from '../../src/search/engine-analysis.ts';
 import { OpenSearchError, SearchUnavailableError, type OpenSearch } from '../../src/search/opensearch.ts';
 import { parseText } from '../../src/search/text.ts';

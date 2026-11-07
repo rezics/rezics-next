@@ -359,17 +359,21 @@ export function createDefaultDiscoverySearch(
         };
       });
       const read = await createRetainedDiscoverySearch({
+        disclosure: disclosureApplication,
         consumer,
         source,
         keys: config.keys,
         prepareConceptFilter: (input) =>
-          prepareConceptDiscoveryFilter({
-            ...input,
-            pool: config.pool,
-            prefix: config.prefix,
-            routeKey: config.routeKey,
-            now: () => config.clock().getTime(),
-          }),
+          prepareConceptDiscoveryFilter(
+            {
+              ...input,
+              pool: config.pool,
+              prefix: config.prefix,
+              routeKey: config.routeKey,
+              now: () => config.clock().getTime(),
+            },
+            disclosureApplication,
+          ),
         now: () => config.clock().getTime(),
         resolve: async () => ({ ...current, registry }),
         currentTextMatches,

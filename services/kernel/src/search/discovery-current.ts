@@ -17,7 +17,8 @@ import {
   type AccountSnapshot,
 } from './discovery.ts';
 import type { DiscoveryCandidate } from './discovery-query.ts';
-import { hydrateOwnerDiscoveryHits, type DiscoveryOwnerCandidate } from './discovery-hydration.ts';
+import { ownerDisclosurePorts, type DiscoveryOwnerCandidate } from './discovery-hydration.ts';
+import { discloseOwnerHits, type SearchDisclosureApplication } from './disclosure-application.ts';
 import { currentDiscoveryFilter } from './discovery-filter.ts';
 import type { ConceptFilterExecution } from './concept-browse-statements.ts';
 import { checkHits } from './disclosure/check.ts';
@@ -239,6 +240,7 @@ export async function currentDiscoveryCandidates<Candidate extends DiscoveryCand
   filter: DiscoveryFilterDocument | undefined,
   release: FilterRelease,
   context: DiscoveryReadContext & { conceptFilter?: ConceptFilterExecution },
+  disclosure: Pick<SearchDisclosureApplication, 'checkHits' | 'discloseOwnerHits'> = { checkHits, discloseOwnerHits },
 ): Promise<Map<Candidate, DiscoveryUnionHit>> {
   if (candidates.length > 200) unavailable();
   const languages = context.languages ?? ['en'];
@@ -336,7 +338,7 @@ export async function currentDiscoveryCandidates<Candidate extends DiscoveryCand
           matched: [],
         };
       });
-      const checked = await checkHits(cached, hits, new Map(), {
+      const checked = await disclosure.checkHits(cached, hits, new Map(), {
         ...(currentFilter === true ? {} : { filter: currentFilter }),
         ...(context.textField === 'credited_creator'
           ? { currentText: creditedText }
@@ -600,8 +602,8 @@ export async function currentDiscoveryCandidates<Candidate extends DiscoveryCand
   }
   if (ownerCandidates.length) {
     if (!registry.ownerAdapters || !registry.ownerKey || !registry.getOwnerAdapter) unavailable();
-    const ownerHits = await hydrateOwnerDiscoveryHits(
-      registry as DiscoveryRegistry & DiscoveryOwnerRegistry,
+    const ownerHits = await disclosure.discloseOwnerHits(
+      ownerDisclosurePorts(registry as DiscoveryRegistry & DiscoveryOwnerRegistry),
       ownerCandidates,
       context,
     );

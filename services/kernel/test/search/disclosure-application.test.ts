@@ -217,3 +217,123 @@ test('source recovery and failed template installation retain native preparation
     reusableRequest: true,
   });
 });
+
+test('the installed application preserves owner context and order through nested hydration and CURRENT final', async () => {
+  const { createNativeSearchDisclosure } = await import('../../src/search/index.ts');
+  const application = createNativeSearchDisclosure({
+    request: async () => {
+      throw new Error('Owner disclosure must not consult the engine');
+    },
+    bulk: async () => {
+      throw new Error('Owner disclosure must not write the index');
+    },
+  });
+  const context = {
+    actor: { kind: 'anonymous' as const },
+    deadline: 123,
+    access: {} as import('../../src/request/access.ts').Access,
+  };
+  const ids = ['018f0000-0000-7000-8000-00a000000002', '018f0000-0000-7000-8000-00a000000001'] as const;
+  const authorId = '018f0000-0000-7000-8000-00a000000003';
+  const subjectId = '018f0000-0000-7000-8000-00a000000004';
+  const candidates = ids.map((id) => ({
+    key: { owner: 'content' as const, kind: 'review' as const, route: 160, id },
+    revision: '1',
+    sourcePosition: '4',
+    sourceVersion: 'opening-1',
+  }));
+  const events: string[] = [];
+  const rows = new Map(
+    ids.map((id) => [
+      id,
+      {
+        id,
+        title: null,
+        summary: null,
+        sourceVersion: 'opening-1',
+        sourcePosition: '4',
+        authorId,
+        subjectId,
+      },
+    ]),
+  );
+  const ports: import('../../src/search/disclosure/owner-current.ts').OwnerDisclosurePorts = {
+    ownerKey: (key) => key,
+    async readCurrent(kind, requested, received) {
+      expect(kind).toBe('review');
+      expect(requested).toEqual(ids);
+      expect(received).toBe(context);
+      events.push('owner');
+      return rows;
+    },
+    async hydrateAccounts(requested, received) {
+      expect(received).toBe(context);
+      expect(requested).toEqual([authorId, authorId]);
+      events.push('accounts');
+      return new Map(); // Withheld context must not be reconstructed from the indexed candidate.
+    },
+    async hydrateSubjects(requested, received) {
+      expect(received).toBe(context);
+      expect(requested).toEqual([subjectId, subjectId]);
+      events.push('subjects');
+      return new Map([[subjectId, { id: subjectId, label: { value: 'Current work' } }]]);
+    },
+  };
+  const page = await application.finishDiscoveryDisclosure(
+    {
+      finish: async () => {
+        events.push('final');
+      },
+    },
+    async () => {
+      const hits = await application.discloseOwnerHits(ports, candidates, context);
+      expect(hits.map((hit) => hit?.key.id)).toEqual([...ids]);
+      expect(hits[0]?.summary.value).toEqual({
+        id: ids[0],
+        kind: 'review',
+        title: null,
+        subject: { id: subjectId, title: 'Current work' },
+      });
+      return {
+        hits: hits.filter((hit) => hit !== undefined),
+        next: 'retained-prefix',
+        kinds: { values: [], next: null },
+        as_of: 'now',
+      };
+    },
+  );
+  expect(events).toEqual(['owner', 'accounts', 'subjects', 'owner', 'final']);
+  expect(page.next).toBe('retained-prefix');
+
+  // Nested I/O may withdraw a row or replace its native evidence. Missing rows drop in place;
+  // replacement must restart the entire window before the final can publish anything.
+  for (const changed of [false, true]) {
+    let reads = 0;
+    const rebound = {
+      ...ports,
+      async readCurrent() {
+        if (++reads === 1) return rows;
+        return changed
+          ? new Map([...rows].map(([id, row]) => [id, { ...row, sourceVersion: 'opening-2' }]))
+          : new Map();
+      },
+    };
+    if (!changed) {
+      expect(await application.discloseOwnerHits(rebound, candidates, context)).toEqual([undefined, undefined]);
+    } else {
+      const error = await application.discloseOwnerHits(rebound, candidates, context).catch((error: unknown) => error);
+      const leaf = await import('../../src/search/operation-outcomes.ts');
+      expect(error).toBeInstanceOf(OwnerCurrentRestartRequired);
+      expect(error).toBeInstanceOf(leaf.OwnerCurrentRestartRequired);
+      expect(error).toBeInstanceOf(SearchOperationError);
+      await expect(
+        searchHttpExecute({}, async () => {
+          throw error;
+        }),
+      ).rejects.toMatchObject({
+        code: 'search_restart_required',
+        status: 409,
+      });
+    }
+  }
+});

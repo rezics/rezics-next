@@ -2,6 +2,7 @@ import { useMemo, useState } from 'react';
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import { expect, userEvent, within } from 'storybook/test';
 import { CreditInspection } from '../features/catalogue/credit-inspection/view';
+import { CharacterReadingBinding } from '../features/pages/character-reading-binding';
 import { creditAssertion, type CreditVisit } from '../features/catalogue/credit-inspection/model';
 import { relationFixture, relationActor, relationProperty } from '../kernel/fake/catalogue-relations';
 import { getLocale } from '../paraglide/runtime.js';
@@ -66,19 +67,21 @@ function Inspection({ denied = false, plain = false }: { denied?: boolean; plain
     <ConnectedStory storyId="credit-inspection">
       <button onClick={() => setOpen(true)}>{m.credit_inspect()}</button>
       {open && (
-        <CreditInspection
-          credit={credit}
-          visit={visit}
-          title="A long original work heading with several credited roles and original names"
-          locale={locale}
-          propertyLabel="Voice actor"
-          onClose={() => setOpen(false)}
-          metadata={async () => ({ kind: 'unavailable' })}
-          transport={fixture.transport}
-          signedIn={!plain}
-          search={async () => []}
-          isCurrent={() => true}
-        />
+        <CharacterReadingBinding>
+          <CreditInspection
+            credit={credit}
+            visit={visit}
+            title="A long original work heading with several credited roles and original names"
+            locale={locale}
+            propertyLabel="Voice actor"
+            onClose={() => setOpen(false)}
+            metadata={async () => ({ kind: 'unavailable' })}
+            transport={fixture.transport}
+            signedIn={!plain}
+            search={async () => []}
+            isCurrent={() => true}
+          />
+        </CharacterReadingBinding>
       )}
     </ConnectedStory>
   );

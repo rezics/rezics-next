@@ -405,6 +405,14 @@ test('docker stdout and stderr are UTF-8 text whether the runtime returns a stri
   expect(calls[1]).toEqual(compilerDatabaseRemoveArgs('half-created'));
 });
 
+test('Kernel and Auth helpers load at runtime through a typed dynamic import', () => {
+  const source = readFileSync(new URL('./compiler-database.ts', import.meta.url), 'utf8');
+  expect(source).not.toMatch(/^import [^;]+ from '\.\.\/services\//m);
+  expect(source).toContain('../services/kernel/scripts/database.ts');
+  expect(source).toContain('../services/auth/scripts/database.ts');
+  expect(source).toContain('../services/kernel/scripts/command-phases.ts');
+});
+
 test('the forwarder child exits when the owner closes stdin', async () => {
   const directory = mkdtempSync(join(tmpdir(), 'pg-forward-exit-'));
   fixtures.push(directory);
