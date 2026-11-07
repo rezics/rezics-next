@@ -128,14 +128,30 @@ export function parseExitObject(output: string): unknown | null {
   }
 }
 
-/** Last complete supported exit; unmatched braces leave the remainder unavailable. */
+/**
+ * Last complete supported exit. An object left open at the end of the text is a truncated fragment, so scanning
+ * resumes after its opening brace and a complete report that follows it is still found; a status object nested inside
+ * braces that do close stays nested and is not an exit.
+ */
 function lastStatusObject(text: string): unknown {
+  let last: unknown = null;
+  let from = 0;
+  for (let rescans = 0; rescans < 64 && from < text.length; rescans++) {
+    const { found, unclosed } = scanStatusObjects(text, from);
+    if (found !== null) last = found;
+    if (unclosed < 0) break;
+    from = unclosed + 1;
+  }
+  return last;
+}
+
+function scanStatusObjects(text: string, from: number): { found: unknown; unclosed: number } {
   let last: unknown = null;
   let start = -1;
   let depth = 0;
   let inString = false;
   let escape = false;
-  for (let i = 0; i < text.length; i++) {
+  for (let i = from; i < text.length; i++) {
     const c = text[i];
     if (start < 0) {
       if (c === '{') {
@@ -166,5 +182,5 @@ function lastStatusObject(text: string): unknown {
       start = -1;
     }
   }
-  return last;
+  return { found: last, unclosed: start };
 }

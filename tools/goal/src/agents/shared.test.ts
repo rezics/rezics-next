@@ -20,3 +20,10 @@ test('malformed output cannot combinatorial-parse or fabricate success', () => {
   expect(parseExitObject('{"status":"error"}')).toBeNull();
   expect(performance.now() - started).toBeLessThan(250);
 });
+
+test('a complete report after a truncated object is still the exit', () => {
+  const truncated = `{"status":"waiting","checks":["earlier"],"summary":"cut off here`;
+  const final = { status: 'waiting', checks: ['1d206ad1'] };
+  expect(parseExitObject(`${truncated}\nReport: ${JSON.stringify(final)}`)).toEqual(final);
+  expect(parseExitObject(`{ "note": "unclosed {"\n${JSON.stringify(success)}`)).toEqual(success);
+});

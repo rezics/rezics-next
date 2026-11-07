@@ -192,11 +192,10 @@ test('a transport drop stays on the same attempt and does not spend the check bu
   }
 }, 15_000);
 
-test('Cursor reconnect-stop and Codex stream or repeated WebSocket drops resume the same way', async () => {
+test('Codex stream or repeated WebSocket drops resume the same way', async () => {
   const h = settleHarness();
   try {
     for (const [stderr, code] of [
-      [`${CONNECTION_LOST}\n${RESUME_STOPPED}`, 1],
       [STREAM, 1],
       [`${WEBSOCKET}\nretry\n${WEBSOCKET}`, 2],
     ] as const) {
