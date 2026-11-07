@@ -314,13 +314,15 @@ test('native platform grants expose real development commands while preserving r
   const operation = await call('editor', 'GET', `/v1/subjectIdentityOperations/${merged.body.operation.id}`);
   status(operation, 200);
   expect(operation.body).toEqual({ operation: { id: merged.body.operation.id, done: false } });
-  const [survivor, redirected] = [...subjects].sort();
-  const redirect = await call('anonymous', 'GET', `/v1/subjects/${redirected}`);
-  status(redirect, 308);
-  expect(redirect.headers.get('location')).toBe(`/v1/subjects/${survivor}`);
-  const history = await call('anonymous', 'GET', `/v1/subjects/${redirected}/revisions`);
+  const [, original] = [...subjects].sort();
+  const pending = await call('anonymous', 'GET', `/v1/subjects/${original}`);
+  status(pending, 200);
+  expect(pending.body.subject).toMatchObject({ id: original, revision: 1 });
+  const history = await call('anonymous', 'GET', `/v1/subjects/${original}/revisions`);
   status(history, 200);
-  expect(history.body.revisions).toContainEqual(expect.objectContaining({ kind: 'merge', revision: 2 }));
+  expect(
+    history.body.revisions.map((revision: { kind: string; revision: number }) => [revision.kind, revision.revision]),
+  ).toEqual([['create', 1]]);
   const ungranted = ids((await call('anonymous', 'GET', '/v1/openapi.json')).body);
   for (const id of gated) expect(ungranted).not.toContain(id);
 }, 180_000);

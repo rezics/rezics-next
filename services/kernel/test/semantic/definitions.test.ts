@@ -178,7 +178,9 @@ test('publishing and activating need their grant on the Global Context', async (
       resource: { route: 0, id: GLOBAL_CONTEXT },
     },
   ]);
-  expect((await call('POST', '/v1/definitions/releases', { key: key(), body })).response.status).toBe(401);
+  const anonymous = await call('POST', '/v1/definitions/releases', { key: key(), body });
+  expect(anonymous.response.status).toBe(403);
+  expect(anonymous.body.code).toBe('platform_closed');
   expect((await call('GET', `/v1/definitions/releases/${digest}`)).response.status).toBe(404);
   expect((await publish(body)).response.status).toBe(201);
   expect((await activate(digest, null, 'editor')).response.status).toBe(403);

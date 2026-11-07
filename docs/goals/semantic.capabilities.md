@@ -82,8 +82,10 @@ causal sessions per credential and records failed requests before throwing, with
 Receiving the installed Access and publication bindings preserves existing actor, deadline, Pool, grants and current
 read assertions; source review does not establish receiving acceptance.
 Receiving fixtures follow the installed six-step membership protocol, charged account-state dispatch and explicit
-definition-publication gate. Advanced merge checks read the accepted operation, independent redirect and merge
-revision. Proposal retry and sealed-journal recovery retain original assertions and dedicated receipt keys; only
+definition-publication gate, including anonymous `platform_closed` refusal. Advanced merge gate checks read the
+accepted operation and independently confirm the original and revision remain unchanged until worker publication;
+redirect completion belongs to the Identity worker receiving suites outside the first-public denominator.
+Proposal retry and sealed-journal recovery retain original assertions and dedicated receipt keys; only
 the seeded native proposal, separate adoption and current fact readback establish convergence.
 
 ## Evidence stages
