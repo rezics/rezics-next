@@ -70,7 +70,7 @@ function addManager(
     db.exec('CREATE TABLE manager_sessions (id TEXT PRIMARY KEY, state TEXT NOT NULL)');
   db.query('INSERT OR REPLACE INTO manager_sessions (id, state) VALUES (?, ?)').run(
     id,
-    JSON.stringify({ id, status: 'running', threadId: sessionId, supermanager }),
+    JSON.stringify({ id, engine: 'codex', status: 'running', threadId: sessionId, supermanager }),
   );
 }
 
@@ -562,3 +562,159 @@ test('dispatch still refuses a critical brief before creating a task or attempt'
     h.dispose();
   }
 });
+
+test('configured operations can rewrite an ordinary normal retry without priority authority or audit mutation', async () => {
+  const h = harness();
+  try {
+    const task = h.tasks.dispatch(h.briefFile);
+    const ref = seedStoppedAttempt(h, task);
+    authenticatePriorityManagers(h, task);
+    h.settings.integration.operationsManager = 'operations';
+    addManager(h.store.db, 'operations', 'operations-session', 'root');
+    addManager(h.store.db, 'unrelated', 'unrelated-session', 'root');
+    h.tasks.grantPriority(task.id, { id: 'supermanager', sessionId: 'super-session' });
+    const before = h.store.task(task.id);
+    const correction = writeAmendment(
+      h,
+      'operations-correction',
+      markdown,
+      false,
+      'Use the rewritten canonical contract.',
+    );
+    const environment = { CODEX_THREAD_ID: 'operations-session', GOAL_MANAGER: 'operations' };
+    await retryCommand(h, task.id, correction, environment);
+    const current = h.store.task(task.id);
+    expect(current.brief.markdown).toContain('rewritten canonical contract');
+    expect(current.priorityHistory).toEqual(before.priorityHistory);
+    expect(current.priorityGrants).toEqual(before.priorityGrants);
+    expect(h.store.attempt(ref).session).toBe('stopped-session');
+    expect(h.store.retryIntent(ref)?.status).toBe('pending');
+    const invalidCorrection = writeAmendment(
+      h,
+      'unauthorized-normal',
+      markdown,
+      false,
+      'Requires a live authorized caller.',
+    );
+    for (const env of [
+      {},
+      { GOAL_MANAGER: 'operations' },
+      { CODEX_THREAD_ID: 'stale-operations', GOAL_MANAGER: 'operations' },
+      { CODEX_THREAD_ID: 'operations-session', GOAL_MANAGER: 'fixture' },
+      { CODEX_THREAD_ID: 'unrelated-session', GOAL_MANAGER: 'unrelated' },
+    ]) {
+      await expect(retryCommand(h, task.id, invalidCorrection, env)).rejects.toThrow();
+      expect(h.store.task(task.id)).toEqual(current);
+    }
+    expect(() =>
+      h.tasks.queueRetry(task.id, { brief: invalidCorrection }, { id: 'operations', sessionId: 'forged' }),
+    ).toThrow('authenticated manager');
+    const escalation = writeAmendment(h, 'operations-escalation', markdown, true, 'Operations may not escalate.');
+    await expect(retryCommand(h, task.id, escalation, environment)).rejects.toThrow('only task manager');
+    h.store.updateTask(ref, (value) => {
+      value.brief.criticalPath = true;
+      value.taskClass = 'critical-path';
+    });
+    const critical = h.store.task(task.id);
+    await expect(retryCommand(h, task.id, invalidCorrection, environment)).rejects.toThrow('only task manager');
+    const retained = writeAmendment(
+      h,
+      'operations-retained-critical',
+      markdown,
+      true,
+      'Operations may not restate critical priority.',
+    );
+    await expect(retryCommand(h, task.id, retained, environment)).rejects.toThrow('only task manager');
+    expect(h.store.task(task.id)).toEqual(critical);
+  } finally {
+    h.dispose();
+  }
+});
+
+test.each(['codex', 'claude'] as const)(
+  'configured operations %s can rewrite a control-plane/main normal retry',
+  async (provider) => {
+    const h = harness();
+    try {
+      const source = markdown
+        .replace('goal: fixture', 'goal: control-plane\nmanager: fixture\ntarget: main')
+        .replace('paths: [result.txt]', 'paths: [tools/goal/src/tasks.ts]');
+      const original = join(h.settings.stateDirectory, 'control-plane-main.md');
+      writeFileSync(original, source);
+      const task = h.tasks.dispatch(original);
+      const ref = seedStoppedAttempt(h, task);
+      authenticatePriorityManagers(h, task);
+      h.settings.integration.operationsManager = 'operations';
+      h.store.db.query('INSERT INTO manager_sessions VALUES (?, ?)').run(
+        'operations',
+        JSON.stringify({
+          id: 'operations',
+          kind: 'resident-supermanager',
+          provider,
+          status: 'running',
+          threadId: 'operations-session',
+        }),
+      );
+      const environment = {
+        GOAL_MANAGER: 'operations',
+        ...(provider === 'claude'
+          ? { CLAUDE_CODE_SESSION_ID: 'operations-session' }
+          : { CODEX_THREAD_ID: 'operations-session' }),
+      };
+      h.tasks.grantPriority(task.id, { id: 'supermanager', sessionId: 'super-session' });
+      const before = h.store.task(task.id);
+      const escalation = writeAmendment(h, 'control-plane-escalation', source, true, 'Only the owner may escalate.');
+      await expect(retryCommand(h, task.id, escalation, environment)).rejects.toThrow('only task manager');
+      const verification = writeAmendment(
+        h,
+        'control-plane-verification',
+        source.replace('kind: implementation', 'kind: verification'),
+        false,
+        'Proof registration is still required.',
+      );
+      await expect(retryCommand(h, task.id, verification, environment)).rejects.toThrow();
+      expect(h.store.task(task.id)).toEqual(before);
+      const correction = writeAmendment(
+        h,
+        'control-plane-correction',
+        source,
+        false,
+        'Use the complete planner correction.',
+      );
+      await retryCommand(h, task.id, correction, environment);
+      const amended = h.store.task(task.id);
+      expect(amended.brief).toMatchObject({
+        goal: 'control-plane',
+        target: 'main',
+        manager: 'fixture',
+        criticalPath: false,
+      });
+      expect(amended.brief.markdown).toContain('complete planner correction');
+      expect(amended.priorityGrants).toEqual(before.priorityGrants);
+      expect(amended.priorityHistory).toEqual(before.priorityHistory);
+      expect(h.store.attempt(ref).session).toBe('stopped-session');
+      expect(h.store.retryIntent(ref)?.status).toBe('pending');
+      h.store.updateRetryIntent(ref, (intent) => {
+        intent.status = 'abandoned';
+      });
+      h.store.updateTask(ref, (current) => {
+        current.brief.criticalPath = true;
+        current.taskClass = 'critical-path';
+      });
+      const critical = h.store.task(task.id);
+      const demotion = writeAmendment(h, 'control-plane-demotion', source, false, 'Only the owner may demote.');
+      await expect(retryCommand(h, task.id, demotion, environment)).rejects.toThrow('only task manager');
+      const retained = writeAmendment(
+        h,
+        'control-plane-critical',
+        source,
+        true,
+        'Only the owner may restate critical priority.',
+      );
+      await expect(retryCommand(h, task.id, retained, environment)).rejects.toThrow('only task manager');
+      expect(h.store.task(task.id)).toEqual(critical);
+    } finally {
+      h.dispose();
+    }
+  },
+);

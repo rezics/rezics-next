@@ -479,7 +479,11 @@ test('the event command authenticates the current owner and reserves decision an
       await expect(submit(owner, forged)).rejects.toThrow('owner decision requires');
     }
     await expect(submit(owner, body, 'owner-contract-decision', '2')).rejects.toThrow();
-    for (const kind of ['owner-contract-decision-accepted', 'owner-contract-decision-delivery'])
+    for (const kind of [
+      'owner-contract-decision-accepted',
+      'owner-contract-decision-delivery',
+      'owner-contract-decisions-superseded',
+    ])
       await expect(submit(owner, { decisionId: 'accounts:rule', summaryDelivered: true }, kind)).rejects.toThrow(
         'controller-owned',
       );

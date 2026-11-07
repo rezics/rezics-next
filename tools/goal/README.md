@@ -1640,7 +1640,7 @@ A `control-plane` brief may declare only `tools/goal/` paths; dispatch refuses o
 split them into a dev task. Without a `target` line it starts from `dev` and lands there mechanically, with unlimited
 retries in the same session; [cp-sync](#control-plane-on-dev-cp-sync) is its release gate to `main`. `target: main` or
 `target: stabilize` uses the main release path: start from `main`, rebase, format, install, then
-`bun run --cwd tools/goal typecheck` and `bun test --timeout 30000 tools/goal/src`.
+`bun run --cwd tools/goal typecheck` and the Goal tests selected from the final candidate's changed owners.
 Decision: that typecheck is database-free `tsc`. `scripts/compiler-database.ts` loads Kernel/Auth helpers with a typed
 dynamic import so the program does not follow `.sql` modules; do not exclude files to hide those errors.
 
@@ -2189,20 +2189,31 @@ top-level fields are accepted. The command authenticates the persisted manager s
 transaction as persistence. Authentication, task identity and decision time come from the controller, never the body.
 Decision: accepted decisions use a reserved controller event; old unverified events remain pending until the owner resubmits through this command.
 
-The controller reads `owner-contract-decision-accepted` events for the task's current attempt when it builds a normal worker
-prompt. It carries the newest authenticated decision from the task's manager and its repository-relative document
-references into that same worker session. A successful launch records `owner-contract-decision-delivery`; a referenced
-document unavailable in the worker worktree remains pending and is named in the prompt. Replayed decision identities
-and decisions from earlier attempts cannot supersede a later current-attempt decision. Recording a decision does not
-start or replace an attempt; delivery waits for the next normal prompt boundary.
-The event command does not sweep or resume workers. Acceptance and delivery events cannot be submitted directly.
+The controller reads task-level `owner-contract-decision-accepted` events through the receiving attempt when it builds
+a normal worker prompt. Pending authenticated owner intent survives ordinary retry, same-session resume and controller
+restart. The decision keeps its original identity, acceptance sequence, originating attempt, manager and sender session;
+renewing that manager's provider session does not erase accepted intent. Only decisions from the task's current manager
+can be projected. Goal reassignment supersedes prior owner intent inside its existing transfer transaction, including
+when the former owner later receives the Goal again. Recording a decision does not start or replace an attempt; delivery waits for a normal prompt boundary.
+
+New acceptances bind the canonical brief hash. A canonical replacement journals `owner-contract-decisions-superseded`
+with the old and new contract hashes in the same task transaction; restoring old brief bytes or replaying the old decision
+identity cannot resurrect superseded intent. An owner sends a new decision identity for a new instruction. Existing
+unbound accepted events remain eligible across unchanged retries; retained pending brief changes and later attempts'
+brief-change hashes establish supersession for those older events.
+
+Prompt preparation, spawn and successful delivery acknowledgement share the existing write fence. A successful launch
+records `owner-contract-decision-delivery` against the actual receiving attempt and `worker-run-started` sequence, with
+the original acceptance identity and provenance. Failed launch or a crash before acknowledgement leaves intent pending.
+Delivery accumulates across generations: an already delivered summary or available reference does not repeat, while
+missing, unreadable or omitted references stay pending. Document availability is refreshed in the receiving worktree.
+The event command does not sweep or resume workers. Acceptance, delivery and supersession events are controller-owned.
+
 The decision shares the existing 20,000-character total prompt limit and process input byte limit with the ordinary
 prompt. References that do not fit remain pending. A summary that does not fit is replaced by a pointer to a worktree file
-holding the whole decision; the pointer is appended even past the limits, so no decision refuses a launch. Only a
-successful launch records delivery against the accepted event sequence.
-Projection decision: each prompt parses decisions and deliveries in one event traversal, keeps the earliest sequence
-per decision identity, selects by controller timestamp then event sequence, and reads each referenced path once.
-No projection cache is persisted, and the delivery protocol is unchanged.
+holding the whole decision; the pointer is appended even past the limits, so no decision refuses a launch. Projection
+parses decisions and deliveries in one traversal, keeps the earliest sequence per decision identity, selects by controller
+timestamp then event sequence, and reads each referenced path once. No projection cache or watcher is added.
 
 #### Native Storybook publication
 
@@ -2620,6 +2631,11 @@ Decision: Goal ownership is the managed session `goals` list; assign is the tran
 `brief.manager` without restarting workers. Status still projects one task cohort and one incident-history read.
 
 `retry <task> [--brief <file>]` retries a task, optionally replacing its brief after checking that its Goal and manager stay the same. Comparison canonicalizes LF endings and ignores trailing EOF whitespace. An unchanged contract is reported and not restarted; a changed brief records both SHA-256 hashes on the new attempt. A stopped task still restarts with plain `retry <task>`.
+An authenticated configured operations manager may submit a rewritten ordinary retry that retains normal priority,
+including control-plane work targeting main.
+This normal-to-normal case rechecks its live persisted provider session and leaves priority grants and history unchanged, matching
+active amendment authority. Critical restatements, escalation and demotion retain the existing owner and grant rules.
+
 Decision: `retry --brief` records the replacement as a pending proposal before the lease. An automatic retry consumes the newest pending proposal with the same Goal, manager and contract checks, records both hashes, and removes the set. A proposal for an earlier attempt still applies unless the current attempt already started on a newer brief.
 
 For an attempt that has started, `stop` and `cancel` persist the requested disposition before signaling its recorded process groups. A waiting attempt has no worker process; they terminate recorded check runners (`runnerPid`, usual process identity), mark those checks abandoned, and settle even if runners are gone. An unknown waiting request settles on the next call and the sweep. `status` shows `terminationRequest` as requested, unknown or complete; waiting uses identity `waiting`, else missing stays unknown. Host recovery settles unknown identity after recorded run PIDs are gone and no live process remains under the worktree, then records that result. A stop abandons a queued retry; a later retry queues a new one.
@@ -2709,9 +2725,34 @@ The train keeps its current-attempt fence, source ref and commit checks, scope a
 attribution, lineage checks, target compare-and-swap, and durable outcome record. It retains the original worker
 acceptance evidence instead of scheduling that same task acceptance again before integration. The post-integration
 development verifier runs acceptance on its captured `dev` head, alongside typecheck and affected checks; that
-verification is recorded separately from the worker's original acceptance. A control-plane release still runs the full
-mandatory control-plane lifecycle checks on its `main` candidate before the controller advances `main`; promotion
-always gates its own frozen integration candidate.
+verification is recorded separately from the worker's original acceptance. Every control-plane release installs its
+dependencies and runs Goal typecheck on the exact `main` candidate. Its test plan compares that candidate with the
+captured main base, retains changed tests, and follows static, type-only and dynamic candidate imports—including
+generated interface consumers—to affected tests. Consumer traversal stops at a consumer with its own tracked
+sibling tests: those tests exercise its public contract, while Goal typing settles callers' type contracts. Unchanged
+shared test setup does not turn an upstream implementation change into every fixture's change. Direct type consumers
+and generated/declaration interfaces remain selected; downstream type-only implementation edges belong to typing.
+The independent integrated-dev verifier supplies wider transitive and integrated behavioural coverage.
+
+A Goal executable with a shebang, a main guard, a help option and a direct same-named source import belongs to that
+source owner's tests. The plan also runs that exact entrypoint with `--help`, exercising module loading and argument
+admission without report delivery. Package check commands remain shared toolchain even when they delegate to a source
+owner. Other scripts have unresolved/shared command impact and widen visibly; the scripts directory is not exempt.
+For the captured six-file hourly-report candidate, this selects report, host scheduler/CLI, maintenance and urgent
+consumer tests plus the report entrypoint, without workspace/provider fixture suites.
+
+Shared toolchain, configuration, fixture/harness, actual launcher/process/controller owners, removed tests and
+unresolved dependency changes select all Goal tests and the full native launch lifecycle. The proof log records the
+base, candidate, scope and reasons. When those launch owners are unchanged, affected owner tests, entrypoint checks
+and fresh compatibility against the captured immutable dev scripts provide bounded coverage. The existing release
+record's `lifecycleEvidence` then explicitly says `release boundary evidence: candidate=<head>
+dev-script-tree=<dev> base=<base> coverage=impact-selected full-lifecycle=deferred` on one line. This is coverage on
+those exact revisions, not a lifecycle success or reused native proof. Recovery requires the same published candidate,
+captured base and dev tree. Full lifecycle evidence retains its `release evidence:` form and named scenarios.
+All individual, cohort, reformatted and compiler-repaired heads use this same final-candidate plan. Full-tree integrity,
+source identity and atomic publication fences are unchanged. Existing exact-source check reuse and compiler-input
+settlement remain separate contracts; this policy neither relabels old failures nor grants evidence reuse. Broader
+release/native/browser/money acceptance keeps its own evidence, and promotion gates its frozen integration candidate.
 
 ### Development verification
 
@@ -3344,9 +3385,9 @@ Only the exact member's combined main preparation consumes its approved addition
 proof and publication record bind the approval identity; the final current-source fence verifies it again. An
 approval arriving after a journal captured its inputs requires a fresh cohort. Ordinary landing permissions are
 unchanged. This API never grants native execution, critical priority, a retry, integration or a passing proof.
-The corrected main cohort still needs fresh full Goal typing, the complete suite, exact dev script compatibility,
-real provider lifecycle and atomic publication before its deferred dev handoff can be consumed. Retained negative
-proofs, supersession generation mappings and unknown legacy physical inventory keep their existing meaning.
+The corrected main cohort still needs fresh full Goal typing, its impact-selected Goal tests, exact dev script
+compatibility, impact-selected launch boundary coverage and atomic publication before its deferred dev handoff can be consumed. Retained
+negative proofs, supersession generation mappings and unknown legacy physical inventory keep their existing meaning.
 
 The controller receiving entrypoint is
 `bun tools/goal/scripts/release-control-plane-batch.ts <manifest.json>`. Invoke it from the authenticated owning
@@ -3373,9 +3414,10 @@ native requests before calling `MergeTrain.releaseControlPlaneBatch`.
 
 The train preserves source commits by merging them in an isolated tree with the delivered `TrainResolver`: actual
 rerere and proven additive unions precede one bounded fresh `gpt-6.1-sol` high session. It applies
-scope and frozen-file guards, formats the combined candidate, and runs the mandatory Goal installs, typing, suite,
-main/dev script compatibility and complete real-boundary provider lifecycle proof on that final head once. Compatibility
-uses the captured immutable dev tree; lifecycle evidence must identify the exact candidate and dev tree. An already
+scope and frozen-file guards, formats the combined candidate, and runs the mandatory Goal installs, typing,
+impact-selected tests, main/dev script compatibility and the required launch boundary coverage on that final
+head once. The test plan uses the captured main base and final formatted or repaired candidate. Compatibility
+uses the captured immutable dev tree; full or explicitly bounded lifecycle coverage identifies the exact candidate and dev tree. An already
 represented contribution is reported explicitly with no invented implementation commit. Unavailable, conflicting or
 refused sources are reported with their source identity, log, affected files and required owning-manager fix; compatible
 sources remain eligible.
@@ -3427,8 +3469,9 @@ owning manager's authenticated provider session, using the delivered controller 
 configuration. It does not change that branch setting or select a default main. The JSON contains `version: 1`, the
 **unchanged** single-source `manifest`, `logHash` (SHA-256 of the retained root log), and `handoff` with the exact prior
 `journalHash`, `controller` process incarnation, `ownedCommands`, `inventory` and retained terminal `evidence` reference.
-The journal must retain exactly three positive, non-timeout full-suite results, their candidate proof refs and exact
-source/scope snapshots; every attempt's native log must document all mandatory checks passing and captured-ref movement.
+The journal must retain exactly three positive, non-timeout candidate-proof results, their selected-test plans, candidate
+proof refs and exact source/scope snapshots; every attempt's native log must document all mandatory checks passing and
+captured-ref movement. Reuse remains bound to those exact candidates and sources.
 These partial positives grant no compatibility, lifecycle or publication proof. There must be no split, failure,
 prepared/release record, outcome, delivery, candidate, source/contract/request/scope change or supersession. The exact
 accepted source must still be clean and current with its original native claim. The prior controller/group and every
@@ -3438,7 +3481,7 @@ positively recorded owned operation must have exited, and both ordinary lanes mu
 An immutable native queue receipt retains the full original journal bytes, exact input and manager session, old/new
 controller identities and receiving time. The journal appends a separate `ref-continuation` node without rewriting the
 old controller, three attempts, proofs, logs or results. That node admits **one** fresh stabilized candidate, requiring
-all existing full checks, compatibility, real lifecycle and atomic CAS. Failure, interruption or external ref movement
+all mandatory candidate checks, compatibility, real lifecycle and atomic CAS. Failure, interruption or external ref movement
 cannot open another budget. Exact terminal replay returns/reconciles that result without gates; changed input or a
 live/incomplete continuation refuses. Ordinary manifest submission cannot bypass the receiving port. Failed-source
 supersession and preparation-only readmission retain their separate existing rules.
@@ -3453,9 +3496,9 @@ that node's journal before ref movement can request a rebuild. The native contro
 `refs/goal/control-plane-proof/`. A failed candidate is classified and split even when publication refs moved; restart
 uses its retained negative rather than rerunning the unchanged candidate. Passing moved-ref checks still require a
 fresh complete proof. Bisection may run one bounded probe of at most three failing Goal test files selected from the
-parent's actual full-suite output. A conclusive negative can split a group early. A passing or inconclusive probe
-cannot publish: every passing head still needs fresh Goal typing, the complete suite, dev script compatibility and
-the real provider lifecycle proof before CAS.
+parent's actual impact-selected test output. A conclusive negative can split a group early. A passing or inconclusive
+probe cannot publish: every passing head still needs fresh Goal typing, its impact-selected tests, dev script
+compatibility and the plan's full or bounded launch boundary coverage before CAS.
 
 For an interrupted, unpublished cohort with a retained completed native failure, the typed receiving operation is
 `receiveControlPlaneBatchSupersession(input: ControlPlaneBatchSupersession, runtime, env)`. The existing CLI also accepts
@@ -3566,5 +3609,5 @@ await receiveControlPlaneBatchDevHandoff(
 ```
 
 The existing supersession JSON CLI receives the same mapping fields. Workers must never invoke these operations.
-Old negative proofs remain failed. The corrected combined head still requires full Goal typing, the complete suite,
+Old negative proofs remain failed. The corrected combined head still requires full Goal typing, its impact-selected Goal
 dev script compatibility, real provider lifecycle evidence and CAS; source typing alone grants no native pass.

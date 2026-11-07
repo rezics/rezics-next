@@ -314,24 +314,9 @@ export async function launch(
   const resuming = Boolean(resumeSession);
   // The branch head at this prompt; the first prompt's head tells whether the attempt made a new commit.
   const startHead = branchHead(task);
-  const ownerDecisionPrompt = prepareOwnerDecisionPrompt(store, task, attempt, prompt, policy);
-  if (ownerDecisionPrompt.file) writeOwnerDecisionFile(task.worktree, ownerDecisionPrompt.file);
   const logStartOffset = resuming ? (statSync(attempt.logPath, { throwIfNoEntry: false })?.size ?? 0) : 0;
   const out = openSync(attempt.logPath, resumeSession ? 'a' : 'w'),
     err = openSync(`${attempt.logPath}.err`, 'w');
-  const [program, args] = launchCommand({
-    profile: attempt.profile,
-    pool,
-    worktree: task.worktree,
-    prompt: ownerDecisionPrompt.prompt,
-    mcpServers: storybookServers(task.worktree, task.brief),
-    ...(resumeSession ? { resumeSession } : {}),
-    logPath: attempt.logPath,
-    ...(codex ? { codex } : {}),
-    // Research clones and reads reference projects and lands its report, so it needs the same access as other work.
-    // Keyed on the brief's kind: a research brief that declares a risk area or cites sources routes as a claim.
-    ...(task.brief.kind === 'research' ? { research: true } : {}),
-  });
   const env = workerEnvironment(
     pool,
     attemptEnvironment(task, attempt, dirname(dirname(dirname(attempt.logPath)))),
@@ -351,6 +336,22 @@ export async function launch(
       });
       const driver = processIdentity();
       if (!driver) throw new Error('Cannot identify driver process');
+      // Select pending intent under the same write fence as spawn and delivery acknowledgement.
+      const ownerDecisionPrompt = prepareOwnerDecisionPrompt(store, store.task(task.id), attempt, prompt, policy);
+      if (ownerDecisionPrompt.file) writeOwnerDecisionFile(task.worktree, ownerDecisionPrompt.file);
+      const [program, args] = launchCommand({
+        profile: attempt.profile,
+        pool,
+        worktree: task.worktree,
+        prompt: ownerDecisionPrompt.prompt,
+        mcpServers: storybookServers(task.worktree, task.brief),
+        ...(resumeSession ? { resumeSession } : {}),
+        logPath: attempt.logPath,
+        ...(codex ? { codex } : {}),
+        // Research clones and reads reference projects and lands its report, so it needs the same access as other work.
+        // Keyed on the brief's kind: a research brief that declares a risk area or cites sources routes as a claim.
+        ...(task.brief.kind === 'research' ? { research: true } : {}),
+      });
       // The wrapper cannot report a missing program to the launcher, so refuse it here.
       if (!Bun.which(program, { PATH: env.PATH ?? '', cwd: task.worktree }))
         throw new Error(`Worker CLI not found: ${program}`);
