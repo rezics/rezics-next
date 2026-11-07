@@ -1,7 +1,7 @@
 import type { KernelClient } from '@rezics/client';
 import { m } from '../paraglide/messages.js';
 import { getLocale, localizeHref } from '../paraglide/runtime.js';
-import { threadLocation } from '../threads/thread-href';
+import { threadLocation } from '../threads/thread-reading-context';
 import { INBOX_PAGE_SIZE, MAX_INBOX_CURSOR_LENGTH } from './inbox-work';
 
 export const INBOX_SELECTIONS = ['all', 'unread'] as const;

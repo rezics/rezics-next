@@ -1,2 +1,3 @@
-/** Immutable published citation for one post. The thread-page context remains the authority. */
+/** Immutable published citation and the owner localized thread route. Thread-page and thread-href remain the authorities. */
 export { publishedCitationForPost } from './thread-page-context';
+export { threadLocation } from './thread-href';
