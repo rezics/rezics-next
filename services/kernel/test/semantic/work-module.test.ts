@@ -2,6 +2,7 @@ import { afterAll, expect, test } from 'bun:test';
 import pg from 'pg';
 import { bundledDigest, bundledRelease } from '@rezics/definitions/bundled';
 import { createPool } from '../../src/database/pool.ts';
+import { installNativeHistory } from '../../src/composition/history.ts';
 import { createKernel } from '../../src/http/kernel.ts';
 import { partitionOf, routeOf } from '../../src/route/route.ts';
 import { bootstrapRelease, GLOBAL_CONTEXT } from '../../src/semantic/definitions.ts';
@@ -14,6 +15,7 @@ import { createRealAccess } from './real-access.ts';
 
 const databaseUrl = process.env.DATABASE_URL;
 if (!databaseUrl) throw new Error('DATABASE_URL must name the migrated test database');
+installNativeHistory();
 const pool = createPool(databaseUrl);
 const admin = new pg.Pool({ connectionString: databaseUrl, max: 4 });
 afterAll(async () => {
@@ -50,19 +52,12 @@ const program = `
     return startRelays(nativePool, relays, ...rest);
   });
   const { readWorkerConfig, startWorker } = await import('./src/worker.ts');
-  import { createDiscoveryProducerEntry } from './src/composition/discovery.ts';
-  import { createKernelRuntimeDefaults } from './src/composition/runtime-defaults.ts';
-    import { createKernelWorkModules } from './src/composition/work-modules.ts';
-    import { composeSemanticIdentityParticipants } from './src/composition/semantic.ts';
-    const KERNEL_WORK_MODULES = createKernelWorkModules(
-      createDiscoveryProducerEntry,
-      createKernelRuntimeDefaults,
-      composeSemanticIdentityParticipants,
-    );
   let pool;
   let starts = 0;
   let stops = 0;
   let registrations = 0;
+  const fail = process.env.SEMANTIC_START_FAILURE === 'true';
+  const decorate = (KERNEL_WORK_MODULES) => {
   assert.equal(KERNEL_WORK_MODULES.filter(m => m.name === 'semantic').length, 1);
   const modules = KERNEL_WORK_MODULES.map(module => ({
     name: module.name,
@@ -94,12 +89,13 @@ const program = `
       }});
     }
   }));
-  const fail = process.env.SEMANTIC_START_FAILURE === 'true';
   if (fail) modules.push({ name: 'startup-failure', register(context) {
     context.addService(() => { throw new Error('later starter failed'); });
   }});
+  return modules;
+  };
   try {
-    const worker = await startWorker(readWorkerConfig(process.env), modules);
+    const worker = await startWorker(readWorkerConfig(process.env), decorate);
     assert.equal(fail, false);
     assert.equal(registrations, 1);
     assert.equal(identityRegistrations, 1);
@@ -382,7 +378,7 @@ test('default Semantic composition registers its real locator and bounded local 
   try {
     await createSemanticWorkModule(composeSemanticIdentityParticipants).register({
       pool,
-      env: process.env,
+      env: { ...process.env, ...workerTestEnv() },
       clock: () => new Date(),
       queues: WORK_QUEUES,
       client,

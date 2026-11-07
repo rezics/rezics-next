@@ -153,6 +153,16 @@ Bootstrap continuation source `b09b9bb129ae6cdb5f6606612d4a4af3ca28f3ca`, integr
 `08ac6bbe43eea4859cdf8ec5ab6534f9f660aae7`, is received. Its work-module assertions remain required; integration
 alone supplies no runtime pass.
 
+The ten-file receiving run at `e9cd0124304e01b936e48912593cb0da0adcd9fb` failed in 217.742 seconds on host c.
+The previous seven files still passed. The new curated occurrence assertion needed a non-null Subject ID type
+assertion; that compiler defect is corrected. Dynamic setup now records the actual first failure as
+`POST /v1/collections`, phase `create-source-collection`, HTTP 403, problem `forbidden`, no correlation header.
+Creation requires the three families' `:read` scopes in addition to the already supplied `:list` scopes, so the
+fixture now carries both. Work-module receiving exposed missing History installation before inspecting module
+names and missing route-key configuration in direct registration. Its child now decorates the live `startWorker`
+module list, and direct registration uses the existing worker environment; lifecycle and registration assertions
+are retained. Evidence: `.temp/goal/checks/worker-check-22d6f13b-4b7c-4793-b98f-0eb8ff02e05b-2026-11-07T10-55-21.456Z-31d2dbd7.log`.
+
 ### Last observed dev census
 
 Observed walk revision: `93eb7908d8e983998d4b280ea275b131aaa444a1` (origin/dev `b94d47ff56` including startup

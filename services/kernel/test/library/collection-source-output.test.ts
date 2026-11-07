@@ -91,7 +91,7 @@ test('explicit COMPLETE A retains membership while pending B never becomes outpu
     allowance: sourceAllowance(),
   });
   expect(occurrences.rows).toHaveLength(2);
-  expect(occurrences.rows.map((row) => row.key.storedSubjectId)).toEqual([ids[0], ids[0]]);
+  expect(occurrences.rows.map((row) => row.key.storedSubjectId)).toEqual([ids[0]!, ids[0]!]);
   expect(occurrences.rows[0]!.key.factId).not.toBe(occurrences.rows[1]!.key.factId);
 });
 
