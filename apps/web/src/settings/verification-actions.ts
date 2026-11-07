@@ -4,7 +4,6 @@ import { getRequest, setResponseHeader } from '@tanstack/react-start/server';
 import { env } from 'cloudflare:workers';
 import { kernelClient, requestLocale } from '../kernel/client';
 import { isPlatformClosedError, isPlatformClosedProblem, requestLanguages } from './ports/vocabulary';
-import { MediaProblem } from '../media/kernel';
 import { m } from '../paraglide/messages.js';
 import { readSubjectSuggestions, SUGGESTION_LIMIT } from '../search/suggestions';
 import { withVerificationDeadline } from './verification-request-deadline';
@@ -19,6 +18,7 @@ import {
   type VerificationSearchFailure,
 } from './verification-core';
 import { validateVerificationDraft } from './verification-validation';
+import { settingsMediaFailure } from './adapters/content';
 
 function uuid(value: unknown): value is string {
   return (
@@ -79,11 +79,11 @@ async function viewer() {
 }
 
 function currentReadFailure(error: unknown): VerificationFailure {
-  return verificationSafeFailure(error, m.settings_verification_load_failed());
+  return verificationSafeFailure(error, m.settings_verification_load_failed(), settingsMediaFailure);
 }
 
 function commandFailure(error: unknown) {
-  return { ok: false as const, ...verificationSafeFailure(error) };
+  return { ok: false as const, ...verificationSafeFailure(error, undefined, settingsMediaFailure) };
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -98,11 +98,12 @@ function verificationSubjectSearchFailure(error: unknown): VerificationSearchFai
   let statusValue: unknown;
   let problem: Record<string, unknown> | undefined;
   let retryAfter: string | undefined;
-  if (error instanceof MediaProblem) {
-    statusValue = error.problem.status;
-    problem = error.problem;
+  const content = settingsMediaFailure(error);
+  if (content) {
+    statusValue = content.status;
+    problem = content.problem;
     try {
-      const header = new Headers(error.headers).get('retry-after');
+      const header = new Headers(content.headers).get('retry-after');
       if (header !== null && header.length <= 128) retryAfter = header;
     } catch {
       // Malformed headers are not part of the private response contract.
@@ -143,7 +144,13 @@ export const readVerificationState = createServerFn({ method: 'GET' })
       if (accountId !== expectedAccountId)
         return { ok: false as const, failure: { status: 409, message: m.settings_verification_identity_changed() } };
       const { readVerification } = await import('./verification-core');
-      const status = await readVerification(kernelClient(), accountId, authorization, request.signal);
+      const status = await readVerification(
+        kernelClient(),
+        accountId,
+        authorization,
+        request.signal,
+        settingsMediaFailure,
+      );
       return { ok: true as const, value: { accountId, ...status, subjectTitle: null } };
     } catch (error) {
       return { ok: false as const, failure: currentReadFailure(error) };
@@ -262,7 +269,7 @@ export const requestVerificationAction = createServerFn({ method: 'POST' })
       if (accountId !== data.accountId)
         return { ok: false as const, status: 409, message: m.settings_verification_identity_changed() };
       const { requestVerification } = await import('./verification-core');
-      return requestVerification(kernelClient(), accountId, authorization, data, request.signal);
+      return requestVerification(kernelClient(), accountId, authorization, data, request.signal, settingsMediaFailure);
     } catch (error) {
       return commandFailure(error);
     }
@@ -281,7 +288,14 @@ export const withdrawVerificationAction = createServerFn({ method: 'POST' })
       if (accountId !== data.accountId)
         return { ok: false as const, status: 409, message: m.settings_verification_identity_changed() };
       const { withdrawVerification } = await import('./verification-core');
-      return withdrawVerification(kernelClient(), accountId, authorization, data.idempotencyKey, request.signal);
+      return withdrawVerification(
+        kernelClient(),
+        accountId,
+        authorization,
+        data.idempotencyKey,
+        request.signal,
+        settingsMediaFailure,
+      );
     } catch (error) {
       return commandFailure(error);
     }

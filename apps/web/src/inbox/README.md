@@ -108,3 +108,38 @@ Account integration follows Settings' [composed capability contract](../settings
 Inbox does not import Accounts Profile pages or request implementations. Its notification account identity remains the
 immutable current viewer, independent of a managed Profile selection; account navigation never acknowledges a notice.
 The existing Inbox runtime, browser and growth walks remain their sole evidence owners.
+
+## Content capability boundary
+
+Inbox owns `InboxContentPort` in `ports/content.ts`: native actor and destination presentation inputs, localized thread
+destination construction, sign-in prompt and Content media-failure projection. The `/inbox` route supplies
+`inboxContent` from `adapters/presentation.tsx`; server read and unread-count entrypoints bind the matching
+`adapters/content.ts` implementation. Inbox page, detail and actor presenters consume required capabilities and do not
+import `media/kernel`, `threads/initials`, `threads/write-prompts`, `threads/thread-href` or Content upload behavior.
+
+Content retains the `MediaProblem` class and translates it through public `media/content-failure.ts`. Inbox retains its
+native page envelope, actor and destination identity checks, owner labels, mark-seen authority and notice summary.
+`threads/thread-reading-context.ts` formats only the admitted thread destination through the Inbox adapter. The route's
+initial presenter and sign-in prompt remain Content-owned. Native response shapes and admitted media behavior are
+preserved.
+
+| Concern | Inbox-owned work | Nested owner work |
+| --- | --- | --- |
+| Actor and notice | Decode current native actor/target disclosure, apply owner labels, keep item and acknowledgement identity | Content supplies initials and prompt presentation; stored profile media never becomes admitted media |
+| Destination | Validate native open identity against current target disclosure and choose the supported route family | Content `threadLocation` formats admitted thread/post identity; the Inbox adapter never consumes a response URL |
+| Failure | Keep the serializable Inbox unavailable/read envelope and retry deadline | Content recognizes `MediaProblem` and projects status, problem and headers |
+| Native growth | Own one bounded current page, read state and acknowledgement lifecycle | Kernel/Content own native disclosure and command examined-work in the linked producer documents |
+
+**Decision:** Settings and Inbox own the Content ports; route composition binds Content adapters; only pure upload
+lifecycle and identity vocabulary is shared.
+
+**Boundary result:** The web-performance baseline drops the same 17 records documented in Settings: 8 `media/kernel`,
+4 `threads/upload`, 2 `threads/initials`, 2 `threads/write-prompts` and 1 `threads/thread-href`. Forty-three baseline
+records remain. Module-edge, SCC and reachable import-closure deltas are 0; the existing web-performance-to-web-content
+dependency remains. No module cycle or baseline growth was introduced. Runtime/native/browser and growth evidence is
+deferred to the post-landing verifier.
+
+The actor, destination and adapter behavior remains covered by inbox-native-triage, inbox-notice-detail,
+inbox-list-rows, inbox-read, inbox-watch, inbox-session-authority, pagination and recorded-response suites. Landing
+checks the Web workspace's two official TypeScript programs; native, browser and root acceptance remain with
+integration.

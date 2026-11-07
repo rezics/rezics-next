@@ -6,6 +6,7 @@ import { profileCommandValues, profileReadObservation } from './profile-data';
 import { useSettingsAmbient } from './adapters/ambient-view.tsx';
 import type { SettingsAmbient } from './ports/ambient';
 import { ProfileEditorSession } from './profile-write';
+import type { SettingsContentFailureReader } from './ports/content';
 
 type EditorEntry = {
   owner: ProfileEditorSession;
@@ -19,6 +20,7 @@ type EditorEntry = {
   observationCurrent: () => boolean;
   release?: () => void;
   readError?: { value: unknown };
+  mediaFailure: SettingsContentFailureReader;
 };
 const editors = new WeakMap<QueryClient, EditorEntry>();
 
@@ -42,7 +44,7 @@ function retire(client: QueryClient, entry: EditorEntry) {
   entry.listeners.forEach((listener) => listener());
 }
 
-function createEntry(client: QueryClient, ambient: SettingsAmbient) {
+function createEntry(client: QueryClient, ambient: SettingsAmbient, mediaFailure: SettingsContentFailureReader) {
   const sessionRecord = productionSettingsShellPort.sessionCacheRecord(client, hashKey);
   const sessionState = productionSettingsShellPort.sessionQueryState(client);
   // These detect a committed success in the render-to-attachment gap, including structural sharing.
@@ -80,6 +82,7 @@ function createEntry(client: QueryClient, ambient: SettingsAmbient) {
       };
       return {
         isCurrent: current,
+        mediaFailure,
         read: async () => {
           await client.cancelQueries({ queryKey: owner.key, exact: true });
           return read();
@@ -135,13 +138,14 @@ function createEntry(client: QueryClient, ambient: SettingsAmbient) {
     snapshot: () => attached.retired,
     current,
     observationCurrent,
+    mediaFailure,
   };
   entry = attached;
   editors.set(client, attached);
   return attached;
 }
 
-export function useProfileEditor() {
+export function useProfileEditor(mediaFailure: SettingsContentFailureReader) {
   useSettingsSession();
   const ambient = useSettingsAmbient();
   const client = useQueryClient();
@@ -156,13 +160,16 @@ export function useProfileEditor() {
       : { state: state?.status === 'error' ? 'unavailable' : 'unknown', csrfToken: null };
   if (
     cached &&
-    ((cached.attached && cached.users === 0) || !cached.observationCurrent() || !cached.owner.matches(observed))
+    ((cached.attached && cached.users === 0) ||
+      !cached.observationCurrent() ||
+      !cached.owner.matches(observed) ||
+      cached.mediaFailure !== mediaFailure)
   ) {
     retire(client, cached);
     cached = undefined;
   }
   // Keep the attachment check with its original entry rather than creating another session authority.
-  const entry = cached ?? createEntry(client, ambient);
+  const entry = cached ?? createEntry(client, ambient, mediaFailure);
   previous.current = { client, entry };
   const { owner } = entry;
   useSyncExternalStore(entry.subscribe, entry.snapshot, entry.snapshot);

@@ -24,6 +24,7 @@ import type {
 import { detailFailure, managedActionFailure as failure } from '../managed-account-failure';
 import { projectManagedAuthNavigation as projectNavigation } from '../managed-account-projection';
 import type { AccountNavigationPath as AuthManagementPagePath } from '../ports/accounts';
+import { settingsMediaFailure } from './content';
 
 type AuthManagementEnv = Parameters<typeof authManagementPageHref>[0];
 const selection = v.strictObject({ accountId: id, viewerId: id });
@@ -50,7 +51,7 @@ export const LOCAL_authManagementPageHref = (
   _targetId?: string,
 ): null => null;
 function exception(error: unknown): ManagedAccountActionsResult {
-  const result = managedAccountsException(error);
+  const result = managedAccountsException(error, settingsMediaFailure);
   return failure(
     result.status,
     { code: result.code },
@@ -186,7 +187,7 @@ export const readManagedAccountActions = createServerFn({ method: 'GET' })
   });
 
 function thrownFailure(error: unknown): DetailFailure {
-  const result = managedAccountsException(error);
+  const result = managedAccountsException(error, settingsMediaFailure);
   return detailFailure(
     result.status,
     { code: result.code, retryable: result.retryable, request_id: result.requestId },
@@ -282,9 +283,13 @@ import {
 import type { AccountRenameNavigation, AccountRenameResult } from '../account-rename-actions';
 
 export function accountRenameException(error: unknown): AccountRenameFailure {
-  const result = managedAccountsException(error);
+  const result = managedAccountsException(error, settingsMediaFailure);
   return boundedFailure(
-    profileReadFailure(error) ?? { status: result.status, ...(result.code ? { code: result.code } : {}) },
+    profileReadFailure(error, settingsMediaFailure) ?? {
+      status: result.status,
+      ...(result.code ? { code: result.code } : {}),
+      ...(result.retryAfter ? { retryAfter: result.retryAfter } : {}),
+    },
   );
 }
 

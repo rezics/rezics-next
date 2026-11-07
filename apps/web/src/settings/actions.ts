@@ -37,6 +37,7 @@ import {
   type WatchKind,
   type WatchRead,
 } from './watch-native';
+import { settingsMediaFailure, settingsThreadHref } from './adapters/content';
 
 /** One bounded owner read for one page, made only by the browser query. */
 export const readOwnedCollectionsPage = createServerFn({ method: 'GET' })
@@ -47,7 +48,8 @@ export const readOwnedCollectionsPage = createServerFn({ method: 'GET' })
   .handler(async ({ data }): Promise<CollectionPrivacyRead<OwnedCollectionsPage>> => {
     setResponseHeader('cache-control', 'private, no-store');
     return collectionPrivacyRead(() =>
-      readOwnedCollections(kernelClient(), getRequest(), env as Partial<SessionEnv>, data),
+      readOwnedCollections(kernelClient(), getRequest(), env as Partial<SessionEnv>, data, settingsMediaFailure),
+      settingsMediaFailure,
     );
   });
 
@@ -73,7 +75,7 @@ export const saveCollectionVisibility = createServerFn({ method: 'POST' })
   })
   .handler(async ({ data }): Promise<CollectionVisibilityWrite> => {
     setResponseHeader('cache-control', 'private, no-store');
-    return changeCollectionVisibility(kernelClient(), getRequest(), env as Partial<SessionEnv>, data);
+    return changeCollectionVisibility(kernelClient(), getRequest(), env as Partial<SessionEnv>, data, settingsMediaFailure);
   });
 
 export const readOwnedCollection = createServerFn({ method: 'GET' })
@@ -84,14 +86,17 @@ export const readOwnedCollection = createServerFn({ method: 'GET' })
   .handler(async ({ data }): Promise<CollectionPrivacyRead<OwnedCollection>> => {
     setResponseHeader('cache-control', 'private, no-store');
     return collectionPrivacyRead(() =>
-      reloadOwnedCollection(kernelClient(), getRequest(), env as Partial<SessionEnv>, data),
+      reloadOwnedCollection(kernelClient(), getRequest(), env as Partial<SessionEnv>, data, settingsMediaFailure),
+      settingsMediaFailure,
     );
   });
 
 export const readSettingsPage = createServerFn({ method: 'GET' }).handler(async (): Promise<SettingsPage> => {
   setResponseHeader('cache-control', 'private, no-store');
   const request = getRequest();
-  const page = await loadSettingsPage(kernelClient(), request, env as Partial<SessionEnv>);
+  const page = await loadSettingsPage(kernelClient(), request, env as Partial<SessionEnv>, {
+    mediaFailure: settingsMediaFailure,
+  });
   if (!page.signedIn) return page;
   return { ...page, csrfToken: requestCsrfToken(request) };
 });
@@ -104,15 +109,15 @@ export const savePreferences = createServerFn({ method: 'POST' })
   })
   .handler(async ({ data }): Promise<PreferenceWriteResult> => {
     setResponseHeader('cache-control', 'private, no-store');
-    return changePreferences(kernelClient(), getRequest(), env as Partial<SessionEnv>, data);
+    return changePreferences(kernelClient(), getRequest(), env as Partial<SessionEnv>, data, settingsMediaFailure);
   });
 
 /** The supported self-profile projection starts only in the signed-in browser settings view. */
-export const readProfile = createServerFn({ method: 'GET' }).handler(runReadProfile);
+export const readProfile = createServerFn({ method: 'GET' }).handler(() => runReadProfile(settingsMediaFailure));
 
 export const saveProfile = createServerFn({ method: 'POST' })
   .validator(parseProfileWrite)
-  .handler(async ({ data }) => runSaveProfile(data));
+  .handler(async ({ data }) => runSaveProfile(data, settingsMediaFailure));
 
 export const saveNotifications = createServerFn({ method: 'POST' })
   .validator((input: unknown) => {
@@ -122,7 +127,7 @@ export const saveNotifications = createServerFn({ method: 'POST' })
   })
   .handler(async ({ data }): Promise<NotificationWriteResult> => {
     setResponseHeader('cache-control', 'private, no-store');
-    return changeNotifications(kernelClient(), getRequest(), env as Partial<SessionEnv>, data);
+    return changeNotifications(kernelClient(), getRequest(), env as Partial<SessionEnv>, data, settingsMediaFailure);
   });
 
 export const readManagedAccountsInventory = createServerFn({ method: 'GET' })
@@ -136,9 +141,9 @@ export const readManagedAccountsInventory = createServerFn({ method: 'GET' })
       const subject = sessionSubject(request);
       if (!authorization || !subject) return { ok: false, kind: 'denied', status: null, code: null };
       // The native endpoint verifies that this is the current human, never an operated account.
-      return loadManagedAccounts(kernelClient(), authorization, subject, data, request.signal);
+      return loadManagedAccounts(kernelClient(), authorization, subject, data, request.signal, settingsMediaFailure);
     } catch (error) {
-      return managedAccountsException(error);
+      return managedAccountsException(error, settingsMediaFailure);
     }
   });
 
@@ -180,7 +185,14 @@ export const readWatchInventory = createServerFn({ method: 'GET' })
     const accountId = sessionSubject(request);
     if (!authorization || !accountId || accountId !== data.accountId)
       return { kind: 'denied', problem: { status: 401, code: null } };
-    return readWatchInventoryNative(kernelClient(undefined, authorization), accountId, data, request.signal);
+    return readWatchInventoryNative(
+      kernelClient(undefined, authorization),
+      accountId,
+      data,
+      settingsThreadHref,
+      request.signal,
+      settingsMediaFailure,
+    );
   });
 
 export const removeWatchSubscription = createServerFn({ method: 'POST' })
@@ -216,5 +228,5 @@ export const removeWatchSubscription = createServerFn({ method: 'POST' })
     const accountId = sessionSubject(request);
     if (!authorization || !accountId || accountId !== data.accountId || requestCsrfToken(request) !== data.csrfToken)
       return { kind: 'denied', problem: { status: 403, code: null } };
-    return removeWatchNative(kernelClient(undefined, authorization), data, authorization);
+    return removeWatchNative(kernelClient(undefined, authorization), data, authorization, settingsMediaFailure);
   });

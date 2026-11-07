@@ -12,6 +12,7 @@ import {
 import { profileReadFailure, type EditableProfileFailure, type ProfileEditing } from './editable-profile-source';
 import { isPlatformClosedError } from './ports/vocabulary';
 import { preferenceRetryDeadline, type SettingsAmbient } from './ports/ambient';
+import type { SettingsContentFailureReader } from './ports/content';
 
 export type ProfileScope = 'profile' | 'views';
 export type ProfileAttempt = Readonly<{
@@ -24,6 +25,7 @@ export type ProfileAttempt = Readonly<{
 export type ProfileEditorIO = {
   read: (signal?: AbortSignal) => Promise<ObservedProfile>;
   save: (attempt: ProfileAttempt, signal?: AbortSignal) => Promise<ProfileSaveResult>;
+  mediaFailure?: SettingsContentFailureReader;
   confirmed?: (profile: ProfileValues) => void;
   isCurrent?: () => boolean;
   canWrite?: () => boolean;
@@ -50,9 +52,13 @@ function observationEditing(current: ObservedProfile): ProfileEditing | null | u
   return 'editing' in current ? (current.editing ?? null) : undefined;
 }
 
-function failureMetadata(error: unknown): EditableProfileFailure | undefined {
+function failureMetadata(
+  error: unknown,
+  mediaFailure: SettingsContentFailureReader = () => undefined,
+): EditableProfileFailure | undefined {
   return (
-    profileReadFailure(error) ?? (isPlatformClosedError(error) ? { status: 403, code: 'platform_closed' } : undefined)
+    profileReadFailure(error, mediaFailure) ??
+    (isPlatformClosedError(error) ? { status: 403, code: 'platform_closed' } : undefined)
   );
 }
 
@@ -232,8 +238,8 @@ export class ProfileEditor {
   }
   unavailable(error?: unknown) {
     if (!this.current()) return;
-    const denied = profileReadDenied(error);
-    const failure = failureMetadata(error);
+    const denied = profileReadDenied(error, this.io.mediaFailure);
+    const failure = failureMetadata(error, this.io.mediaFailure);
     if (denied) this.readVersion++;
     this.update({
       phase: this.state.attempt ? 'uncertain' : 'unavailable',
@@ -356,7 +362,7 @@ export class ProfileEditor {
       );
     } catch (error) {
       if (!this.current()) return;
-      const failure = failureMetadata(error);
+      const failure = failureMetadata(error, this.io.mediaFailure);
       this.update({
         phase: 'uncertain',
         commandRetryAt: extendRetryDeadline(this.state.commandRetryAt, failure?.retryAfter, this.io.ambient.now()),

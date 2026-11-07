@@ -4,9 +4,9 @@ import { useQueryClient, type QueryClient } from '@tanstack/react-query';
 import { Button } from '@rezics/ui/shadcn/button';
 import { productionInboxShellPort } from './adapters/shell';
 import type { InboxSessionObservation } from './ports/shell';
-import { SignInPrompt } from '../threads/write-prompts';
 import { m } from '../paraglide/messages.js';
 import { inboxEntryState, type InboxSessionRead } from './inbox-viewer';
+import type { InboxContentPort } from './ports/content';
 
 export function retryInboxSession(client: QueryClient) {
   // Force one existing server read even when an unavailable result is fresh forever.
@@ -29,9 +29,11 @@ function inboxReturnDestination(value: string): string {
 export function InboxEntryState({
   state,
   sessionRead,
+  SignInPrompt,
 }: {
   state: InboxSessionObservation['state'];
   sessionRead?: InboxSessionRead | undefined;
+  SignInPrompt: InboxContentPort['SignInPrompt'];
 }) {
   const client = useQueryClient();
   const location = useLocation();

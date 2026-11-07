@@ -10,6 +10,7 @@ import { useSettingsAmbient } from '../../settings/adapters/ambient-view.tsx';
 import { ManagedAccountActionsForViewer } from '../../settings/managed-account-actions';
 import { type ManagedAccountActionsIO } from '../../settings/managed-account-actions-read';
 import { loadManagedAccountActions } from '../../settings/adapters/accounts';
+import { settingsContent } from '../../settings/adapters/presentation';
 import { ManagedAccountReader } from '../../settings/managed-account-detail-read';
 import { loadManagedAccountDetail } from '../../settings/adapters/accounts';
 
@@ -154,6 +155,7 @@ function Example({ outcome = 'available', authEntry }: { outcome?: Outcome; auth
           nativeAccountKind={organization ? 'organization' : 'actor'}
           operated={operated}
           self={accountId === viewerId}
+          mediaFailure={settingsContent.mediaFailure}
           authNavigation={authEntry ? authNavigation : undefined}
         />
       </div>

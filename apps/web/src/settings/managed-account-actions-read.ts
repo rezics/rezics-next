@@ -1,5 +1,5 @@
-import { MediaProblem } from '../media/kernel';
 import { managedAccountsException } from './managed-accounts-read';
+import type { SettingsContentFailureReader } from './ports/content';
 import { withManagedReadDeadline } from './managed-read-deadline';
 import type { ManagedReaderCurrent } from './managed-session-reader';
 import { preferenceRetryDeadline } from './preference-failure-retry';
@@ -20,9 +20,13 @@ export type {
 } from './managed-account-vocabulary';
 export { managedAccountActionNames } from './managed-account-vocabulary';
 
-function exception(error: unknown): ManagedAccountActionsResult {
-  const result = managedAccountsException(error);
-  return failure(result.status, { code: result.code }, error instanceof MediaProblem ? error.headers : undefined);
+function exception(error: unknown, mediaFailure: SettingsContentFailureReader): ManagedAccountActionsResult {
+  const result = managedAccountsException(error, mediaFailure);
+  return failure(
+    result.status,
+    { code: result.code },
+    result.retryAfter ? { 'retry-after': result.retryAfter } : undefined,
+  );
 }
 
 type ActionsSnapshot = { result: ManagedAccountActionsResult | null; pending: boolean; retryAt: number };
@@ -39,6 +43,7 @@ export class ManagedAccountActionsRead {
     private readonly target: ManagedAccountActionsSelection,
     private readonly io: ManagedAccountActionsIO,
     private readonly ambient: SettingsAmbient,
+    private readonly mediaFailure: SettingsContentFailureReader,
     private readonly currentOwner: ManagedReaderCurrent = () => true,
   ) {}
   snapshot = () => {
@@ -90,7 +95,7 @@ export class ManagedAccountActionsRead {
           ? failure(null)
           : result,
       )
-      .catch(exception)
+      .catch((error: unknown) => exception(error, this.mediaFailure))
       .then((result) => {
         if (!this.live()) return failure(null);
         this.retryAt =

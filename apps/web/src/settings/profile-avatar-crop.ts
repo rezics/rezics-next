@@ -1,4 +1,4 @@
-import type { UploadRefusalReason } from '../threads/upload';
+import type { UploadRefusalReason } from '../threads/upload-vocabulary';
 
 export const avatarUploadByteLimit = 20 * 1024 * 1024;
 export const avatarCropOutputLimit = 512;

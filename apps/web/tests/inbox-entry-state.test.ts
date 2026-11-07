@@ -48,6 +48,7 @@ mock.module('cloudflare:workers', () => ({
 
 const { sessionQuery } = await import('../src/session/query');
 const { InboxEntryState, retryInboxSession } = await import('../src/inbox/inbox-entry-state');
+const { inboxContent } = await import('../src/inbox/adapters/presentation');
 const { currentInboxViewer, inboxViewerStore, forInboxViewer, inboxEntryState } =
   await import('../src/inbox/inbox-viewer');
 const { inboxPageQuery, unreadCountQueryFor, markInboxViewerSeen } = await import('../src/inbox/inbox-query');
@@ -70,8 +71,18 @@ function deferred<T>() {
   return { promise, resolve };
 }
 
-async function markup(props: EntryProps, path = '/en/inbox', client = new QueryClient()) {
-  const root = createRootRoute({ component: () => createElement(InboxEntryState, props) });
+async function markup(
+  props: Omit<EntryProps, 'SignInPrompt'> & Partial<Pick<EntryProps, 'SignInPrompt'>>,
+  path = '/en/inbox',
+  client = new QueryClient(),
+) {
+  const root = createRootRoute({
+    component: () =>
+      createElement(InboxEntryState, {
+        ...props,
+        SignInPrompt: props.SignInPrompt ?? inboxContent.SignInPrompt,
+      }),
+  });
   const child = createRoute({ getParentRoute: () => root, path: '$' });
   const router = createRouter({
     routeTree: root.addChildren([child]),
@@ -87,7 +98,7 @@ describe('Offer actionable sign-in and session recovery on Inbox preserving nati
   test('sign-in uses the shared Auth entry and the current relative locale, search and fragment in every launch locale', async () => {
     await eachLocale(async (locale) => {
       const returnTo = `/${locale}/inbox?from=header&filter=unread#latest`;
-      const html = await markup({ state: 'signed-out' }, returnTo);
+      const html = await markup({ state: 'signed-out', SignInPrompt: inboxContent.SignInPrompt }, returnTo);
       expect(html).toContain(`/auth/sign-in?return_to=${encodeURIComponent(returnTo)}`);
       expect(html).toContain(m.inbox_sign_in());
       expect(html.match(/<a\b/g)).toHaveLength(1);

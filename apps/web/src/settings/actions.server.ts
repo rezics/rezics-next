@@ -13,6 +13,7 @@ import {
 import { createServerSettingsAmbient } from './adapters/ambient';
 import { notificationOriginalAllowed } from './notification-recovery';
 import { m } from '../paraglide/messages.js';
+import { settingsMediaFailure } from './adapters/content';
 
 const escape = (value: string) =>
   value.replace(
@@ -209,7 +210,9 @@ export async function submitNotificationForm(request: Request): Promise<Response
     const mode = recovery[0] as 'retry' | 'review' | 'confirmed';
     const confirmedVersion = mode === 'confirmed' ? Number(receipts[0]) : undefined;
     const confirmed = confirmedVersion === undefined ? {} : { confirmedVersion };
-    const page = await loadSettingsPage(kernelClient(), request, env as Partial<SessionEnv>);
+    const page = await loadSettingsPage(kernelClient(), request, env as Partial<SessionEnv>, {
+      mediaFailure: settingsMediaFailure,
+    });
     if (!page.signedIn) return recoveryPage(request, token, change, mode, { ...confirmed, status: 403 });
     if (
       !('preferences' in page) ||
@@ -228,7 +231,13 @@ export async function submitNotificationForm(request: Request): Promise<Response
     if (steps[0] !== 'send' || !admitted || (mode === 'review' && change.expectedVersion !== reviewed.expectedVersion))
       return recoveryPage(request, token, reviewed, mode, { current: page.page });
   }
-  const result = await changeNotifications(kernelClient(), request, env as Partial<SessionEnv>, change);
+  const result = await changeNotifications(
+    kernelClient(),
+    request,
+    env as Partial<SessionEnv>,
+    change,
+    settingsMediaFailure,
+  );
   if (!result.ok && result.reason === 'forbidden')
     return recoveryPage(request, token, change, recovery[0] === 'retry' ? 'retry' : 'review', { status: 403 });
   if (!result.ok)
@@ -243,7 +252,9 @@ export async function submitNotificationForm(request: Request): Promise<Response
         : 'review',
     );
   if (recovery[0] === 'retry') {
-    const page = await loadSettingsPage(kernelClient(), request, env as Partial<SessionEnv>);
+    const page = await loadSettingsPage(kernelClient(), request, env as Partial<SessionEnv>, {
+      mediaFailure: settingsMediaFailure,
+    });
     if (!page.signedIn || !('preferences' in page) || !page.page || page.preferences.version < result.version)
       return recoveryPage(request, token, change, 'confirmed', { confirmedVersion: result.version });
   }

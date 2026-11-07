@@ -16,6 +16,7 @@ const draft: ComponentProps<typeof ProfilePreview> = {
   biography: 'Unsaved biography',
   avatar: null,
   localAvatarUrl: null,
+  mediaSource: (media, format, width) => `/media/${media}/${format}/${width}`,
   links: [{ label: 'Notes', url: 'https://example.test/notes?q=local#draft', valid: true }],
   hasUnsavedChanges: true,
 };
@@ -143,20 +144,21 @@ test('matching current fields do not mark the local preview as saved while the o
   await editor.submit('profile');
   editor.edit({ displayName: initial.displayName });
   const snapshot = editor.snapshot();
-  const draft = snapshot.draft;
+  const profileDraft = snapshot.draft;
   expect(snapshot.attempt).not.toBeNull();
-  expect(draft?.displayName).toBe(initial.displayName);
+  expect(profileDraft?.displayName).toBe(initial.displayName);
   const changed =
-    snapshot.known != null && draft != null && Object.keys(profileChanges(snapshot.known, draft)).length > 0;
+    snapshot.known != null && profileDraft != null && Object.keys(profileChanges(snapshot.known, profileDraft)).length > 0;
   expect(changed).toBe(false);
   expect(profileHasLocalPreview(changed, false, snapshot.attempt, snapshot.acknowledged)).toBe(true);
   const html = renderToStaticMarkup(
     performanceAmbientTree(
       createElement(ProfilePreview, {
-        displayName: draft!.displayName,
-        biography: draft!.biography,
-        avatar: draft!.avatar,
+        displayName: profileDraft!.displayName,
+        biography: profileDraft!.biography,
+        avatar: profileDraft!.avatar,
         localAvatarUrl: null,
+        mediaSource: draft.mediaSource,
         hasUnsavedChanges: profileHasLocalPreview(changed, false, snapshot.attempt, snapshot.acknowledged),
         links: [],
       }),

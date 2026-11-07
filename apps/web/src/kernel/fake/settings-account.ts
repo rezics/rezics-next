@@ -5,7 +5,11 @@ import { settingsSections } from '../../settings/sections-navigation';
 export type AccountSafetyExample = 'ready' | 'missing-issuer' | 'signed-out' | 'missing-csrf';
 
 /** Interface examples only: these do not perform or authorize an account operation. */
-export function settingsAccountExample(example: AccountSafetyExample, onReload: () => void): AccountSafetyProps {
+export type SettingsAccountExampleProps =
+  | Extract<AccountSafetyProps, { state: 'signed-in' }>
+  | Omit<Extract<AccountSafetyProps, { state: 'signed-out' }>, 'SignInPrompt'>;
+
+export function settingsAccountExample(example: AccountSafetyExample, onReload: () => void): SettingsAccountExampleProps {
   if (example === 'signed-out') return { state: 'signed-out', returnTo: '/settings#account' };
   return {
     state: 'signed-in',

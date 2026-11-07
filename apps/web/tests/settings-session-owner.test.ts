@@ -38,6 +38,7 @@ const { AccountsQueryProvider: QueryClientProvider } = await import('./fixtures/
 const { sessionQuery, exposureQuery } = await import('../src/session/query');
 const { SettingsSessionOwner } = await import('../src/settings/settings-session-owner');
 const { accountPreferenceIO, SettingsPageView } = await import('../src/settings/settings-page');
+const { settingsContent } = await import('../src/settings/adapters/presentation');
 const { collectionPrivacyIO } = await import('../src/settings/collection-privacy');
 const { verificationRecoveryIO } = await import('../src/settings/verification');
 const { SettingsNavigationDrafts } = await import('../src/settings/reading-navigation');
@@ -524,7 +525,8 @@ test('the StrictMode Settings page retires synchronous away/back callbacks and r
     },
   };
   const route = createRootRoute({
-    component: () => createElement(SettingsPageView, { page, csrfToken: identity.csrfToken, preferenceIO }),
+    component: () =>
+      createElement(SettingsPageView, { page, csrfToken: identity.csrfToken, preferenceIO, content: settingsContent }),
   });
   const router = createRouter({
     routeTree: route,
@@ -1214,6 +1216,7 @@ test('actual null-CSRF Settings composition retains reloads, disabled writers an
         createElement(SettingsPageView, {
           page,
           csrfToken: null,
+          content: settingsContent,
           preferenceIO,
           managedAccountsIO,
         }),

@@ -1317,7 +1317,13 @@
         "apps/web/src/inbox/adapters/library-view.tsx",
         "apps/web/src/inbox/ports/ambient.ts",
         "apps/web/src/inbox/adapters/ambient.ts",
-        "apps/web/src/inbox/adapters/ambient-view.tsx"
+        "apps/web/src/inbox/adapters/ambient-view.tsx",
+        "apps/web/src/settings/ports/content.ts",
+        "apps/web/src/settings/adapters/content.ts",
+        "apps/web/src/settings/adapters/presentation.tsx",
+        "apps/web/src/inbox/ports/content.ts",
+        "apps/web/src/inbox/adapters/content.ts",
+        "apps/web/src/inbox/adapters/presentation.tsx"
       ],
       "allowedDependencies": ["client", "ui", "web-app", "web-content", "web-library", "web-search"],
       "capabilities": ["account-settings"]
@@ -1360,12 +1366,17 @@
         "apps/web/src/community/realm-catalogue-entry.ts",
         "apps/web/src/community/realm-reading-return.ts",
         "apps/web/src/media/cover-src.ts",
+        "apps/web/src/media/content-failure.ts",
         "apps/web/src/threads/byline-time.ts",
         "apps/web/src/threads/community-entry.ts",
+        "apps/web/src/threads/initials.ts",
         "apps/web/src/threads/post-command-lifetime.ts",
         "apps/web/src/threads/thread-reading-context.ts",
         "apps/web/src/threads/contract/contribution-actions.ts",
-        "apps/web/src/threads/index.ts"
+        "apps/web/src/threads/index.ts",
+        "apps/web/src/threads/profile-avatar-upload.ts",
+        "apps/web/src/threads/upload-vocabulary.ts",
+        "apps/web/src/threads/write-prompts.tsx"
       ],
       "allowedDependencies": [
         "client",

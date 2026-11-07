@@ -1,8 +1,8 @@
 import type { KernelClient } from '@rezics/client';
 import { m } from '../paraglide/messages.js';
 import { getLocale, localizeHref } from '../paraglide/runtime.js';
-import { threadLocation } from '../threads/thread-reading-context';
 import { INBOX_PAGE_SIZE, MAX_INBOX_CURSOR_LENGTH } from './inbox-work';
+import type { InboxContentPort } from './ports/content';
 
 export const INBOX_SELECTIONS = ['all', 'unread'] as const;
 export type InboxSelection = (typeof INBOX_SELECTIONS)[number];
@@ -467,7 +467,10 @@ export function decodeInboxPage(value: unknown, accountId?: string): NoticePage 
 }
 
 /** Convert only native action identities to existing localized routes; never consume a supplied URL. */
-export function inboxOpenHref(item: InboxNotice): string | undefined {
+export function inboxOpenHref(
+  item: InboxNotice,
+  threadHref: InboxContentPort['threadHref'],
+): string | undefined {
   const open = item.actions?.open;
   if (
     !open ||
@@ -478,9 +481,9 @@ export function inboxOpenHref(item: InboxNotice): string | undefined {
   if (open.kind === 'board' && item.target.boardId === open.boardId)
     return localizeHref(`/boards/${encodeURIComponent(open.boardId)}`);
   if (open.kind === 'thread' && item.target.threadId === open.threadId)
-    return threadLocation(getLocale(), { id: open.threadId, title: item.target.threadTitle });
+    return threadHref(getLocale(), { id: open.threadId, title: item.target.threadTitle });
   if (open.kind === 'thread_post' && item.target.threadId === open.threadId && item.target.postId === open.postId)
-    return threadLocation(getLocale(), { id: open.threadId, title: item.target.threadTitle }, undefined, open.postId);
+    return threadHref(getLocale(), { id: open.threadId, title: item.target.threadTitle, postId: open.postId });
   if (open.kind === 'moderation_decision' && item.kind === 'moderation_decision' && item.decisionId === open.decisionId)
     return localizeHref(`/moderation/decisions/${encodeURIComponent(open.decisionId)}`);
   if (open.kind === 'report_outcome' && item.kind === 'moderation_decision' && item.reportId === open.reportId)
@@ -497,7 +500,10 @@ export function inboxTargetContext(target: NativeTarget | undefined): string | u
 }
 
 /** The composed response supplies owner summary, current actor and target disclosure without point reads. */
-export async function resolveInboxItems(page: NoticePage): Promise<ResolvedInboxPage> {
+export async function resolveInboxItems(
+  page: NoticePage,
+  threadHref: InboxContentPort['threadHref'],
+): Promise<ResolvedInboxPage> {
   return {
     viewer: page.viewer,
     selection: page.selection,
@@ -506,7 +512,7 @@ export async function resolveInboxItems(page: NoticePage): Promise<ResolvedInbox
       const native = notice.actor && notice.target && notice.actions;
       const actorName = notice.actor?.state === 'available' ? notice.actor.displayName.trim() : undefined;
       const context = inboxTargetContext(notice.target);
-      const href = inboxOpenHref(notice);
+      const href = inboxOpenHref(notice, threadHref);
       return {
         ...notice,
         ...(href ? { href } : {}),

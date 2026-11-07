@@ -1,11 +1,11 @@
 import type { KernelClient } from '@rezics/client';
 import { isPlatformClosedError } from './ports/vocabulary';
-import { MediaProblem } from '../media/kernel';
 import { m } from '../paraglide/messages.js';
 import { validateVerificationDraft } from './verification-validation';
 import { settingsCommandKeyHeader } from './command-headers';
 import { serverSettingsTimer } from './adapters/ambient';
 import { withVerificationDeadline } from './verification-request-deadline';
+import type { SettingsContentFailureReader } from './ports/content';
 
 export type VerificationInput = {
   subject: string;
@@ -153,13 +153,15 @@ function nativeFailure(result: {
 export function verificationFailureFromException(
   error: unknown,
   fallbackMessage = m.settings_verification_request_failed(),
+  mediaFailure: SettingsContentFailureReader = () => undefined,
 ): VerificationFailure | undefined {
   if (error instanceof VerificationReadError) return error.failure;
-  if (error instanceof MediaProblem)
+  const contentFailure = mediaFailure(error);
+  if (contentFailure)
     return nativeFailure({
-      status: error.problem.status,
-      error: { value: error.problem },
-      headers: error.headers,
+      status: contentFailure.status,
+      error: { value: contentFailure.problem },
+      headers: contentFailure.headers,
     });
   if (isPlatformClosedError(error))
     return nativeFailure({
@@ -174,13 +176,17 @@ export function verificationFailureFromException(
 export function verificationSafeFailure(
   error: unknown,
   fallbackMessage = m.settings_verification_request_failed(),
+  mediaFailure: SettingsContentFailureReader = () => undefined,
 ): VerificationFailure {
-  return verificationFailureFromException(error, fallbackMessage) ?? { status: 0, message: fallbackMessage };
+  return verificationFailureFromException(error, fallbackMessage, mediaFailure) ?? { status: 0, message: fallbackMessage };
 }
 
-function asReadError(error: unknown): VerificationReadError | undefined {
+function asReadError(
+  error: unknown,
+  mediaFailure: SettingsContentFailureReader = () => undefined,
+): VerificationReadError | undefined {
   if (error instanceof VerificationReadError) return error;
-  const failure = verificationFailureFromException(error, m.settings_verification_load_failed());
+  const failure = verificationFailureFromException(error, m.settings_verification_load_failed(), mediaFailure);
   return failure ? new VerificationReadError(failure) : undefined;
 }
 
@@ -189,6 +195,7 @@ export async function readVerification(
   accountId: string,
   authorization: string,
   caller?: AbortSignal,
+  mediaFailure: SettingsContentFailureReader = () => undefined,
 ) {
   try {
     const result = await withVerificationDeadline(
@@ -205,7 +212,7 @@ export async function readVerification(
       });
     return data;
   } catch (error) {
-    throw asReadError(error) ?? error;
+    throw asReadError(error, mediaFailure) ?? error;
   }
 }
 
@@ -215,6 +222,7 @@ export async function requestVerification(
   authorization: string,
   input: VerificationInput,
   caller?: AbortSignal,
+  mediaFailure: SettingsContentFailureReader = () => undefined,
 ): Promise<VerificationCommandResult> {
   if (validateVerificationDraft(input).length)
     return { ok: false, status: 0, message: m.settings_verification_validation(), outcome: 'refused' };
@@ -237,7 +245,7 @@ export async function requestVerification(
       return { ok: true, verificationRequest: result.data!.verificationRequest };
     return { ok: false, ...nativeFailure(result) };
   } catch (error) {
-    const failure = verificationFailureFromException(error);
+    const failure = verificationFailureFromException(error, undefined, mediaFailure);
     if (failure) return { ok: false, ...failure };
     throw error;
   }
@@ -249,6 +257,7 @@ export async function withdrawVerification(
   authorization: string,
   idempotencyKey: string,
   caller?: AbortSignal,
+  mediaFailure: SettingsContentFailureReader = () => undefined,
 ): Promise<VerificationCommandResult> {
   try {
     const result = await withVerificationDeadline(
@@ -269,7 +278,7 @@ export async function withdrawVerification(
       return { ok: true, verificationRequest: result.data!.verificationRequest };
     return { ok: false, ...nativeFailure(result) };
   } catch (error) {
-    const failure = verificationFailureFromException(error);
+    const failure = verificationFailureFromException(error, undefined, mediaFailure);
     if (failure) return { ok: false, ...failure };
     throw error;
   }

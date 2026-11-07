@@ -28,6 +28,7 @@ let loadManagedAccountDetail: (typeof import('../src/settings/adapters/accounts'
 let managedAccountTarget: (typeof import('../src/settings/managed-account-detail-read'))['managedAccountTarget'];
 let managedAccountsBackHref: (typeof import('../src/settings/managed-account-detail-read'))['managedAccountsBackHref'];
 let m: (typeof import('../src/paraglide/messages.js'))['m'];
+let settingsContent: (typeof import('../src/settings/adapters/presentation'))['settingsContent'];
 let AnonymousSessionContext: (typeof import('../src/session/query'))['AnonymousSessionContext'];
 let QueryClientProvider: (typeof import('./fixtures/accounts-composition'))['AccountsQueryProvider'];
 beforeAll(async () => {
@@ -38,6 +39,7 @@ beforeAll(async () => {
     await import('../src/settings/managed-account-detail-read'));
   ({ loadManagedAccountDetail } = await import('../src/settings/adapters/accounts'));
   ({ m } = await import('../src/paraglide/messages.js'));
+  ({ settingsContent } = await import('../src/settings/adapters/presentation'));
   ({ AnonymousSessionContext } = await import('../src/session/query'));
 });
 
@@ -88,7 +90,12 @@ const markup = (reader: ManagedAccountReader | null) =>
         createElement(
           AnonymousSessionContext,
           { value: true },
-          createElement(ManagedAccountDetailCard, { reader, backHref }),
+          createElement(ManagedAccountDetailCard, {
+            reader,
+            backHref,
+            initials: settingsContent.initials,
+            mediaFailure: settingsContent.mediaFailure,
+          }),
         ),
       ),
     ),

@@ -20,8 +20,23 @@ import {
   restartInboxPage,
 } from '../src/inbox/inbox-pagination';
 mock.module('cloudflare:workers', () => ({ env: {} }));
-const { decodeInboxPage, nativeInboxEnvelope, readyInboxPage, resolveInboxItems } =
+const {
+  decodeInboxPage,
+  nativeInboxEnvelope,
+  readyInboxPage,
+  resolveInboxItems: resolveWithDestination,
+  loadInboxPage: readInboxPage,
+} =
   await import('../src/inbox/inbox-read');
+const { inboxContent } = await import('../src/inbox/adapters/presentation');
+const resolveInboxItems = (page: Parameters<typeof resolveWithDestination>[0]) =>
+  resolveWithDestination(page, inboxContent.threadHref);
+const loadInboxPage = (
+  client: Parameters<typeof readInboxPage>[0],
+  accountId: string,
+  authorization: string,
+  query?: Parameters<typeof readInboxPage>[3],
+) => readInboxPage(client, accountId, authorization, query, inboxContent);
 const { unreadBadgeLabel } = await import('../src/inbox/unread-badge');
 type InboxNotice = import('../src/inbox/inbox-read').InboxNotice;
 
@@ -184,7 +199,7 @@ test('page and badge use private reads, require deliberate acknowledgement, and 
   expect(unreadBadgeLabel({ count: 4, capped: false, basis: 'current-visible-lower-bound' })).toBe('≥4');
 });
 
-const { loadInboxPage, markInboxThrough } = await import('../src/inbox/inbox-read');
+const { markInboxThrough } = await import('../src/inbox/inbox-read');
 const { loadReporterStatus } = await import('../src/moderation/reporter-status-read');
 
 test('the composed native post action gets its exact Thread post anchor without point reads', async () => {

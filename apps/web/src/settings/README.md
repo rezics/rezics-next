@@ -406,3 +406,45 @@ owns runtime, native/browser walks, architecture counters and growth evidence; n
 Design sources: this README, Inbox and account-specific Profile editor READMEs, development verification, architecture,
 and the Web and migration-under-a-ratchet sections of the adopted architecture research. The shared reference index was
 consulted; this behavior-preserving migration needs no new external product decision.
+
+## Content capability boundary
+
+Settings receives Content behavior through the typed `SettingsContentPort` in `ports/content.ts`. Ordinary `/settings`
+route composition supplies `settingsContent` from `adapters/presentation.tsx`; existing server-function entrypoints bind
+the matching native adapter from `adapters/content.ts`. Settings readers and components do not import `media/kernel`,
+`threads/upload`, `threads/initials`, `threads/write-prompts` or `threads/thread-href`.
+
+The Profile avatar controller owns crop state, local preview, selection, upload stages and retry lifecycle. Content owns
+the native Media reservation, upload, resume and advice transport behind the public `threads/profile-avatar-upload.ts`
+entry. The only shared upload contract is the pure `threads/upload-vocabulary.ts` vocabulary for reservation intent,
+stage and response-wait callbacks, and refusal reason. `media/content-failure.ts` recognizes Content's `MediaProblem`
+inside Content and projects its status, problem and headers into Settings' failure contract without exposing the Content
+error class. Unknown errors retain the consumer's existing failure behavior.
+
+Settings retains the native/application decisions for avatar crop, upload and advice; editable Profile reads, drafts and
+saves; preferences and Collection privacy; managed-account reads, actions, detail and rename; verification; and Watches.
+Accounts and Kernel retain their current reads and commands. Content supplies avatar transport and media-failure
+recognition, plus shared identity formatting, sign-in prompt presentation and canonical thread URL construction. Native
+result envelopes, owner labels, media admission and upload lifecycle retain their current meaning.
+
+| Surface | Settings-owned work | Nested owner work |
+| --- | --- | --- |
+| Avatar | Crop choice, local preview, target ownership, retry and Profile draft/save | Content reserves, uploads, resumes and reads advice through Media; Content projects `MediaProblem` at the boundary |
+| Editable Profile | Current Profile projection, section draft, admission and original write/readback | Accounts and Kernel retain Profile and viewer-action endpoints; Content composes admitted avatar summaries and recognizes its media failures |
+| Preferences and privacy | Preferences, Collection privacy, current-page recovery and writes | Existing Accounts/Kernel native reads and commands stay in their readers; Content contributes media-failure recognition |
+| Managed accounts | Directory/detail reads, action admission, rename handoff and viewer retirement | Accounts and Auth retain management and issuer-owned safety behavior; Content supplies shared identity formatting and failure projection |
+| Verification | Status, suggestions, Request/Withdraw admission and recovery | Existing Accounts/Kernel read and command contracts stay installed; Content contributes media-failure recognition |
+| Watches | Cursor pages, removal identity/revision and current native row | Content formats thread destinations with `threadLocation`; board paths remain Settings-localized |
+
+**Decision:** Settings and Inbox own the Content ports; route composition binds Content adapters; only pure upload
+lifecycle and identity vocabulary is shared.
+
+**Boundary result:** Against this worktree's baseline, this migration removes 17 web-performance rule-2 records: 8
+`media/kernel`, 4 `threads/upload`, 2 `threads/initials`, 2 `threads/write-prompts` and 1 `threads/thread-href`.
+The remaining web-performance baseline has 43 records. The existing web-performance-to-web-content module edge is
+unchanged (module-edge delta 0); affected SCC and reachable import-closure deltas are both 0. No module cycle or
+baseline growth was introduced. Runtime/native/browser and growth evidence remains with the post-landing verifier.
+
+The receiving contracts remain pinned by the existing Profile avatar, editable Profile, Preferences, managed-account,
+verification, Watch and Inbox focused suites. Landing checks the Web workspace's two official TypeScript programs;
+native, browser, root and growth acceptance are deferred to integration.

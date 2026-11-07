@@ -5,7 +5,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@rezics/ui/shadcn/card
 import { Separator } from '@rezics/ui/shadcn/separator';
 import { cn } from '@rezics/ui/utils';
 import { m } from '../paraglide/messages.js';
-import { SignInPrompt } from '../threads/write-prompts';
+import type { SettingsPrompt } from './ports/content';
 import { accountSafetyLinks } from './account-safety-links';
 import { AccountRenameLink } from './account-rename-link';
 import type { AccountRenameNavigation, AccountRenameResult } from './account-rename-actions';
@@ -39,7 +39,7 @@ export type AccountSafetyProps =
         isCurrent?: ManagedReaderCurrent;
       };
     }
-  | { state: 'signed-out'; returnTo: string };
+  | { state: 'signed-out'; returnTo: string; SignInPrompt: SettingsPrompt };
 
 /** This mounted region never seeds capability from a historical settings response. */
 export function AccountSafetySection(props: AccountSafetyProps) {
@@ -365,7 +365,7 @@ export function AccountSafetyCard(props: AccountSafetyProps) {
         {props.state === 'signed-out' ? (
           <div className="space-y-3">
             <p className="text-sm text-muted-foreground">{m.settings_account_sign_in_text()}</p>
-            <SignInPrompt returnTo={props.returnTo} />
+            <props.SignInPrompt returnTo={props.returnTo} />
           </div>
         ) : (
           <>

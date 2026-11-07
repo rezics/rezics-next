@@ -3,23 +3,15 @@ import { UserRound } from 'lucide-react';
 import { Avatar, AvatarFallback, AvatarImage } from '@rezics/ui/shadcn/avatar';
 import { Button } from '@rezics/ui/shadcn/button';
 import { MediaImage } from '@rezics/ui/media-image';
-import { coverSrc } from '../media/cover-src';
 import { m } from '../paraglide/messages.js';
-import {
-  readSiteAvatarUploadAdvice,
-  resumeReplyImageUpload,
-  uploadAvatar,
-  type UploadRefusalReason,
-} from '../threads/upload';
+import type { UploadRefusalReason } from '../threads/upload-vocabulary';
+import type { SettingsAvatarMedia } from './ports/content';
 import type { ProfileValues } from './profile-data';
 import type { ProfileEditor } from './profile-write';
 import {
   avatarMedia,
   ProfileAvatarUpload,
-  type AvatarAdviceRead,
   type AvatarAdviceState,
-  type AvatarResume,
-  type AvatarUpload,
 } from './profile-avatar-upload';
 import { ProfileAvatarCrop } from './profile-avatar-crop.tsx';
 import { useSettingsAmbient } from './adapters/ambient-view.tsx';
@@ -28,19 +20,9 @@ import { usePreferenceRetry } from './preferences';
 export function useProfileAvatarUpload(
   editor: ProfileEditor,
   closed: boolean,
-  upload: AvatarUpload = uploadAvatar,
-  resume: AvatarResume | undefined = upload === uploadAvatar ? resumeReplyImageUpload : undefined,
+  content: SettingsAvatarMedia,
 ) {
-  const controller = useMemo(() => {
-    const guardedUpload: AvatarUpload = (accountId, file, signal, intent, onStage, onResponseWait) =>
-      upload(accountId, file, signal, intent, onStage, onResponseWait);
-    const guardedResume: AvatarResume | undefined =
-      resume &&
-      ((mediaId, file, signal, onStage, intent, onResponseWait) =>
-        resume(mediaId, file, signal, onStage, intent, onResponseWait));
-    const readAdvice: AvatarAdviceRead = readSiteAvatarUploadAdvice;
-    return new ProfileAvatarUpload(editor, guardedUpload, URL, guardedResume, readAdvice);
-  }, [editor, upload, resume]);
+  const controller = useMemo(() => new ProfileAvatarUpload(editor, content), [editor, content]);
   const state = useSyncExternalStore(controller.subscribe, controller.snapshot, controller.snapshot);
   useLayoutEffect(() => {
     if (!closed) return controller.connect();
@@ -119,6 +101,7 @@ function adviceStatus(advice: AvatarAdviceState | undefined) {
 export function ProfileAvatar({
   avatar,
   known,
+  mediaSource,
   upload,
   disabled,
   referenceDisabled = disabled,
@@ -126,6 +109,7 @@ export function ProfileAvatar({
 }: {
   avatar: ProfileValues['avatar'];
   known: ProfileValues['avatar'];
+  mediaSource: (media: string, format: 'avif' | 'webp', width: number) => string;
   upload: ReturnType<typeof useProfileAvatarUpload>;
   disabled: boolean;
   referenceDisabled?: boolean;
@@ -168,7 +152,7 @@ export function ProfileAvatar({
               frame={1}
               sizes="80px"
               alt=""
-              src={({ media, format, width }) => coverSrc(media, format, width)}
+              src={({ media, format, width }) => mediaSource(media, format, width)}
             />
           </div>
         )}

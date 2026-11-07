@@ -19,6 +19,7 @@ import { getLocale, locales } from '../../paraglide/runtime.js';
 import { m } from '../../paraglide/messages.js';
 import { createProfileStoryIO, profileStoryValues } from '../../kernel/fake/settings-profile';
 import { ProfileCard } from '../../settings/profile';
+import { settingsContent } from '../../settings/adapters/presentation';
 import { ProfileEditor } from '../../settings/profile-write';
 import { ProfileNavigation } from '../../settings/profile-navigation';
 import { SettingsNavigationProvider } from '../../settings/reading-navigation';
@@ -230,7 +231,7 @@ function ReadingLeaveEditor() {
           />
         </section>
         <ProfileNavigation editor={editor}>
-          <ProfileCard editor={editor} />
+          <ProfileCard editor={editor} content={settingsContent} />
         </ProfileNavigation>
       </div>
     </SettingsNavigationProvider>

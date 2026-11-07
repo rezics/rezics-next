@@ -4,6 +4,7 @@ import { useQueryClient } from '@tanstack/react-query';
 import { expect, userEvent, waitFor, within } from 'storybook/test';
 import { env } from '../../.storybook/cloudflare-workers';
 import { InboxPageView } from '../inbox/inbox-page';
+import { inboxContent } from '../inbox/adapters/presentation';
 import { sessionQuery } from '../session/query';
 import { m } from '../paraglide/messages.js';
 import { getLocale } from '../paraglide/runtime.js';
@@ -50,7 +51,7 @@ function InboxPageComposition() {
   }, [client]);
   return (
     <AppShell>
-      <InboxPageView />
+      <InboxPageView content={inboxContent} />
     </AppShell>
   );
 }

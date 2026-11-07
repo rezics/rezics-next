@@ -2,6 +2,7 @@ import type { Meta, StoryObj } from '@storybook/react-vite';
 import { useMemo } from 'react';
 import { expect, userEvent, within } from 'storybook/test';
 import { InboxPageView } from '../inbox/inbox-page';
+import { inboxContent } from '../inbox/adapters/presentation';
 import {
   nativeInboxEnvelope,
   resolveInboxItems,
@@ -105,7 +106,7 @@ async function readyPage(
   next: string | null,
   selection: InboxPageQuery['selection'] = 'all',
 ): Promise<InboxPage> {
-  const resolved = await resolveInboxItems(nativeInboxEnvelope(notices, next, 'alice', selection));
+  const resolved = await resolveInboxItems(nativeInboxEnvelope(notices, next, 'alice', selection), inboxContent.threadHref);
   return { signedIn: true, state: 'ready', ...resolved };
 }
 
@@ -146,7 +147,7 @@ function Preview({
   return (
     <PatternStory visitor="Signed In" path="/inbox">
       <AppShell>
-        <InboxPageView loadPage={loadPage} acknowledgeNotice={acknowledgeNotice} />
+        <InboxPageView loadPage={loadPage} acknowledgeNotice={acknowledgeNotice} content={inboxContent} />
       </AppShell>
     </PatternStory>
   );

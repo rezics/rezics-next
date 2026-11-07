@@ -3,6 +3,7 @@ import { useMemo, useState } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { expect, userEvent, waitFor, within } from 'storybook/test';
 import { InboxPageView } from '../inbox/inbox-page';
+import { inboxContent } from '../inbox/adapters/presentation';
 import { readInboxPage, readyInboxPage, type InboxPage, type InboxPageQuery } from '../inbox/inbox-read';
 import { m } from '../paraglide/messages.js';
 import { sessionQuery } from '../session/query';
@@ -183,7 +184,7 @@ function SessionTransitionPage() {
         </button>
       </div>
       <AppShell>
-        <InboxPageView />
+        <InboxPageView content={inboxContent} />
       </AppShell>
     </>
   );
@@ -238,7 +239,7 @@ function RejectedContinuationExample({ failedReset = false }: { failedReset?: bo
   }, [failedReset]);
   return (
     <PatternStory visitor="Signed In" path="/inbox?fixture=mixed">
-      <InboxPageView loadPage={loadPage} />
+      <InboxPageView loadPage={loadPage} content={inboxContent} />
     </PatternStory>
   );
 }

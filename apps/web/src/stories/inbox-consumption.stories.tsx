@@ -2,6 +2,7 @@ import type { Meta, StoryObj } from '@storybook/react-vite';
 import { useMemo, useState } from 'react';
 import { expect, userEvent, within } from 'storybook/test';
 import { InboxPageView } from '../inbox/inbox-page';
+import { inboxContent } from '../inbox/adapters/presentation';
 import {
   nativeInboxEnvelope,
   resolveInboxItems,
@@ -12,7 +13,6 @@ import {
 } from '../inbox/inbox-read';
 import { m } from '../paraglide/messages.js';
 import { getLocale } from '../paraglide/runtime.js';
-import { threadLocation } from '../threads/thread-href';
 import { AppShell } from '../shell/shell';
 import { PageStory, PatternStory } from './page';
 import { inboxTriageStory, resetInboxTriageStory } from '../kernel/fake/notifications';
@@ -33,12 +33,11 @@ const meta = {
 export default meta;
 type Story = StoryObj<typeof meta>;
 
-const watchHref = threadLocation(
-  getLocale(),
-  { id: '01a17a3b-0884-721b-91ef-d7ffd7bb58f1', title: 'Reading together' },
-  undefined,
-  '01a17a3b-0884-721b-91ef-d7ffd7bb58f2',
-);
+const watchHref = inboxContent.threadHref(getLocale(), {
+  id: '01a17a3b-0884-721b-91ef-d7ffd7bb58f1',
+  title: 'Reading together',
+  postId: '01a17a3b-0884-721b-91ef-d7ffd7bb58f2',
+});
 
 function InboxStory({ fixture }: { fixture: string }) {
   return <PageStory visitor="Signed In" path={`/inbox?fixture=${fixture}`} />;
@@ -151,6 +150,7 @@ function ReturnPreview() {
         reads.push(query);
         const resolved = await resolveInboxItems(
           nativeInboxEnvelope([nativeNotice('watch-origin', 'thread_watch')], 'watch-older', 'alice', query.selection),
+          inboxContent.threadHref,
         );
         return { signedIn: true, state: 'ready', ...resolved };
       },
@@ -159,7 +159,11 @@ function ReturnPreview() {
   return (
     <PatternStory visitor="Signed In" path="/inbox">
       <AppShell>
-        <InboxPageView loadPage={loadPage} historyKey={reads.length > 1 ? 'returned-range' : 'original-range'} />
+        <InboxPageView
+          loadPage={loadPage}
+          content={inboxContent}
+          historyKey={reads.length > 1 ? 'returned-range' : 'original-range'}
+        />
       </AppShell>
     </PatternStory>
   );
@@ -196,6 +200,7 @@ function RecoveryPreview() {
       async (query: InboxPageQuery): Promise<InboxPage> => {
         const resolved = await resolveInboxItems(
           nativeInboxEnvelope([nativeNotice('watch-origin', 'thread_watch')], null, 'alice', query.selection),
+          inboxContent.threadHref,
         );
         return { signedIn: true, state: 'ready', ...resolved };
       },
@@ -208,7 +213,7 @@ function RecoveryPreview() {
   return (
     <PatternStory visitor="Signed In" path="/inbox">
       <AppShell>
-        <InboxPageView loadPage={loadPage} acknowledgeNotice={acknowledgeNotice} />
+        <InboxPageView loadPage={loadPage} acknowledgeNotice={acknowledgeNotice} content={inboxContent} />
       </AppShell>
     </PatternStory>
   );

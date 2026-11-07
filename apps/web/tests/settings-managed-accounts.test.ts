@@ -14,6 +14,7 @@ import { managedAccountTarget, selectAdmittedManagedAccountTarget } from '../src
 
 import { MediaProblem } from '../src/media/kernel';
 import { preferenceRetryDeadline } from '../src/settings/preference-failure-retry';
+import { settingsMediaFailure } from '../src/settings/adapters/content';
 import { createBrowserSettingsAmbient } from '../src/settings/adapters/ambient';
 
 const settingsAmbient = createBrowserSettingsAmbient();
@@ -298,6 +299,7 @@ test('Respect native retry delays in managed account inventory with current nati
     expect(
       managedAccountsException(
         new MediaProblem({ ...body, title: 'Unavailable', type: 'about:blank' }, { 'Retry-After': retryAfter }),
+        settingsMediaFailure,
       ),
     ).toEqual(failure);
   }

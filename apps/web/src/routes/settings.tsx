@@ -8,6 +8,7 @@ import { sessionQuery } from '../session';
 import { createFileRoute } from '@tanstack/react-router';
 import { BoundCollectionPrivacySection, BoundShelfPreferencesCard } from '../settings/adapters/library-view.tsx';
 import { readSettingsPage, SettingsPageView } from '../settings';
+import { settingsContent } from '../settings/adapters/presentation';
 import { m } from '../paraglide/messages.js';
 
 export const Route = createFileRoute('/settings')({
@@ -39,6 +40,7 @@ function SettingsRoute() {
         requestSession={requestSession}
         ShelfCard={BoundShelfPreferencesCard}
         PrivacySection={BoundCollectionPrivacySection}
+        content={settingsContent}
       />
     </NativeAccountsProvider>
   );

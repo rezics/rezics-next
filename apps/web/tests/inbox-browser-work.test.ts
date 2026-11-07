@@ -19,7 +19,10 @@ const {
   MAX_INBOX_PRIOR_ADDRESSES,
   MAX_INBOX_RETAINED_CURSORS,
 } = await import('../src/inbox/inbox-work');
-const { loadInboxPage } = await import('../src/inbox/inbox-read');
+const { loadInboxPage: readInboxPage } = await import('../src/inbox/inbox-read');
+const { inboxContent } = await import('../src/inbox/adapters/presentation');
+const loadInboxPage = (client: Parameters<typeof readInboxPage>[0], accountId: string, authorization: string) =>
+  readInboxPage(client, accountId, authorization, undefined, inboxContent);
 type InboxNotice = import('../src/inbox/inbox-read').InboxNotice;
 
 function notice(id: string): InboxNotice {

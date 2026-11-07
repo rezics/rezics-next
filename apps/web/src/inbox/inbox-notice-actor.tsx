@@ -1,8 +1,8 @@
 import { Avatar, AvatarFallback, AvatarImage } from '@rezics/ui/shadcn/avatar';
 import type { ReactNode } from 'react';
-import { initials } from '../threads/initials';
 import { m } from '../paraglide/messages.js';
 import type { ResolvedInboxPage } from './inbox-read';
+import type { InboxContentPort } from './ports/content';
 
 type Actor = NonNullable<ResolvedInboxPage['items'][number]['actor']>;
 
@@ -26,7 +26,10 @@ export type InboxNoticeActorPresentation = {
 };
 
 /** Resolve native and retained fixture actor states once for both Inbox views. */
-export function inboxNoticeActorPresentation(input: InboxNoticeActorInput): InboxNoticeActorPresentation {
+export function inboxNoticeActorPresentation(
+  input: InboxNoticeActorInput,
+  initialsFor: InboxContentPort['initials'],
+): InboxNoticeActorPresentation {
   const actor = input.actor;
   const hiddenLegacy = input.hideLegacy ?? false;
   const actorId =
@@ -47,7 +50,7 @@ export function inboxNoticeActorPresentation(input: InboxNoticeActorInput): Inbo
     actorId,
     // Closed native actors carry avatarUrl: null; stored profile URLs are never admitted media.
     avatarUrl: null,
-    initials: initials(initialSource),
+    initials: initialsFor(initialSource),
     handle: available ? actor.handle : null,
     hasAvatar: available || (!actor && !hiddenLegacy && actorId !== null),
     unavailable: actor ? !available : hiddenLegacy,

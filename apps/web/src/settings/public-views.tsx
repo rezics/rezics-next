@@ -8,10 +8,11 @@ import { ProfileFeedback } from './profile';
 import { profileChanges, profilePatchAdmitted, profileFieldAdmitted } from './profile-data';
 import type { ProfileEditor } from './profile-write';
 import { useProfileEditor } from './profile-write-query';
+import type { SettingsContentFailureReader } from './ports/content';
 import { usePreferenceRetry } from './preferences';
 
-export function PublicViewsSection() {
-  const { editor, readable, writable } = useProfileEditor();
+export function PublicViewsSection({ mediaFailure }: { mediaFailure: SettingsContentFailureReader }) {
+  const { editor, readable, writable } = useProfileEditor(mediaFailure);
   return <PublicViewsCard editor={editor} readable={readable} writable={writable} />;
 }
 

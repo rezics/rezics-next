@@ -4,6 +4,7 @@ import { m } from '../paraglide/messages.js';
 import { getLocale, localizeHref } from '../paraglide/runtime.js';
 import { inboxOpenHref, inboxTargetContext, type InboxSelection } from './inbox-read';
 import { InboxNoticeActorVisual, inboxNoticeActorPresentation } from './inbox-notice-actor';
+import type { InboxContentPort } from './ports/content';
 
 export function inboxNoticeBackHref(selection: InboxSelection, cursor?: string): string {
   const query = new URLSearchParams({ selection });
@@ -30,19 +31,21 @@ export function InboxNoticeDetailView({
   notice,
   selection,
   cursor,
+  content,
 }: {
   notice: NoticeInboxItem;
   selection: InboxSelection;
   cursor?: string;
+  content: InboxContentPort;
 }) {
-  const destination = inboxOpenHref(notice);
+  const destination = inboxOpenHref(notice, content.threadHref);
   const actor = notice.actor;
   const actorPresentation = inboxNoticeActorPresentation({
     actor,
     actorId: actor.state === 'available' ? actor.accountId : null,
     kind: notice.kind,
     reportId: notice.reportId,
-  });
+  }, content.initials);
   const context = inboxTargetContext(notice.target);
 
   return (

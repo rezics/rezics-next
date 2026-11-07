@@ -52,6 +52,7 @@ for (const [key, value] of Object.entries(globals))
   Object.defineProperty(globalThis, key, { configurable: true, writable: true, value });
 const { createRoot } = await import('react-dom/client');
 const { InboxNoticeDetailView } = await import('../src/inbox/inbox-notice-detail');
+const { inboxContent } = await import('../src/inbox/adapters/presentation');
 const { setLocale } = await import('../src/paraglide/runtime.js');
 const { m } = await import('../src/paraglide/messages.js');
 setLocale('en', { reload: false });
@@ -108,7 +109,14 @@ async function mount(item: NoticeInboxItem, selection: 'all' | 'unread', cursor?
   document.body.append(host);
   const root = createRoot(host);
   await act(async () =>
-    root.render(createElement(InboxNoticeDetailView, { notice: item, selection, ...(cursor ? { cursor } : {}) })),
+    root.render(
+      createElement(InboxNoticeDetailView, {
+        notice: item,
+        selection,
+        content: inboxContent,
+        ...(cursor ? { cursor } : {}),
+      }),
+    ),
   );
   return {
     host,

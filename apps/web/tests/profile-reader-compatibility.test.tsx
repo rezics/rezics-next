@@ -182,13 +182,14 @@ test('the connected Profile and Public activity journey shares safe reads and pe
   let root: import('react-dom/client').Root | undefined;
   let client: import('@tanstack/react-query').QueryClient | undefined;
   try {
-    const [reactDom, query, routerApi, sessionApi, profileApi, activityApi, hookApi, accountApi, serverDom, messages] =
+    const [reactDom, query, routerApi, sessionApi, profileApi, settingsContent, activityApi, hookApi, accountApi, serverDom, messages] =
       await Promise.all([
         import('react-dom/client'),
         import('@tanstack/react-query'),
         import('@tanstack/react-router'),
         import('../src/session/query'),
         import('../src/settings/profile'),
+        import('../src/settings/adapters/presentation'),
         import('../src/settings/public-views'),
         import('../src/settings/profile-write-query'),
         import('../src/accounts/profile-editor/editor'),
@@ -212,7 +213,7 @@ test('the connected Profile and Public activity journey shares safe reads and pe
     let nativeProfile = profile();
 
     function Probe() {
-      const result = useProfileEditor();
+      const result = useProfileEditor(settingsContent.mediaFailure);
       surfaceEditors.push(result.editor);
       currentEditor = result.editor;
       currentReadable = result.readable;
@@ -224,8 +225,8 @@ test('the connected Profile and Public activity journey shares safe reads and pe
       return createElement(
         'main',
         null,
-        createElement(ProfileSection),
-        createElement(PublicViewsSection),
+        createElement(ProfileSection, { content: settingsContent.settingsContent }),
+        createElement(PublicViewsSection, { mediaFailure: settingsContent.mediaFailure }),
         createElement(Probe),
         createElement(Probe),
       );
@@ -328,7 +329,7 @@ test('the connected Profile and Public activity journey shares safe reads and pe
     expect(biography?.disabled).toBe(true);
     expect(
       renderToStaticMarkup(
-        performanceAmbientTree(createElement(ProfileCard, { editor: readOnlyEditor, writable: false, readable: true })),
+        performanceAmbientTree(createElement(ProfileCard, { content: settingsContent.settingsContent, editor: readOnlyEditor, writable: false, readable: true })),
       ),
     ).toContain(avatarId);
     expect(host.innerHTML).toContain('organization.example.test');
@@ -775,7 +776,7 @@ test('the connected Profile and Public activity journey shares safe reads and pe
         createElement(
           'div',
           null,
-          createElement(ProfileCard, { editor: standalone }),
+          createElement(ProfileCard, { content: settingsContent.settingsContent, editor: standalone }),
           createElement(PublicViewsCard, { editor: standalone }),
         ),
       ),
@@ -793,7 +794,7 @@ test('the connected Profile and Public activity journey shares safe reads and pe
         createElement(
           'div',
           null,
-          createElement(ProfileCard, { editor: standalone, writable: false }),
+          createElement(ProfileCard, { content: settingsContent.settingsContent, editor: standalone, writable: false }),
           createElement(PublicViewsCard, { editor: standalone, writable: false }),
         ),
       ),
@@ -805,7 +806,7 @@ test('the connected Profile and Public activity journey shares safe reads and pe
         createElement(
           'div',
           null,
-          createElement(ProfileCard, { editor: standalone, writable: false, readable: true }),
+          createElement(ProfileCard, { content: settingsContent.settingsContent, editor: standalone, writable: false, readable: true }),
           createElement(PublicViewsCard, { editor: standalone, writable: false, readable: true }),
         ),
       ),

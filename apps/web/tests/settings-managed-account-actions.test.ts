@@ -1,6 +1,7 @@
 import { expect, spyOn, test } from 'bun:test';
 import { createKernelClient } from '@rezics/client';
 import { MediaProblem } from '../src/media/kernel';
+import { settingsMediaFailure } from '../src/settings/adapters/content';
 import {
   ManagedAccountActionsRead,
   managedAccountActionNames,
@@ -13,6 +14,7 @@ import { performanceAmbientTree } from './performance-ambient';
 const viewerId = '019a0000-0000-7000-8000-000000000001';
 const accountId = '019a0000-0000-7000-8000-000000000002';
 const target = { accountId, viewerId };
+const noMediaFailure = () => undefined;
 function native(actions: { action: string; operations: string[] }[], id = accountId) {
   return { resources: [{ type: 'access.account', id, viewerActions: actions }] };
 }
@@ -137,6 +139,7 @@ test('one selected viewer/target owns one capability read; stale and late other-
       });
     },
     settingsAmbient,
+    noMediaFailure,
   );
   const first = read.load();
   expect(read.load()).toBe(first);
@@ -146,13 +149,14 @@ test('one selected viewer/target owns one capability read; stale and late other-
   expect(await first).toEqual(result);
   expect(await read.load()).toEqual(result);
   expect(calls).toBe(1);
-  const next = new ManagedAccountActionsRead({ accountId: viewerId, viewerId }, async () => result, settingsAmbient);
+  const next = new ManagedAccountActionsRead({ accountId: viewerId, viewerId }, async () => result, settingsAmbient, noMediaFailure);
   expect((await next.load()).state).toBe('unavailable');
   if (result.state !== 'ready') throw new Error('Expected native capabilities');
   const anotherViewer = new ManagedAccountActionsRead(
     target,
     async () => ({ ...result, viewerId: accountId }),
     settingsAmbient,
+    noMediaFailure,
   );
   expect((await anotherViewer.load()).state).toBe('unavailable');
 });
@@ -206,6 +210,7 @@ test('Recover failed management actions without leaving Settings with current na
       return reply.promise;
     },
     settingsAmbient,
+    noMediaFailure,
   );
   const first = read.load();
   expect(await first).toEqual({ state: 'unavailable', status: null, code: null });
@@ -239,6 +244,7 @@ test('repeated unavailable reads stay recoverable while a native denial never be
       );
     },
     settingsAmbient,
+    settingsMediaFailure,
   );
   const failure = { state: 'unavailable', status: 503, code: 'busy', retryAfter: '0' };
   expect(await read.load()).toEqual(failure);
@@ -257,6 +263,7 @@ test('repeated unavailable reads stay recoverable while a native denial never be
       return { state: 'denied', status: 403, code: 'account_suspended' };
     },
     settingsAmbient,
+    noMediaFailure,
   );
   const refusal = denied.load();
   expect(await refusal).toEqual({ state: 'denied', status: 403, code: 'account_suspended' });
@@ -281,6 +288,7 @@ test('native Retry-After survives the capability transport and expires without i
         target,
         async () => (++calls === 1 ? { state: 'unavailable', status: 429, code: 'rate_limited', retryAfter } : ready),
         settingsAmbient,
+        noMediaFailure,
       );
       const first = read.load();
       await first;
@@ -321,6 +329,7 @@ test('late retries cannot publish into a new viewer, target or CSRF lifetime', a
       async () =>
         ++calls === 1 ? { state: 'unavailable', status: 503, code: 'dependency_unavailable' } : late.promise,
       settingsAmbient,
+      noMediaFailure,
       () => currentOwner,
     );
     await previous.load();
@@ -336,6 +345,7 @@ test('late retries cannot publish into a new viewer, target or CSRF lifetime', a
         code: 'forbidden',
       }),
       settingsAmbient,
+      noMediaFailure,
     );
     expect(current.snapshot()).toEqual({ result: null, pending: false, retryAt: 0 });
     await current.load();
@@ -501,6 +511,7 @@ test('missing, unavailable or malformed entry dependencies never gain links from
     nativeAccountKind: 'organization' as const,
     self: false,
     operated: false,
+    mediaFailure: settingsMediaFailure,
     authNavigation,
   };
   const render = (changes = {}) =>

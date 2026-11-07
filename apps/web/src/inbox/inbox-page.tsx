@@ -51,6 +51,7 @@ import {
   type ResolvedInboxPage,
 } from './inbox-read';
 import { InboxNoticeActorVisual, inboxNoticeActorPresentation } from './inbox-notice-actor';
+import type { InboxContentPort } from './ports/content';
 import {
   inboxAcknowledgementRecovery,
   inboxAcknowledgementRetryAllowed,
@@ -93,6 +94,7 @@ function acknowledgementFailureMessage(failure: NativeInboxFailure) {
 
 export function InboxRows({
   page,
+  content,
   onLoadMore,
   loading = false,
   onMarkSeen,
@@ -108,6 +110,7 @@ export function InboxRows({
   onOpenNotice,
 }: {
   page: Pick<ResolvedInboxPage, 'items' | 'next'>;
+  content: InboxContentPort;
   onLoadMore?: () => void;
   loading?: boolean;
   onMarkSeen?: (noticeId: string) => void;
@@ -167,7 +170,7 @@ export function InboxRows({
             kind: item.kind,
             reportId: item.reportId,
             hideLegacy: hiddenLegacyItem,
-          });
+          }, content.initials);
           const kind = kindLabel(item);
           const text =
             item.summary ?? (hiddenLegacyItem ? m.inbox_unavailable_item() : item.text) ?? m.inbox_unavailable_item();
@@ -319,11 +322,13 @@ export function InboxPageView({
   loadPage,
   acknowledgeNotice,
   historyKey: suppliedHistoryKey,
+  content,
 }: {
   loadPage?: InboxPageLoader;
   acknowledgeNotice?: NoticeSeenStoryTransport;
   historyKey?: string;
-} = {}) {
+  content: InboxContentPort;
+}) {
   const router = useRouter({ warn: false });
   const routedHistoryKey = useRouterState({
     select: (state) => {
@@ -367,13 +372,14 @@ export function InboxPageView({
         historyKey={historyKey}
         loadPage={loadPage}
         acknowledgeNotice={acknowledgeNotice}
+        content={content}
       />
     );
   return (
     <div className="mx-auto w-full max-w-3xl px-4 py-8 sm:px-6">
       <h1 className="font-display text-3xl font-semibold tracking-tight">{m.inbox_heading()}</h1>
       <InboxPreferencesLink />
-      <InboxEntryState state={state} sessionRead={sessionRead} />
+      <InboxEntryState state={state} sessionRead={sessionRead} SignInPrompt={content.SignInPrompt} />
     </div>
   );
 }
@@ -386,6 +392,7 @@ export function ViewerInboxPage({
   historyKey,
   loadPage,
   acknowledgeNotice,
+  content,
 }: {
   viewer: InboxViewer;
   csrfToken: string | null;
@@ -393,6 +400,7 @@ export function ViewerInboxPage({
   historyKey: string;
   loadPage?: InboxPageLoader | undefined;
   acknowledgeNotice?: NoticeSeenStoryTransport | undefined;
+  content: InboxContentPort;
 }) {
   const ambient = useInboxAmbient();
   const router = useRouter({ warn: false });
@@ -1406,6 +1414,7 @@ export function ViewerInboxPage({
                   ...readable,
                   items: visibleItems,
                 }}
+                content={content}
                 onMarkSeen={markNoticeSeen}
                 onRetrySeen={retryNoticeSeen}
                 pendingNoticeId={noticePendingId}

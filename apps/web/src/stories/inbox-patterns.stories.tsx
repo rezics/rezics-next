@@ -2,6 +2,7 @@ import type { Meta, StoryObj } from '@storybook/react-vite';
 import { useMemo, useState } from 'react';
 import { expect, userEvent, waitFor, within } from 'storybook/test';
 import { InboxPageView, InboxRows } from '../inbox/inbox-page';
+import { inboxContent } from '../inbox/adapters/presentation';
 import {
   readInboxPage,
   readyInboxPage,
@@ -31,7 +32,7 @@ type Story = StoryObj<typeof meta>;
 function Example({ fixture }: { fixture: string }) {
   return (
     <PatternStory visitor="Signed In" path={`/inbox?fixture=${fixture}`}>
-      <InboxPageView />
+      <InboxPageView content={inboxContent} />
     </PatternStory>
   );
 }
@@ -68,7 +69,7 @@ function PaginationExample({ denied = false }: { denied?: boolean }) {
   }, [denied]);
   return (
     <PatternStory visitor="Signed In" path="/inbox?fixture=mixed">
-      <InboxPageView loadPage={loadPage} />
+      <InboxPageView loadPage={loadPage} content={inboxContent} />
     </PatternStory>
   );
 }
@@ -192,7 +193,7 @@ function EmptyFilterContinuationCase({ mode }: { mode: 'unread' | 'all-empty' })
         {mode === 'unread' ? 'Unread filter recovery' : 'All-empty continuation'}
       </h2>
       <PatternStory visitor="Signed In" path="/inbox?fixture=mixed">
-        <InboxPageView loadPage={loadPage} />
+        <InboxPageView loadPage={loadPage} content={inboxContent} />
       </PatternStory>
     </section>
   );
@@ -371,7 +372,7 @@ export const LongContent: Story = {
   render: () => (
     <div className="mx-auto w-full max-w-3xl px-4 py-8 sm:px-6">
       <h1 className="font-display text-3xl font-semibold tracking-tight">{m.inbox_heading()}</h1>
-      <InboxRows page={illustrativeLongContent} />
+      <InboxRows page={illustrativeLongContent} content={inboxContent} />
     </div>
   ),
   play: async ({ canvasElement }) => {

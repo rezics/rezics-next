@@ -4,6 +4,7 @@ import { expect, userEvent, within } from 'storybook/test';
 import { settingsAccountExample, type AccountSafetyExample } from '../kernel/fake/settings-account';
 import { m } from '../paraglide/messages.js';
 import { AccountSafetyCard } from '../settings/account-safety';
+import { settingsContent } from '../settings/adapters/presentation';
 
 const meta = {
   title: 'Patterns/Account/Account safety',
@@ -15,7 +16,12 @@ type Story = StoryObj<typeof Example>;
 
 function Example({ scenario = 'ready' }: { scenario?: AccountSafetyExample }) {
   const [current, setCurrent] = useState(scenario);
-  return <AccountSafetyCard {...settingsAccountExample(current, () => setCurrent('ready'))} />;
+  const props = settingsAccountExample(current, () => setCurrent('ready'));
+  return props.state === 'signed-out' ? (
+    <AccountSafetyCard {...props} SignInPrompt={settingsContent.SignInPrompt} />
+  ) : (
+    <AccountSafetyCard {...props} />
+  );
 }
 
 export const Default: Story = {
