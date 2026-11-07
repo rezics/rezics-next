@@ -797,7 +797,12 @@ export function captureHourlyEfficiencyObservation(db: Database, options: Report
         windowEnd: bucket.end,
       }
     : undefined;
-  if (existing && !candidate) return { disposition: 'replayed', snapshot: existing };
+  if (existing && !candidate)
+    return {
+      disposition: 'replayed',
+      attribution: existing.observation.attribution,
+      snapshot: existing,
+    };
 
   const asOf = options.now ?? Date.now();
   const capturedAt = (asOf instanceof Date ? asOf : new Date(asOf)).toISOString();

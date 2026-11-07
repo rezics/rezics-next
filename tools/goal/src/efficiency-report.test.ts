@@ -652,12 +652,13 @@ test('concurrent first capture, restart and delivery replay share the original r
   const h = fixture();
   const databasePath = join(h.directory.path, 'goal.sqlite');
   const reportFile = join(h.directory.path, 'delivered.txt');
+  type ChildCapture = { disposition: string; reportRef: string; report: string };
   h.db.close();
   try {
     const [one, two] = await Promise.all([
-      runCaptureChild(databasePath, 2979, 'a'.repeat(40)),
-      runCaptureChild(databasePath, 4266, 'b'.repeat(40)),
-    ]).then((values) => values.map((value) => JSON.parse(value) as { disposition: string; reportRef: string; report: string }));
+      runCaptureChild(databasePath, 2979, 'a'.repeat(40)).then((value) => JSON.parse(value) as ChildCapture),
+      runCaptureChild(databasePath, 4266, 'b'.repeat(40)).then((value) => JSON.parse(value) as ChildCapture),
+    ]);
     expect([one.disposition, two.disposition].sort()).toEqual(['captured', 'conflicting']);
     expect(one.report).toBe(two.report);
     expect(one.reportRef).toBe(two.reportRef);
