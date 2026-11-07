@@ -7,7 +7,7 @@
  */
 import { createHash, randomBytes } from 'node:crypto';
 import { createRequire } from 'node:module';
-import { mkdir, readFile, writeFile } from 'node:fs/promises';
+import { mkdir, open, readFile, writeFile } from 'node:fs/promises';
 import { join, resolve } from 'node:path';
 import { importJWK, SignJWT, type JWK } from 'jose';
 
@@ -44,13 +44,21 @@ export const JOURNEYS = [
     journey: 'accounts → create software agent → operator/delegated caller uses held permissions',
     owner: 'Accounts',
   },
-  { id: 'J10', journey: 'consent → grant requested authority → revoke → next operation reflects it', owner: 'Auth c883' },
+  {
+    id: 'J10',
+    journey: 'consent → grant requested authority → revoke → next operation reflects it',
+    owner: 'Auth c883',
+  },
   {
     id: 'J11',
     journey: 'account verification → verify/unverify address → independent publication readback',
     owner: 'Identity 4ff',
   },
-  { id: 'J12', journey: 'public person/organization/agent page → identity without private data', owner: 'Identity 4ff' },
+  {
+    id: 'J12',
+    journey: 'public person/organization/agent page → identity without private data',
+    owner: 'Identity 4ff',
+  },
   {
     id: 'J13',
     journey: 'public eligible target → follow → Following → unfollow, including stored unavailable target',
@@ -100,6 +108,8 @@ export type JourneyRow = {
   elapsed: string;
   cause: string;
   owner: string;
+  persona: string;
+  evidence: string;
 };
 
 /** Website-bearer Kernel mutations. Auth-only journeys and anonymous public reads continue after a bearer 401. */
@@ -120,6 +130,8 @@ const password = 'walk persona password with enough entropy 32';
 const nextPassword = 'walk recovered password with enough entropy 32';
 const softwarePassword = 'software actor password with enough entropy 32';
 const turnstile = 'rezics-local-signup';
+const observedPersonas = new Set<string>();
+const journeyPersonas = new Set<string>();
 
 type Json = Record<string, unknown>;
 type Origins = { web: string; issuer: string; native: string; kernel: string };
@@ -142,12 +154,11 @@ export function parseJourneyTable(markdown: string): JourneyRow[] {
       .split('|')
       .slice(1, -1)
       .map((cell) => cell.trim());
-    if (cells.length < 9) throw new Error(`journey row is short: ${line}`);
+    if (cells.length < 11) throw new Error(`journey row is short: ${line}`);
     const id = cells[0] as JourneyId;
     if (!JOURNEYS.some((journey) => journey.id === id)) throw new Error(`unknown journey ${id}`);
     const result = cells[2] as JourneyResult;
-    if (result !== 'PASS' && result !== 'FAIL' && result !== 'unobserved')
-      throw new Error(`${id} result is ${result}`);
+    if (result !== 'PASS' && result !== 'FAIL' && result !== 'unobserved') throw new Error(`${id} result is ${result}`);
     rows.push({
       id,
       journey: cells[1]!,
@@ -158,6 +169,8 @@ export function parseJourneyTable(markdown: string): JourneyRow[] {
       elapsed: cells[6]!,
       cause: cells[7]!,
       owner: cells[8]!,
+      persona: cells[9]!,
+      evidence: cells[10]!,
     });
   }
   return rows;
@@ -169,18 +182,18 @@ function cell(value: string): string {
 
 export function renderJourneyTable(rows: JourneyRow[]): string {
   const header = [
-    '| ID | Journey | Result | Reached | Revision | Observed (UTC) | Elapsed | First cause | Repair owner |',
-    '| -- | ------- | ------ | ------- | -------- | -------------- | ------- | ----------- | ------------ |',
+    '| ID | Journey | Result | Reached | Revision | Observed (UTC) | Elapsed | First cause | Repair owner | Persona | Evidence |',
+    '| -- | ------- | ------ | ------- | -------- | -------------- | ------- | ----------- | ------------ | ------- | -------- |',
   ];
   const body = rows.map(
     (row) =>
-      `| ${row.id} | ${cell(row.journey)} | ${row.result} | ${cell(row.reached)} | ${cell(row.revision)} | ${cell(row.observedAt)} | ${cell(row.elapsed)} | ${cell(row.cause)} | ${cell(row.owner)} |`,
+      `| ${row.id} | ${cell(row.journey)} | ${row.result} | ${cell(row.reached)} | ${cell(row.revision)} | ${cell(row.observedAt)} | ${cell(row.elapsed)} | ${cell(row.cause)} | ${cell(row.owner)} | ${cell(row.persona)} | ${cell(row.evidence)} |`,
   );
   return [...header, ...body].join('\n');
 }
 
 const CENSUS_REPAIRS =
-  '`.temp/continuation/rating-walk-setup.md`, `auth-website-kernel-bearer.md`, `auth-recovery-and-credentials.md`, `accounts-operations-e18.md`, `accounts-follow.md`, `accounts-walk-browser.md`, `accounts-realm.md`';
+  '`.temp/continuation/accounts-walk-admission.md`, `auth-website-kernel-bearer.md`, `auth-recovery-and-credentials.md`, `accounts-operations-e18.md`, `accounts-follow.md`, `accounts-walk-browser.md`, `accounts-realm.md`';
 const CENSUS_MARKER = ' The table-shape check does not start Storybook.';
 
 export function renderWalkCensus(
@@ -234,13 +247,109 @@ export async function writeJourneyTable(
   let output = tableOutput;
   if (census) {
     try {
-      output = replaceWalkCensus(tableOutput, renderWalkCensus(rows, census.revision, census.observedAt, census.nextHourly));
+      output = replaceWalkCensus(
+        tableOutput,
+        renderWalkCensus(rows, census.revision, census.observedAt, census.nextHourly),
+      );
     } catch (error) {
       console.error(`accounts-goal-walk: ${error instanceof Error ? error.message : String(error)}`);
       output = tableOutput;
     }
   }
   await writeFile(markdownPath, output);
+}
+
+/** A launcher failure has no seeded persona and must never reuse last round's product result. */
+export function finishUnobservedJourneys(
+  rows: JourneyRow[],
+  diagnostic: string,
+  exitCode: number,
+  observedAt: string,
+  elapsedMs: number,
+): JourneyRow[] {
+  const cause =
+    diagnostic
+      .split(/\r?\n/)
+      .find((line) => /^(?:[A-Z][A-Z_]+:|error:|Error:)/.test(line.trim()))
+      ?.trim() ?? `walk launcher exited ${exitCode} before the journey driver recorded a result`;
+  return rows.map((row) =>
+    row.result !== 'unobserved'
+      ? row
+      : {
+          ...row,
+          result: 'FAIL',
+          reached: 'not reached: dev-stack walk admission/startup',
+          observedAt,
+          elapsed: `${elapsedMs}ms`,
+          cause,
+          owner: 'Content (walk stack infrastructure)',
+          persona: 'not reached: no persona provisioned',
+          evidence: '.temp/accounts/launcher.log',
+        },
+  );
+}
+
+/** Own only the supported stack command; its existing signal/cleanup handling owns stack resources. */
+async function launchWalk(): Promise<number> {
+  if (!process.env.GOAL_TASK_ID || !/native|browser/.test(process.env.GOAL_ACCEPTANCE_REQUIRES ?? ''))
+    throw new Error('This walk runs on a controller-owned walk stack with native and browser acceptance');
+  const revision = Bun.spawnSync(['git', 'rev-parse', 'HEAD'], { cwd: root }).stdout.toString().trim();
+  const started = Date.now();
+  const observedAt = new Date(started).toISOString();
+  const nextHourly = new Date(started + 3_600_000).toISOString().replace(/\.\d+Z$/, 'Z');
+  const rows: JourneyRow[] = JOURNEYS.map((journey) => ({
+    ...journey,
+    result: 'unobserved',
+    reached: 'not reached: launching supported walk stack',
+    revision,
+    observedAt,
+    elapsed: '0ms',
+    cause: 'awaiting stack admission',
+    persona: 'not reached: no persona provisioned',
+    evidence: '.temp/accounts/launcher.log',
+  }));
+  await mkdir(evidenceDir, { recursive: true, mode: 0o700 });
+  const resultFile = join(evidenceDir, 'journeys.json');
+  await writeFile(resultFile, `${JSON.stringify({ evidence: { revision, observedAt }, rows }, null, 2)}\n`, {
+    mode: 0o600,
+  });
+  await writeJourneyTable(rows, join(root, CAPABILITIES), { revision, observedAt, nextHourly });
+  const log = await open(join(evidenceDir, 'launcher.log'), 'w', 0o600);
+  let exitCode: number;
+  try {
+    const child = Bun.spawn(
+      [
+        process.execPath,
+        'services/auth/scripts/dev-stack.ts',
+        'walk',
+        '--',
+        process.execPath,
+        'apps/web/scripts/accounts-goal-walk.ts',
+      ],
+      { cwd: root, env: process.env, stdin: 'ignore', stdout: log.fd, stderr: log.fd },
+    );
+    const signals = ['SIGINT', 'SIGTERM', 'SIGHUP'] as const;
+    const handlers = signals.map((signal) => {
+      const handler = () => child.kill(signal);
+      process.on(signal, handler);
+      return [signal, handler] as const;
+    });
+    try {
+      exitCode = await child.exited;
+    } finally {
+      for (const [signal, handler] of handlers) process.off(signal, handler);
+    }
+  } finally {
+    await log.close();
+  }
+  const recorded = JSON.parse(await readFile(resultFile, 'utf8')) as { evidence: Json; rows: JourneyRow[] };
+  const diagnostic = await readFile(join(evidenceDir, 'launcher.log'), 'utf8');
+  const finishedAt = new Date().toISOString();
+  const finishedRows = finishUnobservedJourneys(recorded.rows, diagnostic, exitCode, finishedAt, Date.now() - started);
+  await writeFile(resultFile, `${JSON.stringify({ ...recorded, rows: finishedRows }, null, 2)}\n`, { mode: 0o600 });
+  await writeJourneyTable(finishedRows, join(root, CAPABILITIES), { revision, observedAt: finishedAt, nextHourly });
+  console.log(renderWalkCensus(finishedRows, revision, finishedAt, nextHourly));
+  return exitCode;
 }
 
 function origin(variable: string, fallback: string): string {
@@ -405,11 +514,7 @@ async function waitForPublicAgentSubject(stack: Origins, handle: string, label: 
   const deadline = Date.now() + 30_000;
   while (Date.now() < deadline) {
     const publicTarget = accountRow(
-      requireStatus(
-        await kernel(stack, 'GET', '/v1/accounts', { query: { handle } }),
-        label,
-        200,
-      ),
+      requireStatus(await kernel(stack, 'GET', '/v1/accounts', { query: { handle } }), label, 200),
     );
     try {
       return agentSubjectId(publicTarget, label);
@@ -493,7 +598,11 @@ async function signup(stack: Origins, tag: string): Promise<Person> {
     30_000,
   );
   requireStatus(result, `signup ${tag}`, 201);
-  return { handle: name, email: `${name}@example.test`, accountId: asId(result.value.accountId, `${tag} account`) };
+  const accountId = asId(result.value.accountId, `${tag} account`);
+  const persona = `${name} (${accountId})`;
+  observedPersonas.add(persona);
+  journeyPersonas.add(persona);
+  return { handle: name, email: `${name}@example.test`, accountId };
 }
 
 async function signIn(
@@ -511,8 +620,12 @@ async function signIn(
     30_000,
   );
   requireStatus(result, `signin ${clientId}`, 200);
+  const accountId = asId(result.value.account_id, 'session account');
+  const persona = `account ${accountId}`;
+  observedPersonas.add(persona);
+  journeyPersonas.add(persona);
   return {
-    accountId: asId(result.value.account_id, 'session account'),
+    accountId,
     cookie: result.cookie,
     clientId,
     scopes: [...scopes],
@@ -618,11 +731,17 @@ async function operate(
   const approval = await auth(stack, '/account-operations/approve', session, body, 30_000);
   if (approval.status !== 200) return approval;
   if (operation.kind === 'transfer-acceptance' || operation.kind === 'opening') return approval;
-  return auth(stack, '/account-operations/execute', session, {
-    ...body,
-    reference: approval.value.reference,
-    ...(typeof confirmation === 'string' ? { confirmation } : {}),
-  }, 30_000);
+  return auth(
+    stack,
+    '/account-operations/execute',
+    session,
+    {
+      ...body,
+      reference: approval.value.reference,
+      ...(typeof confirmation === 'string' ? { confirmation } : {}),
+    },
+    30_000,
+  );
 }
 
 async function credentialEffect(
@@ -666,7 +785,10 @@ function loopbackOnly(route: import('playwright').Route) {
 
 async function settle(page: import('playwright').Page, url: string) {
   const response = await page.goto(url, { waitUntil: 'domcontentloaded' });
-  await page.locator('html[data-hydrated]').waitFor({ state: 'attached', timeout: 120_000 }).catch(() => {});
+  await page
+    .locator('html[data-hydrated]')
+    .waitFor({ state: 'attached', timeout: 120_000 })
+    .catch(() => {});
   return response;
 }
 
@@ -689,8 +811,7 @@ async function startFrontend(action: 'pages' | 'web', stack: Origins) {
   const deadline = Date.now() + 600_000;
   try {
     while (Date.now() < deadline) {
-      if (child.exitCode !== null)
-        throw new Error(`${label} exited ${child.exitCode} before becoming ready`);
+      if (child.exitCode !== null) throw new Error(`${label} exited ${child.exitCode} before becoming ready`);
       const ok = await fetch(url, { signal: AbortSignal.timeout(2_000) }).then(
         (response) => response.status < 500,
         () => false,
@@ -717,7 +838,11 @@ async function startFrontend(action: 'pages' | 'web', stack: Origins) {
   };
 }
 
-if (import.meta.main) {
+if (import.meta.main && process.argv.includes('--launch')) {
+  process.exitCode = await launchWalk();
+}
+
+if (import.meta.main && !process.argv.includes('--launch')) {
   if (!process.env.GOAL_TASK_ID || !/native|browser/.test(process.env.GOAL_ACCEPTANCE_REQUIRES ?? ''))
     throw new Error('This walk runs on a controller-owned walk stack with native and browser acceptance');
 
@@ -738,6 +863,8 @@ if (import.meta.main) {
         elapsed: '—',
         cause: 'not walked',
         owner: journey.owner,
+        persona: 'not reached: no persona provisioned',
+        evidence: '.temp/accounts/journeys.json',
       },
     ]),
   );
@@ -774,6 +901,10 @@ if (import.meta.main) {
       elapsed: `${Math.max(0, elapsedMs)}ms`,
       cause,
       owner,
+      persona: reached.startsWith('not reached:')
+        ? 'not reached: no persona used'
+        : [...journeyPersonas].join(', ') || 'anonymous public reader',
+      evidence: `.temp/accounts/journeys.json#${id}`,
     });
   }
 
@@ -786,9 +917,14 @@ if (import.meta.main) {
   }
 
   async function persist() {
-    await writeFile(join(evidenceDir, 'journeys.json'), `${JSON.stringify({ evidence, rows: [...rows.values()] }, null, 2)}\n`, {
-      mode: 0o600,
-    });
+    evidence.personas = [...observedPersonas];
+    await writeFile(
+      join(evidenceDir, 'journeys.json'),
+      `${JSON.stringify({ evidence, rows: [...rows.values()] }, null, 2)}\n`,
+      {
+        mode: 0o600,
+      },
+    );
     await writeJourneyTable([...rows.values()], join(root, CAPABILITIES), {
       revision: sourceRevision,
       observedAt: new Date().toISOString(),
@@ -799,6 +935,7 @@ if (import.meta.main) {
   async function runJourney(id: JourneyId, reached: string, body: () => Promise<string | void>) {
     if (rows.get(id)?.result !== 'unobserved') return;
     const started = Date.now();
+    journeyPersonas.clear();
     try {
       const detail = (await body()) ?? 'ok';
       mark(id, 'PASS', reached, Date.now() - started, detail);
@@ -821,842 +958,885 @@ if (import.meta.main) {
   }
 
   try {
-  await untilAnswers(`${stack.native}/`, 'native Auth');
-  note('native-ready');
-  await persist();
+    await untilAnswers(`${stack.native}/`, 'native Auth');
+    note('native-ready');
+    await persist();
 
-  const keys = JSON.parse(await readFile(join(root, '.temp/local-stack/keys.json'), 'utf8')) as {
-    password: string;
-    website: JWK;
-  };
-  const developer: Person = { handle: 'developer', email: 'developer@rezics.test', accountId: '' };
-  const developerPassword = keys.password;
-  const bindings = await parseEnv(join(root, 'apps/web/.dev.vars'));
-  let website: { session: Session; bearer: string; refresh: string; codePath: string } | undefined;
-  try {
-    website = await websiteToken(stack, developer, bindings, keys.website, developerPassword);
-    developer.accountId = website.session.accountId;
-    evidence.native.push({ developer: developer.accountId, callback: website.codePath });
-    note('developer-token');
-  } catch (error) {
-    const cause = error instanceof Error ? error.message : String(error);
-    await failDependents(
-      JOURNEYS.map((journey) => journey.id),
-      cause,
-      'POST /signin login then GET /authorize',
-    );
-    throw error;
-  }
-  if (!website) throw new Error('developer website token was not issued');
-
-  async function developerSignIn(clientId: string, scopes: readonly string[]): Promise<Session> {
-    const result = await auth(
-      stack,
-      '/signin',
-      undefined,
-      { email: developer.email, password: developerPassword, client_id: clientId, scope: [...scopes] },
-      30_000,
-    );
-    requireStatus(result, `developer ${clientId}`, 200);
-    return {
-      accountId: asId(result.value.account_id, 'developer'),
-      cookie: result.cookie,
-      clientId,
-      scopes: [...scopes],
+    const keys = JSON.parse(await readFile(join(root, '.temp/local-stack/keys.json'), 'utf8')) as {
+      password: string;
+      website: JWK;
     };
-  }
-
-  let kernelBearerCause = '';
-  async function rememberKernelBearerFailure(result: { status: number; value: Json }, label: string) {
-    if (!isInvalidCredentials(result) || kernelBearerCause) return;
-    kernelBearerCause = `${label} returned HTTP ${result.status}: ${summarize(result.value)}`;
-    await failDependents([...KERNEL_BEARER_JOURNEYS], kernelBearerCause, label);
-  }
-
-  const openedOrg = await kernel(stack, 'POST', '/v1/platform/exposure/organizations:open', {
-    bearer: website.bearer,
-    body: {},
-  });
-  if (![200, 409].includes(openedOrg.status))
-    evidence.native.push({ organizationsOpen: openedOrg.status, body: publicFields(openedOrg.value) });
-  await rememberKernelBearerFailure(openedOrg, 'POST /v1/platform/exposure/organizations:open');
-
-  let walker: Person | undefined;
-  let outsider: Person | undefined;
-  let dest: Person | undefined;
-  let organizationId = '';
-  let orgHandle = '';
-  let humanSoftwareId = '';
-  let followTarget: Person | undefined;
-  let followTargetId = '';
-  let realmId = '';
-  let spaceId = '';
-
-  await runJourney('J01', 'POST /signup → GET /authorize → GET /auth/callback → GET /en/', async () => {
-    walker = await signup(stack, 'j01');
-    const token = await websiteToken(stack, walker, bindings, keys.website);
-    if (!token.codePath.includes('/auth/callback') && token.codePath !== '/auth/callback')
-      throw new Error(`callback path ${token.codePath}`);
-    const me = await kernel(stack, 'GET', '/v1/accounts', {
-      bearer: token.bearer,
-      query: { ids: token.session.accountId },
-    });
-    await rememberKernelBearerFailure(me, 'authenticated account');
-    requireStatus(me, 'authenticated account', 200);
-    walker.accountId = token.session.accountId;
-    evidence.native.push({ j01: walker.accountId, callback: token.codePath });
-    return `signup ${walker.handle}; callback ${token.codePath}`;
-  });
-
-  await runJourney('J02', 'POST /signin → GET /sessions → POST /sessions/revoke', async () => {
-    const person = walker ?? (await signup(stack, 'j02'));
-    const session = await signIn(stack, person, 'login', []);
-    const listed = await send(`${stack.native}/sessions`, { method: 'GET', cookie: session.cookie, origin: stack.issuer });
-    requireStatus(listed, 'session review', [200, 204]);
-    const items = Array.isArray(listed.value.items)
-      ? (listed.value.items as Json[])
-      : Array.isArray(listed.value.sessions)
-        ? (listed.value.sessions as Json[])
-        : [];
-    const current = items.find((item) => item.current === true) ?? items[0];
-    const sessionId = typeof current?.id === 'string' ? current.id : typeof listed.value.viewer === 'object' && listed.value.viewer
-      ? String((listed.value.viewer as Json).session_id ?? '')
-      : '';
-    if (sessionId) {
-      const revoked = await auth(stack, '/sessions/revoke', session, { session_id: sessionId });
-      requireStatus(revoked, 'session revoke', [200, 204]);
+    const developer: Person = { handle: 'developer', email: 'developer@rezics.test', accountId: '' };
+    const developerPassword = keys.password;
+    const bindings = await parseEnv(join(root, 'apps/web/.dev.vars'));
+    let website: { session: Session; bearer: string; refresh: string; codePath: string } | undefined;
+    try {
+      website = await websiteToken(stack, developer, bindings, keys.website, developerPassword);
+      developer.accountId = website.session.accountId;
+      evidence.native.push({ developer: developer.accountId, callback: website.codePath });
+      note('developer-token');
+    } catch (error) {
+      const cause = error instanceof Error ? error.message : String(error);
+      await failDependents(
+        JOURNEYS.map((journey) => journey.id),
+        cause,
+        'POST /signin login then GET /authorize',
+      );
+      throw error;
     }
-    const after = await send(`${stack.native}/sessions`, { method: 'GET', cookie: session.cookie, origin: stack.issuer });
-    if (after.status === 200 && sessionId && JSON.stringify(after.value).includes(sessionId))
-      throw new Error('revoked session still listed');
-    return sessionId ? `revoked ${sessionId}` : `session review HTTP ${listed.status}`;
-  });
+    if (!website) throw new Error('developer website token was not issued');
 
-  await runJourney('J03', 'POST /recovery/start → POST /recovery/complete → POST /signin', async () => {
-    const person = await signup(stack, 'j03');
-    const oldSession = await signIn(stack, person, 'login', []);
-    const started = await auth(stack, '/recovery/start', undefined, { email: person.email }, 15_000);
-    requireStatus(started, 'recovery start', 200);
-    const token = await deliveredRecoveryToken(person.email);
-    const completed = await auth(
-      stack,
-      '/recovery/complete',
-      undefined,
-      { account_id: person.accountId, token, new_password: nextPassword },
-      15_000,
-    );
-    requireStatus(completed, 'recovery complete', 200);
-    const stale = await auth(
-      stack,
-      '/signin',
-      undefined,
-      { email: person.email, password, client_id: 'login', scope: [] },
-      15_000,
-    );
-    if (stale.status === 200) throw new Error('old password still established a session');
-    await signIn(stack, person, 'login', [], nextPassword);
-    const staleCookie = await send(`${stack.native}/sessions`, {
-      method: 'GET',
-      cookie: oldSession.cookie,
-      origin: stack.issuer,
-    });
-    if (staleCookie.status === 200) throw new Error('old session retained authority after recovery');
-    return 'old password and session refused';
-  });
+    async function developerSignIn(clientId: string, scopes: readonly string[]): Promise<Session> {
+      const result = await auth(
+        stack,
+        '/signin',
+        undefined,
+        { email: developer.email, password: developerPassword, client_id: clientId, scope: [...scopes] },
+        30_000,
+      );
+      requireStatus(result, `developer ${clientId}`, 200);
+      return {
+        accountId: asId(result.value.account_id, 'developer'),
+        cookie: result.cookie,
+        clientId,
+        scopes: [...scopes],
+      };
+    }
 
-  await runJourney('J04', 'POST /credential-effects → GET /sessions → POST /sessions/revoke', async () => {
-    const person = await signup(stack, 'j04');
-    // Security uses the login client; a just-established session is the fresh step-up for this HTTP walk.
-    const session = await signIn(stack, person, 'login', []);
-    const changed = await credentialEffect(stack, session, session.accountId, {
-      kind: 'password',
-      password: nextPassword,
-    });
-    if (changed.status !== 200) throw new Error(`credential effect HTTP ${changed.status}: ${summarize(changed.value)}`);
-    const stale = await auth(
-      stack,
-      '/signin',
-      undefined,
-      { email: person.email, password, client_id: 'login', scope: [] },
-      15_000,
-    );
-    if (stale.status === 200) throw new Error('old password still signed in after credential replace');
-    const fresh = await signIn(stack, person, 'login', [], nextPassword);
-    const listed = await send(`${stack.native}/sessions`, { method: 'GET', cookie: fresh.cookie, origin: stack.issuer });
-    requireStatus(listed, 'security sessions', [200, 204]);
-    return `password replaced HTTP ${changed.status}`;
-  });
+    let kernelBearerCause = '';
+    async function rememberKernelBearerFailure(result: { status: number; value: Json }, label: string) {
+      if (!isInvalidCredentials(result) || kernelBearerCause) return;
+      kernelBearerCause = `${label} returned HTTP ${result.status}: ${summarize(result.value)}`;
+      await failDependents([...KERNEL_BEARER_JOURNEYS], kernelBearerCause, label);
+    }
 
-  await runJourney('J05', 'PATCH /v1/accounts/{id} → GET /v1/accounts?handle=', async () => {
-    const person = walker ?? (await signup(stack, 'j05'));
-    const token = await websiteToken(stack, person, bindings, keys.website);
-    const patched = await kernel(stack, 'PATCH', `/v1/accounts/${token.session.accountId}`, {
-      bearer: token.bearer,
-      body: { displayName: 'Walk profile', biography: 'Goal walk biography' },
+    const openedOrg = await kernel(stack, 'POST', '/v1/platform/exposure/organizations:open', {
+      bearer: website.bearer,
+      body: {},
     });
-    requireStatus(patched, 'profile save', 200);
-    const publicRead = requireStatus(
-      await kernel(stack, 'GET', '/v1/accounts', { query: { handle: person.handle } }),
-      'independent public profile',
-      200,
-    );
-    const row = accountRow(publicRead);
-    if (row?.displayName !== 'Walk profile') throw new Error(`public displayName ${String(row?.displayName)}`);
-    if (row && ('email' in row || 'credentials' in row)) throw new Error('public profile disclosed private fields');
-    return 'independent handle readback matched';
-  });
+    if (![200, 409].includes(openedOrg.status))
+      evidence.native.push({ organizationsOpen: openedOrg.status, body: publicFields(openedOrg.value) });
+    await rememberKernelBearerFailure(openedOrg, 'POST /v1/platform/exposure/organizations:open');
 
-  await runJourney('J06', 'POST /account-operations organization → membership', async () => {
-    const operations = await developerSignIn(AUTH_PAGE_OPERATION_CLIENT_ID, AUTH_PAGE_OPERATION_SCOPES.organization);
-    orgHandle = handle('org');
-    const created = await operate(stack, operations, { kind: 'organization', handle: orgHandle });
-    if (created.status !== 200)
-      throw new Error(`organization create HTTP ${created.status}: ${summarize(created.value)}`);
-    organizationId = asId(created.value.accountId, 'organization');
-    dest = dest ?? (await signup(stack, 'dst'));
-    outsider = outsider ?? (await signup(stack, 'out'));
-    const membership = await developerSignIn(AUTH_MANAGEMENT_CLIENT_ID, AUTH_MANAGEMENT_SCOPES.membership);
-    const added = await operate(stack, membership, {
-      kind: 'membership',
-      organizationId,
-      memberAccountId: dest.accountId,
-      role: 'member',
-    });
-    if (added.status !== 200) throw new Error(`membership HTTP ${added.status}: ${summarize(added.value)}`);
-    evidence.native.push({ organizationId, orgHandle, member: dest.accountId });
-    return `organization ${orgHandle}`;
-  });
-  if (rows.get('J06')?.result === 'FAIL') await failDependents(['J07'], rows.get('J06')!.cause, 'J06 organization');
+    let walker: Person | undefined;
+    let outsider: Person | undefined;
+    let dest: Person | undefined;
+    let organizationId = '';
+    let orgHandle = '';
+    let humanSoftwareId = '';
+    let followTarget: Person | undefined;
+    let followTargetId = '';
+    let realmId = '';
+    let spaceId = '';
 
-  await runJourney('J07', 'POST /account-operations membership role=owner → management read', async () => {
-    if (!organizationId || !dest) throw new Error('organization create did not yield an identity');
-    const membership = await developerSignIn(AUTH_MANAGEMENT_CLIENT_ID, AUTH_MANAGEMENT_SCOPES.membership);
-    const selected = await auth(stack, '/account-management/organizations/member', membership, {
-      organizationId,
-      memberAccountId: dest.accountId,
+    await runJourney('J01', 'POST /signup → GET /authorize → GET /auth/callback → GET /en/', async () => {
+      walker = await signup(stack, 'j01');
+      const token = await websiteToken(stack, walker, bindings, keys.website);
+      if (!token.codePath.includes('/auth/callback') && token.codePath !== '/auth/callback')
+        throw new Error(`callback path ${token.codePath}`);
+      const me = await kernel(stack, 'GET', '/v1/accounts', {
+        bearer: token.bearer,
+        query: { ids: token.session.accountId },
+      });
+      await rememberKernelBearerFailure(me, 'authenticated account');
+      requireStatus(me, 'authenticated account', 200);
+      walker.accountId = token.session.accountId;
+      evidence.native.push({ j01: walker.accountId, callback: token.codePath });
+      return `signup ${walker.handle}; callback ${token.codePath}`;
     });
-    requireStatus(selected, 'selected member', 200);
-    const reservation = (selected.value.membership as Json | undefined)?.reservationId;
-    if (typeof reservation !== 'string') throw new Error('selected member omitted reservation');
-    const promoted = await operate(stack, membership, {
-      kind: 'membership',
-      organizationId,
-      memberAccountId: dest.accountId,
-      role: 'owner',
-      reservationId: reservation,
-    });
-    if (promoted.status !== 200) throw new Error(`owner promotion HTTP ${promoted.status}: ${summarize(promoted.value)}`);
-    const destToken = await websiteToken(stack, dest, bindings, keys.website);
-    const detail = await kernel(stack, 'GET', `/v1/accounts/${organizationId}/management`, {
-      bearer: destToken.bearer,
-    });
-    requireStatus(detail, 'new owner management', 200);
-    return `dest owner role ${String(detail.value.role)}`;
-  });
 
-  await runJourney('J08', 'POST /account-operations rename → GET /v1/accounts?handle=', async () => {
-    const person = await signup(stack, 'j08');
-    const renameSession = await signIn(stack, person, AUTH_MANAGEMENT_CLIENT_ID, AUTH_MANAGEMENT_SCOPES.rename);
-    const nextHandle = handle('ren');
-    const renamed = await operate(stack, renameSession, {
-      kind: 'rename',
-      accountId: person.accountId,
-      handle: nextHandle,
-      expectedHandle: person.handle,
+    await runJourney('J02', 'POST /signin → GET /sessions → POST /sessions/revoke', async () => {
+      const person = walker ?? (await signup(stack, 'j02'));
+      const session = await signIn(stack, person, 'login', []);
+      const listed = await send(`${stack.native}/sessions`, {
+        method: 'GET',
+        cookie: session.cookie,
+        origin: stack.issuer,
+      });
+      requireStatus(listed, 'session review', [200, 204]);
+      const items = Array.isArray(listed.value.items)
+        ? (listed.value.items as Json[])
+        : Array.isArray(listed.value.sessions)
+          ? (listed.value.sessions as Json[])
+          : [];
+      const current = items.find((item) => item.current === true) ?? items[0];
+      const sessionId =
+        typeof current?.id === 'string'
+          ? current.id
+          : typeof listed.value.viewer === 'object' && listed.value.viewer
+            ? String((listed.value.viewer as Json).session_id ?? '')
+            : '';
+      if (sessionId) {
+        const revoked = await auth(stack, '/sessions/revoke', session, { session_id: sessionId });
+        requireStatus(revoked, 'session revoke', [200, 204]);
+      }
+      const after = await send(`${stack.native}/sessions`, {
+        method: 'GET',
+        cookie: session.cookie,
+        origin: stack.issuer,
+      });
+      if (after.status === 200 && sessionId && JSON.stringify(after.value).includes(sessionId))
+        throw new Error('revoked session still listed');
+      return sessionId ? `revoked ${sessionId}` : `session review HTTP ${listed.status}`;
     });
-    if (renamed.status !== 200) throw new Error(`rename HTTP ${renamed.status}: ${summarize(renamed.value)}`);
-    const next = accountRow(
-      requireStatus(await kernel(stack, 'GET', '/v1/accounts', { query: { handle: nextHandle } }), 'new handle', 200),
-    );
-    if (next?.id !== person.accountId) throw new Error('new handle did not resolve to the same account');
-    const former = accountRow(
-      requireStatus(await kernel(stack, 'GET', '/v1/accounts', { query: { handle: person.handle } }), 'former handle', 200),
-    );
-    if (former && former.id !== person.accountId && former.movedTo !== nextHandle)
-      throw new Error('former handle did not retire toward the new address');
-    person.handle = nextHandle;
-    return `renamed to ${nextHandle}`;
-  });
 
-  await runJourney('J09', 'POST /account-operations automated → POST /operator-sessions/open', async () => {
-    const management = await developerSignIn(AUTH_MANAGEMENT_CLIENT_ID, AUTH_MANAGEMENT_SCOPES.transfer);
-    const softwareHandle = handle('bot');
-    const operationKey = crypto.randomUUID();
-    const operation = {
-      kind: 'automated',
-      registrationId: '',
-      operationKey,
-      operatorAccountId: developer.accountId,
-      handle: softwareHandle,
-    };
-    const approval = await auth(
-      stack,
-      '/account-operations/approve',
-      management,
-      {
+    await runJourney('J03', 'POST /recovery/start → POST /recovery/complete → POST /signin', async () => {
+      const person = await signup(stack, 'j03');
+      const oldSession = await signIn(stack, person, 'login', []);
+      const started = await auth(stack, '/recovery/start', undefined, { email: person.email }, 15_000);
+      requireStatus(started, 'recovery start', 200);
+      const token = await deliveredRecoveryToken(person.email);
+      const completed = await auth(
+        stack,
+        '/recovery/complete',
+        undefined,
+        { account_id: person.accountId, token, new_password: nextPassword },
+        15_000,
+      );
+      requireStatus(completed, 'recovery complete', 200);
+      const stale = await auth(
+        stack,
+        '/signin',
+        undefined,
+        { email: person.email, password, client_id: 'login', scope: [] },
+        15_000,
+      );
+      if (stale.status === 200) throw new Error('old password still established a session');
+      await signIn(stack, person, 'login', [], nextPassword);
+      const staleCookie = await send(`${stack.native}/sessions`, {
+        method: 'GET',
+        cookie: oldSession.cookie,
+        origin: stack.issuer,
+      });
+      if (staleCookie.status === 200) throw new Error('old session retained authority after recovery');
+      return 'old password and session refused';
+    });
+
+    await runJourney('J04', 'POST /credential-effects → GET /sessions → POST /sessions/revoke', async () => {
+      const person = await signup(stack, 'j04');
+      // Security uses the login client; a just-established session is the fresh step-up for this HTTP walk.
+      const session = await signIn(stack, person, 'login', []);
+      const changed = await credentialEffect(stack, session, session.accountId, {
+        kind: 'password',
+        password: nextPassword,
+      });
+      if (changed.status !== 200)
+        throw new Error(`credential effect HTTP ${changed.status}: ${summarize(changed.value)}`);
+      const stale = await auth(
+        stack,
+        '/signin',
+        undefined,
+        { email: person.email, password, client_id: 'login', scope: [] },
+        15_000,
+      );
+      if (stale.status === 200) throw new Error('old password still signed in after credential replace');
+      const fresh = await signIn(stack, person, 'login', [], nextPassword);
+      const listed = await send(`${stack.native}/sessions`, {
+        method: 'GET',
+        cookie: fresh.cookie,
+        origin: stack.issuer,
+      });
+      requireStatus(listed, 'security sessions', [200, 204]);
+      return `password replaced HTTP ${changed.status}`;
+    });
+
+    await runJourney('J05', 'PATCH /v1/accounts/{id} → GET /v1/accounts?handle=', async () => {
+      const person = walker ?? (await signup(stack, 'j05'));
+      const token = await websiteToken(stack, person, bindings, keys.website);
+      const patched = await kernel(stack, 'PATCH', `/v1/accounts/${token.session.accountId}`, {
+        bearer: token.bearer,
+        body: { displayName: 'Walk profile', biography: 'Goal walk biography' },
+      });
+      requireStatus(patched, 'profile save', 200);
+      const publicRead = requireStatus(
+        await kernel(stack, 'GET', '/v1/accounts', { query: { handle: person.handle } }),
+        'independent public profile',
+        200,
+      );
+      const row = accountRow(publicRead);
+      if (row?.displayName !== 'Walk profile') throw new Error(`public displayName ${String(row?.displayName)}`);
+      if (row && ('email' in row || 'credentials' in row)) throw new Error('public profile disclosed private fields');
+      return 'independent handle readback matched';
+    });
+
+    await runJourney('J06', 'POST /account-operations organization → membership', async () => {
+      const operations = await developerSignIn(AUTH_PAGE_OPERATION_CLIENT_ID, AUTH_PAGE_OPERATION_SCOPES.organization);
+      orgHandle = handle('org');
+      const created = await operate(stack, operations, { kind: 'organization', handle: orgHandle });
+      if (created.status !== 200)
+        throw new Error(`organization create HTTP ${created.status}: ${summarize(created.value)}`);
+      organizationId = asId(created.value.accountId, 'organization');
+      dest = dest ?? (await signup(stack, 'dst'));
+      outsider = outsider ?? (await signup(stack, 'out'));
+      const membership = await developerSignIn(AUTH_MANAGEMENT_CLIENT_ID, AUTH_MANAGEMENT_SCOPES.membership);
+      const added = await operate(stack, membership, {
+        kind: 'membership',
+        organizationId,
+        memberAccountId: dest.accountId,
+        role: 'member',
+      });
+      if (added.status !== 200) throw new Error(`membership HTTP ${added.status}: ${summarize(added.value)}`);
+      evidence.native.push({ organizationId, orgHandle, member: dest.accountId });
+      return `organization ${orgHandle}`;
+    });
+    if (rows.get('J06')?.result === 'FAIL') await failDependents(['J07'], rows.get('J06')!.cause, 'J06 organization');
+
+    await runJourney('J07', 'POST /account-operations membership role=owner → management read', async () => {
+      if (!organizationId || !dest) throw new Error('organization create did not yield an identity');
+      const membership = await developerSignIn(AUTH_MANAGEMENT_CLIENT_ID, AUTH_MANAGEMENT_SCOPES.membership);
+      const selected = await auth(stack, '/account-management/organizations/member', membership, {
+        organizationId,
+        memberAccountId: dest.accountId,
+      });
+      requireStatus(selected, 'selected member', 200);
+      const reservation = (selected.value.membership as Json | undefined)?.reservationId;
+      if (typeof reservation !== 'string') throw new Error('selected member omitted reservation');
+      const promoted = await operate(stack, membership, {
+        kind: 'membership',
+        organizationId,
+        memberAccountId: dest.accountId,
+        role: 'owner',
+        reservationId: reservation,
+      });
+      if (promoted.status !== 200)
+        throw new Error(`owner promotion HTTP ${promoted.status}: ${summarize(promoted.value)}`);
+      const destToken = await websiteToken(stack, dest, bindings, keys.website);
+      const detail = await kernel(stack, 'GET', `/v1/accounts/${organizationId}/management`, {
+        bearer: destToken.bearer,
+      });
+      requireStatus(detail, 'new owner management', 200);
+      return `dest owner role ${String(detail.value.role)}`;
+    });
+
+    await runJourney('J08', 'POST /account-operations rename → GET /v1/accounts?handle=', async () => {
+      const person = await signup(stack, 'j08');
+      const renameSession = await signIn(stack, person, AUTH_MANAGEMENT_CLIENT_ID, AUTH_MANAGEMENT_SCOPES.rename);
+      const nextHandle = handle('ren');
+      const renamed = await operate(stack, renameSession, {
+        kind: 'rename',
+        accountId: person.accountId,
+        handle: nextHandle,
+        expectedHandle: person.handle,
+      });
+      if (renamed.status !== 200) throw new Error(`rename HTTP ${renamed.status}: ${summarize(renamed.value)}`);
+      const next = accountRow(
+        requireStatus(await kernel(stack, 'GET', '/v1/accounts', { query: { handle: nextHandle } }), 'new handle', 200),
+      );
+      if (next?.id !== person.accountId) throw new Error('new handle did not resolve to the same account');
+      const former = accountRow(
+        requireStatus(
+          await kernel(stack, 'GET', '/v1/accounts', { query: { handle: person.handle } }),
+          'former handle',
+          200,
+        ),
+      );
+      if (former && former.id !== person.accountId && former.movedTo !== nextHandle)
+        throw new Error('former handle did not retire toward the new address');
+      person.handle = nextHandle;
+      return `renamed to ${nextHandle}`;
+    });
+
+    await runJourney('J09', 'POST /account-operations automated → POST /operator-sessions/open', async () => {
+      const management = await developerSignIn(AUTH_MANAGEMENT_CLIENT_ID, AUTH_MANAGEMENT_SCOPES.transfer);
+      const softwareHandle = handle('bot');
+      const operationKey = crypto.randomUUID();
+      const operation = {
+        kind: 'automated',
+        registrationId: '',
         operationKey,
-        operation,
-        accountId: management.accountId,
-      },
-      30_000,
-    );
-    if (approval.status !== 200) throw new Error(`software approval HTTP ${approval.status}: ${summarize(approval.value)}`);
-    const executed = await auth(
-      stack,
-      '/account-operations/execute',
-      management,
-      {
-        operationKey,
-        operation,
-        accountId: management.accountId,
-        reference: approval.value.reference,
-      },
-      30_000,
-    );
-    if (executed.status !== 200) throw new Error(`software execute HTTP ${executed.status}: ${summarize(executed.value)}`);
-    humanSoftwareId = asId(executed.value.accountId, 'software');
-    const passwordSet = await credentialEffect(stack, management, humanSoftwareId, {
-      kind: 'password',
-      password: softwarePassword,
-    });
-    if (passwordSet.status !== 200)
-      throw new Error(`software password HTTP ${passwordSet.status}: ${summarize(passwordSet.value)}`);
-    const opening = await developerSignIn(AUTH_MANAGEMENT_CLIENT_ID, AUTH_MANAGEMENT_SCOPES.opening);
-    const openingKey = crypto.randomUUID();
-    const openingOperation = {
-      kind: 'opening',
-      operatorAccountId: opening.accountId,
-      subjectAccountId: humanSoftwareId,
-    };
-    const openingApproval = await auth(
-      stack,
-      '/account-operations/approve',
-      opening,
-      {
-        operationKey: openingKey,
-        operation: openingOperation,
-        accountId: opening.accountId,
-      },
-      30_000,
-    );
-    requireStatus(openingApproval, 'operator approve', 200);
-    const opened = await auth(
-      stack,
-      '/operator-sessions/open',
-      opening,
-      {
-        operationKey: openingKey,
-        operation: openingOperation,
-        accountId: opening.accountId,
-        reference: openingApproval.value.reference,
-      },
-      30_000,
-    );
-    requireStatus(opened, 'operator opening', 200);
-    if (opened.value.account_id !== humanSoftwareId) throw new Error('operator opening returned a foreign actor');
-    outsider = outsider ?? (await signup(stack, 'out'));
-    const outsiderSession = await signIn(stack, outsider, AUTH_MANAGEMENT_CLIENT_ID, AUTH_MANAGEMENT_SCOPES.opening);
-    const outsiderKey = crypto.randomUUID();
-    const outsiderOperation = {
-      kind: 'opening',
-      operatorAccountId: outsider.accountId,
-      subjectAccountId: humanSoftwareId,
-    };
-    const outsiderApproval = await auth(
-      stack,
-      '/account-operations/approve',
-      outsiderSession,
-      {
-        operationKey: outsiderKey,
-        operation: outsiderOperation,
-        accountId: outsiderSession.accountId,
-      },
-      30_000,
-    );
-    if (outsiderApproval.status === 200) {
-      const outsiderOpened = await auth(
+        operatorAccountId: developer.accountId,
+        handle: softwareHandle,
+      };
+      const approval = await auth(
+        stack,
+        '/account-operations/approve',
+        management,
+        {
+          operationKey,
+          operation,
+          accountId: management.accountId,
+        },
+        30_000,
+      );
+      if (approval.status !== 200)
+        throw new Error(`software approval HTTP ${approval.status}: ${summarize(approval.value)}`);
+      const executed = await auth(
+        stack,
+        '/account-operations/execute',
+        management,
+        {
+          operationKey,
+          operation,
+          accountId: management.accountId,
+          reference: approval.value.reference,
+        },
+        30_000,
+      );
+      if (executed.status !== 200)
+        throw new Error(`software execute HTTP ${executed.status}: ${summarize(executed.value)}`);
+      humanSoftwareId = asId(executed.value.accountId, 'software');
+      const passwordSet = await credentialEffect(stack, management, humanSoftwareId, {
+        kind: 'password',
+        password: softwarePassword,
+      });
+      if (passwordSet.status !== 200)
+        throw new Error(`software password HTTP ${passwordSet.status}: ${summarize(passwordSet.value)}`);
+      const opening = await developerSignIn(AUTH_MANAGEMENT_CLIENT_ID, AUTH_MANAGEMENT_SCOPES.opening);
+      const openingKey = crypto.randomUUID();
+      const openingOperation = {
+        kind: 'opening',
+        operatorAccountId: opening.accountId,
+        subjectAccountId: humanSoftwareId,
+      };
+      const openingApproval = await auth(
+        stack,
+        '/account-operations/approve',
+        opening,
+        {
+          operationKey: openingKey,
+          operation: openingOperation,
+          accountId: opening.accountId,
+        },
+        30_000,
+      );
+      requireStatus(openingApproval, 'operator approve', 200);
+      const opened = await auth(
         stack,
         '/operator-sessions/open',
+        opening,
+        {
+          operationKey: openingKey,
+          operation: openingOperation,
+          accountId: opening.accountId,
+          reference: openingApproval.value.reference,
+        },
+        30_000,
+      );
+      requireStatus(opened, 'operator opening', 200);
+      if (opened.value.account_id !== humanSoftwareId) throw new Error('operator opening returned a foreign actor');
+      outsider = outsider ?? (await signup(stack, 'out'));
+      const outsiderSession = await signIn(stack, outsider, AUTH_MANAGEMENT_CLIENT_ID, AUTH_MANAGEMENT_SCOPES.opening);
+      const outsiderKey = crypto.randomUUID();
+      const outsiderOperation = {
+        kind: 'opening',
+        operatorAccountId: outsider.accountId,
+        subjectAccountId: humanSoftwareId,
+      };
+      const outsiderApproval = await auth(
+        stack,
+        '/account-operations/approve',
         outsiderSession,
         {
           operationKey: outsiderKey,
           operation: outsiderOperation,
           accountId: outsiderSession.accountId,
-          reference: outsiderApproval.value.reference,
         },
         30_000,
       );
-      if (outsiderOpened.status === 200) throw new Error('outsider opened the software session');
-      return `software ${humanSoftwareId}; outsider open HTTP ${outsiderOpened.status}`;
-    }
-    return `software ${humanSoftwareId}; outsider approve HTTP ${outsiderApproval.status}`;
-  });
+      if (outsiderApproval.status === 200) {
+        const outsiderOpened = await auth(
+          stack,
+          '/operator-sessions/open',
+          outsiderSession,
+          {
+            operationKey: outsiderKey,
+            operation: outsiderOperation,
+            accountId: outsiderSession.accountId,
+            reference: outsiderApproval.value.reference,
+          },
+          30_000,
+        );
+        if (outsiderOpened.status === 200) throw new Error('outsider opened the software session');
+        return `software ${humanSoftwareId}; outsider open HTTP ${outsiderOpened.status}`;
+      }
+      return `software ${humanSoftwareId}; outsider approve HTTP ${outsiderApproval.status}`;
+    });
 
-  await runJourney('J10', 'GET /authorize grant → POST /revoke → GET /v1/accounts/{id}/profile', async () => {
-    const person = walker ?? (await signup(stack, 'j10'));
-    const granted = await websiteToken(stack, person, bindings, keys.website);
-    const before = await kernel(stack, 'GET', `/v1/accounts/${granted.session.accountId}/profile`, {
-      bearer: granted.bearer,
+    await runJourney('J10', 'GET /authorize grant → POST /revoke → GET /v1/accounts/{id}/profile', async () => {
+      const person = walker ?? (await signup(stack, 'j10'));
+      const granted = await websiteToken(stack, person, bindings, keys.website);
+      const before = await kernel(stack, 'GET', `/v1/accounts/${granted.session.accountId}/profile`, {
+        bearer: granted.bearer,
+      });
+      requireStatus(before, 'consented profile', 200);
+      if (!granted.refresh) throw new Error('website token omitted refresh_token');
+      const revoked = await fetch(`${stack.native}/revoke`, {
+        method: 'POST',
+        headers: { origin: stack.issuer, 'content-type': 'application/x-www-form-urlencoded' },
+        body: new URLSearchParams({
+          client_id: WEBSITE_CLIENT_ID,
+          client_assertion_type: 'urn:ietf:params:oauth:client-assertion-type:jwt-bearer',
+          client_assertion: await websiteAssertion(stack, keys.website),
+          resource: bindings.API_RESOURCE ?? WEBSITE_AUDIENCE,
+          token: granted.refresh,
+          token_type_hint: 'refresh_token',
+        }),
+        signal: AbortSignal.timeout(30_000),
+      });
+      if (revoked.status !== 200)
+        throw new Error(`website revoke returned HTTP ${revoked.status}: ${(await revoked.text()).slice(0, 240)}`);
+      const after = await kernel(stack, 'GET', `/v1/accounts/${granted.session.accountId}/profile`, {
+        bearer: granted.bearer,
+      });
+      if (after.status === 200) throw new Error('revoked website family still read the editable profile');
+      return `profile after revoke HTTP ${after.status}`;
     });
-    requireStatus(before, 'consented profile', 200);
-    if (!granted.refresh) throw new Error('website token omitted refresh_token');
-    const revoked = await fetch(`${stack.native}/revoke`, {
-      method: 'POST',
-      headers: { origin: stack.issuer, 'content-type': 'application/x-www-form-urlencoded' },
-      body: new URLSearchParams({
-        client_id: WEBSITE_CLIENT_ID,
-        client_assertion_type: 'urn:ietf:params:oauth:client-assertion-type:jwt-bearer',
-        client_assertion: await websiteAssertion(stack, keys.website),
-        resource: bindings.API_RESOURCE ?? WEBSITE_AUDIENCE,
-        token: granted.refresh,
-        token_type_hint: 'refresh_token',
-      }),
-      signal: AbortSignal.timeout(30_000),
-    });
-    if (revoked.status !== 200)
-      throw new Error(`website revoke returned HTTP ${revoked.status}: ${(await revoked.text()).slice(0, 240)}`);
-    const after = await kernel(stack, 'GET', `/v1/accounts/${granted.session.accountId}/profile`, {
-      bearer: granted.bearer,
-    });
-    if (after.status === 200) throw new Error('revoked website family still read the editable profile');
-    return `profile after revoke HTTP ${after.status}`;
-  });
 
-  await runJourney('J11', 'POST /v1/accounts/{id}:requestVerification → POST :withdrawVerification', async () => {
-    const person = walker ?? (await signup(stack, 'j11'));
-    const token = await websiteToken(stack, person, bindings, keys.website);
-    const opened = await kernel(stack, 'POST', '/v1/platform/exposure/agent_verification:open', {
-      bearer: website.bearer,
-      body: {},
-    });
-    if (![200, 409, 403].includes(opened.status))
-      throw new Error(`agent_verification open HTTP ${opened.status}: ${summarize(opened.value)}`);
-    const requested = await kernel(stack, 'POST', `/v1/accounts/${token.session.accountId}:requestVerification`, {
-      bearer: token.bearer,
-      body: { subject: GLOBAL_CONTEXT, statement: 'Goal walk verification of the Global Context address.', links: [] },
-    });
-    if (requested.status === 201) {
-      const withdrawn = await kernel(stack, 'POST', `/v1/accounts/${token.session.accountId}:withdrawVerification`, {
-        bearer: token.bearer,
+    await runJourney('J11', 'POST /v1/accounts/{id}:requestVerification → POST :withdrawVerification', async () => {
+      const person = walker ?? (await signup(stack, 'j11'));
+      const token = await websiteToken(stack, person, bindings, keys.website);
+      const opened = await kernel(stack, 'POST', '/v1/platform/exposure/agent_verification:open', {
+        bearer: website.bearer,
         body: {},
       });
-      requireStatus(withdrawn, 'withdraw verification', 200);
-      const publicRead = requireStatus(
-        await kernel(stack, 'GET', '/v1/accounts', { query: { handle: person.handle } }),
-        'unverified public readback',
-        200,
+      if (![200, 409, 403].includes(opened.status))
+        throw new Error(`agent_verification open HTTP ${opened.status}: ${summarize(opened.value)}`);
+      const requested = await kernel(stack, 'POST', `/v1/accounts/${token.session.accountId}:requestVerification`, {
+        bearer: token.bearer,
+        body: {
+          subject: GLOBAL_CONTEXT,
+          statement: 'Goal walk verification of the Global Context address.',
+          links: [],
+        },
+      });
+      if (requested.status === 201) {
+        const withdrawn = await kernel(stack, 'POST', `/v1/accounts/${token.session.accountId}:withdrawVerification`, {
+          bearer: token.bearer,
+          body: {},
+        });
+        requireStatus(withdrawn, 'withdraw verification', 200);
+        const publicRead = requireStatus(
+          await kernel(stack, 'GET', '/v1/accounts', { query: { handle: person.handle } }),
+          'unverified public readback',
+          200,
+        );
+        return `requested then withdrawn; public ${String(accountRow(publicRead)?.id)}`;
+      }
+      throw new Error(
+        `requestVerification HTTP ${requested.status}: ${summarize(requested.value)}; no catalogue agent identity on this walk stack`,
       );
-      return `requested then withdrawn; public ${String(accountRow(publicRead)?.id)}`;
-    }
-    throw new Error(
-      `requestVerification HTTP ${requested.status}: ${summarize(requested.value)}; no catalogue agent identity on this walk stack`,
-    );
-  });
+    });
 
-  await runJourney('J12', 'GET /v1/accounts?handle= person/organization/agent', async () => {
-    const person = walker ?? { handle: developer.handle, email: developer.email, accountId: developer.accountId };
-    const personRow = accountRow(
-      requireStatus(await kernel(stack, 'GET', '/v1/accounts', { query: { handle: person.handle } }), 'public person', 200),
-    );
-    if (!personRow || personRow.kind === 'organization') throw new Error('person page missing or mistyped');
-    if ('email' in personRow || 'credentials' in personRow) throw new Error('person page disclosed private fields');
-    evidence.native.push({ publicPerson: person.handle, id: personRow.id });
-    const missing: string[] = [];
-    if (!organizationId) missing.push('organization (J06)');
-    else {
-      const orgRow = accountRow(
+    await runJourney('J12', 'GET /v1/accounts?handle= person/organization/agent', async () => {
+      const person = walker ?? { handle: developer.handle, email: developer.email, accountId: developer.accountId };
+      const personRow = accountRow(
         requireStatus(
-          await kernel(stack, 'GET', '/v1/accounts', { query: { handle: orgHandle } }),
-          'public organization',
+          await kernel(stack, 'GET', '/v1/accounts', { query: { handle: person.handle } }),
+          'public person',
           200,
         ),
       );
-      if (orgRow?.kind !== 'organization' || orgRow.id !== organizationId)
-        throw new Error('organization page identity mismatch');
-      if (orgRow && ('email' in orgRow || 'credentials' in orgRow))
-        throw new Error('organization page disclosed private fields');
-    }
-    if (!humanSoftwareId) missing.push('software (J09)');
-    else {
-      const agent = requireStatus(
-        await kernel(stack, 'GET', '/v1/accounts', { query: { ids: humanSoftwareId } }),
-        'public agent',
+      if (!personRow || personRow.kind === 'organization') throw new Error('person page missing or mistyped');
+      if ('email' in personRow || 'credentials' in personRow) throw new Error('person page disclosed private fields');
+      evidence.native.push({ publicPerson: person.handle, id: personRow.id });
+      const missing: string[] = [];
+      if (!organizationId) missing.push('organization (J06)');
+      else {
+        const orgRow = accountRow(
+          requireStatus(
+            await kernel(stack, 'GET', '/v1/accounts', { query: { handle: orgHandle } }),
+            'public organization',
+            200,
+          ),
+        );
+        if (orgRow?.kind !== 'organization' || orgRow.id !== organizationId)
+          throw new Error('organization page identity mismatch');
+        if (orgRow && ('email' in orgRow || 'credentials' in orgRow))
+          throw new Error('organization page disclosed private fields');
+      }
+      if (!humanSoftwareId) missing.push('software (J09)');
+      else {
+        const agent = requireStatus(
+          await kernel(stack, 'GET', '/v1/accounts', { query: { ids: humanSoftwareId } }),
+          'public agent',
+          200,
+        );
+        const agentRow = accountRow(agent);
+        if (!agentRow || agentRow.id !== humanSoftwareId) throw new Error('agent page identity mismatch');
+        if (agentRow && ('email' in agentRow || 'credentials' in agentRow))
+          throw new Error('agent page disclosed private fields');
+      }
+      if (missing.length)
+        throw new Error(`person public HTTP 200 without private fields; not reached: ${missing.join(', ')}`);
+      return 'person, organization and agent omit private fields';
+    });
+
+    await runJourney('J13', 'PUT /v1/follows/{id} → GET /v1/follows → DELETE /v1/follows/{id}', async () => {
+      const follower = walker ?? (await signup(stack, 'j13a'));
+      followTarget = await signup(stack, 'j13b');
+      const token = await websiteToken(stack, follower, bindings, keys.website);
+      followTargetId = await waitForPublicAgentSubject(stack, followTarget.handle, 'follow target');
+      const followed = await kernel(stack, 'PUT', `/v1/follows/${followTargetId}`, { bearer: token.bearer });
+      if (followed.status !== 200) throw new Error(`follow HTTP ${followed.status}: ${summarize(followed.value)}`);
+      const listed = await kernel(stack, 'GET', '/v1/follows', { bearer: token.bearer, query: { limit: '20' } });
+      requireStatus(listed, 'Following', 200);
+      const removed = await kernel(stack, 'DELETE', `/v1/follows/${followTargetId}`, { bearer: token.bearer });
+      requireStatus(removed, 'unfollow', 200);
+      const again = await kernel(stack, 'PUT', `/v1/follows/${followTargetId}`, { bearer: token.bearer });
+      requireStatus(again, 'refollow', 200);
+      const deleteSession = await signIn(
+        stack,
+        followTarget,
+        AUTH_PAGE_OPERATION_CLIENT_ID,
+        AUTH_PAGE_OPERATION_SCOPES.delete,
+      );
+      const erased = await operate(
+        stack,
+        deleteSession,
+        { kind: 'delete', accountId: followTarget.accountId },
+        { confirmation: followTarget.handle },
+      );
+      const unavailable = await kernel(stack, 'DELETE', `/v1/follows/${followTargetId}`, { bearer: token.bearer });
+      if (unavailable.status !== 200 && erased.status !== 200)
+        throw new Error(
+          `unavailable unfollow HTTP ${unavailable.status} after target delete HTTP ${erased.status}: ${summarize(unavailable.value)}`,
+        );
+      if (unavailable.status !== 200)
+        throw new Error(`stored unavailable unfollow HTTP ${unavailable.status}: ${summarize(unavailable.value)}`);
+      return `followed then removed unavailable ${followTargetId}`;
+    });
+
+    await runJourney('J14', 'GET /v1/followCounts/outgoing → stranger GET /v1/followCounts/{type}/{id}', async () => {
+      const anonymous = await kernel(stack, 'GET', '/v1/followCounts/outgoing');
+      if (anonymous.status === 200 && typeof anonymous.value.followingCount === 'number')
+        throw new Error('anonymous reader received a private outgoing count');
+      if (kernelBearerCause)
+        throw new Error(`anonymous outgoing HTTP ${anonymous.status}; not reached: own count (${kernelBearerCause})`);
+      const follower = walker ?? (await signup(stack, 'j14a'));
+      const target = outsider ?? (await signup(stack, 'j14b'));
+      const token = await websiteToken(stack, follower, bindings, keys.website);
+      const stranger = await websiteToken(stack, target, bindings, keys.website);
+      const subjectId = await waitForPublicAgentSubject(stack, target.handle, 'count target');
+      await kernel(stack, 'PUT', `/v1/follows/${subjectId}`, { bearer: token.bearer });
+      const own = await kernel(stack, 'GET', '/v1/followCounts/outgoing', { bearer: token.bearer });
+      await rememberKernelBearerFailure(own, 'own outgoing count');
+      requireStatus(own, 'own outgoing count', 200);
+      if (typeof own.value.followingCount !== 'number') throw new Error('outgoing omitted followingCount');
+      const concealed = await kernel(stack, 'GET', `/v1/followCounts/subject/${subjectId}`, {
+        bearer: stranger.bearer,
+      });
+      if (concealed.status === 200 && typeof concealed.value.followerCount === 'number')
+        throw new Error('unrelated reader received the private follower aggregate');
+      return `own followingCount ${String(own.value.followingCount)}; stranger HTTP ${concealed.status}; anonymous HTTP ${anonymous.status}`;
+    });
+
+    await runJourney(
+      'J15',
+      'POST /v1/spaces → POST /v1/realms → POST /v1/realms/{id}/membership → DELETE',
+      async () => {
+        const member = dest ?? (await signup(stack, 'j15'));
+        const ownerToken = website;
+        const space = await kernel(stack, 'POST', '/v1/spaces', {
+          bearer: ownerToken.bearer,
+          body: { title: 'Accounts walk Space', summary: 'Goal walk protected membership' },
+        });
+        if (space.status !== 201) throw new Error(`space create HTTP ${space.status}: ${summarize(space.value)}`);
+        spaceId = asId((space.value.space as Json | undefined)?.spaceId ?? space.value.spaceId, 'space');
+        const realm = await kernel(stack, 'POST', '/v1/realms', {
+          bearer: ownerToken.bearer,
+          body: {
+            spaceId,
+            title: 'Accounts walk Realm',
+            summary: 'Goal walk protected reads',
+            visibility: 'protected',
+            contextId: GLOBAL_CONTEXT,
+          },
+        });
+        if (realm.status !== 201) throw new Error(`realm create HTTP ${realm.status}: ${summarize(realm.value)}`);
+        realmId = asId((realm.value.realm as Json | undefined)?.realmId ?? realm.value.realmId, 'realm');
+        const memberToken = await websiteToken(stack, member, bindings, keys.website);
+        const joined = await kernel(stack, 'POST', `/v1/realms/${realmId}/members`, {
+          bearer: ownerToken.bearer,
+          body: { accountId: member.accountId },
+        });
+        if (![200, 201, 202].includes(joined.status))
+          throw new Error(`join HTTP ${joined.status}: ${summarize(joined.value)}`);
+        const allowed = await untilStatus(
+          () => kernel(stack, 'GET', `/v1/realms/${realmId}/members/me`, { bearer: memberToken.bearer }),
+          'protected member read',
+          200,
+        );
+        const left = await kernel(stack, 'DELETE', `/v1/realms/${realmId}/membership`, { bearer: memberToken.bearer });
+        if (![200, 202, 204].includes(left.status))
+          throw new Error(`leave HTTP ${left.status}: ${summarize(left.value)}`);
+        const after = await kernel(stack, 'GET', `/v1/realms/${realmId}/members/me`, { bearer: memberToken.bearer });
+        if (after.status === 200) throw new Error('member read still succeeded after leave');
+        return `realm ${realmId} leave HTTP ${after.status}`;
+      },
+    );
+    if (rows.get('J15')?.result === 'FAIL') await failDependents(['J16'], rows.get('J15')!.cause, 'J15 realm');
+
+    await runJourney('J16', 'PUT /v1/realms/{id}/bans/{accountId} → GET members/me → POST members', async () => {
+      if (!realmId) throw new Error('realm create did not yield an identity');
+      const banned = dest ?? (await signup(stack, 'j16'));
+      const memberToken = await websiteToken(stack, banned, bindings, keys.website);
+      const joined = await kernel(stack, 'POST', `/v1/realms/${realmId}/members`, {
+        bearer: website.bearer,
+        body: { accountId: banned.accountId },
+      });
+      if (![200, 201, 202].includes(joined.status))
+        throw new Error(`rejoin HTTP ${joined.status}: ${summarize(joined.value)}`);
+      await untilStatus(
+        () => kernel(stack, 'GET', `/v1/realms/${realmId}/members/me`, { bearer: memberToken.bearer }),
+        'rejoined member read',
         200,
       );
-      const agentRow = accountRow(agent);
-      if (!agentRow || agentRow.id !== humanSoftwareId) throw new Error('agent page identity mismatch');
-      if (agentRow && ('email' in agentRow || 'credentials' in agentRow))
-        throw new Error('agent page disclosed private fields');
-    }
-    if (missing.length)
-      throw new Error(`person public HTTP 200 without private fields; not reached: ${missing.join(', ')}`);
-    return 'person, organization and agent omit private fields';
-  });
-
-  await runJourney('J13', 'PUT /v1/follows/{id} → GET /v1/follows → DELETE /v1/follows/{id}', async () => {
-    const follower = walker ?? (await signup(stack, 'j13a'));
-    followTarget = await signup(stack, 'j13b');
-    const token = await websiteToken(stack, follower, bindings, keys.website);
-    followTargetId = await waitForPublicAgentSubject(stack, followTarget.handle, 'follow target');
-    const followed = await kernel(stack, 'PUT', `/v1/follows/${followTargetId}`, { bearer: token.bearer });
-    if (followed.status !== 200)
-      throw new Error(`follow HTTP ${followed.status}: ${summarize(followed.value)}`);
-    const listed = await kernel(stack, 'GET', '/v1/follows', { bearer: token.bearer, query: { limit: '20' } });
-    requireStatus(listed, 'Following', 200);
-    const removed = await kernel(stack, 'DELETE', `/v1/follows/${followTargetId}`, { bearer: token.bearer });
-    requireStatus(removed, 'unfollow', 200);
-    const again = await kernel(stack, 'PUT', `/v1/follows/${followTargetId}`, { bearer: token.bearer });
-    requireStatus(again, 'refollow', 200);
-    const deleteSession = await signIn(
-      stack,
-      followTarget,
-      AUTH_PAGE_OPERATION_CLIENT_ID,
-      AUTH_PAGE_OPERATION_SCOPES.delete,
-    );
-    const erased = await operate(
-      stack,
-      deleteSession,
-      { kind: 'delete', accountId: followTarget.accountId },
-      { confirmation: followTarget.handle },
-    );
-    const unavailable = await kernel(stack, 'DELETE', `/v1/follows/${followTargetId}`, { bearer: token.bearer });
-    if (unavailable.status !== 200 && erased.status !== 200)
-      throw new Error(
-        `unavailable unfollow HTTP ${unavailable.status} after target delete HTTP ${erased.status}: ${summarize(unavailable.value)}`,
-      );
-    if (unavailable.status !== 200)
-      throw new Error(`stored unavailable unfollow HTTP ${unavailable.status}: ${summarize(unavailable.value)}`);
-    return `followed then removed unavailable ${followTargetId}`;
-  });
-
-  await runJourney('J14', 'GET /v1/followCounts/outgoing → stranger GET /v1/followCounts/{type}/{id}', async () => {
-    const anonymous = await kernel(stack, 'GET', '/v1/followCounts/outgoing');
-    if (anonymous.status === 200 && typeof anonymous.value.followingCount === 'number')
-      throw new Error('anonymous reader received a private outgoing count');
-    if (kernelBearerCause)
-      throw new Error(
-        `anonymous outgoing HTTP ${anonymous.status}; not reached: own count (${kernelBearerCause})`,
-      );
-    const follower = walker ?? (await signup(stack, 'j14a'));
-    const target = outsider ?? (await signup(stack, 'j14b'));
-    const token = await websiteToken(stack, follower, bindings, keys.website);
-    const stranger = await websiteToken(stack, target, bindings, keys.website);
-    const subjectId = await waitForPublicAgentSubject(stack, target.handle, 'count target');
-    await kernel(stack, 'PUT', `/v1/follows/${subjectId}`, { bearer: token.bearer });
-    const own = await kernel(stack, 'GET', '/v1/followCounts/outgoing', { bearer: token.bearer });
-    await rememberKernelBearerFailure(own, 'own outgoing count');
-    requireStatus(own, 'own outgoing count', 200);
-    if (typeof own.value.followingCount !== 'number') throw new Error('outgoing omitted followingCount');
-    const concealed = await kernel(stack, 'GET', `/v1/followCounts/subject/${subjectId}`, {
-      bearer: stranger.bearer,
-    });
-    if (concealed.status === 200 && typeof concealed.value.followerCount === 'number')
-      throw new Error('unrelated reader received the private follower aggregate');
-    return `own followingCount ${String(own.value.followingCount)}; stranger HTTP ${concealed.status}; anonymous HTTP ${anonymous.status}`;
-  });
-
-  await runJourney('J15', 'POST /v1/spaces → POST /v1/realms → POST /v1/realms/{id}/membership → DELETE', async () => {
-    const member = dest ?? (await signup(stack, 'j15'));
-    const ownerToken = website;
-    const space = await kernel(stack, 'POST', '/v1/spaces', {
-      bearer: ownerToken.bearer,
-      body: { title: 'Accounts walk Space', summary: 'Goal walk protected membership' },
-    });
-    if (space.status !== 201) throw new Error(`space create HTTP ${space.status}: ${summarize(space.value)}`);
-    spaceId = asId((space.value.space as Json | undefined)?.spaceId ?? space.value.spaceId, 'space');
-    const realm = await kernel(stack, 'POST', '/v1/realms', {
-      bearer: ownerToken.bearer,
-      body: {
-        spaceId,
-        title: 'Accounts walk Realm',
-        summary: 'Goal walk protected reads',
-        visibility: 'protected',
-        contextId: GLOBAL_CONTEXT,
-      },
-    });
-    if (realm.status !== 201) throw new Error(`realm create HTTP ${realm.status}: ${summarize(realm.value)}`);
-    realmId = asId((realm.value.realm as Json | undefined)?.realmId ?? realm.value.realmId, 'realm');
-    const memberToken = await websiteToken(stack, member, bindings, keys.website);
-    const joined = await kernel(stack, 'POST', `/v1/realms/${realmId}/members`, {
-      bearer: ownerToken.bearer,
-      body: { accountId: member.accountId },
-    });
-    if (![200, 201, 202].includes(joined.status))
-      throw new Error(`join HTTP ${joined.status}: ${summarize(joined.value)}`);
-    const allowed = await untilStatus(
-      () => kernel(stack, 'GET', `/v1/realms/${realmId}/members/me`, { bearer: memberToken.bearer }),
-      'protected member read',
-      200,
-    );
-    const left = await kernel(stack, 'DELETE', `/v1/realms/${realmId}/membership`, { bearer: memberToken.bearer });
-    if (![200, 202, 204].includes(left.status)) throw new Error(`leave HTTP ${left.status}: ${summarize(left.value)}`);
-    const after = await kernel(stack, 'GET', `/v1/realms/${realmId}/members/me`, { bearer: memberToken.bearer });
-    if (after.status === 200) throw new Error('member read still succeeded after leave');
-    return `realm ${realmId} leave HTTP ${after.status}`;
-  });
-  if (rows.get('J15')?.result === 'FAIL') await failDependents(['J16'], rows.get('J15')!.cause, 'J15 realm');
-
-  await runJourney('J16', 'PUT /v1/realms/{id}/bans/{accountId} → GET members/me → POST members', async () => {
-    if (!realmId) throw new Error('realm create did not yield an identity');
-    const banned = dest ?? (await signup(stack, 'j16'));
-    const memberToken = await websiteToken(stack, banned, bindings, keys.website);
-    const joined = await kernel(stack, 'POST', `/v1/realms/${realmId}/members`, {
-      bearer: website.bearer,
-      body: { accountId: banned.accountId },
-    });
-    if (![200, 201, 202].includes(joined.status))
-      throw new Error(`rejoin HTTP ${joined.status}: ${summarize(joined.value)}`);
-    await untilStatus(
-      () => kernel(stack, 'GET', `/v1/realms/${realmId}/members/me`, { bearer: memberToken.bearer }),
-      'rejoined member read',
-      200,
-    );
-    const ban = await kernel(stack, 'PUT', `/v1/realms/${realmId}/bans/${banned.accountId}`, {
-      bearer: website.bearer,
-      body: { reason: 'Goal walk ban' },
-    });
-    if (![200, 201, 202].includes(ban.status)) throw new Error(`ban HTTP ${ban.status}: ${summarize(ban.value)}`);
-    const hidden = await kernel(stack, 'GET', `/v1/realms/${realmId}/members/me`, { bearer: memberToken.bearer });
-    if (hidden.status === 200) throw new Error('banned member still read membership before cleanup');
-    const selfJoin = await kernel(stack, 'POST', `/v1/realms/${realmId}/membership`, {
-      bearer: memberToken.bearer,
-      body: {},
-    });
-    if (selfJoin.status === 200 || selfJoin.status === 201 || selfJoin.status === 202)
-      throw new Error('banned member rejoined before unban');
-    const lifted = await kernel(stack, 'DELETE', `/v1/realms/${realmId}/bans/${banned.accountId}`, {
-      bearer: website.bearer,
-    });
-    if (![200, 202, 204].includes(lifted.status)) throw new Error(`unban HTTP ${lifted.status}: ${summarize(lifted.value)}`);
-    const readmit = await kernel(stack, 'POST', `/v1/realms/${realmId}/members`, {
-      bearer: website.bearer,
-      body: { accountId: banned.accountId },
-    });
-    if (![200, 201, 202].includes(readmit.status))
-      throw new Error(`authorized readmission HTTP ${readmit.status}: ${summarize(readmit.value)}`);
-    await untilStatus(
-      () => kernel(stack, 'GET', `/v1/realms/${realmId}/members/me`, { bearer: memberToken.bearer }),
-      'readmitted member read',
-      200,
-    );
-    return `ban HTTP ${ban.status}; readmission HTTP ${readmit.status}`;
-  });
-
-  await runJourney('J17', 'PATCH /v1/accounts/{id}/preferences → GET reopen', async () => {
-    const person = walker ?? (await signup(stack, 'j17'));
-    const token = await websiteToken(stack, person, bindings, keys.website);
-    const current = requireStatus(
-      await kernel(stack, 'GET', `/v1/accounts/${token.session.accountId}/preferences`, { bearer: token.bearer }),
-      'preferences open',
-      200,
-    );
-    const version = typeof current.version === 'number' ? current.version : 0;
-    const saved = await kernel(stack, 'PATCH', `/v1/accounts/${token.session.accountId}/preferences`, {
-      bearer: token.bearer,
-      body: { expectedVersion: version, notifications: { reply: false, mention: true } },
-    });
-    requireStatus(saved, 'preference save', 200);
-    const reopened = requireStatus(
-      await kernel(stack, 'GET', `/v1/accounts/${token.session.accountId}/preferences`, { bearer: token.bearer }),
-      'preferences reopen',
-      200,
-    );
-    const notifications = reopened.notifications as Json | undefined;
-    if (notifications?.reply !== false) throw new Error(`reopened reply ${String(notifications?.reply)}`);
-    const stranger = outsider ?? (await signup(stack, 'j17b'));
-    const other = await websiteToken(stack, stranger, bindings, keys.website);
-    const concealed = await kernel(stack, 'GET', `/v1/accounts/${token.session.accountId}/preferences`, {
-      bearer: other.bearer,
-    });
-    if (concealed.status === 200) throw new Error('unrelated reader read notification preferences');
-    return 'reply disabled at reopen; stranger denied';
-  });
-
-  await runJourney('J18', 'POST /account-operations delete → GET /v1/accounts/{id}', async () => {
-    const person = await signup(stack, 'j18');
-    const session = await signIn(stack, person, AUTH_PAGE_OPERATION_CLIENT_ID, AUTH_PAGE_OPERATION_SCOPES.delete);
-    const deleted = await operate(
-      stack,
-      session,
-      { kind: 'delete', accountId: person.accountId },
-      { confirmation: person.handle },
-    );
-    if (deleted.status !== 200) throw new Error(`delete HTTP ${deleted.status}: ${summarize(deleted.value)}`);
-    const stale = await auth(
-      stack,
-      '/signin',
-      undefined,
-      { email: person.email, password, client_id: 'login', scope: [] },
-      15_000,
-    );
-    if (stale.status === 200) throw new Error('deleted account still signed in');
-    const tombstone = await kernel(stack, 'GET', '/v1/accounts', { query: { ids: person.accountId } });
-    requireStatus(tombstone, 'retained attribution', 200);
-    const row = accountRow(tombstone);
-    if (row && row.state !== 'deleted' && row.kind !== undefined && 'handle' in row && row.handle === person.handle)
-      throw new Error('deleted identity still published a live handle');
-    return `erased ${person.accountId}; attribution HTTP ${tombstone.status}`;
-  });
-
-  await runJourney('J19', 'POST /v1/platform/exposure/{group}:open|:close → POST /v1/viewerActions', async () => {
-    const person = walker ?? (await signup(stack, 'j19'));
-    const token = await websiteToken(stack, person, bindings, keys.website);
-    const group = 'agent_verification';
-    const opened = await kernel(stack, 'POST', `/v1/platform/exposure/${group}:open`, {
-      bearer: website.bearer,
-      body: {},
-    });
-    if (![200, 409].includes(opened.status))
-      throw new Error(`open ${group} HTTP ${opened.status}: ${summarize(opened.value)}`);
-    const discovery = await kernel(stack, 'POST', '/v1/viewerActions', {
-      bearer: token.bearer,
-      body: { resources: [{ type: 'access.account', id: person.accountId }] },
-    });
-    requireStatus(discovery, 'viewer discovery while open', [200, 403]);
-    const actual = await kernel(stack, 'GET', `/v1/accounts/${person.accountId}/verification`, { bearer: token.bearer });
-    const closed = await kernel(stack, 'POST', `/v1/platform/exposure/${group}:close`, {
-      bearer: website.bearer,
-      body: {},
-    });
-    if (![200, 409].includes(closed.status))
-      throw new Error(`close ${group} HTTP ${closed.status}: ${summarize(closed.value)}`);
-    const afterDiscovery = await kernel(stack, 'POST', '/v1/viewerActions', {
-      bearer: token.bearer,
-      body: { resources: [{ type: 'access.account', id: person.accountId }] },
-    });
-    const afterActual = await kernel(stack, 'GET', `/v1/accounts/${person.accountId}/verification`, {
-      bearer: token.bearer,
-    });
-    if (afterActual.status === 200 && actual.status === 200 && afterDiscovery.status === discovery.status)
-      throw new Error('close did not change discovery or access');
-    await kernel(stack, 'POST', `/v1/platform/exposure/${group}:open`, { bearer: website.bearer, body: {} });
-    return `open access HTTP ${actual.status}; closed HTTP ${afterActual.status}`;
-  });
-
-  const deferFrontends = process.env.REZICS_WALK_DEFER_FRONTENDS === '1';
-  const frontends: Array<{ stop: () => Promise<void> }> = [];
-  let browser: import('playwright').Browser | undefined;
-  try {
-    if (deferFrontends) {
-      frontends.push(await startFrontend('pages', stack));
-      note('auth-pages-ready');
-      frontends.push(await startFrontend('web', stack));
-      note('web-ready');
-    }
-    await mkdir('/tmp/rw', { recursive: true, mode: 0o700 });
-    if (typeof Bun.gc === 'function') Bun.gc(true);
-    const require = createRequire(resolve(root, 'apps/web/package.json'));
-    const { chromium } = require('playwright') as typeof import('playwright');
-    browser = await chromium.launch({
-      headless: true,
-      chromiumSandbox: false,
-      env: { ...process.env, TMPDIR: '/tmp/rw' },
-      args: [
-        '--disable-dev-shm-usage',
-        '--disable-gpu',
-        '--disable-software-rasterizer',
-        '--disable-extensions',
-        '--disable-background-networking',
-        '--mute-audio',
-        '--renderer-process-limit=1',
-      ],
-    });
-    const context = await browser.newContext({ locale: 'en-US', viewport: { width: 1280, height: 1000 } });
-    const page = await context.newPage();
-    page.setDefaultTimeout(60_000);
-    await page.route('**/*', loopbackOnly);
-
-    const person = walker ?? { handle: developer.handle, email: developer.email, accountId: developer.accountId };
-    const secret = walker ? password : developerPassword;
-
-    if (rows.get('J01')?.result === 'PASS') {
-      await page.setViewportSize({ width: 1280, height: 1000 });
-      await settle(page, `${stack.web}/en/auth/sign-in?return_to=${encodeURIComponent('/en/')}`);
-      if (page.url().includes('/login')) await fillPasswordSignIn(page, person.email, secret);
-      const approve = page.getByRole('button', { name: 'Approve' });
-      if (await approve.isVisible({ timeout: 8_000 }).catch(() => false)) await approve.click();
-      await page.waitForURL((url) => url.origin === stack.web, { timeout: 120_000 }).catch(() => {});
-      const home = await settle(page, `${stack.web}/en/`);
-      evidence.pages.push({
-        journey: 'J01',
-        path: new URL(page.url()).pathname,
-        status: home?.status() ?? 0,
-        width: 1280,
+      const ban = await kernel(stack, 'PUT', `/v1/realms/${realmId}/bans/${banned.accountId}`, {
+        bearer: website.bearer,
+        body: { reason: 'Goal walk ban' },
       });
-      await page.setViewportSize({ width: 390, height: 844 });
-      await page.emulateMedia({ colorScheme: 'dark' });
-      const phone = await settle(page, `${stack.web}/en/`);
-      evidence.pages.push({
-        journey: 'J01',
-        path: new URL(page.url()).pathname,
-        status: phone?.status() ?? 0,
-        width: 390,
+      if (![200, 201, 202].includes(ban.status)) throw new Error(`ban HTTP ${ban.status}: ${summarize(ban.value)}`);
+      const hidden = await kernel(stack, 'GET', `/v1/realms/${realmId}/members/me`, { bearer: memberToken.bearer });
+      if (hidden.status === 200) throw new Error('banned member still read membership before cleanup');
+      const selfJoin = await kernel(stack, 'POST', `/v1/realms/${realmId}/membership`, {
+        bearer: memberToken.bearer,
+        body: {},
       });
-      if (rows.get('J02')?.result === 'PASS') {
-        await page.setViewportSize({ width: 1280, height: 1000 });
-        const security = await settle(page, `${stack.issuer}/security`);
-        evidence.pages.push({ journey: 'J02', path: '/security', status: security?.status() ?? 0 });
-        await page
-          .locator('form[action="/auth/sign-out"]')
-          .first()
-          .evaluate((form) => (form as HTMLFormElement).requestSubmit())
-          .catch(() => {});
+      if (selfJoin.status === 200 || selfJoin.status === 201 || selfJoin.status === 202)
+        throw new Error('banned member rejoined before unban');
+      const lifted = await kernel(stack, 'DELETE', `/v1/realms/${realmId}/bans/${banned.accountId}`, {
+        bearer: website.bearer,
+      });
+      if (![200, 202, 204].includes(lifted.status))
+        throw new Error(`unban HTTP ${lifted.status}: ${summarize(lifted.value)}`);
+      const readmit = await kernel(stack, 'POST', `/v1/realms/${realmId}/members`, {
+        bearer: website.bearer,
+        body: { accountId: banned.accountId },
+      });
+      if (![200, 201, 202].includes(readmit.status))
+        throw new Error(`authorized readmission HTTP ${readmit.status}: ${summarize(readmit.value)}`);
+      await untilStatus(
+        () => kernel(stack, 'GET', `/v1/realms/${realmId}/members/me`, { bearer: memberToken.bearer }),
+        'readmitted member read',
+        200,
+      );
+      return `ban HTTP ${ban.status}; readmission HTTP ${readmit.status}`;
+    });
+
+    await runJourney('J17', 'PATCH /v1/accounts/{id}/preferences → GET reopen', async () => {
+      const person = walker ?? (await signup(stack, 'j17'));
+      const token = await websiteToken(stack, person, bindings, keys.website);
+      const current = requireStatus(
+        await kernel(stack, 'GET', `/v1/accounts/${token.session.accountId}/preferences`, { bearer: token.bearer }),
+        'preferences open',
+        200,
+      );
+      const version = typeof current.version === 'number' ? current.version : 0;
+      const saved = await kernel(stack, 'PATCH', `/v1/accounts/${token.session.accountId}/preferences`, {
+        bearer: token.bearer,
+        body: { expectedVersion: version, notifications: { reply: false, mention: true } },
+      });
+      requireStatus(saved, 'preference save', 200);
+      const reopened = requireStatus(
+        await kernel(stack, 'GET', `/v1/accounts/${token.session.accountId}/preferences`, { bearer: token.bearer }),
+        'preferences reopen',
+        200,
+      );
+      const notifications = reopened.notifications as Json | undefined;
+      if (notifications?.reply !== false) throw new Error(`reopened reply ${String(notifications?.reply)}`);
+      const stranger = outsider ?? (await signup(stack, 'j17b'));
+      const other = await websiteToken(stack, stranger, bindings, keys.website);
+      const concealed = await kernel(stack, 'GET', `/v1/accounts/${token.session.accountId}/preferences`, {
+        bearer: other.bearer,
+      });
+      if (concealed.status === 200) throw new Error('unrelated reader read notification preferences');
+      return 'reply disabled at reopen; stranger denied';
+    });
+
+    await runJourney('J18', 'POST /account-operations delete → GET /v1/accounts/{id}', async () => {
+      const person = await signup(stack, 'j18');
+      const session = await signIn(stack, person, AUTH_PAGE_OPERATION_CLIENT_ID, AUTH_PAGE_OPERATION_SCOPES.delete);
+      const deleted = await operate(
+        stack,
+        session,
+        { kind: 'delete', accountId: person.accountId },
+        { confirmation: person.handle },
+      );
+      if (deleted.status !== 200) throw new Error(`delete HTTP ${deleted.status}: ${summarize(deleted.value)}`);
+      const stale = await auth(
+        stack,
+        '/signin',
+        undefined,
+        { email: person.email, password, client_id: 'login', scope: [] },
+        15_000,
+      );
+      if (stale.status === 200) throw new Error('deleted account still signed in');
+      const tombstone = await kernel(stack, 'GET', '/v1/accounts', { query: { ids: person.accountId } });
+      requireStatus(tombstone, 'retained attribution', 200);
+      const row = accountRow(tombstone);
+      if (row && row.state !== 'deleted' && row.kind !== undefined && 'handle' in row && row.handle === person.handle)
+        throw new Error('deleted identity still published a live handle');
+      return `erased ${person.accountId}; attribution HTTP ${tombstone.status}`;
+    });
+
+    await runJourney('J19', 'POST /v1/platform/exposure/{group}:open|:close → POST /v1/viewerActions', async () => {
+      const person = walker ?? (await signup(stack, 'j19'));
+      const token = await websiteToken(stack, person, bindings, keys.website);
+      const group = 'agent_verification';
+      const opened = await kernel(stack, 'POST', `/v1/platform/exposure/${group}:open`, {
+        bearer: website.bearer,
+        body: {},
+      });
+      if (![200, 409].includes(opened.status))
+        throw new Error(`open ${group} HTTP ${opened.status}: ${summarize(opened.value)}`);
+      const discovery = await kernel(stack, 'POST', '/v1/viewerActions', {
+        bearer: token.bearer,
+        body: { resources: [{ type: 'access.account', id: person.accountId }] },
+      });
+      requireStatus(discovery, 'viewer discovery while open', [200, 403]);
+      const actual = await kernel(stack, 'GET', `/v1/accounts/${person.accountId}/verification`, {
+        bearer: token.bearer,
+      });
+      const closed = await kernel(stack, 'POST', `/v1/platform/exposure/${group}:close`, {
+        bearer: website.bearer,
+        body: {},
+      });
+      if (![200, 409].includes(closed.status))
+        throw new Error(`close ${group} HTTP ${closed.status}: ${summarize(closed.value)}`);
+      const afterDiscovery = await kernel(stack, 'POST', '/v1/viewerActions', {
+        bearer: token.bearer,
+        body: { resources: [{ type: 'access.account', id: person.accountId }] },
+      });
+      const afterActual = await kernel(stack, 'GET', `/v1/accounts/${person.accountId}/verification`, {
+        bearer: token.bearer,
+      });
+      if (afterActual.status === 200 && actual.status === 200 && afterDiscovery.status === discovery.status)
+        throw new Error('close did not change discovery or access');
+      await kernel(stack, 'POST', `/v1/platform/exposure/${group}:open`, { bearer: website.bearer, body: {} });
+      return `open access HTTP ${actual.status}; closed HTTP ${afterActual.status}`;
+    });
+
+    const deferFrontends = process.env.REZICS_WALK_DEFER_FRONTENDS === '1';
+    const frontends: Array<{ stop: () => Promise<void> }> = [];
+    let browser: import('playwright').Browser | undefined;
+    try {
+      if (deferFrontends) {
+        frontends.push(await startFrontend('pages', stack));
+        note('auth-pages-ready');
+        frontends.push(await startFrontend('web', stack));
+        note('web-ready');
       }
-    }
+      const browserTemp = join(evidenceDir, 'browser');
+      await mkdir(browserTemp, { recursive: true, mode: 0o700 });
+      if (typeof Bun.gc === 'function') Bun.gc(true);
+      const require = createRequire(resolve(root, 'apps/web/package.json'));
+      const { chromium } = require('playwright') as typeof import('playwright');
+      browser = await chromium.launch({
+        headless: true,
+        chromiumSandbox: false,
+        env: { ...process.env, TMPDIR: browserTemp },
+        args: [
+          '--disable-dev-shm-usage',
+          '--disable-gpu',
+          '--disable-software-rasterizer',
+          '--disable-extensions',
+          '--disable-background-networking',
+          '--mute-audio',
+          '--renderer-process-limit=1',
+        ],
+      });
+      const context = await browser.newContext({ locale: 'en-US', viewport: { width: 1280, height: 1000 } });
+      const page = await context.newPage();
+      page.setDefaultTimeout(60_000);
+      await page.route('**/*', loopbackOnly);
 
-    if (person.handle) {
-      await page.setViewportSize({ width: 1280, height: 1000 });
-      const publicPage = await settle(page, `${stack.web}/en/@${person.handle}`);
-      evidence.pages.push({
-        journey: 'J12',
-        path: `/@${person.handle}`,
-        status: publicPage?.status() ?? 0,
-        width: 1280,
-        title: await page.locator('h1').first().textContent().catch(() => null),
-      });
-      await page.setViewportSize({ width: 390, height: 844 });
-      const phonePublic = await settle(page, `${stack.web}/en/@${person.handle}`);
-      evidence.pages.push({
-        journey: 'J12',
-        path: `/@${person.handle}`,
-        status: phonePublic?.status() ?? 0,
-        width: 390,
-      });
-      const html = await page.content();
-      if (/@example\.test|credentials/i.test(html))
-        (evidence.defects as string[]).push('J12 public page included private-looking fields');
-    }
+      const person = walker ?? { handle: developer.handle, email: developer.email, accountId: developer.accountId };
+      const secret = walker ? password : developerPassword;
 
-    if (rows.get('J17')?.result === 'PASS') {
-      await context.clearCookies();
-      await settle(page, `${stack.web}/en/auth/sign-in?return_to=${encodeURIComponent('/en/settings/notifications')}`);
-      if (page.url().includes('/login')) await fillPasswordSignIn(page, person.email, secret);
-      const settings = await settle(page, `${stack.web}/en/settings/notifications`);
-      evidence.pages.push({
-        journey: 'J17',
-        path: new URL(page.url()).pathname,
-        status: settings?.status() ?? 0,
-        width: 1280,
-      });
-      await page.setViewportSize({ width: 390, height: 844 });
-      const phoneSettings = await settle(page, `${stack.web}/en/settings/notifications`);
-      evidence.pages.push({
-        journey: 'J17',
-        path: new URL(page.url()).pathname,
-        status: phoneSettings?.status() ?? 0,
-        width: 390,
-      });
-    }
-    await context.close();
-  } catch (error) {
-    (evidence.defects as string[]).push(`browser: ${error instanceof Error ? error.message : String(error)}`);
-    note(`browser ${error instanceof Error ? error.message : String(error)}`);
-  } finally {
-    await browser?.close();
-    for (const frontend of [...frontends].reverse()) await frontend.stop();
-    await persist();
-  }
+      if (rows.get('J01')?.result === 'PASS') {
+        await page.setViewportSize({ width: 1280, height: 1000 });
+        await settle(page, `${stack.web}/en/auth/sign-in?return_to=${encodeURIComponent('/en/')}`);
+        if (page.url().includes('/login')) await fillPasswordSignIn(page, person.email, secret);
+        const approve = page.getByRole('button', { name: 'Approve' });
+        if (await approve.isVisible({ timeout: 8_000 }).catch(() => false)) await approve.click();
+        await page.waitForURL((url) => url.origin === stack.web, { timeout: 120_000 }).catch(() => {});
+        const home = await settle(page, `${stack.web}/en/`);
+        evidence.pages.push({
+          journey: 'J01',
+          path: new URL(page.url()).pathname,
+          status: home?.status() ?? 0,
+          width: 1280,
+        });
+        await page.setViewportSize({ width: 390, height: 844 });
+        await page.emulateMedia({ colorScheme: 'dark' });
+        const phone = await settle(page, `${stack.web}/en/`);
+        evidence.pages.push({
+          journey: 'J01',
+          path: new URL(page.url()).pathname,
+          status: phone?.status() ?? 0,
+          width: 390,
+        });
+        if (rows.get('J02')?.result === 'PASS') {
+          await page.setViewportSize({ width: 1280, height: 1000 });
+          const security = await settle(page, `${stack.issuer}/security`);
+          evidence.pages.push({ journey: 'J02', path: '/security', status: security?.status() ?? 0 });
+          await page
+            .locator('form[action="/auth/sign-out"]')
+            .first()
+            .evaluate((form) => (form as HTMLFormElement).requestSubmit())
+            .catch(() => {});
+        }
+      }
 
+      if (person.handle) {
+        await page.setViewportSize({ width: 1280, height: 1000 });
+        const publicPage = await settle(page, `${stack.web}/en/@${person.handle}`);
+        evidence.pages.push({
+          journey: 'J12',
+          path: `/@${person.handle}`,
+          status: publicPage?.status() ?? 0,
+          width: 1280,
+          title: await page
+            .locator('h1')
+            .first()
+            .textContent()
+            .catch(() => null),
+        });
+        await page.setViewportSize({ width: 390, height: 844 });
+        const phonePublic = await settle(page, `${stack.web}/en/@${person.handle}`);
+        evidence.pages.push({
+          journey: 'J12',
+          path: `/@${person.handle}`,
+          status: phonePublic?.status() ?? 0,
+          width: 390,
+        });
+        const html = await page.content();
+        if (/@example\.test|credentials/i.test(html))
+          (evidence.defects as string[]).push('J12 public page included private-looking fields');
+      }
+
+      if (rows.get('J17')?.result === 'PASS') {
+        await context.clearCookies();
+        await settle(
+          page,
+          `${stack.web}/en/auth/sign-in?return_to=${encodeURIComponent('/en/settings/notifications')}`,
+        );
+        if (page.url().includes('/login')) await fillPasswordSignIn(page, person.email, secret);
+        const settings = await settle(page, `${stack.web}/en/settings/notifications`);
+        evidence.pages.push({
+          journey: 'J17',
+          path: new URL(page.url()).pathname,
+          status: settings?.status() ?? 0,
+          width: 1280,
+        });
+        await page.setViewportSize({ width: 390, height: 844 });
+        const phoneSettings = await settle(page, `${stack.web}/en/settings/notifications`);
+        evidence.pages.push({
+          journey: 'J17',
+          path: new URL(page.url()).pathname,
+          status: phoneSettings?.status() ?? 0,
+          width: 390,
+        });
+      }
+      await context.close();
+    } catch (error) {
+      (evidence.defects as string[]).push(`browser: ${error instanceof Error ? error.message : String(error)}`);
+      note(`browser ${error instanceof Error ? error.message : String(error)}`);
+    } finally {
+      await browser?.close();
+      for (const frontend of [...frontends].reverse()) await frontend.stop();
+      await persist();
+    }
   } catch (error) {
     const cause = error instanceof Error ? error.message.slice(0, 300) : String(error).slice(0, 300);
     await failRemaining(cause, 'walk ended');
