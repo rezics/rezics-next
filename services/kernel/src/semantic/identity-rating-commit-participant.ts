@@ -1,23 +1,23 @@
 import { memoizedValue } from '../memoized.ts';
-import { deadlineClient } from '../access/authenticate.ts';
 import { requireAccessDeadline } from '../access/unavailable.ts';
-import { currentCommand, currentCommandResources, type CommandTransaction } from '../command/command.ts';
-import { ratingReviewOf, VoteReviewUnavailableError } from './adapters/rating-review.ts';
+import type { CommandTransaction } from '../command/command.ts';
+import { VoteReviewUnavailableError } from '../rating/own-votes-review.ts';
 import {
   IDENTITY_RATING_REVIEW_MAX_CONTROL_LOCATORS,
   IDENTITY_RATING_REVIEW_MAX_KEYS,
   IDENTITY_RATING_REVIEW_MAX_OPERAND_BYTES,
 } from './identity-core/rating-review-bounds.ts';
 import { partitionOf, routeOf } from '../route/route.ts';
+import { identityRatingReviewEvidence } from './identity-core/index.ts';
 import {
   classifyIdentityRatingReviewEvidence,
-  identityRatingReviewEvidence,
   readIdentityRatingEvidenceInTransaction,
   type IdentityRatingControlLocator,
   type IdentityRatingNativeEvidence,
   type IdentityRatingReviewOperand,
   type IdentityRatingReviewResult,
 } from './identity-adapters/identity-epoch-read.ts';
+import { nativeIdentityCapabilities } from './identity-adapter-bind.ts';
 import lockOwner from './identity-rating-commit-participant-lock-owner.sql';
 
 const MAX_REVIEW_KEYS = IDENTITY_RATING_REVIEW_MAX_KEYS;
@@ -488,8 +488,9 @@ export function createIdentityRatingCommitParticipant(): IdentityRatingCommitPar
     async admit(tx: CommandTransaction, prepared: IdentityRatingCommitPreparation): Promise<IdentityRatingCommitHeld> {
       const operand = inputs.get(prepared);
       if (!operand) throw new TypeError('Unknown identity rating commit preparation');
-      const command = currentCommand(tx);
-      const { deadline } = currentCommandResources(tx);
+      const caps = nativeIdentityCapabilities();
+      const command = caps.command.currentCommand(tx);
+      const { deadline } = caps.command.currentCommandResources(tx);
       requireAccessDeadline(deadline);
       if (
         operand.sourceHomes.some((home) => home !== command.partition) ||
@@ -497,7 +498,7 @@ export function createIdentityRatingCommitParticipant(): IdentityRatingCommitPar
       )
         throw new (IdentityRatingCommitUnavailableError())('foreign-control');
 
-      const client = deadlineClient(tx, deadline);
+      const client = caps.command.deadlineClient(tx, deadline);
       const owner = await lockOwner.run(client, { partition_no: command.partition });
       if (!owner || owner.writeState !== 'active')
         throw new (IdentityRatingCommitUnavailableError())(
@@ -516,7 +517,7 @@ export function createIdentityRatingCommitParticipant(): IdentityRatingCommitPar
         operand.sourceHomes,
         native.evidence,
       );
-      if (reviewed.state === 'changed') throw ratingReviewOf().subjectChanged();
+      if (reviewed.state === 'changed') throw caps.ratingReview.subjectChanged();
       // A withdrawn/replaced directory can make the new cut unclassifiable while
       // its source epoch stays unchanged. It still invalidates this exact review.
       if (
@@ -524,7 +525,7 @@ export function createIdentityRatingCommitParticipant(): IdentityRatingCommitPar
         reviewed.reason !== 'missing-owner' &&
         identityRatingReviewEvidence(native.evidence) !== operand.evidence
       )
-        throw ratingReviewOf().identityEpochChanged();
+        throw caps.ratingReview.identityEpochChanged();
       if (reviewed.state !== 'reviewed') throwUnavailable(reviewed);
       if (
         reviewed.operand.evidence !== operand.evidence ||
@@ -537,7 +538,7 @@ export function createIdentityRatingCommitParticipant(): IdentityRatingCommitPar
             locator.group !== operand.controlLocators[index]?.group,
         )
       )
-        throw ratingReviewOf().identityEpochChanged();
+        throw caps.ratingReview.identityEpochChanged();
       requireAccessDeadline(deadline);
       const publishedHeads = operand.controlLocators.map((locator) => {
         const row = native.evidence.mapping.currentRows.find(

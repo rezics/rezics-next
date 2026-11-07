@@ -5,7 +5,7 @@ import { lstat, open, type FileHandle } from 'node:fs/promises';
 import type { SourceId } from '@rezics/conversion';
 import { createImporter, type Importer, type ImporterOptions } from './importer.ts';
 import { createImportTransport } from './import-client.ts';
-import { createReviewedCatalogueLookup } from './reviewed-catalogue.ts';
+import { composeReviewedCatalogueHost, releasedReviewedVocabulary } from './showcase-cross-media.ts';
 import {
   composeBangumiImportIdentifierLookups,
   createShowcaseBangumiGameGenreLookup,
@@ -1093,7 +1093,10 @@ export async function runImportCli(argv: readonly string[], options: ImportCliOp
           bangumiPersonCareerBindings,
           liveTransport(),
         );
-      const publicTagLookup = createReviewedCatalogueLookup(importer.session.bindings, liveTransport());
+      const publicTagLookup = composeReviewedCatalogueHost({
+        transport: liveTransport(),
+        vocabulary: releasedReviewedVocabulary(),
+      }).lookup(importer.session.bindings);
       importerOptions.identifierLookup = bangumiGameGenreBindings
         ? composeBangumiImportIdentifierLookups(
             publicTagLookup,

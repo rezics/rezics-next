@@ -12,13 +12,15 @@ import prepare from './identity-epoch-admission-prepare.sql';
 import custodyPrepare from './identity-epoch-admission-custody-prepare.sql';
 import { IDENTITY_EPOCH_PROGRESS } from './events.ts';
 import {
+  acceptIdentityBinding,
+  authorizeIdentityAdmission,
   claimIdentityBinding,
-  lookupIdentityBinding,
-  identityBindingData,
   identityBindingAccountRoles,
+  identityBindingData,
   identityBindingDigest,
   identityBindingJob,
-  acceptIdentityBinding,
+  lookupIdentityBinding,
+  recordIdentityEpochNativeCommit,
   type IdentityReceiptBinding,
   type IdentityAdmissionSource,
 } from './identity-adapters/identity-epoch-binding.ts';
@@ -51,30 +53,15 @@ import bootstrapHome from './identity-epoch-store-select-bootstrap-home.sql';
 import type { Pool } from 'pg';
 import { createHash } from 'node:crypto';
 import canonicalize from 'canonicalize';
-import {
-  currentCommand,
-  registerCommandCallback,
-  runCommand,
-  noEffect,
-  IdempotencyConflictError,
-  type CommandTransaction,
-} from '../command/command.ts';
+import type { CommandTransaction } from '../command/command.ts';
 import { readPartition } from '../partition/partition.ts';
 import { partitionOf, routeOf } from '../route/route.ts';
-import { withReadTransaction } from './read.ts';
 import { readIdentityEpochCutover } from './identity-epoch-bootstrap.ts';
-import { IDENTITY_EPOCH_ADMITTED, IDENTITY_EPOCH_HOME_AVAILABLE } from './events.ts';
-import {
-  IdentityEpochStoreError,
-  identityJobPartition,
-  selectIdentityEpochRemainder,
-  identityEpochRemainderTerminal,
-  authorizeIdentityAdmission,
-  identityReceiptKey,
-  identityReceiptValue,
-  serializeIdentityValue as json,
-  recordIdentityEpochNativeCommit,
-} from './identity-adapters/index.ts';
+import { IDENTITY_EPOCH_ADMITTED } from './events.ts';
+import { IdentityEpochStoreError } from './contract/identity-errors.ts';
+import { serializeIdentityValue as json } from './identity-core/index.ts';
+import { nativeIdentityCapabilities } from './identity-adapter-bind.ts';
+import { selectIdentityEpochRemainder } from './identity-adapters/identity-epoch-read.ts';
 import type {
   IdentityIntent,
   IdentityJobRef,
@@ -85,10 +72,15 @@ import type {
 export type { IdentityAdmissionInput, IdentityAdmissionAuthority } from './identity-epoch-contract.ts';
 import {
   commandAuthorityAt,
+  identityEpochRemainderTerminal,
+  identityHomeAvailable,
+  identityJobPartition,
+  identityReceiptKey,
+  identityReceiptValue,
   type IdentityAdmissionInput,
   type IdentityAdmissionAuthority,
 } from './identity-epoch-contract.ts';
-import { guardReviewedPersonIdentity } from './reviewed-person-identity.ts';
+export { identityHomeAvailable };
 export type IdentityAdmissionProgress = Readonly<{
   job: IdentityJobRef;
   state: 'preparing' | 'pending' | 'cancelling' | 'cancelled' | 'published';
@@ -96,6 +88,9 @@ export type IdentityAdmissionProgress = Readonly<{
 }>;
 type Work = { -readonly [K in keyof NativeStepWork]: NativeStepWork[K] };
 const work = (): Work => ({ rows: 0, points: 0, statements: 0, bytes: 0, engineRequests: 0 });
+function cmd() {
+  return nativeIdentityCapabilities().command;
+}
 async function measuredQuery(tx: CommandTransaction, sql: string, values: unknown[], measured?: Work) {
   const result = await tx.query(sql, values);
   if (measured) {
@@ -136,7 +131,7 @@ async function capture(pool: Pool, input: IdentityAdmissionInput): Promise<Ident
   const points = [];
   for (const home of [...new Set(ids.map((id) => partitionOf(routed(id))))]) {
     const local = ids.filter((id) => partitionOf(routed(id)) === home);
-    const rows = await withReadTransaction(pool, async (tx) => {
+    const rows = await nativeIdentityCapabilities().read.withReadTransaction(pool, async (tx) => {
       const owner = await readPartition(tx, home);
       if (!owner || owner.writeState !== 'active') throw unavailable();
       const rows = (await tx.query(sourcePoints.sql, [local, local.map(routed)])).rows;
@@ -159,7 +154,7 @@ async function capture(pool: Pool, input: IdentityAdmissionInput): Promise<Ident
   const result: IdentityAdmissionSource[] = [];
   for (const home of [...new Set(points.map((p) => p.control_partition))]) {
     const local = points.filter((p) => p.control_partition === home);
-    const rows = await withReadTransaction(pool, async (tx) => {
+    const rows = await nativeIdentityCapabilities().read.withReadTransaction(pool, async (tx) => {
       const owner = await readPartition(tx, home);
       if (!owner || owner.writeState !== 'active') throw unavailable();
       const groups = (
@@ -178,7 +173,7 @@ async function capture(pool: Pool, input: IdentityAdmissionInput): Promise<Ident
       if (group.pending_job)
         throw new IdentityEpochStoreError('identity_epoch_busy', 'An input group is already claimed');
       if (!group.ready) {
-        const ready = await withReadTransaction(
+        const ready = await nativeIdentityCapabilities().read.withReadTransaction(
           pool,
           async (tx) =>
             (await readIdentityEpochCutover(tx)).state === 'ready' &&
@@ -255,7 +250,7 @@ export async function bindIdentityEpochReceipt(
       'Resulting identity group exceeds 4096 complete originals',
     );
   const home = Math.min(...groups.map((r) => r.partition_no));
-  const state = await withReadTransaction(
+  const state = await nativeIdentityCapabilities().read.withReadTransaction(
     pool,
     async (tx) =>
       (
@@ -293,12 +288,12 @@ async function closeUnreservedBinding(
   binding: IdentityReceiptBinding,
 ) {
   const data = identityBindingData(binding);
-  const first = await runCommand(pool, await commandAuthorityAt(authority, data.home), async (tx) => {
+  const first = await cmd().runCommand(pool, await commandAuthorityAt(authority, data.home), async (tx) => {
     await authorizeIdentityAdmission(tx, input.receipt, binding, input.intent);
     await tx.query(selectControl.sql, [data.home]);
     const existingJob = (await tx.query(job.sql, [data.home, data.job.jobId, data.job.epoch.toString()])).rows[0];
     if (existingJob) {
-      if (existingJob.state !== 'cancelled') return noEffect(false);
+      if (existingJob.state !== 'cancelled') return cmd().noEffect(false);
       const unresolved = (
         await tx.query(
           `SELECT resource_home FROM semantic.identity_epoch_admission_plan
@@ -307,14 +302,14 @@ async function closeUnreservedBinding(
         )
       ).rows[0];
       if (unresolved) throw unavailable();
-      return noEffect(true);
+      return cmd().noEffect(true);
     }
     const duplicate = (await tx.query(receipt.sql, [data.home, data.job.jobId, data.job.epoch.toString(), 'closed']))
       .rows[0];
-    if (duplicate) return noEffect(true);
+    if (duplicate) return cmd().noEffect(true);
     await tx.query(close.sql, [data.home, data.job.jobId, data.job.epoch.toString(), data.scope]);
     recordIdentityEpochNativeCommit(tx, 'admission');
-    registerCommandCallback(tx, async (id) => {
+    cmd().registerCommandCallback(tx, async (id) => {
       await tx.query(record.sql, [data.home, id, data.job.jobId, 'closed']);
     });
     return {
@@ -322,7 +317,7 @@ async function closeUnreservedBinding(
       events: [
         {
           type: IDENTITY_EPOCH_PROGRESS,
-          data: { partition: currentCommand(tx).partition, generation: data.generation },
+          data: { partition: cmd().currentCommand(tx).partition, generation: data.generation },
         },
       ],
     };
@@ -340,9 +335,9 @@ async function closeUnreservedBinding(
       position: BigInt(received.native_position),
     });
   }
-  await runCommand(pool, await commandAuthorityAt(authority, data.partition), async (tx) => {
+  await cmd().runCommand(pool, await commandAuthorityAt(authority, data.partition), async (tx) => {
     const current = await lookupLocalBinding(tx, input, binding);
-    if (current.state !== 'pending' && current.state !== 'accepted') return noEffect(null);
+    if (current.state !== 'pending' && current.state !== 'accepted') return cmd().noEffect(null);
     for (const r of receipts)
       await tx.query(
         `INSERT INTO semantic.identity_epoch_receipt_closure VALUES($1,$2,$3,$4,$5,$6,$7) ON CONFLICT DO NOTHING`,
@@ -357,7 +352,7 @@ async function closeUnreservedBinding(
       events: [
         {
           type: IDENTITY_EPOCH_PROGRESS,
-          data: { partition: currentCommand(tx).partition, generation: data.generation },
+          data: { partition: cmd().currentCommand(tx).partition, generation: data.generation },
         },
       ],
     };
@@ -371,8 +366,8 @@ async function lookupLocalBinding(
 ) {
   await authorizeIdentityAdmission(tx, input.receipt, binding, input.intent);
   const data = identityBindingData(binding);
-  if (currentCommand(tx).partition !== data.partition || data.digest !== identityBindingDigest(input))
-    throw new IdempotencyConflictError(currentCommand(tx).partition);
+  if (cmd().currentCommand(tx).partition !== data.partition || data.digest !== identityBindingDigest(input))
+    throw new (cmd().IdempotencyConflictError)(cmd().currentCommand(tx).partition);
   return data;
 }
 
@@ -382,7 +377,7 @@ export async function guardIdentityAdmissionReviewedPerson(
   input: IdentityAdmissionInput,
 ): Promise<void> {
   if (!input.reviewedPerson) return;
-  await guardReviewedPersonIdentity(
+  await nativeIdentityCapabilities().reviewedPerson.guard(
     tx,
     input.reviewedPerson.expected,
     input.reviewedPerson.routeKey,
@@ -398,15 +393,15 @@ export async function admitBoundIdentityEpoch(
 ) {
   await authorizeIdentityAdmission(tx, input.receipt, input.binding, input.intent);
   const data = identityBindingData(input.binding),
-    home = currentCommand(tx).partition;
-  if (data.digest !== identityBindingDigest(input)) throw new IdempotencyConflictError(home);
+    home = cmd().currentCommand(tx).partition;
+  if (data.digest !== identityBindingDigest(input)) throw new (cmd().IdempotencyConflictError)(home);
   if (data.home !== home || data.state === 'not-applied') throw stale();
-  if (data.state === 'accepted' && !immediate) return noEffect(data.job);
+  if (data.state === 'accepted' && !immediate) return cmd().noEffect(data.job);
   const state = (await tx.query(selectControl.sql, [home])).rows[0];
   const prior = (await tx.query(job.sql, [home, data.job.jobId, data.job.epoch.toString()])).rows[0];
   if (prior) {
     if (immediate && prior.state !== 'pending' && prior.state !== 'published') throw unavailable();
-    return noEffect(data.job);
+    return cmd().noEffect(data.job);
   }
   const closed = (
     await tx.query(`SELECT state FROM semantic.identity_epoch_admission_attempt WHERE partition_no=$1 AND job_id=$2`, [
@@ -472,7 +467,7 @@ export async function admitBoundIdentityEpoch(
   if (roles.length) bindSemanticProducerRoles(tx, roles);
   const remainderTerminal = identityEpochRemainderTerminal(input.intent, data.sources);
   recordIdentityEpochNativeCommit(tx, 'admission');
-  registerCommandCallback(tx, async (transactionId) => {
+  cmd().registerCommandCallback(tx, async (transactionId) => {
     await tx.query(insertJob.sql, [
       home,
       data.job.jobId,
@@ -548,7 +543,7 @@ async function prepareIdentityEpochAdmissionWithinDeadline(
   const binding = await bindIdentityEpochReceipt(pool, authority, input),
     data = identityBindingData(binding);
   if (data.state === 'accepted') return data.job;
-  const admitted = await runCommand(pool, await commandAuthorityAt(authority, data.home), (tx) =>
+  const admitted = await cmd().runCommand(pool, await commandAuthorityAt(authority, data.home), (tx) =>
     admitBoundIdentityEpoch(tx, { ...input, binding }),
   );
   await acceptIdentityBinding(pool, authority, input, binding);
@@ -567,7 +562,7 @@ export function prepareIdentityEpochAdmission(
 }
 
 async function load(pool: Pool, ref: IdentityJobRef, measured?: Work) {
-  return withReadTransaction(pool, async (tx) => {
+  return nativeIdentityCapabilities().read.withReadTransaction(pool, async (tx) => {
     const home = identityJobPartition(ref);
     const saved = (await measuredQuery(tx, job.sql, [home, ref.jobId, ref.epoch.toString()], measured)).rows[0];
     const owner = await readPartition(tx, home);
@@ -597,7 +592,7 @@ async function receivingReceipt(
   stage: 'prepared' | 'acquired' | 'closed',
   measured?: Work,
 ) {
-  return withReadTransaction(pool, async (tx) => {
+  return nativeIdentityCapabilities().read.withReadTransaction(pool, async (tx) => {
     const saved = (await measuredQuery(tx, receipt.sql, [home, ref.jobId, ref.epoch.toString(), stage], measured))
       .rows[0];
     if (!saved) return null;
@@ -627,7 +622,7 @@ async function deliverHome(
       const retained = await load(pool, ref, measured);
       if (retained.saved.scope_digest !== scope || !retained.planned.some((p) => p.resource_home === home))
         throw stale();
-      const source = await withReadTransaction(
+      const source = await nativeIdentityCapabilities().read.withReadTransaction(
         pool,
         async (tx) =>
           (
@@ -638,14 +633,14 @@ async function deliverHome(
           ).rows[0],
       );
       if (!source) throw unavailable();
-      await runCommand(pool, command, async (tx) => {
+      await cmd().runCommand(pool, command, async (tx) => {
         const duplicate = (
           await tx.query(
             `SELECT job_id FROM semantic.identity_epoch_admission_handoff WHERE partition_no=$1 AND job_id=$2`,
             [home, ref.jobId],
           )
         ).rows[0];
-        if (duplicate) return noEffect(null);
+        if (duplicate) return cmd().noEffect(null);
         await tx.query(handoff.sql, [
           home,
           ref.jobId,
@@ -660,13 +655,13 @@ async function deliverHome(
           events: [
             {
               type: IDENTITY_EPOCH_PROGRESS,
-              data: { partition: currentCommand(tx).partition, generation: ref.epoch.toString() },
+              data: { partition: cmd().currentCommand(tx).partition, generation: ref.epoch.toString() },
             },
           ],
         };
       });
     }
-    await runCommand(pool, command, async (tx) => {
+    await cmd().runCommand(pool, command, async (tx) => {
       bindSemanticProducerRoles(tx, roles);
       await measuredQuery(tx, selectControl.sql, [home], measured);
       // Acquire always checks the irreversible local fence, even after an earlier successful receipt.
@@ -679,11 +674,11 @@ async function deliverHome(
         );
       const duplicate = (await measuredQuery(tx, receipt.sql, [home, ref.jobId, ref.epoch.toString(), stage], measured))
         .rows[0];
-      if (duplicate) return noEffect(null);
+      if (duplicate) return cmd().noEffect(null);
       if (stage === 'closed')
         await measuredQuery(tx, close.sql, [home, ref.jobId, ref.epoch.toString(), scope], measured);
       recordIdentityEpochNativeCommit(tx, 'admission');
-      registerCommandCallback(tx, async (transactionId) => {
+      cmd().registerCommandCallback(tx, async (transactionId) => {
         const recorded = await measuredQuery(tx, record.sql, [home, transactionId, ref.jobId, stage], measured);
         if (recorded.rowCount !== 1) throw stale();
         if (stage === 'prepared') await recordPreparedIdentityPrearm(tx, ref, scope, transactionId);
@@ -711,10 +706,10 @@ export async function acquireIdentityEpochAdmissionHome(pool: Pool, ref: Identit
 
 /** Job-home CAS chooses cancellation. It does not release any slot or claim by itself. */
 export async function cancelIdentityEpochAdmission(pool: Pool, ref: IdentityJobRef): Promise<void> {
-  await runCommand(pool, { partition: identityJobPartition(ref) }, async (tx) => {
+  await cmd().runCommand(pool, { partition: identityJobPartition(ref) }, async (tx) => {
     const saved = (await tx.query(lockJob.sql, [identityJobPartition(ref), ref.jobId, ref.epoch.toString()])).rows[0];
     if (!saved) throw unavailable();
-    if (saved.state === 'cancelling' || saved.state === 'cancelled') return noEffect(null);
+    if (saved.state === 'cancelling' || saved.state === 'cancelled') return cmd().noEffect(null);
     if (saved.state !== 'preparing') throw stale();
     await tx.query(cancel.sql, [ref.jobId, ref.epoch.toString(), identityJobPartition(ref)]);
     recordIdentityPrearmCancellation(tx, ref);
@@ -733,9 +728,12 @@ async function validateSources(
   const home = identityJobPartition(ref);
   for (const base of bases) {
     const sourceHome = Number(base.route) >> 4;
-    const active = await withReadTransaction(pool, async (tx) => await readPartition(tx, sourceHome));
+    const active = await nativeIdentityCapabilities().read.withReadTransaction(
+      pool,
+      async (tx) => await readPartition(tx, sourceHome),
+    );
     if (!active || active.writeState !== 'active' || active.epoch !== base.source_owner_epoch) return false;
-    const held = await runCommand(pool, { partition: sourceHome }, async (tx) => {
+    const held = await cmd().runCommand(pool, { partition: sourceHome }, async (tx) => {
       await measuredQuery(
         tx,
         `SELECT original FROM semantic.identity_epoch_dirty WHERE route=$1 AND original=$2 FOR UPDATE`,
@@ -743,7 +741,7 @@ async function validateSources(
         measured,
       );
       const valid = (await measuredQuery(tx, holdSource.sql, [json([base]), sourceHome], measured)).rows;
-      if (valid.length !== 1) return noEffect(false);
+      if (valid.length !== 1) return cmd().noEffect(false);
       const prior = (
         await measuredQuery(
           tx,
@@ -752,9 +750,9 @@ async function validateSources(
           measured,
         )
       ).rows[0];
-      if (prior) return noEffect(!prior.closed && prior.scope_digest === saved.scope_digest);
+      if (prior) return cmd().noEffect(!prior.closed && prior.scope_digest === saved.scope_digest);
       recordIdentityEpochNativeCommit(tx, 'admission');
-      registerCommandCallback(tx, async (id) => {
+      cmd().registerCommandCallback(tx, async (id) => {
         await measuredQuery(
           tx,
           `INSERT INTO semantic.identity_epoch_admission_source_hold(partition_no,job_id,job_epoch,original,route,scope_digest,basis,transaction_id) VALUES($1,$2,$3,$4,$5,$6,$7,$8)`,
@@ -767,13 +765,13 @@ async function validateSources(
         events: [
           {
             type: IDENTITY_EPOCH_PROGRESS,
-            data: { partition: currentCommand(tx).partition, generation: ref.epoch.toString() },
+            data: { partition: cmd().currentCommand(tx).partition, generation: ref.epoch.toString() },
           },
         ],
       };
     });
     if (!held.value) return false;
-    const received = await withReadTransaction(
+    const received = await nativeIdentityCapabilities().read.withReadTransaction(
       pool,
       async (tx) =>
         (
@@ -786,7 +784,7 @@ async function validateSources(
         ).rows[0],
     );
     if (!received) return false;
-    await runCommand(pool, { partition: home }, async (tx) => {
+    await cmd().runCommand(pool, { partition: home }, async (tx) => {
       const prior = (
         await measuredQuery(
           tx,
@@ -795,7 +793,7 @@ async function validateSources(
           measured,
         )
       ).rows[0];
-      if (prior) return noEffect(null);
+      if (prior) return cmd().noEffect(null);
       await measuredQuery(
         tx,
         `INSERT INTO semantic.identity_epoch_admission_validation VALUES($1,$2,$3,$4,$5,$6,$7)`,
@@ -807,7 +805,7 @@ async function validateSources(
         events: [
           {
             type: IDENTITY_EPOCH_PROGRESS,
-            data: { partition: currentCommand(tx).partition, generation: ref.epoch.toString() },
+            data: { partition: cmd().currentCommand(tx).partition, generation: ref.epoch.toString() },
           },
         ],
       };
@@ -815,7 +813,7 @@ async function validateSources(
   }
   // Receiving owner/generation evidence is independently anchored at each actual group home.
   for (const controlHome of [...new Set(bases.map((b) => Number(b.control_partition)))]) {
-    const valid = await withReadTransaction(pool, async (tx) => {
+    const valid = await nativeIdentityCapabilities().read.withReadTransaction(pool, async (tx) => {
       const owner = await readPartition(tx, controlHome);
       if (!owner || owner.writeState !== 'active') return false;
       const groups = (
@@ -849,7 +847,7 @@ async function validateSources(
 }
 async function releaseSourceHolds(pool: Pool, ref: IdentityJobRef, bases: readonly Record<string, unknown>[]) {
   for (const home of [...new Set(bases.map((b) => Number(b.route) >> 4))]) {
-    await runCommand(pool, { partition: home }, async (tx) => {
+    await cmd().runCommand(pool, { partition: home }, async (tx) => {
       const changed = await tx.query(
         `UPDATE semantic.identity_epoch_admission_source_hold SET closed=true WHERE partition_no=$1 AND job_id=$2 AND job_epoch=$3 AND NOT closed RETURNING original`,
         [home, ref.jobId, ref.epoch.toString()],
@@ -860,11 +858,11 @@ async function releaseSourceHolds(pool: Pool, ref: IdentityJobRef, bases: readon
             events: [
               {
                 type: IDENTITY_EPOCH_PROGRESS,
-                data: { partition: currentCommand(tx).partition, generation: ref.epoch.toString() },
+                data: { partition: cmd().currentCommand(tx).partition, generation: ref.epoch.toString() },
               },
             ],
           }
-        : noEffect(null);
+        : cmd().noEffect(null);
     });
   }
 }
@@ -891,7 +889,7 @@ async function stepIdentityEpochAdmissionWithinDeadline(
   const stage = closing ? 'closed' : preparing ? 'prepared' : 'acquired';
   // PREPARE all ordered homes, validate/hold original Sources, then establish native scope custody.
   if (!closing && !preparing && saved.prearm_phase === 'prearm-open') {
-    const retained = await withReadTransaction(
+    const retained = await nativeIdentityCapabilities().read.withReadTransaction(
       pool,
       async (tx) =>
         (await measuredQuery(tx, validBases.sql, [ref.jobId, identityJobPartition(ref)], measured)).rows.length,
@@ -927,7 +925,7 @@ async function stepIdentityEpochAdmissionWithinDeadline(
       received = await receivingReceipt(pool, ref, next.resource_home, stage, measured);
     }
     if (!received || received.scope_digest !== saved.scope_digest) throw stale();
-    await runCommand(pool, { partition: identityJobPartition(ref) }, async (tx) => {
+    await cmd().runCommand(pool, { partition: identityJobPartition(ref) }, async (tx) => {
       const current = (await query(tx, lockJob.sql, [identityJobPartition(ref), ref.jobId, ref.epoch.toString()]))
         .rows[0];
       if (!current || current.state !== saved.state || current.scope_digest !== received.scope_digest) throw stale();
@@ -965,14 +963,14 @@ async function stepIdentityEpochAdmissionWithinDeadline(
   }
   // Finish-close only CAS-cancels the job. Cancelled input and source rows stay for
   // Lifecycle inverse removal; this command has no editorial write-basis of its own.
-  const finalized = await runCommand<IdentityAdmissionProgress['state']>(
+  const finalized = await cmd().runCommand<IdentityAdmissionProgress['state']>(
     pool,
     { partition: identityJobPartition(ref) },
     async (tx) => {
       const current = (await query(tx, lockJob.sql, [identityJobPartition(ref), ref.jobId, ref.epoch.toString()]))
         .rows[0];
       if (!current) throw unavailable();
-      if (current.state !== saved.state) return noEffect(current.state);
+      if (current.state !== saved.state) return cmd().noEffect(current.state);
       const changed = await query(tx, (closing ? finishClose : promote).sql, [
         ref.jobId,
         ref.epoch.toString(),
@@ -991,15 +989,11 @@ export function stepIdentityEpochAdmission(pool: Pool, ref: IdentityJobRef): Pro
   );
 }
 
-export function identityHomeAvailable(partition: number, after = '00000000-0000-0000-0000-000000000000') {
-  return { type: IDENTITY_EPOCH_HOME_AVAILABLE, data: { partition, after } };
-}
-
 /** Native release wakes retained waiters through the existing bounded outbox/effect runner. No new queue or timer. */
 export async function wakeIdentityEpochAdmissionWaiters(pool: Pool, partition: number, after: string): Promise<void> {
-  await runCommand(pool, { partition }, async (tx) => {
+  await cmd().runCommand(pool, { partition }, async (tx) => {
     const pending = (await tx.query(waiters.sql, [partition, after])).rows;
-    if (!pending.length) return noEffect(null);
+    if (!pending.length) return cmd().noEffect(null);
     return {
       value: null,
       events: [

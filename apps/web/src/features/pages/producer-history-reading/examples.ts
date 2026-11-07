@@ -1,5 +1,5 @@
 import { producerHistoryFixture } from '../../../kernel/fake/producer-history';
-import { candidateContext } from '../../../subject/candidates';
+import { candidateContext } from '../visit-host-port';
 import {
   relationFields,
   type RelationProposal,

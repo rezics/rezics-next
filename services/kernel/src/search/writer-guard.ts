@@ -1,15 +1,11 @@
 import type { Pool } from 'pg';
 import {
-  readNativePublicFilterPublicationCompletion,
-  type PublicFilterSourceBinding,
-} from '../semantic/public-filter-source-binding.ts';
-import {
   readAccountDiscoveryRepairObservation,
   type AccountDiscoveryRepairObservation,
 } from '../access/account-discovery-source.ts';
 import { readSubjectErasureSourceProof, verifySubjectErasureSourceProof } from '../semantic/account-erasure-source.ts';
 import { drainGenerationPublicationProofCopy, hasRetainedWriterPublicationCopies } from './public-filter-custody.ts';
-import type { PublicFilterConsumer, PublicFilterCost } from '../semantic/public-filter-source-contract.ts';
+import type { PublicFilterConsumer } from '../semantic/public-filter-source-contract.ts';
 import type {
   PublicFilterConsumerContext,
   PublicFilterConsumerUnavailable,
@@ -51,6 +47,7 @@ import { validateDiscoveryWriteReceipt } from './write-actions.ts';
 import { assertCompleteSearch } from './complete-search.ts';
 import { type HistoryBarrier } from '../history/contract/index.ts';
 import { readCreditIndexSnapshot } from './credit-index.ts';
+import type { SearchNativePublicationCompletionReader, SearchPublicFilterCost } from './semantic-source-port.ts';
 
 /** Durable native evidence retained by the existing writer, never supplied by Source callers. */
 export type SearchRepairWriterReceipt = Readonly<{
@@ -745,35 +742,36 @@ export type SearchWriterPublicationGuard = SearchWriterGuard &
       request: Readonly<{ consumer: PublicFilterConsumer; job: string }>,
       context: PublicFilterConsumerContext,
     ): Promise<
-      | { status: 'fenced'; fence: SearchWriterPublicationFence; cost: PublicFilterCost }
+      | { status: 'fenced'; fence: SearchWriterPublicationFence; cost: SearchPublicFilterCost }
       | PublicFilterConsumerUnavailable
     >;
     drainPublication(
       fence: SearchWriterPublicationFence,
       context: PublicFilterConsumerContext,
     ): Promise<
-      | { status: 'draining' | 'drained'; fence: SearchWriterPublicationFence; cost: PublicFilterCost }
+      | { status: 'draining' | 'drained'; fence: SearchWriterPublicationFence; cost: SearchPublicFilterCost }
       | PublicFilterConsumerUnavailable
     >;
     adoptPublication(
       fence: SearchWriterPublicationFence,
       context: PublicFilterConsumerContext,
     ): Promise<
-      { status: 'held'; fence: SearchWriterPublicationFence; cost: PublicFilterCost } | PublicFilterConsumerUnavailable
+      | { status: 'held'; fence: SearchWriterPublicationFence; cost: SearchPublicFilterCost }
+      | PublicFilterConsumerUnavailable
     >;
     releasePublication(
       fence: SearchWriterPublicationFence,
       context: PublicFilterConsumerContext,
-    ): Promise<{ status: 'released'; cost: PublicFilterCost } | PublicFilterConsumerUnavailable>;
+    ): Promise<{ status: 'released'; cost: SearchPublicFilterCost } | PublicFilterConsumerUnavailable>;
   }>;
 
-// The generation owner installs the original native binding on its existing writer.
-const publicationBindings = new WeakMap<SearchWriterPublicationGuard, PublicFilterSourceBinding>();
-export function bindSearchWriterPublicationSource(
+// The generation owner installs the current native completion reader on its existing writer.
+const publicationReaders = new WeakMap<SearchWriterPublicationGuard, SearchNativePublicationCompletionReader>();
+export function bindSearchWriterPublicationReader(
   guard: SearchWriterPublicationGuard,
-  binding: PublicFilterSourceBinding,
+  reader: SearchNativePublicationCompletionReader,
 ) {
-  publicationBindings.set(guard, binding);
+  publicationReaders.set(guard, reader);
 }
 
 // Producer-private native readers retain the actual supplied Source/listing composition. This is
@@ -936,7 +934,7 @@ export function createSearchWriterGuard(options: {
     publication_after: string | null;
     publication_revision: string;
   };
-  const publicationCost = (): PublicFilterCost => ({
+  const publicationCost = (): SearchPublicFilterCost => ({
     inputKeys: 0,
     candidates: 0,
     accessPoints: 0,
@@ -957,7 +955,7 @@ export function createSearchWriterGuard(options: {
   }
   async function publicationCall<T>(
     context: PublicFilterConsumerContext,
-    work: (cost: PublicFilterCost) => Promise<T>,
+    work: (cost: SearchPublicFilterCost) => Promise<T>,
   ): Promise<T | PublicFilterConsumerUnavailable> {
     const cost = publicationCost();
     try {
@@ -1014,15 +1012,15 @@ export function createSearchWriterGuard(options: {
   async function publicationSource(
     value: SearchWriterPublicationFence,
     context: PublicFilterConsumerContext,
-    cost: PublicFilterCost,
+    cost: SearchPublicFilterCost,
   ) {
     const job = await withReadTransaction(options.pool, (tx) => publicationJob(tx, value));
     if (!job.barrier) {
-      const binding = publicationBindings.get(guard);
-      if (!binding) return pendingPublication();
-      const completion = await readNativePublicFilterPublicationCompletion(binding, { job: value.job }, context);
-      for (const key of Object.keys(cost) as (keyof PublicFilterCost)[])
-        (cost as { -readonly [K in keyof PublicFilterCost]: number })[key] += completion.cost[key];
+      const readCompletion = publicationReaders.get(guard);
+      if (!readCompletion) return pendingPublication();
+      const completion = await readCompletion({ job: value.job }, context);
+      for (const key of Object.keys(cost) as (keyof SearchPublicFilterCost)[])
+        (cost as { -readonly [K in keyof SearchPublicFilterCost]: number })[key] += completion.cost[key];
       if (completion.status !== 'complete') return pendingPublication();
       return;
     }

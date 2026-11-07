@@ -1,4 +1,9 @@
 import type { KernelClient, SubjectRead } from '@rezics/client';
+import { candidateContext, candidateFailure } from '../features/pages/visit-host-port';
+import type { CandidateFailure } from '../features/pages/visit-host-port';
+
+export { candidateContext, candidateFailure };
+export type { CandidateFailure };
 
 type Endpoint = ReturnType<KernelClient['subjects']>;
 type NativeCandidatePage = NonNullable<Awaited<ReturnType<Endpoint['candidates']['get']>>['data']>;
@@ -22,11 +27,6 @@ export type ContextComparison = {
   selected: SubjectRead['subject']['statements'][string];
   inherited: SubjectRead['subject']['statements'][string];
   adoption: CandidatePage['adoption'];
-};
-export type CandidateFailure = {
-  ok: false;
-  reason: 'denied' | 'stale' | 'unavailable' | 'invalid';
-  clearPrivate?: boolean;
 };
 export type ViewerActionEntry = { action: string; operations: string[] };
 export type ViewerActionComponent =
@@ -87,8 +87,6 @@ export type CandidateResult =
       contextReview?: ContextComparison;
       contextRefreshFailed?: boolean;
     };
-
-export const candidateContext = '00000000-0000-8000-8000-000000000000';
 
 export type CandidateActions = { state: 'available'; context: string; operations: string[] } | { state: 'unavailable' };
 export type CandidateAuthority = {
@@ -241,21 +239,6 @@ export function candidateSourceRecords(subject: object): {
       },
     ];
   });
-}
-
-export function candidateFailure(status: number): CandidateFailure {
-  // Missing and hidden use the same unavailable outcome. Never reveal existence from a denial.
-  return {
-    ok: false,
-    reason:
-      status === 401 || status === 403
-        ? 'denied'
-        : status === 409
-          ? 'stale'
-          : status === 400 || status === 422
-            ? 'invalid'
-            : 'unavailable',
-  };
 }
 
 export async function readCandidates(

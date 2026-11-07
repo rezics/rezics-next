@@ -3545,6 +3545,8 @@ export async function runCrossMediaSeedCli(
     sameShowcaseVndbReleaseClassifications,
     seedShowcaseVndbReleases,
   } = await import('./showcase-vndb-releases.ts');
+  const { releasedReviewedVocabulary } = await import('./reviewed-vocabulary-port.ts');
+  const reviewedVocabulary = releasedReviewedVocabulary();
   const tokenProvider = await createAccountTokenProvider({
     accountKeyPath: values.get('--account-key')!,
     account: values.get('--account')!,
@@ -3845,6 +3847,7 @@ export async function runCrossMediaSeedCli(
       plan: publicationPlan,
       path: statePath,
       port,
+      vocabulary: reviewedVocabulary,
       bindings: releaseClassificationPreparation.bindings,
       destination: { origin: api },
       ...(vndbReleaseStateBindings?.groups.length || releaseClassificationPreparation.groups.length
@@ -3914,6 +3917,7 @@ export async function runCrossMediaSeedCli(
           plan: publicationPlan,
           path: statePath,
           port,
+          vocabulary: reviewedVocabulary,
           bindings: releaseContext.bindings,
           destination: { origin: api },
           ...(releaseContext.groups.length ? { groups: releaseContext.groups } : {}),
@@ -4213,6 +4217,7 @@ export async function runCrossMediaSeedCli(
         plan: publicationPlan,
         path: statePath,
         port,
+        vocabulary: reviewedVocabulary,
         bindings: releaseContext.bindings,
         destination: { origin: api },
         ...(releaseContext.groups.length ? { groups: releaseContext.groups } : {}),

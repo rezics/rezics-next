@@ -135,12 +135,15 @@ test('generation restart keeps the original Source proof through lost observatio
         return result;
       },
     });
+    const binding = createPublicFilterSourceBinding(bindingPool, f.config.routeKey, f.config.access);
     return createSearchGenerationPublication({
       pool: f.db.pool,
       search: transport,
       source,
       sourceKeys: createSubjectSourceKeyPages(f.db.pool, f.config.routeKey, f.config.access),
-      binding: createPublicFilterSourceBinding(bindingPool, f.config.routeKey, f.config.access),
+      binding,
+      readPublicationCompletion: (request, context) =>
+        readNativePublicFilterPublicationCompletion(binding, request, context),
       clock: f.config.clock,
       meaning: f.meaning,
       writerGuard: writer,
