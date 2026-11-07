@@ -5,15 +5,16 @@
  * Evidence stays under `.temp/commerce-walk/`.
  *
  * Kernel /v1/definitions/active must return a digest, then an importer fence
- * must succeed, before seed. A 404 or sign-in mismatch is a page failure except
- * anonymous private pages, which must leave the member shell.
+ * and a subject write must succeed, before seed. Leftover seed journals are
+ * retired first. A 404 or sign-in mismatch is a page failure except anonymous
+ * private pages, which must leave the member shell.
  */
 import { execFileSync, spawn } from 'node:child_process';
 import { randomBytes } from 'node:crypto';
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { join, resolve } from 'node:path';
 import { chromium, type Browser, type BrowserContext, type Page } from 'playwright';
-import { startSeededFrontends } from '../../../../services/auth/scripts/dev-stack.ts';
+import { retireDevelopmentSeedState, startSeededFrontends } from '../../../../services/auth/scripts/dev-stack.ts';
 import {
   createAccountTokenProvider,
   CredentialServiceError,
@@ -129,11 +130,34 @@ async function waitUntilImportReady(kernel: string, env: Record<string, string>,
   let last = 'no response';
   while (Date.now() < deadline) {
     try {
-      await transport.fence({ source: 'rezics_reviewed_vocabulary', externalId: 'walk-import-ready', fieldGroup: 'facts' });
-      return;
+      await transport.fence({
+        source: 'rezics_reviewed_vocabulary',
+        externalId: 'walk-import-ready',
+        fieldGroup: 'facts',
+      });
+      const token = await tokenProvider();
+      const response = await fetch(`${kernel}/v1/subjects`, {
+        method: 'POST',
+        headers: {
+          authorization: `Bearer ${token}`,
+          accept: 'application/json',
+          'content-type': 'application/json',
+          'idempotency-key': JSON.stringify(`walk-ready-${crypto.randomUUID()}`),
+        },
+        body: JSON.stringify({ type: 'skos:ConceptScheme', labels: { en: 'Walk import ready' } }),
+        signal: AbortSignal.timeout(10_000),
+        cache: 'no-store',
+      });
+      if (response.status === 201) return;
+      last = `HTTP ${response.status}`;
     } catch (error) {
       if (error instanceof ImportTransportError)
-        last = [error.message, error.status !== undefined ? `HTTP ${error.status}` : undefined, error.code]
+        last = [
+          error.message,
+          error.status !== undefined ? `HTTP ${error.status}` : undefined,
+          error.code,
+          error.cause instanceof Error ? error.cause.message : undefined,
+        ]
           .filter(Boolean)
           .join(' ');
       else if (error instanceof CredentialServiceError) last = error.message;
@@ -141,7 +165,7 @@ async function waitUntilImportReady(kernel: string, env: Record<string, string>,
     }
     await Bun.sleep(1_000);
   }
-  throw new Error(`import fence not ready: ${last}`);
+  throw new Error(`import writes not ready: ${last}`);
 }
 
 async function parseEnv(path: string): Promise<Record<string, string>> {
@@ -369,7 +393,13 @@ async function seedEnv(stack: Stack): Promise<Record<string, string>> {
 }
 
 async function seedCatalog(stack: Stack, env: Record<string, string>): Promise<void> {
-  const command = ['bun', 'scripts/datasets/cross-media-seed.ts', '--dev'];
+  await mkdir(evidenceDir, { recursive: true, mode: 0o700 });
+  await writeFile(
+    join(evidenceDir, 'seed-origins.log'),
+    `KERNEL_ORIGIN=${env.KERNEL_ORIGIN}\nAUTH_ORIGIN=${env.AUTH_ORIGIN}\nKERNEL_PORT=${env.KERNEL_PORT}\n`,
+    { mode: 0o600 },
+  );
+  const command = ['bun', '--no-env-file', 'scripts/datasets/cross-media-seed.ts', '--dev'];
   try {
     await child(command, 'seed', env);
   } catch (first) {
@@ -459,6 +489,7 @@ async function main() {
   let browser: Browser | undefined;
   try {
     await waitUntilActiveRelease(stack.kernel);
+    await retireDevelopmentSeedState(root);
     await child(['bun', 'services/auth/scripts/dev-stack.ts', 'persona'], 'persona');
     const env = await seedEnv(stack);
     await waitUntilImportReady(stack.kernel, env);
@@ -576,6 +607,8 @@ async function main() {
   const capabilitiesPath = join(root, 'docs/goals/commerce.capabilities.md');
   try {
     const capabilities = await readFile(capabilitiesPath, 'utf8');
+    if (!capabilities.includes('## First-public journeys on dev'))
+      throw new Error('finishing register heading missing');
     await writeFile(capabilitiesPath, applyWalkResults(capabilities, rows));
   } catch (error) {
     if ((error as { code?: string }).code !== 'ENOENT') throw error;

@@ -1009,6 +1009,10 @@ Decision: admitted walk processes bind `KERNEL_ORIGIN`, `AUTH_ORIGIN` and `KERNE
 that Kernel; an inherited default-port `KERNEL_ORIGIN` is the observed import-transport setup failure. Bun
 `--env-file` does not override an existing `KERNEL_ORIGIN`, so the walker merges persona `seed.env` after the slot
 origins. The finishing register is `docs/goals/commerce.capabilities.md#first-public-journeys-on-dev`.
+Decision: walk stacks always retire leftover seed journals because a new database reuses the slot's PostgreSQL
+identity string. The walker then waits for an importer fence and a subject write before seed, and seed bun uses
+`--no-env-file` so slot `KERNEL_ORIGIN` stays. Fewest first-public tests remain the seeded walk,
+`erasure-participant.test.ts`, and the VNDB scan-budget cases.
 Decision: Content's canonical issuer owns JWKS: `AUTH_ISSUER` and `AUTH_JWKS_URL` share the issuer origin and port;
 membership admission does not allow a distinct native JWKS port. The walk command stays on the worker host so
 `GOAL_ACCEPTANCE_REQUIRES` is not stripped; Auth pages start before Kernel so issuer JWKS is reachable for seed.

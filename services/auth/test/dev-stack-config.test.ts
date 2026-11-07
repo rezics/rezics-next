@@ -14,6 +14,7 @@ import {
   developmentKernelBindings,
   issuerPublicJwksUrl,
   retireStaleSeedJournals,
+  resetWalkSeedJournals,
   root,
   developmentBindings,
   developmentRegistrationPassword,
@@ -321,6 +322,27 @@ test('first-run secrets remain private and stable across setup retries', async (
     expect(keys.secret).not.toBe(keys.staging);
   } finally {
     await rm(directory, { recursive: true, force: true });
+  }
+});
+
+test('walk stacks retire leftover journals even when the PostgreSQL identity string matches', async () => {
+  const repository = await mkdtemp(resolve(import.meta.dir, '../../../.temp/walk-seed-'));
+  try {
+    await mkdir(resolve(repository, '.temp/cross-media-seed'), { recursive: true });
+    await writeFile(resolve(repository, '.temp/cross-media-seed/database-identity'), '127.0.0.1:20024/rezics\n');
+    await writeFile(resolve(repository, '.temp/cross-media-seed/state.sqlite'), 'previous-attempt-native-ids');
+    const archived = await resetWalkSeedJournals(
+      repository,
+      'postgres://rezics:rezics@127.0.0.1:20024/rezics',
+    );
+    expect(archived).toBeDefined();
+    expect(await readFile(resolve(archived!, 'state.sqlite'), 'utf8')).toBe('previous-attempt-native-ids');
+    expect(await readFile(resolve(repository, '.temp/cross-media-seed/database-identity'), 'utf8')).toBe(
+      '127.0.0.1:20024/rezics\n',
+    );
+    expect(await Bun.file(resolve(repository, '.temp/cross-media-seed/state.sqlite')).exists()).toBe(false);
+  } finally {
+    await rm(repository, { recursive: true, force: true });
   }
 });
 

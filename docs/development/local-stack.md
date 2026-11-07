@@ -265,7 +265,8 @@ bun services/auth/scripts/dev-stack.ts walk -- <command...>
    earlier slot cannot occupy a later slot's names.
    Admission skips slots whose ports still have listeners, including containers surviving an interrupted launcher.
    Those listeners remain untouched; when all slots are occupied, the launch keeps its queue position.
-3. Runs `db up`, `search up` and `setup`, retires seed journals that name another database, then starts native Auth,
+3. Runs `db up`, `search up` and `setup`, retires leftover seed journals (a walk stack always has a fresh
+   database, even when the slot reuses the same PostgreSQL identity string), then starts native Auth,
    Auth pages, the worker and Kernel. `AUTH_ISSUER` and `AUTH_JWKS_URL` share the issuer origin; Auth pages proxy that
    JWKS document from native Auth. An admitted stack runs Kernel without `--watch` and does not start Web: its journey
    seeds first and then starts Web. Auth pages start before Kernel so issuer JWKS is reachable for seed.
@@ -355,11 +356,12 @@ actual native identities. Missing credentials, private exports or required seede
 controller. Keep actual doctor volumes and live process and browser sessions. Use `127.0.0.1` throughout.
 
 Inside `<command>`, provision with `bun services/auth/scripts/dev-stack.ts persona` and seed with
-`bun scripts/datasets/cross-media-seed.ts --dev` after loading the private `seed.env` that persona wrote. Admitted
-walk processes bind `KERNEL_ORIGIN`, `AUTH_ORIGIN` and `KERNEL_PORT` to the slot so seed reaches this Kernel, not an
-inherited default-port origin; `bun --env-file` does not override those names once they are already set. Do not run
-`task seed:dev` or `task dev:persona` inside a walk: those depend on `dev:infra` and would start the default-port
-stack beside the admitted slot. Ordinary member personas use actual signup; privileged roles come from native
+`bun --no-env-file scripts/datasets/cross-media-seed.ts --dev` after loading the private `seed.env` that persona wrote.
+Admitted walk processes bind `KERNEL_ORIGIN`, `AUTH_ORIGIN` and `KERNEL_PORT` to the slot so seed reaches this Kernel,
+not an inherited default-port origin; bun auto-loaded `.env` files must not replace those names. The walker waits for
+an importer fence and a subject write, because a fence-only ready check left identity-epoch subject writes failing.
+Do not run `task seed:dev` or `task dev:persona` inside a walk: those depend on `dev:infra` and would start the
+default-port stack beside the admitted slot. Ordinary member personas use actual signup; privileged roles come from native
 admission. Browser launch sets `TMPDIR` to a short root such as `/tmp/rw` when the inherited root is missing, so
 Chromium Unix socket paths fit; the controller supplies a healthy connector if that root is unavailable.
 

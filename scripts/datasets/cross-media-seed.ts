@@ -150,6 +150,7 @@ export async function runDevelopmentSeed(
   const showcaseClient = requiredEnvironment('REZICS_DEV_SHOWCASE_CLIENT', env);
   const auth = requiredEnvironment('AUTH_ORIGIN', env);
   const api = env.KERNEL_ORIGIN || 'http://127.0.0.1:' + (env.KERNEL_PORT || '4100');
+  process.stderr.write(`Development seed api=${api} auth=${auth}\n`);
   const characterVocabulary = env.REZICS_DEV_VNDB_CHARACTER_VOCABULARY?.trim();
   const gameEnvironmentBindings = env.REZICS_DEV_BANGUMI_GAME_ENVIRONMENT_BINDINGS?.trim();
   const gameGenreBindings = env.REZICS_DEV_BANGUMI_GAME_GENRE_BINDINGS?.trim();

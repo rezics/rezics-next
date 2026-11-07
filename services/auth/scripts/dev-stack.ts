@@ -385,6 +385,19 @@ export async function retireDevelopmentSeedState(repository = root): Promise<str
   }
 }
 
+/** Walk stacks always have a new database, even when the slot reuses the same PostgreSQL identity string. */
+export async function resetWalkSeedJournals(repository: string, databaseUrl: string): Promise<string | undefined> {
+  const archived = await retireDevelopmentSeedState(repository);
+  const seedDirectory = resolve(repository, '.temp/cross-media-seed');
+  await mkdir(seedDirectory, { recursive: true, mode: 0o700 });
+  await writeFile(
+    resolve(seedDirectory, SEED_JOURNAL_IDENTITY_FILE),
+    `${seedJournalDatabaseIdentity(databaseUrl)}\n`,
+    { mode: 0o600 },
+  );
+  return archived;
+}
+
 /** A leftover journal that names another PostgreSQL identity cannot replay into this stack's database. */
 export async function retireStaleSeedJournals(repository: string, databaseUrl: string): Promise<string | undefined> {
   const seedDirectory = resolve(repository, '.temp/cross-media-seed');
@@ -1187,9 +1200,10 @@ async function walk(command: string[]): Promise<number> {
       const log = join(root, '.temp', 'walk', task, 'stack.log');
       await mkdir(dirname(log), { recursive: true });
       await writeFile(log, '');
-      // Journals from another database cannot replay into this stack; retire them before the seed reads them.
+      // Walk stacks always get a new database. Leftover journals still name the previous
+      // attempt's native UUIDs when the slot reuses the same PostgreSQL identity string.
       const kernelEnv = await kernelEnvironment();
-      if (kernelEnv.DATABASE_URL) await retireStaleSeedJournals(root, kernelEnv.DATABASE_URL);
+      if (kernelEnv.DATABASE_URL) await resetWalkSeedJournals(root, kernelEnv.DATABASE_URL);
       starting = current = Bun.spawn([process.execPath, 'services/auth/scripts/dev-stack.ts', 'start'], {
         cwd: root,
         env,

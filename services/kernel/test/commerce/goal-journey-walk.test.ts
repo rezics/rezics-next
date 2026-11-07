@@ -74,3 +74,34 @@ test('walk results replace finishing-register cells and the measured summary', (
     '| Offer management | Creator opens /creator/offers. | FAIL e68f0eb31ddd 2026-11-07T04:46:25.021Z setup | .temp/commerce-walk/results.json 278s; seeded walk setup → seed-retry exited 1: Import transport request failed |',
   );
 });
+
+test('walk results keep the finishing-register heading', () => {
+  const rows: JourneyWalkRow[] = FIRST_PUBLIC_JOURNEYS.map((journey) => ({
+    journey: journey.id,
+    title: journey.title,
+    result: 'FAIL',
+    revision: '48f34b7b8910087b3146aad968b8d97201736066',
+    utc: '2026-11-07T06:13:14.996Z',
+    elapsedSeconds: 466,
+    persona: 'setup',
+    firstDiffering: {
+      command: 'seeded walk setup',
+      expected: 'admitted seeded walk setup',
+      observed: 'seed-retry exited 1: Import transport request failed',
+    },
+    evidence: '.temp/commerce-walk/results.json',
+    steps: [],
+    pages: [...journey.pages],
+  }));
+  const next = applyWalkResults(
+    [
+      '## First-public journeys on dev',
+      'Latest measured result: **0/26**. Slowest failing path: Offer management (setup, 278s); first differing command `seeded walk setup` / result `seed-retry exited 1: Import transport request failed`.',
+      '| Journey | User-visible path | Latest dev walk | Evidence / elapsed |',
+      '| Offer management | Creator opens /creator/offers. | FAIL e68f0eb31ddd 2026-11-07T04:46:25.021Z setup | .temp/commerce-walk/results.json 278s; seeded walk setup → seed-retry exited 1: Import transport request failed |',
+    ].join('\n'),
+    rows,
+  );
+  expect(next.startsWith('## First-public journeys on dev')).toBe(true);
+  expect(next).toContain('FAIL 48f34b7b8910 2026-11-07T06:13:14.996Z setup');
+});
