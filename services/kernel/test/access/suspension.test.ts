@@ -20,7 +20,7 @@ import { bootstrapGovernance, PLATFORM_RESOURCE } from '../../src/access/bootstr
 import { ACCESS_EVENTS } from '../../src/access/events.ts';
 import { EVENT_TYPES } from '../../src/events/log.ts';
 import { Value } from 'typebox/value';
-import { readPublicAccount } from '../../src/access/account-data.ts';
+import { readPublicAccount } from '../../src/access/public-identity.ts';
 
 async function cloneAuthDatabase(): Promise<{ url: string; close(): Promise<void> }> {
   const name = `suspension_auth_${Bun.randomUUIDv7().replaceAll('-', '')}`;

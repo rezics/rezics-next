@@ -915,7 +915,7 @@
       "owner": "commerce",
       "paths": ["apps/web/src/library/**"],
       "excludes": ["apps/web/src/library/public-collection-discovery/**"],
-      "publicEntries": ["apps/web/src/library/follow-control.tsx"],
+      "publicEntries": ["apps/web/src/library/follow-control.tsx", "apps/web/src/library/score-write.ts"],
       "allowedDependencies": [
         "client",
         "composition",

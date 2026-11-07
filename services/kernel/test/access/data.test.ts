@@ -288,7 +288,7 @@ test('public account reads expose operator and omit private facts', async () => 
       avatar_url = 'https://example.com/avatar', biography = 'Public biography' WHERE route = $1 AND account_id = $2`,
       [route, actor, organization, person],
     );
-    const { readPublicAccount } = await import('../../src/access/account-data.ts');
+    const { readPublicAccount } = await import('../../src/access/public-identity.ts');
     const visible = {
       accountId: actor,
       kind: 'actor',

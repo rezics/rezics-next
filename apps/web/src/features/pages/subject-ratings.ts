@@ -4,7 +4,7 @@ import { prepareSession, sessionSubject, viewerCredential } from '../../session/
 import { admitRatingRetryAfter, ratingRetryAt } from './rating-retry-admission';
 import { decodeOwnRatingValue } from './subject-own-rating-value';
 import { admitRatingAggregate } from './rating-population-value';
-import { classifyPersonalScoreWriteProblem, type PersonalScoreWriteResult } from '../../library/personal-score';
+import { classifyPersonalScoreWriteProblem, type PersonalScoreWriteResult } from '../../library/score-write';
 
 export const GLOBAL = '00000000-0000-8000-8000-000000000000';
 export const QUESTION = '00000000-0000-7000-8000-000000000001';

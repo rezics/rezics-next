@@ -3,6 +3,7 @@ import { checkAvatarMedia, readAvatarSummaries } from '../../content/access-capa
 import { applyRealmClaimApproval, lockRealmClaimApprovalSource } from '../../community/index.ts';
 import {
   accountAgentId,
+  accountAgentsForSubjects,
   activeIdentitySourceConsumerMaintenance,
   IDENTITY_HISTORY_ORIGINAL_SOURCE_DECLARATION,
   readOriginalAccountAgentIdentity,
@@ -52,6 +53,9 @@ export function createNativeAccessPorts(
 ): AccessApplicationPorts {
   const identity: IdentitySemanticPort = {
     accountAgentId: (accountId) => accountAgentId(accountId),
+    accountAgentsForSubjects(client, subjects) {
+      return accountAgentsForSubjects(asClient(client) as Parameters<typeof accountAgentsForSubjects>[0], subjects);
+    },
     async readOriginalAccountAgentIdentity(pool, input) {
       return readOriginalAccountAgentIdentity(asPool(pool), input);
     },

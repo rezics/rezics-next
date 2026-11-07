@@ -3,7 +3,7 @@ import { afterAll, beforeAll, beforeEach, expect, test } from 'bun:test';
 import { exportJWK, generateKeyPair, SignJWT } from 'jose';
 import { Pool, type QueryConfig } from 'pg';
 import { AccessUnavailableError, createAccess } from '../../src/access/index.ts';
-import { readPublicAccount } from '../../src/access/account-data.ts';
+import { readPublicAccount } from '../../src/access/public-identity.ts';
 import { createWriteRateLimiter, WriteRateUnavailableError } from '../../src/access/write-rate.ts';
 import { canonicalRateAddress, rateIdentity } from '../../src/access/write-rate-identity.ts';
 import type { AccountActor } from '../../src/request/access.ts';

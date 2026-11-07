@@ -1,15 +1,24 @@
-import { afterAll, expect, test } from 'bun:test';
+import { afterAll, beforeAll, expect, test } from 'bun:test';
 import { Pool } from 'pg';
 import {
   agentContributionAttribution,
   readContributionAttributions,
   type ContributionAttribution,
 } from '../../src/access/public-identity.ts';
+import { createAccessApplication } from '../../src/access/application/index.ts';
+import { bindAccessApplication, unbindAccessApplication } from '../../src/access/adapters/bind.ts';
+import { createNativeAccessPorts } from '../../src/access/adapters/native.ts';
 import { accountAgentId } from '../../src/semantic/access-capabilities.ts';
 import { newId, routeOf } from '../../src/route/route.ts';
 
 const pool = new Pool({ connectionString: process.env.DATABASE_URL, max: 1 });
-afterAll(() => pool.end());
+beforeAll(() => {
+  bindAccessApplication(createAccessApplication(createNativeAccessPorts(async () => undefined)));
+});
+afterAll(() => {
+  unbindAccessApplication();
+  return pool.end();
+});
 
 test('bounded owner reads keep live, deleted, pending and missing identities distinct through retained agent resolution', async () => {
   const client = await pool.connect();
