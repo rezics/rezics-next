@@ -419,11 +419,11 @@ export async function executeLabelOperation<T>(plan: LabelOperationPlan, body: (
 
 const parentInput = (route: number, accountId: string, labelId: string) =>
   Object.freeze({ route, account_id: accountId, label_id: labelId });
-const labelPoint = (route: number, accountId: string, labelId: string, includeDeleted = false) =>
+const labelPoint = (route: number, accountId: string, labelId: string) =>
   labelSqlPlan(
     'label.point',
     labelRead.sql,
-    { ...parentInput(route, accountId, labelId), include_deleted: includeDeleted },
+    parentInput(route, accountId, labelId),
     { candidateKeys: 1, nativeRows: 1, points: 1, emptySeeks: 1, output: labelRow, outputRows: 1 },
   );
 
@@ -495,7 +495,7 @@ export function labelLifecyclePlan(input: {
   restore: boolean;
   includeRead?: boolean;
 }): LabelOperationPlan {
-  const read = labelPoint(input.route, input.accountId, input.labelId, true);
+  const read = labelPoint(input.route, input.accountId, input.labelId);
   const lifecycle = labelSqlPlan(
     input.restore ? 'label.restore' : 'label.delete',
     labelLifecycle.sql,

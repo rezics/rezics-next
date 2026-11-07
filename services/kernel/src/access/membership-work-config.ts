@@ -116,8 +116,8 @@ function loopbackHttpOrigin(value: string, variable: string): string {
   return parsed.origin;
 }
 
-function requestedHref(url: string | URL): string {
-  return typeof url === 'string' ? url : url.href;
+function requestedHref(url: string | URL | Request): string {
+  return typeof url === 'string' ? url : url instanceof Request ? url.url : url.href;
 }
 
 /**

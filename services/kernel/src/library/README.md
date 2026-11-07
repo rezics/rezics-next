@@ -188,9 +188,32 @@ occurrences, nested admission, original/terminal disclosure, active release, wit
 identity-native declaration equality, ordinary `composeLibraryDomain` adapter install, and unbound collection-read deferral.
 Selected identity seal cases keep the selected bind vector; transform fixtures use routable job IDs. Existing native
 identity, Source/member/publication, assignment-growth and lifecycle-growth cases keep their unchanged assertions.
-Label assignment and parent SQL use LATERAL LIMIT-1 primary-key points and the reserved-source 32-row seek so
-owner-catalogue size cannot appear as Seq Scan or `personal_label` touches above 33. Set, unassign, restore and
-rename select each named operand once in the one-row request and read those columns in the mutation WHERE.
+Label catalogue, assignment and parent SQL use typed input CTEs and LATERAL primary-key or reserved-source
+points so generic prepared plans cannot Seq Scan an owner catalogue. Exact point lookups keep the Access
+ROW fences and repeat their key as scalar equalities, because PostgreSQL did not reduce the composite bounds
+to the complete index key for the FULL warmup plan. Those `ORDER BY` lists name the index
+columns in index order. Point reads take a typed `MATERIALIZED` input row and LATERAL unique
+`(route, account_id, label_id)` so the inner is a parameterized `personal_label_pkey` nested loop. Assignment
+owner-label pages and desired-tuple seeks use the MATERIALIZED ROW-bounded `OFFSET 0` fence in
+`label_assignment_owner_label` order `(route, account_id, label_id, subject_id)`; reserved-source reads use
+`label_assignment_reserved_source` order `(route, account_id, subject_id, assignment_id)`. Reserved-source pages
+repeat route/account/subject scalar equalities beside their row bounds, so a custom plan with constant UUIDs still
+seeks the partial index. Each `ORDER BY` names its index columns in that order, so a custom plan that inlines the
+UUID cannot broaden the lookup to route/account and scan unrelated subjects. The store does not `LIMIT 1` or `OR include_deleted` in SQL: `NOT MATERIALIZED` inlined the CTE and Seq Scanned a
+small catalogue (FULL warmup 34/34 nodes), equality filters Seq Scan when the UUID is a constant, `LIMIT 1` lets Seq Scan stop early, and `OR` hides the unique index. The store filters
+`include_deleted` on that row. They project `createdAt` as insert RETURNING does so Reylo still decodes timestamptz
+text. A unique point may be one row or a one-element array; UNION ALL pages are arrays, so the store takes that row
+or the first array element. They do not UNION ALL `include_deleted`. Existing Label command, HTTP and growth suites
+pin this; no extra tests. Prefix `ORDER BY` names `personal_label_live_name`
+`(route, account_id, normalized_name)`. Folded FULL warmup sees 34 `personal_label` parent observations and
+zero sequential scans on `personal_label`, `label_assignment`, `entry` and `progress_session`. FULL
+entry tiles and active-session seeks drive one integer step from the MATERIALIZED request row that
+carries the subject-id array, then a MATERIALIZED one-row point CTE inside LATERAL with the same Access
+ROW-bounded `OFFSET 0` fence. The Entry point also repeats route, account and subject as scalar equalities:
+the FULL HTTP growth capture showed that the tuple fence alone Seq Scanned `library.entry` at 64, while
+the key equalities keep the complete primary key visible to the planner. Active-session `LIMIT 1` stays
+after its fence and still names `progress_session_active`. Set, unassign, restore and rename select each named operand once in the one-row request
+and read those columns in the mutation WHERE.
 
 Decision: Source capture, member preparation, owner-query preparation, publication, presentation, Entry/progress and funded Progress-operation planning/admission use
 one fake-capability application suite; ordinary composition binds the real Access, Semantic, Search and Content

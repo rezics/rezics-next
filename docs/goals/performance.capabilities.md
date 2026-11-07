@@ -32,6 +32,79 @@ nothing; it becomes frozen with its executable acceptance. Existing frozen tests
 every applicable cell and exact scenario execution, zero skips/todos, real native Access, production HTTP/default
 workers where relevant, and recorded revision evidence.
 
+Decision: Label unique-key points and FULL assignment pages keep MATERIALIZED input, Access ROW-bounded index
+range and `OFFSET 0`; prefix/FULL growth allow only that `OFFSET 0` fence and still refuse `LIKE`. FULL entry tiles
+and active-session seeks drive one integer step from the MATERIALIZED request row that carries the subject-id
+array, then a MATERIALIZED one-row point CTE inside LATERAL with that same fence, so a custom plan cannot
+hash-join unnest into a Seq Scan or Bitmap Heap Scan of `library.entry` or `progress_session`. Auth setup does
+not copy the host-scope `catalogue_only` URL into `process.env`, so Reylo keeps cached analysis when a real
+`DATABASE_URL` is already present. Seeded frontends wait until `/auth/sign-in` redirects before signed-in probes.
+
+Decision: pin the 17 first-public journey path IDs in one focused walk-source test; add no extra stories. A row can
+pass only when its source is integrated into current dev; candidate runs remain failures. Record full source/dev
+revisions and a per-row evidence JSON reference. Native, browser and growth evidence is the sole Goal walk
+`bun services/auth/scripts/dev-stack.ts walk -- bun apps/web/scripts/first-public-journeys-walk.ts`.
+The walk records actual integrated-dev results in this file; typing, local units and source integration alone cannot
+pass a row. Content ce33 integrated `ea7dc5fe59`: signed-in paths resume on a stack that contains it. Issuer, JWKS
+and launcher failures are recorded causes; this walk does not repair startup. A missing or failed cross-media seed
+does not fail-rest the 17 paths: mixed anonymous P02/P17 and other seed-free surfaces still run on the admitted
+stack, and each signed-in row records its own first unreached cause. Semantic owns importer
+`Import transport request failed`. Native Web sign-in is `/auth/sign-in` (302 to Auth); Kernel probes the stack-ready
+`GET /v1/definitions/active` and `GET /health` (there is no `GET /v1/definitions`); public Log list GET requires `accountId`. The walk source pin does not start
+shared Vite. Fewest tests: `apps/web/tests/first-public-journeys-walk.test.ts` plus the walk itself.
+
+Current correction: the two candidate worker stacks exceeded the shared 6 GiB check limit before hydration. Semantic
+owns the startup-memory repair. Keep all seventeen browser journeys pending and advance the independent native
+repairs and Auth retention group already assigned to this handle; resume the integrated browser walk when startup
+is repaired. Candidate stack outcomes do not update the current-dev table.
+
+<!-- first-public-journeys:begin -->
+
+## Current-dev first-public journeys
+
+Observed source `6d2f788cfe` on base `fd920c9cdb`. Walk command
+`bun services/auth/scripts/dev-stack.ts walk -- bun apps/web/scripts/first-public-journeys-walk.ts`.
+Operands: Web `http://127.0.0.1:20050`, issuer `http://127.0.0.1:20051`, native Auth `http://127.0.0.1:20052`, Kernel `http://127.0.0.1:20053`.
+Kernel/JWKS probe: kernel /v1/definitions HTTP 404; native JWKS HTTP 200; kernel /v1/health HTTP 404.
+Sign-in probe: sign-in surfaces unavailable: login HTTP 200; web sign-in HTTP 404; issuer JWKS HTTP 200; native JWKS HTTP 200.
+Cross-media seed: seed exited 1: Import transport request failed. Mixed anonymous paths still ran; Semantic owns importer transport.
+Secret-free evidence is `.temp/goal/performance/evidence.json` in this attempt. Phone and desktop viewports ran for each reached path.
+
+Hourly: **0/17**. Slowest failing path: **P02** (181.891 s FAIL). First causal error: **`waitFor: Timeout 180000ms exceeded. Call log:   - waiting for locator('html[data-hydrated]') `**.
+
+| Path | User-visible journey | Persona | Elapsed | Result | First wrong result | Owner |
+| ---- | -------------------- | ------- | ------: | ------ | ------------------ | ----- |
+| P01 | Settings Profile edit, Save, private readback, leave/return with draft and focus | signed-in | 0.000 s | FAIL-unreached | sign-in surfaces unavailable: login HTTP 200; web sign-in HTTP 404; issuer JWKS HTTP 200; native JWKS HTTP 200 | Settings |
+| P02 | Public profile save fields/view flags; read as owner, member and anonymous | anonymous | 181.891 s | FAIL | waitFor: Timeout 180000ms exceeded. Call log:   - waiting for locator('html[data-hydrated]')  | Accounts |
+| P03 | Safety managed-account directory, detail/profile, exact frontier/focus return | signed-in | 0.000 s | FAIL-unreached | sign-in surfaces unavailable: login HTTP 200; web sign-in HTTP 404; issuer JWKS HTTP 200; native JWKS HTTP 200 | Accounts |
+| P04 | Settings security into native Auth security page and current-session return | signed-in | 0.000 s | FAIL-unreached | sign-in surfaces unavailable: login HTTP 200; web sign-in HTTP 404; issuer JWKS HTTP 200; native JWKS HTTP 200 | Accounts |
+| P05 | Settings rename into native Auth, complete rename, return to current identity | signed-in | 0.000 s | FAIL-unreached | sign-in surfaces unavailable: login HTTP 200; web sign-in HTTP 404; issuer JWKS HTTP 200; native JWKS HTTP 200 | Accounts |
+| P06 | Settings deletion into native Auth deletion/recovery | signed-in | 0.000 s | FAIL-unreached | sign-in surfaces unavailable: login HTTP 200; web sign-in HTTP 404; issuer JWKS HTTP 200; native JWKS HTTP 200 | Accounts |
+| P07 | Sign out, signed-out destination, uncertain-response session read | signed-in | 0.000 s | FAIL-unreached | sign-in surfaces unavailable: login HTTP 200; web sign-in HTTP 404; issuer JWKS HTTP 200; native JWKS HTTP 200 | Accounts |
+| P08 | Safety verification select, submit, revisit, withdraw, return | signed-in | 0.000 s | FAIL-unreached | sign-in surfaces unavailable: login HTTP 200; web sign-in HTTP 404; issuer JWKS HTTP 200; native JWKS HTTP 200 | Accounts |
+| P09 | Notification preferences Save/readback and Reset | signed-in | 0.000 s | FAIL-unreached | sign-in surfaces unavailable: login HTTP 200; web sign-in HTTP 404; issuer JWKS HTTP 200; native JWKS HTTP 200 | Inbox |
+| P10 | Reading spoiler/suitability Save/readback, Reset/native defaults | signed-in | 0.000 s | FAIL-unreached | sign-in surfaces unavailable: login HTTP 200; web sign-in HTTP 404; issuer JWKS HTTP 200; native JWKS HTTP 200 | Settings |
+| P11 | Layout type override Save/readback, remove, resulting default | signed-in | 0.000 s | FAIL-unreached | sign-in surfaces unavailable: login HTTP 200; web sign-in HTTP 404; issuer JWKS HTTP 200; native JWKS HTTP 200 | Settings |
+| P12 | Private Collections inventory/privacy Save/readback and version-conflict recovery | signed-in | 0.000 s | FAIL-unreached | sign-in surfaces unavailable: login HTTP 200; web sign-in HTTP 404; issuer JWKS HTTP 200; native JWKS HTTP 200 | Settings |
+| P13 | Inbox page reply/mention/moderation, destination, same-range return, acknowledge/badge | signed-in | 0.000 s | FAIL-unreached | sign-in surfaces unavailable: login HTTP 200; web sign-in HTTP 404; issuer JWKS HTTP 200; native JWKS HTTP 200 | Inbox |
+| P14 | Follow edge, page Following, target, original-frontier return, remove/replay | signed-in | 0.000 s | FAIL-unreached | sign-in surfaces unavailable: login HTTP 200; web sign-in HTTP 404; issuer JWKS HTTP 200; native JWKS HTTP 200 | Accounts |
+| P15 | Labels create/select, assign, FULL assignment/shelf, exact removal/readback | signed-in | 0.000 s | FAIL-unreached | sign-in surfaces unavailable: login HTTP 200; web sign-in HTTP 404; issuer JWKS HTTP 200; native JWKS HTTP 200 | Library |
+| P16 | Active shelf page/session/target/return, complete or retire, updated shelf | signed-in | 0.000 s | FAIL-unreached | sign-in surfaces unavailable: login HTTP 200; web sign-in HTTP 404; issuer JWKS HTTP 200; native JWKS HTTP 200 | Library |
+| P17 | Published Log publish, owner/member/anonymous snapshot, retract/Undo, My Logs return | anonymous | 0.207 s | FAIL-unreached | anonymous published-log list HTTP 400 (empty); publish unreached: sign-in surfaces unavailable: login HTTP 200; web sign-in HTTP 404; issuer JWKS HTTP 200; native JWKS HTTP 200 | Library |
+<!-- first-public-journeys:end -->
+
+### Candidate walk setup attempts
+
+The integrated-dev table above remains the last actual dev observation; neither worker-stack attempt below ran a
+journey or seed, so neither changes a row result. Task source `df0953bf308bed5b43e1b3acf79c29ccbe89c3cb` targeted
+base/dev revision `100b66159886575f852ea9d819c5b6d0058f7f58`. The candidate stack never reached the walk executable;
+P01–P17, all personas, both viewports and all seeds were unstarted. The second attempt failed after 907 remote CPU
+seconds with `remote-check: check exceeded its memory limit (6 GiB) while running the check command`; the same
+failure occurred on the preceding attempt. Owner: shared remote-check infrastructure. Evidence:
+`.temp/check-logs/329fcf97-436d-4af2-8e18-bd90f9b0334a.log` and
+`.temp/check-logs/580a377f-b3c2-493e-9d08-08d7e7d3a476.log`. The current-dev table remains 0/17; no current-dev
+persona, seed, elapsed journey time or per-row evidence was produced by these candidate checks.
+
 ## composed-discovery-cost
 
 **User job:** Anonymous and Alice find light novels tagged harem with more than 1,000,000 words, and vegetarian
@@ -370,7 +443,10 @@ the original finite operation (`maxAttempts=1`, ceiling 8) and receives
 `{fence, attempts, failedWork}` as `readonly {attempt,dispatch}[]`. Aggregate
 counters are ignored. Work `SDK_RETIREMENT_DISPATCH` prices the envelope and retire
 body; maintain/delete identities are not used. Failed funded work remains charged.
-Scan-page connection retry stays an explicit unbounded producer bound.
+Scan-page access is one pool query when opening a sweep and one page query for a nonempty captured upper key; the
+null-upper-key path returns without a query. The installed plain `pg.Pool` adds no application retry loop. Charge
+failed dispatch and any outer Auth/DBOS re-execution to the real operation context. This does not bound connection
+acquisition or elapsed time.
 Decision: fewest tests extend those existing suites only; no new suite.
 
 Run through the Auth owning runner:
@@ -385,9 +461,12 @@ examined rows, hits/reads and request/response bytes, including every consumer, 
 FK and request trigger in the original operation context. Raw pages, not deletion
 counts, price empty work. Test existence and clean typing provide no native pass.
 Personal closure accounts failed funded attempts and resumes the original writer
-identity after uncertain COMMIT; timeout never proves absence. Scan-page connection
-retry still has no finite attempt limit. Selection uses the received scan producer;
-no Auth-owned SDK SQL or synthetic fence is supplied here.
+identity after uncertain COMMIT; timeout never proves absence. The pinned scan producer
+issues one query to open a sweep and one query for a nonempty captured upper key; a
+null upper key issues none. The installed plain `pg.Pool` adds no application retry
+loop. Charge failed dispatch and any outer Auth/DBOS re-execution to the real operation;
+connection acquisition and elapsed time remain unbounded. Selection uses the received
+scan producer; no Auth-owned SDK SQL or synthetic fence is supplied here.
 
 ### Control-plane operation coverage
 

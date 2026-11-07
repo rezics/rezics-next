@@ -271,6 +271,21 @@ function eligible(account: PermissionAccount, actor: AccountActor): boolean {
   );
 }
 
+/** Pages keep their admitted type. Global point checks keep the SQL evaluator:
+ * unique-type inference would send first-holder grantor-must-hold through the
+ * core, while platform.governance role grants already satisfy that formula.
+ */
+function pointCheckPolicyResourceType(
+  catalogue: PolicyCatalogue,
+  action: string,
+  resource: Resource,
+  page?: ResourcePage,
+): string | undefined {
+  if (page?.resourceType !== undefined) return page.resourceType;
+  if (isPlatformResource(resource)) return undefined;
+  return uniqueNativePolicyResourceType(catalogue, action);
+}
+
 function preparedFormula(
   facts: Prepared,
   actor: Actor,
@@ -331,16 +346,6 @@ export async function checkPermission(
   return (await checkPreparedPermission(client, actor, action, resource, evidence, time, clock)).allowed;
 }
 
-/** A point Resource omits its type, so only a single registered type is inferable. The Global Context has no
- * type: platform governance holds its actions as exact role grants there, so SQL booleans decide that resource. */
-function inferredPolicyResourceType(
-  catalogue: Prepared['policyCatalogue'],
-  action: string,
-  resource: Resource,
-): string | undefined {
-  return isPlatformResource(resource) ? undefined : uniqueNativePolicyResourceType(catalogue, action);
-}
-
 async function checkPreparedPermission(
   client: AccessClient,
   actor: Actor,
@@ -396,8 +401,7 @@ async function checkPreparedPermission(
     };
     if (!stillValid()) return { allowed: false, explicit: false };
     const ids = page?.ids ?? [resource.id];
-    const policyResourceType =
-      page?.resourceType ?? inferredPolicyResourceType(facts.policyCatalogue, action, resource);
+    const policyResourceType = pointCheckPolicyResourceType(facts.policyCatalogue, action, resource, page);
     const policyCore =
       policyResourceType !== undefined && hasNativePolicyProfile(facts.policyCatalogue, action, policyResourceType);
     const formula = preparedFormula(facts, actor, action, resource, at, floor, policyCore, page, includeExplicit);
@@ -537,7 +541,7 @@ function preparedCheckWork(
     if (facts.verifyFloor && !owner) return undefined;
     // false is the larger serialized boolean; the mounted native plan is identical
     // for either eligibility outcome. Undispatched branches settle at zero.
-    const resourceType = inferredPolicyResourceType(facts.policyCatalogue, action, resource);
+    const resourceType = pointCheckPolicyResourceType(facts.policyCatalogue, action, resource);
     const policyCore =
       resourceType !== undefined && hasNativePolicyProfile(facts.policyCatalogue, action, resourceType);
     const formula = preparedFormula(facts, actor, action, resource, at, false, policyCore);

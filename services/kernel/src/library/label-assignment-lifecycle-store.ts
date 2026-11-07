@@ -29,7 +29,8 @@ export type PrivateLabelAssignment = Tuple & {
   purgeAfter: string | null;
   transactionId: string;
 };
-type Observed = NonNullable<Awaited<ReturnType<typeof read.run>>>;
+type ReadResult = Awaited<ReturnType<typeof read.run>>;
+type Observed = NonNullable<ReadResult extends readonly (infer Row)[] ? Row : ReadResult>;
 export type UnassignStoredLabelAssignmentResult =
   | { kind: 'applied'; assignment: PrivateLabelAssignment }
   | { kind: 'not_found' | 'stale' | 'migration_required' };
@@ -45,6 +46,11 @@ function timestamp(value: string): string {
   const iso = new Date(value).toISOString();
   const submillisecond = value.match(/\.(\d+)/)?.[1]?.slice(3) ?? '';
   return /[1-9]/.test(submillisecond) ? iso.replace('Z', `${submillisecond}Z`) : iso;
+}
+
+function firstObserved(result: ReadResult): Observed | undefined {
+  if (result == null) return;
+  return (Array.isArray(result) ? result[0] : result) as Observed;
 }
 
 function record(row: Omit<Observed, 'identityMatches' | 'started' | 'expired'>): PrivateLabelAssignment {
@@ -93,7 +99,7 @@ export async function readStoredLabelAssignment(client: Client, input: Tuple): P
     },
     outputRows: 1,
   });
-  const row = await executeLabelSql(plan, (input) => read.run(db, input));
+  const row = firstObserved(await executeLabelSql(plan, (input) => read.run(db, input)));
   return row ? record(row) : null;
 }
 
@@ -142,8 +148,8 @@ async function observe(client: Client, input: Expected, context: Context, expect
     },
     outputRows: 1,
   });
-  return executeLabelSql(plan, (operands) => read.run(db, operands)).then((row) => ({
-    row,
+  return executeLabelSql(plan, (operands) => read.run(db, operands)).then((result) => ({
+    row: firstObserved(result) ?? null,
     parentChanged: false as const,
   }));
 }

@@ -61,6 +61,7 @@ const serverIndependentTests = [
   'scripts/messages-ready.test.ts',
   'scripts/storybook-dev.test.ts',
   'tests/accounts-goal-journeys.test.ts',
+  'tests/first-public-journeys-walk.test.ts',
   'tests/focused-runner.test.ts',
   'tests/root-application-shell.test.tsx',
   'tests/server-custody.test.ts',

@@ -461,6 +461,19 @@ test('Entry/progress refuses before identity disclosure when collection authoriz
   expect(result).toMatchObject({ admitted: false, original: null, terminal: null });
   expect(result.admission.terms.map((term) => term.name)).toEqual(['collection-read-denied']);
   expect(disclosureReads).toBe(0);
+  const previous = peekLibraryDomain();
+  bindLibraryDomain(domain);
+  try {
+    await admitComposedEntryProgress({
+      actor,
+      subjectId,
+      deadline: Date.now() + 1_000,
+      at: { epoch: 1 },
+    });
+  } finally {
+    unbindLibraryDomain();
+    if (previous) bindLibraryDomain(previous);
+  }
 });
 
 test('owner-query filter uses the Search preparation capability and records nested admission on the ledger', async () => {

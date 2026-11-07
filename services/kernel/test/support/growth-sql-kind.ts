@@ -1,4 +1,5 @@
 export type GrowthSqlKind = 'statement' | 'control' | 'begin' | 'commit' | 'rollback' | 'rollback-to';
+export type GrowthSqlOffset = Readonly<{ operand: string; bareZero: boolean }>;
 
 const MULTI_COMMAND_CONTROL = 'multi-command SQL cannot be classified from its leading control keyword';
 
@@ -142,6 +143,141 @@ function kindFromLeadingWords(
   if (first === 'SAVEPOINT' || first === 'RELEASE') return 'control';
   if (first === 'SET' && (second === 'LOCAL' || second === 'TRANSACTION')) return 'control';
   return 'statement';
+}
+
+const OFFSET_BOUNDARIES = new Set(['ROW', 'ROWS', 'FETCH', 'LIMIT', 'FOR']);
+const OFFSET_CLAUSE_WORDS = new Set([
+  'AS',
+  'EXCEPT',
+  'FETCH',
+  'FOR',
+  'FROM',
+  'GROUP',
+  'HAVING',
+  'INTERSECT',
+  'JOIN',
+  'LIMIT',
+  'OFFSET',
+  'ON',
+  'ORDER',
+  'RETURNING',
+  'UNION',
+  'WHERE',
+  'WINDOW',
+]);
+const OFFSET_NON_CLAUSE_PREDECESSORS = new Set([
+  'ALL',
+  'AND',
+  'AS',
+  'BETWEEN',
+  'BY',
+  'CASE',
+  'DISTINCT',
+  'ELSE',
+  'FROM',
+  'GROUP',
+  'HAVING',
+  'IN',
+  'IS',
+  'JOIN',
+  'LIKE',
+  'NOT',
+  'ON',
+  'OR',
+  'ORDER',
+  'RETURNING',
+  'SELECT',
+  'SET',
+  'THEN',
+  'VALUES',
+  'WHEN',
+  'WHERE',
+  'WINDOW',
+]);
+
+function wordEnd(sql: string, start: number): number {
+  let index = start + 1;
+  while (index < sql.length && isIdentifierPart(sql[index]!)) index++;
+  return index;
+}
+
+function operandEnd(sql: string, start: number): number {
+  const afterLiteral = skipLiteral(sql, start);
+  if (afterLiteral !== start) return afterLiteral;
+  const first = sql[start];
+  if (first === undefined) return start;
+  if (isIdentifierPart(first)) return wordEnd(sql, start);
+  return start + 1;
+}
+
+function zeroHasClauseBoundary(sql: string, start: number): boolean {
+  const next = skipTrivia(sql, start);
+  if (next === sql.length || sql[next] === ';' || sql[next] === ')' || sql[next] === ',') return true;
+  if (!/[A-Za-z_]/.test(sql[next]!)) return false;
+  const end = wordEnd(sql, next);
+  return OFFSET_BOUNDARIES.has(sql.slice(next, end).toUpperCase());
+}
+
+function isLikelyOffsetClause(sql: string, start: number, previousToken: string | undefined): boolean {
+  if (
+    previousToken === undefined ||
+    OFFSET_NON_CLAUSE_PREDECESSORS.has(previousToken) ||
+    ['(', ',', '.', ';', '::', '+', '-', '*', '/', '%', '=', '<', '>', '!', '|', '&', '^'].includes(previousToken)
+  )
+    return false;
+
+  const operand = skipTrivia(sql, start);
+  const first = sql[operand];
+  if (first === undefined || first === ')' || first === ',' || first === ';') return false;
+  if (/[A-Za-z_]/.test(first)) {
+    const end = wordEnd(sql, operand);
+    if (OFFSET_CLAUSE_WORDS.has(sql.slice(operand, end).toUpperCase())) return false;
+  }
+  return true;
+}
+
+/** Finds executable OFFSET operands without matching comments, string bodies or quoted identifiers. */
+export function executableSqlOffsets(sql: string): readonly GrowthSqlOffset[] {
+  const offsets: GrowthSqlOffset[] = [];
+  let index = 0;
+  let previousToken: string | undefined;
+  while (index < sql.length) {
+    const afterTrivia = skipTrivia(sql, index);
+    if (afterTrivia !== index) {
+      index = afterTrivia;
+      continue;
+    }
+    const afterLiteral = skipLiteral(sql, index);
+    if (afterLiteral !== index) {
+      previousToken = '<literal>';
+      index = afterLiteral;
+      continue;
+    }
+    const first = sql[index]!;
+    if (/[A-Za-z_]/.test(first) || first.charCodeAt(0) >= 0x80) {
+      const end = wordEnd(sql, index);
+      if (sql.slice(index, end).toUpperCase() === 'OFFSET') {
+        const operandStart = skipTrivia(sql, end);
+        if (isLikelyOffsetClause(sql, end, previousToken)) {
+          const operandFinish = operandEnd(sql, operandStart);
+          const operand = sql.slice(operandStart, operandFinish);
+          const bareZero = operand === '0' && zeroHasClauseBoundary(sql, operandFinish);
+          offsets.push({ operand, bareZero });
+        }
+      }
+      previousToken = sql.slice(index, end).toUpperCase();
+      index = end;
+      continue;
+    }
+    if (index + 1 < sql.length && ['::', '||', '->', '>=', '<=', '<>', '!='].includes(sql.slice(index, index + 2))) {
+      previousToken = sql.slice(index, index + 2);
+      index += 2;
+      continue;
+    }
+    previousToken = first;
+    index++;
+  }
+  return offsets;
 }
 
 /** Classify only leading SQL tokens; comments and quoted or identifier lookalikes are not commands. */

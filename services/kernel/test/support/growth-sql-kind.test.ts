@@ -1,6 +1,6 @@
 import { expect, test } from 'bun:test';
 import { costOf, isControlStatement, type Capture } from './growth-cost.ts';
-import { classifyGrowthSql } from './growth-sql-kind.ts';
+import { classifyGrowthSql, executableSqlOffsets } from './growth-sql-kind.ts';
 import { readAttemptLedger } from './growth.ts';
 
 function captured(statements: string[], errors?: (string | null)[]): Capture {
@@ -26,6 +26,19 @@ test('classifies supported controls after SQL comments without matching lookalik
     expect(isControlStatement(sql)).toBe(false);
   expect(() => isControlStatement('/* comment only */')).toThrow(/empty or contains only comments/);
   expect(() => isControlStatement('/* unterminated')).toThrow(/unterminated leading SQL block comment/);
+});
+
+test('reads executable OFFSET clauses while ignoring comments and quoted lookalikes', () => {
+  expect(
+    executableSqlOffsets(`-- OFFSET 7
+      SELECT 'OFFSET 8', E'OFFSET 9', "OFFSET", $$ OFFSET 10 $$, value
+      OFFSET /* OFFSET 11 */ 0 LIMIT 3`),
+  ).toEqual([{ operand: '0', bareZero: true }]);
+  expect(executableSqlOffsets('SELECT 1 OFFSET 4')).toEqual([{ operand: '4', bareZero: false }]);
+  expect(executableSqlOffsets('SELECT 1 OFFSET 0 + 1')).toEqual([{ operand: '0', bareZero: false }]);
+  expect(executableSqlOffsets('SELECT value AS offset FROM labels')).toEqual([]);
+  expect(executableSqlOffsets('SELECT offset + 1, label.offset FROM labels')).toEqual([]);
+  expect(executableSqlOffsets(`SELECT 'OFFSET 4', $$ OFFSET 5 $$`)).toEqual([]);
 });
 
 test('commented transaction boundaries preserve savepoints, costs, and retry outcomes', () => {

@@ -2737,9 +2737,13 @@ attempts, waits, backoff and reconciliation before dispatch using Work
 `SDK_RETIREMENT_DISPATCH`, not maintain/delete identities. Failed work stays charged.
 A lost reply rereads that writer identity and never treats timeout as absence.
 Uncertain COMMIT resumes the same workflow/domain closure.
-`WorkflowRetirementBudgetError` remains charged. Scan-page connection retry remains
-unbounded producer evidence. Native plans, nested producer constants, bytes and
-original operation attribution require the owning checks after integration; capability
+`WorkflowRetirementBudgetError` remains charged. The pinned workflow-status scan issues
+one pool query to open a sweep and one page query for a nonempty captured upper key;
+the null-upper-key path returns without querying. The installed plain `pg.Pool` adds no
+application retry loop. Charge failed dispatch and any outer Auth/DBOS re-execution to
+the real operation context. This does not bound connection acquisition or elapsed time.
+Native plans, nested producer constants, bytes and original operation attribution require
+the owning checks after integration; capability
 limits are recorded in
 [Performance acceptance](../../docs/goals/performance.capabilities.md).
 Executable nested ceilings live in `src/retention-cost.ts`.

@@ -63,9 +63,10 @@ Kernel's registered list, and Global decisions retain command provenance; unregi
 Global path. Own-account and authenticated buyer facts retain their existing native action-specific sources.
 
 The point `Resource` has no resource-type field, so actions with no registered type or more than one target type keep
-the existing native SQL evaluator. For example, resource-role registrations bind `access:grant` to
-`community.realm`, `semantic.context` and `semantic.zone`; its point profile awaits a typed Resource. A batch for the
-same action can use the core only when its supplied type is registered. The pure evaluation adds no query, clock
+the existing native SQL evaluator. Kernel also keeps that SQL evaluator for Global Context point checks, because
+Global predates ordinary typed resources and carries `platform.governance` role grants. For example, resource-role
+registrations bind `access:grant` to `community.realm`, `semantic.context` and `semantic.zone`; its point profile
+awaits a typed Resource. A batch for the same action can use the core only when its supplied type is registered. The pure evaluation adds no query, clock
 read, scan, per-row read or retry; native preparation, one bounded formula statement and each consumer's existing
 disclosure checks keep their current bounds.
 

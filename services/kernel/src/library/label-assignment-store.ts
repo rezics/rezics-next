@@ -155,7 +155,8 @@ async function setLabelAssignmentInOperation(
     outputRows: parentInput.label_ids.length,
   });
   const locked = await executeLabelSql(parentPlan, (operands) => parents.run(db, operands));
-  const current = new Map(locked.map((parent) => [parent.labelId, parent]));
+  const parentRows = Array.isArray(locked) ? locked : locked ? [locked] : [];
+  const current = new Map(parentRows.map((parent) => [parent.labelId, parent]));
   const parent = current.get(labelId);
   if (!parent || parent.deletedAt !== null) return { kind: 'not_found' };
   if (input.expectedLabelRevision !== undefined && parent.revision !== input.expectedLabelRevision)

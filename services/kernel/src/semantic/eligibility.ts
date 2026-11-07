@@ -3,9 +3,11 @@ import type {
   ResourceEligibilityPrepareContext,
   ResourceEligibilityVerifyContext,
 } from '../access/public-eligibility.ts';
-import { EMPTY_ACCESS_WORK, type AccessWork, type AccessWorkProducer } from '../access/work.ts';
+import { addAccessWork, EMPTY_ACCESS_WORK, type AccessWork, type AccessWorkProducer } from '../access/work.ts';
 import type { PoolClient, QueryResultRow } from 'pg';
 import { withConnection } from '../database/pool.ts';
+import type { ReadDecisionEligibility } from '../request/access.ts';
+import { routeOf } from '../route/route.ts';
 import contextPublicExists from './context-public-exists.sql';
 import contextPublicEvidence from './context-public-evidence.sql';
 import { GLOBAL_SUBJECT_CONTEXT as GLOBAL_CONTEXT } from './contract/subject-values.ts';
@@ -144,6 +146,54 @@ export function globalReadEligibility(action: GlobalReadAction): ResourceEligibi
     prepare: prepare.run,
     verify: verify.run,
   });
+}
+
+/** Related-read floor for a bounded summary page: visibility alone, one exact subject point each. */
+export async function relatedReadVisibility(
+  client: ResourceEligibilityVerifyContext<unknown>['client'],
+  ids: readonly string[],
+): Promise<Readonly<Record<string, boolean>>> {
+  if (ids.length > 256) throw new TypeError('A related read accepts at most 256 ids');
+  const result: Record<string, boolean> = Object.create(null);
+  for (const id of ids) {
+    const route = routeOf(id);
+    if (route === null) {
+      result[id] = false;
+      continue;
+    }
+    const row = (await point(client, subjectPublicEvidence, { route, subject_id: id })) ?? null;
+    result[id] = row?.visibility === 'visible';
+  }
+  return result;
+}
+
+function relatedReadPointWork(ids: readonly string[]): AccessWork {
+  return addAccessWork(
+    EMPTY_ACCESS_WORK,
+    ...ids.map((id) => {
+      const route = routeOf(id);
+      return route === null ? EMPTY_ACCESS_WORK : pointWork({ route, id }, publicStateBytes, false);
+    }),
+  );
+}
+
+/** One ReadDecisions eligibility handle: the same points as related-read verify, declared once for the page. */
+export function relatedReadDecisionEligibility(): ReadDecisionEligibility {
+  const receipts = new WeakMap<object, AccessWork>();
+  const eligibility: ReadDecisionEligibility = async (client, ids) => {
+    const result = await relatedReadVisibility(client, ids);
+    receipts.set(ids, relatedReadPointWork(ids));
+    return result;
+  };
+  eligibility.work = {
+    bound: ({ ids }) => relatedReadPointWork(ids),
+    actual: ({ ids }) => {
+      const receipt = receipts.get(ids);
+      receipts.delete(ids);
+      return receipt;
+    },
+  };
+  return eligibility;
 }
 
 /** Related eligibility needs visibility alone; it never hydrates labels/history. */

@@ -3,6 +3,7 @@ import { existsSync, mkdtempSync, readFileSync, rmSync, watch } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { basename, dirname, join } from 'node:path';
 import {
+  commandNeedsSharedDevServer,
   privateNetworkCommand,
   runOwnedCommand,
   sharedViteChildEnvironment,
@@ -70,6 +71,20 @@ test('walk Vite keeps Cloudflare local without test runtime, fixture bindings or
   expect(child.WEB_VITE_CACHE_DIR).toBe('/tmp/walk-vite');
   expect(child.WEBSITE_CLIENT_KEY).toBe('from-caller');
   expect(child.NODE_OPTIONS).toBe('--max-old-space-size=8192');
+});
+
+test('first-public journey source pins do not start a shared Vite server', () => {
+  expect(commandNeedsSharedDevServer(['bun', 'test', 'tests/first-public-journeys-walk.test.ts'])).toBe(false);
+  expect(
+    commandNeedsSharedDevServer(['bun', 'test', '--max-concurrency=1', 'tests/first-public-journeys-walk.test.ts']),
+  ).toBe(false);
+  expect(commandNeedsSharedDevServer(['bun', 'test', 'apps/web/tests/first-public-journeys-walk.test.ts'])).toBe(false);
+  expect(commandNeedsSharedDevServer(['bun', 'test', 'tests/with-dev-server.test.ts'])).toBe(false);
+  expect(commandNeedsSharedDevServer(['bun', 'test', 'tests/search.test.ts'])).toBe(true);
+  expect(
+    commandNeedsSharedDevServer(['bun', 'test', 'tests/first-public-journeys-walk.test.ts', 'tests/search.test.ts']),
+  ).toBe(true);
+  expect(commandNeedsSharedDevServer(['bun', 'test'])).toBe(true);
 });
 
 test('private-network wrapping keeps the original command after the namespace setup', () => {

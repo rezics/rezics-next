@@ -134,7 +134,17 @@ function plans(raw: Capture) {
   for (const node of all.filter(
     (n) => n.Schema === 'library' && ['personal_label', 'label_assignment'].includes(String(n['Relation Name'])),
   )) {
-    expect(['Seq Scan', 'Bitmap Heap Scan']).not.toContain(node['Node Type']);
+    if (['Seq Scan', 'Bitmap Heap Scan'].includes(String(node['Node Type']))) {
+      const plan = raw.plans.find((candidate) => nodes(candidate).includes(node)) as
+        | { 'Query Text'?: string }
+        | undefined;
+      throw new Error(
+        `Unexpected ${String(node['Node Type'])} on library.${String(node['Relation Name'])}: ${JSON.stringify({
+          query: plan?.['Query Text'],
+          node,
+        })}`,
+      );
+    }
     const rows =
       (Number(node['Actual Rows']) + Number(node['Rows Removed by Filter'] ?? 0)) * Number(node['Actual Loops']);
     expect(rows).toBeLessThanOrEqual(node['Relation Name'] === 'personal_label' ? 33 : 32);

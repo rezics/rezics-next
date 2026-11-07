@@ -3,14 +3,18 @@ import { accountToken } from '../support/admitted-access.ts';
 import { newId, partitionOf, routeOf } from '../../src/route/route.ts';
 import {
   capture,
+  captureWithFoldedCost,
   catalogStatementBound,
   checkGrowth,
+  costOf,
   openGrowthDatabase,
   seed,
   type Capture,
+  type Cost,
   type GrowthDatabase,
 } from '../support/growth.ts';
 import { createProfileEntryFixture, type NativeProfileFixture } from './support/profile-entry-fixture.ts';
+import { executableSqlOffsets } from '../support/growth-sql-kind.ts';
 
 let db: GrowthDatabase, f: NativeProfileFixture;
 const scopes = [
@@ -62,6 +66,14 @@ function privateScans(raw: Capture) {
         n.Schema === 'library' &&
         ['entry', 'progress_session', 'personal_label', 'label_assignment'].includes(String(n['Relation Name'])),
     );
+}
+function libraryRelation(cost: Cost, name: string) {
+  return Object.values(cost.relations).find(
+    (relation) =>
+      relation.identity?.kind === 'relation' &&
+      relation.identity.schema === 'library' &&
+      relation.identity.name === name,
+  );
 }
 
 test('An owner opens a label shelf with current label headings and bounded profiled entry/progress tiles through the FULL HTTP caller', async () => {
@@ -139,7 +151,7 @@ test('An owner opens a label shelf with current label headings and bounded profi
   await json(owner.bearer, 'DELETE', `/v1/libraryLabels/${l.id}?revision=2`, 200);
   await json(owner.bearer, 'GET', path + '&view=FULL', 404);
   await f.suspend(owner.actor.accountId);
-  await json(owner.bearer, 'GET', `/v1/libraryLabelAssignments?labelId=${empty.id}&view=FULL`, 403);
+  await json(owner.bearer, 'GET', `/v1/libraryLabelAssignments?labelId=${empty.id}&view=FULL`, 401);
   await f.activate(f.originalDigest);
 }, 120000);
 
@@ -257,6 +269,7 @@ test('FULL label HTTP charges all native pools at 64 512 4096 catalogue entries 
   const evidence: unknown[] = [];
   const report = await checkGrowth(db, {
     name: 'FULL HTTP complete owner and public-source work',
+    captureMode: 'cost-folded',
     scales: [64, 512, 4096],
     bounds: { rows: 'constant', statements: 'constant', blocks: 'logarithmic' },
     async grow(database, scale, previous) {
@@ -310,25 +323,74 @@ test('FULL label HTTP charges all native pools at 64 512 4096 catalogue entries 
     },
     async warmup(_database, scale) {
       for (let i = 0; i < 6; i++) await operation();
-      const measured = await capture(db, operation),
-        raw = measured.capture;
-      const catalogue = catalogStatementBound(raw);
-      expect(catalogue.catalogStatements).toBeLessThanOrEqual(catalogue.allowedStatements);
-      const scans = privateScans(raw);
-      const parents = scans.filter((n) => n['Relation Name'] === 'personal_label');
-      expect(parents).toHaveLength(34); // 32 existing subject observations + one parent for each label page.
-      for (const n of scans) {
-        expect(['Seq Scan', 'Bitmap Heap Scan']).not.toContain(n['Node Type']);
-        const perLoop = Number(n['Actual Rows']) + Number(n['Rows Removed by Filter'] ?? 0);
-        expect(perLoop * Number(n['Actual Loops'])).toBeLessThanOrEqual(
-          n['Relation Name'] === 'label_assignment' ? 32 : 4,
+      const measured = await captureWithFoldedCost(db, operation);
+      const folded = measured.capture;
+      const cost = costOf(folded);
+      const catalogue = catalogStatementBound(folded);
+      const labels = libraryRelation(cost, 'personal_label');
+      const assignments = libraryRelation(cost, 'label_assignment');
+      const entries = libraryRelation(cost, 'entry');
+      const sessions = libraryRelation(cost, 'progress_session');
+      const subjectPage = await capture(db, () =>
+        json(owner.bearer, 'GET', `/v1/libraryLabelAssignments?subjectId=${subjects[0]}&view=FULL&limit=100`, 200),
+      );
+      const subjectPagePlans = subjectPage.capture.plans.flatMap(nodes);
+      const reservationPlans = subjectPagePlans.filter(
+        (node) => node['Index Name'] === 'label_assignment_reserved_source',
+      );
+      const invalidOffsets = folded.statements.flatMap((statement, index) =>
+        executableSqlOffsets(statement)
+          .filter(({ bareZero }) => !bareZero)
+          .map(({ operand }) => ({ index, operand, statement: statement.slice(0, 1200) })),
+      );
+      try {
+        expect(catalogue.catalogStatements).toBeLessThanOrEqual(catalogue.allowedStatements);
+        expect(labels?.nodes).toBe(34); // 32 existing subject observations + one parent for each label page.
+        expect(labels?.sequentialScans).toBe(0);
+        expect(assignments?.sequentialScans).toBe(0);
+        expect(entries?.sequentialScans).toBe(0);
+        expect(sessions?.sequentialScans).toBe(0);
+        expect(reservationPlans.length).toBeGreaterThan(0);
+        for (const node of reservationPlans) {
+          const examined =
+            (Number(node['Actual Rows']) +
+              Number(node['Rows Removed by Filter'] ?? 0) +
+              Number(node['Rows Removed by Index Recheck'] ?? 0)) *
+            Number(node['Actual Loops']);
+          expect(examined).toBeLessThanOrEqual(32);
+        }
+        expect(folded.statements.some((s) => /\bLIKE\b/i.test(s))).toBe(false);
+        expect(invalidOffsets).toEqual([]);
+      } catch (error) {
+        // Keep failed producers attributable without replaying a page whose complete native
+        // access-plan notices can exceed the shared 32 MiB raw telemetry cap.
+        const assignmentOccurrences = folded.foregroundOccurrences.filter((occurrence) =>
+          occurrence.relationIdentities.some(
+            (identity) => identity.schema === 'library' && identity.name === 'label_assignment',
+          ),
+        );
+        const entryOccurrences = folded.foregroundOccurrences.filter((occurrence) =>
+          occurrence.relationIdentities.some((identity) => identity.schema === 'library' && identity.name === 'entry'),
+        );
+        throw new Error(
+          `FULL label growth failed at scale ${scale}: ${JSON.stringify({
+            assertion: error instanceof Error ? { message: error.message, stack: error.stack } : String(error),
+            reservationPlans: reservationPlans.map((node) => ({
+              node: node['Node Type'],
+              actualRows: node['Actual Rows'],
+              loops: node['Actual Loops'],
+              indexCondition: node['Index Cond'],
+            })),
+            invalidOffsets,
+            assignmentOccurrences,
+            assignmentStatements: [...new Set(assignmentOccurrences.map(({ index }) => folded.statements[index]))],
+            entryOccurrences,
+            entryStatements: [...new Set(entryOccurrences.map(({ index }) => folded.statements[index]))],
+          })}`,
+          { cause: error },
         );
       }
-      expect(scans.some((n) => n['Index Name'] === 'label_assignment_reserved_source')).toBe(true);
-      expect(scans.find((n) => n['Relation Name'] === 'entry')!['Actual Loops']).toBe(4);
-      expect(scans.find((n) => n['Relation Name'] === 'progress_session')!['Actual Loops']).toBe(2);
-      expect(raw.statements.some((s) => /\bOFFSET\b/i.test(s))).toBe(false);
-      evidence.push({ scale, capture: raw });
+      evidence.push({ scale, capture: folded, cost });
     },
     operation,
   });

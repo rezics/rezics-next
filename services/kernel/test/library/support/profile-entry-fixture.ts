@@ -404,7 +404,8 @@ export async function createProfileEntryFixture(
     const owner = await identity([...entryScopes, ...(options.ownerScopes ?? [])], 0);
     const other = await identity(entryScopes, 0);
     await bootstrapGovernance(pool, steward.actor.accountId);
-    // Bootstrap writes platform.governance on the Global Context for this steward.
+    // platform.governance is the first Global holder. Ordinary grant commands then
+    // create the steward's definition and library grants; no test-only grant rows.
     // Grant-routes authenticates that original bearer onto a fresh command boundary
     // and records the live account/resource/role binding. gate:any on those original
     // scopes covers library-gate delegation; a minted sibling token does not.
@@ -522,6 +523,8 @@ export async function createProfileEntryFixture(
     await grantOnDeadline({ kind: 'account', id: steward.actor.accountId }, [
       'definitions:publish',
       'definitions:activate',
+      'subject:merge',
+      'gate:personal_library',
     ]);
     // Governance bootstrap already performed the Global parent's one-time installation.
     // Extend its standing creation authority through ordinary, fully authorized grants.
