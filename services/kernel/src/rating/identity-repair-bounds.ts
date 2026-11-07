@@ -1,4 +1,4 @@
-import { RATING_IDENTITY_PAGE_SIZE } from './identity-work-frame.ts';
+import { RATING_IDENTITY_PAGE_SIZE } from './identity-work-frame-limits.ts';
 
 /** Closed work vector for one Rating identity-repair native step. Engine MVCC is outside this claim. */
 export type IdentityRepairWork = Readonly<{

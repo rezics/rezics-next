@@ -1,5 +1,5 @@
 import { Type, type Static } from 'typebox';
-import { COMMUNITY_LOG_POSITION, COMMUNITY_ROUTED_UUID, COMMUNITY_UUID } from './contract/index.ts';
+import { COMMUNITY_LOG_POSITION, COMMUNITY_ROUTED_UUID, COMMUNITY_UUID } from './contract/literals.ts';
 
 const logId = Type.String({ pattern: COMMUNITY_UUID });
 const routedId = Type.String({ pattern: COMMUNITY_ROUTED_UUID });

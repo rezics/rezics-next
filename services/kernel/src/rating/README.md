@@ -1666,8 +1666,8 @@ Semantic adapters and kernel test preload). HTTP `createKernel` consumes the bou
 `createRatingModule` and does not import the composition installer. Ordinary `application().identityRepair`
 uses the bound producer and `createIdentityRepairRead` for independent counted-vote, ordered-outbox, receipt
 obligation/mapping-digest and checkpoint observations. Native installed-composition acceptance is
-`test/rating/identity-repair-native.test.ts`. Performance Cost vectors live in `identity-repair-bounds.ts` and the
-Cost subsections below. `test/rating/growth-identity-repair.test.ts` keeps injected seam series distinct from
+`test/rating/identity-repair-native.test.ts`. Cost vectors in `identity-repair-bounds.ts`; page size
+`identity-work-frame-limits.ts`. `test/rating/growth-identity-repair.test.ts` keeps injected seam series distinct from
 installed native growth of the bound producer.
 
 Decision: ordinary installed Rating identity repair uses the Semantic producer bound by host composition; omitting

@@ -15,6 +15,7 @@ import {
   sumOriginalControl,
   type AccessWorkDimensions,
 } from './core/index.ts';
+import { ACCOUNT_IDENTITY_FENCE_SQL } from './agent-verification-identity-literals.ts';
 import intentRead from './agent-verification-identity-read.sql';
 import technicalRead from './agent-verification-identity-technical-read.sql';
 import settlementRead from './agent-verification-identity-reversal-read.sql';
@@ -30,8 +31,7 @@ const declare = (work: AccessWorkDimensions): AccountIdentityWorkDeclaration => 
   return Object.freeze({ work, engineRequests: 0 as const });
 };
 
-/** Account terminal fence preceding any intent or technical disclosure. */
-export const ACCOUNT_IDENTITY_FENCE_SQL = `SELECT kind,state,authn_fenced FROM access.account WHERE route=$1 AND account_id=$2 FOR SHARE`;
+export { ACCOUNT_IDENTITY_FENCE_SQL };
 
 /** Subject-only technical role inventory; LIMIT 2 refuses a widened payload. */
 export const ACCOUNT_IDENTITY_TECHNICAL_ROLE_SQL = `SELECT role_account_id::text AS account_id,roles FROM access.agent_identity_technical_role

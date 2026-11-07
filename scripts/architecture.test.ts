@@ -12,6 +12,9 @@ import {
   type BoundaryBaseline,
   loadBaseline,
   loadManifest,
+  MAX_MODULE_MAP_CHARACTERS,
+  MODULE_MAP_POINTER,
+  MODULE_MAP_TRUNCATION,
   validateBaseline,
   writeGraphCache,
 } from './architecture';
@@ -246,14 +249,6 @@ describe('architecture boundaries', () => {
       ),
     ).toEqual([
       {
-        binding: 'ScopeWork',
-        column: 36,
-        file: 'services/kernel/src/library/builtin-runtime-query.ts',
-        initializer: 'ClassDeclaration',
-        line: 30,
-        specifier: '../search/scope-execution.ts',
-      },
-      {
         binding: 'CollectionSourceLedger',
         column: 30,
         file: 'services/kernel/src/zones/membership.ts',
@@ -330,16 +325,67 @@ describe('architecture boundaries', () => {
     const output = formatModuleMap(current);
     expect(output).toContain('core|c|@/core:{.,contracts/*}|-');
     expect(output.length).toBeLessThanOrEqual(2_000);
+
+    const bulky = manifest(
+      Array.from({ length: 80 }, (_, index) => ({
+        id: `mod${String(index).padStart(3, '0')}`,
+        kind: 'core' as const,
+        owner: 'platform',
+        paths: [`src/m${index}/**`],
+        publicEntries: Array.from(
+          { length: 12 },
+          (_, entry) => `src/m${index}/entry-${entry}-quite-long-public-name.ts`,
+        ),
+        allowedDependencies: [],
+        capabilities: [],
+      })),
+    );
+    const overflowing = formatModuleMap(bulky);
+    expect(overflowing.length).toBeLessThanOrEqual(MAX_MODULE_MAP_CHARACTERS);
+    expect(overflowing).toContain(MODULE_MAP_TRUNCATION);
+    expect(overflowing).toContain('mod000|');
   });
 
   test('keeps a path-selected module map complete when it fits the worker map budget', () => {
     const committed = loadManifest(process.cwd());
     const selected = formatModuleMap(committed, ['services/kernel/src/search/query.ts']);
     expect(selected).toContain('ksearch|');
-    expect(selected).toContain('Other modules: docs/architecture/modules.json');
-    expect(selected).not.toContain('... more modules');
+    expect(selected).toContain(MODULE_MAP_POINTER);
+    expect(selected).not.toContain(MODULE_MAP_TRUNCATION);
     expect(selected).not.toMatch(/^wsearch\|/m);
-    expect(selected.length).toBeLessThanOrEqual(6_800);
+    expect(selected.length).toBeLessThanOrEqual(MAX_MODULE_MAP_CHARACTERS);
+    expect(selected).toMatch(/^ksearch\|d\|/m);
+
+    const overflowing = manifest([
+      {
+        id: 'owned',
+        kind: 'adapter',
+        owner: 'platform',
+        paths: ['src/owned/**'],
+        publicEntries: ['src/owned/index.ts', 'src/owned/public.ts'],
+        allowedDependencies: Array.from({ length: 40 }, (_, index) => `dep${String(index).padStart(2, '0')}`),
+        capabilities: [],
+      },
+      ...Array.from({ length: 40 }, (_, index) => ({
+        id: `dep${String(index).padStart(2, '0')}`,
+        kind: 'core' as const,
+        owner: 'platform',
+        paths: [`src/d${index}/**`],
+        publicEntries: Array.from(
+          { length: 16 },
+          (_, entry) => `src/d${index}/entry-${entry}-quite-long-public-name.ts`,
+        ),
+        allowedDependencies: [],
+        capabilities: [],
+      })),
+    ]);
+    const overflow = formatModuleMap(overflowing, ['src/owned/index.ts']);
+    expect(overflow.length).toBeLessThanOrEqual(MAX_MODULE_MAP_CHARACTERS);
+    expect(overflow).toContain('owned|');
+    expect(overflow).toContain('src/owned:{index.ts,public.ts}');
+    expect(overflow).toContain('dep00,dep01');
+    expect(overflow).toContain(MODULE_MAP_POINTER);
+    expect(overflow).toContain(MODULE_MAP_TRUNCATION);
   });
 
   test('registers extracted packages and admitted source edges at public entries', () => {
@@ -423,7 +469,7 @@ describe('architecture boundaries', () => {
     expectImports(
       '@rezics/bounds',
       'packages/bounds/src/index.ts',
-      'services/kernel/src/history/core/operational-work-axes.ts services/kernel/src/history/core/operational-work-budget.ts services/kernel/src/library/canonical-source-bounds.ts services/kernel/src/library/label-command-admission.ts services/kernel/src/library/collection-directory-bounds.ts services/kernel/src/library/collection-history-bounds.ts services/kernel/src/library/collection-kind-input-bounds.ts services/kernel/src/library/collection-order-bounds.ts services/kernel/src/library/collection-publication-bounds.ts services/kernel/src/library/collection-retention-bounds.ts services/kernel/src/library/collection-rule-edit-bounds.ts services/kernel/src/library/collection-rule-read-bounds.ts services/kernel/src/library/collection-selected-publication-bounds.ts services/kernel/src/library/collection-source-native.ts services/kernel/src/library/collection-source-work-native.ts services/kernel/src/library/command-support.ts services/kernel/src/library/copy-operation-bounds.ts services/kernel/src/library/entry-operation-bounds.ts services/kernel/src/library/follow-operation-bounds.ts services/kernel/src/library/identity-native-bounds.ts services/kernel/src/library/identity-original-work.ts services/kernel/src/library/label-operation-bounds.ts services/kernel/src/library/loan-operation-bounds.ts services/kernel/src/library/members-preparation-budget.ts services/kernel/src/library/native-public-output-bounds.ts services/kernel/src/library/native-source-custody-bounds.ts services/kernel/src/library/ordinary-read-bounds.ts services/kernel/src/library/pin-operation-bounds.ts services/kernel/src/library/published-log-bounds.ts services/kernel/src/library/session-operation-bounds.ts services/kernel/src/library/shelf-maintenance-bounds.ts services/kernel/src/library/subject-collection-read-bounds.ts services/kernel/src/search/scope-members-source-declaration.ts services/kernel/src/search/service-scope-order.ts services/kernel/src/semantic/public-filter-collection-reduction-work.ts services/kernel/src/work/adapters/native.ts services/kernel/src/work/core/selected-cost.ts',
+      'services/kernel/src/history/core/operational-work-axes.ts services/kernel/src/history/core/operational-work-budget.ts services/kernel/src/library/canonical-source-bounds.ts services/kernel/src/library/label-command-admission.ts services/kernel/src/library/collection-directory-bounds.ts services/kernel/src/library/collection-history-bounds.ts services/kernel/src/library/collection-kind-input-bounds.ts services/kernel/src/library/collection-order-bounds.ts services/kernel/src/library/collection-publication-bounds.ts services/kernel/src/library/collection-retention-bounds.ts services/kernel/src/library/collection-rule-edit-bounds.ts services/kernel/src/library/collection-rule-read-bounds.ts services/kernel/src/library/collection-selected-publication-bounds.ts services/kernel/src/library/collection-source-native.ts services/kernel/src/library/collection-source-work-native.ts services/kernel/src/library/command-support.ts services/kernel/src/library/copy-operation-bounds.ts services/kernel/src/library/core/identity-bounds.ts services/kernel/src/library/core/page-plan.ts services/kernel/src/library/entry-operation-bounds.ts services/kernel/src/library/follow-operation-bounds.ts services/kernel/src/library/identity-native-bounds.ts services/kernel/src/library/identity-original-work.ts services/kernel/src/library/label-operation-bounds.ts services/kernel/src/library/loan-operation-bounds.ts services/kernel/src/library/members-preparation-budget.ts services/kernel/src/library/native-public-output-bounds.ts services/kernel/src/library/native-source-custody-bounds.ts services/kernel/src/library/pin-operation-bounds.ts services/kernel/src/library/published-log-bounds.ts services/kernel/src/library/published-log-native.ts services/kernel/src/library/session-operation-bounds.ts services/kernel/src/library/shelf-maintenance-bounds.ts services/kernel/src/library/subject-collection-read-bounds.ts services/kernel/src/search/scope-members-source-declaration.ts services/kernel/src/search/service-scope-order.ts services/kernel/src/semantic/public-filter-collection-reduction-work.ts services/kernel/src/work/adapters/native.ts services/kernel/src/work/core/selected-cost.ts',
     );
     expectImports(
       '@rezics/operations',

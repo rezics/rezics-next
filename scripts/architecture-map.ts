@@ -113,6 +113,29 @@ function moduleOwnsPath(module: ArchitectureModule, path: string): boolean {
   return module.paths.some((pattern) => prefixesOverlap(briefPrefix, pathPrefix(pattern)));
 }
 
+function groupPathEntries(entries: readonly string[]): string[] {
+  const byDirectory = new Map<string, string[]>();
+  const rest: string[] = [];
+  for (const entry of entries) {
+    const slash = entry.lastIndexOf('/');
+    if (slash <= 0) {
+      rest.push(entry);
+      continue;
+    }
+    const directory = entry.slice(0, slash);
+    const base = entry.slice(slash + 1);
+    const grouped = byDirectory.get(directory) ?? [];
+    grouped.push(base);
+    byDirectory.set(directory, grouped);
+  }
+  const compact: string[] = [];
+  for (const directory of [...byDirectory.keys()].sort()) {
+    const bases = byDirectory.get(directory)!.sort();
+    compact.push(bases.length === 1 ? `${directory}/${bases[0]!}` : `${directory}:{${bases.join(',')}}`);
+  }
+  return [...compact, ...rest.sort()];
+}
+
 function moduleEntryLabel(module: ArchitectureModule): string {
   const entries = module.publicEntries;
   if (!entries.length) return '-';
@@ -136,7 +159,7 @@ function moduleEntryLabel(module: ArchitectureModule): string {
     const sorted = values.sort();
     return sorted.length === 1 && sorted[0] === '.' ? prefix : `${prefix}:{${sorted.join(',')}}`;
   });
-  return [...compact, ...other.sort()].join(',');
+  return [...compact, ...groupPathEntries(other)].join(',');
 }
 
 function moduleMapRow(module: ArchitectureModule): string {
@@ -146,49 +169,66 @@ function moduleMapRow(module: ArchitectureModule): string {
   );
 }
 
+function compareModuleId(left: ArchitectureModule, right: ArchitectureModule): number {
+  return left.id.localeCompare(right.id);
+}
+
 function renderModuleMap(modules: readonly ArchitectureModule[]): { legend: string; rows: string[]; text: string } {
-  const rows = modules
-    .slice()
-    .sort((left, right) => left.id.localeCompare(right.id))
-    .map(moduleMapRow);
+  const rows = modules.slice().sort(compareModuleId).map(moduleMapRow);
   return { legend: MODULE_MAP_LEGEND, rows, text: [MODULE_MAP_LEGEND, ...rows].join('\n') };
 }
 
-export function modulesForBriefPaths(manifest: ArchitectureManifest, paths: readonly string[]): ArchitectureModule[] {
-  const byId = new Map(manifest.modules.map((module) => [module.id, module]));
-  const owned = new Set<ArchitectureModule>();
+function fitRows(legend: string, rows: readonly string[], suffix: string, truncation: string): string {
+  const extra = suffix ? `\n${suffix}` : '';
+  const omitted = `\n${truncation}`;
+  let kept = legend;
+  for (const row of rows) {
+    if (kept.length + 1 + row.length + omitted.length + extra.length > MAX_MODULE_MAP_CHARACTERS)
+      return kept + omitted + extra;
+    kept += `\n${row}`;
+  }
+  return kept + extra;
+}
+
+function ownedModulesForBriefPaths(manifest: ArchitectureManifest, paths: readonly string[]): ArchitectureModule[] {
+  const owned = new Map<string, ArchitectureModule>();
   for (const raw of paths) {
     const path = normalizeBriefPath(raw);
     if (!path) continue;
     for (const module of manifest.modules) {
-      if (moduleOwnsPath(module, path)) owned.add(module);
+      if (moduleOwnsPath(module, path)) owned.set(module.id, module);
     }
   }
+  return [...owned.values()].sort(compareModuleId);
+}
+
+export function modulesForBriefPaths(manifest: ArchitectureManifest, paths: readonly string[]): ArchitectureModule[] {
+  const byId = new Map(manifest.modules.map((module) => [module.id, module]));
   const selected = new Map<string, ArchitectureModule>();
-  for (const module of owned) {
+  for (const module of ownedModulesForBriefPaths(manifest, paths)) {
     selected.set(module.id, module);
     for (const dependency of module.allowedDependencies) {
       const resolved = byId.get(dependency);
       if (resolved) selected.set(resolved.id, resolved);
     }
   }
-  return [...selected.values()].sort((left, right) => left.id.localeCompare(right.id));
+  return [...selected.values()].sort(compareModuleId);
 }
 
 export function formatModuleMap(manifest: ArchitectureManifest, paths?: readonly string[]): string {
-  if (paths) {
-    const { text } = renderModuleMap(modulesForBriefPaths(manifest, paths));
-    return `${text}\n${MODULE_MAP_POINTER}`;
+  if (!paths) {
+    const { legend, rows, text } = renderModuleMap(manifest.modules);
+    if (text.length <= MAX_MODULE_MAP_CHARACTERS) return text;
+    return fitRows(legend, rows, '', MODULE_MAP_TRUNCATION);
   }
-  const { legend, rows, text } = renderModuleMap(manifest.modules);
-  if (text.length <= MAX_MODULE_MAP_CHARACTERS) return text;
-  const omitted = `\n${MODULE_MAP_TRUNCATION}`;
-  let kept = legend;
-  for (const row of rows) {
-    if (kept.length + 1 + row.length + omitted.length > MAX_MODULE_MAP_CHARACTERS) return kept + omitted;
-    kept += `\n${row}`;
-  }
-  return kept;
+  const owned = ownedModulesForBriefPaths(manifest, paths);
+  const selected = modulesForBriefPaths(manifest, paths);
+  const { legend, text } = renderModuleMap(selected);
+  const complete = `${text}\n${MODULE_MAP_POINTER}`;
+  if (complete.length <= MAX_MODULE_MAP_CHARACTERS) return complete;
+  const ownedIds = new Set(owned.map((module) => module.id));
+  const prioritized = [...owned, ...selected.filter((module) => !ownedIds.has(module.id)).sort(compareModuleId)];
+  return fitRows(legend, prioritized.map(moduleMapRow), MODULE_MAP_POINTER, MODULE_MAP_TRUNCATION);
 }
 
 export function loadManifest(rootInput: string): ArchitectureManifest {

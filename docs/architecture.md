@@ -83,6 +83,10 @@ capabilities it registers. The kinds are:
 
 Decision: Kernel computed values use memoized getters that retain value identity; literal-only leaves remain eager.
 The syntax-tree architecture check enforces this at file boundaries, including within an architecture module.
+Access account-fence SQL is the `agent-verification-identity-literals.ts` public entry; Community UUID and
+log-position strings are `community/contract/literals.ts`; Rating identity page size is
+`identity-work-frame-limits.ts`. Callers import those leaves. They do not evaluate identity work, the contract
+barrel or the native work-frame at load. Repair vectors keep local arithmetic from the page-size leaf.
 
 Decision: Semantic subject facts, item projection and canonical identity run through registered contract, core,
 application and adapter modules. Inward code uses Semantic-owned ports for Library custody, Search currentness,
@@ -111,7 +115,8 @@ landing's final candidate. It needs no database and runs in seconds. Workers run
 before handoff. Receive changes through that manifest and check using actual public edges; do not add another writer,
 an alias edge or an allowance. Every worker prompt carries the compact module-map rows for the modules that own the
 brief's paths, plus those modules' allowed dependencies, and a one-line pointer to `docs/architecture/modules.json` for
-the rest.
+the rest. The shared formatter groups public entries by directory and enforces the 6,800-character bound on full and
+path-selected maps; an overflowing selected map keeps the owned module's public entries and allowed dependencies.
 
 The production Kernel has one `createKernel` composition for module, route, event and resource registrations. Queue
 registration completes before DBOS launch, and the composition injects one clock. Exposure, initializer and event

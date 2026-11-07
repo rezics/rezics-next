@@ -15,9 +15,8 @@ export {
   COMMUNITY_ROUTED_UUID_PATTERN,
   COMMUNITY_UUID,
   COMMUNITY_UUID_PATTERN,
-  isCommunityRoutedUuid,
-  isCommunityUuid,
-} from './vocabulary.ts';
+} from './literals.ts';
+export { isCommunityRoutedUuid, isCommunityUuid } from './vocabulary.ts';
 export {
   COMMUNITY_DISCOVERY_PAGE,
   COMMUNITY_PARTITION_COUNT,
