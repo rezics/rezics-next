@@ -17,6 +17,8 @@ export type JourneyTableExtras = {
   kernel?: { ok: boolean; detail: string };
   signIn?: { ok: boolean; detail: string };
   seedCause?: string;
+  seedElapsedMs?: number;
+  hydration?: { ok: boolean; detail: string; elapsedMs: number };
 };
 
 function formatElapsed(ms: number): string {
@@ -50,7 +52,14 @@ export function capabilitiesTableMarkdown(
     extras.kernel ? `Kernel/JWKS probe: ${extras.kernel.detail}.` : '',
     extras.signIn ? `Sign-in probe: ${extras.signIn.detail}.` : '',
     extras.seedCause
-      ? `Cross-media seed: ${escapeTableCell(extras.seedCause)}. Mixed anonymous paths still ran; Semantic owns importer transport.`
+      ? `Cross-media seed: ${escapeTableCell(extras.seedCause)}${
+          extras.seedElapsedMs === undefined ? '' : ` (${formatElapsed(extras.seedElapsedMs)})`
+        }. Mixed anonymous paths still ran; Semantic owns importer transport.`
+      : extras.seedElapsedMs === undefined
+        ? ''
+        : `Cross-media seed elapsed ${formatElapsed(extras.seedElapsedMs)}.`,
+    extras.hydration
+      ? `Public /en hydration: ${extras.hydration.ok ? 'reached' : 'failed'} in ${formatElapsed(extras.hydration.elapsedMs)} (${escapeTableCell(extras.hydration.detail)}).`
       : '',
     'Secret-free evidence is `.temp/goal/performance/evidence.json` in this attempt. Phone and desktop viewports ran for each reached path.',
     '',

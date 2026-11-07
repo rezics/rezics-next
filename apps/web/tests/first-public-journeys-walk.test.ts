@@ -63,12 +63,23 @@ test('the walk continues mixed anonymous paths when seed writes no result.json',
   expect(frontends).toBeGreaterThan(seed);
   expect(source.slice(seed, frontends)).not.toMatch(/failRest\(/);
   expect(source.slice(seed, frontends)).toContain("handle: 'developer'");
+  expect(source).toContain("`${stack.web}/auth/sign-in?return_to=${encodeURIComponent('/en/settings')}`");
+  expect(source).not.toContain('/en/auth/sign-in?return_to');
+  expect(source).toContain('/v1/definitions/active');
+  expect(source).toContain('`${stack.kernel}/health`');
+  expect(source).toContain("query: { accountId: ctx.seed.accountId, limit: '5' }");
   const markdown = capabilitiesTableMarkdown(
     'abc123def0',
     'fd920c9cdb',
     [{ id: 'P02', status: 'FAIL-unreached', persona: 'anonymous', elapsedMs: 1200, firstWrong: 'save unreached' }],
-    { seedCause: 'seed exited 1: Import transport request failed' },
+    {
+      seedCause: 'seed exited 1: Import transport request failed',
+      seedElapsedMs: 4_200,
+      hydration: { ok: false, detail: 'html[data-hydrated] timeout', elapsedMs: 60_000 },
+    },
   );
   expect(markdown).toContain('Import transport request failed');
+  expect(markdown).toContain('4.200 s');
   expect(markdown).toContain('Mixed anonymous paths still ran');
+  expect(markdown).toContain('Public /en hydration: failed');
 });

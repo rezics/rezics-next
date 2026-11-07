@@ -1,5 +1,6 @@
 import { expect, test } from 'bun:test';
 import {
+  commandNeedsSharedDevServer,
   privateNetworkCommand,
   sharedViteChildEnvironment,
   webTestPrivateNetworkEnvName,
@@ -25,6 +26,24 @@ test('the shared Vite child fills example Worker bindings without replacing a ca
   expect(caller.WEB_VITE_CACHE_DIR).toBe('/tmp/vite-cache');
   expect(caller.CLOUDFLARE_VITE_FORCE_LOCAL).toBe('true');
   expect(caller.CLOUDFLARE_CF_FETCH_ENABLED).toBe('false');
+});
+
+test('the first-public journey source pin does not start a shared Vite server', () => {
+  expect(commandNeedsSharedDevServer(['bun', 'test', 'tests/first-public-journeys-walk.test.ts'])).toBe(false);
+  expect(
+    commandNeedsSharedDevServer(['bun', 'test', '--max-concurrency=1', 'tests/first-public-journeys-walk.test.ts']),
+  ).toBe(false);
+  expect(commandNeedsSharedDevServer(['bun', 'test', 'apps/web/tests/first-public-journeys-walk.test.ts'])).toBe(false);
+  expect(commandNeedsSharedDevServer(['bun', 'test', 'tests/search.test.ts'])).toBe(true);
+  expect(
+    commandNeedsSharedDevServer([
+      'bun',
+      'test',
+      'tests/first-public-journeys-walk.test.ts',
+      'tests/with-dev-server.test.ts',
+    ]),
+  ).toBe(true);
+  expect(commandNeedsSharedDevServer(['bun', 'test'])).toBe(true);
 });
 
 test('private-network wrapping keeps the original command after the namespace setup', () => {

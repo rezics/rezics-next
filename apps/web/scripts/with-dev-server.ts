@@ -34,8 +34,18 @@ export function sharedViteChildEnvironment(
   return child;
 }
 
+const namedTestFile = /\.test\.[cm]?[jt]sx?$/u;
+const firstPublicJourneySourcePin = /(?:^|\/)first-public-journeys-walk\.test\.[cm]?[jt]sx?$/u;
+
+/** Shared Vite is for page tests. The 17-path walk source pin only reads files. */
 export function commandNeedsSharedDevServer(command: string[]): boolean {
-  return command[0] === 'bun' && command[1] === 'test';
+  if (command[0] !== 'bun' || command[1] !== 'test') return false;
+  const files = command
+    .slice(2)
+    .filter((argument) => !argument.startsWith('-') && namedTestFile.test(argument))
+    .map((argument) => argument.replaceAll('\\', '/'));
+  if (files.length > 0 && files.every((file) => firstPublicJourneySourcePin.test(file))) return false;
+  return true;
 }
 
 export function privateNetworkCommand(command: string[]): string[] {

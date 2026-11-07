@@ -41,6 +41,7 @@ const keysPath = join(root, '.temp/local-stack/keys.json');
 const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const phone = { width: 390, height: 844 };
 const desktop = { width: 1280, height: 860 };
+let hydrateBudgetMs = 180_000;
 
 export const SIGN_IN_STARTUP_CAUSE =
   'issuer JWKS origin differs from native Auth JWKS after ce33 ea7dc5fe59; recorded, not repaired here';
@@ -200,7 +201,30 @@ async function readSeed(): Promise<Seed> {
 }
 
 async function hydrated(page: Page): Promise<void> {
-  await page.locator('html[data-hydrated]').waitFor({ state: 'attached', timeout: 180_000 });
+  await page.locator('html[data-hydrated]').waitFor({ state: 'attached', timeout: hydrateBudgetMs });
+}
+
+async function probeHydration(
+  page: Page,
+  origin: string,
+): Promise<{ ok: boolean; detail: string; elapsedMs: number }> {
+  const started = performance.now();
+  try {
+    const response = await page.goto(`${origin}/en`, { waitUntil: 'domcontentloaded', timeout: 60_000 });
+    await page.locator('html[data-hydrated]').waitFor({ state: 'attached', timeout: 60_000 });
+    return {
+      ok: true,
+      detail: `GET /en HTTP ${response?.status() ?? 0}`,
+      elapsedMs: Math.round(performance.now() - started),
+    };
+  } catch (error) {
+    hydrateBudgetMs = 15_000;
+    return {
+      ok: false,
+      detail: error instanceof Error ? error.message : String(error),
+      elapsedMs: Math.round(performance.now() - started),
+    };
+  }
 }
 
 async function gotoPage(page: Page, url: string): Promise<{ status: number; url: string }> {
@@ -222,7 +246,7 @@ async function probeSignIn(stack: Stack): Promise<{ ok: boolean; detail: string 
   const nativeJwks = await http(`${stack.native}/.well-known/jwks.json`);
   const discovery = await http(`${stack.issuer}/.well-known/openid-configuration`);
   const login = await http(`${stack.issuer}/login`);
-  const signIn = await http(`${stack.web}/en/auth/sign-in?return_to=${encodeURIComponent('/en/settings')}`);
+  const signIn = await http(`${stack.web}/auth/sign-in?return_to=${encodeURIComponent('/en/settings')}`);
   const sameOrigin = new URL(stack.issuer).origin === new URL(stack.native).origin;
   const nativeKeys = nativeJwks.status < 500;
   const issuerKeys = issuerJwks.status < 500 && /"keys"\s*:/.test(issuerJwks.text);
@@ -240,14 +264,14 @@ async function probeSignIn(stack: Stack): Promise<{ ok: boolean; detail: string 
   }
   return {
     ok: true,
-    detail: `issuer JWKS HTTP ${issuerJwks.status}; native JWKS HTTP ${nativeJwks.status}; login HTTP ${login.status}`,
+    detail: `issuer JWKS HTTP ${issuerJwks.status}; native JWKS HTTP ${nativeJwks.status}; login HTTP ${login.status}; web sign-in HTTP ${signIn.status}`,
   };
 }
 
 async function probeKernel(stack: Stack): Promise<{ ok: boolean; detail: string }> {
-  const definitions = await http(`${stack.kernel}/v1/definitions`);
+  const definitions = await http(`${stack.kernel}/v1/definitions/active`);
   const nativeJwks = await http(`${stack.native}/.well-known/jwks.json`);
-  const worker = await http(`${stack.kernel}/v1/health`).catch((error: Error) => ({
+  const worker = await http(`${stack.kernel}/health`).catch((error: Error) => ({
     status: 0,
     headers: {},
     text: error.message,
@@ -255,7 +279,7 @@ async function probeKernel(stack: Stack): Promise<{ ok: boolean; detail: string 
   const ok = definitions.status < 500 && nativeJwks.status < 500;
   return {
     ok,
-    detail: `kernel /v1/definitions HTTP ${definitions.status}; native JWKS HTTP ${nativeJwks.status}; kernel /v1/health HTTP ${worker.status}`,
+    detail: `kernel /v1/definitions/active HTTP ${definitions.status}; native JWKS HTTP ${nativeJwks.status}; kernel /health HTTP ${worker.status}`,
   };
 }
 
@@ -275,6 +299,8 @@ async function writeCapabilitiesTable(
     kernel?: { ok: boolean; detail: string };
     signIn?: { ok: boolean; detail: string };
     seedCause?: string;
+    seedElapsedMs?: number;
+    hydration?: { ok: boolean; detail: string; elapsedMs: number };
   } = {},
 ): Promise<void> {
   const base = (await gitRevision(['merge-base', 'HEAD', 'dev']).catch(() => '')) || source;
@@ -581,7 +607,10 @@ async function walkP16(ctx: WalkContext): Promise<unknown> {
 }
 
 async function walkAnonymousLog(ctx: WalkContext): Promise<{ id?: string; url?: string; status: number; empty: boolean }> {
-  const listed = await kernel(ctx.stack, 'GET', '/v1/publishedLogs', { query: { limit: '5' } });
+  if (typeof ctx.seed.accountId !== 'string') return { status: 0, empty: true };
+  const listed = await kernel(ctx.stack, 'GET', '/v1/publishedLogs', {
+    query: { accountId: ctx.seed.accountId, limit: '5' },
+  });
   const items =
     (listed.value.publishedLogs as Json[] | undefined) ?? (listed.value.items as Json[] | undefined) ?? [];
   const id = items.find((row) => typeof row.id === 'string')?.id;
@@ -597,7 +626,11 @@ async function walkP17(ctx: WalkContext): Promise<unknown> {
   if (!ctx.signIn.ok) {
     throw unreached(
       anonymous.empty
-        ? `anonymous published-log list HTTP ${anonymous.status} (empty); publish unreached: ${ctx.signIn.detail}`
+        ? `anonymous published-log list ${
+            typeof ctx.seed.accountId === 'string'
+              ? `HTTP ${anonymous.status} (empty)`
+              : 'skipped (no seeded accountId)'
+          }; publish unreached: ${ctx.signIn.detail}`
         : `anonymous public snapshot reached ${anonymous.url}; publish/retract unreached: ${ctx.signIn.detail}`,
     );
   }
@@ -685,7 +718,9 @@ export async function run(): Promise<PathResult[]> {
     return results;
   }
   const seedEnv = { ...process.env, ...(await parseEnv(join(root, '.temp/local-stack/seed.env'))) };
+  const seedStarted = performance.now();
   const seedCode = await child(['bun', 'scripts/datasets/cross-media-seed.ts', '--dev'], 'seed', seedEnv);
+  const seedElapsedMs = Math.round(performance.now() - seedStarted);
   let seed: Seed = { handle: 'developer' };
   let seedCause: string | undefined;
   try {
@@ -696,7 +731,7 @@ export async function run(): Promise<PathResult[]> {
     seedCause = `seed exited ${seedCode}: ${first}`;
     await writeFile(
       join(evidenceDir, 'seed-failure.json'),
-      `${JSON.stringify({ seedCode, first, log: seedLog.slice(0, 4000) }, null, 2)}\n`,
+      `${JSON.stringify({ seedCode, seedElapsedMs, first, log: seedLog.slice(0, 4000) }, null, 2)}\n`,
     );
   }
 
@@ -705,6 +740,7 @@ export async function run(): Promise<PathResult[]> {
   let browser: Browser | undefined;
   let signIn: { ok: boolean; detail: string } | undefined;
   let kernelReady: { ok: boolean; detail: string } | undefined;
+  let hydration: { ok: boolean; detail: string; elapsedMs: number } | undefined;
   try {
     frontends = await startSeededFrontends();
     const admitted = await probeSignIn(stack);
@@ -713,7 +749,7 @@ export async function run(): Promise<PathResult[]> {
     kernelReady = kernel;
     await writeFile(
       join(evidenceDir, 'sign-in-probe.json'),
-      `${JSON.stringify({ stack, signIn: admitted, kernel, seed: publicFields(seed), seedCause }, null, 2)}\n`,
+      `${JSON.stringify({ stack, signIn: admitted, kernel, seed: publicFields(seed), seedCause, seedElapsedMs }, null, 2)}\n`,
     );
     browser = await chromium.launch({ headless: true, env: { ...process.env, TMPDIR: '/tmp/rw' } });
     const desktopContext: BrowserContext = await browser.newContext({ locale: 'en-US', viewport: desktop });
@@ -722,6 +758,7 @@ export async function run(): Promise<PathResult[]> {
     page.setDefaultTimeout(60_000);
     const phonePage = await phoneContext.newPage();
     phonePage.setDefaultTimeout(60_000);
+    hydration = await probeHydration(page, stack.web);
     const ctx: WalkContext = { stack, seed, page, source, signIn: admitted, signedIn: false };
     const phoneCtx: WalkContext = { stack, seed, page: phonePage, source, signIn: admitted, signedIn: false };
 
@@ -789,7 +826,7 @@ export async function run(): Promise<PathResult[]> {
     await browser?.close();
     await frontends?.stop();
   }
-  await writeEvidence(source, results, stack, seed, { kernel: kernelReady, signIn, seedCause });
+  await writeEvidence(source, results, stack, seed, { kernel: kernelReady, signIn, seedCause, seedElapsedMs, hydration });
   hourly(results);
   return results;
 }
@@ -803,6 +840,8 @@ async function writeEvidence(
     kernel?: { ok: boolean; detail: string };
     signIn?: { ok: boolean; detail: string };
     seedCause?: string;
+    seedElapsedMs?: number;
+    hydration?: { ok: boolean; detail: string; elapsedMs: number };
   } = {},
 ): Promise<void> {
   const passing = results.filter((row) => row.status === 'PASS').length;
@@ -823,6 +862,8 @@ async function writeEvidence(
         kernel: extras.kernel,
         signIn: extras.signIn,
         seedCause: extras.seedCause,
+        seedElapsedMs: extras.seedElapsedMs,
+        hydration: extras.hydration,
         results,
       },
       null,
