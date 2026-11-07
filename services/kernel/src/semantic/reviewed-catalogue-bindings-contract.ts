@@ -2,14 +2,20 @@
 import type { BatchCommand, BatchStatement, BatchWriteResult, Source } from '@rezics/definitions/bulk';
 import type { Item, Statement } from './item.ts';
 import type { createSubject } from './subject.ts';
-import type { adoptCandidates, decideCandidate, listCandidates } from './candidates.ts';
+import type {
+  CandidateAdoptionOptions,
+  CandidateAdoptionResult,
+  CandidateDecisionOptions,
+  CandidateDecisionResult,
+  CandidateObservation,
+} from './candidate-contract.ts';
 import type { batchCommand } from './bulk.ts';
 
 type NativeCreation = Awaited<ReturnType<typeof createSubject>>;
-type NativeAcceptance = Awaited<ReturnType<typeof decideCandidate>>;
-type NativeAdoption = Awaited<ReturnType<typeof adoptCandidates>>;
+type NativeAcceptance = CandidateDecisionResult;
+type NativeAdoption = CandidateAdoptionResult;
 type NativeBatch = Awaited<ReturnType<typeof batchCommand>>;
-export type NativeCandidateObservation = Awaited<ReturnType<typeof listCandidates>>['candidates'][number];
+export type NativeCandidateObservation = CandidateObservation;
 
 /** A logical vocabulary key, not a provider record number or native subject ID. */
 export type ReviewedVocabularyIdentity = Readonly<{
@@ -118,6 +124,6 @@ export type PlatformBindingReview = Readonly<{
 export type ExistingNativeBindingAPIs = Readonly<{
   create: { input: Parameters<typeof createSubject>[1]; output: NativeCreation };
   batch: { input: Parameters<typeof batchCommand>[1]; output: NativeBatch };
-  accept: { input: Parameters<typeof decideCandidate>[1]; output: NativeAcceptance };
-  adopt: { input: Parameters<typeof adoptCandidates>[1]; output: NativeAdoption };
+  accept: { input: CandidateDecisionOptions; output: NativeAcceptance };
+  adopt: { input: CandidateAdoptionOptions; output: NativeAdoption };
 }>;
