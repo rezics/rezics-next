@@ -7,12 +7,13 @@
  */
 import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
-import { readFileSync } from 'node:fs';
+import { appendFileSync, readFileSync } from 'node:fs';
 import { mkdir, readFile, rename, writeFile } from 'node:fs/promises';
 import { resolve } from 'node:path';
 import { bangumiRecordUrl } from '@rezics/conversion/cross-media-entities';
 import { createAccountTokenProvider, IMPORTER_SCOPES, VNDB_IMPORTER_SCOPES } from './credentials.ts';
 import { runImportCli } from './cli.ts';
+import { reviewedCatalogueProblem } from './http.ts';
 import { createImportTransport, importTransportCause, ImportTransportError } from './import-client.ts';
 import {
   formatSeedFailure,
@@ -416,16 +417,46 @@ export async function retireWalkJournals(repository = root): Promise<void> {
   }
 }
 
+/** Isolate a demonstrated stuck operator so independent rows and the seed still finish. */
+export async function runBoundedWalkCommand(
+  args: string[],
+  options: { cwd: string; env?: NodeJS.ProcessEnv; deadlineMs: number },
+): Promise<{ stdout: string; stderr: string; code: number; timedOut: boolean }> {
+  const child = Bun.spawn(args, {
+    cwd: options.cwd,
+    env: options.env,
+    stdout: 'pipe',
+    stderr: 'pipe',
+    detached: true,
+  });
+  let timedOut = false;
+  const timer = setTimeout(() => {
+    timedOut = true;
+    // This process group belongs only to the child started above, including its decoders.
+    try {
+      process.kill(-child.pid, 'SIGKILL');
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code !== 'ESRCH') throw error;
+    }
+  }, options.deadlineMs);
+  try {
+    const [stdout, stderr, code] = await Promise.all([
+      new Response(child.stdout).text(),
+      new Response(child.stderr).text(),
+      child.exited,
+    ]);
+    return { stdout, stderr, code, timedOut };
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
 async function command(name: string, args: string[], env: NodeJS.ProcessEnv = process.env) {
   await mkdir(evidenceRoot, { recursive: true, mode: 0o700 });
-  const child = Bun.spawn(args, { cwd: root, env, stdout: 'pipe', stderr: 'pipe' });
-  const [stdout, stderr, code] = await Promise.all([
-    new Response(child.stdout).text(),
-    new Response(child.stderr).text(),
-    child.exited,
-  ]);
-  await writeFile(resolve(evidenceRoot, `${name}.log`), `${stdout}${stderr}`, { mode: 0o600 });
-  if (code !== 0) throw walkChildFailure(name, code, stdout, stderr);
+  const result = await runBoundedWalkCommand(args, { cwd: root, env, deadlineMs: 15 * 60_000 });
+  await writeFile(resolve(evidenceRoot, `${name}.log`), `${result.stdout}${result.stderr}`, { mode: 0o600 });
+  if (result.timedOut) throw new Error(`${name} exceeded its 900000ms walk deadline; see ${name}.log`);
+  if (result.code !== 0) throw walkChildFailure(name, result.code, result.stdout, result.stderr);
 }
 
 async function parseEnv(path: string): Promise<Record<string, string>> {
@@ -484,8 +515,12 @@ type SeedEnv = {
 };
 
 async function loadPersona(): Promise<SeedEnv> {
-  const origins = stackOrigins();
   await command('persona', ['bun', 'services/auth/scripts/dev-stack.ts', 'persona']);
+  return readPersona();
+}
+
+async function readPersona(): Promise<SeedEnv> {
+  const origins = stackOrigins();
   const seedEnv = await parseEnv(resolve(root, '.temp/local-stack/seed.env'));
   return {
     account: seedEnv.REZICS_DEV_PERSONA_ACCOUNT!,
@@ -610,12 +645,32 @@ const operatorSpecs: Record<'I01' | 'I02' | 'I03' | 'I04', OperatorSpec> = {
   },
 };
 
+export const OPERATOR_WALK_DEADLINE_MS = 120_000;
+
+async function runOperatorChild(id: 'I01' | 'I02' | 'I03' | 'I04'): Promise<WalkRowResult> {
+  return walkRow(id, async () => {
+    const result = await runBoundedWalkCommand(
+      ['bun', 'services/importer/src/imports-public-journey.ts', '--operator', id],
+      { cwd: root, env: process.env, deadlineMs: OPERATOR_WALK_DEADLINE_MS },
+    );
+    await writeFile(resolve(evidenceRoot, `${id.toLowerCase()}.log`), `${result.stdout}${result.stderr}`, { mode: 0o600 });
+    if (result.timedOut)
+      throw new Error(
+        `${id} operator exceeded ${OPERATOR_WALK_DEADLINE_MS}ms; retained progress and requests in ${id.toLowerCase()}/`,
+      );
+    if (result.code !== 0) throw walkChildFailure(id, result.code, result.stdout, result.stderr);
+    return JSON.parse(await readFile(resolve(evidenceRoot, `${id.toLowerCase()}/result.json`), 'utf8'));
+  });
+}
+
 async function runOperator(id: 'I01' | 'I02' | 'I03' | 'I04', persona: SeedEnv): Promise<Record<string, unknown>> {
   const spec = operatorSpecs[id];
   const directory = resolve(evidenceRoot, id.toLowerCase());
   await mkdir(directory, { recursive: true, mode: 0o700 });
   const state = resolve(directory, 'state.sqlite');
   const argv = [
+    '--progress',
+    'jsonl',
     '--source',
     spec.source,
     '--dump',
@@ -633,12 +688,46 @@ async function runOperator(id: 'I01' | 'I02' | 'I03' | 'I04', persona: SeedEnv):
     '--client',
     persona.client,
   ];
+  const observedFetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
+    const request = new Request(input, init);
+    const response = await fetch(request);
+    const payload: unknown = response.headers.get('content-type')?.includes('json')
+      ? await response.clone().json()
+      : undefined;
+    const problems =
+      isRecord(payload) && Array.isArray(payload.results)
+        ? payload.results.filter(isRecord).filter((row) => row.problem !== undefined)
+            .map((row) => reviewedCatalogueProblem(row.problem))
+        : response.status >= 400 ? [reviewedCatalogueProblem(payload)] : [];
+    appendFileSync(
+      resolve(directory, 'requests.jsonl'),
+      `${JSON.stringify({
+        method: request.method,
+        path: new URL(request.url).pathname,
+        status: response.status,
+        problems,
+        correlation: response.headers.get('x-request-id'),
+      })}\n`,
+      { mode: 0o600 },
+    );
+    return response;
+  }) as typeof fetch;
   const cliOptions = {
+    fetch: observedFetch,
+    progressSink: {
+      write(frame: string) {
+        appendFileSync(resolve(directory, 'progress.jsonl'), frame, { mode: 0o600 });
+      },
+    },
     testOrigin: persona.kernel,
     ...(spec.stdin ? { stdin: spec.stdin() } : {}),
   };
   const first = await runImportCli(argv, cliOptions);
-  assert.equal(first.code, 0, `${spec.source} CLI ${first.stderr || first.stdout}`);
+  await writeFile(resolve(directory, 'cli-result.json'), JSON.stringify(first), { mode: 0o600 });
+  assert.equal(
+    first.code, 0,
+    `${spec.source} CLI ${first.stderr || first.stdout}; safe requests: ${id.toLowerCase()}/requests.jsonl`,
+  );
   const session = new ImportSession(state);
   const subjects = new Map<string, string>();
   try {
@@ -710,6 +799,7 @@ async function runOperator(id: 'I01' | 'I02' | 'I03' | 'I04', persona: SeedEnv):
     adopted.push({ key, id, type: read.subject.type, candidate: candidate.id, statement: candidate.statement });
   }
   const again = await runImportCli(argv, {
+    ...cliOptions,
     testOrigin: persona.kernel,
     ...(spec.stdin ? { stdin: spec.stdin() } : {}),
   });
@@ -936,22 +1026,14 @@ export async function runImportsPublicJourney(): Promise<WalkInventory> {
   }
 
   const operatorIds = ['I01', 'I02', 'I03', 'I04'] as const;
-  if (!persona || sharedStartup) {
-    for (const id of operatorIds)
-      rows.push({
-        id,
-        path: firstPublicRow(id).path,
-        result: 'failing',
-        elapsedMs: 0,
-        cause: sharedStartup ?? 'persona unavailable',
-        evidence: { sharedStartup: true },
-      });
-  } else {
-    for (const id of operatorIds) {
-      const current = persona;
-      rows.push(await walkRow(id, () => runOperator(id, current)));
-    }
-  }
+  const operators = Promise.all(operatorIds.map(async (id): Promise<WalkRowResult> => {
+    const row = !persona || sharedStartup ? {
+      id, path: firstPublicRow(id).path, result: 'failing' as const, elapsedMs: 0,
+      cause: sharedStartup ?? 'persona unavailable', evidence: { sharedStartup: true },
+    } : await runOperatorChild(id);
+    await writeFile(resolve(evidenceRoot, `${id.toLowerCase()}-row.json`), JSON.stringify(row), { mode: 0o600 });
+    return row;
+  }));
 
   const seedStarted = Date.now();
   let seedElapsedMs = 0;
@@ -980,6 +1062,7 @@ export async function runImportsPublicJourney(): Promise<WalkInventory> {
 
   seedElapsedMs = Date.now() - seedStarted;
   if (seedCause) console.error(`shared seed failing; ${seedElapsedMs}ms; ${seedCause}`);
+  rows.push(...await operators);
   const catalogueFromSeed = ['I05', 'I06', 'I07', 'I08', 'I09', 'I10', 'I11', 'I12'] as const;
   if (seedCause || !publication || !report) {
     for (const id of catalogueFromSeed)
@@ -1118,6 +1201,14 @@ export async function runImportsPublicJourney(): Promise<WalkInventory> {
 }
 
 if (import.meta.main) {
-  const inventory = await runImportsPublicJourney();
-  if (inventory.passing < inventory.total) process.exitCode = 1;
+  const operator = process.argv[3];
+  if (process.argv[2] === '--operator' && ['I01', 'I02', 'I03', 'I04'].includes(operator ?? '')) {
+    const id = operator as 'I01' | 'I02' | 'I03' | 'I04';
+    const row = await walkRow(id, async () => runOperator(id, await readPersona()));
+    await writeFile(resolve(evidenceRoot, `${id.toLowerCase()}/result.json`), JSON.stringify(row.evidence), { mode: 0o600 });
+    if (row.result === 'failing') process.exitCode = 1;
+  } else {
+    const inventory = await runImportsPublicJourney();
+    if (inventory.passing < inventory.total) process.exitCode = 1;
+  }
 }
