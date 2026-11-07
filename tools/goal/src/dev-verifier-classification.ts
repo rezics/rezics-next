@@ -5,7 +5,12 @@ import { CHECK_HOST_TRANSPORT } from './records.ts';
 import type { DevVerifierEvidence, DevVerifierResult } from './types.ts';
 
 export function infraFailure(output: string, timedOut: boolean): boolean {
-  return timedOut || CHECK_HOST_TRANSPORT.test(output) || isTransportTimeout(output);
+  return (
+    timedOut ||
+    CHECK_HOST_TRANSPORT.test(output) ||
+    isTransportTimeout(output) ||
+    /remote-check: no check host answered/i.test(output)
+  );
 }
 
 export function unavailableFailure(output: string): boolean {

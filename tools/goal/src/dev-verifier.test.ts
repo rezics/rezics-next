@@ -398,7 +398,7 @@ test('checks not reached at the round deadline carry into the next due round', a
   const ctx = setup(root);
   seedRound(ctx, base);
   ctx.settings.policy = readControlPolicy({
-    verifier: { roundDeadlineMs: 80, roundIntervalMs: 60000, concurrency: 3 },
+    verifier: { roundDeadlineMs: 1000, roundIntervalMs: 60000, concurrency: 3 },
   });
   ctx.settings.verifierChecks = Array.from({ length: 5 }, (_, index) => ({
     paths: ['services/kernel/**'],
@@ -469,6 +469,9 @@ test('classification and workspace placement preserve the existing verifier chec
   expect(classifyRun({ passed: true, timedOut: false, output: '' })).toBe('pass');
   expect(classifyRun({ passed: false, timedOut: false, output: 'AssertionError: expected value' })).toBe('fail');
   expect(classifyRun({ passed: false, timedOut: true, output: 'ETIMEDOUT' })).toBe('infrastructure');
+  expect(classifyRun({ passed: false, timedOut: false, output: 'remote-check: no check host answered' })).toBe(
+    'infrastructure',
+  );
   expect(classifyRun({ passed: false, timedOut: false, output: 'cannot find module fixture' })).toBe('infrastructure');
   expect(
     classifyRun({
