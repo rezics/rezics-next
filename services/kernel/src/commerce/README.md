@@ -186,9 +186,24 @@ Current native partition/session fences apply before and after the read. No buye
 
 Default Commerce composition, including an unconfigured Stripe worker, admits actual committed order-created and
 order-updated events through existing native effects. Admission verifies the exact log slot; native
-`creator_sale_receipt` and `creator_sale_work` locators remain pending after dispatch. A fresh exact admitted
-`purchase_order` read, native revision/transaction and its current actual write-basis/outbox provenance supply
-financial truth, never copied event JSON. The source snapshot is released before a creator write. The local DAO
+`creator_sale_receipt` and `creator_sale_work` locators remain pending after dispatch. If the exact event is valid
+but its original role roster or current buyer authority is temporarily unavailable, admission commits a bounded
+`commerce.creator_sale_admission_recovery` row keyed only by partition, position, event sequence, epoch, event ID
+and type. It never copies an order ID, account ID, financial term, Actor, permission or inferred role roster, and
+creates no receipt/work locator or live-copy inventory. The maintenance worker reloads that exact outbox event,
+rechecks its order revision and current native authority, then runs the same ordinary admission path. Only restored
+exact role evidence can create the event receipt, ordinary work and full role inventory in that transaction. One
+indexed per-partition due page handles one key; missing evidence schedules it ten minutes later so other due work
+continues independently of the covered order frontier. After buyer T, the same producer path retains only the
+minimized original event slot and clears the key; existing Commerce erasure still reports its independent
+financial/shared-custody result.
+
+Decision: retain only an exact original outbox event key for a role gap; the producer reloads that event and current
+native authority before admitting any receipt, work locator or copy inventory.
+
+The ordinary worker then reads a fresh exact admitted `purchase_order`, native revision/transaction and its current
+actual write-basis/outbox provenance for financial truth, never copied event JSON. The source snapshot is released
+before a creator write. The local DAO
 fences the native creator account, rejects immutable-term conflicts and only advances a lower source revision;
 duplicate/late events cannot roll it back. It creates no command receipt, financial event or second order authority.
 
@@ -227,8 +242,10 @@ receiver adapters. Missing original proof retains coverage debt; a terminal buye
 removal. Accounts discovery cannot seal an unknown historical role frontier.
 Source work and original event receipts have their own raw1 primary-key role-coverage frontiers, independent of
 the creator-row frontier. A retained receipt requires its exact original native event and role basis, even after
-the order advanced to a later revision. Missing original proof keeps that precise frontier pending. New source
-intents require native buyer/creator inverse inventory and a locked active buyer at deferred commit; native update
+the order advanced to a later revision. A `creator_sale_admission_recovery` row is only producer-owned retry work
+and is not counted as a receipt or personal copy; it remains keyed by the original event until evidence returns or
+the exact event is minimized after buyer T. Missing original proof keeps that precise frontier pending. New source intents require native
+buyer/creator inverse inventory and a locked active buyer at deferred commit; native update
 guards preserve their original keys. After actual buyer T, coverage can only delete exact old work or minimize its
 receipt, and only after its exact pending-transition check. No new personal intent is admitted by this cleanup.
 
