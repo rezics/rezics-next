@@ -102,7 +102,9 @@ The result is **0/6 passing**. Search recovery is the slowest failing journey at
 product step is corrected search still **503 `index_not_ready`**. Mixed Search is the representative granted-search
 failure at **180.415 s**. The shared setup cause is [Seed import repair](#seed-import-repair); page and bearer
 gaps join [Frontend after seed repair](#frontend-after-seed-repair). Partial public presentation reads do not pass
-Configured reading or Published composition. Existing broader acceptance below is preserved.
+Configured reading or Published composition. Authenticated Search and publication stay blocked on issuer pages after
+that failed seed; ce33 issuer-origin JWKS already started. 04:10 walk-only: seed diagnostics stay with the queued
+Imports repair; this walk does not implement them. Existing broader acceptance below is preserved.
 
 The prior registration-handle failure was not reached. The importer-proposal `POST /v1/grants` 403 was not reached.
 Members' binding/fixtures, Web's Character/Person search, condition weights and composition, Semantic's tagged works

@@ -663,7 +663,7 @@ journeys.push(
     } finally {
       await context.close();
     }
-    if (corrected.status !== 200 && corrected.status !== 503)
+    if (corrected.status !== 200)
       fail(record, `corrected search HTTP ${corrected.status} ${problemCode(corrected.value) ?? ''}`);
   }),
 );
