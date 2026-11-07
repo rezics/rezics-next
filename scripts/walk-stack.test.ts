@@ -28,6 +28,7 @@ import {
   walkPageBodyIsUseful,
   walkParentInvocation,
   walkPortAllocated,
+  walkProcessEnvironment,
   walkPublishedPortAllocated,
   WalkPublishedPortAllocated,
   walkReadyResponse,
@@ -82,6 +83,18 @@ test('walk stacks cap OpenSearch, Postgres and bun heaps inside the host run sli
   expect(() => searchRunArgs('native-policy-test-image', { KERNEL_SEARCH_MEMORY: '1g' })).toThrow(
     'KERNEL_SEARCH_MEMORY',
   );
+});
+
+test('full-effect walks retain their worker mode while slot identities remain scoped', () => {
+  const env = walkProcessEnvironment('content-mode', 2, {
+    REZICS_WALK_DEFER_FRONTENDS: '0',
+    KERNEL_CHECK_ON_REMOTE: '1',
+    KERNEL_DATABASE_PORT: '5432',
+  });
+  expect(env.REZICS_WALK_DEFER_FRONTENDS).toBe('0');
+  expect(env.KERNEL_CHECK_ON_REMOTE).toBeUndefined();
+  expect(env.KERNEL_DATABASE_PORT).toBe(String(walkStackPorts(2).database));
+  expect(walkProcessEnvironment('account-mode', 1, {}).REZICS_WALK_DEFER_FRONTENDS).toBe('1');
 });
 
 test('the walk parent and Docker teardown stay inside the 6 GiB slice', () => {

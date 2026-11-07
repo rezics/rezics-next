@@ -108,7 +108,7 @@ count growth uses the same cost-folded capture and ANALYZE of the filler neighbo
 ANALYZE a same-route neighbourhood first so a handful of fixture rows cannot seq-scan the primary-key lookup;
 existing native HTTP, growth, runtime and walk pins stay the fewest tests, with no extra stories.
 Subject discussion listing HTTP uses the shared 30s test request budget so Access evaluation under parallel
-check instrumentation cannot turn an empty 200 page into 503; production stays 2s. Command: `bun services/auth/scripts/dev-stack.ts walk -- bun apps/web/scripts/seeded-content-goal-walk.ts`.
+check instrumentation cannot turn an empty 200 page into 503; production stays 2s. Command: `REZICS_WALK_DEFER_FRONTENDS=0 bun services/auth/scripts/dev-stack.ts walk -- bun apps/web/scripts/seeded-content-goal-walk.ts`.
 Worker Vite resolves Elysia and Eden to their `exports.import` files and replaces TypeBox loaders with live ESM re-exports so workerd never evaluates CJS `module`. Focused test Vite skips the Home route crawl so edit journeys can start. Browser receiving waits for issuer `html[data-hydrated]` and the landed Sign in control. Seed token minting keeps issuer `AUTH_ORIGIN` so own-key assertions target `${issuer}/token`, and reaches native Auth through a loopback issuer proxy that uses `walkIssuerForward` because walk stacks defer Auth pages until after seed. The walk command restores the pinned Bangumi/VNDB dump cache onto the check host and extracts it before the run slice, the same way `vndb-seeded-journey` does, then points seed at `REZICS_DATASETS_DUMP_CACHE`. The dump-cache matcher also matches the Financial outer command `apps/web/tests/native/commerce-library-journeys.walk.ts` so that walk receives the same pinned archives. After journal cleanup the walk waits until identity-epoch topology remaining is zero before persona and seed, because `POST /v1/subjects:batchWrite` answered `503 semantic_not_ready` while 4096-home bootstrap was still open. VNDB release-fidelity seed scans admit the pinned 2026-11-04 dump (`entry_meta` 495184 rows, `releases` 160532). The fewest tests that pin that swap, crawl skip, walk inventory, dump-cache restore, Financial argv, remaining-zero wait and issuer-seed proxy are `vite-config.test.ts`, `scripts/cross-media-dump-cache.test.ts`, `scripts/walk-stack.test.ts` plus the walk unit tests; composed native/browser proof is the seeded walk; no extra stories.
 The sole walk receives Accounts published-post effects for reply, mention and moderation delivery, current access and
 preferences, replay, inbox and independent appeals. Ordinary HTTP grant receipts are the walk's authority proof, not
@@ -123,6 +123,14 @@ as not reached in `setup-failure.json`, alongside the attempt's worker stack log
 evidence. It does not count setup as a product failure or infer a bootstrap cause from `remaining 4096`; Semantic
 receives the native trace through its existing bootstrap owner. Existing focused walk tests remain the regression
 check; no extra stories or duplicate acceptance suite.
+
+Decision: the Content walk explicitly selects `REZICS_WALK_DEFER_FRONTENDS=0`, retaining the real default worker,
+Search and standalone Kernel before identity bootstrap and seed. The walk launcher honors that existing mode while
+keeping its default lightweight Account mode and scoped names, ports and cleanup. The observed deferred launch had
+no worker and remained at 4096 bootstrap homes; this is launcher evidence, not a Semantic execution failure. Returned
+startup logs remove the native Auth `Password:` line's credential. The existing walk and startup tests pin these
+boundaries; no duplicate stories. The native membership registration fixture now expects the installed six named
+steps, including Realm finalize/cancel, while retaining all authority and compensation assertions.
 
 ## realms-and-spaces
 

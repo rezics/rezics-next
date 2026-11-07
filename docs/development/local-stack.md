@@ -268,9 +268,11 @@ bun services/auth/scripts/dev-stack.ts walk -- <command...>
    the worker and Kernel. Kernel verifies issuer-origin JWKS and fetches that exact public document from native Auth.
    An admitted stack runs Kernel without `--watch`
    and does not start Auth pages or Web: its journey seeds first and then starts them.
-   `REZICS_WALK_DEFER_FRONTENDS=1` also omits OpenSearch, the Kernel worker and a second Kernel process, serves
+   The default lightweight Account mode (`REZICS_WALK_DEFER_FRONTENDS=1`) also omits OpenSearch, the Kernel worker and a second Kernel process, serves
    Kernel HTTP from the Auth host, and waits for native JWKS and Kernel health instead; the child starts issuer then
-   Web when it needs mounted pages. Otherwise the walk `start` process waits for native JWKS and Kernel
+   Web when it needs mounted pages. Full-effect walks such as Content set `REZICS_WALK_DEFER_FRONTENDS=0`
+   explicitly so the real worker and Search can finish bootstrap and seed effects. Slot identities remain scoped in
+   either mode. Otherwise the walk `start` process waits for native JWKS and Kernel
    `/v1/definitions`, for at most twenty minutes. Readiness first checks that the port accepts TCP, then fetches with
    the remaining window so a short abort cannot strand a compile; a hard request budget
    also bounds a listener that never writes. `db up` and `search up` retry once; a failed database bring-up first

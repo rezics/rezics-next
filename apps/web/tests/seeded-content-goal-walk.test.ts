@@ -7,6 +7,7 @@ import {
   jwtAccountId,
   mentionBody,
   publicFields,
+  publicStackLog,
   requireStatus,
   summarizeWalk,
   waitForNotices,
@@ -138,4 +139,10 @@ test('waitForNotices returns the delivered item once the default worker has writ
   );
   expect(found).toEqual([{ id: 'notice-1', kind: 'reply', unread: true }]);
   expect(calls).toBe(2);
+});
+
+test('returned startup evidence preserves phase diagnostics without the native bootstrap password', () => {
+  expect(publicStackLog('stack: identity ready\nPassword: bootstrap-secret\nworker: starting\n')).toBe(
+    'stack: identity ready\nPassword: [redacted]\nworker: starting\n',
+  );
 });

@@ -18,6 +18,11 @@ in browser history and honoring leave-page blockers. The destination rereads nat
 supplied names and source text keep their original language. The focused locale regression covers the production
 rewrite/provider as well as the injected reader lifetime; seeded native/browser acceptance remains required.
 
+Decision: the root mounts the existing RecentSearchBinding around both AppShell and its route outlet. Header
+search and route consumers share one QueryClient-owned host, session observer and retirement boundary. Mounting it
+inside the outlet leaves the header without a host and makes ordinary `/en` SSR fail; the focused Web startup and
+existing header tests retain this receiving contract.
+
 ## Phone navigation clearance
 
 `PhoneNavigationClearance` scopes one `--bottom-nav-height` value around the shell and observes only its own phone

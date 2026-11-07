@@ -469,7 +469,13 @@ export function walkProcessEnvironment(
   for (const [name, value] of Object.entries(env)) {
     if (value !== undefined && name !== 'KERNEL_CHECK_ON_REMOTE') merged[name] = value;
   }
-  return { ...merged, ...walkStackEnvironment(task, index) };
+  const scoped = walkStackEnvironment(task, index);
+  return {
+    ...merged,
+    ...scoped,
+    // Full-effect journeys need the default worker and Search before seed. Keep Account walks deferred by default.
+    REZICS_WALK_DEFER_FRONTENDS: env.REZICS_WALK_DEFER_FRONTENDS ?? scoped.REZICS_WALK_DEFER_FRONTENDS!,
+  };
 }
 
 /** Re-exec the walk parent under bun --smol once, so its module graph shares the 6 GiB slice. */

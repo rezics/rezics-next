@@ -8,7 +8,7 @@
  * result.
  */
 import { createRequire } from 'node:module';
-import { copyFile, mkdir, readFile, writeFile } from 'node:fs/promises';
+import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { join, resolve } from 'node:path';
 import { fromPlainText, normalizeDocument } from '@rezics/document';
 import {
@@ -125,6 +125,11 @@ export function jwtAccountId(token: string): string | null {
   } catch {
     return null;
   }
+}
+
+/** Native Auth prints a bootstrap credential; returned diagnostics must retain phases without that credential. */
+export function publicStackLog(log: string): string {
+  return log.replace(/^Password:.*$/gm, 'Password: [redacted]');
 }
 
 export function publicFields(value: unknown): unknown {
@@ -1952,22 +1957,28 @@ async function main(): Promise<void> {
   } catch (error) {
     // A pre-seed failure is not a failed product journey. Retain the worker's causal trace before teardown.
     const stackLog = join(root, '.temp/walk', process.env.GOAL_TASK_ID, 'stack.log');
-    await copyFile(stackLog, join(evidenceDir, 'bootstrap-stack.log'));
+    await writeFile(join(evidenceDir, 'bootstrap-stack.log'), publicStackLog(await readFile(stackLog, 'utf8')), {
+      mode: 0o600,
+    });
     await writeFile(
       join(evidenceDir, 'setup-failure.json'),
-      `${JSON.stringify({
-        sourceRevision: Bun.spawnSync(['git', 'rev-parse', 'HEAD'], { cwd: root }).stdout.toString().trim(),
-        observedAt: new Date().toISOString(),
-        installedRoot: process.env.REZICS_INSTALLED_ROOT ?? null,
-        runtime: publicRuntime(),
-        phase: 'identity-epoch-bootstrap',
-        durationMs: Date.now() - bootstrapStarted,
-        defect: error instanceof Error ? error.message : String(error),
-        seed: 'not-started',
-        personas: 'not-provisioned',
-        rows: FIRST_SCOPE_ROWS.map((row) => ({ row, status: 'not-reached' })),
-        stackLog: 'bootstrap-stack.log',
-      }, null, 2)}\n`,
+      `${JSON.stringify(
+        {
+          sourceRevision: Bun.spawnSync(['git', 'rev-parse', 'HEAD'], { cwd: root }).stdout.toString().trim(),
+          observedAt: new Date().toISOString(),
+          installedRoot: process.env.REZICS_INSTALLED_ROOT ?? null,
+          runtime: publicRuntime(),
+          phase: 'identity-epoch-bootstrap',
+          durationMs: Date.now() - bootstrapStarted,
+          defect: error instanceof Error ? error.message : String(error),
+          seed: 'not-started',
+          personas: 'not-provisioned',
+          rows: FIRST_SCOPE_ROWS.map((row) => ({ row, status: 'not-reached' })),
+          stackLog: 'bootstrap-stack.log',
+        },
+        null,
+        2,
+      )}\n`,
       { mode: 0o600 },
     );
     throw error;
