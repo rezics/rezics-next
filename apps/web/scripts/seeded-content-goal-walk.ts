@@ -8,7 +8,7 @@
  * result.
  */
 import { createRequire } from 'node:module';
-import { mkdir, readFile, writeFile } from 'node:fs/promises';
+import { copyFile, mkdir, readFile, writeFile } from 'node:fs/promises';
 import { join, resolve } from 'node:path';
 import { fromPlainText, normalizeDocument } from '@rezics/document';
 import {
@@ -1946,7 +1946,32 @@ async function main(): Promise<void> {
   const databaseUrl = kernelEnv.DATABASE_URL;
   if (databaseUrl) await retireStaleSeedJournals(root, databaseUrl);
   if (!databaseUrl) throw new Error('KERNEL DATABASE_URL missing');
-  await waitUntilIdentityBootstrapRemainingZero(() => identityEpochBootstrapRemaining(databaseUrl));
+  const bootstrapStarted = Date.now();
+  try {
+    await waitUntilIdentityBootstrapRemainingZero(() => identityEpochBootstrapRemaining(databaseUrl));
+  } catch (error) {
+    // A pre-seed failure is not a failed product journey. Retain the worker's causal trace before teardown.
+    const stackLog = join(root, '.temp/walk', process.env.GOAL_TASK_ID, 'stack.log');
+    await copyFile(stackLog, join(evidenceDir, 'bootstrap-stack.log'));
+    await writeFile(
+      join(evidenceDir, 'setup-failure.json'),
+      `${JSON.stringify({
+        sourceRevision: Bun.spawnSync(['git', 'rev-parse', 'HEAD'], { cwd: root }).stdout.toString().trim(),
+        observedAt: new Date().toISOString(),
+        installedRoot: process.env.REZICS_INSTALLED_ROOT ?? null,
+        runtime: publicRuntime(),
+        phase: 'identity-epoch-bootstrap',
+        durationMs: Date.now() - bootstrapStarted,
+        defect: error instanceof Error ? error.message : String(error),
+        seed: 'not-started',
+        personas: 'not-provisioned',
+        rows: FIRST_SCOPE_ROWS.map((row) => ({ row, status: 'not-reached' })),
+        stackLog: 'bootstrap-stack.log',
+      }, null, 2)}\n`,
+      { mode: 0o600 },
+    );
+    throw error;
+  }
   if ((await runCommand(['bun', 'services/auth/scripts/dev-stack.ts', 'persona'])) !== 0)
     throw new Error('Developer persona provisioning failed');
   const seedEnv = {

@@ -118,6 +118,12 @@ Catalogue CurrentPost attribution is received through existing `authoring-contro
 unknown and id-free deletion stay; exact revision, body, licence and viewer retirement stay. Ada fixtures are not
 native or visual proof; no extra stories or screenshots.
 
+Decision: a pre-seed identity-bootstrap timeout records the source revision, UTC, elapsed time and all eighteen rows
+as not reached in `setup-failure.json`, alongside the attempt's worker stack log in the returned Content walk
+evidence. It does not count setup as a product failure or infer a bootstrap cause from `remaining 4096`; Semantic
+receives the native trace through its existing bootstrap owner. Existing focused walk tests remain the regression
+check; no extra stories or duplicate acceptance suite.
+
 ## realms-and-spaces
 
 Scope row: **Realms and Spaces**. Stage: **specified red** for the complete capability.
