@@ -524,10 +524,16 @@ if (process.argv.includes('--reaction-count-worker')) {
     const page = await call('GET', `/v1/threads/${fixture.thread}/posts?limit=100`, { bearer: other.bearer });
     expect(thread.response.status).toBe(200);
     expect(page.response.status).toBe(200);
-    for (const body of [thread.text, page.text]) {
-      expect(body).not.toContain('"actorId"');
-      expect(body).not.toContain(member.accountId);
-      expect(body).not.toContain(other.accountId);
+    for (const [text, viewer] of [
+      [thread.text, member.accountId],
+      [page.text, other.accountId],
+    ] as const) {
+      expect(text).not.toContain('"actorId"');
+      const value = JSON.parse(text) as { authorErasure?: { authorId: string } };
+      if (value.authorErasure?.authorId === viewer) delete value.authorErasure;
+      const counts = JSON.stringify(value);
+      expect(counts).not.toContain(member.accountId);
+      expect(counts).not.toContain(other.accountId);
     }
     const shown = thread.value as CountedThread;
     expect(shown.thread.authorId).toBe(author.accountId);
@@ -629,12 +635,19 @@ if (process.argv.includes('--reaction-count-worker')) {
       };
       const report = await checkGrowth(db, {
         name: 'Post page reaction counts',
+        captureMode: 'cost-folded',
         scales: [256, 1024, 4096],
         bounds: { rows: 'constant', statements: 'constant', blocks: 'logarithmic' },
         repetitions: 1,
         async grow(database, scale, previous) {
-          if (previous === 0) await seed(database, filler, { from: 0, to: 2048 });
+          if (previous === 0) {
+            await seed(database, filler, { from: 0, to: 2048 });
+            await database.admin.query(
+              'ANALYZE content.board, content.thread, content.post, content.revision, content.reaction_total',
+            );
+          }
           await seed(database, population, { from: previous, to: scale });
+          await database.admin.query('ANALYZE content.reaction_total');
         },
         async operation() {
           const trace = observeSql(db.pool);

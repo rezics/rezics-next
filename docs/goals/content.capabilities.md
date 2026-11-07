@@ -94,9 +94,11 @@ HTTP request starts its envelope from wall time so a held late-revocation reques
 author-item
 growth captures stay on a one-item page after bootstrapping the bundled release, and large other-author
 neighbourhoods use cost-folded capture so Access nested plan notices stay inside the 32MiB telemetry cap.
-Public-view index proofs ANALYZE a same-route neighbourhood first so a handful of fixture rows cannot seq-scan
-the primary-key lookup; existing native HTTP, growth, runtime and walk pins stay the fewest tests, with no extra
-stories. Command: `bun services/auth/scripts/dev-stack.ts walk -- bun apps/web/scripts/seeded-content-goal-walk.ts`.
+Author-item growth cases allow 180s. Authenticated thread count bodies may include the viewer's own
+`authorErasure.authorId`; reaction-privacy checks drop only that field before scanning for reactor IDs. Post-page
+count growth uses the same cost-folded capture and ANALYZE of the filler neighbourhood. Public-view index proofs
+ANALYZE a same-route neighbourhood first so a handful of fixture rows cannot seq-scan the primary-key lookup;
+existing native HTTP, growth, runtime and walk pins stay the fewest tests, with no extra stories. Command: `bun services/auth/scripts/dev-stack.ts walk -- bun apps/web/scripts/seeded-content-goal-walk.ts`.
 Worker Vite resolves Elysia and Eden to their `exports.import` files and replaces TypeBox loaders with live ESM re-exports so workerd never evaluates CJS `module`. Focused test Vite skips the Home route crawl so edit journeys can start. The fewest tests that pin that swap and crawl skip are `vite-config.test.ts` plus the existing walk unit tests; no extra stories.
 The sole walk receives Accounts published-post effects for reply, mention and moderation delivery, current access and
 preferences, replay, inbox and independent appeals. Ordinary HTTP grant receipts are the walk's authority proof, not

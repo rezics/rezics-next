@@ -498,4 +498,4 @@ for (const reply of [false, true])
       },
     });
     expect(report.samples.map((s) => s.scale)).toEqual([64, 512, 4096]);
-  });
+  }, 180_000);

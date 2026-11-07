@@ -2891,6 +2891,9 @@ Cost per operation:
 Authenticated `GET /v1/threads/{id}` adds the private optional envelope field
 `authorErasure: { authorId: string, mayErase: boolean }`. Anonymous reads omit it. The acting account supplies
 `authorId`; no request selector, displayed post, ownership flag or Global staff role supplies this admission.
+Reaction-count privacy still withholds reactor identities; it does not treat that viewer `authorId` as a leak.
+`test/content/reaction-counts-http.test.ts` drops only that field before scanning for other accounts, and its
+post-page count growth uses cost-folded capture so Access nested plan notices stay inside the 32MiB telemetry cap.
 `author-erasure-admission.ts` reuses `read-first-erasure-post.sql`'s two same-thread/same-author indexed prefix
 seeks, then current native Access `post:erase` on the actual first selected post. It binds native read time,
 clock, deadline and account lifetime, releasing each connection before consulting an independent anchor.
