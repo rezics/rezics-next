@@ -108,7 +108,8 @@ Subject discussion listing HTTP tests use the shared 30s test request budget so 
 parallel check instrumentation cannot turn an empty 200 page into 503; production stays 2s. Author-item
 cases bootstrap the bundled
 definitions release so review subject observation is a current source. The Goal walk on an admitted seeded stack reuses that driver, seed-journal cleanup and Performance
-`waitUntilWalkReady` recovery; it restores the pinned dump cache before the run slice, forwards issuer seed POSTs
+`waitUntilWalkReady` recovery; it restores the pinned dump cache before the run slice, waits for identity-epoch
+topology remaining to reach zero before persona and seed, forwards issuer seed POSTs
 through `walkIssuerForward`, and does not add stories.
 
 ### Cost: native directory assembly

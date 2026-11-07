@@ -1,6 +1,7 @@
 /**
  * Content Goal seeded walk. Runs inside `dev-stack.ts walk` for a worker whose brief lists native and browser
- * acceptance. Persona, journal cleanup and the cross-media seed run before Auth pages and Web start. Seed token
+ * acceptance. Persona, journal cleanup, identity-epoch remaining-zero and the cross-media seed run before Auth
+ * pages and Web start. Seed token
  * minting keeps issuer `AUTH_ORIGIN` and reaches native Auth through `withIssuerSeedProxy` until pages bind that
  * port. Frontend readiness uses Performance's `waitUntilWalkReady` hydration recovery through `startSeededFrontends`.
  * Evidence stays under `.temp/content-walk/`. A wrong result becomes a repair brief naming trigger, defect and correct
@@ -10,8 +11,13 @@ import { createRequire } from 'node:module';
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { join, resolve } from 'node:path';
 import { fromPlainText, normalizeDocument } from '@rezics/document';
-import { waitUntilWalkReady, walkIssuerForward } from '../../../scripts/walk-stack.ts';
 import {
+  waitUntilIdentityBootstrapRemainingZero,
+  waitUntilWalkReady,
+  walkIssuerForward,
+} from '../../../scripts/walk-stack.ts';
+import {
+  identityEpochBootstrapRemaining,
   kernelEnvironment,
   retireDevelopmentSeedState,
   retireStaleSeedJournals,
@@ -1937,7 +1943,10 @@ async function main(): Promise<void> {
   await mkdir('/tmp/rw', { recursive: true, mode: 0o700 });
   await retireDevelopmentSeedState(root);
   const kernelEnv = await kernelEnvironment();
-  if (kernelEnv.DATABASE_URL) await retireStaleSeedJournals(root, kernelEnv.DATABASE_URL);
+  const databaseUrl = kernelEnv.DATABASE_URL;
+  if (databaseUrl) await retireStaleSeedJournals(root, databaseUrl);
+  if (!databaseUrl) throw new Error('KERNEL DATABASE_URL missing');
+  await waitUntilIdentityBootstrapRemainingZero(() => identityEpochBootstrapRemaining(databaseUrl));
   if ((await runCommand(['bun', 'services/auth/scripts/dev-stack.ts', 'persona'])) !== 0)
     throw new Error('Developer persona provisioning failed');
   const seedEnv = {

@@ -5,7 +5,8 @@ replace later files’ native client exports. Mounted route replacements update 
 assertions remain unchanged. The native late-revocation cases remain the current-authority acceptance. The Content Goal seeded walk reuses that
 driver with Performance `waitUntilWalkReady` hydration recovery and does not add stories. Seed token minting keeps
 issuer `AUTH_ORIGIN` and forwards POST bodies through `walkIssuerForward`; the walk command restores the pinned
-dump cache before the run slice. Worker Vite resolves Elysia/Eden ESM and live TypeBox re-exports; `vite-config.test.ts` pins that swap. The same walk receives
+dump cache before the run slice, including the Financial outer command basename, and waits for identity-epoch
+remaining zero before persona and seed. Worker Vite resolves Elysia/Eden ESM and live TypeBox re-exports; `vite-config.test.ts` pins that swap. The same walk receives
 Accounts published-post reply, mention and moderation delivery through the default worker, current preferences,
 replay, inbox and independent appeals. Catalogue CurrentPost attribution is received through those existing
 authoring-controls-family and own-drafts native, resume and commands checks: live identity, null unknown and

@@ -418,6 +418,28 @@ export async function kernelEnvironment(): Promise<Record<string, string>> {
       }),
   );
 }
+
+/** Topology remaining for the walk seed gate. Unfinished 4096-home close cannot admit import writes. */
+export async function identityEpochBootstrapRemaining(databaseUrl: string): Promise<number> {
+  localDatabase(databaseUrl);
+  const pool = new Pool({
+    connectionString: databaseUrl,
+    max: 1,
+    connectionTimeoutMillis: 5_000,
+    query_timeout: 5_000,
+  });
+  try {
+    const { rows } = await pool.query<{ remaining: unknown }>(
+      'SELECT semantic.identity_epoch_bootstrap_remaining() AS remaining',
+    );
+    const value = rows[0]?.remaining;
+    if (typeof value === 'number' && Number.isInteger(value)) return value;
+    if (typeof value === 'string' && /^-?\d+$/.test(value)) return Number(value);
+    throw new Error(`identity epoch remaining ${String(value)}`);
+  } finally {
+    await pool.end();
+  }
+}
 export function localDatabase(url: string): URL {
   const parsed = new URL(url);
   if (!['postgres:', 'postgresql:'].includes(parsed.protocol) || parsed.hostname !== '127.0.0.1')

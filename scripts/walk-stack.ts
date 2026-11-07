@@ -405,6 +405,29 @@ export async function waitUntilWalkReady(options: {
   }
 }
 
+/** Seed import writes wait until topology remaining is zero, not only until one subject POST succeeds. */
+export async function waitUntilIdentityBootstrapRemainingZero(
+  remaining: () => Promise<number | string>,
+  options: { ms?: number; now?: () => number; sleep?: (ms: number) => Promise<void> } = {},
+): Promise<void> {
+  const ms = options.ms ?? 1_200_000;
+  const now = options.now ?? Date.now;
+  const sleep = options.sleep ?? ((wait: number) => Bun.sleep(wait));
+  const deadline = now() + ms;
+  let last = 'no remaining';
+  while (now() < deadline) {
+    try {
+      const value = await remaining();
+      if (value === 0) return;
+      last = `remaining ${value}`;
+    } catch (error) {
+      last = error instanceof Error ? error.message : String(error);
+    }
+    await sleep(1_000);
+  }
+  throw new Error(`identity epoch bootstrap not caught up: ${last}`);
+}
+
 /** The variables that give one admitted stack its own names, ports and origins. */
 export function walkStackEnvironment(task: string, index: number): Record<string, string> {
   const names = walkStackNames(task, index);
