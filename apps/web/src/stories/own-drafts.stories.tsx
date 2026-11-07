@@ -141,7 +141,6 @@ function commandsFor(scenario: StoryArgs['scenario']): OwnDraftCommands {
             securityRevision: 'story-security-revision',
             route: 0,
             authorId: accountId,
-            attribution: { id: accountId, kind: 'actor', displayName: 'Ada' },
             parentId: null,
             subjectIds: [subjectId],
             boardId,
