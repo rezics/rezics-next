@@ -269,8 +269,7 @@ async function settleGeneratorGroup(pid: number): Promise<void> {
   while (processGroupAlive(pid) && Date.now() < settleDeadline) {
     await new Promise<void>((resolve) => setTimeout(resolve, 25));
   }
-  if (processGroupAlive(pid))
-    throw new Error(`Paraglide generator process group ${pid} remains alive after SIGKILL`);
+  if (processGroupAlive(pid)) throw new Error(`Paraglide generator process group ${pid} remains alive after SIGKILL`);
 }
 
 async function runGenerator(
