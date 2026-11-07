@@ -49,9 +49,13 @@ A concealed or moved Source on FULL by-label withholds (`subject: null`) through
 it does not 503 the assignment page or shrink the raw cursor.
 The folded FULL warmup still sees 34 `personal_label` parent
 observations and zero sequential scans. Point reads seek the primary key, then filter `include_deleted` on that
-row, so a generic prepared plan cannot hide the unique index behind `OR deleted_at IS NULL`. They take the first
-SQL row and project `createdAt` as insert RETURNING does. Passing the result array to `asRecord` made `createdAt`
-undefined and Invalid Date. They do not UNION ALL `include_deleted`. Prefix still UNION ALLs `upper_bound`.
+row, so a generic prepared plan cannot hide the unique index behind `OR deleted_at IS NULL`. They project
+`createdAt` as insert RETURNING does. Reylo types a unique LATERAL LIMIT-1 point as one row and a UNION ALL
+page as an array; taking only `[0]` of the row made parent reads return empty, so FULL by-subject skipped
+assignments, prefix continuation saw a stale cursor, and delete/restore 404ed. The store takes that row or the
+first array element. They do not UNION ALL `include_deleted`. Prefix still UNION ALLs `upper_bound`, and its
+`ORDER BY` names `personal_label_live_name` `(route, account_id, normalized_name)`. Restore, rename, assignment
+point and desired-tuple seeks name the primary key in index order.
 Point, catalogue and assignment pages bind typed input CTEs the same way prefix already does.
 Existing Label command, HTTP and growth suites pin this; no extra tests or stories.
 
@@ -855,6 +859,32 @@ The existing native prefix journey now takes a full 100-row prefix page and its 
 journey takes a 100-assignment raw page with one withheld Subject summary and verifies that continuation starts after
 the raw frontier without refill; existing assignment, lifecycle and catalogue journeys retain their replay, CAS,
 capacity and later-edit assertions.
+
+Native Label and Search-receiving journeys, and the capability each pins:
+
+| Journey | Capability |
+| --- | --- |
+| `label-catalogue-command` | create/rename/delete/restore receipts, cursor identity |
+| `label-catalogue-http` | served catalogue pages and admission |
+| `label-catalogue-growth` | indexed catalogue windows as owners grow |
+| `label-prefix-command` | prefix normalization and continuation |
+| `label-prefix-growth` | generic `personal_label_live_name` prefix seeks |
+| `label-assignment-command` | assign receipts and capacity |
+| `label-assignment-command-growth` | assignment command work as neighbours grow |
+| `label-assignment-http` | served assignment pages |
+| `label-assignment-growth` | indexed assignment pages as owners grow |
+| `label-assignment-lifecycle-growth` | unassign/restore CAS under growth |
+| `label-full-http` | FULL headings, tiles, withheld Subject cursor |
+| `label-full-growth` | folded FULL work, 34 parent points, no Seq Scan |
+| `scoped-work-context` | Search scoped work frame |
+| `members-native-scope` | native member scope |
+| `scope-members-source-declaration` | member source declaration |
+| `scope-kind-work-context` | kind work frame |
+| `publication-work-context` | publication work frame |
+
+Ordinary Global `definitions:publish` / `definitions:activate` grants are the grant command after Access bootstrap;
+`platform.governance` is the first holder. No test-only grant rows. Passing/total and the slowest failure are the
+landing kernel check after this decode.
 
 Decision: the finite priced unit is one native command attempt (preparation, authorization, receipt, body, fence,
 rollback and serialization), consumed again on each Core retry. Deadline-scoped retries are request evidence; they

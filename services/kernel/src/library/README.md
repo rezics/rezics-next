@@ -126,8 +126,10 @@ Label catalogue, assignment, parent and point SQL use typed input CTEs and LATER
 (and the reserved-source 32-row seek) so generic prepared plans cannot Seq Scan an owner catalogue. Those
 `ORDER BY` lists name the index columns in index order; ordering only the trailing key Seq Scanned
 `personal_label` once per parent observation. Point reads
-seek the primary key then filter `include_deleted` on that row, take the first SQL row and project `createdAt` as
-insert RETURNING does so Reylo still decodes timestamptz text; they do not UNION ALL `include_deleted`. Folded FULL
+seek the primary key then filter `include_deleted` on that row, and project `createdAt` as insert RETURNING does so
+Reylo still decodes timestamptz text. A unique LATERAL LIMIT-1 point is one row; UNION ALL pages are arrays, so the
+store takes that row or the first array element. They do not UNION ALL `include_deleted`. Prefix `ORDER BY` names
+`personal_label_live_name` `(route, account_id, normalized_name)`. Folded FULL
 warmup sees 34 `personal_label` parent observations and zero sequential scans. Set, unassign, restore and
 rename select each named operand once in the one-row request and read those columns in the mutation WHERE.
 
