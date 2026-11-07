@@ -227,7 +227,7 @@ test('the first round runs boot smoke then the full suite, batches current-head 
   });
 
   const round = ctx.store.devVerifierLatestRound()!.round!;
-  expect(commands[0]).toContain('test/boot.test.ts');
+  expect(commands[0]!.at(-1)).toBe('services/kernel/test/boot.test.ts');
   expect(commands.some((command) => command.includes('scripts/typecheck.ts'))).toBe(true);
   expect(commands).toContainEqual(
     expect.arrayContaining(['services/kernel/test/a.test.ts', 'services/kernel/test/b.test.ts']),
@@ -605,7 +605,7 @@ test('Web verifier selections reach check.ts one file at a time with the capture
   expect(boot.command).toContain('--private-network');
   expect(boot.cwd.endsWith('/apps/web')).toBe(true);
   const webCalls = calls.filter(({ command }) => command.includes('scripts/check.ts'));
-  expect(webCalls).toHaveLength(3);
+  expect(webCalls).toHaveLength(4);
   expect(webCalls.every(({ cwd, head }) => cwd.endsWith('/apps/web') && head === target)).toBe(true);
   expect(webCalls.every(({ command }) => command.includes('--tests-only') && command.includes('--skip-format'))).toBe(
     true,
@@ -619,11 +619,16 @@ test('Web verifier selections reach check.ts one file at a time with the capture
     ),
   ).toBe(true);
   expect(webCalls.every(({ command }) => command.includes('-t') && command.includes('current selection'))).toBe(true);
-  expect(webCalls.map(({ command }) => command.at(-1))).toEqual([
-    'tests/unit/session-state.test.ts',
-    'tests/unit/session-mocks.test.ts',
-    'tests/browser/server-regression.test.ts',
-  ]);
+  expect(new Set(webCalls.map(({ command }) => command.at(-1)))).toEqual(
+    new Set([
+      'tests/unit/session-state.test.ts',
+      'tests/unit/session-mocks.test.ts',
+      'tests/browser/server-regression.test.ts',
+    ]),
+  );
+  expect(webCalls.filter(({ command }) => command.at(-1) === 'tests/browser/server-regression.test.ts')).toHaveLength(
+    2,
+  );
 
   const finding = [...ctx.findings.values()].find(
     (item) => item.test === 'apps/web/tests/browser/server-regression.test.ts',
@@ -680,7 +685,7 @@ test('deadline cancellation records the first cause and carries each unstarted W
   expect(started).toHaveLength(1);
   expect(cleanupFinished).toBe(true);
   expect(existsSync(started[0]!.cwd)).toBe(false);
-  expect(round).toMatchObject({ testsRun: 2, passed: 1, unknown: 1, pendingChecks: expect.any(Array) });
+  expect(round).toMatchObject({ testsRun: 2, passed: 1, unknown: 1 });
   expect(round.pendingChecks).toHaveLength(files.length - 1);
   expect(round.pendingChecks.every((check) => check.command.includes('scripts/check.ts'))).toBe(true);
   expect(round.pendingChecks.map((check) => check.command.at(-1))).toEqual(
