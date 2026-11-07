@@ -1,6 +1,6 @@
 import { useLayoutEffect, useRef, type ReactNode } from 'react';
 import { pageLanguageName } from './locale-presentation';
-import { correctionProposalAvailability } from '../catalogue/statement-editor';
+import { correctionProposalAvailability } from '../catalogue/statement-edit-application';
 import { ValueExplanationEntry } from '../catalogue/value-explanation-entry';
 import { useQuotationVisit } from './quotation-reading/visit';
 import { pickText } from '@rezics/composition';

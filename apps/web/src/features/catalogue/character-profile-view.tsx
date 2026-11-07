@@ -8,7 +8,7 @@ import { m } from '../../paraglide/messages.js';
 import { coverSrc } from '../../media/cover-src';
 import { pageText } from '../pages/data';
 import { ViewHeadingActions } from '../pages/view-heading';
-import { candidateContext } from '../../subject/candidates';
+import { candidateContext } from '../pages/visit-host-port';
 import type { CandidateTransport } from '../../subject/candidate-review';
 import type { RelationTransport } from '../../subject/relation-candidates';
 import { SubjectFacts } from './subject-facts-view';

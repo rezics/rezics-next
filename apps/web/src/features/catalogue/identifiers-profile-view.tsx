@@ -11,7 +11,7 @@ import { SubjectFacts } from './subject-facts-view';
 import { identifierFields } from './identifiers-profile';
 import type { IdentifierInspection, IdentifierVisitOrigin } from './identifier-current-visit';
 import { identifierOriginHref, identifierReviewHref } from './identifier-current-visit';
-import { candidateContext } from '../../subject/candidates';
+import { candidateContext } from '../pages/visit-host-port';
 import { pageText } from '../pages/shared';
 import { subjectHref } from '../../subject/subject-href';
 

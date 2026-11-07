@@ -1,5 +1,5 @@
 import { createContext, useContext } from 'react';
-import { CandidateValue } from '../../../pages/data';
+import { CandidateValue } from '../../../pages/scalar-value';
 import type { LinkProps } from '../../../pages/shared';
 import type { PartValue } from '../../statement-editor-view';
 import { m } from '../../../../paraglide/messages.js';

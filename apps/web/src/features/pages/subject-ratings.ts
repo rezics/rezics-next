@@ -40,9 +40,8 @@ export function providerStatisticLabel(source: string): string {
   return source;
 }
 type SubjectRoutes = ReturnType<KernelClient['subjects']>;
-export type RatingQuestion = NonNullable<
-  Awaited<ReturnType<ReturnType<KernelClient['rating-questions']>['get']>>['data']
->;
+import type { RatingQuestion } from '../../ratings/question-contract';
+export type { RatingQuestion } from '../../ratings/question-contract';
 export type PublicFigure = NonNullable<Awaited<ReturnType<SubjectRoutes['figure']['get']>>['data']>['figure'];
 export type Ratings = {
   question: RatingQuestion;
@@ -53,16 +52,8 @@ export type Ratings = {
   own: number | null;
 };
 
-/** PublicFigure numbers already use this documented display domain, rather than vote units. */
-export const PUBLIC_RATING_SCALE = { min: 0, max: 10 } as const;
-
-/** The standard question maps its stored bounds and step to the published display domain. */
-export function displayRating(units: number, scale: RatingQuestion['scale']): number {
-  return (
-    PUBLIC_RATING_SCALE.min +
-    ((units - scale.min) / (scale.max - scale.min)) * (PUBLIC_RATING_SCALE.max - PUBLIC_RATING_SCALE.min)
-  );
-}
+import { PUBLIC_RATING_SCALE, displayRating } from '../../ratings/question-contract';
+export { PUBLIC_RATING_SCALE, displayRating } from '../../ratings/question-contract';
 
 export function validRatingUnits(units: number, scale: RatingQuestion['scale']): boolean {
   return (
@@ -87,10 +78,8 @@ export function hasPublicMean(figure: PublicFigure): figure is PublicFigure & { 
   );
 }
 
-export async function readRatingQuestion(client: KernelClient): Promise<RatingQuestion | null> {
-  const result = await client['rating-questions']({ questionId: QUESTION }).get();
-  return result.status === 200 && result.data ? result.data : null;
-}
+export { readRatingQuestion } from '../../ratings/question-read';
+import { readRatingQuestion } from '../../ratings/question-read';
 
 export type SubjectOwnRating =
   | { reader: string | null; kind: 'ready'; units: number | null }

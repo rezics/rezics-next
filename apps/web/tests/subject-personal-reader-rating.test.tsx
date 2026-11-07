@@ -6,7 +6,8 @@ mock.module('cloudflare:workers', () => ({ env: { PUBLIC_ORIGIN: 'https://site.t
 import { dirname } from 'node:path';
 import { act, Fragment, StrictMode, createElement, useState } from 'react';
 import type { QueryClient, QueryKey } from '@tanstack/react-query';
-import type { SubjectOwnRating, RatingQuestion } from '../src/features/pages/subject-ratings';
+import type { SubjectOwnRating } from '../src/features/pages/subject-ratings';
+import type { RatingQuestion } from '../src/ratings/question-contract';
 import type { SubjectPersonalReadTransport, SubjectReaderObservation } from '../src/features/pages/subject-queries';
 import type { RatingWrite } from '../src/features/pages/rating-control';
 

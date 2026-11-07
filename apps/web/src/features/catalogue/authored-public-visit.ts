@@ -1,4 +1,4 @@
-import { candidateContext } from '../../subject/candidates';
+import { candidateContext } from '../pages/visit-host-port';
 import { subjectVisitReturn } from '../pages/subject-visit-navigation';
 
 /** A public observation only. It never names an assertion, document body, draft or command. */

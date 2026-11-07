@@ -1,5 +1,5 @@
 import { expect, test } from 'bun:test';
-import { QUESTION } from '../src/features/pages/subject-ratings';
+import { QUESTION } from '../src/ratings/question-ids';
 import { ownScoreUnits } from '../src/library/score';
 import {
   classifyPersonalScoreWriteProblem,

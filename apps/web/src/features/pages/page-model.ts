@@ -1,3 +1,4 @@
+import type { TermsPageAuthority } from './semantic-render-port';
 import type { SelectedContext, PageContinuation } from '@rezics/composition';
 import type { Release, ReleasedRelationDirectionResult } from '@rezics/definitions';
 import type { NativePageBody } from './page-read-failure';
@@ -6,6 +7,8 @@ import type { SubjectCommunity } from './subject-community';
 import type { PageDocument } from './render';
 
 export type SubjectPageData = {
+  /** Optional current Terms operation advice, independent of public names and subject-level actions. */
+  termsAuthority?: TermsPageAuthority;
   /** The subject the page is for; an agent page always has one, a route page none. */
   subject: string | null;
   /** The account an agent page is for, as the page read named it. */

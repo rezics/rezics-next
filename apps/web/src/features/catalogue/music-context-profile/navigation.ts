@@ -1,4 +1,4 @@
-import { candidateContext } from '../../../subject/candidates';
+import { candidateContext } from '../../pages/visit-host-port';
 import { subjectVisitReturn, withSubjectVisitReturn } from '../../pages/subject-visit-navigation';
 
 const streamId = /^[A-Za-z][A-Za-z0-9+.-]*:[^\s\u0000-\u001f\u007f]{1,128}$/u;

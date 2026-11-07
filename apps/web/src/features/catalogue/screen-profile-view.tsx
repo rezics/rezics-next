@@ -14,7 +14,7 @@ import { Button, buttonVariants } from '@rezics/ui/shadcn/button';
 import { m } from '../../paraglide/messages.js';
 import { contextHref } from '../pages/context-navigation';
 import { subjectHref } from '../../subject/subject-href';
-import { candidateContext } from '../../subject/candidates';
+import { candidateContext } from '../pages/visit-host-port';
 import type { CandidateTransport } from '../../subject/candidate-review';
 import type { RelationTransport } from '../../subject/relation-candidates';
 import { ViewHeading, ViewHeadingActions } from '../pages/view-heading';

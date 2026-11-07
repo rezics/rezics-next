@@ -1,7 +1,7 @@
 import { useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { candidateSession, useCatalogueLifetime } from '../../subject/candidate-lifetime';
-import { CandidateValue } from '../pages/data';
+import { CandidateValue } from '../pages/scalar-value';
 import { pageText } from '../pages/shared';
 import { identifierInspectionHref, type IdentifierInspection } from './identifier-current-visit';
 import {

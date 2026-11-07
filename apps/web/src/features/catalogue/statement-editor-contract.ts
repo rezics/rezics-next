@@ -2,7 +2,8 @@ import type { SubjectRead } from '@rezics/client';
 import type { Release } from '@rezics/definitions';
 import type { BatchStatement } from '@rezics/definitions/bulk';
 import type { Violation } from '@rezics/definitions/validate';
-import type { CandidateFailure, CandidateViewerActions } from '../../subject/candidates';
+import type { CandidateFailure } from '../pages/visit-host-port';
+import type { CandidateViewerActions } from '../../subject/candidate-contract';
 
 type EditorStatement = SubjectRead['subject']['statements'][string][number];
 

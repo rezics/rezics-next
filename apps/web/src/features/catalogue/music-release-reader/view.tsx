@@ -9,7 +9,7 @@ import type {
   CandidateViewerActions,
   NativeOperationAvailability,
   ViewerActionComponent,
-} from '../../../subject/candidates';
+} from '../../../subject/candidate-contract';
 import { useSubjectCommunityReading } from '../../pages/subject-community-lifetime';
 import { linkClass, linkColor } from '../../pages/shared';
 import { MusicReleaseFacts, MusicReleaseOccurrenceFacts, MusicReleaseSlot } from './facts';

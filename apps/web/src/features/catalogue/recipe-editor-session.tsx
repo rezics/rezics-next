@@ -1,6 +1,6 @@
 import { recipeVisitSearch, type RecipeVisitInput } from './recipe-current-visit';
 import { RecipeVisitNotice } from './recipe-current-visit-view';
-import { candidateContext } from '../../subject/candidates';
+import { candidateContext } from '../pages/visit-host-port';
 import { editorRequest } from './editor-request';
 import { useCatalogueLifetime } from '../../subject/candidate-lifetime';
 import { candidateSession } from '../../subject/candidate-lifetime';

@@ -1,8 +1,8 @@
 import { planReads, platformRegistry, type CompositionDocument } from '@rezics/composition';
 import platform from '@rezics/composition/profiles/platform.json';
-import type { SubjectPageData } from '../pages/subject';
+import type { SubjectPageData } from '../pages/page-model';
 import { identifiersProfileFixture, identifiersStatement } from '../../kernel/fake/catalogue-identifiers-profile';
-import { candidateContext } from '../../subject/candidates';
+import { candidateContext } from '../pages/visit-host-port';
 import { identifierEvidenceFromPage } from './identifier-current-visit-evidence';
 
 export const identifierExampleRealm = 'b7d92525-081e-42e1-9cb8-ef72b1492a25';

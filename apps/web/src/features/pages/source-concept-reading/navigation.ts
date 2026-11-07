@@ -1,6 +1,6 @@
 import { catalogueEntries } from '../../catalogue/catalogue-entry';
 import type { ConceptPage } from './visit';
-import type { ConceptWorksRouteState } from '../../catalogue/concept-works/view';
+import type { ConceptWorksRouteState } from '../../catalogue/concept-works/contract';
 
 export const conceptVisitDescriptorLimit = 8192;
 export const conceptVisitHistoryLimit = 8;

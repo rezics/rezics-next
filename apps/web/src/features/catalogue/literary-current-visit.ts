@@ -1,4 +1,4 @@
-import { candidateContext } from '../../subject/candidates';
+import { candidateContext } from '../pages/visit-host-port';
 import { subjectVisitReturn } from '../pages/subject-visit-navigation';
 import { isLiteraryType, type LiteraryType } from './literary-profile';
 

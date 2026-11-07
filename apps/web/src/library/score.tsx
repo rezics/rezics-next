@@ -1,5 +1,6 @@
 import { m } from '../paraglide/messages.js';
-import { displayRating, QUESTION } from '../features/pages/subject-ratings';
+import { displayRating } from '../ratings/question-contract';
+import { QUESTION } from '../ratings/question-ids';
 import type { KernelClient } from '@rezics/client';
 
 export type LibraryScoreQuestion = {
