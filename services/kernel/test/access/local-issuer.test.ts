@@ -10,7 +10,6 @@ import type { AuthenticationConfig } from '../../src/access/authenticate.ts';
 import { localJwksTransport } from '../../src/access/membership-work-config.ts';
 import { trustedAccessPorts } from '../support/trusted-access.ts';
 import { dropTestDatabase } from '../support/drop-test-database.ts';
-import { localJwksTransport } from '../../src/access/membership-work-config.ts';
 
 const url = process.env.DATABASE_URL;
 if (!url) throw new Error('DATABASE_URL must name the migrated test database');

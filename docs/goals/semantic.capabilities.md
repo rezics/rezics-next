@@ -77,6 +77,10 @@ account's discovered agent and an uncited private assertion, then checks public 
 Walk Kernel GET `/v1/definitions` is the supported active-release producer, equivalent to `/v1/definitions/active`;
 a missing-route 404 is not readiness. Kernel starts before worker discovery. The stack restores generated bindings
 and releases its slot even if another cleanup fails. Fixtures and typing are not native or browser passes.
+The native fixture runs the standard link relay and supplies dedicated receipt keys. The walk HTTP client retains
+causal sessions per credential and records failed requests before throwing, without storing bearer secrets.
+Receiving the installed Access and publication bindings preserves existing actor, deadline, Pool, grants and current
+read assertions; source review does not establish receiving acceptance.
 
 ## Evidence stages
 

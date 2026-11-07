@@ -1,5 +1,6 @@
 import { expect, test } from 'bun:test';
 import { FIRST_PUBLIC_JOURNEYS } from '../scripts/semantic-first-public-inventory.ts';
+import { nativeWalkCall, type NativeObservation } from '../scripts/semantic-first-public-request.ts';
 import {
   handleCall,
   walkReadinessUrls,
@@ -15,6 +16,47 @@ const stack = {
   native: 'http://127.0.0.1:20022',
   kernel: 'http://127.0.0.1:20023',
 };
+
+test('walk records exact native operands and readback while keeping sessions isolated by credential', async () => {
+  const trace: NativeObservation[] = [];
+  const requests: Request[] = [];
+  const call = nativeWalkCall(stack.kernel, trace, (async (input: RequestInfo | URL, init?: RequestInit) => {
+    const request = input instanceof Request ? input : new Request(input, init);
+    requests.push(request);
+    return Response.json(
+      { revision: requests.length },
+      { headers: { etag: '"revision"', 'rezics-session-token': 'causal-session', 'x-request-id': 'correlation' } },
+    );
+  }) as typeof fetch);
+  const body = { labels: { en: 'Corrected' } };
+  await call('PATCH', '/v1/subjects/id/terms', { bearer: 'editor-secret', ifMatch: '1', body });
+  const answer = await call('GET', '/v1/subjects/id', { bearer: 'editor-secret', query: { language: 'ja' } });
+  await call('GET', '/v1/subjects/id');
+  expect(requests[0]!.headers.get('idempotency-key')).toBe(JSON.stringify(trace[0]!.key));
+  expect(requests[0]!.headers.get('if-match')).toBe('"1"');
+  expect(await requests[0]!.json()).toEqual(body);
+  expect(requests[1]!.headers.get('rezics-session-token')).toBe('causal-session');
+  expect(requests[2]!.headers.get('rezics-session-token')).toBeNull();
+  expect(requests[2]!.headers.get('authorization')).toBeNull();
+  expect(trace[0]).toMatchObject({ method: 'PATCH', body, ifMatch: '1', status: 200, correlation: 'correlation' });
+  expect(trace[1]).toMatchObject({ url: `${stack.kernel}/v1/subjects/id?language=ja`, response: { revision: 2 } });
+  expect(trace[2]!.credential).toBe('anonymous');
+  expect(JSON.stringify(trace)).not.toContain('editor-secret');
+  expect(answer.etag).toBe('"revision"');
+});
+
+test('walk keeps a refused native response and an attempted transport failure in its trace', async () => {
+  const trace: NativeObservation[] = [];
+  const failure = new Error('connection closed');
+  const call = nativeWalkCall(stack.kernel, trace, (async () => {
+    if (trace.length === 1) return Response.json({ code: 'forbidden' }, { status: 403 });
+    throw failure;
+  }) as typeof fetch);
+  expect((await call('POST', '/v1/statements/id/disclose', { bearer: 'outsider' })).status).toBe(403);
+  expect(trace[0]).toMatchObject({ status: 403, response: { code: 'forbidden' } });
+  await expect(call('GET', '/v1/subjects/id')).rejects.toBe(failure);
+  expect(trace[1]).toEqual({ method: 'GET', url: `${stack.kernel}/v1/subjects/id`, credential: 'anonymous' });
+});
 
 test('the first-public walk names each of the 31 catalogue and Zone journeys once', () => {
   expect(FIRST_PUBLIC_JOURNEYS).toHaveLength(31);

@@ -1,3 +1,4 @@
+import { testReceiptKeys } from '../support/receipt-keys.ts';
 import { afterAll, beforeAll, expect, test } from 'bun:test';
 import { randomUUID } from 'node:crypto';
 import { PROFILE_FORMAT } from '@rezics/composition';
@@ -43,6 +44,7 @@ beforeAll(async () => {
   db = await openGrowthDatabase();
   real = await createRealAccess(db.admin, accounts, actions);
   app = createKernel({
+    receiptKeys: testReceiptKeys(),
     pool: db.pool,
     access: real.access,
     clock,

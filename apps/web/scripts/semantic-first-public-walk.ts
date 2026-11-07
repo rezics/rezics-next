@@ -5,7 +5,7 @@
  * every row in docs/goals/semantic.capabilities.md with native writes, independent readback and mounted pages.
  */
 import { spawn } from 'node:child_process';
-import { createHash, randomUUID } from 'node:crypto';
+import { randomUUID } from 'node:crypto';
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { join, resolve } from 'node:path';
 import { chromium, type Browser, type BrowserContext, type Page } from 'playwright';
@@ -52,6 +52,7 @@ import {
   type WalkStackOrigins,
 } from './semantic-first-public-native.ts';
 
+import { nativeWalkCall, type NativeObservation } from './semantic-first-public-request.ts';
 import { updateFirstPublicInventory } from './semantic-first-public-evidence.ts';
 import { withWalkResources } from '../../../scripts/walk-stack.ts';
 
@@ -60,18 +61,6 @@ const evidenceDir = join(root, '.temp/semantic-first-public-walk');
 const token = randomUUID().slice(0, 8);
 
 type Stack = WalkStackOrigins;
-type NativeObservation = {
-  method: string;
-  url: string;
-  credential: string;
-  key?: string;
-  ifMatch?: string;
-  body?: unknown;
-  status?: number;
-  response?: unknown;
-  etag?: string;
-  correlation?: string;
-};
 
 type Result = {
   id: FirstPublicJourneyId;
@@ -129,18 +118,6 @@ type TypedProbe = { url: string; status: number; error?: string; code?: string; 
 
 async function typedProbe(url: string, phase: string): Promise<TypedProbe> {
   try {
-    const key = method === 'GET' ? undefined : randomUUID();
-    const observation: NativeObservation = {
-      method,
-      url: url.href,
-      credential: options.bearer
-        ? `bearer-sha256:${createHash('sha256').update(options.bearer).digest('hex')}`
-        : 'anonymous',
-      ...(key === undefined ? {} : { key }),
-      ...(options.ifMatch === undefined ? {} : { ifMatch: options.ifMatch }),
-      ...(options.body === undefined ? {} : { body: options.body }),
-    };
-    trace.push(observation);
     const response = await fetch(url, { signal: AbortSignal.timeout(15_000), redirect: 'manual' });
     const text = await response.text();
     let body: { code?: unknown; digest?: unknown } | undefined;
@@ -181,40 +158,6 @@ async function parseEnv(path: string): Promise<Record<string, string>> {
     if (match?.groups) values[match.groups.name!] = match.groups.value!.replace(/^'(.*)'$/, '$1');
   }
   return values;
-}
-
-function fetchCall(stack: Stack, trace: NativeObservation[]): KernelCall {
-  return async (method, path, options = {}) => {
-    const url = new URL(path, stack.kernel);
-    for (const [name, value] of Object.entries(options.query ?? {})) url.searchParams.set(name, value);
-    const response = await fetch(url, {
-      method,
-      signal: AbortSignal.timeout(60_000),
-      headers: {
-        ...(options.body === undefined ? {} : { 'content-type': 'application/json' }),
-        ...(key === undefined ? {} : { 'idempotency-key': JSON.stringify(key) }),
-        ...(options.ifMatch ? { 'if-match': `"${options.ifMatch}"` } : {}),
-        ...(options.bearer ? { authorization: `Bearer ${options.bearer}` } : {}),
-        'accept-language': 'en',
-      },
-      ...(options.body === undefined ? {} : { body: JSON.stringify(options.body) }),
-    });
-    const text = await response.text();
-    const etag = response.headers.get('etag') ?? undefined;
-    const body = text ? (JSON.parse(text) as Json) : {};
-    Object.assign(observation, {
-      status: response.status,
-      response: body,
-      ...(etag === undefined ? {} : { etag }),
-      ...(response.headers.get('x-request-id') ? { correlation: response.headers.get('x-request-id')! } : {}),
-    });
-    return {
-      status: response.status,
-      headers: response.headers,
-      body,
-      ...(etag === undefined ? {} : { etag }),
-    };
-  };
 }
 
 async function accessToken(stack: Stack, email: string, password: string): Promise<string> {
@@ -508,7 +451,7 @@ async function main() {
       editorCause = personaCause ?? 'persona keys.json missing';
     }
     const trace: NativeObservation[] = [];
-    const call = fetchCall(stack, trace);
+    const call = nativeWalkCall(stack.kernel, trace);
     const browserTemp = join(evidenceDir, 'browser');
     await mkdir(browserTemp, { recursive: true, mode: 0o700 });
     const results = roundResults;

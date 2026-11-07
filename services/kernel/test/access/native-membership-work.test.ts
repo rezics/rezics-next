@@ -1,3 +1,4 @@
+import { configureTestReceiptKeys } from '../support/receipt-keys.ts';
 import { afterAll, expect, spyOn, test } from 'bun:test';
 import { randomUUID } from 'node:crypto';
 import { DBOS } from '@dbos-inc/dbos-sdk';
@@ -21,6 +22,7 @@ import { newId, routeOf } from '../../src/route/route.ts';
 
 const pool = createPool(process.env.DATABASE_URL!);
 pool.options.max = 1;
+configureTestReceiptKeys(pool);
 const client = await createWorkClient(process.env.DATABASE_URL!);
 const signing = await generateKeyPair('ES256', { extractable: true });
 const jwk = { ...(await exportJWK(signing.publicKey)), kid: 'membership-component', alg: 'ES256' };

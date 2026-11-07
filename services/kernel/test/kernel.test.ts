@@ -223,6 +223,7 @@ const typed = [
   'POST /v1/definitions/releases',
   'POST /v1/definitions/imports',
   'GET /v1/definitions/releases/:digest',
+  'GET /v1/definitions',
   'GET /v1/definitions/active',
   'GET /v1/definitionTypes',
   'GET /v1/definitionTypes/:typeId',

@@ -1,3 +1,4 @@
+import { testReceiptKeys } from '../support/receipt-keys.ts';
 import { afterAll, beforeAll, expect, test } from 'bun:test';
 import { randomUUID } from 'node:crypto';
 import pg from 'pg';
@@ -37,6 +38,7 @@ beforeAll(async () => {
 
 const tokens: KeyRing = { current: 1, keys: new Map([[1, new Uint8Array(32).fill(5)]]) };
 const kernel = createKernel({
+  receiptKeys: testReceiptKeys(),
   pool,
   access: realAccess.access,
   tokens,

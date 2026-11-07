@@ -1,3 +1,5 @@
+import { startRelays } from '../../src/events/relays.ts';
+import { linkProjection } from '../../src/semantic/links.ts';
 import { afterAll, beforeAll, expect, setDefaultTimeout, test } from 'bun:test';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
@@ -96,6 +98,7 @@ const verticals = [
 ] as const;
 
 let call: KernelCall;
+let relays: ReturnType<typeof startRelays> | undefined;
 let editorAgent: string;
 const accounts = {
   editor: newId(0x7111),
@@ -147,6 +150,7 @@ beforeAll(async () => {
     await access.grant(global, 'editor', action);
     await access.grant(global, 'operator', action);
   }
+  relays = startRelays(pool, [linkProjection(pool)], { intervalMs: 20 });
   call = handleCall(
     (request) => app.handle(request),
     (token) => access.bearer(token as keyof typeof accounts),
@@ -154,6 +158,7 @@ beforeAll(async () => {
 }, 180_000);
 
 afterAll(async () => {
+  await relays?.stop();
   await pool.end();
   await admin.end();
 }, 120_000);
