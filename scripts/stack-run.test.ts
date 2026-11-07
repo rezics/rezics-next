@@ -32,6 +32,7 @@ import {
 import { runWorkerCheck } from './worker-check.ts';
 import { checkClass, recordPeak } from './check-memory.ts';
 import { walkHttpAnswers, walkStackLimit, walkStackNames } from './walk-stack.ts';
+import { currentCheckSourceManifest } from './check-run.ts';
 
 const repository = resolve(import.meta.dir, '..');
 const stackRun = join(repository, 'scripts/stack-run.ts');
@@ -561,6 +562,7 @@ async function missingGenericEvidenceRun(
   directory: string,
   events: () => Event[],
 ) {
+  const expectedSourceManifest = await currentCheckSourceManifest(directory, ['missing-output.txt']);
   const source = `const { remoteCheck } = await import(${JSON.stringify(join(repository, 'scripts/remote-check.ts'))});
 let settlement;
 let outcome;
@@ -570,7 +572,8 @@ try {
       cpuQuotaPercent: 800, slots: 2, processorsPerSlot: 4 }],
     workspace: process.env.TEST_WORKSPACE,
     command: ['true'],
-    expectedSourceSha256: '${'a'.repeat(64)}',
+    expectedSourceSha256: ${JSON.stringify(expectedSourceManifest.sourceSha256)},
+    expectedSourceManifest: ${JSON.stringify(expectedSourceManifest)},
     returns: ['missing-output.txt'],
     settled: (receipt) => { settlement = receipt; },
   }, new AbortController().signal);
@@ -648,6 +651,7 @@ test('ordinary remote transport keeps the native outcome and declared returns/cl
   const fixture = scenario({ a: { available: 20e9, exit: 7 } });
   assertMockProbeReady(fixture);
   const directory = workspace();
+  writeFileSync(join(directory, 'missing-output.txt'), 'return this file from the simulated host\n');
   const result = await stackWithFixtureDeadline(fixture, ['true'], ['--returns', 'missing-output.txt'], directory);
   const eventSummary = fixture
     .events()
@@ -738,7 +742,6 @@ test('a refused physical run keeps its predicate primary and cannot start nested
   const run = `${ROOT}/runs/m7v0a9-k1a2b3c4`;
   const diagnostics: string[] = [];
   const original = console.error;
-  let remoteAttempts = 0;
   console.error = (...values: unknown[]) => diagnostics.push(values.map(String).join(' '));
   let result: number | null = null;
   try {
@@ -750,10 +753,7 @@ test('a refused physical run keeps its predicate primary and cannot start nested
         command: ['bun', 'scripts/typecheck.ts'],
       },
       fixture.env,
-      async () => {
-        remoteAttempts += 1;
-        return 0;
-      },
+      undefined,
       () => ({ outcome: 'refused', reason: 'supervisor-marker-invalid' }),
     );
   } finally {
@@ -763,7 +763,6 @@ test('a refused physical run keeps its predicate primary and cannot start nested
   expect(diagnostics).toEqual([
     'stack-run: kernel typecheck physical run recognition refused (supervisor-marker-invalid)',
   ]);
-  expect(remoteAttempts).toBe(0);
   expect(fixture.events()).toEqual([]);
 });
 

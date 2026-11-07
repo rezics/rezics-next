@@ -2,7 +2,6 @@ import { afterAll, expect, test } from 'bun:test';
 import { randomUUID } from 'node:crypto';
 import { EventEmitter } from 'node:events';
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
-import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { PassThrough } from 'node:stream';
 import type { spawn } from 'node:child_process';
@@ -29,7 +28,7 @@ test('explicit host-local and host-absolute environment overrides are refused', 
 function fixture(): string {
   // Remote acceptance runs from /srv/rezics-check/runs/<id>. Keep an off-host
   // fixture outside that physical run or onCheckHost(root) tests the runner.
-  const root = mkdtempSync(join(tmpdir(), `placement-${randomUUID()}-`));
+  const root = mkdtempSync(join('/tmp', `placement-${randomUUID()}-`));
   temporary.push(root);
   mkdirSync(join(root, '.git'));
   writeFileSync(
@@ -192,7 +191,7 @@ test('caller markers cannot convert heavy placement to local, and only performan
 });
 
 test('worker --local with unflagged host c fails closed and transport failure never replays locally', async () => {
-  const root = mkdtempSync(join(tmpdir(), `worker-placement-${randomUUID()}-`));
+  const root = mkdtempSync(join('/tmp', `worker-placement-${randomUUID()}-`));
   temporary.push(root);
   const gitInit = Bun.spawnSync(['git', 'init', '--quiet', root], { stdin: 'ignore', stdout: 'pipe', stderr: 'pipe' });
   expect(gitInit.exitCode).toBe(0);
@@ -342,7 +341,7 @@ test('stack-heavy work never calls its local callback with absent hosts, unflagg
 test('the fixed held-child operation retains ordinary remote placement and grants no eval or local bypass', async () => {
   const { encodeLifecycleSpec, LIFECYCLE_CHILD } = await import('./check-lifecycle-child.ts');
   const { tmpdir } = await import('node:os');
-  const root = mkdtempSync(join(tmpdir(), 'rezics-placement-lifecycle-'));
+  const root = mkdtempSync(join('/tmp', 'rezics-placement-lifecycle-'));
   try {
     const encoded = encodeLifecycleSpec({
       version: 1,
