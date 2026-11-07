@@ -1,4 +1,4 @@
-import type { SearchPageData } from './search';
+import type { SearchPageData } from './search-query-contract';
 
 /** Retain only the last row window during a continuation; aggregates require the new read's proof. */
 export function realmCatalogueWindow(current: SearchPageData, previous?: SearchPageData): SearchPageData {

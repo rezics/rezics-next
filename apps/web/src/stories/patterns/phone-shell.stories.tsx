@@ -9,7 +9,7 @@ import { HeaderSearch } from '../../search/header-search/header-search';
 import { rememberRecent, type RecentHistory } from '../../search/recent-history';
 import type { SearchRealmDiscoveryLoader } from '../../search/realm-discovery-section';
 import { SearchPage } from '../../search/search';
-import { searchQueryOptions } from '../../search/search-queries';
+import { searchQueryOptions } from '../../search/search-query-options';
 import { searchLoaderDeps } from '../../search/search-params';
 import { searchFacetStoryPaths } from '../../kernel/fake/search-facets';
 import type { UnreadCount } from '../../inbox/inbox-read';

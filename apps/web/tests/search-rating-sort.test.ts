@@ -9,17 +9,19 @@ async function source(path: string) {
 }
 
 test('the search page offers relevance by default and a URL-backed Top rated sort', async () => {
-  const [params, search, queries, sort, messages] = await Promise.all([
+  const [params, search, queries, application, sort, messages] = await Promise.all([
     source('src/search/search-params.ts'),
     source('src/search/search.tsx'),
-    source('src/search/search-queries.ts'),
+    source('src/search/search-query-options.ts'),
+    source('src/search/search-application.ts'),
     source('src/search/sort.tsx'),
     source('messages/en.json'),
   ]);
   expect(params).toMatch(/sort/);
   expect(search).toMatch(/sort/);
   expect(search).toMatch(/rating/);
-  expect(queries).toMatch(/queryKey: \['search', 'discovery-v1', searchSessionLifetime\(locale, params, reader\)\]/);
+  expect(queries).toMatch(/queryKey: searchApplication\.queryKey\(locale, params, reader\)/);
+  expect(application).toMatch(/searchSessionLifetime\(locale, params, reader\)/);
   expect(queries).toMatch(/sort/);
   expect(sort).toMatch(/changeRatingOrder/);
   expect(messages).toMatch(/Top rated/);
