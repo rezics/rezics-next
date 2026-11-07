@@ -1,5 +1,6 @@
 import { expect, test } from 'bun:test';
 import {
+  applyWalkResults,
   checkoutSessionIdFromUrl,
   FIRST_PUBLIC_JOURNEYS,
   publicFields,
@@ -38,4 +39,38 @@ test('walk checkout URLs yield the hosted session and loopback Stripe origin', (
   expect(checkoutSessionIdFromUrl('https://checkout.stripe.com/c/pay/cs_test_walkSession')).toBe('cs_test_walkSession');
   expect(walkStripeOrigin({ STRIPE_API_HOST: 'http://127.0.0.1:18765' })).toBe('http://127.0.0.1:18765');
   expect(walkStripeOrigin({ STRIPE_API_HOST: 'https://api.stripe.com' })).toBeUndefined();
+});
+
+test('walk results replace finishing-register cells and the measured summary', () => {
+  const rows: JourneyWalkRow[] = FIRST_PUBLIC_JOURNEYS.map((journey) => ({
+    journey: journey.id,
+    title: journey.title,
+    result: 'FAIL',
+    revision: 'e68f0eb31ddd8857e27ad7ff794487b1672c9d8b',
+    utc: '2026-11-07T04:46:25.021Z',
+    elapsedSeconds: 278,
+    persona: 'setup',
+    firstDiffering: {
+      command: 'seeded walk setup',
+      expected: 'admitted seeded walk setup',
+      observed: 'seed-retry exited 1: Import transport request failed',
+    },
+    evidence: '.temp/commerce-walk/results.json',
+    steps: [],
+    pages: [...journey.pages],
+  }));
+  const next = applyWalkResults(
+    [
+      'Latest measured result: **1/26**.',
+      '| Journey | User-visible path | Latest dev walk | Evidence / elapsed |',
+      '| Offer management | Creator opens /creator/offers. | Pending first walk | — |',
+    ].join('\n'),
+    rows,
+  );
+  expect(next).toContain(
+    'Latest measured result: **0/26**. Slowest failing path: Offer management (setup, 278s); first differing command `seeded walk setup` / result `seed-retry exited 1: Import transport request failed`.',
+  );
+  expect(next).toContain(
+    '| Offer management | Creator opens /creator/offers. | FAIL e68f0eb31ddd 2026-11-07T04:46:25.021Z setup | .temp/commerce-walk/results.json 278s; seeded walk setup → seed-retry exited 1: Import transport request failed |',
+  );
 });

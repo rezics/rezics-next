@@ -1005,6 +1005,10 @@ this genuine-order suite remains the financial retention proof. No extra outcome
 26 rows. Seed dump scans throw the shared scan-limit class and the pinned 2026-11-04 VNDB dump fits the release
 budgets, so overflow is a gap rather than a seed crash. The walker waits for an importer fence after persona, and
 admitted stacks start a signed Stripe fixture so purchase settles through `checkout.session.completed`.
+Decision: admitted walk processes bind `KERNEL_ORIGIN`, `AUTH_ORIGIN` and `KERNEL_PORT` to the slot. Seed talks to
+that Kernel; an inherited default-port `KERNEL_ORIGIN` is the observed import-transport setup failure. Bun
+`--env-file` does not override an existing `KERNEL_ORIGIN`, so the walker merges persona `seed.env` after the slot
+origins. The finishing register is `docs/goals/commerce.capabilities.md#first-public-journeys-on-dev`.
 Decision: Content's canonical issuer owns JWKS: `AUTH_ISSUER` and `AUTH_JWKS_URL` share the issuer origin and port;
 membership admission does not allow a distinct native JWKS port. The walk command stays on the worker host so
 `GOAL_ACCEPTANCE_REQUIRES` is not stripped; Auth pages start before Kernel so issuer JWKS is reachable for seed.

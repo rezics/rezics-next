@@ -80,7 +80,7 @@ async function child(command: string[], name: string, env: NodeJS.ProcessEnv = p
 async function logTail(name: string): Promise<string> {
   try {
     const lines = (await readFile(join(evidenceDir, `${name}.log`), 'utf8')).trim().split('\n').filter(Boolean);
-    return lines.slice(-8).join(' | ').slice(0, 400) || '(empty log)';
+    return lines.slice(-16).join(' | ').slice(0, 800) || '(empty log)';
   } catch {
     return '(missing log)';
   }
@@ -352,14 +352,31 @@ function failSetup(revision: string, utc: string, elapsedSeconds: number, stage:
   }));
 }
 
-async function seedCatalog(): Promise<void> {
-  const command = ['bun', '--env-file=.temp/local-stack/seed.env', 'scripts/datasets/cross-media-seed.ts', '--dev'];
+function assignedEnv(env: NodeJS.ProcessEnv): Record<string, string> {
+  const values: Record<string, string> = {};
+  for (const [name, value] of Object.entries(env)) if (value !== undefined) values[name] = value;
+  return values;
+}
+
+async function seedEnv(stack: Stack): Promise<Record<string, string>> {
+  return assignedEnv({
+    ...process.env,
+    ...(await parseEnv(join(root, '.temp/local-stack/seed.env'))),
+    KERNEL_ORIGIN: stack.kernel,
+    AUTH_ORIGIN: stack.issuer,
+    KERNEL_PORT: new URL(stack.kernel).port,
+  });
+}
+
+async function seedCatalog(stack: Stack, env: Record<string, string>): Promise<void> {
+  const command = ['bun', 'scripts/datasets/cross-media-seed.ts', '--dev'];
   try {
-    await child(command, 'seed');
+    await child(command, 'seed', env);
   } catch (first) {
     const observed = first instanceof Error ? first.message : String(first);
     if (!/Import transport request failed/i.test(observed)) throw first;
-    await child(command, 'seed-retry');
+    await waitUntilImportReady(stack.kernel, env);
+    await child(command, 'seed-retry', env);
   }
 }
 
@@ -443,8 +460,9 @@ async function main() {
   try {
     await waitUntilActiveRelease(stack.kernel);
     await child(['bun', 'services/auth/scripts/dev-stack.ts', 'persona'], 'persona');
-    await waitUntilImportReady(stack.kernel, await parseEnv(join(root, '.temp/local-stack/seed.env')));
-    await seedCatalog();
+    const env = await seedEnv(stack);
+    await waitUntilImportReady(stack.kernel, env);
+    await seedCatalog(stack, env);
     frontends = await startSeededFrontends();
     const showcase = await readShowcase();
     const keys = JSON.parse(await readFile(join(root, '.temp/local-stack/keys.json'), 'utf8')) as { password: string };

@@ -355,7 +355,9 @@ actual native identities. Missing credentials, private exports or required seede
 controller. Keep actual doctor volumes and live process and browser sessions. Use `127.0.0.1` throughout.
 
 Inside `<command>`, provision with `bun services/auth/scripts/dev-stack.ts persona` and seed with
-`bun scripts/datasets/cross-media-seed.ts --dev` after loading the private `seed.env` that persona wrote. Do not run
+`bun scripts/datasets/cross-media-seed.ts --dev` after loading the private `seed.env` that persona wrote. Admitted
+walk processes bind `KERNEL_ORIGIN`, `AUTH_ORIGIN` and `KERNEL_PORT` to the slot so seed reaches this Kernel, not an
+inherited default-port origin; `bun --env-file` does not override those names once they are already set. Do not run
 `task seed:dev` or `task dev:persona` inside a walk: those depend on `dev:infra` and would start the default-port
 stack beside the admitted slot. Ordinary member personas use actual signup; privileged roles come from native
 admission. Browser launch sets `TMPDIR` to a short root such as `/tmp/rw` when the inherited root is missing, so
