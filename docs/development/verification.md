@@ -72,6 +72,13 @@ child file. Option operands and their values stay unchanged. Each named file sti
 log is not execution evidence. Pin current-reader recovery in the existing Subject community, CollectionList, Copies
 session and Person Location tests; Auth metadata uses the existing protocol cases plus a consumed-body fallback.
 
+Decision: test dependency admission uses the consuming workspace's declared packages and the syntax parser owned by
+root tooling, including type-only imports. Web fixtures import their DOM tools directly, preserve the full public
+exports of mocked modules, and explicitly restore module replacements; `mock.restore()` alone does not retire those
+replacements. Locale transitions in mounted fixtures change the browser's locale-bearing URL as well as locale state.
+Keep credential preparation and reached-work assertions on the real producers. Run retained multi-file selections
+through the focused runner's fresh runtime for each file, in the original selection order.
+
 Decision: mapper-enabled workspaces (Kernel, Auth, Web) typecheck one at a time inside an admitted slice so their
 tsc/Reylo runs cannot stack past the 6 GiB per-run memory cap; leaf packages may run in parallel.
 

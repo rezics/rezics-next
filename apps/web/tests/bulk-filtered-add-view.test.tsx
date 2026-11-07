@@ -1,5 +1,4 @@
 import { afterAll, expect, mock, test } from 'bun:test';
-import { dirname } from 'node:path';
 import { act } from 'react';
 import collection from '../src/kernel/recorded/library-collection.json';
 import type { FilteredAddOperation } from '../src/library/bulk-filtered-add-native';
@@ -65,9 +64,7 @@ const native = {
   expiresAt: '2099-11-05T00:00:00Z',
   reason: null,
 } as FilteredAddOperation;
-const { Window } = await import(
-  Bun.resolveSync('happy-dom', dirname(Bun.resolveSync('@puckeditor/core', import.meta.dir)))
-);
+const { Window } = await import('happy-dom');
 const window = new Window({ url: 'https://site.test/en/collections/source' });
 const previous = new Map<string, PropertyDescriptor | undefined>();
 for (const name of [

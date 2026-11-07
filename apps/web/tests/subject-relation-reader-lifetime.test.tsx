@@ -1,5 +1,4 @@
 import { expect, mock, test } from 'bun:test';
-import { dirname } from 'node:path';
 import { act } from 'react';
 import * as start from '../.storybook/react-start';
 import type { OverviewValue, Section } from '../src/features/pages/overview';
@@ -273,9 +272,7 @@ test('private unmount cannot bless borrowed relation rows after unobserved sessi
   mock.module('@tanstack/react-start', () => ({ ...start, createServerFn }));
   mock.module('@tanstack/react-start/server', () => ({ ...start, createServerFn }));
 
-  const { Window } = await import(
-    Bun.resolveSync('happy-dom', dirname(Bun.resolveSync('@puckeditor/core', import.meta.dir)))
-  );
+  const { Window } = await import('happy-dom');
   const window = new Window({ url: 'https://rezics.test/en/subjects/relations' });
   const restoreGlobals = installWindow(window);
 
@@ -1054,9 +1051,7 @@ test('private unmount cannot bless borrowed relation rows after unobserved sessi
 });
 
 test('work region return focuses its actual inspection control once and retires replacement and concealed readings', async () => {
-  const { Window } = await import(
-    Bun.resolveSync('happy-dom', dirname(Bun.resolveSync('@puckeditor/core', import.meta.dir)))
-  );
+  const { Window } = await import('happy-dom');
   const browser = new Window({ url: 'https://rezics.test/en/subjects/00000000-0000-4000-8000-000000000970/book' });
   const restoreGlobals = installWindow(browser);
   const { createElement: h } = await import('react');

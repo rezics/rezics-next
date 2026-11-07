@@ -1,5 +1,4 @@
 import { afterAll, expect, mock, spyOn, test } from 'bun:test';
-import { dirname } from 'node:path';
 import { act, StrictMode, type ReactNode } from 'react';
 import * as start from '../.storybook/react-start';
 import type { BuyerOrdersCurrentRead } from '../src/checkout/orders';
@@ -15,9 +14,7 @@ import paid from '../src/kernel/recorded/order-paid.json';
 mock.module('@tanstack/react-start', () => start);
 mock.module('@tanstack/react-start/server', () => start);
 mock.module('cloudflare:workers', () => ({ env: {} }));
-const { Window } = await import(
-  Bun.resolveSync('happy-dom', dirname(Bun.resolveSync('@puckeditor/core', import.meta.dir)))
-);
+const { Window } = await import('happy-dom');
 const window = new Window({ url: 'https://site.test/en/orders' });
 const globals = {
   window,

@@ -1,5 +1,4 @@
 import { expect, mock, test } from 'bun:test';
-import { dirname } from 'node:path';
 import { act, createElement, StrictMode } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import * as start from '../.storybook/react-start';
@@ -243,9 +242,7 @@ async function settle() {
 
 // One mounted reader and public-profile consumer regression spanning both account paths.
 test('public account readers retire old admissions across sign-out, replacement, route changes and ABA', async () => {
-  const { Window } = await import(
-    Bun.resolveSync('happy-dom', dirname(Bun.resolveSync('@puckeditor/core', import.meta.dir)))
-  );
+  const { Window } = await import('happy-dom');
   const window = new Window({ url: 'https://rezics.test/en/@alice' });
   const restoreGlobals = installWindow(window);
   const [

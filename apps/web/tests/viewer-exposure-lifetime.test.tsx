@@ -1,6 +1,5 @@
 import { afterAll, expect, mock, test } from 'bun:test';
 import { AsyncLocalStorage } from 'node:async_hooks';
-import { dirname } from 'node:path';
 import { act, createElement, Fragment, StrictMode } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import * as storyStart from '../.storybook/react-start';
@@ -197,9 +196,7 @@ test('viewer exposure retires each mounted reader observation without leaking or
 
   try {
     if (originalWindow) Reflect.deleteProperty(globalThis, 'window');
-    const { Window } = await import(
-      Bun.resolveSync('happy-dom', dirname(Bun.resolveSync('@puckeditor/core', import.meta.dir)))
-    );
+    const { Window } = await import('happy-dom');
 
     // Public preparation remains session-free and supplies the current public exposure result.
     client.setQueryData(['exposure', 'anonymous'], { state: 'ready', admitted: publicGroups });
