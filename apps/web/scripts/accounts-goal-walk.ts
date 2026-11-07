@@ -659,11 +659,12 @@ if (import.meta.main) {
     });
   }
 
-  function failDependents(ids: JourneyId[], cause: string, reached: string) {
+  async function failDependents(ids: JourneyId[], cause: string, reached: string) {
     for (const id of ids) {
       const row = rows.get(id)!;
       if (row.result === 'unobserved') mark(id, 'FAIL', `not reached: ${reached}`, 0, cause, row.owner);
     }
+    await persist();
   }
 
   async function persist() {
@@ -686,6 +687,7 @@ if (import.meta.main) {
       (evidence.defects as string[]).push(`${id}: ${cause}`);
       note(`${id} FAIL ${reached}: ${cause}`);
     }
+    await persist();
   }
 
   await untilAnswers(`${stack.native}/`, 'native Auth');
@@ -707,12 +709,11 @@ if (import.meta.main) {
     note('developer-token');
   } catch (error) {
     const cause = error instanceof Error ? error.message : String(error);
-    failDependents(
+    await failDependents(
       JOURNEYS.map((journey) => journey.id),
       cause,
       'POST /signin login then GET /authorize',
     );
-    await persist();
     throw error;
   }
   if (!website) throw new Error('developer website token was not issued');
@@ -735,10 +736,10 @@ if (import.meta.main) {
   }
 
   let kernelBearerCause = '';
-  function rememberKernelBearerFailure(result: { status: number; value: Json }, label: string) {
+  async function rememberKernelBearerFailure(result: { status: number; value: Json }, label: string) {
     if (!isInvalidCredentials(result) || kernelBearerCause) return;
     kernelBearerCause = `${label} returned HTTP ${result.status}: ${summarize(result.value)}`;
-    failDependents([...KERNEL_BEARER_JOURNEYS], kernelBearerCause, label);
+    await failDependents([...KERNEL_BEARER_JOURNEYS], kernelBearerCause, label);
   }
 
   const openedOrg = await kernel(stack, 'POST', '/v1/platform/exposure/organizations:open', {
@@ -747,7 +748,7 @@ if (import.meta.main) {
   });
   if (![200, 409].includes(openedOrg.status))
     evidence.native.push({ organizationsOpen: openedOrg.status, body: publicFields(openedOrg.value) });
-  rememberKernelBearerFailure(openedOrg, 'POST /v1/platform/exposure/organizations:open');
+  await rememberKernelBearerFailure(openedOrg, 'POST /v1/platform/exposure/organizations:open');
 
   let walker: Person | undefined;
   let outsider: Person | undefined;
@@ -769,7 +770,7 @@ if (import.meta.main) {
       bearer: token.bearer,
       query: { ids: token.session.accountId },
     });
-    rememberKernelBearerFailure(me, 'authenticated account');
+    await rememberKernelBearerFailure(me, 'authenticated account');
     requireStatus(me, 'authenticated account', 200);
     walker.accountId = token.session.accountId;
     evidence.native.push({ j01: walker.accountId, callback: token.codePath });
@@ -900,7 +901,7 @@ if (import.meta.main) {
     evidence.native.push({ organizationId, orgHandle, member: dest.accountId });
     return `organization ${orgHandle}`;
   });
-  if (rows.get('J06')?.result === 'FAIL') failDependents(['J07'], rows.get('J06')!.cause, 'J06 organization');
+  if (rows.get('J06')?.result === 'FAIL') await failDependents(['J07'], rows.get('J06')!.cause, 'J06 organization');
 
   await runJourney('J07', 'POST /account-operations membership role=owner → management read', async () => {
     if (!organizationId || !dest) throw new Error('organization create did not yield an identity');
@@ -1152,7 +1153,7 @@ if (import.meta.main) {
     const stranger = await websiteToken(stack, target, bindings, keys.website);
     await kernel(stack, 'PUT', `/v1/follows/${target.accountId}`, { bearer: token.bearer, body: {} });
     const own = await kernel(stack, 'GET', '/v1/followCounts/outgoing', { bearer: token.bearer });
-    rememberKernelBearerFailure(own, 'own outgoing count');
+    await rememberKernelBearerFailure(own, 'own outgoing count');
     requireStatus(own, 'own outgoing count', 200);
     if (typeof own.value.followingCount !== 'number') throw new Error('outgoing omitted followingCount');
     const concealed = await kernel(stack, 'GET', `/v1/followCounts/subject/${target.accountId}`, {
@@ -1196,7 +1197,7 @@ if (import.meta.main) {
     if (after.status === 200) throw new Error('member read still succeeded after leave');
     return `realm ${realmId} leave HTTP ${after.status}`;
   });
-  if (rows.get('J15')?.result === 'FAIL') failDependents(['J16'], rows.get('J15')!.cause, 'J15 realm');
+  if (rows.get('J15')?.result === 'FAIL') await failDependents(['J16'], rows.get('J15')!.cause, 'J15 realm');
 
   await runJourney('J16', 'PUT /v1/realms/{id}/bans/{accountId} → GET members/me → POST members', async () => {
     if (!realmId) throw new Error('realm create did not yield an identity');
