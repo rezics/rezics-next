@@ -23,6 +23,12 @@ export const journeySteps = {
 } as const;
 
 export type JourneyName = keyof typeof journeySteps;
+
+/** Native persona setup prints a generated password; retained walk logs are public evidence. */
+export function redactWalkLog(line: string): string {
+  return line.replace(/^(\s*Password:)\s*[^\r\n]*/gim, '$1 [redacted]');
+}
+
 export type JourneyProgress = {
   name: JourneyName;
   startedAt: string;

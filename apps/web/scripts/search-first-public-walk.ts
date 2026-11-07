@@ -12,6 +12,7 @@ import {
   censusSummary,
   completeStep,
   finishJourney,
+  redactWalkLog,
   type JourneyName,
   type JourneyProgress,
 } from './search-first-public-walk-report';
@@ -101,8 +102,21 @@ async function child(command: string[], name: string, env: NodeJS.ProcessEnv = p
   const log = Bun.file(join(evidenceDir, `${name}.log`));
   const handle = await log.writer();
   const proc = spawn(command[0]!, command.slice(1), { cwd: root, env, stdio: ['ignore', 'pipe', 'pipe'] });
-  proc.stdout.on('data', (chunk: Buffer) => handle.write(chunk));
-  proc.stderr.on('data', (chunk: Buffer) => handle.write(chunk));
+  // Lines can span child output chunks. Redact only after a whole line is available.
+  const retain = (stream: NodeJS.ReadableStream) => {
+    let pending = '';
+    stream.setEncoding('utf8');
+    stream.on('data', (chunk: string) => {
+      pending += chunk;
+      const end = pending.lastIndexOf('\n');
+      if (end < 0) return;
+      handle.write(redactWalkLog(pending.slice(0, end + 1)));
+      pending = pending.slice(end + 1);
+    });
+    stream.on('end', () => handle.write(redactWalkLog(pending)));
+  };
+  retain(proc.stdout);
+  retain(proc.stderr);
   const code = await new Promise<number | null>((done) => proc.on('close', done));
   await handle.end();
   if (code !== 0) throw new Error(`${name} exited ${code}; see ${join(evidenceDir, `${name}.log`)}`);
@@ -372,47 +386,43 @@ const evidenceBase = () => ({
   bearerIssued,
 });
 
-async function noteFailure(step: string, error: unknown): Promise<void> {
-  setup.push({
+async function setupStep(step: string, run: () => Promise<Json | void>): Promise<void> {
+  const started = Date.now();
+  const record: Json = {
     step,
-    error: error instanceof Error ? error.message.slice(0, 500) : String(error).slice(0, 500),
-  });
+    startedAt: new Date(started).toISOString(),
+    result: 'running',
+  };
+  setup.push(record);
+  // A killed frontend cannot run finally. Keep completed setup and the active phase before starting it.
+  await writeEvidence(evidenceBase());
+  try {
+    Object.assign(record, await run(), { result: 'complete' });
+  } catch (error) {
+    record.result = 'failed';
+    record.error = error instanceof Error ? error.message.slice(0, 500) : String(error).slice(0, 500);
+  } finally {
+    record.endedAt = new Date().toISOString();
+    record.elapsedSeconds = Number(((Date.now() - started) / 1000).toFixed(3));
+    await writeEvidence(evidenceBase());
+  }
 }
 
 try {
-  try {
-    const started = Date.now();
+  await setupStep('persona', async () => {
     await child(['bun', 'services/auth/scripts/dev-stack.ts', 'persona'], 'persona');
-    setup.push({ step: 'persona', elapsedSeconds: Number(((Date.now() - started) / 1000).toFixed(3)) });
-  } catch (error) {
-    await noteFailure('persona-failure', error);
-  }
+  });
 
-  try {
+  await setupStep('seed', async () => {
     const seedEnv = { ...process.env, ...(await parseEnv(join(root, '.temp/local-stack/seed.env'))) };
-    const seedStarted = Date.now();
     await child(['bun', 'scripts/datasets/cross-media-seed.ts', '--dev'], 'seed', seedEnv);
     showcase = await readShowcase();
-    setup.push({
-      step: 'seed',
-      elapsedSeconds: Number(((Date.now() - seedStarted) / 1000).toFixed(3)),
-      workId: showcase.workId,
-      collections: showcase.collections.length,
-    });
-  } catch (error) {
-    await noteFailure('setup-failure', error);
-  }
+    return { workId: showcase.workId, collections: showcase.collections.length };
+  });
 
-  try {
-    const frontendStarted = Date.now();
+  await setupStep('frontends', async () => {
     frontends = await startSeededFrontends();
-    setup.push({
-      step: 'frontends',
-      elapsedSeconds: Number(((Date.now() - frontendStarted) / 1000).toFixed(3)),
-    });
-  } catch (error) {
-    await noteFailure('frontends-failure', error);
-  }
+  });
 
   try {
     const keysPath = join(root, '.temp/local-stack/keys.json');

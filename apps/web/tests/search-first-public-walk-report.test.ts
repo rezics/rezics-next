@@ -3,8 +3,15 @@ import {
   censusSummary,
   finishJourney,
   journeySteps,
+  redactWalkLog,
   type JourneyProgress,
 } from '../scripts/search-first-public-walk-report';
+
+test('persona evidence retains the native identity while removing its generated password', () => {
+  expect(
+    redactWalkLog('Local persona: developer@rezics.test\nPassword: generated-private-value\nAccount: native-id\n'),
+  ).toBe('Local persona: developer@rezics.test\nPassword: [redacted]\nAccount: native-id\n');
+});
 
 function record(completedSteps: string[] = []): JourneyProgress {
   return {

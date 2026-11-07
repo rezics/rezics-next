@@ -48,11 +48,18 @@ Orientation before this reporting change: [scope](../scope.md), this manifest,
 
 ### Receiving status
 
-The creator/provisioning owner has not delivered the repair commit and integrated dev revision required for another
-ordinary admission. The previous census below remains the last observed six-path result; there is no new product
-journey measurement. The malformed Auth label is corrected to
-`ea7dc5fe59d4f5723b3ab59cd6d08aba98687eb1`; startup remains
-`d87dc7a9045e7fe65110db6bedfa4decb4b2ce5d`. Both are ancestors of this walk. Neither proves host recovery.
+The creator/provisioning repair is received: implementation `52503f7f63b1673826a554eda1c8baf1fa3598ae`,
+integrated binding `6948a89278c0383165a7ed4ca69f1c99506c74a2`, received here as
+`2aa83f1adb21aca8b4718d7ba5193176bf14c521`. Ordinary admission succeeded in the new census below.
+The prior permission failure is historical. The complete dependency delivery `452da6ea5f43e26967726283ed2fec7c04d3e8ca`
+and Source factory delivery `5db0f76f7fc3e81841541152cb1a471692fa5ff7` are also received.
+The complete installed-producer repair remains with its existing Search owner; the original default-worker assertions
+remain required after its repair commit and integrated revision are supplied.
+
+Fixture decision: reconcile the genuine completed Mapping receipt before asserting the control ACK in native Search
+receiving. Keep the existing 128-step bound and every original custody, transaction, replay and completion assertion.
+Do not increase limits to substitute for receipt reconciliation. Setup evidence is checkpointed before each phase;
+the concrete persona `Password:` output is redacted before retaining child logs.
 
 The final single-file reporting selection also failed before its test executed:
 `bun scripts/worker-check.ts -- bun apps/web/scripts/focused.ts --private-network -- bun test tests/search-first-public-walk-report.test.ts`.
@@ -195,66 +202,51 @@ or started by this receiving round.
 
 ### Last observed dev census
 
-Observed walk revision: `93eb7908d8e983998d4b280ea275b131aaa444a1` (origin/dev `b94d47ff56` including startup
-`d87dc7a9045e7fe65110db6bedfa4decb4b2ce5d`, Identity `e815ae17`, Imports `a67c30ad`/`681d1fa8`, Performance shell
-`95e3fac9`). Membership JWKS config stays off authenticate SQL at module load. This row set replaces the 06:25–07:03
-UTC census. Worker identity started. Partial public steps never pass an unexecuted whole journey.
-Elapsed launcher time is setup, not a measured product journey. This round is closed.
+Observed revision: `2aa83f1adb21aca8b4718d7ba5193176bf14c521`. One ordinary admitted walk used
+`bun services/auth/scripts/dev-stack.ts walk -- bun apps/web/scripts/search-first-public-walk.ts`.
+The script's round began **2026-11-07 12:26:23.118 UTC**. No terminal UTC timestamp survived the memory kill;
+the check returned **exit 137**. Slot 1/6 was admitted in **1.006 seconds**. That is setup time, not product time.
+The previous round was archived before this run. No second Search stack was launched.
 
-`bun services/auth/scripts/dev-stack.ts walk -- bun apps/web/scripts/search-first-public-walk.ts` failed twice at
-walk slot admission, before persona, seed or frontends. First run **2026-11-07 07:33:04.872 UTC**, exit 1 in **0.887 s**.
-Retry **07:34:04.306 UTC**, exit 1 in **0.711 s**. First error both times:
-`EACCES: permission denied, open '/tmp/rezics-walk-stacks/sequence.next'` at `scripts/stack-lease.ts:215`
-`acquireStackSlot` from `dev-stack.ts` `walk`. `/tmp/rezics-walk-stacks` is `root:root` mode `0755` (created 07:20 UTC).
-Worker uid 1000 cannot write `sequence.next`. No slot, origins, persona, bearer, native HTTP or mounted page. Phone 390,
-desktop 1280 and `en`/`zh-Hant`/`ja` were not opened. Authenticated Search/publication stay blocked on that directory,
-not on issuer-origin JWKS. No second concurrent Search walk ran. Vite 8.3.6 / Cloudflare beta.v.12 / React 6.2.1 were
-not exercised; they do not match this permission failure.
+Native persona setup completed for `developer@rezics.test`, Account `99e7b230-90dd-83ae-b5dc-932fcb45ae35`.
+Cross-media seed then failed with the retained diagnostic
+`Import transport failed phase=response method=unknown target=unknown-origin status=503 problem=none network=none correlation=none`.
+Its exact endpoint, problem code and correlation were not retained; none is inferred. Setup continued to frontends.
+Web printed Vite ready in **214061 ms**, then the check host terminated the command:
+`remote-check: check exceeded its memory limit (6 GiB) while running the check command`.
+No bearer/sign-in, browser launch, native Search request or mounted journey observation was saved.
 
-| Journey               | User-visible path and passing result                                                                                                                                                                                         | Exposure                                                                            | Dev walk result                                                                       | Evidence / first failure                                                                                                                                                           |
-| --------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Mixed Search          | Open Search, submit text, open a permitted result and return to the executed query; continued pages remain useful and current after a visibility change.                                                                     | Existing Search grant                                                               | FAIL — setup (not a journey); 0.887 s; rev `93eb7908d8e983998d4b280ea275b131aaa444a1` | `EACCES: permission denied, open '/tmp/rezics-walk-stacks/sequence.next'`. Submit, result open, return and visibility change not executed. [Repair](#walk-stack-directory-repair). |
-| Refine and continue   | Submit supported Type/filter operands, inspect current facet choices, continue and restart in the same executed query; changed reader or resource scope retires old values and cursors.                                      | Existing Search grant; advanced second-scope operands remain outside this inventory | FAIL — setup (not a journey); 0.887 s; rev `93eb7908d8e983998d4b280ea275b131aaa444a1` | Same admission `EACCES`. Typed search, facets, continuation and reader retirement not executed. [Repair](#walk-stack-directory-repair).                                            |
-| Multilingual names    | Type an original-language name or current alias, select a suggestion, open the matching Subject and change locale without losing the query or authored language order.                                                       | Existing Search grant                                                               | FAIL — setup (not a journey); 0.887 s; rev `93eb7908d8e983998d4b280ea275b131aaa444a1` | Same admission `EACCES`. Suggest, Subject and locale return not executed. [Repair](#walk-stack-directory-repair).                                                                  |
-| Search recovery       | Correct an invalid authored operand or deliberately retry a preparing/unavailable request after its deadline; generation loss restarts that executed request and renders useful output.                                      | Existing Search grant                                                               | FAIL — setup (not a journey); 0.887 s; rev `93eb7908d8e983998d4b280ea275b131aaa444a1` | Same admission `EACCES`. Invalid operand, corrected search and recovery page not executed. [Repair](#walk-stack-directory-repair).                                                 |
-| Configured reading    | Open a configured Subject or static Zone page and read its declared lists in document order; unavailable slots leave supported siblings usable, and a current continuation/retry reaches the right list.                     | Public configured reader where the owning scope admits it                           | FAIL — setup (not a journey); 0.887 s; rev `93eb7908d8e983998d4b280ea275b131aaa444a1` | Same admission `EACCES`. Public configured lists and mounted Home/Subject pages not executed. [Repair](#walk-stack-directory-repair).                                              |
-| Published composition | Publish an admitted shared profile or curated Collection presentation, open the selected public version while the editor has a later draft, and deliberately recover a refused/lost response to the actual published result. | Existing publication authority and public selected-version reading                  | FAIL — setup (not a journey); 0.887 s; rev `93eb7908d8e983998d4b280ea275b131aaa444a1` | Same admission `EACCES`. Selected-public read, lost digest recover and editor publish not executed. [Repair](#walk-stack-directory-repair).                                        |
+| Journey               | Result                                   | Unexecuted complete path                                                                                 |
+| --------------------- | ---------------------------------------- | -------------------------------------------------------------------------------------------------------- |
+| Mixed Search          | FAIL — setup; journey elapsed unmeasured | Submit, open permitted result, return query, phone 390 results, continue, current visibility.            |
+| Refine and continue   | FAIL — setup; journey elapsed unmeasured | Type/filter operands, current facets, continuation, restart, mounted facets, reader/resource retirement. |
+| Multilingual names    | FAIL — setup; journey elapsed unmeasured | Original-language name, current alias, suggestion, Subject, locale/query/language order.                 |
+| Search recovery       | FAIL — setup; journey elapsed unmeasured | Invalid input, corrected native request, mounted correction, lost generation, useful restart.            |
+| Configured reading    | FAIL — setup; journey elapsed unmeasured | Selected profile, Subject lists, static-Zone lists, document order, continuation/retry, usable siblings. |
+| Published composition | FAIL — setup; journey elapsed unmeasured | Publish A, working B, public A over B, lost/refused response, reconciliation, mounted public A.          |
 
-### Native observation and operands
+The result is **0/6 passing**. There is **no slowest measured failing journey**, because no journey began.
+Planned operands were `Steins;Gate`, book text `The`, `シュタインズ・ゲート`, alias `CLANNAD`, invalid text `"unclosed`,
+Types `wd:Q689445` and `schema:Book`; desktop 1280, phone 390 and `en`/`zh-Hant`/`ja` visits remain unexecuted.
+Seed 503 and frontend memory termination are separable setup failures, not measured Search product failures.
+The existing startup owner receives the memory diagnostic; the existing seed/source-fence owner receives the 503
+with unavailable endpoint/correlation explicitly marked. No heap, deadline, pool or permission change is made here.
 
-Secret-free evidence is the two walk launcher logs for this revision. No bearer, password, key, cookie or private seed
-environment is recorded. `.temp/search-walk/evidence.json` was not rewritten; journeys did not start.
-
-- Launcher operands: none. `WALK_STACK_DIRECTORY` is `/tmp/rezics-walk-stacks` (`1cd890d5c1`). Slot was not admitted.
-- Retry reproduced the same first error line. Kernel postlanding cells still ran through the owning remote runner.
-- Native Search, suggest, facets, presentation, issuer sign-in and mounted pages were not reached. `formatImportTransportError`
-  and Elysia TypeBox live modules are in this product and were not exercised.
-
-### Walk-stack directory repair
-
-**Cause and owner:** Performance `1cd890d5c1` moved host-wide walk admission to `/tmp/rezics-walk-stacks`.
-`stack-lease.ts` `mkdirSync(directory, { recursive: true })` keeps the first creator's mode. A root process created the
-directory `0755`, so later workers cannot write `sequence.next`. Performance/control-plane owns that host-wide directory.
-
-Repair: provision `/tmp/rezics-walk-stacks` as mode `01777` (sticky, like `/tmp`) before workers admit, or chmod it to
-that mode in the stack-lease creator. Keep the host-wide queue; do not fall back to a worktree `.temp` directory. Do not
-chmod from Search. Live Performance `0c9024bc` is a first-public walk, not a launcher writer; control-plane is paused.
-Send the reproducible `EACCES` packet to the Performance manager for one urgent creator/provisioning repair. Vite 8.3.6 /
-Cloudflare beta.v.12 / React 6.2.1 candidates do not establish this permission failure.
+Secret-free retained evidence:
+`.temp/search-walk/2026-11-07T12-26-23-118Z/census.json`, `persona.log`, `seed.log` and `stack.redacted.log`.
+The census was reconstructed only from returned artifacts, not a completed walk report. Persona passwords are redacted.
+The full owned check log is
+`.temp/goal/checks/worker-check-ef268857-9864-46fb-ab95-2656f01f54d9-2026-11-07T12-13-33.053Z-f3dcd568.log`.
+The remote runner reported artifact staging cleanup. No walk-specific container/lease cleanup receipt was retained,
+so this ledger does not independently assert that cleanup completed.
 
 ### Scope of this census and handoff
 
-The last observed result is **0/6 passing**. No failing product journey has a measured duration. The longest setup
-attempt took **0.887 s**; its first failing step was walk slot admission `EACCES` before any journey began. Every row joins [Walk-stack directory repair](#walk-stack-directory-repair). Authenticated
-Search and publication stay blocked on that directory. Identity `e815ae17`, Imports `a67c30ad`/`681d1fa8`, Performance
-shell `95e3fac9` and startup `d87dc7a9` are ancestors of this product and were not exercised through journeys. Identity
-isolation stays a separate successor. Original disclosure, identity/default-worker and mounted return proofs stay.
-Queued scoped-Library and native-disclosure repairs stay their own outcomes. Typing is not a runtime pass.
-
-Members' binding/fixtures, Web's Character/Person, condition-weight, composition, tagged works and fake-discovery
-assertions remain required; admission failure gave them no mounted verdict. Deferred metadata stays deferred. No walk
-container or volume was started. Documentation formatting is the focused delivery check; it supplies no native/browser
-PASS.
+The earlier permission failures at 07:33/07:34 UTC (0.887/0.711 seconds, revision
+`93eb7908d8e983998d4b280ea275b131aaa444a1`) are superseded by successful ordinary admission.
+Native/default-worker receiving and mounted Character/with-dev-server assertions remain required. Compiler,
+fixture and reporting passes cannot fill any of the six unexecuted paths. Existing output-custody, installed-producer,
+WorkModule lifecycle and frontend startup repairs retain their current owners.
 
 ### Additional owner-requested acceptance
 
