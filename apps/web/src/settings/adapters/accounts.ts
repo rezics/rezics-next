@@ -273,7 +273,8 @@ export const readManagedAccountDetail = createServerFn({ method: 'GET' })
   });
 
 import { isNotFound, isRedirect } from '@tanstack/react-router';
-import { createEditableProfileSource, nativeProfileFailure, profileReadFailure } from '../editable-profile-source';
+import { createEditableProfileSource, nativeProfileFailure } from '../editable-profile-source';
+import { profileReadFailure } from '../profile-failure';
 import {
   boundedFailure,
   type AccountRenameContext,

@@ -2,7 +2,7 @@ import { hashKey, QueryObserver, useQueryClient, type QueryClient } from '@tanst
 import { useCallback, useLayoutEffect, useMemo, useRef, useSyncExternalStore } from 'react';
 import { productionSettingsShellPort, useSettingsSession } from './adapters/shell';
 import { readProfile, saveProfile } from './actions';
-import { profileCommandValues, profileReadObservation } from './profile-data';
+import { profileCommandValues, profileReadObservation } from './profile-model';
 import { useSettingsAmbient } from './adapters/ambient-view.tsx';
 import type { SettingsAmbient } from './ports/ambient';
 import { ProfileEditorSession } from './profile-write';

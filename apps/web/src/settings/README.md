@@ -42,6 +42,8 @@ Eliminated ambient sites: Profile/avatar, Watches, verification, notifications, 
 
 **Decision:** Private Profile reads consume the installed `{ profile, editing }` GET and PATCH `{ accountId }` acknowledgement; setup, serialization and unknown native bodies stay in the existing success/failure envelope. The original intent keeps its immutable credential, key, version and body for exact retry. Local preview stays local until the original acknowledgement; only later edits remain for review.
 
+**Decision:** Browser Profile values, projection, admission and recovery live in `profile-model.ts`; native record I/O lives in `profile-data.ts`, and Worker request/session handling stays behind the ordinary Settings `createServerFn` actions. The startup fixture overlay applies only to Vite's `ssr` Worker environment. This boundary adds no native calls: one Profile dispatch still performs the exact-account advice GET, captured PATCH and independent current GET. Fewest pins are the transformed `/settings` client graph (including managed-account capabilities), one dispatched Profile read using the real Worker binding wrapper, and the existing Profile recording/recovery suites. Receiving remains the six post-editing cases and the original Settings/Profile/Watches journeys; native, browser and root acceptance stay with integration.
+
 Profile controls and whole-patch admission consume each field's `applicable` value and each admitted public-view
 flag. Null advice closes changes while preserving the local draft. Before every self or delegated dispatch, including
 an original retry, the server rereads the selected immutable account's private native advice without replacing the

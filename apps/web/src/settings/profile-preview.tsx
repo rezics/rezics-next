@@ -4,7 +4,7 @@ import { Button } from '@rezics/ui/shadcn/button';
 import { Avatar, AvatarFallback, AvatarImage } from '@rezics/ui/shadcn/avatar';
 import { MediaImage } from '@rezics/ui/media-image';
 import { m } from '../paraglide/messages.js';
-import type { ProfileValues } from './profile-data';
+import type { ProfileValues } from './profile-model';
 
 type ProfilePreviewAvatar = ProfileValues['avatar'];
 

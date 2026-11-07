@@ -5,7 +5,7 @@ import { AccountProfileEditor } from '../../accounts/profile-editor/editor';
 import { AccountProfileView } from '../../accounts/profile-editor/page';
 import type { Failure, ProfilePage } from '../../accounts/profile-editor/data';
 import { createBrowserSettingsAmbient } from '../../settings/adapters/ambient';
-import type { ProfileValues } from '../../settings/profile-data';
+import type { ProfileValues } from '../../settings/ports/profile-editor';
 
 const profile: ProfileValues = {
   accountId: '00000000-0000-7000-8000-000000000002',

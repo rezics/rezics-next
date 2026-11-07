@@ -19,7 +19,7 @@ import { settingsContent } from '../../settings/adapters/presentation';
 import { PublicViewsCard } from '../../settings/public-views';
 import { ProfileEditor, type ProfileAttempt } from '../../settings/profile-write';
 import { ProfileNavigation } from '../../settings/profile-navigation';
-import { EditableProfileReadError, nativeProfileFailure } from '../../settings/editable-profile-source';
+import { EditableProfileReadError, nativeProfileFailure } from '../../settings/ports/profile-editor';
 
 type SaveObserver = ((attempt: ProfileAttempt) => void) | undefined;
 type RecoveryScenario = 'delay' | 'date' | 'short' | 'malformed' | 'read';

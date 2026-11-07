@@ -405,6 +405,9 @@ export default defineConfig((context) => {
             {
               name: 'rezics-test-env-bindings',
               enforce: 'pre' as const,
+              applyToEnvironment(environment: { name: string }) {
+                return environment.name === 'ssr';
+              },
               transform(code: string, id: string) {
                 if (filePathOf(id) === filePathOf(testRuntimeBindings)) {
                   return {

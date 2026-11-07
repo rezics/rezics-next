@@ -2,7 +2,7 @@ import { expect, mock, test } from 'bun:test';
 import { dirname } from 'node:path';
 import { act, createElement, StrictMode, useLayoutEffect, useState } from 'react';
 import * as start from '../.storybook/react-start';
-import type { ProfileReadResult, ProfileSaveResult, ProfileValues } from '../src/settings/profile-data';
+import type { ProfileReadResult, ProfileSaveResult, ProfileValues } from '../src/settings/profile-model';
 import type { ProfileAttempt, ProfileEditor } from '../src/settings/profile-write';
 import { createBrowserSettingsAmbient } from '../src/settings/adapters/ambient';
 import { performanceAmbientTree } from './performance-ambient';

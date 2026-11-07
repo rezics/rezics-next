@@ -1,12 +1,15 @@
 import type { FakeRoute } from '../fake-modules.ts';
-import type { ObservedProfile, ProfileLink, ProfileValues } from '../../settings/profile-data';
 import {
   closedProfileEditing,
   officialProfileRead,
   type EditableProfile,
-} from '../../settings/editable-profile-source';
+  type ObservedProfile,
+  type ProfileEditorIO,
+  type ProfileLink,
+  type ProfileValues,
+  rebaseProfile,
+} from '../../settings/ports/profile-editor';
 import { createBrowserSettingsAmbient } from '../../settings/adapters/ambient';
-import { rebaseProfile, type ProfileEditorIO } from '../../settings/profile-write';
 import { storyViewerId } from './identities';
 
 export type ProfileScenario =
