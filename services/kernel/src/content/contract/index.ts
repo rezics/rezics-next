@@ -75,3 +75,4 @@ export type {
 export * from './reading-page.ts';
 
 export * from './realm.ts';
+export * from './feed.ts';

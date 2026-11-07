@@ -188,3 +188,16 @@ export * from './copy-application.ts';
 export * from './copy-operations.ts';
 export * from './presentation.ts';
 export type { BuiltinMemberCapability, BuiltinMemberOptions } from './builtin-presentation.ts';
+
+export type {
+  ContinueActor,
+  ContinueListQuery,
+  ContinuePage,
+  ContinueProgressPresentation,
+  ContinueProgressRecording,
+  ContinueReads,
+  ContinueSession,
+  ContinueSessionMeasure,
+  ContinueSubject,
+  ContinueSubjectFacts,
+} from './continue.ts';
