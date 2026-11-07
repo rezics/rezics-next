@@ -1105,7 +1105,7 @@ async function start() {
       if (stopping) return;
       if (plan.deferPages) {
         const pages = launch(['bun', 'services/auth/scripts/dev-stack.ts', 'pages']);
-        await phase('pages', untilReady([issuerJwksUrl(origins.issuer)], [pages, identity, worker]));
+        await phase('pages', untilReady([issuerJwksUrl(origins.issuer)], [pages, identity]));
         if (stopping) return;
       }
       const kernel = launch(plan.kernel);
