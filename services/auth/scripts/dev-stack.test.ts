@@ -56,6 +56,9 @@ test('local setup and launch carry the complete real mounted host scope composit
         child.exited,
       ]);
       if (code !== 0) throw new Error(stderr);
+      expect(stderr).toContain('stack: native-registration starting');
+      expect(stderr).toContain('stack: native-imports ready');
+      expect(stderr).not.toContain(env.DATABASE_URL!);
       return JSON.parse(stdout) as Awaited<ReturnType<typeof developmentWebsiteConfiguration>>;
     },
     { analysis: false },

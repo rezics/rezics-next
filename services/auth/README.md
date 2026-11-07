@@ -2382,6 +2382,12 @@ Fresh setup starts without an inherited database or Reylo cache and checks the o
 website registration and connection retirement. Changed-workspace typing is worker acceptance; the controller runs
 the original three-file native/browser selection after integration without increasing its timeout.
 
+Setup and native loading report fixed operation names with `starting`/`ready` markers on stderr; they never include
+database URLs or key material. Setup distinguishes environment loading, Auth database creation and migration,
+key loading, Kernel bindings, native catalogue construction and Web bindings. Startup reports Auth and default-worker
+readiness independently inside the existing identity phase. The fresh-stack test streams infrastructure stderr as
+it runs so a timeout retains the first incomplete operation, rather than only post-timeout cleanup output.
+
 Trusted `registerWebsiteDeployment(auth, actionCatalogue(kernel), registration, websiteConfigurationFile)`
 registers first, then emits Web's public `WEBSITE_CONFIGURATION_FILE` operand. Deployment supplies the actual
 composition, public JWK and callbacks; Web refuses a scope override mismatch. Importer grants stay separate.

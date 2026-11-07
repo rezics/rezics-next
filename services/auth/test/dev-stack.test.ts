@@ -42,11 +42,11 @@ test('fresh checkout starts native loopback Auth and signs a person into and out
     KERNEL_SEARCH_CONTAINER: search,
     KERNEL_SEARCH_VOLUME: search,
   };
-  const commands = async (args: string[], cwd = checkout) => {
-    const child = Bun.spawn(args, { cwd, env, stdout: 'pipe', stderr: 'pipe' });
+  const commands = async (args: string[], cwd = checkout, progress = false) => {
+    const child = Bun.spawn(args, { cwd, env, stdout: 'pipe', stderr: progress ? 'inherit' : 'pipe' });
     const [stdout, stderr, code] = await Promise.all([
       new Response(child.stdout).text(),
-      new Response(child.stderr).text(),
+      progress ? '' : new Response(child.stderr as ReadableStream<Uint8Array>).text(),
       child.exited,
     ]);
     if (code) throw new Error(`${args.join(' ')}: ${stderr}\n${stdout}`);
@@ -81,7 +81,7 @@ test('fresh checkout starts native loopback Auth and signs a person into and out
       const store = resolve(root, workspace, 'node_modules');
       if (existsSync(store)) await symlink(store, resolve(checkout, workspace, 'node_modules'));
     }
-    for (const command of infra) await commands(command);
+    for (const command of infra) await commands(command, checkout, true);
     const kernelEnv = await Bun.file(resolve(checkout, 'services/kernel/.env')).text();
     const kernelDatabaseUrl = kernelEnv
       .split('\n')
@@ -89,7 +89,7 @@ test('fresh checkout starts native loopback Auth and signs a person into and out
       .slice(13);
     const port = (await commands(['docker', 'port', database, '5432/tcp'])).trim().split(':').at(-1)!;
     expect(new URL(kernelDatabaseUrl).port).toBe(port);
-    for (const command of infra) await commands(command); // Existing, migrated development DB is a no-op.
+    for (const command of infra) await commands(command, checkout, true); // Existing, migrated development DB is a no-op.
     expect(await Bun.file(resolve(checkout, 'services/kernel/.env')).text()).toBe(kernelEnv);
     stack = Bun.spawn(devCommand, {
       cwd: checkout,
