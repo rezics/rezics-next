@@ -108,7 +108,7 @@ export type WalkRowResult = {
   id: FirstPublicImportRowId;
   path: string;
   result: 'passing' | 'failing';
-  elapsedMs: number;
+  elapsedMs: number | null;
   cause: string | null;
   evidence: Record<string, unknown>;
 };
@@ -171,10 +171,7 @@ export function walkInventorySummary(inventory: WalkInventory): string {
 
 const OBSERVED_WALK_HEADING = '### Observed walk';
 
-export const WALK_ROW_REPAIR_OWNERS: Record<
-  FirstPublicImportRowId,
-  { goal: string; manager: string }
-> = {
+export const WALK_ROW_REPAIR_OWNERS: Record<FirstPublicImportRowId, { goal: string; manager: string }> = {
   I01: { goal: 'imports', manager: 'imports' },
   I02: { goal: 'imports', manager: 'imports' },
   I03: { goal: 'imports', manager: 'imports' },
@@ -207,7 +204,9 @@ function currentReadEvidence(evidence: Record<string, unknown>): string {
 
 export function capabilitiesResultCell(row: WalkRowResult): string {
   const detail = row.result === 'passing' ? currentReadEvidence(row.evidence) : (row.cause ?? 'failed');
-  return markdownTableCell(`${row.result}; ${row.elapsedMs}ms; ${detail}`);
+  return markdownTableCell(
+    `${row.result}; ${row.elapsedMs === null ? 'duration unknown' : `${row.elapsedMs}ms`}; ${detail}`,
+  );
 }
 
 export function applyWalkInventoryToCapabilities(markdown: string, inventory: WalkInventory): string {
@@ -324,6 +323,58 @@ Use the returned seed.log and remaining-request.json, retaining the exact prepar
     if (skip) continue;
     await writeFile(resolve(drafts, `imports-walk-${row.id.toLowerCase()}.md`), walkRepairBrief(inventory, row));
   }
+}
+
+/** Seal returned observations only after the controller confirms the owned run has ended.
+ * An infrastructure termination has no row-local elapsed time. Keep it unknown rather than
+ * subtracting clocks from different hosts or converting the entire run lifetime into row time.
+ */
+export function sealInterruptedWalkInventory(
+  run: Pick<WalkInventory, 'command' | 'revision' | 'startedAt'>,
+  rows: readonly WalkRowResult[],
+  active: { id: FirstPublicImportRowId; startedAt: string },
+  terminal: { finishedAt: string; cause: string; checkId: string; runElapsedMs: number },
+): WalkInventory {
+  const observed = new Map(rows.map((row) => [row.id, row]));
+  if (!observed.has(active.id)) {
+    observed.set(active.id, {
+      id: active.id,
+      path: firstPublicRow(active.id).path,
+      result: 'failing',
+      elapsedMs: null,
+      cause: terminal.cause,
+      evidence: {
+        interrupted: true,
+        activeStartedAt: active.startedAt,
+        controllerFinishedAt: terminal.finishedAt,
+        checkId: terminal.checkId,
+        runElapsedMs: terminal.runElapsedMs,
+        currentRead: 'not reached',
+      },
+    });
+  }
+  // A returned partial directory cannot establish outcomes for unobserved rows.
+  const missing = FIRST_PUBLIC_IMPORT_ROWS.filter((row) => !observed.has(row.id));
+  if (missing.length) throw new Error(`No returned walk observation for ${missing.map((row) => row.id).join(', ')}`);
+  const ordered = FIRST_PUBLIC_IMPORT_ROWS.map((row) => observed.get(row.id)!);
+  const slowest = ordered
+    .filter((row) => row.result === 'failing' && row.elapsedMs !== null)
+    .sort((left, right) => right.elapsedMs! - left.elapsedMs!)[0];
+  return {
+    ...run,
+    endedAt: terminal.finishedAt,
+    passing: ordered.filter((row) => row.result === 'passing').length,
+    total: ordered.length,
+    rows: ordered,
+    slowestFailing: slowest
+      ? {
+          id: slowest.id,
+          path: slowest.path,
+          elapsedMs: slowest.elapsedMs!,
+          cause: slowest.cause!,
+        }
+      : null,
+  };
 }
 
 /** Apply returned output locally after the check settles; source inputs survive artifact cleanup. */
@@ -645,19 +696,30 @@ async function runOperator(id: 'I01' | 'I02' | 'I03' | 'I04', persona: SeedEnv):
   const observedFetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
     const request = new Request(input, init);
     const requestId = randomUUID();
-    appendFileSync(resolve(directory, 'requests.jsonl'), `${JSON.stringify({
-      requestId, event: 'start', at: new Date().toISOString(),
-      method: request.method, path: new URL(request.url).pathname,
-    })}\n`, { mode: 0o600 });
+    appendFileSync(
+      resolve(directory, 'requests.jsonl'),
+      `${JSON.stringify({
+        requestId,
+        event: 'start',
+        at: new Date().toISOString(),
+        method: request.method,
+        path: new URL(request.url).pathname,
+      })}\n`,
+      { mode: 0o600 },
+    );
     const response = await fetch(request);
     const payload: unknown = response.headers.get('content-type')?.includes('json')
       ? await response.clone().json()
       : undefined;
     const problems =
       isRecord(payload) && Array.isArray(payload.results)
-        ? payload.results.filter(isRecord).filter((row) => row.problem !== undefined)
+        ? payload.results
+            .filter(isRecord)
+            .filter((row) => row.problem !== undefined)
             .map((row) => reviewedCatalogueProblem(row.problem))
-        : response.status >= 400 ? [reviewedCatalogueProblem(payload)] : [];
+        : response.status >= 400
+          ? [reviewedCatalogueProblem(payload)]
+          : [];
     appendFileSync(
       resolve(directory, 'requests.jsonl'),
       `${JSON.stringify({
@@ -683,9 +745,16 @@ async function runOperator(id: 'I01' | 'I02' | 'I03' | 'I04', persona: SeedEnv):
           ...options.observer,
           onRecordActive(phase, recordKey, active) {
             options.observer?.onRecordActive?.(phase, recordKey, active);
-            appendFileSync(resolve(directory, 'records.jsonl'), `${JSON.stringify({
-              at: new Date().toISOString(), phase, recordKey, active,
-            })}\n`, { mode: 0o600 });
+            appendFileSync(
+              resolve(directory, 'records.jsonl'),
+              `${JSON.stringify({
+                at: new Date().toISOString(),
+                phase,
+                recordKey,
+                active,
+              })}\n`,
+              { mode: 0o600 },
+            );
           },
         },
       });
@@ -701,7 +770,8 @@ async function runOperator(id: 'I01' | 'I02' | 'I03' | 'I04', persona: SeedEnv):
   const first = await runImportCli(argv, cliOptions);
   await writeFile(resolve(directory, 'cli-result.json'), JSON.stringify(first), { mode: 0o600 });
   assert.equal(
-    first.code, 0,
+    first.code,
+    0,
     `${spec.source} CLI ${first.stderr || first.stdout}; safe requests: ${id.toLowerCase()}/requests.jsonl`,
   );
   const session = new ImportSession(state);
@@ -969,9 +1039,15 @@ async function walkRow(
 ): Promise<WalkRowResult> {
   const meta = firstPublicRow(id);
   const started = Date.now();
-  await writeFile(resolve(evidenceRoot, 'active-row.json'), JSON.stringify({
-    id, path: meta.path, startedAt: new Date(started).toISOString(),
-  }), { mode: 0o600 });
+  await writeFile(
+    resolve(evidenceRoot, 'active-row.json'),
+    JSON.stringify({
+      id,
+      path: meta.path,
+      startedAt: new Date(started).toISOString(),
+    }),
+    { mode: 0o600 },
+  );
   let row: WalkRowResult;
   try {
     const evidence = await run();
@@ -1007,9 +1083,15 @@ export async function runImportsPublicJourney(): Promise<WalkInventory> {
     sharedStartup = walkFailureCause(error);
   }
 
-  await writeFile(resolve(evidenceRoot, 'run.json'), JSON.stringify({
-    command: retainedCommand, revision, startedAt,
-  }), { mode: 0o600 });
+  await writeFile(
+    resolve(evidenceRoot, 'run.json'),
+    JSON.stringify({
+      command: retainedCommand,
+      revision,
+      startedAt,
+    }),
+    { mode: 0o600 },
+  );
 
   const seedStarted = Date.now();
   let seedElapsedMs = 0;
@@ -1139,7 +1221,7 @@ export async function runImportsPublicJourney(): Promise<WalkInventory> {
       const current = rows[index]!;
       rows[index] = {
         ...current,
-        elapsedMs: current.elapsedMs + browser.elapsedMs,
+        elapsedMs: current.elapsedMs! + browser.elapsedMs!,
         evidence: { ...current.evidence, browser: browser.result },
         ...(browser.result === 'failing' && current.result === 'passing'
           ? { result: 'failing' as const, cause: browser.cause }
@@ -1154,10 +1236,17 @@ export async function runImportsPublicJourney(): Promise<WalkInventory> {
   // These callers share the ordinary account/source authority. Keep native writes serial.
   // Open Library is last so its unresolved operation cannot hide the other observations.
   for (const id of ['I01', 'I02', 'I04', 'I03'] as const) {
-    const row: WalkRowResult = !persona || sharedStartup ? {
-      id, path: firstPublicRow(id).path, result: 'failing', elapsedMs: 0,
-      cause: sharedStartup ?? 'persona unavailable', evidence: { sharedStartup: true },
-    } : await walkRow(id, () => runOperator(id, persona!));
+    const row: WalkRowResult =
+      !persona || sharedStartup
+        ? {
+            id,
+            path: firstPublicRow(id).path,
+            result: 'failing',
+            elapsedMs: 0,
+            cause: sharedStartup ?? 'persona unavailable',
+            evidence: { sharedStartup: true },
+          }
+        : await walkRow(id, () => runOperator(id, persona!));
     rows.push(row);
     await writeFile(resolve(evidenceRoot, `${id.toLowerCase()}-row.json`), JSON.stringify(row), { mode: 0o600 });
   }
@@ -1165,7 +1254,9 @@ export async function runImportsPublicJourney(): Promise<WalkInventory> {
 
   const endedAt = new Date().toISOString();
   const failing = rows.filter((row) => row.result === 'failing');
-  const slowestFailing = failing.slice().sort((left, right) => right.elapsedMs - left.elapsedMs)[0];
+  const slowestFailing = failing
+    .filter((row) => row.elapsedMs !== null)
+    .sort((left, right) => right.elapsedMs! - left.elapsedMs!)[0];
   const inventory: WalkInventory = {
     command: retainedCommand,
     revision,
@@ -1177,7 +1268,7 @@ export async function runImportsPublicJourney(): Promise<WalkInventory> {
       ? {
           id: slowestFailing.id,
           path: slowestFailing.path,
-          elapsedMs: slowestFailing.elapsedMs,
+          elapsedMs: slowestFailing.elapsedMs!,
           cause: slowestFailing.cause!,
         }
       : null,

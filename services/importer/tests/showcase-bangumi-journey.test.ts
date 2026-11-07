@@ -24,6 +24,7 @@ import {
   assertCurrentOperatorFact,
   writeWalkInventoryArtifacts,
   receiveWalkInventoryArtifacts,
+  sealInterruptedWalkInventory,
   applyWalkInventoryToCapabilities,
   capabilitiesResultCell,
   currentAnimeCharacterIds,
@@ -305,19 +306,21 @@ test('the walk inventory replaces each pending capabilities row and names the sl
   expect(rewritten).toContain('Slowest failing: I06 4000ms seed published no Game identity.');
   expect(rewritten).toContain('Books owner-grant composition uses the ordinary Global grant intent.');
   expect(walkRepairSkipReason(failing)).toBeNull();
-  expect(walkRepairBrief(
-    {
-      command: 'walk',
-      revision: 'abc',
-      startedAt: 't0',
-      endedAt: 't1',
-      passing: 1,
-      total: 2,
-      slowestFailing: { id: 'I06', path: failing.path, elapsedMs: 12_000, cause: failing.cause! },
-      rows: [passing, failing],
-    },
-    failing,
-  )).toContain('Goal: imports');
+  expect(
+    walkRepairBrief(
+      {
+        command: 'walk',
+        revision: 'abc',
+        startedAt: 't0',
+        endedAt: 't1',
+        passing: 1,
+        total: 2,
+        slowestFailing: { id: 'I06', path: failing.path, elapsedMs: 12_000, cause: failing.cause! },
+        rows: [passing, failing],
+      },
+      failing,
+    ),
+  ).toContain('Goal: imports');
   expect(
     walkRepairSkipReason({
       ...failing,
@@ -398,9 +401,12 @@ test('leftover walk journals are archived before persona so wiped slot databases
 
 test('operator causes keep safe status and request metadata without private nested text', () => {
   expect(walkFailureCause(new ImportTransportError(404))).toContain('status=404');
-  expect(walkFailureCause(new ImportTransportError(403, 'about:blank', 'forbidden'))).toContain('status=403 problem=forbidden');
+  expect(walkFailureCause(new ImportTransportError(403, 'about:blank', 'forbidden'))).toContain(
+    'status=403 problem=forbidden',
+  );
   const named = new ImportTransportError(503, undefined, undefined, false, undefined, undefined, {
-    method: 'POST', path: '/v1/subjects:batchWrite',
+    method: 'POST',
+    path: '/v1/subjects:batchWrite',
   });
   expect(walkFailureCause(named)).toContain('method=POST target=unknown-origin/v1/subjects:batchWrite status=503');
   const nested = new ImportTransportError();
@@ -454,7 +460,9 @@ test('seed remaining request names the prepared classification create without bo
     db.exec(
       `CREATE TABLE showcase_command (command_key TEXT PRIMARY KEY, command_json TEXT NOT NULL, state TEXT NOT NULL)`,
     );
-    db.run("INSERT INTO showcase_command VALUES ('k','{\"op\":\"create\",\"source\":{\"source\":\"vndb_cross_media\",\"external_id\":\"vocabulary:vndb.releases.media\",\"converter_revision\":\"vndb-release-classification-vocabulary@1\"},\"subject\":{\"type\":\"skos:ConceptScheme\"}}','prepared')");
+    db.run(
+      'INSERT INTO showcase_command VALUES (\'k\',\'{"op":"create","source":{"source":"vndb_cross_media","external_id":"vocabulary:vndb.releases.media","converter_revision":"vndb-release-classification-vocabulary@1"},"subject":{"type":"skos:ConceptScheme"}}\',\'prepared\')',
+    );
     db.close();
     expect(remainingRequestFromPreparedJournal(journal)?.externalId).toBe('vocabulary:vndb.releases.media');
     const reviewed = {
@@ -493,8 +501,12 @@ test('bounded VNDB entry_meta pages continue until selected revisions are found'
     await writeFile(join(db, 'entry_meta.header'), 'id\trevision\tlastmod\n');
     await writeFile(
       join(db, 'entry_meta'),
-      ['c1\t1\t2026-10-25 00:00:00+00', 'c2\t1\t2026-10-25 00:00:00+00', 'c3\t1\t2026-10-25 00:00:00+00', 'v1\t7\t2026-10-25 00:00:00+00']
-        .join('\n') + '\n',
+      [
+        'c1\t1\t2026-10-25 00:00:00+00',
+        'c2\t1\t2026-10-25 00:00:00+00',
+        'c3\t1\t2026-10-25 00:00:00+00',
+        'v1\t7\t2026-10-25 00:00:00+00',
+      ].join('\n') + '\n',
     );
     const input = new CrossMediaDumpFiles(directory, directory);
     const found = new Map<string, number>();
@@ -564,18 +576,29 @@ test('bounded VNDB entry_meta pages continue until selected revisions are found'
   expect(plan.gaps.some((gap) => gap.reason.includes('entry_meta exceeded its bounded scan'))).toBe(true);
 });
 
-
 test('current operator acceptance requires the exact adopted value and citation after reopen', () => {
   const statement = {
     property: { id: 'schema:name' },
     value: { type: 'value', content: 'Licensed title' },
-    references: [{ parts: [{ property: { id: 'schema:url' }, value: { type: 'value', content: 'https://bgm.tv/subject/233' } }] }],
+    references: [
+      { parts: [{ property: { id: 'schema:url' }, value: { type: 'value', content: 'https://bgm.tv/subject/233' } }] },
+    ],
   };
   const read = (facts: unknown[]) => ({ subject: { statements: { 'schema:name': facts } } });
-  expect(() => assertCurrentOperatorFact(read([{ ...statement, id: 'current-id', rank: 'normal' }]), 'schema:name', statement)).not.toThrow();
+  expect(() =>
+    assertCurrentOperatorFact(read([{ ...statement, id: 'current-id', rank: 'normal' }]), 'schema:name', statement),
+  ).not.toThrow();
   expect(() => assertCurrentOperatorFact(read([]), 'schema:name', statement)).toThrow('anonymous current');
-  expect(() => assertCurrentOperatorFact(read([{ ...statement, references: [] }]), 'schema:name', statement)).toThrow('provenance');
-  expect(() => assertCurrentOperatorFact(read([{ ...statement, value: { type: 'value', content: 'Other title' } }]), 'schema:name', statement)).toThrow('anonymous current');
+  expect(() => assertCurrentOperatorFact(read([{ ...statement, references: [] }]), 'schema:name', statement)).toThrow(
+    'provenance',
+  );
+  expect(() =>
+    assertCurrentOperatorFact(
+      read([{ ...statement, value: { type: 'value', content: 'Other title' } }]),
+      'schema:name',
+      statement,
+    ),
+  ).toThrow('anonymous current');
 });
 
 test('walk outputs preserve source documents and sibling drafts and group a shared seed repair', async () => {
@@ -584,17 +607,28 @@ test('walk outputs preserve source documents and sibling drafts and group a shar
     const document = join(repository, 'docs/goals/imports.capabilities.md');
     await mkdir(join(repository, 'docs/goals'), { recursive: true });
     await mkdir(join(repository, '.temp/continuation'), { recursive: true });
-    const original = '| I05 | Anime | Pending |\n| I11 | Books | Pending |\n\nBooks owner-grant composition uses ordinary grants.\n';
+    const original =
+      '| I05 | Anime | Pending |\n| I11 | Books | Pending |\n\nBooks owner-grant composition uses ordinary grants.\n';
     await writeFile(document, original);
     const sibling = join(repository, '.temp/continuation/sibling.md');
     await writeFile(sibling, 'another owner');
     const rows: WalkRowResult[] = (['I05', 'I11'] as const).map((id) => ({
-      id, path: id, result: 'failing', elapsedMs: 41000,
-      cause: 'semantic_not_ready POST /v1/subjects:batchWrite', evidence: { seed: true },
+      id,
+      path: id,
+      result: 'failing',
+      elapsedMs: 41000,
+      cause: 'semantic_not_ready POST /v1/subjects:batchWrite',
+      evidence: { seed: true },
     }));
     const inventory: WalkInventory = {
-      command: 'walk', revision: 'source-head', startedAt: 't0', endedAt: 't1', passing: 0, total: 2,
-      slowestFailing: { id: 'I05', path: 'Anime', elapsedMs: 41000, cause: rows[0]!.cause! }, rows,
+      command: 'walk',
+      revision: 'source-head',
+      startedAt: 't0',
+      endedAt: 't1',
+      passing: 0,
+      total: 2,
+      slowestFailing: { id: 'I05', path: 'Anime', elapsedMs: 41000, cause: rows[0]!.cause! },
+      rows,
     };
     await writeWalkInventoryArtifacts(inventory, repository);
     expect(await readFile(document, 'utf8')).toBe(original);
@@ -612,4 +646,35 @@ test('walk outputs preserve source documents and sibling drafts and group a shar
   } finally {
     await rm(repository, { recursive: true, force: true });
   }
+});
+
+test('a settled infrastructure termination seals only its active row and keeps its duration unknown', () => {
+  const rows: WalkRowResult[] = FIRST_PUBLIC_IMPORT_ROWS.filter((row) => row.id !== 'I03').map((row) => ({
+    ...row,
+    result: 'failing',
+    elapsedMs: 100,
+    cause: 'semantic_not_ready',
+    evidence: {},
+  }));
+  const run = { command: 'retained walk', revision: 'abc', startedAt: '2026-11-07T12:14:28Z' };
+  const active = { id: 'I03' as const, startedAt: '2026-11-07T12:16:06Z' };
+  const terminal = {
+    finishedAt: '2026-11-07T14:08:48Z',
+    cause: 'remote run timed out',
+    checkId: 'check',
+    runElapsedMs: 7204023,
+  };
+  const inventory = sealInterruptedWalkInventory(run, rows, active, terminal);
+  expect(inventory.passing).toBe(0);
+  expect(inventory.rows).toHaveLength(12);
+  expect(inventory.rows.find((row) => row.id === 'I03')).toMatchObject({
+    result: 'failing',
+    elapsedMs: null,
+    evidence: { interrupted: true, runElapsedMs: 7204023 },
+  });
+  expect(inventory.rows.find((row) => row.id === 'I01')).toEqual(rows[0]);
+  expect(capabilitiesResultCell(inventory.rows[2]!)).toContain('duration unknown');
+  expect(() => sealInterruptedWalkInventory(run, rows.slice(1), active, terminal)).toThrow(
+    'No returned walk observation for I01',
+  );
 });
