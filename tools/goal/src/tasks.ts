@@ -757,12 +757,12 @@ export class WorkerTasks {
       }
     }
   }
-  /** Replace ordinary input before its first start, without scheduling or touching its capacity ticket. */
+  /** Replace ordinary input without scheduling, restarting the current attempt or touching its checks. */
   amend(
     taskId: string,
-    options: { expectedAttempt: number; brief: string },
+    options: { expectedAttempt: number; brief: string; active?: boolean },
     actor?: AuthenticatedManager | null,
-  ): { taskId: string; attempt: 0; status: 'amended' | 'unchanged'; contractSha256: string } {
+  ): { taskId: string; attempt: number; status: 'amended' | 'unchanged'; contractSha256: string } {
     const lease = acquireDirectoryLease(
       join(this.settings.stateDirectory, 'leases', taskId),
       this.settings.policy?.leases,
@@ -772,7 +772,23 @@ export class WorkerTasks {
       return this.store.write({ taskId, attempt: options.expectedAttempt }, () => {
         const task = this.store.task(taskId);
         const attempts = this.store.attempts(taskId);
-        if (
+        const active = options.active === true;
+        const ref = { taskId, attempt: options.expectedAttempt };
+        if (active) {
+          const attempt = attempts.at(-1);
+          if (
+            options.expectedAttempt < 1 ||
+            task.state !== 'running' ||
+            !devProductBrief(task.brief) ||
+            task.proofAuthorization ||
+            task.proofRun ||
+            !attempt ||
+            !['pending', 'running', 'waiting', 'exited'].includes(attempt.state) ||
+            attempt.terminationIntent ||
+            this.store.events(taskId, task.currentAttempt).some((event) => event.kind === 'landing-requested')
+          )
+            throw new Error('active amendment requires a current ordinary dev task before landing');
+        } else if (
           options.expectedAttempt !== 0 ||
           task.currentAttempt !== 0 ||
           !['ready', 'held', 'stopped'].includes(task.state) ||
@@ -810,12 +826,21 @@ export class WorkerTasks {
         });
         if (!authenticated || authenticated.id !== owner.id || authenticated.sessionId !== owner.sessionId)
           throw new Error('prelaunch amendment requires a live unambiguous authenticated manager session');
-        if (task.state === 'stopped') this.assertStoppedPrelaunchEvidenceAbsent(task);
+        if (!active && task.state === 'stopped') this.assertStoppedPrelaunchEvidenceAbsent(task);
         const submitted = this.validateBrief(options.brief, taskId, owner);
         if (submitted.brief.kind === 'verification')
           throw new Error('use proof registration for verification contracts');
         if (submitted.brief.goal !== task.brief.goal || submitted.brief.manager !== task.brief.manager)
           throw new Error('an amended brief must keep the same goal and manager');
+        if (
+          active &&
+          (!devProductBrief(submitted.brief) ||
+            submitted.brief.kind !== task.brief.kind ||
+            submitted.brief.target !== task.brief.target ||
+            submitted.brief.model !== task.brief.model ||
+            submitted.brief.effort !== task.brief.effort)
+        )
+          throw new Error('active amendment must preserve the ordinary source, kind and model contract');
         if (task.workspace && webModule(submitted.brief, this.settings) !== task.workspace.module)
           throw new Error('amendment outside a shared module requires a new isolated task');
         if (criticalPriority(task.brief, task.taskClass) || criticalPriority(submitted.brief, submitted.taskClass))
@@ -833,28 +858,28 @@ export class WorkerTasks {
           throw new Error('prelaunch amendment must preserve frozen acceptance files');
         const contractSha256 = briefHash(submitted.brief.markdown);
         if (sameBriefText(task.brief.markdown, submitted.brief.markdown))
-          return { taskId, attempt: 0, status: 'unchanged', contractSha256 };
+          return { ...ref, status: 'unchanged', contractSha256 };
         briefPath = join(this.settings.stateDirectory, 'briefs', `${taskId}-amended-${crypto.randomUUID()}.md`);
         mkdirSync(dirname(briefPath), { recursive: true });
         writeFileSync(briefPath, submitted.brief.markdown, { flag: 'wx' });
         const acceptedPath = briefPath;
-        this.store.updateTask({ taskId, attempt: 0 }, (current) => {
+        this.store.updateTask(ref, (current) => {
           current.brief = submitted.brief;
           current.briefPath = acceptedPath;
           current.taskClass = submitted.taskClass;
-          current.state = this.dependenciesMet(current) ? 'ready' : 'held';
+          if (!active) current.state = this.dependenciesMet(current) ? 'ready' : 'held';
         });
-        this.store.event({ taskId, attempt: 0 }, 'prelaunch-contract-amended', {
+        this.store.event(ref, active ? 'active-contract-amended' : 'prelaunch-contract-amended', {
           actor: owner,
           ...(task.state === 'stopped' ? { previousState: task.state } : {}),
           previous: { path: task.briefPath, sha256: briefHash(task.brief.markdown), markdown: task.brief.markdown },
           current: { path: acceptedPath, sha256: contractSha256, markdown: submitted.brief.markdown },
         });
-        return { taskId, attempt: 0, status: 'amended', contractSha256 };
+        return { ...ref, status: 'amended', contractSha256 };
       });
     } catch (error) {
       if (briefPath) rmSync(briefPath, { force: true });
-      if (error instanceof StaleAttemptError) {
+      if (error instanceof StaleAttemptError && !options.active) {
         const current = this.store.task(taskId);
         const attempt = this.store.attempts(taskId).at(-1);
         throw new Error(

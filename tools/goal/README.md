@@ -341,8 +341,24 @@ replacement is the only stopped-zero transition added here; it does not restart 
 remain the same single intent and ticket. Amendment does not dispatch, retry, create an attempt, start a provider or
 bypass capacity. The waiting launcher rereads the accepted task under its lease after capacity admission, so the first
 native prompt contains the full latest canonical contract and current verification policy. Removing a held task's last
-dependency uses that same first-start path. Advanced/live generations refuse with their actual current identity and
+dependency uses that same first-start path. Without `--active`, advanced/live generations refuse with their actual current identity and
 log/process handle, without changing them. This command does not steer an active worker.
+
+An owner or operations manager can also admit a reached ordinary dev contract before landing is queued:
+
+```sh
+bun tools/goal/src/cli.ts amend <task> --active --expected-attempt <n> --brief <file>
+```
+
+`WorkerTasks.amend(taskId, { active: true, expectedAttempt, brief }, actor)` replaces the authoritative contract under
+that same task lease and generation fence. The task stays running, including when its current attempt waits for checks;
+its attempt, session, check IDs, branch, commits, routing and budget remain intact. This does not schedule or steer a
+worker. The same authority, full-brief validation, ordinary priority and frozen acceptance rules apply. Goal, manager,
+kind, source target and model stay the same. Proofs and tasks already queued for landing retain their existing lifecycle.
+The `active-contract-amended` event archives the authenticated authority and both contracts and hashes. Settlement
+rereads scope, risk ownership and acceptance inside its landing publication transaction, so the current attempt lands
+against the accepted contract without first failing its old scope gate. Existing pending checks finish normally, and
+required typing and money checks and integrated Goal acceptance keep their existing owners and requirements.
 
 Each actual worker prompt boundary records its log offset and accumulated check-wait baseline in the existing
 `worker-run-started` event. Recovery uses that boundary's original timestamp rather than restarting its clock. Silence,
