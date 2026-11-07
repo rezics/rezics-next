@@ -495,9 +495,7 @@ export async function createProfileEntryFixture(
       let requestedActions = [...new Set(actions)].sort();
       if (!revoke && subject.kind === 'account' && subject.id === actor.accountId) {
         const held = await Promise.all(
-          requestedActions.map(async (action) =>
-            (await accessCheck(access, actor, action, global, boundary))(pool),
-          ),
+          requestedActions.map(async (action) => (await accessCheck(access, actor, action, global, boundary))(pool)),
         );
         requestedActions = requestedActions.filter((_, index) => !held[index]);
       }
@@ -513,9 +511,7 @@ export async function createProfileEntryFixture(
       try {
         if (revoke) await grants.revoke(command, input);
         else await grants.create(command, input);
-        grantReceiptKeys.delete(
-          grantIntent(revoke ? 'create' : 'revoke', subject, requestedActions),
-        );
+        grantReceiptKeys.delete(grantIntent(revoke ? 'create' : 'revoke', subject, requestedActions));
       } catch (error) {
         throw new Error(
           `Grant ${revoke ? 'revoke' : 'create'} denied: ${error instanceof Error ? error.message : String(error)} facts=${JSON.stringify(await grantFacts(actor, actions, boundary))}`,
