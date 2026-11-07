@@ -1,6 +1,9 @@
 /** Search-owned Library capabilities used by scoped Source, Members and preparation. */
 
-type LibraryOwnerFilterApi = Pick<typeof import('../library/owner-filter.ts'), 'admitCollectionMemberQuery' | 'leafProvider'>;
+type LibraryOwnerFilterApi = Pick<
+  typeof import('../library/owner-filter.ts'),
+  'admitCollectionMemberQuery' | 'leafProvider'
+>;
 type LibraryOwnerFilterPlanApi = Pick<
   typeof import('../library/owner-filter-plan.ts'),
   'bindOwnerFilterRead' | 'readOwnerFilterCandidate' | 'readOwnerFilterCandidateClosure'

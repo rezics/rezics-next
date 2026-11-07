@@ -1,6 +1,6 @@
 import type { SearchNativePorts } from './native-ports.ts';
 
-let installed: SearchNativePorts | undefined;
+let installed: SearchNativePorts;
 
 export let PublicFilterSourceDefinitionError: SearchNativePorts['PublicFilterSourceDefinitionError'];
 export let REVIEW_DISCOVERY_PAGE_LIMIT: SearchNativePorts['REVIEW_DISCOVERY_PAGE_LIMIT'];
@@ -127,6 +127,5 @@ export function bindSearchNativePorts(port: SearchNativePorts): void {
 }
 
 export function searchNativePorts(): SearchNativePorts {
-  if (!installed) throw new TypeError('Search native ports are not installed');
   return installed;
 }
