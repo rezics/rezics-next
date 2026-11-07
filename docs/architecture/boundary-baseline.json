@@ -345,16 +345,6 @@
           "rule": "rule 2",
           "file": "services/importer/src/source-observation.ts",
           "edge": "value import \"../../kernel/src/rating/source-provider.ts\" #1 => services/kernel/src/rating/source-provider.ts"
-        },
-        {
-          "rule": "rule 3",
-          "file": "services/importer/src/batch-cli.ts",
-          "edge": "value import \"./cli.ts\" #1 => services/importer/src/cli.ts (value-import cycle)"
-        },
-        {
-          "rule": "rule 3",
-          "file": "services/importer/src/cli.ts",
-          "edge": "value import \"./batch-cli.ts\" #1 => services/importer/src/batch-cli.ts (value-import cycle)"
         }
       ]
     },

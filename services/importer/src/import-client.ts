@@ -289,6 +289,37 @@ function copiedDiagnostics(error: ImportTransportError): Partial<ImportRequestDi
     cause: error.cause,
   };
 }
+
+/** Public copy of the safe envelope; the original cause stays on the Error chain. */
+export function importTransportDiagnostics(
+  error: ImportTransportError,
+): Partial<ImportRequestDiagnostics> & { cause?: unknown } {
+  return copiedDiagnostics(error);
+}
+
+function safeDiagnosticField(value: unknown, pattern: RegExp, limit: number): string | undefined {
+  return typeof value === 'string' && value.length <= limit && pattern.test(value) ? value : undefined;
+}
+
+/** Operator-visible transport envelope. Causes and response bodies remain private to the Error chain. */
+export function formatImportTransportError(error: ImportTransportError): string {
+  const values = copiedDiagnostics(error);
+  const method = safeDiagnosticField(values.method, /^(GET|HEAD|POST|PUT|PATCH|DELETE)$/u, 8) ?? 'unknown';
+  const origin = safeDiagnosticField(values.origin, /^https?:\/\/[A-Za-z0-9.:[\]_-]+(?::[0-9]{1,5})?$/u, 256);
+  const path = safeDiagnosticField(values.path, /^\/[A-Za-z0-9._~!$&'()*+,;=:@%\/-]{0,512}$/u, 512);
+  const target = `${origin ?? 'unknown-origin'}${path ?? ''}`;
+  const fallbackPhase = error.status === undefined ? 'transport' : 'http';
+  const phase = safeDiagnosticField(values.phase, /^[a-z-]{1,24}$/u, 24) ?? fallbackPhase;
+  const status =
+    Number.isInteger(error.status) && error.status! >= 100 && error.status! <= 599 ? String(error.status) : 'none';
+  const code = safeDiagnosticField(error.code, /^[a-z0-9_-]{1,80}$/u, 80) ?? 'none';
+  const network =
+    safeDiagnosticField(error.networkCode, /^(?:E[A-Z0-9_]{1,64}|ERR_[A-Z0-9_]{1,64}|UND_ERR_[A-Z0-9_]{1,64})$/u, 72) ??
+    'none';
+  const correlation = safeDiagnosticField(error.correlationId, /^[A-Za-z0-9._:-]{1,128}$/u, 128) ?? 'none';
+  const classification = safeDiagnosticField(error.phase, /^[A-Za-z][A-Za-z0-9]{0,31}$/u, 32);
+  return `Import transport failed phase=${phase} method=${method} target=${target} status=${status} problem=${code} network=${network} correlation=${correlation}${classification ? ` classification=${classification}` : ''}`;
+}
 type ClientResponse = { status: number; data: unknown; error: unknown; response?: Response };
 function httpFailure(reply: ClientResponse): ImportTransportError {
   // Only public problem identifiers are useful to callers. No remote diagnostic text is retained.
