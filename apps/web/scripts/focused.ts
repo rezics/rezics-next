@@ -85,7 +85,7 @@ async function prepareFocusedRun(
   env: NodeJS.ProcessEnv,
   signal?: AbortSignal,
 ): Promise<number> {
-  const messages = await ensureMessagesReady(appDirectory, env, { signal });
+  const messages = await ensureMessagesReady(appDirectory, env, signal === undefined ? {} : { signal });
   if (messages !== 0) return messages;
   const generated = Bun.spawn(['bun', 'run', 'generate:routes'], {
     cwd: appDirectory,

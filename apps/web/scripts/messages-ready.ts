@@ -150,7 +150,7 @@ function staleLock(lockPath: string): boolean {
   const owner = lockOwner(lockPath);
   if (owner !== undefined) return !isProcessAlive(owner);
   const directory = statOrMissing(lockPath);
-  return directory === undefined || Date.now() - directory.mtimeMs > LOCK_OWNER_GRACE_MS;
+  return directory === undefined || Date.now() - Number(directory.mtimeMs) > LOCK_OWNER_GRACE_MS;
 }
 
 function abortError(signal: AbortSignal): Error {
