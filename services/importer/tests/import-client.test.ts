@@ -1,6 +1,8 @@
 import { expect, test } from 'bun:test';
 import type { KernelClient, ReviewedPersonMerge } from '@rezics/client';
-import { createImportTransport } from '../src/import-client.ts';
+import { createImportTransport, ImportTransportError } from '../src/import-client.ts';
+import { CredentialServiceError } from '../src/credentials.ts';
+import { formatSeedError } from '../src/seed-cli.ts';
 import type {
   ClassificationAssociation,
   ImportSourceClassificationPutResult,
@@ -109,7 +111,7 @@ test('one batch deadline cancels a pending member retry and releases its timer',
           },
         ],
       });
-    }) as typeof fetch,
+    }) as unknown as typeof fetch,
     schedule: (callback) => {
       expire = callback;
       return () => {
@@ -316,6 +318,99 @@ test('classification mutation transport rejects malformed and opposite-state suc
       },
     ]);
   }
+});
+
+test('transport failure retains safe request metadata and its original network cause', async () => {
+  const cause = Object.assign(new Error('Bearer private-token in upstream text'), { code: 'ECONNRESET' });
+  const transport = createImportTransport({
+    origin: 'https://api.importer.test',
+    tokenProvider: async () => 'private-token',
+    maxAttempts: 1,
+    fetch: (async () => {
+      throw cause;
+    }) as unknown as typeof fetch,
+  });
+  const failure = await transport.readReviewedSubject(subjectId).catch((error: unknown) => error);
+  expect(failure).toBeInstanceOf(ImportTransportError);
+  expect(failure).toMatchObject({
+    method: 'GET',
+    origin: 'https://api.importer.test',
+    path: `/v1/subjects/${subjectId}`,
+    failurePhase: 'network',
+    networkCode: 'ECONNRESET',
+  });
+  expect((failure as ImportTransportError).cause).toBe(cause);
+  const diagnostic = formatSeedError(failure);
+  expect(diagnostic).toContain('network=ECONNRESET');
+  expect(diagnostic).not.toContain('private-token');
+  expect(diagnostic).not.toContain('upstream text');
+});
+
+test('HTTP failure retains only its public problem code and correlation ID', async () => {
+  const transport = createImportTransport({
+    origin: 'https://api.importer.test',
+    tokenProvider: async () => 'private-token',
+    maxAttempts: 1,
+    fetch: (async () =>
+      Response.json(
+        {
+          type: 'https://rezics.com/problems/dependency_unavailable',
+          code: 'dependency_unavailable',
+          title: 'private response text',
+          detail: 'raw imported record body',
+        },
+        { status: 503, headers: { 'x-request-id': 'req-1234', 'x-private-header': 'secret-header' } },
+      )) as unknown as typeof fetch,
+  });
+  const failure = await transport.readReviewedSubject(subjectId).catch((error: unknown) => error);
+  expect(failure).toBeInstanceOf(ImportTransportError);
+  expect(failure).toMatchObject({
+    method: 'GET',
+    origin: 'https://api.importer.test',
+    path: `/v1/subjects/${subjectId}`,
+    status: 503,
+    code: 'dependency_unavailable',
+    phase: 'SubjectGET503',
+    failurePhase: 'http',
+    correlationId: 'req-1234',
+  });
+  const diagnostic = formatSeedError(failure);
+  expect(diagnostic).toContain('problem=dependency_unavailable');
+  expect(diagnostic).toContain('correlation=req-1234');
+  expect(diagnostic).not.toContain('private response text');
+  expect(diagnostic).not.toContain('raw imported record body');
+  expect(diagnostic).not.toContain('secret-header');
+  expect(diagnostic).not.toContain('private-token');
+});
+
+test('token acquisition reports its own safe Auth failure beside the Import operation', async () => {
+  const credential = new CredentialServiceError({
+    method: 'POST',
+    origin: 'http://auth.importer.test',
+    path: '/token',
+    phase: 'http',
+    status: 503,
+    code: 'identity_unavailable',
+    correlationId: 'auth-req-7',
+  });
+  const transport = createImportTransport({
+    origin: 'https://api.importer.test',
+    tokenProvider: async () => {
+      throw credential;
+    },
+    maxAttempts: 1,
+  });
+  const failure = await transport.readReviewedSubject(subjectId).catch((error: unknown) => error);
+  expect(failure).toBeInstanceOf(ImportTransportError);
+  expect(failure).toMatchObject({
+    method: 'GET',
+    path: `/v1/subjects/${subjectId}`,
+    failurePhase: 'token',
+  });
+  expect((failure as ImportTransportError).cause).toBe(credential);
+  expect(formatSeedError(failure)).toContain('auth{phase=http method=POST target=http://auth.importer.test/token status=503');
+  expect(formatSeedError(failure)).toContain('problem=identity_unavailable');
+  expect(formatSeedError(failure)).toContain('correlation=auth-req-7');
 });
 
 test('review transport retains coherent query, nullable evidence, exact admission and immutable request bytes', async () => {

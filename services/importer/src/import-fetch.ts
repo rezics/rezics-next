@@ -1,3 +1,5 @@
+import { types } from 'node:util';
+
 export const MAX_IMPORT_BODY_BYTES = 2097152;
 export const MAX_IMPORT_RESPONSE_BYTES = 1048576;
 export const MAX_IMPORT_WAIT_MS = 30000;
@@ -13,6 +15,68 @@ export type ImportRetryState = Readonly<{
 }>;
 const retryStates = new WeakMap<Response, ImportRetryState>();
 export const importRetryState = (response: Response): ImportRetryState | undefined => retryStates.get(response);
+
+export type ImportFailurePhase = 'network' | 'token' | 'deadline' | 'http' | 'response';
+export type ImportRequestDiagnostics = Readonly<{
+  method: string;
+  origin: string;
+  path: string;
+  phase: ImportFailurePhase;
+  status?: number;
+  code?: string;
+  networkCode?: string;
+  correlationId?: string;
+}>;
+
+const responseDiagnostics = new WeakMap<Response, Omit<ImportRequestDiagnostics, 'phase'>>();
+const requestFailures = new WeakMap<object, ImportRequestDiagnostics>();
+export const importResponseDiagnostics = (response: Response): Omit<ImportRequestDiagnostics, 'phase'> | undefined =>
+  responseDiagnostics.get(response);
+export const importRequestFailure = (error: unknown): ImportRequestDiagnostics | undefined =>
+  (typeof error === 'object' && error !== null) || typeof error === 'function'
+    ? requestFailures.get(error as object)
+    : undefined;
+
+export function importNetworkCode(error: unknown): string | undefined {
+  let value: unknown = error;
+  for (let depth = 0; depth < 3; depth++) {
+    if (typeof value !== 'object' || value === null || types.isProxy(value)) return undefined;
+    const code = Object.getOwnPropertyDescriptor(value, 'code')?.value;
+    if (
+      typeof code === 'string' &&
+      code.length <= 72 &&
+      /^(?:E[A-Z0-9_]{1,64}|ERR_[A-Z0-9_]{1,64}|UND_ERR_[A-Z0-9_]{1,64})$/.test(code)
+    )
+      return code;
+    value = Object.getOwnPropertyDescriptor(value, 'cause')?.value;
+  }
+  return undefined;
+}
+
+export function importCorrelationId(response: Response): string | undefined {
+  for (const name of ['x-request-id', 'x-correlation-id', 'traceparent']) {
+    const value = response.headers.get(name);
+    if (value && value.length <= 128 && /^[A-Za-z0-9._:-]+$/.test(value)) return value;
+  }
+  return undefined;
+}
+
+function requestDiagnostics(request: Request, phase: ImportFailurePhase, error: unknown): ImportRequestDiagnostics {
+  const url = new URL(request.url);
+  const networkCode = phase === 'network' ? importNetworkCode(error) : undefined;
+  return {
+    method: request.method,
+    origin: url.origin.slice(0, 256),
+    path: url.pathname.slice(0, 512),
+    phase,
+    ...(networkCode === undefined ? {} : { networkCode }),
+  };
+}
+
+function rememberRequestFailure(error: unknown, diagnostics: ImportRequestDiagnostics): void {
+  if ((typeof error === 'object' && error !== null) || typeof error === 'function')
+    requestFailures.set(error as object, diagnostics);
+}
 
 export type ImportHttpOptions = {
   origin: string;
@@ -455,6 +519,7 @@ export function createImportFetch(options: ImportHttpOptions): typeof fetch {
     caller?.addEventListener('abort', aborted, { once: true });
     const deadline = now() + deadlineMs;
     let clearDeadline: (() => void) | undefined;
+    let activeRequest: Request | undefined;
     try {
       clearDeadline = schedule(
         () => controller.abort(new DOMException('Import request deadline exceeded', 'TimeoutError')),
@@ -481,6 +546,7 @@ export function createImportFetch(options: ImportHttpOptions): typeof fetch {
               redirect: 'manual',
             })
           : new Request(url.href, { ...init, signal, redirect: 'manual' });
+      activeRequest = request;
       const source = input instanceof Request && init?.body == null ? input.body : request.body;
       if (source !== null && (request.method === 'GET' || request.method === 'HEAD'))
         throw new TypeError('GET/HEAD import requests cannot have a body');
@@ -490,7 +556,16 @@ export function createImportFetch(options: ImportHttpOptions): typeof fetch {
       request.signal.throwIfAborted();
       const retryable = mayRetry(request, body);
       const headers = new Headers(request.headers);
-      headers.set('authorization', `Bearer ${await abortable(request.signal, options.token)}`);
+      const accessToken = async (fresh?: boolean): Promise<string> => {
+        try {
+          return await abortable(request.signal, () => options.token(fresh));
+        } catch (error) {
+          request.signal.throwIfAborted();
+          rememberRequestFailure(error, requestDiagnostics(request, 'token', error));
+          throw error;
+        }
+      };
+      headers.set('authorization', `Bearer ${await accessToken()}`);
       let scheduledWait = 0;
       let renewedAfterDenial = false;
       for (let attempt = 1; ; attempt++) {
@@ -509,8 +584,10 @@ export function createImportFetch(options: ImportHttpOptions): typeof fetch {
         } catch (error) {
           request.signal.throwIfAborted();
           const delay = backoff(attempt);
-          if (!retryable || attempt === maxAttempts || delay > maxWaitMs || delay > maxTotalWaitMs - scheduledWait)
+          if (!retryable || attempt === maxAttempts || delay > maxWaitMs || delay > maxTotalWaitMs - scheduledWait) {
+            rememberRequestFailure(error, requestDiagnostics(request, 'network', error));
             throw error;
+          }
           scheduledWait += delay;
           await sleep(delay, request.signal);
           continue;
@@ -518,7 +595,7 @@ export function createImportFetch(options: ImportHttpOptions): typeof fetch {
         if (response.status === 401 && !renewedAfterDenial && options.token.length > 0) {
           renewedAfterDenial = true;
           await abortable(request.signal, () => cancel(response.body));
-          headers.set('authorization', `Bearer ${await abortable(request.signal, () => options.token(true))}`);
+          headers.set('authorization', `Bearer ${await accessToken(true)}`);
           attempt--;
           continue;
         }
@@ -556,6 +633,13 @@ export function createImportFetch(options: ImportHttpOptions): typeof fetch {
                   : undefined;
         const finish = async (refused = false) => {
           const result = buffered ? response : await boundedResponse(response, maxResponseBytes, signal);
+          const correlationId = importCorrelationId(response);
+          responseDiagnostics.set(result, {
+            method: request.method,
+            origin: url.origin.slice(0, 256),
+            path: url.pathname.slice(0, 512),
+            ...(correlationId === undefined ? {} : { correlationId }),
+          });
           if (adaptable && (notBefore !== undefined || refused)) {
             const reason = stopped();
             retryStates.set(
@@ -582,6 +666,10 @@ export function createImportFetch(options: ImportHttpOptions): typeof fetch {
         await abortable(request.signal, () => cancel(response.body));
         await sleep(delay, request.signal);
       }
+    } catch (error) {
+      if (activeRequest && signal.aborted && !caller?.aborted)
+        rememberRequestFailure(error, requestDiagnostics(activeRequest, 'deadline', error));
+      throw error;
     } finally {
       caller?.removeEventListener('abort', aborted);
       clearDeadline?.();

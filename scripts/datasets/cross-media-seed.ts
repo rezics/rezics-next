@@ -3,7 +3,7 @@ import { chmod, mkdir, readFile, writeFile } from 'node:fs/promises';
 import { dirname, join, resolve } from 'node:path';
 import { createKernelClient } from '@rezics/client';
 import { createAccountTokenProvider, IMPORTER_SCOPES } from '../../services/importer/src/credentials.ts';
-import { createImportTransport, ImportTransportError } from '../../services/importer/src/import-client.ts';
+import { createImportTransport } from '../../services/importer/src/import-client.ts';
 import { createImportFetch } from '../../services/importer/src/import-fetch.ts';
 import {
   developmentPersonalListScopes,
@@ -13,6 +13,7 @@ import {
 } from '../../services/importer/src/showcase-personal-list.ts';
 import { seedReviewedCatalogue } from '../../services/importer/src/reviewed-catalogue.ts';
 import { createSeedDenialDiagnostics } from '../../services/importer/src/showcase-denial-diagnostics.ts';
+import { formatSeedError } from '../../services/importer/src/seed-cli.ts';
 import { fetchCrossMediaDumps, type CrossMediaDumpPaths } from './fetch-dumps.ts';
 import { releaseWalkFileCache } from '../walk-memory.ts';
 import { ShowcaseJournal, type ShowcasePublicationResult } from '../../services/importer/src/showcase-publication.ts';
@@ -328,13 +329,9 @@ export async function runDevelopmentSeed(
   return composedReport;
 }
 
-/** Seed CLI prints only public HTTP classifiers; remote bodies and credentials stay off the walk log. */
+/** Seed CLI prints bounded operation metadata; remote bodies and credentials stay off the walk log. */
 export function seedFailureDetail(error: unknown): string {
-  if (error instanceof ImportTransportError) {
-    const detail = [error.status, error.code, error.type].filter((part) => part !== undefined && part !== '');
-    return detail.length === 0 ? error.message : `${error.message} (${detail.join(' ')})`;
-  }
-  return error instanceof Error ? error.message : 'Cross-media seed failed';
+  return formatSeedError(error);
 }
 
 if (import.meta.main) {

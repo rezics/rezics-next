@@ -166,12 +166,17 @@ import {
 } from './showcase-bangumi-credits.ts';
 import {
   CrossMediaTableScanLimitError,
+  collectSelectedDumpRows,
+  isCrossMediaTableScanLimitError,
   showcaseLimits,
   type CrossMediaTableScanLimits,
+  type CrossMediaTables,
   type ShowcaseAcknowledgement,
   type ShowcaseManifest,
 } from './showcase-contract.ts';
-export { CrossMediaTableScanLimitError, type CrossMediaTableScanLimits };
+
+export { CrossMediaTableScanLimitError, collectSelectedDumpRows, isCrossMediaTableScanLimitError };
+export type { CrossMediaTableScanLimits, CrossMediaTables };
 
 type Provider = 'bangumi' | 'vndb';
 type Row = Record<string, unknown>;
@@ -201,9 +206,6 @@ export function crossMediaFranchise(...names: unknown[]): Franchise | undefined 
   );
 }
 
-export interface CrossMediaTables {
-  rows(provider: Provider, table: string, limits?: CrossMediaTableScanLimits): AsyncIterable<Row>;
-}
 export type SelectedVndbCharacterNameRows = {
   names: Map<string, Row[]>;
   aliases: Map<string, Row[]>;
@@ -1333,20 +1335,25 @@ export async function planCrossMediaSeed(
     chars = new Set<string>(),
     aliases = new Set<string>();
   if (selection?.includeReleases !== false && vnIds.size) {
-    const releasePlan = await (
-      await import('./vndb-release-fidelity.ts')
-    ).planVndbReleaseFidelity(input, {
-      selectedWorkIds: [...vnIds],
-    });
-    const existingWorkRecords = new Set(plan.records.vndb.map((record) => record.key));
-    plan.records.vndb.push(...releasePlan.records.vndb.filter((record) => !existingWorkRecords.has(record.key)));
-    plan.entities.vndb.push(...releasePlan.entities.vndb);
-    plan.edges.push(...releasePlan.edges);
-    plan.gaps.push(...releasePlan.gaps);
-    for (const item of releasePlan.members) member(item);
-    plan.releaseFacts = releasePlan.facts;
-    plan.releasePlatforms = releasePlan.releasePlatforms;
-    for (const entity of releasePlan.entities.vndb) releases.add(entity.key);
+    try {
+      const releasePlan = await (
+        await import('./vndb-release-fidelity.ts')
+      ).planVndbReleaseFidelity(input, {
+        selectedWorkIds: [...vnIds],
+      });
+      const existingWorkRecords = new Set(plan.records.vndb.map((record) => record.key));
+      plan.records.vndb.push(...releasePlan.records.vndb.filter((record) => !existingWorkRecords.has(record.key)));
+      plan.entities.vndb.push(...releasePlan.entities.vndb);
+      plan.edges.push(...releasePlan.edges);
+      plan.gaps.push(...releasePlan.gaps);
+      for (const item of releasePlan.members) member(item);
+      plan.releaseFacts = releasePlan.facts;
+      plan.releasePlatforms = releasePlan.releasePlatforms;
+      for (const entity of releasePlan.entities.vndb) releases.add(entity.key);
+    } catch (error) {
+      if (!isCrossMediaTableScanLimitError(error)) throw error;
+      gap('vndb', error.table, { table: error.table }, error.message);
+    }
   }
   for await (const row of input.rows('vndb', 'vn_staff')) {
     if (!vnIds.has(text(row, 'id'))) continue;
@@ -2062,39 +2069,44 @@ export class CrossMediaDumpFiles implements CrossMediaTables {
       ensure(!this.digests.has(headerKey) || this.digests.get(headerKey) === hash, 'Dump changed during selection');
       this.digests.set(headerKey, hash);
     }
-    const stream = createReadStream(file);
+    const resumeFrom = limits?.resumeBytes ?? 0;
+    ensure(Number.isSafeInteger(resumeFrom) && resumeFrom >= 0, 'Invalid cross-media table scan resume offset');
+    const stream = createReadStream(file, resumeFrom > 0 ? { start: resumeFrom } : {});
     const digest = createHash('sha256');
     const decoder = new TextDecoder('utf-8', { fatal: true });
     async function* lines() {
       let pending = '';
       for await (const chunk of stream) {
-        digest.update(chunk);
+        if (resumeFrom === 0) digest.update(chunk);
         pending += decoder.decode(chunk, { stream: true });
         let end: number;
         while ((end = pending.indexOf('\n')) !== -1) {
-          ensure(Buffer.byteLength(pending.slice(0, end)) <= 1024 * 1024, 'Dump row exceeds seed input limit');
-          yield pending.slice(0, end).replace(/\r$/, '');
+          const raw = pending.slice(0, end);
+          const lineBytes = Buffer.byteLength(raw) + 1;
+          ensure(lineBytes <= 1024 * 1024, 'Dump row exceeds seed input limit');
+          yield { line: raw.replace(/\r$/, ''), bytes: lineBytes };
           pending = pending.slice(end + 1);
         }
         ensure(Buffer.byteLength(pending) <= 1024 * 1024, 'Dump row exceeds seed input limit');
       }
       pending += decoder.decode();
-      if (pending) yield pending;
+      if (pending) yield { line: pending, bytes: Buffer.byteLength(pending) };
     }
     let rowsRead = 0;
     let bytesRead = 0;
+    let complete = false;
     try {
-      for await (const line of lines()) {
-        if (!line) continue;
-        const rowBytes = Buffer.byteLength(line) + 1;
-        ensure(rowBytes <= 1024 * 1024, 'Dump row exceeds seed input limit');
+      for await (const item of lines()) {
+        const line = item.line;
+        ensure(item.bytes <= 1024 * 1024, 'Dump row exceeds seed input limit');
         if (limits) {
-          if (rowsRead >= limits.maxRows || bytesRead + rowBytes > limits.maxBytes)
-            throw new CrossMediaTableScanLimitError(provider, table);
+          if (rowsRead >= limits.maxRows || bytesRead + item.bytes > limits.maxBytes)
+            throw new CrossMediaTableScanLimitError(provider, table, resumeFrom + bytesRead);
           rowsRead += 1;
-          bytesRead += rowBytes;
-          limits.consumeRow?.(rowBytes);
+          bytesRead += item.bytes;
+          limits.consumeRow?.(item.bytes);
         }
+        if (!line) continue;
         if (columns) {
           const cells = line.split('\t');
           ensure(cells.length === columns.length, `Invalid VNDB column count: ${table}`);
@@ -2105,6 +2117,7 @@ export class CrossMediaDumpFiles implements CrossMediaTables {
           yield row as Row;
         }
       }
+      complete = true;
     } catch (error) {
       if (requiredLinkTable && (error as { code?: unknown }).code === 'ENOENT')
         throw new TypeError('Required VNDB external-link table is missing: ' + table);
@@ -2115,6 +2128,7 @@ export class CrossMediaDumpFiles implements CrossMediaTables {
       stream.destroy();
       this.onTableReleased?.(file);
     }
+    if (!complete || resumeFrom > 0) return;
     const key = `${provider}/${table}`,
       hash = digest.digest('hex');
     ensure(!this.digests.has(key) || this.digests.get(key) === hash, 'Dump changed during selection');
