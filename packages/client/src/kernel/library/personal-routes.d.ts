@@ -12110,7 +12110,7 @@ export declare function personalLibraryRoutes(app: ReturnType<typeof definitionR
                 updatedAt: import("typebox").TString;
                 ownerId: import("typebox").TString;
             } & {
-                target: import("typebox").TOptional<import("typebox").TUnion<[import("typebox").TUnion<[import("typebox").TObject<{
+                target: import("typebox").TOptional<import("typebox").TUnion<[import("typebox").TObject<{
                     id: import("typebox").TString;
                     type: import("typebox").TString;
                     types: import("typebox").TArray<import("typebox").TString>;
@@ -12149,13 +12149,7 @@ export declare function personalLibraryRoutes(app: ReturnType<typeof definitionR
                     id: import("typebox").TString;
                     type: import("typebox").TString;
                     label: import("typebox").TString;
-                }>, import("typebox").TNull]>, import("typebox").TUnion<[import("typebox").TObject<{
-                    id: import("typebox").TString;
-                    kind: import("typebox").TUnion<[import("typebox").TLiteral<"actor">, import("typebox").TLiteral<"organization">]>;
-                    displayName: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;
-                }>, import("typebox").TObject<{
-                    displayName: import("typebox").TUnion<[import("typebox").TLiteral<"Deleted account">, import("typebox").TLiteral<"Deleted organization">]>;
-                }>, import("typebox").TNull]>]>>;
+                }>, import("typebox").TNull]>>;
                 destination: import("typebox").TOptional<import("typebox").TUnion<[import("typebox").TObject<{
                     kind: import("typebox").TLiteral<"space">;
                     spaceId: import("typebox").TString;
@@ -12318,12 +12312,6 @@ export declare function personalLibraryRoutes(app: ReturnType<typeof definitionR
                     } | null;
                 } | {
                     id: string;
-                    kind: "actor" | "organization";
-                    displayName: string | null;
-                } | {
-                    displayName: "Deleted account" | "Deleted organization";
-                } | {
-                    id: string;
                     type: string;
                     label: string;
                 } | null;
@@ -12475,12 +12463,6 @@ export declare function personalLibraryRoutes(app: ReturnType<typeof definitionR
                     } | null;
                 } | {
                     id: string;
-                    kind: "actor" | "organization";
-                    displayName: string | null;
-                } | {
-                    displayName: "Deleted account" | "Deleted organization";
-                } | {
-                    id: string;
                     type: string;
                     label: string;
                 } | null;
@@ -12630,7 +12612,7 @@ export declare function personalLibraryRoutes(app: ReturnType<typeof definitionR
                     updatedAt: import("typebox").TString;
                     ownerId: import("typebox").TString;
                 } & {
-                    target: import("typebox").TOptional<import("typebox").TUnion<[import("typebox").TUnion<[import("typebox").TObject<{
+                    target: import("typebox").TOptional<import("typebox").TUnion<[import("typebox").TObject<{
                         id: import("typebox").TString;
                         type: import("typebox").TString;
                         types: import("typebox").TArray<import("typebox").TString>;
@@ -12669,13 +12651,7 @@ export declare function personalLibraryRoutes(app: ReturnType<typeof definitionR
                         id: import("typebox").TString;
                         type: import("typebox").TString;
                         label: import("typebox").TString;
-                    }>, import("typebox").TNull]>, import("typebox").TUnion<[import("typebox").TObject<{
-                        id: import("typebox").TString;
-                        kind: import("typebox").TUnion<[import("typebox").TLiteral<"actor">, import("typebox").TLiteral<"organization">]>;
-                        displayName: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;
-                    }>, import("typebox").TObject<{
-                        displayName: import("typebox").TUnion<[import("typebox").TLiteral<"Deleted account">, import("typebox").TLiteral<"Deleted organization">]>;
-                    }>, import("typebox").TNull]>]>>;
+                    }>, import("typebox").TNull]>>;
                     destination: import("typebox").TOptional<import("typebox").TUnion<[import("typebox").TObject<{
                         kind: import("typebox").TLiteral<"space">;
                         spaceId: import("typebox").TString;
@@ -12893,7 +12869,7 @@ export declare function personalLibraryRoutes(app: ReturnType<typeof definitionR
                 updatedAt: import("typebox").TString;
                 ownerId: import("typebox").TString;
             } & {
-                target: import("typebox").TOptional<import("typebox").TUnion<[import("typebox").TUnion<[import("typebox").TObject<{
+                target: import("typebox").TOptional<import("typebox").TUnion<[import("typebox").TObject<{
                     id: import("typebox").TString;
                     type: import("typebox").TString;
                     types: import("typebox").TArray<import("typebox").TString>;
@@ -12932,13 +12908,7 @@ export declare function personalLibraryRoutes(app: ReturnType<typeof definitionR
                     id: import("typebox").TString;
                     type: import("typebox").TString;
                     label: import("typebox").TString;
-                }>, import("typebox").TNull]>, import("typebox").TUnion<[import("typebox").TObject<{
-                    id: import("typebox").TString;
-                    kind: import("typebox").TUnion<[import("typebox").TLiteral<"actor">, import("typebox").TLiteral<"organization">]>;
-                    displayName: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;
-                }>, import("typebox").TObject<{
-                    displayName: import("typebox").TUnion<[import("typebox").TLiteral<"Deleted account">, import("typebox").TLiteral<"Deleted organization">]>;
-                }>, import("typebox").TNull]>]>>;
+                }>, import("typebox").TNull]>>;
                 destination: import("typebox").TOptional<import("typebox").TUnion<[import("typebox").TObject<{
                     kind: import("typebox").TLiteral<"space">;
                     spaceId: import("typebox").TString;
