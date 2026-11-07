@@ -146,7 +146,7 @@ function* collectBatches<TPlacement>(
   const columnsByTable = new Map<string, string[]>();
   const rowNumbers = new Map<string, number>();
   const validatedColumns = new Set<string>();
-  const encoder = createSeedValueEncoder();
+  let encoder = createSeedValueEncoder();
   let tables = new Map<string, TableRows>();
   let rowCount = 0;
   let byteCount = 0;
@@ -184,6 +184,7 @@ function* collectBatches<TPlacement>(
           tables = new Map();
           rowCount = 0;
           byteCount = 0;
+          encoder = createSeedValueEncoder();
           yield completed;
           target = undefined;
           addedBytes = encodedBytes + 2;

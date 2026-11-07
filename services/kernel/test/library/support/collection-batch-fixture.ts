@@ -3,8 +3,7 @@ import { createGrantCommands } from '../../../src/access/grant-commands.ts';
 import { createCollectionCommands } from '../../../src/library/collections.ts';
 import { deadlineFor } from '../../../src/request/deadline.ts';
 import { partitionOf, routeOf } from '../../../src/route/route.ts';
-import { GLOBAL_CONTEXT } from '../../../src/semantic/definitions.ts';
-import { accountToken, authenticateAccount } from '../../support/admitted-access.ts';
+import { accountToken } from '../../support/admitted-access.ts';
 import { createProfileEntryFixture, entryKey } from './profile-entry-fixture.ts';
 
 export const batchScopes = [
@@ -30,19 +29,7 @@ export async function createCollectionBatchFixture(options: Parameters<typeof cr
     ...(options.clock ? { clock: options.clock } : {}),
   });
   async function merge(a: string, b: string) {
-    const claims = { ...f.steward.actor, scopes: [...f.steward.actor.scopes, 'subject:merge'] };
-    const actor = await authenticateAccount(f.access, { pool: f.pool, deadline: deadlineFor(30000) }, claims);
-    await grants.create(
-      { pool: f.pool, actor, deadline: deadlineFor(30000) },
-      {
-        resource: { route: 0, id: GLOBAL_CONTEXT },
-        subject: { kind: 'account', id: actor.accountId },
-        actions: ['subject:merge'],
-        valid: '(,)',
-        key: entryKey(),
-      },
-    );
-    const result = await f.send(await accountToken(claims), 'POST', '/v1/subjects:merge', { subjects: [a, b] });
+    const result = await f.send(f.steward.bearer, 'POST', '/v1/subjects:merge', { subjects: [a, b] });
     expect(result.status, await result.clone().text()).toBe(200);
     return (await result.json()) as { survivor: string; redirected: string };
   }

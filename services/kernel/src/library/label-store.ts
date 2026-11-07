@@ -82,6 +82,15 @@ function asRecord(
   };
 }
 
+type ReadResult = Awaited<ReturnType<typeof readLabel.run>>;
+type ReadRow = NonNullable<ReadResult extends readonly (infer Row)[] ? Row : ReadResult>;
+
+/** A unique point may be one row or a one-element array; UNION ALL and RETURNING are arrays. */
+function firstRow(result: ReadResult): ReadRow | undefined {
+  if (result == null) return;
+  return (Array.isArray(result) ? result[0] : result) as ReadRow;
+}
+
 export async function insertPersonalLabel(
   client: Client,
   route: number,
@@ -126,7 +135,6 @@ export async function readPersonalLabel(
     route,
     account_id: accountId,
     label_id: labelId,
-    include_deleted: includeDeleted,
   };
   const plan = labelSqlPlan('label.read', readLabel.sql, input, {
     candidateKeys: 1,
@@ -144,8 +152,10 @@ export async function readPersonalLabel(
     },
     outputRows: 1,
   });
-  const row = await executeLabelSql(plan, (operands) => readLabel.run(queryClient(client), operands));
-  return row ? asRecord(row) : null;
+  const result = await executeLabelSql(plan, (operands) => readLabel.run(queryClient(client), operands));
+  const row = firstRow(result);
+  if (!row || (!includeDeleted && row.deletedAt !== null)) return null;
+  return asRecord(row);
 }
 
 export async function renamePersonalLabel(

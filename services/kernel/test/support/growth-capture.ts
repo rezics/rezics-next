@@ -1093,14 +1093,15 @@ function instrument(client: PoolClient, state: CaptureState): void {
     let reservation: GrowthNativeNoticeReservation | undefined;
     try {
       if (capture.costFolder) {
+        // Folded captures keep cost summaries; per-node entries are raw-plan retention.
         reservation = capture.budget.retainNativeNotice(noticeBytes, side);
         plan = JSON.parse(message.slice(message.indexOf(marker) + marker.length));
       } else {
         plan = parseNativePlanNotice(capture.budget, message, side, () =>
           JSON.parse(message.slice(message.indexOf(marker) + marker.length)),
         );
+        retainNativePlanNodes(plan, capture, side);
       }
-      if (!capture.costFolder) retainNativePlanNodes(plan, capture, side);
       if (capture.costFolder) {
         const database = connectedDatabase(client) ?? '';
         const planIndex = capture.costFolder.addNotice(plan, {

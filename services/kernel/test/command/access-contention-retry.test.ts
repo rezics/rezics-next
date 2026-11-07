@@ -6,6 +6,7 @@ import { AccessUnavailableError } from '../../src/access/unavailable.ts';
 import { createPool } from '../../src/database/pool.ts';
 import { registerEventTypes } from '../../src/events/catalogue.ts';
 import { problemResponse } from '../../src/http/problem.ts';
+import { configureTestReceiptKeys } from '../support/receipt-keys.ts';
 
 const databaseUrl = process.env.DATABASE_URL;
 if (!databaseUrl) throw new Error('DATABASE_URL must name the migrated test database');
@@ -16,6 +17,7 @@ const eventType = 'com.rezics.fixture.access-contention.v1';
 registerEventTypes({ [eventType]: Type.Object({ attempt: Type.Integer() }, { additionalProperties: false }) });
 
 beforeAll(async () => {
+  configureTestReceiptKeys(pool);
   await pool.query('CREATE TABLE public.access_contention_effect (id uuid PRIMARY KEY)');
   await pool.query('CREATE TABLE public.access_contention_lock (id uuid PRIMARY KEY, value integer NOT NULL)');
 });
@@ -104,9 +106,9 @@ test('a serialization failure raised through an Access query inside a command tr
   const { rows } = await pool.query(
     `SELECT
        (SELECT count(*)::int FROM public.access_contention_effect) AS body,
-       (SELECT count(*)::int FROM core.receipt WHERE command_kind='fixture.access-contention' AND idempotency_key=$1) AS receipts,
-       (SELECT count(*)::int FROM core.outbox WHERE partition_no=$2 AND position=$3) AS events`,
-    [key, partition, result.position.toString()],
+       (SELECT count(*)::int FROM core.receipt WHERE command_kind='fixture.access-contention') AS receipts,
+       (SELECT count(*)::int FROM core.outbox WHERE partition_no=$1 AND position=$2) AS events`,
+    [partition, result.position.toString()],
   );
   expect(rows).toEqual([{ body: 1, receipts: 1, events: 1 }]);
 });
@@ -114,7 +116,6 @@ test('a serialization failure raised through an Access query inside a command tr
 test('Access contention that outlasts the command deadline answers the same AccessUnavailableError with no effects', async () => {
   const key = crypto.randomUUID();
   const cause = new AccessUnavailableError('contention');
-  const deadline = Date.now() + 500;
   let attempts = 0;
   const authorization = authorizationFor(
     async () => {
@@ -125,11 +126,13 @@ test('Access contention that outlasts the command deadline answers the same Acce
   );
   const before = await pool.query(
     `SELECT
-       (SELECT count(*)::int FROM core.receipt WHERE command_kind='fixture.access-contention' AND idempotency_key=$1) AS receipts,
+       (SELECT count(*)::int FROM core.receipt WHERE command_kind='fixture.access-contention') AS receipts,
        (SELECT count(*)::int FROM core.outbox) AS events,
        (SELECT count(*)::int FROM public.access_contention_effect) AS body`,
-    [key],
   );
+  // Mint time and gate admission must finish once before authorize throws; 500ms from test
+  // entry expired on loaded check hosts during mintTime, so the gate answered deadline.
+  const deadline = Date.now() + 5000;
   const caught = await runCommand(
     pool,
     {
@@ -155,10 +158,9 @@ test('Access contention that outlasts the command deadline answers the same Acce
   expect(attempts).toBeGreaterThan(0);
   const after = await pool.query(
     `SELECT
-       (SELECT count(*)::int FROM core.receipt WHERE command_kind='fixture.access-contention' AND idempotency_key=$1) AS receipts,
+       (SELECT count(*)::int FROM core.receipt WHERE command_kind='fixture.access-contention') AS receipts,
        (SELECT count(*)::int FROM core.outbox) AS events,
        (SELECT count(*)::int FROM public.access_contention_effect) AS body`,
-    [key],
   );
   expect(after.rows).toEqual(before.rows);
 });

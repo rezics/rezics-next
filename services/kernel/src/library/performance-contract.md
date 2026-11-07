@@ -17,9 +17,63 @@ domain-composition suite covering fake capabilities, independent contract/core/a
 declaration equality, ordinary native adapter install, Search filter-leaf ports, and unbound collection-read deferral; native identity,
 Source/member/publication, assignment-growth and lifecycle-growth cases keep their existing assertions.
 The Source adapter ABI keeps Search `ScopeWorkContext`; contract `work` stays unknown. Label
-admission SQL drives from the one-row request through LATERAL LIMIT-1 primary-key points and the 32-row reserved
-source; restore and rename lock the exact parent rather than scanning the owner catalogue. Those growth suites
-remain the oracles; this landing adds no parallel Label suite.
+catalogue, assignment and reserved-source SQL drives from the one-row request through typed input CTEs and LATERAL
+primary-key or reserved-source points, with `ORDER BY` naming the index columns in index order. Point reads take a typed
+`MATERIALIZED` input row and LATERAL unique `(route, account_id, label_id)` so the inner is a parameterized
+`personal_label_pkey` nested loop. `ORDER BY` names that primary key. The inner retains the Access ROW-bounded
+primary-key range (`>=` and `<=` the same tuple), repeats its key components as scalar equalities, and keeps
+`OFFSET 0`; this gives generic plans the complete index key when they cannot reduce the ROW bound. Equality alone
+may Seq Scan when a custom plan inlines the UUID into a small catalogue, `LIMIT 1` lets Seq Scan stop early, and
+`OR include_deleted` hides the unique index. The store filters `include_deleted` on that row. Restore and rename
+lock the exact parent rather than scanning the owner catalogue. Those
+growth suites remain the oracles; this landing adds no parallel Label suite.
+Decision: native Label fixtures create the steward's Global `definitions:publish` / `definitions:activate` grants
+through the ordinary command after Access bootstrap; Access keeps Global point checks on the SQL evaluator so
+`platform.governance` is the first holder. No test-only grant rows. The operator bootstrap CLI installs native
+History before `runCommand`, matching server and worker. Subject writes load Semantic's installed source-set module
+through History's adapter at `src/semantic/record-source-set.ts`; a declaration file alone stays unavailable.
+`beginSemanticRecordSourceSet` already declares the set and registers work, so a successful History test returns an
+ordinary `access.account.preferences` result with `account-updated` rather than `noEffect`; a fabricated handle fails
+owner provenance, not module-unavailable. Native digest verification requires 64 lowercase hex characters; a
+same-width mismatch returns false. Direct `createKernel` / `runCommand` tests bind the dedicated receipt ring
+rather than seeding grants. The operator bootstrap CLI binds that same ring from `KERNEL_RECEIPT_KEYS` because
+standing-parent installation writes receipts. Composed Entry/progress collection-read on a subject id is not
+library-entry authorization; native fixtures defer that denial and keep `library_entry` admission. FULL by-label
+withheld pages open `reading_progress` and carry `progress_session:list`; a suspended own-account viewer is
+unauthenticated. Whitespace-only prefix continuation matches the unfiltered page; authenticated list tokens stay
+unique per issuance. Growth seed encoding resets its visited-node ceiling on each insert batch. Generic prefix plans may
+Bitmap Heap Scan `personal_label_live_name`; Seq Scan stays refused. Assignment owner-label and reserved-source
+pages use the MATERIALIZED input, Access ROW-bounded index range, index-order `ORDER BY` and `OFFSET 0` fence.
+Exact assignment points and the desired tuple also repeat their key components as scalar equalities so generic plans
+reach the complete primary/owner index key instead of scanning the owner table or filtering a route/account bitmap.
+Page `LIMIT` stays after the range fence.
+FULL empty-shelf gate denials keep raw capture so private Library plans must be absent; FULL HTTP
+growth folds native plan notices so Access formula EXPLAIN stays inside the telemetry cap, charging one
+provenance summary per notice rather than one telemetry entry per EXPLAIN node, and walks each notice
+under the per-tree node cap rather than the capture-wide 20 000-node telemetry budget; Seq Scan
+on Library relations stays refused. FULL entry tiles and active-session seeks drive one integer step from the
+MATERIALIZED request row that carries the subject-id array, then a MATERIALIZED one-row point CTE
+inside LATERAL with the same Access ROW-bounded `OFFSET 0` fence. The Entry point also repeats route,
+account and subject as scalar equalities: the FULL HTTP growth capture showed the tuple fence alone
+Seq Scanned `library.entry` at 64, while the key equalities keep the complete primary key visible to
+the planner. Active-session `LIMIT 1` stays after its fence and still names `progress_session_active`.
+FULL assignment pages hydrate Subject summaries from the admitted
+request deadline and one Semantic `prepareReadDecisions` page, not per-subject Access point formulas.
+A concealed or moved Source on FULL by-label withholds (`subject: null`) through `withholdChangedSource`;
+it does not 503 the assignment page or shrink the raw cursor.
+The folded FULL warmup still sees 34 `personal_label` parent
+observations and zero sequential scans on `personal_label`, `label_assignment`, `entry` and
+`progress_session`. Point reads use that typed MATERIALIZED LATERAL unique-key inner with the ROW-bounded
+primary-key range, exact key equalities and `OFFSET 0`; the store filters
+`include_deleted` on the unique row so a generic prepared plan cannot hide `personal_label_pkey` behind
+`OR deleted_at IS NULL`, inline a `NOT MATERIALIZED` CTE, stop a Seq Scan at `LIMIT 1`, or Seq Scan a small
+catalogue after inlining the UUID. Prefix continuation may dispatch that `OFFSET 0` point read; it still
+refuses `LIKE` and nonzero `OFFSET`. They project `createdAt` as insert RETURNING does. The
+store takes a unique point as a row or the first array element. They do not UNION ALL `include_deleted`. Prefix
+still UNION ALLs `upper_bound`, and its `ORDER BY` names `personal_label_live_name`
+`(route, account_id, normalized_name)`. Restore, rename, assignment point and desired-tuple seeks name the
+primary key in index order. Catalogue and assignment pages bind typed input CTEs the same way prefix already does.
+Existing Label command, HTTP and growth suites pin this; no extra tests or stories.
 
 ## Collection operation costs
 
@@ -143,8 +197,9 @@ summaries, indexed active-label fallback and Community actions; repeated origina
 changed source. Serialization never refunds hidden work.
 
 Decision: FULL follow original/current Source mismatch or a non-current summary observation withholds that target
-(`target: null`) and keeps the private edge; it does not 503 the list or point. Other FULL Library views still refuse
-with `dependency_unavailable`. Create/unfollow freeze original actor, client, owner, edge, request key, typed target
+(`target: null`) and keeps the private edge; it does not 503 the list or point. Published-log and Label FULL
+assignment pages withhold the same way (`subject: null`) and keep the raw frontier. Other FULL Library views still
+refuse with `dependency_unavailable`. Create/unfollow freeze original actor, client, owner, edge, request key, typed target
 body and absolute deadline before receipt replay; replay returns that acknowledged result. Empty exhaustion and
 other-member/anonymous views use their own admission. Web binds list GET and the callable point separately; Following
 return stores cursor, kind and target on the private list history entry with the current session.
@@ -825,8 +880,18 @@ PostgreSQL timestamp text. The active-session seek is the existing partial index
 `(route, account_id, subject_id, last_changed_at DESC, session_id)`. FULL subject summaries are Semantic-owned:
 `ViewReader.subject`/`loadSubjects` use `readSubjectSummaryObservation` with original and terminal authorization,
 identity/Source/cover fences and language/profile/type currentness. A withheld summary does not shrink the raw
-assignment frontier. Counter-only rebuilds keep last-complete FULL tiles; field backfill withholds them until
+assignment frontier: FULL by-label passes `withholdChangedSource` so a concealed Subject stays `subject: null`. Counter-only rebuilds keep last-complete FULL tiles; field backfill withholds them until
 publication, after which the original Label and Shelf actions return the published generation.
+The FULL growth fixture retains the zero-sequential-scan requirement for the complete HTTP caller and checks the
+reserved-source partial index on a focused FULL subject-page capture. Its OFFSET invariant tokenizes executable
+clauses while ignoring SQL comments and quoted text. Reserved-source pages repeat
+route/account/subject scalar equalities beside the Access row bounds, because the FULL custom plan could otherwise
+scan unrelated assignments. Folded cost reports do not retain index names for ordinary Index Scan nodes, so the
+focused capture supplies that exact plan assertion while the complete three-request journey stays cost-folded.
+Failed folded assertions report compact occurrences and source SQL for the reached Entry and assignment
+producers. The fixture does not replay the complete page: its native plan notices exceeded the shared 32 MiB raw
+telemetry cap. It keeps the original bounds and assertions while identifying failed producers without that replay.
+Fewest tests: preserve bounded failure evidence in the existing `label-full-growth.test.ts` journey.
 Fewest tests: one native maintenance journey covers last-complete, field-backfill preparing, and those original
 actions after publication; served HTTP uses own-account admission, open personal_library, and listEntries standing.
 The empty-owner drain/late-writer, source-change, purge and last-complete journeys are serial; source-change uses
@@ -850,6 +915,32 @@ The existing native prefix journey now takes a full 100-row prefix page and its 
 journey takes a 100-assignment raw page with one withheld Subject summary and verifies that continuation starts after
 the raw frontier without refill; existing assignment, lifecycle and catalogue journeys retain their replay, CAS,
 capacity and later-edit assertions.
+
+Native Label and Search-receiving journeys, and the capability each pins:
+
+| Journey | Capability |
+| --- | --- |
+| `label-catalogue-command` | create/rename/delete/restore receipts, cursor identity |
+| `label-catalogue-http` | served catalogue pages and admission |
+| `label-catalogue-growth` | indexed catalogue windows as owners grow |
+| `label-prefix-command` | prefix normalization and continuation |
+| `label-prefix-growth` | generic `personal_label_live_name` prefix seeks |
+| `label-assignment-command` | assign receipts and capacity |
+| `label-assignment-command-growth` | assignment command work as neighbours grow |
+| `label-assignment-http` | served assignment pages |
+| `label-assignment-growth` | indexed assignment pages as owners grow |
+| `label-assignment-lifecycle-growth` | unassign/restore CAS under growth |
+| `label-full-http` | FULL headings, tiles, withheld Subject cursor |
+| `label-full-growth` | folded FULL work, 34 parent points, no Seq Scan |
+| `scoped-work-context` | Search scoped work frame |
+| `members-native-scope` | native member scope |
+| `scope-members-source-declaration` | member source declaration |
+| `scope-kind-work-context` | kind work frame |
+| `publication-work-context` | publication work frame |
+
+Ordinary Global `definitions:publish` / `definitions:activate` grants are the grant command after Access bootstrap;
+`platform.governance` is the first holder. No test-only grant rows. Passing/total and the slowest failure are the
+landing kernel check after this decode.
 
 Decision: the finite priced unit is one native command attempt (preparation, authorization, receipt, body, fence,
 rollback and serialization), consumed again on each Core retry. Deadline-scoped retries are request evidence; they
