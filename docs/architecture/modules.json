@@ -351,7 +351,7 @@
         "services/kernel/src/content/media.ts"
       ],
       "allowedDependencies": [
-        "definitions",
+        "definitions", "definitions-compiler", "definitions-compiler-adapter",
         "document",
         "filter",
         "kernel-access",
@@ -577,7 +577,7 @@
         "access-policy",
         "auth-contract",
         "bounds",
-        "definitions",
+        "definitions", "definitions-compiler", "definitions-compiler-adapter",
         "filter",
         "kernel-access",
         "kernel-community",
@@ -646,7 +646,7 @@
         "bounds",
         "catalogue-page-metadata",
         "composition",
-        "definitions",
+        "definitions", "definitions-compiler", "definitions-compiler-adapter",
         "document",
         "filter",
         "kernel-access",
@@ -717,7 +717,7 @@
       ],
       "allowedDependencies": [
         "composition",
-        "definitions",
+        "definitions", "definitions-compiler", "definitions-compiler-adapter",
         "document",
         "filter",
         "kernel-access",
@@ -846,7 +846,7 @@
       "allowedDependencies": [
         "auth-contract",
         "bounds",
-        "definitions",
+        "definitions", "definitions-compiler", "definitions-compiler-adapter",
         "kernel-access",
         "kernel-commerce",
         "kernel-community",
@@ -888,7 +888,7 @@
       "paths": ["services/kernel/src/server.ts", "services/kernel/src/worker.ts", "services/kernel/src/composition/**"],
       "publicEntries": [],
       "allowedDependencies": [
-        "definitions",
+        "definitions", "definitions-compiler", "definitions-compiler-adapter",
         "filter",
         "kernel-access",
         "kernel-access-application",
@@ -1011,7 +1011,7 @@
       "owner": "imports",
       "paths": ["services/importer/src/**"],
       "publicEntries": [],
-      "allowedDependencies": ["client", "conversion", "definitions", "kernel-rating"],
+      "allowedDependencies": ["client", "conversion", "definitions", "definitions-compiler", "definitions-compiler-adapter", "kernel-rating"],
       "capabilities": ["imports"]
     },
     {
@@ -1090,7 +1090,7 @@
       "allowedDependencies": [
         "client",
         "composition",
-        "definitions",
+        "definitions", "definitions-compiler", "definitions-compiler-adapter",
         "filter",
         "ui",
         "web-accounts",
@@ -1195,7 +1195,7 @@
       "allowedDependencies": [
         "client",
         "composition",
-        "definitions",
+        "definitions", "definitions-compiler", "definitions-compiler-adapter",
         "document",
         "filter",
         "ui",
@@ -1310,7 +1310,7 @@
       "allowedDependencies": [
         "client",
         "composition",
-        "definitions",
+        "definitions", "definitions-compiler", "definitions-compiler-adapter",
         "document",
         "kernel-rating",
         "ui",
@@ -1357,7 +1357,7 @@
       "allowedDependencies": [
         "client",
         "composition",
-        "definitions",
+        "definitions", "definitions-compiler", "definitions-compiler-adapter",
         "document",
         "filter",
         "kernel-zones",
@@ -1472,7 +1472,7 @@
         "content-edition-contract",
         "client",
         "composition",
-        "definitions",
+        "definitions", "definitions-compiler", "definitions-compiler-adapter",
         "document",
         "filter",
         "ui",
@@ -1558,7 +1558,7 @@
         "@rezics/conversion/wikidata",
         "@rezics/conversion/cross-media-entities"
       ],
-      "allowedDependencies": ["definitions", "document"],
+      "allowedDependencies": ["definitions", "definitions-compiler", "document"],
       "capabilities": ["source-conversion"]
     },
     {
@@ -1587,24 +1587,95 @@
         "packages/definitions/schema/**",
         "packages/definitions/sources/**"
       ],
+      "excludes": [
+        "packages/definitions/src/index.ts",
+        "packages/definitions/src/compile.ts",
+        "packages/definitions/src/compile-library-profiles.ts",
+        "packages/definitions/src/catalogue-artifacts.ts",
+        "packages/definitions/src/catalogue-files.ts",
+        "packages/definitions/src/catalogue-cli.ts",
+        "packages/definitions/src/bundled.ts",
+        "packages/definitions/src/pattern-safety.ts",
+        "packages/definitions/src/extension.ts",
+        "packages/definitions/src/import-document.ts",
+        "packages/definitions/src/compiler/application.ts",
+        "packages/definitions/src/compiler/catalogue-compile.ts",
+        "packages/definitions/src/compiler/catalogue-artifacts.ts",
+        "packages/definitions/src/compiler/release-validation.ts",
+        "packages/definitions/src/adapters/**"
+      ],
       "publicEntries": [
-        "@rezics/definitions",
+        "@rezics/definitions/contract",
         "@rezics/definitions/schema/release.json",
-        "@rezics/definitions/extension",
-        "@rezics/definitions/compile",
-        "@rezics/definitions/bundled",
         "@rezics/definitions/validate",
         "@rezics/definitions/bulk",
         "@rezics/definitions/media-import",
         "@rezics/definitions/slug",
         "@rezics/definitions/catalogue",
-        "@rezics/definitions/catalogue/files",
         "@rezics/definitions/schema/catalogue.json",
         "@rezics/definitions/schema/catalogue-node.json",
-        "@rezics/definitions/schema/kind.json"
+        "@rezics/definitions/schema/kind.json",
+        "packages/definitions/src/compiler/contract.ts",
+        "packages/definitions/src/portable.ts",
+        "packages/definitions/src/catalogue.ts",
+        "packages/definitions/src/publication-construction.ts",
+        "packages/definitions/src/publication-workspace.ts",
+        "packages/definitions/src/library-profile.ts",
+        "packages/definitions/src/release-digest.ts",
+        "packages/definitions/src/language.ts",
+        "packages/definitions/src/browser.ts",
+        "packages/definitions/src/bundled-browser.ts"
       ],
-      "allowedDependencies": ["document", "filter"],
+      "allowedDependencies": ["document"],
       "capabilities": ["definitions"]
+    },
+    {
+      "id": "definitions-compiler",
+      "kind": "application",
+      "owner": "semantic",
+      "paths": [
+        "packages/definitions/src/compiler/application.ts",
+        "packages/definitions/src/compiler/catalogue-compile.ts",
+        "packages/definitions/src/compiler/catalogue-artifacts.ts",
+        "packages/definitions/src/compiler/release-validation.ts",
+        "packages/definitions/src/compile-library-profiles.ts",
+        "packages/definitions/src/import-document.ts",
+        "packages/definitions/src/extension.ts",
+        "packages/definitions/src/bundled.ts"
+      ],
+      "publicEntries": [
+        "packages/definitions/src/compiler/application.ts",
+        "packages/definitions/src/compiler/catalogue-compile.ts",
+        "packages/definitions/src/compiler/catalogue-artifacts.ts",
+        "packages/definitions/src/compiler/release-validation.ts",
+        "packages/definitions/src/import-document.ts",
+        "@rezics/definitions/extension",
+        "@rezics/definitions/bundled"
+      ],
+      "allowedDependencies": ["definitions"],
+      "capabilities": ["definitions-compilation"]
+    },
+    {
+      "id": "definitions-compiler-adapter",
+      "kind": "adapter",
+      "owner": "semantic",
+      "paths": [
+        "packages/definitions/src/index.ts",
+        "packages/definitions/src/compile.ts",
+        "packages/definitions/src/catalogue-artifacts.ts",
+        "packages/definitions/src/catalogue-files.ts",
+        "packages/definitions/src/catalogue-cli.ts",
+        "packages/definitions/src/pattern-safety.ts",
+        "packages/definitions/src/adapters/**"
+      ],
+      "publicEntries": [
+        "@rezics/definitions",
+        "@rezics/definitions/compile",
+        "@rezics/definitions/catalogue",
+        "@rezics/definitions/catalogue/files"
+      ],
+      "allowedDependencies": ["definitions", "definitions-compiler", "filter"],
+      "capabilities": ["definitions-compiler-host"]
     },
     {
       "id": "document",
@@ -1664,7 +1735,7 @@
         "auth-contract",
         "bounds",
         "composition",
-        "definitions",
+        "definitions", "definitions-compiler", "definitions-compiler-adapter",
         "document",
         "filter",
         "money",

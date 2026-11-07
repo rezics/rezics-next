@@ -1,4 +1,4 @@
-import type { PropertyDefinition, Release } from './index.ts';
+import type { PropertyDefinition, Release } from './portable.ts';
 import { Compile } from 'typebox/schema';
 import { checkDocument, serializeDocument } from '@rezics/document';
 import spdxLicenseIds from 'spdx-license-ids';

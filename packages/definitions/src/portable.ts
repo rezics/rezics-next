@@ -5,7 +5,6 @@ export type {
   ReleasedRelationDirectionKind,
   ReleasedRelationDirectionResolver,
 } from './released-relation-direction.ts';
-import type { FilterDocument } from '@rezics/filter';
 import schema from '../schema/release.json';
 import type { LibraryProfile, LibraryProfileReference } from './library-profile.ts';
 export { chooseLabel, languageRanges } from './language.ts';
@@ -135,9 +134,11 @@ export type ContextSettings = {
   labels: Record<string, string>;
   defaults: Record<string, 'inherit' | 'suppress'>;
 };
+/** Closed saved-filter JSON. Filter owns admission; the compiler host validates the document. */
+export type SavedFilterDocument = object;
 export type SavedFilter = {
   labels: Record<string, string>;
-  filter: FilterDocument;
+  filter: SavedFilterDocument;
 };
 export type Release = {
   format: typeof RELEASE_FORMAT;

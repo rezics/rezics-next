@@ -1,6 +1,6 @@
 import { readdirSync, readFileSync } from 'node:fs';
 import { posix } from 'node:path';
-import { releaseDigest, type Release } from './index.ts';
+import { releaseDigest, type Release } from './portable.ts';
 
 const source = (path: string) => readFileSync(new URL(path, import.meta.url), 'utf8');
 const files = (directory: string): string[] =>
