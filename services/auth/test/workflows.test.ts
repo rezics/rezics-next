@@ -18,12 +18,17 @@ const stagingKey = randomBytes(32);
 let fixture: ReturnType<typeof testDatabase>;
 let pool: Pool;
 let system: Pool;
+let systemName: string;
 let auth: AuthService;
 let workflows: ReturnType<typeof createAccountWorkflows>;
 let options: Parameters<typeof createAccountWorkflows>[0];
 let instant = Date.now();
 let failRevoke = false;
+let failReserve = false;
 let beforeRevoke: (() => Promise<void>) | undefined;
+let boundOperationKey = '';
+const creationDigest = 'a'.repeat(64);
+const creationCommand = 'workflow-command';
 const accounts = new Map<string, AccessAccount>();
 const calls: string[] = [];
 const pageCalls: { operatorAccountId: string; limit?: number; cursor?: string }[] = [];
@@ -64,7 +69,63 @@ const ports: AccountWorkflowPorts = {
       }
     );
   },
-  async authorizeOperation(reference) {
+  actorAccountId: (context) => context.actor.accountId,
+  copyActors: async () => [
+    { accountId: 'approved-human', role: 'human' as const },
+    { accountId: 'approved-human', role: 'initiator' as const },
+  ],
+  approvalBinding: () =>
+    boundOperationKey
+      ? { operationKey: boundOperationKey, digest: creationDigest, commandKeyPrefix: creationCommand }
+      : undefined,
+  async readNativeCreationContext(input) {
+    if (typeof input.approvalReference !== 'string' || !input.operationKey)
+      return { kind: 'unavailable' as const, reason: 'historical-provenance' as const };
+    const target =
+      'accountId' in input.operation && typeof input.operation.accountId === 'string'
+        ? input.operation.accountId
+        : 'approved-human';
+    return {
+      kind: 'available' as const,
+      context: {
+        actorAccountId: 'approved-human',
+        actingHumanId: 'approved-human',
+        operatorAccountId: null,
+        principalAccountId: null,
+        sourceClientId: 'workflow-web',
+        approvalReference: input.approvalReference,
+        commandKey: creationCommand,
+        operationKey: input.operationKey,
+        operationDigest: creationDigest,
+        operation: {
+          kind: input.operation.kind === 'fence-operator' ? 'fence-operator' : 'revoke',
+          action: 'account:suspend' as const,
+          targetResourceId: target,
+          targetClientId: null,
+        },
+      },
+    };
+  },
+  async authorizeOperation(reference, operation) {
+    boundOperationKey = operation.operationKey ?? '';
+    if (reference === 'approved-revoke' && operation.kind === 'revoke') {
+      return {
+        actor: { accountId: 'approved-human' },
+        async revokeSessions() {
+          const account = accounts.get(operation.accountId)!;
+          const result = await value('fence', boundOperationKey, {
+            accountId: operation.accountId,
+            receiptId: `${boundOperationKey}:receipt`,
+            minimumAuthnEpoch: String(account.authnEpoch + 1),
+            kind: 'fence',
+            priorOperatorAccountId: null,
+          });
+          account.fenced = true;
+          account.authnEpoch = Number(result.value.minimumAuthnEpoch);
+          return { ...result.value, continuationOperationKey: boundOperationKey };
+        },
+      };
+    }
     if (reference !== 'approved-fanout') throw new Error('Operation denied');
     return {
       actor: { accountId: 'approved-human' },
@@ -82,6 +143,23 @@ const ports: AccountWorkflowPorts = {
   },
   async readContinuation(operationKey, accountId) {
     continuationReads.push({ operationKey, accountId });
+    if (operationKey === 'revoke-human')
+      return {
+        reference: 'revoke-continuation-reference',
+        operationKey,
+        operationDigest: creationDigest,
+        commandKeyPrefix: creationCommand,
+        barrierReceiptId: `${operationKey}:receipt`,
+        expiresAt: new Date(instant + 1800000).toISOString(),
+        allowlist: [
+          {
+            step: 'revoke-auth-sessions',
+            target: accountId,
+            key: 'fixture-revoke-sessions',
+            digest: 'fixture-revoke-digest',
+          },
+        ],
+      };
     if (operationKey !== 'fixture-fanout-continuation' || accountId !== 'workflow-fanout-operator') return null;
     return {
       reference: 'fixture-continuation-reference',
@@ -115,6 +193,7 @@ const ports: AccountWorkflowPorts = {
   },
   registrationTarget: (key) => `workflow-account-${key}`,
   async reserveHandle(input) {
+    if (failReserve) throw new Error('Injected handle reservation failure');
     return value('reserve-handle', input.key, {
       handle: input.handle.toLowerCase(),
       accountId: input.accountId,
@@ -211,9 +290,13 @@ async function restart() {
 beforeAll(async () => {
   fixture = testDatabase();
   pool = new Pool({ connectionString: fixture.url });
-  await pool.query('CREATE DATABASE auth_workflow_system');
+  // Own a lane-local system database. A shared cluster name would collide with parallel files and FORCE-drop live DBOS.
+  systemName = `${decodeURIComponent(new URL(fixture.url).pathname.slice(1))}_system`;
+  if (!/^[a-zA-Z_][a-zA-Z0-9_]*$/.test(systemName)) throw new Error('Auth workflow system database name is invalid');
+  await pool.query(`DROP DATABASE IF EXISTS ${systemName} WITH (FORCE)`);
+  await pool.query(`CREATE DATABASE ${systemName}`);
   const systemUrl = new URL(fixture.url);
-  systemUrl.pathname = '/auth_workflow_system';
+  systemUrl.pathname = `/${systemName}`;
   system = new Pool({ connectionString: systemUrl.href });
   await pool.query(
     'CREATE TABLE test_workflow_command (key text PRIMARY KEY, kind text NOT NULL, value jsonb NOT NULL)',
@@ -268,6 +351,8 @@ beforeAll(async () => {
 afterAll(async () => {
   await workflows?.close();
   await system?.end();
+  // Release only this file's system database so a rerun in the same server starts clean.
+  if (systemName) await pool?.query(`DROP DATABASE IF EXISTS ${systemName} WITH (FORCE)`);
   await pool?.end();
   fixture?.close();
 });
@@ -344,7 +429,9 @@ test('revocation persists Access fence before first Auth side effect and outage 
     expect((await pool.query("SELECT value FROM test_workflow_command WHERE kind='fence'")).rows).toHaveLength(1);
   };
   failRevoke = true;
-  await expect(workflows.revokeSessions({ accountId: id, key: 'revoke-human' })).rejects.toThrow();
+  await expect(
+    workflows.revokeSessions({ accountId: id, key: 'revoke-human', authorization: 'approved-revoke' }),
+  ).rejects.toThrow();
   expect(observed).toBeGreaterThan(0);
   const fenced = { ...accounts.get(id)! };
   expect((await signin(id)).status).toBeGreaterThanOrEqual(400);
@@ -429,6 +516,9 @@ test('public signup binds credentials atomically and cannot take over a trusted 
 }, 30000);
 
 test('operator fencing delegates fanout to a committed continuation and resumes Auth revocation once', async () => {
+  continuationReads.length = 0;
+  continuationAuthorizations.length = 0;
+  pageCalls.length = 0;
   const operator = 'workflow-fanout-operator';
   for (const id of [operator, ...fanoutRows.map((row) => row.subjectAccountId)]) {
     accounts.set(id, { accountId: id, kind: 'actor', state: 'active', automated: false, authnEpoch: 1 });
@@ -527,18 +617,18 @@ test('failed launch keeps the first error through cleanup failure and a later ho
       },
     });
     await expect(failing.start()).rejects.toThrow('injected launch failure');
-    const recovered = createAccountWorkflows(options);
-    await recovered.start();
-    const opened = await recovered.beginRegistration({
-      key: 'lifecycle-failed-launch',
-      handle: 'Lifecycle_Failed',
-    });
-    expect(opened.accountId).toBe('workflow-account-lifecycle-failed-launch');
-    await recovered.close();
-    workflows = recovered;
   } finally {
     DBOS.shutdown = shutdown;
   }
+  const recovered = createAccountWorkflows(options);
+  await recovered.start();
+  const opened = await recovered.beginRegistration({
+    key: 'lifecycle-failed-launch',
+    handle: 'Lifecycle_Failed',
+  });
+  expect(opened.accountId).toBe('workflow-account-lifecycle-failed-launch');
+  await recovered.close();
+  workflows = recovered;
 }, 60_000);
 
 test('a second host does not shut down a healthy owner', async () => {
@@ -579,4 +669,18 @@ test('close during launch settles that generation before a sequential host start
   expect(opened.accountId).toBe('workflow-account-lifecycle-close-during-launch');
   await next.close();
   workflows = next;
+}, 60_000);
+
+test('a failed native reservation reports its first actual failure as the registration cause', async () => {
+  failReserve = true;
+  try {
+    const failure = await workflows.beginRegistration({ key: 'reserve-failure', handle: 'Reserve_Failure' }).then(
+      () => undefined,
+      (error: unknown) => error,
+    );
+    const cause = (failure as { cause?: unknown } | undefined)?.cause;
+    expect(cause instanceof Error ? cause.message : undefined).toBe('Injected handle reservation failure');
+  } finally {
+    failReserve = false;
+  }
 }, 60_000);

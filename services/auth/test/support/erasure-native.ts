@@ -4,6 +4,8 @@ import { createRequire } from 'node:module';
 import { Pool, type PoolClient } from 'pg';
 import { exportJWK, generateKeyPair } from 'jose';
 import { kernelTestDatabase, testDatabase } from '../../scripts/database.ts';
+import { configureTestReceiptKeys } from '../../../kernel/test/support/receipt-keys.ts';
+import { workerTestEnv } from '../../../kernel/test/support/worker-env.ts';
 import { bindAuthDeletionHandleRead, createAuthHost, type AccountOperationAccess } from '../../src/index.ts';
 import { createNativeWorkflowProofPorts } from '../../src/native-workflow-proofs.ts';
 import { createProvisioningEvidenceVerifier } from '../../src/provisioning-evidence.ts';
@@ -46,18 +48,55 @@ export function failNativeQueries(pool: Pool, fails: (sql: string) => boolean) {
   };
 }
 
+/** Bind operating-session evidence in the session's current producer transaction.
+ * A later INSERT cannot rewrite session role custody from another xid. */
+export async function attachOperatingOpening(
+  pool: Pool,
+  input: {
+    sessionId: string;
+    subjectAccountId: string;
+    actingHumanId: string;
+    operatorAccountId: string;
+    receiptId: string;
+  },
+) {
+  const connection = await pool.connect();
+  try {
+    await connection.query('BEGIN');
+    await connection.query('UPDATE session SET erasure_role_xid=txid_current() WHERE id=$1', [input.sessionId]);
+    await connection.query(
+      `INSERT INTO auth_session_opening (session_id,subject_account_id,acting_human_id,operator_account_id,receipt_id)
+      VALUES ($1,$2,$3,$4,$5)`,
+      [input.sessionId, input.subjectAccountId, input.actingHumanId, input.operatorAccountId, input.receiptId],
+    );
+    await connection.query('COMMIT');
+  } catch (error) {
+    await connection.query('ROLLBACK');
+    throw error;
+  } finally {
+    connection.release();
+  }
+}
+
 /** Real Access composition is test-only. Production Auth receives ports and an
  * Auth-only pool, never a kernel module, pool, key or credential. */
 export async function nativeFixture(options: { openPool?: (url: string) => Promise<Pool> } = {}) {
   const fixture = testDatabase();
   const kernelFixture = kernelTestDatabase();
   const kernel = new Pool({ connectionString: kernelFixture.url });
+  // Dedicated receipt material, independent of this fixture's Access reference keys.
+  process.env.KERNEL_RECEIPT_KEYS ??= workerTestEnv().KERNEL_RECEIPT_KEYS!;
+  configureTestReceiptKeys(kernel);
   const pool = options.openPool ? await options.openPool(fixture.url) : new Pool({ connectionString: fixture.url });
   const previous = process.env.DATABASE_URL;
   process.env.DATABASE_URL = kernelFixture.url;
   let modules;
   try {
+    // Reylo must compile Kernel .sql modules before History adapters or Access load. A static History import
+    // evaluates those adapters first and fails with a missing `sql` export.
     await import(createRequire(new URL('../../../kernel/package.json', import.meta.url)).resolve('reylo/register'));
+    const { installNativeHistoryPreload } = await import('../../../kernel/src/composition/preload.ts');
+    installNativeHistoryPreload();
     modules = {
       ...(await import('../../../kernel/src/access/index.ts')),
       ...(await import('../../../kernel/src/access/native-account-bindings.ts')),

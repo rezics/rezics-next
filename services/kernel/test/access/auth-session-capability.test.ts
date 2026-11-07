@@ -11,6 +11,8 @@ import { createLifecycleInternals } from '../../src/access/lifecycle.ts';
 import { createOperatorCommands } from '../../src/access/operator.ts';
 import { createRegistrationProofBindings } from '../../src/access/registration-proof.ts';
 import { newId, routeOf } from '../../src/route/route.ts';
+import { configureTestReceiptKeys } from '../support/receipt-keys.ts';
+import { workerTestEnv } from '../support/worker-env.ts';
 
 const issuer = 'https://operator.auth.test';
 const password = 'correct horse battery staple';
@@ -159,6 +161,9 @@ import { seal, unseal } from '../../src/tokens/seal.ts';
 
 const url = process.env.DATABASE_URL!;
 const pool = createPool(url);
+// Kernel commands read receipt keys from their pool; env is the supported fallback the worker composition uses.
+process.env.KERNEL_RECEIPT_KEYS ??= workerTestEnv().KERNEL_RECEIPT_KEYS!;
+configureTestReceiptKeys(pool);
 const authPool = new AuthPool({ connectionString: url });
 let f: Awaited<ReturnType<typeof fixture>>;
 let human: string;

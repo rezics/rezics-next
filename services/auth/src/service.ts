@@ -1119,10 +1119,12 @@ export async function buildAuthService(options: AuthServiceOptions): Promise<Aut
         creationStage &&
         (creationStage.creation_context_version !== 1 ||
           !creationStage.creation_scope_digest ||
+          !creationStage.reservation_id ||
+          !creationStage.expires_at ||
           (receipt &&
             (creationStage.reservation_id !== receipt.reservationId ||
               receipt.registrationId !== creationStage.reservation_id ||
-              creationStage.expires_at?.getTime() !== Date.parse(receipt.expiresAt))))
+              creationStage.expires_at.getTime() !== Date.parse(receipt.expiresAt))))
       )
         throw new Denied();
       const digest = creationStage
@@ -1167,6 +1169,9 @@ export async function buildAuthService(options: AuthServiceOptions): Promise<Aut
           [credentialId, account.accountId, input.hash],
         );
         if (creationStage) {
+          // The party guard binds receipt registration/reservation/expiry to the locked stage reservation.
+          // A stub or Access approval without a receipt still copies that identity; nulls are refused.
+          const reservationId = receipt?.reservationId ?? creationStage.reservation_id;
           const copied = await connection.query(
             `INSERT INTO auth_provisioning_receipt
              (idempotency_key,account_id,digest,registration_id,reservation_id,authn_epoch,expires_at,
@@ -1186,13 +1191,13 @@ export async function buildAuthService(options: AuthServiceOptions): Promise<Aut
               receiptKey,
               account.accountId,
               digest,
-              receipt?.registrationId ?? null,
-              receipt?.reservationId ?? null,
-              receipt?.authnEpoch ?? null,
-              receipt?.expiresAt ?? null,
-              receipt ? account.accountId : null,
-              receipt ? credentialId : null,
-              receipt ? (input.hash === null ? 'credentialless' : 'password') : null,
+              receipt?.registrationId ?? reservationId,
+              reservationId,
+              receipt?.authnEpoch ?? account.authnEpoch,
+              receipt?.expiresAt ?? creationStage.expires_at,
+              account.accountId,
+              credentialId,
+              input.hash === null ? 'credentialless' : 'password',
               creationStage.registration_id,
               creationStage.creation_scope_digest,
             ],

@@ -14,6 +14,8 @@ configures the shared content worker's storage. It can be repeated. Identical ge
 while app servers run does not trigger configuration reloads. An interrupted setup can be repeated too.
 `dev` also runs setup, then starts these processes together; Ctrl-C ends the processes it launched and leaves
 infrastructure running. A child startup failure ends the other children.
+The dev-stack check prefers `go-task` or `task` on `PATH`, then the repository binary under `node_modules/.bin`.
+When none of those exist it runs the Taskfile's Bun commands, so check hosts without Go Task still exercise the stack.
 
 | Service                      | Loopback address       |
 | ---------------------------- | ---------------------- |

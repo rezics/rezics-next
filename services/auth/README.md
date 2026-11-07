@@ -1133,6 +1133,38 @@ or a failed-start release. Failed-start cleanup cannot replace the first causal
 error. Late cleanup of a previous generation cannot clear or shut down a
 successor.
 
+Native fixtures bind dedicated receipt keys on the kernel pool they pass to Access
+commands, using the same supported test ring as kernel worker composition,
+independent of Auth staging keys and Access reference-seal keys. They install Kernel
+History after Reylo registers SQL modules; Auth's check has no Kernel bunfig. A
+forked isolated Auth helper installs that History/event catalogue, binds a separate
+receipt ring on its Access `createPool`, reports original Access errors on the child
+stream, and cleans up independently without replacing this process's first-cause map.
+A staged provisioning receipt copies reservation identity from the locked
+registration row when Access did not supply a receipt. The dump CLI copies
+`scripts/database.ts` away from the kernel tree and loads kernel migrate only when a
+kernel template is actually migrated. Workflow-host, native-consumer and database
+tests run through `bun run --cwd services/auth check <file>` so each file receives a
+lane copy of the once-migrated kernel template and releases its host.
+
+A registration whose workflow stopped reports the durable failure, and this process's
+first actual step failure rides along as its `cause`, including when the workflow is
+still pending. Durable steps journal only the generic step message; the retained
+failure is bounded to 64 workflows and is never persisted or exposed outside the host.
+Failed start does not shut down DBOS unless that generation launched it. Isolated
+system-store hosts still persist `auth_workflow_request` on the Auth database so
+resume can read the original operation; they still have no copy custody. Expired
+registration terminals the stage and records handle release before `erase-auth-owner`,
+which is how the owner producer recognizes pending-registration cleanup. Mock workflow
+hosts that exercise native operations supply creation context, actor roles and approval
+bindings; they do not reconstruct those from an unprotected callback. `authorizeOperation`
+receives the host-bound `operationKey` on that same operation; the shared contract
+carries the optional key so native bindings keep one port type. Kernel durable
+approvals use that same host operation type: revoke and transfer-acceptance carry
+the optional key on the variant, and the union is not intersected again. The official
+dev-stack copy omits check-host `.last-test-file` artifacts so a concurrent check receipt
+cannot break the isolated checkout.
+
 Before resolving, `host.start()` also registers the first-party client
 `rezics-auth-account-operations` through trusted `registerClient` in
 `create-or-match` mode. `@rezics/auth-contract` exports its nonsecret
