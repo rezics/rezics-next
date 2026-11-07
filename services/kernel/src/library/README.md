@@ -33,7 +33,7 @@ native growth, public Search settlement/discovery and default-worker runtime pro
 
 Decision: `collection-native-work.ts` is the mechanical NativeCollectionWork leaf (ProblemError from `http/problem-error.ts`). Access `access-capabilities.ts` re-exports that leaf and Kind input work/types only. Kind raw resolution stays on `collection-kind-input.ts`; composition binds it into Access native ports. Canonical Source sweep/repair stays on `collection-source-work.ts`.
 
-Decision: AniList/MAL list-import vote types consume Rating `VoteObservation` from `rating/index.ts`. Progress adoption classifies Access grant denial and unavailability through `resource-access-errors.ts` and `unavailable.ts`, keeping those error identities. Follow count composition supplies Access `public-identity.ts` through the account producer; public identity no longer value-imports Semantic `subject.ts` or `link-keys.ts`.
+Decision: AniList/MAL list-import vote types consume Rating `VoteObservation` from `rating/index.ts`. Progress adoption imports Access refusal constructors from `contract/errors.ts` and uses the defining `unavailable.ts` classifier leaf, keeping those error identities. Follow count composition supplies Access `public-identity.ts` through the account producer; public identity no longer value-imports Semantic `subject.ts` or `link-keys.ts`.
 
 Decision: ordinary filtered Collection pages consume one immutable finite page plan; Library's native admission, SQL observation, receipts and refusal remain authoritative. Canonical generation repair uses one closed 9-axis plan.
 

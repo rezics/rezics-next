@@ -1,7 +1,7 @@
 import type { Release } from '@rezics/definitions';
 import { applyJournalPatch, sameJournalValues, recordedProgressValues } from '@rezics/progress';
 import type { Pool } from 'pg';
-import { readAccount } from './access-port.ts';
+import { readAccount, deadlineClient, within } from './access-port.ts';
 import { GrantDeniedError } from '../access/contract/errors.ts';
 import type { KernelClock } from '../clock.ts';
 import {

@@ -20,7 +20,6 @@ import type {
 } from '../access/resource-authorization.ts';
 import type {
   createResourcePublicEligibility as NativeCreateResourcePublicEligibility,
-  ResourceEligibility,
   ResourceEligibilityOptions,
   ResourceEligibilityPrepareContext,
 } from '../access/public-eligibility.ts';
@@ -74,6 +73,8 @@ import type {
   readLiveCopyResult as NativeReadLiveCopyResult,
 } from '../access/live-copy.ts';
 import { requireLibraryAccess } from './domain-binding.ts';
+
+type ResourceEligibility = ReturnType<typeof NativeCreateResourcePublicEligibility>;
 
 export type LibraryAccessPorts = Readonly<{
   deadlineClient: typeof NativeDeadlineClient;

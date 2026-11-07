@@ -267,11 +267,9 @@
         "services/kernel/src/access/account-data.ts",
         "services/kernel/src/access/grant-commands.ts",
         "services/kernel/src/access/content-adapter.ts",
-        "services/kernel/src/access/resource-authorization.ts",
         "services/kernel/src/access/public-eligibility.ts",
         "services/kernel/src/access/parent-creation.ts",
         "services/kernel/src/access/resource-initialization.ts",
-        "services/kernel/src/access/viewer-actions.ts",
         "services/kernel/src/access/adapters/copy-account.ts",
         "services/kernel/src/access/adapters/library.ts",
         "services/kernel/src/access/public-views.ts",
@@ -310,7 +308,8 @@
         "services/kernel/src/access/contract/bounds.ts",
         "services/kernel/src/access/contract/collection-policy.ts",
         "services/kernel/src/access/contract/errors.ts",
-        "services/kernel/src/access/contract/erasure.ts"
+        "services/kernel/src/access/contract/erasure.ts",
+        "services/kernel/src/access/contract/contribution-attribution.ts"
       ],
       "allowedDependencies": [],
       "capabilities": ["access-vocabulary"]
