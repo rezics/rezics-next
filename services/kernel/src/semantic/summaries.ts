@@ -3,6 +3,7 @@ import type { SubjectSummary, SubjectSummaryObservation } from './contract/index
 import type { SummaryDependencies, SummaryReaderDependencies } from './subject-reading-application.ts';
 
 export type {
+  CoverCredit,
   CoverSummary,
   RelatedSubjectSummary,
   SubjectSummary,

@@ -45,6 +45,7 @@ export const RelatedSubjectSummarySchema = t.Object(
 );
 
 /** Disclosed display vocabulary shared by native producers and receiving transports. */
+export type CoverCredit = ContentCoverCredit;
 export type CoverSummary = {
   media: string;
   width: number;
@@ -76,3 +77,13 @@ export type SubjectSummaryObservation = Readonly<{
   components: SummarySources;
   current: () => Promise<boolean>;
 }>;
+
+export type PublicSummaryQuery = Readonly<{
+  ids: readonly string[];
+  languages: readonly string[];
+  deadline: number;
+}>;
+
+export type PublicSummaryRead<Summary extends SubjectSummary = SubjectSummary> = (
+  query: PublicSummaryQuery,
+) => Promise<ReadonlyMap<string, Summary>>;

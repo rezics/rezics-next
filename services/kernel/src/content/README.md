@@ -595,6 +595,15 @@ Content owns mixed Home composition through the existing Home port. The [feed co
 owns selection, source limits and sparse cursors; Search owns its public discovery source/result/continuation entry,
 real adapters, query/default-worker assembly and minimal caller migration. There is no second renderer or private
 Library merge.
+Decision: mixed Home construction and read orchestration run through the Content feed application over
+consumer-owned continuation, public-summary and presentation ports. Library owns Continue page vocabulary and
+the native Continue adapter; Semantic owns disclosed Subject summary vocabulary and the native public-summary
+adapter. Server/default-worker composition binds those producers once. HTTP operation and problem mapping stay
+on `feed-routes.ts`. Missing continuation, summary or discovery authority is unavailable, not an empty page or
+an all-candidate fallback. Focused application/composition tests pin missing authority, exact kind conjunction,
+sparse Continue resume and the 20/160/6 bounds; runtime proof stays with the existing Content walk. No extra
+stories. Destination kinds stay distinct union members; public summary and Continue schemas stay TypeBox objects.
+The mounted Feed page schemas stamp the Content contract page types so GET /v1/feedItems stays a closed route.
 `feed-discovery.ts` maps Search's delivered Subject/Account and public Collection/review/Space summaries with
 exhaustive dispatch and exact route, kind and primary identity checks. It translates only the public
 `library/collection` and `community/space` keys to Content's `commerce/collection` and `content/space` feed

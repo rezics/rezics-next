@@ -1,9 +1,9 @@
 import { memoizedValue } from '../memoized.ts';
 import { t } from 'elysia';
+import type { ContinueProgressPresentation } from './contract/index.ts';
 import type { ProgressPresentation } from './progress-model.ts';
 import { MAX_PROGRESS_MEASURES } from './progress.ts';
 import { libraryStoredVocabularySchema } from './profile-schemas.ts';
-import { SubjectSummarySchema } from '../semantic/contract/index.ts';
 
 const closed = { additionalProperties: false } as const;
 const id = t.String({ format: 'uuid' });
@@ -13,7 +13,7 @@ const state = t.Union([t.Literal('active'), t.Literal('completed'), t.Literal('a
 const revision = t.Integer({ minimum: 1, maximum: 2_147_483_646 });
 
 /** Stable Library wire contract, kept outside route handlers for Continue and Feed composition. */
-export const progressPresentationSchema = t.Unsafe<ProgressPresentation>(
+export const progressPresentationSchema = t.Unsafe<ProgressPresentation & ContinueProgressPresentation>(
   t.Object(
     {
       meaning: t.Union([t.Literal('known'), t.Literal('unknown'), t.Literal('unavailable')]),
@@ -91,32 +91,6 @@ export function sessionSchema() {
         ),
       },
       closed,
-    ),
-  );
-}
-
-const continueClosed = { additionalProperties: false } as const;
-const continueNullable = t.Union([t.String(), t.Null()]);
-
-export function continuePageSchema() {
-  return memoizedValue(continuePageSchema, () =>
-    t.Object(
-      {
-        subjects: t.Array(
-          t.Object(
-            {
-              subjectId: t.String({ format: 'uuid' }),
-              state: continueNullable,
-              lastActivityAt: t.String(),
-              activeProgressSession: t.Union([sessionSchema(), t.Null()]),
-              subject: t.Optional(t.Union([SubjectSummarySchema, t.Null()])),
-            },
-            continueClosed,
-          ),
-        ),
-        next: continueNullable,
-      },
-      continueClosed,
     ),
   );
 }

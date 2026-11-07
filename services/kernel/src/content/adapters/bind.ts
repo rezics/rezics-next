@@ -1,4 +1,5 @@
 import { unbindContentRealmApplication } from './realm-binding.ts';
+import { unbindFeedCapabilities } from './feed-bind.ts';
 import type { ContentAmbient, ContentApplication } from '../contract/index.ts';
 
 let bound: ContentApplication | undefined;
@@ -21,6 +22,7 @@ export function tryContentApplication(): ContentApplication | undefined {
 export function unbindContentApplication(): void {
   bound = undefined;
   unbindContentRealmApplication();
+  unbindFeedCapabilities();
 }
 
 function boundAmbient(): ContentAmbient {

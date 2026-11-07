@@ -108,6 +108,14 @@ a metadata revision rechecks current visibility. The publication list fixture de
 `search_selection_state` then the subject under Semantic erasure cleanup. Existing realm visibility
 and publication disclosure tests pin those states; no extra stories.
 
+Decision: mixed Home construction is one Content feed application over continuation, public-summary and
+presentation ports. Library and Semantic own the real Continue and disclosed-summary adapters; composition
+binds them once. HTTP mapping stays on the existing feed route. Missing authority is unavailable. Fewest
+tests pin those states in `feed-application.test.ts` and `feed-composition.test.ts`; the existing Content walk
+keeps runtime acceptance. No extra stories. Destination kinds stay distinct union members so thread, subject,
+collection and account extract; public summary/Continue schemas stay TypeBox objects for composition and stamp the Content contract page types. Cover
+credit obligations stay the CC literals. Existing feed tests keep their assertions.
+
 Decision: compose Realm community, exact disclosure and Subject scope as one Content application over
 consumer-owned ports; bind independent Community/Semantic evidence and Search execution at existing roots.
 Focused identity, unavailable-authority and final-currentness tests preserve existing outcome assertions; no extra
