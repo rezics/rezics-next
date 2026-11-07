@@ -3,9 +3,11 @@ import { pickText } from '@rezics/composition';
 import type { Release } from '@rezics/definitions';
 import { libraryChoices, libraryProfile } from '../../library/profiles';
 import { catalogueEntries } from './catalogue-entry';
-import { albumFields, albumType, albumUuid } from './album-profile';
+import { albumFields, albumType } from './album-profile';
+import { albumUuid } from './contract/album';
 import type { GuideRelease } from './definition-guide';
-import { encodedBytes, isA } from './release-fidelity/model';
+import { isA } from './release-fidelity/model';
+import { encodedBytes } from './release-fidelity/encoding';
 
 export type ProfileReaderState =
   | 'ready'

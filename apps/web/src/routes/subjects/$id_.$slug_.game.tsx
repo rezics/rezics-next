@@ -1,5 +1,5 @@
 import { pickText } from '@rezics/composition';
-import { encodedBytes } from '../../features/catalogue/release-fidelity/model';
+import { encodedBytes } from '../../features/catalogue/release-fidelity/encoding';
 import { createFileRoute, notFound, redirect } from '@tanstack/react-router';
 import { createServerFn } from '@tanstack/react-start';
 import { setResponseHeader } from '@tanstack/react-start/server';

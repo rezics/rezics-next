@@ -77,12 +77,8 @@ import { useSession } from '../../session/query';
 import { subjectHref } from '../../subject/subject-href';
 import { synopsisVisitHref } from './subject-summary-reading/visit';
 import { withSubjectVisitReturn, summaryReadingFragment, summaryReadingReturn } from './subject-visit-navigation';
-import {
-  SUMMARY_PROPERTY as SUMMARY_CHOICE_PROPERTY,
-  synopsisChoices,
-  synopsisReturnMatches,
-  type SynopsisChoice,
-} from './subject-summary-reading/model';
+import { synopsisChoices, synopsisReturnMatches, type SynopsisChoice } from './subject-summary-reading/model';
+import { SUMMARY_PROPERTY as SUMMARY_CHOICE_PROPERTY } from './subject-summary-reading/contract';
 export type { Count } from '../count';
 
 /** What one node's read returned: its planned descriptor and body, or the fact that it did not succeed. */

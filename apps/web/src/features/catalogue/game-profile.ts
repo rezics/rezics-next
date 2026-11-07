@@ -1,7 +1,7 @@
 import type { KernelClient, SubjectRead, SubjectReadQuery } from '@rezics/client';
 import { candidateContext } from '../../subject/candidates';
 import type { GameCurrentVisit } from './game-current-visit';
-import { encodedBytes } from './release-fidelity/model';
+import { encodedBytes } from './release-fidelity/encoding';
 import { pickText } from '@rezics/composition';
 import type { Release } from '@rezics/definitions';
 import { checkSubjectInput, type Violation } from '@rezics/definitions/validate';

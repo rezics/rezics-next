@@ -120,6 +120,14 @@ Identity Rating repair values stay on `identity-rating-repair-producer.ts`; Sour
 
 Decision: `config-check-runtime.ts` constructs check runners and reloads train settings from supplied dependencies; `createRuntime` keeps process, store and lifecycle ownership.
 
+Decision: Web routes compose concrete domain-owned page, navigation and reader adapters through their declared
+leaf entries. Register the defining leaf in `modules.json`; do not collect unrelated route APIs in a barrel or widen
+allowed dependencies. Existing Session observation/cache compatibility leaves remain Web adapter entries over the
+browser reader owner. Candidate context comes directly from the page visit port. Reaction command recovery vocabulary
+lives in the Threads contract; its session observer is a separate adapter shared by Home and Threads, so Home does not
+load the reaction widget to observe a session. Album identity syntax and summary property vocabulary live in domain
+contract leaves; release byte measurement is an independent leaf, keeping route intake out of editor/read models.
+
 **Enforcement.** One static architecture check (manifest validation plus a dependency-graph check) runs on every
 landing's final candidate. It needs no database and runs in seconds. Workers run the same check with `--changed`
 before handoff. Receive changes through that manifest and check using actual public edges; do not add another writer,
