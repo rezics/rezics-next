@@ -15,6 +15,14 @@ import { createWriteRateLimiter } from '../../../src/access/write-rate.ts';
 import { insertMember } from '../../../src/library/collection-store.ts';
 import { keyBetween, respacedKeys } from '../../../src/library/ordinal.ts';
 import { createKernel } from '../../../src/http/kernel.ts';
+import { composeLibraryDomain } from '../../../src/composition/library.ts';
+import {
+  bindLibraryDomain,
+  bindLibraryPresentation,
+  peekLibraryDomain,
+  peekLibraryPresentation,
+  unbindLibraryDomain,
+} from '../../../src/library/domain-binding.ts';
 import { SHELF_TYPE_DIGEST_ENV } from '../../../src/library/shelf-type-keys.ts';
 import { actionCatalogue } from '../../../src/http/request.ts';
 import { newId, partitionOf, routeOf } from '../../../src/route/route.ts';
@@ -249,6 +257,9 @@ function sourceFile(statement: string): string {
 
 export async function createLibraryDriver(options: NativeConformanceOptions = {}): Promise<NativeConformanceWorld> {
   const typePauses = createNativeShelfTypePauses();
+  const previousDomain = peekLibraryDomain();
+  const previousPresentation = peekLibraryPresentation();
+  let composedDomain: ReturnType<typeof composeLibraryDomain> | undefined;
   const base = process.env.DATABASE_URL;
   if (!base) throw new Error('DATABASE_URL must name the migrated test database');
 
@@ -290,6 +301,14 @@ export async function createLibraryDriver(options: NativeConformanceOptions = {}
     authServer = undefined;
     await workClient?.close().catch(() => undefined);
     workClient = undefined;
+    if (composedDomain && peekLibraryDomain() === composedDomain) {
+      if (previousDomain) bindLibraryDomain(previousDomain);
+      else {
+        unbindLibraryDomain();
+        if (previousPresentation) bindLibraryPresentation(previousPresentation);
+      }
+      composedDomain = undefined;
+    }
     await accountHost?.close().catch(() => undefined);
     accountHost = undefined;
     await authPool?.end().catch(() => undefined);
@@ -403,6 +422,14 @@ export async function createLibraryDriver(options: NativeConformanceOptions = {}
         };
         nativeAccess = access;
         return access;
+      },
+      onAccessReady(access) {
+        composedDomain = composeLibraryDomain({
+          pool: db!.pool,
+          routeKey,
+          access,
+          clock: () => new Date(scenarioNow()),
+        });
       },
     });
     const scopes = [...actionCatalogue(app).keys()].filter((scope) => scope !== 'media:complete');
