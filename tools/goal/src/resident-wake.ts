@@ -59,13 +59,17 @@ export class ResidentWakeBridge {
       .filter((row) => residentWakeable(row.event));
     const last = rows[rows.length - 1]!.id;
     if (actionable.length) {
-      // Keep the marker stable while new events arrive during a transport retry.
-      // The inbox owns event bodies; large terminal pastes can hide their markers.
-      const marker = `[resident inbox ${actionable[0]!.id}]`;
-      const kinds = [...new Set(actionable.map(({ event }) => event.kind))].join(', ');
+      const marker = `[resident inbox ${actionable[0]!.id}-${last}]`;
+      const summaryLimit = Math.min(1200, Math.floor(10000 / actionable.length));
+      const details = actionable
+        .map(
+          ({ id, event }) =>
+            `#${id} ${event.kind}${event.from ? ` from ${event.from.slice(0, 80)}` : ''}: ${event.summary.replace(/\s+/g, ' ').slice(0, summaryLimit)}`,
+        )
+        .join(' | ');
       this.send(
         resident,
-        `${marker} ${actionable.length} new events (${kinds}) through #${last}. Read the supermanager inbox with the supported Goal commands and act on the pending decisions and alarms.`,
+        `${marker} ${details} Act on these events now; inspect the native inbox and task store as needed. For a low-output hourly report, diagnose the largest loss, act within the hour and report cause and action to the project Telegram group. ${marker}`,
       );
     }
     // Never consume native inbox state. Failed delivery throws before this independent checkpoint.
@@ -79,7 +83,7 @@ export class ResidentWakeBridge {
 }
 
 /** Verify the configured pane is running the registered provider and contains the literal prompt before submitting. */
-export function tmuxResidentSender(socket: string, pane: string, command = 'tmux', journalFile?: string) {
+export function tmuxResidentSender(socket: string, pane: string, command = 'tmux') {
   const run = (...args: string[]) => {
     const result = spawnSync(command, ['-S', socket, ...args], { encoding: 'utf8', timeout: 5000 });
     if (result.error) throw result.error;
@@ -87,35 +91,12 @@ export function tmuxResidentSender(socket: string, pane: string, command = 'tmux
       throw new Error(`tmux ${args[0]} failed: ${result.stderr.trim() || `exit ${result.status}`}`);
     return result.stdout.trim();
   };
-  let staged: { threadId: string; marker: string; submitted: boolean } | undefined = journalFile && existsSync(journalFile)
-    ? JSON.parse(readFileSync(journalFile, 'utf8'))
-    : undefined;
-  const checkpoint = () => {
-    if (!journalFile) return;
-    mkdirSync(dirname(journalFile), { recursive: true });
-    const temporary = `${journalFile}.${process.pid}.tmp`;
-    writeFileSync(temporary, JSON.stringify(staged));
-    renameSync(temporary, journalFile);
-  };
   return (resident: ResidentIdentity, prompt: string): void => {
     const current = run('display-message', '-p', '-t', pane, '#{pane_current_command}');
     if (current !== resident.provider)
       throw new Error(`Resident pane ${pane} runs ${current}, expected ${resident.provider} (${resident.threadId})`);
+    run('send-keys', '-t', pane, '-l', prompt);
     const marker = prompt.slice(0, prompt.indexOf(']') + 1);
-    if (!marker) throw new Error('Resident prompt is missing a delivery marker');
-    if (staged?.threadId === resident.threadId) {
-      if (staged.marker !== marker && !staged.submitted)
-        throw new Error(`Resident pane ${pane} still has an unconfirmed delivery ${staged.marker}`);
-      if (staged.marker === marker && staged.submitted) return;
-    }
-    const retry = staged?.threadId === resident.threadId && staged.marker === marker;
-    if (!retry) {
-      // Record before writing: a failed display check or process restart must never
-      // append the same text to the resident's draft again.
-      staged = { threadId: resident.threadId, marker, submitted: false };
-      checkpoint();
-      run('send-keys', '-t', pane, '-l', prompt);
-    }
     let displayed = false;
     for (let attempt = 0; attempt < 10; attempt++) {
       const captured = run('capture-pane', '-p', '-t', pane, '-S', '-100').replace(/\n/g, '');
@@ -126,10 +107,6 @@ export function tmuxResidentSender(socket: string, pane: string, command = 'tmux
       Bun.sleepSync(50);
     }
     if (!displayed) throw new Error(`Resident pane ${pane} did not display delivery marker ${marker}`);
-    // Give the CLI time to finish processing the paste before submitting it.
-    Bun.sleepSync(250);
     run('send-keys', '-t', pane, 'Enter');
-    staged = { threadId: resident.threadId, marker, submitted: true };
-    checkpoint();
   };
 }

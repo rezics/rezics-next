@@ -101,8 +101,6 @@ export async function startWorker(
       createKernelCreditSearchSource,
       community.ambient,
     );
-  const resolvedModules =
-    modules === undefined ? composed() : typeof modules === 'function' ? modules(composed()) : modules;
   const receiptKeys = readReceiptKeyRing(env, config.receiptKeys);
   initializeEventTypes();
   let pool: pg.Pool;
@@ -124,6 +122,24 @@ export async function startWorker(
   } catch (error) {
     content.stop();
     await pool.end();
+    throw error;
+  }
+  let resolvedModules: readonly WorkModule[];
+  try {
+    // Build the default list only after the worker pool/client are prepared. Its Search producer
+    // supplier remains lazy until registration and is shared by the Semantic and Search modules.
+    resolvedModules =
+      modules === undefined ? composed() : typeof modules === 'function' ? modules(composed()) : modules;
+  } catch (error) {
+    try {
+      await client.close();
+    } finally {
+      try {
+        content.stop();
+      } finally {
+        await pool.end();
+      }
+    }
     throw error;
   }
   let work: Awaited<ReturnType<typeof composeWork>> | undefined;

@@ -11,14 +11,13 @@ import commandNoEffect from '../command/no-effect-fence.sql';
 import commandReceipt from '../command/read-receipt.sql';
 import { currentCommandWorkAssociation } from '../command/work-context.ts';
 import type { WorkDimensions } from './contract/work-dimensions.ts';
+import { semanticObservationBound } from './semantic-observation.ts';
 import { partitionOf, routeOf } from '../route/route.ts';
-import type { PreparationSourceExecution } from './preparation-source.ts';
+import type { PreparationSourceExecution, PreparationSourceRead } from './preparation-source.ts';
 import sourceSize from './shelf-maintenance-source-size.sql';
 import rootSize from './shelf-maintenance-root-size.sql';
 import retirementSize from './shelf-maintenance-retirement-size.sql';
 import partitionRead from '../partition/read.sql';
-import identityRead from '../semantic/read-item-identity-version.sql';
-import typesRead from '../semantic/read-item-types.sql';
 import { COMMAND_STEP_RETRIES } from '../work/retries.ts';
 import { SELECTED_COST } from '../work/selected-runtime-cost.ts';
 import counterDelta from './shelf-counter-delta.sql';
@@ -111,10 +110,15 @@ const size = (value: unknown) => boundValues().size(value);
 const row = (value: unknown) => boundValues().row(value);
 const normalize = (sql: string) => boundValues().normalize(sql);
 
-export function consumeShelfMaintenance<T>(operation: string, total: Bound, dispatch: () => Promise<T>): Promise<T> {
+export function consumeShelfMaintenance<T>(
+  operation: string,
+  total: Bound,
+  dispatch: () => Promise<T>,
+  actual?: (value: T) => Partial<WorkDimensions> | undefined,
+): Promise<T> {
   const native = currentCommandWorkAssociation();
   return native
-    ? native.run(`library.shelf-maintenance.${operation}`, shelfMaintenanceWorkDimensions(total), dispatch)
+    ? native.run(`library.shelf-maintenance.${operation}`, shelfMaintenanceWorkDimensions(total), dispatch, actual)
     : dispatch();
 }
 
@@ -373,7 +377,13 @@ export const shelfMaintenanceSourceExecution: PreparationSourceExecution = Objec
       read,
     );
   },
-  async read<T>(client: PoolClient, subjectId: string, full: boolean, read: () => Promise<T>): Promise<T> {
+  async read<T>(
+    client: PoolClient,
+    subjectId: string,
+    full: boolean,
+    observations: import('./contract/semantic-observation.ts').LibrarySemanticObservationCapability,
+    read: (maxTypeBytes: number) => Promise<PreparationSourceRead<T>>,
+  ): Promise<PreparationSourceRead<T>> {
     const route = routeOf(subjectId)!;
     const args = { partition_no: partitionOf(route), route, subject_id: subjectId };
     const sizes = await consumeShelfMaintenance(
@@ -390,30 +400,30 @@ export const shelfMaintenanceSourceExecution: PreparationSourceExecution = Objec
       }),
       () => sourceSize.run(client, args),
     );
-    const statements = [partitionRead, identityRead, ...(full ? [typesRead] : [])];
-    const projectionBytes =
-      row({ partitionNo: 4095, node: '', writeState: 'active', movedTo: '', epoch: I(), position: D() }) +
-      6 * (sizes.partition_bytes ?? 0) +
-      row({ revision: I(), transactionId: U(), redirect: U() }) +
-      (full
-        ? row({ id: U(), type: '', agent_account_id: U(), agent_verified: false }) + 6 * (sizes.type_bytes ?? 0)
-        : 0);
-    // Identity: exact subject, latest create/identity revision, latest redirect; full projection adds
-    // one subject and its unique agent link. Every absent lateral/left join still pays its EOF point.
-    const total = shelfCost({
-      nativeRows: full ? 6 : 4,
-      nativePoints: full ? 6 : 4,
-      identityMetadataRows: 3,
-      emptySeeks: full ? 6 : 4,
-      statements: statements.length,
+    const local = shelfCost({
+      nativeRows: 2,
+      nativePoints: 2,
+      emptySeeks: 2,
+      statements: 1,
       bytes:
-        statements.reduce((n, query) => n + statementBytes(query), 0) +
-        projectionBytes +
-        size([args.partition_no]) +
-        size([route, subjectId]) +
-        (full ? size([args.partition_no, [route], [subjectId]]) : 0),
+        statementBytes(partitionRead) +
+        row({ partitionNo: 4095, node: '', writeState: 'active', movedTo: '', epoch: I(), position: D() }) +
+        6 * (sizes.partition_bytes ?? 0) +
+        size([args.partition_no]),
     });
-    return consumeShelfMaintenance('source.read', total, read);
+    const semantic = sumBounds(
+      semanticObservationBound(observations.shelf.identityVersionWork(subjectId)),
+      full
+        ? semanticObservationBound(observations.shelf.itemTypesWork([subjectId], sizes.type_bytes ?? 0))
+        : shelfCost(),
+    );
+    const total = sumBounds(local, semantic);
+    return consumeShelfMaintenance(
+      'source.read',
+      total,
+      () => read(sizes.type_bytes ?? 0),
+      (result) => shelfMaintenanceWorkDimensions(sumBounds(local, semanticObservationBound(result.semanticWork))),
+    );
   },
 });
 

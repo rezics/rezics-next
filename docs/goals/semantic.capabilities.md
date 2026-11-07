@@ -9,6 +9,96 @@ remains: immutable definitions, third vertical, referenced candidates, Context a
 claims and disputes, one partition/revision per command, current Access, batched related labels, asynchronous incoming
 links with declared freshness, one-hop redirects, all required personas, main and root-gate evidence.
 
+## First-public-scope dev journeys
+
+This finishing table follows the two Semantic-owned **In** rows in [public scope](../scope.md): catalogue,
+editorial contributions, identity resolution, definitions and vertical editors; and Zones. One row is one
+user-visible path. The single Semantic walk executes every row on current dev by **2026-11-07 00:30 UTC**,
+then repeats hourly toward **09:30 UTC**. It replaces Pending with Passing or Failing, recording the dev revision,
+UTC time, native/browser evidence and first failing transition/repair owner. Pending is not a pass. A shared setup
+failure marks every dependent row Failing with that cause; it supplies no downstream success.
+
+| Journey                         | User-visible path                                                                                                                                          | Dev result                                                                                                                                                           |
+| ------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Released definitions            | `/{locale}/catalogue/definitions` → choose released Type → inspect its actual fields, targets and accepting profile                                        | Failing e08bc9a534c3 2026-11-07T10:02:26.796Z setup (not provisioned); controller admission: EACCES: permission denied, open '/tmp/rezics-walk-stacks/sequence.next' |
+| Catalogue browsing              | `/{locale}/catalogue/{profile}` → page actual released subjects → open the selected canonical reader                                                       | Failing e08bc9a534c3 2026-11-07T10:02:26.796Z setup (not provisioned); controller admission: EACCES: permission denied, open '/tmp/rezics-walk-stacks/sequence.next' |
+| Generic creation                | `/{locale}/catalogue/new` → choose released Type/data language → discover existing matches → create → independent returned-subject read                    | Failing e08bc9a534c3 2026-11-07T10:02:26.796Z setup (not provisioned); controller admission: EACCES: permission denied, open '/tmp/rezics-walk-stacks/sequence.next' |
+| Book and series editing         | `/{locale}/catalogue/literary` → create/correct Book or series → cite a work/edition relation → review → current reader                                    | Failing e08bc9a534c3 2026-11-07T10:02:26.796Z setup (not provisioned); controller admission: EACCES: permission denied, open '/tmp/rezics-walk-stacks/sequence.next' |
+| Recipe editing                  | `/{locale}/catalogue/recipe` → original ingredients/method/licence and diet/time facts → propose → separate editorial selection → public recipe            | Failing e08bc9a534c3 2026-11-07T10:02:26.796Z setup (not provisioned); controller admission: EACCES: permission denied, open '/tmp/rezics-walk-stacks/sequence.next' |
+| Game and visual-novel editing   | `/{locale}/catalogue/game` → choose released work/release grain → enter supported facts → submit → current distinct identity                               | Failing e08bc9a534c3 2026-11-07T10:02:26.796Z setup (not provisioned); controller admission: EACCES: permission denied, open '/tmp/rezics-walk-stacks/sequence.next' |
+| Add-on editing                  | `/{locale}/catalogue/addon` → choose exact base work → create/correct add-on → current add-on and base relationship                                        | Failing e08bc9a534c3 2026-11-07T10:02:26.796Z setup (not provisioned); controller admission: EACCES: permission denied, open '/tmp/rezics-walk-stacks/sequence.next' |
+| Manga editing                   | `/{locale}/catalogue/manga` → create/correct series or volume at its own grain → submit → current reader                                                   | Failing e08bc9a534c3 2026-11-07T10:02:26.796Z setup (not provisioned); controller admission: EACCES: permission denied, open '/tmp/rezics-walk-stacks/sequence.next' |
+| Screen editing                  | `/{locale}/catalogue/screen` → choose film/series/episode and classification → submit → current reader with correct work relations                         | Failing e08bc9a534c3 2026-11-07T10:02:26.796Z setup (not provisioned); controller admission: EACCES: permission denied, open '/tmp/rezics-walk-stacks/sequence.next' |
+| Album editing                   | `/{locale}/catalogue/album` → released album facts and credits → review → submit → current reader                                                          | Failing e08bc9a534c3 2026-11-07T10:02:26.796Z setup (not provisioned); controller admission: EACCES: permission denied, open '/tmp/rezics-walk-stacks/sequence.next' |
+| Publication editing             | `/{locale}/catalogue/publication` → independently identified publication → review → submit → current publication reader                                    | Failing e08bc9a534c3 2026-11-07T10:02:26.796Z setup (not provisioned); controller admission: EACCES: permission denied, open '/tmp/rezics-walk-stacks/sequence.next' |
+| Music-context editing           | `/{locale}/catalogue/music-context` → current released context and exact related work → submit → current reader                                            | Failing e08bc9a534c3 2026-11-07T10:02:26.796Z setup (not provisioned); controller admission: EACCES: permission denied, open '/tmp/rezics-walk-stacks/sequence.next' |
+| File and release-group editing  | `/{locale}/catalogue/file` → catalogue identity and supported relations → submit → current reader without hosted-file publication                          | Failing e08bc9a534c3 2026-11-07T10:02:26.796Z setup (not provisioned); controller admission: EACCES: permission denied, open '/tmp/rezics-walk-stacks/sequence.next' |
+| Work-part editing               | Subject → work-parts editor → create/correct exact story arc or part → submit → current ordered work relationship                                          | Failing e08bc9a534c3 2026-11-07T10:02:26.796Z setup (not provisioned); controller admission: EACCES: permission denied, open '/tmp/rezics-walk-stacks/sequence.next' |
+| Character identity and credit   | `/{locale}/catalogue/character?work={id}` → distinct fictional character → qualified work credit → submit → current Character and work readback            | Failing e08bc9a534c3 2026-11-07T10:02:26.796Z setup (not provisioned); controller admission: EACCES: permission denied, open '/tmp/rezics-walk-stacks/sequence.next' |
+| Person and organization editing | `/{locale}/catalogue/people` → choose person/organization grain → names and qualified credits → submit → current catalogue identity                        | Failing e08bc9a534c3 2026-11-07T10:02:26.796Z setup (not provisioned); controller admission: EACCES: permission denied, open '/tmp/rezics-walk-stacks/sequence.next' |
+| Concept and scheme editing      | `/{locale}/catalogue/concept` → choose existing released classification meaning → create/correct Concept or scheme → current reader                        | Failing e08bc9a534c3 2026-11-07T10:02:26.796Z setup (not provisioned); controller admission: EACCES: permission denied, open '/tmp/rezics-walk-stacks/sequence.next' |
+| Multilingual terms              | Subject → Contribute → names/descriptions → edit explicit language fields → resolve a stale comparison → confirm → current canonical reader                | Failing e08bc9a534c3 2026-11-07T10:02:26.796Z setup (not provisioned); controller admission: EACCES: permission denied, open '/tmp/rezics-walk-stacks/sequence.next' |
+| Cited fact correction           | Subject → Contribute → fact editor → cite exact value/qualifiers/references → propose → compare exact candidate and current public selection               | Failing e08bc9a534c3 2026-11-07T10:02:26.796Z setup (not provisioned); controller admission: EACCES: permission denied, open '/tmp/rezics-walk-stacks/sequence.next' |
+| Original authored text          | Subject → authored editor → compose original licensed text → preview → propose → read exact candidate independently from selected public text              | Failing e08bc9a534c3 2026-11-07T10:02:26.796Z setup (not provisioned); controller admission: EACCES: permission denied, open '/tmp/rezics-walk-stacks/sequence.next' |
+| Relationship correction         | Subject → relation editor → choose exact related identity and qualified statement → propose → review → current relationship                                | Failing e08bc9a534c3 2026-11-07T10:02:26.796Z setup (not provisioned); controller admission: EACCES: permission denied, open '/tmp/rezics-walk-stacks/sequence.next' |
+| Missing related work            | Subject relationship editor → missing-work handoff → create actual released identity → return → propose intended relationship                              | Failing e08bc9a534c3 2026-11-07T10:02:26.796Z setup (not provisioned); controller admission: EACCES: permission denied, open '/tmp/rezics-walk-stacks/sequence.next' |
+| Identifier evidence             | Subject → identifiers → propose cited identifier → exact candidate comparison → separate current selected identifier read                                  | Failing e08bc9a534c3 2026-11-07T10:02:26.796Z setup (not provisioned); controller admission: EACCES: permission denied, open '/tmp/rezics-walk-stacks/sequence.next' |
+| Why this value and history      | Subject selected value → Why this value → exact candidate/provenance → Sources/Changes → current reader with captured return                               | Failing e08bc9a534c3 2026-11-07T10:02:26.796Z setup (not provisioned); controller admission: EACCES: permission denied, open '/tmp/rezics-walk-stacks/sequence.next' |
+| Context creation                | `/{locale}/my/contexts/new` → choose current released settings → review → create → independent exact Context/defaults read                                 | Failing e08bc9a534c3 2026-11-07T10:02:26.796Z setup (not provisioned); controller admission: EACCES: permission denied, open '/tmp/rezics-walk-stacks/sequence.next' |
+| Context editorial decisions     | Subject → context-review for exact Context → competing cited candidates → accept/reject/abstain → separately adopt/rank → compare Context and Global       | Failing e08bc9a534c3 2026-11-07T10:02:26.796Z setup (not provisioned); controller admission: EACCES: permission denied, open '/tmp/rezics-walk-stacks/sequence.next' |
+| Statement consent               | Subject → statement-consent → review exact affected statement and current authority → disclose/withdraw → independent current public read                  | Failing e08bc9a534c3 2026-11-07T10:02:26.796Z setup (not provisioned); controller admission: EACCES: permission denied, open '/tmp/rezics-walk-stacks/sequence.next' |
+| Subject lifecycle               | Owned Subject → available delete/restore controls → confirmed native transition → progress/current reader with owner and public disclosure                 | Failing e08bc9a534c3 2026-11-07T10:02:26.796Z setup (not provisioned); controller admission: EACCES: permission denied, open '/tmp/rezics-walk-stacks/sequence.next' |
+| Zone creation and configuration | `/{locale}/my/zones/new` → create → `/my/zones/{id}/edit` → configure static routes/documents without source reads → save → native saved preview           | Failing e08bc9a534c3 2026-11-07T10:02:26.796Z setup (not provisioned); controller admission: EACCES: permission denied, open '/tmp/rezics-walk-stacks/sequence.next' |
+| Zone publication and navigation | Configured static Zone → publish → anonymous `/zones/{id}/{route}` → configured navigation → same-tab return with current Access                           | Failing e08bc9a534c3 2026-11-07T10:02:26.796Z setup (not provisioned); controller admission: EACCES: permission denied, open '/tmp/rezics-walk-stacks/sequence.next' |
+| Zone lifecycle and moderation   | Owned static Zone → delete → unavailable public route → restore → current route; authorized exact-pointer takedown/release → current owner/public readback | Failing e08bc9a534c3 2026-11-07T10:02:26.796Z setup (not provisioned); controller admission: EACCES: permission denied, open '/tmp/rezics-walk-stacks/sequence.next' |
+
+Catalogue rows use existing released profiles and common editors. Walk anonymous reader, editor, Context acceptor,
+owner, outsider and suspended personas where applicable, through actual Auth/Access, native writes and independent
+readback. Canonical one-hop reading and exact original references apply throughout; advanced merge mutations are
+not a public creation step. Exercise en/zh-Hant/ja, touched labels across eight locales, phone/desktop and both themes.
+Web owns rendering/navigation; Imports owns connected provider-review UI; Semantic owns native meaning and decisions.
+
+The finishing denominator excludes custom definition publication, advanced identity mutations, reviewed vocabulary
+seeds, measured-input expansion, advanced Search/facets and personal dynamic queries. Zones count configured static
+routes without source reads; saved-scope/mounted-Collection unions, direct catalogue targets and retained preparation
+remain grant-closed. These scope boundaries do not erase the broader Goal's retained acceptance obligations below.
+After the first walk, dispatch complete repairs only for failing first-public journeys (same-day net-new violation
+repairs continue). Hourly reporting is one line: passing/31 and slowest failing journey with its causal owner.
+
+Decision: fewest tests pin the 31 user-visible first-public paths: one kernel native suite over bundled Types, proposals,
+Contexts and static Zones, plus one admitted seeded walk that executes every row with independent native readback and
+mounted pages. Walk `dev-stack.ts walk` stays on the worker host so `GOAL_ACCEPTANCE_REQUIRES` is not stripped.
+Native JSON sign-in uses a dedicated first-party development client with exact catalogue and static Zone scopes;
+the confidential website client remains OAuth-only. The native transport sends the issuer Origin, and editor tokens
+refresh between journeys before their five-minute lifetime ends. Every result binds revision, UTC, persona, request
+keys, credential fingerprints, operands and independent native responses; served-page evidence includes screenshots.
+Multiline failures remain one table row and HTTP page failures cannot count as success. Consent acceptance uses the
+account's discovered agent and an uncited private assertion, then checks public absence, disclosure and retraction.
+Walk Kernel GET `/v1/definitions` is the supported active-release producer, equivalent to `/v1/definitions/active`;
+a missing-route 404 is not readiness. Kernel starts before worker discovery. The stack restores generated bindings
+and releases its slot even if another cleanup fails. Fixtures and typing are not native or browser passes.
+The native fixture runs the standard link relay and supplies dedicated receipt keys. The walk HTTP client retains
+causal sessions per credential and records failed requests before throwing, without storing bearer secrets.
+Receiving the installed Access and publication bindings preserves existing actor, deadline, Pool, grants and current
+read assertions; source review does not establish receiving acceptance.
+Receiving fixtures follow the installed six-step membership protocol, charged account-state dispatch and explicit
+definition-publication gate, including anonymous `platform_closed` refusal. Advanced merge gate checks read the
+accepted operation and independently confirm the original and revision remain unchanged until worker publication;
+redirect completion belongs to the Identity worker receiving suites outside the first-public denominator.
+Proposal retry and sealed-journal recovery retain original assertions and dedicated receipt keys; only
+the seeded native proposal, separate adoption and current fact readback establish convergence.
+Receipt fixture queries resolve the configured keyed receipt identity for both finalization and replay. Installed
+Library public-output custody is received through its application export and composed Semantic observations; its
+owning native suites must establish publication, transfer, cancellation, rollback and ordinary-scope behavior.
+Native profile fixtures install the full Library application with their current Pool, Access, route key and clock,
+matching the server's Access-ready composition before Collection creation. A presentation-only preload cannot
+satisfy those native producers. Installed Members preparation retains its original authorization, duplicate intent,
+retired-owner and 64/512/4096 growth assertions; fixture or composition checks do not establish a first-public pass.
+Members reservation and touch reuse the mounted reader's current native eligibility evidence and retain concealed
+private denials. Public-output fixtures follow the owning dynamic-only publication contract and exact expanded
+owner-family grants; the COMPLETE-versus-pending assertion checks activated output, while ordinal custody remains
+curated. Empty SQL projections cost zero result bytes without changing declared work or transaction funding.
+
 ## Evidence stages
 
 | Stage      | Required evidence                                                                                                                                                                                     |

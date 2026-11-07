@@ -4,17 +4,14 @@ import { statementBytes } from '../database/statement-bytes.ts';
  * Declarations constrain dispatch; they never fund a ledger or mint native authority.
  */
 import { BOUND_AXES, declareBound, repeatBound, sumBounds, withinCeiling, type Bound } from '@rezics/bounds';
-import type { IdentityScopeWork } from '../semantic/identity-scope-types.ts';
-import ownersSql from '../semantic/identity-epoch-read-owners.sql';
-import sourcesSql from '../semantic/identity-epoch-read-sources.sql';
-import pendingSql from '../semantic/identity-epoch-read-pending.sql';
-import currentSql from '../semantic/identity-terminal-closure-current.sql';
 import {
   SELECTED_CLEANUP_DECLARATION,
   SELECTED_COST,
   WORK_EXECUTION_ATTEMPT_BOUND,
 } from '../work/selected-runtime-cost.ts';
-import type { WorkDimensions, WorkReceipt } from './contract/work-dimensions.ts';
+import type { WorkDimensions } from './contract/work-dimensions.ts';
+import { librarySemanticObservations } from './semantic-observation.ts';
+import type { LibrarySemanticObservationCapability } from './contract/semantic-observation.ts';
 import ownerFactsSql from './collection-source-native-facts.sql';
 import labelOriginalsSql from './owner-index-native-label-originals.sql';
 import { CANONICAL_SOURCE_RAW_KEY_LIMIT } from './canonical-source-limits.ts';
@@ -34,11 +31,11 @@ export const CANONICAL_SOURCE_IDENTITY_SWEEP_HOMES = 4096;
 export const CANONICAL_SOURCE_IDENTITY_SWEEPS = 2;
 
 const maxUuid = 'ffffffff-ffff-ffff-ffff-ffffffffffff';
+const maxRoutedUuid = 'ffffffff-ffff-8fff-bfff-ffffffffffff';
 const maxRoute = 65535;
 const maxInt = 2147483647;
 const maxSafe = Number.MAX_SAFE_INTEGER;
 const identityJsonCeiling = 4096;
-const xidCeiling = 32;
 
 export type CanonicalSourceSqlBound = Bound & Readonly<{ engineRequests: 0 }>;
 export type CanonicalSourceStatement = Readonly<{
@@ -115,76 +112,6 @@ const maxReferenceRow = jsonBytes([{ original: maxUuid, driver: 5, fact: maxUuid
 const maxLockRow = jsonBytes([{ generation: maxUuid }]);
 const maxRetainedRow = jsonBytes([{ generation: maxUuid }]);
 const maxScopeFenceRow = jsonBytes([{ source_fence: 'f'.repeat(64) }]);
-const maxMappingSourceRow = jsonBytes({
-  subject_id: maxUuid,
-  route: maxRoute,
-  original: maxUuid,
-  terminal: maxUuid,
-  epoch: maxSafe,
-  origin: 'published',
-  recorded_transaction_id: maxUuid,
-  control_partition: 4095,
-  control_group: maxUuid,
-  source_revision: maxSafe,
-  owner_epoch: maxInt,
-  erasure_key: maxSafe,
-  closure_state: 'withdrawn',
-  closure_enrollment: maxUuid,
-  closure_generation: maxUuid,
-  closure_incarnation: maxUuid,
-  closure_immediate: maxUuid,
-  closure_export_transaction: maxUuid,
-  closure_hold_transaction: maxUuid,
-  closure_hold_xid: 'x'.repeat(xidCeiling),
-  closure_registration_transaction: maxUuid,
-  closure_install_transaction: maxUuid,
-  closure_install_xid: 'x'.repeat(xidCeiling),
-  closure_ack_transaction: maxUuid,
-  closure_ack_xid: 'x'.repeat(xidCeiling),
-  closure_source_reservation: maxUuid,
-  closure_claim: maxUuid,
-  closure_withdraw_transaction: maxUuid,
-  closure_withdraw_xid: 'x'.repeat(xidCeiling),
-  closure_successor_ticket: maxUuid,
-  closure_successor_original: maxUuid,
-  closure_ticket_reservation: maxUuid,
-  closure_mutation_xid: 'x'.repeat(xidCeiling),
-  closure_cancelled_successor: true,
-  dirty_revision: maxSafe,
-  captured_revision: maxSafe,
-  current_target: maxUuid,
-});
-const maxPartitionRow = jsonBytes({
-  partition_no: 4095,
-  epoch: maxInt,
-  position: String(maxSafe),
-  write_state: 'frozen',
-});
-const maxPendingRow = jsonBytes({
-  partition_no: 4095,
-  terminal: maxUuid,
-  pending_job: maxUuid,
-  pending_epoch: maxSafe,
-});
-const maxCurrentRow = jsonBytes({
-  partition_no: 4095,
-  terminal: maxUuid,
-  published_epoch: maxSafe,
-  owner_epoch: maxInt,
-  generation: maxUuid,
-  closure_state: 'withdrawn',
-  closure_incarnation: maxUuid,
-  requested_original: maxUuid,
-  directory_state: 'withdrawn',
-  directory_enrollment: maxUuid,
-  directory_incarnation: maxUuid,
-  directory_install: maxUuid,
-  directory_export: maxUuid,
-  directory_revision: String(maxSafe),
-  directory_owner: maxInt,
-  registration_transaction: maxUuid,
-  redirected: true,
-});
 const maxOwnerFactRow = jsonBytes({ storedSubjectId: maxUuid, factId: maxUuid });
 const maxInsertValues = [maxRoute, maxUuid, maxUuid, maxUuid, maxUuid, 5, maxUuid];
 const maxGroupValues = [maxRoute, maxUuid, maxUuid, maxUuid, maxUuid, 5, maxUuid, CANONICAL_SOURCE_RAW_KEY_LIMIT];
@@ -202,10 +129,6 @@ const maxOwnerFactValues = {
   after_fact: maxUuid,
   limit: CANONICAL_SOURCE_RAW_KEY_LIMIT,
 };
-const maxOwnersValues = [[4095]];
-const maxSourcesValues = [[maxUuid], [maxRoute]];
-const maxPendingValues = [[4095], [maxUuid]];
-const maxCurrentValues = [[4095], [maxUuid], [maxUuid]];
 
 const point = (sql: string, values: unknown, resultBytes: number, rows = 1, nativeRows = 4): CanonicalSourceSqlBound =>
   sqlBound({
@@ -269,14 +192,6 @@ export const CANONICAL_SOURCE_SQL = Object.freeze({
   insertScope: `INSERT INTO library.canonical_source_scope(route,collection_id,source_fence,identity) VALUES($1,$2,$3,$4::jsonb) ON CONFLICT DO NOTHING`,
   updateScopeFrontier: `UPDATE library.canonical_source_scope SET frontier=$4::jsonb
         WHERE route=$1 AND collection_id=$2 AND source_fence=$3 AND frontier IS NOT DISTINCT FROM $5::jsonb RETURNING collection_id`,
-  commitScopeCapture: `UPDATE library.canonical_source_scope s
-        SET frontier=i.frontier,capture_id=i.capture_id,committed_revision=i.revision
-        FROM semantic.identity_scope_summary i
-        WHERE s.route=$1 AND s.collection_id=$2 AND s.source_fence=$3
-          AND i.partition_no=$6 AND i.source_key=$7 AND i.scope_id=$8
-          AND i.capture_id=$4 AND i.revision=$5 AND i.state='ready' AND i.active=0 AND i.scan_complete
-          AND i.source=jsonb_build_object('kind','library','identity',s.identity)
-          AND i.frontier->>'driver'='done' AND (i.frontier->>'captureId')::uuid=i.capture_id`,
 });
 
 const seekValues = [maxRoute, maxUuid, maxUuid, maxUuid];
@@ -301,16 +216,6 @@ const maxFrontierString = JSON.stringify({
 const insertGenerationValues = [maxRoute, maxUuid, maxUuid, maxBasisJson, 'member'];
 const updateFrontierValues = [maxRoute, maxUuid, maxUuid, 'session', maxUuid, maxUuid, true];
 const updateScopeFrontierValues = [maxRoute, maxUuid, 'f'.repeat(64), maxFrontierString, maxFrontierString];
-const commitScopeValues = [
-  maxRoute,
-  maxUuid,
-  'f'.repeat(64),
-  maxUuid,
-  String(maxSafe),
-  4095,
-  '\u0001'.repeat(4096),
-  'collection-source',
-];
 const insertScopeValues = [maxRoute, maxUuid, 'f'.repeat(64), 'a'.repeat(identityJsonCeiling)];
 
 export function CANONICAL_SOURCE_STATEMENTS() {
@@ -486,14 +391,6 @@ export function CANONICAL_SOURCE_STATEMENTS() {
           jsonBytes([{ collection_id: maxUuid }]),
         ),
       ),
-      commitScopeCapture: statement(
-        'canonical-source-commit-scope-capture',
-        CANONICAL_SOURCE_SQL.commitScopeCapture,
-        commitScopeValues,
-        0,
-        0,
-        point(CANONICAL_SOURCE_SQL.commitScopeCapture, commitScopeValues, 0, 0, 12),
-      ),
     }),
   );
 }
@@ -544,75 +441,31 @@ function identitySweepBound() {
   );
 }
 
-function mappingOwners() {
-  return memoizedValue(mappingOwners, () =>
-    sqlBound({
-      candidateKeys: 0,
-      nativeRows: 2,
-      identityMetadataRows: 0,
-      emptySeeks: 1,
-      nativePoints: 1,
-      witnessKeys: 0,
-      statements: 1,
-      bytes: bytesOf(ownersSql.sql, maxOwnersValues, maxPartitionRow),
-    }),
-  );
-}
-function mappingSources() {
-  return memoizedValue(mappingSources, () =>
-    sqlBound({
-      candidateKeys: 0,
-      nativeRows: 8,
-      identityMetadataRows: 0,
-      emptySeeks: 1,
-      nativePoints: 4,
-      witnessKeys: 0,
-      statements: 1,
-      bytes: bytesOf(sourcesSql.sql, maxSourcesValues, maxMappingSourceRow),
-    }),
-  );
-}
-function mappingPending() {
-  return memoizedValue(mappingPending, () =>
-    sqlBound({
-      candidateKeys: 0,
-      nativeRows: 2,
-      identityMetadataRows: 0,
-      emptySeeks: 1,
-      nativePoints: 1,
-      witnessKeys: 0,
-      statements: 1,
-      bytes: bytesOf(pendingSql.sql, maxPendingValues, maxPendingRow),
-    }),
-  );
-}
-function mappingCurrent() {
-  return memoizedValue(mappingCurrent, () =>
-    sqlBound({
-      candidateKeys: 0,
-      nativeRows: 6,
-      identityMetadataRows: 0,
-      emptySeeks: 1,
-      nativePoints: 4,
-      witnessKeys: 0,
-      statements: 1,
-      bytes: bytesOf(currentSql.sql, maxCurrentValues, maxCurrentRow),
-    }),
-  );
-}
-function mappingCollect() {
-  return memoizedValue(mappingCollect, () =>
-    sumBounds(mappingOwners(), mappingSources(), mappingOwners(), mappingPending(), mappingCurrent()),
-  );
-}
-function mappingOriginal() {
-  return memoizedValue(mappingOriginal, () => sumBounds(mappingCollect(), mappingCollect()));
-}
-
-export function canonicalSourceMappingBound(originalCount: number): CanonicalSourceSqlBound {
+const mappingUnitBounds = new WeakMap<LibrarySemanticObservationCapability, CanonicalSourceSqlBound>();
+export function canonicalSourceMappingBound(
+  originalCount: number,
+  observations?: LibrarySemanticObservationCapability,
+): CanonicalSourceSqlBound {
   if (!Number.isSafeInteger(originalCount) || originalCount < 0 || originalCount > CANONICAL_SOURCE_RAW_KEY_LIMIT)
     throw new RangeError('Canonical Source mapping page must contain at most 100 originals');
-  const total = repeatBound(mappingOriginal(), originalCount);
+  if (originalCount === 0)
+    return sqlBound({
+      candidateKeys: 0,
+      nativeRows: 0,
+      identityMetadataRows: 0,
+      emptySeeks: 0,
+      nativePoints: 0,
+      witnessKeys: 0,
+      statements: 0,
+      bytes: 0,
+    });
+  const owner = observations ?? librarySemanticObservations();
+  let unit = mappingUnitBounds.get(owner);
+  if (!unit) {
+    unit = sqlBound(owner.canonical.mappingWork([maxRoutedUuid]));
+    mappingUnitBounds.set(owner, unit);
+  }
+  const total = repeatBound(unit, originalCount);
   if (total.engineRequests !== 0) throw new TypeError('Canonical Source mapping cannot issue engine requests');
   return Object.freeze({ ...total, engineRequests: 0 });
 }
@@ -738,34 +591,52 @@ function executionEnvelope() {
   );
 }
 
-export function CANONICAL_SOURCE_TERMS() {
-  return memoizedValue(CANONICAL_SOURCE_TERMS, () =>
-    Object.freeze({
-      observation: observation(),
-      begin: begin(),
-      rawWindow: canonicalSourceRawWindowBound(CANONICAL_SOURCE_RAW_KEY_LIMIT),
-      mapping: canonicalSourceMappingBound(CANONICAL_SOURCE_RAW_KEY_LIMIT),
-      repairWrite: repairWrite(CANONICAL_SOURCE_RAW_KEY_LIMIT),
-      publish: publish(),
-      readback: readback(),
-      seek: CANONICAL_SOURCE_STATEMENTS().seek.bound,
-      group: canonicalSourceGroupStatement(CANONICAL_SOURCE_RAW_KEY_LIMIT).bound,
-      executionEnvelope: executionEnvelope(),
-    }),
-  );
+const termsByObservation = new WeakMap<
+  LibrarySemanticObservationCapability,
+  ReturnType<typeof buildCanonicalSourceTerms>
+>();
+function buildCanonicalSourceTerms(observations: LibrarySemanticObservationCapability) {
+  return Object.freeze({
+    observation: observation(),
+    begin: begin(),
+    rawWindow: canonicalSourceRawWindowBound(CANONICAL_SOURCE_RAW_KEY_LIMIT),
+    mapping: canonicalSourceMappingBound(CANONICAL_SOURCE_RAW_KEY_LIMIT, observations),
+    repairWrite: repairWrite(CANONICAL_SOURCE_RAW_KEY_LIMIT),
+    publish: publish(),
+    readback: readback(),
+    seek: CANONICAL_SOURCE_STATEMENTS().seek.bound,
+    group: canonicalSourceGroupStatement(CANONICAL_SOURCE_RAW_KEY_LIMIT).bound,
+    executionEnvelope: executionEnvelope(),
+  });
+}
+export function CANONICAL_SOURCE_TERMS(
+  observations: LibrarySemanticObservationCapability = librarySemanticObservations(),
+) {
+  let terms = termsByObservation.get(observations);
+  if (!terms) {
+    terms = buildCanonicalSourceTerms(observations);
+    termsByObservation.set(observations, terms);
+  }
+  return terms;
 }
 
-export function CANONICAL_SOURCE_REPAIR_STEP() {
-  return memoizedValue(CANONICAL_SOURCE_REPAIR_STEP, () =>
-    sumBounds(
+const repairByObservation = new WeakMap<LibrarySemanticObservationCapability, Bound>();
+export function CANONICAL_SOURCE_REPAIR_STEP(
+  observations: LibrarySemanticObservationCapability = librarySemanticObservations(),
+) {
+  let repair = repairByObservation.get(observations);
+  if (!repair) {
+    repair = sumBounds(
       observation(),
       observation(),
-      CANONICAL_SOURCE_TERMS().rawWindow,
-      CANONICAL_SOURCE_TERMS().mapping,
-      CANONICAL_SOURCE_TERMS().repairWrite,
+      CANONICAL_SOURCE_TERMS(observations).rawWindow,
+      CANONICAL_SOURCE_TERMS(observations).mapping,
+      CANONICAL_SOURCE_TERMS(observations).repairWrite,
       executionEnvelope(),
-    ),
-  );
+    );
+    repairByObservation.set(observations, repair);
+  }
+  return repair;
 }
 export function CANONICAL_SOURCE_PUBLICATION_STEP() {
   return memoizedValue(CANONICAL_SOURCE_PUBLICATION_STEP, () =>
@@ -776,28 +647,40 @@ export function CANONICAL_SOURCE_COMPLETED_READBACK() {
   return memoizedValue(CANONICAL_SOURCE_COMPLETED_READBACK, () => readback());
 }
 
-export function CANONICAL_SOURCE_DECLARATION() {
-  return memoizedValue(CANONICAL_SOURCE_DECLARATION, () =>
-    Object.freeze({
-      status: 'complete' as const,
-      axes: CANONICAL_SOURCE_AXES(),
-      limits: Object.freeze({
-        rawKeys: CANONICAL_SOURCE_RAW_KEY_LIMIT,
-        zoneAggregate: CANONICAL_SOURCE_ZONE_AGGREGATE,
-        generations: CANONICAL_SOURCE_GENERATION_CAPACITY,
-        scopes: CANONICAL_SOURCE_SCOPE_CAPACITY,
-        attempts: CANONICAL_SOURCE_ATTEMPTS(),
-        identitySweepHomes: CANONICAL_SOURCE_IDENTITY_SWEEP_HOMES,
-        identitySweeps: CANONICAL_SOURCE_IDENTITY_SWEEPS,
-      }),
-      statements: CANONICAL_SOURCE_STATEMENTS(),
-      terms: CANONICAL_SOURCE_TERMS(),
-      repair: CANONICAL_SOURCE_REPAIR_STEP(),
-      publication: CANONICAL_SOURCE_PUBLICATION_STEP(),
-      readback: CANONICAL_SOURCE_COMPLETED_READBACK(),
-      receiving: CANONICAL_SOURCE_RECEIVING_COST(),
+const declarationByObservation = new WeakMap<
+  LibrarySemanticObservationCapability,
+  ReturnType<typeof buildCanonicalSourceDeclaration>
+>();
+function buildCanonicalSourceDeclaration(observations: LibrarySemanticObservationCapability) {
+  return Object.freeze({
+    status: 'complete' as const,
+    axes: CANONICAL_SOURCE_AXES(),
+    limits: Object.freeze({
+      rawKeys: CANONICAL_SOURCE_RAW_KEY_LIMIT,
+      zoneAggregate: CANONICAL_SOURCE_ZONE_AGGREGATE,
+      generations: CANONICAL_SOURCE_GENERATION_CAPACITY,
+      scopes: CANONICAL_SOURCE_SCOPE_CAPACITY,
+      attempts: CANONICAL_SOURCE_ATTEMPTS(),
+      identitySweepHomes: CANONICAL_SOURCE_IDENTITY_SWEEP_HOMES,
+      identitySweeps: CANONICAL_SOURCE_IDENTITY_SWEEPS,
     }),
-  );
+    statements: CANONICAL_SOURCE_STATEMENTS(),
+    terms: CANONICAL_SOURCE_TERMS(observations),
+    repair: CANONICAL_SOURCE_REPAIR_STEP(observations),
+    publication: CANONICAL_SOURCE_PUBLICATION_STEP(),
+    readback: CANONICAL_SOURCE_COMPLETED_READBACK(),
+    receiving: CANONICAL_SOURCE_RECEIVING_COST(),
+  });
+}
+export function CANONICAL_SOURCE_DECLARATION(
+  observations: LibrarySemanticObservationCapability = librarySemanticObservations(),
+) {
+  let declaration = declarationByObservation.get(observations);
+  if (!declaration) {
+    declaration = buildCanonicalSourceDeclaration(observations);
+    declarationByObservation.set(observations, declaration);
+  }
+  return declaration;
 }
 
 /** Adapter edge for the existing eight-axis native observer. Canonical SQL declares zero engine requests. */
@@ -837,30 +720,6 @@ export function canonicalSourceCallAllowance(bound: Bound = CANONICAL_SOURCE_REP
     statements: declared.statements,
     bytes: declared.bytes,
     identityMetadataRows: declared.identityMetadataRows,
-  });
-}
-
-export function identityScopeWorkBound(work: IdentityScopeWork): CanonicalSourceSqlBound {
-  if (work.outputWork) {
-    const used = canonicalSourceWorkDimensions({ ...work.outputWork.used, engineRequests: 0 });
-    return sqlBound(used);
-  }
-  return sqlBound({
-    candidateKeys: 0,
-    nativeRows: work.rows,
-    identityMetadataRows: 0,
-    emptySeeks: 0,
-    nativePoints: work.points,
-    witnessKeys: 0,
-    statements: work.statements,
-    bytes: work.bytes,
-  });
-}
-
-export function identityScopeWorkReceipt(work: IdentityScopeWork, reservationId: string): WorkReceipt {
-  return Object.freeze({
-    reservationId,
-    used: canonicalSourceWorkDimensions(identityScopeWorkBound(work)),
   });
 }
 

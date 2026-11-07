@@ -54,8 +54,33 @@ type EventRow = {
   epoch: string;
   payload_state: string;
 };
+type AdmissionRecovery = Readonly<{
+  partition: number;
+  position: string;
+  eventSeq: number;
+  epoch: number;
+  eventId: string;
+  type: string;
+}>;
 type Locator = { route: number; orderId: string };
 type Sweep = { accounts: []; partition: number; root: string; segment: number };
+type CreatorSaleEventIdentity = Readonly<{
+  partition: number;
+  position: string;
+  eventSeq: number;
+  epoch: number;
+  eventId: string;
+  type: string;
+  route: number;
+  orderId: string;
+  revision: number;
+}>;
+type CreatorSaleBusinessRoles = Readonly<{
+  buyerAccountId: string;
+  creatorAccountId: string;
+  buyerState: string;
+  buyerAuthnFenced: boolean;
+}>;
 type NativeSource = Readonly<{
   view: CreatorSaleView;
   creatorAccountId: string;
@@ -132,8 +157,189 @@ async function creatorSaleEventRoles(
   return liveCopyEventRoles(client, input, extra);
 }
 
-/** Actual effects admission transaction; copied wake-up JSON supplies only a locator. */
-export async function admitCreatorSale(client: Client, event: CloudEvent): Promise<void> {
+async function readCreatorSaleBusinessRoles(client: Client, identity: CreatorSaleEventIdentity) {
+  return (
+    await client.query<{
+      buyer_account_id: string;
+      creator_account_id: string;
+      state: string;
+      authn_fenced: boolean;
+    }>(
+      `SELECT o.buyer_account_id,o.creator_account_id,a.state,a.authn_fenced
+       FROM commerce.purchase_order o JOIN access.account a
+         ON (a.route,a.account_id)=(o.route,o.buyer_account_id)
+       WHERE o.route=$1 AND o.order_id=$2 FOR UPDATE OF a FOR SHARE OF o`,
+      [identity.route, identity.orderId],
+    )
+  ).rows[0];
+}
+
+function sameCreatorSaleEvent(
+  row: { event_id: string; epoch: string; route: number },
+  identity: CreatorSaleEventIdentity,
+) {
+  return row.event_id === identity.eventId && row.epoch === String(identity.epoch) && row.route === identity.route;
+}
+
+async function readCreatorSaleReceipt(client: Client, identity: CreatorSaleEventIdentity, lock = false) {
+  return (
+    await client.query<{
+      event_id: string;
+      epoch: string;
+      route: number;
+      order_id: string | null;
+      source_revision: number | null;
+      state: string;
+    }>(
+      `SELECT event_id,epoch::text,route,order_id,source_revision,state FROM commerce.creator_sale_receipt
+       WHERE partition_no=$1 AND position=$2 AND event_seq=$3${lock ? ' FOR UPDATE' : ''}`,
+      [identity.partition, identity.position, identity.eventSeq],
+    )
+  ).rows[0];
+}
+
+function matchesCreatorSaleReceipt(
+  previous: NonNullable<Awaited<ReturnType<typeof readCreatorSaleReceipt>>>,
+  identity: CreatorSaleEventIdentity,
+) {
+  if (!sameCreatorSaleEvent(previous, identity)) return false;
+  if (previous.state === 'minimized') return previous.order_id === null && previous.source_revision === null;
+  return previous.order_id === identity.orderId && previous.source_revision === identity.revision;
+}
+
+async function writeMinimizedCreatorSaleReceipt(client: Client, identity: CreatorSaleEventIdentity) {
+  await client.query(
+    `INSERT INTO commerce.creator_sale_receipt
+       (partition_no,position,event_seq,epoch,event_id,route,order_id,source_revision,state)
+     VALUES($1,$2,$3,$4,$5,$6,NULL,NULL,'minimized') ON CONFLICT DO NOTHING`,
+    [identity.partition, identity.position, identity.eventSeq, identity.epoch, identity.eventId, identity.route],
+  );
+  const previous = await readCreatorSaleReceipt(client, identity, true);
+  if (!previous || !sameCreatorSaleEvent(previous, identity))
+    throw new Error('Creator sale event receipt provenance conflict');
+  if (previous.state === 'minimized' && previous.order_id === null && previous.source_revision === null) return;
+  if (previous.order_id !== identity.orderId || previous.source_revision !== identity.revision)
+    throw new Error('Creator sale event receipt provenance conflict');
+  const minimized = await client.query(
+    `UPDATE commerce.creator_sale_receipt SET order_id=NULL,source_revision=NULL,state='minimized'
+     WHERE partition_no=$1 AND position=$2 AND event_seq=$3 AND event_id=$4 AND epoch=$5 AND route=$6
+       AND order_id=$7 AND source_revision=$8`,
+    [
+      identity.partition,
+      identity.position,
+      identity.eventSeq,
+      identity.eventId,
+      identity.epoch,
+      identity.route,
+      identity.orderId,
+      identity.revision,
+    ],
+  );
+  if (minimized.rowCount !== 1) throw new Error('Creator sale event receipt minimization failed');
+}
+
+async function readCreatorSaleAdmissionRecovery(client: Client, key: AdmissionRecovery, lock = false) {
+  return (
+    await client.query<{ epoch: string; event_id: string; type: string }>(
+      `SELECT epoch::text,event_id,event_type AS type FROM commerce.creator_sale_admission_recovery
+       WHERE partition_no=$1 AND position=$2 AND event_seq=$3${lock ? ' FOR UPDATE' : ''}`,
+      [key.partition, key.position, key.eventSeq],
+    )
+  ).rows[0];
+}
+
+function matchesCreatorSaleAdmissionRecovery(
+  row: NonNullable<Awaited<ReturnType<typeof readCreatorSaleAdmissionRecovery>>>,
+  key: AdmissionRecovery,
+) {
+  return row.epoch === String(key.epoch) && row.event_id === key.eventId && row.type === key.type;
+}
+
+async function deferCreatorSaleAdmission(client: Client, key: AdmissionRecovery, retry: boolean): Promise<void> {
+  const result = await client.query<{ event_id: string }>(
+    `INSERT INTO commerce.creator_sale_admission_recovery
+       (partition_no,position,event_seq,epoch,event_id,event_type,retry_at)
+     VALUES($1,$2,$3,$4,$5,$6,now()+interval '10 minutes')
+     ON CONFLICT(partition_no,position,event_seq) DO UPDATE SET
+       retry_at=CASE WHEN $7 THEN now()+interval '10 minutes'
+                     ELSE commerce.creator_sale_admission_recovery.retry_at END
+     WHERE commerce.creator_sale_admission_recovery.epoch=EXCLUDED.epoch
+       AND commerce.creator_sale_admission_recovery.event_id=EXCLUDED.event_id
+       AND commerce.creator_sale_admission_recovery.event_type=EXCLUDED.event_type
+     RETURNING event_id`,
+    [key.partition, key.position, key.eventSeq, key.epoch, key.eventId, key.type, retry],
+  );
+  if (result.rows[0]?.event_id !== key.eventId) throw new Error('Creator sale admission recovery provenance conflict');
+}
+
+async function clearCreatorSaleAdmissionRecovery(client: Client, key: AdmissionRecovery): Promise<void> {
+  await client.query(
+    `DELETE FROM commerce.creator_sale_admission_recovery
+     WHERE partition_no=$1 AND position=$2 AND event_seq=$3
+       AND epoch=$4 AND event_id=$5 AND event_type=$6`,
+    [key.partition, key.position, key.eventSeq, key.epoch, key.eventId, key.type],
+  );
+}
+
+async function admitCreatorSaleWithRoles(
+  client: Client,
+  identity: CreatorSaleEventIdentity,
+  business: CreatorSaleBusinessRoles,
+) {
+  const roles = await creatorSaleEventRoles(
+    client,
+    {
+      route: identity.route,
+      orderId: identity.orderId,
+      partition: identity.partition,
+      position: identity.position,
+      eventSeq: identity.eventSeq,
+    },
+    [
+      { accountId: business.buyerAccountId, roles: 1024 },
+      { accountId: business.creatorAccountId, roles: 2048 },
+    ],
+  );
+  await client.query(
+    `INSERT INTO commerce.creator_sale_receipt
+       (partition_no,position,event_seq,epoch,event_id,route,order_id,source_revision)
+     VALUES($1,$2,$3,$4,$5,$6,$7,$8) ON CONFLICT DO NOTHING`,
+    [
+      identity.partition,
+      identity.position,
+      identity.eventSeq,
+      identity.epoch,
+      identity.eventId,
+      identity.route,
+      identity.orderId,
+      identity.revision,
+    ],
+  );
+  const previous = await readCreatorSaleReceipt(client, identity);
+  if (!previous || !matchesCreatorSaleReceipt(previous, identity))
+    throw new Error('Creator sale event receipt provenance conflict');
+  if (previous.state === 'minimized') return;
+  await enrollCommerceCopyIntents(
+    client,
+    {
+      route: identity.route,
+      orderId: identity.orderId,
+      partition: identity.partition,
+      position: identity.position,
+      eventSeq: identity.eventSeq,
+    },
+    roles,
+  );
+  await client.query(
+    `INSERT INTO commerce.creator_sale_work(route,order_id) VALUES($1,$2)
+     ON CONFLICT(route,order_id) DO UPDATE SET generation=commerce.creator_sale_work.generation+1,
+       state='pending',gap=NULL,next_run=now()`,
+    [identity.route, identity.orderId],
+  );
+}
+
+/** Actual effects admission; only an exact committed event key survives missing evidence. */
+export async function admitCreatorSale(client: Client, event: CloudEvent, retry = false): Promise<void> {
   const anchor = /^urn:rezics:log:(\d+)\.(\d+)$/.exec(event.source);
   if (!anchor || !/^\d{19}$/.test(event.sequence)) throw new Error('Creator sale event source unavailable');
   const partition = Number(anchor[1]),
@@ -155,84 +361,132 @@ export async function admitCreatorSale(client: Client, event: CloudEvent): Promi
   if (!row || !order || partitionOf(routeOf(order.orderId)!) !== partition)
     throw new Error('Creator sale exact committed event proof unavailable');
   const route = routeOf(order.orderId)!;
-  const nativeOrder = (
-    await client.query<{ buyer_account_id: string; creator_account_id: string; state: string; authn_fenced: boolean }>(
-      `SELECT o.buyer_account_id,o.creator_account_id,a.state,a.authn_fenced FROM commerce.purchase_order o
-     JOIN access.account a ON (a.route,a.account_id)=(o.route,o.buyer_account_id)
-     WHERE o.route=$1 AND o.order_id=$2 FOR UPDATE OF a FOR SHARE OF o`,
-      [route, order.orderId],
-    )
-  ).rows[0];
+  const identity: CreatorSaleEventIdentity = {
+    partition,
+    position,
+    eventSeq: row.event_seq,
+    epoch,
+    eventId: row.id,
+    type: row.type,
+    route,
+    orderId: order.orderId,
+    revision: order.revision,
+  };
+  const recoveryKey: AdmissionRecovery = {
+    partition,
+    position,
+    eventSeq: row.event_seq,
+    epoch,
+    eventId: row.id,
+    type: row.type,
+  };
+  // Recovery retries and effect replays take the durable key before buyer authority,
+  // so both paths use the same lock order when they overlap.
+  const recovery = await readCreatorSaleAdmissionRecovery(client, recoveryKey, true);
+  if (recovery && !matchesCreatorSaleAdmissionRecovery(recovery, recoveryKey))
+    throw new Error('Creator sale admission recovery provenance conflict');
+  const nativeOrder = await readCreatorSaleBusinessRoles(client, identity);
   if (!nativeOrder) throw new Error('Creator sale original business role basis unavailable');
-  if (nativeOrder.state === 'deleted') {
-    // Exact non-personal slot tombstone: never recreate work/order locators after native T.
-    await client.query(
-      `INSERT INTO commerce.creator_sale_receipt(partition_no,position,event_seq,epoch,event_id,route,order_id,source_revision,state)
-      VALUES($1,$2,$3,$4,$5,$6,NULL,NULL,'minimized') ON CONFLICT DO NOTHING`,
-      [partition, position, row.event_seq, epoch, row.id, route],
-    );
-    const previous = (
-      await client.query<{ event_id: string; epoch: string; route: number }>(
-        `SELECT event_id,epoch::text,route FROM commerce.creator_sale_receipt
-       WHERE partition_no=$1 AND position=$2 AND event_seq=$3`,
-        [partition, position, row.event_seq],
-      )
-    ).rows[0];
-    if (!previous || previous.event_id !== row.id || previous.epoch !== String(epoch) || previous.route !== route)
-      throw new Error('Creator sale event receipt provenance conflict');
+  const business: CreatorSaleBusinessRoles = {
+    buyerAccountId: nativeOrder.buyer_account_id,
+    creatorAccountId: nativeOrder.creator_account_id,
+    buyerState: nativeOrder.state,
+    buyerAuthnFenced: nativeOrder.authn_fenced,
+  };
+  const receipt = await readCreatorSaleReceipt(client, identity);
+  if (business.buyerState === 'deleted') {
+    await writeMinimizedCreatorSaleReceipt(client, identity);
+    await clearCreatorSaleAdmissionRecovery(client, recoveryKey);
     return;
   }
-  if (nativeOrder.state !== 'active' || nativeOrder.authn_fenced)
-    throw new CommandUnavailableError('fenced', partition);
-  const receipt = await client.query(
-    `INSERT INTO commerce.creator_sale_receipt(partition_no,position,event_seq,epoch,event_id,route,order_id,source_revision)
-     VALUES($1,$2,$3,$4,$5,$6,$7,$8) ON CONFLICT DO NOTHING RETURNING event_id`,
-    [partition, position, row.event_seq, epoch, row.id, route, order.orderId, order.revision],
-  );
-  if (!receipt.rows.length) {
-    const previous = (
-      await client.query(
-        `SELECT event_id,epoch::text,route,order_id,source_revision,state FROM commerce.creator_sale_receipt
-       WHERE partition_no=$1 AND position=$2 AND event_seq=$3`,
-        [partition, position, row.event_seq],
-      )
-    ).rows[0];
-    if (
-      previous?.state === 'minimized' &&
-      previous.event_id === row.id &&
-      previous.epoch === String(epoch) &&
-      previous.route === route
-    )
-      return;
-    if (
-      !previous ||
-      previous.event_id !== row.id ||
-      previous.epoch !== String(epoch) ||
-      previous.route !== route ||
-      previous.order_id !== order.orderId ||
-      previous.source_revision !== order.revision
-    )
+  if (receipt) {
+    if (!matchesCreatorSaleReceipt(receipt, identity))
       throw new Error('Creator sale event receipt provenance conflict');
+    await clearCreatorSaleAdmissionRecovery(client, recoveryKey);
     return;
   }
-  const roles = await creatorSaleEventRoles(
-    client,
-    { route, orderId: order.orderId, partition, position, eventSeq: row.event_seq },
-    [
-      { accountId: nativeOrder.buyer_account_id, roles: 1024 },
-      { accountId: nativeOrder.creator_account_id, roles: 2048 },
-    ],
-  );
-  await enrollCommerceCopyIntents(
-    client,
-    { route, orderId: order.orderId, partition, position, eventSeq: row.event_seq },
-    roles,
-  );
-  await client.query(
-    `INSERT INTO commerce.creator_sale_work(route,order_id) VALUES($1,$2)
-       ON CONFLICT(route,order_id) DO UPDATE SET generation=commerce.creator_sale_work.generation+1,
-         state='pending',gap=NULL,next_run=now()`,
-    [route, order.orderId],
+  if (business.buyerState !== 'active' || business.buyerAuthnFenced) {
+    await deferCreatorSaleAdmission(client, recoveryKey, retry);
+    return;
+  }
+  if (recovery && !retry) return;
+
+  await client.query('SAVEPOINT creator_sale_event_roles');
+  try {
+    await admitCreatorSaleWithRoles(client, identity, business);
+    await clearCreatorSaleAdmissionRecovery(client, recoveryKey);
+    await client.query('RELEASE SAVEPOINT creator_sale_event_roles');
+  } catch (error) {
+    if (!(error instanceof LiveCopyPendingError)) throw error;
+    await client.query('ROLLBACK TO SAVEPOINT creator_sale_event_roles');
+    await client.query('RELEASE SAVEPOINT creator_sale_event_roles');
+    await deferCreatorSaleAdmission(client, recoveryKey, retry);
+  }
+}
+
+/** Reload one exact recovery event and re-enter ordinary native admission. */
+export async function retryCreatorSaleAdmission(
+  context: Pick<WorkContext, 'pool' | 'client'>,
+  partition: number,
+): Promise<boolean> {
+  return runOperationalTransaction(
+    context.pool,
+    {
+      mode: 'work-step',
+      partition,
+      kind: 'commerce.creatorSales.admissionRecovery',
+      accounts: [],
+      workClient: context.client,
+    },
+    async (tx) => {
+      const pending = (
+        await tx.query<AdmissionRecovery>(
+          `SELECT partition_no AS partition,position::text,event_seq AS "eventSeq",epoch::integer,
+                  event_id AS "eventId",event_type AS type
+           FROM commerce.creator_sale_admission_recovery
+           WHERE partition_no=$1 AND retry_at<=now()
+           ORDER BY retry_at,position,event_seq LIMIT 1 FOR UPDATE SKIP LOCKED`,
+          [partition],
+        )
+      ).rows[0];
+      if (!pending) return false;
+      const source = (
+        await tx.query<EventRow & { time: string }>(
+          `SELECT event_seq,id,type,subject,
+                  CASE WHEN id=$4::uuid AND octet_length(data::text)<=1024 THEN data ELSE NULL END AS data,
+                  epoch::text,payload_state,
+                  to_char(recorded_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"') AS time
+           FROM core.outbox WHERE partition_no=$1 AND position=$2 AND event_seq=$3`,
+          [partition, pending.position, pending.eventSeq, pending.eventId],
+        )
+      ).rows[0];
+      if (
+        !source ||
+        source.event_seq !== pending.eventSeq ||
+        source.id !== pending.eventId ||
+        Number(source.epoch) !== pending.epoch ||
+        source.type !== pending.type ||
+        source.payload_state !== 'present' ||
+        source.data === null
+      )
+        throw new Error('Creator sale deferred event proof unavailable');
+      await admitCreatorSale(
+        tx,
+        {
+          specversion: '1.0',
+          id: source.id,
+          source: `urn:rezics:log:${partition}.${pending.epoch}`,
+          type: source.type,
+          ...(source.subject === null ? {} : { subject: source.subject }),
+          time: source.time,
+          datacontenttype: 'application/json',
+          sequence: BigInt(pending.position).toString().padStart(19, '0'),
+          data: source.data,
+        },
+        true,
+      );
+      return true;
+    },
   );
 }
 
@@ -1047,6 +1301,34 @@ export async function backfillCreatorSales(context: WorkContext, partitionNo: nu
   );
 }
 
+/** The ordinary bounded worker page. Tests can restart this same producer-owned step. */
+export async function runCreatorSaleWorkPage(context: WorkContext, input: Sweep): Promise<boolean> {
+  if (
+    !input ||
+    !Array.isArray(input.accounts) ||
+    input.accounts.length !== 0 ||
+    !Number.isInteger(input.partition) ||
+    input.partition < 0 ||
+    input.partition >= 4096
+  )
+    throw new TypeError('Invalid creator sales sweep locator');
+  // A role-gap ticket is independent of the covered raw-order frontier. One exact
+  // retry per bounded step lets other due tickets and existing work progress.
+  if (await retryCreatorSaleAdmission(context, input.partition)) return true;
+  // One exact pending locator per step, separate from the raw100 backfill page.
+  // Actual terms never enter DBOS inputs or step results.
+  const pending = await withConnection(context.pool, (tx) =>
+    tx.query<{ route: number; order_id: string }>(
+      `SELECT route,order_id FROM commerce.creator_sale_work
+       WHERE route BETWEEN $1 AND $2 AND state='pending' AND next_run<=now()
+       ORDER BY route,next_run,order_id LIMIT 1`,
+      [input.partition * 16, input.partition * 16 + 15],
+    ),
+  );
+  for (const row of pending.rows) await advanceCreatorSale(context, { route: row.route, orderId: row.order_id });
+  return pending.rows.length > 0;
+}
+
 export async function registerCreatorSales(context: WorkContext): Promise<void> {
   enableCreatorSaleReceiving(context);
   if (!context.addNativeEffects) throw new Error('Creator sales requires native effects admission');
@@ -1069,11 +1351,21 @@ export async function registerCreatorSales(context: WorkContext): Promise<void> 
             [key.partitionNo, key.position.toString(), key.eventSeq],
           )
         ).rows[0];
+        const recovery = receipt
+          ? undefined
+          : (
+              await tx.query(
+                'SELECT 1 FROM commerce.creator_sale_admission_recovery WHERE partition_no=$1 AND position=$2 AND event_seq=$3',
+                [key.partitionNo, key.position.toString(), key.eventSeq],
+              )
+            ).rows[0];
         return {
           ready: false,
           gap: receipt
             ? 'commerce-creator-sale-projection-custody-pending'
-            : 'commerce-creator-sale-exact-receipt-unavailable',
+            : recovery
+              ? 'commerce-creator-sale-original-role-proof-pending'
+              : 'commerce-creator-sale-exact-receipt-unavailable',
         };
       },
     });
@@ -1081,32 +1373,10 @@ export async function registerCreatorSales(context: WorkContext): Promise<void> 
     name: 'commerce.creatorSales.backfill',
     ...COMMAND_STEP_RETRIES,
   });
-  const step = DBOS.registerStep(
-    async (input: Sweep): Promise<boolean> => {
-      if (
-        !input ||
-        !Array.isArray(input.accounts) ||
-        input.accounts.length !== 0 ||
-        !Number.isInteger(input.partition) ||
-        input.partition < 0 ||
-        input.partition >= 4096
-      )
-        throw new TypeError('Invalid creator sales sweep locator');
-      // One exact pending locator per step, separate from the raw100 backfill page.
-      // Actual terms never enter DBOS inputs or step results.
-      const pending = await withConnection(context.pool, (tx) =>
-        tx.query<{ route: number; order_id: string }>(
-          `SELECT route,order_id FROM commerce.creator_sale_work
-       WHERE route BETWEEN $1 AND $2 AND state='pending' AND next_run<=now()
-       ORDER BY route,next_run,order_id LIMIT 1`,
-          [input.partition * 16, input.partition * 16 + 15],
-        ),
-      );
-      for (const row of pending.rows) await advanceCreatorSale(context, { route: row.route, orderId: row.order_id });
-      return pending.rows.length > 0;
-    },
-    { name: 'commerce.creatorSales.page', ...COMMAND_STEP_RETRIES },
-  );
+  const step = DBOS.registerStep((input: Sweep): Promise<boolean> => runCreatorSaleWorkPage(context, input), {
+    name: 'commerce.creatorSales.page',
+    ...COMMAND_STEP_RETRIES,
+  });
   const continueSweep = DBOS.registerStep(
     async (input: Sweep) => {
       await runOperationalTransaction(

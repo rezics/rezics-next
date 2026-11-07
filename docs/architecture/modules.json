@@ -607,7 +607,8 @@
         "services/kernel/src/library/contract/continue.ts",
         "services/kernel/src/library/contract/index.ts",
         "services/kernel/src/library/contract/collection-policy.ts",
-        "services/kernel/src/library/contract/members-preparation.ts"
+        "services/kernel/src/library/contract/members-preparation.ts",
+        "services/kernel/src/library/contract/semantic-observation.ts"
       ],
       "allowedDependencies": [],
       "capabilities": []
@@ -674,7 +675,8 @@
         "services/kernel/src/library/native-source-custody.ts",
         "services/kernel/src/library/collection-kind-work-admission.ts",
         "services/kernel/src/library/collection-publication-work-admission.ts",
-        "services/kernel/src/library/access-port.ts"
+        "services/kernel/src/library/access-port.ts",
+        "services/kernel/src/library/semantic-observation.ts"
       ],
       "allowedDependencies": [
         "access-policy",
@@ -870,7 +872,8 @@
         "services/kernel/src/semantic/identity-scoped-observations.ts",
         "services/kernel/src/semantic/search-relations.ts",
         "services/kernel/src/semantic/account-erasure-source.ts",
-        "services/kernel/src/semantic/scope-leaf-evidence.ts"
+        "services/kernel/src/semantic/scope-leaf-evidence.ts",
+        "services/kernel/src/semantic/library-observation.ts"
       ],
       "allowedDependencies": [
         "bounds",
@@ -2186,9 +2189,10 @@
         "services/kernel/src/semantic/contract/subject-values.ts",
         "services/kernel/src/semantic/contract/summaries.ts",
         "services/kernel/src/semantic/contract/index.ts",
-        "services/kernel/src/semantic/contract/global-context.ts"
+        "services/kernel/src/semantic/contract/global-context.ts",
+        "services/kernel/src/semantic/contract/library-observation.ts"
       ],
-      "allowedDependencies": ["definitions"],
+      "allowedDependencies": ["definitions", "kernel-library-contract"],
       "capabilities": ["semantic-contract"]
     },
     {

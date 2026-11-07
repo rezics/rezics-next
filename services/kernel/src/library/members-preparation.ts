@@ -4,6 +4,7 @@ import { decodeListCursor, encodeListCursor, type ListCursorBinding } from '../t
 import type { KeyRing } from '../tokens/seal.ts';
 import ownerFence from './owner-filter-native-binding-fence.sql';
 import { requireLibraryMembersPreparation } from './domain-binding.ts';
+import { collectionReadEligibility } from './collection-read-eligibility.ts';
 import readHeader from './members-preparation-read.sql';
 import readResults from './members-preparation-results.sql';
 import step from './members-preparation-step.sql';
@@ -442,7 +443,7 @@ export function createMembersPreparationNative(config: {
         config.access,
         actor,
         'collection:read',
-        { route, id: collectionId },
+        { route, id: collectionId, eligibility: collectionReadEligibility({ route, id: collectionId }) },
         { pool: config.pool, deadline },
         notFound,
       )) as CommandAuthorization;
@@ -457,13 +458,15 @@ export function createMembersPreparationNative(config: {
           workClient: config.workClient,
           authorization,
           deadline,
-          clock,
           ...(options.history ? { operationalHistory: options.history } : {}),
         },
         async (tx) => {
           const nowToken = commandTime(tx);
           if (!nowToken) throw new ProblemError('dependency_unavailable');
-          const now = authoritativeTimeValue(nowToken);
+          // Access uses Core's attempt time. The injected KernelClock owns only
+          // this feature's trusted idle lifecycle, so it cannot backdate the
+          // command's authorization against current resource grants.
+          const now = clock().toISOString();
           const collection = (
             await tx.query<{
               collection_id: string;
@@ -678,7 +681,11 @@ export function createMembersPreparationNative(config: {
         config.access,
         actor,
         'collection:read',
-        { route: locator.route, id: locator.collectionId },
+        {
+          route: locator.route,
+          id: locator.collectionId,
+          eligibility: collectionReadEligibility({ route: locator.route, id: locator.collectionId }),
+        },
         { pool: config.pool, deadline },
         notFound,
       )) as CommandAuthorization;
@@ -693,12 +700,11 @@ export function createMembersPreparationNative(config: {
           workClient: config.workClient,
           authorization,
           deadline,
-          clock,
         },
         async (tx) => {
           const nowToken = commandTime(tx);
           if (!nowToken) return false;
-          const now = authoritativeTimeValue(nowToken);
+          const now = clock().toISOString();
           const collection = (
             await tx.query<{ incarnation: string; generation: string }>(currentCollectionSQL(), [
               locator.route,

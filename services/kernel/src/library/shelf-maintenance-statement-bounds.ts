@@ -10,8 +10,6 @@ import sourceSize from './shelf-maintenance-source-size.sql';
 import rootSize from './shelf-maintenance-root-size.sql';
 import retirementSize from './shelf-maintenance-retirement-size.sql';
 import partitionRead from '../partition/read.sql';
-import identityRead from '../semantic/read-item-identity-version.sql';
-import typesRead from '../semantic/read-item-types.sql';
 import counterDelta from './shelf-counter-delta.sql';
 import counterInitialize from './shelf-counter-owner-initialize.sql';
 import counterRead from './shelf-counter-owner-read.sql';

@@ -7,14 +7,23 @@ import {
   CANONICAL_SOURCE_STATEMENTS,
   assertCanonicalSourceStatement,
   canonicalSourceGroupStatement,
-  canonicalSourceMappingBound,
   canonicalSourceOwnerFactBound,
   canonicalSourceRawSplit,
   canonicalSourceWorkDimensions,
-  identityScopeWorkReceipt,
   type CanonicalSourceStatement,
 } from './canonical-source-bounds.ts';
 import { CANONICAL_SOURCE_RAW_KEY_LIMIT } from './canonical-source-limits.ts';
+import {
+  librarySemanticObservations,
+  semanticObservationBound,
+  semanticObservationReceipt,
+} from './semantic-observation.ts';
+import type {
+  LibrarySemanticObservationCapability,
+  LibrarySemanticScopeKey,
+  LibrarySemanticScopeObservation,
+} from './contract/semantic-observation.ts';
+import type { WorkDimensions } from './contract/work-dimensions.ts';
 export { CANONICAL_SOURCE_RAW_KEY_LIMIT } from './canonical-source-limits.ts';
 
 /**
@@ -85,6 +94,8 @@ export interface CanonicalSourceRef {
 export interface CanonicalCall extends CanonicalSourceRef {
   readonly deadline: number;
   readonly allowance: CanonicalAllowance;
+  /** The same installed Semantic owner capability is carried through nested reads. */
+  readonly semanticObservations?: LibrarySemanticObservationCapability;
 }
 export interface CanonicalBoundCall extends CanonicalCall {
   readonly basis: CanonicalBasis;
@@ -189,13 +200,6 @@ import { enqueueIntent, runOperationalTransaction, type OperationalTransaction }
 import { partitionOf, routeOf } from '../route/route.ts';
 import { ProblemError } from '../http/problem-error.ts';
 import type { WorkContext } from '../work/registry.ts';
-import { identityEpochStore } from '../semantic/identity-adapters/index.ts';
-import { createIdentityScopedObservations, identityScopeAddress } from '../semantic/identity-scoped-observations.ts';
-import type {
-  IdentityScopeKey,
-  IdentityScopeObservation,
-  IdentityScopeWork,
-} from '../semantic/identity-scope-types.ts';
 import { CollectionSourceLedger } from './collection-native-work.ts';
 import {
   createNativeLibrarySourceCustody,
@@ -310,8 +314,23 @@ export async function initializeCanonicalCollectionSource(
   );
   return created.rows[0]?.identity ?? null;
 }
-function scopeKey(identity: NativeSourceIdentity): IdentityScopeKey {
+function scopeKey(identity: NativeSourceIdentity): LibrarySemanticScopeKey {
   return { source: { kind: 'library', identity }, scopeId: 'collection-source' };
+}
+function semanticObservations(input: CanonicalCall): LibrarySemanticObservationCapability {
+  return input.semanticObservations ?? librarySemanticObservations();
+}
+function bindSemanticObservations<T extends CanonicalCall>(
+  input: T,
+): T & {
+  readonly semanticObservations: LibrarySemanticObservationCapability;
+} {
+  return input.semanticObservations
+    ? (input as T & { semanticObservations: LibrarySemanticObservationCapability })
+    : {
+        ...input,
+        semanticObservations: librarySemanticObservations(),
+      };
 }
 function ledger(input: CanonicalCall): CollectionSourceLedger {
   const a = input.allowance;
@@ -378,10 +397,15 @@ async function query<R extends QueryResultRow>(
     }),
   );
 }
-function takeScopeWork(l: CollectionSourceLedger, used: IdentityScopeWork): void {
-  l.take(identityScopeWorkReceipt(used, l.allowance().reservationId));
+function takeScopeWork(l: CollectionSourceLedger, used: WorkDimensions): void {
+  l.take(semanticObservationReceipt(used, l.allowance().reservationId));
 }
-async function scope(pool: Pool, metadata: NativeCollectionMetadata, l: CollectionSourceLedger) {
+async function scope(
+  pool: Pool,
+  metadata: NativeCollectionMetadata,
+  l: CollectionSourceLedger,
+  observations: LibrarySemanticObservationCapability,
+) {
   const [row] = await withConnection(pool, (client) =>
     query<ScopeRow>(client, l, CANONICAL_SOURCE_STATEMENTS().scope, [
       metadata.route,
@@ -390,12 +414,12 @@ async function scope(pool: Pool, metadata: NativeCollectionMetadata, l: Collecti
     ]),
   );
   if (!row || !row.capture || row.revision === null) return null;
-  const expected: IdentityScopeObservation = {
+  const expected: LibrarySemanticScopeObservation = {
     key: scopeKey(row.identity),
     captureId: row.capture,
     committedRevision: BigInt(row.revision),
   };
-  const result = await createIdentityScopedObservations(pool).revalidate({
+  const result = await observations.canonical.revalidateScope(pool, {
     key: expected.key,
     expected,
     deadline: l.deadline,
@@ -403,6 +427,7 @@ async function scope(pool: Pool, metadata: NativeCollectionMetadata, l: Collecti
   takeScopeWork(l, result.work);
   if (
     result.status !== 'current' ||
+    !result.observation ||
     result.observation.captureId !== expected.captureId ||
     result.observation.committedRevision !== expected.committedRevision
   )
@@ -416,7 +441,7 @@ async function observe(pool: Pool, input: CanonicalCall, l: CollectionSourceLedg
   if (!metadata || metadata.state !== 'active' || metadata.authority === 'unavailable_output') return null;
   // Public capture remains solely Semantic-owned. A Library capture is never substituted for public proof.
   if (metadata.authority === 'activated_output') return null;
-  const observation = await scope(pool, metadata, l);
+  const observation = await scope(pool, metadata, l, semanticObservations(input));
   if (!observation) return null;
   const authority: CanonicalAuthority =
     metadata.authority === 'curated'
@@ -523,6 +548,7 @@ async function mutate<T>(
   );
 }
 export async function observeCanonicalSource(pool: Pool, input: CanonicalCall): Promise<CanonicalAuthorityRead> {
+  input = bindSemanticObservations(input);
   const l = ledger(input);
   try {
     const observed = await observe(pool, input, l);
@@ -535,6 +561,7 @@ export async function observeCanonicalSource(pool: Pool, input: CanonicalCall): 
   }
 }
 export async function readCanonicalSourceState(pool: Pool, input: CanonicalCall): Promise<CanonicalReadyRead> {
+  input = bindSemanticObservations(input);
   const l = ledger(input);
   try {
     const observed = await observe(pool, input, l);
@@ -556,6 +583,7 @@ export async function seekCanonicalSourceGroup(
   pool: Pool,
   input: CanonicalBoundCall & { generation: string; afterSubjectId: string | null },
 ): Promise<CanonicalCandidateSeek> {
+  input = bindSemanticObservations(input);
   const l = ledger(input);
   try {
     if (input.afterSubjectId !== null && routeOf(input.afterSubjectId) === null)
@@ -591,6 +619,7 @@ export async function readCanonicalSourceGroup(
   pool: Pool,
   input: CanonicalBoundCall & { progress: CanonicalGroupProgress },
 ): Promise<CanonicalGroupWindow> {
+  input = bindSemanticObservations(input);
   const l = ledger(input);
   try {
     const p = input.progress;
@@ -642,6 +671,7 @@ export async function readCanonicalSourceGroup(
   }
 }
 export async function beginCanonicalSourceRepair(pool: Pool, input: CanonicalBoundCall): Promise<CanonicalRepairRead> {
+  input = bindSemanticObservations(input);
   const l = ledger(input);
   try {
     const observed = await current(pool, input, l);
@@ -691,6 +721,7 @@ export async function repairCanonicalSourceStep(
   pool: Pool,
   input: CanonicalBoundCall & { repair: CanonicalRepair },
 ): Promise<CanonicalRepairStep> {
+  input = bindSemanticObservations(input);
   const l = ledger(input);
   try {
     const observed = await current(pool, input, l);
@@ -733,9 +764,13 @@ export async function repairCanonicalSourceStep(
           }),
         );
     const originals = [...new Set(page.rows.map((r) => r.key.storedSubjectId))];
-    const mappings = await l.bounded(canonicalSourceWorkDimensions(canonicalSourceMappingBound(originals.length)), () =>
-      identityEpochStore().readMappings(pool, originals),
+    const observations = semanticObservations(input);
+    const mapped = await l.bounded(
+      canonicalSourceWorkDimensions(semanticObservationBound(observations.canonical.mappingWork(originals))),
+      () => observations.canonical.readMappings(pool, originals),
+      (result) => result.work,
     );
+    const mappings = mapped.value;
     // Mapping points supply identity for examined raw originals, never complete population evidence.
     if (mappings.some((mapping) => mapping.state !== 'mapped')) return notReady(l, 'identity');
     if (!(await current(pool, input, l)))
@@ -807,6 +842,7 @@ export async function publishCanonicalSourceRepair(
   pool: Pool,
   input: CanonicalBoundCall & { repair: CanonicalRepair },
 ): Promise<CanonicalPublication> {
+  input = bindSemanticObservations(input);
   const l = ledger(input);
   try {
     const observed = await current(pool, input, l);
@@ -836,6 +872,7 @@ export async function publishCanonicalSourceRepair(
 
 /** Bounded native population capture precedes canonical mapping; source originals include rejects/order inputs. */
 export async function advanceCanonicalSourceCapture(pool: Pool, input: CanonicalCall): Promise<CanonicalAuthorityRead> {
+  input = bindSemanticObservations(input);
   const l = ledger(input);
   try {
     const context = contexts.get(pool);
@@ -909,7 +946,8 @@ export async function advanceCanonicalSourceCapture(pool: Pool, input: Canonical
       custody.finishCapture({ identity: row.identity, frontier: row.frontier!, deadline: input.deadline, allowance }),
     );
     if (completed.status !== 'complete') return notReady(l, 'identity');
-    const registered = await createIdentityScopedObservations(pool).register({
+    const observations = semanticObservations(input);
+    const registered = await observations.canonical.registerScope(pool, {
       key: scopeKey(row.identity),
       deadline: input.deadline,
       capture: { kind: 'library', capture: completed.capture, frontier: row.frontier, allowance: l.allowance() },
@@ -917,18 +955,22 @@ export async function advanceCanonicalSourceCapture(pool: Pool, input: Canonical
     takeScopeWork(l, registered.work);
     if (registered.status !== 'registered')
       return notReady(l, registered.status === 'pending' ? 'incomplete' : 'identity');
-    const address = identityScopeAddress(registered.observation.key);
+    const observation = registered.observation;
+    if (!observation) return notReady(l, 'identity');
     await mutate(pool, input, l, metadata, async (tx) => {
-      await query(tx, l, CANONICAL_SOURCE_STATEMENTS().commitScopeCapture, [
-        input.route,
-        input.collectionId,
-        fence,
-        registered.observation.captureId,
-        registered.observation.committedRevision.toString(),
-        address.partition,
-        address.source,
-        address.scope,
-      ]);
+      const commitInput = {
+        route: input.route,
+        collectionId: input.collectionId,
+        sourceFence: fence,
+        observation,
+      };
+      const declaration = observations.canonical.scopeCommitWork(commitInput);
+      const committed = await l.bounded(
+        semanticObservationBound(declaration),
+        () => observations.canonical.commitScopeCapture(tx, commitInput),
+        (result) => result.work,
+      );
+      if (committed.value !== undefined) throw new TypeError('Semantic capture commit returned an unexpected value');
     });
     const observed = await observe(pool, input, l);
     return observed

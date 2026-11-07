@@ -218,7 +218,10 @@ export function releasedDiscoveryRuntime(
         workerOperation(async () => {
           if (!worker?.exited) throw new Error('Restart requires confirmed actual worker exit');
           // Reuse the original environment, database, prefix and durable preparations verbatim.
-          worker = startOutcomeWorkerProcess(env!, initialInstant);
+          worker = startOutcomeWorkerProcess(
+            env!,
+            initialInstant === undefined ? {} : { frozenInstant: initialInstant },
+          );
           return worker.ready;
         }),
       );
@@ -360,7 +363,10 @@ export function releasedDiscoveryRuntime(
           instrumentedWorker = createOutcomeWorker({ kernelPool, clock: config?.clock ?? systemClock });
           await instrumentedWorker.request<WorkerStats>('init', { env });
         } else {
-          worker = startOutcomeWorkerProcess(env, initialInstant);
+          worker = startOutcomeWorkerProcess(
+            env,
+            initialInstant === undefined ? {} : { frozenInstant: initialInstant },
+          );
           await worker.ready;
         }
         started = true;

@@ -2,6 +2,7 @@ import { expect, test } from 'bun:test';
 import { readdirSync, readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { composeSemanticDomain, composeSemanticIdentityParticipants } from '../../src/composition/semantic.ts';
+import { composeSearchNativePorts } from '../../src/composition/search-native.ts';
 import { contentLifecycleOf } from '../../src/semantic/adapters/index.ts';
 import { stepLibraryIdentityEpoch } from '../../src/library/identity-epoch-participant.ts';
 import { createIdentityEpochParticipants } from '../../src/semantic/application/identity-epoch-participants.ts';
@@ -170,17 +171,18 @@ test('workflow identifiers are stable per job and distinct per continuation segm
 });
 
 test('ordinary composition binds the real Search and Library participants and stays unavailable without Search configuration', () => {
-  expect(composeSemanticIdentityParticipants({ env: {} })).toBeNull();
-  expect(composeSemanticDomain({ env: {} })).toBeNull();
+  const searchNativePorts = composeSearchNativePorts();
+  expect(composeSemanticIdentityParticipants({ env: {} }, searchNativePorts)).toBeNull();
+  expect(composeSemanticDomain({ env: {} }, searchNativePorts)).toBeNull();
   expect(contentLifecycleOf().importedTupleRoute).toBeTypeOf('function');
   const routeKey = Buffer.alloc(32, 7).toString('base64url');
   const env = { OPENSEARCH_URL: 'http://127.0.0.1:9200', KERNEL_ROUTE_KEY: routeKey };
-  const participants = composeSemanticIdentityParticipants({ env });
+  const participants = composeSemanticIdentityParticipants({ env }, searchNativePorts);
   expect(participants).not.toBeNull();
   expect(Object.isFrozen(participants)).toBe(true);
   expect(participants?.['library-private-follow-counts']).toBe(stepLibraryIdentityEpoch);
   expect(typeof participants?.['search-canonical-index']).toBe('function');
-  const domain = composeSemanticDomain({ env });
+  const domain = composeSemanticDomain({ env }, searchNativePorts);
   expect(domain).not.toBeNull();
   expect(domain?.version).toBe(1);
   expect(domain?.ports.identityEpoch['library-private-follow-counts']).toBe(stepLibraryIdentityEpoch);

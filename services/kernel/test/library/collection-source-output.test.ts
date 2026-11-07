@@ -62,12 +62,12 @@ test('explicit COMPLETE A retains membership while pending B never becomes outpu
   const retained = await f.inspect(source.collectionId);
   expect(retained.selected).toBe(a.generation);
   expect(retained.generations.find((row) => row.generation === b.generation)?.state).toBe('building');
-  // Curated native authority remains occurrences. Publication storage is never silently substituted for them.
+  // Dynamic native authority retains selected COMPLETE A while the successor remains pending.
   const observed = await readNativeCollectionMetadata(f.pool, source, {
     deadline: Date.now() + 30000,
     allowance: sourceAllowance(),
   });
-  expect(observed.metadata?.authority).toBe('curated');
+  expect(observed.metadata?.authority).toBe('activated_output');
 });
 
 test('failed native append rolls back checkpoint and keys, then cancellation retains exact custody and refuses a third copy', async () => {

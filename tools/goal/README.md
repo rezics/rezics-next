@@ -2046,10 +2046,7 @@ The resident watchdog service runs `bun tools/goal/scripts/supermanager-watch.ts
 <socket> --pane <target>`. It reads the registered provider and thread from the store and delivers real inbox events
 within its two-second coalescing interval, independently of read, acknowledgement and host notification state.
 A separate atomic `--cursor <file>` checkpoints successful verified tmux submission; failed transport retains pending
-IDs. Wakes contain a short notice; event bodies stay in the inbox. A companion transport journal records staged text
-before typing and submission afterwards, so display-check retries and watcher restarts never append the same paste.
-An unconfirmed paste stays pending until its marker is visible; inspect the resident draft before resetting its journal.
-Worker info and successful manager renewal notices stay quiet. There are no periodic model turns.
+IDs. Worker info and successful manager renewal notices stay quiet. There are no periodic model turns.
 An initial `--start-after <id>` explicitly selects the historical backlog boundary when no cursor exists.
 The same script accepts `--emit --source hourly-report --summary <report>` to write the existing report's computed
 alarm into the native inbox. Metrics remain owned by the hourly report; the bridge does not recompute them.

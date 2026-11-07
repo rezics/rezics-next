@@ -240,6 +240,23 @@ test('Bun process custody settles a parent-exited group whose descendant still h
   expect(outputSettled).toBe(true);
 });
 
+test('Bun custody preserves the runtime-owned direct child exit status', async () => {
+  const child = Bun.spawn(['sh', '-c', 'exit 7'], {
+    detached: true,
+    stdin: 'ignore',
+    stdout: 'ignore',
+    stderr: 'ignore',
+  });
+  const custody = ownBunProcess(child, { pollIntervalMs: 1 });
+  try {
+    expect(await child.exited).toBe(7);
+  } finally {
+    await custody.close();
+  }
+  expect(custody.settled).toBe(true);
+  expect(await child.exited).toBe(7);
+});
+
 test('Bun process custody preserves an AbortError captured before stop starts', async () => {
   const child = Bun.spawn(['bun', '-e', 'setInterval(() => {}, 1000)'], {
     detached: true,

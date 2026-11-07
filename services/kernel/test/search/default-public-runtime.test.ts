@@ -1,7 +1,14 @@
 import { expect, test } from 'bun:test';
 import { randomUUID } from 'node:crypto';
+import type { Pool } from 'pg';
 import { createSearchDriver } from './outcome-driver.ts';
 import type { SearchDriver, HttpResponse } from '../../../../specs/search-driver.ts';
+import { createKernelRuntimeDefaults } from '../../src/composition/runtime-defaults.ts';
+import { composeSearchNativePorts } from '../../src/composition/search-native.ts';
+import { searchNativePorts } from '../../src/search/native-bindings.ts';
+import { createRatedSubjectSource } from '../../src/search/rated-source.ts';
+import type { SearchNativePorts } from '../../src/search/composition.ts';
+import type { KeyRing } from '../../src/tokens/seal.ts';
 
 async function currentPage(driver: SearchDriver, body: Record<string, unknown>): Promise<HttpResponse> {
   const deadline = Date.now() + 60_000;
@@ -26,6 +33,44 @@ function subjects(
   if (!Array.isArray(response.body.subjects)) throw new Error('Search omitted its subjects');
   return response.body.subjects;
 }
+
+test('rated sources use each explicitly supplied native application instance', () => {
+  const producers = composeSearchNativePorts();
+  const observed: { pool: Pool; routeKey: Uint8Array | undefined }[] = [];
+  const supplied = (): SearchNativePorts =>
+    Object.freeze({
+      ...producers,
+      subjectSource(pool: Pool, routeKey?: Uint8Array) {
+        observed.push({ pool, routeKey });
+        return producers.subjectSource(pool, routeKey);
+      },
+    });
+  const firstPool = {} as Pool;
+  const secondPool = {} as Pool;
+  const firstRouteKey = new Uint8Array(32).fill(11);
+  const secondRouteKey = new Uint8Array(32).fill(12);
+  const firstApplication = supplied();
+  const secondApplication = supplied();
+
+  const first = createRatedSubjectSource(firstPool, firstRouteKey, undefined, firstApplication).source;
+  const second = createRatedSubjectSource(secondPool, secondRouteKey, undefined, secondApplication).source;
+
+  expect(observed).toEqual([
+    { pool: firstPool, routeKey: firstRouteKey },
+    { pool: secondPool, routeKey: secondRouteKey },
+  ]);
+  expect(first).not.toBe(second);
+
+  const tokens: KeyRing = { current: 1, keys: new Map([[1, new Uint8Array(32).fill(1)]]) };
+  const receipts: KeyRing = { current: 1, keys: new Map([[1, new Uint8Array(32).fill(2)]]) };
+  createKernelRuntimeDefaults({
+    env: {},
+    tokens,
+    receiptKeys: receipts,
+    searchNativePorts: firstApplication,
+  });
+  expect(searchNativePorts()).toBe(firstApplication);
+});
 
 async function currentSuggestions(driver: SearchDriver, query: string): Promise<HttpResponse> {
   const deadline = Date.now() + 60_000;

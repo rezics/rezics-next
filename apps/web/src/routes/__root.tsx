@@ -153,11 +153,9 @@ export const Route = createRootRouteWithContext<{
 function RootRoutes() {
   return (
     <PageVisitBinding>
-      <RecentSearchBinding>
-        <OwnVotesReturnProvider>
-          <CurrentReadingOutlet />
-        </OwnVotesReturnProvider>
-      </RecentSearchBinding>
+      <OwnVotesReturnProvider>
+        <CurrentReadingOutlet />
+      </OwnVotesReturnProvider>
     </PageVisitBinding>
   );
 }
@@ -255,9 +253,11 @@ export function Root({ children }: { children: ReactNode }) {
             <SettingsAmbientProvider ambient={performanceAmbient.settings}>
               <InboxAmbientProvider ambient={performanceAmbient.inbox}>
                 <LocaleNavigationProvider>
-                  <AppShell navigation={commerceNavigation} subjectPurchase={subjectPurchaseRegions}>
-                    {platformClosed ? <ClosedPage /> : children}
-                  </AppShell>
+                  <RecentSearchBinding>
+                    <AppShell navigation={commerceNavigation} subjectPurchase={subjectPurchaseRegions}>
+                      {platformClosed ? <ClosedPage /> : children}
+                    </AppShell>
+                  </RecentSearchBinding>
                 </LocaleNavigationProvider>
               </InboxAmbientProvider>
             </SettingsAmbientProvider>

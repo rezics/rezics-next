@@ -3,9 +3,14 @@ import { createHash, randomUUID } from 'node:crypto';
 import { resourceAuthorization } from '../../../src/access/resource-authorization.ts';
 import { principalCommandIdentity, runCommand, type CommandTransaction } from '../../../src/command/command.ts';
 import { withConnection } from '../../../src/database/pool.ts';
-import { composeLibraryDomain } from '../../../src/composition/library.ts';
 import { partitionOf, routeOf } from '../../../src/route/route.ts';
 import type { WorkAllowance } from '../../../src/library/contract/work-dimensions.ts';
+import {
+  bindLibraryDomain,
+  composeLibraryDomain,
+  peekLibraryDomain,
+  unbindLibraryDomain,
+} from '../../../src/composition/library.ts';
 import { createProfileEntryFixture } from './profile-entry-fixture.ts';
 
 export const sourceAllowance = (keys = 100): WorkAllowance => ({
@@ -24,33 +29,60 @@ export const sourceAllowance = (keys = 100): WorkAllowance => ({
 
 /** Product setup uses actual Auth, Access, subject and Collection APIs. Observations are exact read-only points. */
 export async function sourceRuntimeFixture() {
+  const previousDomain = peekLibraryDomain();
   const native = await createProfileEntryFixture();
+  const restoreDomain = () => {
+    if (previousDomain) bindLibraryDomain(previousDomain);
+    else unbindLibraryDomain();
+  };
   try {
+    // Dynamic owner rules require the same installed Library domain as production.
     composeLibraryDomain({ pool: native.pool, access: native.access });
     expect((await native.send('steward', 'POST', '/v1/platform/exposure/collections:open')).status).toBe(200);
+    expect((await native.send('steward', 'POST', '/v1/platform/exposure/personal_library:open')).status).toBe(200);
     expect((await native.send('steward', 'POST', '/v1/platform/exposure/reading_progress:open')).status).toBe(200);
     const owner = await native.identity([
       'subject:read',
-      'library_entry:read',
-      'progress_session:read',
-      'copy:read',
       'collection:create',
       'collection:read',
       'collection:update',
       'collection:delete',
+      'library_entry:read',
+      'gate:personal_library',
+      'library_entry:list',
+      'progress_session:read',
+      'progress_session:list',
+      'copy:read',
+      'copy:list',
     ]);
-    async function collection(visibility: 'private' | 'public' | 'unlisted' = 'public') {
+    await native.grantLibraryGate(owner.actor.accountId);
+    async function collection(
+      visibility: 'private' | 'public' | 'unlisted' = 'public',
+      membershipKind: 'dynamic' | 'curated' = 'dynamic',
+    ) {
+      // Public dynamic creation starts its whole-query publication immediately. These tests exercise
+      // explicit output allocation against an empty public source, so promote a private dynamic source
+      // through the normal metadata command after creation instead of racing that initial worker.
+      const createdVisibility = membershipKind === 'dynamic' && visibility !== 'private' ? 'private' : visibility;
       const response = await native.send(owner.bearer, 'POST', '/v1/collections', {
         title: 'Explicit source runtime',
-        visibility: 'private',
-        membershipKind: 'dynamic',
-        rule: { filter: { owner: { presence: true } }, sort: 'id' },
+        visibility: createdVisibility,
+        ...(membershipKind === 'dynamic'
+          ? { membershipKind, rule: { filter: { owner: { presence: true } }, sort: 'id' } }
+          : {}),
       });
+      if (response.status !== 201)
+        throw new Error(`Collection creation returned ${response.status}: ${await response.text()}`);
       expect(response.status).toBe(201);
       const id = (await response.json()).collection.id as string;
-      if (visibility !== 'private') {
-        const exposed = await native.send(owner.bearer, 'PATCH', '/v1/collections/' + id, { revision: 1, visibility });
-        expect(exposed.status).toBe(200);
+      if (createdVisibility !== visibility) {
+        const promoted = await native.send(owner.bearer, 'PATCH', `/v1/collections/${id}`, {
+          revision: 1,
+          visibility,
+        });
+        if (promoted.status !== 200)
+          throw new Error(`Collection visibility promotion returned ${promoted.status}: ${await promoted.text()}`);
+        expect(promoted.status).toBe(200);
       }
       return { route: routeOf(id)!, collectionId: id };
     }
@@ -140,8 +172,19 @@ export async function sourceRuntimeFixture() {
         }
       });
     }
-    return { ...native, owner, collection, command, inspect };
+    return {
+      ...native,
+      owner,
+      collection,
+      command,
+      inspect,
+      async close() {
+        restoreDomain();
+        await native.close();
+      },
+    };
   } catch (error) {
+    restoreDomain();
     await native.close();
     throw error;
   }

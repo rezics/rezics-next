@@ -7,7 +7,8 @@ import { SEARCH_GLOBAL_CONTEXT as GLOBAL_CONTEXT } from './global-context.ts';
 import { ConfigError } from '../commerce/config.ts';
 import { createPublicRatingSource } from '../rating/public-rating-source.ts';
 import { STANDARD_QUESTION_ID } from '../rating/standard-question.ts';
-import { subjectSource } from './native-bindings.ts';
+import { searchNativePorts } from './native-bindings.ts';
+import type { SearchNativePorts } from './native-ports.ts';
 import type { PublicRatingSource } from './rating-source.ts';
 import { withPublicRatings } from './rating-subject-source.ts';
 import type { SubjectSource } from './source.ts';
@@ -18,13 +19,14 @@ export function createRatedSubjectSource(
   pool: Pool,
   routeKey: Uint8Array,
   creditSearch?: CreditSearchSource,
+  nativePorts: SearchNativePorts = searchNativePorts(),
 ): {
   source: SubjectSource & SubjectSourceKeyPages & { canonicalNames: SubjectCanonicalNames };
   ratings: PublicRatingSource;
 } {
   if (!(routeKey instanceof Uint8Array) || routeKey.byteLength !== 32) throw new ConfigError('KERNEL_ROUTE_KEY');
   const ratings = createPublicRatingSource(pool);
-  const semantic = subjectSource(pool, routeKey);
+  const semantic = nativePorts.subjectSource(pool, routeKey);
   const native = creditSearch === undefined ? semantic : { ...semantic, creditSearch };
   const rated = withPublicRatings(native, ratings, {
     questionId: STANDARD_QUESTION_ID,

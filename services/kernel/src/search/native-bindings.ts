@@ -62,8 +62,8 @@ export let verifySubjectErasureSourceProof: SearchNativePorts['verifySubjectEras
 export let withOwnerFilterNativeRead: SearchNativePorts['withOwnerFilterNativeRead'];
 export let withReadTransaction: SearchNativePorts['withReadTransaction'];
 
-/** Composition installs the current producers explicitly; module evaluation installs nothing. */
-export function bindSearchNativePorts(port: SearchNativePorts): void {
+/** Composition installs one complete producer set explicitly; module evaluation installs nothing. */
+export function bindSearchNativePorts(port: SearchNativePorts): SearchNativePorts {
   installed = Object.freeze(port);
   PublicFilterSourceDefinitionError = port.PublicFilterSourceDefinitionError;
   REVIEW_DISCOVERY_PAGE_LIMIT = port.REVIEW_DISCOVERY_PAGE_LIMIT;
@@ -124,6 +124,7 @@ export function bindSearchNativePorts(port: SearchNativePorts): void {
   verifySubjectErasureSourceProof = port.verifySubjectErasureSourceProof;
   withOwnerFilterNativeRead = port.withOwnerFilterNativeRead;
   withReadTransaction = port.withReadTransaction;
+  return installed;
 }
 
 export function searchNativePorts(): SearchNativePorts {

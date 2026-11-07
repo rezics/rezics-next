@@ -72,6 +72,39 @@ test('default Search returns its owner before initial inventory settles and canc
   expect(aborted).toBe(true);
 }, 10_000);
 
+test('default worker registers Search erasure with real producers while indexing is unconfigured', async () => {
+  const driver = await createSemanticDriver(undefined, { isolatedAuth: true });
+  const { runtime } = driver.fixtures;
+  let worker: ReturnType<typeof startOutcomeWorkerProcess> | undefined;
+  try {
+    const env = workerTestEnv({
+      DATABASE_URL: runtime.databaseUrl,
+      KERNEL_ROUTE_KEY: runtime.routeKey,
+      KERNEL_SESSION_KEYS: runtime.sessionKeys,
+      AUTH_ISSUER: runtime.authIssuer,
+      AUTH_AUDIENCE: runtime.authAudience,
+      AUTH_JWKS_URL: runtime.authJwksUrl,
+      KERNEL_PORT: '0',
+    });
+    delete env.OPENSEARCH_URL;
+    delete env.KERNEL_SEARCH_PREFIX;
+    worker = startOutcomeWorkerProcess(env, { searchDisabled: true });
+    await worker.ready;
+
+    const registrations = await worker.rpc.request<{
+      registeredModules: string[];
+      searchStarterInvocations: number;
+      startedServices: Record<string, number>;
+    }>('stats');
+    expect(registrations.registeredModules).toContain('search');
+    expect(registrations.searchStarterInvocations).toBe(0);
+    expect(registrations.startedServices.semantic).toBeGreaterThan(0);
+  } finally {
+    await worker?.close();
+    await driver.close();
+  }
+}, 900_000);
+
 test('ordinary configured server returns current mixed discovery through its default owner producers and retained continuation', async () => {
   const endpoint = process.env.OPENSEARCH_URL;
   if (!endpoint) throw new Error('OPENSEARCH_URL must name the check node');

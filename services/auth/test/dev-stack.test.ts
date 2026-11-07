@@ -7,13 +7,26 @@ import { cp, mkdir, mkdtemp, readdir, symlink, rm } from 'node:fs/promises';
 import { dirname, resolve } from 'node:path';
 import { Pool } from 'pg';
 import { root } from '../scripts/dev-stack.ts';
+import { StackFixtureLifetime, waitForFixtureResponse, type StackFixtureChild } from '../scripts/dev-stack-lifetime.ts';
 import { admitWalkStack, walkStackEnvironment } from '../../../scripts/walk-stack.ts';
 
 // Exercise the documented commands in a fresh retained-source copy. Never reset a developer's stack.
 test('fresh checkout starts native loopback Auth and signs a person into and out of Web without an external service', async () => {
   const suffix = randomUUID();
-  const slot = await admitWalkStack(`auth-${suffix}`, process.env, root);
+  // The test keeps its original 300-second budget, including a 30-second resource settlement reserve.
+  const lifetime = new StackFixtureLifetime(270_000);
+  let slot: Awaited<ReturnType<typeof admitWalkStack>> | undefined;
+  const cleanupFailures: unknown[] = [];
+  let failure: unknown;
+  const settle = async (cleanup: () => Promise<unknown>) => {
+    try {
+      await cleanup();
+    } catch (error) {
+      cleanupFailures.push(error);
+    }
+  };
   try {
+    slot = await admitWalkStack(`auth-${suffix}`, process.env, root, lifetime.signal);
     await mkdir(resolve(root, '.temp'), { recursive: true });
     const checkout = await mkdtemp(resolve(root, '.temp/dev-stack-'));
     // Go Task is the documented entry point. Check hosts may have neither `go-task` nor `task` on PATH; the repository
@@ -53,18 +66,16 @@ test('fresh checkout starts native loopback Auth and signs a person into and out
       // The Taskfile prepends the checkout's dependency binaries to PATH; the Bun fallback needs the same lookup.
       PATH: [resolve(checkout, 'node_modules/.bin'), process.env.PATH].filter(Boolean).join(':'),
     };
-    const commands = async (args: string[], cwd = checkout, progress = false) => {
-      const child = Bun.spawn(args, { cwd, env, stdout: 'pipe', stderr: progress ? 'inherit' : 'pipe' });
-      const [stdout, stderr, code] = await Promise.all([
-        new Response(child.stdout).text(),
-        progress ? '' : new Response(child.stderr as ReadableStream<Uint8Array>).text(),
-        child.exited,
-      ]);
-      if (code) throw new Error(`${args.join(' ')}: ${stderr}\n${stdout}`);
-      return stdout;
-    };
-    let stack: ReturnType<typeof Bun.spawn> | undefined;
+    const commands = (name: string, args: string[], progress = false) =>
+      lifetime.command(name, args, { cwd: checkout, env, progress });
+    let stack: StackFixtureChild | undefined;
     let browser: { close(): Promise<void> } | undefined;
+    let closingBrowser: Promise<void> | undefined;
+    const closeBrowser = () => (closingBrowser ??= browser?.close() ?? Promise.resolve());
+    const abortBrowser = () => {
+      void closeBrowser().catch(() => {});
+    };
+    lifetime.signal.addEventListener('abort', abortBrowser, { once: true });
     try {
       // Check hosts receive source snapshots without Git metadata. Copy retained
       // source, excluding shared dependencies and generated attempt state.
@@ -92,25 +103,32 @@ test('fresh checkout starts native loopback Auth and signs a person into and out
         const store = resolve(root, workspace, 'node_modules');
         if (existsSync(store)) await symlink(store, resolve(checkout, workspace, 'node_modules'));
       }
-      for (const command of infra) await commands(command, checkout, true);
+      for (const [index, command] of infra.entries()) await commands(`setup-first-${index}`, command, true);
       const kernelEnv = await Bun.file(resolve(checkout, 'services/kernel/.env')).text();
       const kernelDatabaseUrl = kernelEnv
         .split('\n')
         .find((line) => line.startsWith('DATABASE_URL='))!
         .slice(13);
-      const port = (await commands(['docker', 'port', database, '5432/tcp'])).trim().split(':').at(-1)!;
+      const port = (await commands('database-port', ['docker', 'port', database, '5432/tcp']))
+        .trim()
+        .split(':')
+        .at(-1)!;
       expect(port).toBe(selected.KERNEL_DATABASE_PORT!);
       expect(new URL(kernelDatabaseUrl).port).toBe(port);
-      for (const command of infra) await commands(command, checkout, true); // Existing, migrated development DB is a no-op.
+      for (const [index, command] of infra.entries()) await commands(`setup-repeat-${index}`, command, true); // Existing, migrated development DB is a no-op.
       expect(await Bun.file(resolve(checkout, 'services/kernel/.env')).text()).toBe(kernelEnv);
-      stack = Bun.spawn(devCommand, {
+      stack = lifetime.start('start', devCommand, {
         cwd: checkout,
         env,
-        stdout: Bun.file(resolve(checkout, '.temp/stack.log')),
-        stderr: 'inherit',
+        progress: true,
+        outputFile: resolve(checkout, '.temp/stack.log'),
       });
       const instance = await chromium.launch({ headless: true });
       browser = instance;
+      if (lifetime.signal.aborted) {
+        await instance.close();
+        lifetime.signal.throwIfAborted();
+      }
       const page = await instance.newPage({ locale: 'en-US' });
       await page.route(
         '**/*',
@@ -121,33 +139,13 @@ test('fresh checkout starts native loopback Auth and signs a person into and out
             : route.abort();
         },
       );
-      // Startup includes bundling both apps. Retry only transport startup, never a mutation.
-      await browserExpect
-        .poll(
-          async () => {
-            try {
-              return (await fetch(`${origins.issuer}/.well-known/openid-configuration`)).status;
-            } catch {
-              return 0;
-            }
-          },
-          { timeout: 180_000 },
-        )
-        .toBe(200);
-      for (const url of [`${origins.kernel}/health`, `${origins.web}/`]) {
-        await browserExpect
-          .poll(
-            async () => {
-              try {
-                return (await fetch(url)).status;
-              } catch {
-                return 0;
-              }
-            },
-            { timeout: 180_000 },
-          )
-          .toBe(200);
-      }
+      // Bundling both apps and every readiness probe share the fixture's original absolute deadline.
+      for (const url of [
+        `${origins.issuer}/.well-known/openid-configuration`,
+        `${origins.kernel}/health`,
+        `${origins.web}/`,
+      ])
+        expect(await waitForFixtureResponse(url, lifetime.signal)).toBe(200);
       await page.goto(`${origins.web}/`);
       await page.locator('a[href^="/auth/sign-in"]').first().click();
       await page.waitForURL('**/login?**');
@@ -174,7 +172,7 @@ test('fresh checkout starts native loopback Auth and signs a person into and out
       expect(
         (await page.context().cookies()).some((cookie: { name: string }) => cookie.name === '__Host-rezics_session'),
       ).toBe(false);
-      const discovery = await fetch(`${origins.native}/.well-known/openid-configuration`);
+      const discovery = await fetch(`${origins.native}/.well-known/openid-configuration`, { signal: lifetime.signal });
       expect(((await discovery.json()) as { issuer: string }).issuer).toBe(origins.issuer);
       const authUrl = new URL(kernelDatabaseUrl);
       authUrl.pathname = '/rezics_auth';
@@ -191,11 +189,8 @@ test('fresh checkout starts native loopback Auth and signs a person into and out
             .slice(15),
         );
         expect(registered.rows[0].scopes).toEqual(scopes.split(' '));
-        await browser.close();
-        browser = undefined;
-        stack.kill('SIGTERM');
-        await stack.exited;
-        stack = undefined;
+        await closeBrowser();
+        await lifetime.stop(stack);
         const remaining = await originalDatabase.query(
           `SELECT pid FROM pg_stat_activity WHERE datname = ANY($1) AND backend_type='client backend'
          AND pid <> pg_backend_pid()`,
@@ -205,22 +200,68 @@ test('fresh checkout starts native loopback Auth and signs a person into and out
       } finally {
         await originalDatabase.end();
       }
+    } catch (error) {
+      failure = lifetime.signal.aborted ? lifetime.signal.reason : error;
     } finally {
-      await browser?.close();
-      if (stack) {
-        stack.kill('SIGTERM');
-        await stack.exited;
+      // A setup failure reaches the same teardown as a running stack. Stop descendants before removing their DB.
+      lifetime.cancel(new Error('Local stack fixture finishing'));
+      await settle(closeBrowser);
+      await settle(() => lifetime.close());
+      lifetime.signal.removeEventListener('abort', abortBrowser);
+      const cleanup = new StackFixtureLifetime(20_000);
+      const cleanupCommand = (name: string, args: string[]) => cleanup.command(name, args, { cwd: root, env });
+      try {
+        // Exact admitted names only. Listing first also distinguishes absence from an inspect/daemon failure.
+        for (const name of [database, search]) {
+          await settle(async () => {
+            const containers = await cleanupCommand('container-inspect', [
+              'docker',
+              'ps',
+              '-aq',
+              '--filter',
+              `name=^${name}$`,
+            ]);
+            if (containers.trim()) await cleanupCommand('container-remove', ['docker', 'rm', '-f', name]);
+            expect(
+              (await cleanupCommand('container-verify', ['docker', 'ps', '-aq', '--filter', `name=^${name}$`])).trim(),
+            ).toBe('');
+          });
+          await settle(async () => {
+            const volumes = await cleanupCommand('volume-inspect', [
+              'docker',
+              'volume',
+              'ls',
+              '-q',
+              '--filter',
+              `name=^${name}$`,
+            ]);
+            if (volumes.trim()) await cleanupCommand('volume-remove', ['docker', 'volume', 'rm', name]);
+            expect(
+              (
+                await cleanupCommand('volume-verify', ['docker', 'volume', 'ls', '-q', '--filter', `name=^${name}$`])
+              ).trim(),
+            ).toBe('');
+          });
+        }
+      } finally {
+        await settle(() => cleanup.close());
+        await settle(() => rm(checkout, { recursive: true, force: true }));
+        console.error(
+          `stack: fixture-resources ${cleanupFailures.length ? 'unsettled' : 'settled'} utc=${new Date().toISOString()}`,
+        );
       }
-      // Exact admitted names only. A failed setup may have left only a volume.
-      for (const name of [database, search]) {
-        const inspect = Bun.spawn(['docker', 'inspect', name], { stdout: 'ignore', stderr: 'ignore' });
-        if ((await inspect.exited) === 0) await commands(['docker', 'rm', '-f', name]);
-        const volume = Bun.spawn(['docker', 'volume', 'inspect', name], { stdout: 'ignore', stderr: 'ignore' });
-        if ((await volume.exited) === 0) await commands(['docker', 'volume', 'rm', name]);
-      }
-      await rm(checkout, { recursive: true, force: true });
     }
+  } catch (error) {
+    failure ??= error;
   } finally {
-    await slot.release();
+    await settle(() => lifetime.close());
+    const admittedSlot = slot;
+    if (admittedSlot) await settle(() => admittedSlot.release());
   }
+  if (failure !== undefined && cleanupFailures.length)
+    throw new AggregateError([failure, ...cleanupFailures], 'Local stack fixture failed and cleanup failed', {
+      cause: failure,
+    });
+  if (failure !== undefined) throw failure;
+  if (cleanupFailures.length) throw new AggregateError(cleanupFailures, 'Local stack fixture cleanup failed');
 }, 300_000);

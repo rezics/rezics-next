@@ -4,6 +4,7 @@ import { AuthenticationError } from '../../access/contract/authentication.ts';
 import { ProblemError } from '../../http/problem-error.ts';
 import { classifyUnavailability } from '../../access/unavailable.ts';
 import { createFollowActivitySource } from '../../library/follow-activity.ts';
+import { librarySemanticObservations } from '../../library/semantic-observation.ts';
 import { createCollectionReads } from '../../library/collection-reads.ts';
 import { readAccountDiscoverySummaries } from '../../access/account-discovery-source.ts';
 import { readPublication } from '../../community/publication.ts';
@@ -119,6 +120,7 @@ export function createNativeFeedPorts(deps: FeedDependencies, liveActor: () => A
       ...deps,
       workClient: await deps.workClient(),
       activityStore: activities,
+      semanticObservations: librarySemanticObservations(),
     }));
   const collections = createCollectionReads(deps);
   const content = { ...deps, access: deps.contentAccess };

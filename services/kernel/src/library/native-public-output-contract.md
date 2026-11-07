@@ -141,6 +141,10 @@ active unmoved partition epoch, persisted Semantic closure and the exact native 
 header/head/partition/reference literals, exact xid/partition-size points and read transaction control. Unknown
 SQL has no footprint and refuses before dispatch. SQL text and parameter bytes are added to every bound below.
 These are declared native plan-node bounds, not returned-row counts or engine visibility/vacuum work.
+An empty SQL result has zero projection bytes, including BEGIN, COMMIT and ROLLBACK. Its literal SQL, parameters
+and declared work remain charged. Read cleanup covers BEGIN as well as the page so a rejected result cannot leave
+the caller connection in a read-only transaction. Native custody fixtures create dynamic Collections and admit
+every family expanded by an owner-presence rule; curated ordinal fixtures retain occurrence authority.
 
 | Literal/operation                                                                 | nativeRows | nativePoints |          result/internal bytes |                  statements |
 | --------------------------------------------------------------------------------- | ---------: | -----------: | -----------------------------: | --------------------------: |

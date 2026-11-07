@@ -53,8 +53,31 @@ export function walkViteChildEnvironment(
   return child;
 }
 
+const testFileArgument = /\.test\.[cm]?[jt]sx?$/u;
+const serverIndependentTests = [
+  'scripts/check-placement.test.ts',
+  'scripts/check-placement-custody.test.ts',
+  'scripts/focused.test.ts',
+  'scripts/messages-ready.test.ts',
+  'scripts/storybook-dev.test.ts',
+  'tests/accounts-goal-journeys.test.ts',
+  'tests/focused-runner.test.ts',
+  'tests/root-application-shell.test.tsx',
+  'tests/server-custody.test.ts',
+  'tests/with-dev-server.test.ts',
+];
+
+/** These explicit unit selections own their fixtures; every page or mixed selection still starts Vite. */
 export function commandNeedsSharedDevServer(command: string[]): boolean {
-  return command[0] === 'bun' && command[1] === 'test';
+  if (command[0] !== 'bun' || command[1] !== 'test') return false;
+  const files = command.filter((argument) => testFileArgument.test(argument));
+  return (
+    files.length === 0 ||
+    files.some((file) => {
+      const normalized = file.replaceAll('\\', '/');
+      return !serverIndependentTests.some((unit) => normalized === unit || normalized.endsWith(`/${unit}`));
+    })
+  );
 }
 
 export function privateNetworkCommand(command: string[]): string[] {
