@@ -14,7 +14,7 @@ bigint authentication floor and missing-row result, using the current command's 
 Library retains its current-authority decision. Focused producer tests pin forwarding, current states and accounting;
 existing Collection rule/preparation assertions remain unchanged. Worker typing is acceptance; runtime walks run after integration.
 
-Choice summary: Content author-erasure uses the shared request access check through its existing Access port, while Library rule authority reads only the current command-state projection on the caller's Access ledger.
+Choice summary: Content request checks forward through its single invocation-time-bound Access port; Access projects only current Account state for Library, while Library composition retains admission, filter compilation and denial.
 The account-state query consumes one keyed point plus its command-dispatch point (two points total), returns two row
 units, and charges the measured input/result bytes (156 for a present account, 70 for absence).
 [Architecture](../../../../docs/architecture.md): catalogue, closed-operand `decide`, bounded explanations,
