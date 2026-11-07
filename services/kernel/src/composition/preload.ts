@@ -6,6 +6,7 @@ import { composeContentReading } from './content.ts';
 import { composeAccessApplication } from './access.ts';
 import { composeZones } from './zones.ts';
 import { composeSemanticAdapters } from './semantic.ts';
+import { composeSearchNativePorts } from './search-native.ts';
 import { composePresentationApplication } from './presentation.ts';
 
 /**
@@ -21,6 +22,7 @@ export function installNativeHistoryPreload(): void {
   installNativeHistory();
   composeZones();
   composeSemanticAdapters();
+  composeSearchNativePorts();
   composePresentationApplication();
   composeLibraryPresentation();
 }

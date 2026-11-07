@@ -13,15 +13,17 @@ import { isDeepStrictEqual } from 'node:util';
 import { systemClock, type KernelClock } from '../clock.ts';
 import type { WorkAllowance, WorkReceipt } from '../library/contract/work-dimensions.ts';
 import type { CollectionSourceObservation, NativeSourceIdentity } from '../library/contract/index.ts';
-import { admitCollectionMemberQuery } from '../library/owner-filter.ts';
-import { bindOwnerFilterRead } from '../library/owner-filter-plan.ts';
-import { withOwnerFilterNativeRead } from '../library/owner-filter-native-binding.ts';
+import {
+  admitCollectionMemberQuery,
+  bindOwnerFilterRead,
+  createIdentityScopedObservations,
+  createPublicFilterSourceBinding,
+  publicFilterSource,
+  withOwnerFilterNativeRead,
+} from './native-bindings.ts';
 import type { NativeOrdinalKey } from '../library/contract/index.ts';
 import { readIdentityMappings } from '../semantic/identity-adapters/identity-epoch-read.ts';
 import { readRelease } from '../semantic/definitions.ts';
-import { createIdentityScopedObservations } from '../semantic/identity-scoped-observations.ts';
-import { createPublicFilterSourceBinding } from '../semantic/public-filter-source-binding.ts';
-import { publicFilterSource } from '../semantic/public-filter-source.ts';
 import {
   createSearchScopeOrder,
   sameScopeObservation,

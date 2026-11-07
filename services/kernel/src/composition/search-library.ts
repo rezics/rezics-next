@@ -6,15 +6,18 @@ import {
   createMembersWorkDefinitionApplication,
   createOrderedCollectionSourceApplication,
 } from '../library/application/index.ts';
-import type { MembersPreparationWorkContext, MembersPreparationWorkDefinition } from '../library/adapters/index.ts';
-import { createSearchLibraryScopePort as createSearchLibraryOperations } from '../search/adapters/index.ts';
+import {
+  createScopedSearchLibraryOperations,
+  type MembersPreparationWorkContext,
+  type MembersPreparationWorkDefinition,
+} from '../library/adapters/index.ts';
 import type { SearchCollectionSourceDeps, SearchLibraryScopePort, SearchScopeWorkOptions } from '../search/index.ts';
 
 export { createNativeLibraryScopeWork } from '../search/adapters/index.ts';
 
 /** Installed root: application facades over constructed Library operations, limits and receiving costs. */
 export function createSearchLibraryScopePort(): SearchLibraryScopePort {
-  const operations = createSearchLibraryOperations();
+  const operations = createScopedSearchLibraryOperations();
   const membersDefinition = createMembersWorkDefinitionApplication<MembersPreparationWorkDefinition>({
     readWorkDefinition: (input) =>
       operations.members.readWorkDefinition(input.work as MembersPreparationWorkContext, {

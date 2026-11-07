@@ -3,7 +3,7 @@ import type { Pool } from 'pg';
 import { withConnection } from '../database/pool.ts';
 import { lookupEventType } from '../events/catalogue.ts';
 import { REVIEW_DISCOVERY_CHANGED } from '../content/review-discovery-events.ts';
-import { readReviewDiscoveryChanges, refreshReviewDiscoveryChanges } from '../content/review-discovery-changes.ts';
+import { readReviewDiscoveryChanges, refreshReviewDiscoveryChanges } from './native-bindings.ts';
 import type { ReviewDiscoverySource } from '../content/review-discovery.ts';
 import { discoveryGenerations } from './generations.ts';
 import { withDiscoveryTarget, type DiscoveryProjection, type DiscoveryTarget } from './account-discovery.ts';

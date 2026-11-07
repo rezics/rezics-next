@@ -1,11 +1,11 @@
 import { publicFilterCatalogue } from './discovery-catalogue.ts';
 import { verifyPublicFilterRepairSourcePage, PublicFilterRepairSourceError } from './public-filter-custody-source.ts';
+import type { NativePublicFilterPublicationCompletion } from '../semantic/public-filter-source-binding.ts';
 import {
   joinNativePublicFilterRepair,
-  readNativePublicFilterRepairStart,
   readNativePublicFilterPublicationCompletion,
-  type NativePublicFilterPublicationCompletion,
-} from '../semantic/index.ts';
+  readNativePublicFilterRepairStart,
+} from './native-bindings.ts';
 import repairSave from './public-filter-custody-repair-save.sql';
 import repairCurrent from './public-filter-custody-repair-current.sql';
 import repairEffectSave from './public-filter-custody-repair-effect-save.sql';
@@ -596,8 +596,12 @@ export async function applyPublicFilterConsumerActions(
 
 import { randomUUID } from 'node:crypto';
 import type { Pool } from 'pg';
-import type { PublicFilterCost, PrivacyReductionStart, PublicFilterProjectionRecord } from '../semantic/index.ts';
-import { advanceNativePublicFilterPreparation } from '../semantic/index.ts';
+import type {
+  PublicFilterCost,
+  PrivacyReductionStart,
+  PublicFilterProjectionRecord,
+} from '../semantic/public-filter-source-contract.ts';
+import { advanceNativePublicFilterPreparation } from './native-bindings.ts';
 import type {
   PublicFilterSourceBinding,
   PublicFilterSourceBootstrapBinding,
@@ -634,7 +638,7 @@ import type {
   RetainedRepairPage,
   RetainedSourceRepair,
 } from './public-filter-custody-contract.ts';
-import { publicFilterSourceOrigin } from '../semantic/index.ts';
+import { publicFilterSourceOrigin } from './native-bindings.ts';
 import { createRatedSubjectSource } from './rated-source.ts';
 import { subjectListingSource } from '../library/listing-counts.ts';
 import {

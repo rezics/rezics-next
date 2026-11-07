@@ -1,7 +1,6 @@
 import type { Pool } from 'pg';
 import type { PublicFilterSourceFactory } from '../semantic/public-filter-source-contract.ts';
-import { createPublicFilterSourceBinding } from '../semantic/public-filter-source-binding.ts';
-import { publicFilterSource } from '../semantic/public-filter-source.ts';
+import { createPublicFilterSourceBinding, publicFilterSource } from './native-bindings.ts';
 import type { PublicFilterSourceDefinition } from '../semantic/public-filter-source-binding.ts';
 import { ProblemError } from '../http/problem-error.ts';
 import type { OpenSearch } from './opensearch.ts';

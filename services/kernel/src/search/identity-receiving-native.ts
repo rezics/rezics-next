@@ -2,13 +2,16 @@ import { AsyncLocalStorage } from 'node:async_hooks';
 import { createHash } from 'node:crypto';
 import { isDeepStrictEqual } from 'node:util';
 import { currentCommandResources, runCommand } from '../command/command.ts';
-import { createIdentitySourceSupportReader } from '../semantic/identity-source-support.ts';
 import { serializeIdentityValue } from '../semantic/identity-core/encoding.ts';
-import { PublicFilterSourceDefinitionError, readPublicFilterSourceDefinition } from '../semantic/index.ts';
 import { requireAccessDeadline } from '../access/unavailable.ts';
 import { withRequestDeadline } from '../request/deadline.ts';
-import { publicFilterSource } from '../semantic/index.ts';
-import { readIdentitySourceProjection } from '../semantic/search-source.ts';
+import {
+  PublicFilterSourceDefinitionError,
+  createIdentitySourceSupportReader,
+  publicFilterSource,
+  readIdentitySourceProjection,
+  readPublicFilterSourceDefinition,
+} from './native-bindings.ts';
 import { searchIdentityWriterChanged } from './identity-epoch-participant-events.ts';
 import type { OpenSearch } from './opensearch.ts';
 import type {

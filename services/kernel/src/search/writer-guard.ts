@@ -1,10 +1,6 @@
 import { SEARCH_IDENTITY_WRITER_CHUNK } from './writer-limits.ts';
 import type { Pool } from 'pg';
-import {
-  readAccountDiscoveryRepairObservation,
-  type AccountDiscoveryRepairObservation,
-} from '../access/account-discovery-source.ts';
-import { readSubjectErasureSourceProof, verifySubjectErasureSourceProof } from '../semantic/account-erasure-source.ts';
+import type { AccountDiscoveryRepairObservation } from '../access/account-discovery-source.ts';
 import { drainGenerationPublicationProofCopy, hasRetainedWriterPublicationCopies } from './publication-proof-copy.ts';
 import type { PublicFilterConsumer } from '../semantic/public-filter-source-contract.ts';
 import type {
@@ -16,9 +12,15 @@ import { currentCommand, noEffect, runCommand, type CommandTransaction } from '.
 import { partitionOf, routeOf } from '../route/route.ts';
 import { readPartition } from '../partition/partition.ts';
 import type { IdentityJobRef, IdentityNativeReceipt } from '../semantic/identity-epoch-contract.ts';
-import { identityEpochStore, recordIdentityEpochNativeCommit } from '../semantic/identity-adapters/index.ts';
 import { IdentityEpochStoreError } from '../semantic/contract/identity-errors.ts';
-import { withReadTransaction } from '../semantic/read.ts';
+import {
+  identityEpochStore,
+  readAccountDiscoveryRepairObservation,
+  readSubjectErasureSourceProof,
+  recordIdentityEpochNativeCommit,
+  verifySubjectErasureSourceProof,
+  withReadTransaction,
+} from './native-bindings.ts';
 import gateSql from './writer-guard-gate.sql';
 import dispatchSql from './writer-guard-dispatch.sql';
 import { prepareBoundedSortKeys } from './bounded-sort-keys.ts';

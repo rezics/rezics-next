@@ -19,19 +19,21 @@ import type {
   SearchLibraryScopePort,
   SearchNativeCollectionWork,
 } from './library-scope-port.ts';
+import type {
+  CollectionKindPreparationLocator,
+  CollectionKindWorkDefinition,
+} from '../library/collection-kind-work-admission.ts';
+import type {
+  CollectionPublicationLocator,
+  CollectionPublicationWorkDefinition,
+} from '../library/collection-publication-work-admission.ts';
 import {
   admitCollectionKindPreparationStep,
+  admitCollectionPublicationStep,
   bindCollectionKindPreparationStep,
   readCollectionKindWorkDefinition,
-  type CollectionKindPreparationLocator,
-  type CollectionKindWorkDefinition,
-} from '../library/collection-kind-work-admission.ts';
-import {
-  admitCollectionPublicationStep,
   readCollectionPublicationWorkDefinition,
-  type CollectionPublicationLocator,
-  type CollectionPublicationWorkDefinition,
-} from '../library/collection-publication-work-admission.ts';
+} from './native-bindings.ts';
 
 import type {
   MembersPreparationWorkContext,

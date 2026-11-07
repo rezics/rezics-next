@@ -1,4 +1,4 @@
-import { GLOBAL_CONTEXT } from '../access/gates/catalogue.ts';
+import { SEARCH_GLOBAL_CONTEXT as GLOBAL_CONTEXT } from './global-context.ts';
 import { PARTITIONS, routeOf } from '../route/route.ts';
 import { SearchUnavailableError } from './opensearch.ts';
 import {

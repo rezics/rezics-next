@@ -410,7 +410,9 @@
         "services/kernel/src/content/imported-contract.ts",
         "services/kernel/src/content/media.ts",
         "services/kernel/src/content/schema-validation.ts",
-        "services/kernel/src/content/source-fence-schemas.ts"
+        "services/kernel/src/content/source-fence-schemas.ts",
+        "services/kernel/src/content/realm-subject-source.ts",
+        "services/kernel/src/content/review-discovery-changes.ts"
       ],
       "allowedDependencies": [
         "definitions",
@@ -646,7 +648,13 @@
         "services/kernel/src/library/zone-collection-adapter.ts",
         "services/kernel/src/library/members-preparation-source-declaration.ts",
         "services/kernel/src/library/command-support.ts",
-        "services/kernel/src/library/shelf-reader-unavailable.ts"
+        "services/kernel/src/library/shelf-reader-unavailable.ts",
+        "services/kernel/src/library/owner-filter.ts",
+        "services/kernel/src/library/owner-filter-plan.ts",
+        "services/kernel/src/library/owner-filter-native-binding.ts",
+        "services/kernel/src/library/native-source-custody.ts",
+        "services/kernel/src/library/collection-kind-work-admission.ts",
+        "services/kernel/src/library/collection-publication-work-admission.ts"
       ],
       "allowedDependencies": [
         "access-policy",
@@ -724,7 +732,10 @@
         "services/kernel/src/presentation/page-semantic-port.ts",
         "services/kernel/src/presentation/page-application.ts",
         "services/kernel/src/presentation/adapters/semantic-page.ts",
-        "services/kernel/src/search/config.ts"
+        "services/kernel/src/search/config.ts",
+        "services/kernel/src/search/global-context.ts",
+        "services/kernel/src/search/native-bindings.ts",
+        "services/kernel/src/search/native-ports.ts"
       ],
       "allowedDependencies": [
         "bounds",
@@ -834,7 +845,11 @@
         "services/kernel/src/semantic/identity-adapters/identity-epoch-read.ts",
         "services/kernel/src/semantic/erasure-producer.ts",
         "services/kernel/src/semantic/public-filter-source-binding.ts",
-        "services/kernel/src/semantic/public-filter-source.ts"
+        "services/kernel/src/semantic/public-filter-source.ts",
+        "services/kernel/src/semantic/identity-scoped-observations.ts",
+        "services/kernel/src/semantic/search-relations.ts",
+        "services/kernel/src/semantic/account-erasure-source.ts",
+        "services/kernel/src/semantic/scope-leaf-evidence.ts"
       ],
       "allowedDependencies": [
         "bounds",
