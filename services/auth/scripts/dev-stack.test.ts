@@ -1,26 +1,82 @@
-import 'reylo/register';
 import { expect, test } from 'bun:test';
 import { developmentEnv } from '../../kernel/scripts/database.ts';
+import { withThrowawayDatabase } from '../../kernel/scripts/derived.ts';
 import {
   developmentWebsiteBindings,
-  developmentWebsiteConfiguration,
+  type developmentWebsiteConfiguration,
   type DevelopmentKeys,
   developmentMediaBindings,
   origins,
+  root,
 } from './dev-stack.ts';
+import { StackFixtureLifetime } from './dev-stack-lifetime.ts';
 import { websiteRequestedScopes } from '../../../apps/web/src/session/website-scopes.ts';
 
 test('local setup and launch carry the complete real mounted host scope composition', async () => {
-  const env = Object.fromEntries(
-    developmentEnv('', 'postgres://127.0.0.1/catalogue_only')
-      .trim()
-      .split('\n')
-      .map((line) => {
-        const i = line.indexOf('=');
-        return [line.slice(0, i), line.slice(i + 1)];
-      }),
+  const website = await withThrowawayDatabase(
+    async ({ DATABASE_URL }) => {
+      const env = Object.fromEntries(
+        developmentEnv('', DATABASE_URL!)
+          .trim()
+          .split('\n')
+          .map((line) => {
+            const i = line.indexOf('=');
+            return [line.slice(0, i), line.slice(i + 1)];
+          }),
+      );
+      // A cold process must register Reylo itself and use the supplied database,
+      // even when its ambient URL points at an unavailable, unrelated database.
+      const lifetime = new StackFixtureLifetime(270_000);
+      try {
+        const child = lifetime.start(
+          'supplied-catalogue',
+          [
+            process.execPath,
+            '--eval',
+            `
+          import assert from 'node:assert/strict';
+          const original = process.env.DATABASE_URL;
+          const { Elysia } = await import(Bun.resolveSync('elysia', process.cwd() + '/services/kernel'));
+          const compile = Elysia.prototype.compile;
+          let compiled = 0;
+          Elysia.prototype.compile = function(...args) { compiled++; return compile.apply(this, args); };
+          const { developmentWebsiteConfiguration } = await import('./services/auth/scripts/dev-stack.ts');
+          const website = await developmentWebsiteConfiguration(JSON.parse(process.env.SUPPLIED_KERNEL_ENV));
+          assert.equal(process.env.DATABASE_URL, original);
+          const repeated = await developmentWebsiteConfiguration(JSON.parse(process.env.SUPPLIED_KERNEL_ENV));
+          assert.deepEqual(repeated, website);
+          assert.equal(process.env.DATABASE_URL, original);
+          assert.equal(compiled, 0, 'catalogue composition must not compile HTTP handlers');
+          console.log(JSON.stringify(website));
+        `,
+          ],
+          {
+            cwd: root,
+            env: {
+              ...process.env,
+              DATABASE_URL: 'postgres://127.0.0.1:1/foreign',
+              REYLO_CONFIG: undefined,
+              SUPPLIED_KERNEL_ENV: JSON.stringify(env),
+            },
+          },
+        );
+        const code = await child.child.exited;
+        await lifetime.stop(child);
+        const { stdout, stderr } = await child.output;
+        lifetime.signal.throwIfAborted();
+        if (code !== 0) throw new Error(stderr);
+        expect(stderr).toContain('stack: native-registration starting');
+        expect(stderr).toContain('stack: native-imports ready');
+        expect(stderr).not.toContain(env.DATABASE_URL!);
+        expect(stderr).toMatch(/catalogue-native-mount ready utc=\S+ elapsedMs=\d+/);
+        expect(stderr).toMatch(/catalogue-pool-settlement ready utc=\S+ elapsedMs=\d+/);
+        return JSON.parse(stdout) as Awaited<ReturnType<typeof developmentWebsiteConfiguration>>;
+      } finally {
+        await lifetime.close();
+      }
+    },
+    { analysis: false },
   );
-  const website = await developmentWebsiteConfiguration(env);
   const bindings = developmentWebsiteBindings({ website: {} } as DevelopmentKeys, website);
   expect(bindings.WEBSITE_SCOPES).toBe(website.scopes.join(' '));
   expect(websiteRequestedScopes(bindings.WEBSITE_SCOPES)).toBe(bindings.WEBSITE_SCOPES);
