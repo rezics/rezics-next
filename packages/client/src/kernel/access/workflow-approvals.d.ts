@@ -29,11 +29,12 @@ type TransferOperation = Extract<ContractAccountOperation, {
 }> & {
     acceptance?: string;
 };
-/** The contract's revoke carries no approval reference; this adapter binds one and denies a request without. */
+/** Native hosts bind a session revocation to an approval; a callback-only historical host runs it without one. */
 type RevokeOperation = {
     kind: 'revoke';
     accountId: string;
     authorization?: string;
+    operationKey?: string;
 };
 type TransferAcceptanceOperation = {
     kind: 'transfer-acceptance';
@@ -42,12 +43,12 @@ type TransferAcceptanceOperation = {
     operatorAccountId: string;
     sourceOperationKey: string;
     authorization: string;
-};
-type AccountOperation = (Exclude<ContractAccountOperation, {
-    kind: 'transfer' | 'revoke';
-}> | RevokeOperation | TransferOperation | TransferAcceptanceOperation) & {
     operationKey?: string;
 };
+/** Same host operation type as Auth workflows: contract variants already carry optional operationKey. */
+type AccountOperation = Exclude<ContractAccountOperation, {
+    kind: 'transfer' | 'revoke';
+}> | RevokeOperation | TransferOperation | TransferAcceptanceOperation;
 export type WorkflowApprovalRequest = {
     operationKey: string;
     operation: AccountOperation;
