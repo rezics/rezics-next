@@ -54,6 +54,15 @@ journey measurement. The malformed Auth label is corrected to
 `ea7dc5fe59d4f5723b3ab59cd6d08aba98687eb1`; startup remains
 `d87dc7a9045e7fe65110db6bedfa4decb4b2ce5d`. Both are ancestors of this walk. Neither proves host recovery.
 
+The final single-file reporting selection also failed before its test executed:
+`bun scripts/worker-check.ts -- bun apps/web/scripts/focused.ts --private-network -- bun test tests/search-first-public-walk-report.test.ts`.
+At revision `e5fd604190034f643a182acd908768d7fa64f831`, host b returned exit 1 after 210.886 seconds. First diagnostic:
+`dev server ready failed for /en; elapsed 150000.487164 ms; last error: Error: phase timed out; last error: Error: Vite ready line has not been printed`.
+Evidence: `.temp/goal/checks/worker-check-c42a7cbc-ee93-4c1d-907a-eb7a69fc1e3d-2026-11-07T11-24-24.906Z-599a279e.log`.
+This repeats the existing startup failure; no reporting, Character or with-dev-server pass is inferred. Subsequent
+Semantic worker-fixture repair has one existing owner. Receiving keeps the workspace-import parser explanation and
+root-spec scope once, and adopts its 60-second repository-wide assertion deadline without relaxing any import assertion.
+
 The authorized proposal-retry range `6ccd350eae..849c1bee2ca6de9f17be5a8f346bbb47e3b85695` is integrated into this
 walk branch. Its four source commits retain command deadlines, actor/receipt identity, sealed importer journals and
 safe diagnostics. Native proposal, separate authorized adoption and independent current-fact readback remain

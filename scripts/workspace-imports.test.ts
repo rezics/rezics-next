@@ -216,4 +216,4 @@ test('the repository passes except for the imports listed in this brief', () => 
   // Only imports outside the known list fail.
   const known = new Set<string>();
   expect(checkWorkspaceImports(repositoryRoot).filter((line) => !known.has(line))).toEqual([]);
-});
+}, 60_000);
