@@ -93,3 +93,8 @@ export { createNativeCopyProducers } from './copy-producers.ts';
 export { createCopyOperationPlans } from '../copy-operation-bounds.ts';
 export type { NativeCopyDefinitions, CopyProfileSource } from '../copy-model.ts';
 export { createLibraryCommandRunner } from '../command-support.ts';
+
+export { createFollowActivitySource } from '../follow-activity.ts';
+export { createCollectionReads } from '../collection-reads.ts';
+export type { ViewerPersonalActionsReader } from '../viewer-personal-actions.ts';
+export type { CollectionResourceView } from '../collection-reads.ts';

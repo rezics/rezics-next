@@ -1,45 +1,21 @@
 import { memoizedValue } from '../../memoized.ts';
-import { t } from 'elysia';
-import { SubjectSummarySchema, type SubjectSummary } from '../../semantic/adapters/public-summary-schema.ts';
-import { sessionSchema } from '../transport-contract.ts';
+import { SubjectSummarySchema, type SubjectSummary } from '../../semantic/contract/index.ts';
+import { continuePageSchema as createContinuePageSchema } from '../contract/index.ts';
 import { createContinueReads } from '../continue-reads.ts';
-import type { ContinuePage, ContinueSubject } from '../contract/index.ts';
-
-const continueClosed = { additionalProperties: false } as const;
-const continueNullable = t.Union([t.String(), t.Null()]);
+import type { ContinuePage, ContinueReads, ContinueSubject } from '../contract/index.ts';
 
 export type { ContinuePage, ContinueReads, ContinueSession, ContinueSubject } from '../contract/index.ts';
-
 export type DisclosedContinueSubject = ContinueSubject<SubjectSummary>;
 export type DisclosedContinuePage = ContinuePage<SubjectSummary>;
 
-/** Closed Continue page. Session presentation is Library-owned; optional subject is Semantic's disclosed summary. */
+/** Native transport compatibility: composition of the two owners' pure schemas. */
 export function continuePageSchema() {
-  return memoizedValue(continuePageSchema, () =>
-    t.Object(
-      {
-        subjects: t.Array(
-          t.Object(
-            {
-              subjectId: t.String({ format: 'uuid' }),
-              state: continueNullable,
-              lastActivityAt: t.String(),
-              activeProgressSession: t.Union([sessionSchema(), t.Null()]),
-              subject: t.Optional(t.Union([SubjectSummarySchema, t.Null()])),
-            },
-            continueClosed,
-          ),
-        ),
-        next: continueNullable,
-      },
-      continueClosed,
-    ),
-  );
+  return memoizedValue(continuePageSchema, () => createContinuePageSchema(SubjectSummarySchema));
 }
 
 /** Native Continue producer. Composition binds this; Content consumes the page, not Library storage. */
 export function createContinuePageAdapter(
   ...args: Parameters<typeof createContinueReads>
-): ReturnType<typeof createContinueReads> {
+): ContinueReads<SubjectSummary> {
   return createContinueReads(...args);
 }

@@ -1,3 +1,6 @@
+import type { SubjectSummary } from '../../semantic/contract/index.ts';
+import type { ContinuePage, ContinueSubject } from '../../library/contract/index.ts';
+
 /** Mixed Home feed vocabulary and consumer-owned continuation, summary and presentation ports. */
 
 export const FEED_PAGE_LIMIT = 20;
@@ -52,21 +55,6 @@ export type FeedKey<Owner extends string = string, Kind extends string = string>
   id: string;
 }>;
 
-export type FeedCoverSummary = Readonly<{
-  media: string;
-  width: number;
-  height: number;
-  placeholder: Readonly<{ thumbhash: string; color: string }>;
-  variants: readonly Readonly<{ format: 'avif' | 'webp'; width: number }>[];
-  focalPoint: Readonly<{ x: number; y: number }> | null;
-  credit: Readonly<{
-    rightsHolder: string;
-    via: Readonly<{ name: string; url: string }>;
-    license: string;
-    obligations: readonly string[];
-  }>;
-}>;
-
 export type FeedSubjectReactionKind = 'like' | 'love' | 'laugh' | 'insightful' | 'sad';
 export type FeedSubjectReactions = {
   target: { targetKind: 'subject'; targetId: string };
@@ -81,82 +69,10 @@ export type FeedSubjectReactions = {
   action: 'sign_in' | 'allowed' | 'denied' | 'unavailable';
 };
 
-/** Public Subject summary as Home consumes it. Semantic owns the disclosed producer. */
-export type FeedPublicSummary = {
-  id: string;
-  type: string;
-  types: readonly string[];
-  label: { value: string; language: string } | null;
-  creativeWork: boolean;
-  cover: FeedCoverSummary | null;
-  subjectReactions?: FeedSubjectReactions;
-};
-
-export type FeedPresentedRecording =
-  | Readonly<{
-      state: 'supported';
-      inputRules: Readonly<{
-        min?: string;
-        max?: string;
-        step: string;
-        total: 'optional' | 'required' | 'forbidden';
-      }>;
-    }>
-  | Readonly<{ state: 'unsupported' | 'unavailable' }>;
-
-export type FeedPresentedProgress = Readonly<{
-  meaning: 'known' | 'unknown' | 'unavailable';
-  unitLabel?: string;
-  unitLabelLanguage?: string;
-  unitCountForms?: Readonly<{
-    other: string;
-    zero?: string;
-    one?: string;
-    two?: string;
-    few?: string;
-    many?: string;
-  }>;
-  dimension?: string;
-  structure: 'unverified';
-  recording: FeedPresentedRecording;
-}>;
-
-export type FeedPresentedSession = Readonly<{
-  id: string;
-  subjectId: string;
-  versionSubjectId: string | null;
-  mode: 'scalar_amount' | 'cursor_position' | 'completed_units';
-  unit: string;
-  total: string | null;
-  amount: string | null;
-  locator: string | null;
-  position: string | null;
-  completedUnitCount: number;
-  state: 'active' | 'completed' | 'abandoned' | 'retired';
-  revision: number;
-  startedAt: string;
-  completedAt: string | null;
-  measures?: readonly Readonly<{
-    unit: string;
-    amount: string | null;
-    total: string | null;
-    presentation?: FeedPresentedProgress;
-  }>[];
-}>;
-
-/** Continue row as Home consumes it. Library owns continuation and session presentation. */
-export type FeedContinuationSubject = Readonly<{
-  subjectId: string;
-  state: string | null;
-  lastActivityAt: string;
-  activeProgressSession: FeedPresentedSession | null;
-  subject?: FeedPublicSummary | null;
-}>;
-
-export type FeedContinuationPage = Readonly<{
-  subjects: readonly FeedContinuationSubject[];
-  next: string | null;
-}>;
+/** Semantic owns the disclosed summary; reactions are a Content-only addition. */
+export type FeedPublicSummary = SubjectSummary & { subjectReactions?: FeedSubjectReactions };
+export type FeedContinuationSubject = ContinueSubject<FeedPublicSummary>;
+export type FeedContinuationPage = ContinuePage<FeedPublicSummary>;
 
 export type FeedContinuationQuery = Readonly<{
   limit: number;

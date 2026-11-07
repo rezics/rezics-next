@@ -1,13 +1,6 @@
 import type { Actor } from '../../request/access.ts';
-import { admitGroup, PlatformClosedError } from '../../access/gates/admission.ts';
 import { AuthenticationError } from '../../access/contract/authentication.ts';
 import { ProblemError } from '../../http/problem-error.ts';
-import { classifyUnavailability } from '../../access/unavailable.ts';
-import { createFollowActivitySource } from '../../library/follow-activity.ts';
-import { librarySemanticObservations } from '../../library/semantic-observation.ts';
-import { createCollectionReads } from '../../library/collection-reads.ts';
-import { readAccountDiscoverySummaries } from '../../access/account-discovery-source.ts';
-import { readPublication } from '../../community/publication.ts';
 import {
   ContentNotFoundError,
   discloseThreads,
@@ -34,22 +27,13 @@ import { feedDiscoveryItem } from '../feed-discovery.ts';
 import { openFollowingSpace, type FollowingSpace } from '../feed-space.ts';
 import { openSpaceSubjectPopulation, type SpaceSubjectPopulation } from '../feed-subject-scope.ts';
 import { composeFeedViewerPersonalActions } from '../feed-viewer.ts';
-import type { Pool } from 'pg';
-import type { Access } from '../../request/access.ts';
-import type { KernelClock } from '../../clock.ts';
-import type { KeyRing } from '../../tokens/seal.ts';
-import type { WorkClient } from '../../work/client.ts';
-import type { DiscoverySearch } from '../../search/index.ts';
-import type { SearchService } from '../../search/service-scope.ts';
-import type { ViewerPersonalActionsReader } from '../../library/viewer-personal-actions.ts';
-import type { ReadingPageViewerActionRuntime } from '../reading-page.ts';
-import { tryFeedCapabilities } from './feed-bind.ts';
+import type { FeedDependencies, FeedProducerCapabilities } from './feed-capabilities.ts';
+export type { FeedDependencies } from './feed-capabilities.ts';
 import { isDiscoveryReview, isFollowingPost, isFollowingThread } from '../core/index.ts';
 import type {
   FeedActor,
   FeedApplicationPorts,
   FeedContinuationPort,
-  FeedContinuationSubject,
   FeedDiscoveryPort,
   FeedItem,
   FeedLane,
@@ -60,30 +44,15 @@ import type {
   FeedSourceState,
 } from '../contract/index.ts';
 
-export type FeedDependencies = {
-  pool: Pool;
-  routeKey: Uint8Array;
-  tokens: KeyRing;
-  clock: KernelClock;
-  deadlineNow: () => number;
-  access: Access;
-  contentAccess: Access;
-  workClient: () => Promise<WorkClient>;
-  discovery?: DiscoverySearch;
-  search?: SearchService;
-  viewerPersonalActions: ViewerPersonalActionsReader;
-  viewerActionRuntime?: () => ReadingPageViewerActionRuntime;
-};
-
 function asPlatformActor(actor: FeedActor, live: Actor): Actor {
   if (actor.kind === 'anonymous') return { kind: 'anonymous' };
   if (live.kind !== 'account' || live.accountId !== actor.accountId) throw new ProblemError('forbidden');
   return live;
 }
 
-function sourceState(error: unknown): FeedSourceState {
-  if (classifyUnavailability(error) === 'deadline') throw new ProblemError('deadline_exceeded');
-  if (error instanceof AuthenticationError || error instanceof PlatformClosedError) throw error;
+function sourceState(error: unknown, suppliers: FeedProducerCapabilities): FeedSourceState {
+  if (suppliers.isDeadline(error)) throw new ProblemError('deadline_exceeded');
+  if (error instanceof AuthenticationError || suppliers.isAdmissionFailure(error)) throw error;
   if (error instanceof ProblemError) {
     if (
       [
@@ -111,18 +80,13 @@ function refuse(code: FeedRefusalCode): never {
 }
 
 /** Request-scoped native producers for the Content feed application. */
-export function createNativeFeedPorts(deps: FeedDependencies, liveActor: () => Actor): FeedApplicationPorts {
-  const producers = tryFeedCapabilities();
+export function createNativeFeedPorts(
+  deps: FeedDependencies,
+  liveActor: () => Actor,
+  capabilities: FeedProducerCapabilities,
+): FeedApplicationPorts {
   const activities = createFeedActivityStore(deps);
-  let follows: ReturnType<typeof createFollowActivitySource> | undefined;
-  const followSource = async () =>
-    (follows ??= createFollowActivitySource({
-      ...deps,
-      workClient: await deps.workClient(),
-      activityStore: activities,
-      semanticObservations: librarySemanticObservations(),
-    }));
-  const collections = createCollectionReads(deps);
+  const producers = capabilities.create(deps, activities);
   const content = { ...deps, access: deps.contentAccess };
   const contextSources = new Map<string, Readonly<{ thread: ThreadView; post?: PostEntry }>>();
   const activitySources = new Map<string, ActivityRef>();
@@ -135,9 +99,8 @@ export function createNativeFeedPorts(deps: FeedDependencies, liveActor: () => A
   let reactionAdvice: FeedReactionAdviceComposition | undefined;
 
   async function supported(activity: ActivityRef, actor: Actor, deadline: number): Promise<boolean> {
-    const status = (
-      await (await followSource()).checkCurrentFollowSupport(actor, { targets: [activity.target] }, deadline)
-    )[0]?.status;
+    const status = (await producers.checkCurrentFollowSupport(actor, { targets: [activity.target] }, deadline))[0]
+      ?.status;
     if (status === 'unavailable') throw new ProblemError('dependency_unavailable');
     return status === 'following';
   }
@@ -223,7 +186,7 @@ export function createNativeFeedPorts(deps: FeedDependencies, liveActor: () => A
       });
     } else if (object.owner === 'semantic') {
       if (followingSpace && object.realmId !== followingSpace.realmId) return null;
-      const publication = await readPublication(deps, object.realmId, object.id, { actor, deadline });
+      const publication = await producers.readPublication(object.realmId, object.id, actor, deadline);
       if (!publication || publication.publicationId !== object.publicationId) return null;
       const summary = summaries.get(object.id);
       if (!summary) return null;
@@ -237,7 +200,7 @@ export function createNativeFeedPorts(deps: FeedDependencies, liveActor: () => A
       };
     } else {
       if (followingSpace) return null;
-      const collection = await collections.readCollection(actor, object.id, deadline);
+      const collection = await producers.readCollection(actor, object.id, deadline);
       if (collection.visibility !== 'public') return null;
       item = {
         id: activity.id,
@@ -252,35 +215,17 @@ export function createNativeFeedPorts(deps: FeedDependencies, liveActor: () => A
     return item;
   }
 
-  const continuation: FeedContinuationPort | undefined = producers
-    ? {
-        async page(actor, query, deadline, languages) {
-          const page = await producers
-            .createContinuation(deps)
-            .list(asPlatformActor(actor, liveActor()), query, deadline, languages);
-          return {
-            subjects: page.subjects as FeedContinuationSubject[],
-            next: page.next,
-          };
-        },
-      }
-    : undefined;
-
-  const publicSummary: FeedPublicSummaryPort | undefined = producers
-    ? {
-        async read(actor, ids, languages, deadline) {
-          return producers.createPublicSummary().read({
-            ...deps,
-            actor: asPlatformActor(actor, liveActor()),
-            ids,
-            languages,
-            deadline,
-          }) as Promise<ReadonlyMap<string, FeedPublicSummary>>;
-        },
-      }
-    : undefined;
-
-  const presentation: FeedPresentationPort | undefined = producers ? { present: producers.present } : undefined;
+  const continuation: FeedContinuationPort = {
+    page(actor, query, deadline, languages) {
+      return producers.continuation.list(asPlatformActor(actor, liveActor()), query, deadline, languages);
+    },
+  };
+  const publicSummary: FeedPublicSummaryPort = {
+    read(actor, ids, languages, deadline) {
+      return producers.publicSummary.read(asPlatformActor(actor, liveActor()), { ids, languages, deadline });
+    },
+  };
+  const presentation: FeedPresentationPort = { present: producers.present };
 
   const discovery: FeedDiscoveryPort | undefined = deps.discovery
     ? {
@@ -313,15 +258,14 @@ export function createNativeFeedPorts(deps: FeedDependencies, liveActor: () => A
     : undefined;
 
   return {
-    ...(continuation === undefined ? {} : { continuation }),
-    ...(publicSummary === undefined ? {} : { publicSummary }),
-    ...(presentation === undefined ? {} : { presentation }),
+    continuation,
+    publicSummary,
+    presentation,
     ...(discovery === undefined ? {} : { discovery }),
     following: {
       async page(input) {
         const actor = asPlatformActor(input.actor, liveActor());
         if (actor.kind !== 'account') throw new AuthenticationError(401, 'Bearer');
-        if (!publicSummary) throw new ProblemError('dependency_unavailable');
         const page = await activities.pageFollowingActivity(
           actor.accountId,
           {
@@ -366,10 +310,11 @@ export function createNativeFeedPorts(deps: FeedDependencies, liveActor: () => A
             }
           }),
         );
-        const accounts = await readAccountDiscoverySummaries(
-          { ...deps, actor, deadline: input.deadline },
+        const accounts = await producers.readAccounts(
+          actor,
           [...new Set(authorIds.values())],
-          { languages: input.languages },
+          input.languages,
+          input.deadline,
         );
         candidates = await Promise.all(
           candidates.map(async (candidate, index) => {
@@ -390,48 +335,20 @@ export function createNativeFeedPorts(deps: FeedDependencies, liveActor: () => A
     admission: {
       async following(actor, deadline) {
         const live = asPlatformActor(actor, liveActor());
-        await (await followSource()).checkCurrentFollowSupport(live, { targets: [] }, deadline);
-        await admitGroup({
-          ...deps,
-          access: () => deps.access,
-          actor: live,
-          group: 'personal_library',
-          clientAction: 'follow:list',
-          deadline,
-        });
+        await producers.checkCurrentFollowSupport(live, { targets: [] }, deadline);
+        await producers.admit(live, 'personal_library', 'follow:list', deadline);
       },
       async personalLibrary(actor, deadline) {
         const live = asPlatformActor(actor, liveActor());
-        await admitGroup({
-          ...deps,
-          access: () => deps.access,
-          actor: live,
-          group: 'personal_library',
-          clientAction: 'library_entry:list',
-          deadline,
-        });
+        await producers.admit(live, 'personal_library', 'library_entry:list', deadline);
       },
       async readingProgress(actor, deadline) {
         const live = asPlatformActor(actor, liveActor());
-        await admitGroup({
-          ...deps,
-          access: () => deps.access,
-          actor: live,
-          group: 'reading_progress',
-          clientAction: 'progress_session:list',
-          deadline,
-        });
+        await producers.admit(live, 'reading_progress', 'progress_session:list', deadline);
       },
       async discovery(actor, deadline) {
         const live = asPlatformActor(actor, liveActor());
-        await admitGroup({
-          ...deps,
-          access: () => deps.access,
-          actor: live,
-          group: 'search',
-          clientAction: 'subject:search',
-          deadline,
-        });
+        await producers.admit(live, 'search', 'subject:search', deadline);
       },
     },
     cursor: {
@@ -772,7 +689,7 @@ export function createNativeFeedPorts(deps: FeedDependencies, liveActor: () => A
         });
       },
     },
-    classifyFailure: sourceState,
+    classifyFailure: (error) => sourceState(error, capabilities),
     refuse,
     now: () => deps.clock(),
   };

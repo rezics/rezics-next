@@ -32,4 +32,5 @@ export {
   type FeedProducerCapabilities,
 } from './feed-bind.ts';
 export { createNativeFeedPorts, type FeedDependencies } from './feed-native.ts';
-export { createNativeFeedCapabilities } from './feed-capabilities.ts';
+export type { FeedNativeSuppliers } from './feed-capabilities.ts';
+export type { FeedActivityStore } from '../feed-activity.ts';

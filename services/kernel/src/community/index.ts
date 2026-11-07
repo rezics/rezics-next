@@ -23,3 +23,5 @@ export {
   type LockedRealmClaimApproval,
   type RealmClaimApprovalResult,
 } from './realm-claim-approval.ts';
+
+export { readPublication } from './publication.ts';

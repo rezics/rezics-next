@@ -1,6 +1,7 @@
 import type { Actor } from '../request/access.ts';
 import { createFeedApplication } from './application/index.ts';
 import { createNativeFeedPorts, type FeedDependencies } from './adapters/feed-native.ts';
+import { feedCapabilities } from './adapters/feed-bind.ts';
 import { feedRoute } from './feed-activity.ts';
 import { readFeedKind, type FeedPage, type FeedSelection } from './feed-contract.ts';
 import {
@@ -53,7 +54,7 @@ function toFeedActor(actor: Actor): FeedActor {
 export function createFeedReads(deps: FeedDependencies): FeedReads {
   let actor: Actor;
   const application = createFeedApplication(
-    createNativeFeedPorts(deps, () => actor),
+    createNativeFeedPorts(deps, () => actor, feedCapabilities()),
     { route: feedRoute },
   );
   return {

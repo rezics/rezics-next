@@ -2,9 +2,10 @@
 
 Integration decision: retain current Search and Library producer bindings and the completed Kernel action catalogue; worker authorization uses its native Access callback. Workspace typing is the worker gate; original native and browser assertions run after integration.
 
-Decision: disclosed Subject and cover summaries live in `contract/summaries.ts`. HTTP schemas are
+Decision: disclosed Subject and cover summaries live in `contract/summaries.ts`. Transport schemas re-export those same pure schemas through
 `adapters/public-summary-schema.ts`; the native reader adapter is `adapters/public-summary.ts`. Content Home
-and Library Continue consume those public entries. `http/summaries.ts` re-exports the schema for existing
+and Library Continue consume the contract entry. Content composition binds the native summary host once and passes
+the current actor, exact keys, languages and deadline on every read; Content does not select the native reader. `http/summaries.ts` re-exports the schema for existing
 routes. Wire shapes are unchanged. Cover credit obligations stay the CC literals; schemas stay TypeBox objects
 so callers can spread `.properties` and `.anyOf`.
 The inward-layer import check permits the declared Definitions contract entry and TypeBox in contract schemas.

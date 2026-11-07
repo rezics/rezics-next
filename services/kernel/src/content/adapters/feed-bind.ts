@@ -1,13 +1,5 @@
-import type { createContinuePageAdapter } from '../../library/adapters/continue-page.ts';
-import type { createPublicSummaryAdapter } from '../../semantic/adapters/public-summary.ts';
-import type { FeedContinuationSubject } from '../contract/index.ts';
-
-/** Library Continue, Semantic public summary and Library session presentation as Home consumes them. */
-export type FeedProducerCapabilities = {
-  createContinuation: typeof createContinuePageAdapter;
-  createPublicSummary: typeof createPublicSummaryAdapter;
-  present(row: FeedContinuationSubject): FeedContinuationSubject;
-};
+import type { FeedProducerCapabilities } from './feed-capabilities.ts';
+export type { FeedProducerCapabilities } from './feed-capabilities.ts';
 
 let bound: FeedProducerCapabilities | undefined;
 

@@ -4,7 +4,7 @@ import { t } from 'elysia';
 import type { Static } from 'typebox';
 import { FilterError, parseDiscoveryFilter } from '@rezics/filter';
 import { ProblemError } from '../http/problem-error.ts';
-import { SubjectSummarySchema } from '../semantic/adapters/public-summary-schema.ts';
+import { SubjectSummarySchema } from '../semantic/contract/index.ts';
 import type { ThreadView } from './reads.ts';
 import type { ItemView } from './model.ts';
 import type {
@@ -13,9 +13,9 @@ import type {
   PublicReviewDiscoverySummary,
   PublicSpaceDiscoverySummary,
 } from '../search/index.ts';
-import type { CollectionResourceView } from '../library/collection-reads.ts';
+import type { CollectionResourceView } from '../library/adapters/index.ts';
 import { CollectionDiscoverySummarySchema } from '../search/index.ts';
-import { continuePageSchema } from '../library/adapters/continue-page.ts';
+import { continuePageSchema } from '../library/contract/index.ts';
 import { REACTION_KINDS } from './events.ts';
 import type { ReactionCountFreshness, ViewerReactionKind } from './reads.ts';
 import type { ReactionTarget } from './reactions.ts';
@@ -411,7 +411,7 @@ export function FeedItemSchema() {
             key: semanticKey,
             summary: feedSubjectSummary(),
             destination: destination('subject'),
-            continue: continuePageSchema().properties.subjects.items,
+            continue: continuePageSchema(SubjectSummarySchema).properties.subjects.items,
           },
           closed,
         ),

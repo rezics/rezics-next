@@ -1,3 +1,9 @@
+Decision: Continue page and session schemas live in `contract/continue-schema.ts`, parameterized by the caller's
+disclosed Subject schema. Session measure limits come from the literal-only public `@rezics/progress/limits`
+contract, so schema consumers do not load progress execution. Native Continue transport composes the Semantic contract schema without importing its
+reader. `transport-contract.ts` preserves the existing session entry; composition selects the native Continue,
+Follow and Collection readers through the public adapter index. Existing Continue wire assertions are unchanged.
+
 # Library
 
 Decision: a successful revisioned write to a historical NULL-incarnation entry stamps and returns its new

@@ -449,7 +449,8 @@
         "kernel-search",
         "kernel-semantic",
         "operations",
-        "kernel-search-contract"
+        "kernel-search-contract",
+        "kernel-semantic-contract"
       ],
       "capabilities": ["content"],
       "postgresPaths": ["services/kernel/src/content/**"]
@@ -460,7 +461,7 @@
       "owner": "content",
       "paths": ["services/kernel/src/content/contract/**"],
       "publicEntries": ["services/kernel/src/content/contract/index.ts"],
-      "allowedDependencies": [],
+      "allowedDependencies": ["kernel-library-contract", "kernel-semantic-contract"],
       "capabilities": ["content-vocabulary"]
     },
     {
@@ -610,7 +611,7 @@
         "services/kernel/src/library/contract/members-preparation.ts",
         "services/kernel/src/library/contract/semantic-observation.ts"
       ],
-      "allowedDependencies": [],
+      "allowedDependencies": ["progress-contract"],
       "capabilities": []
     },
     {
@@ -703,7 +704,8 @@
         "progress",
         "kernel-library-core",
         "kernel-search-contract",
-        "kernel-access-contract"
+        "kernel-access-contract",
+        "kernel-semantic-contract"
       ],
       "capabilities": ["library"],
       "postgresPaths": ["services/kernel/src/library/**"]
@@ -2233,12 +2235,22 @@
       "capabilities": ["semantic-identity-participants", "semantic-domain"]
     },
     {
+      "id": "progress-contract",
+      "kind": "contract",
+      "owner": "commerce",
+      "paths": ["packages/progress/src/limits.ts"],
+      "publicEntries": ["@rezics/progress/limits"],
+      "allowedDependencies": [],
+      "capabilities": []
+    },
+    {
       "id": "progress",
       "kind": "core",
       "owner": "commerce",
       "paths": ["packages/progress/src/**"],
+      "excludes": ["packages/progress/src/limits.ts"],
       "publicEntries": ["@rezics/progress"],
-      "allowedDependencies": [],
+      "allowedDependencies": ["progress-contract"],
       "capabilities": ["progress-rules"]
     },
     {
