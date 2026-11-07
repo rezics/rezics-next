@@ -89,4 +89,3 @@ observations, but confer no atomic conditional write admission.
 
 Decision: publish the named reader and dependency types from the generated mounted module so consumers never infer
 the protocol from private source; the account-page `createOwnVotesReader` remains a separate authority.
-
