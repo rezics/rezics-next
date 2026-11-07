@@ -472,30 +472,34 @@ test('author pages set no planner method settings and read content.author_item t
 });
 
 for (const reply of [false, true])
-  test(reply ? 'author post page' : 'author thread page', async () => {
-    const author = newId(authorRoute);
-    await ensureAuthor(author);
-    for (let index = 0; index < 4; index++)
-      await fixture(author, `2026-01-0${index + 1}T00:00:00Z`, 'discussion', reply);
-    const population = otherAuthorItems(reply, randomUUID().slice(0, 6));
-    // This check grows 500 × scale other-author content.author_item rows in this route partition.
-    const report = await checkGrowth(db, {
-      name: reply ? 'Author post page' : 'Author thread page',
-      captureMode: 'cost-folded',
-      scales: [64, 512, 4096],
-      warmups: 1,
-      repetitions: 1,
-      bounds: { rows: 'constant', statements: 'constant', blocks: 'logarithmic' },
-      grow: (database, scale, previous) => seed(database, population, { from: previous * 500, to: scale * 500 }),
-      async operation() {
-        const list = reply ? 'posts' : 'threads';
-        const page = await get(path(author, list, { limit: '1' }));
-        expect(page.status).toBe(200);
-        expect(page.body[list]).toHaveLength(1);
-        const next = await get(path(author, list, { limit: '1', cursor: page.body.next }));
-        expect(next.status).toBe(200);
-        expect(next.body[list]).toHaveLength(1);
-      },
-    });
-    expect(report.samples.map((s) => s.scale)).toEqual([64, 512, 4096]);
-  }, 180_000);
+  test(
+    reply ? 'author post page' : 'author thread page',
+    async () => {
+      const author = newId(authorRoute);
+      await ensureAuthor(author);
+      for (let index = 0; index < 4; index++)
+        await fixture(author, `2026-01-0${index + 1}T00:00:00Z`, 'discussion', reply);
+      const population = otherAuthorItems(reply, randomUUID().slice(0, 6));
+      // This check grows 500 × scale other-author content.author_item rows in this route partition.
+      const report = await checkGrowth(db, {
+        name: reply ? 'Author post page' : 'Author thread page',
+        captureMode: 'cost-folded',
+        scales: [64, 512, 4096],
+        warmups: 1,
+        repetitions: 1,
+        bounds: { rows: 'constant', statements: 'constant', blocks: 'logarithmic' },
+        grow: (database, scale, previous) => seed(database, population, { from: previous * 500, to: scale * 500 }),
+        async operation() {
+          const list = reply ? 'posts' : 'threads';
+          const page = await get(path(author, list, { limit: '1' }));
+          expect(page.status).toBe(200);
+          expect(page.body[list]).toHaveLength(1);
+          const next = await get(path(author, list, { limit: '1', cursor: page.body.next }));
+          expect(next.status).toBe(200);
+          expect(next.body[list]).toHaveLength(1);
+        },
+      });
+      expect(report.samples.map((s) => s.scale)).toEqual([64, 512, 4096]);
+    },
+    180_000,
+  );

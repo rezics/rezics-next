@@ -103,6 +103,10 @@ Worker Vite resolves Elysia and Eden to their `exports.import` files and replace
 The sole walk receives Accounts published-post effects for reply, mention and moderation delivery, current access and
 preferences, replay, inbox and independent appeals. Ordinary HTTP grant receipts are the walk's authority proof, not
 seeded fixture rows. The frozen notification suite timeout stays 180 seconds; its assertions are unchanged.
+Catalogue CurrentPost attribution is received through existing `authoring-controls-family.test.tsx` and
+`own-drafts-native.test.tsx`, `own-drafts-resume.test.tsx` and `own-drafts-commands.test.tsx`. Live identity, null
+unknown and id-free deletion stay; exact revision, body, licence and viewer retirement stay. Ada fixtures are not
+native or visual proof; no extra stories or screenshots.
 
 ## realms-and-spaces
 

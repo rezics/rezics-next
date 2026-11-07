@@ -5,7 +5,10 @@ replace later files’ native client exports. Mounted route replacements update 
 assertions remain unchanged. The native late-revocation cases remain the current-authority acceptance. The Content Goal seeded walk reuses that
 driver with Performance `waitUntilWalkReady` hydration recovery and does not add stories. Worker Vite resolves Elysia/Eden ESM and live TypeBox re-exports; `vite-config.test.ts` pins that swap. The same walk receives
 Accounts published-post reply, mention and moderation delivery through the default worker, current preferences,
-replay, inbox and independent appeals.
+replay, inbox and independent appeals. Catalogue CurrentPost attribution is received through those existing
+authoring-controls-family and own-drafts native, resume and commands checks: live identity, null unknown and
+id-free deletion, exact revision, body and licence, and viewer retirement. Ada fixtures are not native or visual
+proof; no extra stories or screenshots.
 Post-editing browser checks fetch the thread route only to learn Vite is up; they do not Playwright-hydrate Home
 during startup, because that compiled the Home client graph until Vite died at its 2 GiB heap. Finite test Vite
 starts skip SSR dependency discovery so the ready line is not held by the optimizer crawl. The same host answers
