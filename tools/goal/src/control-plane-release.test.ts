@@ -2049,21 +2049,22 @@ for (const probeFails of [false, true])
         if (command[0] === 'bun' && command[1] === 'test') {
           focusedRuns++;
           expect(command).toEqual(['bun', 'test', '--timeout', '30000', suspect]);
-          const probePassed = !probeFails && focusedRuns < 3;
-          return { passed: probePassed, timedOut: false, output: 'focused negative observation\n' };
+          return { passed: !probeFails, timedOut: false, output: 'focused negative observation\n' };
         }
         return { passed: true, timedOut: false, output: '' };
       }).releaseControlPlaneBatch(manifest);
       expect(fulls).toBeGreaterThanOrEqual(1);
       expect([focusedRuns, compatibility]).toEqual([probeFails ? 1 : 3, 1]);
-      expect(result.members.find((member) => member.taskId === tasks[0]!.id)).toMatchObject({
-        disposition: 'excluded',
-        phase: 'native',
-      });
-      expect(result.members.find((member) => member.taskId === tasks[1]!.id)).toMatchObject({
-        disposition: 'released',
-        mergedCommit: h.head('main'),
-      });
+      expect(result.members.find((member) => member.taskId === tasks[0]!.id)).toMatchObject(
+        probeFails
+          ? { disposition: 'excluded', phase: 'native' }
+          : { disposition: 'released', mergedCommit: h.head('main') },
+      );
+      expect(result.members.find((member) => member.taskId === tasks[1]!.id)).toMatchObject(
+        probeFails
+          ? { disposition: 'released', mergedCommit: h.head('main') }
+          : { disposition: 'excluded', phase: 'native' },
+      );
       const journal = cohortJournal(h, manifest).value;
       expect(journal.nodes['root-left']!.proofs[0]!.result.negativeOnly).toBe(probeFails ? true : undefined);
       expect(h.outcomes).toHaveLength(1);
