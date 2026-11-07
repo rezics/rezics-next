@@ -27,138 +27,105 @@ rather than claiming the unexecuted product is defective. A passing implementati
 The latest observed path result replaces its previous result. Existing broader native acceptance remains separate.
 
 Decision: the six first-public rows remain the walk evidence. Keep existing issuer-origin JWKS tests; add no Search
-journey tests. Receive Identity `e815ae17`, Imports `a67c30ad`/`681d1fa8` and Performance shell `95e3fac9` through
-those journeys; Identity isolation is a separate successor; original disclosure, identity/default-worker and mounted
-return proofs stay. One failed shared setup step fails every dependent journey; independent executable paths still
-run. Documentation formatting is the focused delivery check; it supplies no native or browser PASS.
+journey tests. Receive Identity `e815ae17`, Imports `a67c30ad`/`681d1fa8`, Performance shell `95e3fac9` and startup
+`d87dc7a9` through those journeys; Identity isolation is a separate successor; original disclosure,
+identity/default-worker and mounted return proofs stay. One failed shared setup step fails every dependent journey;
+independent executable paths still run. Documentation formatting is the focused delivery check; it supplies no native
+or browser PASS.
 
 ### Current dev census
 
-Observed walk revision: `5705ac4e00e51dc30d2495d19d19a2fc1573436e` (issuer-origin JWKS on product
-`4904c8e26e1994442c45dce707a642dda0125168`). This row set replaces the 04:51–05:27 UTC census. Worker identity
-started. Partial native public reads do not pass an unexecuted whole journey.
+Observed walk revision: `93eb7908d8e983998d4b280ea275b131aaa444a1` (origin/dev `b94d47ff56` including startup
+`d87dc7a9045e7fe65110db6bedfa4decb4b2ce5d`, Identity `e815ae17`, Imports `a67c30ad`/`681d1fa8`, Performance shell
+`95e3fac9`). Membership JWKS config stays off authenticate SQL at module load. This row set replaces the 06:25–07:03
+UTC census. Worker identity started. Partial public steps never pass an unexecuted whole journey.
 
-One admitted slot, with PostgreSQL and OpenSearch, ran
-`bun services/auth/scripts/dev-stack.ts walk -- bun apps/web/scripts/search-first-public-walk.ts`.
-The child ran native `persona` (84.85 s), then `bun scripts/datasets/cross-media-seed.ts --dev`, which exited 1,
-then `startSeededFrontends`. No second concurrent Search walk ran.
-
-Launcher wall **2305.194 seconds** from **2026-11-07 06:25:13.581 UTC** through **07:03:38.775 UTC**. Slot **6/6**
-after 33 ms. Child observations begin **06:37:59.387 UTC**. Persona **anonymous** for every row: a developer
-account was created; issuer Vite listened, then both frontends stopped after the Web module failure, so no bearer
-was issued. Phone 390, desktop 1280 and `en`/`zh-Hant`/`ja` were attempted only where a page URL was opened.
-Authenticated Search and publication stay blocked on issuer pages after that Web failure, not on JWKS identity.
+`bun services/auth/scripts/dev-stack.ts walk -- bun apps/web/scripts/search-first-public-walk.ts` failed twice at
+walk slot admission, before persona, seed or frontends. First run **2026-11-07 07:33:04.872 UTC**, exit 1 in **0.887 s**.
+Retry **07:34:04.306 UTC**, exit 1 in **0.711 s**. First error both times:
+`EACCES: permission denied, open '/tmp/rezics-walk-stacks/sequence.next'` at `scripts/stack-lease.ts:215`
+`acquireStackSlot` from `dev-stack.ts` `walk`. `/tmp/rezics-walk-stacks` is `root:root` mode `0755` (created 07:20 UTC).
+Worker uid 1000 cannot write `sequence.next`. No slot, origins, persona, bearer, native HTTP or mounted page. Phone 390,
+desktop 1280 and `en`/`zh-Hant`/`ja` were not opened. Authenticated Search/publication stay blocked on that directory,
+not on issuer-origin JWKS. No second concurrent Search walk ran. Vite 8.3.6 / Cloudflare beta.v.12 / React 6.2.1 were
+not exercised; they do not match this permission failure.
 
 | Journey               | User-visible path and passing result                                                                                                                                                                                         | Exposure                                                                            | Dev walk result                                                                                 | Evidence / first failure                                                                                                                                                          |
 | --------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Mixed Search          | Open Search, submit text, open a permitted result and return to the executed query; continued pages remain useful and current after a visibility change.                                                                     | Existing Search grant                                                               | FAIL — native search; 181.152 s; rev `5705ac4e00e51dc30d2495d19d19a2fc1573436e`                  | Anonymous `POST /v1/subjects:search` text `Steins;Gate` stayed **503 `index_not_ready`**. Result open, return and visibility change not executed. [Repair](#seed-import-repair).  |
-| Refine and continue   | Submit supported Type/filter operands, inspect current facet choices, continue and restart in the same executed query; changed reader or resource scope retires old values and cursors.                                      | Existing Search grant; advanced second-scope operands remain outside this inventory | FAIL — native search; 181.030 s; rev `5705ac4e00e51dc30d2495d19d19a2fc1573436e`                  | Typed search `The` / `schema:Book` stayed **503 `index_not_ready`**. Facets, continuation and reader retirement not executed. [Repair](#seed-import-repair).                      |
-| Multilingual names    | Type an original-language name or current alias, select a suggestion, open the matching Subject and change locale without losing the query or authored language order.                                                       | Existing Search grant                                                               | FAIL — native suggest; 1.110 s; rev `5705ac4e00e51dc30d2495d19d19a2fc1573436e`                    | `GET /v1/subjects:suggest?q=シュタインズ・ゲート` **503 `index_not_ready`**. Suggestion, Subject and locale return not executed. [Repair](#seed-import-repair).                     |
-| Search recovery       | Correct an invalid authored operand or deliberately retry a preparing/unavailable request after its deadline; generation loss restarts that executed request and renders useful output.                                      | Existing Search grant                                                               | FAIL — corrected search; 187.444 s; rev `5705ac4e00e51dc30d2495d19d19a2fc1573436e`               | Invalid `"unclosed` returned **422 `unsupported_query`**. Corrected `Steins;Gate` stayed **503 `index_not_ready`**. Search page `ERR_CONNECTION_REFUSED`. [Repair](#seed-import-repair). |
-| Configured reading    | Open a configured Subject or static Zone page and read its declared lists in document order; unavailable slots leave supported siblings usable, and a current continuation/retry reaches the right list.                     | Public configured reader where the owning scope admits it                           | FAIL — mounted page; 1.472 s; rev `5705ac4e00e51dc30d2495d19d19a2fc1573436e`                     | Native `GET /v1/presentation/active` **200** digest `sha256:192d23c559f0befa1f7e4ecbe1dadd0a6eb766c2c668ce7652c2e07cd8492002`. Home `http://127.0.0.1:20060/en/` `ERR_CONNECTION_REFUSED`. [Repair](#frontend-after-seed-repair). |
-| Published composition | Publish an admitted shared profile or curated Collection presentation, open the selected public version while the editor has a later draft, and deliberately recover a refused/lost response to the actual published result. | Existing publication authority and public selected-version reading                  | FAIL — editor bearer; 0.519 s; rev `5705ac4e00e51dc30d2495d19d19a2fc1573436e`                    | Public A GET **200**, lost digest **404**, recover **200**; anonymous publish **401 `authentication_required`**. Bearer not issued; page refused. [Repair](#frontend-after-seed-repair). |
+| Mixed Search          | Open Search, submit text, open a permitted result and return to the executed query; continued pages remain useful and current after a visibility change.                                                                     | Existing Search grant                                                               | FAIL — walk slot admission; 0.887 s; rev `93eb7908d8e983998d4b280ea275b131aaa444a1`              | `EACCES: permission denied, open '/tmp/rezics-walk-stacks/sequence.next'`. Submit, result open, return and visibility change not executed. [Repair](#walk-stack-directory-repair). |
+| Refine and continue   | Submit supported Type/filter operands, inspect current facet choices, continue and restart in the same executed query; changed reader or resource scope retires old values and cursors.                                      | Existing Search grant; advanced second-scope operands remain outside this inventory | FAIL — walk slot admission; 0.887 s; rev `93eb7908d8e983998d4b280ea275b131aaa444a1`              | Same admission `EACCES`. Typed search, facets, continuation and reader retirement not executed. [Repair](#walk-stack-directory-repair).                                            |
+| Multilingual names    | Type an original-language name or current alias, select a suggestion, open the matching Subject and change locale without losing the query or authored language order.                                                       | Existing Search grant                                                               | FAIL — walk slot admission; 0.887 s; rev `93eb7908d8e983998d4b280ea275b131aaa444a1`              | Same admission `EACCES`. Suggest, Subject and locale return not executed. [Repair](#walk-stack-directory-repair).                                                                  |
+| Search recovery       | Correct an invalid authored operand or deliberately retry a preparing/unavailable request after its deadline; generation loss restarts that executed request and renders useful output.                                      | Existing Search grant                                                               | FAIL — walk slot admission; 0.887 s; rev `93eb7908d8e983998d4b280ea275b131aaa444a1`              | Same admission `EACCES`. Invalid operand, corrected search and recovery page not executed. [Repair](#walk-stack-directory-repair).                                                 |
+| Configured reading    | Open a configured Subject or static Zone page and read its declared lists in document order; unavailable slots leave supported siblings usable, and a current continuation/retry reaches the right list.                     | Public configured reader where the owning scope admits it                           | FAIL — walk slot admission; 0.887 s; rev `93eb7908d8e983998d4b280ea275b131aaa444a1`              | Same admission `EACCES`. Public configured lists and mounted Home/Subject pages not executed. [Repair](#walk-stack-directory-repair).                                              |
+| Published composition | Publish an admitted shared profile or curated Collection presentation, open the selected public version while the editor has a later draft, and deliberately recover a refused/lost response to the actual published result. | Existing publication authority and public selected-version reading                  | FAIL — walk slot admission; 0.887 s; rev `93eb7908d8e983998d4b280ea275b131aaa444a1`              | Same admission `EACCES`. Selected-public read, lost digest recover and editor publish not executed. [Repair](#walk-stack-directory-repair).                                       |
 
 ### Native observation and operands
 
-Secret-free evidence is `.temp/search-walk/evidence.json` plus the walk stack log: slot, public origins, JWKS
-identity, HTTP statuses and codes. No bearer, password, key, cookie or private seed environment is recorded.
+Secret-free evidence is the two walk launcher logs for this revision. No bearer, password, key, cookie or private seed
+environment is recorded. `.temp/search-walk/evidence.json` was not rewritten; journeys did not start.
 
-- Launcher operands: slot 6; Web `http://127.0.0.1:20060`, issuer `http://127.0.0.1:20061`, native Auth
-  `http://127.0.0.1:20062`, Kernel `http://127.0.0.1:20063`.
-- `AUTH_ISSUER` `http://127.0.0.1:20061`; `AUTH_JWKS_URL` `http://127.0.0.1:20061/.well-known/jwks.json`. Worker
-  printed `Worker ready`. Native transport served JWKS on `:20062`. Kernel `/v1/definitions` became ready. Anonymous
-  JWKS/kernel startup is not a remaining issuer-origin gate.
-- Persona step created `developer@rezics.test`. Seed step printed **`Import transport request failed`** and exited 1
-  (unphased `ImportTransportError`: the Kernel fetch threw, with no HTTP status). Showcase collections: 0.
-- Frontends ran after that failed seed. Issuer Vite became ready on `:20061` in 19292 ms. Web `:20060` then failed:
-  `no match for module: typebox/type` / `No such module ".../elysia/dist/type/typebox/type"`, `script "dev"` exit 1.
-- Developer bearer: issuer `:20061/signin` **ECONNREFUSED** after both frontend children were stopped.
-- Actual native Search: mixed/typed/suggest **503 `index_not_ready`** with `retry-after: 1` through the 180 s
-  wait. Invalid operand **422 `unsupported_query`**. Stale cursor **400 `invalid_request`**. Public presentation
-  active/profile read **200**; publish without a bearer **401**.
-- Mounted pages: desktop 1280 `en` navigations returned `ERR_CONNECTION_REFUSED`. Phone 390 and `zh-Hant`/`ja` pages
-  were not reached after that.
+- Launcher operands: none. `WALK_STACK_DIRECTORY` is `/tmp/rezics-walk-stacks` (`1cd890d5c1`). Slot was not admitted.
+- Retry reproduced the same first error line. Kernel postlanding cells still ran through the owning remote runner.
+- Native Search, suggest, facets, presentation, issuer sign-in and mounted pages were not reached. `formatImportTransportError`
+  and Elysia TypeBox live modules are in this product and were not exercised.
 
-### Seed import repair
+### Walk-stack directory repair
 
-**Cause and owner:** `bun scripts/datasets/cross-media-seed.ts --dev` threw unphased
-`ImportTransportError` in [import-client.ts](../../services/importer/src/import-client.ts) (`response()` catch:
-the Kernel call threw before an HTTP status). Imports owns the seed producer; Content owns the walk child that
-invokes it. Search `index_not_ready` is the missing population after that failed seed, not a second Search
-indexer defect.
+**Cause and owner:** Performance `1cd890d5c1` moved host-wide walk admission to `/tmp/rezics-walk-stacks`.
+`stack-lease.ts` `mkdirSync(directory, { recursive: true })` keeps the first creator's mode. A root process created the
+directory `0755`, so later workers cannot write `sequence.next`. Performance/control-plane owns that host-wide directory.
 
-Repair: print the transport `status`/`type`/`code`/`phase` from `ImportTransportError` on the seed CLI, wait for
-Kernel `GET /v1/definitions/active` **200** before the first import fetch, and rerun the same `--dev` seed on an
-admitted stack. Do not invent source records. Do not treat a thrown fetch as a finished import.
-
-### Frontend after seed repair
-
-**Cause and owner:** this walk started `startSeededFrontends` after the failed seed. Issuer Vite listened on
-`:20061`. Web SSR then failed: `AssertionError: Unexpected error: no match for module: typebox/type`, then
-`Error: No such module ".../elysia/dist/type/typebox/type"`, `script "dev" exited with code 1`. Both frontend
-children were stopped, so issuer sign-in and mounted pages were **ECONNREFUSED**. Content/Web owns that Vite
-Cloudflare/miniflare Elysia module map.
-
-Repair: resolve Elysia's `typebox/type` specifier in the Web Vite plugin, then rerun `startSeededFrontends` on an
-admitted stack. Sign-in still uses the real issuer pages and a real password from persona, never a synthesized bearer.
+Repair: provision `/tmp/rezics-walk-stacks` as mode `01777` (sticky, like `/tmp`) before workers admit, or chmod it to
+that mode in the stack-lease creator. Keep the host-wide queue; do not fall back to a worktree `.temp` directory. Do not
+chmod from Search. Do not treat this as a Search indexer, seed or Vite defect. Vite 8.3.6 / Cloudflare beta.v.12 /
+React 6.2.1 candidates do not establish this permission failure.
 
 ### Scope of this census and handoff
 
-The result is **0/6 passing**. Search recovery is the slowest failing journey at **187.444 s**; its first failing
-product step is corrected search **503 `index_not_ready`**. The shared setup cause is [Seed import repair](#seed-import-repair);
-page and bearer gaps join [Frontend after seed repair](#frontend-after-seed-repair). Partial public presentation
-reads do not pass Configured reading or Published composition. Authenticated Search and publication stay blocked on
-issuer pages after the Web module failure; issuer-origin JWKS already started. Seed diagnostics stay with the queued
-Imports repair; this walk does not implement them. Existing broader acceptance below is preserved.
+The result is **0/6 passing**. The slowest failing journey is Mixed Search at **0.887 s**; its first failing step is
+walk slot admission `EACCES`. Every row joins [Walk-stack directory repair](#walk-stack-directory-repair). Authenticated
+Search and publication stay blocked on that directory. Identity `e815ae17`, Imports `a67c30ad`/`681d1fa8`, Performance
+shell `95e3fac9` and startup `d87dc7a9` are ancestors of this product and were not exercised through journeys. Identity
+isolation stays a separate successor. Original disclosure, identity/default-worker and mounted return proofs stay.
+Queued scoped-Library and native-disclosure repairs stay their own outcomes. Typing is not a runtime pass.
 
 Members' binding/fixtures, Web's Character/Person, condition-weight, composition, tagged works and fake-discovery
-assertions remain required; this seed failure gave them no mounted verdict. Deferred metadata stays deferred.
-The seed transport failure is an Imports repair, not a new Imports Goal outcome.
-
-Owner decision `semantic:search-landed-construction-regressions-47601`: queued scoped-Library and native-disclosure
-repairs stay their own outcomes. Original scoped ordering/current-work and disclosure/recovery assertions receive
-them after integration. Typing is not a runtime pass. Vite `typebox/type` stays Content/Web.
-
-Owner decision `semantic:constructed-identity-and-importer-receiving-47772`: receive Identity `e815ae17`, Imports
-`a67c30ad`/`681d1fa8` and Performance shell `95e3fac9` through owned Search journeys. This product `4904c8e26e`
-does not contain them. Identity isolation is a separate successor. Original disclosure, identity/default-worker
-and mounted return proofs stay. Mounted pages did not run, so shell return was not observed. Seed still printed
-unphased `Import transport request failed`; the d8f formatter is not in this product and does not recover transport.
-
-Teardown left this attempt's walk containers and volumes absent. No unrelated stack was stopped or pruned.
-Documentation formatting is the focused delivery check; it supplies no native/browser PASS.
+assertions remain required; admission failure gave them no mounted verdict. Deferred metadata stays deferred. No walk
+container or volume was started. Documentation formatting is the focused delivery check; it supplies no native/browser
+PASS.
 
 ### Additional owner-requested acceptance
 
-Owner-requested Kernel cells ran through the owning runner on this attempt. They are not mounted-journey evidence
-and do not pass any of the six rows. Product code is `4904c8e26e1994442c45dce707a642dda0125168`.
+Owner-requested Kernel cells ran through the owning runner on this attempt (host b, 2026-11-07 07:35–07:48 UTC,
+rev `93eb7908d8e983998d4b280ea275b131aaa444a1`). They are not mounted-journey evidence and do not pass any of the six
+rows.
 
 | File                                              | Actual result                                                                                                                                                                                                                                                                                                                                 |
 | ------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `test/search/review-population-readiness.test.ts` | PASS (3 tests). Executed 2026-11-07 00:55 UTC through the Kernel runner.                                                                                                                                                                                                                                                                      |
-| `test/search/second-scope-generations.test.ts`    | FAIL: `DiscoveryProducerCoverageError: native producer coverage is incomplete (missing kinds: collection)` at `generations.ts` `assertDiscoveryProducerCoverage`; case “a later metadata reconciliation step resumes the committed raw frontier before indexed cleanup” (10 pass / 1 fail). The injected setup already has a collection producer. |
-| `test/search/review-discovery-receiving.test.ts`  | FAIL: `TypeError: Invalid native Access policy catalogue: unknown-resource-action` in `standingFixture` / `compileNativePolicyCatalogue` before cases (0 pass / 1 fail / 1 error).                                                                                                                                                            |
-| `test/search/default-discovery.test.ts`           | FAIL: both cases `OutcomeRpcError: init did not complete within 90000 ms`, then `Worker did not drain: {"code":null,"signal":"SIGKILL"}` (0 pass / 2 fail, 456.44 s). Executed 2026-11-07 02:48–03:01 UTC on rev `06f822b6d30aa9f3291fc112ab0a5f09a2d4b147`.                                                                                |
+| `test/search/review-population-readiness.test.ts` | PASS (3 tests). Executed 2026-11-07 07:35 UTC through the Kernel runner.                                                                                                                                                                                                                                                                      |
+| `test/search/second-scope-generations.test.ts`    | FAIL: `DiscoveryProducerCoverageError: Discovery generation is not ready: native producer coverage is incomplete (missing kinds: collection)` at `generations.ts` `assertDiscoveryProducerCoverage`; case “a later metadata reconciliation step resumes the committed raw frontier before indexed cleanup” (10 pass / 1 fail). The injected setup already has a collection producer. |
+| `test/search/review-discovery-receiving.test.ts`  | FAIL: `RangeError: concurrency must be a positive integer below the pool size` at `events/relays.ts` `startRelays` from `search/runner.ts:414` (`concurrency: options.concurrency ?? 2`) during `runner.refresh()`; case “default mixed supervisor applies current reviews and recovers exact journal progress” (0 pass / 1 fail). Prior `unknown-resource-action` catalogue error did not recur. |
+| `test/search/default-discovery.test.ts`           | FAIL: both cases `OutcomeRpcError: init did not complete within 90000 ms`, then `Worker did not drain: {"code":null,"signal":"SIGKILL"}` (0 pass / 2 fail, 477.19 s). Child stdout in the drain error was empty.                                                                                                                                 |
 
 **Receiving coverage repair, Search generation owner:** the failing metadata-reconciliation case already injects a
 `collection` producer (`owner: commerce`) in `metadataProducers`; the injected registry/target kinds are account-only.
 Reconcile that registry/target/producer contract in existing receiving, then rerun the same case. Do not install a
 new producer, drop the coverage assertion, or open deferred metadata. Commerce remains owner of Collection records.
 
-**Review fixture repair, Content/Accounts owner:** `standingFixture` must compile a valid native Access catalogue
-before Review discovery cases run. Content/Accounts owns that valid Review fixture setup. Keep the existing
-intentional invalid-policy assertions. Do not add catalogue actions from Search or loosen the compiler.
+**Review relay concurrency repair, Search runner owner:** `startRelays` refuses `concurrency >= pool.options.max`.
+`runner.ts` defaults `concurrency` to 2. Size the Review discovery fixture pool above 2, or pass
+`relayConcurrencyForPool(options.pool)` instead of 2. Keep the existing coverage assertions. Do not loosen
+`startRelays`. The prior Content/Accounts catalogue fixture error did not recur on this product.
 
 **Default-worker init repair, Search default-worker owner:** both default-discovery cases failed at
 `startOutcomeWorkerProcess` `rpc.request('init')` (`timeoutMs: 90_000`). Child `outcome-worker.ts` `startWorker` never
 replied; `close()` awaits that `ready` then SIGKILLs at 90 s (`Worker did not drain: {"code":null,"signal":"SIGKILL"}`).
-Walk worker printed `Discovery requires an active definition release` at `account-discovery.ts:289` / `runner.ts:350`,
-then `SearchUnavailableError: Public preparation release is unavailable`, then later `Worker ready`. Capture child
-stdout in the 90 s init window. Keep the existing assertions. This is not a new Imports outcome.
+The drain error carried empty child stdout. Capture child stdout in the 90 s init window. Keep the existing assertions.
+This is not a new Imports outcome.
 
-Web Character local-selection and with-dev-server cells were retried 2026-11-07 07:04 UTC: focused Web again
-returned `Web check unavailable: the selected Performance snapshot is not integrated into canonical
-dev`. Commerce 401f58 assertions remain required. Loans query/read stay Commerce-owned.
+Web Character local-selection and with-dev-server cells were retried 2026-11-07 07:48 UTC after `95e3fac9` became an
+ancestor: focused Web again returned `Web check unavailable: the selected Performance snapshot is not integrated into
+canonical dev`. Commerce 401f58 assertions remain required. Loans query/read stay Commerce-owned.
 
 ## Evidence rules and common boundaries
 

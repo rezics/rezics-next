@@ -131,7 +131,7 @@ function requestedHref(url: string | URL): string {
  * loopback transport for that exact public document; other URLs are not forwarded.
  * A different loopback port is not an allowed JWKS identity.
  */
-export function localJwksTransport<T extends AuthJwksConfig>(env: Environment, auth: T): T {
+export function localJwksTransport(env: Environment, auth: AuthJwksConfig): AuthJwksConfig {
   const native = env.REZICS_LOCAL_STACK_NATIVE_ORIGIN;
   if (native === undefined || native === '') return auth;
   let issuer: URL;
