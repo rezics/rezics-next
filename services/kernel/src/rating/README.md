@@ -1653,13 +1653,24 @@ including rollback and repoint and at most 64 competing originals, then atomical
 The receipt retains the obligation ID and exact mapping digest. That obligation covers later identity changes and concurrent vote creation beyond the captured upper key; it
 must remain held until Rating's effects and checkpoint commit, including the empty terminal page. Home state reads
 and released observations cannot implement this contract. Same-home voter commands lock the partition owner through COMMIT. Foreign source or control homes persist a preparing
-obligation and continue through one-partition prepare/handoff and bounded drain; tests that omit the producer still see
-`semantic-exact-currentness-and-held-repair-obligation-unavailable`. Pending or unavailable producer observations
+obligation and continue through one-partition prepare/handoff and bounded drain; tests that omit the producer on
+`createRatingIdentityRepairCommands` still see
+`semantic-exact-currentness-and-held-repair-obligation-unavailable`. That omitted-producer factory call is the
+transaction/page seam, not ordinary installed composition. Pending or unavailable producer observations
 never advance work. The port is service configuration, not caller input, and supplies no authorization. A failed
 obligation handoff rolls back the entire page. Withdrawal uses local counted identities and requires no mapping
 observation. Repair has finite page, selection-byte, membership and event bounds, with no runtime funding, prepaid
 quotes, no-refill rule or foreign-price availability gate. Production composition binds the Semantic producer onto
-Rating's port; `createRatingModule` does not import that factory.
+Rating's port through `installIdentityRatingRepairProducer` (runtime defaults, `createKernel`, Semantic adapters and
+kernel test preload); `createRatingModule` does not import that factory. Ordinary `application().identityRepair`
+uses the bound producer and `createIdentityRepairRead` for independent counted-vote, ordered-outbox, receipt
+obligation/mapping-digest and checkpoint observations. Native installed-composition acceptance is
+`test/rating/identity-repair-native.test.ts`. Performance owns nested-cost review and 256/1024/4096 growth of the
+page seam.
+
+Decision: ordinary installed Rating identity repair uses the Semantic producer bound by host composition; omitting
+the producer on the command factory remains the unavailable seam; later identity changes and votes beyond the
+captured upper key stay on the retained obligation and converge through another admitted generation.
 
 ## Voter Realm membership
 

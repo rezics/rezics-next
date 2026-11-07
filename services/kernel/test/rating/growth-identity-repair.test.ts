@@ -1,5 +1,6 @@
 import { expect, test } from 'bun:test';
 import { createRatingIdentityRepairCommands } from '../../src/rating/identity-repair.ts';
+import { unavailableRatingIdentityProducer } from '../../src/rating/segment-identity-guard.ts';
 import { RATING_IDENTITY_PAGE_SIZE, type IdentityRepairPage } from '../../src/rating/identity-work-frame.ts';
 import { STANDARD_QUESTION_ID } from '../../src/rating/votes.ts';
 import { newId } from '../../src/route/route.ts';
@@ -153,10 +154,14 @@ async function series(
     const actor = await voter();
     voterIds.push(actor.accountId);
     const injected = producer(destination);
-    // Production unavailability and local withdrawal deliberately use the delivered default composition.
+    // pending is the omitted-producer seam; withdrawal uses local counted identities; other scenarios inject the page seam.
     const commands = createRatingIdentityRepairCommands({
       pool: db.pool,
-      ...(scenario === 'pending' || scenario === 'withdrawal' ? {} : { producer: injected.port }),
+      ...(scenario === 'pending'
+        ? { producer: unavailableRatingIdentityProducer }
+        : scenario === 'withdrawal'
+          ? {}
+          : { producer: injected.port }),
     });
     const target = { pool: db.pool, admin: db.admin };
     const input = axis === 'input' ? scale : 256;

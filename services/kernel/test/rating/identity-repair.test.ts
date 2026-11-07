@@ -15,7 +15,7 @@ afterAll(async () => {
 });
 const { key, voter, seed, producer, admit, select, binding, rows, effects } = ratingIdentityFixture(() => database);
 
-test('durable pages remain bounded and pending without Semantic authority, then resume through an empty terminal receipt', async () => {
+test('durable pages remain bounded and pending without a producer, then resume through an empty terminal receipt', async () => {
   const actor = await voter();
   const targets = Array.from({ length: 67 }, () => newId(route)).sort();
   for (const target of targets.slice(0, 66)) await seed(actor, target);

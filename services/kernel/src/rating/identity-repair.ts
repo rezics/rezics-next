@@ -67,6 +67,7 @@ export function createRatingIdentityRepairCommands(config: {
     ...config,
     ...(config.capabilities ? { command: config.capabilities.command, clock: config.capabilities.clock } : {}),
   });
+  // Omitting producer is the focused seam. Ordinary module/host composition binds Semantic's factory.
   const producer = config.producer ?? unavailableRatingIdentityProducer;
   const owner = (actor: Actor): string => {
     if (actor.kind !== 'account' || !actor.scopes.includes('rating:vote')) throw new GrantDeniedError();
