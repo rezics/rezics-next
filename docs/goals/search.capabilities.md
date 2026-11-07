@@ -26,10 +26,11 @@ evidence reference. FAIL includes a path not observed because its setup or an ea
 rather than claiming the unexecuted product is defective. A passing implementation typecheck supplies no walk pass.
 The latest observed path result replaces its previous result. Existing broader native acceptance remains separate.
 
-Decision: the six first-public rows remain the walk evidence. JWKS receiving keeps the existing issuer-origin
-transport tests and adds no Search journey tests. One failed shared setup step fails every dependent journey;
-independent executable paths still run, including public pages after a failed seed, and unexecuted product steps stay
-explicit. Documentation formatting is the focused delivery check; it supplies no native or browser PASS.
+Decision: the six first-public rows remain the walk evidence. Keep existing issuer-origin JWKS tests; add no Search
+journey tests. Receive Identity `e815ae17`, Imports `a67c30ad`/`681d1fa8` and Performance shell `95e3fac9` through
+those journeys; Identity isolation is a separate successor; original disclosure, identity/default-worker and mounted
+return proofs stay. One failed shared setup step fails every dependent journey; independent executable paths still
+run. Documentation formatting is the focused delivery check; it supplies no native or browser PASS.
 
 ### Current dev census
 
@@ -110,16 +111,19 @@ reads do not pass Configured reading or Published composition. Authenticated Sea
 issuer pages after the Web module failure; issuer-origin JWKS already started. Seed diagnostics stay with the queued
 Imports repair; this walk does not implement them. Existing broader acceptance below is preserved.
 
-Members' binding/fixtures, Web's Character/Person search, condition weights and composition, Semantic's tagged works
-and Performance's fake-discovery notices have no mounted-journey verdict from this seed failure. Their assertions
-remain required. Deferred metadata stays deferred. The seed transport failure is an Imports repair, not a new
-Imports Goal outcome.
+Members' binding/fixtures, Web's Character/Person, condition-weight, composition, tagged works and fake-discovery
+assertions remain required; this seed failure gave them no mounted verdict. Deferred metadata stays deferred.
+The seed transport failure is an Imports repair, not a new Imports Goal outcome.
 
-Owner decision `semantic:search-landed-construction-regressions-47601`: two urgent construction repairs (scoped
-Library instance; native disclosure) stay queued as their own outcomes. This walk does not implement them.
-Architecture, source review and affected-workspace typing are not a runtime pass. Original scoped
-ordering/current-work and disclosure/recovery assertions receive those landings after integration, with the
-installed binding and source revision. The live useful-page Vite `typebox/type` failure stays Content/Web.
+Owner decision `semantic:search-landed-construction-regressions-47601`: queued scoped-Library and native-disclosure
+repairs stay their own outcomes. Original scoped ordering/current-work and disclosure/recovery assertions receive
+them after integration. Typing is not a runtime pass. Vite `typebox/type` stays Content/Web.
+
+Owner decision `semantic:constructed-identity-and-importer-receiving-47772`: receive Identity `e815ae17`, Imports
+`a67c30ad`/`681d1fa8` and Performance shell `95e3fac9` through owned Search journeys. This product `4904c8e26e`
+does not contain them. Identity isolation is a separate successor. Original disclosure, identity/default-worker
+and mounted return proofs stay. Mounted pages did not run, so shell return was not observed. Seed still printed
+unphased `Import transport request failed`; the d8f formatter is not in this product and does not recover transport.
 
 Teardown left this attempt's walk containers and volumes absent. No unrelated stack was stopped or pruned.
 Documentation formatting is the focused delivery check; it supplies no native/browser PASS.
