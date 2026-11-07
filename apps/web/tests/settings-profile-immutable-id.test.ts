@@ -2,10 +2,7 @@ import { expect, mock, test } from 'bun:test';
 import { createKernelClient } from '@rezics/client';
 import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
-import {
-  loadProfileRecord,
-  saveProfileRecord,
-} from '../src/settings/profile-data';
+import { loadProfileRecord, saveProfileRecord } from '../src/settings/profile-data';
 import type { ProfilePatch, ProfileValues } from '../src/settings/profile-model';
 import { performanceAmbientTree } from './performance-ambient';
 import { ProfileEditor, ProfileEditorSession, type ProfileAttempt } from '../src/settings/profile-write';

@@ -176,7 +176,9 @@ test('the composed Profile read dispatch uses the startup Worker fixture and rec
       if (id === kernelBoundary) return kernel;
     },
   };
-  const runtime = await createSettingsViteRuntime({ KERNEL_ORIGIN: 'https://settings-worker-fixture.test' }, [boundaries]);
+  const runtime = await createSettingsViteRuntime({ KERNEL_ORIGIN: 'https://settings-worker-fixture.test' }, [
+    boundaries,
+  ]);
   try {
     const actions = (await runtime.vite.ssrLoadModule('/src/settings/actions.ts')) as {
       readProfile: () => Promise<{ ok: true; profile: ProfileValues; editing: unknown }>;
