@@ -1,4 +1,4 @@
-import { readRelease, activeRelease } from '../definitions.ts';
+import { readRelease, activeRelease } from '../definition-release-read.ts';
 import type { ReleasedDefinitions } from '../contract/index.ts';
 
 export type NativeReleasedDefinitions = ReleasedDefinitions<

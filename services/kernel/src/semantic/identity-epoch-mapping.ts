@@ -12,15 +12,11 @@ import { withReadTransaction } from './read.ts';
 import { readPartition } from '../partition/partition.ts';
 import { partitionOf, routeOf } from '../route/route.ts';
 import { IDENTITY_EPOCH_PROGRESS } from './events.ts';
-import {
-  admittedAccountMappingSource,
-  identityEpochStore,
-  identityJobPartition,
-  identityEpochChangeTerminal,
-  IdentityEpochStoreError,
-  recordIdentityEpochNativeCommit,
-  serializeIdentityValue as json,
-} from './identity-adapters/index.ts';
+import { recordIdentityEpochNativeCommit } from './identity-adapters/native-commit.ts';
+import { identityEpochStore, admittedAccountMappingSource } from './identity-adapters/index.ts';
+import { identityJobPartition } from './identity-adapters/identity-epoch-contract.ts';
+import { identityEpochChangeTerminal, serializeIdentityValue as json } from './identity-core/index.ts';
+import { IdentityEpochStoreError } from './contract/identity-errors.ts';
 import type {
   IdentityAdmissionInput,
   IdentityChange,
@@ -36,7 +32,7 @@ import sourceEffect from './identity-epoch-mapping-source.sql';
 import inboundEffect from './identity-epoch-mapping-inbound.sql';
 import outboundEffect from './identity-epoch-mapping-outbound.sql';
 import removeInboundEffect from './identity-epoch-mapping-remove-inbound.sql';
-import { GLOBAL_CONTEXT } from './definitions.ts';
+import { GLOBAL_SUBJECT_CONTEXT as GLOBAL_CONTEXT } from './contract/subject-values.ts';
 import { identityErasureRoles, bindSemanticProducerRoles, type SemanticCopyRole } from './erasure-producer.ts';
 
 const NIL = '00000000-0000-0000-0000-000000000000';

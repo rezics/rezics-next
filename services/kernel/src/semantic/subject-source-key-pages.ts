@@ -2,7 +2,7 @@ import { createHash } from 'node:crypto';
 import type { Pool } from 'pg';
 import { deadlineClient } from '../access/authenticate.ts';
 import { discardConnection, withConnection } from '../database/pool.ts';
-import { ProblemError } from '../http/problem.ts';
+import { ProblemError } from '../http/problem-error.ts';
 import type { Access } from '../request/access.ts';
 import type {
   PublicFilterConsumerUnavailable,
@@ -14,7 +14,7 @@ import { withRequestDeadline } from '../request/deadline.ts';
 import { requireAccessDeadline, classifyUnavailability } from '../access/unavailable.ts';
 import { mintReadTime } from '../command/command.ts';
 import { routeOf, partitionOf } from '../route/route.ts';
-import { GLOBAL_CONTEXT } from './definitions.ts';
+import { GLOBAL_SUBJECT_CONTEXT as GLOBAL_CONTEXT } from './contract/subject-values.ts';
 import { globalReadEligibility } from './eligibility.ts';
 import ownerStatement from './subject-source-key-pages-owner.sql';
 import pageStatement from './subject-source-key-pages-read.sql';

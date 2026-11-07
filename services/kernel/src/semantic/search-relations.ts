@@ -41,7 +41,7 @@ import {
   type RelationFacetProbe,
   type RetainedRelationFacetPage,
 } from '../search/source.ts';
-import { activeRelease, readRelease } from './definitions.ts';
+import { activeRelease, readRelease } from './definition-release-read.ts';
 import { sourceTuple } from './fences.ts';
 import { prepareCharacterPersonPage } from '../search/character-person-voice.ts';
 import { indexedStatement, inSearchSnapshot, readSearchCanonicalGeneration } from './search-source.ts';

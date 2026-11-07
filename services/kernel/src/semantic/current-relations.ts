@@ -3,10 +3,10 @@ import { routeOf } from '../route/route.ts';
 import { candidateSources, fencedIds, sourceTuple, type CandidateSource } from './fences.ts';
 import readLiveCandidates from './current-relations-live-candidate.sql';
 import readCompactRelationCandidates from './current-relations-compact.sql';
-import { GLOBAL_CONTEXT } from './definitions.ts';
+import { GLOBAL_SUBJECT_CONTEXT as GLOBAL_CONTEXT } from './contract/subject-values.ts';
 import { hiddenCandidateKeys, slotView } from './slots.ts';
 import type { FactRow } from './item.ts';
-import { redirectOf } from './merges.ts';
+import { redirectOf } from './subject-redirect.ts';
 
 export type CurrentRelationCandidate = {
   subject: string;

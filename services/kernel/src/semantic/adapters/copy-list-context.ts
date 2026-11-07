@@ -2,7 +2,7 @@
 import { readIdentityMappings } from '../identity-adapters/read.ts';
 import { readListPresentationFacts } from '../copy-work-application.ts';
 import { readSubjectSummaries } from '../summaries.ts';
-import { activeRelease } from '../definitions.ts';
+import { activeRelease } from '../definition-release-read.ts';
 
 export function nativeCopyListContext() {
   return {

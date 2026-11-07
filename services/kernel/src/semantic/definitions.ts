@@ -1,12 +1,5 @@
 import { jsonParameter } from '../database/json.ts';
-import {
-  publicationLimits,
-  releaseAdmission,
-  releaseDigest,
-  validateRelease,
-  type Release,
-  type ReleaseViolation,
-} from '@rezics/definitions';
+import { publicationLimits, releaseAdmission, releaseDigest, validateRelease, type Release } from '@rezics/definitions';
 import type { Pool } from 'pg';
 import { runCommand, type CommandAuthorization, type CommandTransaction } from '../command/command.ts';
 import { systemClock } from '../clock.ts';
@@ -16,61 +9,30 @@ import pointer from './definitions-active.sql';
 import exists from './definitions-exists.sql';
 import publish from './definitions-publish.sql';
 import read from './definitions-read.sql';
-import { readComposedRelease } from './extensions.ts';
-import { stageReleaseTypeDirectory } from './definition-type-directory.ts';
+import {
+  DefinitionInputError,
+  DefinitionAccessDeniedError,
+  DefinitionNotFoundError,
+  StaleEditorialHeadError,
+} from './contract/definition-values.ts';
+export {
+  DefinitionInputError,
+  DefinitionAccessDeniedError,
+  DefinitionNotFoundError,
+  StaleEditorialHeadError,
+} from './contract/definition-values.ts';
+export { freeze } from './core/freeze.ts';
+export { activeRelease, readRelease } from './definition-release-read.ts';
+import { stageReleaseTypeDirectory } from './definition-type-directory-stage.ts';
 
 import { GLOBAL_CONTEXT, GLOBAL_CONTEXT_RESOURCE as resource } from './contract/global-context.ts';
 export { GLOBAL_CONTEXT } from './contract/global-context.ts';
 const DIGEST = /^sha256:[0-9a-f]{64}$/;
-const releases = new Map<string, Release>();
-
-export class DefinitionInputError extends Error {
-  constructor(readonly violations: ReleaseViolation[]) {
-    super('Invalid definition release');
-  }
-}
-export class DefinitionAccessDeniedError extends Error {}
-export class DefinitionNotFoundError extends Error {}
-export class StaleEditorialHeadError extends Error {}
 
 function validated(value: unknown): Release {
   const violations = validateRelease(value);
   if (violations.length) throw new DefinitionInputError(violations);
   return value as Release;
-}
-
-export function freeze(value: unknown): void {
-  if (value === null || typeof value !== 'object' || Object.isFrozen(value)) return;
-  for (const child of Object.values(value)) freeze(child);
-  Object.freeze(value);
-}
-
-/** A cache hit reads the digest only. The cache stores validated, digest-checked bodies, and a release is immutable. */
-export async function readRelease(
-  pool: Pool | CommandTransaction,
-  digest: string,
-  options: { composed?: boolean } = {},
-): Promise<Release | null> {
-  if (DIGEST.exec(digest)?.[0] !== digest) return null;
-  const cached = releases.get(digest);
-  if (cached) return (await exists.run(pool, { route: resource.route, digest })) ? cached : null;
-  const row = await read.run(pool, { route: resource.route, digest });
-  if (!row) return options.composed === false ? null : readComposedRelease(pool, digest);
-  const release = validated(row.body);
-  if (releaseDigest(release) !== digest) throw new Error('Stored definition release digest mismatch');
-  freeze(release);
-  releases.set(digest, release);
-  return release;
-}
-
-export async function activeRelease(
-  pool: Pool | CommandTransaction,
-): Promise<{ digest: string; head: number; release: Release } | null> {
-  const active = await pointer.run(pool, { route: resource.route });
-  if (!active) return null;
-  const release = releases.get(active.digest) ?? (await readRelease(pool, active.digest));
-  if (!release) throw new Error('Active definition release is missing');
-  return { ...active, release };
 }
 
 export type WriteOptions = {

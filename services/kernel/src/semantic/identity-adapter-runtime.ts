@@ -21,7 +21,7 @@ import {
 import { withReadTransaction } from './read.ts';
 import { importedTupleRouteOf } from './adapters/imported-route.ts';
 import { nativeRatingReview } from './adapters/rating-review.ts';
-import { EditorialConflictError } from './candidates.ts';
+import { EditorialConflictError } from './contract/subject-errors.ts';
 import { effectiveGlobalSlotFacts } from './slots.ts';
 import {
   bindIdentityAdapterPort,

@@ -29,6 +29,13 @@ fences and disclosure.
 
 Decision: the seeded Global Context ID lives in the literal-only `context-literals.ts` leaf. Ordinary History composition binds the typed Semantic record-source-set producer before installing History; importing the Semantic producer has no registration side effect.
 
+Definition reads and composed-extension caches share `definition-release-read.ts`; publication and native type-index
+staging stay outside that read closure. Shared definition and Subject errors live in contract leaves; redirect lookup uses `subject-redirect.ts`. Native
+identity reads, Subject birth and commit callbacks use their defining leaves instead of the identity-store barrel.
+Related identity/label reads use `related-subject-read.ts`, preserving fresh per-call reads and the 256-ID bound.
+Compatibility entries re-export the same functions and error classes. Reduction adapters depend on the pure Bounds
+contract, which owns their existing work vectors.
+
 ## Semantic label policy
 
 Definitions' public root owns pure `languageRanges`/`chooseLabel`, including browser exports and stored-tag behavior.
@@ -40,7 +47,14 @@ Subject IDs are permanent and never reused. Global subject:create creates revisi
 
 The pure kernel-identity-core leaf owns mapping DTOs, bounded evidence classification and immutable merge/unmerge/repoint transforms. Its public entry is identity-core/index.ts: no SQL, runtime, command, Access, environment, clock, randomness or crypto. It indexes acquired evidence once and performs O(N) time/space for at most 100 originals; its four states and reasons are unchanged, and pending never implies self.
 
-Semantic is split into registered contract, core, application and adapter modules. Contract (`semantic/contract/`) holds identity vocabulary, item facts, subject values and typed ports for Library custody, Search currentness, Rating review, Content lifecycle, hashing, routing and the fact store, with no runtime imports. Core (`semantic/core/`) holds pure next-step, receipt and item-projection derivations over those values. identity-core remains the pure mapping, remainder and rating-review classifier; its `rating-review-bounds.ts` file is the literal-only leaf for keys 2 / locators 2 / operand 16,384 bytes, which identity-epoch adapters import. Application (`semantic/application/`) installs the frozen Semantic domain over those ports: item projection, subject fact plans, identity coordination and rating-review mapping. Effectful adapters remain in kernel-semantic: identity-adapters/read.ts for lightweight native mapping reads, identity-adapters/index.ts for the effectful store, identity-adapters/identity-epoch-binding.ts for the public binding, and adapters/native-domain.ts for hashing, routing and fact-store binding. `item.ts` is a compatibility facade that calls the item application. Callers retain existing named exports, opaque proof objects and WeakMaps. readIdentityMappings, readIdentityRatingReview and readIdentityBasis stay on read.ts and do not load the store or binding graph; published identity digest reads share the mapping-read module rather than identity-basis.ts so Search can consume them without a value-import cycle through semantic/read. The [rating currentness contract](identity-rating-currentness.md) owns exact reviewed operands and same-home COMMIT admission; [Rating ports](../rating/vote-readback.md) own counted orchestration and native adapter composition.
+Semantic's registered contract/core/application/adapter layers keep inward use cases over owned ports. Contracts hold
+identity vocabulary, item facts, subject values and ports for Library, Search, Rating, Content, hashing, routing and fact
+storage. Core derives coordination receipts and item projections. Application installs the domain; native adapters bind
+effects. Compatibility callers retain named exports, opaque proofs and WeakMaps. `identity-core/rating-review-bounds.ts`
+is the literal-only keys 2 / locators 2 / 16,384-byte bound. Native mapping, Rating review, basis and published identity
+digests use `identity-adapters/read.ts`, outside the store/binding graph. The [rating currentness
+contract](identity-rating-currentness.md) owns reviewed operands and same-home COMMIT admission; [Rating
+ports](../rating/vote-readback.md) own counted orchestration and native composition.
 
 Access agent identity maintenance consumes an Access-owned native capability. Its producer,
 `adapters/agent-identity-maintenance.ts`, is bound by `composition/access.ts`, including native preload. Semantic owns

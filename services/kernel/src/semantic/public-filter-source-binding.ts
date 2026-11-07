@@ -16,7 +16,8 @@ import {
   readAccountDiscoveryRepairObservation,
   type AccountDiscoveryRepairObservation,
 } from '../access/account-discovery-source.ts';
-import { readRelease, freeze } from './definitions.ts';
+import { readRelease } from './definition-release-read.ts';
+import { freeze } from './core/freeze.ts';
 import { withRequestDeadline } from '../request/deadline.ts';
 import { classifyUnavailability, CommandUnavailableError, requireAccessDeadline } from '../access/unavailable.ts';
 import { withConnection, discardConnection } from '../database/pool.ts';

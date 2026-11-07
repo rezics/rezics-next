@@ -24,7 +24,9 @@ import {
   type IdentityEpochNext,
 } from './core/identity-epoch-sequence.ts';
 import { stepIdentityEpochMapping } from './identity-epoch-mapping.ts';
-import { identityEpochStore, identityJobPartition, IdentityEpochStoreError } from './identity-adapters/index.ts';
+import { identityEpochStore } from './identity-adapters/index.ts';
+import { identityJobPartition } from './identity-adapters/identity-epoch-contract.ts';
+import { IdentityEpochStoreError } from './contract/identity-errors.ts';
 import { registeredSemanticDomain } from './adapters/registry.ts';
 import control from './identity-epoch-coordinator-control.sql';
 import { withReadTransaction } from './read.ts';

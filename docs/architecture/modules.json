@@ -744,6 +744,12 @@
         "services/kernel/src/semantic/identity-epoch-read-pending.sql",
         "services/kernel/src/semantic/identity-epoch-read-current.sql",
         "services/kernel/src/semantic/definitions.ts",
+        "services/kernel/src/semantic/related-subject-read.ts",
+        "services/kernel/src/semantic/subject-redirect.ts",
+        "services/kernel/src/semantic/definition-release-read.ts",
+        "services/kernel/src/semantic/definition-type-directory-stage.ts",
+        "services/kernel/src/semantic/identity-adapters/native-commit.ts",
+        "services/kernel/src/semantic/identity-adapters/subject-creation.ts",
         "services/kernel/src/semantic/read.ts",
         "services/kernel/src/semantic/search-source.ts",
         "services/kernel/src/semantic/identity-receiving-effects.ts",
@@ -760,6 +766,7 @@
         "services/kernel/src/semantic/context.ts"
       ],
       "allowedDependencies": [
+        "bounds",
         "composition",
         "definitions",
         "definitions-compiler",
@@ -860,6 +867,7 @@
         "services/kernel/src/events/consumer-lag.ts",
         "services/kernel/src/clock.ts",
         "services/kernel/src/request/access.ts",
+        "services/kernel/src/partition/partition.ts",
         "services/kernel/src/route/route.ts",
         "services/kernel/src/tokens/seal.ts",
         "services/kernel/src/command/command.ts",
@@ -2013,6 +2021,8 @@
       "owner": "semantic",
       "paths": ["services/kernel/src/semantic/contract/**"],
       "publicEntries": [
+        "services/kernel/src/semantic/contract/subject-errors.ts",
+        "services/kernel/src/semantic/contract/definition-values.ts",
         "services/kernel/src/semantic/contract/identity-values.ts",
         "services/kernel/src/semantic/contract/identity-source-schedule.ts",
         "services/kernel/src/semantic/contract/identity-errors.ts",
@@ -2024,7 +2034,7 @@
         "services/kernel/src/semantic/contract/index.ts",
         "services/kernel/src/semantic/contract/global-context.ts"
       ],
-      "allowedDependencies": [],
+      "allowedDependencies": ["definitions"],
       "capabilities": ["semantic-contract"]
     },
     {
@@ -2033,6 +2043,7 @@
       "owner": "semantic",
       "paths": ["services/kernel/src/semantic/core/**"],
       "publicEntries": [
+        "services/kernel/src/semantic/core/freeze.ts",
         "services/kernel/src/semantic/core/identity-epoch-sequence.ts",
         "services/kernel/src/semantic/core/item-projection.ts",
         "services/kernel/src/semantic/core/identity-coordination.ts",

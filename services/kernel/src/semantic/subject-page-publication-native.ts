@@ -1,11 +1,11 @@
 import type { Release } from '@rezics/definitions';
 import type { CommandEvent, CommandTransaction } from '../command/command.ts';
 import { routeOf } from '../route/route.ts';
-import { GLOBAL_CONTEXT } from './definitions.ts';
+import { GLOBAL_SUBJECT_CONTEXT as GLOBAL_CONTEXT } from './contract/subject-values.ts';
 import { isRelationProperty, type FactRow } from './item.ts';
 import { slotView } from './slots.ts';
 import { withPublicStatementReader } from './statement-disclosure.ts';
-import { loadRelated } from './subject.ts';
+import { loadRelated } from './related-subject-read.ts';
 import { candidateSources, sourceTuple, fenceKey, fencedIds } from './fences.ts';
 import readTermSupport from './terms-read-support.sql';
 import type { Source } from '@rezics/definitions/bulk';

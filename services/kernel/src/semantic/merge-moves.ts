@@ -8,10 +8,10 @@ import {
 import { withReadTransaction } from './read.ts';
 import type { Pool, PoolClient } from 'pg';
 import { runCommand, type CommandTransaction } from '../command/command.ts';
-import { GLOBAL_CONTEXT } from './definitions.ts';
+import { GLOBAL_SUBJECT_CONTEXT as GLOBAL_CONTEXT } from './contract/subject-values.ts';
 import { partitionOf, routeOf } from '../route/route.ts';
 import { LINKS_MOVING, LINKS_PROJECTED } from './events.ts';
-import { redirectOf } from './merges.ts';
+import { redirectOf } from './subject-redirect.ts';
 import firstMember from './merge-moves-first-member.sql';
 import insertMember from './merge-moves-insert-member.sql';
 import insertRedirect from './merge-moves-insert-redirect.sql';

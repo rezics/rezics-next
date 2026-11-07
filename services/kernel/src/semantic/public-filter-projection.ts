@@ -12,7 +12,7 @@ import { partitionOf, routeOf } from '../route/route.ts';
 import { readPartition } from '../partition/partition.ts';
 import { readFences, type SourceFenceTuple } from '../content/source-fences.ts';
 import { sourceTuple } from './fences.ts';
-import { GLOBAL_CONTEXT } from './definitions.ts';
+import { GLOBAL_SUBJECT_CONTEXT as GLOBAL_CONTEXT } from './contract/subject-values.ts';
 import { factDataTypes, resolveItem, type FactRow, type Statement } from './item.ts';
 import { indexedStatement } from './search-source.ts';
 import type {

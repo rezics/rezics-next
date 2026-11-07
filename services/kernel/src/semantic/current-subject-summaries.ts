@@ -1,10 +1,10 @@
 import type { PoolClient } from 'pg';
 import { deadlineClient } from '../access/authenticate.ts';
 import { partitionReadClient } from '../database/read-snapshot.ts';
-import { ProblemError } from '../http/problem.ts';
+import { ProblemError } from '../http/problem-error.ts';
 import { accessCheck } from '../request/access.ts';
 import { partitionOf, routeOf } from '../route/route.ts';
-import { activeRelease } from './definitions.ts';
+import { activeRelease } from './definition-release-read.ts';
 import { relatedReadEligibility } from './eligibility.ts';
 import { withReadTransaction } from './read.ts';
 import { readSubjectSummaries, type SubjectSummary, type SummaryReaderDependencies } from './summaries.ts';

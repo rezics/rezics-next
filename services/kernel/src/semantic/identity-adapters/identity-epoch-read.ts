@@ -625,3 +625,8 @@ export async function readIdentityMappings(pool: Pool, originals: readonly strin
 export async function readIdentityBasis(pool: Pool, options: { deadline: number }): Promise<BasisRead> {
   return defaultReaders().readIdentityBasis(pool, options);
 }
+
+/** One original through the same bounded producer and current native capability set. */
+export async function readIdentityMapping(pool: Pool, original: string): Promise<IdentityMapping> {
+  return (await readIdentityMappings(pool, [original]))[0]!;
+}

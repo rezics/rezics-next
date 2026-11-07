@@ -7,7 +7,9 @@ import { createKernel } from '../../src/http/kernel.ts';
 import { openApiDocument } from '../../src/http/openapi.ts';
 import { SESSION_HEADER } from '../../src/http/request.ts';
 import { createRealAccess } from './real-access.ts';
-import { activeRelease, bootstrapRelease, GLOBAL_CONTEXT } from '../../src/semantic/definitions.ts';
+import { bootstrapRelease } from '../../src/semantic/definitions.ts';
+import { activeRelease } from '../../src/semantic/definition-release-read.ts';
+import { GLOBAL_SUBJECT_CONTEXT as GLOBAL_CONTEXT } from '../../src/semantic/contract/subject-values.ts';
 import type { KeyRing } from '../../src/tokens/seal.ts';
 
 const databaseUrl = process.env.DATABASE_URL;

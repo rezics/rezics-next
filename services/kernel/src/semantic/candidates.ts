@@ -22,11 +22,13 @@ import type { AccountActor } from '../request/access.ts';
 import { derivedId, partitionOf, routeOf } from '../route/route.ts';
 import { decodeCursor, encodeCursor, type CursorBinding, type CursorKey } from '../tokens/cursor.ts';
 import type { KeyRing } from '../tokens/seal.ts';
-import { redirectOf, SubjectRedirectError } from './merges.ts';
+import { redirectOf } from './subject-redirect.ts';
+import { SubjectRedirectError } from './contract/subject-errors.ts';
 import { initializeRevisionAuthorship, revisionResource, StaleRevisionAuthorshipError } from './authorship.ts';
 import { creationDeclares } from '../access/index.ts';
-import { activeRelease, GLOBAL_CONTEXT, readRelease } from './definitions.ts';
-import { baseOf, layeredRelease } from './extensions.ts';
+import { activeRelease, readRelease } from './definition-release-read.ts';
+import { GLOBAL_SUBJECT_CONTEXT as GLOBAL_CONTEXT } from './contract/subject-values.ts';
+import { baseOf, layeredRelease } from './definition-release-read.ts';
 import { termContext } from '@rezics/definitions/extension';
 import { LINK_KEYS_CHANGED, LINKS_CHANGED } from './events.ts';
 import { SUBJECT_REVISED } from './events.ts';
@@ -89,8 +91,8 @@ import readCandidateOwners from './candidates-read-owners.sql';
 import updateSubjectRelease from './update-subject-release.sql';
 import { declareCommandHistory } from '../history/application/index.ts';
 
-export class SubjectNotFoundError extends Error {}
-export class EditorialConflictError extends Error {}
+import { SubjectNotFoundError, EditorialConflictError } from './contract/subject-errors.ts';
+export { SubjectNotFoundError, EditorialConflictError } from './contract/subject-errors.ts';
 const CANDIDATE_NS = '3c62c392-7c55-4fda-bf16-13b4853e7598';
 const record = (value: unknown): value is Record<string, unknown> =>
   typeof value === 'object' && value !== null && !Array.isArray(value);
