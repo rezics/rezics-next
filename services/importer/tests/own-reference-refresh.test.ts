@@ -151,9 +151,9 @@ test('same-run Work overload yields Edition admission and replays the sealed cre
       'bound',
     );
     expect(importer.session.store.key(registration.source, work.key).acknowledged).toBeNull();
-    expect(native.requests.some((request) => request.commands.some((command) => command.source.external_id === edition.key))).toBe(
-      false,
-    );
+    expect(
+      native.requests.some((request) => request.commands.some((command) => command.source.external_id === edition.key)),
+    ).toBe(false);
     const failedImporter = importer;
     await importer.close();
     expect(() => failedImporter.session.store.database.query('SELECT 1').get()).toThrow();
@@ -190,13 +190,18 @@ test('same-run Work overload yields Edition admission and replays the sealed cre
         .flatMap((request) => request.commands)
         .filter((command) => command.op === 'create' && command.source.external_id === edition.key),
     ).toHaveLength(1);
-    const relation = native.requests.flatMap((request) => request.commands).find(
-      (command): command is Extract<BatchCommand, { op: 'propose' }> =>
-        command.op === 'propose' &&
-        command.source.external_id === edition.key &&
-        command.statement.property.id === 'schema:exampleOfWork',
-    );
-    expect(relation?.op === 'propose' && relation.statement.value).toMatchObject({ type: 'value', content: binding.subject });
+    const relation = native.requests
+      .flatMap((request) => request.commands)
+      .find(
+        (command): command is Extract<BatchCommand, { op: 'propose' }> =>
+          command.op === 'propose' &&
+          command.source.external_id === edition.key &&
+          command.statement.property.id === 'schema:exampleOfWork',
+      );
+    expect(relation?.op === 'propose' && relation.statement.value).toMatchObject({
+      type: 'value',
+      content: binding.subject,
+    });
   } finally {
     await importer.close();
     rmSync(directory, { recursive: true, force: true });
