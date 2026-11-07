@@ -22,6 +22,7 @@ import {
   webViteWorkerSsrOptimizeDeps,
   type ViteDepCacheAlignEnvironment,
 } from './tests/support/vite-dep-cache.ts';
+import { elysiaWorkerdTypebox } from './vite-elysia-typebox.ts';
 
 const configuredInspectorPort = process.env.WORKER_INSPECTOR_PORT;
 const nativeWebHost = process.env.NATIVE_WEB_TEST_HOST;
@@ -369,8 +370,11 @@ export default defineConfig((context) => {
     // Fonts must stay on the site origin; the page policy does not allow data: fonts.
     build: { assetsInlineLimit: 0 },
     optimizeDeps: {
-      entries: [...webViteClientOptimizeDeps.entries],
-      holdUntilCrawlEnd: webViteClientOptimizeDeps.holdUntilCrawlEnd,
+      // Scan the complete route graph up front so a local Worker browser check never discovers a route dependency
+      // after the first page load. Focused browser files compile the journey route on demand; crawling Home
+      // during Vite startup holds the ready line until the process dies.
+      entries: testRuntime ? ['src/server.ts', 'src/session/routes.ts'] : [...webViteClientOptimizeDeps.entries],
+      holdUntilCrawlEnd: testRuntime ? false : webViteClientOptimizeDeps.holdUntilCrawlEnd,
       exclude: [...webViteClientOptimizeDeps.exclude],
     },
     ssr: {
@@ -471,10 +475,13 @@ export default defineConfig((context) => {
           );
         },
       },
-      paraglideVitePlugin({ project: './project.inlang' }),
+      // Finite checks prepare the complete locale tree before importing tests. Starting another compiler here
+      // rewrites that shared tree while Bun and the Worker optimizer are reading it.
+      ...(process.env.REZICS_TEST_RUNTIME === '1' ? [] : [paraglideVitePlugin({ project: './project.inlang' })]),
       tanstackStart(),
       react(),
       tailwindcss(),
+      elysiaWorkerdTypebox(),
       ...cloudflare({
         viteEnvironment: { name: 'ssr' },
         inspectorPort,

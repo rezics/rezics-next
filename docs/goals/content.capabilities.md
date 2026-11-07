@@ -35,6 +35,21 @@ Personas: anonymous, author, Realm member, outsider and moderator. Fixtures: `ra
 and deterministic revocation; the bound thread/disclosure/media suites retain their own native fixtures. Media
 claims are covered here, including uploader identity, parent disclosure and lifecycle.
 
+Decision: reading-card `placeId` is the Board identity. Subject discussion pages confirm the Subject on the
+disclosed thread and the Board home separately; they do not pass the Board id to `readSubjectThread` as a place.
+Subject and author list query limits stay decimal-digit strings on the HTTP schema so a mismatched continuation is
+`400`, not a missing route. Focused post-editing browser cases remain the fewest that pin the mounted edit/delete
+journey; they consume the composed reading-page rather than split thread and post lists. Conversation-row items are
+the post slots; nested presentation lists are not indexes. Journey navigation waits for DOMContentLoaded and
+hydration. Owner edit and erase use the reading-page viewer when that page was admitted for the account, otherwise
+the signed-in session subject after anonymous SSR. An unknown session withholds the overflow menu so a
+stranger copy/report menu cannot open in place of owner edit and delete. Inline revisions send the inherited
+native licence; a permanent
+author-erased slot shows “Removed by its author” without overflow, while a restorable deletion keeps its deleted
+tombstone and restore window. Edit discard confirms from live draft dirtiness, including capture-phase editor input, host text and a
+pending snapshot so Escape can confirm before the next paint. Revision and erase Idempotency-Key headers
+stay RFC 8941 quoted strings.
+
 | Surface cell             | Scope and scenarios                                                                                                                                                   |
 | ------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | Catalogue                | In: the subject's discussion list, `test/content/subject-threads-http.test.ts`; bound thread/disclosure scenarios and `late-board-revocation` subject-thread reads.   |
@@ -54,21 +69,31 @@ Scenarios and evidence on this base:
   `author-item-public-views` coverage; stage **implementation exposed**.
 - `late-board-revocation`: take the board down or revoke its protected read grant after the board check for thread,
   post head, exact revision, subject-thread and author-activity reads. Final output must disclose no now-ineligible
-  item, summary, count, source or cursor material. Stage **specified red**; the deterministic composed binding for
-  these point reads is not established on this base.
-- `late-board-revocation-pages`: the new suite declares literal cases for hot, active and newest board first and
+  item, summary, count, source or cursor material. Stage **driver registered**:
+  `test/content/late-board-revocation-point-reads.test.ts` is the one native family for those surfaces.
+- `late-board-revocation-pages`: the frozen suite declares literal cases for hot, active and newest board first and
   continuation pages, and thread post first and continuation pages. Each has a late board takedown, late protected
-  read-grant revocation, and unchanged public and protected positive controls. Stage **specified red**; no user-cases driver is registered.
+  read-grant revocation, and unchanged public and protected positive controls. Stage **driver registered**:
+  `test/content/user-cases-driver.ts` binds `holdPage`, and `test/content/late-board-revocation-pages.test.ts` pins
+  the native HTTP family. No extra stories.
 
 Native acceptance commands, from the repository root:
 
 ```sh
-bun run --cwd services/kernel check test/content/thread-outcomes.test.ts test/content/disclosure-outcomes.test.ts test/content/media-outcomes.test.ts test/content/subject-threads-http.test.ts test/content/boards-http.test.ts test/content/board-ranking-http.test.ts test/content/board-hot-http.test.ts test/content/author-item-reads.test.ts test/content/author-item-public-views.test.ts
+bun run --cwd services/kernel check test/content/thread-outcomes.test.ts test/content/disclosure-outcomes.test.ts test/content/media-outcomes.test.ts test/content/subject-threads-http.test.ts test/content/boards-http.test.ts test/content/board-ranking-http.test.ts test/content/board-hot-http.test.ts test/content/author-item-reads.test.ts test/content/author-item-public-views.test.ts test/content/late-board-revocation-point-reads.test.ts test/content/late-board-revocation-pages.test.ts
 CONTENT_USER_CASES_DRIVER=/absolute/path/to/native-driver.ts bun test specs/content-user-cases-outcomes.test.ts --test-name-pattern late-board-revocation-pages
 ```
 
-The second command requires the future real binding. Neither existing board sort tests nor the missing-driver
-verifier establish the late point-read or page outcomes.
+The second command uses the bound native driver. Existing board-sort tests do not establish the late point-read or
+page outcomes.
+
+Decision: the Content Goal seeded walk uses the existing thread-board driver, seed-journal cleanup and Performance
+`waitUntilWalkReady` hydration recovery. First-scope rows are walked as named journeys on one admitted stack; no extra
+stories. Command: `bun services/auth/scripts/dev-stack.ts walk -- bun apps/web/scripts/seeded-content-goal-walk.ts`.
+Worker Vite resolves Elysia and Eden to their `exports.import` files and replaces TypeBox loaders with live ESM re-exports so workerd never evaluates CJS `module`. The fewest tests that pin that swap are `vite-config.test.ts` plus the existing walk unit tests; no extra stories.
+The sole walk receives Accounts published-post effects for reply, mention and moderation delivery, current access and
+preferences, replay, inbox and independent appeals. Ordinary HTTP grant receipts are the walk's authority proof, not
+seeded fixture rows. The frozen notification suite timeout stays 180 seconds; its assertions are unchanged.
 
 ## realms-and-spaces
 

@@ -119,6 +119,7 @@ export type RevisePostInput = {
   body: import('@rezics/document').DocumentSnapshot;
   idempotencyKey: string;
   mediaIds?: string[];
+  licence?: string;
 };
 
 export type ErasePostInput = { postId: string; idempotencyKey: string };
@@ -144,6 +145,7 @@ export async function revisePostRequest(
       {
         body: input.body,
         mediaIds: input.mediaIds ?? [],
+        ...(input.licence === undefined ? {} : { licence: input.licence }),
       },
       {
         headers: {
