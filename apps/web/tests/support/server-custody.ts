@@ -167,10 +167,7 @@ export function relatedProcessIds(rootPid: number, table = readProcessTable()): 
 }
 
 const WNOHANG = 1;
-let waitpidSymbol:
-  | { waitpid(pid: number, status: number, options: number): number }
-  | undefined
-  | false;
+let waitpidSymbol: { waitpid(pid: number, status: number, options: number): number } | undefined | false;
 
 function waitpidNoHang(pid: number): number | undefined {
   if (waitpidSymbol === false) return undefined;
@@ -569,8 +566,7 @@ function makeProcessCustody(
     ]);
     childSettled = completions[0]?.status === 'fulfilled';
     outputIsSettled = completions[1]?.status === 'fulfilled';
-    for (const completion of completions)
-      if (completion.status === 'rejected') cleanupErrors.push(completion.reason);
+    for (const completion of completions) if (completion.status === 'rejected') cleanupErrors.push(completion.reason);
     cleanupErrors.push(...errors);
 
     isSettled = groupSettled && childSettled && outputIsSettled;

@@ -68,13 +68,7 @@ function streamStatus(stream: ConceptMembershipStream, locale: string) {
   return null;
 }
 
-function WorkLink({
-  row,
-  href,
-}: {
-  row: ConceptMembershipRow;
-  href: string;
-}) {
+function WorkLink({ row, href }: { row: ConceptMembershipRow; href: string }) {
   return (
     <li data-concept-membership-row={row.id} data-concept-membership-property={row.property}>
       <a className={linkClass} href={href} lang={row.lang ?? undefined} data-concept-target={row.id}>
