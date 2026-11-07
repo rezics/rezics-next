@@ -304,11 +304,7 @@ async function eligible(
   );
   if (held.status !== 'locked' || !equal(held.binding, a.binding)) return refuse('current', 'changed');
   const current = await work.compose(async (allowance) =>
-    nativeOutput.lockNativePublicCollectionOutput(
-      tx,
-      a.binding.tuple.identity,
-      context(tx, pool, deadline, allowance),
-    ),
+    nativeOutput.lockNativePublicCollectionOutput(tx, a.binding.tuple.identity, context(tx, pool, deadline, allowance)),
   );
   if (current.status !== 'locked' || !samePublication(current.tuple, a.binding.tuple))
     return refuse('current', 'changed');
@@ -1120,11 +1116,7 @@ export function createPublicIdentityOutputCapture(
             ),
           )
         : await work.compose(async (allowance) =>
-            nativeOutput.releaseNativePublicCollectionOutputHold(
-              tx,
-              selection,
-              context(tx, pool, deadline, allowance),
-            ),
+            nativeOutput.releaseNativePublicCollectionOutputHold(tx, selection, context(tx, pool, deadline, allowance)),
           );
     if (result.status !== 'transferred' && result.status !== 'released') return refuse('current');
     const nativeReceipt = result.status === 'transferred' ? result.transfer : result.release;
@@ -1173,11 +1165,7 @@ export const resolvePublicIdentityOutputCaptureDisposition: LockPublicOutputDisp
   CommandTransaction,
   Pool,
   AuthoritativeTime
-> = async (
-  tx,
-  selection,
-  ctx,
-) => {
+> = async (tx, selection, ctx) => {
   const command = currentCommand(tx),
     resources = currentCommandResources(tx);
   if (
