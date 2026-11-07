@@ -440,7 +440,7 @@ class Recorder {
       name: 'paid order',
       command: last?.command ?? `GET /v1/orders/${orderId}`,
       ok: false,
-      status: last?.status,
+      ...(typeof last?.status === 'number' ? { status: last.status } : {}),
       observed: publicFields(last?.value ?? {}),
       expected: 'HTTP 200 paid entitlement',
     });
