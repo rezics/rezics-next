@@ -3902,10 +3902,10 @@ export class MergeTrain {
       result.mergedCommit = candidate;
       if (workspace) workspace.integrated(recorded.workspace!.module, target());
       if (controlPlane)
-        await this.propagateControlPlaneCommit(entry.candidate, request.taskId, recorded.manager, logPath);
+        await this.propagateControlPlaneCommit(candidate, request.taskId, recorded.manager, logPath);
       else if (stabilize) {
-        candidateWorkspace = this.trainWorkspace(trainTree, entry.candidate, trainCandidateCleanup);
-        await this.mergeStabilizedCommitIntoDev(entry.candidate, trainTree, request.taskId, recorded.manager, logPath);
+        candidateWorkspace = this.trainWorkspace(trainTree, candidate, trainCandidateCleanup);
+        await this.mergeStabilizedCommitIntoDev(candidate, trainTree, request.taskId, recorded.manager, logPath);
       }
       return true;
     };

@@ -1946,6 +1946,8 @@ transactions, so it never holds the SQLite lock while a child process runs. A se
 process's lock beyond the busy timeout is retried after 0.5, 1, 2, 4 and 8 seconds; a successful exit then lands once,
 as if there had been no contention. If the lock outlasts every try, the attempt is not classified as a worker failure:
 its driver is released and the host's orphan sweep settles the same exit again.
+Provider-progress incident resolution uses that same bounded retry schedule; if its writes remain contended, the
+driver is released for orphan recovery without changing the worker's result.
 
 Each task's step in a recovery sweep (cancelled-dependency notice, dependency release, proof reservation release,
 orphaned landing, pending or first start, worker adoption) is isolated: its failure is logged, reported once per
