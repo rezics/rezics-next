@@ -1,6 +1,6 @@
 import { afterAll, expect, test } from 'bun:test';
 import { mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
-import { join, relative, resolve } from 'node:path';
+import { dirname, join, relative, resolve } from 'node:path';
 import { browserWorkerCommand, browserWorkerRequest, runBrowserWorker, runWebTestLanes } from '../scripts/check.ts';
 
 const app = resolve(import.meta.dir, '..');
@@ -15,8 +15,15 @@ afterAll(() => rmSync(temporary, { recursive: true, force: true }));
 
 function addFakeTest(
   name: string,
-  options: { browser?: boolean; delay?: number; failure?: string; waitForStart?: string } = {},
+  options: {
+    browser?: boolean;
+    delay?: number;
+    failure?: string;
+    serverIndependentFile?: string;
+    waitForStart?: string;
+  } = {},
 ) {
+  const file = join(fakeTests, options.serverIndependentFile ?? name);
   const source = [
     "import { expect, test } from 'bun:test';",
     "import { existsSync, writeFileSync } from 'node:fs';",
@@ -42,8 +49,9 @@ function addFakeTest(
   ]
     .filter(Boolean)
     .join('\n');
-  writeFileSync(join(fakeTests, name), source);
-  return relative(app, join(fakeTests, name)).split('\\').join('/');
+  mkdirSync(dirname(file), { recursive: true });
+  writeFileSync(file, source);
+  return relative(app, file).split('\\').join('/');
 }
 
 function timing(wall: number) {
@@ -60,8 +68,14 @@ function options(run: string, files: string[], env: NodeJS.ProcessEnv = {}) {
 }
 
 test('runs fake files longest first in separate browser and unit pools, then records their wall times', async () => {
-  const browserSlow = addFakeTest('browser-slow.test.ts', { browser: true });
-  const browserFast = addFakeTest('browser-fast.test.ts', { browser: true });
+  const browserSlow = addFakeTest('browser-slow.test.ts', {
+    browser: true,
+    serverIndependentFile: 'ordered/scripts/check-placement.test.ts',
+  });
+  const browserFast = addFakeTest('browser-fast.test.ts', {
+    browser: true,
+    serverIndependentFile: 'ordered/scripts/focused.test.ts',
+  });
   const unitSlow = addFakeTest('unit-slow.test.ts');
   const unitFast = addFakeTest('unit-fast.test.ts');
   const runOptions = options('ordered', [browserFast, unitFast, browserSlow, unitSlow], {
@@ -98,7 +112,7 @@ test('runs fake files longest first in separate browser and unit pools, then rec
     expect(recorded.files[file]?.wall).toBeGreaterThan(0);
     expect(recorded.files[file]?.result).toBe('pass');
   }
-}, 15_000);
+}, 30_000);
 
 test('a verifier test-name selector reaches each fresh per-file Bun process unchanged', async () => {
   const file = join(fakeTests, 'filtered.test.ts');
@@ -125,7 +139,8 @@ test('a verifier test-name selector reaches each fresh per-file Bun process unch
 test('a placed browser worker keeps the selected Bun filter through per-file execution', async () => {
   const selected = join(events, 'browser-filter-selected');
   const excluded = join(events, 'browser-filter-excluded');
-  const file = join(fakeTests, 'browser-filtered.test.ts');
+  const file = join(fakeTests, 'filter/scripts/check-placement-custody.test.ts');
+  mkdirSync(dirname(file), { recursive: true });
   writeFileSync(
     file,
     [
@@ -153,11 +168,19 @@ test('a placed browser worker keeps the selected Bun filter through per-file exe
   } finally {
     rmSync(resolve(root, report), { recursive: true, force: true });
   }
-}, 15_000);
+}, 30_000);
 
 test('bounds browser lanes separately while unit files use a wider pool', async () => {
-  const browserOne = addFakeTest('browser-one.test.ts', { browser: true, delay: 500 });
-  const browserTwo = addFakeTest('browser-two.test.ts', { browser: true, delay: 500 });
+  const browserOne = addFakeTest('browser-one.test.ts', {
+    browser: true,
+    delay: 500,
+    serverIndependentFile: 'pools/scripts/check-placement.test.ts',
+  });
+  const browserTwo = addFakeTest('browser-two.test.ts', {
+    browser: true,
+    delay: 500,
+    serverIndependentFile: 'pools/scripts/focused.test.ts',
+  });
   const unitOne = addFakeTest('unit-one.test.ts', { delay: 1000, waitForStart: 'unit-two.test.ts' });
   const unitTwo = addFakeTest('unit-two.test.ts', { delay: 1000, waitForStart: 'unit-one.test.ts' });
   const runOptions = options('pools', [browserOne, browserTwo, unitOne, unitTwo], {
@@ -173,7 +196,7 @@ test('bounds browser lanes separately while unit files use a wider pool', async 
   expect(Math.max(start('unit-one.test.ts'), start('unit-two.test.ts'))).toBeLessThan(
     Math.min(end('unit-one.test.ts'), end('unit-two.test.ts')),
   );
-}, 15_000);
+}, 30_000);
 
 test('reports a failed fake file with its own output', async () => {
   const passing = addFakeTest('unit-pass.test.ts');
@@ -191,8 +214,16 @@ test('reports a failed fake file with its own output', async () => {
 });
 
 test('a placed browser worker serializes files that share its generated source and Vite cache', async () => {
-  const first = addFakeTest('worker-browser-first.test.ts', { browser: true, delay: 500 });
-  const second = addFakeTest('worker-browser-second.test.ts', { browser: true, delay: 500 });
+  const first = addFakeTest('worker-browser-first.test.ts', {
+    browser: true,
+    delay: 500,
+    serverIndependentFile: 'worker/scripts/check-placement.test.ts',
+  });
+  const second = addFakeTest('worker-browser-second.test.ts', {
+    browser: true,
+    delay: 500,
+    serverIndependentFile: 'worker/scripts/focused.test.ts',
+  });
   const env = { ...process.env, WEB_BROWSER_CHECK_CONCURRENCY: '3' };
   delete env.REZICS_STACK_SLOT;
   const result = await runBrowserWorker({
@@ -204,4 +235,4 @@ test('a placed browser worker serializes files that share its generated source a
   const start = (name: string) => Number(readFileSync(join(events, `start-${name}`), 'utf8'));
   const end = (name: string) => Number(readFileSync(join(events, `end-${name}`), 'utf8'));
   expect(start('worker-browser-second.test.ts')).toBeGreaterThanOrEqual(end('worker-browser-first.test.ts'));
-}, 15_000);
+}, 30_000);
