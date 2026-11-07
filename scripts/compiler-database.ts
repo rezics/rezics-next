@@ -20,11 +20,7 @@ type AuthDatabaseHelpers = {
 };
 
 type CommandPhaseHelpers = {
-  withCommandPhase: <T>(
-    phase: string,
-    work: () => Promise<T> | T,
-    env?: NodeJS.ProcessEnv,
-  ) => Promise<T>;
+  withCommandPhase: <T>(phase: string, work: () => Promise<T> | T, env?: NodeJS.ProcessEnv) => Promise<T>;
 };
 
 function importHelpers<T>(relativePath: string): Promise<T> {
