@@ -11,7 +11,7 @@ import {
 } from '@rezics/client';
 import { MediaProblem } from '../media/kernel';
 import { isPlatformClosedError } from '../kernel/platform-closed';
-import { dynamicCollectionTitle } from '../../library/settings-adapter';
+import { dynamicCollectionTitle } from '../library/settings-adapter';
 import {
   collectionVisibilities,
   shelfPreferenceColumns,

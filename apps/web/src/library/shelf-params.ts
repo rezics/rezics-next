@@ -1,4 +1,4 @@
-import { shelfColumnIds, type ShelfLayout } from './settings-contract';
+import { shelfColumnIds, shelfLayouts, type ShelfLayout } from './settings-contract';
 
 export { shelfColumnIds, shelfLayouts, type PersonalShelfColumnId, type ShelfLayout } from './settings-contract';
 

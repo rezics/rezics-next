@@ -614,8 +614,8 @@ function OwnedSettingsPage({
   managedAccountsIO,
   watchesIO,
   onRetry,
-  ShelfCard,
-  PrivacySection,
+  ShelfCard = BoundShelfPreferencesCard,
+  PrivacySection = BoundCollectionPrivacySection,
 }: {
   page: Extract<SettingsPage, { signedIn: true }> & { accountId: string };
   csrfToken: string | null;

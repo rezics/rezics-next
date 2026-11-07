@@ -4,10 +4,12 @@ import { Checkbox } from '@rezics/ui/shadcn/checkbox';
 import { Field, FieldLabel } from '@rezics/ui/shadcn/field';
 import { useNavigate } from '@tanstack/react-router';
 import { useId } from 'react';
+import { m } from '../paraglide/messages.js';
+import { shelfColumnLabel } from './shelf-column-label';
 import { shelfColumnIds, shelfColumns, type ShelfPresentationIntent } from './shelf-params';
 import { replaceShelfAddress } from './shelf-preferences';
 
-export { shelfColumnLabel } from './shelf-column-label';
+export { shelfColumnLabel };
 
 /** The personal table's existing fields, using the same display URL as layout and size. */
 export function ShelfColumnsControl({
