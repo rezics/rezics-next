@@ -99,6 +99,27 @@ The proposal no-effect fixture stopped at `error: KERNEL_RECEIPT_KEYS is require
 supplies the existing dedicated `testReceiptKeys()` capability, as the ordinary bulk fixture does; no assertion is
 removed or weakened. Native check time is not a six-path journey duration.
 
+The subsequent native receiving at `9eac1f44cbaf5b42a844d527f884d5bb674b5c62` returned exit 1 in 173.046 seconds.
+Batch diagnostics passed 3/3 and installed Members composition passed 2/2. Original Members intent passed 3/28;
+25 cases, including the 64/512/4096 growth cases, failed after mounted Collection admission at native
+`library.membersPreparation.reserve` or `library.membersPreparation.touch` with `ProblemError: Not Found`, code
+`not_found`. There is no HTTP status or correlation for these native calls. Semantic receives this cause for the
+Members owner with unchanged private-denial, intent, replay, retirement and growth assertions. Owned server evidence:
+`.temp/goal/checks/worker-check-82772a82-ef7d-41b9-ba80-612ca65c83c2-2026-11-07T10-20-46.644Z-9db9684c.log`.
+Bulk no-effect passed 2/3: its remaining failure exposed a fixture lookup still using the raw command key rather
+than the executor's derived receipt key. Both the before-finalization and after-commit fixture queries now use the
+existing native receipt-key reader; exactly-one receipt, replay, authorization and no-effect assertions stay intact.
+
+The expanded root landing selection returned 106 pass / 4 fail in 86.96 seconds. Signup, step-up, Importer and
+page-data receiving passed except for the retained challenge-reset assertion at `turnstile-lifetime.test.tsx:877`
+(expected one reset, received zero). Workspace-import receiving reported ten undeclared imports, including Auth's
+Operations test import and Importer's Playwright import; its repository scan also exceeded its five-second timeout.
+The configured SQL connection refusal above remained. The fresh-stack test failed before startup with
+`Bind for 127.0.0.1:54329 failed: port is already allocated`; its `finally` cleanup removed its UUID-owned container,
+volume and source copy. These are receiving failures, not journey measurements or permission to change unrelated
+authorization and dependency owners. The exact root selection is the landing command supplied with this walk;
+all original assertions remain in place.
+
 ### Last observed dev census
 
 Observed walk revision: `93eb7908d8e983998d4b280ea275b131aaa444a1` (origin/dev `b94d47ff56` including startup
