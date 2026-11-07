@@ -59,6 +59,7 @@ import {
 } from './records.ts';
 import { readRouting } from './routing.ts';
 import { FINAL_REPORT_PROMPT, finalReportPending, isSqliteContention, settle } from './settle.ts';
+import { CURSOR_FRESH_SESSION_EVENT, CURSOR_FRESH_SESSION_PROMPT } from './agents/shared.ts';
 import { firstFailure } from './merge.ts';
 import {
   canonicalConflictPaths,
@@ -537,6 +538,12 @@ export class WorkerJob implements GateOutcomeSink {
       if (observed.status === 'running') return null;
       return `Original proof result: ${JSON.stringify(observed)}`;
     }
+    const events = this.tasks.store.events(attempt.taskId, attempt.attempt);
+    const freshSessionRequest = events.findLast((event) => event.kind === CURSOR_FRESH_SESSION_EVENT);
+    const lastRun = events.findLast((event) => event.kind === 'worker-run-started');
+    // Once a new run starts, later check waits must use their own wake reason instead of replaying this prompt.
+    if (freshSessionRequest && (!lastRun || freshSessionRequest.sequence > lastRun.sequence))
+      return CURSOR_FRESH_SESSION_PROMPT;
     if (finalReportPending(this.tasks.store, attempt)) return FINAL_REPORT_PROMPT;
     const transport = lastTransportFailure(this.tasks.store, attempt);
     if (transport) {

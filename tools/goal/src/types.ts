@@ -341,6 +341,8 @@ export type RetryIntent = AttemptRef & {
     conflictFiles?: string[];
     /** A backed-off retry starts no earlier than this ISO time. */
     notBefore?: string;
+    /** Start the next attempt in a new provider session while preserving its branch and worktree. */
+    freshSession?: boolean;
     /** A check-host transport failure retries only while no check host is in a probed outage. */
     awaitCheckHosts?: boolean;
     profile?: Profile;

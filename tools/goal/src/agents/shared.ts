@@ -47,6 +47,10 @@ export const TRANSPORT_RETRY_BACKOFF_MS = [60_000, 120_000, 240_000] as const;
 export const TRANSPORT_RETRY_LIMIT = 6;
 export const TRANSPORT_RESUME_PROMPT =
   'The previous run ended on a dropped provider connection. Resume this same session and continue the work. Do not wait or poll. Finish with the required exit object.';
+export const CURSOR_FRESH_SESSION_EVENT = 'cursor-fresh-session-restart';
+export const CURSOR_FRESH_SESSION_RETRY_LIMIT = 1;
+export const CURSOR_FRESH_SESSION_PROMPT =
+  'The previous Cursor run stopped after repeated resume attempts made no progress. Continue in a fresh Cursor session from the existing branch and worktree, preserving committed and uncommitted changes. Do not repeat completed work. Finish with the required exit object.';
 
 const CURSOR_TLS_DISCONNECT = /Client network socket disconnected before secure TLS connection was established/i;
 const CURSOR_CONNECTION_LOST = /Connection lost, reconnecting to /i;
@@ -54,6 +58,10 @@ const CURSOR_RESUME_STOPPED = /Agent turn stopped after repeated resume attempts
 const CURSOR_CONNECTION_FAILED_REPEATEDLY = /Connection failed repeatedly/i;
 const CODEX_STREAM_DISCONNECTED = /stream disconnected/i;
 const CODEX_RESPONSES_WEBSOCKET = /failed to connect to Responses WebSocket/i;
+
+export function isCursorResumeStopped(stderr: string): boolean {
+  return CURSOR_RESUME_STOPPED.test(stderr);
+}
 
 function websocketFailureCount(stderr: string): number {
   return stderr.match(/failed to connect to Responses WebSocket/gi)?.length ?? 0;
@@ -63,7 +71,6 @@ function lineMatchesTransport(line: string): boolean {
   return (
     CURSOR_TLS_DISCONNECT.test(line) ||
     CURSOR_CONNECTION_LOST.test(line) ||
-    CURSOR_RESUME_STOPPED.test(line) ||
     CURSOR_CONNECTION_FAILED_REPEATEDLY.test(line) ||
     CODEX_STREAM_DISCONNECTED.test(line) ||
     CODEX_RESPONSES_WEBSOCKET.test(line)
@@ -79,17 +86,11 @@ export function lastNonemptyLine(text: string): string {
   return '';
 }
 
-/**
- * A dropped provider connection, classified from stderr. Cursor TLS and reconnect-then-stop lines do not depend on
- * the exit code; Codex WebSocket refusals must repeat and leave a nonzero exit.
- */
+/** A provider network drop classified from stderr; Cursor's repeated-resume-stop signal is recovered separately. */
 export function isTransportFailure(stderr: string, exitCode: number | null = null): boolean {
+  if (isCursorResumeStopped(stderr)) return false;
   if (CURSOR_TLS_DISCONNECT.test(stderr)) return true;
-  if (
-    CURSOR_CONNECTION_LOST.test(stderr) &&
-    (CURSOR_RESUME_STOPPED.test(stderr) || CURSOR_CONNECTION_FAILED_REPEATEDLY.test(stderr))
-  )
-    return true;
+  if (CURSOR_CONNECTION_LOST.test(stderr) && CURSOR_CONNECTION_FAILED_REPEATEDLY.test(stderr)) return true;
   if (CODEX_STREAM_DISCONNECTED.test(stderr)) return true;
   return exitCode !== 0 && websocketFailureCount(stderr) >= 2;
 }

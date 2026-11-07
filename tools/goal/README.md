@@ -1784,14 +1784,15 @@ A running worker is stalled only when none of these move for `silenceMs` (40 min
 
 A provider connection drop is classified from the worker's `<log>.err` stream, not from the exit code: Cursor
 `Client network socket disconnected before secure TLS connection was established`; `Connection lost, reconnecting to …`
-followed by `Agent turn stopped after repeated resume attempts made no progress` or `Connection failed repeatedly`;
-Codex `stream disconnected`; or repeated `failed to connect to Responses WebSocket` with a nonzero exit. The attempt
-stays on the same session after a 1-, 2-, then 4-minute backoff, at most six times in a row, and does not spend a
-task attempt or check-host stamp. Transport failures across tasks open one environment incident whose fingerprint is
-the transport line; its probe resumes one task, and the first probe that gets past the drop releases every held task
-at once. Adapters that cannot resume a session start a fresh process on that same attempt.
+followed by `Connection failed repeatedly`; Codex `stream disconnected`; or repeated `failed to connect to Responses
+WebSocket` with a nonzero exit. The attempt stays on the same session after a 1-, 2-, then 4-minute backoff, at most
+six times in a row, and does not spend a task attempt or check-host stamp. Transport failures across tasks open one
+environment incident whose fingerprint is the transport line; its probe resumes one task, and the first probe that
+gets past the drop releases every held task at once. Adapters that cannot resume a session start a fresh process on
+that same attempt.
 Decision: provider connection drops stay on the current attempt and fingerprint the transport line, not the empty
 `Worker ended without a success report (exit #):` prefix.
+Decision: Cursor's repeated-resume-stop line gets one fresh-session wake on the same attempt, preserving its branch and worktree without transport retries or incidents; Cursor never resumes retained sessions, including stores over 2 MB, and `retry --fresh-session` amends a pending retry intent in place.
 
 A worker that exits without a success report and with an empty or unparsed result records the last error line of
 `<log>.err` after `Worker ended without a success report (exit N):`. That generic prefix with no detail is not
@@ -2517,7 +2518,8 @@ explicit `retry` of the same task resumes that unsettled stop first, then uses t
 A retry resumes the previous attempt's provider session while the pool, CLI and model stay the same. `--fresh-session`
 starts the next attempt in a new session instead, keeping the branch, worktree, commits and uncommitted work; the
 choice is kept on the task through capacity waits, dependency holds and restarts, and the attempt it creates consumes
-it, so later retries resume again. It combines with `--brief` but not with the proof options.
+it, so later retries resume again. If a retry is already pending, `--fresh-session` is merged into that intent while
+preserving its place and existing options. It combines with `--brief` but not with the proof options.
 Explicit retries are recorded with their amended brief as pending host start intents and return without waiting for capacity. The host consumes pending intents on recovery ticks in their saved order, starting each once as capacity becomes available.
 Product work integrating into dev can be retried at any generation: `retry <task>`, with or without
 `--expected-attempt 0`, also starts a never-started task, and `--brief` also amends a retry that is still waiting to

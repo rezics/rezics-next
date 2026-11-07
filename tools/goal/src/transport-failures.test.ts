@@ -1,7 +1,10 @@
 import { expect, test } from 'bun:test';
 import { mkdirSync, readdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
+import { agentAdapter } from './agents.ts';
 import {
+  CURSOR_FRESH_SESSION_EVENT,
+  isCursorResumeStopped,
   isTransportFailure,
   TRANSPORT_FAILURE_EVENT,
   TRANSPORT_RETRY_BACKOFF_MS,
@@ -24,6 +27,7 @@ import {
 } from './tool-incidents.ts';
 import type { Attempt } from './types.ts';
 import { workerCheckBudgetDirectory } from './worker-check-budget.ts';
+import { runWorkerCommand } from './worker-commands.ts';
 
 const TLS = 'Error: [aborted] Client network socket disconnected before secure TLS connection was established';
 const CONNECTION_LOST = 'Connection lost, reconnecting to https://agentn.global.api5.cursor.sh';
@@ -50,9 +54,33 @@ if (process.argv.includes('resume')) {
 }
 `;
 
+const cursorResumeStoppedCli = `#!/usr/bin/env bun
+import { appendFileSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { join } from 'node:path';
+import { spawnSync } from 'node:child_process';
+const state = '.temp/goal';
+mkdirSync(state, { recursive: true });
+const runs = join(state, 'cursor-runs.jsonl');
+appendFileSync(runs, JSON.stringify({ argv: process.argv.slice(2), cwd: process.cwd() }) + '\\n');
+const count = readFileSync(runs, 'utf8').trim().split('\\n').length;
+if (count === 1) {
+  writeFileSync('partial-commit.txt', 'committed before recovery');
+  spawnSync('git', ['add', 'partial-commit.txt']);
+  spawnSync('git', ['commit', '-m', 'Keep partial work']);
+  writeFileSync('partial-dirty.txt', 'uncommitted before recovery');
+  console.log(JSON.stringify({ type: 'result', result: 'incomplete', session_id: 'cursor-old-session' }));
+  console.error(${JSON.stringify(`${CONNECTION_LOST}\n${RESUME_STOPPED}`)});
+  process.exit(1);
+}
+const preserved = readFileSync('partial-commit.txt', 'utf8') === 'committed before recovery' && readFileSync('partial-dirty.txt', 'utf8') === 'uncommitted before recovery';
+console.log(JSON.stringify({ type: 'result', result: preserved ? 'RESULT: success' : 'partial work was missing', session_id: 'cursor-fresh-session' }));
+if (!preserved) process.exit(1);
+`;
+
 test('transport classification uses stderr, not exit code', () => {
   expect(isTransportFailure(TLS, 0)).toBe(true);
-  expect(isTransportFailure(`${CONNECTION_LOST}\nretrying\n${RESUME_STOPPED}`, 0)).toBe(true);
+  expect(isCursorResumeStopped(`${CONNECTION_LOST}\nretrying\n${RESUME_STOPPED}`)).toBe(true);
+  expect(isTransportFailure(`${CONNECTION_LOST}\nretrying\n${RESUME_STOPPED}`, 0)).toBe(false);
   expect(isTransportFailure(`${CONNECTION_LOST}\n${CONNECTION_FAILED}`, 0)).toBe(true);
   expect(isTransportFailure(STREAM, 0)).toBe(true);
   expect(isTransportFailure(`${WEBSOCKET}\n${WEBSOCKET}`, 1)).toBe(true);
@@ -60,7 +88,7 @@ test('transport classification uses stderr, not exit code', () => {
   expect(isTransportFailure(`${WEBSOCKET}\n${WEBSOCKET}`, 0)).toBe(false);
   expect(isTransportFailure(CONNECTION_LOST, 1)).toBe(false);
   expect(isTransportFailure(OTHER, 1)).toBe(false);
-  expect(transportFailureLine(`${CONNECTION_LOST}\n${RESUME_STOPPED}`)).toBe(RESUME_STOPPED);
+  expect(transportFailureLine(`${CONNECTION_LOST}\n${RESUME_STOPPED}`)).toBe(CONNECTION_LOST);
   expect(TRANSPORT_RETRY_BACKOFF_MS).toEqual([60_000, 120_000, 240_000]);
   expect(TRANSPORT_RETRY_LIMIT).toBe(6);
   expect([1, 2, 3, 6].map((count) => transportRetryBackoffMs(count))).toEqual([60_000, 120_000, 240_000, 240_000]);
@@ -282,6 +310,55 @@ test('a transport drop resumes the existing session after backoff', async () => 
     ) as string[];
     expect(argv).toContain('resume');
     expect(argv).toContain('wake-session');
+  } finally {
+    await h.disposeAsync();
+  }
+}, 30_000);
+
+test('Cursor resume-stop starts fresh on the existing worktree without a transport incident', async () => {
+  const h = settleHarness(cursorResumeStoppedCli);
+  try {
+    const pool = h.settings.pools[0]!;
+    pool.cli = 'cursor';
+    pool.classes = ['cursor'];
+    const routing = JSON.parse(readFileSync(h.settings.routingFile, 'utf8'));
+    routing.classes.implementation.first = { cli: 'cursor', model: 'cursor-fixture', effort: 'high', poolClass: 'cursor' };
+    routing.classes.implementation.fallbacks = [];
+    h.settings.routingFile = join(h.settings.stateDirectory, 'cursor-routing.json');
+    writeFileSync(h.settings.routingFile, JSON.stringify(routing));
+    expect(agentAdapter('cursor').canResume).toBe(false);
+
+    const task = h.tasks.dispatch(h.briefFile);
+    const job = new WorkerJob(h.tasks, { enqueue() {} }, { deliver() {} });
+    await job.start(task.id);
+    await job.drain();
+    const ref = { taskId: task.id, attempt: 1 };
+    expect(h.store.attempt(ref)).toMatchObject({ state: 'waiting', session: null, failureKind: null });
+    expect(h.store.events(ref.taskId, ref.attempt).filter((event) => event.kind === TRANSPORT_FAILURE_EVENT)).toHaveLength(0);
+    expect(h.store.events(ref.taskId, ref.attempt).filter((event) => event.kind === CURSOR_FRESH_SESSION_EVENT)).toHaveLength(1);
+
+    await job.recoverOrphans();
+    await job.drain();
+    expect(h.store.task(task.id)).toMatchObject({ currentAttempt: 1, branch: task.branch, worktree: task.worktree });
+    expect(h.store.attempt(ref)).toMatchObject({ state: 'exited', failureKind: null, session: 'cursor-fresh-session' });
+    expect(readFileSync(join(task.worktree, 'partial-commit.txt'), 'utf8')).toBe('committed before recovery');
+    expect(readFileSync(join(task.worktree, 'partial-dirty.txt'), 'utf8')).toBe('uncommitted before recovery');
+    const runs = readFileSync(join(task.worktree, '.temp/goal/cursor-runs.jsonl'), 'utf8')
+      .trim()
+      .split('\n')
+      .map((line) => JSON.parse(line) as { argv: string[]; cwd: string });
+    expect(runs).toHaveLength(2);
+    expect(runs.map((run) => run.cwd)).toEqual([task.worktree, task.worktree]);
+    expect(runs[1]!.argv.some((arg) => arg === 'resume' || arg === '--resume')).toBe(false);
+    expect(listOpenToolIncidents(h.store)).toEqual([]);
+
+    const notBefore = new Date(Date.now() + 60_000).toISOString();
+    h.tasks.queueRetry(task.id, { evidence: 'retained-evidence', notBefore });
+    await runWorkerCommand('retry', [task.id, '--fresh-session'], { tasks: h.tasks, print() {} });
+    expect(h.store.retryIntent(ref)).toMatchObject({
+      status: 'pending',
+      options: { evidence: 'retained-evidence', notBefore, freshSession: true },
+    });
   } finally {
     await h.disposeAsync();
   }
