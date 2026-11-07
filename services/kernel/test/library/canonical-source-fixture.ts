@@ -31,6 +31,7 @@ import { createSubject } from '../../src/semantic/subject.ts';
 import readSubjectStatement from '../../src/semantic/read-subject.sql';
 import { createRealAccess } from '../semantic/real-access.ts';
 import type { GrowthDatabase } from '../support/growth.ts';
+import { configureTestReceiptKeys } from '../support/receipt-keys.ts';
 import type { DynamicCollectionsDriver } from '../../../../specs/dynamic-collections-driver.ts';
 
 export const NIL = '00000000-0000-0000-0000-000000000000';
@@ -179,6 +180,7 @@ export const sourceIndexExpectations = {
 };
 
 export async function canonicalFixture(db: GrowthDatabase) {
+  configureTestReceiptKeys(db.pool);
   const accounts = { editor: newId(0x6b10), reader: newId(0x6b20) };
   const actions = [
     'subject:create',
