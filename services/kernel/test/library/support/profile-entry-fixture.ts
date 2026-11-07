@@ -172,6 +172,7 @@ export async function createProfileEntryFixture(
     projectLinks?: boolean;
     gameUnits?: readonly string[];
     ownerScopes?: readonly string[];
+    growthSubjectCount?: number;
   } = {},
 ) {
   const url = options.databaseUrl ?? process.env.DATABASE_URL;
@@ -537,6 +538,31 @@ export async function createProfileEntryFixture(
     // Governance bootstrap already performed the Global parent's one-time installation.
     // Extend its standing creation authority through ordinary, fully authorized grants.
     await grantOnDeadline({ kind: 'active_accounts' }, ['subject:create', 'statement:propose']);
+    const original = await compileEntryRelease('original', options.gameUnits);
+    const originalDigest = releaseDigest(original);
+    const growthSubjects = Array.from({ length: options.growthSubjectCount ?? 0 }, () =>
+      newId(routeOf(owner.actor.accountId)!),
+    );
+    if (growthSubjects.length > 0) {
+      // The documented legacy-import window closes when native identity installation commits.
+      // Seed only Semantic source rows here; Library entries still use native commands.
+      const source = JSON.stringify(growthSubjects.map((subjectId) => ({ subjectId, transactionId: randomUUID() })));
+      await pool.query(
+        `WITH source AS (
+           SELECT $1::integer AS route, subject_id::uuid, transaction_id::uuid
+           FROM jsonb_to_recordset($2::jsonb) AS input(subject_id text, transaction_id text)
+         ), created AS (
+           INSERT INTO semantic.subject
+             (route,subject_id,type,recorded_transaction_id,current_facts,current_release)
+           SELECT route,subject_id,'ex:Child',transaction_id,0,$3::text FROM source
+           RETURNING route,subject_id,recorded_transaction_id
+         )
+         INSERT INTO semantic.revision
+           (route,subject_id,revision,kind,release,recorded_transaction_id)
+         SELECT route,subject_id,1,'create',$3::text,recorded_transaction_id FROM created`,
+        [routeOf(owner.actor.accountId), source, originalDigest],
+      );
+    }
     await installIdentityEpochBootstrap(pool);
     identityHomesReady = true;
     for (const home of partitions) {
@@ -831,9 +857,8 @@ export async function createProfileEntryFixture(
         client.release();
       }
     }
-    const original = await compileEntryRelease('original', options.gameUnits);
     const replacement = await compileEntryRelease('replacement', options.gameUnits);
-    const originalDigest = await publish(original);
+    await publish(original);
     const replacementDigest = await publish(replacement);
     await activate(originalDigest);
     await setLibraryOpen(true);
@@ -842,6 +867,11 @@ export async function createProfileEntryFixture(
     const accepted = await commands.putEntry(owner.actor, baseline, { state: 'planned' }, entryKey());
     expect(accepted.value.entry.subjectId).toBe(baseline);
     await awaitCurrentIdentity(baseline);
+    if (growthSubjects.length > 0) {
+      const home = partitionOf(routeOf(growthSubjects[0]!)!);
+      mappedHomes.add(home);
+      await catchUpIdentity(home);
+    }
     expect((await commands.readEntry(owner.actor, baseline)).state).toBe('planned');
     expect((await send('owner', 'GET', `/v1/libraryEntries/${baseline}`)).status).toBe(200);
 
@@ -858,6 +888,7 @@ export async function createProfileEntryFixture(
       replacement,
       originalDigest,
       replacementDigest,
+      growthSubjects,
       identity,
       send,
       sendWithHeaders,
