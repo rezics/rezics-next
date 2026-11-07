@@ -15,6 +15,7 @@ import { m } from '../../paraglide/messages.js';
 import { PageHeading } from '../../shell/page-heading';
 import type * as ProfilePresentation from '../../settings/ports/profile-editor-view';
 import { usePreferenceRetry } from '../../settings/ports/profile-editor';
+import { useSettingsAmbient } from '../../settings/adapters/ambient-view.tsx';
 import type { AccountProfileRuntime, ProfileSessionObservation } from './ports';
 import { AccountProfileEditor } from './editor';
 import { profilePageReadError, type ProfilePage } from './data';
@@ -70,11 +71,13 @@ function BoundProfile({
   boundSession: ProfileSessionObservation;
 }) {
   const { ProfileNavigation } = presentation;
+  const ambient = useSettingsAmbient();
   const [page, setPage] = useState<ProfilePage | null>(null);
   const [binding] = useState(() => {
     const lease = boundSession.bind(viewerId, csrfToken);
     const current = lease.isCurrent;
     const editor = new AccountProfileEditor({
+      ambient,
       isCurrent: current,
       read: async (signal) => {
         if (!current()) throw new Error('Profile selection changed');

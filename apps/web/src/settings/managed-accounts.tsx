@@ -22,6 +22,7 @@ import { useAccounts } from './managed-account-capabilities';
 import { initials } from '../threads/initials';
 import { readManagedAccountsInventory } from './actions';
 import { useManagedReaderLifetime, useManagedSessionReader, type ManagedSessionReader } from './managed-session-reader';
+import { useSettingsAmbient } from './adapters/ambient-view.tsx';
 import { usePreferenceRetry } from './preference-failure-retry';
 import {
   managedAccountHref,
@@ -605,9 +606,16 @@ function ViewerInventory({
   owner?: ManagedSessionReader | undefined;
 }) {
   const locale = getLocale();
+  const ambient = useSettingsAmbient();
   const inventory = useMemo(
-    () => new ManagedAccountsInventory(viewerId, io, () => (!owner || owner.isCurrent()) && getLocale() === locale),
-    [viewerId, io, owner, locale],
+    () =>
+      new ManagedAccountsInventory(
+        viewerId,
+        io,
+        ambient,
+        () => (!owner || owner.isCurrent()) && getLocale() === locale,
+      ),
+    [ambient, viewerId, io, owner, locale],
   );
   const snapshot = useSyncExternalStore(inventory.subscribe, inventory.snapshot, inventory.snapshot);
   useManagedReaderLifetime(inventory.dispose, owner);

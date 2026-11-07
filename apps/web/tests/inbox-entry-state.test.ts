@@ -11,9 +11,13 @@ import {
   createRouter,
   RouterProvider,
 } from '@tanstack/react-router';
+import { performanceAmbientTree } from './performance-ambient';
 import * as start from '../.storybook/react-start';
 import { getServerAsyncLocalStorage, locales, overwriteServerAsyncLocalStorage } from '../src/paraglide/runtime.js';
 import { m } from '../src/paraglide/messages.js';
+import { createBrowserInboxAmbient } from '../src/inbox/adapters/ambient';
+
+const inboxAmbient = createBrowserInboxAmbient();
 
 // Exercise the shared server read with controlled request/native-session boundaries, without a server or database.
 let requests = 0;
@@ -75,7 +79,7 @@ async function markup(props: EntryProps, path = '/en/inbox', client = new QueryC
   });
   await router.load();
   return renderToStaticMarkup(
-    createElement(QueryClientProvider, { client }, createElement(RouterProvider, { router })),
+    performanceAmbientTree(createElement(QueryClientProvider, { client }, createElement(RouterProvider, { router }))),
   );
 }
 
@@ -143,7 +147,7 @@ describe('Offer actionable sign-in and session recovery on Inbox preserving nati
       const duplicate = retryInboxSession(client);
       expect(client.getQueryState(sessionQuery.queryKey)?.fetchStatus).toBe('fetching');
       expect(currentInboxViewer(client)).toBeNull();
-      expect(unreadCountQueryFor(currentInboxViewer(client)).enabled).toBe(false);
+      expect(unreadCountQueryFor(currentInboxViewer(client), inboxAmbient.now).enabled).toBe(false);
       pending.resolve(false);
       await Promise.all([retry, duplicate]);
       expect(requests - before).toBe(3);
@@ -186,7 +190,7 @@ describe('Offer actionable sign-in and session recovery on Inbox preserving nati
       const alice = store.snapshot()!;
       expect(alice.subject).toBe('alice');
       const oldPageKey = inboxPageQuery(alice, 'old-cursor').queryKey;
-      const oldBadgeKey = unreadCountQueryFor(alice).queryKey;
+      const oldBadgeKey = unreadCountQueryFor(alice, inboxAmbient.now).queryKey;
       client.setQueryData(oldPageKey, {
         signedIn: true,
         state: 'ready',
@@ -205,7 +209,7 @@ describe('Offer actionable sign-in and session recovery on Inbox preserving nati
         const sessionKey: readonly unknown[] = sessionQuery.queryKey;
         client.setQueryData(sessionKey, { state, subject: null, csrfToken: 'same-token' });
         expect(store.snapshot()).toBeNull();
-        expect(unreadCountQueryFor(store.snapshot()).enabled).toBe(false);
+        expect(unreadCountQueryFor(store.snapshot(), inboxAmbient.now).enabled).toBe(false);
         await expect(forInboxViewer(alice, async () => ++privateReads)).rejects.toThrow('Inbox viewer changed');
         await expect(
           markInboxViewerSeen(
@@ -213,6 +217,7 @@ describe('Offer actionable sign-in and session recovery on Inbox preserving nati
             alice,
             { through: 'old-row', idempotencyKey: 'old-intent' },
             'same-token',
+            inboxAmbient.now,
             async () => {
               privateReads++;
               return { signedIn: true };
@@ -226,7 +231,7 @@ describe('Offer actionable sign-in and session recovery on Inbox preserving nati
       expect(recovered.subject).toBe('alice');
       expect(recovered.epoch).not.toBe(alice.epoch);
       expect(client.getQueryData(inboxPageQuery(recovered, 'old-cursor').queryKey)).toBeUndefined();
-      expect(client.getQueryData(unreadCountQueryFor(recovered).queryKey)).toBeUndefined();
+      expect(client.getQueryData(unreadCountQueryFor(recovered, inboxAmbient.now).queryKey)).toBeUndefined();
       expect(alice.isCurrent()).toBe(false);
       await client.fetchQuery(
         inboxPageQuery(recovered, undefined, async () => {

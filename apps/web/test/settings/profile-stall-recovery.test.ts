@@ -5,6 +5,9 @@ import { writeTarget } from '../../src/accounts/profile-editor/data';
 import { loadProfileRecord, saveProfileRecord, type ProfileValues } from '../../src/settings/profile-data';
 import { officialProfileRead } from '../../src/settings/editable-profile-source';
 import { withProfileDeadline } from '../../src/settings/profile-request-deadline';
+import { createBrowserSettingsAmbient } from '../../src/settings/adapters/ambient';
+
+const settingsAmbient = createBrowserSettingsAmbient();
 
 const accountId = '019a0000-0000-7000-8000-000000000001';
 const profile: ProfileValues = {
@@ -83,6 +86,7 @@ test('initial read, unknown PATCH and readback recover deliberately with the sam
     let late!: (value: ProfileValues) => void;
     const attempts: unknown[] = [];
     const editor = new AccountProfileEditor({
+      ambient: settingsAmbient,
       read: async () =>
         ++reads === 1
           ? never()
@@ -128,19 +132,27 @@ test('cancellation releases resources, prevents dispatch and retirement aborts o
   const clear = spyOn(globalThis, 'clearTimeout');
   let child!: AbortSignal;
   try {
-    const pending = withProfileDeadline((signal) => {
-      child = signal;
-      return never();
-    }, caller.signal);
+    const pending = withProfileDeadline(
+      (signal) => {
+        child = signal;
+        return never();
+      },
+      caller.signal,
+      settingsAmbient.timer,
+    );
     caller.abort(new Error('retired'));
     await expect(pending).rejects.toThrow('retired');
     await expect(
-      withProfileDeadline(() => {
-        throw new Error('dispatched');
-      }, caller.signal),
+      withProfileDeadline(
+        () => {
+          throw new Error('dispatched');
+        },
+        caller.signal,
+        settingsAmbient.timer,
+      ),
     ).rejects.toThrow('retired');
     expect(child.aborted).toBe(true);
-    expect(await withProfileDeadline(async () => 'ready')).toBe('ready');
+    expect(await withProfileDeadline(async () => 'ready', undefined, settingsAmbient.timer)).toBe('ready');
     expect(remove).toHaveBeenCalledTimes(2);
     expect(clear).toHaveBeenCalledTimes(3);
   } finally {
@@ -148,6 +160,7 @@ test('cancellation releases resources, prevents dispatch and retirement aborts o
     clear.mockRestore();
   }
   const editor = new AccountProfileEditor({
+    ambient: settingsAmbient,
     read: async (signal) => {
       child = signal!;
       return never();

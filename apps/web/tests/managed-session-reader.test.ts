@@ -10,6 +10,9 @@ import type { ManagedAccountsResult } from '../src/settings/managed-accounts-rea
 import type { DetailResult } from '../src/settings/managed-account-detail-read';
 import type { ManagedAuthNavigation, ManagedAccountActionsResult } from '../src/settings/managed-account-actions-read';
 import type { AccountRenameResult } from '../src/settings/account-rename-actions';
+import { createBrowserSettingsAmbient } from '../src/settings/adapters/ambient';
+
+const settingsAmbient = createBrowserSettingsAmbient();
 
 // Actual QueryClient, mounted production callers, original server handlers and generated HTTP client.
 // The DOM/server plumbing and HTTP responses are fixtures. All regressions in this file are authored, UNRUN.
@@ -222,6 +225,7 @@ for (const kind of ['error', 'remove', 'loss', 'subject'] as const) {
         calls[0]++;
         return invResult.promise;
       },
+      settingsAmbient,
       owner.isCurrent,
     );
     const det = new ManagedAccountReader(
@@ -231,6 +235,7 @@ for (const kind of ['error', 'remove', 'loss', 'subject'] as const) {
         calls[1]++;
         return detResult.promise;
       },
+      settingsAmbient,
       token,
       owner.isCurrent,
     );
@@ -240,6 +245,7 @@ for (const kind of ['error', 'remove', 'loss', 'subject'] as const) {
         calls[2]++;
         return actResult.promise;
       },
+      settingsAmbient,
       owner.isCurrent,
     );
     const rename = new AccountRenameRegion(
@@ -247,6 +253,7 @@ for (const kind of ['error', 'remove', 'loss', 'subject'] as const) {
         calls[3]++;
         return renResult.promise;
       },
+      settingsAmbient,
       viewerId,
       owner.isCurrent,
     );
@@ -289,6 +296,7 @@ for (const kind of ['error', 'remove', 'loss', 'subject'] as const) {
     const recovered = new ManagedAccountsInventory(
       viewerId,
       async () => ({ ok: true, page: inventory() }),
+      settingsAmbient,
       fresh.isCurrent,
     );
     await recovered.load();
@@ -384,6 +392,7 @@ for (const late of ['success', 'failure'] as const) {
           return Promise.resolve({ ok: true, page: inventory() });
         return inventoryReplies[input.organizationsCursor ? 0 : 1]!.promise;
       },
+      settingsAmbient,
       owner.isCurrent,
     );
     const det = new ManagedAccountReader(
@@ -394,6 +403,7 @@ for (const late of ['success', 'failure'] as const) {
         if (!input.section) return Promise.resolve({ ok: true, viewerId, value: detail() });
         return detailReplies[input.section === 'members' ? 0 : 1]!.promise;
       },
+      settingsAmbient,
       token,
       owner.isCurrent,
     );
@@ -473,6 +483,7 @@ test('synchronous loss and recovery during pending publication refuses actual IO
         calls++;
         return { ok: true, page: inventory() };
       },
+      settingsAmbient,
       owner.isCurrent,
     );
     const det = new ManagedAccountReader(
@@ -482,6 +493,7 @@ test('synchronous loss and recovery during pending publication refuses actual IO
         calls++;
         return { ok: true, viewerId, value: detail() };
       },
+      settingsAmbient,
       token,
       owner.isCurrent,
     );
@@ -491,6 +503,7 @@ test('synchronous loss and recovery during pending publication refuses actual IO
         calls++;
         return actionResult();
       },
+      settingsAmbient,
       owner.isCurrent,
     );
     const rename = new AccountRenameRegion(
@@ -498,6 +511,7 @@ test('synchronous loss and recovery during pending publication refuses actual IO
         calls++;
         return renameResult;
       },
+      settingsAmbient,
       viewerId,
       owner.isCurrent,
     );
@@ -811,22 +825,39 @@ for (const failure of [false, true]) {
     const actOutcome = deferred<ManagedAccountActionsResult>();
     const renOutcome = deferred<AccountRenameResult>();
     const calls = [0, 0, 0, 0];
-    const inv = new ManagedAccountsInventory(viewerId, () => {
-      calls[0]++;
-      return invOutcome.promise;
-    });
-    const det = new ManagedAccountReader(viewerId, targetId, () => {
-      calls[1]++;
-      return detOutcome.promise;
-    });
-    const actions = new ManagedAccountActionsRead({ viewerId, accountId: targetId }, () => {
-      calls[2]++;
-      return actOutcome.promise;
-    });
-    const rename = new AccountRenameRegion(() => {
-      calls[3]++;
-      return renOutcome.promise;
-    }, viewerId);
+    const inv = new ManagedAccountsInventory(
+      viewerId,
+      () => {
+        calls[0]++;
+        return invOutcome.promise;
+      },
+      settingsAmbient,
+    );
+    const det = new ManagedAccountReader(
+      viewerId,
+      targetId,
+      () => {
+        calls[1]++;
+        return detOutcome.promise;
+      },
+      settingsAmbient,
+    );
+    const actions = new ManagedAccountActionsRead(
+      { viewerId, accountId: targetId },
+      () => {
+        calls[2]++;
+        return actOutcome.promise;
+      },
+      settingsAmbient,
+    );
+    const rename = new AccountRenameRegion(
+      () => {
+        calls[3]++;
+        return renOutcome.promise;
+      },
+      settingsAmbient,
+      viewerId,
+    );
     const leave = rename.mount();
     const reads = [inv.load(), det.load(), actions.load(), rename.reload()];
     await Promise.resolve();

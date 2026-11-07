@@ -1,5 +1,11 @@
 # Settings
 
+**Decision:** Settings recovery consumes explicit `SettingsAmbient` (`now`, `id`, `timer`). `Date.now`, `crypto.randomUUID` and `setTimeout` live only in the named browser/server adapters; root composition binds `createPerformanceAmbient()`. Recovery, retry admission, draft lifetimes and command creation take the capability or an observation. Constructors have no ambient fallback. Original-command identities, absolute Retry-After deadlines, current-reader retirement and deliberate retry stay unchanged. Existing focused suites pin this by passing the adapter; no extra stories. React providers live in `adapters/ambient-view.tsx` so Bun transpile does not collide with `adapters/ambient.ts`.
+
+**Cost:** One process-wide adapter. No extra native round-trips. Retry-After is still observed once as an absolute deadline; expiry enables deliberate recovery only.
+
+Eliminated ambient sites: Profile/avatar, Watches, verification, notifications, Reading/Shelf/Collection privacy, managed-account inventory/detail/actions/rename, and HTTP handlers (those bind `createServerSettingsAmbient` / `serverSettingsTimer`). Remaining adapter sites: `settings/adapters/ambient.ts` (clock, UUID, timer) and `settings/adapters/ambient-view.tsx` (route-bound provider).
+
 **Decision:** Collection privacy uses the existing private owner inventory and native `collection:update` advice; logical built-ins remain inspectable and read-only without a command revision.
 
 **Decision:** Settings consumes private Collection owner windows, privacy command/readback and Shelf type/default/column preferences through the typed Library port (`ports/library.ts`). Visibility, occurrence, frontier and preference vocabulary live in Library `settings-contract`; transport binds at `settings-adapter` and `adapters/library.ts`, presentation at `adapters/library-view.tsx`, composed from ordinary `/settings`. Exact failed cursors, independent command/read deadlines, drafts and acknowledged-original recovery stay on that port. Fewest tests: keep the existing Collection privacy and Shelf recovery suites and add one port-composition pin rather than a second suite.

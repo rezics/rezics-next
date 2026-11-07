@@ -12,6 +12,9 @@ import {
 } from '../../src/settings/verification-core';
 import { VerificationRecovery } from '../../src/settings/verification-recovery';
 import { withVerificationDeadline } from '../../src/settings/verification-request-deadline';
+import { createBrowserSettingsAmbient } from '../../src/settings/adapters/ambient';
+
+const settingsAmbient = createBrowserSettingsAmbient();
 
 const input: VerificationInput = {
   subject: 'subject-1',
@@ -115,25 +118,29 @@ test('review and lost submission recover explicitly with exact input, identity a
     let reads = 0;
     let writes = 0;
     const sent: VerificationInput[] = [];
-    const controller = new VerificationRecovery('alice', {
-      read: async () => {
-        if (++reads === 1 || reads === 5) return never();
-        return {
-          accountId: 'alice',
-          verificationRequest: reads === 3 || reads === 6 ? request : null,
-          viewerActions:
-            reads === 3 || reads === 6
-              ? [{ action: 'account:update', operations: ['account.withdraw_verification'] }]
-              : [{ action: 'account:update', operations: ['account.request_verification'] }],
-          subjectTitle: null,
-        };
+    const controller = new VerificationRecovery(
+      'alice',
+      {
+        read: async () => {
+          if (++reads === 1 || reads === 5) return never();
+          return {
+            accountId: 'alice',
+            verificationRequest: reads === 3 || reads === 6 ? request : null,
+            viewerActions:
+              reads === 3 || reads === 6
+                ? [{ action: 'account:update', operations: ['account.withdraw_verification'] }]
+                : [{ action: 'account:update', operations: ['account.request_verification'] }],
+            subjectTitle: null,
+          };
+        },
+        request: async (_account, draft) => {
+          sent.push(draft);
+          return ++writes === 1 ? never() : { ok: true, verificationRequest: request };
+        },
+        withdraw: never,
       },
-      request: async (_account, draft) => {
-        sent.push(draft);
-        return ++writes === 1 ? never() : { ok: true, verificationRequest: request };
-      },
-      withdraw: never,
-    });
+      settingsAmbient,
+    );
     await controller.reload();
     expect(controller.snapshot().phase).toBe('unavailable');
     await controller.reload();
@@ -169,35 +176,47 @@ test('caller cancellation releases resources, prevents dispatch and retirement a
   const clear = spyOn(globalThis, 'clearTimeout');
   let signal!: AbortSignal;
   try {
-    const pending = withVerificationDeadline((child) => {
-      signal = child;
-      return never();
-    }, caller.signal);
+    const pending = withVerificationDeadline(
+      (child) => {
+        signal = child;
+        return never();
+      },
+      caller.signal,
+      settingsAmbient.timer,
+    );
     caller.abort(new Error('retired'));
     await expect(pending).rejects.toThrow('retired');
     expect(signal.aborted).toBe(true);
     let dispatched = false;
     await expect(
-      withVerificationDeadline(async () => {
-        dispatched = true;
-      }, caller.signal),
+      withVerificationDeadline(
+        async () => {
+          dispatched = true;
+        },
+        caller.signal,
+        settingsAmbient.timer,
+      ),
     ).rejects.toThrow('retired');
     expect(dispatched).toBe(false);
-    expect(await withVerificationDeadline(async () => 'ready')).toBe('ready');
+    expect(await withVerificationDeadline(async () => 'ready', undefined, settingsAmbient.timer)).toBe('ready');
     expect(remove).toHaveBeenCalledTimes(2);
     expect(clear).toHaveBeenCalledTimes(3);
   } finally {
     remove.mockRestore();
     clear.mockRestore();
   }
-  const controller = new VerificationRecovery('alice', {
-    read: async (_account, child) => {
-      signal = child!;
-      return never();
+  const controller = new VerificationRecovery(
+    'alice',
+    {
+      read: async (_account, child) => {
+        signal = child!;
+        return never();
+      },
+      request: never,
+      withdraw: never,
     },
-    request: never,
-    withdraw: never,
-  });
+    settingsAmbient,
+  );
   const pending = controller.reload();
   controller.deactivate();
   await pending;

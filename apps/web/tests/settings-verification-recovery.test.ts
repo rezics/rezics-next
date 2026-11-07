@@ -10,6 +10,10 @@ import { m } from '../src/paraglide/messages.js';
 import { getServerAsyncLocalStorage, locales, overwriteServerAsyncLocalStorage } from '../src/paraglide/runtime.js';
 import { readVerification, unwrapVerificationRead, VerificationReadError } from '../src/settings/verification-core';
 import type { AgentVerificationRequest } from '../src/settings/verification-core';
+import { createBrowserSettingsAmbient } from '../src/settings/adapters/ambient';
+import { performanceAmbientTree } from './performance-ambient';
+
+const settingsAmbient = createBrowserSettingsAmbient();
 import {
   canRequestVerification,
   observeVerificationRead,
@@ -148,24 +152,30 @@ test('the current card announces loading, native read failure and explicit empty
     requestId: 'read-1',
     retryAfter: 'private header text',
   };
-  const controller = new VerificationRecovery('alice', {
-    read: async () => {
-      if (++reads === 1)
-        return new Promise<VerificationSnapshot>((resolve) => {
-          finish = resolve;
-        });
-      if (reads === 2) throw new VerificationReadError(failure);
-      return empty;
+  const controller = new VerificationRecovery(
+    'alice',
+    {
+      read: async () => {
+        if (++reads === 1)
+          return new Promise<VerificationSnapshot>((resolve) => {
+            finish = resolve;
+          });
+        if (reads === 2) throw new VerificationReadError(failure);
+        return empty;
+      },
+      request: noCommand,
+      withdraw: noCommand,
     },
-    request: noCommand,
-    withdraw: noCommand,
-  });
+    settingsAmbient,
+  );
   const markup = () =>
     renderToStaticMarkup(
-      createElement(
-        QueryClientProvider,
-        { client },
-        createElement(VerificationCard, { controller, csrfToken: 'current-csrf' }),
+      performanceAmbientTree(
+        createElement(
+          QueryClientProvider,
+          { client },
+          createElement(VerificationCard, { controller, csrfToken: 'current-csrf' }),
+        ),
       ),
     );
   try {
@@ -228,18 +238,24 @@ test('the current card announces loading, native read failure and explicit empty
 
 test('readable status with no admitted command never unlocks Request', async () => {
   const denied: VerificationSnapshot = { ...empty, viewerActions: [] };
-  const controller = new VerificationRecovery('alice', {
-    read: async () => denied,
-    request: noCommand,
-    withdraw: noCommand,
-  });
+  const controller = new VerificationRecovery(
+    'alice',
+    {
+      read: async () => denied,
+      request: noCommand,
+      withdraw: noCommand,
+    },
+    settingsAmbient,
+  );
   await controller.reload();
   expect(canRequestVerification(controller.snapshot().current)).toBe(false);
   const html = renderToStaticMarkup(
-    createElement(
-      QueryClientProvider,
-      { client: new QueryClient() },
-      createElement(VerificationCard, { controller, csrfToken: 'current-csrf' }),
+    performanceAmbientTree(
+      createElement(
+        QueryClientProvider,
+        { client: new QueryClient() },
+        createElement(VerificationCard, { controller, csrfToken: 'current-csrf' }),
+      ),
     ),
   );
   expect(html).toContain(m.settings_verification_read_empty());
@@ -255,22 +271,26 @@ test('an unacknowledged lookalike stays uncertain and retired readers cannot pub
     ...empty,
     verificationRequest: requestRecord('lookalike', '2026-10-30T08:00:00.000Z', 'Original statement'),
   };
-  const controller = new VerificationRecovery('alice', {
-    read: async () => {
-      reads++;
-      if (reads === 2) throw new Error('Read connection lost');
-      if (reads === 5)
-        return new Promise<VerificationSnapshot>((resolve) => {
-          finish = resolve;
-        });
-      return reads === 3 ? lookalike : empty;
+  const controller = new VerificationRecovery(
+    'alice',
+    {
+      read: async () => {
+        reads++;
+        if (reads === 2) throw new Error('Read connection lost');
+        if (reads === 5)
+          return new Promise<VerificationSnapshot>((resolve) => {
+            finish = resolve;
+          });
+        return reads === 3 ? lookalike : empty;
+      },
+      request: async (_, input) => {
+        sent.push(input);
+        throw new Error('Command response lost');
+      },
+      withdraw: noCommand,
     },
-    request: async (_, input) => {
-      sent.push(input);
-      throw new Error('Command response lost');
-    },
-    withdraw: noCommand,
-  });
+    settingsAmbient,
+  );
   await controller.reload();
   await controller.submit({ subject: 'subject-1', statement: 'Original statement', links: [] });
   const original = controller.snapshot().attempt;
@@ -291,18 +311,20 @@ test('an unacknowledged lookalike stays uncertain and retired readers cannot pub
   expect(original!.input).toBe(originalInput);
   expect(JSON.stringify(original!.input)).toBe(originalEvidence);
   const html = renderToStaticMarkup(
-    createElement(
-      QueryClientProvider,
-      { client: new QueryClient() },
-      createElement(VerificationCard, {
-        controller,
-        csrfToken: 'current-csrf',
-        initialDraft: {
-          selected: { id: 'later-subject', title: 'Later subject', type: 'agent' },
-          statement: 'Later draft',
-          links: [{ label: 'Later link', url: 'https://example.test/later' }],
-        },
-      }),
+    performanceAmbientTree(
+      createElement(
+        QueryClientProvider,
+        { client: new QueryClient() },
+        createElement(VerificationCard, {
+          controller,
+          csrfToken: 'current-csrf',
+          initialDraft: {
+            selected: { id: 'later-subject', title: 'Later subject', type: 'agent' },
+            statement: 'Later draft',
+            links: [{ label: 'Later link', url: 'https://example.test/later' }],
+          },
+        }),
+      ),
     ),
   );
   expect(html).toContain('Original statement');
@@ -343,38 +365,44 @@ test('a validated receipt survives a failed read, then yields to the newer curre
   let reads = 0;
   let controller!: VerificationRecovery;
   let withdrawalTarget: string | null = null;
-  controller = new VerificationRecovery('alice', {
-    read: async () => {
-      if (++reads === 1) return empty;
-      if (reads === 2) throw new Error('Read after receipt failed');
-      return current;
+  controller = new VerificationRecovery(
+    'alice',
+    {
+      read: async () => {
+        if (++reads === 1) return empty;
+        if (reads === 2) throw new Error('Read after receipt failed');
+        return current;
+      },
+      request: async (_accountId, input) => {
+        sent.push(input);
+        return { ok: true, verificationRequest: receipt };
+      },
+      withdraw: async () => {
+        withdrawalTarget = controller.snapshot().attempt?.requestId ?? null;
+        return { ok: false, outcome: 'refused', status: 403, message: 'Not admitted' };
+      },
     },
-    request: async (_accountId, input) => {
-      sent.push(input);
-      return { ok: true, verificationRequest: receipt };
-    },
-    withdraw: async () => {
-      withdrawalTarget = controller.snapshot().attempt?.requestId ?? null;
-      return { ok: false, outcome: 'refused', status: 403, message: 'Not admitted' };
-    },
-  });
+    settingsAmbient,
+  );
   await controller.reload();
   await controller.submit({ subject: 'subject-1', statement: 'Original statement', links: [] });
   expect(controller.snapshot()).toMatchObject({ phase: 'uncertain', readStatus: 'error', attempt: { receipt } });
   await controller.retry();
   const received = renderToStaticMarkup(
-    createElement(
-      QueryClientProvider,
-      { client: new QueryClient() },
-      createElement(VerificationCard, {
-        controller,
-        csrfToken: 'current-csrf',
-        initialDraft: {
-          selected: { id: 'later-subject', title: 'Later subject', type: 'agent' },
-          statement: 'Later draft',
-          links: [{ label: 'Later link', url: 'https://example.test/later' }],
-        },
-      }),
+    performanceAmbientTree(
+      createElement(
+        QueryClientProvider,
+        { client: new QueryClient() },
+        createElement(VerificationCard, {
+          controller,
+          csrfToken: 'current-csrf',
+          initialDraft: {
+            selected: { id: 'later-subject', title: 'Later subject', type: 'agent' },
+            statement: 'Later draft',
+            links: [{ label: 'Later link', url: 'https://example.test/later' }],
+          },
+        }),
+      ),
     ),
   );
   expect(sent).toHaveLength(1);
@@ -404,6 +432,7 @@ test('read-only Verification recovery cannot mint request or withdrawal attempts
       request: noCommand,
       withdraw: noCommand,
     },
+    settingsAmbient,
     () => true,
     () => false,
   );
@@ -432,25 +461,29 @@ test('sequential visits replace one snapshot and ignore late callbacks as unrela
   );
   let visit = 0;
   let finish!: (value: VerificationSnapshot) => void;
-  const controller = new VerificationRecovery('alice', {
-    read: async () => {
-      visit++;
-      if (visit === 2)
-        return new Promise<VerificationSnapshot>((resolve) => {
-          finish = resolve;
-        });
-      return {
-        ...empty,
-        verificationRequest: history[visit - 1] ?? null,
-        viewerActions:
-          visit === 1
-            ? [{ action: 'account:update', operations: ['account.request_verification'] }]
-            : [{ action: 'account:update', operations: ['account.withdraw_verification'] }],
-      };
+  const controller = new VerificationRecovery(
+    'alice',
+    {
+      read: async () => {
+        visit++;
+        if (visit === 2)
+          return new Promise<VerificationSnapshot>((resolve) => {
+            finish = resolve;
+          });
+        return {
+          ...empty,
+          verificationRequest: history[visit - 1] ?? null,
+          viewerActions:
+            visit === 1
+              ? [{ action: 'account:update', operations: ['account.request_verification'] }]
+              : [{ action: 'account:update', operations: ['account.withdraw_verification'] }],
+        };
+      },
+      request: noCommand,
+      withdraw: noCommand,
     },
-    request: noCommand,
-    withdraw: noCommand,
-  });
+    settingsAmbient,
+  );
   try {
     await controller.reload();
     expect(controller.snapshot().current?.verificationRequest?.id).toBe('history-0');

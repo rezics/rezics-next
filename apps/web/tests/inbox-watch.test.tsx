@@ -9,6 +9,10 @@ import { WatchNotificationGuide } from '../src/settings/watch-notification-guide
 import { threadLocation } from '../src/threads/thread-href';
 import { getLocale, locales, overwriteGetLocale, setLocale } from '../src/paraglide/runtime.js';
 import { m } from '../src/paraglide/messages.js';
+import { createBrowserSettingsAmbient } from '../src/settings/adapters/ambient';
+import { performanceAmbientTree } from './performance-ambient';
+
+const settingsAmbient = createBrowserSettingsAmbient();
 mock.module('cloudflare:workers', () => ({ env: {} }));
 const { decodeInboxPage, loadInboxPage, nativeInboxEnvelope, resolveInboxItems } =
   await import('../src/inbox/inbox-read');
@@ -78,12 +82,14 @@ const base: ResolvedNotice = { ...wireNotice(), text: 'Title', unavailable: fals
 test('an uncertain chosen acknowledgement keeps its exact retry visible after a fresh read', () => {
   const item = { ...base, unread: false };
   const html = renderToStaticMarkup(
-    createElement(InboxRows, {
-      page: { items: [item], next: null },
-      onMarkSeen: () => {},
-      onRetrySeen: () => {},
-      uncertainNoticeId: item.id,
-    }),
+    performanceAmbientTree(
+      createElement(InboxRows, {
+        page: { items: [item], next: null },
+        onMarkSeen: () => {},
+        onRetrySeen: () => {},
+        uncertainNoticeId: item.id,
+      }),
+    ),
   );
   expect(html).toContain(m.inbox_notice_seen_retry());
 });
@@ -177,7 +183,7 @@ test('withheld actors and report targets conceal private context while the admit
     actorId: null,
     href: `/${getLocale()}/moderation/reports/report`,
   });
-  const html = renderToStaticMarkup(createElement(InboxRows, { page }));
+  const html = renderToStaticMarkup(performanceAmbientTree(createElement(InboxRows, { page })));
   expect(html).toContain(`href="/${getLocale()}/moderation/reports/report"`);
   expect(html).not.toContain('data-actor-id=');
   expect(html).not.toContain('boardTitle');
@@ -192,23 +198,27 @@ test('all locales explain watch categories and mandatory outcomes, link preferen
       setLocale(locale, { reload: false });
       const item = base;
       const html = renderToStaticMarkup(
-        createElement(InboxRows, {
-          page: {
-            items: [
-              { ...item, id: 'watch', watch: 'thread' },
-              { ...item, id: 'unknown', kind: 'new-owner-kind' },
-            ],
-            next: null,
-          },
-        }),
+        performanceAmbientTree(
+          createElement(InboxRows, {
+            page: {
+              items: [
+                { ...item, id: 'watch', watch: 'thread' },
+                { ...item, id: 'unknown', kind: 'new-owner-kind' },
+              ],
+              next: null,
+            },
+          }),
+        ),
       );
       expect(html).toContain(m.inbox_kind_thread_activity());
       expect(html).toContain(m.inbox_kind_unknown());
       expect(html).not.toContain(m.inbox_kind_reply());
-      const guide = renderToStaticMarkup(createElement(WatchNotificationGuide));
+      const guide = renderToStaticMarkup(performanceAmbientTree(createElement(WatchNotificationGuide)));
       expect(guide).toContain(m.settings_notifications_watches_destination());
       expect(guide).toContain(m.inbox_board_activity_text());
-      expect(renderToStaticMarkup(createElement(InboxPreferencesLink))).toContain(`/${locale}/settings#notifications`);
+      expect(renderToStaticMarkup(performanceAmbientTree(createElement(InboxPreferencesLink)))).toContain(
+        `/${locale}/settings#notifications`,
+      );
     }
   } finally {
     overwriteGetLocale(() => original);
@@ -220,34 +230,42 @@ test('native optional board activity uses original intent/key recovery and retir
   const calls: NotificationChange[] = [];
   const initial = { reply: true, mention: true, thread_watch: true, board_activity: true };
   const current = { ...initial, board_activity: false };
-  const editor = new NotificationEditor(settingsPreferencePage(initial, 4), {
-    save: async (input) => {
-      calls.push(input);
-      return calls.length === 1
-        ? { ok: false, reason: 'unavailable' }
-        : { ok: true, notifications: current, version: 5, page: settingsPreferencePage(current, 5) };
+  const editor = new NotificationEditor(
+    settingsPreferencePage(initial, 4),
+    {
+      save: async (input) => {
+        calls.push(input);
+        return calls.length === 1
+          ? { ok: false, reason: 'unavailable' }
+          : { ok: true, notifications: current, version: 5, page: settingsPreferencePage(current, 5) };
+      },
+      read: async () => ({
+        signedIn: true,
+        preferences: { spoilerLevel: 0, suitability: 'blur', version: 5 },
+        securityHref: null,
+        notifications: current,
+        page: settingsPreferencePage(current, 5),
+      }),
     },
-    read: async () => ({
-      signedIn: true,
-      preferences: { spoilerLevel: 0, suitability: 'blur', version: 5 },
-      securityHref: null,
-      notifications: current,
-      page: settingsPreferencePage(current, 5),
-    }),
-  });
+    settingsAmbient,
+  );
   await editor.edit('board_activity', false, 4);
   await editor.retry();
   expect(calls[0]).toBe(calls[1]);
   expect(calls[0]?.notifications).toEqual({ board_activity: false });
   expect(editor.snapshot()).toMatchObject({ phase: 'saved', draft: current });
   let settle!: (result: NotificationWriteResult) => void;
-  const retired = new NotificationEditor(settingsPreferencePage(initial, 4), {
-    save: () =>
-      new Promise((resolve) => {
-        settle = resolve;
-      }),
-    read: async () => ({ signedIn: false }),
-  });
+  const retired = new NotificationEditor(
+    settingsPreferencePage(initial, 4),
+    {
+      save: () =>
+        new Promise((resolve) => {
+          settle = resolve;
+        }),
+      read: async () => ({ signedIn: false }),
+    },
+    settingsAmbient,
+  );
   const pending = retired.edit('board_activity', false, 4);
   retired.dispose();
   const before = retired.snapshot();

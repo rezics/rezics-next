@@ -8,6 +8,9 @@ import {
 import { managedReadTimeout } from '../src/settings/managed-read-deadline';
 import type { OwnedCollection } from '../src/settings/preferences';
 import type { CollectionPrivacyRead } from '../src/settings/collection-privacy-data';
+import { createBrowserSettingsAmbient } from '../src/settings/adapters/ambient';
+
+const settingsAmbient = createBrowserSettingsAmbient();
 
 const row = (visibility: OwnedCollection['visibility'], revision: number): OwnedCollection => ({
   id: 'collection-1',
@@ -62,18 +65,22 @@ test('A lost Collection visibility save retains the exact attempted revision/inp
   const commands: VisibilityAttempt[] = [];
   const readback = deferred<CollectionPrivacyRead<OwnedCollection>>();
   let reads = 0;
-  const editor = new CollectionPrivacyEditor(initial, {
-    save: async (input) => {
-      commands.push(input);
-      if (commands.length === 1) throw new Error('Response lost after commit');
-      return { ok: true, collection: receipt };
+  const editor = new CollectionPrivacyEditor(
+    initial,
+    {
+      save: async (input) => {
+        commands.push(input);
+        if (commands.length === 1) throw new Error('Response lost after commit');
+        return { ok: true, collection: receipt };
+      },
+      read: async (id) => {
+        expect(id).toBe(initial.id);
+        reads++;
+        return reads === 1 ? { ok: true, value: row('unlisted', 9) } : readback.promise;
+      },
     },
-    read: async (id) => {
-      expect(id).toBe(initial.id);
-      reads++;
-      return reads === 1 ? { ok: true, value: row('unlisted', 9) } : readback.promise;
-    },
-  });
+    settingsAmbient,
+  );
   await editor.edit('public');
   const original = editor.snapshot().attempt!;
   expect(original).toEqual({
@@ -138,9 +145,7 @@ test('empty current update advice blocks a retained original replay and refreshe
         value: ++reads === 1 ? { ...alreadyApplied, allowedVisibilityActions: [] } : alreadyApplied,
       }),
     },
-    undefined,
-    undefined,
-    () => now,
+    createBrowserSettingsAmbient({ now: () => now }),
   );
 
   await editor.edit('public');
@@ -193,9 +198,7 @@ test('an original command wait survives a shorter current-read refusal and retai
           ? { ok: false, reason: 'unavailable', failure: { status: 503, retryAfter: '5' } }
           : { ok: true, value: row('unlisted', 9) },
     },
-    undefined,
-    undefined,
-    () => now,
+    createBrowserSettingsAmbient({ now: () => now }),
   );
   await editor.edit('public');
   const original = editor.snapshot().attempt!;
@@ -228,8 +231,7 @@ test('a failed inventory cursor gates exact retry and cursor-free restart until 
       if (reads.length === 2) return { ok: false, reason: 'unavailable', failure: { status: 503, retryAfter: '30' } };
       return { ok: true, value: { collections: [receipt], next: null } };
     },
-    undefined,
-    () => now,
+    createBrowserSettingsAmbient({ now: () => now }),
   );
   await pager.load();
   await pager.load();
@@ -265,9 +267,7 @@ test('retirement clears private waits and fences a late current-read refusal and
       },
       read: async () => lateRead.promise,
     },
-    undefined,
-    undefined,
-    () => now,
+    createBrowserSettingsAmbient({ now: () => now }),
   );
   await editor.edit('public');
   const retainedRetry = editor.retry.bind(editor);
@@ -283,8 +283,7 @@ test('retirement clears private waits and fences a late current-read refusal and
 
   const pager = new CollectionPrivacyPager(
     async () => ({ ok: false, reason: 'unavailable', failure: { status: 503, retryAfter: '60' } }),
-    undefined,
-    () => now,
+    createBrowserSettingsAmbient({ now: () => now }),
   );
   await pager.load();
   expect(pager.retryDeadline()).toBe(61_000);
@@ -294,13 +293,17 @@ test('retirement clears private waits and fences a late current-read refusal and
 
 test('explicit local abandonment releases the row without claiming the original save was cancelled or absent', async () => {
   let saves = 0;
-  const editor = new CollectionPrivacyEditor(initial, {
-    save: async () => {
-      saves++;
-      throw new Error('Response lost');
+  const editor = new CollectionPrivacyEditor(
+    initial,
+    {
+      save: async () => {
+        saves++;
+        throw new Error('Response lost');
+      },
+      read: async () => ({ ok: true, value: initial }),
     },
-    read: async () => ({ ok: true, value: initial }),
-  });
+    settingsAmbient,
+  );
   await editor.edit('public');
   expect(editor.needsListRestartProtection()).toBe(true);
   editor.abandon();
@@ -321,10 +324,14 @@ test('definite conflict and refusal retain the choice until Use current discards
   for (const reason of ['conflict', 'forbidden', 'closed', 'invalid'] as const) {
     let readFails = true;
     const current = { ...row('unlisted', 12), allowedVisibilityActions: ['private'] as const };
-    const editor = new CollectionPrivacyEditor(initial, {
-      save: async () => ({ ok: false, reason }),
-      read: async () => (readFails ? { ok: false, reason: 'unavailable' } : { ok: true, value: current }),
-    });
+    const editor = new CollectionPrivacyEditor(
+      initial,
+      {
+        save: async () => ({ ok: false, reason }),
+        read: async () => (readFails ? { ok: false, reason: 'unavailable' } : { ok: true, value: current }),
+      },
+      settingsAmbient,
+    );
     await editor.edit('public');
     expect(editor.snapshot()).toMatchObject({
       current: initial,
@@ -353,10 +360,14 @@ test('definite conflict and refusal retain the choice until Use current discards
 
 test('pending drafting and unavailable or stale recovery reads never claim saved or lose the original command', async () => {
   const saving = deferred<Awaited<ReturnType<CollectionPrivacyIO['save']>>>();
-  const pending = new CollectionPrivacyEditor(initial, {
-    save: () => saving.promise,
-    read: async () => ({ ok: true, value: receipt }),
-  });
+  const pending = new CollectionPrivacyEditor(
+    initial,
+    {
+      save: () => saving.promise,
+      read: async () => ({ ok: true, value: receipt }),
+    },
+    settingsAmbient,
+  );
   const first = pending.edit('public');
   await pending.edit('unlisted');
   saving.resolve({ ok: true, collection: receipt });
@@ -370,10 +381,14 @@ test('pending drafting and unavailable or stale recovery reads never claim saved
     { ok: true, value: { ...receipt, visibility: 'private' } },
   ] satisfies CollectionPrivacyRead<OwnedCollection>[]) {
     let calls = 0;
-    const editor = new CollectionPrivacyEditor(initial, {
-      save: async () => (++calls === 1 ? { ok: false, reason: 'unavailable' } : { ok: true, collection: receipt }),
-      read: async () => read,
-    });
+    const editor = new CollectionPrivacyEditor(
+      initial,
+      {
+        save: async () => (++calls === 1 ? { ok: false, reason: 'unavailable' } : { ok: true, collection: receipt }),
+        read: async () => read,
+      },
+      settingsAmbient,
+    );
     await editor.edit('public');
     const attempt = editor.snapshot().attempt;
     await editor.retry();
@@ -399,7 +414,7 @@ test('Failed owner-list paging retains existing rows/cursor and offers retry wit
     if (reads.length === 1) return { ok: true, value: { collections: firstPage, next: 'opaque+/cursor==' } };
     if (reads.length === 2) throw new Error('Next page unavailable');
     return next.promise;
-  });
+  }, settingsAmbient);
   await pager.load();
   await pager.load();
   expect(pager.snapshot()).toEqual({
@@ -424,25 +439,31 @@ test('Failed owner-list paging retains existing rows/cursor and offers retry wit
 
 test('duplicate identities within one native page keep the first row', async () => {
   const duplicate = { ...initial, title: 'Later duplicate' };
-  const pager = new CollectionPrivacyPager(async () => ({
-    ok: true,
-    value: { collections: [initial, duplicate], next: null },
-  }));
+  const pager = new CollectionPrivacyPager(
+    async () => ({
+      ok: true,
+      value: { collections: [initial, duplicate], next: null },
+    }),
+    settingsAmbient,
+  );
   await pager.load();
   expect(pager.snapshot().collections).toEqual([initial]);
 });
 
 test('first-page refusal is distinct from genuine empty, and a disposed account cannot populate a new journey', async () => {
   for (const reason of ['closed', 'forbidden', 'unavailable'] as const) {
-    const pager = new CollectionPrivacyPager(async () => ({ ok: false, reason }));
+    const pager = new CollectionPrivacyPager(async () => ({ ok: false, reason }), settingsAmbient);
     await pager.load();
     expect(pager.snapshot()).toMatchObject({ loaded: false, failure: reason, collections: [], next: null });
   }
-  const empty = new CollectionPrivacyPager(async () => ({ ok: true, value: { collections: [], next: null } }));
+  const empty = new CollectionPrivacyPager(
+    async () => ({ ok: true, value: { collections: [], next: null } }),
+    settingsAmbient,
+  );
   await empty.load();
   expect(empty.snapshot()).toMatchObject({ loaded: true, failure: null, collections: [], next: null });
   const response = deferred<CollectionPrivacyRead<{ collections: OwnedCollection[]; next: string | null }>>();
-  const previous = new CollectionPrivacyPager(() => response.promise);
+  const previous = new CollectionPrivacyPager(() => response.promise, settingsAmbient);
   const loading = previous.load();
   previous.dispose();
   response.resolve({ ok: true, value: { collections: [initial], next: 'old-account' } });
@@ -454,10 +475,14 @@ test('first-page refusal is distinct from genuine empty, and a disposed account 
 test('a replay refused before receipt lookup cannot discard an earlier unknown-outcome command', async () => {
   for (const reason of ['closed', 'forbidden', 'invalid'] as const) {
     let calls = 0;
-    const editor = new CollectionPrivacyEditor(initial, {
-      save: async () => (++calls === 1 ? { ok: false, reason: 'unavailable' } : { ok: false, reason }),
-      read: async () => ({ ok: true, value: receipt }),
-    });
+    const editor = new CollectionPrivacyEditor(
+      initial,
+      {
+        save: async () => (++calls === 1 ? { ok: false, reason: 'unavailable' } : { ok: false, reason }),
+        read: async () => ({ ok: true, value: receipt }),
+      },
+      settingsAmbient,
+    );
     await editor.edit('public');
     const attempt = editor.snapshot().attempt;
     await editor.edit('unlisted');
@@ -479,7 +504,7 @@ test('an exhausted list refresh replaces old pages, and a failed refresh retries
       return { ok: true, value: { collections: [initial, { ...initial, id: 'old-page-row' }], next: null } };
     if (reads.length === 2) throw new Error('Refresh unavailable');
     return response.promise;
-  });
+  }, settingsAmbient);
   await pager.load();
   await pager.load();
   expect(reads).toEqual([null]);
@@ -491,10 +516,14 @@ test('an exhausted list refresh replaces old pages, and a failed refresh retries
     next: null,
     loading: false,
   });
-  const guarded = new CollectionPrivacyEditor(initial, {
-    save: async () => ({ ok: false, reason: 'unavailable' }),
-    read: async () => ({ ok: true, value: initial }),
-  });
+  const guarded = new CollectionPrivacyEditor(
+    initial,
+    {
+      save: async () => ({ ok: false, reason: 'unavailable' }),
+      read: async () => ({ ok: true, value: initial }),
+    },
+    settingsAmbient,
+  );
   const unregister = pager.registerRow(guarded);
   await guarded.edit('public');
   await pager.load();
@@ -510,10 +539,14 @@ test('an exhausted list refresh replaces old pages, and a failed refresh retries
   response.resolve({ ok: true, value: { collections: [fresh], next: null } });
   await retry;
   expect(pager.snapshot()).toMatchObject({ collections: [fresh], failure: null, loading: false, restarting: false });
-  const editor = new CollectionPrivacyEditor(initial, {
-    save: async () => ({ ok: false, reason: 'unavailable' }),
-    read: async () => ({ ok: true, value: fresh }),
-  });
+  const editor = new CollectionPrivacyEditor(
+    initial,
+    {
+      save: async () => ({ ok: false, reason: 'unavailable' }),
+      read: async () => ({ ok: true, value: fresh }),
+    },
+    settingsAmbient,
+  );
   editor.receive(fresh);
   expect(editor.snapshot()).toMatchObject({ current: fresh, desired: 'unlisted', phase: 'idle' });
 });
@@ -522,19 +555,23 @@ test('list restart cannot lose an unknown command or a later choice, and native 
   const reads: (string | null)[] = [];
   const commands: VisibilityAttempt[] = [];
   let deny = false;
-  const editor = new CollectionPrivacyEditor(initial, {
-    save: async (input) => {
-      commands.push(input);
-      return commands.length === 1 ? { ok: false, reason: 'unavailable' } : { ok: true, collection: receipt };
+  const editor = new CollectionPrivacyEditor(
+    initial,
+    {
+      save: async (input) => {
+        commands.push(input);
+        return commands.length === 1 ? { ok: false, reason: 'unavailable' } : { ok: true, collection: receipt };
+      },
+      read: async () => ({ ok: true, value: receipt }),
     },
-    read: async () => ({ ok: true, value: receipt }),
-  });
+    settingsAmbient,
+  );
   const pager = new CollectionPrivacyPager(async (cursor) => {
     reads.push(cursor);
     return deny
       ? { ok: false, reason: 'forbidden' }
       : { ok: true, value: { collections: [initial], next: 'exact-next-page' } };
-  });
+  }, settingsAmbient);
   const unregister = pager.registerRow(editor);
   await pager.load();
   const saving = editor.edit('public');
@@ -582,12 +619,15 @@ test('a late first-page restart cannot populate a replacement actor or cause ano
   const previous = new CollectionPrivacyPager(async () => {
     reads++;
     return reads === 1 ? { ok: true, value: { collections: [initial], next: null } } : response.promise;
-  });
+  }, settingsAmbient);
   await previous.load();
   const restart = previous.restart();
   previous.dispose();
   const before = previous.snapshot();
-  const current = new CollectionPrivacyPager(async () => ({ ok: true, value: { collections: [], next: null } }));
+  const current = new CollectionPrivacyPager(
+    async () => ({ ok: true, value: { collections: [], next: null } }),
+    settingsAmbient,
+  );
   await current.load();
   response.resolve({ ok: true, value: { collections: [{ ...receipt, title: 'Late private title' }], next: 'old' } });
   await restart;
@@ -611,6 +651,7 @@ test('separate privacy write custody permits current row reads without creating 
         return { ok: true, collection: receipt };
       },
     },
+    settingsAmbient,
     () => true,
     () => false,
   );
@@ -633,18 +674,22 @@ test('a stalled Save stays uncertain, a replay receipt becomes read-only recover
     const late = row('private', 11);
     const commands: VisibilityAttempt[] = [];
     let reads = 0;
-    const editor = new CollectionPrivacyEditor(initial, {
-      save: async (input) => {
-        commands.push(input);
-        if (commands.length === 1) return firstSave.promise;
-        return { ok: true, collection: receipt };
+    const editor = new CollectionPrivacyEditor(
+      initial,
+      {
+        save: async (input) => {
+          commands.push(input);
+          if (commands.length === 1) return firstSave.promise;
+          return { ok: true, collection: receipt };
+        },
+        read: async (id) => {
+          expect(id).toBe(initial.id);
+          reads++;
+          return reads === 1 ? replayRead.promise : { ok: true, value: recovered };
+        },
       },
-      read: async (id) => {
-        expect(id).toBe(initial.id);
-        reads++;
-        return reads === 1 ? replayRead.promise : { ok: true, value: recovered };
-      },
-    });
+      settingsAmbient,
+    );
     const saving = editor.edit('public');
     await flushPromiseJobs();
     expect(delay()).toBe(managedReadTimeout);
@@ -717,7 +762,7 @@ test('a stalled page keeps its window and cursor, and a late page cannot replace
       if (reads.length === 1) return { ok: true, value: { collections: [initial], next: 'exact-next-page' } };
       if (reads.length === 2) return nextPage.promise;
       return restartPage.promise;
-    });
+    }, settingsAmbient);
     await pager.load();
     const loading = pager.load();
     await flushPromiseJobs();
@@ -772,10 +817,14 @@ test('a stalled page keeps its window and cursor, and a late page cannot replace
 
 test('a clean current read adopts native visibility without opening review', async () => {
   const current = row('unlisted', 12);
-  const editor = new CollectionPrivacyEditor(initial, {
-    save: async () => ({ ok: true, collection: receipt }),
-    read: async () => ({ ok: true, value: current }),
-  });
+  const editor = new CollectionPrivacyEditor(
+    initial,
+    {
+      save: async () => ({ ok: true, collection: receipt }),
+      read: async () => ({ ok: true, value: current }),
+    },
+    settingsAmbient,
+  );
   await editor.reload();
   expect(editor.snapshot()).toMatchObject({ current, desired: 'unlisted', intent: undefined, phase: 'idle' });
   expect(editor.needsListRestartProtection()).toBe(false);

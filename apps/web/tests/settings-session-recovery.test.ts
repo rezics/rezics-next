@@ -9,6 +9,7 @@ import * as start from '../.storybook/react-start';
 import { getServerAsyncLocalStorage, locales, overwriteServerAsyncLocalStorage } from '../src/paraglide/runtime.js';
 import { m } from '../src/paraglide/messages.js';
 import type { SessionEnv } from '../src/session/client';
+import { performanceAmbientTree } from './performance-ambient';
 
 // Controlled transport boundaries exercise the installed session query, without a native service or database.
 let requests = 0;
@@ -69,11 +70,11 @@ async function pageMarkup(client: QueryClient, requestSession?: Session, path = 
   const router = createRouter({ routeTree: root, history: createMemoryHistory({ initialEntries: [path] }) });
   await router.load();
   return renderToStaticMarkup(
-    createElement(QueryClientProvider, { client }, createElement(RouterProvider, { router })),
+    performanceAmbientTree(createElement(QueryClientProvider, { client }, createElement(RouterProvider, { router }))),
   );
 }
 const fallback = (props: Parameters<typeof SettingsSessionRecovery>[0]) =>
-  renderToStaticMarkup(createElement(SettingsSessionRecovery, props));
+  renderToStaticMarkup(performanceAmbientTree(createElement(SettingsSessionRecovery, props)));
 const retryButtons = (html: string) =>
   html.match(new RegExp(`<button\\b[^>]*>${m.settings_retry()}</button>`, 'g')) ?? [];
 const noPrivateSections = (html: string) => {
@@ -343,7 +344,7 @@ test('the current authorized closed reading recording reaches the guarded page a
     });
     await router.load();
     const html = renderToStaticMarkup(
-      createElement(QueryClientProvider, { client }, createElement(RouterProvider, { router })),
+      performanceAmbientTree(createElement(QueryClientProvider, { client }, createElement(RouterProvider, { router }))),
     );
     expect(html).toContain('id="reading"');
     expect(html).toContain('role="alert"');

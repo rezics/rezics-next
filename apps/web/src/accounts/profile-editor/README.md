@@ -27,6 +27,8 @@ Failed readback keeps acknowledgement or unknown delivery visible without reveal
 recovery never replays an acknowledged command. Departure uses the shared profile draft/command navigation decision.
 Read recovery presents the editor's captured Retry-After deadline through the public `settings/ports/profile-editor` retry
 hook; the disabled reload control becomes available at that deadline without starting another read.
+The shared editor takes `SettingsAmbient` from composition (`SettingsAmbientProvider` in `settings/adapters/ambient-view.tsx`); this route binds the same
+adapter and does not acquire `Date.now` or UUIDs in the constructor. Session observation identity uses `ambient.id()`.
 Missing real `KERNEL_ORIGIN` is unavailable, including development; the editor never consumes the fake kernel.
 
 Integration acceptance remains the contract's web suite and native authority oracles. Web owns visual review.

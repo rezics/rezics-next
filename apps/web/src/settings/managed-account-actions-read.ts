@@ -3,6 +3,7 @@ import { managedAccountsException } from './managed-accounts-read';
 import { withManagedReadDeadline } from './managed-read-deadline';
 import type { ManagedReaderCurrent } from './managed-session-reader';
 import { preferenceRetryDeadline } from './preference-failure-retry';
+import type { SettingsAmbient } from './ports/ambient';
 import { managedActionFailure as failure } from './managed-account-failure';
 import type {
   ManagedAccountActionsSelection,
@@ -37,6 +38,7 @@ export class ManagedAccountActionsRead {
   constructor(
     private readonly target: ManagedAccountActionsSelection,
     private readonly io: ManagedAccountActionsIO,
+    private readonly ambient: SettingsAmbient,
     private readonly currentOwner: ManagedReaderCurrent = () => true,
   ) {}
   snapshot = () => {
@@ -71,7 +73,7 @@ export class ManagedAccountActionsRead {
   }
   retry(): Promise<ManagedAccountActionsResult> {
     if (!this.live()) return Promise.resolve(failure(null));
-    if (this.value.pending || this.value.result?.state !== 'unavailable' || Date.now() < this.retryAt)
+    if (this.value.pending || this.value.result?.state !== 'unavailable' || this.ambient.now() < this.retryAt)
       return this.load();
     return this.request();
   }
@@ -79,7 +81,7 @@ export class ManagedAccountActionsRead {
     this.current = Promise.resolve()
       .then(() =>
         this.live()
-          ? withManagedReadDeadline((signal) => this.io(this.target, signal), this.lifetime.signal)
+          ? withManagedReadDeadline((signal) => this.io(this.target, signal), this.lifetime.signal, this.ambient.timer)
           : failure(null),
       )
       .then((result) =>
@@ -91,7 +93,8 @@ export class ManagedAccountActionsRead {
       .catch(exception)
       .then((result) => {
         if (!this.live()) return failure(null);
-        this.retryAt = result.state === 'unavailable' ? preferenceRetryDeadline(result.retryAfter) : 0;
+        this.retryAt =
+          result.state === 'unavailable' ? preferenceRetryDeadline(result.retryAfter, this.ambient.now()) : 0;
         this.publish({ result, pending: false, retryAt: this.retryAt });
         return result;
       });

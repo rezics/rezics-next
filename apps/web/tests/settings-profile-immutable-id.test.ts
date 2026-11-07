@@ -8,8 +8,12 @@ import {
   type ProfilePatch,
   type ProfileValues,
 } from '../src/settings/profile-data';
+import { performanceAmbientTree } from './performance-ambient';
 import { ProfileEditor, ProfileEditorSession, type ProfileAttempt } from '../src/settings/profile-write';
 import { EditableProfileReadError, officialProfileRead } from '../src/settings/editable-profile-source';
+import { createBrowserSettingsAmbient } from '../src/settings/adapters/ambient';
+
+const settingsAmbient = createBrowserSettingsAmbient();
 
 const accountId = '019a0000-0000-7000-8000-000000000001';
 const mediaId = '019a0000-0000-7000-8000-000000000002';
@@ -79,6 +83,7 @@ function boundary(authorization: string, initial = source()) {
   });
   return {
     editor: new ProfileEditor({
+      ambient: settingsAmbient,
       read: () => loadProfileRecord(client, authorization, accountId),
       save: (attempt) =>
         saveProfileRecord(client, authorization, accountId, attempt.before, attempt.after, attempt.idempotencyKey),
@@ -233,6 +238,7 @@ test('A new or unready actor never receives a prior private profile and an expli
     const sent: ProfileAttempt[] = [];
     const editor = new ProfileEditor(
       {
+        ambient: settingsAmbient,
         read: async () => {
           if (denied) throw new EditableProfileReadError(403);
           return source();
@@ -254,7 +260,9 @@ test('A new or unready actor never receives a prior private profile and an expli
     expect(editor.snapshot().draft).toBe(before.draft);
     expect(editor.snapshot().attempt).toBe(before.attempt);
     const html = renderToStaticMarkup(
-      createElement('div', null, createElement(ProfileCard, { editor }), createElement(PublicViewsCard, { editor })),
+      performanceAmbientTree(
+        createElement('div', null, createElement(ProfileCard, { editor }), createElement(PublicViewsCard, { editor })),
+      ),
     );
     for (const privateValue of ['Private editable source', 'Retained unsent words', 'example.test/notes', mediaId])
       expect(html).not.toContain(privateValue);
@@ -280,15 +288,19 @@ test('A new or unready actor never receives a prior private profile and an expli
     expect(editor.snapshot().draft?.publicViews.posts).toBe(true);
     expect(editor.snapshot().attempt).toBe(before.attempt);
     expect(editor.snapshot().phase).toBe(unresolved ? 'uncertain' : 'review');
-    const hidden = renderToStaticMarkup(createElement(ProfileCard, { editor, writable: false }));
+    const hidden = renderToStaticMarkup(
+      performanceAmbientTree(createElement(ProfileCard, { editor, writable: false })),
+    );
     expect(hidden).not.toContain('Retained unsent words');
     expect(hidden).not.toContain('<input');
     const explicitlyReadable = renderToStaticMarkup(
-      createElement(
-        'div',
-        null,
-        createElement(ProfileCard, { editor, writable: false, readable: true }),
-        createElement(PublicViewsCard, { editor, writable: false, readable: true }),
+      performanceAmbientTree(
+        createElement(
+          'div',
+          null,
+          createElement(ProfileCard, { editor, writable: false, readable: true }),
+          createElement(PublicViewsCard, { editor, writable: false, readable: true }),
+        ),
       ),
     );
     expect(explicitlyReadable).toContain('Retained unsent words');
@@ -349,6 +361,7 @@ test('retired actors ignore late read and save completions and release only thei
     let reads = 0;
     const editor = new ProfileEditor(
       {
+        ambient: settingsAmbient,
         read: async () => {
           reads++;
           await pending;

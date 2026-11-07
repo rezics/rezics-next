@@ -1,3 +1,4 @@
+import { serverSettingsTimer } from './adapters/ambient';
 import { createServerFn } from '@tanstack/react-start';
 import { getRequest, setResponseHeader } from '@tanstack/react-start/server';
 import { env } from 'cloudflare:workers';
@@ -67,7 +68,11 @@ function expectedAccount(input: unknown): string {
 
 async function viewer() {
   const request = getRequest();
-  await withVerificationDeadline(() => prepareSession(request, env as Partial<SessionEnv>), request.signal);
+  await withVerificationDeadline(
+    () => prepareSession(request, env as Partial<SessionEnv>),
+    request.signal,
+    serverSettingsTimer(),
+  );
   const authorization = viewerCredential(request);
   const accountId = sessionSubject(request);
   if (!authorization || !accountId) throw new Error('Sign in is required');
@@ -184,55 +189,61 @@ export const searchVerificationSubjects = createServerFn({ method: 'GET' })
     if (!query.trim()) return { ok: true as const, value: [] };
     try {
       const { request, authorization } = await viewer();
-      const value = await withVerificationDeadline(async (signal) => {
-        const client = kernelClient();
-        const result = await readSubjectSuggestions(
-          client,
-          {
-            q: query,
-            limit: SUGGESTION_LIMIT,
-            languages: requestLanguages(requestLocale(request) ?? 'en'),
-          },
-          authorization,
-          signal,
-        );
-        // Native empty suggestions need no eligibility metadata.
-        if (result.subjects.length === 0) return [];
-        const release = await readVerificationEligibility(client, authorization, signal);
-        if (!release?.types || typeof release.types !== 'object' || Array.isArray(release.types))
-          throw new Error('Invalid eligibility metadata');
-        const resolved = new Map<string, Set<string>>();
-        const roots = (type: string, visited = new Set<string>()): Set<string> => {
-          const known = resolved.get(type);
-          if (known) return known;
-          const definition = Object.hasOwn(release.types, type) ? release.types[type] : undefined;
-          if (
-            !definition ||
-            typeof definition !== 'object' ||
-            Array.isArray(definition) ||
-            (definition.bases !== undefined &&
-              (!Array.isArray(definition.bases) ||
-                definition.bases.some((base: unknown) => typeof base !== 'string' || !base))) ||
-            visited.has(type)
-          )
+      const value = await withVerificationDeadline(
+        async (signal) => {
+          const client = kernelClient();
+          const result = await readSubjectSuggestions(
+            client,
+            {
+              q: query,
+              limit: SUGGESTION_LIMIT,
+              languages: requestLanguages(requestLocale(request) ?? 'en'),
+            },
+            authorization,
+            signal,
+          );
+          // Native empty suggestions need no eligibility metadata.
+          if (result.subjects.length === 0) return [];
+          const release = await readVerificationEligibility(client, authorization, signal);
+          if (!release?.types || typeof release.types !== 'object' || Array.isArray(release.types))
             throw new Error('Invalid eligibility metadata');
-          if (type === 'schema:Person' || type === 'schema:Organization') return new Set([type]);
-          visited.add(type);
-          const result = new Set<string>((definition.bases ?? []).flatMap((base: string) => [...roots(base, visited)]));
-          visited.delete(type);
-          resolved.set(type, result);
-          return result;
-        };
-        return result.subjects.flatMap((subject) => {
-          const title = subject.summary?.label?.value ?? Object.values(subject.labels)[0] ?? subject.id;
-          const baseTypes = roots(subject.type);
-          if (baseTypes.has('schema:Person'))
-            return [{ id: subject.id, title, type: m.settings_verification_person() }];
-          if (baseTypes.has('schema:Organization'))
-            return [{ id: subject.id, title, type: m.settings_verification_organization() }];
-          return [];
-        });
-      }, request.signal);
+          const resolved = new Map<string, Set<string>>();
+          const roots = (type: string, visited = new Set<string>()): Set<string> => {
+            const known = resolved.get(type);
+            if (known) return known;
+            const definition = Object.hasOwn(release.types, type) ? release.types[type] : undefined;
+            if (
+              !definition ||
+              typeof definition !== 'object' ||
+              Array.isArray(definition) ||
+              (definition.bases !== undefined &&
+                (!Array.isArray(definition.bases) ||
+                  definition.bases.some((base: unknown) => typeof base !== 'string' || !base))) ||
+              visited.has(type)
+            )
+              throw new Error('Invalid eligibility metadata');
+            if (type === 'schema:Person' || type === 'schema:Organization') return new Set([type]);
+            visited.add(type);
+            const result = new Set<string>(
+              (definition.bases ?? []).flatMap((base: string) => [...roots(base, visited)]),
+            );
+            visited.delete(type);
+            resolved.set(type, result);
+            return result;
+          };
+          return result.subjects.flatMap((subject) => {
+            const title = subject.summary?.label?.value ?? Object.values(subject.labels)[0] ?? subject.id;
+            const baseTypes = roots(subject.type);
+            if (baseTypes.has('schema:Person'))
+              return [{ id: subject.id, title, type: m.settings_verification_person() }];
+            if (baseTypes.has('schema:Organization'))
+              return [{ id: subject.id, title, type: m.settings_verification_organization() }];
+            return [];
+          });
+        },
+        request.signal,
+        serverSettingsTimer(),
+      );
       return { ok: true as const, value };
     } catch (error) {
       return { ok: false as const, failure: verificationSubjectSearchFailure(error) };

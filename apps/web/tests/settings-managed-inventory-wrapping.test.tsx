@@ -8,6 +8,7 @@ import type {
   ManagedAccountsPage,
   ManagedAccountsResult,
 } from '../src/settings/managed-accounts-read';
+import { performanceAmbientTree } from './performance-ambient';
 import { installManagedModuleMocks } from './fixtures/managed-module-mocks';
 
 // Actual mounted components/readers with supplied bounded IO. DOM plumbing is illustrative, not geometry proof.

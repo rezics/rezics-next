@@ -3,6 +3,7 @@ import { dirname } from 'node:path';
 import { act, createElement } from 'react';
 import { createKernelClient } from '@rezics/client';
 import type { SessionEnv } from '../src/session/client';
+import { performanceAmbientTree } from './performance-ambient';
 
 test('Unavailable shelf items keep bounded usable management actions', async () => {
   // Keep the real page, menu, session/exposure queries, form parser and command transport.

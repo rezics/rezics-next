@@ -10,7 +10,11 @@ import type {
   DetailSection,
   ManagementDetail,
 } from '../src/settings/managed-account-detail-read';
+import { performanceAmbientTree } from './performance-ambient';
 import { installManagedModuleMocks } from './fixtures/managed-module-mocks';
+import { createBrowserSettingsAmbient } from '../src/settings/adapters/ambient';
+
+const settingsAmbient = createBrowserSettingsAmbient();
 
 // The settings modules reach server-only imports; the mocks must be installed before they load. The shared react-start
 // shim keeps isomorphic session selection the same in every focused file that loads these modules.
@@ -77,13 +81,15 @@ function detail(): ManagementDetail {
 const ready = (value = detail()): DetailResult => ({ ok: true, viewerId, value });
 const markup = (reader: ManagedAccountReader | null) =>
   renderToStaticMarkup(
-    createElement(
-      QueryClientProvider,
-      { client: new QueryClient() },
+    performanceAmbientTree(
       createElement(
-        AnonymousSessionContext,
-        { value: true },
-        createElement(ManagedAccountDetailCard, { reader, backHref }),
+        QueryClientProvider,
+        { client: new QueryClient() },
+        createElement(
+          AnonymousSessionContext,
+          { value: true },
+          createElement(ManagedAccountDetailCard, { reader, backHref }),
+        ),
       ),
     ),
   );
@@ -99,8 +105,11 @@ test('A native managed target opens from settings with independently paged curre
       return Response.json(body, { status, headers: { 'cache-control': 'private, no-store', 'retry-after': '3' } });
     },
   });
-  const reader = new ManagedAccountReader(viewerId, accountId, (input) =>
-    loadManagedAccountDetail(client, 'Bearer current-viewer', input),
+  const reader = new ManagedAccountReader(
+    viewerId,
+    accountId,
+    (input) => loadManagedAccountDetail(client, 'Bearer current-viewer', input),
+    settingsAmbient,
   );
   await reader.load();
   let html = markup(reader);
@@ -207,7 +216,7 @@ test('identity changes and authority losses discard private pages and reject lat
   const pending: ((result: DetailResult) => void)[] = [];
   let defer = false;
   const read = async (): Promise<DetailResult> => (defer ? new Promise((resolve) => pending.push(resolve)) : ready());
-  let reader = new ManagedAccountReader(viewerId, accountId, read);
+  let reader = new ManagedAccountReader(viewerId, accountId, read, settingsAmbient);
   await reader.load();
   defer = true;
   const lateMembers = reader.load('members', memberCursor);
@@ -230,7 +239,7 @@ test('identity changes and authority losses discard private pages and reject lat
   await stale;
   expect(reader.snapshot().detail).toBeUndefined();
   await reader.load(); // Disposal never permits another request on that lifetime.
-  reader = new ManagedAccountReader(viewerId, accountId, read);
+  reader = new ManagedAccountReader(viewerId, accountId, read, settingsAmbient);
   defer = false;
   await reader.load();
   defer = true;
@@ -279,7 +288,9 @@ test('the existing localized settings account region selects only an immutable I
   try {
     await router.load();
     const html = renderToStaticMarkup(
-      createElement(QueryClientProvider, { client: queryClient }, createElement(RouterProvider, { router })),
+      performanceAmbientTree(
+        createElement(QueryClientProvider, { client: queryClient }, createElement(RouterProvider, { router })),
+      ),
     );
     const region = html.slice(html.indexOf('<section id="account"'));
     expect(region).toContain(m.managed_detail_title());
@@ -367,8 +378,11 @@ test('detail Refresh and feed reads drop stale Auth links immediately and older 
   const olderPositive: DetailResult = { ok: true, viewerId, value: olderValue, authNavigation };
   const pending: ((result: DetailResult) => void)[] = [];
   let defer = false;
-  const reader = new ManagedAccountReader(viewerId, accountId, async () =>
-    defer ? new Promise((resolve) => pending.push(resolve)) : positive,
+  const reader = new ManagedAccountReader(
+    viewerId,
+    accountId,
+    async () => (defer ? new Promise((resolve) => pending.push(resolve)) : positive),
+    settingsAmbient,
   );
   await reader.load();
   expect(reader.snapshot().authNavigation?.actions.delete.state).toBe('available');
@@ -431,7 +445,7 @@ test('detail Refresh and feed reads drop stale Auth links immediately and older 
   pending[8]!(positive);
   await stale;
   expect(reader.snapshot().authNavigation).toBeUndefined();
-  const switched = new ManagedAccountReader(viewerId, actorId, async () => positive);
+  const switched = new ManagedAccountReader(viewerId, actorId, async () => positive, settingsAmbient);
   await switched.load();
   expect(switched.snapshot().detail).toBeUndefined();
   expect(switched.snapshot().authNavigation).toBeUndefined();
@@ -459,6 +473,7 @@ test('Offer first-page recovery for a failed managed detail continuation preserv
         inputs.push(input);
         return loadManagedAccountDetail(client, 'Bearer current-viewer', input);
       },
+      settingsAmbient,
       'current-csrf',
     );
     await reader.load();
@@ -519,10 +534,15 @@ test('a failed first-page reset stays an honest section error; native refusals o
     for (const status of [400, 401, 403, 404, 200]) {
       let result = ready();
       const inputs: DetailRequest[] = [];
-      const reader = new ManagedAccountReader(viewerId, accountId, async (input) => {
-        inputs.push(input);
-        return result;
-      });
+      const reader = new ManagedAccountReader(
+        viewerId,
+        accountId,
+        async (input) => {
+          inputs.push(input);
+          return result;
+        },
+        settingsAmbient,
+      );
       await reader.load();
       const sibling = section === 'members' ? 'responsibilities' : 'members';
       const retained = reader.snapshot()[sibling];
@@ -573,14 +593,19 @@ test('transient continuation failures retain their page while Retry-After disabl
       let resolve: ((value: DetailResult) => void) | undefined;
       let defer = false;
       const inputs: DetailRequest[] = [];
-      const reader = new ManagedAccountReader(viewerId, accountId, (input) => {
-        inputs.push(input);
-        return defer
-          ? new Promise((done) => {
-              resolve = done;
-            })
-          : Promise.resolve(result);
-      });
+      const reader = new ManagedAccountReader(
+        viewerId,
+        accountId,
+        (input) => {
+          inputs.push(input);
+          return defer
+            ? new Promise((done) => {
+                resolve = done;
+              })
+            : Promise.resolve(result);
+        },
+        settingsAmbient,
+      );
       await reader.load();
       const sibling = section === 'members' ? 'responsibilities' : 'members';
       defer = true;

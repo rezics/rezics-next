@@ -9,6 +9,9 @@ import {
 } from '../src/account-verification/transport';
 import { withVerificationDeadline } from '../src/account-verification/deadline';
 import { request } from '../src/stories/pages/accounts-verification/fixtures';
+import { createBrowserSettingsAmbient } from '../src/settings/adapters/ambient';
+
+const settingsAmbient = createBrowserSettingsAmbient();
 
 const schedule = globalThis.setTimeout;
 const timer = spyOn(globalThis, 'setTimeout').mockImplementation(((fn, ms, ...args) =>
@@ -119,22 +122,30 @@ test('caller cancellation composes with the deadline, releases listeners and avo
   const caller = new AbortController();
   const removed = spyOn(caller.signal, 'removeEventListener');
   let native: AbortSignal | undefined;
-  const pending = withVerificationDeadline((signal) => {
-    native = signal;
-    return new Promise(() => {});
-  }, caller.signal);
+  const pending = withVerificationDeadline(
+    (signal) => {
+      native = signal;
+      return new Promise(() => {});
+    },
+    caller.signal,
+    settingsAmbient.timer,
+  );
   caller.abort(new Error('Viewer retired'));
   await expect(pending).rejects.toThrow('Viewer retired');
   expect(native?.aborted).toBe(true);
   expect(removed).toHaveBeenCalledTimes(1);
   await expect(
-    withVerificationDeadline(() => {
-      throw new Error('Unexpected dispatch');
-    }, caller.signal),
+    withVerificationDeadline(
+      () => {
+        throw new Error('Unexpected dispatch');
+      },
+      caller.signal,
+      settingsAmbient.timer,
+    ),
   ).rejects.toThrow('Viewer retired');
   removed.mockRestore();
   const cleared = spyOn(globalThis, 'clearTimeout');
-  expect(await withVerificationDeadline(async () => 'ready')).toBe('ready');
+  expect(await withVerificationDeadline(async () => 'ready', undefined, settingsAmbient.timer)).toBe('ready');
   expect(cleared).toHaveBeenCalledTimes(1);
   cleared.mockRestore();
 });

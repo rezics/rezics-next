@@ -4,6 +4,7 @@ import { env } from 'cloudflare:workers';
 import { kernelClient } from '../kernel/client';
 import type { SessionEnv } from '../session/client';
 import { requestCsrfToken } from '../session/request';
+import { createServerSettingsAmbient } from './adapters/ambient';
 import { loadSettingsPage, type ShelfPreferences } from './preferences';
 import type { ShelfPreferenceSnapshot } from './ports/library';
 
@@ -22,7 +23,7 @@ export const readCurrentShelfPreferences = createServerFn({ method: 'GET' }).han
     const request = getRequest();
     const page = await loadSettingsPage(kernelClient(), request, env as Partial<SessionEnv>);
     return {
-      generation: crypto.randomUUID(),
+      generation: createServerSettingsAmbient().id(),
       accountId: page.signedIn ? (page.accountId ?? null) : null,
       csrfToken: page.signedIn ? requestCsrfToken(request) : null,
       shelf: page.signedIn && 'preferences' in page ? (page.preferences.shelf ?? {}) : null,

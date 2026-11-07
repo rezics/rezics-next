@@ -4,6 +4,8 @@ import { personalRead } from '../kernel/query';
 import { sessionQuery, useSession } from '../session/query';
 import { readProfile, saveProfile } from './actions';
 import { profileCommandValues, profileReadObservation } from './profile-data';
+import { useSettingsAmbient } from './adapters/ambient-view.tsx';
+import type { SettingsAmbient } from './ports/ambient';
 import { ProfileEditorSession } from './profile-write';
 
 type EditorEntry = {
@@ -41,7 +43,7 @@ function retire(client: QueryClient, entry: EditorEntry) {
   entry.listeners.forEach((listener) => listener());
 }
 
-function createEntry(client: QueryClient) {
+function createEntry(client: QueryClient, ambient: SettingsAmbient) {
   const sessionRecord = client.getQueryCache().get(hashKey(sessionQuery.queryKey));
   const sessionState = client.getQueryState(sessionQuery.queryKey);
   // These detect a committed success in the render-to-attachment gap, including structural sharing.
@@ -67,53 +69,57 @@ function createEntry(client: QueryClient) {
   };
   // The constructor may mark an unreadable observation unavailable before it is attached.
   const current = () => !entry || (entry.users > 0 && owner.isCurrent() && observationCurrent());
-  const owner = new ProfileEditorSession(observed, (owner) => {
-    const read = async () => {
-      if (!current()) throw new Error('Profile unavailable');
-      const profile = profileReadObservation(await readProfile());
-      if (!current()) throw new Error('Profile unavailable');
-      if (profile.accountId !== owner.reader?.subject) throw new Error('Profile account changed');
-      return profile;
-    };
-    return {
-      isCurrent: current,
-      read: async () => {
-        await client.cancelQueries({ queryKey: owner.key, exact: true });
-        return read();
-      },
-      save: async (attempt) => {
-        await client.cancelQueries({ queryKey: owner.key, exact: true });
-        if (!current() || !owner.canWrite()) throw new Error('Profile unavailable');
-        const commandProfile = (value: typeof attempt.before) => ({
-          accountId: value.accountId,
-          kind: value.kind,
-          displayName: value.displayName,
-          biography: value.biography,
-          avatar: value.avatar,
-          links: value.links,
-          publicViews: value.publicViews,
-          ...(value.kind === 'organization' && value.speakersListed !== undefined
-            ? { speakersListed: value.speakersListed }
-            : {}),
-        });
-        return saveProfile({
-          data: {
-            before: commandProfile(attempt.before),
-            after: commandProfile(attempt.after),
-            idempotencyKey: attempt.idempotencyKey,
-          },
-          headers: { 'X-CSRF-Token': owner.actor?.incarnation ?? '' },
-        });
-      },
-      canWrite: () => current() && owner.canWrite(),
-      confirmed: (profile) => {
-        if (!current()) return;
-        const values = profileCommandValues(profile);
-        const editing = owner.editor.snapshot().editing;
-        client.setQueryData(owner.key, editing ? { ...values, editing } : values);
-      },
-    };
-  });
+  const owner = new ProfileEditorSession(
+    observed,
+    (owner) => {
+      const read = async () => {
+        if (!current()) throw new Error('Profile unavailable');
+        const profile = profileReadObservation(await readProfile());
+        if (!current()) throw new Error('Profile unavailable');
+        if (profile.accountId !== owner.reader?.subject) throw new Error('Profile account changed');
+        return profile;
+      };
+      return {
+        isCurrent: current,
+        read: async () => {
+          await client.cancelQueries({ queryKey: owner.key, exact: true });
+          return read();
+        },
+        save: async (attempt) => {
+          await client.cancelQueries({ queryKey: owner.key, exact: true });
+          if (!current() || !owner.canWrite()) throw new Error('Profile unavailable');
+          const commandProfile = (value: typeof attempt.before) => ({
+            accountId: value.accountId,
+            kind: value.kind,
+            displayName: value.displayName,
+            biography: value.biography,
+            avatar: value.avatar,
+            links: value.links,
+            publicViews: value.publicViews,
+            ...(value.kind === 'organization' && value.speakersListed !== undefined
+              ? { speakersListed: value.speakersListed }
+              : {}),
+          });
+          return saveProfile({
+            data: {
+              before: commandProfile(attempt.before),
+              after: commandProfile(attempt.after),
+              idempotencyKey: attempt.idempotencyKey,
+            },
+            headers: { 'X-CSRF-Token': owner.actor?.incarnation ?? '' },
+          });
+        },
+        canWrite: () => current() && owner.canWrite(),
+        confirmed: (profile) => {
+          if (!current()) return;
+          const values = profileCommandValues(profile);
+          const editing = owner.editor.snapshot().editing;
+          client.setQueryData(owner.key, editing ? { ...values, editing } : values);
+        },
+      };
+    },
+    ambient,
+  );
   const listeners = new Set<() => void>();
   const attached: EditorEntry = {
     owner,
@@ -138,6 +144,7 @@ function createEntry(client: QueryClient) {
 
 export function useProfileEditor() {
   useSession();
+  const ambient = useSettingsAmbient();
   const client = useQueryClient();
   const previous = useRef<{ client: QueryClient; entry: EditorEntry } | null>(null);
   // Provider replacement revokes rendered callbacks during render, before layout cleanup or an await resumes.
@@ -156,7 +163,7 @@ export function useProfileEditor() {
     cached = undefined;
   }
   // Keep the attachment check with its original entry rather than creating another session authority.
-  const entry = cached ?? createEntry(client);
+  const entry = cached ?? createEntry(client, ambient);
   previous.current = { client, entry };
   const { owner } = entry;
   useSyncExternalStore(entry.subscribe, entry.snapshot, entry.snapshot);

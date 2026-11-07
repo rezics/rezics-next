@@ -10,6 +10,7 @@ import {
   type NotificationPatch,
   type PreferencePage,
 } from './preferences';
+import { createServerSettingsAmbient } from './adapters/ambient';
 import { notificationOriginalAllowed } from './notification-recovery';
 import { m } from '../paraglide/messages.js';
 
@@ -106,6 +107,7 @@ function recoveryPage(
 
 /** Handle the settings form's native POST before progressive enhancement is available. */
 export async function submitNotificationForm(request: Request): Promise<Response> {
+  const id = createServerSettingsAmbient().id;
   const redirect = (failed: boolean) => {
     const url = new URL(request.url);
     url.search = failed ? '?notificationError=1' : '';
@@ -198,7 +200,7 @@ export async function submitNotificationForm(request: Request): Promise<Response
   const change = parseNotificationChange({
     expectedVersion: Number(expectedVersion[0]),
     notifications,
-    idempotencyKey: typeof keys[0] === 'string' ? keys[0] : crypto.randomUUID(),
+    idempotencyKey: typeof keys[0] === 'string' ? keys[0] : id(),
   });
   if (!change) return redirect(true);
   const token = form.get('csrf_token');
@@ -221,7 +223,7 @@ export async function submitNotificationForm(request: Request): Promise<Response
     // An unresolved retry never borrows a new version or key from a current read.
     const reviewed =
       mode === 'review' && admitted
-        ? { ...change, expectedVersion: page.preferences.version, idempotencyKey: crypto.randomUUID() }
+        ? { ...change, expectedVersion: page.preferences.version, idempotencyKey: id() }
         : change;
     if (steps[0] !== 'send' || !admitted || (mode === 'review' && change.expectedVersion !== reviewed.expectedVersion))
       return recoveryPage(request, token, reviewed, mode, { current: page.page });

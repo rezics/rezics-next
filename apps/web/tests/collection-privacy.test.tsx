@@ -6,6 +6,10 @@ import { renderToStaticMarkup } from 'react-dom/server';
 import type { OwnedCollection } from '../src/settings/preferences';
 import { CollectionPrivacyEditor } from '../src/settings/collection-privacy-recovery';
 import { m } from '../src/paraglide/messages.js';
+import { createBrowserSettingsAmbient } from '../src/settings/adapters/ambient';
+import { performanceAmbientTree } from './performance-ambient';
+
+const settingsAmbient = createBrowserSettingsAmbient();
 
 const { Window } = await import(
   Bun.resolveSync('happy-dom', dirname(Bun.resolveSync('@puckeditor/core', import.meta.dir)))
@@ -93,7 +97,7 @@ const io = {
 };
 
 function markup(collection: OwnedCollection) {
-  return renderToStaticMarkup(createElement(CollectionRow, { collection, io }));
+  return renderToStaticMarkup(performanceAmbientTree(createElement(CollectionRow, { collection, io })));
 }
 
 test('visibility options follow native advice and logical built-ins remain read-only', () => {
@@ -115,7 +119,7 @@ test('current owner advice remains usable when the retry target already matches'
     visibility: 'public' as const,
     allowedVisibilityActions: ['private', 'unlisted'] as const,
   };
-  const editor = new CollectionPrivacyEditor(current, io);
+  const editor = new CollectionPrivacyEditor(current, io, settingsAmbient);
   expect(editor.hasCurrentUpdateAdvice()).toBe(true);
   editor.receive({ ...current, allowedVisibilityActions: [] });
   expect(editor.hasCurrentUpdateAdvice()).toBe(false);

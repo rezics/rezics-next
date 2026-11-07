@@ -1,5 +1,5 @@
 import { withManagedReadDeadline } from './managed-read-deadline';
-import { preferenceRetryDeadline } from './preference-failure-retry';
+import { preferenceRetryDeadline, type SettingsAmbient } from './ports/ambient';
 import type {
   ManagedWatch,
   NativeWatchProblem,
@@ -156,23 +156,24 @@ export class WatchController {
   constructor(
     private io: WatchManagementIO,
     private owner: WatchOwner,
+    private ambient: SettingsAmbient,
     ownerScope: object = owner,
   ) {
     this.ownerScope = ownerScope;
     const deadline = watchWriteRetryAt.get(ownerScope) ?? 0;
-    if (deadline > Date.now()) this.state = { ...initial, writeRetryAt: deadline };
+    if (deadline > this.ambient.now()) this.state = { ...initial, writeRetryAt: deadline };
     else watchWriteRetryAt.delete(ownerScope);
   }
 
   private writeWaitActive() {
-    const now = Date.now();
+    const now = this.ambient.now();
     const viewDeadline = this.state.writeRetryAt;
     const ownerDeadline = watchWriteRetryAt.get(this.ownerScope) ?? 0;
     return Math.max(viewDeadline > now ? viewDeadline : 0, ownerDeadline > now ? ownerDeadline : 0) > now;
   }
 
   private keepWriteWait(retryAfter?: string) {
-    const now = Date.now();
+    const now = this.ambient.now();
     const viewDeadline = this.state.writeRetryAt;
     const ownerDeadline = watchWriteRetryAt.get(this.ownerScope) ?? 0;
     const previous = Math.max(viewDeadline > now ? viewDeadline : 0, ownerDeadline > now ? ownerDeadline : 0);
@@ -323,7 +324,7 @@ export class WatchController {
       !this.current() ||
       this.state.read === 'loading' ||
       this.state.write === 'sending' ||
-      Date.now() < this.state.readRetryAt
+      this.ambient.now() < this.state.readRetryAt
     )
       return;
     this.recovery = request;
@@ -354,6 +355,7 @@ export class WatchController {
             signal,
           }),
         this.request.signal,
+        this.ambient.timer,
       );
       if (!this.current() || generation !== this.generation) return;
       if (result.kind === 'page' && this.validPage(result.page, request.kind)) {
@@ -390,7 +392,7 @@ export class WatchController {
         this.update({
           read: result.kind,
           readProblem: result.problem,
-          readRetryAt: preferenceRetryDeadline(result.problem.retryAfter),
+          readRetryAt: preferenceRetryDeadline(result.problem.retryAfter, this.ambient.now()),
         });
       } else {
         this.update({ read: 'failed', readRetryAt: 0, readProblem: null });
@@ -410,7 +412,7 @@ export class WatchController {
       watchId: row.command.watchId,
       kind: row.command.kind,
       expectedRevision: row.command.expectedRevision,
-      idempotencyKey: crypto.randomUUID(),
+      idempotencyKey: this.ambient.id(),
       credential,
     });
     this.update({ command, write: 'sending' });
@@ -426,7 +428,11 @@ export class WatchController {
     if (!command.credential || !this.current()) return;
     try {
       // Bound waiting without claiming cancellation reversed a dispatched command.
-      const result = await withManagedReadDeadline(() => this.io.stop(command, command.credential));
+      const result = await withManagedReadDeadline(
+        () => this.io.stop(command, command.credential),
+        undefined,
+        this.ambient.timer,
+      );
       if (!this.current() || this.state.command !== command) return;
       const writeRetryAt = this.keepWriteWait(result.kind === 'removed' ? undefined : result.problem.retryAfter);
       if (result.kind === 'removed') {

@@ -2,15 +2,17 @@ import { readAccountProfile, saveAccountProfile } from './actions';
 import { useMemo } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { sessionQuery, useSession } from '../../session/query';
+import { useSettingsAmbient } from '../../settings/adapters/ambient-view.tsx';
 import type { AccountSession } from '../../settings/ports/accounts';
 import type { AccountProfileRuntime, ProfileSessionLease } from './ports';
 
 function useProfileSession() {
   const session = useSession();
   const client = useQueryClient();
+  const ambient = useSettingsAmbient();
   const record = client.getQueryCache().find({ queryKey: sessionQuery.queryKey, exact: true });
   const revision = record?.state.dataUpdateCount;
-  const observation = useMemo(() => crypto.randomUUID(), [client, record, revision]);
+  const observation = useMemo(() => ambient.id(), [ambient, client, record, revision]);
   return {
     session,
     observation,

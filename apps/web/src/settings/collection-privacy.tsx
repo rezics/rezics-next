@@ -32,6 +32,7 @@ import { useSession } from '../session/query';
 import type { CollectionVisibility } from './ports/library';
 import { readOwnedCollection, readOwnedCollectionsPage, saveCollectionVisibility } from './actions';
 import type { OwnedCollection } from './preferences';
+import { useSettingsAmbient } from './adapters/ambient-view.tsx';
 import { usePreferenceRetry } from './preference-failure-retry';
 import type { CollectionPrivacyFailure } from './collection-privacy-data';
 import { useSettingsNavigationDraft } from './reading-navigation';
@@ -121,6 +122,7 @@ function CollectionRowView({
   canSave,
   canRead,
 }: OwnedRowProps & { canSave: boolean; canRead: boolean }) {
+  const ambient = useSettingsAmbient();
   const mayWrite = () => (owner ? owner.isCurrent() : !!io);
   const isCurrent = useSettingsLiveness(owner?.readCurrent ?? (() => !!io));
   const [editor] = useState(
@@ -137,6 +139,7 @@ function CollectionRowView({
                 throw new Error('Settings viewer unavailable');
               },
             }),
+        ambient,
         isCurrent,
         () => isCurrent() && mayWrite(),
       ),
@@ -429,11 +432,16 @@ export function CollectionPrivacyView({
   read?: CollectionPrivacyPageRead;
   io?: CollectionPrivacyIO;
 }) {
+  const ambient = useSettingsAmbient();
   const owner = useSettingsSessionOwner(undefined, undefined, !!io || read !== nativePageRead);
   const isCurrent = useSettingsLiveness(owner?.readCurrent ?? (() => read !== nativePageRead));
   const [pager] = useState(
     () =>
-      new CollectionPrivacyPager((cursor) => (owner ? owner.guardRead(() => read(cursor)) : read(cursor)), isCurrent),
+      new CollectionPrivacyPager(
+        (cursor) => (owner ? owner.guardRead(() => read(cursor)) : read(cursor)),
+        ambient,
+        isCurrent,
+      ),
   );
   useSettingsDisposal(pager.dispose);
   const state = useSyncExternalStore(pager.subscribe, pager.snapshot, pager.snapshot);

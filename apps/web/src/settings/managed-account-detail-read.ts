@@ -1,5 +1,5 @@
 import { withManagedReadDeadline } from './managed-read-deadline';
-import { preferenceRetryDeadline } from './preference-failure-retry';
+import { preferenceRetryDeadline, type SettingsAmbient } from './ports/ambient';
 import type { ManagedReaderCurrent } from './managed-session-reader';
 import { detailFailure } from './managed-account-failure';
 import type {
@@ -80,6 +80,7 @@ export class ManagedAccountReader {
     readonly viewerId: string,
     readonly accountId: string,
     private read: DetailRead,
+    private readonly ambient: SettingsAmbient,
     readonly csrfToken: string | null = null,
     private readonly current: ManagedReaderCurrent = () => true,
   ) {}
@@ -112,7 +113,7 @@ export class ManagedAccountReader {
   async load(section?: DetailSection, cursor?: string) {
     if (!this.live()) return;
     // All controls, including callbacks captured before the response, share this endpoint wait.
-    if ((this.state.retryAt ?? 0) > Date.now()) return;
+    if ((this.state.retryAt ?? 0) > this.ambient.now()) return;
     if (this.state.pending || (section && this.state[section].pending)) return;
     if (!section && (this.state.members.pending || this.state.responsibilities.pending)) return;
     const generation = this.generation;
@@ -141,6 +142,7 @@ export class ManagedAccountReader {
             signal,
           ),
         this.lifetime.signal,
+        this.ambient.timer,
       );
     } catch {
       result = { ok: false, failure: detailFailure(null) };
@@ -154,7 +156,10 @@ export class ManagedAccountReader {
     if (!result.ok) {
       const { failure } = result;
       // Observe once on receipt. A sibling reply cannot shorten an already observed wait.
-      const retryAt = Math.max(this.state.retryAt ?? 0, preferenceRetryDeadline(failure.retryAfter));
+      const retryAt = Math.max(
+        this.state.retryAt ?? 0,
+        preferenceRetryDeadline(failure.retryAfter, this.ambient.now()),
+      );
       if ([401, 403, 404].includes(failure.status ?? 0) || !section) {
         if (!failure.transient) this.generation++;
         this.publish({

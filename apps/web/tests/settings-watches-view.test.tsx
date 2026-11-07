@@ -3,6 +3,7 @@ import { dirname } from 'node:path';
 import { act, useState } from 'react';
 import * as start from '../.storybook/react-start';
 import type { ManagedWatch, WatchManagementIO, WatchRead } from '../src/settings/watch-native';
+import { performanceAmbientTree } from './performance-ambient';
 
 mock.module('cloudflare:workers', () => ({ env: {} }));
 mock.module('@tanstack/react-start', () => start);
