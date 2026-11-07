@@ -18,6 +18,7 @@ import type { RelationDefinition } from '../src/subject/relations';
 
 mock.module('cloudflare:workers', () => ({ env: {} }));
 const { MangaReader } = await import('../src/features/catalogue/manga-reader/view');
+const { isolatedWorkReading } = await import('../src/features/catalogue/work-reading-port');
 
 const seriesId = '0192f3a0-6c1e-7b2a-9d4e-000000000901';
 const volumeTwoId = '0192f3a0-6c1e-7b2a-9d4e-000000000902';
@@ -145,6 +146,7 @@ test('the composed Manga window separates volumes, generic parts and editions by
       reader: defaultReader,
       observation: observation(),
       recoveryHref: `/en/subjects/${seriesId}/the-harbour-atlas#manga-reader`,
+      reading: isolatedWorkReading,
     }),
   );
   expect(html.indexOf('Volume 2')).toBeLessThan(html.indexOf('Volume 1'));
@@ -184,6 +186,7 @@ test('an exact volume retains its disclosed parent and edition identities withou
       reader: defaultReader,
       observation: observation({ subject: volumeId }),
       recoveryHref: `/en/subjects/${volumeId}/volume-1#manga-reader`,
+      reading: isolatedWorkReading,
     }),
   );
   expect(html).toContain(`/en/subjects/${parentId}/the-harbour-atlas`);
@@ -303,6 +306,7 @@ test('a changed viewer or source hides old links and returning to the prior obse
     reader: defaultReader,
     observation: observation(),
     recoveryHref: `/en/subjects/${seriesId}/the-harbour-atlas#manga-reader`,
+    reading: isolatedWorkReading,
   };
   try {
     await act(async () => root.render(createElement(MangaReader, props)));
@@ -388,6 +392,7 @@ test('one selected occurrence keeps its original inverse holder, qualifiers and 
     reader: defaultReader,
     observation: observation({ view: 'contents' }),
     recoveryHref: `/en/subjects/${seriesId}/the-harbour-atlas/contents?node=parts&cursor=opaque#manga-reader`,
+    reading: isolatedWorkReading,
   };
   try {
     await act(async () => root.render(createElement(MangaReader, props)));

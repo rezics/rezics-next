@@ -141,7 +141,6 @@ function commandsFor(scenario: StoryArgs['scenario']): OwnDraftCommands {
             securityRevision: 'story-security-revision',
             route: 0,
             authorId: accountId,
-            attribution: { id: accountId, kind: 'actor', displayName: 'Ada' },
             parentId: null,
             subjectIds: [subjectId],
             boardId,
@@ -154,7 +153,7 @@ function commandsFor(scenario: StoryArgs['scenario']): OwnDraftCommands {
             licence: 'LicenseRef-rezics-terms',
             createdAt: '2026-10-28T09:42:00.000Z',
             revisedAt: '2026-10-28T10:42:00.000Z',
-          } satisfies CurrentPost,
+          } as unknown as CurrentPost,
         };
       return { ok: false, reason: 'unavailable' };
     },

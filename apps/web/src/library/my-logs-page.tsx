@@ -11,7 +11,7 @@ import {
   type MouseEvent as ReactMouseEvent,
 } from 'react';
 import { Exposure, useOperation } from '../kernel/exposure';
-import { personalRead } from '../kernel/query';
+import { personalRead } from '../session/reading-policy';
 import {
   assertHistoryCurrent,
   useHistoryAddress,

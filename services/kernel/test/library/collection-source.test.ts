@@ -4,8 +4,8 @@ import { runOperationalTransaction } from '../../src/command/operational.ts';
 import { createCollectionSource } from '../../src/library/collection-source.ts';
 import type { Access } from '../../src/request/access.ts';
 import { newId, partitionOf } from '../../src/route/route.ts';
-import type { ScopeWorkContext } from '../../src/search/scope-work-context.ts';
-import { readScopeWorkDefinition } from '../../src/search/scope-work-context.ts';
+import type { ScopeWorkContext } from '../../src/library/adapters/index.ts';
+import { requireLibraryDomain } from '../../src/library/domain-binding.ts';
 import { ownerAllowance } from './canonical-source-fixture.ts';
 import { definition, membersPreparationRuntime } from './support/members-preparation-runtime.ts';
 
@@ -32,7 +32,7 @@ test('The actual CollectionSource work-context branch executes real admitted nat
         const work: ScopeWorkContext = { kind: 'members-preparation', tx, locator };
         completed = work;
         const context = { work, deadline: Date.now() + 10000 };
-        const admitted = await readScopeWorkDefinition(work, {
+        const admitted = await requireLibraryDomain().scopeWork!.readDefinition(work, {
           pool: native.db.pool,
           access: native.kernel.testAccess,
           deadline: context.deadline,
@@ -78,7 +78,7 @@ test('The actual CollectionSource work-context branch executes real admitted nat
           }),
         ).rejects.toMatchObject({ code: 'semantic_not_ready' });
         expect(
-          await readScopeWorkDefinition(work, {
+          await requireLibraryDomain().scopeWork!.readDefinition(work, {
             pool: native.db.pool,
             access: native.kernel.testAccess,
             deadline: context.deadline,

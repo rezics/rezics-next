@@ -2,6 +2,20 @@
 
 **Decision:** Collection privacy uses the existing private owner inventory and native `collection:update` advice; logical built-ins remain inspectable and read-only without a command revision.
 
+**Decision:** Settings consumes private Collection owner windows, privacy command/readback and Shelf type/default/column preferences through the typed Library port (`ports/library.ts`). Visibility, occurrence, frontier and preference vocabulary live in Library `settings-contract`; transport binds at `settings-adapter` and `adapters/library.ts`, presentation at `adapters/library-view.tsx`, composed from ordinary `/settings`. Exact failed cursors, independent command/read deadlines, drafts and acknowledged-original recovery stay on that port. Fewest tests: keep the existing Collection privacy and Shelf recovery suites and add one port-composition pin rather than a second suite.
+
+### Cost: private Collection owner window
+
+- Touches: one signed-in `GET /v1/collections?curatorAccountId&ownerManagement=true&limit=20` with the exact opaque cursor. Nested Library work is the owner inventory page plus native `collection:update` advice on each returned row. Dynamic titles use the existing Collection title helper; there is no member, pin or Shelf scan.
+- Bound: one 20-row window; the first occurrence of a Collection ID wins; a successful page replaces the retained rows. Retry repeats the exact failed cursor; Restart is cursor-free. One controller keeps one accepted page, one failed request and independent row command/read deadlines.
+- Growth check: focused Collection privacy suites pin retained rows, exact failed cursors and released callbacks. Native examined-row evidence stays with Library Collection directory growth; Settings does not add a Settings-owned SQL suite.
+
+### Cost: Collection privacy command and current readback
+
+- Touches: one `PATCH /v1/collections/{id}?ownerManagement=true` of the frozen original visibility, revision, credential and idempotency key, then one independent FULL owner GET for current readback. Nested Library work is the Collection update and point read.
+- Bound: one unresolved original; later drafts cannot rewrite it. Command and current-read each use the existing ten-second deadline and their own Retry-After. A validated receipt stays acknowledged through a failed current read.
+- Growth check: existing Collection privacy recovery suites. Native Collection update/point examined-row evidence stays with Library.
+
 **Decision:** Within each native page, the first row for a Collection ID wins; every successful page replaces the current 20-row window.
 
 **Decision:** One mounted Collection privacy viewer keeps the longest Retry-After deadline for its list endpoint across cursors; Retry retains the failed request and Restart stays cursor-free, with expiry enabling deliberate recovery only. Row reads and commands keep independent deadlines.
@@ -262,6 +276,12 @@ new choices; absent saved overrides remain visible and removable within the exis
 The editor keeps eight predecessor coordinates and one staged target, never historical rows, labels or counts.
 Existing Save, uncertain original custody and the single Stay/Leave owner remain unchanged.
 
+### Cost: Shelf type defaults discovery
+
+- Touches: one private Library type-index GET at limit 20 with the exact cursor, plus the existing optional label batch for that page. Settings does not read counts, historical type rows or a shared QueryClient cache.
+- Bound: one current 20-row DTO, eight predecessor coordinates, one staged target. Previous, Next, First and exact Retry are view operations; they never edit a layout, draft or original command.
+- Growth check: existing Shelf type-defaults recovery and type-window suites. Nested native type-index work stays with Library; Settings reports request and retained-coordinate bounds only.
+
 ## Account safety
 
 Managed detail captures Retry-After at response receipt in its immutable viewer/target reader. The longest observed
@@ -342,3 +362,39 @@ The Account card reads the current identity from the managed session and keeps r
 - Touches: one rename region keeps one loading snapshot, the current context or bounded failures, and one absolute Retry-After. Directory selection remains the existing 20-row feeds with eight predecessor coordinates.
 - Bound: sequential visits replace that snapshot; retired viewers drop destination hrefs and ignore late module loads. Verification status, suggestions and commands are independent endpoints and independent deadlines.
 - Growth check: focused region, link and card suites pin call counts, retained identity and released callbacks. Native SQL growth stays with Accounts and Auth.
+
+## Composed account capabilities
+
+**Decision:** Settings owns `ports/accounts.ts`: exact-account Profile destination, managed action/detail reads,
+rename navigation, current session observation and deliberate session recovery. `adapters/accounts.ts` owns the native
+management/viewer-actions requests, cookie-viewer binding and server-function envelopes. `adapters/accounts-browser.tsx`
+binds those operations and a query-backed session source. Ordinary Settings route composition supplies Accounts'
+`profile-editor/address.ts` destination. Settings and Inbox have no dependency on Accounts page or request implementations;
+web-performance no longer declares web-accounts as a dependency.
+
+`managed-account-vocabulary.ts` owns action names and availability; `managed-account-contract.ts` owns detail wire
+validation; `managed-account-projection.ts` projects native management advice through a supplied destination resolver;
+`managed-account-failure.ts` classifies failure values. Neither action nor detail reader imports the other. This removes
+both recorded value-cycle edges and splits their two-file SCC into individual files. Native management GET remains the
+only source of Auth action admission/navigation. Profile entry still requires its independent exact-resource operation
+observation; identity, role, selection and a deployed destination never manufacture authority.
+
+The session source supplies stable snapshots and removal events, without credentials. Viewer, immutable target, token
+or client replacement permanently retires the original observation before retained callbacks or late responses can
+restore action advice. Retry preserves the original request and the longest observed endpoint deadline. Expiry enables
+deliberate recovery only. Rename and Safety consume the composed lazy read and refresh capabilities; their current-viewer
+checks fence module loading, dispatch and completion. Security/deletion remain fixed trusted-issuer handoffs.
+
+The shared Profile owner contract is `ports/profile-editor.ts`; presentation is `ports/profile-editor-view.ts`. Accounts'
+delegated journey consumes that narrow command/read contract and receives the actual cards and navigation from its route.
+Confirmation, immutable command custody, original retry, private advice preflight and current readback retain their
+existing owner semantics. Profile address construction is a separate leaf and does not load an editor.
+
+**Verification choice:** Extend the existing managed-session, managed-action/detail, rename and delegated Profile suites
+with composed-capability coverage, retain their behavior assertions and existing named stories, and add no story states.
+Worker landing runs the Web workspace typecheck, including both official programs, through the check wrapper. Integration
+owns runtime, native/browser walks, architecture counters and growth evidence; none is inferred from a fixture.
+
+Design sources: this README, Inbox and account-specific Profile editor READMEs, development verification, architecture,
+and the Web and migration-under-a-ratchet sections of the adopted architecture research. The shared reference index was
+consulted; this behavior-preserving migration needs no new external product decision.

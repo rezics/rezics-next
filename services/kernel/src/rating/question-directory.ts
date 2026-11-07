@@ -8,15 +8,14 @@ import { partitionReadClient } from '../database/read-snapshot.ts';
 import { ProblemError } from '../http/problem.ts';
 import { accessCheck, type Access, type Actor } from '../request/access.ts';
 import { partitionOf, routeOf } from '../route/route.ts';
-import { globalReadEligibility } from '../semantic/eligibility.ts';
-import { withReadTransaction } from '../semantic/read.ts';
+import { ratingVoteSemantic, type RatingVoteSemantic } from './adapters/vote-semantic.ts';
 import directory from './question-directory.sql';
 import realmDirectory from './question-directory-realm.sql';
 import lifecycleGenerationRead from './question-lifecycle-generation-read.sql';
 import questionRead from './question-read.sql';
 import type { QuestionGrain } from './question-authoring.ts';
 
-type Dependencies = { pool: Pool; access: Access; deadlineNow?: () => number };
+type Dependencies = { pool: Pool; access: Access; deadlineNow?: () => number; semantic?: RatingVoteSemantic };
 export type QuestionMetadata = NonNullable<Awaited<ReturnType<typeof questionRead.run>>>;
 
 export type RatingQuestionView = {
@@ -85,7 +84,7 @@ export async function requireGlobalQuestionRead(deps: Dependencies, actor: Actor
     {
       route: GLOBAL_CONTEXT.route,
       id: GLOBAL_CONTEXT.id,
-      eligibility: globalReadEligibility('definitions:read'),
+      eligibility: (deps.semantic ?? ratingVoteSemantic()).definitionsEligibility(),
     },
     { pool: deps.pool, deadline },
   );
@@ -121,11 +120,15 @@ export async function readVisibleRatingQuestion(
 ): Promise<QuestionMetadata | null> {
   const route = routeOf(questionId);
   if (route === null) return null;
-  const row = await withReadTransaction(deps.pool, async (client) => {
-    const bounded = deadlineClient(client, deadline);
-    await partitionReadClient(bounded, partitionOf(route));
-    return questionRead.run(bounded, { question_id: questionId });
-  });
+  const row = await (deps.semantic ?? ratingVoteSemantic()).snapshot(
+    deps.pool,
+    async (client) => {
+      const bounded = deadlineClient(client, deadline);
+      await partitionReadClient(bounded, partitionOf(route));
+      return questionRead.run(bounded, { question_id: questionId });
+    },
+    deadline,
+  );
   if (!row) return null;
   if (row.realmId !== null) await requireRealmQuestionRead(deps, actor, row.realmId, deadline);
   else if (globalAuthority) await requireGlobalQuestionRead(deps, actor, deadline);
@@ -174,29 +177,37 @@ export async function readSelectedQuestionDirectory(
       ? requireGlobalQuestionRead(deps, actor, deadline)
       : requireRealmQuestionRead(deps, actor, input.realmId, deadline);
   await authorize();
-  const page = await withReadTransaction(deps.pool, async (client) => {
-    const bounded = deadlineClient(client, deadline);
-    // A selected Realm and every question it creates share one native home.
-    const partition = partitionOf(input.realmId === undefined ? 0 : routeOf(input.realmId)!);
-    await partitionReadClient(bounded, partition);
-    const lifecycleGeneration =
-      input.realmId === undefined
-        ? '0'
-        : ((await lifecycleGenerationRead.run(bounded, { realm_id: input.realmId }))?.generation ?? '0');
-    if (input.lifecycleGeneration !== undefined && input.lifecycleGeneration !== lifecycleGeneration)
-      throw new ProblemError('invalid_cursor');
-    return { ...(await readRatingQuestionDirectory(bounded, input)), lifecycleGeneration };
-  });
+  const page = await (deps.semantic ?? ratingVoteSemantic()).snapshot(
+    deps.pool,
+    async (client) => {
+      const bounded = deadlineClient(client, deadline);
+      // A selected Realm and every question it creates share one native home.
+      const partition = partitionOf(input.realmId === undefined ? 0 : routeOf(input.realmId)!);
+      await partitionReadClient(bounded, partition);
+      const lifecycleGeneration =
+        input.realmId === undefined
+          ? '0'
+          : ((await lifecycleGenerationRead.run(bounded, { realm_id: input.realmId }))?.generation ?? '0');
+      if (input.lifecycleGeneration !== undefined && input.lifecycleGeneration !== lifecycleGeneration)
+        throw new ProblemError('invalid_cursor');
+      return { ...(await readRatingQuestionDirectory(bounded, input)), lifecycleGeneration };
+    },
+    deadline,
+  );
   // Requalify the caller after reading question metadata, including on Global pages.
   // For Realm pages, observe the source again after that foreign authorization so a
   // lifecycle change during Access preparation cannot release a stale definition.
   await authorize();
   if (input.realmId !== undefined) {
-    const latest = await withReadTransaction(deps.pool, async (client) => {
-      const bounded = deadlineClient(client, deadline);
-      await partitionReadClient(bounded, partitionOf(routeOf(input.realmId!)!));
-      return (await lifecycleGenerationRead.run(bounded, { realm_id: input.realmId! }))?.generation ?? '0';
-    });
+    const latest = await (deps.semantic ?? ratingVoteSemantic()).snapshot(
+      deps.pool,
+      async (client) => {
+        const bounded = deadlineClient(client, deadline);
+        await partitionReadClient(bounded, partitionOf(routeOf(input.realmId!)!));
+        return (await lifecycleGenerationRead.run(bounded, { realm_id: input.realmId! }))?.generation ?? '0';
+      },
+      deadline,
+    );
     if (latest !== page.lifecycleGeneration) throw new ProblemError('invalid_cursor');
   }
   return page;

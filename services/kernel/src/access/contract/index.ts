@@ -80,3 +80,5 @@ export type {
   RetainIdentityInput,
   SearchErasurePort,
 } from './ports.ts';
+export type { AccessFollowCountAccount, AccessFollowCountProducer } from './follow-counts.ts';
+export type { AccessReadingIdentity, AccessReadingObservation, AccessReadingPorts } from './reading.ts';

@@ -50,3 +50,14 @@ export type { SerializableContinuation, Source, SourcePage } from './discovery-s
 export type { SubjectListingSource, SubjectSource } from './source.ts';
 export { observeComposedSlot, type ObservedSlotResult } from '../presentation/http/slot-observed.ts';
 export { uniqueCanonicalRows } from '../presentation/slot-bodies.ts';
+
+import type { OpenSearch } from './opensearch.ts';
+import { analyzeInstalled } from './engine-analysis.ts';
+import { createSearchDisclosureApplication } from './disclosure-application.ts';
+
+/** Concrete native binding used by Kernel composition and isolated service construction. */
+export function createNativeSearchDisclosure(search: OpenSearch) {
+  return createSearchDisclosureApplication({
+    analyze: (index, analyzer, text) => analyzeInstalled(search, index, { analyzer, text }),
+  });
+}

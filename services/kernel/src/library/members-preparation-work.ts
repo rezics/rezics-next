@@ -21,9 +21,8 @@ import {
 import type { CollectionSourceObservation } from './collection-source.ts';
 import type { WorkReceipt } from './contract/work-dimensions.ts';
 import type { IdentityScopeObservation } from '../semantic/identity-scope-types.ts';
-import type { SearchScopeOrder } from '../search/service-scope-order.ts';
-import { createSearchScopeSource } from '../search/scope-source.ts';
-import type { MembersPreparationWorkContext } from '../search/scope-work-context.ts';
+import type { MembersPreparationWorkContext, NativePreparationWork } from './adapters/preparation-work.ts';
+import { requireLibraryDomain } from './domain-binding.ts';
 import ownerLock from './members-preparation-owner-lock.sql';
 import cleanup from './members-preparation-cleanup.sql';
 import idle from './members-preparation-idle.sql';
@@ -38,14 +37,8 @@ import step from './members-preparation-step.sql';
 import original from './members-preparation-original.sql';
 import sourceMetadata from './members-preparation-source.sql';
 import ownerFence from './owner-filter-native-binding-fence.sql';
-import { collectionPublicationScopeRuntime } from '../search/work.ts';
-import { scopeAllowance } from '../search/scope-execution.ts';
-import { meterMembersDefinition, withMembersWorkBudget } from '../search/scope-members-work-cost.ts';
 import { MEMBERS_PREPARATION_STEP_CEILING, MEMBERS_PREPARATION_LOCAL_COST } from './members-preparation-cost.ts';
-import {
-  MEMBERS_PREPARATION_SOURCE_COST,
-  MEMBERS_PREPARATION_SOURCE_PATHS,
-} from '../search/scope-members-source-declaration.ts';
+import { MEMBERS_PREPARATION_SOURCE_COST } from './members-preparation-source-declaration.ts';
 import { NativeCollectionWork } from './collection-source-work.ts';
 import { readMembershipRouteKey } from '../access/membership-work-config.ts';
 import {
@@ -65,12 +58,11 @@ import type { WorkDimensions } from './contract/work-dimensions.ts';
 import { type SelectedOutcome } from '../history/contract/index.ts';
 
 type Dependencies = Pick<WorkContext, 'pool' | 'client' | 'clock'> & {
-  runtime?: () => ReturnType<typeof collectionPublicationScopeRuntime>;
+  source: NativePreparationWork;
   authorization?: () => Pick<ReturnType<WorkContext['getAuthorization']>, 'access'>;
   routeKey?: Buffer;
 };
 type Input = PreparationIntent['input'];
-type OrderedSource = ReturnType<typeof createSearchScopeSource>;
 
 const nativeCost = (cost: Readonly<WorkDimensions>) => ({ ...cost, engineRequests: 0 });
 /** Literal invocation-wide owned dispatch multiplicities. Native SQL performs no engine requests.
@@ -156,7 +148,7 @@ type PreparationRunnerInput = Readonly<{
   budget: NativeCollectionWork;
   definition: PreparationDefinition;
   retained: PreparationStepState;
-  order: SearchScopeOrder['kind'];
+  order: PreparationDefinition['sort'];
   deadline: number;
 }>;
 
@@ -168,9 +160,8 @@ async function advancePreparation(
   deps: Dependencies,
   input: PreparationRunnerInput,
 ): Promise<PreparationAdvance | Readonly<{ status: 'unavailable' }> | Readonly<{ status: 'restart' }>> {
-  const runtime = deps.runtime?.();
   const authorization = deps.authorization?.();
-  if (!runtime || !authorization || !deps.routeKey) return { status: 'unavailable' };
+  if (!authorization || !deps.routeKey) return { status: 'unavailable' };
   const service = createMembersPreparation({
     pool: deps.pool,
     workClient: deps.client,
@@ -178,94 +169,25 @@ async function advancePreparation(
     clock: deps.clock,
   });
   const work = input.budget;
-  const native = await meterMembersDefinition(input.work.tx, () =>
+  const native = await deps.source.definition(input.work.tx, () =>
     service.readWorkDefinition(input.work.tx, input.work.locator),
   );
   const scope = await readPreparationScope(input.work.tx, input.work.locator);
   if (!native || !scope) return { status: 'unavailable' };
   const ownerFence = await readPreparationOwnerFence(input.work.tx, input.work.locator, input.definition);
-  const source = createSearchScopeSource({
-    ...runtime,
-    evidence: {
-      work: input.work,
-      access: authorization.access,
-      routeKey: deps.routeKey,
-      deadline: input.deadline,
-    },
+  const prefix = await deps.source.prefix({
+    work: input.work,
+    budget: work,
+    definition: input.definition,
+    sourceIdentity: native.sourceIdentity,
+    checkpoint: input.retained.checkpoint,
+    access: authorization.access,
+    routeKey: deps.routeKey,
+    deadline: input.deadline,
   });
-  const prepared = await work.compose(async (allowance) => {
-    const value = await source.prepare(input.definition.filter, {
-      allowance,
-      releaseDigest: input.definition.release.digest,
-      order: { kind: input.order, source: native.sourceIdentity },
-    });
-    return { value, work: source.work(value) };
-  });
-  // Use the installed Search adapter, including its complete native evidence and local receipts.
-  // No raw exhaustion, receipt or reservation alone is promoted to successful completion.
-  type IdRequest = Parameters<OrderedSource['sourcePrefix']>[1];
-  type OrdinalRequest = Parameters<OrderedSource['ordinalPrefix']>[1];
-  type Evaluation = Parameters<OrderedSource['evaluate']>[2];
-  type Checkpoint = {
-    id: IdRequest['afterSubjectId'];
-    ordinal: OrdinalRequest['after'];
-    progress: Evaluation['progress'];
-  };
-  const checkpoint: Checkpoint = input.retained.checkpoint
-    ? JSON.parse(input.retained.checkpoint)
-    : { id: null, ordinal: null, progress: null };
-  let subjects: readonly string[], exhausted: boolean;
-  let observation: CollectionSourceObservation;
-  if (input.order === 'ordinal') {
-    const page = await work.compose((allowance) =>
-      source.ordinalPrefix(prepared.value, { after: checkpoint.ordinal, quota: 1, allowance }),
-    );
-    checkpoint.ordinal = page.frontier.after;
-    subjects = page.subjects.map((row) => row.subject);
-    exhausted = page.exhausted;
-    observation = page.observation;
-  } else {
-    const page = await work.compose((allowance) =>
-      source.sourcePrefix(prepared.value, {
-        afterSubjectId: checkpoint.id,
-        candidateLimit: MEMBERS_PREPARATION_SOURCE_PATHS.id.candidatePrefixMaximum,
-        allowance,
-      }),
-    );
-    const candidate = page.candidates[0];
-    subjects = [];
-    exhausted = page.exhausted && page.candidates.length === 0;
-    observation = page.observation;
-    if (candidate) {
-      const evaluated = await work.compose(async (allowance) => {
-        const remaining = allowance.remaining;
-        const value = await source.evaluate(prepared.value, [candidate.subjectId], {
-          allowance,
-          progress: checkpoint.progress ?? null,
-          rawKeys: remaining.candidateKeys,
-          native: {
-            rows: remaining.nativeRows,
-            points: remaining.nativePoints,
-            witnesses: remaining.witnessKeys,
-            bytes: remaining.bytes,
-            emptySeeks: remaining.emptySeeks,
-          },
-        });
-        return { value, work: source.work(value) };
-      });
-      checkpoint.progress = evaluated.value.progress;
-      const match = evaluated.value.values[0];
-      if (match !== true && match !== false && match !== 'not_proven')
-        throw new TypeError('Missing preparation evaluation');
-      if (match !== 'not_proven') {
-        if (match) subjects = [candidate.subjectId];
-        checkpoint.id = candidate.subjectId;
-        checkpoint.progress = null;
-        exhausted = page.exhausted && page.candidates.length === 1;
-      }
-    }
-  }
-  const final = await meterMembersDefinition(input.work.tx, () =>
+  if (!prefix) return { status: 'unavailable' };
+  const { observation, checkpoint, subjects, exhausted } = prefix;
+  const final = await deps.source.definition(input.work.tx, () =>
     service.readWorkDefinition(input.work.tx, input.work.locator),
   );
   const finalScope = await readPreparationScope(input.work.tx, input.work.locator);
@@ -278,7 +200,7 @@ async function advancePreparation(
     return { status: 'restart' };
   return {
     status: 'advanced',
-    checkpoint: JSON.stringify(checkpoint),
+    checkpoint,
     subjects,
     exhausted,
     source: observation,
@@ -382,12 +304,12 @@ async function readReleasedPreparationSource(
         clock: deps.clock,
       });
       const budget = new NativeCollectionWork(
-        scopeAllowance(100, `${locator.episodeId}:${state.version}`, MEMBERS_PREPARATION_STEP_CEILING),
+        { reservationId: `${locator.episodeId}:${state.version}`, remaining: MEMBERS_PREPARATION_STEP_CEILING },
         deadline,
       );
-      return withMembersWorkBudget(budget, async () => {
+      return deps.source.withBudget(budget, async () => {
         // Immutable release and exact expanded basis are re-read on the actual Source client.
-        const native = await meterMembersDefinition(tx, () => service.readWorkDefinition(tx, locator));
+        const native = await deps.source.definition(tx, () => service.readWorkDefinition(tx, locator));
         if (!native)
           throw new ProblemError('dependency_unavailable', { detail: 'Members Source definition is unavailable' });
         const advance = await advancePreparation(deps, {
@@ -551,12 +473,19 @@ async function cleanupEpisode(deps: Dependencies, locator: PreparationLocator): 
   }
 }
 
+function nativePreparationWork(context: WorkContext): NativePreparationWork {
+  const factory = requireLibraryDomain().preparationWork;
+  if (!factory)
+    throw new ProblemError('dependency_unavailable', { detail: 'Native preparation producer is not composed' });
+  return factory(context);
+}
+
 export async function registerMembersPreparationWork(context: WorkContext): Promise<void> {
   const deps: Dependencies = {
     pool: context.pool,
     client: context.client,
     clock: context.clock,
-    runtime: () => collectionPublicationScopeRuntime(context),
+    source: nativePreparationWork(context),
     authorization: () => context.getAuthorization(),
     routeKey: readMembershipRouteKey(context.env),
   };

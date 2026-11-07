@@ -1,6 +1,6 @@
 import { useLayoutEffect, useRef, useState, useSyncExternalStore } from 'react';
 import { useQueryClient, type QueryClient } from '@tanstack/react-query';
-import type { ReadCredentialMode } from '../kernel/credential';
+import type { ReadCredentialMode } from '../reader/lifetime/contract';
 import { isPlatformClosedError } from '../kernel/platform-closed';
 import { EditionCreateEntry } from '../content-editions/edition-create-entry';
 import { ExactRevisionView } from './exact-revision-view';

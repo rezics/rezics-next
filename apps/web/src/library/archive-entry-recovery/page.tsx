@@ -1,6 +1,6 @@
-import { QueryClientContext } from '@tanstack/react-query';
-import { useContext, useEffect, useState, useSyncExternalStore } from 'react';
-import { exposureQuery, sessionQuery } from '../../session/query';
+import { useLocation } from '@tanstack/react-router';
+import { useRecoveryLifetime } from '../recovery-lifetime';
+import { useEffect, useState } from 'react';
 import { m } from '../../paraglide/messages.js';
 import { getLocale, localizeHref } from '../../paraglide/runtime.js';
 import { PageHeading } from '../../shell/page-heading';
@@ -21,57 +21,41 @@ const json = (value: unknown) => (
 
 /** Every callback consults the current query cache and address, including before React effects run. */
 export function ArchiveEntryRecoveryPage() {
-  const client = useContext(QueryClientContext);
-  const [journey, setJourney] = useState<ArchiveEntryRecoveryJourney | null>(null);
-  const sessionIdentity = () =>
-    JSON.stringify([
-      client?.getQueryState(sessionQuery.queryKey)?.dataUpdateCount ?? 0,
-      client?.getQueryState(exposureQuery.queryKey)?.dataUpdateCount ?? 0,
-      client?.getQueryData(sessionQuery.queryKey),
-      client?.getQueryData(exposureQuery.queryKey),
-      getLocale(),
-    ]);
-  const identity = useSyncExternalStore(
-    (listener) => client?.getQueryCache().subscribe(listener) ?? (() => {}),
-    sessionIdentity,
-    () => '',
-  );
+  const location = useLocation();
+  const scope = useRecoveryLifetime(location.pathname + location.searchStr, getLocale());
+  const [owned, setJourney] = useState<{ scope: typeof scope; journey: ArchiveEntryRecoveryJourney } | null>(null);
+  const journey = owned?.scope === scope ? owned.journey : null;
   useEffect(() => {
-    const session = client?.getQueryData<{ state: string; subject?: string; csrfToken: string | null }>(
-      sessionQuery.queryKey,
-    );
-    if (session?.state !== 'signed-in' || !session.subject || !session.csrfToken) return;
+    if (!scope.subject || !scope.csrfToken || !scope.current()) return;
     let active = true;
     let mounted: ArchiveEntryRecoveryJourney | undefined;
-    const address = window.location.pathname + window.location.search;
     const binding: RecoveryBinding = {
-      viewer: session.subject,
-      credentialEpoch: session.csrfToken,
-      csrfEpoch: session.csrfToken,
+      viewer: scope.subject,
+      credentialEpoch: scope.csrfToken,
+      csrfEpoch: scope.csrfToken,
       admission: crypto.randomUUID(),
       source: 'native-archive-upload',
-      route: address,
-      locale: getLocale(),
-      exposure: identity,
+      route: scope.address,
+      locale: scope.locale,
+      exposure: crypto.randomUUID(),
     };
     const current = () =>
-      active && identity === sessionIdentity() && address === window.location.pathname + window.location.search
-        ? binding
-        : null;
-    void browserArchiveRecoveryPort({ expectedReader: session.subject, expectedCredential: session.csrfToken }).then(
+      active && scope.current() && scope.address === window.location.pathname + window.location.search ? binding : null;
+    const stop = scope.onRetire(() => mounted?.retire());
+    void browserArchiveRecoveryPort({ expectedReader: scope.subject, expectedCredential: scope.csrfToken }).then(
       (port) => {
         if (!current()) return;
         mounted = new ArchiveEntryRecoveryJourney(port, current, Date.now() + 7 * 86_400_000);
-        setJourney(mounted);
+        setJourney({ scope, journey: mounted });
       },
     );
     return () => {
       active = false;
+      stop();
       mounted?.retire();
-      setJourney(null);
     };
-  }, [client, identity]);
-  return <ArchiveEntryRecoveryView journey={journey} />;
+  }, [scope]);
+  return <ArchiveEntryRecoveryView journey={scope.current() ? journey : null} />;
 }
 
 export function ArchiveEntryRecoveryView({ journey }: { journey: ArchiveEntryRecoveryJourney | null }) {

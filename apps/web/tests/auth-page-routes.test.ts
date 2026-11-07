@@ -1,6 +1,6 @@
 import { expect, test } from 'bun:test';
 import { authManagementPageHref, type AuthManagementPagePath } from '../src/session/auth-page-routes';
-import { accountRenameNavigation } from '../src/settings/account-rename-actions';
+import { accountRenameNavigation } from '../src/settings/adapters/accounts';
 import { accountSafetyLinks, securityHrefFromIssuer } from '../src/settings/account-safety-links';
 
 const issuer = 'https://auth.example.test/auth';

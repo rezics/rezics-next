@@ -1,3 +1,4 @@
+import { installRatingVoteSemantic } from './rating-votes.ts';
 import type { Pool } from 'pg';
 import type { KernelClock } from '../clock.ts';
 import { readMembershipRouteKey } from '../access/membership-work-config.ts';
@@ -21,6 +22,7 @@ import {
 import { searchReceivingProductionDeclaration } from '../semantic/identity-search-receiving-statements.ts';
 import { installIdentitySourceConsumerRuntime } from './identity-source-consumer.ts';
 import { installIdentityRatingRepairProducer } from './identity-rating-repair.ts';
+import { composeSemanticContext } from './semantic-context.ts';
 
 type SemanticCompositionContext = {
   readonly env: Readonly<Record<string, string | undefined>>;
@@ -69,8 +71,10 @@ export function composeSemanticIdentityParticipants(
 /** Native Content cover and tuple routing, bound even when identity participants are unavailable. */
 export function composeSemanticAdapters(): void {
   bindOrdinaryContentLifecycle(nativeContentLifecycle());
+  composeSemanticContext();
   installIdentitySourceConsumerRuntime();
   installIdentityRatingRepairProducer();
+  installRatingVoteSemantic();
 }
 
 /** Ordinary process composition: identity participants plus Rating review and Content lifecycle adapters. */

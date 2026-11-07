@@ -6,7 +6,7 @@ import { boardProblemCode } from './board-reading';
 import { notFound } from '@tanstack/react-router';
 import type { VerificationConfig } from '../report/turnstile';
 import type { SessionEnv } from '../session/client';
-import type { ReadCredentialMode } from '../kernel/credential';
+import type { ReadCredentialMode } from '../reader/lifetime/contract';
 import { prepareSession, sessionSubject, viewerCredential } from '../session/request';
 import { boardRealmId, readBoardRealm, type BoardRealm } from './board-context';
 import { sameThreadSlug, threadTitle } from './thread-href';

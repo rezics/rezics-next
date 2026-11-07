@@ -1,58 +1,38 @@
-/** Local public-wire seam. The complete-input publisher owns the eventual installed DTO. */
-export type ContributionReference = Readonly<
-  | { type: 'content.thread'; id: string; placeId: string; sourceRevisionId: string | null }
-  | {
-      type: 'content.post';
-      id: string;
-      threadId: string;
-      placeId: string;
-      threadRevisionId: string | null;
-      sourceRevisionId: string | null;
-    }
->;
-export type ContributionActionsInput = Readonly<{
-  accountId: string;
-  view: 'posts' | 'reviews' | 'discussion';
-  cursor: string | null;
-  proof: string;
-  references: readonly ContributionReference[];
-}>;
+import type {
+  AuthorContributionActionsResponse,
+  AuthorContributionActionsWire,
+  ContributionActionsInput,
+  ContributionReference,
+} from './wire';
 
-export interface AuthorContributionActionsWire<T = never> {
-  /** One selected native read; implementations must retain private/no-store transport semantics. */
-  read(input: ContributionActionsInput, signal: AbortSignal): Promise<T>;
-}
-
-export class ContributionActionsUnavailable extends Error {
-  constructor() {
-    super('The complete-input publisher has not installed author_contributions.actions');
-  }
-}
-
-/** No producer imports, generated declaration edits or speculative SDK method calls. */
-export const unavailableAuthorContributionActionsWire: AuthorContributionActionsWire = {
-  async read() {
-    throw new ContributionActionsUnavailable();
-  },
-};
+export type {
+  AuthorContributionActionsResponse,
+  AuthorContributionActionsWire,
+  ContributionActionsInput,
+  ContributionReference,
+} from './wire';
 
 const record = (value: unknown): value is Record<string, unknown> =>
   typeof value === 'object' && value !== null && !Array.isArray(value);
 const uuid = (value: unknown): value is string =>
   typeof value === 'string' && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(value);
 const revision = (value: unknown): value is string | null => value === null || uuid(value);
+const views: readonly unknown[] = ['posts', 'reviews', 'discussion'];
+const isView = (value: unknown): value is ContributionActionsInput['view'] => views.includes(value);
+const admittedCursor = (value: unknown): value is string | null =>
+  value === null || (typeof value === 'string' && value.length > 0 && value.length <= 4096);
 
 /** Consume only the actual anonymous native selection. Row/browser IDs never supply references. */
 export function contributionActionsInput(
-  accountId: string,
-  view: ContributionActionsInput['view'],
-  cursor: string | null,
+  accountId: unknown,
+  view: unknown,
+  cursor: unknown,
   selection: unknown,
 ): ContributionActionsInput | undefined {
   if (
     !uuid(accountId) ||
-    !['posts', 'reviews', 'discussion'].includes(view) ||
-    (cursor !== null && (typeof cursor !== 'string' || !cursor.length || cursor.length > 4096)) ||
+    !isView(view) ||
+    !admittedCursor(cursor) ||
     !record(selection) ||
     typeof selection.proof !== 'string' ||
     !selection.proof.length ||
@@ -99,6 +79,11 @@ export function contributionActionsInput(
   return Object.freeze({ accountId, view, cursor, proof: selection.proof, references: Object.freeze(references) });
 }
 
+/** The server boundary receives the browser's whole selection request as untrusted data. */
+export function contributionActionsRequest(value: unknown): ContributionActionsInput | undefined {
+  return record(value) ? contributionActionsInput(value.accountId, value.view, value.cursor, value) : undefined;
+}
+
 export type ContributionActionsState<T> =
   | Readonly<{ state: 'unavailable' | 'pending' | 'failed' | 'retired' }>
   | Readonly<{ state: 'ready'; value: T }>;
@@ -108,12 +93,13 @@ export type ContributionActionsState<T> =
  * A host must dispose on every episode replacement, including away/return with equal values.
  * This reader owns no writes: command owners must also consult isCurrent before every attempt.
  */
-export class ContributionActionsReceiver<T> {
+export class ContributionActionsReceiver<T = AuthorContributionActionsResponse> {
   private generation = 0;
   private abort: AbortController | undefined;
   private flight: Promise<void> | undefined;
   private retired = false;
   private current: ContributionActionsState<T> = { state: 'unavailable' };
+  private admitted: T | undefined;
   private listeners = new Set<() => void>();
 
   constructor(
@@ -126,10 +112,13 @@ export class ContributionActionsReceiver<T> {
     if (!this.retired && !this.originCurrent()) this.retire();
     return !this.retired;
   };
-  snapshot = (): ContributionActionsState<T> => {
-    this.isCurrent();
-    return this.current;
-  };
+  /** Paired React reads compare this by Object.is; origin fences live on isCurrent/subscribeCache, not here. */
+  snapshot = (): ContributionActionsState<T> => this.current;
+  /**
+   * The last advice this visit read. A refresh keeps it until readback replaces it, so admitted owners stay mounted;
+   * it never acknowledges a write, and retirement clears it.
+   */
+  advice = (): T | undefined => (this.isCurrent() ? this.admitted : undefined);
   subscribe = (listener: () => void) => {
     this.listeners.add(listener);
     return () => {
@@ -153,11 +142,13 @@ export class ContributionActionsReceiver<T> {
       if (!this.isCurrent() || abort.signal.aborted) return;
       try {
         const value = await this.wire.read(this.input, abort.signal);
-        if (this.isCurrent() && generation === this.generation && !abort.signal.aborted)
+        if (this.isCurrent() && generation === this.generation && !abort.signal.aborted) {
+          this.admitted = value;
           this.publish({ state: 'ready', value });
-      } catch (error) {
+        }
+      } catch {
         if (this.isCurrent() && generation === this.generation && !abort.signal.aborted)
-          this.publish({ state: error instanceof ContributionActionsUnavailable ? 'unavailable' : 'failed' });
+          this.publish({ state: 'failed' });
       } finally {
         if (generation === this.generation) {
           this.flight = undefined;
@@ -178,6 +169,7 @@ export class ContributionActionsReceiver<T> {
   private finishRetirement(notify: boolean) {
     if (this.retired) return;
     this.retired = true;
+    this.admitted = undefined;
     ++this.generation;
     this.abort?.abort();
     this.abort = undefined;

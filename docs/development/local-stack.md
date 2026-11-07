@@ -1,5 +1,11 @@
 # Local development stack
 
+Frozen dependency installation supplies the pinned Go Task CLI as `node_modules/.bin/task`; add that directory to
+PATH when invoking native startup outside a package script. A global `go-task` installation remains supported.
+The integrated startup runner supplies this PATH and a migrated compiler database for mounted Auth composition
+tests. Its native/browser acceptance clears the compiler URL before the fresh checkout runs `dev:infra`, so the
+generated Kernel `.env` remains the native stack's database input.
+
 Use Bun, Docker and Go Task (`task`, or the repository's `go-task` binary). From a fresh checkout:
 
 ```sh
@@ -259,7 +265,8 @@ bun services/auth/scripts/dev-stack.ts walk -- <command...>
    Admission skips slots whose ports still have listeners, including containers surviving an interrupted launcher.
    Those listeners remain untouched; when all slots are occupied, the launch keeps its queue position.
 3. Runs `db up`, `search up` and `setup`, retires seed journals that name another database, then starts native Auth,
-   the worker and Kernel. Kernel fetches issuer JWKS from native Auth. An admitted stack runs Kernel without `--watch`
+   the worker and Kernel. Kernel verifies issuer-origin JWKS and fetches that exact public document from native Auth.
+   An admitted stack runs Kernel without `--watch`
    and does not start Auth pages or Web: its journey seeds first and then starts them.
    `REZICS_WALK_DEFER_FRONTENDS=1` also omits OpenSearch, the Kernel worker and a second Kernel process, serves
    Kernel HTTP from the Auth host, and waits for native JWKS and Kernel health instead; the child starts issuer then
@@ -308,6 +315,9 @@ cannot replace a seeded product walk. Walk `start` waits for the walk signal rat
 Decision: an admitted stack gates on native JWKS and Kernel only. Its Auth pages and Web start after the journey's seed,
 through `startSeededFrontends`, and are killed on exit; the Home and VN-realm walks use it, and a stack's Vite never
 compiles while the seed runs.
+Each walk registers frontend and browser cleanup immediately after acquisition. Every registered cleanup is awaited
+on provisioning, seed, locale, persona and browser failures. Independent cleanup failures retain the original cause
+and do not prevent other resources from settling.
 
 Decision: generate Paraglide modules before Vite starts, wait for useful `/en` HTML, and report the observed probe,
 fetch or child-exit cause. Only an actual ECONNREFUSED is hydration startup; a closed-listener probe does not invent
@@ -318,11 +328,16 @@ loopback Auth issuer, audience, JWKS URL, Kernel host and API port in `services/
 tuple after reading that file, overriding a previous stack's identity. Native Library growth and browser qualification
 remain separate acceptance outcomes.
 
-Decision: admitted stacks fetch issuer JWKS from native Auth, start Kernel without watch, and defer Auth pages and Web
+Decision: admitted stacks set `AUTH_JWKS_URL` on the issuer origin and fetch that exact public JWKS from native Auth
+through the trusted local composition seam, start Kernel without watch, and defer Auth pages and Web
 until seeding finishes; Web installs the declared Reylo mapper so local and remote typing share one identity. Cleanup
 keeps the original failure and the exact cleanup diagnostic. Mapper-enabled workspace typechecks run one at a time
 inside an admitted 6GiB slice. Admitted runs reclaim inactive file pages in the run slice after install and before each
-mapper compiler. Original native acceptance remains open.
+mapper compiler. Original native acceptance remains open. Slot 2 is issuer `:20021`, native Auth `:20022` and Kernel
+`:20023`; Worker and Kernel admit that issuer JWKS after fetching the document from native Auth, without substitute
+credentials or a blanket fetch override. Membership admission and bearer verification refuse `AUTH_JWKS_URL` on native
+Auth's port. The same producer is `developmentKernelBindings`, `readMembershipWorkConfig`/`localJwksTransport`,
+Kernel HTTP `createKernelRuntimeDefaults`, assembled Access in `assemble()`, and the default Worker.
 
 ## Seeded journey walks
 

@@ -1,3 +1,7 @@
+import { shelfColumnIds, shelfLayouts, type ShelfLayout } from './settings-contract';
+
+export { shelfColumnIds, shelfLayouts, type PersonalShelfColumnId, type ShelfLayout } from './settings-contract';
+
 export type LibraryEntryStateWrite = string;
 
 // The native shelf's public-Type grammar. Bound URL input before testing the opaque value.
@@ -13,22 +17,8 @@ export function libraryEntryStateWrite(value: string | undefined): LibraryEntryS
   return value !== undefined && entryStateId.test(value) ? value : undefined;
 }
 
-export const shelfLayouts = ['grid', 'list', 'table'] as const;
-export type ShelfLayout = (typeof shelfLayouts)[number];
 export const shelfSizes = ['s', 'm', 'l'] as const;
 export type ShelfSize = (typeof shelfSizes)[number];
-
-export const shelfColumnIds = [
-  'cover',
-  'title',
-  'type',
-  'status',
-  'progress',
-  'added',
-  'finished',
-  'lastActivity',
-] as const;
-export type PersonalShelfColumnId = (typeof shelfColumnIds)[number];
 
 /** A bounded display value. Omission and an explicit complete set remain distinct URL choices. */
 export function shelfColumns(value: unknown): string | undefined {

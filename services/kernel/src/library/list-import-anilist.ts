@@ -56,7 +56,7 @@ import {
   VoteReviewStaleError,
   VoteReviewUnavailableError,
 } from '../rating/votes.ts';
-import type { VoteObservation } from '../rating/vote-observation.ts';
+import type { VoteObservation } from '../rating/index.ts';
 import {
   ENTRY_IMPORT_METADATA_LIMITS,
   assertEntryImportMetadataHistorySize,

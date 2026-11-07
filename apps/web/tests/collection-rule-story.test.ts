@@ -1,3 +1,4 @@
+import { SavedQueryConditionInput } from '../src/search/saved-query-condition-input';
 import { expect, test } from 'bun:test';
 import { readFileSync } from 'node:fs';
 import { createElement } from 'react';
@@ -113,6 +114,7 @@ test('refused rule bodies render only the localized refusal and retry without an
       for (const state of ['denied', 'unavailable'] as const) {
         const html = renderToStaticMarkup(
           createElement(CollectionRuleEditor, {
+            ConditionInput: SavedQueryConditionInput,
             page: { state },
             viewerId: 'owner',
             collectionId: 'saved',

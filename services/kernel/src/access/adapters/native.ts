@@ -2,6 +2,7 @@ import type { Pool } from 'pg';
 import { checkAvatarMedia, readAvatarSummaries } from '../../content/access-capabilities.ts';
 import { applyRealmClaimApproval, lockRealmClaimApprovalSource } from '../../community/index.ts';
 import { accountAgentId, accountAgentsForSubjects } from '../../semantic/agents.ts';
+import { readPublicSubject } from '../../semantic/public-subject-facts.ts';
 import {
   readOriginalAccountAgentIdentity,
   verifyOriginalAccountAgentIdentity,
@@ -78,6 +79,9 @@ export function createNativeAccessPorts(
     },
     activeIdentitySourceConsumerMaintenance(pool) {
       return activeIdentitySourceConsumerMaintenance(asPool(pool)) !== null;
+    },
+    async readPublicSubject(client, subjectId) {
+      return readPublicSubject(client as Parameters<typeof readPublicSubject>[0], subjectId);
     },
   };
   const identityStore: IdentityRecoveryStorePort = {

@@ -1,3 +1,4 @@
+import { searchOperationProblem } from './operation-problems.ts';
 import { ProblemError } from '../../http/problem-error.ts';
 import type { Actor } from '../../request/access.ts';
 import {
@@ -18,8 +19,9 @@ export async function searchHttpExecute<T>(authored: unknown, execute: () => Pro
   try {
     return await execute();
   } catch (error) {
-    if (error instanceof ProblemError) throw searchNativeRetainOrRestart(error, authored);
-    throw error;
+    const problem = searchOperationProblem(error);
+    if (problem instanceof ProblemError) throw searchNativeRetainOrRestart(problem, authored);
+    throw problem;
   }
 }
 

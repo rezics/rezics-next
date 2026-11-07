@@ -1,15 +1,16 @@
 import type { Pool } from 'pg';
 import { authoritativeTimeValue, releaseOperationalTime, type AuthoritativeTime } from '../command/command.ts';
-import { viewerActionReadTime } from '../access/index.ts';
-import { deadlineClient } from '../access/authenticate.ts';
-import { requireAccessDeadline } from '../access/unavailable.ts';
-import { prepareReadDecisions, type Access, type Actor } from '../request/access.ts';
 import { partitionOf, routeOf } from '../route/route.ts';
 import { readPartition } from '../partition/partition.ts';
-import { withReadTransaction } from './read.ts';
-import { GLOBAL_CONTEXT } from './definitions.ts';
-import type { ContextDirectoryEntry } from './context-directory.ts';
-import { ContextDirectoryPreparingError } from './context-directory.ts';
+import {
+  CONTEXT_GLOBAL_ID,
+  contextAccess,
+  ContextDirectoryPreparingError,
+  type ContextAccessHandle,
+  type ContextActor,
+  type ContextDirectoryEntry,
+  type ContextQueryClient,
+} from './context-access-port.ts';
 
 export type NativeContextMetadata = ContextDirectoryEntry & {
   version: string;
@@ -22,12 +23,13 @@ export type NativeContextMetadata = ContextDirectoryEntry & {
 export async function readNativeContextMetadata(
   pool: Pool,
   ids: readonly string[],
-  actor: Actor,
+  actor: ContextActor,
   at: string,
   deadline: number,
 ): Promise<NativeContextMetadata[]> {
   if (!ids.length) return [];
   if (ids.length > 100 || new Set(ids).size !== ids.length) throw new RangeError('Context metadata page bound');
+  const port = contextAccess();
   const homes = new Map<number, string[]>();
   for (const id of ids) {
     const route = routeOf(id);
@@ -38,8 +40,8 @@ export async function readNativeContextMetadata(
   const rows: NativeContextMetadata[] = [];
   for (const [home, keys] of homes) {
     rows.push(
-      ...(await withReadTransaction(pool, async (connection) => {
-        const tx = deadlineClient(connection, deadline);
+      ...(await port.withReadTransaction(pool, async (connection) => {
+        const tx = port.deadlineClient(connection, deadline);
         const owner = await readPartition(tx, home);
         if (!owner || owner.writeState !== 'active') throw new ContextDirectoryPreparingError();
         const native = await tx.query<Omit<NativeContextMetadata, 'epoch' | 'owners' | 'actorOwner'>>(
@@ -73,6 +75,7 @@ export async function readNativeContextMetadata(
 }
 
 async function activeOwners(pool: Pool, rows: NativeContextMetadata[], deadline: number) {
+  const port = contextAccess();
   const groups = new Map<number, string[]>();
   for (const id of new Set(rows.flatMap((row) => row.owners))) {
     const home = partitionOf(routeOf(id)!);
@@ -82,8 +85,8 @@ async function activeOwners(pool: Pool, rows: NativeContextMetadata[], deadline:
   for (const [home, ids] of groups) {
     for (let offset = 0; offset < ids.length; offset += 100) {
       const keys = ids.slice(offset, offset + 100);
-      await withReadTransaction(pool, async (connection) => {
-        const tx = deadlineClient(connection, deadline);
+      await port.withReadTransaction(pool, async (connection) => {
+        const tx = port.deadlineClient(connection, deadline);
         const owner = await readPartition(tx, home);
         if (!owner || owner.writeState !== 'active') throw new ContextDirectoryPreparingError();
         const accounts = await tx.query<{ id: string }>(
@@ -103,22 +106,23 @@ async function activeOwners(pool: Pool, rows: NativeContextMetadata[], deadline:
  * Public eligibility is the same existing Context floor, including for an eligible retained tombstone.
  */
 export async function authorizedContextMetadata(
-  deps: { pool: Pool; access: Access },
+  deps: { pool: Pool; access: ContextAccessHandle },
   input: {
     ids: readonly string[];
-    actor: Actor;
+    actor: ContextActor;
     deadline: number;
     expected?: ReadonlyMap<string, { version: string; epoch: number }>;
   },
 ): Promise<ContextDirectoryEntry[]> {
   if (!input.ids.length) return [];
+  const port = contextAccess();
   const context = { pool: deps.pool, deadline: input.deadline };
-  const decisions = await prepareReadDecisions(deps.access, {
+  const decisions = await port.prepareReadDecisions(deps.access, {
     actor: input.actor,
     actions: new Set(['context:read', 'context:delete', 'context:restore']),
     context,
   });
-  const time = viewerActionReadTime(deps.access, context);
+  const time = port.viewerActionReadTime(deps.access, context);
   try {
     const at = authoritativeTimeValue(time);
     const first = await readNativeContextMetadata(deps.pool, input.ids, input.actor, at, input.deadline);
@@ -147,8 +151,8 @@ export async function authorizedContextMetadata(
       groups.set(home, [...(groups.get(home) ?? []), row]);
     }
     for (const [home, rows] of groups) {
-      await withReadTransaction(deps.pool, async (connection) => {
-        const tx = deadlineClient(connection, input.deadline);
+      await port.withReadTransaction(deps.pool, async (connection) => {
+        const tx = port.deadlineClient(connection, input.deadline);
         const owner = await readPartition(tx, home);
         if (!owner || owner.writeState !== 'active' || rows.some((row) => row.epoch !== owner.epoch))
           throw new ContextDirectoryPreparingError();
@@ -197,14 +201,14 @@ export async function authorizedContextMetadata(
           if (!nativeActions[row.id]?.includes('context:read')) continue;
           if (!current.rows.some((r) => r.id === row.id && r.version === row.version) || !read[row.id]?.allowed)
             continue;
-          if (row.state === 'deleted' && (!row.actorOwner || row.id === GLOBAL_CONTEXT || !restore[row.id]?.allowed))
+          if (row.state === 'deleted' && (!row.actorOwner || row.id === CONTEXT_GLOBAL_ID || !restore[row.id]?.allowed))
             continue;
           const { id, kind, labels, state, deletedAt, purgeAfter } = row;
           result.push({ id, kind, labels, state, deletedAt, purgeAfter });
         }
       });
     }
-    requireAccessDeadline(input.deadline);
+    port.requireDeadline(input.deadline);
     return result;
   } finally {
     releaseOperationalTime(time);
@@ -213,9 +217,9 @@ export async function authorizedContextMetadata(
 
 /** Shared native lifecycle constraints for viewerActions. Access still decides every action. */
 export async function contextNativeActions(
-  client: import('../request/access.ts').AccessClient,
+  client: ContextQueryClient,
   ids: readonly string[],
-  actor: Actor,
+  actor: ContextActor,
   time: AuthoritativeTime,
 ): Promise<Readonly<Record<string, readonly string[]>>> {
   const at = authoritativeTimeValue(time);
@@ -230,7 +234,7 @@ export async function contextNativeActions(
   return Object.fromEntries(
     rows.rows.map((row) => [
       row.id,
-      row.kind === 'global' && row.id === GLOBAL_CONTEXT && row.state === 'active'
+      row.kind === 'global' && row.id === CONTEXT_GLOBAL_ID && row.state === 'active'
         ? ['context:read', 'context:create']
         : row.state === 'active'
           ? ['context:read', ...(row.owner ? ['context:delete'] : [])]

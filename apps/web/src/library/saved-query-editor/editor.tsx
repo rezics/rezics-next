@@ -1,3 +1,4 @@
+import type { SavedQueryConditionInput } from './presentation';
 import { useState } from 'react';
 import { CollectionRuleCurrent } from '../collection-rule-current';
 import { takeSavedQueryHandoff } from '../save-query';
@@ -10,7 +11,9 @@ export function SavedQueryEditor({
   page,
   collectionId,
   navigate,
+  ConditionInput,
 }: {
+  ConditionInput: SavedQueryConditionInput;
   page: RulePage;
   collectionId: string | null;
   navigate?: (id: string) => void;
@@ -34,6 +37,7 @@ export function SavedQueryEditor({
         </p>
       ) : null}
       <CollectionRuleCurrent
+        ConditionInput={ConditionInput}
         page={page}
         collectionId={collectionId}
         {...(seed ? { seed } : {})}

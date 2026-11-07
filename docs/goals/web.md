@@ -999,6 +999,14 @@ Decision: keep native list and selection calls behind the typed seam until Conte
 
 ### Current-context post history
 
+Decision: Threads and moderation reporter history/status consume the session-owned
+[browser reader lifetime boundary](../../apps/web/src/session/README.md#supported-reader-lifetime). The existing root
+session hook installs the shared cache observation once; isolated mounts retain cache-only observation without a
+Router requirement. Performance and the train own attachment to the shared session provider once publicly exported.
+Successful replacement and A/B/A retire old controls, slow-mode abort and deferred focus synchronously, while native
+response authority and exact uncertain intent remain with each feature. Worker acceptance is Web typing; the Goal
+walk retains runtime acceptance.
+
 The [history reader contract](../../apps/web/src/threads/post-history-lifetime.md#native-page-admission) retains
 actual-reader provenance, exact-address return and recorded citation meaning. Native page identity and bounds
 are checked before related reads. Supported shared publication now supplies the closed current-context and

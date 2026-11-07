@@ -1,5 +1,5 @@
 import type { FutureThreadUploadEpisode } from './thread-upload-episode/episode';
-import { sessionCsrfToken } from '../session/query';
+import { sessionCsrfToken } from '../reader/lifetime/index';
 import type { DocumentNode, DocumentSnapshot } from '@rezics/document';
 import type { UploadedImage } from '@rezics/ui';
 import type { Media, ReservationInput } from '../media/kernel';

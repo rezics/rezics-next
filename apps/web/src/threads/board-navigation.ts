@@ -1,6 +1,6 @@
 import { subjectCommunityVisitReturn } from '../features/pages/subject-visit-navigation';
 import { getLocale, locales } from '../paraglide/runtime.js';
-import { returnTarget } from '../session/return-target';
+import { returnTarget } from '../reader/lifetime/contract';
 import { boardSortFromSearch, type BoardSort } from './board-sort';
 import { validBoardPinId } from './board-pins/contract';
 import { boardReadingHref, type BoardReadingReturn } from './board-reading';

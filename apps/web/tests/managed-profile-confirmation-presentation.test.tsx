@@ -1,3 +1,4 @@
+import * as profilePresentation from '../src/settings/ports/profile-editor-view';
 import { expect, mock, test } from 'bun:test';
 import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
@@ -124,7 +125,12 @@ test('failed managed readback preserves visible acknowledgement separately from 
     await editor.submit('profile');
     await editor.confirm();
     const html = renderToStaticMarkup(
-      createElement(AccountProfileView, { accountId: profile.accountId, editor, page: { state: 'unavailable' } }),
+      createElement(AccountProfileView, {
+        presentation: profilePresentation,
+        accountId: profile.accountId,
+        editor,
+        page: { state: 'unavailable' },
+      }),
     );
     expect(html.includes(m.settings_profile_acknowledged_stale())).toBe(acknowledged);
     expect(html.includes(m.settings_profile_retry_save())).toBe(!acknowledged);
@@ -149,6 +155,7 @@ test('a managed read failure without a retained command shows its Retry-After wa
   const render = (target: AccountProfileEditor) =>
     renderToStaticMarkup(
       createElement(AccountProfileView, {
+        presentation: profilePresentation,
         accountId: profile.accountId,
         editor: target,
         page: { state: 'unavailable' },
@@ -174,4 +181,33 @@ test('a managed read failure without a retained command shows its Retry-After wa
   expect(ready).not.toContain(m.settings_retry_wait());
   expect(reloadControl(ready)).toBeString();
   expect(reloadControl(ready)).not.toMatch(/\sdisabled=""/);
+});
+
+test('the delegated Profile page consumes the route runtime without ambient session or native reads', async () => {
+  const { AccountProfilePage } = await import('../src/accounts/profile-editor/page');
+  type Runtime = import('../src/accounts/profile-editor/ports').AccountProfileRuntime;
+  const runtime: Runtime = {
+    useSession: () => ({
+      session: { state: 'signed-out', csrfToken: null },
+      observation: 'signed-out-observation',
+      bind: () => {
+        throw new Error('A signed-out page must not create an editor');
+      },
+    }),
+    read: async () => {
+      throw new Error('A signed-out page must not read a private Profile');
+    },
+    save: async () => {
+      throw new Error('A signed-out page must not dispatch a command');
+    },
+  };
+  const html = renderToStaticMarkup(
+    createElement(AccountProfilePage, {
+      accountId: profile.accountId,
+      runtime,
+      presentation: profilePresentation,
+    }),
+  );
+  expect(html).toContain(m.account_profile_signed_out());
+  expect(html).not.toContain(profile.displayName!);
 });

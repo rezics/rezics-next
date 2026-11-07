@@ -3,7 +3,6 @@ import { ScopeWork, zeroScopeWork } from './scope-work.ts';
 import type { Pool } from 'pg';
 import { deadlineClient } from '../access/authenticate.ts';
 import { withConnection } from '../database/pool.ts';
-import { NativeCollectionWork } from '../library/collection-source-work.ts';
 import { readOwnerFilterCandidate, readOwnerFilterCandidateClosure } from '../library/owner-filter-plan.ts';
 import { isDeepStrictEqual } from 'node:util';
 import { ProblemError } from '../http/problem.ts';
@@ -17,6 +16,8 @@ import type { FactClause } from './disclosure/check.ts';
 import type { ScopeEvaluationProgress, ScopeEvaluationReservation } from './scope-source.ts';
 import type { RelationFacetMatch } from './source.ts';
 import { evaluateMembersSubject, membersProgress, type MembersExecution } from './scope-members-work.ts';
+import { searchLibraryScopePort } from './scope-application.ts';
+import type { SearchNativeCollectionWork } from './library-scope-port.ts';
 
 export type { WorkAllowance, WorkDimensions, WorkReceipt, IdentityScopeWork, PublicFilterCost, LeafWork };
 
@@ -112,7 +113,7 @@ export async function evaluateScopeSubjects(
         continue;
       }
       const { pool, options } = input;
-      const native = new NativeCollectionWork(work.remaining(), options.deadline);
+      const native = searchLibraryScopePort().members.createNativeCollectionWork(work.remaining(), options.deadline);
       try {
         const read = async () => {
           const closure = await readOwnerFilterCandidateClosure(owner.binding, owner.source, subject, native);

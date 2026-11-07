@@ -3,7 +3,7 @@ import { getRequest, setResponseHeader } from '@tanstack/react-start/server';
 import type { KernelClient } from '@rezics/client';
 import type { SessionEnv } from '../../session/client';
 import { asSession, isRecord, kernelHeaders, writeSession } from '../collection-records';
-import { isPlatformClosedProblem } from '../../kernel/platform-closed';
+import { isPlatformClosedProblem } from '../../session/reading-policy';
 
 export type QueryPublicationInput = {
   collectionId: string;

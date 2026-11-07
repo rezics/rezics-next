@@ -1,6 +1,19 @@
 import { initializeEventTypes } from '../events/catalogue.ts';
-import { ensureContentApplication } from '../content/adapters/index.ts';
-import { bindOrdinaryContentLifecycle, nativeContentLifecycle } from '../semantic/adapters/index.ts';
+import {
+  ensureContentApplication,
+  createNativeContentRealmApplication,
+  nativeRealmEvidenceHost,
+  bindContentRealmApplication,
+} from '../content/adapters/index.ts';
+import { createRealmScopeEvidence } from '../community/adapters/index.ts';
+import {
+  bindOrdinaryContentLifecycle,
+  nativeContentLifecycle,
+  nativeContextAccess,
+  createSubjectScopeEvidence,
+} from '../semantic/adapters/index.ts';
+import { bindContextAccess } from '../semantic/context-access-port.ts';
+import { withRealmDisclosureWork } from '../search/adapters/index.ts';
 import { contentHttpDeclaration, mountContentHttp, type ContentHttpRoutes } from '../content/http.ts';
 import { createOperationCatalogue } from '@rezics/operations';
 import { readCommerceMoneyPolicy, type CommerceMoneyPolicy } from '../commerce/money.ts';
@@ -406,12 +419,23 @@ export function createKernelAccessResolver(options: {
 /** The route key must stay the same across restarts, or retries lose their receipts. */
 export function createKernel(dependencies: KernelDependencies): Kernel {
   bindOrdinaryContentLifecycle(nativeContentLifecycle());
+  bindContextAccess(nativeContextAccess());
   const declared = contentHttpDeclaration();
   const contentRuntime = ensureContentApplication({
     ...(dependencies.clock ? { clock: dependencies.clock } : {}),
     ...(dependencies.content?.now ? { now: dependencies.content.now } : {}),
     ...(dependencies.content?.id ? { id: dependencies.content.id } : {}),
   });
+  bindContentRealmApplication(
+    createNativeContentRealmApplication(
+      {
+        parent: createRealmScopeEvidence(nativeRealmEvidenceHost).observe,
+        subject: createSubjectScopeEvidence(nativeRealmEvidenceHost).observe,
+        withWork: (reader, work, maximum, run) => withRealmDisclosureWork(reader, work, maximum, run),
+      },
+      contentRuntime.ambient.now,
+    ),
+  );
   initializeEventTypes();
   const operationCatalogue = createOperationCatalogue([...LIBRARY_OPERATION_DECLARATIONS, ...declared.operations]);
   const sourceClock = dependencies.clock ?? systemClock;

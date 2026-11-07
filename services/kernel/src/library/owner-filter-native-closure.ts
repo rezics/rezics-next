@@ -31,10 +31,8 @@ import populationQuery from './owner-filter-native-closure-population.sql';
 
 type NativeFactKey = { driver: number; factId: string; labelId: string | null };
 
-/** Actual cap enforced while collecting one canonical group's complete original closure. */
-export const OWNER_FILTER_CLOSURE_REFERENCE_LIMIT = 100;
-/** Each retained original is represented by a reference plus at most the requested terminal. */
-export const OWNER_FILTER_CLOSURE_ORIGINAL_LIMIT = Math.floor(OWNER_FILTER_CLOSURE_REFERENCE_LIMIT / 2);
+import { OWNER_FILTER_CLOSURE_REFERENCE_LIMIT, OWNER_FILTER_CLOSURE_ORIGINAL_LIMIT } from './contract/index.ts';
+export { OWNER_FILTER_CLOSURE_REFERENCE_LIMIT, OWNER_FILTER_CLOSURE_ORIGINAL_LIMIT } from './contract/index.ts';
 
 /** A prepared answer must reauthorize its complete structural population, including exclusions/order.
  * LIMIT bounds raw references before hydration. A full window is unavailable, never fabricated coverage.

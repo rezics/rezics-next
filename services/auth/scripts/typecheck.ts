@@ -1,6 +1,10 @@
 import { resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { prepareCompilerDatabase, retainOriginalAndCleanupFailure } from '../../../scripts/compiler-database.ts';
+import {
+  keepCompilerStatusAfterCleanup,
+  prepareCompilerDatabase,
+  retainOriginalAndCleanupFailure,
+} from '../../../scripts/compiler-database.ts';
 import {
   compilerConfigArgs,
   compilerEnvironment,
@@ -71,22 +75,23 @@ export async function runAuthTypecheck(
   try {
     await database.remove();
   } catch (error) {
-    return compilerInfrastructureFailure(
-      label,
-      'database-cleanup',
-      failure === undefined
-        ? `compiler status ${result}; ${error instanceof Error ? error.message : String(error)}`
-        : retainOriginalAndCleanupFailure(failure, error, 'compiler execution failed'),
-    );
+    if (failure !== undefined) {
+      return compilerInfrastructureFailure(
+        label,
+        'database-cleanup',
+        retainOriginalAndCleanupFailure(failure, error, 'compiler execution failed'),
+      );
+    }
+    return keepCompilerStatusAfterCleanup(result, error, label);
   }
   return result;
 }
 
 if (import.meta.main) {
   try {
-    process.exitCode = await runAuthTypecheck();
+    process.exit(await runAuthTypecheck());
   } catch (error) {
     console.error(error);
-    process.exitCode = 1;
+    process.exit(1);
   }
 }

@@ -149,7 +149,28 @@ a future Retry-After deadline withhold every read; expiry only enables an explic
 cursor, never a queued request. Local property lookup and shown-set selection stay available during those states. A new
 query identity starts a fresh admitted state.
 
+## Library integration
+
+Decision: Search provides the public Collection directory read and row-presentation adapters and the saved-rule
+ConditionEditor adapter; the ordinary Collection and new-rule routes choose them. Library owns the request/result
+and presentation ports. Search's adapters import those public ports, with no Library implementation dependency.
+Pure directory addresses and released condition metadata live in the separately registered Search contract module.
+The directory uses one native 24-hit request with its exact frontier and the existing card renderer; no facet,
+count, browser filter, refill, secondary renderer or private rule query is added. Shared Collection chrome and exact
+occurrence-return vocabulary are shell/Subject public leaves. The [directory](../library/public-collection-discovery.md)
+and [rule boundary](../library/saved-query-results.md#rule-presentation-boundary) retain the reader and mutation contracts.
+
 ## Route, query recovery and navigation
+
+Decision: Search request assembly and its session-aware query identity live in the module-local Search application.
+`search-query-contract.ts` owns the typed request, page result and application port; `search-application.ts` owns the
+executed search and result/facet recovery assembly. `search-query-input.ts` validates the external server-function
+input. `search-query-options.ts` registers the server function and TanStack Query options, and binds the existing
+locale-scoped Kernel client provider once. Each execution creates one client and reuses it for its search and facet
+reads. The Search page's secondary server reads use the application request projection, while the mounted query
+observer uses the application's query key and pending/unavailable page pair for cancellation and reader-lifetime
+decisions. The results region consumes the shared page contract directly. UI, observer and query adapter depend on
+the application or its contract; the application has no dependency on the UI or query adapter.
 
 Native GET sort submission uses an empty `sort` value for Relevance, parsed as the default; `rating` is the only
 explicit sort value.

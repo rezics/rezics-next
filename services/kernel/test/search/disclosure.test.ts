@@ -1,3 +1,4 @@
+import { searchOperationProblem } from '../../src/search/http/operation-problems.ts';
 import { afterAll, beforeAll, describe, expect, test } from 'bun:test';
 import { bundledDigest, bundledRelease } from '@rezics/definitions/bundled';
 import { resourceAuthorization } from '../../src/access/resource-authorization.ts';
@@ -646,7 +647,7 @@ describe('native request Source observation boundary', () => {
               });
         const error = await request.then(
           () => undefined,
-          (error: unknown) => error,
+          (error: unknown) => searchOperationProblem(error),
         );
         expect(error).toBeInstanceOf(ProblemError);
         expect((error as ProblemError).code).toBe('index_not_ready');

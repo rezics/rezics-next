@@ -11,6 +11,10 @@ import { CANONICAL_SOURCE_RECEIVING_COST } from '../../src/library/canonical-sou
 import { MEMBERS_DEFINITION_QUERY_BOUNDS } from '../../src/search/scope-members-work-cost.ts';
 import { MEMBERS_SELECTED_CHILDREN } from '../../src/library/members-preparation-work.ts';
 import { NATIVE_PUBLIC_OUTPUT_COMMAND_CEILING } from '../../src/library/native-public-output-work.ts';
+import { bindSearchLibraryScopePort } from '../../src/search/scope-application.ts';
+import { createSearchLibraryScopePort } from '../../src/composition/search-library.ts';
+
+bindSearchLibraryScopePort(createSearchLibraryScopePort());
 
 test('the selected Members Source has a complete static bound for the declared call paths', () => {
   expect(MEMBERS_PREPARATION_SOURCE_AXES()).toEqual([
@@ -31,10 +35,10 @@ test('the selected Members Source has a complete static bound for the declared c
     sumBounds(...Object.values(MEMBERS_PREPARATION_SOURCE_TERMS())),
   );
   expect(MEMBERS_PREPARATION_SOURCE_TERMS().collectionState).toEqual(
-    repeatBound(CANONICAL_SOURCE_RECEIVING_COST().state, MEMBERS_PREPARATION_SOURCE_PATHS.id.membersSnapshots),
+    repeatBound(CANONICAL_SOURCE_RECEIVING_COST().state, MEMBERS_PREPARATION_SOURCE_PATHS().id.membersSnapshots),
   );
-  expect(MEMBERS_PREPARATION_SOURCE_PATHS.id.membersSnapshots).toBe(8);
-  expect(MEMBERS_PREPARATION_SOURCE_PATHS.ordinal.membersSnapshots).toBe(4);
+  expect(MEMBERS_PREPARATION_SOURCE_PATHS().id.membersSnapshots).toBe(8);
+  expect(MEMBERS_PREPARATION_SOURCE_PATHS().ordinal.membersSnapshots).toBe(4);
   expect(MEMBERS_SELECTED_CHILDREN().source).toEqual(MEMBERS_PREPARATION_SOURCE_DECLARATION().cost);
   expect(MEMBERS_DEFINITION_QUERY_BOUNDS.releaseProjection).toEqual({
     maxExpandedVarlenaBytes: 1024 ** 3,

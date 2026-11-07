@@ -28,6 +28,26 @@ const requireNative = createRequire(import.meta.url);
 const ownerModule = fileURLToPath(new URL('../../semantic/record-source-set.ts', import.meta.url));
 let producer: RecordSourceSetProducer | undefined;
 
+type NativeRecordSourceSetBinding = Pick<
+  RecordSourceSetProducer,
+  | 'appendSemanticRecordSourceSet'
+  | 'beginSemanticRecordSourceSet'
+  | 'collectSemanticCandidateSource'
+  | 'collectSemanticRecordFacts'
+  | 'currentSemanticRecordSourceSet'
+  | 'pageSemanticRecordSourceSets'
+  | 'readSemanticRecordSourceSet'
+  | 'recordSemanticDocumentSource'
+  | 'sealSemanticRecordSourceSet'
+  | 'semanticRecordSourceSetLocator'
+  | 'verifySemanticRecordSourceSet'
+>;
+
+/** Live ESM owner installs itself so catalogue create shares writeSubject's command maps. */
+export function bindNativeRecordSourceSetProducer(native: NativeRecordSourceSetBinding): void {
+  producer = native as RecordSourceSetProducer;
+}
+
 export function nativeRecordSourceSetProducer(): RecordSourceSetProducer {
   if (producer) return producer;
   if (!existsSync(ownerModule)) throw new RecordSourceSetUnavailableError();

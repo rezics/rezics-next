@@ -14,7 +14,7 @@ import {
   type NativeContributionAdvice,
 } from './advice';
 
-/** Prepared native presentation input, never an adapter for the receiver's unknown response. */
+/** Presentation input for one surviving row; `source` is the installed callable's advice for the admitted visit. */
 export type ContributionPresentation = {
   input: ContributionActionsInput;
   row: Record<string, unknown>;
@@ -24,6 +24,8 @@ export type ContributionPresentation = {
   isCurrent(): boolean;
   operation(name: ContributionOperation): OperationLease<ContributionOperation> | undefined;
   failed?: boolean;
+  /** Current selected-source or projection failure disables new commands without retiring their owner. */
+  restriction?: ContributionAdviceState;
   replyState?: 'available' | 'denied' | 'sign_in_required' | 'withheld' | 'unavailable';
 };
 
@@ -102,19 +104,21 @@ export function ContributionWatch({
   const reference = originalContributionReference(input, row);
   const state = !isCurrent()
     ? 'retired'
-    : presentation.failed
-      ? 'failed'
-      : reference
-        ? contributionOperationAdvice({
-            reference,
-            operation: 'watch',
-            action: 'thread:watch',
-            operationId: watching ? 'thread.unwatch' : 'thread.watch',
-            source,
-            reader,
-            isCurrent,
-          })
-        : 'unavailable';
+    : presentation.restriction
+      ? presentation.restriction
+      : presentation.failed
+        ? 'failed'
+        : reference
+          ? contributionOperationAdvice({
+              reference,
+              operation: 'watch',
+              action: 'thread:watch',
+              operationId: watching ? 'thread.unwatch' : 'thread.watch',
+              source,
+              reader,
+              isCurrent,
+            })
+          : 'unavailable';
   const lease = isCurrent() ? presentation.operation('watch') : undefined;
   const ready =
     state === 'available' &&

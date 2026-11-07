@@ -8,7 +8,7 @@ import type { Ref } from 'react';
 import { Button, buttonVariants } from '@rezics/ui/shadcn/button';
 import { m } from '../../paraglide/messages.js';
 import { locales } from '../../paraglide/runtime.js';
-import type { SearchPageData } from '../search';
+import type { SearchPageData } from '../search-query-contract';
 import type { SearchLoaderDeps } from '../search-params';
 import { localizedLabel } from '../results';
 import { resultFreshness } from './observation';

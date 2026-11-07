@@ -3,7 +3,7 @@ import { useQuery, useQueryClient, type QueryClient, type QueryKey } from '@tans
 import { useRouter } from '@tanstack/react-router';
 import { viewerExposureLifetime, viewerExposureQuery, type ViewerExposure } from '../kernel/viewer-exposure';
 import { getLocale } from '../paraglide/runtime.js';
-import { sessionQuery, useSession } from '../session/query';
+import { sessionQuery, useSession } from '../session';
 
 type Session = ReturnType<typeof useSession>;
 const idleSubscribe = () => () => {};

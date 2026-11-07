@@ -1,8 +1,8 @@
 import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
 import { CancelledError, useQuery, useQueryClient } from '@tanstack/react-query';
-import { useSession } from '../session/query';
+import { useSession } from './application';
 import { useLibraryWorkspaceAdmission } from './library-workspace-admission';
-import { personalRead } from '../kernel/query';
+import { personalRead } from '../session/reading-policy';
 import { m } from '../paraglide/messages.js';
 import { LoansPage, type LoansOrigin } from './loans-page';
 import { useManagementCurrentOrigin } from './management-current-origin';

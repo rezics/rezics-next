@@ -1,25 +1,39 @@
 # Search
 
+Decision: `adapters/library-preparation.ts` implements Library's native preparation and scope-work capabilities.
+It uses the worker's existing Search runtime, original same-client work definition admission and definition/body
+meters. The ordered Source prepare/prefix/evaluate algorithm retains its exact cursor and partial-evaluation
+progress. Search contract owns path multiplicities; Library declares the complete Source composite. Ordinary default
+composition binds both capabilities before registration; absent Search runtime remains unavailable. Search retains
+Source settlement, public discovery and its existing native/growth outcomes.
+
 [Rejected text query repair](text-query-repair.md) owns bounded parser diagnostics and deliberate in-place correction.
 
 Search owns the subject search projection, indexing consumers, disclosure checks, query API, freshness and index
 generations.
 
-The first released subject search slice, generic public hit bases and bounded kind metadata are built but
-closed behind `search` platform grants. Advanced filters/scopes, facets and rating remain behind
-`search_advanced`. Complete population/privacy, physical incarnation, erasure and native growth proofs remain
-deferred; this closed slice does not complete the Search Goal.
+Subject search, public hit bases and bounded kind metadata require `search` grants; advanced filters/scopes,
+facets and ratings require `search_advanced`. Population/privacy, incarnation, erasure and native growth proofs remain
+Goal acceptance. Search, suggest and facets use one typed problem family: invalid, invalid-cursor, session, closed,
+denied, restart, index-not-ready, source-not-ready, unavailable and ready. `503 semantic_not_ready` is preparation;
+generation/identity changes restart execution. Suggest documents that 503. `searchHttpExecute` applies these families
+to HTTP search, releases, facets, typeahead and discovery, omitting absent optional fields.
 
-Decision: Search, suggest and facet HTTP problems share one typed family (`invalid`, `invalid-cursor`, `session`,
-`closed`, `denied`, `restart`, `index-not-ready`, `source-not-ready`, `unavailable`, `ready`) before a reader
-publishes ready. `503 semantic_not_ready` is source preparation, never an empty success. Generation or identity
-change restarts the executed request. Suggest `503` documents `semantic_not_ready` with the other unavailable codes.
-HTTP search, grouped releases, facets, typeahead and mixed discovery classify those families through
-`searchHttpExecute`; optional problem fields are omitted rather than passed as undefined.
-Decision: executed-request recovery classifies the public `problem-error.ts` ProblemError identity; query privacy
-heads consume Semantic's public `PrivacyReductionHead` and `PrivacyReductionObservation`; current-text analyzer
-concurrency is the module-init literal 16 matching `ENGINE_ANALYSIS_LIMITS` because that owner file is not a literal
-leaf.
+`contract/index.ts` owns scope dimensions, axes and zero values. `adapters/index.ts` exports the existing `ScopeWork`
+and `withRealmDisclosureWork`, the native Access-to-Search bridge. It keeps reservations, settlement on failure,
+bounds, caller deadline and root unchanged. Content consumes a port; its native sparse cursor and allowance stay
+with their original owners.
+
+Decision: `disclosure-application.ts` owns candidate admission, current-text matching, owner revalidation,
+concept preparation and source/index recovery. `createKernelRuntimeDefaults().searchDisclosure`
+binds the physical analyzer through `search/index.ts`; concept adapters bind relation/store ports. `operation-outcomes.ts` owns refusal/correction and operand-retention vocabulary. `searchHttpExecute`
+maps native refusals through `http/operation-problems.ts`.
+
+Search, suggest and facets retain `invalid`, `invalid-cursor`, `session`, `closed`, `denied`, `restart`,
+`index-not-ready`, `source-not-ready`, `unavailable` and `ready`. Source preparation is `503 semantic_not_ready`;
+identity/generation changes restart. Current-text concurrency stays 16. Projection precedes CURRENT final; useful-page
+continuations, receipts and all existing native/replay reservations retain their owners. Query privacy heads consume
+Semantic's public `PrivacyReductionHead` and `PrivacyReductionObservation`.
 Decision: canonical Search admits self only from a published mapped-self row supplied by revision-1 creation or bounded original recovery;
 absent mappings use the existing preparation path. Four native HTTP cases pin executed-request recovery.
 
@@ -133,6 +147,12 @@ resolver is Source's `PublicFilterSourceBinding.resolve/join`, never another rea
 population factory is `createFacetPopulationSource(config: Parameters<PublicFilterSourceFactory>[0])`, with
 `readFacetPopulationPage({population,frontier,inputLimit,capture})` and types in `facet-population-contract.ts`.
 Missing generation or meaning still returns `503 index_not_ready`.
+
+Decision: Scoped facet preparation, execution and current-reader admission are constructed from Search's Access
+observation port (`facet-access-port.ts`). `createScopedFacetApplication` owns Collection and Realm adapters plus
+admission; composition `search-access.ts` maps `AccessUnavailableError` and public `ProblemError` codes onto the
+existing native closed statuses (`unready`, `changed`, `unavailable`). Default public runtime and `createSearchService`
+bind that adapter. `scoped-facet-source.ts` no longer imports Access or HTTP problem types.
 
 ## Trending searches
 
@@ -586,13 +606,19 @@ coveredThrough. All [filtered-list budgets](../../../../docs/filtered-lists.md#c
 their independent work axes. The returned receipt settles the actual supplied root once. Native Source
 availability and Library's missing admitted preparation fields/ports remain explicit integration dependencies.
 
-`service-scope-order.ts:createSearchScopeOrder({pool, options: LeafOptions, clock})` is the internal ordered
-Source adapter. `SearchScopeOrder` is `{kind:'id', source?: NativeSourceIdentity} | {kind:'ordinal',
-source: NativeSourceIdentity}`. These are native locators; they confer no authority. `prepare(order, allowance)`
+`scope-application.ts` owns native source ordering orchestration. `service-scope-order.ts:createSearchScopeOrder({pool,
+options: LeafOptions, clock})` binds that application to the installed port. `SearchScopeOrder` is
+`{kind:'id', source?: NativeSourceIdentity} | {kind:'ordinal', source: NativeSourceIdentity}`. These are native
+locators; they confer no authority. `prepare(order, allowance)`
 returns `{collection, work}` with the complete `CollectionSourceObservation` and native prepared Source.
 `rawOrdinal(collection, after: NativeOrdinalKey|null, limit, allowance)` returns the canonical Library
 `RawOrdinalCollectionPrefix`; `prefix` and `contains` preserve the native ID APIs and actual work receipts.
 `contains` also accepts the native optional `CollectionAliasProgress` as its fourth argument.
+
+Decision: scoped Search membership, continuation and ordinal execution use the Search-owned `SearchLibraryScopePort`;
+Kernel composition binds Library's complete native Source, fixed bounds and limits, ordinal page capability, and
+Members definition reader. Search retains current work admission, observation revalidation, disclosure and receipt
+settlement.
 The adapter adds no public Search sort and manufactures no Search Hits from Collection rows.
 
 `createSearchScopeForService(service, options)` remains the sole resolved-service boundary with the original two

@@ -1,6 +1,6 @@
 import type { KernelClient } from '@rezics/client';
 import { readEntryPage } from '../entries-read';
-import { isPlatformClosedError } from '../../kernel/platform-closed';
+import { isPlatformClosedError } from '../../session/reading-policy';
 import type { SessionEnv } from '../../session/client';
 import { prepareExpectedReader, type ExpectedReader } from '../../session/expected-reader';
 import { sessionSubject } from '../../session/request';

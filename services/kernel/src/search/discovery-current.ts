@@ -18,7 +18,6 @@ import {
 } from './discovery.ts';
 import type { DiscoveryCandidate } from './discovery-query.ts';
 import { hydrateOwnerDiscoveryHits, type DiscoveryOwnerCandidate } from './discovery-hydration.ts';
-import { OwnerCurrentRestartRequired } from './disclosure/owner-current.ts';
 import { currentDiscoveryFilter } from './discovery-filter.ts';
 import type { ConceptFilterExecution } from './concept-browse-statements.ts';
 import { checkHits } from './disclosure/check.ts';
@@ -29,7 +28,7 @@ import type { IndexedSubject, SubjectSnapshot, SubjectSource } from './source.ts
 import { projectCharacterPersonContexts } from './character-person.ts';
 import { publicAliases } from './document-names.ts';
 import { chooseTexts, projectHit } from './hits.ts';
-import { ProblemError } from '../http/problem.ts';
+import { SearchOperationError } from './operation-outcomes.ts';
 import { projectMatchEvidence } from './match-evidence.ts';
 import type { CreditSearchWitness } from './credit-search.ts';
 import { creditMatchView, verifyCreditedHit } from './credit-hit.ts';
@@ -356,8 +355,8 @@ export async function currentDiscoveryCandidates<Candidate extends DiscoveryCand
         ...(context.conceptFilter ? { conceptFilter: context.conceptFilter } : {}),
       });
       // A changed credit cut retires this window; unavailable proof removes its candidate, never a positive match.
-      if (creditChanged) throw new ProblemError('search_restart_required');
-      if (checked.relationRejected) throw new ProblemError('index_not_ready', { headers: { 'retry-after': '1' } });
+      if (creditChanged) throw new SearchOperationError('search_restart_required');
+      if (checked.relationRejected) throw new SearchOperationError('index_not_ready');
       for (const { subject } of checked.passed)
         if (subject.type === entry.kind) checkedSubjects.set(subject.id, subject);
       const accepted = new Set(checkedSubjects.keys());
@@ -401,7 +400,7 @@ export async function currentDiscoveryCandidates<Candidate extends DiscoveryCand
           (subject.type === 'schema:Person' || subject.type === 'schema:Character') &&
           contexts === null
         )
-          throw new ProblemError('search_restart_required');
+          throw new SearchOperationError('search_restart_required');
         const listPresentation = (
           release.types[subject.type] as
             | ((typeof release.types)[string] & {
@@ -447,7 +446,8 @@ export async function currentDiscoveryCandidates<Candidate extends DiscoveryCand
           const chunk = ids.slice(offset, offset + 256);
           const after = await source.read(partition, chunk);
           const currentRows = validateRequestSourceSnapshot(after, partition, chunk);
-          if (!baseline || after.position !== baseline.position) throw new ProblemError('search_restart_required');
+          if (!baseline || after.position !== baseline.position)
+            throw new SearchOperationError('search_restart_required');
           const previousRows = new Map(baseline.subjects.map((subject) => [subject.id, subject]));
           for (const id of chunk) {
             const previous = previousRows.get(id);
@@ -460,7 +460,7 @@ export async function currentDiscoveryCandidates<Candidate extends DiscoveryCand
               current.securityRevision !== previous.securityRevision ||
               current.type !== previous.type
             )
-              throw new ProblemError('search_restart_required');
+              throw new SearchOperationError('search_restart_required');
           }
         }
       }
@@ -525,7 +525,7 @@ export async function currentDiscoveryCandidates<Candidate extends DiscoveryCand
           try {
             snapshot = validateAccountSnapshot(observed, partition, chunk, 0n);
           } catch {
-            throw new ProblemError('search_restart_required');
+            throw new SearchOperationError('search_restart_required');
           }
           const currentRows = new Map(snapshot.accounts.map((account) => [account.id, account]));
           for (const id of chunk) {
@@ -541,7 +541,7 @@ export async function currentDiscoveryCandidates<Candidate extends DiscoveryCand
               after.displayName !== before.displayName ||
               after.accountKind !== before.accountKind
             )
-              throw new ProblemError('search_restart_required');
+              throw new SearchOperationError('search_restart_required');
           }
         }
       }
@@ -600,22 +600,17 @@ export async function currentDiscoveryCandidates<Candidate extends DiscoveryCand
   }
   if (ownerCandidates.length) {
     if (!registry.ownerAdapters || !registry.ownerKey || !registry.getOwnerAdapter) unavailable();
-    try {
-      const ownerHits = await hydrateOwnerDiscoveryHits(
-        registry as DiscoveryRegistry & DiscoveryOwnerRegistry,
-        ownerCandidates,
-        context,
-      );
-      for (let index = 0; index < ownerHits.length; index++) {
-        const ownerHit = ownerHits[index];
-        if (!ownerHit) continue;
-        const hit = { ...ownerHit, matchEvidence: { state: 'unsupported' as const } };
-        admitDiscoveryHit(hit);
-        passed.set(ownerOriginals[index]!, hit);
-      }
-    } catch (error) {
-      if (error instanceof OwnerCurrentRestartRequired) throw new ProblemError('search_restart_required');
-      throw error;
+    const ownerHits = await hydrateOwnerDiscoveryHits(
+      registry as DiscoveryRegistry & DiscoveryOwnerRegistry,
+      ownerCandidates,
+      context,
+    );
+    for (let index = 0; index < ownerHits.length; index++) {
+      const ownerHit = ownerHits[index];
+      if (!ownerHit) continue;
+      const hit = { ...ownerHit, matchEvidence: { state: 'unsupported' as const } };
+      admitDiscoveryHit(hit);
+      passed.set(ownerOriginals[index]!, hit);
     }
   }
   return passed;

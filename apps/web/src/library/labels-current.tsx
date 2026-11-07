@@ -1,10 +1,10 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
 import { CancelledError, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useLocation, useRouter } from '@tanstack/react-router';
-import { useSession } from '../session/query';
+import { useSession } from './application';
 import { sessionQueryKey } from '../session/browser-state';
 import { useLibraryWorkspaceAdmission } from './library-workspace-admission';
-import { personalRead } from '../kernel/query';
+import { personalRead } from '../session/reading-policy';
 import { m } from '../paraglide/messages.js';
 import { LabelsPageView } from './labels-page';
 import type { LabelsPage } from './labels-read';

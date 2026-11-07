@@ -14,9 +14,12 @@ import { AccessUnavailableError, CommandUnavailableError, requireAccessDeadline 
 import { mintReadTime, releaseOperationalTime, type AuthoritativeTime } from '../command/command.ts';
 import { discardConnection, withConnection } from '../database/pool.ts';
 import { readPartition } from '../partition/partition.ts';
-import { readFollowCountHealthObservation, type FollowCountHealthObservation } from './follow-count-health.ts';
-import { readCollectionDiscoveryFollowCounts } from './follow-count-reads.ts';
-import { FollowCountUnavailableError } from './follow-count-target.ts';
+import {
+  readFollowCountHealthObservation,
+  type FollowCountHealthObservation,
+} from './adapters/follow-count-observation.ts';
+import { readCollectionDiscoveryFollowCounts } from './adapters/follow-count-discovery.ts';
+import { FollowCountUnavailableError } from './contract/index.ts';
 import { prepareReadDecisions, type Actor } from '../request/access.ts';
 import { PARTITIONS, partitionOf, routeOf } from '../route/route.ts';
 import {

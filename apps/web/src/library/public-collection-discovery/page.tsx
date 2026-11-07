@@ -1,6 +1,5 @@
-import { publicCollectionDirectoryHref } from './address';
-import type { FormEvent, MouseEvent, Ref } from 'react';
-import { CollectionDiscoveryCard } from '../showcase-collection/discovery-card';
+import { publicCollectionDirectoryHref } from '../../search/contracts/collection-directory';
+import type { FormEvent, MouseEvent, Ref, ReactNode } from 'react';
 import { Button } from '@rezics/ui/shadcn/button';
 import { PageHeading } from '../../shell/page-heading';
 import { m } from '../../paraglide/messages.js';
@@ -12,18 +11,15 @@ import {
   parsePublicCollectionDirectoryAddress,
   selectPublicCollectionDirectory,
   type PublicCollectionDirectorySelection,
-} from './address';
+} from '../../search/contracts/collection-directory';
 
 function messageOptions(locale: string) {
   return { locale: locales.find((value) => value === locale) ?? 'en' };
 }
 
-function collectionHref(locale: string, id: string) {
-  return `/${locale}/collections/${encodeURIComponent(id)}`;
-}
-
-export function PublicCollectionDiscoveryPage({
+export function PublicCollectionDiscoveryPage<Row extends { id: string }>({
   state,
+  renderCollection,
   locale,
   selection = {},
   cursor,
@@ -34,7 +30,8 @@ export function PublicCollectionDiscoveryPage({
   headingRef,
   navigation,
 }: {
-  state: PublicCollectionDiscoveryState;
+  state: PublicCollectionDiscoveryState<Row>;
+  renderCollection: (collection: Row, locale: string) => ReactNode;
   locale: string;
   selection?: PublicCollectionDirectorySelection;
   cursor?: string;
@@ -145,27 +142,7 @@ export function PublicCollectionDiscoveryPage({
             <ul role="list" data-slot="public-collection-discovery-results" className="space-y-3">
               {state.collections.map((collection) => (
                 <li key={collection.id} className="min-w-0 rounded-2xl border border-border bg-card p-4 sm:p-6">
-                  {collection.card ? (
-                    <CollectionDiscoveryCard card={collection.card} locale={locale} />
-                  ) : (
-                    <>
-                      <a
-                        href={collectionHref(locale, collection.id)}
-                        lang={collection.titleLanguage}
-                        className="block min-h-11 rounded-sm font-semibold text-primary underline-offset-4 hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
-                      >
-                        {collection.title || m.subject_value_unlabelled({}, options)}
-                      </a>
-                      {collection.description ? (
-                        <p
-                          lang={collection.descriptionLanguage}
-                          className="mt-2 text-sm leading-relaxed text-muted-foreground"
-                        >
-                          {collection.description}
-                        </p>
-                      ) : null}
-                    </>
-                  )}
+                  {renderCollection(collection, locale)}
                 </li>
               ))}
             </ul>

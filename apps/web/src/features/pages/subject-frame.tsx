@@ -133,6 +133,7 @@ export async function loadViewPages(
   cursor?: string,
   options: {
     realm?: string | undefined;
+    board?: string | undefined;
     node?: string | undefined;
     authorization?: string | undefined;
     signal?: SubjectPageReadLifetime | undefined;

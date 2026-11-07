@@ -28,7 +28,7 @@ import {
   type PreferenceWriteResult,
   type SettingsPage,
 } from './preferences';
-import type { CollectionVisibility } from '../library/reads';
+import type { CollectionVisibility } from './ports/library';
 import { collectionPrivacyRead, type CollectionPrivacyRead } from './collection-privacy-data';
 import {
   readWatchInventoryNative,

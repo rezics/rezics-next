@@ -6,7 +6,7 @@ import { QueryClientContext, useQueryClient, type QueryClient } from '@tanstack/
 import { useRouter } from '@tanstack/react-router';
 import { m } from '../paraglide/messages.js';
 import * as exposure from '../kernel/exposure';
-import * as sessionCache from '../session/query';
+import * as sessionCache from '../session';
 import { useLibraryWorkspaceAdmission } from './library-workspace-admission';
 import type { AcceptedPinsOrigin } from './pins-current';
 import { csrfHeaders } from '../threads/composer';

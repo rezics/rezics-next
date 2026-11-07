@@ -281,6 +281,14 @@ export function settleWorkerCheckHostBudget(
 
 export type WorkerCheckHostTypingSettlement = { ok: true } | { ok: false; result: string };
 
+const TYPING_SETTLEMENT_FAILED = 'Last check-host run failed its typecheck.';
+const TYPING_SETTLEMENT_CHANGED = 'Worktree content changed after the last check-host typecheck.';
+
+/** A typing settlement is the attempt's own failure, never a shared environment fault. */
+export function isTypingSettlementResult(result: string | null | undefined): boolean {
+  return Boolean(result?.startsWith(TYPING_SETTLEMENT_FAILED) || result?.startsWith(TYPING_SETTLEMENT_CHANGED));
+}
+
 /**
  * Product outcomes land when they type-check. A success report after a failed last host typecheck, or after the
  * worktree changed since that typecheck, is recorded as a typing failure so the attempt is retried instead of landing.
@@ -308,9 +316,7 @@ export function workerCheckHostTypingSettlement(input: {
     lastTypecheck?.content !== undefined && workerCheckHostContentTree(input.worktree) !== lastTypecheck.content;
   if (!failed && !changed) return { ok: true };
   const source = failed ? last : lastTypecheck;
-  const reason = failed
-    ? 'Last check-host run failed its typecheck.'
-    : 'Worktree content changed after the last check-host typecheck.';
+  const reason = failed ? TYPING_SETTLEMENT_FAILED : TYPING_SETTLEMENT_CHANGED;
   return {
     ok: false,
     result: `${reason} Settlement records a typing failure with that run's log, so this attempt is retried instead of landing.\n${source?.log ? boundedLog(source.log) : '(check log unavailable)'}`,
@@ -330,14 +336,6 @@ function commandIncludesTypecheckFlag(command: readonly string[]): boolean {
   const bun = command[0] === 'env' || command[0] === 'bun' || (command[0]?.endsWith('/bun') ?? false);
   if (!bun) return command[0] === 'tsc' && command.includes('--noEmit');
   return command.includes('check') && command.includes('--no-script');
-}
-
-export function verifierFailureRevertsLanding(check: {
-  command: readonly string[];
-  closure?: readonly string[];
-}): boolean {
-  if (isTypecheckCommand(check.command)) return true;
-  return [...check.command, ...(check.closure ?? [])].some((part) => isMoneyPath(part));
 }
 
 export function worktreeChangedPaths(cwd: string): string[] {

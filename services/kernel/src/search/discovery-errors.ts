@@ -1,3 +1,4 @@
+import { SearchOperationError } from './operation-outcomes.ts';
 import type { DiscoveryMetadataKind } from './discovery-api.ts';
 
 /** A candidate cannot be populated or published from an incomplete native producer set. */
@@ -29,5 +30,13 @@ export class DiscoveryProducerCoverageError extends Error {
 export class DiscoveryPopulationCutChangedError extends DiscoveryProducerCoverageError {
   constructor(kind: DiscoveryMetadataKind) {
     super({ missingKinds: [], unsupportedKinds: [kind], duplicateKinds: [] });
+  }
+}
+
+/** Owner rows changed during nested hydration; the page is not one observation. */
+export class OwnerCurrentRestartRequired extends SearchOperationError {
+  constructor() {
+    super('search_restart_required');
+    this.name = 'OwnerCurrentRestartRequired';
   }
 }

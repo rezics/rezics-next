@@ -1,5 +1,6 @@
 /** Application result types. Callers and tests alias these; adapters do not own them. */
 
+import type { FollowCountRuntime } from './follow-counts.ts';
 import type { LibraryActor } from './actors.ts';
 import type { LibraryCapabilities } from './capabilities.ts';
 import type { MembershipPage, NestedAdmissionAccount, OccurrenceDraft } from './membership.ts';
@@ -65,6 +66,7 @@ export type EntryProgressAdmission = Readonly<{
 
 export type LibraryDomain = LibraryCapabilities &
   Readonly<{
+    followCounts?: FollowCountRuntime;
     ownerQuery: {
       open(input: OwnerQueryInput): Promise<OwnerQueryOpen>;
     };

@@ -1,6 +1,29 @@
 # Library
 
+Decision: native Collection preparation consumes Library's `PreparationWorkCapability` and `ScopeWorkCapability`.
+`adapters/preparation-work.ts` specializes them to the original native transaction, locator and ledger. Default
+`composition/library.ts` binds Search's `adapters/library-preparation.ts`: it borrows the already registered worker
+Search runtime at dispatch and preserves Search's definition meter, Source receipts, ordered prefix and reduction.
+Library retains episode admission, before/after Source/Scope/owner checks, checkpoint persistence and conditional apply.
+The exact fixed upper frontier, contiguous ACK, captured-prefix recovery, retained cursor, terminal fences, parent,
+absolute deadline, Pool and complete inclusive work vector remain the original native contracts.
+
+`members-preparation-source-declaration.ts` owns the complete Library Source composite, including the original
+Search execution ceiling and producer-owned path multiplicities from `search/contract`. Search's former declaration
+entry preserves its callable path getter over that same schedule. The single Search contract manifest entry owns both
+execution operands and preparation vocabulary; default composition retains the native follow-count runtime. Saved-probe and closure limits are declaration leaves; publication bounds load neither
+the native Source reader nor closure acquisition. Retention SQL/control execution lives in
+`collection-retention-execution.ts`; its descriptor consumes Semantic's effect-free SQL reduction declaration and
+Shelf's statement descriptor. Both native producers use those same plans. Source client deadline wrapping uses the
+already composed Access capability. No additional Source registry, work plan, publisher or cost is introduced.
+
+Acceptance choice: extend the existing native Source outcome test through default composed admission, and add one
+missing-worker-runtime case; preserve all existing outcome assertions. Workspace typing is worker acceptance;
+native growth, public Search settlement/discovery and default-worker runtime proof remain in the owning Goal walks.
+
 Decision: `collection-native-work.ts` is the mechanical NativeCollectionWork leaf (ProblemError from `http/problem-error.ts`). Access `access-capabilities.ts` re-exports that leaf and Kind input work/types only. Kind raw resolution stays on `collection-kind-input.ts`; composition binds it into Access native ports. Canonical Source sweep/repair stays on `collection-source-work.ts`.
+
+Decision: AniList/MAL list-import vote types consume Rating `VoteObservation` from `rating/index.ts`. Progress adoption classifies Access grant denial and unavailability through `resource-access-errors.ts` and `unavailable.ts`, keeping those error identities. Follow count composition supplies Access `public-identity.ts` through the account producer; public identity no longer value-imports Semantic `subject.ts` or `link-keys.ts`.
 
 Decision: ordinary filtered Collection pages consume one immutable finite page plan; Library's native admission, SQL observation, receipts and refusal remain authoritative. Canonical generation repair uses one closed 9-axis plan.
 
@@ -92,10 +115,10 @@ slot, parallel reader, route, writer, score cache or GET repair is introduced.
 The manifest splits Library by layer. `kernel-library-contract` owns `library/contract/**`: work dimensions, actors,
 Source, membership, ordering, capability ports and application result types. Access, Platform, Search, Semantic,
 Content and Zones import those shapes from the contract entries, not from the Source runtime. `kernel-library-core`
-owns pure route/grant, page-plan, work-ledger, Source classification, membership accounting, identity-native matching
-and publication admission. `kernel-library-application` owns Source capture, owner-query, member preparation,
-publication admission, identity-native and Entry/progress use cases; they load without Access, Search, Semantic or
-Content and run with fake capabilities. Native SQL catalogs and foreign Access/Search/Semantic/Content adapters live
+owns pure route/grant, page-plan, work-ledger, Source classification, membership accounting, identity-native matching,
+publication admission, Collection history plans and retention disposition. `kernel-library-application` owns Source
+capture, owner-query, member preparation, publication admission, Collection mutations, identity-native and
+Entry/progress use cases; they load without Access, Search, Semantic or Content and run with fake capabilities. Native SQL catalogs and foreign Access/Search/Semantic/Content adapters live
 in `library/adapters/**` and are bound only from `composition/library.ts`. `createKernelRuntimeDefaults`, the HTTP
 server and the worker call `composeLibraryDomain`. Compatibility entries (`identity-native-bounds.ts`,
 `account-grant.ts`, `ordinary-read-bounds.ts`, `builtin-runtime-query.ts`, `members-preparation.ts`,
@@ -111,14 +134,16 @@ Access are present, including the ordinary-page factory). Compatibility Source, 
 command-support and Entry/progress entries call those composed applications. Public entries:
 `kernel-library-contract` `contract/work-dimensions.ts` and `contract/index.ts`; `kernel-library-core`
 `core/index.ts`; `kernel-library-application` `application/index.ts`; adapter `adapters/index.ts` and
-`domain-binding.ts` plus the existing Library discovery and Access-capability entries.
+`domain-binding.ts`, `zone-collection-adapter.ts` plus the existing Library discovery and Access-capability entries.
+`zone-collection-adapter.ts` is the Library host for Zone membership work and mounted Collection reads; Zones own the
+port and composition binds it.
 
 `account-grant.ts` remains a leaf: `grantCapable` takes account fields structurally. Owner-query Search preparation
 uses the Library `searchPreparation` capability through existing dependency objects; `CollectionWorkLedger` replaces
 Search `ScopeWork` subclassing. The Source adapter ABI keeps Search `ScopeWorkContext` so Search receiving type pins
 stay exact; contract `CollectionSourceContext.work` stays unknown so contract/core/application load without Search.
 
-Decision: pin this increment's user-visible composition with the existing domain-composition suite, including presentation kind admission and withheld cover, rather than a second suite.
+[Collection mutations](collection-mutation.md) owns mutation layers, effects and focused tests.
 
 Fewest tests: one `domain-composition.test.ts` suite covering fake-capability applications plus Source, member,
 publication, presentation and Entry/progress edges (actor, deadline, private working versus activated public, repeated ordered
@@ -2858,6 +2883,20 @@ not raw outgoing intent or this counter. No count becomes publicly exposed by th
   neither local typing nor shared occurrence-custody delivery establishes a calibrated native pass.
 
 ### Maintain and read private follow counts
+
+Decision: Follow counts use Library contract vocabulary/errors, pure scalar/health rules, port-driven read,
+delivery and bounded partition applications, and native SQL/DBOS adapters. Default Library composition binds
+Access account/authentication/public-agent observations, Community Space existence and Semantic epoch admission.
+Producer contracts retain their owners; the application passes the original actor, native instant and deadline.
+Compatibility entries keep callers and error identities stable. Public Collection discovery imports only the
+independent aggregate and health observation adapters, never private count reads, source delivery or target work.
+The application dependency points inward; platform consumer-lag metadata is a public constant-cost observation.
+
+Fewest tests: `follow-count-application.test.ts` pins authority/health ordering, zero versus unknown, identity and
+agent-binding changes, nonpublic curator fencing, retained source delivery, bounded segments and executable default
+composition. Existing Following sparse order, opaque cursors, read-loss unfollow, native count outcomes and growth
+assertions remain unchanged. This restructuring adds no query, fallback or policy; native/browser/growth acceptance
+runs after integration under the worker typing-only protocol.
 
 The [private-count authority](../../../../docs/private-follow-counts.md) owns disclosure, canonical totals,
 readiness and terminal custody. The default Library worker installs bounded source/target bootstrap, current-source

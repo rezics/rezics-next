@@ -27,7 +27,7 @@ import { jwt } from 'better-auth/plugins';
 import { websiteProvider } from './website-provider.ts';
 import { WEBSITE_CLIENT_ID, websiteRoutes } from './website.ts';
 import { pruneExpiredProtocolState } from './protocol-maintenance.ts';
-import { runWorkflowRetentionBatch } from './retention.ts';
+import { createAuthWorkflowRetention } from './retention.ts';
 import { APIError, createAuthEndpoint } from 'better-auth/api';
 import { setSessionCookie } from 'better-auth/cookies';
 import { serializeCookie } from 'better-call';
@@ -288,6 +288,11 @@ export async function buildAuthService(options: AuthServiceOptions): Promise<Aut
   if (!options.secret || options.secret.length < 32)
     throw new Error('Configure a persistent Better Auth secret of at least 32 characters');
   const signer = await createSigner(database, options.signing);
+  const retireWorkflowCopy = async (id: string) => {
+    await completeCopy(database, id);
+    return eraseCopy(database, id);
+  };
+  const workflowRetention = createAuthWorkflowRetention(database, retireWorkflowCopy);
   // Object identity, source and scope belong to this instance. No caller can
   // install a brand, and inherited async contexts lose authority on callback exit.
   const proofSources = new WeakMap<SessionProof, { id: string; expiresAt: number }>();
@@ -1516,12 +1521,8 @@ export async function buildAuthService(options: AuthServiceOptions): Promise<Aut
         return id;
       },
       redriveErasureHistory: () => redriveErasureHistory(database, trustedAccess),
-      retainWorkflowHistory: (retentionDays) =>
-        runWorkflowRetentionBatch(database, retentionDays, DBOS, new Date(), service.internal.retireWorkflowCopy),
-      async retireWorkflowCopy(id) {
-        await completeCopy(database, id);
-        return eraseCopy(database, id);
-      },
+      retainWorkflowHistory: (retentionDays) => workflowRetention.batch(retentionDays),
+      retireWorkflowCopy,
       fenceKindConsentErasure,
       nativeErasurePage: (id) => nativeErasurePage(database, id, undefined, undefined, fenceKindConsentErasure),
       redriveNativeErasure: () => redriveNativeErasure(database, undefined, fenceKindConsentErasure),

@@ -1,9 +1,12 @@
 import type { KernelClient } from '@rezics/client';
 import type { CoverSummary } from '@rezics/ui/cover';
 import { notFound } from '@tanstack/react-router';
-import { isPlatformClosedProblem, PlatformClosedError } from '../kernel/platform-closed';
+import { isPlatformClosedProblem, PlatformClosedError } from '../session/reading-policy';
 import type { SessionEnv } from '../session/client';
 import { readSessionIdentity, type SessionIdentity } from '../session/state';
+import type { CollectionVisibility } from './settings-contract';
+
+export type { CollectionVisibility };
 
 /** One rendered library list page. The kernel allows at most 100. */
 export const LIBRARY_PAGE_LIMIT = 100;
@@ -29,7 +32,6 @@ export function libraryLabel(label: LibraryLabel | undefined, fallback: string):
   return typeof label === 'string' ? label : (label ?? fallback);
 }
 export type LibraryAccount = { handle: string | null; displayName: string | null };
-export type CollectionVisibility = 'private' | 'public' | 'unlisted';
 
 type NativeMembers = NonNullable<
   Awaited<ReturnType<ReturnType<KernelClient['collections']>['members']['get']>>['data']

@@ -1,5 +1,5 @@
 import { isPlatformClosedError, isPlatformClosedProblem } from '../kernel/platform-closed';
-import { readLibraryResult } from '../library/reads';
+import { readLibraryResult } from '../library/settings-adapter';
 import { MediaProblem } from '../media/kernel';
 import type { NativePreferenceFailure } from './preferences';
 

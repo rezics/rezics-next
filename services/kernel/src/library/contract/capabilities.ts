@@ -1,6 +1,6 @@
 /** Library-owned ports. Foreign Access, Search, Semantic and Content implement these; Library never imports them. */
 
-import type { LibraryActor } from './actors.ts';
+import type { LibraryActor, LibraryAccountActor } from './actors.ts';
 import type { CanonicalCollectionCandidate, CollectionSourceObservation, PreparedCollectionSource } from './source.ts';
 import type { NestedAdmissionAccount } from './membership.ts';
 import type { WorkAllowance, WorkDimensions, WorkReceipt } from './work-dimensions.ts';
@@ -222,7 +222,47 @@ export interface SourceCaptureCapability {
   }): Promise<{ source: PreparedCollectionSource; work: WorkReceipt }>;
 }
 
+/** Composition connects storage to original native command/admission/source effects, never the reverse. */
+export interface CollectionPublicationNativeCapability {
+  createCommands(config: unknown): unknown;
+  readBuiltinRule(client: unknown, route: number, collectionId: string): Promise<unknown>;
+  admitStep(
+    tx: unknown,
+    locator: Readonly<{ route: number; ownerAccountId: string; collectionId: string; publicationId: string }>,
+  ): Promise<boolean>;
+}
+
+/** Native rule admission uses the caller's original pool, actor and command time. */
+export interface CollectionRuleAuthorityCapability {
+  readAccount(
+    client: unknown,
+    route: number,
+    accountId: string,
+  ): Promise<Readonly<{
+    kind: string;
+    state: string;
+    fenced: boolean;
+    minimumAuthnEpoch: bigint;
+  }> | null>;
+  admitGroup(
+    input: Readonly<{
+      pool: unknown;
+      access: unknown;
+      actor: LibraryAccountActor;
+      action: string;
+      deadline: number;
+      at: unknown;
+    }>,
+  ): Promise<void>;
+  compileOwnerFilter(filter: unknown): void;
+  denied(): Error;
+}
+
 export type LibraryCapabilities = Readonly<{
+  collectionRetentionNative?: import('./collection-mutation.ts').CollectionRetentionNativeCapability;
+  collectionPublicationNative?: CollectionPublicationNativeCapability;
+  collectionRuleAuthority?: CollectionRuleAuthorityCapability;
+  collectionMutations?: import('./collection-mutation.ts').CollectionMutationApplication;
   authorization: AuthorizationCapability;
   identityDisclosure: IdentityDisclosureCapability;
   searchPreparation: SearchPreparationCapability;

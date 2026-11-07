@@ -8,6 +8,10 @@ the existing Search step ceiling, the maximum eight Collection source-state chec
 commit/rollback envelope. Its cost is a static dispatch description; it neither creates a ledger nor authorizes a
 Source observation. The id and ordinal branches remain mutually exclusive.
 
+Search receives the canonical source bounds, work-group limit and ordinal statement bound through the installed
+`SearchLibraryScopePort`. Its path schedule and total cost remain Search-owned; composition binds the existing
+Library source operations without changing the operation's disclosure or receipt rules.
+
 The shared axes are candidateKeys, nativeRows, identityMetadataRows, nativePoints, witnessKeys, statements, bytes,
 emptySeeks and engineRequests. Library's existing `MEMBERS_PREPARATION_BRANCH_COST.sourceMetadata` is the one
 priced whole prefix available to Search. Its producer documents 9 step reads, 5 Source metadata reads and 2 owner

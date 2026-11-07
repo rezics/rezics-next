@@ -6,7 +6,7 @@ import { ResponsiveDialog } from '@rezics/ui/responsive-dialog';
 import { Link } from '@tanstack/react-router';
 import { useLayoutEffect, useId, useState, useRef, type FormEvent, type ReactNode } from 'react';
 import { m } from '../paraglide/messages.js';
-import { isPlatformClosedError } from '../kernel/platform-closed';
+import { isPlatformClosedError } from '../session/reading-policy';
 import { getLocale } from '../paraglide/runtime.js';
 import { Exposure, type GatedOperation } from '../kernel/exposure';
 import { coverSubject, rowRatio, SubjectCover } from './subject-row';

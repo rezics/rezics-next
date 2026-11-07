@@ -48,11 +48,15 @@ Decision: outage recovery retains only a bounded, query-free local return path i
 ## Public module entry
 
 `session/index.ts` is the public browser adapter entry for observation and read/operation/address leases.
+It also exports the installed `sessionQuery`, `useSession`, `sessionCsrfToken` and `AnonymousSessionContext` for
+consumer-owned application composition. These are the original producer bindings, not another session policy.
+`session/reading-policy.ts` is a pure entry for the existing public/personal query defaults, credential-mode keys and
+platform-closed error/problem recognition. It loads no React observer, query cache or session fetch. Native and
+browser readers share the original error class, including its serialized route-boundary recognition.
 Public catalogue inspect reads the prepared cache through `cachedBrowserSession` and does not start a session fetch.
-`session/reader.ts` exposes workspace admission and current-response/address composition without eagerly loading
+`session/reader.ts` exposes operation/workspace admission and current-response/address composition without eagerly loading
 those React/Query adapters for observation-only consumers. `reader/` contains its existing implementations;
-these are Web runtime adapters, not Library infrastructure. Lease descriptors in `reader/lease.ts` have no
-runtime imports. Authentication and request preparation retain their server-only entries.
+these are Web runtime adapters, not Library infrastructure. Credential-mode vocabulary lives in the pure `reader/lifetime/contract.ts` entry. Authentication and request preparation retain their server-only entries.
 `SessionRecoveryPage` is the public indeterminate-session recovery prompt: callers pass the visit pathname and locale;
 the session owner derives the safe sign-in href and the shell still renders the unavailable page. The leaf does not
 read the router.
@@ -82,3 +86,30 @@ The journey stays unaccepted until a real walk passes.
 Decision: delegated agent and principal media acceptance waits for Accounts' native delegated-client and assignment
 fixture binding. The operator session is never used as a delegated proof; Alice, Bob, anonymous, revoked and suspended
 cases bind the personal driver now.
+
+## Supported reader lifetime
+
+Decision: Threads and moderation reporter history/status consume the session-owned
+[`reader/lifetime/index.ts`](../reader/lifetime/index.ts) browser capability. Its implementation owns the existing
+session cache observation, credential lookup, leases, cache-only session source, activity retirement and optional
+address/locale visits. The existing root session hook and QueryClient install its shared cache observation once.
+Default navigation adapts the existing application Router; isolated mounts need neither a Router nor another provider.
+Decision: the installed root shell supplies `ReaderNavigationContext` once, binding its existing Router through
+`useReaderNavigationHost` from the public session entry. The capability has only `ReaderNavigation.address` and
+`subscribe` from `reader/lifetime/contract.ts`; its mounted readers share one departure subscription, released when
+the last reader leaves. An idle host reads the current Router address before a new reader subscribes. There is no
+generic session-provider dependency, added session value, cache, fetch or authentication. Performance/session train
+receiving resolves overlapping host edits. `tests/thread-reader-boundary.test.tsx` covers hosted and fallback Router
+departure before replacement render, irreversible return visits and isolated QueryClient mounts.
+The old observation, browser-state, lease and credential files remain compatibility entries for other owners.
+
+The leaf adapter has no Web application or feature dependency. Cache-only Threads consumers no longer load the
+fetching session query, server request preparation or exposure code through their session key. Credential-mode and local-return
+vocabulary have a separate pure entry so native read and revision-return contracts do not evaluate browser adapters.
+This extraction removes those behaviour edges rather than allowing private application imports in the manifest.
+
+Session replacement, including equal successful responses and A/B/A, retires reader identity synchronously. The
+cache-only session source releases its shared subscription when its last consumer leaves. Slow-mode callers abort
+in the retirement stack; late continuations still check their original caller. Address/locale visits are irreversible
+and host navigation observes departure before React replaces a page. Feature owners retain native response epochs,
+exposure admission, exact uncertain command operands and focus ownership. No browser deadline grants native authority.

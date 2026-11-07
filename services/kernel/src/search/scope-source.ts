@@ -17,7 +17,6 @@ import type { NativeSourceIdentity } from '../library/native-source-custody.ts';
 import { admitCollectionMemberQuery } from '../library/owner-filter.ts';
 import { bindOwnerFilterRead } from '../library/owner-filter-plan.ts';
 import { withOwnerFilterNativeRead } from '../library/owner-filter-native-binding.ts';
-import { NativeCollectionWork } from '../library/collection-source-work.ts';
 import type { NativeOrdinalKey } from '../library/collection-source-order.ts';
 import { readIdentityMappings } from '../semantic/identity-adapters/index.ts';
 import { readRelease } from '../semantic/definitions.ts';
@@ -77,6 +76,7 @@ import {
   type MembersWorkInput,
 } from './scope-members-work.ts';
 import { membersSource } from './scope-members-work-cost.ts';
+import { searchLibraryScopePort } from './scope-application.ts';
 import {
   compareScopeOrderedTuple,
   addScopePublicCost,
@@ -263,7 +263,9 @@ export function createSearchScopeSource({
   }
   const observations = createIdentityScopedObservations(pool);
   const store = createScopePreparationStore(pool, prefix);
-  const order = evidence ? createSearchScopeOrder({ pool, options: evidence, clock }) : null;
+  const order = evidence
+    ? createSearchScopeOrder({ pool, options: evidence, clock, library: searchLibraryScopePort() })
+    : null;
   function state(prepared: PreparedSearchScope): ScopeState {
     const value = states.get(prepared);
     if (!value || prepared.basis !== value.basis) unavailable();
@@ -385,7 +387,7 @@ export function createSearchScopeSource({
     )
       unavailable();
     if (!reader.nativeT) unavailable();
-    const nativeWork = new NativeCollectionWork(work.remaining(), reader.deadline);
+    const nativeWork = searchLibraryScopePort().members.createNativeCollectionWork(work.remaining(), reader.deadline);
     const bound = await (async () => {
       try {
         const captured = value.ordered?.state;

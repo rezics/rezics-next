@@ -81,6 +81,8 @@ Admitted public containment is independently readable through the [album content
 
 Decision: Comparison cards retain the native inverse-link order of the current bounded release page.
 
+Decision: Game edition/evidence and Manga evidence values use the catalogue-owned WorkReadingPort; the Subject page binds CandidateValue at composition and the readers do not import pages/data.
+
 The ordinary Game and Visual Novel overview mounts the [Game reader](../apps/web/src/features/catalogue/game-reader/README.md).
 It groups admitted work facts, classifications, qualified credits and relations using the active immutable Release.
 Work, software release and independently referable add-on remain separate identities. Missing platform, engine,

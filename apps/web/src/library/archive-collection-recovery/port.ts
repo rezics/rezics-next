@@ -1,5 +1,5 @@
 import { createContext, useContext } from 'react';
-import { sessionCsrfToken } from '../../session/query';
+import { sessionCsrfToken } from '../../session';
 import type { RecoveryEffectCommand, RecoveryPort } from './contract';
 
 export const ArchiveCollectionRecoveryPortContext = createContext<RecoveryPort | null>(null);

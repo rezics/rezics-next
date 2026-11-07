@@ -17,6 +17,22 @@ reads.
 
 Decision: The expanded reader stays in page flow on phones and uses a bounded side panel beside writing on desktop.
 
+## Browser reader integration
+
+Decision: Threads and moderation reporter history/status use the session-owned
+[browser reader lifetime boundary](../session/README.md#supported-reader-lifetime). Activity, erasure, pins,
+slow mode, authoring and revision return consume its cache-only observation or pure credential-mode vocabulary.
+The existing shell session hook installs the shared cache observation once; isolated mounts continue with their
+QueryClient and browser address without a Router requirement. Default navigation uses the existing optional Router;
+Performance and the train own attachment to their shared session provider once its public export is delivered. Native authorization and disclosure remain in prepared server reads.
+
+A successful session replacement, even equal data or account A/B/A, cannot restore a retired callback. Slow mode
+aborts its old caller synchronously. Locale and address retirement also reject deferred focus. Thread/native page
+identity, exposure, exact uncertain intent, credential and idempotency key remain with their existing feature owners;
+the reader boundary never reconstructs, retries or upgrades a command. Existing outcome assertions remain unchanged;
+`tests/thread-reader-boundary.test.tsx` adds cache replacement, synchronous abort, isolated host and navigation ABA
+coverage. Runtime acceptance runs after integration; workspace typing is the worker acceptance.
+
 ## Board pins
 
 The pin and unpin consumer contract, native-order presentation and pending Content binding are documented in

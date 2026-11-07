@@ -1,16 +1,17 @@
 import type { Pool } from 'pg';
+import { createNativeSearchDisclosure } from '../search/index.ts';
 import { composeLibraryDomain } from './library.ts';
+import { composeZoneCollection } from './zones.ts';
 import { createWriteRateLimiter, type WriteRateLimiter } from '../access/write-rate.ts';
 import { createAccess, type AccessConfig } from '../access/index.ts';
 import type { AuthenticationConfig } from '../access/authenticate.ts';
+import { localJwksTransport } from '../access/membership-work-config.ts';
 import { composeAccessApplication } from './access.ts';
 import { composeCommunityApplication } from './community.ts';
 import { composeContentApplication } from './content.ts';
 import { composeWorkApplication } from './work.ts';
 import { installNativeHistory } from './history.ts';
-import { installIdentitySourceConsumerRuntime } from './identity-source-consumer.ts';
-import { installIdentityRatingRepairProducer } from './identity-rating-repair.ts';
-import { bindOrdinaryContentLifecycle, nativeContentLifecycle } from '../semantic/adapters/index.ts';
+import { composeSemanticAdapters } from './semantic.ts';
 import { ConfigError } from '../commerce/config.ts';
 import { assertReceiptKeyRing, readReceiptKeyRing } from '../command/receipt-key.ts';
 import { systemClock } from '../clock.ts';
@@ -19,8 +20,13 @@ import type { AccessFactory } from '../request/access.ts';
 import type { WriteRateStageOptions } from '../access/write-rate-stage.ts';
 import type { CreditSearchSource } from '../search/credit-search.ts';
 import { createCreditSearchSource } from '../semantic/credit-search.ts';
+import { bindSearchLibraryScopePort } from '../search/scope-application.ts';
+import { createSearchLibraryScopePort } from './search-library.ts';
+import { composeSearchAccess } from './search-access.ts';
+import type { FacetAccessObservationPort } from '../search/facet-access-port.ts';
 
 export type KernelRuntimeDefaults = {
+  searchDisclosure: typeof createNativeSearchDisclosure;
   tokens: KeyRing;
   receiptKeys: KeyRing;
   writeRate: WriteRateLimiter;
@@ -30,6 +36,8 @@ export type KernelRuntimeDefaults = {
   deadlineNow: () => number;
   access: AccessFactory;
   auth?: AuthenticationConfig;
+  /** Search-owned Access observation used by live scoped facet execution. */
+  facetAccess: FacetAccessObservationPort;
 };
 
 export type KernelRuntimeOverrides = {
@@ -65,7 +73,7 @@ function readAuthConfig(env: NodeJS.ProcessEnv): AuthenticationConfig | undefine
   const audience = env.AUTH_AUDIENCE;
   const jwksUrl = env.AUTH_JWKS_URL;
   if (issuer === undefined && audience === undefined && jwksUrl === undefined) return undefined;
-  return { issuer: issuer ?? '', audience: audience ?? '', jwksUrl: jwksUrl ?? '' };
+  return localJwksTransport(env, { issuer: issuer ?? '', audience: audience ?? '', jwksUrl: jwksUrl ?? '' });
 }
 
 /** Production CreditSearchSource for the installed Search consumer. */
@@ -78,15 +86,15 @@ const systemDeadlineNow = (): number => Date.now();
 
 /** Shared runtime defaults for the HTTP server and Search work factory. */
 export function createKernelRuntimeDefaults(overrides: KernelRuntimeOverrides = {}): KernelRuntimeDefaults {
+  bindSearchLibraryScopePort(createSearchLibraryScopePort());
   composeAccessApplication();
   composeWorkApplication();
   composeContentApplication();
   composeCommunityApplication();
   installNativeHistory();
-  installIdentitySourceConsumerRuntime();
-  installIdentityRatingRepairProducer();
-  bindOrdinaryContentLifecycle(nativeContentLifecycle());
+  composeSemanticAdapters();
   composeLibraryDomain();
+  composeZoneCollection();
   const env = overrides.env ?? process.env;
   const tokens = overrides.tokens ?? readTokenKeys(env);
   const receiptKeys = readReceiptKeyRing(env, overrides.receiptKeys);
@@ -104,6 +112,7 @@ export function createKernelRuntimeDefaults(overrides: KernelRuntimeOverrides = 
   const auth = overrides.auth ?? readAuthConfig(env);
   const access: AccessFactory = auth ? (config: AccessConfig) => createAccess({ ...config, auth }) : createAccess;
   return {
+    searchDisclosure: createNativeSearchDisclosure,
     tokens,
     receiptKeys,
     writeRate,
@@ -111,6 +120,7 @@ export function createKernelRuntimeDefaults(overrides: KernelRuntimeOverrides = 
     clock: overrides.clock ?? systemClock,
     deadlineNow: overrides.deadlineNow ?? systemDeadlineNow,
     access,
+    facetAccess: composeSearchAccess(),
     ...(auth === undefined ? {} : { auth }),
   };
 }

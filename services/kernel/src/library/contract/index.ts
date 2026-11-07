@@ -46,6 +46,8 @@ export type {
   OrderedOccurrence,
 } from './membership.ts';
 export type {
+  CollectionPublicationNativeCapability,
+  CollectionRuleAuthorityCapability,
   AuthorizationCapability,
   AuthorizationDecision,
   ContentPublicationCapability,
@@ -73,3 +75,65 @@ export type {
   PublicationAdmissionResult,
   SourceCaptureResult,
 } from './results.ts';
+
+export {
+  FollowCountUnavailableError,
+  FollowCountTargetAbsentError,
+  FollowCountReadRefusedError,
+  FOLLOW_COUNT_ACCOUNT_EVENTS,
+} from './follow-counts.ts';
+export type {
+  CountKey,
+  CountReplacement,
+  CountDestination,
+  FollowTargetType,
+  FollowCountTarget,
+  FollowCountPage,
+  FollowCountHealthObservation,
+  FollowCountReadPorts,
+  FollowCountReads,
+  FollowCountDeliveryPorts,
+  FollowCountPartitionPorts,
+  FollowCountRuntime,
+} from './follow-counts.ts';
+
+export type {
+  CollectionVisibility,
+  CollectionState,
+  CollectionRow,
+  Collection,
+  CollectionDraft,
+  CollectionChanges,
+  CollectionMemberRow,
+  CollectionMember,
+  CollectionMemberDraft,
+  MemberPosition,
+  MemberNeighbors,
+  MemberPage,
+  MemberReordering,
+} from './collection.ts';
+
+export * from './collection-history.ts';
+export type {
+  CollectionMetadataHistorySqlPlan,
+  CollectionMetadataHistoryCapturePlan,
+  CollectionWriteContext,
+  CollectionHistoryInitializeInput,
+  CollectionHistoryCaptureInput,
+  CollectionMutationPorts,
+  CollectionMutationApplication,
+} from './collection-mutation.ts';
+
+export type {
+  CollectionCleanupPage,
+  CollectionDeletionKey,
+  CollectionRetirementEpisode,
+  CollectionRetentionNativeCapability,
+} from './collection-mutation.ts';
+
+export const COLLECTION_PUBLICATION_COMMAND = 'library.collection.publication.begin';
+export const COLLECTION_PUBLICATION_WORKFLOW = 'library.collectionPublication';
+
+export type { PreparationWorkCapability, PreparationSourcePrefix, ScopeWorkCapability } from './preparation-work.ts';
+
+export { OWNER_FILTER_CLOSURE_REFERENCE_LIMIT, OWNER_FILTER_CLOSURE_ORIGINAL_LIMIT } from './preparation-limits.ts';

@@ -1,7 +1,7 @@
 import { useLayoutEffect, useMemo, useRef, useSyncExternalStore } from 'react';
 import { useRouter } from '@tanstack/react-router';
 import { useLibraryWorkspaceAdmission } from './library-workspace-admission';
-import { useSession } from '../session/query';
+import { useSession } from '../session';
 import { shelfHref, type ShelfSearch } from './shelf-params';
 import { useHydrated } from './shelf-rows';
 

@@ -238,7 +238,12 @@ Issuers require HTTPS except for canonical HTTP origins on exactly `127.0.0.1`,
 path, trailing slash, query or fragment. Numeric aliases, suffix tricks, other
 private/LAN addresses and `0.0.0.0` are rejected. HTTP public JWKS is permitted
 only for an approved HTTP issuer on the exact same origin and port, with no
-userinfo, query or fragment. Token issuer identity includes the port; request
+userinfo, query or fragment. A second loopback port is not an allowed JWKS identity.
+Local stacks may set `REZICS_LOCAL_STACK_NATIVE_ORIGIN`
+to native Auth's loopback origin; worker and API composition then fetch only that
+configured issuer JWKS URL from native Auth, forwarding jose's GET options and
+rejecting every other URL. Production HTTPS issuers ignore the
+variable. Token issuer identity includes the port; request
 Host headers do not configure it. The API audience remains HTTPS, including for
 local issuers: `https://api.rezics.com` in production without a trailing slash,
 and `https://api.rezics.test` in tests. Verification still uses standard JOSE,

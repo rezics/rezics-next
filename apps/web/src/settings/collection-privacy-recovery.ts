@@ -1,4 +1,4 @@
-import type { CollectionVisibility } from '../library/reads';
+import type { CollectionVisibility } from './ports/library';
 import type {
   CollectionVisibilityWrite,
   NativePreferenceFailure,

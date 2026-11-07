@@ -374,7 +374,7 @@ await Bun.write(state, previous + 'state');
   }
 });
 
-test('compiler cleanup and no-diagnostic compiler failures are infrastructure, never type errors', async () => {
+test('ordinary compiler cleanup keeps native status; no-diagnostic compiler failures stay infrastructure', async () => {
   const databaseFixture = fixture();
   const error = spyOn(console, 'error').mockImplementation(() => {});
   try {
@@ -399,10 +399,12 @@ test('compiler cleanup and no-diagnostic compiler failures are infrastructure, n
         },
       }),
     });
-    expect(cleanupCode).toBe(75);
-    expect(error).toHaveBeenCalledWith(
-      'root typecheck infrastructure failure: compiler database cleanup could not be proven: volume remains',
-    );
+    expect(cleanupCode).toBe(0);
+    const diagnostic = error.mock.calls.flat().join('\n');
+    expect(diagnostic).toContain('phase=database-cleanup');
+    expect(diagnostic).toContain('compiler status 0');
+    expect(diagnostic).toContain('volume remains');
+    expect(readFileSync(new URL('./typecheck.ts', import.meta.url), 'utf8')).toContain('void remove(false)');
   } finally {
     error.mockRestore();
     databaseFixture.remove();

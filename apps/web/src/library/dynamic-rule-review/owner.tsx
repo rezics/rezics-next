@@ -1,7 +1,7 @@
 import type { OwnerLeaf } from '@rezics/filter';
 import type { LibraryProfile } from '@rezics/definitions';
 import { m } from '../../paraglide/messages.js';
-import { localizedLabel } from '../../search/results';
+import { pickText } from '@rezics/composition';
 import type { ChoiceState, RuleChoices } from '../collection-rule-read';
 
 type OwnerReviewProps = {
@@ -111,7 +111,7 @@ function StateCondition({
           <ul className="mt-1 list-disc space-y-1 pl-5">
             {selected.map(({ id, name }) => (
               <li key={id} className="break-words">
-                {name ? `${localizedLabel(name, locale).text} · ` : null}
+                {name ? `${pickText(name, locale).text} · ` : null}
                 {!name && profileState === 'ready' && setMatches ? (
                   <span>{m.library_rule_review_unknown_reference()} </span>
                 ) : null}
@@ -184,7 +184,7 @@ function SessionCondition({
                     <ul className="mt-1 list-disc space-y-1 pl-5">
                       {units.map((unit) => (
                         <li key={unit.id} className="break-words">
-                          {localizedLabel(unit.labels, locale).text} · <code>{unit.id}</code>
+                          {pickText(unit.labels, locale).text} · <code>{unit.id}</code>
                           {unit.dimension ? (
                             <span>
                               {' · '}
@@ -250,7 +250,7 @@ function HoldingCondition({
         <Descriptor
           label={m.library_rule_holding_kind()}
           id={value.kind}
-          name={kind ? localizedLabel(kind.labels, locale).text : undefined}
+          name={kind ? pickText(kind.labels, locale).text : undefined}
         />
       ) : (
         <p className="text-sm text-muted-foreground">{m.library_rule_review_any_holding_kind()}</p>
@@ -259,7 +259,7 @@ function HoldingCondition({
         <Descriptor
           label={m.library_rule_holding_status()}
           id={value.status}
-          name={status ? localizedLabel(status.labels, locale).text : undefined}
+          name={status ? pickText(status.labels, locale).text : undefined}
         />
       ) : (
         <p className="text-sm text-muted-foreground">{m.library_rule_review_any_holding_status()}</p>

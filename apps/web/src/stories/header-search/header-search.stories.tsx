@@ -14,7 +14,7 @@ import { rememberRecent, type RecentHistory } from '../../search/recent-history'
 import type { SearchRealmDiscoveryLoader } from '../../search/realm-discovery-section';
 import { trendingResponse, type TrendingPage } from '../../search/trending';
 import { SearchPage } from '../../search/search';
-import { searchQueryOptions } from '../../search/search-queries';
+import { searchQueryOptions } from '../../search/search-query-options';
 import { searchLoaderDeps } from '../../search/search-params';
 import { PatternStory } from '../page';
 import { discoveryRealm } from '../patterns/realm-discovery/fixtures';

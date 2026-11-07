@@ -1,3 +1,4 @@
+import { searchOperationProblem } from '../../src/search/http/operation-problems.ts';
 import { afterAll, beforeAll, expect, test } from 'bun:test';
 import type { FilterRelease } from '@rezics/filter';
 import { createPool } from '../../src/database/pool.ts';
@@ -165,7 +166,7 @@ const names = async (values: string[]) =>
 async function refusal(promise: Promise<unknown>) {
   const error = await promise.then(
     () => undefined,
-    (caught: unknown) => caught,
+    (caught: unknown) => searchOperationProblem(caught),
   );
   expect(error).toBeInstanceOf(ProblemError);
   return [(error as ProblemError).code, (error as ProblemError).errors] as unknown[];

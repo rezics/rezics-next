@@ -1,4 +1,4 @@
-import { expect, mock, test } from 'bun:test';
+import { afterAll, expect, mock, test } from 'bun:test';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { createMemoryHistory, createRootRoute, createRouter, RouterProvider } from '@tanstack/react-router';
 import { renderToString } from 'react-dom/server';
@@ -7,6 +7,14 @@ import { createRoot } from 'react-dom/client';
 import { dirname } from 'node:path';
 
 mock.module('cloudflare:workers', () => ({ env: {} }));
+const realReport = { ...(await import('../src/report/content-actions')) };
+const realComposer = { ...(await import('../src/threads/composer')) };
+const realActions = { ...(await import('../src/threads/actions')) };
+afterAll(() => {
+  mock.module('../src/report/content-actions', () => realReport);
+  mock.module('../src/threads/composer', () => realComposer);
+  mock.module('../src/threads/actions', () => realActions);
+});
 
 type MockPostActionsProps = {
   target: { kind: string; id: string };
@@ -113,6 +121,8 @@ mock.module('../src/threads/actions', () => ({
   startThread: async () => ({ ok: false, reason: 'unavailable' }),
 }));
 
+const { AccountPageApplication } = await import('../src/features/pages/account-page-application');
+const { accountProfilePageBinding } = await import('../src/accounts/public-profile/page-binding');
 const { AccountPosts } = await import('../src/features/pages/account');
 const { OverviewContext } = await import('../src/features/pages/overview');
 const {
@@ -125,8 +135,11 @@ const {
 type ContributionActionsEpisode =
   import('../src/accounts/public-profile/contribution-actions/host').ContributionActionsEpisode;
 const { sessionQuery } = await import('../src/session/query');
-const { unavailableAuthorContributionActionsWire } =
-  await import('../src/accounts/public-profile/contribution-actions/receiver');
+const unavailableAuthorContributionActionsWire = {
+  read: async () => {
+    throw new Error('Private advice is unavailable in this fixture');
+  },
+};
 const { rememberContribution, restoreContributionRecovery, contributionReturnOccurrence } =
   await import('../src/accounts/public-profile/contributions/navigation');
 const { ContributionAdvicePresentation, ContributionWatch } =
@@ -344,7 +357,9 @@ test('an admitted posts page mounts one bounded host and never derives a selecti
       <QueryClientProvider client={client}>
         <OverviewContext.Provider value={value}>
           <ContributionActionsPageScope page={page} cursor="original+/=cursor" view="posts">
-            <AccountPosts id="posts" paged limit={20} />
+            <AccountPageApplication profile={accountProfilePageBinding}>
+              <AccountPosts id="posts" paged limit={20} />
+            </AccountPageApplication>
           </ContributionActionsPageScope>
         </OverviewContext.Provider>
       </QueryClientProvider>
@@ -427,6 +442,8 @@ test('mounted host shares reader retirement and reacquires only the current orig
     reviewsPublished: true,
     rows: [{ id: 'browser-row-only' }],
   };
+  const sourceQueryKey = ['profile-composition', 'selected'];
+  client.setQueryData(sourceQueryKey, initial.page);
   let latest: Value | null = null;
   let update: (value: typeof initial) => void = () => {};
   function Probe() {
@@ -438,10 +455,17 @@ test('mounted host shares reader retirement and reacquires only the current orig
     update = setScope;
     return (
       <QueryClientProvider client={client}>
-        <ContributionActionsHost {...scope} wire={wire}>
-          <Probe />
-          <a href="/en/threads/original?post=original">Public contribution</a>
-        </ContributionActionsHost>
+        <ContributionActionsPageScope
+          page={scope.page as import('../src/features/pages/subject').SubjectPageData}
+          cursor={scope.cursor}
+          view={scope.view}
+          sourceQueryKey={sourceQueryKey}
+        >
+          <ContributionActionsHost {...scope} wire={wire}>
+            <Probe />
+            <a href="/en/threads/original?post=original">Public contribution</a>
+          </ContributionActionsHost>
+        </ContributionActionsPageScope>
       </QueryClientProvider>
     );
   }
@@ -558,6 +582,20 @@ test('mounted host shares reader retirement and reacquires only the current orig
       expect(beforeABA.isCurrent()).toBe(false);
     });
     expect(operation.credential()).toBeNull();
+    const oldQuerySource = current();
+    const sourceOperation = oldQuerySource.operation('reaction')!;
+    await flush(() => {
+      const sourceQuery = client.getQueryCache().find({ queryKey: sourceQueryKey, exact: true })!;
+      sourceQuery.setState({ fetchStatus: 'fetching' });
+      expect(oldQuerySource.isCurrent()).toBe(false);
+      expect(sourceOperation.current()).toBe(false);
+      sourceQuery.setState({ fetchStatus: 'idle' });
+    });
+    const equalQuerySource = current();
+    await flush(() => {
+      client.setQueryData(sourceQueryKey, initial.page);
+      expect(equalQuerySource.isCurrent()).toBe(false);
+    });
     const oldSource = current();
     await flush(() => update({ ...initial, source: { actionSelection: selection }, rows: [] }));
     expect(oldSource.isCurrent()).toBe(false);

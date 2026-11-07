@@ -1,21 +1,12 @@
+import { requireLibraryDomain } from './domain-binding.ts';
 import { admitFilter, FilterError, parseFilter, walkFilter, type FilterDocument } from '@rezics/filter';
 import type { Pool, PoolClient } from 'pg';
-import { readAccount } from '../access/account-data.ts';
-import { GrantDeniedError } from '../access/grant-commands.ts';
-import { admitGroup } from '../access/gates/admission.ts';
-import {
-  authoritativeTimeValue,
-  type AuthoritativeTime,
-  type CommandAttempt,
-  type CommandTransaction,
-} from '../command/command.ts';
-import { ProblemError } from '../http/problem.ts';
-import { type Access, type AccessCheck, type AccountActor } from '../request/access.ts';
+import type { AuthoritativeTime, CommandAttempt, CommandTransaction } from '../command/command.ts';
+import { ProblemError } from '../http/problem-error.ts';
+import type { Access, AccessCheck, AccountActor } from '../request/access.ts';
 import { routeOf } from '../route/route.ts';
-import { activeRelease } from '../semantic/definitions.ts';
-import { compileCurrentOwnerFilter } from '../search/current-filter-plan.ts';
-import { runLibraryBoundedStep } from './command-support.ts';
-import { initializeCollectionMetadataHistory } from './collection-metadata-history.ts';
+import { runLibraryBoundedStep } from './collection-command-work.ts';
+import { collectionMutationApplication } from './collection-mutation.ts';
 import type { CollectionDraft } from './collection-model.ts';
 import type { PreparationDefinition } from './members-preparation.ts';
 import { collectionRuleReadPlan, executeCollectionRuleRead } from './collection-rule-read-bounds.ts';
@@ -25,6 +16,12 @@ import {
   executeCollectionRuleInsert,
   executeCollectionRuleUpdate,
 } from './collection-rule-edit-bounds.ts';
+
+function ruleAuthority() {
+  const authority = requireLibraryDomain().collectionRuleAuthority;
+  if (!authority) throw new TypeError('Collection rule authority is not composed');
+  return authority;
+}
 
 /** Source selection is stored beside the shared predicate, never inside its grammar. */
 export type CollectionRuleSource = Readonly<{ kind: 'owner' | 'catalogue' }>;
@@ -87,13 +84,13 @@ export function collectionRuleActions(filter: FilterDocument): readonly string[]
 
 /** Meaning admission is independent of native execution admission and never certifies completeness. */
 export async function admitCollectionRule(pool: Pool, rule: CollectionRule): Promise<AdmittedCollectionRule> {
-  const current = await activeRelease(pool);
+  const current = await requireLibraryDomain().identityDisclosure.readActiveRelease(pool);
   if (!current) throw new ProblemError('semantic_not_ready');
   try {
-    const filter = admitFilter(rule.filter, current.release, { owner: true });
+    const filter = admitFilter(rule.filter, current.release as Parameters<typeof admitFilter>[1], { owner: true });
     // OWNER rules compile against Commerce's private population. Catalogue rules retain shared Search meaning;
     // their execution admission belongs to the installed Search Source and is not certified by this write.
-    if (rule.source.kind === 'owner') compileCurrentOwnerFilter(filter);
+    if (rule.source.kind === 'owner') ruleAuthority().compileOwnerFilter(filter);
     return {
       filter,
       sort: rule.sort,
@@ -147,26 +144,25 @@ export async function prepareCollectionRuleAuthority(
   deadline: number,
 ): Promise<readonly AccessCheck[]> {
   const route = routeOf(actor.accountId);
-  if (route === null) throw new GrantDeniedError();
+  if (route === null) throw ruleAuthority().denied();
   const checks: AccessCheck[] = [];
   for (const action of collectionRuleActions(filter)) {
     if (!actor.scopes.includes(action))
       throw new ProblemError('forbidden', {
         headers: { 'WWW-Authenticate': `Bearer error="insufficient_scope", scope="${action}"` },
       });
-    await admitGroup({
+    await ruleAuthority().admitGroup({
       pool: config.pool,
-      access: () => config.access,
+      access: config.access,
       actor,
-      group: action === 'progress_session:read' ? 'reading_progress' : 'personal_library',
-      clientAction: action,
+      action,
       deadline,
-      clock: () => new Date(authoritativeTimeValue(attempt.time)),
+      at: attempt.time,
     });
     // These are the actor's private families, using the same intrinsic ownership
     // boundary as native entry/session/copy reads, rather than resource grants.
     checks.push(async (client) => {
-      const current = await readAccount(client, route, actor.accountId);
+      const current = await ruleAuthority().readAccount(client, route, actor.accountId);
       return (
         !!current &&
         current.kind === 'actor' &&
@@ -187,7 +183,7 @@ export async function authorizeCollectionRule(
   attempt: Pick<CommandAttempt, 'time'>,
   checks: readonly AccessCheck[],
 ): Promise<void> {
-  for (const check of checks) if (!(await check(tx, attempt.time))) throw new GrantDeniedError();
+  for (const check of checks) if (!(await check(tx, attempt.time))) throw ruleAuthority().denied();
 }
 
 /**
@@ -239,13 +235,9 @@ export async function insertSavedCollection(
     transaction_id: command.transactionId,
     time: command.time,
   });
-  await runLibraryBoundedStep(plan.operation, plan.total, () => executeCollectionRuleInsert(tx, plan));
-  await initializeCollectionMetadataHistory(tx, {
-    route,
-    collection: draft,
-    transactionId: command.transactionId,
-    time: command.time,
-  });
+  await collectionMutationApplication().create(tx, { route, collection: draft, ...command }, () =>
+    runLibraryBoundedStep(plan.operation, plan.total, () => executeCollectionRuleInsert(tx, plan)),
+  );
 }
 
 /** One header CAS advances the rule's own revision and Source generation exactly once. */

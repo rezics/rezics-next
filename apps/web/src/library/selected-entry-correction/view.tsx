@@ -1,6 +1,6 @@
 import { useContext, useEffect, useId, useRef, useState, useSyncExternalStore } from 'react';
 import type { EntryAnnotationCorrectionPage } from '@rezics/client';
-import { useSession } from '../../session/query';
+import { useSession } from '../../session';
 import { useOperation } from '../../kernel/exposure';
 import { m } from '../../paraglide/messages.js';
 import { useAuthoringDeparture } from '../../threads/authoring-departure';

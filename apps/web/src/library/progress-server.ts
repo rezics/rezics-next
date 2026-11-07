@@ -5,7 +5,7 @@ import { env } from 'cloudflare:workers';
 import { progressFormChoices, type ProgressChoices } from './progress-profile';
 import { readRelease } from '../subject/definitions';
 import { requestLocale } from '../kernel/client';
-import { isPlatformClosedError } from '../kernel/platform-closed';
+import { isPlatformClosedError } from '../session/reading-policy';
 import { kernelClient } from '../kernel/client';
 import { nameSubjectTypes } from '../subject/definitions';
 import { configured, type SessionEnv } from '../session/client';

@@ -1,3 +1,4 @@
+import { LibraryApplicationBoundary } from '../src/session/library-application';
 import { afterAll, expect, mock, spyOn, test } from 'bun:test';
 import { dirname } from 'node:path';
 import { act, StrictMode, type ComponentProps, type ReactNode } from 'react';
@@ -132,7 +133,9 @@ function mounted(client: InstanceType<typeof QueryClient>, path = '/library') {
         root.render(
           <StrictMode>
             <QueryClientProvider client={client}>
-              <RouterContextProvider router={router}>{node}</RouterContextProvider>
+              <LibraryApplicationBoundary>
+                <RouterContextProvider router={router}>{node}</RouterContextProvider>
+              </LibraryApplicationBoundary>
             </QueryClientProvider>
           </StrictMode>,
         ),

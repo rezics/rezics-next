@@ -1,5 +1,5 @@
 import type { Query, QueryClient } from '@tanstack/react-query';
-import type { ReadCredentialMode } from '../kernel/credential';
+import type { ReadCredentialMode } from '../reader/lifetime/contract';
 
 export type HistoricalReaderState = 'unknown' | 'signed-in' | 'signed-out' | 'preparing' | 'unavailable';
 

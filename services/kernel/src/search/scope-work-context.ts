@@ -9,15 +9,16 @@ import {
   type OperationalTransaction,
 } from '../command/operational.ts';
 import { ProblemError } from '../http/problem.ts';
-import {
-  createMembersPreparation,
-  type MembersPreparationWorkDefinition,
-  type PreparationLocator,
-} from '../library/members-preparation.ts';
 import type { Access } from '../request/access.ts';
 import { partitionOf, routeOf } from '../route/route.ts';
 import { isDeepStrictEqual } from 'node:util';
 import { meterMembersDefinition } from './scope-members-work-cost.ts';
+import { searchLibraryScopePort } from './scope-application.ts';
+import type {
+  MembersPreparationWorkDefinition,
+  PreparationLocator,
+  SearchNativeCollectionWork,
+} from './library-scope-port.ts';
 import {
   admitCollectionKindPreparationStep,
   bindCollectionKindPreparationStep,
@@ -25,7 +26,6 @@ import {
   type CollectionKindPreparationLocator,
   type CollectionKindWorkDefinition,
 } from '../library/collection-kind-work-admission.ts';
-import type { NativeCollectionWork } from '../library/collection-source-work.ts';
 import {
   admitCollectionPublicationStep,
   readCollectionPublicationWorkDefinition,
@@ -33,25 +33,25 @@ import {
   type CollectionPublicationWorkDefinition,
 } from '../library/collection-publication-work-admission.ts';
 
-/** SERVER ONLY. A native lookup, never an Actor, permission, DTO or persisted cursor value. */
-export type MembersPreparationWorkContext = Readonly<{
-  kind: 'members-preparation';
-  tx: OperationalTransaction;
-  locator: PreparationLocator;
-}>;
+import type {
+  MembersPreparationWorkContext,
+  CollectionKindPreparationWorkContext,
+  CollectionPublicationWorkContext,
+  ScopeWorkContext,
+} from '../library/adapters/index.ts';
+export type {
+  MembersPreparationWorkContext,
+  CollectionKindPreparationWorkContext,
+  CollectionPublicationWorkContext,
+  ScopeWorkContext,
+} from '../library/adapters/index.ts';
 
-/** SERVER ONLY. A distinct native Kind episode, never a curated Members locator. */
-export type CollectionKindPreparationWorkContext = Readonly<{
-  kind: 'collection-kind-preparation';
-  tx: OperationalTransaction;
-  locator: CollectionKindPreparationLocator;
-}>;
 const kindContexts = new WeakMap<
   object,
   Readonly<{
     tx: OperationalTransaction;
     locator: CollectionKindPreparationLocator;
-    work: NativeCollectionWork;
+    work: SearchNativeCollectionWork;
   }>
 >();
 
@@ -59,7 +59,7 @@ const kindContexts = new WeakMap<
 export function bindCollectionKindPreparationWorkContext(
   tx: OperationalTransaction,
   locator: CollectionKindPreparationLocator,
-  work: NativeCollectionWork,
+  work: SearchNativeCollectionWork,
 ): CollectionKindPreparationWorkContext {
   bindCollectionKindPreparationStep(tx, locator, work);
   const context = Object.freeze({
@@ -85,22 +85,11 @@ function isBoundCollectionKindPreparationWorkContext(context: CollectionKindPrep
 /** Accounts consumes the same private original Kind frame, never a structural context. */
 export function collectionKindPreparationNativeWork(
   context: CollectionKindPreparationWorkContext,
-): NativeCollectionWork | undefined {
+): SearchNativeCollectionWork | undefined {
   return isBoundCollectionKindPreparationWorkContext(context) && hasLiveOperationalTransaction(context.tx)
     ? kindContexts.get(context)!.work
     : undefined;
 }
-
-/** SERVER ONLY. Whole-query publication B consumes its own Collection's private working input. */
-export type CollectionPublicationWorkContext = Readonly<{
-  kind: 'collection-publication';
-  tx: OperationalTransaction;
-  locator: CollectionPublicationLocator;
-}>;
-export type ScopeWorkContext =
-  | MembersPreparationWorkContext
-  | CollectionKindPreparationWorkContext
-  | CollectionPublicationWorkContext;
 
 type WorkOptions = Readonly<{ pool: Pool; access: Access; deadline: number }>;
 
@@ -399,7 +388,7 @@ async function readMembersDefinition(
   const time = commandTime(tx);
   if (!time) throw new ProblemError('semantic_not_ready');
   authoritativeTimeValue(time);
-  const preparation = createMembersPreparation({
+  const preparation = searchLibraryScopePort().members.createPreparation({
     pool: resources.pool,
     workClient: resources.workClient,
     access: options.access,

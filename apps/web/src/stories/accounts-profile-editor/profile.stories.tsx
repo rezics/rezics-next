@@ -1,3 +1,4 @@
+import * as profilePresentation from '../../settings/ports/profile-editor-view';
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import { useState } from 'react';
 import { AccountProfileEditor } from '../../accounts/profile-editor/editor';
@@ -39,7 +40,12 @@ function Example({ failure, confirmation = false }: { failure?: Failure; confirm
     : { state: 'ready', viewerId: '00000000-0000-7000-8000-000000000001', profile };
   return (
     <div className="mx-auto max-w-2xl space-y-6">
-      <AccountProfileView accountId={profile.accountId} editor={editor} page={page} />
+      <AccountProfileView
+        presentation={profilePresentation}
+        accountId={profile.accountId}
+        editor={editor}
+        page={page}
+      />
     </div>
   );
 }

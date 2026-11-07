@@ -24,7 +24,7 @@ import {
 } from './reaction-request';
 import { Button } from '@rezics/ui/shadcn/button';
 import type { useSession } from '../session/query';
-import { browserObservation } from '../session';
+import { browserObservation } from '../reader/lifetime/index';
 
 function reactionLabels(failed: string | null, locale: string) {
   const options = { locale: locale as Locale };

@@ -2,7 +2,6 @@ import type { MemberPageTarget } from './member-list-query';
 import type { DocumentNode, DocumentSnapshot } from '@rezics/document';
 import { PAGE_GLOBAL_CONTEXT, type SelectedContext } from '@rezics/composition';
 import { OverviewContext } from './overview-context';
-import { PageReadState } from './page-read-state';
 import { RatingsSection } from './subject-ratings-view';
 import { SubjectCommunityRegion, useSubjectCommunity } from './subject-community-view';
 import { composedCommunityRegion } from './subject-community';
@@ -35,7 +34,7 @@ import type { ReleasedRelationDirectionResult } from '@rezics/definitions';
 import type { Reader } from '../../subject/reader';
 import type { Related, Subject, Summary as SubjectCover } from '../../subject/types';
 import { subjectViewHref } from '../../subject/subject-href';
-import type { AccountProfile } from './account-read';
+import type { AccountProfile } from './account-profile-reading';
 import { CoverList } from './cover-list';
 import { creditAssertion, creditVisit, type CreditAssertion } from '../catalogue/credit-inspection/model';
 import { listView, readerViewLabel } from './views';
@@ -174,12 +173,9 @@ export { OverviewContext };
 
 const SUMMARY_PROPERTY = 'schema:abstract';
 
-export const headingClass =
-  'text-2xl leading-snug font-semibold tracking-tight text-balance in-data-[heading-scale=lg]:text-3xl';
-export const sectionClass = 'min-w-0 space-y-4 in-data-[density=compact]:space-y-3';
+import { headingClass, sectionClass, useOverview, viewHref, Preview, Failed } from './overview-section';
+export { headingClass, sectionClass, useOverview, viewHref, Preview, Failed } from './overview-section';
 const anchorClass = 'scroll-mt-32';
-const sectionTitleClass = `${headingClass} min-w-0 max-w-full [overflow-wrap:anywhere]`;
-const sectionActionClass = `${linkClass} ${linkColor} inline-flex min-h-11 min-w-11 max-w-full items-center rounded-sm py-2 text-sm font-medium whitespace-normal [overflow-wrap:anywhere] hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring`;
 
 /** What a row of related subjects needs from its page; the full relations view supplies the same fields. */
 export type RowValue = Pick<
@@ -212,38 +208,12 @@ function hasMore(count: Count | undefined, returned: number): boolean {
   return count !== undefined && (count.relation === 'lower_bound' || count.value > returned);
 }
 
-export function useOverview(id: unknown): { value: OverviewValue; section: Section | undefined } | null {
-  const value = useContext(OverviewContext);
-  if (!value) return null;
-  return { value, section: value.sections.get(typeof id === 'string' ? id : '') };
-}
-
 function subjectRead(section: Section | undefined): SubjectRead | undefined {
   if (!section?.ok || section.read.kind !== 'subject') return;
   const { body } = section;
   return isRecord(body.subject) && body.subject.id === section.read.id && isRecord(body.related)
     ? (body as unknown as SubjectRead)
     : undefined;
-}
-
-export function viewHref(value: OverviewValue, view: string, property?: string): string | null {
-  if (
-    value.agentBase !== undefined &&
-    property === undefined &&
-    (view === 'posts' || view === 'reviews' || view === 'collections')
-  )
-    return `${value.agentBase}/${view}`;
-  const href = value.subject
-    ? subjectViewHref(
-        { id: value.subject, label: value.subjectLabel || value.unlabelled },
-        value.locale,
-        view,
-        property === undefined ? '' : `?property=${encodeURIComponent(property)}`,
-      )
-    : null;
-  const realm = value.realm ?? (value.context?.population.kind === 'realm' ? value.context.population.id : undefined);
-  if (!href || !realm) return href;
-  return `${href}${href.includes('?') ? '&' : '?'}realm=${encodeURIComponent(realm)}`;
 }
 
 /** A native continuation belongs to exactly one configured node/property stream. */
@@ -312,88 +282,6 @@ function datedItems(items: Item[], locale: string): Item[] {
     const year = yearText(item.date, locale);
     return year ? { ...item, notes: [...item.notes, year] } : item;
   });
-}
-
-/** A preview section: a heading with its count, then the body, then a link to the full view when there is more. */
-export function Preview({
-  slot,
-  id,
-  title,
-  titleLang,
-  count,
-  more,
-  href,
-  locale,
-  children,
-}: {
-  slot: string;
-  id: string;
-  title: string;
-  titleLang?: string | undefined;
-  count?: Count | undefined;
-  more: boolean;
-  href: string | null;
-  locale: string;
-  children: ReactNode;
-}) {
-  return (
-    <section id={id} data-slot={slot} aria-labelledby={`${id}-title`} className={`${sectionClass} ${anchorClass}`}>
-      <div className="flex min-w-0 flex-col items-start gap-2 sm:flex-row sm:flex-wrap sm:items-baseline sm:justify-between sm:gap-x-4">
-        <div className="flex min-w-0 max-w-full flex-wrap items-baseline gap-x-3 gap-y-1 sm:flex-1">
-          <h2 id={`${id}-title`} lang={titleLang} className={sectionTitleClass}>
-            {title}
-          </h2>
-          {count && (
-            <span
-              data-slot="count"
-              className="max-w-full text-sm text-muted-foreground tabular-nums [overflow-wrap:anywhere]"
-            >
-              {formatCount(count, locale)}
-            </span>
-          )}
-        </div>
-        {more && href && (
-          <a data-slot="see-all" href={href} aria-describedby={`${id}-title`} className={sectionActionClass}>
-            {m.subject_view_all({ label: title }, { locale: locale as never })}
-          </a>
-        )}
-      </div>
-      {children}
-    </section>
-  );
-}
-
-/** A section whose read did not succeed says so with a retry; the rest of the page is unaffected. */
-export function Failed({
-  slot,
-  id,
-  title,
-  titleLang,
-  locale,
-}: {
-  slot: string;
-  id: string;
-  title: string;
-  titleLang?: string | undefined;
-  locale: string;
-}) {
-  const value = useContext(OverviewContext);
-  const section = value?.sections.get(id);
-  const failure = section && !section.ok ? section : {};
-  return (
-    <section
-      id={id}
-      data-slot={slot}
-      data-state="failed"
-      aria-labelledby={`${id}-title`}
-      className={`${sectionClass} ${anchorClass}`}
-    >
-      <h2 id={`${id}-title`} lang={titleLang} className={sectionTitleClass}>
-        {title}
-      </h2>
-      <PageReadState key={JSON.stringify(failure)} failure={failure} locale={locale} describedBy={`${id}-title`} />
-    </section>
-  );
 }
 
 function limitOf(props: Record<string, unknown>): number {
@@ -1889,13 +1777,23 @@ export function RatingSummary(props: Record<string, unknown>) {
   );
 }
 
+const emptyCommunityAuthors = {};
+
 function CommunityList({ kind, ...props }: Record<string, unknown> & { kind: 'review' | 'discussion' }) {
   const state = useOverview(props.id);
   const node = String(props.id);
   const data = useSubjectCommunity(kind, node);
   const subject = state?.value.subject;
+  const section = state?.section;
+  const fallbackBody = section?.ok ? section.body : undefined;
+  const fallbackRegion = useMemo(
+    () => composedCommunityRegion(fallbackBody !== undefined ? { status: 200, body: fallbackBody } : undefined),
+    [fallbackBody],
+  );
+  const standaloneNow = useRef<string | undefined>(undefined);
+  standaloneNow.current ??= new Date().toISOString();
   if (!state || !subject) return null;
-  const { value, section } = state;
+  const { value } = state;
   const view = kind === 'review' ? 'reviews' : 'discussion';
   const href = viewHref(value, view);
   if (!href) return null;
@@ -1907,9 +1805,9 @@ function CommunityList({ kind, ...props }: Record<string, unknown> & { kind: 're
         id={node}
         node={node}
         kind={kind}
-        region={data?.region ?? composedCommunityRegion(section?.ok ? { status: 200, body: section.body } : undefined)}
-        authors={data?.authors ?? {}}
-        now={data?.now ?? new Date().toISOString()}
+        region={data?.region ?? fallbackRegion}
+        authors={data?.authors ?? emptyCommunityAuthors}
+        now={data?.now ?? standaloneNow.current}
         subject={{ id: subject, label: value.subjectLabel ?? value.unlabelled }}
         locale={value.locale}
         href={href}

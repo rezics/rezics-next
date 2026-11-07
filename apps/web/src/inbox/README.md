@@ -31,6 +31,8 @@ waits stay independent. A failed or zero summary does not hide the loaded page o
 Inbox links to `/settings#notifications` for supported preferences. The thread watch toggle remains on its existing
 thread page; board subscription management remains in the existing Settings Watches section.
 
+**Decision:** Inbox publishes the same Library consumer port and adapter as Settings so the web-performance/web-library pair has one typed Collection/Shelf contract. Inbox pages do not mount Collection privacy or Shelf editors; `/settings` composition binds `adapters/library.ts` and `adapters/library-view.tsx`.
+
 **Decision:** Page reads and target navigation never imply acknowledgement; only the selected-item command or the
 owner-admitted displayed boundary may mark notices read. Unread continuation does not admit bulk mark-through.
 
@@ -93,3 +95,8 @@ window. Nested native disclosure and acknowledgement examined-work stay with Con
 list/disclosure/unread cases); composed Inbox work keeps the original command and read counts in diagnostic output and
 names Content's constant-row / logarithmic-block / 80-candidate list and 201-key unread window. Native database and
 Access history growth are owned by Content, not inferred from browser requests.
+
+Account integration follows Settings' [composed capability contract](../settings/README.md#composed-account-capabilities).
+Inbox does not import Accounts Profile pages or request implementations. Its notification account identity remains the
+immutable current viewer, independent of a managed Profile selection; account navigation never acknowledges a notice.
+The existing Inbox runtime, browser and growth walks remain their sole evidence owners.

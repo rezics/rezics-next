@@ -1,3 +1,4 @@
+import { renderPublicCollection } from '../src/search/public-collection-directory/presentation';
 import { afterAll, expect, mock, spyOn, test } from 'bun:test';
 import { dirname } from 'node:path';
 import { act, type ReactNode } from 'react';
@@ -44,7 +45,7 @@ const globals = {
 const previous = new Map(Object.keys(globals).map((key) => [key, Object.getOwnPropertyDescriptor(globalThis, key)]));
 for (const [key, value] of Object.entries(globals))
   Object.defineProperty(globalThis, key, { configurable: true, writable: true, value });
-const { readPublicCollectionPage } = await import('../src/library/public-collection-discovery/read');
+const { readPublicCollectionPage } = await import('../src/search/public-collection-directory/read');
 const { PublicCollectionDiscoveryPage } = await import('../src/library/public-collection-discovery/page');
 const { CollectionPage, CollectionReadMembers } = await import('../src/library/collection-page');
 const { DynamicCollectionPage } = await import('../src/library/dynamic-collection-page');
@@ -127,7 +128,13 @@ test('native public discovery leads to ordered/mixed and grid reading, with exac
       expect(cursor).toBe('opaque+/=');
       expect(result.status).toBe('ready');
       const discovery = renderToStaticMarkup(
-        <PublicCollectionDiscoveryPage locale={locale} state={result} onRetry={() => {}} onSelect={() => {}} />,
+        <PublicCollectionDiscoveryPage
+          renderCollection={renderPublicCollection}
+          locale={locale}
+          state={result}
+          onRetry={() => {}}
+          onSelect={() => {}}
+        />,
       );
       expect(discovery).toContain(`href="/${locale}/collections/${card.id}"`);
       expect(discovery).toContain('native-next%2B%2F%3D');

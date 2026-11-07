@@ -1362,7 +1362,7 @@ export async function readContentReadingPage(
   );
   const replies = selected.replies;
   requireSelectedLimit(thread, replies);
-  const mentions = await readReadingPageMentions(dependencies.pool, [thread.firstPost, ...replies]);
+  const mentions = await readReadingPageMentions(dependencies.pool, [thread.firstPost, ...replies], deadline);
   const reviewContextPreparation = await prepareReadingPageReviewContext(dependencies, thread, replies, {
     actor,
     deadline,

@@ -1,6 +1,6 @@
 import { useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { personalRead } from '../kernel/query';
+import { personalRead } from '../session/reading-policy';
 import { getLocale } from '../paraglide/runtime.js';
 import { PublishedLogPageView, type PublishedLogOrigin } from './log-page';
 import { readPublishedLogCurrent } from './logs-server';

@@ -1,17 +1,2 @@
-import type { DiscoveryPage } from '../discovery.ts';
-import type { PublicFilterCoveragePage } from '../public-filter-coverage-page.ts';
-
-/** Project every dependent value before the one CURRENT native page final.
- * The native root owns the closed plan, complete child chain and own-row sets;
- * returned hits and diagnostic readStatus are not disclosure authority.
- * Kind counts on the projected page must already be decided from this execution:
- * a disclosed sample never becomes an exact total after FINAL.
- */
-export async function finishDiscoveryDisclosure(
-  coverage: PublicFilterCoveragePage,
-  project: () => Promise<DiscoveryPage>,
-): Promise<DiscoveryPage> {
-  const page = await project();
-  await coverage.finish();
-  return page;
-}
+/** Native page projection and CURRENT final are owned by the Search application. */
+export { finishDiscoveryDisclosure } from '../disclosure-application.ts';

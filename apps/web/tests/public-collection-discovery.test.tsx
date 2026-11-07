@@ -1,3 +1,5 @@
+import { publicCollectionDiscoveryQueryOptions } from '../src/library/public-collection-discovery/query';
+import { renderPublicCollection } from '../src/search/public-collection-directory/presentation';
 import { afterAll, expect, mock, test } from 'bun:test';
 import { dirname } from 'node:path';
 import { createElement } from 'react';
@@ -13,8 +15,11 @@ import {
 } from '@tanstack/react-router';
 import { libraryNavigation } from '../src/library/navigation';
 import { PublicCollectionDiscoveryPage } from '../src/library/public-collection-discovery/page';
-import { publicCollectionDiscoveryRequest } from '../src/library/public-collection-discovery/request';
-import type { PublicCollectionDiscoveryState } from '../src/library/public-collection-discovery/read';
+import { publicCollectionDiscoveryRequest } from '../src/search/public-collection-directory/request';
+import type {
+  PublicCollectionDiscoveryState,
+  PublicCollectionSummary,
+} from '../src/search/public-collection-directory/read';
 import type { DiscoveryRequest } from '../src/search/discovery';
 import { getLocale, setLocale } from '../src/paraglide/runtime.js';
 import { resolveNavigation } from '../src/shell/navigation';
@@ -111,7 +116,7 @@ for (const [key, value] of Object.entries(globals))
   Object.defineProperty(globalThis, key, { configurable: true, writable: true, value });
 const { act } = await import('react');
 const { createRoot } = await import('react-dom/client');
-const { readPublicCollectionPage } = await import('../src/library/public-collection-discovery/read');
+const { readPublicCollectionPage } = await import('../src/search/public-collection-directory/read');
 const { Route } = await import('../src/routes/collections/index');
 const rootRoute = createRootRouteWithContext<{ queryClient: QueryClient }>()({ component: Outlet });
 const localeRoute = createRoute({ getParentRoute: () => rootRoute, path: '/$locale', component: Outlet });
@@ -276,7 +281,8 @@ test('an empty native continuation stays open and offers its exact next cursor',
     order: 'popular' as const,
   };
   const markup = renderToStaticMarkup(
-    createElement(PublicCollectionDiscoveryPage, {
+    createElement(PublicCollectionDiscoveryPage<PublicCollectionSummary>, {
+      renderCollection: renderPublicCollection,
       state: { status: 'ready', collections: [], next: 'next+/=', asOf: 'native-checkpoint' },
       locale: 'en',
       selection,
@@ -300,7 +306,8 @@ test('an empty native continuation stays open and offers its exact next cursor',
 
 test('a refused continuation has a localized first-page recovery link', () => {
   const markup = renderToStaticMarkup(
-    createElement(PublicCollectionDiscoveryPage, {
+    createElement(PublicCollectionDiscoveryPage<PublicCollectionSummary>, {
+      renderCollection: renderPublicCollection,
       state: { status: 'denied' },
       locale: 'en',
       cursor: 'refused-cursor',
@@ -473,4 +480,55 @@ afterAll(async () => {
     if (descriptor) Object.defineProperty(globalThis, key, descriptor);
     else Reflect.deleteProperty(globalThis, key);
   }
+});
+
+test('the consumer read port makes one bounded read with the exact public address and cancellation', async () => {
+  const signal = new AbortController().signal;
+  const calls: unknown[] = [];
+  const address = { presentationKind: 'mixed', order: 'popular' as const, cursor: 'opaque+/=%25' };
+  const refused: PublicCollectionDiscoveryState = { status: 'denied' };
+  const options = publicCollectionDiscoveryQueryOptions('ja', address, async (input) => {
+    calls.push(input);
+    return refused;
+  });
+  if (typeof options.queryFn !== 'function') throw new Error('Expected the directory read function');
+  const result = await options.queryFn({ signal } as never);
+  expect(result).toBe(refused);
+  expect(calls).toEqual([{ data: { locale: 'ja', ...address }, signal }]);
+  expect(options.queryKey).toEqual([
+    'public-collection-discovery',
+    'anonymous',
+    'ja',
+    'mixed',
+    null,
+    null,
+    'popular',
+    address.cursor,
+  ]);
+  expect(options.retry).toBe(false);
+  expect(options.refetchOnMount).toBe(false);
+  expect(options.refetchOnWindowFocus).toBe(false);
+});
+
+test('the native adapter retains refusal, preparing and empty as different outcomes without another query', async () => {
+  for (const [status, code, expected] of [
+    [403, 'forbidden', 'denied'],
+    [503, 'index_not_ready', 'not-ready'],
+  ] as const) {
+    let requests = 0;
+    const result = await readPublicCollectionPage('en', { cursor: 'exact+/=' }, async () => {
+      requests++;
+      return { status, error: { code } };
+    });
+    expect(result).toEqual({ status: expected });
+    expect(requests).toBe(1);
+  }
+  let requests = 0;
+  expect(
+    await readPublicCollectionPage('en', {}, async () => {
+      requests++;
+      return { status: 200, data: { hits: [], kinds: { values: [], next: null }, next: null, as_of: 'empty' } };
+    }),
+  ).toEqual({ status: 'ready', collections: [], next: null, asOf: 'empty' });
+  expect(requests).toBe(1);
 });

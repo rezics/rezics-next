@@ -5,12 +5,12 @@ import { isDeepStrictEqual } from 'node:util';
 import type { Pool, QueryResultRow } from 'pg';
 import { type Bound } from '@rezics/bounds';
 import { currentOperationalResources, hasLiveOperationalTransaction } from '../command/operational.ts';
-import { deadlineClient } from '../access/authenticate.ts';
+const deadlineClient = <T extends object>(client: T, deadline: number): T =>
+  requireLibraryDomain().authorization.deadlineClient(client, deadline);
 import { ProblemError } from '../http/problem.ts';
 import { routeOf } from '../route/route.ts';
-// Search work context is loaded on use: a static import leaves COLLECTION_SOURCE_WORK_COST
-// uninitialized during Collection Source / Members declaration cycles.
-import type { ScopeWorkContext } from '../search/scope-work-context.ts';
+import { requireLibraryDomain } from './domain-binding.ts';
+import type { ScopeWorkContext, NativeScopeWorkDefinition } from './adapters/preparation-work.ts';
 import type { Access } from '../request/access.ts';
 import {
   CANONICAL_SOURCE_RECEIVING_COST,
@@ -28,9 +28,7 @@ import type { CollectionSourceObservation } from './collection-source.ts';
 import type { WorkReceipt } from './contract/work-dimensions.ts';
 import type { NativeSourceIdentity } from './native-source-custody.ts';
 
-export type CollectionSourceWorkDefinition = Awaited<
-  ReturnType<(typeof import('../search/scope-work-context.ts'))['readScopeWorkDefinition']>
->;
+export type CollectionSourceWorkDefinition = NativeScopeWorkDefinition;
 export type CollectionSourceWorkState = Readonly<{
   metadata: NativeCollectionMetadata;
   basis: CanonicalBasis;
@@ -91,8 +89,10 @@ export async function readCollectionSourceWorkState(
 ): Promise<CollectionSourceWorkState> {
   const current = frame(options.deadline);
   try {
-    const { readScopeWorkDefinition } = await import('../search/scope-work-context.ts');
-    const native = await readScopeWorkDefinition(work, { pool, access: options.access, deadline: options.deadline });
+    if (!hasLiveOperationalTransaction(work.tx)) throw new ProblemError('semantic_not_ready');
+    const scopeWork = requireLibraryDomain().scopeWork;
+    if (!scopeWork) throw new ProblemError('dependency_unavailable');
+    const native = await scopeWork.readDefinition(work, { pool, access: options.access, deadline: options.deadline });
     if (!hasLiveOperationalTransaction(work.tx)) throw new ProblemError('semantic_not_ready');
     const resources = currentOperationalResources(work.tx);
     const source = native.sourceIdentity;

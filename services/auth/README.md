@@ -1020,7 +1020,13 @@ without a trailing slash, and tests use `https://api.rezics.test`. A local HTTP
 issuer does not permit an HTTP audience. Tokens retain the exact issuer and port;
 own-key assertions must target exactly `${issuer}/token`, including that port.
 Kernel may fetch HTTP public JWKS only on that same approved HTTP issuer origin.
-The local issuer tests use separate migrated Auth databases; kernel tests run
+A local walk stack therefore sets `AUTH_JWKS_URL` on that issuer origin and port;
+native Auth's port is transport, not a second allowed JWKS identity.
+Kernel's trusted `AuthenticationConfig.fetch` seam, installed from
+`REZICS_LOCAL_STACK_NATIVE_ORIGIN`, retrieves only that exact public document from
+native Auth while issuer pages are still deferred, forwarding jose's GET options
+and rejecting every other URL. Production URL validation is
+unchanged. The local issuer tests use separate migrated Auth databases; kernel tests run
 password signin, token issuance and public JWKS verification over real loopback
 sockets for all three approved hosts.
 
@@ -2586,6 +2592,30 @@ or consumer authority remains pending; age supplies neither. A failed body rolls
 back only the page checkpoint. Already committed exact retirements are idempotent
 on replay, using the saved cut. Only the two closed counts-only maintenance workflow
 names use direct SDK deletion. They create no personal request binding.
+
+### Application boundary
+
+Decision: retention vocabulary, admission bounds and nested dispatch prices live in the pure
+`src/contract` and `src/core` modules. `src/application` orchestrates workflow preparation,
+retirement and checkpoint recovery through ports; its cursor is the SDK producer's opaque
+continuation. `retention-store.ts` owns only SQL transactions and the singleton lock, and never
+imports orchestration. SQL request effects and SDK scanning live in `src/adapters`.
+`retention.ts` composes those effects; service assembly binds the existing `completeCopy` /
+`eraseCopy` capability once for both manual and scheduled maintenance. No second SDK writer
+or retirement implementation is introduced.
+
+Signing maintenance uses its own generation CAS and occupied-slot result through the pure
+signing port/error vocabulary; key storage, raw-key custody and the 990-second horizon remain
+in `signing.ts`. Request retirement uses the caller's existing copy transaction, exact versioned
+binding and original native terminal-consumer proof. Neither workflow age nor an SDK status
+substitutes for that proof. Workflow, signing, request and website protocol stores retain their
+independent policies.
+
+Decision: keep the existing native lifecycle, terminal, funding and permanent uncertain-COMMIT
+assertions. Focused fake-port cases in `test/retention-application.test.ts` pin saved-horizon
+replay, pending-consumer continuation, signing admission and partial request evidence without
+loading SQL/SDK effects. Worker acceptance is Auth typing only; Accounts retains native,
+retirement, retention and growth receiving after integration.
 
 ### Cost derivation
 

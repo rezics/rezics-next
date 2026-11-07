@@ -14,6 +14,10 @@ import {
   SEARCH_SCOPE_ORDINAL_OPERATION,
 } from '../../src/search/service-scope-order.ts';
 import { createSearchScopeForService } from '../../src/search/service-scope.ts';
+import { bindSearchLibraryScopePort } from '../../src/search/scope-application.ts';
+import { createSearchLibraryScopePort } from '../../src/composition/search-library.ts';
+
+bindSearchLibraryScopePort(createSearchLibraryScopePort());
 
 const nativePreconnect = globalThis.fetch.preconnect;
 

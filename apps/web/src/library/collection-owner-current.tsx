@@ -8,7 +8,7 @@ import {
   type ViewerExposure,
   type ViewerObservation,
 } from '../kernel/viewer-exposure';
-import { sessionQuery, useSession } from '../session/query';
+import { sessionQuery, useSession } from '../session';
 import { getLocale } from '../paraglide/runtime.js';
 
 type Session = { state?: string; subject?: string | null; csrfToken?: string | null };

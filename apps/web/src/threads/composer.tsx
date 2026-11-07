@@ -1,4 +1,4 @@
-import { sessionCsrfToken, sessionQuery } from '../session/query';
+import { sessionCsrfToken, sessionQueryKey, type BrowserSession } from '../reader/lifetime/index';
 import { QueryClientContext } from '@tanstack/react-query';
 import {
   documentText,
@@ -64,7 +64,7 @@ function useComposerLifetime() {
   const [, renderRetired] = useState(false);
   const [lifetime] = useState(() => {
     const identity = () => {
-      const session = client?.getQueryData(sessionQuery.queryKey);
+      const session = client?.getQueryData<BrowserSession>(sessionQueryKey);
       return JSON.stringify([session?.state ?? 'unknown', session?.subject ?? null]);
     };
     const owner = identity();
@@ -132,7 +132,7 @@ function useComposerUpload(
   const client = useContext(QueryClientContext);
   const current = useRef(() => ({ target, session: null }) as import('./media-upload-recovery').ReplyUploadContext);
   current.current = () => {
-    const session = client?.getQueryData(sessionQuery.queryKey);
+    const session = client?.getQueryData<BrowserSession>(sessionQueryKey);
     return {
       target,
       session:
@@ -243,7 +243,7 @@ function useDraftMediaCheck(
     const owner = lifetime.controller.signal;
     active.current = controller;
     const context = JSON.stringify(target);
-    const session = client?.getQueryData(sessionQuery.queryKey);
+    const session = client?.getQueryData<BrowserSession>(sessionQueryKey);
     setChecking(true);
     let media: DraftMediaState[];
     try {
@@ -256,7 +256,7 @@ function useDraftMediaCheck(
       body.current === snapshot &&
       latest.current.failure === failure &&
       JSON.stringify(latest.current.target) === context &&
-      client?.getQueryData(sessionQuery.queryKey) === session
+      client?.getQueryData<BrowserSession>(sessionQueryKey) === session
     )
       update(mediaAfterRefusal(media, snapshot, owned.current));
     setChecking(false);
@@ -637,7 +637,7 @@ function PostComposerContent<T, Context = undefined>({
   const [submitting, setSubmitting] = useState(false);
   const submittingRef = useRef(false);
   const sessionClient = useContext(QueryClientContext);
-  const session = sessionClient?.getQueryData(sessionQuery.queryKey);
+  const session = sessionClient?.getQueryData<BrowserSession>(sessionQueryKey);
   const commandContext = JSON.stringify([containerId, boardId, session?.subject, session?.csrfToken]);
   const uncertainChanged = !replyIntent.current.canPrepare(
     {
@@ -1422,7 +1422,7 @@ function InlinePostEditorContent({
   const reuploading = useRef(new Map<string, symbol>());
   const editIntent = useRef(new ReplyIntent(idempotencyKey));
   const sessionClient = useContext(QueryClientContext);
-  const session = sessionClient?.getQueryData(sessionQuery.queryKey);
+  const session = sessionClient?.getQueryData<BrowserSession>(sessionQueryKey);
   const commandContext = (action: 'save' | 'publish') =>
     JSON.stringify([containerId, revisionId, session?.subject, session?.csrfToken, action]);
   const uncertainChanged = !editIntent.current.canPrepare(

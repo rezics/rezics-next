@@ -4,9 +4,12 @@
 [filtered lists](../../../../docs/filtered-lists.md) own behavior.
 
 `http.ts` mounts `GET /v1/zones/{id}/collections`, `GET /v1/zones/{id}/subjects` and one `zone.read_page` composition in `page-runtime.ts`.
-The mounted Collection summary route uses the requesting Actor's current Zone `zone:read` admission, then the
-existing `zone_sources` gate and each Collection owner's `readCollection` projection. It returns only the
-currently readable summaries in configured mount order. Hidden mounts add no output or cursor position.
+Zone membership work and mounted Collection reads go through `collection-port.ts`. `composeZoneCollection` and `zoneRoutes`
+bind `library/zone-collection-adapter.ts`, which supplies `CollectionSourceLedger`, `readCollection`, `collectionReadView`
+and `collectionResourceSchema`. `ZoneWorkLedger` wraps that host at call time. The mounted Collection summary route uses
+the requesting Actor's current Zone `zone:read` admission, then the existing `zone_sources` gate and each Collection
+owner's `readCollection` projection through the port. It returns only the currently readable summaries in configured
+mount order. Hidden mounts add no output or cursor position.
 Kernel supplies the same optional real Search service used by Search routes, native Access, routing key, clock
 and Accounts key ring. Static documents with no planned reads take the original independent 200 path.
 Source-dependent and direct-subject reads first use current Zone authority and native
@@ -53,7 +56,7 @@ list, not the Zone's UUID Subject union.
 
 The cursor uses the default list profile and binds method, Zone, viewer and limit. Its locator is the last
 disclosed Collection ID plus current Zone and lifecycle revisions; each request re-reads every configured mount
-through `createCollectionReads().readCollection`. Only a native `not_found` is omitted. Other owner errors,
+through the bound Collection read port. Only a native `not_found` is omitted. Other owner errors,
 including unavailable reads with their original Retry-After, abort the whole response. A first and final Zone
 basis read and two serial source passes revalidate mount configuration, visibility, owner activity, Collection
 permissions and safe summaries before returning `{collections,next}`. No Collection members, owner predicates or

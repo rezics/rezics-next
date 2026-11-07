@@ -24,38 +24,42 @@ with the real `acknowledgeErasure` command. Normal startup and the isolated nati
 local Access completion remains distinct from pending shared-history custody. Live-copy discovery binds the same
 Work execution contract as server and worker on each client it opens; there is no process-global client.
 
-Decision: Content and Library present contribution owners through Access `contribution-attribution.ts` and
-`public-identity.ts`. Contribution attribution is nullable: missing, pending and unavailable identity are `null`,
-not evidence of deletion. `contributionDeleted` requires an explicit deletion label with no id; an id-free
-partial view alone never establishes deletion. The live variant retains `id`, `kind` and nullable `displayName`; only an authoritative
-deleted account produces a label-only `Deleted account` or `Deleted organization`. `readContributionAttributions` deduplicates page owners and reads at most 100 Account anchors per batch.
-Native agent attribution reads
-the exact bounded Semantic owner relation through the bound `IdentitySemanticPort` and confirms the anchored Account;
-it never manufactures a deleted state when that read is absent. `public-identity.ts` does not value-import
-`account-data.ts` or Semantic `access-capabilities.ts`; the removed return path is
-`index.ts → public-identity.ts → account-data.ts → semantic/access-capabilities.ts → identity-adapters/index.ts`. Consumers keep command ownership separate from
-this presentation and retain revision, SHA, licence, references and body availability under current disclosure.
-They do not import Access internals, Platform pool helpers or Semantic agent tables.
+Decision: Content and Library consume `contribution-attribution.ts` and `public-identity.ts`; immutable authorship
+stays separate from current presentation and command ownership. Missing, pending and unavailable attribution is
+null. Only an authoritative tombstone produces an id-free Deleted account/organization label; partial identity
+cannot establish deletion. Batches deduplicate at most 100 owners. Agent attribution confirms the exact Semantic
+relation and anchored Account through `IdentitySemanticPort`; absent subject overlay stays null. Public identity
+imports neither private account-data nor Semantic recovery/Source maintenance. Revision, SHA, licence, references
+and readable bodies retain native disclosure. Progress uses the public resource-access and unavailable errors.
 
-Decision: Kernel Access is split into `contract`, `core`, `application` and adapter modules. Vocabulary and finite
-bounds live in `access/contract`. Pure authorization, original-work and Kind-audience rules live in `access/core`.
-Use cases consume Access-owned ports in `access/application`. Native adapters in `access/adapters/native.ts` implement
-those ports by calling Content, Community, Library and Search public capability facades and the focused Semantic
-entries for Account/agent mapping (`semantic/agents.ts`), original recovery, read snapshots, Source custody and
-maintenance. Public account reads import mapping from `semantic/agents.ts` so recovery and Source-maintenance
-implementations stay out of that value graph. `createKernel`/`server`/`worker` bind the ports through
-`composition/access.ts`. Contract, core and application import no downstream domain behaviour. Tests pin allow/deny,
-identity recovery with the original actor/request/deadline, and original-work admission against fake ports without
-loading native adapters; growth membership remains the native bounded-work check. Contribution attribution remains
-nullable for missing, pending and unavailable identity; only an anchored Account tombstone is deletion.
+Decision: `contract/reading.ts` owns active/deleted/unknown reading identity observations. The native reading adapter
+uses the caller's pool, route-first public projection and original optional deadline, returning explicit unavailable
+for known native failures and throwing unexpected errors. Missing rows are unknown; failures are never empty
+success or deletion. `composition/content.ts` adapts these producer contracts to Content reading applications for
+normal server/worker/preload construction. It adds no lookup, cache or authority. Media uses the same bounded
+observation to distinguish an expired producer read from complete empty evidence; HTTP mapping remains in Content's
+existing transport boundary. Existing Account, grant and contribution policies and native cost bounds remain.
 
-Public entries: `access/contract/index.ts`, `access/core/index.ts`, `access/application/index.ts`,
-`access/adapters/index.ts`, `access/contribution-attribution.ts`, `access/public-identity.ts`, plus the
-existing Access adapter facades. Ports: `AvatarMediaPort`,
-`RealmAdministrationPort`, `IdentitySemanticPort`, `IdentityRecoveryStorePort`, `IdentityRetentionPort`,
-`KindAudienceLibraryPort`, `OriginalWorkPort`, `SearchErasurePort`, `NativeErasureCoordinatorPort`,
-`ResourceAuthorizationPort`. Wiring adds no
-query, scan or extra statement; native cost stays with the existing producer declarations.
+Decision: Access contracts own vocabulary/bounds; core owns pure authorization, original-work and Kind-audience
+rules; application owns use cases over Access ports. Native adapters implement them through public producer entries.
+`composition/access.ts` binds the application and `AgentIdentityMaintenancePort` for ordinary createKernel, server,
+worker and native preload. Unbinding Access clears both; isolated overrides return a disposer.
+
+Agent verification, retained technical Source, recovery, publication and reversal consume that Access-owned native
+capability from `adapters/bind.ts`. Its Semantic producer is `semantic/adapters/agent-identity-maintenance.ts`.
+Access imports neither Semantic maintenance/terminal behavior nor private SQL. The producer owns accepted-binding
+and retained-reference SQL, published-scope reads and their exact declarations. It validates the original opaque
+accepted binding, never substitutes active admission. Terminal commands retain original fencing, bounded drain,
+release and recovery. Pool, authority, deadline, native receipt, work vector and original-home custody pass to the
+existing producers. Cross-domain declarations are requested only during the admitted operation. Source/Core/owner
+prices and technical fallback remain unchanged; pure schedule/error vocabulary lives in Semantic contract leaves.
+
+Contract, core and application load no downstream behavior. Existing application ports keep their owners;
+public identity stays nullable until the anchored Account proves deletion.
+
+Acceptance choice: retain existing verification, reversal, recovery and source-work assertions; focused capability
+tests pin exact receipt/Pool/deadline forwarding, error identity and scoped reset. Native composition supplies the
+producer declarations. Typing is the worker gate; runtime journeys remain with the integrated Goal walks.
 
 ## Pure policy core consumer
 

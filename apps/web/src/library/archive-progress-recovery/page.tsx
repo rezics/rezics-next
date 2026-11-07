@@ -1,7 +1,6 @@
-import { QueryClientContext } from '@tanstack/react-query';
+import { useRecoveryLifetime } from '../recovery-lifetime';
 import { useLocation } from '@tanstack/react-router';
-import { useContext, useEffect, useReducer, useState, useSyncExternalStore } from 'react';
-import { exposureQuery, sessionQuery } from '../../session/query';
+import { useEffect, useReducer, useState } from 'react';
 import { m } from '../../paraglide/messages.js';
 import { getLocale, localizeHref } from '../../paraglide/runtime.js';
 import { PageHeading } from '../../shell/page-heading';
@@ -25,58 +24,42 @@ type View = Snapshot<ProgressChoices>;
 const uuid = '[0-9a-fA-F]{8}(-[0-9a-fA-F]{4}){3}-[0-9a-fA-F]{12}';
 
 export function ArchiveProgressRecoveryPage() {
-  const client = useContext(QueryClientContext);
   const location = useLocation();
-  const routeAddress = location.pathname + location.searchStr;
+  const scope = useRecoveryLifetime(location.pathname + location.searchStr, getLocale());
   const [, update] = useReducer((n) => n + 1, 0);
-  const [journey, setJourney] = useState<Journey | null>(null);
-  const identity = () =>
-    JSON.stringify([
-      client?.getQueryData(sessionQuery.queryKey),
-      client?.getQueryData(exposureQuery.queryKey),
-      getLocale(),
-    ]);
-  const binding = useSyncExternalStore(
-    (listener) => client?.getQueryCache().subscribe(listener) ?? (() => {}),
-    identity,
-    () => '',
-  );
+  const [owned, setJourney] = useState<{ scope: typeof scope; journey: Journey } | null>(null);
+  const journey = owned?.scope === scope ? owned.journey : null;
   useEffect(() => {
-    const session = client?.getQueryData<{ state: string; subject?: string; csrfToken?: string }>(
-      sessionQuery.queryKey,
-    );
-    if (session?.state !== 'signed-in' || !session.subject || !session.csrfToken) return;
-    let active = true,
-      mounted: Journey | undefined;
-    const address = window.location.pathname + window.location.search;
+    if (!scope.subject || !scope.csrfToken || !scope.current()) return;
+    let active = true;
+    let mounted: Journey | undefined;
     const current = () =>
-      active && binding === identity() && address === window.location.pathname + window.location.search;
-    void browserProgressRecoveryPort({ expectedReader: session.subject, expectedCredential: session.csrfToken }).then(
+      active && scope.current() && scope.address === window.location.pathname + window.location.search;
+    const stop = scope.onRetire(() => mounted?.retire());
+    void browserProgressRecoveryPort({ expectedReader: scope.subject, expectedCredential: scope.csrfToken }).then(
       (port) => {
         if (!current()) return;
-        mounted = new ProgressRecoveryJourney(port, JSON.stringify([binding, address]), current, update);
-        setJourney(mounted);
+        mounted = new ProgressRecoveryJourney(port, crypto.randomUUID(), current, update);
+        setJourney({ scope, journey: mounted });
       },
     );
     return () => {
       active = false;
+      stop();
       mounted?.retire();
     };
-  }, [client, binding, routeAddress]);
+  }, [scope]);
   const snap = journey?.snapshot();
-  if (!journey || !snap)
+  if (!scope.current() || !journey || !snap)
     return (
       <main className="p-6">
         <p role="status">{m.library_archive_progress_preparing()}</p>
       </main>
     );
-  return <RecoveryJourney key={binding + routeAddress} journey={journey} snap={snap} />;
+  return <RecoveryJourney key={scope.address + scope.csrfToken} journey={journey} snap={snap} owner={scope.subject} />;
 }
 
-function RecoveryJourney({ journey, snap }: { journey: Journey; snap: View }) {
-  const client = useContext(QueryClientContext);
-  const session = client?.getQueryData<{ subject?: string }>(sessionQuery.queryKey);
-  const owner = session?.subject;
+function RecoveryJourney({ journey, snap, owner }: { journey: Journey; snap: View; owner: string | null }) {
   if (owner) bindArchiveCustodyOwner(owner);
   const completed = owner ? completedArchiveFor(owner) : null;
   const [consent, setConsent] = useState('');

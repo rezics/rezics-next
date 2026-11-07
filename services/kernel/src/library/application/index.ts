@@ -28,3 +28,11 @@ export function createLibraryApplications(
     entryProgress: createEntryProgressApplication(capabilities),
   };
 }
+
+export {
+  createFollowCountReadApplication,
+  deliverFollowCountApplication,
+  runFollowCountPartition,
+} from './follow-counts.ts';
+
+export { createCollectionMutationApplication } from './collection-mutation.ts';

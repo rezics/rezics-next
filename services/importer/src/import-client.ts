@@ -37,6 +37,10 @@ import {
   MAX_IMPORT_WAIT_MS,
   MAX_IMPORT_TOTAL_WAIT_MS,
   type ImportHttpOptions,
+  importCorrelationId,
+  importRequestFailure,
+  importResponseDiagnostics,
+  type ImportRequestDiagnostics,
   type ImportRetryState,
 } from './import-fetch.ts';
 import {
@@ -246,6 +250,13 @@ export type ImportTransportPhase = 'readiness' | 'merge403' | 'SubjectGET503';
 
 /** Error diagnostics retain only the HTTP classifier, never remote bodies or credentials. */
 export class ImportTransportError extends Error {
+  readonly method: string | undefined;
+  readonly origin: string | undefined;
+  readonly path: string | undefined;
+  readonly failurePhase: ImportRequestDiagnostics['phase'] | undefined;
+  readonly networkCode: string | undefined;
+  readonly correlationId: string | undefined;
+
   constructor(
     readonly status?: number,
     readonly type?: string,
@@ -253,39 +264,72 @@ export class ImportTransportError extends Error {
     readonly retryable = false,
     readonly retry?: ImportRetryState,
     readonly phase?: ImportTransportPhase,
+    diagnostics: Partial<ImportRequestDiagnostics> & { cause?: unknown } = {},
   ) {
-    super(phase ? `Import transport request failed at ${phase}` : 'Import transport request failed');
+    super(phase ? `Import transport request failed at ${phase}` : 'Import transport request failed', {
+      cause: diagnostics.cause,
+    });
     this.name = 'ImportTransportError';
+    this.method = diagnostics.method;
+    this.origin = diagnostics.origin;
+    this.path = diagnostics.path;
+    this.failurePhase = diagnostics.phase;
+    this.networkCode = diagnostics.networkCode;
+    this.correlationId = diagnostics.correlationId;
   }
+}
+function copiedDiagnostics(error: ImportTransportError): Partial<ImportRequestDiagnostics> & { cause?: unknown } {
+  return {
+    ...(error.method === undefined ? {} : { method: error.method }),
+    ...(error.origin === undefined ? {} : { origin: error.origin }),
+    ...(error.path === undefined ? {} : { path: error.path }),
+    ...(error.failurePhase === undefined ? {} : { phase: error.failurePhase }),
+    ...(error.networkCode === undefined ? {} : { networkCode: error.networkCode }),
+    ...(error.correlationId === undefined ? {} : { correlationId: error.correlationId }),
+    cause: error.cause,
+  };
 }
 type ClientResponse = { status: number; data: unknown; error: unknown; response?: Response };
 function httpFailure(reply: ClientResponse): ImportTransportError {
   // Only public problem identifiers are useful to callers. No remote diagnostic text is retained.
-  const value: unknown =
-    typeof reply.error === 'object' && reply.error !== null && !types.isProxy(reply.error)
-      ? Object.getOwnPropertyDescriptor(reply.error, 'value')?.value
-      : undefined;
-  const type =
-    typeof value === 'object' && value !== null && 'type' in value && typeof value.type === 'string'
-      ? value.type
-      : undefined;
+  const outer =
+    typeof reply.error === 'object' && reply.error !== null && !types.isProxy(reply.error) ? reply.error : undefined;
+  const nested = outer === undefined ? undefined : Object.getOwnPropertyDescriptor(outer, 'value')?.value;
+  const value =
+    typeof nested === 'object' && nested !== null && !types.isProxy(nested) ? nested : (outer as object | undefined);
+  const field = (name: string): unknown =>
+    value && !types.isProxy(value) ? Object.getOwnPropertyDescriptor(value, name)?.value : undefined;
+  const type = field('type');
   const safeType =
     type === 'about:blank' ||
-    (type !== undefined && /^https:\/\/rezics\.com\/problems\/[a-z0-9_-]{1,80}(?![\s\S])/.test(type))
+    (typeof type === 'string' && /^https:\/\/rezics\.com\/problems\/[a-z0-9_-]{1,80}$/u.test(type))
       ? type
       : undefined;
-  const field = (name: string): unknown =>
-    typeof value === 'object' && value !== null && !types.isProxy(value)
-      ? Object.getOwnPropertyDescriptor(value, name)?.value
-      : undefined;
   const code = field('code');
-  const safeCode = typeof code === 'string' && /^[a-z0-9_-]{1,80}$/.test(code) ? code : undefined;
+  const safeCode = typeof code === 'string' && /^[a-z0-9_-]{1,80}$/u.test(code) ? code : undefined;
+  const request = reply.response ? importResponseDiagnostics(reply.response) : undefined;
+  let fallback: { origin?: string; path?: string } = {};
+  if (reply.response?.url) {
+    try {
+      const url = new URL(reply.response.url);
+      fallback = { origin: url.origin.slice(0, 256), path: url.pathname.slice(0, 512) };
+    } catch {
+      // A generated response can omit or malformedly report its URL; keep the safe envelope partial.
+    }
+  }
+  const correlationId = reply.response ? (request?.correlationId ?? importCorrelationId(reply.response)) : undefined;
   return new ImportTransportError(
-    reply.response?.status,
+    reply.response?.status ?? (reply.status > 0 ? reply.status : undefined),
     safeType,
     safeCode,
     field('retryable') === true,
     reply.response ? importRetryState(reply.response) : undefined,
+    undefined,
+    {
+      ...(request ?? fallback),
+      phase: reply.response ? 'http' : 'response',
+      ...(correlationId === undefined ? {} : { correlationId }),
+    },
   );
 }
 async function response(
@@ -297,9 +341,19 @@ async function response(
   let reply: ClientResponse;
   try {
     reply = await call();
-  } catch {
+  } catch (error) {
     signal?.throwIfAborted();
-    throw new ImportTransportError();
+    const diagnostics = importRequestFailure(error);
+    if (diagnostics) {
+      throw new ImportTransportError(undefined, undefined, undefined, false, undefined, undefined, {
+        ...diagnostics,
+        cause: error,
+      });
+    }
+    throw new ImportTransportError(undefined, undefined, undefined, false, undefined, undefined, {
+      phase: 'network',
+      cause: error,
+    });
   }
   signal?.throwIfAborted();
   if (
@@ -764,6 +818,7 @@ export function createImportTransport(options: ImportTransportOptions) {
               error.retryable,
               error.retry,
               error.type === 'https://rezics.com/problems/semantic_not_ready' ? 'readiness' : 'SubjectGET503',
+              copiedDiagnostics(error),
             );
           throw error;
         }
@@ -823,7 +878,15 @@ export function createImportTransport(options: ImportTransportOptions) {
       return result;
     } catch (error) {
       if (error instanceof ImportTransportError && error.status === 403)
-        throw new ImportTransportError(403, error.type, error.code, false, error.retry, 'merge403');
+        throw new ImportTransportError(
+          403,
+          error.type,
+          error.code,
+          false,
+          error.retry,
+          'merge403',
+          copiedDiagnostics(error),
+        );
       throw error;
     }
   }

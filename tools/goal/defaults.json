@@ -466,11 +466,12 @@
       "runRows": 5000,
       "concurrency": 3,
       "findingAssertions": 64,
-      "existingProbes": 8,
       "diagnosticCharacters": 6000,
-      "gitBufferBytes": 33554432,
       "residentPollMs": 60000,
-      "bootSmokeTimeoutMs": 120000
+      "bootSmokeTimeoutMs": 120000,
+      "roundIntervalMs": 3600000,
+      "roundDeadlineMs": 3300000,
+      "maxSelectionCommits": 1000
     },
     "pageData": {
       "intervalMs": 7200000,

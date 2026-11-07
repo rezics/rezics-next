@@ -11,21 +11,23 @@ import {
 import { pickText } from '@rezics/composition';
 import { buttonVariants } from '@rezics/ui/shadcn/button';
 import { m } from '../../../paraglide/messages.js';
-import { subjectHref, subjectUrlForView } from '../../../subject/subject-href';
+import { subjectHref, subjectUrlForView } from '../../../subject/load-subject';
 import { contextHref } from '../../pages/context-navigation';
-import type { SubjectRead } from '@rezics/client';
 import { useSubjectCommunityReading } from '../../pages/subject-community-lifetime';
 import { spoilerLevel } from '../../pages/shared';
 import { SpoilerGate } from '../../pages/values';
 import { profileSourceRecords } from '../music-reader';
-import type { GameReaderAddress, GameReaderRead, GameReaderReady, GameReaderTransport, GameStatement } from './model';
+import type { GameReaderAddress, GameReaderRead, GameReaderTransport, GameStatement } from './model';
+import { WorkReadingProvider, useWorkReading, type WorkReadingPort } from '../work-reading-port';
 
 import { action, linkClass } from './reading/controls';
+import { WorkReleaseComparison } from './reading/comparison';
 import { GameFact, GameEvidence } from './reading/evidence';
 import { useEditionWindow } from './reading/window';
 import { useReaderFocus } from './reading/focus';
 import { EditionInspection, type EditionSelection } from './reading/edition';
 import { RetiredReading, SafeNavigation } from './reading/recovery';
+import { gameReaderReturnMessage, resolveGameReaderReturn } from './reading/return';
 import type { GameClassificationReturn } from '../game-current-visit-descriptor';
 
 type Props = GameReaderAddress & {
@@ -39,6 +41,7 @@ type Props = GameReaderAddress & {
   transport: GameReaderTransport;
   initial?: GameReaderRead;
   refresh?: () => Promise<void>;
+  reading?: WorkReadingPort;
 };
 
 /** Source and authority replacement retire the entire window, its cursors, reveal consent and focus intent. */
@@ -121,132 +124,54 @@ export function GameReader(props: Props) {
     }
   }, [reading.key, reading.available, returnKey, props.returnSelection]);
   const o = { locale: props.locale as never };
+  const port = useWorkReading(props.reading);
   return (
-    <section
-      ref={section}
-      data-slot="game-reader"
-      aria-labelledby={id}
-      className="min-w-0 space-y-4 [overflow-wrap:anywhere]"
-      onFocusCapture={(event) => {
-        focused.current = keyboard.current ? event.target : null;
-      }}
-    >
-      <h2
-        id={id}
-        ref={heading}
-        tabIndex={-1}
-        className="text-xl font-semibold focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+    <WorkReadingProvider port={port}>
+      <section
+        ref={section}
+        data-slot="game-reader"
+        aria-labelledby={id}
+        className="min-w-0 space-y-4 [overflow-wrap:anywhere]"
+        onFocusCapture={(event) => {
+          focused.current = keyboard.current ? event.target : null;
+        }}
       >
-        {m.game_reader_title({}, o)}
-      </h2>
-      {reading.available ? (
-        <GameWindow
-          key={reading.key}
-          {...props}
-          current={reading.isCurrent}
-          focusHeading={() => heading.current?.focus()}
-          focusAssertion={(statement) => {
-            const target = [
-              ...(section.current?.querySelectorAll<HTMLElement>('[data-game-current-assertion]') ?? []),
-            ].find((node) => node.dataset.gameCurrentAssertion === statement);
-            if (!target) return false;
-            target.focus();
-            return true;
-          }}
-          returnFocusActive={() => returnFocus.current.active && returnFocus.current.key === returnKey}
-          completeReturnFocus={() => {
-            returnFocus.current.active = false;
-          }}
-        />
-      ) : (
-        <>
-          {props.returnSelection ? <p role="status">{m.game_visit_selection_unavailable({}, o)}</p> : null}
-          <RetiredReading {...props} />
-        </>
-      )}
-    </section>
+        <h2
+          id={id}
+          ref={heading}
+          tabIndex={-1}
+          className="text-xl font-semibold focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+        >
+          {m.game_reader_title({}, o)}
+        </h2>
+        {reading.available ? (
+          <GameWindow
+            key={reading.key}
+            {...props}
+            current={reading.isCurrent}
+            focusHeading={() => heading.current?.focus()}
+            focusAssertion={(statement) => {
+              const target = [
+                ...(section.current?.querySelectorAll<HTMLElement>('[data-game-current-assertion]') ?? []),
+              ].find((node) => node.dataset.gameCurrentAssertion === statement);
+              if (!target) return false;
+              target.focus();
+              return true;
+            }}
+            returnFocusActive={() => returnFocus.current.active && returnFocus.current.key === returnKey}
+            completeReturnFocus={() => {
+              returnFocus.current.active = false;
+            }}
+          />
+        ) : (
+          <>
+            {props.returnSelection ? <p role="status">{m.game_visit_selection_unavailable({}, o)}</p> : null}
+            <RetiredReading {...props} />
+          </>
+        )}
+      </section>
+    </WorkReadingProvider>
   );
-}
-
-type GameReaderReturnResult =
-  | {
-      kind:
-        | 'pending'
-        | 'changed'
-        | 'removed'
-        | 'concealed'
-        | 'unavailable'
-        | 'withheld'
-        | 'unknown'
-        | 'no-value'
-        | 'unsupported';
-    }
-  | { kind: 'current'; statement: GameStatement };
-
-function resolveGameReaderReturn(
-  props: Pick<Props, 'id' | 'context' | 'type' | 'locale' | 'realm' | 'reader' | 'spoiler'>,
-  selection: GameClassificationReturn,
-  page: GameReaderReady | undefined,
-  failure: GameReaderRead | undefined,
-): GameReaderReturnResult {
-  if (
-    selection.holder.toLowerCase() !== props.id.toLowerCase() ||
-    selection.context !== props.context ||
-    selection.type !== props.type ||
-    selection.locale !== props.locale ||
-    selection.realm !== props.realm ||
-    selection.reader !== props.reader
-  )
-    return { kind: 'changed' };
-  if (!page) {
-    if (!failure) return { kind: 'pending' };
-    if (failure.ok) return { kind: 'pending' };
-    return failure.reason === 'withheld'
-      ? { kind: 'withheld' }
-      : failure.reason === 'invalid'
-        ? { kind: 'unknown' }
-        : failure.reason === 'restart'
-          ? { kind: 'changed' }
-          : { kind: 'unavailable' };
-  }
-  if (
-    page.public.subject.id !== props.id ||
-    page.public.subject.context !== props.context ||
-    page.public.subject.type !== props.type ||
-    page.digest !== selection.release
-  )
-    return { kind: 'changed' };
-  if (!page.admitted) return { kind: 'unsupported' };
-  if (!page.labels[selection.property]) return { kind: 'unknown' };
-  const classification = page.groups.find((group) => group.id === 'classification');
-  const field = classification?.fields.find((candidate) => candidate.property === selection.property);
-  if (!field) return { kind: 'unsupported' };
-  if (!field.statements.length) return { kind: 'no-value' };
-  const statement = field.statements.find((candidate) => candidate.id === selection.statement);
-  if (!statement) return { kind: 'removed' };
-  if (spoilerLevel(statement) > (props.spoiler ?? 0)) return { kind: 'concealed' };
-  return { kind: 'current', statement };
-}
-
-function gameReaderReturnMessage(
-  kind: Exclude<GameReaderReturnResult['kind'], 'pending' | 'current'>,
-  o: { locale: never },
-) {
-  return kind === 'changed'
-    ? m.game_visit_selection_changed({}, o)
-    : kind === 'removed'
-      ? m.game_visit_selection_removed({}, o)
-      : kind === 'concealed'
-        ? m.game_visit_selection_concealed({}, o)
-        : kind === 'unavailable'
-          ? m.game_visit_selection_unavailable({}, o)
-          : kind === 'withheld'
-            ? m.game_visit_selection_withheld({}, o)
-            : kind === 'unknown'
-              ? m.game_visit_selection_unknown({}, o)
-              : kind === 'no-value'
-                ? m.game_visit_selection_no_value({}, o)
-                : m.game_visit_selection_unsupported({}, o);
 }
 
 function GameWindow({
@@ -654,90 +579,5 @@ function GameWindow({
         </div>
       ) : null}
     </div>
-  );
-}
-
-type WorkReleaseCardView = Extract<
-  NonNullable<GameReaderReady['workReleaseCards']>,
-  { state: 'available' }
->['cards'][number];
-type WorkReleaseCardProperty = keyof WorkReleaseCardView['fields'];
-
-function WorkReleaseComparison({
-  card,
-  page,
-  locale,
-  link,
-}: {
-  card: WorkReleaseCardView;
-  page: GameReaderReady;
-  locale: string;
-  link: Parameters<typeof GameFact>[0]['link'];
-}) {
-  const o = { locale: locale as never };
-  const related: SubjectRead['related'] = Object.fromEntries(
-    Object.entries(card.related).map(([id, item]) => [
-      id,
-      { type: item.type, labels: item.label ? { [item.label.language]: item.label.value } : {} },
-    ]),
-  );
-  const groups: { id: string; label: string; properties: WorkReleaseCardProperty[] }[] = [
-    { id: 'platform', label: m.game_reader_compare_platform_label({}, o), properties: ['schema:gamePlatform'] },
-    { id: 'language', label: m.game_reader_compare_language_label({}, o), properties: ['schema:inLanguage'] },
-    { id: 'date', label: m.game_reader_compare_date_label({}, o), properties: ['schema:datePublished'] },
-    {
-      id: 'status',
-      label: m.game_reader_compare_status_label({}, o),
-      properties: ['schema:creativeWorkStatus', 'wdt:P5804', 'rezics:releaseStatus'],
-    },
-    { id: 'age', label: m.game_reader_compare_age_label({}, o), properties: ['wdt:P2899', 'schema:contentRating'] },
-    { id: 'publisher', label: m.game_reader_compare_publisher_label({}, o), properties: ['schema:publisher'] },
-    { id: 'producer', label: m.game_reader_compare_producer_label({}, o), properties: ['schema:producer', 'wdt:P162'] },
-    { id: 'developer', label: m.game_reader_compare_developer_label({}, o), properties: ['wdt:P178'] },
-  ];
-  return (
-    <section className="mt-3 space-y-2" data-slot="work-release-comparison">
-      <h4 className="font-semibold">{m.game_reader_compare_title({}, o)}</h4>
-      <dl className="grid min-w-0 gap-2 sm:grid-cols-2">
-        {groups.map((group) => {
-          const fields = group.properties.map((property) => card.fields[property]);
-          const available = fields.filter((field) => field.state === 'available');
-          const states = [
-            ...new Set(fields.filter((field) => field.state !== 'available').map((field) => field.state)),
-          ];
-          return (
-            <div key={group.id} className="min-w-0 rounded-md bg-muted/40 p-2">
-              <dt className="font-medium">{group.label}</dt>
-              <dd className="mt-1 space-y-2">
-                {available.flatMap((field) =>
-                  field.statements.map((statement) => (
-                    <GameFact
-                      key={statement.id}
-                      statement={statement}
-                      page={page}
-                      related={related}
-                      locale={locale}
-                      date={statement.property.id === 'schema:datePublished'}
-                      link={link}
-                    />
-                  )),
-                )}
-                {states.map((state) => (
-                  <p key={state} className={available.length ? 'text-sm text-muted-foreground' : undefined}>
-                    {state === 'unavailable'
-                      ? m.game_reader_compare_field_unavailable({}, o)
-                      : state === 'withheld'
-                        ? m.game_reader_compare_withheld({}, o)
-                        : state === 'missing'
-                          ? m.game_reader_compare_missing({}, o)
-                          : m.game_reader_compare_unsupported({}, o)}
-                  </p>
-                ))}
-              </dd>
-            </div>
-          );
-        })}
-      </dl>
-    </section>
   );
 }

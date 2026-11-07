@@ -9,10 +9,8 @@ import { identityEpochStore } from './identity-adapters/index.ts';
 import type { IdentityEpochState } from './identity-epoch-contract.ts';
 import admission from './identity-rating-admission.sql';
 
-export type IdentityRatingAdmissionReason = 'redirect-chain' | 'epoch-pending' | 'source-pending';
-export type IdentityRatingAdmissionResult =
-  | Readonly<{ status: 'admitted'; subjectId: string }>
-  | Readonly<{ status: 'pending'; reason: IdentityRatingAdmissionReason }>;
+import type { IdentityRatingAdmissionResult } from './contract/index.ts';
+export type { IdentityRatingAdmissionReason, IdentityRatingAdmissionResult } from './contract/index.ts';
 export type IdentityRatingEpochWitness = IdentityRatingEpochObservation;
 
 export type IdentityRatingEpochReader = (tx: CommandTransaction, home: number) => Promise<IdentityEpochState>;
@@ -87,16 +85,4 @@ export async function admitIdentityRatingEffect(
   }
   if (input.expectedEpochs) compareIdentityRatingEpochs(input.expectedEpochs, epochs);
   return { status: 'admitted', subjectId: input.resolvedTargetId };
-}
-
-export class IdentityRatingAdmissionPendingError extends Error {
-  readonly code = 'identity_rating_pending';
-
-  constructor(
-    readonly targetId: string,
-    readonly reason: IdentityRatingAdmissionReason,
-  ) {
-    super(`Identity rating admission is pending for ${targetId}: ${reason}`);
-    this.name = 'IdentityRatingAdmissionPendingError';
-  }
 }

@@ -2,7 +2,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useEffect, useMemo, useRef, useState, type MouseEvent } from 'react';
 import { m } from '../../paraglide/messages.js';
 import { useOperation } from '../../kernel/exposure';
-import type { useSession } from '../../session/query';
+import type { useSession } from '../../session';
 import {
   annotationWrite,
   annotationIssues,

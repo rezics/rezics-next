@@ -8,13 +8,9 @@ import {
   useSyncExternalStore,
   type ReactNode,
 } from 'react';
-import { sessionQuery } from '../../session/query';
-import { browserObservation } from '../../session/observation';
-import { useReaderAddress } from '../../reader/current-origin';
+import { browserObservation, readerSessionSource, useReaderAddress } from '../../reader/lifetime/index';
 import { getLocale } from '../../paraglide/runtime.js';
 import type { SlowModePort, SlowModeRead, SlowModeVisitOwner } from './contract';
-
-type SessionValue = { state?: string; subject?: string | null; csrfToken?: string | null };
 
 export const SlowModePortContext = createContext<SlowModePort | null>(null);
 
@@ -77,8 +73,8 @@ export function useSlowModeVisit(
     observation?.getSnapshot ?? emptySnapshot,
     observation?.getServerSnapshot ?? emptySnapshot,
   );
-  const session = client?.getQueryData<SessionValue>(sessionQuery.queryKey);
-  const address = useReaderAddress(null, undefined, getLocale());
+  const session = readerSessionSource(client).read();
+  const address = useReaderAddress(null, undefined, getLocale(), getLocale);
   const ready =
     !!boardId &&
     owner.state === 'signed-in' &&
@@ -139,7 +135,7 @@ export function useSlowModeVisit(
   useLayoutEffect(() => {
     if (!visit) return;
     if (!visit.retired && visit.controller.signal.aborted) visit.controller = new AbortController();
-    const stop = observation?.subscribe(() => visit.current());
+    const stop = observation?.subscribeRetirement(() => visit.current());
     return () => {
       stop?.();
       visit.retire();

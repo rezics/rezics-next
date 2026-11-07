@@ -1,9 +1,13 @@
 import { queryOptions } from '@tanstack/react-query';
-import { publicRead } from '../../kernel/query';
-import { readPublicCollectionDiscovery } from './read';
-import type { PublicCollectionDirectoryAddress } from './address';
+import { publicRead } from '../../session/reading-policy';
+import type { PublicCollectionDiscoveryReader } from './request';
+import type { PublicCollectionDirectoryAddress } from '../../search/contracts/collection-directory';
 
-export function publicCollectionDiscoveryQueryOptions(locale: string, address: PublicCollectionDirectoryAddress = {}) {
+export function publicCollectionDiscoveryQueryOptions<Row extends { id: string }>(
+  locale: string,
+  address: PublicCollectionDirectoryAddress,
+  read: PublicCollectionDiscoveryReader<Row>,
+) {
   return queryOptions({
     ...publicRead,
     gcTime: 60_000,
@@ -21,6 +25,6 @@ export function publicCollectionDiscoveryQueryOptions(locale: string, address: P
       address.order ?? 'recent',
       address.cursor ?? null,
     ],
-    queryFn: ({ signal }) => readPublicCollectionDiscovery({ data: { locale, ...address }, signal }),
+    queryFn: ({ signal }) => read({ data: { locale, ...address }, signal }),
   });
 }

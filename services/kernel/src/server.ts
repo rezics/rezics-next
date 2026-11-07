@@ -179,6 +179,7 @@ export function startServer(config: ServerConfig): Promise<RunningServer> & Runn
       openSearch === undefined || searchConfig === undefined || rated === undefined
         ? undefined
         : createSearchService({
+            disclosure: defaults.searchDisclosure(openSearch),
             pool,
             client: openSearch,
             prefix: searchConfig.prefix,
@@ -193,6 +194,7 @@ export function startServer(config: ServerConfig): Promise<RunningServer> & Runn
             realmSubjectsForReader: (reader) => createRealmSubjectSearchSource({ pool, reader }),
             cursors: config.tokens,
             clock: defaults.clock,
+            facetAccess: defaults.facetAccess,
             publicFilters: () => {
               if (!publicFilters) throw new Error('Public Search Access composition is incomplete');
               return publicFilters;
@@ -242,6 +244,7 @@ export function startServer(config: ServerConfig): Promise<RunningServer> & Runn
             search: openSearch,
             prefix: searchConfig.prefix,
             clock: defaults.clock,
+            facetAccess: defaults.facetAccess,
             ...(creditSearch === undefined ? {} : { creditSearch }),
           });
           const producers = createDiscoveryProducerEntry({
@@ -254,6 +257,7 @@ export function startServer(config: ServerConfig): Promise<RunningServer> & Runn
           });
           discovery = createDefaultDiscoverySearch(
             {
+              disclosure: defaults.searchDisclosure(openSearch),
               spaceEntryActions: viewerActions,
               pool,
               routeKey: config.routeKey,
@@ -263,6 +267,7 @@ export function startServer(config: ServerConfig): Promise<RunningServer> & Runn
               keys: config.tokens,
               deadlineNow: defaults.deadlineNow,
               clock: defaults.clock,
+              facetAccess: defaults.facetAccess,
             },
             producers,
           );

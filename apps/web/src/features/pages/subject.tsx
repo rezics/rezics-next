@@ -7,7 +7,7 @@ import { supportsReleasedWorkNames } from '../catalogue/work-names/model';
 import { subjectCatalogueTagDefinitions } from './subject-catalogue-metadata/index';
 import { WorkNamesEntry } from '../catalogue/work-names/entry';
 import { GameProfileEntry, gameProfileEntry } from '../catalogue/game-profile-entry';
-import { GameOverview } from '../catalogue/game-reader/entry';
+import { GameOverview } from './work-reading-binding';
 import { gameReaderEntry, type GameReaderRead, type GameStatement } from '../catalogue/game-reader/model';
 import { EditorialEntry } from '../catalogue/editorial-entry';
 import { AddonProfileEntry } from '../catalogue/addon-profile-entry';
@@ -96,7 +96,7 @@ import {
 } from 'react';
 import { requestLanguages } from '../../kernel/languages.ts';
 import { originalLanguage } from '../../subject/language';
-import { accountOf } from './account-read';
+import { accountOf } from './account-profile-reading';
 import { defaultReader, type Reader } from '../../subject/reader';
 import type { RelationDefinition } from '../../subject/relations';
 import type { Related, Subject, Summary } from '../../subject/types';
@@ -130,7 +130,7 @@ import { subjectUrlForView } from '../../subject/subject-href';
 import { ContextNavigation, contextHref } from './context-navigation';
 import { candidateContext } from '../../subject/candidates';
 import { subjectVisitReturn, withSubjectVisitReturn, zoneVisitReturn } from './subject-visit-navigation';
-import { MangaReaderEntry } from '../catalogue/manga-reader/entry';
+import { MangaReaderEntry } from './work-reading-binding';
 import { isMangaReaderType } from '../catalogue/manga-reader/model';
 import { mangaReaderAddress } from '../catalogue/manga-reader/navigation';
 import type { WorkFranchiseReadingProps, WorkFranchiseSelection } from './showcase-work';
@@ -163,41 +163,13 @@ function pageComponents(framed: boolean) {
   return framed ? componentSets.framed : componentSets.page;
 }
 
-export type SubjectPageData = {
-  /** The subject the page is for; an agent page always has one, a route page none. */
-  subject: string | null;
-  /** The account an agent page is for, as the page read named it. */
-  account?: { id: string; handle: string };
-  context?: SelectedContext | undefined;
-  /** The requested selector survives a native Global fallback without inventing Realm metadata. */
-  requestedRealm?: string | undefined;
-  /** BFF cache identity of this reading; never native read authority. */
-  requestedReader?: string | null | undefined;
-  continuation?: PageContinuation | undefined;
-  streams?: SubjectStreams | undefined;
-  community?: SubjectCommunity;
-  profile: string;
-  template: { scope: 'base' | 'generic' | 'route' | 'type'; key: string | null };
-  document: PageDocument;
-  /** The views the subject's templates define; absent when the kernel did not say. */
-  views?: string[];
-  /** Bounded active file/group vocabulary carried by the native page response. */
-  catalogue?: {
-    state: 'released' | 'unsupported' | 'unavailable';
-    type: string;
-    digest?: string;
-    definitions?: Pick<Release, 'types' | 'properties'>;
-    directions?: ReleasedRelationDirectionResult[];
-  };
-  /** Caller-bound native action state; page responses containing it are private and no-store. */
-  viewer?: NativePageBody['viewer'];
-  /** Native Access envelope for the selected subject; private and no-store with viewer. */
-  actions?: NativePageBody['actions'];
+import type { SubjectPageData as PageModel } from './page-model';
+export type SubjectPageData = PageModel & {
   /** Optional current Terms operation advice, independent of public names and subject-level actions. */
   termsAuthority?: import('../catalogue/subject-terms').TermsPageAuthority;
-  reads: Record<string, { status: number; body: unknown; retryAt?: number; headers?: Record<string, string> }>;
 };
-
+import { pageContext } from './page-model';
+export { pageContext } from './page-model';
 export type SubjectPageLoad =
   | { kind: 'missing' }
   | { kind: 'redirect'; id: string; target?: 'account' }
@@ -225,16 +197,6 @@ function placesType(content: readonly unknown[], type: string): boolean {
         (isRecord(node.props) &&
           Object.values(node.props).some((value) => Array.isArray(value) && placesType(value, type)))),
   );
-}
-
-/** The context the page's reads are planned in. */
-export function pageContext(page: Pick<SubjectPageData, 'subject' | 'account' | 'context' | 'continuation'>) {
-  return {
-    subject: page.subject,
-    account: page.account ?? null,
-    ...(page.context ? { context: page.context } : {}),
-    ...(page.continuation ? { continuation: page.continuation } : {}),
-  };
 }
 
 /** A successful planned projection must name the page's already admitted Subject. */
@@ -285,6 +247,7 @@ export async function loadSubjectPage(
   locale = 'en',
   options: {
     realm?: string | undefined;
+    board?: string | undefined;
     continuation?: PageContinuation | undefined;
     stream?: string | undefined;
     authorization?: string | undefined;
@@ -297,7 +260,12 @@ export async function loadSubjectPage(
   try {
     result = await client.pages.$read.post(
       {
-        target: { subject: id, ...(view ? { view } : {}), ...(options.realm ? { realm: options.realm } : {}) },
+        target: {
+          subject: id,
+          ...(view ? { view } : {}),
+          ...(options.realm ? { realm: options.realm } : {}),
+          ...(options.board ? { board: options.board } : {}),
+        },
         ...(options.continuation ? { continuation: options.continuation } : {}),
         ...(options.stream ? { stream: options.stream } : {}),
         languages: requestLanguages(locale),
@@ -348,6 +316,7 @@ export async function loadSubjectPage(
           ...catalogue,
           subject: id,
           ...(options.realm ? { requestedRealm: options.realm } : {}),
+          ...(options.board ? { board: options.board, requestedBoard: options.board } : {}),
         },
       };
     }
@@ -381,6 +350,7 @@ export async function loadSubjectPage(
         ...page,
         subject: page.subject ?? null,
         ...(options.realm ? { requestedRealm: options.realm } : {}),
+        ...(options.board ? { board: options.board, requestedBoard: options.board } : {}),
         ...(termsAuthority ? { termsAuthority } : {}),
       },
     };
@@ -804,8 +774,10 @@ export function SubjectPage({
   recoverCatalogueFileReader,
   recoverMusicReleaseReader,
   readingAdmission,
+  communityQueryKey,
 }: {
   page: SubjectPageData;
+  communityQueryKey?: readonly unknown[] | undefined;
   verification?: VerificationConfig;
   refreshCommunityAdvice?: () => Promise<void>;
   /** Re-enter the current Subject route loader for catalogue-file recovery. */
@@ -1805,7 +1777,9 @@ export function SubjectPage({
                 />
               ) : null}
               <SubjectCommunityRefreshContext.Provider value={refreshCommunityAdvice}>
-                <SubjectCommunityContext.Provider value={page.community}>
+                <SubjectCommunityContext.Provider
+                  value={page.community ? { ...page.community, queryKey: communityQueryKey } : undefined}
+                >
                   <SubjectCommunityVerificationContext.Provider value={verification}>
                     <CompositionRender
                       document={composition.remaining}

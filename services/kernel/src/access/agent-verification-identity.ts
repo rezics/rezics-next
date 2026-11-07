@@ -1,4 +1,4 @@
-import { runIdentityTerminalCommand } from '../semantic/identity-terminal-closure-command.ts';
+import { agentIdentityMaintenance } from './adapters/bind.ts';
 import {
   acceptTechnicalSource,
   verifyTechnicalSource,
@@ -21,7 +21,7 @@ import {
   type CommandTransaction,
 } from '../command/command.ts';
 import { partitionOf, routeOf } from '../route/route.ts';
-import { accountAgentId } from '../semantic/agents.ts';
+
 import type {
   IdentityNativeReceipt,
   IdentityAdmissionInput,
@@ -29,7 +29,7 @@ import type {
   IdentityJobRef,
   IdentityReceipt,
 } from '../semantic/identity-epoch-contract.ts';
-import { IdentityEpochStoreError } from '../semantic/identity-adapters/index.ts';
+import { IdentityEpochStoreError } from '../semantic/contract/index.ts';
 import insert from './agent-verification-identity-insert.sql';
 import read from './agent-verification-identity-read.sql';
 import {
@@ -189,13 +189,13 @@ export async function recordAccountIdentitySource(tx: CommandTransaction, source
   if (
     (source.receipt.kind === 'account-agent.verify' &&
       (source.intent.kind !== 'merge' ||
-        source.intent.redirected !== accountAgentId(source.account) ||
+        source.intent.redirected !== agentIdentityMaintenance().accountAgentId(source.account) ||
         source.intent.survivor !== source.catalogue ||
         !source.requestId ||
         !source.decidedBy)) ||
     (source.receipt.kind === 'account-agent.unverify' &&
       (source.intent.kind !== 'unmerge' ||
-        source.intent.original !== accountAgentId(source.account) ||
+        source.intent.original !== agentIdentityMaintenance().accountAgentId(source.account) ||
         source.intent.verificationReceipt !== source.verificationReceipt))
   )
     throw new TypeError('Accounts source does not match its original decision');
@@ -223,7 +223,7 @@ export async function recordAccountIdentitySource(tx: CommandTransaction, source
     source.account,
     source.receipt.kind,
     source.receipt.receipt,
-    accountAgentId(source.account),
+    agentIdentityMaintenance().accountAgentId(source.account),
     source.accountKind,
     source.catalogue,
     source.requestId,
@@ -323,20 +323,15 @@ export async function recordAccountIdentitySource(tx: CommandTransaction, source
 
 async function reserveAccountIdentitySourceWork(tx: CommandTransaction): Promise<void> {
   const resources = currentCommandResources(tx);
-  const maintenance = await import('../semantic/identity-source-consumer-maintenance.ts');
-  if (!maintenance.isPrepaidIdentitySourceConsumerMaintenance(resources.pool)) return;
+  const maintenance = agentIdentityMaintenance();
+  if (!maintenance.isPrepaidMaintenance(resources.pool)) return;
   const declaration = ACCOUNT_IDENTITY_SOURCE_DECLARATION();
-  const token = maintenance.currentIdentitySourceConsumerMaintenance(resources.pool, resources.deadline);
+  const token = maintenance.currentMaintenance(resources.pool, resources.deadline);
   if (
     !token ||
-    !maintenance.reserveIdentitySourceConsumerNativeWork(
-      resources.pool,
-      token,
-      accountIdentityNativeStep(declaration.work),
-      declaration.work,
-    )
+    !maintenance.reserveNativeWork(resources.pool, token, accountIdentityNativeStep(declaration.work), declaration.work)
   )
-    throw new maintenance.IdentitySourceOriginalUnavailable('identity-source-original-Account-reader-exhausted');
+    throw maintenance.originalUnavailable('identity-source-original-Account-reader-exhausted');
 }
 
 /** Current native T and account terminal fence precede the immutable receipt lookup and any disclosure. */
@@ -383,7 +378,7 @@ export async function readAccountIdentitySource(
     row.source_partition !== command.partition ||
     row.source_epoch !== row.current_epoch ||
     BigInt(row.source_position) > BigInt(row.current_position) ||
-    row.agent_id !== accountAgentId(receipt.account) ||
+    row.agent_id !== agentIdentityMaintenance().accountAgentId(receipt.account) ||
     row.account_kind !== current.kind ||
     row.delivery_key !== keyOf(receipt) ||
     row.release !== stored.release ||
@@ -456,7 +451,7 @@ export async function loadAccountIdentitySource(pool: Pool, receipt: AccountRece
   return withRequestDeadline(deadline, async () => {
     const load = async () =>
       (
-        await runIdentityTerminalCommand(
+        await agentIdentityMaintenance().runTerminalCommand(
           pool,
           { partition: partitionOf(accountRoute(receipt)), deadline },
           async (tx) => noEffect(await readAccountIdentitySource(tx, receipt)),
@@ -471,30 +466,6 @@ export async function loadAccountIdentitySource(pool: Pool, receipt: AccountRece
   });
 }
 
-/** Typed adapter for the delivered coordinator ABI. Absence is durable retryable unavailability. */
-async function coordinator(): Promise<{
-  resumeIdentityEpochJob: import('../semantic/identity-epoch-contract.ts').ResumeIdentityEpochJob;
-  waitIdentityEpochPublished: import('../semantic/identity-epoch-contract.ts').WaitIdentityEpochPublished;
-}> {
-  const location = new URL('../semantic/identity-epoch-coordinator.ts', import.meta.url);
-  // A variable module URL keeps the adapter buildable during the independent producer cutover.
-  // Only the exact delivered module/export names are accepted; no callback or fallback implementation.
-  let implementation: Record<string, unknown>;
-  try {
-    implementation = await import(location.href);
-  } catch (error) {
-    if (error instanceof Error && /Cannot find module|ModuleNotFound|module not found/i.test(error.message))
-      throw accountIdentityUnavailable('semantic/identity-epoch-coordinator.ts is not integrated');
-    throw error;
-  }
-  if (
-    typeof implementation.resumeIdentityEpochJob !== 'function' ||
-    typeof implementation.waitIdentityEpochPublished !== 'function'
-  )
-    throw accountIdentityUnavailable('native coordinator resume/wait exports are not integrated');
-  return implementation as Awaited<ReturnType<typeof coordinator>>;
-}
-
 /** One bounded delivery/probe invocation. The original DBOS workflow owns durable sleeps/redrive. */
 export function deliverAccountIdentity(pool: Pool, receipt: AccountReceipt): Promise<IdentityJobRef> {
   return withRequestDeadline(Math.min(deadlineFor(5000), Date.now() + 5000), () =>
@@ -503,18 +474,18 @@ export function deliverAccountIdentity(pool: Pool, receipt: AccountReceipt): Pro
 }
 async function deliverAccountIdentityBounded(pool: Pool, receipt: AccountReceipt): Promise<IdentityJobRef> {
   const source = await loadAccountIdentitySource(pool, receipt);
-  const native = await coordinator();
-  const { identityEpochStore: identityEpochStoreGetter, identityJobPartition } =
-    await import('../semantic/identity-adapters/index.ts');
-  const identityEpochStore = identityEpochStoreGetter();
+  const maintenance = agentIdentityMaintenance();
+  const identityEpochStore = maintenance.store();
   const job = await identityEpochStore.prepareAdmission(pool, {}, source.input);
-  await native.resumeIdentityEpochJob(pool, job);
-  await native.waitIdentityEpochPublished(pool, job);
+  await maintenance.resume(pool, job);
+  await maintenance.waitPublished(pool, job);
   // Completion is independently read from actual native custody, never inferred from adapter return.
   const binding = await identityEpochStore.bindReceipt(pool, {}, source.input);
   const published = (
-    await runIdentityTerminalCommand(pool, { partition: identityJobPartition(job) }, async (tx) =>
-      noEffect(await identityEpochStore.findJob(tx, receipt, binding)),
+    await agentIdentityMaintenance().runTerminalCommand(
+      pool,
+      { partition: agentIdentityMaintenance().jobPartition(job) },
+      async (tx) => noEffect(await identityEpochStore.findJob(tx, receipt, binding)),
     )
   ).value;
   if (
@@ -540,14 +511,14 @@ export async function publishedAccountIdentityUndo(
   source: AccountIdentitySource;
 }> {
   const receipt: AccountReceipt = { kind: 'account-agent.verify', account, receipt: verificationReceipt };
-  const { readAccountIdentityUndo } = await import('../semantic/identity-adapters/identity-epoch-binding.ts');
-  const existing = await readAccountIdentityUndo(pool, receipt);
-  const { identityEpochStore: identityEpochStoreGetter, identityJobPartition } =
-    await import('../semantic/identity-adapters/index.ts');
-  const identityEpochStore = identityEpochStoreGetter();
+  const existing = await agentIdentityMaintenance().readUndo(pool, receipt);
+  const maintenance = agentIdentityMaintenance();
+  const identityEpochStore = maintenance.store();
   const saved = (
-    await runIdentityTerminalCommand(pool, { partition: identityJobPartition(existing.job) }, async (tx) =>
-      noEffect(await identityEpochStore.readJob(tx, existing.job)),
+    await agentIdentityMaintenance().runTerminalCommand(
+      pool,
+      { partition: agentIdentityMaintenance().jobPartition(existing.job) },
+      async (tx) => noEffect(await identityEpochStore.readJob(tx, existing.job)),
     )
   ).value;
   const source = existing.source;
@@ -566,8 +537,7 @@ export async function publishedAccountIdentityUndo(
 
 /** Actual Global decision locator, resolved before the account home is acquired. */
 export async function readOriginalAgentIdentityDecision(pool: Pool, requestId: string, receiptId: string) {
-  const { withReadTransaction } = await import('../semantic/read.ts');
-  const row = await withReadTransaction(
+  const row = await agentIdentityMaintenance().withReadTransaction(
     pool,
     async (tx) =>
       (
@@ -624,15 +594,15 @@ export function probeAccountIdentityPublication(pool: Pool, receipt: AccountRece
 }
 async function probeAccountIdentityPublicationBounded(pool: Pool, receipt: AccountReceipt): Promise<IdentityJobRef> {
   const source = await loadAccountIdentitySource(pool, receipt);
-  const { lookupIdentityBinding } = await import('../semantic/identity-adapters/identity-epoch-binding.ts');
-  const { identityEpochStore: identityEpochStoreGetter, identityJobPartition } =
-    await import('../semantic/identity-adapters/index.ts');
-  const identityEpochStore = identityEpochStoreGetter();
-  const binding = await lookupIdentityBinding(pool, {}, source.input);
+  const maintenance = agentIdentityMaintenance();
+  const identityEpochStore = maintenance.store();
+  const binding = await maintenance.lookupBinding(pool, {}, source.input);
   if (!binding) throw accountIdentityUnavailable(`missing published binding ${keyOf(receipt)}`);
   const saved = (
-    await runIdentityTerminalCommand(pool, { partition: identityJobPartition(binding.job) }, async (tx) =>
-      noEffect(await identityEpochStore.findJob(tx, receipt, binding)),
+    await agentIdentityMaintenance().runTerminalCommand(
+      pool,
+      { partition: agentIdentityMaintenance().jobPartition(binding.job) },
+      async (tx) => noEffect(await identityEpochStore.findJob(tx, receipt, binding)),
     )
   ).value;
   if (

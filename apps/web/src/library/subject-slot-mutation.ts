@@ -1,5 +1,5 @@
 import { kernelClient } from '../kernel/client';
-import { isPlatformClosedError, isPlatformClosedProblem } from '../kernel/platform-closed';
+import { isPlatformClosedError, isPlatformClosedProblem } from '../session/reading-policy';
 import type { SessionEnv } from '../session/client';
 import { prepareSession, viewerCredential } from '../session/request';
 import { changePersonalLibraryEntry, libraryEntryStateWrite, removePersonalLibraryEntry } from './entries-read';

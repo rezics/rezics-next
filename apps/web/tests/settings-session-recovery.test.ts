@@ -3,7 +3,7 @@ import { AsyncLocalStorage } from 'node:async_hooks';
 import { readFile } from 'node:fs/promises';
 import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { QueryClient } from '@tanstack/react-query';
 import { createMemoryHistory, createRootRoute, createRouter, RouterProvider } from '@tanstack/react-router';
 import * as start from '../.storybook/react-start';
 import { getServerAsyncLocalStorage, locales, overwriteServerAsyncLocalStorage } from '../src/paraglide/runtime.js';
@@ -36,6 +36,7 @@ mock.module('cloudflare:workers', () => ({
   },
 }));
 
+const { AccountsQueryProvider: QueryClientProvider } = await import('./fixtures/accounts-composition');
 const { sessionQuery } = await import('../src/session/query');
 const { SettingsPageView, SettingsSessionRecovery, retrySettingsSession } =
   await import('../src/settings/settings-page');

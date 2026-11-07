@@ -27,26 +27,13 @@ const U64_MAX = 18_446_744_073_709_551_615n;
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const DECIMAL = /^(?:0|[1-9][0-9]{0,19})$/;
 
-declare const preparation: unique symbol;
-
-/** Factory-local immutable input only; it conveys neither authorization nor a held lock. */
-export type IdentityRatingCommitPreparation = Readonly<{ [preparation]: true }>;
-export type IdentityRatingCommitHeld = Readonly<{
-  ownerId: string;
-  ownerEpoch: number;
-  partition: number;
-  subjectId: string;
-  publishedHeads: readonly Readonly<{
-    partition: number;
-    group: string;
-    epoch: string;
-  }>[];
-}>;
-export type IdentityRatingCommitParticipant = Readonly<{
-  prepare(operand: IdentityRatingReviewOperand): IdentityRatingCommitPreparation;
-  /** Fresh command body only, after receipt lookup and before no-op, cleanup or effects. */
-  admit(tx: CommandTransaction, prepared: IdentityRatingCommitPreparation): Promise<IdentityRatingCommitHeld>;
-}>;
+import type {
+  IdentityRatingCommitPreparation,
+  IdentityRatingCommitHeld,
+  IdentityRatingCommitParticipant as CommitParticipant,
+} from './contract/index.ts';
+export type { IdentityRatingCommitPreparation, IdentityRatingCommitHeld } from './contract/index.ts';
+export type IdentityRatingCommitParticipant = CommitParticipant<CommandTransaction>;
 
 type EvidenceRecord = Record<string, unknown>;
 type ParsedRatingEvidence = Readonly<{

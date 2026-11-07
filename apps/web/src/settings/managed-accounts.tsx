@@ -18,7 +18,7 @@ import { Alert, AlertDescription, AlertTitle } from '@rezics/ui/shadcn/alert';
 import { ContentItem, ContentItemHeading } from '@rezics/ui/content-item';
 import { m } from '../paraglide/messages.js';
 import { getLocale } from '../paraglide/runtime.js';
-import { useSession } from '../session/query';
+import { useAccounts } from './managed-account-capabilities';
 import { initials } from '../threads/initials';
 import { readManagedAccountsInventory } from './actions';
 import { useManagedReaderLifetime, useManagedSessionReader, type ManagedSessionReader } from './managed-session-reader';
@@ -645,7 +645,7 @@ export function ManagedAccounts(props: {
 
 /** The public/SSR page never starts a private read. A session transition removes the entire prior inventory. */
 export function ManagedAccountsSection({ io }: { io?: ManagedAccountsIO | undefined }) {
-  const session = useSession();
+  const { session } = useAccounts();
   const location = useLocation();
   const router = useRouter();
   const selected = !new URL(location.publicHref, 'https://rezics.local').searchParams.has('managedAccount');

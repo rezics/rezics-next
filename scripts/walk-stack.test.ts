@@ -4,24 +4,168 @@ import { createServer } from 'node:net';
 import { join } from 'node:path';
 import { acquireStackSlot } from './stack-lease.ts';
 import {
+  dropFileCache,
+  withWalkResources,
   firstRedactedDiagnostic,
   hydrationMonitorMessage,
   isStartupTransportError,
   kernelLaunchCommand,
   nativeJwksUrl,
+  publishedHostPorts,
+  reclaimBytesFromStat,
+  reclaimInactiveFileCache,
+  releaseWalkFileCache,
   SEEDED_WEB_READY_PATH,
   seedJournalDatabaseIdentity,
   seedJournalsNameDifferentDatabase,
   stackStartPlan,
   waitUntilWalkReady,
+  walkCgroupPath,
+  walkDockerOutput,
+  walkIssuerForward,
   walkOriginProbe,
   walkPageBodyIsUseful,
+  walkParentInvocation,
+  walkPortAllocated,
   walkReadyResponse,
+  walkReadyUrls,
   walkReadyWaitingMessage,
+  walkStackEnvironment,
+  walkStackLogExcerpt,
+  walkStackPorts,
   walkStackPortsAvailable,
   walkUrlNeedsHtml,
   walkUsefulPageResponse,
 } from './walk-stack.ts';
+import { databaseRunArgs } from '../services/kernel/scripts/database.ts';
+import { searchRunArgs } from '../services/kernel/scripts/search.ts';
+
+test('walk stacks cap OpenSearch, Postgres and bun heaps inside the host run slice', () => {
+  const env = walkStackEnvironment('24256f23-7a74-4949-881c-7dbaea6b0207', 1);
+  expect(env).toMatchObject({
+    OPENSEARCH_JAVA_OPTS: '-Xms128m -Xmx128m',
+    KERNEL_SEARCH_ALLOW_MMAP: '0',
+    KERNEL_SEARCH_MEMORY: '768m',
+    KERNEL_DATABASE_MEMORY: '384m',
+    KERNEL_DATABASE_BOUNDED: '1',
+    KERNEL_WORKER_POOL_SIZE: '1',
+    REZICS_WALK_SMOL: '1',
+    REZICS_WALK_DEFER_FRONTENDS: '1',
+    MALLOC_ARENA_MAX: '2',
+  });
+  expect(walkReadyUrls(walkStackPorts(1), env)).toEqual([
+    'http://127.0.0.1:20012/.well-known/jwks.json',
+    'http://127.0.0.1:20013/health',
+  ]);
+  expect(walkReadyUrls(walkStackPorts(1), {})).toEqual([
+    'http://127.0.0.1:20010/',
+    'http://127.0.0.1:20011/',
+    'http://127.0.0.1:20013/',
+  ]);
+  const search = searchRunArgs('native-policy-test-image', env);
+  const environment = search.flatMap((arg, i) => (arg === '-e' ? [search[i + 1]] : []));
+  expect(environment).toContain('OPENSEARCH_JAVA_OPTS=-Xms128m -Xmx128m');
+  expect(environment).toContain('node.store.allow_mmap=false');
+  expect(search).toContain('--memory');
+  expect(search[search.indexOf('--memory') + 1]).toBe('768m');
+  expect(search[search.indexOf('--memory-swap') + 1]).toBe('768m');
+  const database = databaseRunArgs(env);
+  expect(database[database.indexOf('--memory') + 1]).toBe('384m');
+  expect(database[database.indexOf('--memory-swap') + 1]).toBe('384m');
+  expect(database).toContain('shared_buffers=32MB');
+  expect(database).toContain('max_connections=50');
+  expect(searchRunArgs('native-policy-test-image', {})).not.toContain('--memory');
+  expect(databaseRunArgs({})).not.toContain('--memory');
+  expect(() => searchRunArgs('native-policy-test-image', { KERNEL_SEARCH_MEMORY: '1g' })).toThrow(
+    'KERNEL_SEARCH_MEMORY',
+  );
+});
+
+test('the walk parent and Docker teardown stay inside the 6 GiB slice', () => {
+  expect(walkParentInvocation({}, ['/pinned/bun', 'services/auth/scripts/dev-stack.ts', 'walk', '--', 'true'])).toEqual(
+    ['/pinned/bun', '--smol', 'services/auth/scripts/dev-stack.ts', 'walk', '--', 'true'],
+  );
+  expect(
+    walkParentInvocation({ REZICS_WALK_SMOL: '1' }, ['/pinned/bun', 'services/auth/scripts/dev-stack.ts', 'walk']),
+  ).toBeUndefined();
+  expect(
+    walkParentInvocation({}, ['/pinned/bun', '--smol', 'services/auth/scripts/dev-stack.ts', 'walk']),
+  ).toBeUndefined();
+  expect(walkDockerOutput({ status: 0, stdout: 'abc\n' })).toBe('abc');
+  expect(walkDockerOutput({ status: null, stdout: '' })).toBe('');
+  expect(walkDockerOutput({ status: 1, stdout: 'ignored' })).toBe('');
+  expect(() => reclaimInactiveFileCache(1024)).not.toThrow();
+  expect(() => dropFileCache('/tmp/rezics-walk-missing-dump')).not.toThrow();
+  expect(() => releaseWalkFileCache()).not.toThrow();
+  expect(reclaimBytesFromStat('anon 100\ninactive_file 2147483648\nactive_file 10\n')).toBe(2147483648);
+  expect(reclaimBytesFromStat('inactive_file 0\n')).toBe(0);
+  expect(reclaimBytesFromStat('anon 99\n')).toBe(0);
+  expect(reclaimBytesFromStat('inactive_file 8589934592\n', 4096)).toBe(4096);
+  expect(walkCgroupPath('0::/user.slice/rezics-check-run_1.slice/job.scope', 'rezics-check-run_1.slice')).toBe(
+    '/user.slice/rezics-check-run_1.slice',
+  );
+  expect(walkCgroupPath('0::/user.slice/job.scope')).toBe('/user.slice/job.scope');
+});
+
+test('the seeded walk loads Playwright, the worker and the Kernel client only after dump import', async () => {
+  const source = await Bun.file(join(import.meta.dir, '../apps/web/scripts/vndb-seeded-journey.ts')).text();
+  expect(source.includes("from 'playwright/test'")).toBe(false);
+  expect(source.includes("from '@rezics/client'")).toBe(false);
+  expect(source).toContain("await import('playwright')");
+  expect(source).toContain("await import('playwright/test')");
+  expect(source).toContain("await import('@rezics/client')");
+  expect(source).toContain("spawn('worker')");
+  expect(source).toContain('releaseWalkFileCache');
+  expect(source).toContain('Issuer JWKS through native Auth must answer before seed');
+  const seed = await Bun.file(join(import.meta.dir, 'datasets/cross-media-seed.ts')).text();
+  expect(seed).toContain('onDumpTableReleased: releaseWalkFileCache');
+  expect(seed).toContain('seedFailureDetail');
+});
+
+test('walk issuer forwarding keeps POST bodies for native Auth', async () => {
+  const request = new Request('http://127.0.0.1:20011/signin/key', {
+    method: 'POST',
+    headers: { 'content-type': 'application/json', origin: 'http://127.0.0.1:20011' },
+    body: JSON.stringify({ account_id: '99e7b230-90dd-83ae-b5dc-67cacb45ae35' }),
+  });
+  const forwarded = walkIssuerForward(request, 'http://127.0.0.1:20012');
+  expect(forwarded.url).toBe('http://127.0.0.1:20012/signin/key');
+  expect(forwarded.method).toBe('POST');
+  expect(forwarded.headers.get('origin')).toBe('http://127.0.0.1:20011');
+  expect(await forwarded.json()).toEqual({ account_id: '99e7b230-90dd-83ae-b5dc-67cacb45ae35' });
+});
+
+test('a failed walk stack reprint drops DBOS chatter and keeps Kernel create errors', () => {
+  const recorded = `{
+  code: "dbos_diagnostic",
+  operation: "workflow_runtime",
+  severity: "info",
+}
+TypeError: Unsealed or mismatched native Semantic source set
+{
+  "code": "dbos_diagnostic",
+  "operation": "workflow_runtime",
+  "severity": "debug"
+}
+`;
+  const excerpt = walkStackLogExcerpt(recorded);
+  expect(excerpt).toContain('Unsealed or mismatched native Semantic source set');
+  expect(excerpt).not.toContain('dbos_diagnostic');
+});
+
+test('Docker published mappings occupy a walk slot even when nothing is listening', () => {
+  expect(publishedHostPorts('127.0.0.1:20014->5432/tcp\n127.0.0.1:20015->9200/tcp, 127.0.0.1:20020->80/tcp')).toEqual(
+    new Set([20014, 20015, 20020]),
+  );
+  expect(publishedHostPorts('[::]:20014->5432/tcp')).toEqual(new Set([20014]));
+  expect(publishedHostPorts('5432/tcp')).toEqual(new Set());
+  expect(
+    walkPortAllocated(
+      'docker: Error response from daemon: Bind for 127.0.0.1:20014 failed: port is already allocated.',
+    ),
+  ).toBe(true);
+  expect(walkPortAllocated('walk: services/kernel/scripts/database.ts up failed')).toBe(false);
+});
 
 test('walk admission preserves an occupied slot and reuses it after its listener closes', async () => {
   const directory = await mkdtemp(join(import.meta.dir, '../.temp/walk-admission-'));
@@ -207,4 +351,41 @@ test('seeded Web is ready only on useful /en HTML, not a Vite missing-module ove
     await page.stop(true);
     await jwks.stop(true);
   }
+});
+
+test('walk acquisition failure settles all acquired resources and retains its original error', async () => {
+  const original = new Error('persona failed after frontend and browser acquisition');
+  const settled: string[] = [];
+  await expect(
+    withWalkResources(async (own) => {
+      own('frontends', async () => {
+        await Bun.sleep(5);
+        settled.push('frontends');
+      });
+      own('browser', () => {
+        settled.push('browser');
+      });
+      throw original;
+    }),
+  ).rejects.toBe(original);
+  expect(settled.sort()).toEqual(['browser', 'frontends']);
+  let failure: unknown;
+  try {
+    await withWalkResources(async (own) => {
+      own('frontends', () => {
+        throw new Error('frontend stop');
+      });
+      own('browser', async () => {
+        await Bun.sleep(5);
+        settled.push('browser settled');
+      });
+      throw original;
+    });
+  } catch (error) {
+    failure = error;
+  }
+  expect(failure).toBeInstanceOf(AggregateError);
+  expect((failure as AggregateError).cause).toBe(original);
+  expect((failure as AggregateError).message).toContain('frontend stop');
+  expect(settled).toContain('browser settled');
 });

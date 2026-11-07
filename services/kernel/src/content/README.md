@@ -546,19 +546,12 @@ The installed Community target variants use the same closed entry shape as the p
 The sole `realm-subject-source.ts` census/factory owner supplies original keys; this evaluator creates no
 population, candidate storage, bootstrap, event consumer or registration. `listSubjectThreads` is not a census.
 
-Exported types are `RealmSubjectCandidate = Readonly<{ threadId: string; openingPostId: string;
-subjectId: string }>`, `RealmSubjectDisclosureInput = Readonly<{ realmId: string;
-candidates: readonly RealmSubjectCandidate[] }>`, `RealmSubjectDisclosureDependencies = Readonly<{
-pool: Pool; access: Access }>`, and `RealmSubjectDisclosureContext = Readonly<{ actor: Actor;
-deadline: number; work: AccessWorkAccounting }>`. `RealmSubjectDisclosure` has only
-`finish(): Promise<readonly RealmSubjectEvidence[]>`. Evidence is aligned with input, without echoed keys:
-`{ state: 'positive'; freshness: RealmSubjectFreshness }` or `{ state: 'absent' | 'withheld' | 'unknown' }`.
-`RealmSubjectFreshness = Readonly<{ before: string; final: string; expiresAt: number; anchors: readonly AnchoredPosition[] }>`
-is internal native freshness, never permission or a reusable bearer proof. Signatures hash actual native
-source and parent observations. No concealed identifiers, counts, denial details or public DTOs are returned.
-The internal `reads.ts` export `prepareRealmSubjectThreadDisclosure` returns `state`, nullable `signature`,
-`anchors` and `final(): Promise<{ signature: string; anchors: readonly AnchoredPosition[] } | null>`;
-its state is `positive | absent | withheld`. It reuses native source, ancestry and board disclosure without bytes.
+`content/contract/index.ts` owns the consumer capabilities and aligned evidence shapes. The native facade keeps
+`RealmSubjectCandidate`, `RealmSubjectDisclosureInput`, Pool/Access dependencies, actual actor/deadline/work context,
+and `finish(): Promise<readonly RealmSubjectEvidence[]>`. Evidence is positive with `before`, `final`, `expiresAt`
+and lossless native anchors, or absent/withheld/unknown without echoed keys. Signatures and freshness are internal
+observations, never permissions. `reads.ts` retains `prepareRealmSubjectThreadDisclosure`: positive/absent/withheld,
+nullable signature, anchors and one final native source observation. It reads source/ancestry/Board metadata only.
 
 Decision: exact evidence pins the original Subject and requires its native reference to remain terminal;
 a redirect never substitutes a different Subject. Missing native capabilities and dependency failures produce
@@ -577,12 +570,20 @@ a missing producer refuses the attempt. The deadline is capped at the caller roo
 bans include the actual actor and authenticated delegating principal. Protected grants, account fences,
 source/parent revisions, takedown and restoration retain native read authority at both rounds.
 
-`realm-subject-search.ts` exports `createRealmSubjectSearchSource`, re-exported from the Content `index.ts` boundary.
-The service supplies the actual request `LeafOptions`; Content binds that reader's Access and actor to the exact
-disclosure evaluator and live lifecycle before Search creates its Realm scope. Prefix candidate disclosure is batched
-in groups of at most eight, with one existing Access work ledger bridged into Search's caller-owned `ScopeWork`.
-Resolve, currentness, candidate batches and terminal Subject reads stay request-bound; no native locator or copied
-authorization observation leaves Content. The default service runtime creates this composition per reader.
+Decision: install Realm community, exact disclosure and Subject search together through
+`createContentRealmApplication`; preserve settled behavior and test identity, unavailable authority and final
+currentness without claiming positive default-journey proof or adding stories.
+
+The existing facade entries delegate to this bound application. HTTP `createKernel` and `composition/content.ts`
+bind Community's current Realm/Space evidence, Semantic's independent exact terminal Subject evidence and Search's
+native work bridge through their public adapter entries. Application code consumes Content-owned ports only.
+Publication advice supplies no global ownership; Realm never becomes Zone. Current carrier disclosure and the
+original/terminal association remain native owner decisions. The original request, Pool and deadline pass unchanged;
+the facade retains the public wire shapes. Search settles into the existing caller root with the accepted bounds.
+The unchanged source/lifecycle own native sparse cursors and final currentness: no directory, scan, registry or feed
+predicate is added. Missing producers remain unavailable. `realm-application.test.ts` pins those use-case outcomes;
+`realm-composition.test.ts` pins default binding and missing authority before IO. Native journey acceptance stays
+with the Goal walk.
 
 ## Mixed Home summaries
 
@@ -638,21 +639,21 @@ provide viewer action advice; mounted resource readers and the current-thread ca
 
 ## Domain composition
 
-Decision: Kernel Content is split into `contract`, `core`, `application` and adapter modules. Vocabulary, finite
-bounds and the `ContentAmbient` operand live in `content/contract`. Pure ranking, cursor, document-deadline,
-authored-field and work-source rules live in `content/core`. Use cases consume Content-owned ports in
-`content/application`. Native adapters in `content/adapters/native.ts` implement those ports, and
-`createKernel`/`server`/`worker` bind them through `composition/content.ts`. Contract, core and application import no
-downstream domain behaviour. Tests pin document deadline admission, ranking, authored-field rejection and worker
-budgets against fake ports without loading native adapters.
+Decision: contract/core/application/adapters separate Content vocabulary/bounds, pure rules, use cases and native
+effects. `ContentAmbient` supplies time, identity and fetch. Public entries are each layer's `index.ts`, adapter
+`bind.ts`/`ambient.ts` and existing facades. Server, worker and preload composition bind native ports. Platform
+`defineModule`/shared Ambient and Semantic disclosure/eligibility facades remain undelivered; `contentDeclaration()`
+stays. Contract/core/application import no downstream behaviour. Wiring adds no SQL, scan or checkout.
 
-Public entries: `content/contract/index.ts`, `content/core/index.ts`, `content/application/index.ts`,
-`content/adapters/index.ts`, `content/adapters/bind.ts`, `content/adapters/ambient.ts`, plus the existing Content
-adapter facades. Platform `defineModule` is not delivered;
-Content keeps `contentDeclaration()` on the existing composition interfaces. Missing shared operands: platform
-`defineModule` / shared Ambient contract, and Semantic public facades for `disclosure.ts` and `eligibility.ts`.
-
-Wiring adds no query, scan or extra statement; native cost stays with the existing producer declarations.
+Decision: activity, review current context, exact document-media and bounded mentions use Content applications with
+explicit optional outcomes. `composition/content.ts` installs native Content/Access reading adapters. Access owns
+active/deleted/unknown observations and native failure classification; applications import no Account data or HTTP
+errors. Compatibility facades retain closed schemas and map changed-source failures to HTTP retry. Reading/history
+variants and older consumers retain wire shapes, pool/deadline, exact revisions, references and historical citations.
+Final native authorization follows enrichment. Partial sibling presentation preserves readable documents; failed
+batches retain unavailable state and selected keys. Media observation uses the original budget, including the
+producer's expired-budget empty result. Application/composition tests pin these states; runtime/growth acceptance
+stays with sole Goal walks. No extra stories or publisher.
 
 ## Worker authorization composition
 
@@ -1863,7 +1864,7 @@ raw SQL fixture changes and gate changes without a committed original event cann
   or provider history; global exposure changes affect the complete directory.
 - Growth check: the focused lifecycle test adds more than 100 disappeared identities across native partitions and
   unrelated dependencies, checks bounded examined counts, continuation, replay and explicit removal. This is a focused
-  outcome/batch-bound check; physical block growth remains a dev-verifier measurement.
+  outcome/batch-bound check; sole Goal walks retain physical block growth measurement.
 
 #### Cost: changed-source catch-up and refresh
 
@@ -2065,6 +2066,8 @@ in this producer task. The source candidate API remains available to existing in
 
 ## Subject threads
 
+Decision: Subject page identity uses Access `public-identity` `readPublicAccountByAgent`; live identity, unknown absence and evidence-backed deletion stay distinct, and contribution attribution is not command authority.
+
 Decision: The mounted Subject page accepts an optional `board` ContentId; omission returns `not_selected`, while a supplied Board is admitted only when its exact Subject, Global/Realm place, purpose, parent read and current `thread:create` advice remain stable through final observation.
 
 ### Explicit selected Board entry
@@ -2145,8 +2148,8 @@ state. Erased or withheld sources do not gain author, media, action, comment, or
 does not trigger a refill, and unavailable activity never becomes a zero count.
 
 Decision: preserve the Subject page envelope, attach closed card disclosures to each retained thread, and expose
-only mounted selected-card action preconditions; leave creation advice absent because this endpoint has no concrete
-creation target.
+only mounted selected-card action preconditions. Creation advice is separate and requires the explicit selected
+Board entry described above.
 
 Examples include a populated entry with `card.presentation.state: 'current'`, `card.parentContext.kind: 'opening'`,
 `card.media.state: 'none'`, and `card.comments.state: 'unavailable'` when public coverage is not installed; a covered
@@ -4159,10 +4162,8 @@ It returns the opening plus at most 20 raw replies, excluding the opening from t
 request selects 21 rows to account for the opening's list slot; each continuation selects 20 after its original
 cursor. It never concatenates pages or accepts a client-selected post-ID batch. `target` carries the board's current
 security revision, and each available post action reference carries the exact disclosed source revision.
-The installed composer is `readContentReadingPage(dependencies, threadId, actor, deadline, cursor?)`, mounted as
-operation `thread.reading_page`.
-The Web thread-page loader consumes the generated response and maps its opening and replies into the existing thread
-and post interface. The controller retains rendered and broader native acceptance.
+The mounted `thread.reading_page` composer is `readContentReadingPage(dependencies, threadId, actor, deadline, cursor?)`;
+Web consumes its generated response. Native/rendered acceptance stays with the controller.
 
 Personal data is bounded to the current actor and this page. One deduplicated Accounts summary call admits at most 21
 author identities. Existing viewer-reaction and reaction-count readers receive at most 22 targets (thread, opening,
@@ -4238,7 +4239,7 @@ Decision: The shared batch accepts at most 20 deduplicated exact thread/post ref
 their Subject key, Home retains its own parent/review context, concealment withholds an entry, and readable changes
 fail closed for retry.
 
-Decision: the thread reading receiver and its public response alias use the emitted mounted reading-page declaration, including the existing native post locator; broader client mirrors remain until the full source publication succeeds.
+Decision: the receiver/response alias uses the emitted reading-page declaration and native post locator; broader client mirrors remain until full source publication.
 
 Decision: duplicate mention identities keep the first disclosed row; mixed document-media availability keeps available images and readable text, and only a failed presentation read marks the page unavailable.
 

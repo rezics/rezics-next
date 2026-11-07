@@ -1190,6 +1190,16 @@ export class WorkerStore implements AttemptFence {
   devVerifierRun(key: string): DevVerifierRun | undefined {
     return decode<DevVerifierRun>(this.db.query('SELECT body FROM dev_verifier_runs WHERE cache_key=?').get(key));
   }
+  devVerifierLatestRound(): DevVerifierRun | undefined {
+    const run = decode<DevVerifierRun>(
+      this.db
+        .query(
+          "SELECT body FROM dev_verifier_runs WHERE cache_key LIKE 'dev-verifier-round:%' ORDER BY rowid DESC LIMIT 1",
+        )
+        .get(),
+    );
+    return run?.round ? run : undefined;
+  }
   saveDevVerifierRun(run: DevVerifierRun): void {
     this.db
       .transaction(() => {
@@ -1209,13 +1219,6 @@ export class WorkerStore implements AttemptFence {
       .query('SELECT body FROM dev_verifier_findings ORDER BY rowid DESC LIMIT ?')
       .all(Math.max(0, Math.min(this.policy.verifier.findingRows, limit)))
       .map((row) => decode<DevVerifierFinding>(row)!);
-  }
-  devVerifierHasKnownExisting(signature: string): boolean {
-    return Boolean(
-      this.db
-        .query("SELECT 1 FROM dev_verifier_findings WHERE signature=? AND status='existing' LIMIT 1")
-        .get(signature),
-    );
   }
   saveDevVerifierFinding(finding: DevVerifierFinding): void {
     this.db

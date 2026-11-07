@@ -30,6 +30,8 @@ check admission, including callers of `dev` with `REZICS_TEST_RUNTIME=1`; the `-
 From `apps/web`, use `bun run storybook` for interface development and `bun run check` to generate, type-check, test,
 and build through the supported check route.
 
+Decision: Library Loans are public at `library/loans-current.tsx`, `library/loans-query.ts` and `library/loans-actions.ts`. The `/library/loans` route imports those entries with Web `session/guard.ts`, `shell/head.ts` and `shell/head-context.ts`. Loans consume Web `kernel/exposure.ts`, `kernel/query.ts`, `kernel/platform-closed.ts`, `session/query.ts`, `shell/page-heading.tsx` and Search `features/pages/shared.tsx`.
+
 ## Workspace typing
 
 Decision: `bun run typecheck` compiles both `tsconfig.json` (product with Worker globals) and
@@ -151,7 +153,7 @@ left the process group, when the invocation ends or is interrupted. Lifecycle, f
 pin that composed-run behaviour; existing browser page assertions stay unchanged. Decision: wrap optimizer init from a
 pre plugin so Cloudflare cannot re-optimize before restamp; keep those few tests as the pin for shared-server
 acquisition, lock-keyed cache reuse and optimizer restamp; no extra stories for this runner. Decision: Web typecheck
-declares `reylo` 0.7.0 beside its `contentMappers` entry so the mapper resolves from this workspace; it does not
+declares `reylo` 0.7.0 in `devDependencies` only, beside its `contentMappers` entry, so the mapper resolves from this workspace; it does not
 compile Kernel, Auth or Importer scripts. Commerce Copies owns Workerd urlpattern ESM entry, Worker `import` conditions and child-output custody; this
 runner keeps shared-server and lock-keyed cache identity, and overlapping Vite config is train reconciliation. Decision:
 Vite `server.fs.allow` is the Node-resolved install roots of packages the client and Worker actually load, collapsed to

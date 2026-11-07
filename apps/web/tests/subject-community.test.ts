@@ -1,8 +1,8 @@
 import { expect, test } from 'bun:test';
 import { createElement } from 'react';
-import { renderToStaticMarkup } from 'react-dom/server';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { createMemoryHistory, createRootRoute, createRouter, RouterProvider } from '@tanstack/react-router';
+import { createRootRoute, createRouter, createMemoryHistory, RouterContextProvider } from '@tanstack/react-router';
+import { renderToStaticMarkup } from 'react-dom/server';
 import { createKernelClient } from '@rezics/client';
 import { fromPlainText } from '@rezics/document';
 import {
@@ -12,14 +12,12 @@ import {
 } from '../src/features/pages/subject-community';
 import { SubjectCommunityRegion } from '../src/features/pages/subject-community-view';
 import { loadSubjectPage, SubjectPage, type SubjectPageData } from '../src/features/pages/subject';
-import { DefaultReaderProvider } from '../src/shell/current-reading';
 import { subjectTabs } from '../src/features/pages/views';
 import { subjectPageMessages } from '../src/features/pages/route-support';
 import { GLOBAL } from '../src/features/pages/subject-ratings';
 import { createStoryRecordedKernelFetch } from '../src/kernel/fake';
 import {
   communityAuthor,
-  communityCurrentEntry,
   communitySubject,
   communityThread,
   communityThreadPage,
@@ -28,6 +26,8 @@ import { threadLocation } from '../src/threads/thread-href';
 import { startThreadRequest } from '../src/threads/post-writes';
 import { ExistingReviewNotice } from '../src/threads/write-prompts';
 import type { SessionEnv } from '../src/session/client';
+import type { PageAuthors } from '../src/identity/read';
+import { m } from '../src/paraglide/messages.js';
 
 function fixture(answer?: (request: Request) => Response | undefined) {
   const requests: Request[] = [];
@@ -45,32 +45,32 @@ const threadReads = (requests: Request[]) =>
   requests.filter((request) => new URL(request.url).pathname.endsWith('/threads'));
 const isCommunity = (request: Request) =>
   new URL(request.url).pathname === `/v1/subjects/${communitySubject.id}/threads`;
-async function pageHtml(page: SubjectPageData) {
-  const route = createRootRoute({
-    component: () =>
-      createElement(SubjectPage, { page, locale: 'en', messages: subjectPageMessages(), renderJsonLd: false }),
+function pageHtml(page: SubjectPageData) {
+  const router = createRouter({
+    routeTree: createRootRoute(),
+    history: createMemoryHistory({ initialEntries: [`/en/subjects/${page.subject}/work`] }),
   });
-  const router = createRouter({ routeTree: route, history: createMemoryHistory({ initialEntries: ['/'] }) });
-  await router.load();
   return renderToStaticMarkup(
-    createElement(
-      QueryClientProvider,
-      { client: new QueryClient({ defaultOptions: { queries: { retry: false } } }) },
-      createElement(DefaultReaderProvider, null, createElement(RouterProvider, { router })),
-    ),
+    createElement(RouterContextProvider, {
+      router,
+      children: createElement(QueryClientProvider, {
+        client: new QueryClient(),
+        children: createElement(SubjectPage, {
+          page,
+          locale: 'en',
+          messages: subjectPageMessages(),
+          renderJsonLd: false,
+        }),
+      }),
+    }),
   );
-}
-
-function withoutNativeCard(thread: ReturnType<typeof communityThread>) {
-  const { card: _card, ...row } = thread as typeof thread & { card?: unknown };
-  return row;
 }
 
 test('Subject lists expose readable native cards and keep writes unavailable without native advice', async () => {
   const { client, requests } = fixture();
   const loaded = await withSubjectCommunity(client, await loadSubjectPage(client, communitySubject.id));
   if (loaded.kind !== 'page') throw new Error('Expected subject page');
-  const html = await pageHtml(loaded.page);
+  const html = pageHtml(loaded.page);
   expect(html).toContain('A small book with lasting questions');
   expect(html).toContain('What does the fox teach the prince?');
   expect(html).toContain('The desert journey leaves room for tenderness and responsibility.');
@@ -78,11 +78,10 @@ test('Subject lists expose readable native cards and keep writes unavailable wit
   expect(html).toContain(`data-context-subject-id="${communitySubject.id}"`);
   expect(html).toContain(`data-context-place-id="${GLOBAL}"`);
   expect(html).toContain(threadLocation('en', communityThread('review')));
-  expect(html).not.toContain(`new?subject=${communitySubject.id}`);
+  expect(html).not.toContain(`subject=${communitySubject.id}`);
   expect(html).not.toContain('data-slot="create-thread"');
-  expect(loaded.page.community?.regions.review?.state).toBe('ready');
-  expect(loaded.page.community?.regions.discussion?.state).toBe('ready');
-  expect(subjectTabs(loaded.page).map((tab) => tab.view)).toEqual(expect.arrayContaining(['overview', 'details']));
+  expect(html).not.toContain('data-slot="community-entry"');
+  expect(subjectTabs(loaded.page).map((tab) => tab.view)).toEqual(expect.arrayContaining(['reviews', 'discussion']));
   const reads = threadReads(requests);
   expect(reads).toHaveLength(2);
   for (const request of reads) {
@@ -92,11 +91,13 @@ test('Subject lists expose readable native cards and keep writes unavailable wit
     expect(request.headers.has('authorization')).toBe(false);
     expect(request.headers.has('cookie')).toBe(false);
   }
-  expect(requests.filter((request) => new URL(request.url).pathname === '/v1/accounts')).toHaveLength(0);
+  expect(requests.filter((request) => new URL(request.url).pathname === '/v1/accounts')).toHaveLength(1);
   expect(
     requests.filter((request) => /\/v1\/(accounts|subjects)\/[^/]+$/.test(new URL(request.url).pathname)),
   ).toHaveLength(0);
-  expect(JSON.stringify(loaded.page.community)).not.toMatch(/firstPost|sha256|viewerReaction|decisionId|report|appeal/);
+  expect(JSON.stringify(loaded.page.community)).not.toMatch(
+    /"firstPost"|"sha256"|"viewerReaction"|"decisionId"|"report"|"appeal"/,
+  );
 
   requests.length = 0;
   const view = await withSubjectCommunity(
@@ -105,7 +106,7 @@ test('Subject lists expose readable native cards and keep writes unavailable wit
     'reviews',
   );
   if (view.kind !== 'page') throw new Error('Expected review view');
-  expect(await pageHtml(view.page)).toContain('?cursor=community-next');
+  expect(pageHtml(view.page)).toContain('?cursor=community-next');
   expect(new URL(threadReads(requests)[0]!.url).searchParams.get('limit')).toBe('20');
   requests.length = 0;
   const later = await withSubjectCommunity(
@@ -115,7 +116,7 @@ test('Subject lists expose readable native cards and keep writes unavailable wit
     'community-next',
   );
   if (later.kind !== 'page') throw new Error('Expected review continuation');
-  const laterHtml = await pageHtml(later.page);
+  const laterHtml = pageHtml(later.page);
   expect(laterHtml).toContain('Reading it again');
   expect(laterHtml).not.toContain('data-slot="community-next"');
   expect(threadReads(requests)).toHaveLength(1);
@@ -178,35 +179,31 @@ test('current hidden, unavailable and closed reads are distinct from empty, and 
 
 test('only public available summaries and one author batch leave the reader; cursor input remains bounded', async () => {
   const hidden = communityThread('review');
-  const ordinaryDiscussion = withoutNativeCard(communityThread('discussion'));
-  const { client, requests } = fixture((request) => {
-    if (!isCommunity(request)) return;
-    const kind = new URL(request.url).searchParams.get('kind');
-    if (kind === 'review')
-      return Response.json({
-        ...communityThreadPage(
-          'review',
-          communitySubject,
-          [
-            communityThread('review'),
-            {
-              ...hidden,
-              id: 'hidden-review',
-              availability: 'withheld',
-              firstPost: {
-                ...hidden.firstPost,
-                body: fromPlainText('withheld body'),
-                decisionId: 'private-decision',
+  const { client, requests } = fixture((request) =>
+    isCommunity(request) && new URL(request.url).searchParams.get('kind') === 'review'
+      ? Response.json({
+          ...communityThreadPage(
+            'review',
+            communitySubject,
+            [
+              communityThread('review'),
+              {
+                ...hidden,
+                id: 'hidden-review',
+                availability: 'withheld',
+                firstPost: {
+                  ...hidden.firstPost,
+                  body: fromPlainText('withheld body'),
+                  decisionId: 'private-decision',
+                },
               },
-            },
-          ],
-          'native-next',
-        ),
-        privateCount: 1000,
-      });
-    if (kind === 'discussion')
-      return Response.json(communityThreadPage('discussion', communitySubject, [ordinaryDiscussion], null));
-  });
+            ],
+            'native-next',
+          ),
+          privateCount: 1000,
+        })
+      : undefined,
+  );
   const data = await readSubjectCommunity(client, communitySubject.id, ['review', 'review', 'discussion']);
   expect(data.regions.review).toMatchObject({ state: 'unavailable' });
   expect(JSON.stringify(data)).not.toMatch(/withheld body|hidden-review|private-decision|privateCount/);
@@ -236,6 +233,42 @@ test('only public available summaries and one author batch leave the reader; cur
   ).toEqual([cursor, cursor]);
   expect(first.sourceKey).toBeString();
   expect(first.sourceKey).not.toBe(second.sourceKey);
+});
+
+test('native community identity uses the public identity batch: live, unknown, and deletion stay distinct', () => {
+  const thread = communityThread('discussion');
+  const region = composedCommunityRegion(
+    { status: 200, body: communityThreadPage('discussion', communitySubject, [thread], null) },
+    { kind: 'subjectThreads', id: communitySubject.id, place: GLOBAL, threadKind: 'discussion', limit: 5 },
+  );
+  if (region.state !== 'ready' || !region.threads[0]?.nativeCard) throw new Error('Expected a native card');
+  const leftover = region.threads[0]!.nativeCard.author;
+  expect(leftover?.handle).toBe(communityAuthor.handle);
+  const html = (authors: PageAuthors) =>
+    renderToStaticMarkup(
+      createElement(SubjectCommunityRegion, {
+        id: 'discussion',
+        kind: 'discussion',
+        region,
+        authors,
+        now: '2026-10-24T01:00:00.000Z',
+        subject: communitySubject,
+        locale: 'en',
+        href: '/en/subjects/subject/discussion',
+      }),
+    );
+  const live = html({ [communityAuthor.id]: communityAuthor });
+  expect(live).toContain('Mira Okabe');
+  expect(live).toContain('/en/@mira');
+  const unknown = html({});
+  expect(unknown).toContain(m.thread_author_unknown());
+  expect(unknown).not.toContain('/en/@mira');
+  const deleted = html({
+    [communityAuthor.id]: { id: communityAuthor.id, kind: 'actor', state: 'deleted' },
+  });
+  expect(deleted).toContain(m.thread_author_deleted());
+  expect(deleted).not.toContain('/en/@mira');
+  expect(deleted).not.toContain('Mira Okabe');
 });
 
 test('ordinary discussion creation keeps the chosen subject and review conflicts retain the author-owned native target', async () => {
@@ -295,78 +328,4 @@ test('ordinary discussion creation keeps the chosen subject and review conflicts
   );
   bodies.push(await discussion.requests[0]!.json());
   expect(bodies[0]).toMatchObject({ subjectIds: [communitySubject.id] });
-});
-
-const reviewRequest = {
-  kind: 'subjectThreads' as const,
-  id: communitySubject.id,
-  place: GLOBAL,
-  threadKind: 'review' as const,
-  limit: 20,
-};
-
-test('create-thread binds only native entry.current Board advice, never a readable card boardId', () => {
-  const thread = communityThread('review');
-  const entry = communityCurrentEntry('review', communitySubject);
-  expect(entry.board.id).not.toBe(thread.boardId);
-  const ready = composedCommunityRegion(
-    { status: 200, body: communityThreadPage('review', communitySubject, [thread], null, GLOBAL, entry) },
-    reviewRequest,
-  );
-  expect(ready).toMatchObject({
-    state: 'ready',
-    entry: { state: 'current', board: { id: entry.board.id }, createThread: 'allowed' },
-    threads: [{ id: thread.id, boardId: thread.boardId }],
-  });
-  const unselected = composedCommunityRegion(
-    { status: 200, body: communityThreadPage('review', communitySubject, [thread], null) },
-    reviewRequest,
-  );
-  expect(unselected).toMatchObject({ state: 'ready', entry: { state: 'not_selected' } });
-  expect(
-    composedCommunityRegion(
-      {
-        status: 200,
-        body: communityThreadPage('review', communitySubject, [thread], null, GLOBAL, {
-          state: 'current',
-          request: {
-            subjectId: communitySubject.id,
-            placeId: GLOBAL,
-            kind: 'review',
-            selectedBoardId: thread.boardId,
-          },
-        }),
-      },
-      reviewRequest,
-    ).state,
-  ).toBe('unavailable');
-  const html = renderToStaticMarkup(
-    createElement(SubjectCommunityRegion, {
-      id: 'reviews',
-      kind: 'review',
-      region: ready,
-      authors: {},
-      now: '2026-10-24T00:00:00.000Z',
-      subject: communitySubject,
-      locale: 'en',
-      href: '/en/subjects/subject/reviews',
-    }),
-  );
-  expect(html).toContain('data-slot="community-entry"');
-  expect(html).not.toContain('data-slot="community-entry-unavailable"');
-  expect(html).not.toContain('data-slot="create-thread"');
-  const withheld = renderToStaticMarkup(
-    createElement(SubjectCommunityRegion, {
-      id: 'reviews',
-      kind: 'review',
-      region: unselected,
-      authors: {},
-      now: '2026-10-24T00:00:00.000Z',
-      subject: communitySubject,
-      locale: 'en',
-      href: '/en/subjects/subject/reviews',
-    }),
-  );
-  expect(withheld).toContain('data-slot="community-entry-unavailable"');
-  expect(withheld).not.toContain('data-slot="create-thread"');
 });

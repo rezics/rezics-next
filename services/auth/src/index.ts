@@ -120,7 +120,7 @@ export {
 export { createInternalConsentHandler } from './internal-consent.ts';
 export type { InternalConsentAccessConfiguration } from './internal-consent.ts';
 export type { AccountOperationAccess } from './account-operations-transport.ts';
-export { SigningRotationPending } from './signing.ts';
+export { SigningRotationPending } from './contract/index.ts';
 export { createAccountWorkflows } from './workflows.ts';
 export {
   AUTH_SDK_RETIREMENT,

@@ -47,15 +47,69 @@ export type CrossMediaTableScanLimits = {
   maxRows: number;
   maxBytes: number;
   consumeRow?: (bytes: number) => void;
+  /** Byte offset of the first unread dump line for a bounded continuation page. */
+  resumeBytes?: number;
 };
 
 export class CrossMediaTableScanLimitError extends Error {
   constructor(
     readonly provider: Provider,
     readonly table: string,
+    readonly resumeBytes = 0,
   ) {
     super(`Cross-media ${provider}/${table} exceeded its bounded scan`);
     this.name = 'CrossMediaTableScanLimitError';
+  }
+}
+
+/** A duplicate module instance can produce the same named scan-limit error. */
+export function isCrossMediaTableScanLimitError(error: unknown): error is CrossMediaTableScanLimitError {
+  return (
+    error instanceof CrossMediaTableScanLimitError ||
+    (error instanceof Error && error.name === 'CrossMediaTableScanLimitError')
+  );
+}
+
+function scanResumeBytes(error: { resumeBytes?: unknown }): number {
+  return typeof error.resumeBytes === 'number' && Number.isSafeInteger(error.resumeBytes) && error.resumeBytes >= 0
+    ? error.resumeBytes
+    : 0;
+}
+
+/** Read bounded pages until selected rows are present, EOF, or a page cannot advance. */
+export async function collectSelectedDumpRows(
+  input: CrossMediaTables,
+  provider: Provider,
+  table: string,
+  options: {
+    limits: CrossMediaTableScanLimits;
+    select: (row: Row) => boolean;
+    onRow: (row: Row) => void;
+    done?: () => boolean;
+    onLimit: () => void;
+  },
+): Promise<void> {
+  let resumeBytes = options.limits.resumeBytes ?? 0;
+  for (;;) {
+    if (options.done?.()) return;
+    let advanced = 0;
+    try {
+      for await (const row of input.rows(provider, table, { ...options.limits, resumeBytes })) {
+        advanced += 1;
+        if (!options.select(row)) continue;
+        options.onRow(row);
+        if (options.done?.()) return;
+      }
+      return;
+    } catch (error) {
+      if (!isCrossMediaTableScanLimitError(error)) throw error;
+      const next = scanResumeBytes(error);
+      if (advanced === 0 || next <= resumeBytes) {
+        options.onLimit();
+        return;
+      }
+      resumeBytes = next;
+    }
   }
 }
 

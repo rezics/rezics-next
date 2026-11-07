@@ -1,5 +1,9 @@
 import { registerDefinitionCatalogueWork } from './register.ts';
-import { contextDirectoryEffect, populateContextDirectory, registerContextDirectoryWork } from './context-directory.ts';
+import {
+  contextDirectoryEffect,
+  populateContextDirectory,
+  registerContextDirectoryWork,
+} from './context-application.ts';
 import { relayConcurrencyForPool, startRelays } from '../events/relays.ts';
 import type { WorkContext, WorkModule } from '../work/registry.ts';
 import type { Pool } from 'pg';

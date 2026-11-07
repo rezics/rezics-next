@@ -2,7 +2,6 @@ import { sortName } from './title-sort-key.ts';
 export { sortName } from './title-sort-key.ts';
 import { collectSemanticRecordFacts } from './record-source-set.ts';
 import type { Release } from '@rezics/definitions';
-import { chooseLabel, languageRanges } from './language.ts';
 import type { FactRow } from './item.ts';
 import type { CommandTransaction } from '../command/command.ts';
 import { routeOf } from '../route/route.ts';
@@ -10,11 +9,8 @@ import type { Pool } from 'pg';
 import { withConnection } from '../database/pool.ts';
 import { slotView } from './slots.ts';
 import readSubject from './read-holder-facts.sql';
-
-/** Unlocalized projection keys use the shared label rule without reader or original-language preferences. */
-export function subjectLabel(labels: Record<string, string>, language?: string): string {
-  return chooseLabel(labels, languageRanges(null, language))?.value ?? '';
-}
+import { subjectLabel } from './public-subject-facts.ts';
+export { subjectLabel } from './public-subject-facts.ts';
 /** Fixed-width decimal scientific encoding; preserves integer ordinals beyond Number's precision. */
 export function positionKey(value: unknown): string {
   const text = typeof value === 'string' ? value : (value as { amount?: string } | null)?.amount;

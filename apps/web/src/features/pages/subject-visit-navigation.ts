@@ -850,6 +850,7 @@ function subjectVisitReturnAt(value: unknown, locale: string | undefined, nested
     }
     const allowed = new Set([
       'realm',
+      'board',
       'context',
       'node',
       'cursor',
@@ -875,6 +876,7 @@ function subjectVisitReturnAt(value: unknown, locale: string | undefined, nested
     }
     if (keys.some((key) => !allowed.has(key)) || new Set(keys).size !== keys.length) return;
     const selectedRealm = url.searchParams.get('realm');
+    const selectedBoard = url.searchParams.get('board');
     const selectedContext = url.searchParams.get('context');
     const node = url.searchParams.get('node');
     const cursor = url.searchParams.get('cursor');
@@ -910,6 +912,7 @@ function subjectVisitReturnAt(value: unknown, locale: string | undefined, nested
       streamDirection !== null;
     if (
       (selectedRealm !== null && !new RegExp(`^${uuid}$`).test(selectedRealm)) ||
+      (selectedBoard !== null && !new RegExp(`^${uuid}$`).test(selectedBoard)) ||
       (selectedContext !== null && (!subject || !new RegExp(`^${uuid}$`, 'i').test(selectedContext))) ||
       (personBiography !== undefined && selectedContext !== personBiography.context) ||
       (gameReturn !== undefined &&

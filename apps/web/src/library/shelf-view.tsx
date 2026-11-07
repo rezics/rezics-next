@@ -57,7 +57,7 @@ import {
 import { ShelfLabelAction, ShelfLabelOutcomes } from './shelf-labels';
 import { useBulkLibraryRemoval } from './bulk-library-removal-controller';
 import { BulkLibraryRemovalAction, BulkLibraryRemovalReviewView } from './bulk-library-removal-view';
-import { useSession } from '../session/query';
+import { useSession } from '../session';
 import { selectableEntry, shelfSelectionLimit, type ShelfRemovalIdentity } from './shelf-selection';
 import type { LibrarySubject } from './reads';
 import type { LabelShelfEntry } from './label-shelf-read';

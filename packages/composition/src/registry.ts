@@ -28,6 +28,8 @@ export type PageContinuation = { node: string; cursor: string };
 export interface PageContext {
   subject: string | null;
   context?: SelectedContext;
+  /** A supplied Board operand; it selects an entry for the Subject threads reads and grants nothing. */
+  board?: string;
   continuation?: PageContinuation;
   /** The account the page is for, resolved before planning. */
   account?: { id: string; handle: string } | null;
@@ -77,6 +79,7 @@ export type PageRead =
       id: string;
       place: string;
       threadKind: 'discussion' | 'review';
+      board?: string;
       limit: number;
       cursor?: string;
     }
@@ -376,6 +379,7 @@ const readSubjectThreads =
           id: page.subject,
           place: page.context?.population.kind === 'realm' ? page.context.population.id : PAGE_GLOBAL_CONTEXT,
           threadKind,
+          ...(page.board === undefined ? {} : { board: page.board }),
           // Preserve the selected-Realm window; Global previews use the adopted six-entry window.
           limit: page.context?.population.kind === 'realm' ? 5 : 6,
         };

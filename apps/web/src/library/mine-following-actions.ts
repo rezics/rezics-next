@@ -4,7 +4,7 @@ import { getRequest, setResponseHeader } from '@tanstack/react-start/server';
 import { env } from 'cloudflare:workers';
 import { nameSubjectTypes } from '../subject/definitions';
 import { kernelClient, requestLocale } from '../kernel/client';
-import { isPlatformClosedError } from '../kernel/platform-closed';
+import { isPlatformClosedError } from '../session/reading-policy';
 import type { SessionEnv } from '../session/client';
 import { sessionSubject } from '../session/request';
 import { loadMineFollowingPage, type MineFollowingPage, unfollowFollow } from './mine-following';

@@ -110,12 +110,14 @@ afterAll(async () => {
 const searches = (since: number) => kernelCalls.slice(since).filter((call) => call.path === '/v1/subjects:search');
 
 test('the search query factory uses publicRead and keys the locale with all validated params', async () => {
-  const querySource = await Bun.file(join(app, 'src/search/search-queries.ts'))
-    .text()
-    .catch(() => '');
+  const [querySource, applicationSource] = await Promise.all([
+    Bun.file(join(app, 'src/search/search-query-options.ts')).text(),
+    Bun.file(join(app, 'src/search/search-application.ts')).text(),
+  ]);
   expect(querySource).toContain('queryOptions');
   expect(querySource).toContain('...publicRead');
-  expect(querySource).toMatch(/queryKey:\s*\[\s*'search',\s*locale,\s*params\s*\]/);
+  expect(querySource).toContain('searchApplication.queryKey(locale, params, reader)');
+  expect(applicationSource).toMatch(/searchSessionLifetime\(locale, params, reader\)/);
 });
 
 test('search validates and defaults every public search parameter, and its loader deps match the read', async () => {

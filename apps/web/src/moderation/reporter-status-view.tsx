@@ -14,7 +14,7 @@ import {
 import { m } from '../paraglide/messages.js';
 import { getLocale, localizeHref } from '../paraglide/runtime.js';
 import type { ReporterHistoryFocus } from './reporter-history/focus';
-import { browserObservation } from '../session/observation';
+import { browserObservation } from '../reader/lifetime/index';
 import type { ReporterStatus } from './reporter-status-model';
 
 type RetryActivation = { keyboard: boolean; source: HTMLButtonElement };

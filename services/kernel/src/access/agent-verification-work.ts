@@ -1,5 +1,5 @@
 import { deliverAccountIdentity } from './agent-verification-identity.ts';
-import { IdentityEpochStoreError } from '../semantic/identity-adapters/index.ts';
+import { IdentityEpochStoreError } from '../semantic/contract/index.ts';
 import { classifyUnavailability } from './unavailable.ts';
 import { DBOS } from '@dbos-inc/dbos-sdk';
 import { Value } from 'typebox/value';

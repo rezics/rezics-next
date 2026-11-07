@@ -1,3 +1,4 @@
+import { installRatingVoteSemantic } from './rating-votes.ts';
 import { createInitiatorRestorer } from '../access/durable-initiator.ts';
 import { erasureWorkModule } from '../access/erasure.ts';
 import { sharedHistoryWorkModule } from '../history/application/index.ts';
@@ -81,6 +82,7 @@ export function createKernelWorkModules(
   communityAmbient: CommunityAmbient = systemCommunityAmbient,
 ): readonly WorkModule[] {
   installIdentityRatingRepairProducer();
+  installRatingVoteSemantic();
   const searchWorkModule = createSearchWorkModule(composeDiscovery, composeRuntimeDefaults, composeCreditSearch);
   const semanticWorkModule = createSemanticWorkModule(composeSemantic);
   const contentWorkModule = contentDeclaration().work(contentWorkAmbient(ambient));

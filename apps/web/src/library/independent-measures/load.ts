@@ -1,5 +1,5 @@
 import type { KernelClient } from '@rezics/client';
-import { isPlatformClosedError } from '../../kernel/platform-closed';
+import { isPlatformClosedError } from '../../session/reading-policy';
 import type { SessionEnv } from '../../session/client';
 import { prepareSession, viewerCredential } from '../../session/request';
 import { loadProgressSession, type ProgressSessionPage, type ProgressSessionView } from '../progress-reads';

@@ -1,5 +1,5 @@
 import { createContext, useContext } from 'react';
-import { sessionCsrfToken } from '../../session/query';
+import { sessionCsrfToken } from '../../session';
 import { archiveTransportLost } from '../archive-entry-recovery/native';
 import type { AniListCommand, AniListImportPort } from './contract';
 

@@ -2,6 +2,7 @@ import canonicalize from 'canonicalize';
 import { createHash } from 'node:crypto';
 import type { FilterRelease } from '@rezics/filter';
 import { ProblemError } from '../http/problem.ts';
+import { SearchOperationError } from './operation-outcomes.ts';
 import { compileText, type TextNode } from './text.ts';
 import { boundMatchEvidencePage, compileMatchEvidence } from './match-evidence.ts';
 import { CollectionDiscoveryReadinessError } from './collection-discovery.ts';
@@ -46,8 +47,7 @@ import type {
   PublicFilterQueriedObservation,
   PublicFilterConsumerRefill,
 } from './public-filter-consumer-contract.ts';
-import { finishDiscoveryDisclosure } from './disclosure/discovery.ts';
-import { OwnerCurrentRestartRequired, revalidateOwnerCurrentSummaries } from './disclosure/owner-current.ts';
+import { finishDiscoveryDisclosure, revalidateOwnerCurrentSummaries } from './disclosure-application.ts';
 import { openPublicFilterCoveragePage } from './public-filter-coverage-page.ts';
 import {
   admitTaggedWorkPlan,
@@ -816,8 +816,11 @@ function executeDiscoverySearch(
             aggregateProof = window.exhausted;
           } catch (error) {
             countFailed = true;
-            if (error instanceof OwnerCurrentRestartRequired) throw new ProblemError('search_restart_required');
-            if (error instanceof ProblemError && error.code === 'search_restart_required') throw error;
+            if (
+              (error instanceof ProblemError || error instanceof SearchOperationError) &&
+              error.code === 'search_restart_required'
+            )
+              throw error;
             kindWitnesses = new Map();
             kindExhausted = false;
             aggregateProof = false;
@@ -930,8 +933,7 @@ function executeDiscoverySearch(
     try {
       return await execute(...args);
     } catch (error) {
-      if (error instanceof ProblemError) throw error;
-      if (error instanceof OwnerCurrentRestartRequired) throw new ProblemError('search_restart_required');
+      if (error instanceof ProblemError || error instanceof SearchOperationError) throw error;
       if (error instanceof CollectionDiscoveryReadinessError) throw error;
       // Owner source/native decoder failures are readiness for the whole response, never absence.
       throw ready();

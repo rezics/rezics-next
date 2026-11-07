@@ -90,3 +90,18 @@ Supplied property controls remain the shared Collection filter editor. Reset dro
 never weaken them. Continued empty pages remain page-local absence. Suppressed rows do not trigger refill, counts,
 identity recovery or extra requests. Native row order, duplicate destinations and source/membership fences remain
 unchanged. List/grid, filter and member links carry the supported visit address through the existing shared readers.
+
+## Rule presentation boundary
+
+Decision: Library owns the saved-query condition presentation port and owner-leaf extension. Ordinary new/edit rule
+routes bind Search's existing ConditionEditor through `SavedQueryConditionInput`; Library does not import that
+implementation or Search result chrome. Search remains the released grammar, query, facet and result renderer
+authority. Its pure `search/contracts/condition-metadata` entry supplies released public metadata without loading
+the Search request runtime. Owner criteria, accepted immutable release, original CAS revision and atomic commands
+remain in the existing private Library read/write lifetime. Public readers never receive that presentation input.
+
+The results review uses the same pure metadata contract and composition's text selection. Its private read,
+current owner admission, page-observation retirement, refused/empty distinction and saved-result return address
+remain unchanged. Isolated editor fixtures supply the production presentation adapter explicitly; their existing
+command, uncertain retry, release, session-replacement and return assertions still apply. Runtime acceptance runs
+after integration; workspace typing does not establish native or browser acceptance.

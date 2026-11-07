@@ -13,9 +13,7 @@ import {
   type ReactNode,
 } from 'react';
 import { m } from '../../paraglide/messages.js';
-import { browserObservation } from '../../session/observation';
-import { sessionQuery } from '../../session/query';
-import type { useSession } from '../../session/query';
+import { browserObservation, readerSessionSource, type BrowserSession } from '../../reader/lifetime/index';
 import type { BoardPinAdviceSelection } from './advice';
 import {
   BoardPinCommandCaller,
@@ -30,7 +28,7 @@ import {
 } from './contract';
 import { productionBoardPinProducer } from './producer';
 
-type SessionValue = ReturnType<typeof useSession>;
+type SessionValue = BrowserSession;
 
 type SessionObservation = {
   id: number;
@@ -67,6 +65,7 @@ function observeSession(client: QueryClient | undefined): SessionObservation {
   }
 
   const shared = browserObservation(client);
+  const session = readerSessionSource(client);
   const state = () => shared.getSnapshot();
   const snapshot = () => {
     const current = state();
@@ -76,7 +75,7 @@ function observeSession(client: QueryClient | undefined): SessionObservation {
     id,
     read() {
       const current = state();
-      const value = client.getQueryData<SessionValue>(sessionQuery.queryKey);
+      const value = session.read();
       return current.state === 'signed-in' &&
         value?.state === 'signed-in' &&
         value.subject === current.observation.subject

@@ -70,107 +70,45 @@ and reader lifetimes keep their current authority. No private state is added to 
 The examples are prepared presentation states, including unavailable context. They are not native eligibility
 evidence. Native and browser acceptance remains with integration execution.
 
-## Private selected reader
+## Private selected actions
 
-Decision: derive the private receiver only from the installed public `@rezics/client` action callable and anonymous
-page `actionSelection`; while either output is absent, keep the production wire unavailable and expose no row controls.
+Decision: use one installed-callable adapter per surviving public occurrence, keep native command owners on their
+original operation lease through advice/projection failure, and preserve exact profile return in the existing history entry.
 
-`contribution-actions/receiver.ts` validates the anonymous page's actual `actionSelection`, caps its cohort at twenty,
-retains the original author/view/cursor/proof, and coalesces refreshes. Failure keeps that exact input for retry.
-Retirement aborts the read, clears retained private state and guards late completion. It does not normalize missing
-own slots or acknowledge writes. The page host now supplies only the anonymous source's actual selection and retires
-on page, read, record, publication, credential, locale, QueryClient and navigation replacement. It never derives
-native references from rendered rows. When the source selection or installed method is absent, the host stays
-unavailable and exposes no inferred controls.
+`contribution-actions/wire.ts` derives both request and response from the installed public
+`accounts({accountId})['contribution-actions'].post` callable. The BFF prepares the viewer's current credential;
+its private no-store response never enters the anonymous document. `receiver.ts` consumes only that document's
+actual `actionSelection`, caps the cohort at twenty, freezes author/view/cursor/proof/references and coalesces refreshes.
+Failure retries that input. Retirement aborts reads, clears private advice and rejects late completion.
+`getSnapshot` returns the last published state by identity until a subscription fires; origin away is fenced by
+`isCurrent` and `subscribeCache`, never by a paired React read. Existing host/receiver tests pin that; no extra stories.
 
-Installed `@rezics/client` resolves to `packages/client` version `0.1.0`. Its mounted Content declarations must
-include `author_contributions.actions` and the anonymous page's `actionSelection` before adaptation can begin.
-The production wire remains unavailable until the complete-input publisher supplies that public method and DTO.
-The closed response adapter and exact native command-owner connections require the admitted native mounted
-contract and official installed callable closure. Recorded adapters do not constitute that delivery. Existing
-native destinations and their reaction/watch/report/reply writers remain the way to review current native advice.
-This reader does not add private fields to anonymous documents.
+The host uses Web's `browserObservation` and `subscribeCache` plus address/read/operation leases. Session fetching,
+invalidation, equal successful replacement and A/B/A retire the original reader synchronously. The named anonymous
+source query has the same custody: fetching, invalidation, removal or any successful replacement retires its advice,
+even when structural sharing retains equal response objects. Page, source, row, publication, credential, locale,
+QueryClient and navigation replacement cannot adopt an earlier unresolved command. Unmount retires immediately;
+remount acquires a new visit. Public links remain usable while private advice is unavailable.
 
-## Current page custody
+Sign-in and private read recovery appear once per contribution page. Sign-in preserves the actual path, cursor,
+query bytes and hash. Advice retry reads only the same selected input; counts, advice and independent durable readback
+never acknowledge a write.
 
-The existing host uses Web's `browserObservation` and `subscribeCache`; it has no separate session event policy.
-The shared observation retires advice during invalidation/fetching, equal successful replacement and observed
-A/B/A, even when React batches the intermediate states. Local address/read/operation leases keep the selected
-public account, original cursor, publication, source, locale and bounded rows separate from the signed-in viewer.
-A read does not require a mutation credential. An operation lease fences the original reader and credential; it
-is not action advice or an authorization grant. Native writers must still admit the exact operation themselves.
-Retirement aborts owned reads and releases their listeners, retained response and page references. Unmount cleanup
-retires synchronously; effect replay and remount acquire a new page visit. A replacement reader reacquires the
-current original selection instead of adopting a previous response or uncertain command.
+`contributions/row-actions.tsx` matches the original public author, view, place, thread/opening and selected revision
+against the anonymous selection and the private selected response. Missing, withheld, denied, sign-in-required,
+not-applicable, unavailable, failed and retired remain distinct. Reaction counts and the own slot must be explicit;
+a missing own slot is not null and missing counts are not zero. Both exact set and clear operations are required.
 
-Decision: show sign-in and private recovery once per contribution page, leaving each original public destination
-usable while private advice is unavailable. The sign-in return keeps the actual path, cursor query bytes and hash.
-Preparing, unavailable and retired notices describe private advice rather than claiming that the public page failed.
-Retry refreshes only the same admitted page input; readback never acknowledges a native write.
+- Watch uses `ThreadWatch`; a Post watches its containing thread and opening revision.
+- Reactions use `ThreadReactions` and its native one-slot queue, freshness and receipt recovery.
+- Report uses `PostActions` with the exact selected resource/revision and current page verification. Its native owner
+  retains private text, body, sender, credential and key across uncertainty.
+- Reply uses `PostComposer` and `ReplyIntent`, targeting the selected Post as immediate parent or the original opening
+  Post for a Discussion/Review. Its thread, parent, draft, credential, key and operation lease remain original.
+  Private visit drafts are not restored from another visit.
 
-## Exact native advice preparation
-
-Decision: prepare exact occurrence and operation selection against the installed native reading-page contract;
-leave contribution response adaptation and production controls unavailable until the official mounted callable and
-DTO are published, rather than inventing a contribution response type.
-
-`contribution-actions/advice.ts` derives its contribution response alias from the mounted account method. That
-alias is `never` on the current installed declaration. Its separate native advice selector uses the existing
-`ReadingPageResponse` declaration and does not accept the receiver's unknown wire result. It requires the exact
-reader, target, source revision, action and operation together. Missing advice, denied advice, withheld advice,
-failure and retirement stay distinct; duplicate references or operations cannot admit a command. A Post's watch
-target is its containing thread with the original thread revision. Original-occurrence matching also checks the
-author, public availability, place, containing thread and first-post revision against the admitted selection.
-
-`contribution-actions/presentation.tsx` prepares separate denied, missing, withheld, sign-in-required, not-applicable,
-unavailable, retired and failed notices. Current allowed advice alone can expose a native control; failed advice
-offers a read retry rather than a command retry. These are native reading-contract presentation inputs, never an
-adapter for the selected receiver's unknown result. Production does not mount these prepared controls yet.
-
-The prepared watch control also requires an exact surviving occurrence and the original host's current operation
-lease. It delegates the command, captured reader/credential, uncertain recovery and deliberate retry to `ThreadWatch`.
-Decision: bind the watch owner's read authority to that operation lease, so an equal current advice readback cannot
-retire its unresolved command; episode replacement still retires the original lease.
-A Post uses its original containing thread and opening revision. A status read cannot settle its uncertain command;
-the native owner retains that command for exact retry. A successful watch needs fresh advice before its inverse can
-appear. No native writer, transport or session observation is copied into this account module.
-
-Decision: the prepared native reaction picker requires both exact set and clear advice, because the existing picker
-can issue either operation; one operation's admission cannot stand in for the other.
-
-`contribution-actions/reaction.tsx` composes `ThreadReactions` for original Discussion, Review and Post occurrences.
-It requires the original operation lease and the mounted native `reaction:set` action with `thread.set_reaction` /
-`thread.clear_reaction` or `post.set_reaction` / `post.clear_reaction` respectively. Slots and counts are explicit
-prepared inputs, never parsed from the receiver's unknown response. The native owner retains an uncertain choice,
-reader, credential and key through advice/count echoes; deliberate retry replays that command before a current point
-read can reconcile its projection. The account module owns no reaction transport or recovery engine. A supplied
-projection watermark keeps the native owner's existing settlement rule.
-
-Decision: account replies target the selected post's containing thread and exact row as parent, or the original opening post for a Discussion or Review; reports keep the selected row and revision.
-
-`contribution-actions/report.tsx` composes current `report:create` / `report.create` advice with `PostActions` for
-that exact selected row and revision. `PostActions` retains private report details, sender, credential, key and
-target across an uncertain result; a later advice read cannot settle it or replace its retry operands. Current
-denial prevents a new report while the original report owner remains available for deliberate retry or discard.
-
-`contribution-actions/reply.tsx` composes current `post:create` / `post.create` advice with `PostComposer` and its
-existing `ReplyIntent`. The command keeps the original thread, immediate parent, draft and operation lease. Local
-draft restoration is off for this private visit; a replaced operation lease remounts the composer with fresh advice
-and no earlier uncertain intent. Advice readback never acknowledges the native write. Both compositions are
-prepared for the official mounted adapter; production remains unavailable until the publisher installs the public
-callable and DTO.
-
-The mounted contribution response adapter and production controls still require the publisher's official callable
-and DTO. Existing public links and the shared host retirement and recovery notice continue to own the production
-journey meanwhile.
-
-Decision: keep an admitted watch, reaction or reply owner on its original operation lease when current advice
-changes. Denial disables new commands; unresolved native commands retain deliberate exact retry or discard, and
-readback never acknowledges them. Watch baseline changes and reaction watermarks cannot retire unresolved commands.
-The advice wrapper keeps native children in the same React slot when a denial notice appears, so showing current
-advice cannot recreate an admitted command owner.
-Admission is retained by the original operation lease, never by a boolean that a replacement lease can inherit.
-The prepared reaction fixture uses the host's stable lease contract; replacing that lease under denial exposes no
-native control and adopts no earlier command.
-Only the official installed row adapter may supply production advice; the public callable and anonymous selection
-must both be installed before replacing the unavailable wire.
+A refresh may disable new commands without replacing an admitted owner. The row keeps its last known watch/reaction
+projection for that occurrence when a section becomes unavailable, while current advice controls new admission.
+The existing native owner alone offers deliberate exact retry/discard. A replacement lease receives fresh advice
+and no retained intent. Exact profile view/cursor/query/hash and surviving occurrence focus remain owned by
+`contributions/navigation.ts`; changed or missing occurrences use its existing recovery notice.

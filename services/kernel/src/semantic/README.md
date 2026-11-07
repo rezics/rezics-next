@@ -1,5 +1,11 @@
 # Semantic
 
+Decision: public-filter Collection reduction exposes the native statement declaration through
+`adapters/collection-reduction.ts`, using `contract` statement names. That descriptor has no command work-association
+implementation. Native reduction executes the identical SQL and serialized-bind plan from that adapter; Library
+retention can compose the original complete cost without loading reduction execution. Existing publication,
+currentness and terminal fencing remain authoritative.
+
 This module owns subject facts and their item projections, partition paging, and immutable definition releases with editorial activation history.
 
 ## Semantic label policy
@@ -14,7 +20,25 @@ Subject IDs are permanent and never reused. Global subject:create creates revisi
 
 The pure kernel-identity-core leaf owns mapping DTOs, bounded evidence classification and immutable merge/unmerge/repoint transforms. Its public entry is identity-core/index.ts: no SQL, runtime, command, Access, environment, clock, randomness or crypto. It indexes acquired evidence once and performs O(N) time/space for at most 100 originals; its four states and reasons are unchanged, and pending never implies self.
 
-Semantic is split into registered contract, core, application and adapter modules. This domain split supersedes the earlier single-adapter-module instruction that retained identity cycles inside one adapter. Contract (`semantic/contract/`) holds identity vocabulary, item facts, subject values and typed ports for Library custody, Search currentness, Rating review, Content lifecycle, hashing, routing and the fact store, with no runtime imports. Core (`semantic/core/`) holds pure next-step, receipt and item-projection derivations over those values. identity-core remains the pure mapping, remainder and rating-review classifier; its `rating-review-bounds.ts` file is the literal-only leaf for keys 2 / locators 2 / operand 16,384 bytes, which identity-epoch adapters import. Application (`semantic/application/`) installs the frozen Semantic domain over those ports: item projection, subject fact plans, identity coordination and rating-review mapping. Effectful adapters remain in kernel-semantic: identity-adapters/read.ts for lightweight native mapping reads, identity-adapters/index.ts for the effectful store, identity-adapters/identity-epoch-binding.ts for the public binding, and adapters/native-domain.ts for hashing, routing and fact-store binding. `item.ts` is a compatibility facade that calls the item application. Callers retain existing named exports, opaque proof objects and WeakMaps. readIdentityMappings, readIdentityRatingReview and readIdentityBasis stay on read.ts and do not load the store or binding graph; published identity digest reads share the mapping-read module rather than identity-basis.ts so Search can consume them without a value-import cycle through semantic/read. The [rating currentness contract](identity-rating-currentness.md) owns its exact reviewed operand and same-home COMMIT participant.
+Semantic is split into registered contract, core, application and adapter modules. Contract (`semantic/contract/`) holds identity vocabulary, item facts, subject values and typed ports for Library custody, Search currentness, Rating review, Content lifecycle, hashing, routing and the fact store, with no runtime imports. Core (`semantic/core/`) holds pure next-step, receipt and item-projection derivations over those values. identity-core remains the pure mapping, remainder and rating-review classifier; its `rating-review-bounds.ts` file is the literal-only leaf for keys 2 / locators 2 / operand 16,384 bytes, which identity-epoch adapters import. Application (`semantic/application/`) installs the frozen Semantic domain over those ports: item projection, subject fact plans, identity coordination and rating-review mapping. Effectful adapters remain in kernel-semantic: identity-adapters/read.ts for lightweight native mapping reads, identity-adapters/index.ts for the effectful store, identity-adapters/identity-epoch-binding.ts for the public binding, and adapters/native-domain.ts for hashing, routing and fact-store binding. `item.ts` is a compatibility facade that calls the item application. Callers retain existing named exports, opaque proof objects and WeakMaps. readIdentityMappings, readIdentityRatingReview and readIdentityBasis stay on read.ts and do not load the store or binding graph; published identity digest reads share the mapping-read module rather than identity-basis.ts so Search can consume them without a value-import cycle through semantic/read. The [rating currentness contract](identity-rating-currentness.md) owns exact reviewed operands and same-home COMMIT admission; [Rating ports](../rating/vote-readback.md) own counted orchestration and native adapter composition.
+
+Access agent identity maintenance consumes an Access-owned native capability. Its producer,
+`adapters/agent-identity-maintenance.ts`, is bound by `composition/access.ts`, including native preload. Semantic owns
+accepted-binding and retained-reference SQL and exact work declarations in `adapters/agent-identity-maintenance-work.ts`.
+The producer invokes existing terminal fencing/drain/release, binding, native receipt, publication and Source-frame
+operations with the original Pool, authority, deadline and work vector. It creates no identity registry or startup
+writer. Access keeps original Source, technical receiver and reversal settlement custody. Declarations are evaluated
+at use; Source admission multiplicity is pure `contract/identity-source-schedule.ts`. The shared store error is in
+`contract/identity-errors.ts`; its former entry re-exports the same class. Existing Source/Core/owner bounds and
+outcome assertions remain unchanged; focused capability tests cover forwarding and reset, with native acceptance
+owned by integrated Goal walks.
+
+`contract/index.ts` owns the parametric scope reader and exact scope observation/host contracts.
+`adapters/index.ts` exports `NativeScopeReader` and `createSubjectScopeEvidence`. The latter retains the original
+reference/state point plans, Subject read eligibility and native snapshot anchors; a redirected original never
+substitutes its target. Content composes this independent evidence with its own current carrier disclosure.
+Publication is no ownership or authority proof. Borrowed snapshot/point capabilities preserve the existing caller
+root and Source bounds; Semantic neither enumerates a Content population nor opens a second ledger.
 
 The identity coordinator receives Search currentness and Library custody as `IdentityEpochParticipantPorts` and dispatches producers through the composed application. The process composition root (`composition/semantic.ts`) binds the real Library, Search, Rating and Content implementations, hashing and routing, and injects them through `createKernelWorkModules` and `createSemanticWorkModule`. Subject, summaries and bulk HTTP resolve Content lifecycle through `adapters/ports.ts` and the composed registry; they do not value-import `adapters/content-lifecycle.ts`, so native cover-reference stays out of that inward value graph. `composeSemanticAdapters` binds the native cover adapter even when identity participants are absent. Ordinary createKernel/server/worker uses those native adapters; a fake-port application loads without them. Native authority and opaque proof contracts retain their owners. Remaining adapter-internal retention, binding and index cycles stay in the boundary baseline until a later extraction breaks them.
 Decision: Identity Rating repair values stay on `identity-rating-repair-producer.ts` and mapping-read `identity-adapters/read.ts`; the Semantic barrel type-exports them only. Source custody/maintenance import Library `collection-native-work.ts`. Composition binds Kind raw input and Rating installation. HTTP takes `DefinitionImportRoutes` from the Semantic barrel. The producer takes `requireAccessDeadline` from Access `authenticate.ts`.
@@ -23,7 +47,7 @@ Composed native identity produce owns one worker pool: coordination is installed
 
 Adapters own independent repeatable-read collection, route/home selection, support jobs, SQL, authorization, prearm, native receipt hashing, binding proofs, admission and publication. Library keeps originals and source fences, Search keeps membership/currentness, Rating keeps visibility witnesses and hashing, and Content keeps lifecycle writes. Mapping/store/publication/admission and three-scale growth remain owner acceptance. No wildcard custody export, second Library resolver, permission cache or new protocol is introduced.
 
-Public entries: `semantic/contract/index.ts` (values and ports), `semantic/core/index.ts` (next-step and item projection), `semantic/application/index.ts` (`createSemanticDomain`), `semantic/identity-core/index.ts` (mapping and rating-review classifier), `semantic/identity-core/rating-review-bounds.ts` (literal rating-review limits), `semantic/adapters/native-domain.ts` and `adapters/index.ts` (hashing, routing, fact store, Rating review, Content lifecycle, domain registry), `semantic/agents.ts` (Account/agent mapping for Access public reads and native ports), `semantic/access-capabilities.ts` (mapping re-export only), plus original recovery, read snapshots, Source custody, Source maintenance and the existing identity-adapters mapping-read, store and binding entries. Ports on `SemanticDomainPorts`: `identityEpoch`, `libraryCustody`, `searchCurrentness`, `ratingReview`, `contentLifecycle`, `hashing`, `routing`, `facts`. Observed counters: item facts 512; rating-review keys 2, control locators 2, operand 16,384 bytes; identity page 100 originals; epoch segment 100 pages, frontier 8 keys / 2,048 bytes, 100 rows per step. Cost derivations stay in the existing identity-epoch and item growth contracts. Compact landing tests: fake-port domain load plus ordinary native composition of one identity epoch through the composed participants.
+Public entries: `semantic/contract/index.ts` (values and ports), `semantic/core/index.ts` (next-step and item projection), `semantic/application/index.ts` (`createSemanticDomain`), `semantic/identity-core/index.ts` (mapping and rating-review classifier), `semantic/identity-core/rating-review-bounds.ts` (literal rating-review limits), `semantic/adapters/native-domain.ts` and `adapters/index.ts` (hashing, routing, fact store, Rating review, Content lifecycle, domain registry), `semantic/agents.ts` (Account/agent mapping for Access public reads and native ports), `semantic/public-subject-facts.ts` (visible type/label reads for Access public identity), `semantic/access-capabilities.ts` (mapping re-export only), plus original recovery, read snapshots, Source custody, Source maintenance and the existing identity-adapters mapping-read, store and binding entries. Ports on `SemanticDomainPorts`: `identityEpoch`, `libraryCustody`, `searchCurrentness`, `ratingReview`, `contentLifecycle`, `hashing`, `routing`, `facts`. Observed counters: item facts 512; rating-review keys 2, control locators 2, operand 16,384 bytes; identity page 100 originals; epoch segment 100 pages, frontier 8 keys / 2,048 bytes, 100 rows per step. Cost derivations stay in the existing identity-epoch and item growth contracts. Compact landing tests: fake-port domain load plus ordinary native composition of one identity epoch through the composed participants.
 
 ## Bounded current relation visits
 
@@ -1187,6 +1211,12 @@ Credits keep their main role property and credited subject together with that st
 
 ## Native Context discovery
 
+Directory paging, lifecycle reads and historical-party enrollment use the Semantic-owned Access port in
+`context-access-port.ts`, installed by `composeSemanticContext` at the Kernel composition root (and by `createKernel`).
+`createContextApplication` is the concrete application for those operations. Context reads do not import Access,
+request admission or erasure implementations; composition binds those adapters. Qualified list work-context helpers
+stay local: they have no Access operations and are not on this port.
+
 `createContextDirectory({pool,access,tokens,clock?})` exports `list` and `lifecycle`, together with
 `ContextDirectoryEntrySchema` and the corresponding exact types from `semantic/index.ts`.
 `GET /v1/contexts` takes an optional case-insensitive NFC label/technical-ID prefix `query`, `limit` from 1 to 100
@@ -1342,10 +1372,12 @@ Its current terms, field/language explanation, receipt and canonical publication
 | Revision author initialization  | One exact new revision anchor and, for native subject birth only, its exact subject resource; existing creation manifest and role initializer.                                                                                              | One resource and grant per account-authored write revision; compact facts do not multiply grants and 512 facts retain the existing 16-entry manifest cap.                                                                                                                                                                                                                                                | `test/semantic/contribution-authorship.test.ts` and `test/semantic/contribution-lifecycle.test.ts` inspect native creation/grant rows; 64/512/4096 full growth evidence remains post-integration.                                             |
 | Owned contribution availability | One indexed original-candidate locator, one retention lifecycle PK mutation and security revision update, current author Access and (restore only) fresh Global proposal Access; before/after native slot/publication and link-delta reads. | Each selected/expanded slot retains its existing 32-entry cap. Relation maintenance uses the existing exact affected-slot Context registry (C entries) and at most 32 selected facts per Context, O((1 + C) × 32), independent of unrelated subject history/population. No new Context cap, history walk, subject-degree scan or live aggregate recount. Payload purge and account cleanup are separate. | `test/semantic/contribution-authorship.test.ts` adds collision, rollback, replay, window, Content and single-connection cases. Existing `contribution-lifecycle.test.ts` and all 64/512/4096 growth acceptance remain post-integration proof. |
 
+Decision: the live ESM Semantic source-set module binds itself into History's producer slot after it
+finishes evaluating, so History locates the same command maps that `writeSubject` began. A CJS require
+of that path is a second instance and is only the fallback when the owner module never loaded.
+
 Required remaining work: run the original native acceptance and regenerate the API artifacts through the official
-integration producer. The native shared-history source-set producer is still unavailable at
-`history/record-source-set-native.ts:nativeRecordSourceSetProducer`; local producer custody does not replace that
-producer or prove shared-copy coverage. Separate platform early/legal purge, legal holds, automatic minimal personal/private payload purge and
+integration producer. Local producer custody does not prove shared-copy coverage. Separate platform early/legal purge, legal holds, automatic minimal personal/private payload purge and
 account-erasure de-identification remain outside this slice. Account confirmation
 is final in first scope: private cleanup starts at the same native T by bounded durable work, without a 30-day
 account grace. The 30-day restore window applies to individually deleted records. Only platform legal-order
@@ -1371,7 +1403,8 @@ Its fresh-state/locator acceptance runs independently of missing lifecycle HTTP 
 ### Native Context historical-party enrollment
 
 `enrollContextRoleProvenance(tx,{route,occurrence})` in `context-role-provenance.ts` is the Source sink for
-the exact readonly Access `ContextRoleProvenance`. Its SQL ABI is
+the exact readonly Access occurrence. Access calls it through Semantic `access-capabilities.ts`. Source commit
+goes through the bound Access port, not an erasure-producer import. Its SQL ABI is
 `semantic.enroll_context_role_provenance(integer,bigint,uuid,uuid,uuid,text,text,text,uuid,uuid)`, with arguments
 `route, occurrence, resourceId, originalCreator, accountId, grantRole, valid, side, grantTransaction,
 sourceTransaction`, returning `(state text, context_key bigint)`. Both bigint identities stay canonical decimal
@@ -1399,6 +1432,7 @@ Focused acceptance is `test/semantic/context-role-provenance.test.ts`; native ex
 
 ### Community Context lifecycle
 
+Lifecycle commands go through `createContextApplication` and the Semantic-owned Access port bound at composition.
 `DELETE /v1/contexts/:id` and `POST /v1/contexts/:id:restore` use the native command executor, request digest,
 receipt and Session component. DELETE accepts no body or a closed empty object; restore requires a closed empty
 object. Neither route has an If-Match contract. Successful responses contain only

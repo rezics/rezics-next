@@ -5,6 +5,9 @@ Previous and First reread one replacing native BASIC window rather than retainin
 Each cursor is bounded by the route's 4096-character admission; the existing plan limit is at most 24 rows.
 No storage, extra query fields, private read, per-row hydration or detail-return protocol is introduced.
 
+The named route installs the [page binding](../README.md); its host accepts a page-owned reading projection and
+never plans a composition or reads an Agent profile.
+
 The served path is the named-view loader → agentViewQuery → readAgentPage → loadPublicAccountJourney →
 continueAgentList → anonymous accounts({accountId}).collections.get with exact cursor, planned limit and BASIC.
 The composition descriptor continues to supply only the initial window. Native order and repeated associations remain.

@@ -31,7 +31,7 @@ import { timePresentation } from '../../subject/time-presentation';
 import type { PageDocument } from './render';
 import { statementDocument } from './documents';
 import * as accounts from './account';
-import { accountOf } from './account-read';
+import { accountOf } from './account-profile-reading';
 import * as overview from './overview';
 import { SubjectPageCover } from './subject-page-cover';
 import { SubjectArtwork, SubjectArtworkBoundary } from '../catalogue/subject-artwork/view';
