@@ -92,6 +92,11 @@ Default navigation adapts the existing application Router; isolated mounts need 
 A host may supply the narrow navigation capability. Performance owns attachment to its shared session provider when
 that public export is delivered; train reconciliation owns the overlapping host. No session value, cache, fetch or
 authentication is added.
+Decision: until Performance exports its shared session provider, retain this existing root hook and optional Router
+fallback. Attach `ReaderNavigationContext` exactly once inside that provider when it is available, using only
+`ReaderNavigation.address` and `subscribe` from `reader/lifetime/contract.ts`; do not introduce an interim session
+provider. `tests/thread-reader-boundary.test.tsx` covers host and Router departure before replacement render,
+irreversible return visits and isolated QueryClient mounts.
 The old observation, browser-state, lease and credential files remain compatibility entries for other owners.
 
 The leaf adapter has no Web application or feature dependency. Cache-only Threads consumers no longer load the

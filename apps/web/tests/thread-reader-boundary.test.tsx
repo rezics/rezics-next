@@ -4,9 +4,17 @@ import { act } from 'react';
 import { createRoot } from 'react-dom/client';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import {
+  createMemoryHistory,
+  createRootRoute,
+  createRoute,
+  createRouter,
+  RouterProvider,
+} from '@tanstack/react-router';
+import {
   browserObservation,
   readerSessionSource,
   ReaderNavigationContext,
+  useReaderAddress,
   useReaderVisit,
 } from '../src/reader/lifetime/index';
 import type { ReaderNavigation } from '../src/reader/lifetime/contract';
@@ -136,5 +144,56 @@ test('host navigation retires a captured visit before render and never restores 
   } finally {
     await act(async () => root.unmount());
     expect(listeners.size).toBe(0);
+  }
+});
+
+test('the optional Router fallback retires visits and cursor reads before a replacement render', async () => {
+  const path = '/en/threads/thread/title';
+  const routeTree = createRootRoute({ component: Reader });
+  routeTree.addChildren([createRoute({ getParentRoute: () => routeTree, path: '$' })]);
+  const router = createRouter({
+    routeTree,
+    history: createMemoryHistory({ initialEntries: [path] }),
+  });
+  await router.load();
+  const readLocale = () => 'en';
+  let visit!: ReturnType<typeof useReaderVisit>;
+  let address!: ReturnType<typeof useReaderAddress>;
+  function Reader() {
+    visit = useReaderVisit('thread', 'en', readLocale);
+    address = useReaderAddress(path, undefined, 'en', readLocale);
+    return null;
+  }
+  const root = createRoot(document.createElement('div'));
+  let stop = () => {};
+  try {
+    await act(async () => root.render(<RouterProvider router={router} />));
+    const originalVisit = visit;
+    const originalAddress = address;
+    expect(originalVisit.current()).toBe(true);
+    expect(originalAddress.isCurrent()).toBe(true);
+    let departures = 0;
+    stop = router.subscribe('onBeforeNavigate', () => {
+      departures++;
+      // The fallback subscriptions run in the departure stack, before React can replace the reader.
+      expect(originalVisit.current()).toBe(false);
+      expect(originalAddress.isCurrent()).toBe(false);
+    });
+    await act(async () => {
+      await router.navigate({ to: `${path}?cursor=next` });
+    });
+    expect(address.cursor).toBe('next');
+    expect(address.isCurrent()).toBe(true);
+    await act(async () => {
+      await router.navigate({ to: path });
+    });
+    expect(departures).toBe(2);
+    expect(address.cursor).toBeNull();
+    expect(originalAddress.isCurrent()).toBe(false);
+    expect(originalVisit.current()).toBe(false);
+  } finally {
+    stop();
+    await act(async () => root.unmount());
+    router.history.destroy();
   }
 });
