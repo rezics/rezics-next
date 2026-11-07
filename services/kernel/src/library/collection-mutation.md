@@ -6,6 +6,15 @@ transitions, retention disposition and history bounds from adapter-measured stat
 existing SQL and caller-owned transaction. The low-level mutation facade supplies the same native application for
 standalone storage callers; ordinary composition binds rule authority, publication commands and retention effects.
 
+Decision: Collection `revision` is the shared metadata/rule/membership CAS version: each successful parent write,
+including tombstone, restore and respacing writes, advances it; note-only edits do not. `order_epoch` records
+respacing. Occurrence `member_revision` is a distinct row stamp; a retained member deletion records the resulting
+parent version in `deletion_revision`. Access conceals a non-curator's private Collection mutation during current
+admission, before receipt access. Retention timestamp bind ceilings use PostgreSQL's native
+`timestamptz::text` shape; the tombstone's former 27-byte ISO declaration was two serialized JSON bytes below the
+29-byte timestamp observed at the failing command. Retained cleanup remains bounded, child-first, and on its original
+transaction and Pool.
+
 `collection-command-work.ts` owns mechanical accounting and deadline helpers without importing command support.
 Metadata history and retention bounds use that leaf. Episode storage no longer imports the begin-command adapter,
 Source custody or builtin materialization. Rule admission uses composed Access admission, active release and owner

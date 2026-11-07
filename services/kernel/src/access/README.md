@@ -26,6 +26,8 @@ and authn floor before private-state/receipt disclosure. Error, Access, Pool, ac
 
 Decision: Collection directory, list, order-bounds and current reads consume Library `AuthorizationCapability.specializeCollectionList` and the Access-funded `collectionAuthorizationPreparation` bound. Access adapters keep `specializePolicy`, residual lowering, native permission SQL and the inverse membership limit; Library does not import private policy-core/filter or reconstruct permission statements. Wire shapes, independent deny operands and final authority before disclosure stay the same. Collection authorization memberships, residual operands and action names live in the Access contract literal leaf; adapters re-export them and do not evaluate membership-inverse at import. Fewest tests: owner/public/unavailable list outcomes and the funded inverse membership limit 1000.
 
+Decision: Access owns the private Collection mutation concealment rule. Library applies it to the current Collection anchor during authorization admission, before receipt lookup; a non-curator receives the same `not_found` as an unknown private Collection while current account, action and grant checks remain authoritative.
+
 [Accounts](../../../../docs/accounts.md) owns product identity, delegation, consent and preferences;
 [Deletion](../../../../docs/deletion.md) owns erasure/restore policy;
 [Auth](../../../auth/README.md#ordinary-native-host-assembly) owns trusted composition.

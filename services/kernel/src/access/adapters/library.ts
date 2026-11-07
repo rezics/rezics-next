@@ -19,7 +19,11 @@ import { readPublicViews } from '../public-views.ts';
 import { readMembershipRouteKey, readMembershipWorkConfig } from '../membership-work-config.ts';
 import { isAccessWorkDispatch } from '../work.ts';
 import { agentContributionAttribution, contributionDeleted, readContributionAttributions } from '../public-identity.ts';
-import { collectionAuthorizationPreparationWork, specializeCollectionList } from './collection-policy.ts';
+import {
+  collectionAuthorizationPreparationWork,
+  collectionMutationIsConcealed,
+  specializeCollectionList,
+} from './collection-policy.ts';
 import { readAccountDiscoverySummaries } from '../account-discovery-source.ts';
 import { ACCESS_EVENTS } from '../events.ts';
 import {
@@ -72,6 +76,7 @@ export function createLibraryAccessPorts(): LibraryAccessPorts {
     creationDeclares,
     specializeCollectionList,
     collectionAuthorizationPreparationWork,
+    collectionMutationIsConcealed,
     readAccountDiscoverySummaries,
     ACCESS_EVENTS,
     liveCopyLocator,

@@ -41,6 +41,15 @@ import type {
 
 export { bindCollectionListFilter, COLLECTION_AUTHORIZATION_MEMBERSHIPS };
 
+/** Private Collections are visible to their curator alone, including during mutation admission. */
+export function collectionMutationIsConcealed(input: {
+  actorAccountId: string;
+  curatorAccountId: string | null;
+  visibility: string;
+}): boolean {
+  return input.visibility === 'private' && input.curatorAccountId !== input.actorAccountId;
+}
+
 export function specializeCollectionListFromCatalogue(
   catalogue: PolicyCatalogue | undefined,
   fullView: boolean,

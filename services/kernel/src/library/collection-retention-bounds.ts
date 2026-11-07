@@ -88,7 +88,8 @@ const UUID = 'ffffffff-ffff-ffff-ffff-ffffffffffff';
 const ROUTE = 65535;
 const INT = 2147483647;
 const BIGINT = '9223372036854775807';
-const TIMESTAMP = '9999-12-31T23:59:59.999999Z';
+const ISO_TIMESTAMP = '9999-12-31T23:59:59.999999Z';
+/** PostgreSQL's full timestamptz::text range; command/time.sql binds this native text form. */
 const PG_TIMESTAMP = '294276-12-31 23:59:59.999999+00';
 const ESCAPED = (characters: number) => '\u0001'.repeat(characters);
 const MAX_PAGE = 64;
@@ -253,7 +254,7 @@ function shapes(): Readonly<Record<StatementId, SQLShape>> {
         state: 'deleted',
         fenced: true,
       }),
-      commandTime: statement(commandTime, { at: TIMESTAMP }, 1, 1, 1, 1, { at: PG_TIMESTAMP }),
+      commandTime: statement(commandTime, { at: ISO_TIMESTAMP }, 1, 1, 1, 1, { at: PG_TIMESTAMP }),
       receiptRead: statement(
         readReceipt,
         {
@@ -361,7 +362,7 @@ function shapes(): Readonly<Record<StatementId, SQLShape>> {
       }),
       tombstone: statement(
         collectionTombstone,
-        { route: ROUTE, id: UUID, transaction_id: UUID, time: TIMESTAMP },
+        { route: ROUTE, id: UUID, transaction_id: UUID, time: PG_TIMESTAMP },
         1,
         1,
         1,
@@ -374,7 +375,7 @@ function shapes(): Readonly<Record<StatementId, SQLShape>> {
       ),
       restoreWindow: statement(
         collectionRestoreWindow,
-        { route: ROUTE, id: UUID, time: TIMESTAMP },
+        { route: ROUTE, id: UUID, time: PG_TIMESTAMP },
         1,
         1,
         1,
@@ -383,7 +384,7 @@ function shapes(): Readonly<Record<StatementId, SQLShape>> {
       ),
       restore: statement(
         collectionRestore,
-        { route: ROUTE, id: UUID, revision: INT, deletion_id: UUID, transaction_id: UUID, time: TIMESTAMP },
+        { route: ROUTE, id: UUID, revision: INT, deletion_id: UUID, transaction_id: UUID, time: PG_TIMESTAMP },
         1,
         1,
         1,
@@ -396,7 +397,7 @@ function shapes(): Readonly<Record<StatementId, SQLShape>> {
       ),
       due: statement(
         collectionDue,
-        { partition_no: INT, cutoff: TIMESTAMP, after_time: TIMESTAMP, after_route: ROUTE, after_id: UUID },
+        { partition_no: INT, cutoff: PG_TIMESTAMP, after_time: PG_TIMESTAMP, after_route: ROUTE, after_id: UUID },
         MAX_DUE,
         MAX_DUE,
         1,
@@ -407,7 +408,7 @@ function shapes(): Readonly<Record<StatementId, SQLShape>> {
       partition: statement(retentionPartition, { partition_no: 4095 }, 1, 1, 1, 1, { write_state: 'initializing' }),
       lock: statement(
         collectionLock,
-        { route: ROUTE, collection_id: UUID, purge_after: TIMESTAMP, time: TIMESTAMP },
+        { route: ROUTE, collection_id: UUID, purge_after: PG_TIMESTAMP, time: PG_TIMESTAMP },
         4,
         4,
         4,
@@ -836,7 +837,7 @@ function continuationStep() {
   );
 }
 function cutoffStep() {
-  return memoizedValue(cutoffStep, () => dimensions({ engineRequests: 1, bytes: SIZE(TIMESTAMP) }));
+  return memoizedValue(cutoffStep, () => dimensions({ engineRequests: 1, bytes: SIZE(ISO_TIMESTAMP) }));
 }
 function segmentIteration() {
   return memoizedValue(segmentIteration, () => maxBound(discoveryStep(), removeDBOSStep()));

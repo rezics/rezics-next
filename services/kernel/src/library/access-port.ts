@@ -57,6 +57,7 @@ import type {
 } from '../access/public-identity.ts';
 import type {
   collectionAuthorizationPreparationWork as NativeCollectionAuthorizationPreparationWork,
+  collectionMutationIsConcealed as NativeCollectionMutationIsConcealed,
   specializeCollectionList as NativeSpecializeCollectionList,
 } from '../access/adapters/collection-policy.ts';
 import type { readAccountDiscoverySummaries as NativeReadAccountDiscoverySummaries } from '../access/account-discovery-source.ts';
@@ -113,6 +114,7 @@ export type LibraryAccessPorts = Readonly<{
   creationDeclares: typeof NativeCreationDeclares;
   specializeCollectionList: typeof NativeSpecializeCollectionList;
   collectionAuthorizationPreparationWork: typeof NativeCollectionAuthorizationPreparationWork;
+  collectionMutationIsConcealed: typeof NativeCollectionMutationIsConcealed;
   readAccountDiscoverySummaries: typeof NativeReadAccountDiscoverySummaries;
   ACCESS_EVENTS: typeof NativeAccessEvents;
   liveCopyLocator: typeof NativeLiveCopyLocator;
@@ -237,6 +239,9 @@ export const specializeCollectionList: LibraryAccessPorts['specializeCollectionL
 
 export const collectionAuthorizationPreparationWork: LibraryAccessPorts['collectionAuthorizationPreparationWork'] =
   () => requireLibraryAccess().collectionAuthorizationPreparationWork();
+
+export const collectionMutationIsConcealed: LibraryAccessPorts['collectionMutationIsConcealed'] = (...args) =>
+  requireLibraryAccess().collectionMutationIsConcealed(...args);
 
 export const readAccountDiscoverySummaries: LibraryAccessPorts['readAccountDiscoverySummaries'] = (...args) =>
   requireLibraryAccess().readAccountDiscoverySummaries(...args);

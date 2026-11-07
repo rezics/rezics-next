@@ -16,6 +16,7 @@ import {
   initializeResourceGrants,
   resourceAuthorization,
   resourceAuthorizationPage,
+  collectionMutationIsConcealed,
 } from './access-port.ts';
 import { shareAccount } from './access-port.ts';
 import { deriveAccess } from './access-port.ts';
@@ -614,6 +615,7 @@ export function createCollectionCommands(config: {
         throw new ProblemError('dynamic_membership_immutable');
     }
     const identity = principalCommandIdentity(owner);
+    const concealedAttempts = new WeakSet<AuthoritativeTime>();
     const normalAccess = destinationCollectionId
       ? resourceAuthorizationPage({
           access,
@@ -631,6 +633,16 @@ export function createCollectionCommands(config: {
                 throw new ProblemError('dynamic_membership_immutable');
               if (rows[0]!.curatorAccountId !== rows[1]!.curatorAccountId)
                 throw new ProblemError('collection_move_unsupported');
+              if (
+                rows.some((collection) =>
+                  collectionMutationIsConcealed({
+                    actorAccountId: owner.accountId,
+                    curatorAccountId: collection.curatorAccountId,
+                    visibility: collection.visibility,
+                  }),
+                )
+              )
+                concealedAttempts.add(time);
               return true;
             },
           },
@@ -642,8 +654,18 @@ export function createCollectionCommands(config: {
           action,
           anchor: {
             resource: { route, id: collectionId },
-            validate: async (client, time) =>
-              !!(await authorizedCollection(client, owner, route, collectionId, time, allowDeleted)),
+            async validate(client, time) {
+              const collection = await authorizedCollection(client, route, collectionId, time, allowDeleted);
+              if (
+                collectionMutationIsConcealed({
+                  actorAccountId: owner.accountId,
+                  curatorAccountId: collection.curatorAccountId,
+                  visibility: collection.visibility,
+                })
+              )
+                concealedAttempts.add(time);
+              return true;
+            },
           },
           context: { pool, deadline: deadlineFor(WORK_STEP_DEADLINE_MS), partition: partitionOf(route) },
         });
@@ -652,7 +674,15 @@ export function createCollectionCommands(config: {
     const authorization: typeof normalAccess = {
       ...normalAccess,
       async prepare(attempt) {
-        const proof = await normalAccess.prepare!(attempt);
+        let proof: unknown;
+        try {
+          proof = await normalAccess.prepare!(attempt);
+        } catch (error) {
+          // Translate only after Access has evaluated current account and grant evidence.
+          if (concealedAttempts.has(attempt.time) && error instanceof GrantDeniedError) throw notFound();
+          throw error;
+        }
+        if (concealedAttempts.has(attempt.time)) throw notFound();
         if (selection)
           failures.set(
             attempt.time,
@@ -674,7 +704,15 @@ export function createCollectionCommands(config: {
       },
       async authorize(tx, attempt, proof) {
         const mode = await normalAccess.authorize(tx, attempt, proof);
-        const collection = await authorizedCollection(tx, owner, route, collectionId, attempt.time, allowDeleted);
+        const collection = await authorizedCollection(tx, route, collectionId, attempt.time, allowDeleted);
+        if (
+          collectionMutationIsConcealed({
+            actorAccountId: owner.accountId,
+            curatorAccountId: collection.curatorAccountId,
+            visibility: collection.visibility,
+          })
+        )
+          throw notFound();
         if (
           (kind.startsWith('library.collection.member') || kind === 'library.collection.order.repair.begin') &&
           collection.membershipKind === 'dynamic'
@@ -718,7 +756,7 @@ export function createCollectionCommands(config: {
       };
       const dispatch = () =>
         runCommand(pool, commandOptions, async (tx, command) => {
-          const current = await authorizedCollection(tx, owner, route, collectionId, command.time, allowDeleted);
+          const current = await authorizedCollection(tx, route, collectionId, command.time, allowDeleted);
           if (current.curatorAccountId === null) throw new GrantDeniedError();
           await enterShelfWrite({ client: tx, route, accountId: current.curatorAccountId });
           const failure = failures.get(command.time);
@@ -1204,7 +1242,6 @@ export function createCollectionCommands(config: {
 
 async function authorizedCollection(
   client: AccessClient,
-  actor: AccountActor,
   route: number,
   collectionId: string,
   time: Parameters<typeof authoritativeTimeValue>[0],
@@ -1216,8 +1253,6 @@ async function authorizedCollection(
     collection_id: collectionId,
   });
   if (!current || (!allowDeleted && current.state === 'deleted')) throw notFound();
-  if (allowDeleted && current.visibility === 'private' && actor.accountId !== current.curatorAccountId)
-    throw notFound();
   return current;
 }
 

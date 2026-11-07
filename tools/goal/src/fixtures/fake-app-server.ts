@@ -50,10 +50,16 @@ function respond(message: any): void {
       result = { thread: { id: p.threadId, turns: turns.has(p.threadId) ? [turns.get(p.threadId)] : [] } };
       break;
     case 'thread/goal/set': {
+      const previouslyPaused = goals.get(p.threadId)?.status === 'paused';
       const goal = { tokensUsed: 0, timeUsedSeconds: 0, ...goals.get(p.threadId), ...p };
       goals.set(p.threadId, goal);
       result = { goal };
       send({ method: 'thread/goal/updated', params: { threadId: p.threadId, goal } });
+      if (process.env.FAKE_RPC_AUTO_TURN_ON_GOAL_ACTIVATION === '1' && p.status === 'active' && previouslyPaused) {
+        const turn = { id: `turn-${++nextTurn}`, status: 'inProgress' };
+        turns.set(p.threadId, turn);
+        send({ method: 'turn/started', params: { threadId: p.threadId, turn } });
+      }
       break;
     }
     case 'thread/goal/get':
@@ -64,6 +70,10 @@ function respond(message: any): void {
       result = { cleared: true };
       break;
     case 'turn/start': {
+      if (turns.get(p.threadId)?.status === 'inProgress') {
+        send({ id: message.id, error: { code: -32600, message: 'Turn already active' } });
+        return;
+      }
       const turn = { id: `turn-${++nextTurn}`, status: 'inProgress' };
       turns.set(p.threadId, turn);
       send({ method: 'turn/started', params: { threadId: p.threadId, turn } });

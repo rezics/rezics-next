@@ -414,6 +414,22 @@ export async function createProfileEntryFixture(
       managementAction: 'access:grant',
       ...(options.clock === undefined ? {} : { clock: options.clock }),
     });
+    const grantReceiptKeys = new Map<string, string>();
+    const grantIntent = (
+      operation: 'create' | 'revoke',
+      subject: { kind: 'account'; id: string } | { kind: 'active_accounts' },
+      actions: readonly string[],
+    ) => JSON.stringify([operation, subject, [...actions].sort(), '(,)']);
+    function grantReceiptKey(
+      operation: 'create' | 'revoke',
+      subject: { kind: 'account'; id: string } | { kind: 'active_accounts' },
+      actions: readonly string[],
+    ) {
+      const intent = grantIntent(operation, subject, actions);
+      let key = grantReceiptKeys.get(intent);
+      if (!key) grantReceiptKeys.set(intent, (key = entryKey()));
+      return key;
+    }
     async function grantFacts(
       actor: AccountActor,
       granted: readonly string[],
@@ -476,17 +492,26 @@ export async function createProfileEntryFixture(
       // reuse a leaked request ALS deadline; a minted sibling token drops coverage.
       const boundary = { pool, deadline: Date.now() + 10_000 };
       const actor = await access.authenticate(steward.bearer, boundary);
+      let requestedActions = [...new Set(actions)].sort();
+      if (!revoke && subject.kind === 'account' && subject.id === actor.accountId) {
+        const held = await Promise.all(
+          requestedActions.map(async (action) => (await accessCheck(access, actor, action, global, boundary))(pool)),
+        );
+        requestedActions = requestedActions.filter((_, index) => !held[index]);
+      }
+      if (!revoke && requestedActions.length === 0) return;
       const input = {
         resource: global,
         subject,
-        actions: [...actions],
+        actions: requestedActions,
         valid: '(,)',
-        key: entryKey(),
+        key: grantReceiptKey(revoke ? 'revoke' : 'create', subject, requestedActions),
       };
       const command = { ...boundary, actor };
       try {
         if (revoke) await grants.revoke(command, input);
         else await grants.create(command, input);
+        grantReceiptKeys.delete(grantIntent(revoke ? 'create' : 'revoke', subject, requestedActions));
       } catch (error) {
         throw new Error(
           `Grant ${revoke ? 'revoke' : 'create'} denied: ${error instanceof Error ? error.message : String(error)} facts=${JSON.stringify(await grantFacts(actor, actions, boundary))}`,

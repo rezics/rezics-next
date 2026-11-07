@@ -366,13 +366,14 @@ export class ManagerSessions {
   private async handleNotification(id: string, { method, params }: Notification): Promise<void> {
     const state = this.get(id);
     assertManagedManager(state);
+    let completedCurrentTurn = false;
     // Notifications from a retired Codex thread can already be queued when renewal swaps sessions.
     if (state.threadId && params?.threadId && state.threadId !== params.threadId) return;
     if (method === 'turn/started') {
       this.turnStarted(state, params.turn.id);
       if (state.status !== 'running') await this.pauseRemote(state);
     } else if (method === 'turn/completed') {
-      this.turnEnded(state, params.turn.id);
+      completedCurrentTurn = this.turnEnded(state, params.turn.id);
     } else if (method === 'thread/goal/updated') {
       state.goalState = params.goal;
     } else if (method === 'thread/goal/cleared') {
@@ -387,6 +388,15 @@ export class ManagerSessions {
       if (method === 'thread/goal/updated' && (await this.handleGoalUpdate(state))) return;
       if (await this.checkLimits(state)) return;
       if (state.goalState?.status === 'complete') await this.completeInternal(state.id);
+      // A stale completion may arrive after a wake started another turn; pause only the turn that actually ended.
+      if (
+        completedCurrentTurn &&
+        state.engine === 'codex' &&
+        state.threadId &&
+        state.goalState?.status === 'active' &&
+        this.inbox.notifications(state.id).length === 0
+      )
+        await this.pauseRemote(state);
     }
   }
   /** Event-driven managers sleep only by ending the turn: a `clock.sleep` loop re-reads the whole context each call. */
@@ -773,10 +783,12 @@ export class ManagerSessions {
       })
       .immediate();
   }
-  private turnEnded(state: ManagedManagerState, turn: string): void {
+  private turnEnded(state: ManagedManagerState, turn: string): boolean {
+    let ended = false;
     this.db
       .transaction(() => {
         if (state.activeTurnId !== turn) return;
+        ended = true;
         if (state.threadId && managerHasDecision(this.db, state.id, state.threadId, turn)) state.decision = true;
         // Ready briefs are a manager's main output; writing one is a decision even without a control-plane command.
         if (
@@ -790,6 +802,7 @@ export class ManagerSessions {
         this.save(state);
       })
       .immediate();
+    return ended;
   }
   async noteCommand(id: string): Promise<void> {
     this.get(id);
@@ -951,9 +964,16 @@ export class ManagerSessions {
     if (isResidentSupermanager(state)) return;
     if (state.status !== 'running') return;
     if (state.engine === 'claude') return await this.reviveClaude(state);
+    const events = this.inbox.notifications(id);
+    // Inbox polling with no delivery must leave native Goal autonomy paused.
+    if (events.length === 0) return;
     const client = await this.transport.client(state.pool);
+    if (state.goalState?.status === 'paused') {
+      state.goalState = await this.transport.setGoalStatus(client, state.threadId!, 'active');
+      this.save(state);
+    }
     let prefix = this.consumeGoalReadings(state);
-    for (const event of this.inbox.notifications(id)) {
+    for (const event of events) {
       state = this.get(id);
       assertManagedManager(state);
       const summary = prefix ? [prefix, event.event.summary].filter(Boolean).join('\n\n') : event.event.summary;

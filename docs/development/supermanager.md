@@ -16,6 +16,9 @@ system boundaries: HTTP input, imported records, external files and third-party 
 behaviour asked for; ask for refusal tests only for boundary input and authorization rules. Money movement
 (payments, payouts, balances) keeps strict guards.
 
+Native boot acceptance fixtures provide required trusted material such as `KERNEL_RECEIPT_KEYS` in the test
+environment before startup, so independently composed command consumers can read the same dedicated ring.
+
 ## Environment incidents
 
 When the same failure line ends three or more tasks within 20 minutes, it is one shared incident. The supermanager is
