@@ -330,6 +330,9 @@ Reload/close warns only for that unfinished work; Leave clears in-memory details
 without undoing a dispatched creation. A persisted browser return clears entered values, challenge tokens, request
 payloads and old callbacks, then shows only a generic summary for a possibly completed creation or confirmed creation
 whose automatic sign-in did not establish a session. Before showing registration controls, it reads fresh native advice.
+Explicit Leave captures that generic outcome before retiring the active attempt, so replacing the route cannot
+erase an unresolved creation. Retiring a journey removes its challenge without resetting it; detached credential
+inputs are cleared by their owning form. Failed automatic sign-in focuses its existing error before offering login.
 An untouched draft or known terminal refusal restores without a warning, after the same fresh advice read. A deliberate
 review acknowledgement can open a new form only while native advice permits registration; the form has a new key and
 explains that the earlier result remains unknown. Browser restoration never replays registration or automatic sign-in.
@@ -359,6 +362,13 @@ Only the still-owned acknowledged attempt releases its frozen credentials to one
 its original destination is captured before submission. Replacement and departure retire old completions.
 Focused source/mounted fixtures do not establish native or browser acceptance; broader acceptance is deferred
 until integration.
+
+Decision: mounted sign-up tests control `readRegistrationPage`, the current advice boundary, rather than an unused
+route loader; login advice stays a separate `/signin/page` read. Fixtures fill password confirmation, restore their
+read doubles, fetch and DOM globals, and retire every mounted root even when setup fails. Existing assertions follow
+the native closed-envelope and uncertainty rules above: explicit original-attempt retry preserves key/input with a
+fresh token, unsupported registration 429 stays unknown, and departure keeps generic history without reopening fields.
+Step-up retains its opaque authorization assertions; readiness diagnostics precede teardown and never read credentials.
 
 ## Consent
 
