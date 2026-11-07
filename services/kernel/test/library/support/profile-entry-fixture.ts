@@ -43,7 +43,10 @@ import {
 import { stepIdentityEpochAdmission } from '../../../src/semantic/identity-epoch-admission.ts';
 import { installIdentityEpochBootstrap } from '../../../src/semantic/identity-epoch-bootstrap-install.ts';
 import { stepIdentityEpochBootstrap } from '../../../src/semantic/identity-epoch-bootstrap.ts';
-import { resumeIdentityEpochJob, waitIdentityEpochPublished } from '../../../src/semantic/identity-epoch-coordinator.ts';
+import {
+  resumeIdentityEpochJob,
+  waitIdentityEpochPublished,
+} from '../../../src/semantic/identity-epoch-coordinator.ts';
 import type { IdentityJobRef } from '../../../src/semantic/identity-epoch-contract.ts';
 import { stepIdentityEpochMapping } from '../../../src/semantic/identity-epoch-mapping.ts';
 import { subjectTarget } from '../../../src/semantic/subject.ts';
@@ -307,11 +310,7 @@ export async function createProfileEntryFixture(
         if (!(await identityDirty(home)) && !(await homeCapacityOccupied(home))) return;
         try {
           const progress = await stepIdentityEpochBootstrap(pool, home);
-          if (
-            progress.state === 'caught-up' &&
-            !(await identityDirty(home)) &&
-            !(await homeCapacityOccupied(home))
-          )
+          if (progress.state === 'caught-up' && !(await identityDirty(home)) && !(await homeCapacityOccupied(home)))
             return;
         } catch (error) {
           if (!isIdentityPrearmHold(error)) throw error;

@@ -329,12 +329,17 @@ async function admitAuthorization(
 ): Promise<string | null> {
   const custody = command.custody;
   if (!custody) return original ?? session.authorization;
-  return originalAnnotationCredential(request, sessionEnv, { ...session, viewer: custody.viewer, csrfToken: custody.csrfToken }, {
-    viewer: custody.viewer,
-    csrfToken: custody.csrfToken,
-    subjectId: command.subjectId,
-    credential: custody.credential,
-  });
+  return originalAnnotationCredential(
+    request,
+    sessionEnv,
+    { ...session, viewer: custody.viewer, csrfToken: custody.csrfToken },
+    {
+      viewer: custody.viewer,
+      csrfToken: custody.csrfToken,
+      subjectId: command.subjectId,
+      credential: custody.credential,
+    },
+  );
 }
 
 export function kernelAniListPort(
