@@ -199,7 +199,7 @@ Every surface builds `Cover` from the cover summary the kernel returned with the
 
 ### Credit and text alternative
 
-The `alt` text is the subject's title. Decorative repeats of a cover next to its visible title use `alt=""`. The subject page opens a viewer from its cover, where the original image appears with its rights holder, linked source and licence. Sources and credits are collected in the page's Sources section; covers never render a caption or credit control.
+The `alt` text is the subject's title. Decorative repeats of a cover next to its visible title use `alt=""`. When a caller supplies an action for a usable cover, its native button opens the viewer, where the original image and supplied rights holder, linked source and licence stay together. Sources and credits are collected in the page's Sources section; the `Cover` frame never renders an inline caption or credit control.
 
 ## Cover cards
 
