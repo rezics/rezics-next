@@ -86,7 +86,7 @@ clear displayed choices. Fresh owners have no predecessors; source, viewer, cred
 replacement and disposal retire choices, coordinates and focus. Closing/reopening follows the existing chooser
 lifetime. Only a fresh admitted movement may focus the still-current open owner's heading.
 
-Decision: Settings reaches that owner window, privacy command/readback and Shelf type/default/column preferences only through `settings-contract` and `settings-adapter`. Visibility, occurrence, frontier and preference vocabulary stay in the contract. Ordinary `/settings` composition binds the existing transport and presentation adapters; Settings paths do not privately import Library read, dynamic Collection, Shelf column, parameter, preference, type-read or window-navigation modules.
+Decision: Settings reaches that owner window, privacy command/readback and Shelf type/default/column preferences only through `settings-contract` and `settings-adapter`. Visibility, occurrence, frontier and preference vocabulary stay in the contract. Ordinary `/settings` composition binds the existing transport (`adapters/library.ts`) and presentation (`adapters/library-view.tsx`) adapters; Settings paths do not privately import Library read, dynamic Collection, Shelf column, parameter, preference, type-read or window-navigation modules.
 
 ## Cost bounds
 

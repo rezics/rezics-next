@@ -2,4 +2,4 @@ export {
   BoundCollectionPrivacySection,
   BoundCollectionPrivacyView,
   BoundShelfPreferencesCard,
-} from '../../settings/adapters/library.tsx';
+} from '../../settings/adapters/library-view.tsx';

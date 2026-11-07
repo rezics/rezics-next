@@ -1218,11 +1218,11 @@
         "apps/web/src/settings/preferences.ts",
         "apps/web/src/settings/ports/library.ts",
         "apps/web/src/settings/adapters/library.ts",
-        "apps/web/src/settings/adapters/library.tsx",
+        "apps/web/src/settings/adapters/library-view.tsx",
         "apps/web/src/settings/shelf-preferences-current.tsx",
         "apps/web/src/inbox/ports/library.ts",
         "apps/web/src/inbox/adapters/library.ts",
-        "apps/web/src/inbox/adapters/library.tsx"
+        "apps/web/src/inbox/adapters/library-view.tsx"
       ],
       "allowedDependencies": ["client", "ui", "web-accounts", "web-app", "web-content", "web-library", "web-search"],
       "capabilities": ["account-settings"]

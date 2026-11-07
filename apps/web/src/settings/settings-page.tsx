@@ -20,7 +20,7 @@ import { m } from '../paraglide/messages.js';
 import { PageHeading } from '../shell/page-heading';
 import { ProfileSection } from './profile';
 import { ReadingCard } from './reading-card';
-import { BoundCollectionPrivacySection, BoundShelfPreferencesCard } from './adapters/library.tsx';
+import { BoundCollectionPrivacySection, BoundShelfPreferencesCard } from './adapters/library-view.tsx';
 import { ReadingNavigation, SettingsNavigationProvider, useSettingsNavigationOwner } from './reading-navigation';
 import { DisplayPreferences } from './display-preferences';
 import { NotificationsCard } from './notifications';

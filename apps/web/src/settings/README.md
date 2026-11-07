@@ -2,7 +2,7 @@
 
 **Decision:** Collection privacy uses the existing private owner inventory and native `collection:update` advice; logical built-ins remain inspectable and read-only without a command revision.
 
-**Decision:** Settings consumes private Collection owner windows, privacy command/readback and Shelf type/default/column preferences through the typed Library port (`ports/library.ts`). Visibility, occurrence, frontier and preference vocabulary live in Library `settings-contract`; transport and presentation bind at `settings-adapter` and ordinary `/settings` composition. Exact failed cursors, independent command/read deadlines, drafts and acknowledged-original recovery stay on that port. Fewest tests: keep the existing Collection privacy and Shelf recovery suites and add one port-composition pin rather than a second suite.
+**Decision:** Settings consumes private Collection owner windows, privacy command/readback and Shelf type/default/column preferences through the typed Library port (`ports/library.ts`). Visibility, occurrence, frontier and preference vocabulary live in Library `settings-contract`; transport binds at `settings-adapter` and `adapters/library.ts`, presentation at `adapters/library-view.tsx`, composed from ordinary `/settings`. Exact failed cursors, independent command/read deadlines, drafts and acknowledged-original recovery stay on that port. Fewest tests: keep the existing Collection privacy and Shelf recovery suites and add one port-composition pin rather than a second suite.
 
 ### Cost: private Collection owner window
 

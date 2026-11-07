@@ -4,7 +4,7 @@ import { pageHead } from '../shell/head';
 import { pageHeadContext } from '../shell/head-context';
 import { sessionQuery } from '../session/query';
 import { createFileRoute } from '@tanstack/react-router';
-import { BoundCollectionPrivacySection, BoundShelfPreferencesCard } from '../settings/adapters/library.tsx';
+import { BoundCollectionPrivacySection, BoundShelfPreferencesCard } from '../settings/adapters/library-view.tsx';
 import { readSettingsPage } from '../settings/actions';
 import { SettingsPageView } from '../settings/settings-page';
 import { m } from '../paraglide/messages.js';
