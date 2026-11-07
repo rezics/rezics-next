@@ -7,7 +7,9 @@ Session writes resolve accepted releases by their stored digest through Library'
 capability and validate against both original and current profiles.
 
 Decision: retain the original 64/512/4096 native growth axes while seeding one retained entry per fresh account and
-one live same-owner entry per unique subject; refresh shared fixture actors every 16 units and omit redundant refills.
+one live same-owner entry per unique subject. Seed the same-owner subjects before growing account/receipt history so
+their native creation proofs stay within Access's one-second evidence lifetime; keep fresh-account entries on one
+shared subject, refresh fixture actors every 16 units, and omit redundant refills.
 
 Decision: Library consumes native Access behaviour through `access-port.ts`; the existing domain binding holds that
 consumer-owned port and `composition/library.ts` installs Access's native adapter. Shared refusal constructors,

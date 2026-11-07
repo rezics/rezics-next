@@ -494,6 +494,14 @@ test('fresh guard work remains bounded across 64 512 and 4096 unrelated live ret
         await f.commands.deleteEntry(f.owner.actor, old.subjectId, old.updated.value.entry.revision, old.deleteKey),
       ).toEqual({ ...old.deleted, replayed: true });
     };
+    const ownerSubjects: string[] = [];
+    async function refreshFixtureActors() {
+      // Keep the long-running fixture actors inside Access's native identity freshness window.
+      for (const who of [f.owner, f.steward, f.other]) {
+        who.bearer = await accountToken(who.actor);
+        who.actor = await f.access.authenticate(who.bearer, { pool: f.pool, deadline: deadlineFor(30000) });
+      }
+    }
     const report = await checkGrowth(growth, {
       name: 'fresh native incarnation admission success rejection replay and ABA',
       scales: [64, 512, 4096],
@@ -501,28 +509,28 @@ test('fresh guard work remains bounded across 64 512 and 4096 unrelated live ret
       captureMode: 'cost-folded',
       includeBackends: true,
       async grow(_db, scale, previous) {
-        // One ordinary subject supports many unrelated private owner slots.
         const subjectId = await f.createSubject('game');
+        // Establish this scale's same-owner subjects before growing native accounts and
+        // their receipts. This keeps Semantic's one-second Access evidence current while
+        // preserving the same set of live owner entries in each measured database.
         for (let n = previous; n < scale; n++) {
           if ((n - previous) % 16 === 0) {
-            // Keep the long-running fixture actors inside Access's native identity freshness window.
-            for (const who of [f.owner, f.steward, f.other]) {
-              who.bearer = await accountToken(who.actor);
-              who.actor = await f.access.authenticate(who.bearer, { pool: f.pool, deadline: deadlineFor(30000) });
-            }
+            await refreshFixtureActors();
           }
+          ownerSubjects[n] = await f.createSubject('game');
+        }
+        // Retain one native entry per fresh account on a shared subject and one same-owner
+        // entry per unique subject, keeping both independent index populations represented.
+        for (let n = previous; n < scale; n++) {
+          if ((n - previous) % 16 === 0) await refreshFixtureActors();
           // Keep one retained native entry per fresh actor and one live owner slot per scale unit.
           // Replacing each actor's row adds no coverage beyond its delete receipt and archive.
           const who = await f.identity(scopes);
           const first = (await f.commands.putEntry(who.actor, subjectId, { state: 'planned' }, entryKey())).value.entry;
           await f.commands.deleteEntry(who.actor, subjectId, first.revision, entryKey(), first.incarnationId!);
-          const ownSubject = await f.createSubject('game');
-          await f.commands.putEntry(f.owner.actor, ownSubject, { state: 'planned' }, entryKey());
+          await f.commands.putEntry(f.owner.actor, ownerSubjects[n]!, { state: 'planned' }, entryKey());
         }
-        for (const who of [f.owner, f.steward, f.other]) {
-          who.bearer = await accountToken(who.actor);
-          who.actor = await f.access.authenticate(who.bearer, { pool: f.pool, deadline: deadlineFor(30000) });
-        }
+        await refreshFixtureActors();
       },
       operation,
     });
