@@ -10,6 +10,12 @@ const keys = {
   KERNEL_SESSION_KEYS: session,
   KERNEL_RECEIPT_KEYS: receipt,
 };
+const jwksGet = {
+  headers: new Headers(),
+  method: 'GET' as const,
+  redirect: 'manual' as const,
+  signal: new AbortController().signal,
+};
 
 test('worker and Kernel HTTP admit issuer-origin JWKS and fetch it from native Auth', async () => {
   const native = Bun.serve({
@@ -30,13 +36,15 @@ test('worker and Kernel HTTP admit issuer-origin JWKS and fetch it from native A
     const membership = readMembershipWorkConfig(env);
     expect(membership.auth.jwksUrl).toBe(env.AUTH_JWKS_URL);
     expect(new URL(membership.auth.jwksUrl).origin).toBe(issuer);
-    const jwks = await membership.auth.fetch!(env.AUTH_JWKS_URL);
+    const jwks = await membership.auth.fetch!(env.AUTH_JWKS_URL, jwksGet);
     expect(await jwks.json()).toEqual({ keys: [{ kty: 'EC', kid: 'native' }] });
-    await expect(membership.auth.fetch!(`${issuer}/signin`)).rejects.toThrow('only the configured issuer JWKS URL');
+    await expect(membership.auth.fetch!(`${issuer}/signin`, jwksGet)).rejects.toThrow(
+      'only the configured issuer JWKS URL',
+    );
 
     const defaults = createKernelRuntimeDefaults({ env });
     expect(defaults.auth?.jwksUrl).toBe(env.AUTH_JWKS_URL);
-    expect(await (await defaults.auth!.fetch!(env.AUTH_JWKS_URL)).json()).toEqual({
+    expect(await (await defaults.auth!.fetch!(env.AUTH_JWKS_URL, jwksGet)).json()).toEqual({
       keys: [{ kty: 'EC', kid: 'native' }],
     });
   } finally {

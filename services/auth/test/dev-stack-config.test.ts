@@ -102,10 +102,18 @@ test('isolated stacks keep issuer, JWKS and audience consistent with each other'
     kernel: 'http://127.0.0.1:20033',
     native: 'http://127.0.0.1:20032',
   });
+  const keys = {
+    KERNEL_ROUTE_KEY: Buffer.alloc(32, 1).toString('base64url'),
+    KERNEL_SESSION_KEYS: `1:${Buffer.alloc(32, 2).toString('base64url')}`,
+  };
   for (const bindings of [first, second]) {
     expect(new URL(bindings.AUTH_JWKS_URL).origin).toBe(new URL(bindings.AUTH_ISSUER).origin);
     expect(bindings.AUTH_AUDIENCE).toBe('https://api.rezics.test');
     expect(bindings.REZICS_LOCAL_STACK_NATIVE_ORIGIN).not.toBe(bindings.AUTH_ISSUER);
+    const config = readMembershipWorkConfig({ ...keys, ...bindings });
+    expect(config.auth.issuer).toBe(bindings.AUTH_ISSUER);
+    expect(config.auth.jwksUrl).toBe(bindings.AUTH_JWKS_URL);
+    expect(config.auth.fetch).toBeTypeOf('function');
   }
   expect(first.AUTH_ISSUER).not.toBe(second.AUTH_ISSUER);
   expect(first.AUTH_JWKS_URL).not.toBe(second.AUTH_JWKS_URL);
@@ -127,10 +135,16 @@ test('local JWKS transport fetches only the issuer JWKS URL from native Auth', a
     const nativeOrigin = `http://127.0.0.1:${native.port}`;
     const jwksUrl = issuerPublicJwksUrl(issuer);
     const fetch = developmentJwksFetch(jwksUrl, nativeOrigin);
-    const response = await fetch(jwksUrl);
+    const jwksGet = {
+      headers: new Headers(),
+      method: 'GET' as const,
+      redirect: 'manual' as const,
+      signal: new AbortController().signal,
+    };
+    const response = await fetch(jwksUrl, jwksGet);
     expect(response.ok).toBe(true);
     expect(await response.json()).toEqual({ keys: [{ kty: 'EC', kid: 'walk' }] });
-    await expect(fetch(`${issuer}/signin`)).rejects.toThrow('only the configured issuer JWKS URL');
+    await expect(fetch(`${issuer}/signin`, jwksGet)).rejects.toThrow('only the configured issuer JWKS URL');
     expect(
       localJwksTransport({}, { issuer, audience: 'https://api.rezics.test', jwksUrl: 'https://other.test/jwks' }).fetch,
     ).toBeUndefined();

@@ -324,7 +324,9 @@ through the trusted local composition seam, start Kernel without watch, and defe
 until seeding finishes; Web installs the declared Reylo mapper so local and remote typing share one identity. Cleanup
 keeps the original failure and the exact cleanup diagnostic. Mapper-enabled workspace typechecks run one at a time
 inside an admitted 6GiB slice. Admitted runs reclaim inactive file pages in the run slice after install and before each
-mapper compiler. Original native acceptance remains open.
+mapper compiler. Original native acceptance remains open. Slot 2 is issuer `:20021`, native Auth `:20022` and Kernel
+`:20023`; Worker and Kernel admit that issuer JWKS after fetching the document from native Auth, without substitute
+credentials or a blanket fetch override.
 
 ## Seeded journey walks
 
