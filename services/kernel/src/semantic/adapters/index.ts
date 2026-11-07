@@ -18,3 +18,5 @@ export {
   resolvedSemanticDomain,
 } from './registry.ts';
 export { hashingOf, routingOf, contentLifecycleOf, bindOrdinaryContentLifecycle } from './ports.ts';
+
+export { createNativeRatingVoteSemantic } from './rating-votes.ts';

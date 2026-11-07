@@ -1,5 +1,5 @@
 import { expect, test } from 'bun:test';
-import { produceIdentityRatingVoteChange } from '../../src/semantic/identity-rating-producer.ts';
+import { produceIdentityRatingVoteChange } from '../../src/rating/events.ts';
 import { consumeIdentityRatingPage } from '../../src/semantic/identity-rating-consumer.ts';
 import { repairIdentityRatingVisibility } from '../../src/semantic/identity-rating-repair.ts';
 import type {

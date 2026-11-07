@@ -1,3 +1,4 @@
+import { installRatingVoteSemantic } from './rating-votes.ts';
 import { installNativeHistory } from './history.ts';
 import { composeAccessApplication } from './access.ts';
 import { installIdentityRatingRepairProducer } from './identity-rating-repair.ts';
@@ -7,4 +8,5 @@ export function installNativeHistoryPreload(): void {
   composeAccessApplication();
   installNativeHistory();
   installIdentityRatingRepairProducer();
+  installRatingVoteSemantic();
 }

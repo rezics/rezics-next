@@ -475,6 +475,7 @@
       "kind": "adapter",
       "owner": "content",
       "paths": ["services/kernel/src/rating/**", "services/kernel/db/rating/**"],
+      "excludes": ["services/kernel/src/rating/application/**"],
       "publicEntries": [
         "services/kernel/src/rating/index.ts",
         "services/kernel/src/rating/module.ts",
@@ -493,7 +494,9 @@
         "kernel-memoized",
         "kernel-platform",
         "kernel-search",
-        "kernel-semantic"
+        "kernel-semantic",
+        "kernel-rating-application",
+        "kernel-semantic-contract"
       ],
       "capabilities": ["rating"],
       "postgresPaths": ["services/kernel/src/rating/**"]
@@ -552,7 +555,8 @@
         "services/kernel/src/library/identity-scope-effects.ts",
         "services/kernel/src/library/collection-source-work.ts",
         "services/kernel/src/library/collection-native-work.ts",
-        "services/kernel/src/library/collection-kind-input.ts"
+        "services/kernel/src/library/collection-kind-input.ts",
+        "services/kernel/src/library/subject-anchor.ts"
       ],
       "allowedDependencies": [
         "access-policy",
@@ -1654,6 +1658,15 @@
       "publicEntries": ["services/kernel/src/route/contract.ts"],
       "allowedDependencies": [],
       "capabilities": []
+    },
+    {
+      "id": "kernel-rating-application",
+      "kind": "application",
+      "owner": "content",
+      "paths": ["services/kernel/src/rating/application/**"],
+      "publicEntries": ["services/kernel/src/rating/application/index.ts"],
+      "allowedDependencies": ["kernel-semantic-contract"],
+      "capabilities": ["rating-vote-application"]
     }
   ]
 }

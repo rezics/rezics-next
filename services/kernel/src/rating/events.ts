@@ -318,3 +318,9 @@ export function RATING_EVENTS() {
       }) as const,
   );
 }
+
+export {
+  IDENTITY_RATING_VOTE_EVENT,
+  produceIdentityRatingVoteChange,
+  type IdentityRatingVoteChange,
+} from './vote-event.ts';

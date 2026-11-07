@@ -13,3 +13,6 @@ export {
   ratingIdentityProducer,
   unavailableRatingIdentityProducer,
 } from './segment-identity-guard.ts';
+
+export { bindRatingVoteSemantic, ratingVoteSemantic } from './adapters/vote-semantic.ts';
+export type { RatingVoteSemantic } from './adapters/vote-semantic.ts';

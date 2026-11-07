@@ -112,6 +112,11 @@ domain clocks stay required on holders that already have one; deadlineNow is a s
 public entry includes realmReadEligibility. Tests pin declaration inventory, ambient deadline refusal, and one
 populated Realm witness revision/replay including stale work; no extra stories.
 
+Decision: Rating counted preparation/read/finish and vote admission consume required Rating application ports;
+Semantic supplies native adapters through composition. Rating owns exact readback and vote events; Semantic owns
+immutable review operands. Extend vote-review for original actor/Pool/deadline/transaction handoff, receive installed
+repair/default-worker acceptance, and leave native/browser/growth receiving to sole Goal walks. See the [Rating boundary](../../services/kernel/src/rating/README.md#vote-and-semantic-application-boundary).
+
 ## Dependencies
 
 Requires Accounts membership, role, ban, preference and lifecycle ports; Access authorization and resource grants;

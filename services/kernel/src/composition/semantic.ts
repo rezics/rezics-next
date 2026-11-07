@@ -1,3 +1,4 @@
+import { installRatingVoteSemantic } from './rating-votes.ts';
 import type { Pool } from 'pg';
 import type { KernelClock } from '../clock.ts';
 import { readMembershipRouteKey } from '../access/membership-work-config.ts';
@@ -71,6 +72,7 @@ export function composeSemanticAdapters(): void {
   bindOrdinaryContentLifecycle(nativeContentLifecycle());
   installIdentitySourceConsumerRuntime();
   installIdentityRatingRepairProducer();
+  installRatingVoteSemantic();
 }
 
 /** Ordinary process composition: identity participants plus Rating review and Content lifecycle adapters. */

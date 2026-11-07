@@ -1,5 +1,5 @@
 import type { CommandEvent } from '../command/command.ts';
-import { isStoredRatingUnit } from '../rating/question-scale.ts';
+import { isStoredRatingUnit } from './question-scale.ts';
 
 export const IDENTITY_RATING_VOTE_EVENT = 'com.rezics.rating.vote.changed.v1';
 

@@ -1,3 +1,4 @@
+import { installRatingVoteSemantic } from './rating-votes.ts';
 import type { Pool } from 'pg';
 import { composeLibraryDomain } from './library.ts';
 import { createWriteRateLimiter, type WriteRateLimiter } from '../access/write-rate.ts';
@@ -86,6 +87,7 @@ export function createKernelRuntimeDefaults(overrides: KernelRuntimeOverrides = 
   installNativeHistory();
   installIdentitySourceConsumerRuntime();
   installIdentityRatingRepairProducer();
+  installRatingVoteSemantic();
   bindOrdinaryContentLifecycle(nativeContentLifecycle());
   composeLibraryDomain();
   const env = overrides.env ?? process.env;

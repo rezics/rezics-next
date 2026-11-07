@@ -68,3 +68,5 @@ export type {
   ItemProjectionRequest,
   ItemResolveRequest,
 } from './domain-ports.ts';
+
+export type * from './rating-values.ts';

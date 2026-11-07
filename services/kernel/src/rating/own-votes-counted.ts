@@ -1,20 +1,16 @@
-import { identityMappingObservationValue } from '../semantic/identity-core/index.ts';
 import { createHash } from 'node:crypto';
 import type { Pool, PoolClient } from 'pg';
 import { GrantDeniedError } from '../access/grant-commands.ts';
 import { readAccount, type Account } from '../access/account-data.ts';
 import { partitionReadClient } from '../database/read-snapshot.ts';
 import type { Access, AccountActor, Actor } from '../request/access.ts';
-import { withReadTransaction } from '../semantic/read.ts';
-import { identityEpochStore } from '../semantic/identity-adapters/index.ts';
-import type { IdentityMapping } from '../semantic/identity-core/index.ts';
-import { readableSubjects } from '../library/subject-anchor.ts';
+import type { IdentityMapping } from '../semantic/contract/index.ts';
+import { ratingVoteSemantic, type RatingVoteSemantic } from './adapters/vote-semantic.ts';
 import { ProblemError } from '../http/problem.ts';
 import { partitionOf, routeOf } from '../route/route.ts';
 import { readVisibleRatingQuestion } from './question-directory.ts';
 import { STANDARD_QUESTION_ID } from './standard-question.ts';
 import countedVotes from './own-votes-counted.sql';
-import { readIdentityRatingEpochs } from '../semantic/identity-rating-admission.ts';
 import {
   VOTE_SCOPE,
   VoteInvalidError,
@@ -186,7 +182,7 @@ export type OwnCountedVoteResult =
     }>;
 
 type Queryable = Pick<Pool | PoolClient, 'query'>;
-export type OwnCountedVoteReaderDependencies = Readonly<{ pool: Pool; access: Access }>;
+export type OwnCountedVoteReaderDependencies = Readonly<{ pool: Pool; access: Access; semantic?: RatingVoteSemantic }>;
 export type OwnCountedVoteReader = Readonly<{
   prepare(request: OwnCountedVoteRequest, deadline: number): Promise<OwnCountedVotePrepareResult>;
   read(
@@ -412,6 +408,8 @@ function validPreparation(preparation: OwnCountedVotePreparation): boolean {
 }
 
 export function createOwnCountedVoteReader(deps: OwnCountedVoteReaderDependencies): OwnCountedVoteReader {
+  const semantic = deps.semantic ?? ratingVoteSemantic();
+  deps = { ...deps, semantic };
   const identityWitnesses = new WeakMap<OwnCountedVotePreparation, readonly IdentityMapping[]>();
   const visibilityWitnesses = new WeakMap<OwnCountedVotePreparation, readonly string[]>();
   const epochWitnesses = new WeakMap<OwnCountedVotePreparation, readonly VoteReviewEpoch[]>();
@@ -433,7 +431,7 @@ export function createOwnCountedVoteReader(deps: OwnCountedVoteReaderDependencie
   async function prepare(request: OwnCountedVoteRequest, deadline: number): Promise<OwnCountedVotePrepareResult> {
     const ids = targetIds(request);
     const actor = owner(request.actor);
-    const account = await withReadTransaction(
+    const account = await semantic.snapshot(
       deps.pool,
       async (client) => {
         await partitionReadClient(client, partitionOf(routeOf(actor.accountId)!));
@@ -468,15 +466,16 @@ export function createOwnCountedVoteReader(deps: OwnCountedVoteReaderDependencie
     if (!validStandardQuestion(question))
       return { status: 'preparing', reason: 'question-changed', retry: 'same-input', targets: [] };
 
-    const first = await identityEpochStore().readMappings(deps.pool, ids);
+    const first = await semantic.mappings(deps.pool, ids, deadline);
     const visible = new Set(
-      await readableSubjects(
+      await semantic.readable(
         { pool: deps.pool, access: deps.access },
         actor,
         ids.filter((_, index) => first[index]?.state === 'mapped'),
+        deadline,
       ),
     );
-    const last = await identityEpochStore().readMappings(deps.pool, ids);
+    const last = await semantic.mappings(deps.pool, ids, deadline);
     if (!identityObservationsEqual(first, last))
       return { status: 'preparing', reason: 'identity-changed', retry: 'same-input', targets: [] };
 
@@ -503,7 +502,7 @@ export function createOwnCountedVoteReader(deps: OwnCountedVoteReaderDependencie
     });
     let epochs: VoteReviewEpoch[];
     try {
-      epochs = await readIdentityRatingEpochs(deps.pool, homes(targets), deadline);
+      epochs = await semantic.epochs(deps.pool, homes(targets), deadline);
     } catch (error) {
       if (!(error instanceof VoteReviewUnavailableError)) throw error;
       return {
@@ -611,15 +610,16 @@ export function createOwnCountedVoteReader(deps: OwnCountedVoteReaderDependencie
         return { status: 'preparing', reason: 'question-changed', retry: 'same-input' };
     }
 
-    const first = await identityEpochStore().readMappings(deps.pool, ids);
+    const first = await semantic.mappings(deps.pool, ids, deadline);
     const visible = new Set(
-      await readableSubjects(
+      await semantic.readable(
         { pool: deps.pool, access: deps.access },
         actor,
         ids.filter((_, index) => first[index]?.state === 'mapped'),
+        deadline,
       ),
     );
-    const last = await identityEpochStore().readMappings(deps.pool, ids);
+    const last = await semantic.mappings(deps.pool, ids, deadline);
     if (!identityObservationsEqual(first, last))
       return { status: 'preparing', reason: 'identity-changed', retry: 'same-input' };
     const originalWitnesses = identityWitnesses.get(preparation);
@@ -641,7 +641,7 @@ export function createOwnCountedVoteReader(deps: OwnCountedVoteReaderDependencie
 
     let epochs: VoteReviewEpoch[];
     try {
-      epochs = await readIdentityRatingEpochs(deps.pool, homes(preparation.targets), deadline);
+      epochs = await semantic.epochs(deps.pool, homes(preparation.targets), deadline);
     } catch (error) {
       if (!(error instanceof VoteReviewUnavailableError)) throw error;
       return { status: 'preparing', reason: 'identity-changed', retry: 'same-input' };
@@ -649,7 +649,7 @@ export function createOwnCountedVoteReader(deps: OwnCountedVoteReaderDependencie
     if (JSON.stringify(epochs) !== JSON.stringify(epochWitnesses.get(preparation)))
       return { status: 'preparing', reason: 'identity-changed', retry: 'same-input' };
 
-    const current = await withReadTransaction(
+    const current = await semantic.snapshot(
       deps.pool,
       async (client) => {
         await partitionReadClient(client, partitionOf(routeOf(actor.accountId)!));
@@ -739,4 +739,18 @@ export function createOwnCountedVoteReader(deps: OwnCountedVoteReaderDependencie
   }
 
   return { prepare, read, finish };
+}
+
+/** Stable observation bytes used by native Rating equality and hashing. */
+function identityMappingObservationValue(mapping: IdentityMapping): readonly unknown[] {
+  switch (mapping.state) {
+    case 'mapped':
+      return ['mapped', mapping.original, mapping.terminal, mapping.epoch.toString()];
+    case 'pending':
+      return ['pending', mapping.original, mapping.job.jobId, mapping.job.epoch.toString()];
+    case 'unavailable':
+      return ['unavailable', mapping.reason];
+    case 'absent':
+      return ['absent'];
+  }
 }
