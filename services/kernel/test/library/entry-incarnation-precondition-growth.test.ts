@@ -531,9 +531,15 @@ test('fresh guard work remains bounded across 64 512 and 4096 unrelated live ret
           // Keep one retained native entry per fresh actor and one live owner slot per scale unit.
           // Replacing each actor's row adds no coverage beyond its delete receipt and archive.
           const who = await f.identity(scopes);
-          const first = (await f.commands.putEntry(who.actor, target, { state: 'planned' }, entryKey())).value.entry;
-          await f.commands.deleteEntry(who.actor, target, first.revision, entryKey(), first.incarnationId!);
-          await f.commands.putEntry(f.owner.actor, f.growthSubjects[n]!, { state: 'planned' }, entryKey());
+          const first = (
+            await fixtureRequest(() => f.commands.putEntry(who.actor, target, { state: 'planned' }, entryKey()))
+          ).value.entry;
+          await fixtureRequest(() =>
+            f.commands.deleteEntry(who.actor, target, first.revision, entryKey(), first.incarnationId!),
+          );
+          await fixtureRequest(() =>
+            f.commands.putEntry(f.owner.actor, f.growthSubjects[n]!, { state: 'planned' }, entryKey()),
+          );
           if ((n + 1) % 128 === 0)
             process.stderr.write(`Library entry growth scale ${scale}: seeded ${n + 1}/${scale}\n`);
         }
@@ -563,7 +569,7 @@ test('fresh guard work remains bounded across 64 512 and 4096 unrelated live ret
       growth,
       async () => {
         await expect(
-          f.commands.deleteEntry(f.owner.actor, target, current.revision, entryKey()),
+          fixtureRequest(() => f.commands.deleteEntry(f.owner.actor, target, current.revision, entryKey())),
         ).rejects.toBeInstanceOf(LibraryConflictError);
       },
       { includeBackends: true },
