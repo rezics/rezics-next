@@ -1,6 +1,13 @@
 import { WatchesSection } from './watches';
 import type { WatchManagementIO } from './watch-native';
-import { sessionQuery, useSession } from '../session/query';
+import {
+  productionSettingsShellPort,
+  useSettingsOperation,
+  useSettingsOperationAdmission,
+  useSettingsSession,
+  useSettingsShell,
+} from './adapters/shell';
+import type { SettingsSessionObservation } from './ports/shell';
 import { useQueryClient, type QueryClient, type QueryState } from '@tanstack/react-query';
 import {
   useState,
@@ -17,20 +24,17 @@ import { Alert, AlertDescription, AlertTitle } from '@rezics/ui/shadcn/alert';
 import { Button } from '@rezics/ui/shadcn/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@rezics/ui/shadcn/card';
 import { m } from '../paraglide/messages.js';
-import { PageHeading } from '../shell/page-heading';
 import { ProfileSection } from './profile';
 import { ReadingCard } from './reading-card';
-import { ShelfPreferencesCard } from './shelf-preferences';
+import { BoundCollectionPrivacySection, BoundShelfPreferencesCard } from './adapters/library-view.tsx';
 import { ReadingNavigation, SettingsNavigationProvider, useSettingsNavigationOwner } from './reading-navigation';
 import { DisplayPreferences } from './display-preferences';
 import { NotificationsCard } from './notifications';
 import { PublicViewsSection } from './public-views';
 import type { NativePreferenceFailure, SettingsPage } from './preferences';
 import { usePreferenceRetry } from './preferences';
-import { CollectionPrivacySection } from './collection-privacy';
 import { VerificationSection } from './verification';
 import { observeVerificationRead, verificationQueryKey } from './verification-recovery';
-import { useOperation, useOperationAdmission } from '../kernel/exposure';
 import { AccountSafetyCard, AccountSafetySection } from './account-safety';
 import { ManagedAccountsSection } from './managed-accounts';
 import type { ManagedAccountsIO } from './managed-accounts-read';
@@ -323,6 +327,8 @@ function SettingsSections({
   preferenceIO,
   watchReturn = null,
   profileReturn = null,
+  ShelfCard = BoundShelfPreferencesCard,
+  PrivacySection = BoundCollectionPrivacySection,
 }: {
   page: Extract<SettingsPage, { signedIn: true }> & { accountId: string };
   csrfToken: string | null;
@@ -331,11 +337,13 @@ function SettingsSections({
   preferenceIO: PreferenceIO;
   watchReturn?: WatchReturnReceipt | null;
   profileReturn?: import('./settings-return').ProfileReturnSnapshot | null;
+  ShelfCard?: typeof BoundShelfPreferencesCard;
+  PrivacySection?: typeof BoundCollectionPrivacySection;
 }) {
-  const collectionsAdmission = useOperationAdmission('account.collections');
+  const collectionsAdmission = useSettingsOperationAdmission('account.collections');
   const collectionsAdmitted = collectionsAdmission === 'available';
-  const verificationAdmitted = useOperation('agent_verification.request');
-  const { subject: verificationAccountId } = useSession();
+  const verificationAdmitted = useSettingsOperation('agent_verification.request');
+  const { subject: verificationAccountId } = useSettingsSession();
   const queryClient = useQueryClient();
   // The shared operation hook observes the enrolled viewer exposure used by these sections.
   const observeVerification = useCallback(
@@ -411,7 +419,7 @@ function SettingsSections({
       <div id="display" className="scroll-mt-6 space-y-6">
         <DisplayPreferences />
         {'preferences' in page ? (
-          <ShelfPreferencesCard
+          <ShelfCard
             initial={page.preferences}
             version={version}
             csrfToken={csrfToken}
@@ -463,7 +471,7 @@ function SettingsSections({
         </section>
       ) : null,
     watches: <SettingsWatchesOwner io={watchesIO} initialReturn={watchReturn} />,
-    privacy: <CollectionPrivacySection />,
+    privacy: <PrivacySection />,
     verification: (
       <section id="verification" aria-label={m.settings_verification_heading()} className="scroll-mt-6" tabIndex={-1}>
         <VerificationSection />
@@ -539,8 +547,8 @@ const sessionRetries = new WeakMap<QueryClient, Promise<void>>();
 export function retrySettingsSession(client: QueryClient, invalidate: () => Promise<unknown>): Promise<void> {
   const pending = sessionRetries.get(client);
   if (pending) return pending;
-  const retry = client
-    .fetchQuery({ ...sessionQuery, staleTime: 0 })
+  const retry = productionSettingsShellPort
+    .refreshSession(client)
     .then((session) => {
       // Unavailable or identity-less responses cannot authorize another private page read.
       if (session.state === 'unavailable' || (session.state === 'signed-in' && !session.subject)) return;
@@ -560,7 +568,7 @@ export function SettingsSessionRecovery({
   retryFailed = false,
   onRetry,
 }: {
-  state: ReturnType<typeof useSession>['state'];
+  state: SettingsSessionObservation['state'];
   sessionRead?: Pick<QueryState, 'status' | 'fetchStatus'> | undefined;
   retrying?: boolean;
   retryFailed?: boolean;
@@ -611,6 +619,8 @@ function OwnedSettingsPage({
   managedAccountsIO,
   watchesIO,
   onRetry,
+  ShelfCard = BoundShelfPreferencesCard,
+  PrivacySection = BoundCollectionPrivacySection,
 }: {
   page: Extract<SettingsPage, { signedIn: true }> & { accountId: string };
   csrfToken: string | null;
@@ -618,6 +628,8 @@ function OwnedSettingsPage({
   managedAccountsIO?: ManagedAccountsIO | undefined;
   watchesIO?: WatchManagementIO | undefined;
   onRetry: () => void;
+  ShelfCard?: typeof BoundShelfPreferencesCard;
+  PrivacySection?: typeof BoundCollectionPrivacySection;
 }) {
   const owner = useSettingsSessionOwner(csrfToken, page.accountId)!;
   const [returnEntry] = useState(() =>
@@ -642,6 +654,8 @@ function OwnedSettingsPage({
           watchesIO={watchesIO}
           watchReturn={returnEntry.receipt}
           profileReturn={returnEntry.profile}
+          ShelfCard={ShelfCard}
+          PrivacySection={PrivacySection}
         />
       </SettingsNavigationProvider>
     </SettingsSessionContext.Provider>
@@ -654,14 +668,18 @@ export function SettingsPageView({
   managedAccountsIO,
   watchesIO,
   preferenceIO = nativePreferences,
+  ShelfCard = BoundShelfPreferencesCard,
+  PrivacySection = BoundCollectionPrivacySection,
 }: {
   page: SettingsPage;
   csrfToken: string | null;
   /** Supplied only by the guarded route, from its request's established session query. */
-  requestSession?: ReturnType<typeof useSession> | null;
+  requestSession?: SettingsSessionObservation | null;
   managedAccountsIO?: ManagedAccountsIO | undefined;
   watchesIO?: WatchManagementIO | undefined;
   preferenceIO?: PreferenceIO;
+  ShelfCard?: typeof BoundShelfPreferencesCard;
+  PrivacySection?: typeof BoundCollectionPrivacySection;
 }) {
   const location = useLocation();
   const router = useRouter();
@@ -671,20 +689,14 @@ export function SettingsPageView({
     () => true,
     () => false,
   );
-  const browserSession = useSession();
+  const { PageHeading, subscribeSessionQuery, sessionQueryState } = useSettingsShell();
+  const browserSession = useSettingsSession();
   // Observe the installed query, as Inbox does; useSession owns the initial request.
   const observeSession = useCallback(
-    (changed: () => void) =>
-      queryClient.getQueryCache().subscribe(({ query }) => {
-        if (query.queryKey.length === 1 && query.queryKey[0] === sessionQuery.queryKey[0]) changed();
-      }),
-    [queryClient],
+    (changed: () => void) => subscribeSessionQuery(queryClient, changed),
+    [queryClient, subscribeSessionQuery],
   );
-  const sessionRead = useSyncExternalStore(
-    observeSession,
-    () => queryClient.getQueryState(sessionQuery.queryKey),
-    serverSessionRead,
-  );
+  const sessionRead = useSyncExternalStore(observeSession, () => sessionQueryState(queryClient), serverSessionRead);
   const [generation, setGeneration] = useState(0);
   const [retrying, setRetrying] = useState(false);
   const [retryFailed, setRetryFailed] = useState(false);
@@ -724,6 +736,8 @@ export function SettingsPageView({
           managedAccountsIO={managedAccountsIO}
           watchesIO={watchesIO}
           onRetry={retry}
+          ShelfCard={ShelfCard}
+          PrivacySection={PrivacySection}
         />
       ) : signedOut ? (
         <SignedOutSettings returnTo={location.publicHref} />

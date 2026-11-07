@@ -79,16 +79,44 @@ The shared rules are owned by [architecture](../architecture.md),
 the [document package](../../packages/document/README.md) and [deletion](../deletion.md). Consumers adapt to
 producer-owned interfaces; Content does not copy another module's storage or authority.
 
-Decision: Kernel Content is split into contract/core/application/adapters; composition binds ContentAmbient;
-platform defineModule is not delivered so contentDeclaration() stays and contentHttpDeclaration() extends it with
-mount; start/stop owns the process bind; edition consent is an explicit reader with no pool WeakMap. Work
-registrations compose in composition/work-modules.ts from contentDeclaration().work(ambient); startWorker binds
-Content then shares database.pool with WorkClient and composeWork. Registration observation uses that original
-WorkClient; native queue registration refuses a stub. Tests pin the declaration, supplied clock, request identity
-and worker-import graph; no extra stories.
+Decision: Content contract/core/application/adapters separate ambient operands and native effects; composition
+installs activity, current review context, exact document-media and bounded mention capabilities with real Access
+reading adapters. Explicit optional outcomes preserve unknown/deleted identities, historical citations, exact
+revision anchors and partial sibling presentation. Existing closed reading/history shapes and final native
+authorization remain; HTTP mapping stays at the compatibility boundary. Focused application/composition tests pin
+these states without new stories. Runtime/growth acceptance stays with sole Goal walks. Platform defineModule
+is undelivered, so contentDeclaration()/contentHttpDeclaration() remain. Work registrations compose in
+composition/work-modules.ts; startWorker binds Content and shares the original database pool with WorkClient and
+composeWork. Native queue registration refuses a stub; edition consent stays explicit with no pool WeakMap.
 
-Type compatibility repairs preserve outcome assertions and align callers with producer-owned contracts without
-changing behavior.
+Decision: pin Community construction with declaration inventory, ambient deadline refusal, and one populated Realm
+witness revision/replay native test including stale work; no extra stories. Domain clocks stay required on holders;
+deadlineNow is a separate ambient; Access-facing public entry includes realmReadEligibility. Command pools supply
+declared receipt keys before setup and grants; `createKernel` reuses a pool ring when composition omits `receiptKeys`.
+Policy catalogues drop resource types that did not resolve for the mounted action subset. JSON-array readers bind
+keys as text so `jsonb_to_recordset` never sees a non-array. Composition tests compare installed roles with
+`accessActionCatalogue` of the mounted routes. The Realm minting test records `preparePage` for the Global parent
+and `prepare` for Space/Context extras, capturing the live extras attempt during prepare because
+Access refuses a finished command time; extras deadline and the Space slot witness are stored on
+that command attempt at prepare so authorize admits only that attempt, without a shared scalar
+fallback. Growth isolation pools that run authored erasure commands bind the same dedicated
+receipt-key ring as HTTP fixtures. GrantDeniedError maps to forbidden before its write-denied superclass. Native HTTP
+fixtures carry dedicated receipt keys and the shared 30s request budget. Sequential fixtures unfence and re-issue tokens at the current
+authentication floor after suspension and never decrease `minimum_authn_epoch`.
+Boolean Realm-read and publication disclosure checks conceal eligibility `not_found` as a closed miss;
+a metadata revision rechecks current visibility. The publication list fixture deletes
+`search_selection_state` then the subject under Semantic erasure cleanup. Existing realm visibility
+and publication disclosure tests pin those states; no extra stories.
+
+Decision: compose Realm community, exact disclosure and Subject scope as one Content application over
+consumer-owned ports; bind independent Community/Semantic evidence and Search execution at existing roots.
+Focused identity, unavailable-authority and final-currentness tests preserve existing outcome assertions; no extra
+stories or positive default-journey claim. Typing is implementation acceptance; the Goal walk owns runtime acceptance.
+
+Decision: Rating counted preparation/read/finish and vote admission consume required Rating application ports;
+Semantic supplies native adapters through composition. Rating owns exact readback and vote events; Semantic owns
+immutable review operands. Extend vote-review for original actor/Pool/deadline/transaction handoff, receive installed
+repair/default-worker acceptance, and leave native/browser/growth receiving to sole Goal walks. See the [Rating boundary](../../services/kernel/src/rating/README.md#vote-and-semantic-application-boundary).
 
 ## Dependencies
 

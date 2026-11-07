@@ -1,5 +1,5 @@
 import type { QueryClient } from '@tanstack/react-query';
-import { sessionQuery } from '../session/query';
+import { sessionQueryKey } from '../reader/lifetime/index';
 
 export type PostCommandSession = {
   state?: string;
@@ -31,7 +31,7 @@ export function postCommandSessionSource(client: QueryClient | undefined): PostC
   const existing = sources.get(client);
   if (existing) return existing;
 
-  const read = () => client.getQueryData<PostCommandSession>(sessionQuery.queryKey);
+  const read = () => client.getQueryData<PostCommandSession>(sessionQueryKey);
   const identity = () => {
     const session = read();
     return JSON.stringify([session?.state ?? 'unknown', session?.subject ?? null, session?.csrfToken ?? null]);
@@ -40,7 +40,7 @@ export function postCommandSessionSource(client: QueryClient | undefined): PostC
   let revision = 0;
   const listeners = new Set<() => void>();
   client.getQueryCache().subscribe((event) => {
-    if (event.query.queryKey.length !== 1 || event.query.queryKey[0] !== sessionQuery.queryKey[0]) return;
+    if (event.query.queryKey.length !== 1 || event.query.queryKey[0] !== sessionQueryKey[0]) return;
     const next = identity();
     const replaced =
       event.type === 'added' ||

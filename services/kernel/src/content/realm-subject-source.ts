@@ -1,8 +1,9 @@
 import { createHash } from 'node:crypto';
 import type { Pool } from 'pg';
-import type { LeafOptions } from '../semantic/scope-leaf-evidence.ts';
+import type { NativeScopeReader } from '../semantic/adapters/index.ts';
 import type { WorkDimensions } from '../library/contract/work-dimensions.ts';
-import { ScopeWork, zeroScopeWork } from '../search/scope-execution.ts';
+import type { ScopeWork } from '../search/adapters/index.ts';
+import { zeroScopeWork } from '../search/contract/index.ts';
 import { ProblemError } from '../http/problem.ts';
 import {
   createRealmSubjectCandidates,
@@ -20,7 +21,7 @@ export type RealmSubjectResolution =
   | Readonly<{ state: 'concealed' | 'unavailable' }>;
 export type RealmSubjectMembership = 'discussed' | 'not_published' | 'withheld' | 'unknown';
 type Current = 'current' | 'changed' | 'concealed' | 'unavailable';
-type Context = Readonly<{ reader: LeafOptions; work: ScopeWork }>;
+type Context = Readonly<{ reader: NativeScopeReader; work: ScopeWork }>;
 /** Supplied by the separate current-disclosure owner. All methods use the caller root;
  * dependencies bind actor, Access, Realm/place, opening, original and terminal identity.
  * Currentness also revalidates every Subject/candidate dependency added during a page.
@@ -60,23 +61,23 @@ export interface RealmSubjectMaintenance {
   ): Promise<'current' | 'changed' | 'unavailable'>;
 }
 export interface RealmSubjectSource {
-  resolve(realm: string, reader: LeafOptions, work: ScopeWork): Promise<RealmSubjectResolution>;
-  current(observation: RealmSubjectObservation, reader: LeafOptions, work: ScopeWork): Promise<Current>;
+  resolve(realm: string, reader: NativeScopeReader, work: ScopeWork): Promise<RealmSubjectResolution>;
+  current(observation: RealmSubjectObservation, reader: NativeScopeReader, work: ScopeWork): Promise<Current>;
   prefix(
     observation: RealmSubjectObservation,
     after: string | null,
     limit: number,
-    reader: LeafOptions,
+    reader: NativeScopeReader,
     work: ScopeWork,
   ): Promise<Readonly<{ subjects: readonly string[]; after: string | null; exhausted: boolean }>>;
   match(
     observation: RealmSubjectObservation,
     subjects: readonly string[],
-    reader: LeafOptions,
+    reader: NativeScopeReader,
     work: ScopeWork,
   ): Promise<readonly RealmSubjectMembership[]>;
 }
-type State = { coverage: RealmSubjectCoverage; dependency: string; live: string; reader: LeafOptions };
+type State = { coverage: RealmSubjectCoverage; dependency: string; live: string; reader: NativeScopeReader };
 type Frontier = { revision: string; key: CandidateKey; emitted: string | null };
 const unavailable = (): never => {
   throw new ProblemError('dependency_unavailable');
@@ -134,7 +135,11 @@ export function createRealmSubjectSource(input: {
   const states = new WeakMap<RealmSubjectObservation, State>();
   const disclosure = input.disclosure,
     maintenance = input.maintenance;
-  async function current(observation: RealmSubjectObservation, reader: LeafOptions, work: ScopeWork): Promise<Current> {
+  async function current(
+    observation: RealmSubjectObservation,
+    reader: NativeScopeReader,
+    work: ScopeWork,
+  ): Promise<Current> {
     const state = states.get(observation);
     if (!state || reader !== state.reader) return 'changed';
     if (!disclosure || !maintenance || Date.now() >= reader.deadline) return 'unavailable';
@@ -150,7 +155,7 @@ export function createRealmSubjectSource(input: {
       maintenance.current(observation.realm, coverage, state.live, context),
     );
   }
-  async function requireCurrent(observation: RealmSubjectObservation, reader: LeafOptions, work: ScopeWork) {
+  async function requireCurrent(observation: RealmSubjectObservation, reader: NativeScopeReader, work: ScopeWork) {
     if ((await current(observation, reader, work)) !== 'current') unavailable();
     return states.get(observation)!;
   }

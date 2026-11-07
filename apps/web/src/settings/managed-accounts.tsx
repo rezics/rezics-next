@@ -18,10 +18,11 @@ import { Alert, AlertDescription, AlertTitle } from '@rezics/ui/shadcn/alert';
 import { ContentItem, ContentItemHeading } from '@rezics/ui/content-item';
 import { m } from '../paraglide/messages.js';
 import { getLocale } from '../paraglide/runtime.js';
-import { useSession } from '../session/query';
+import { useAccounts } from './managed-account-capabilities';
 import { initials } from '../threads/initials';
 import { readManagedAccountsInventory } from './actions';
 import { useManagedReaderLifetime, useManagedSessionReader, type ManagedSessionReader } from './managed-session-reader';
+import { useSettingsAmbient } from './adapters/ambient-view.tsx';
 import { usePreferenceRetry } from './preference-failure-retry';
 import {
   managedAccountHref,
@@ -605,9 +606,16 @@ function ViewerInventory({
   owner?: ManagedSessionReader | undefined;
 }) {
   const locale = getLocale();
+  const ambient = useSettingsAmbient();
   const inventory = useMemo(
-    () => new ManagedAccountsInventory(viewerId, io, () => (!owner || owner.isCurrent()) && getLocale() === locale),
-    [viewerId, io, owner, locale],
+    () =>
+      new ManagedAccountsInventory(
+        viewerId,
+        io,
+        ambient,
+        () => (!owner || owner.isCurrent()) && getLocale() === locale,
+      ),
+    [ambient, viewerId, io, owner, locale],
   );
   const snapshot = useSyncExternalStore(inventory.subscribe, inventory.snapshot, inventory.snapshot);
   useManagedReaderLifetime(inventory.dispose, owner);
@@ -645,7 +653,7 @@ export function ManagedAccounts(props: {
 
 /** The public/SSR page never starts a private read. A session transition removes the entire prior inventory. */
 export function ManagedAccountsSection({ io }: { io?: ManagedAccountsIO | undefined }) {
-  const session = useSession();
+  const { session } = useAccounts();
   const location = useLocation();
   const router = useRouter();
   const selected = !new URL(location.publicHref, 'https://rezics.local').searchParams.has('managedAccount');

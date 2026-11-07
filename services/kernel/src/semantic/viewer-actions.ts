@@ -1,6 +1,9 @@
 import { memoizedValue } from '../memoized.ts';
-import { authorizedContextMetadata, contextNativeActions } from './context-lifecycle-read.ts';
-import { ContextDirectoryPreparingError } from './context-directory.ts';
+import {
+  authorizedContextMetadata,
+  contextNativeActions,
+  ContextDirectoryPreparingError,
+} from './context-application.ts';
 import {
   readViewerActions,
   type ViewerActionBinding,

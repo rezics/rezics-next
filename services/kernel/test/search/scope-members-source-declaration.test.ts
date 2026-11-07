@@ -31,10 +31,10 @@ test('the selected Members Source has a complete static bound for the declared c
     sumBounds(...Object.values(MEMBERS_PREPARATION_SOURCE_TERMS())),
   );
   expect(MEMBERS_PREPARATION_SOURCE_TERMS().collectionState).toEqual(
-    repeatBound(CANONICAL_SOURCE_RECEIVING_COST().state, MEMBERS_PREPARATION_SOURCE_PATHS.id.membersSnapshots),
+    repeatBound(CANONICAL_SOURCE_RECEIVING_COST().state, MEMBERS_PREPARATION_SOURCE_PATHS().id.membersSnapshots),
   );
-  expect(MEMBERS_PREPARATION_SOURCE_PATHS.id.membersSnapshots).toBe(8);
-  expect(MEMBERS_PREPARATION_SOURCE_PATHS.ordinal.membersSnapshots).toBe(4);
+  expect(MEMBERS_PREPARATION_SOURCE_PATHS().id.membersSnapshots).toBe(8);
+  expect(MEMBERS_PREPARATION_SOURCE_PATHS().ordinal.membersSnapshots).toBe(4);
   expect(MEMBERS_SELECTED_CHILDREN().source).toEqual(MEMBERS_PREPARATION_SOURCE_DECLARATION().cost);
   expect(MEMBERS_DEFINITION_QUERY_BOUNDS.releaseProjection).toEqual({
     maxExpandedVarlenaBytes: 1024 ** 3,

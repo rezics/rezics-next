@@ -3,7 +3,7 @@ import type { SessionEnv } from '../session/client';
 import { cookie, SESSION_COOKIE, setCookie } from '../session/cookies';
 import { prepareSession, sessionSubject, viewerCredential } from '../session/request';
 import { readSessionIdentity } from '../session/state';
-import { isPlatformClosedError, isPlatformClosedProblem } from '../kernel/platform-closed';
+import { isPlatformClosedError, isPlatformClosedProblem } from '../session/reading-policy';
 import type { LibraryLabelSummary } from './subject-labels.ts';
 import { libraryLabelNameIssue } from './subject-label-name';
 

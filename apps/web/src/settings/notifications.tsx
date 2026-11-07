@@ -18,6 +18,7 @@ import {
 import { preferencePageAllows, usePreferenceRetry, type PreferencePage } from './preferences';
 import { useSettingsNavigationDraft } from './reading-navigation';
 
+import { useSettingsAmbient } from './adapters/ambient-view.tsx';
 import { useSettingsCurrent, useSettingsReadCurrent, useSettingsDisposal } from './settings-session-owner';
 
 const preferenceActionClassName = 'h-auto min-h-11 min-w-11 max-w-full py-2 whitespace-normal wrap-anywhere';
@@ -53,6 +54,7 @@ export function NotificationsCard({
   const [hydrated, setHydrated] = useState(false);
   const sharedVersion = useRef(version);
   sharedVersion.current = Math.max(sharedVersion.current, version);
+  const ambient = useSettingsAmbient();
   const writeCurrent = useSettingsCurrent(csrfToken, !!io);
   const isCurrent = useSettingsReadCurrent(csrfToken, !!io);
   const [editor] = useState(
@@ -64,6 +66,7 @@ export function NotificationsCard({
           read: () => readSettingsPage(),
           confirmed: onVersionChange,
         },
+        ambient,
         initialFailed,
         () => sharedVersion.current,
         isCurrent,

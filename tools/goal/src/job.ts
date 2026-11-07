@@ -36,6 +36,7 @@ import {
   waitForWorkerExit,
   processIdentity,
   getProcessOwnershipAdapter,
+  type HostStartKind,
 } from './process.ts';
 import { assessUsageLimitRefusal, markExhausted } from './usage.ts';
 import { StaleAttemptError } from './contracts.ts';
@@ -58,6 +59,7 @@ import {
 } from './records.ts';
 import { readRouting } from './routing.ts';
 import { FINAL_REPORT_PROMPT, finalReportPending, isSqliteContention, settle } from './settle.ts';
+import { CURSOR_FRESH_SESSION_EVENT, CURSOR_FRESH_SESSION_PROMPT } from './agents/shared.ts';
 import { firstFailure } from './merge.ts';
 import {
   canonicalConflictPaths,
@@ -234,7 +236,21 @@ export class WorkerJob implements GateOutcomeSink {
     private readonly worktreeLifetimeRuntime?: LifetimeRuntime,
     // False once this host retires for a newer tools/goal: the attempts it already follows continue, but none starts.
     private readonly startsAllowed: () => boolean = () => true,
+    // The manager host sets this so git, bun install and follow run in a child, not on the host event loop.
+    private readonly offloadStart?: (taskId: string, kind: HostStartKind) => Promise<void>,
   ) {}
+  async runHostTask(kind: HostStartKind, taskId: string): Promise<void> {
+    if (kind === 'retry') {
+      const task = this.tasks.store.task(taskId);
+      await this.runRetryIntent({ taskId, attempt: task.currentAttempt });
+      return;
+    }
+    if (kind === 'released') {
+      await this.startReleased(taskId);
+      return;
+    }
+    await this.start(taskId, kind === 'first' ? { expectedAttempt: 0 } : {});
+  }
   private track(work: Promise<void>): void {
     const handled = work.catch((error) => {
       if (!(error instanceof StaleAttemptError)) throw error;
@@ -267,6 +283,15 @@ export class WorkerJob implements GateOutcomeSink {
     if (!this.startsAllowed()) return;
     const key = `${ref.taskId}:${ref.attempt}`;
     if (this.retryIntentsInProgress.has(key)) return;
+    if (this.offloadStart) {
+      this.retryIntentsInProgress.add(key);
+      try {
+        await this.offloadStart(ref.taskId, 'retry');
+      } finally {
+        this.retryIntentsInProgress.delete(key);
+      }
+      return;
+    }
     this.retryIntentsInProgress.add(key);
     const store = this.tasks.store;
     try {
@@ -382,6 +407,10 @@ export class WorkerJob implements GateOutcomeSink {
   }
   async start(taskId: string, options: RetryOptions = {}): Promise<void> {
     if (!this.startsAllowed()) return;
+    if (this.offloadStart) {
+      await this.offloadStart(taskId, options.expectedAttempt === 0 ? 'first' : 'start');
+      return;
+    }
     const task = this.tasks.store.task(taskId);
     if (
       task.currentAttempt > 0 &&
@@ -458,6 +487,15 @@ export class WorkerJob implements GateOutcomeSink {
   private readonly starting = new Set<string>();
   private async startReleased(taskId: string): Promise<void> {
     if (!this.startsAllowed() || this.starting.has(taskId)) return;
+    if (this.offloadStart) {
+      this.starting.add(taskId);
+      try {
+        await this.offloadStart(taskId, 'released');
+      } finally {
+        this.starting.delete(taskId);
+      }
+      return;
+    }
     this.starting.add(taskId);
     try {
       try {
@@ -500,6 +538,12 @@ export class WorkerJob implements GateOutcomeSink {
       if (observed.status === 'running') return null;
       return `Original proof result: ${JSON.stringify(observed)}`;
     }
+    const events = this.tasks.store.events(attempt.taskId, attempt.attempt);
+    const freshSessionRequest = events.findLast((event) => event.kind === CURSOR_FRESH_SESSION_EVENT);
+    const lastRun = events.findLast((event) => event.kind === 'worker-run-started');
+    // Once a new run starts, later check waits must use their own wake reason instead of replaying this prompt.
+    if (freshSessionRequest && (!lastRun || freshSessionRequest.sequence > lastRun.sequence))
+      return CURSOR_FRESH_SESSION_PROMPT;
     if (finalReportPending(this.tasks.store, attempt)) return FINAL_REPORT_PROMPT;
     const transport = lastTransportFailure(this.tasks.store, attempt);
     if (transport) {

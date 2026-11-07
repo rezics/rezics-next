@@ -8,6 +8,7 @@ import type { ProfileRelationWindow } from '../../pages/views';
 import { mangaReaderAddress } from './navigation';
 import { mangaCurrentAddress, mangaSelectedAddress } from './navigation';
 import { subjectVisitReturn } from '../../pages/subject-visit-navigation';
+import type { WorkReadingPort } from '../work-reading-port';
 import type { MangaPropertyLabels } from './evidence';
 import { MangaReader } from './view';
 
@@ -29,6 +30,7 @@ export function MangaReaderEntry({
   windows,
   reader = defaultReader,
   link,
+  reading,
 }: {
   source: object;
   subject: Subject;
@@ -47,6 +49,7 @@ export function MangaReaderEntry({
   windows: readonly ProfileRelationWindow[];
   reader: Reader;
   link?: PageLink;
+  reading?: WorkReadingPort;
 }) {
   const address = mangaReaderAddress({
     id: subject.id,
@@ -83,6 +86,7 @@ export function MangaReaderEntry({
       currentHref={currentAddress}
       propertyLabels={propertyLabels}
       {...(link ? { link } : {})}
+      {...(reading ? { reading } : {})}
     />
   );
 }

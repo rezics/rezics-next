@@ -2,7 +2,7 @@ import { useMemo, useSyncExternalStore } from 'react';
 import { useQuery, useQueryClient, type QueryClient } from '@tanstack/react-query';
 import { operationIsAdmitted, type GatedOperation } from '../kernel/exposure';
 import { viewerExposureLifetime, viewerExposureQuery, type ViewerObservation } from '../kernel/viewer-exposure';
-import { sessionQuery, useSession } from '../session/query';
+import { sessionQuery, useSession } from '../session';
 
 export type ReadingAdmission = { readonly id: string; readonly allowed: boolean; retired: boolean };
 type Snapshot = {

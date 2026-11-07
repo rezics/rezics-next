@@ -2,6 +2,7 @@ import { expect, mock, test } from 'bun:test';
 import { dirname } from 'node:path';
 import { act, createElement } from 'react';
 import definitions from '../src/kernel/recorded/definitions-release.json';
+import { performanceAmbientTree } from './performance-ambient';
 
 // Default route and HTTP adapters, with constructed responses. This is not native acceptance evidence.
 // Intentionally unrun under minimal verification; the controller owns the focused outcome gate.

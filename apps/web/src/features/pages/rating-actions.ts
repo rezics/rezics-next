@@ -4,7 +4,7 @@ import { getRequest, setResponseHeader } from '@tanstack/react-start/server';
 import type { SessionEnv } from '../../session/client';
 import { prepareSession, viewerCredential } from '../../session/request';
 import { prepareExpectedReader, type ExpectedReader } from '../../session/expected-reader';
-import type { PersonalScoreWriteResult } from '../../library/personal-score';
+import type { PersonalScoreWriteResult } from '../../library/score-write';
 import {
   QUESTION,
   readRatingQuestion,

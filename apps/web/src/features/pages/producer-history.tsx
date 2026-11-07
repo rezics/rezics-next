@@ -5,10 +5,10 @@ import { NativeSelect, NativeSelectOption } from '@rezics/ui/shadcn/native-selec
 import { Field, FieldLabel } from '@rezics/ui/shadcn/field';
 import { EntityPicker, type EntityPickerSearch, type EntityPickerSubject } from '@rezics/ui/entity-picker';
 import { catalogueEditor, CatalogueCurrentReading, useEditorLifetime } from '../catalogue/editor-lifetime';
-import { useCatalogueLifetime } from '../../subject/candidate-lifetime';
+import { useCandidateReading } from './candidate-reading-application';
 import { ViewHeading } from './view-heading';
 import { coverSrc } from '../../media/cover-src';
-import { subjectHref } from '../../subject/subject-href';
+import { subjectHref } from '../../subject/load-subject';
 import type { RelationTransport, RelationDraft, RelationSlot } from '../../subject/relation-candidates';
 import { m } from '../../paraglide/messages.js';
 import { RelationEditor } from '../catalogue/relation-editor';
@@ -64,7 +64,10 @@ function ProducerHistoryPageLive({
   const lifetime = useEditorLifetime();
   const reader = useProducerHistorySlice({ id, locale, transport, initial });
   const { slice, read } = reader;
-  const lease = useCatalogueLifetime(String(slice.revision), lifetime);
+  const lease = useCandidateReading(
+    { candidate: 'producer-history-editor', locale, address: slice.revision },
+    lifetime,
+  );
   const [selected, setSelected] = useState<{ revision: number; index: number }>();
   const [draft, setDraft] = useState<Correction>();
   const [part, setPart] = useState<EntityPickerSubject[]>([]);

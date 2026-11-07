@@ -1,7 +1,7 @@
 /** Finite Kind raw-original input. Values describe work only and never grant Type or catalogue admission. */
 import { type Bound } from '@rezics/bounds';
 import type { WorkDimensions } from './contract/work-dimensions.ts';
-import { NativeCollectionWork } from './collection-source-work.ts';
+import { NativeCollectionWork } from './collection-native-work.ts';
 export declare const COLLECTION_KIND_INPUT_RAW_LIMIT = 100;
 export declare const COLLECTION_KIND_INPUT_BYTE_LIMIT = 4096;
 /** One raw original. An exact-limit page is not EOF; the next charged seek establishes exhaustion. */

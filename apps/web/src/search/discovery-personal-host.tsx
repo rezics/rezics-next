@@ -14,7 +14,7 @@ import { collectionFollowSource } from './collection-context/schema';
 import { m } from '../paraglide/messages.js';
 import { locales } from '../paraglide/runtime.js';
 import { changeQuestionBoundRating } from '../features/pages/rating-actions';
-import { personalScoreDiscoveryWrite } from '../library/personal-score';
+import { personalScoreDiscoveryWrite } from '../library/score-write';
 import { discoveryKey, type DiscoveryHit, type DiscoveryRequest, type DiscoveryState } from './discovery';
 import type { SubjectLibraryMutation, SubjectLibraryMutationResponse } from '../library/subject-slot';
 import type { QuestionBoundRatingInput } from '../features/pages/rating-actions';

@@ -2,9 +2,9 @@ import { memoizedValue } from '../memoized.ts';
 import { statementBytes } from '../database/statement-bytes.ts';
 /** Finite Kind raw-original input. Values describe work only and never grant Type or catalogue admission. */
 import { declareBound, repeatBound, sumBounds, withinCeiling, type Bound } from '@rezics/bounds';
-import { ProblemError } from '../http/problem.ts';
+import { ProblemError } from '../http/problem-error.ts';
 import type { WorkDimensions } from './contract/work-dimensions.ts';
-import { NativeCollectionWork } from './collection-source-work.ts';
+import { NativeCollectionWork } from './collection-native-work.ts';
 import admitEpisode from './collection-kind-work-admit.sql';
 import readSource from './collection-kind-work-source.sql';
 import readState from './collection-kind-input-state.sql';

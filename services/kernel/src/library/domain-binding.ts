@@ -1,19 +1,23 @@
 /** Process composition binds the Library domain once. Compatibility entries read this handle. */
 
 import type { LibraryDomain } from './contract/index.ts';
+import type { NativePreparationWorkFactory, NativeScopeWork } from './adapters/preparation-work.ts';
 
-let domain: LibraryDomain | undefined;
+export type NativeLibraryDomain = LibraryDomain &
+  Readonly<{ preparationWork?: NativePreparationWorkFactory; scopeWork?: NativeScopeWork }>;
 
-export function bindLibraryDomain(value: LibraryDomain): LibraryDomain {
+let domain: NativeLibraryDomain | undefined;
+
+export function bindLibraryDomain(value: NativeLibraryDomain): NativeLibraryDomain {
   domain = value;
   return value;
 }
 
-export function peekLibraryDomain(): LibraryDomain | undefined {
+export function peekLibraryDomain(): NativeLibraryDomain | undefined {
   return domain;
 }
 
-export function requireLibraryDomain(): LibraryDomain {
+export function requireLibraryDomain(): NativeLibraryDomain {
   if (!domain) throw new TypeError('Library domain is not composed');
   return domain;
 }

@@ -13,7 +13,7 @@ import type { IdentityNativeReceipt } from '../semantic/identity-epoch-contract.
 import type { IdentityScopeObservation } from '../semantic/identity-scope-types.ts';
 import type { CollectionSourceObservation } from './collection-source.ts';
 import type { WorkAllowance } from './contract/work-dimensions.ts';
-import { NativeCollectionWork } from './collection-source-work.ts';
+import { NativeCollectionWork } from './collection-native-work.ts';
 import {
   createNativeLibrarySourceCustody,
   type NativeSourceIdentity,

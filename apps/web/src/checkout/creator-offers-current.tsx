@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import type { CreatorOfferReaders } from './capabilities';
 import { useQuery } from '@tanstack/react-query';
 import { Button } from '@rezics/ui/shadcn/button';
 import { useOperation } from '../kernel/exposure';
@@ -9,8 +10,6 @@ import { CreatorOfferAddressPage, CreatorOfferRequested } from './creator-offer-
 import { CreatorOfferEditor } from './creator-offer-editor';
 import { CreatorOffersPage } from './creator-offers-page';
 import {
-  readCreatorOfferEditorCurrent,
-  readCreatorOffersCurrent,
   type CreatorEditorCurrentRead,
   type CreatorOfferAddress,
   type CreatorOfferGuard,
@@ -19,7 +18,13 @@ import {
 
 type Read = CreatorOffersCurrentRead | CreatorEditorCurrentRead;
 type Origin = ReturnType<typeof useCreatorCurrentOrigin>['origin'];
-type Props = { initial: Read; address: CreatorOfferAddress; locale: string; offerPageAvailable?: boolean };
+type Props = {
+  initial: Read;
+  address: CreatorOfferAddress;
+  locale: string;
+  offerPageAvailable?: boolean;
+  readers?: CreatorOfferReaders | undefined;
+};
 
 function matches(value: Read | undefined, subject: string, address: CreatorOfferAddress): value is Read {
   if (!value || value.sessionSubject !== subject || value.requested.kind !== address.kind) return false;
@@ -48,16 +53,19 @@ export function CreatorOffersCurrent({
   initial,
   locale,
   cursor,
+  readers,
 }: {
   initial: CreatorOffersCurrentRead;
   locale: string;
   cursor?: string | undefined;
+  readers?: CreatorOfferReaders | undefined;
 }) {
   // Public offer links have their own admission, separate from private seller management.
   const offerPageAvailable = useOperation('offer.get');
   return (
     <CreatorCurrent
       initial={initial}
+      readers={readers}
       address={{ kind: 'list', cursor: cursor || null }}
       locale={locale}
       offerPageAvailable={offerPageAvailable}
@@ -69,14 +77,17 @@ export function CreatorOfferEditorCurrent({
   initial,
   locale,
   contentEditionId,
+  readers,
 }: {
   initial: CreatorEditorCurrentRead;
   locale: string;
   contentEditionId?: string | undefined;
+  readers?: CreatorOfferReaders | undefined;
 }) {
   return (
     <CreatorCurrent
       initial={initial}
+      readers={readers}
       address={{ kind: 'editor', contentEditionId: contentEditionId || null }}
       locale={locale}
     />
@@ -131,12 +142,22 @@ function CreatorCurrentContent(props: Props) {
   return <CreatorRead key={origin.id} {...props} subject={subject} hydrated={hydrated} seed={seed} origin={origin} />;
 }
 
-async function read(address: CreatorOfferAddress): Promise<Read> {
+async function read(address: CreatorOfferAddress, readers?: CreatorOfferReaders): Promise<Read> {
+  if (!readers)
+    return address.kind === 'list'
+      ? {
+          sessionSubject: null,
+          requested: address,
+          data: { page: { kind: 'unavailable' }, schema: null, csrfToken: '', selling: false, keys: {} },
+        }
+      : {
+          sessionSubject: null,
+          requested: address,
+          data: { editor: { kind: 'unavailable' }, csrfToken: '', createKey: '', selling: false },
+        };
   return address.kind === 'list'
-    ? readCreatorOffersCurrent({ data: address.cursor ? { cursor: address.cursor } : {} })
-    : readCreatorOfferEditorCurrent({
-        data: address.contentEditionId ? { contentEditionId: address.contentEditionId } : {},
-      });
+    ? readers.list({ data: address.cursor ? { cursor: address.cursor } : {} })
+    : readers.editor({ data: address.contentEditionId ? { contentEditionId: address.contentEditionId } : {} });
 }
 
 type Outcome = { kind: 'accepted'; value: Read } | { kind: 'failed' };
@@ -161,6 +182,7 @@ function CreatorRead({
   hydrated,
   seed,
   origin,
+  readers,
 }: Props & {
   subject: string;
   hydrated: boolean;
@@ -181,7 +203,7 @@ function CreatorRead({
     queryFn: async () => {
       if (!origin.isCurrent()) return null;
       try {
-        const value = await read(address);
+        const value = await read(address, readers);
         return origin.isCurrent() && (matches(value, subject, address) || withdraws(value, address))
           ? { kind: 'accepted', value }
           : null;

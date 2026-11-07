@@ -115,6 +115,7 @@ export function createRealmScopeSource(input: {
   reader?: LeafOptions;
   source?: RealmSubjectSource;
   capabilities?: RealmSubjectCapabilities;
+  library?: import('./library-scope-port.ts').SearchLibraryScopePort;
   release: (digest?: string) => Promise<Readonly<{ digest: string; release: FilterRelease }> | null>;
 }) {
   const source = input.source ?? createRealmSubjectSource({ pool: input.pool, ...input.capabilities });
@@ -287,6 +288,7 @@ export function createRealmScopeSource(input: {
                 })();
           const result = await evaluateScopeSubjects({
             pool: input.pool,
+            ...(input.library ? { library: input.library } : {}),
             options: reader(),
             plan: compileCurrentOwnerFilter(filter),
             basis: scope.basis,

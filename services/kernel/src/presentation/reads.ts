@@ -235,7 +235,7 @@ function validateReads(reads: unknown): PreparedRead[] {
       unknownFields(
         descriptor,
         descriptor.kind === 'subjectThreads'
-          ? ['kind', 'id', 'place', 'threadKind', 'limit', 'cursor']
+          ? ['kind', 'id', 'place', 'board', 'threadKind', 'limit', 'cursor']
           : ['kind', 'id', 'threadKind', 'limit'],
         pointer,
         errors,
@@ -257,7 +257,18 @@ function validateReads(reads: unknown): PreparedRead[] {
         if (descriptor.kind === 'subjectThreads') {
           if (typeof descriptor.place !== 'string' || !UUID_PATTERN.test(descriptor.place))
             addError(errors, `${pointer}/place`, 'invalid_format');
-          else canonicalDescriptor = { ...canonicalDescriptor, kind: 'subjectThreads', place: descriptor.place };
+          else {
+            const board = typeof descriptor.board === 'string' ? descriptor.board : undefined;
+            if (descriptor.board !== undefined && (board === undefined || !UUID_PATTERN.test(board)))
+              addError(errors, `${pointer}/board`, 'invalid_format');
+            else
+              canonicalDescriptor = {
+                ...canonicalDescriptor,
+                kind: 'subjectThreads',
+                place: descriptor.place,
+                ...(board === undefined ? {} : { board }),
+              };
+          }
         }
       }
     } else if (descriptor.kind === 'accountPosts' || descriptor.kind === 'accountCollections') {
@@ -424,7 +435,10 @@ function requestFor(url: URL, descriptor: PageRead, credentials: ForwardedCreden
     url.searchParams.set('handle', descriptor.handle);
   } else if (descriptor.kind === 'accountThreads' || descriptor.kind === 'subjectThreads') {
     url.pathname = `/v1/${descriptor.kind === 'subjectThreads' ? 'subjects' : 'accounts'}/${descriptor.id}/threads`;
-    if (descriptor.kind === 'subjectThreads') url.searchParams.set('place', descriptor.place);
+    if (descriptor.kind === 'subjectThreads') {
+      url.searchParams.set('place', descriptor.place);
+      if (descriptor.board !== undefined) url.searchParams.set('board', descriptor.board);
+    }
     url.searchParams.set('kind', descriptor.threadKind);
     url.searchParams.set('limit', String(descriptor.limit));
   } else if (descriptor.kind === 'accountPosts') {

@@ -292,6 +292,7 @@ test('native parent and isolated worker retain current board sale authority and 
     pool,
     tokens: system.tokenKeys,
     clock: () => new Date(),
+    deadlineNow: () => Date.now(),
     access: system.access,
   });
   composition.resolveAccess({ actions: system.actions });
@@ -328,6 +329,7 @@ test('lazy native Realm-role composition retains bounded receipts for an authori
       pool,
       tokens: testReceiptKeys(),
       clock: () => new Date(),
+      deadlineNow: () => Date.now(),
     });
     composition.resolveAccess({ actions: productionActions() });
     await assertRoleReceipts(pool, composition, newId(0x1234), newId(0x2345));

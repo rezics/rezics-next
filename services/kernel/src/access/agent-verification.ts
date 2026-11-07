@@ -10,8 +10,7 @@ import {
   publishedAccountIdentityUndo,
   accountIdentityUnavailable,
 } from './agent-verification-identity.ts';
-import { accountAgentId } from '../semantic/agents.ts';
-import { activeRelease } from '../semantic/definitions.ts';
+import { agentIdentityMaintenance } from './adapters/bind.ts';
 import { createHash } from 'node:crypto';
 import type { Pool, PoolClient } from 'pg';
 import type { CommandOutcome } from '../command/command.ts';
@@ -31,7 +30,6 @@ import {
   type Resource,
 } from '../request/access.ts';
 import { resourceAuthorization } from './resource-authorization.ts';
-import { withReadTransaction } from '../semantic/read.ts';
 import { PLATFORM_RESOURCE } from './bootstrap-governance.ts';
 import { viewerActionReadTime } from './index.ts';
 import { deadlineClient, within } from './authenticate.ts';
@@ -323,7 +321,7 @@ async function authorizeRead(
   if (actor.kind !== 'account' || !access.prepare || context.pool !== pool) return { allowed: false };
   const evidence = await access.prepare(actor, action, resource, context);
   if (evidence === null || evidence === undefined) return { allowed: false };
-  return withReadTransaction(pool, async (client) => {
+  return agentIdentityMaintenance().withReadTransaction(pool, async (client) => {
     if (!(await validate(client))) return { allowed: false };
     if (!(await access.authorize(client, actor, action, resource, evidence))) return { allowed: false };
     return { allowed: true, value: await read(client) };
@@ -872,7 +870,7 @@ export async function recordPendingAgentVerification(
     decision.catalogue_subject_id !== input.catalogueSubjectId
   )
     throw accountIdentityUnavailable(`mismatched original Global decision ${input.id}:${input.receiptId}`);
-  const accepted = await activeRelease(pool);
+  const accepted = await agentIdentityMaintenance().activeRelease(pool);
   if (!accepted) throw accountIdentityUnavailable('accepted Global release is unavailable');
   const digest = createHash('sha256')
     .update(JSON.stringify([input.id, input.accountId, accountKind, input.catalogueSubjectId, input.receiptId]))
@@ -923,7 +921,7 @@ export async function recordPendingAgentVerification(
         receipt: { kind: 'account-agent.verify', account: input.accountId, receipt: input.receiptId },
         intent: {
           kind: 'merge',
-          redirected: accountAgentId(input.accountId),
+          redirected: agentIdentityMaintenance().accountAgentId(input.accountId),
           survivor: input.catalogueSubjectId,
           release: accepted.digest,
         },
@@ -952,8 +950,7 @@ export async function mergeVerifiedAgent(
   pool: Pool,
   input: AgentVerificationWorkflowRequest & { receiptId: string },
 ): Promise<void> {
-  const { verifyAccountAgent } = await import('../semantic/account-agents.ts');
-  await verifyAccountAgent(pool, {
+  await agentIdentityMaintenance().verifyAccountAgent(pool, {
     account: input.accountId,
     catalogue: input.catalogueSubjectId,
     receipt: input.receiptId,
@@ -1315,7 +1312,7 @@ async function commitReversal(
     receipt: { kind: 'account-agent.unverify', account: accountId, receipt: receiptId },
     intent: {
       kind: 'unmerge',
-      original: accountAgentId(accountId),
+      original: agentIdentityMaintenance().accountAgentId(accountId),
       undoJob: undo.job,
       verificationReceipt: previous.verificationReceiptId,
       release: verification.intent.release,
@@ -1383,8 +1380,7 @@ export async function unmergeVerifiedAgent(pool: Pool, input: AgentVerificationR
   // Old outbox delivery after workflow retention must not undo a newer reviewed verification.
   if (account?.pendingAgentReceiptId !== input.receiptId || account.pendingAgentSubjectId !== input.catalogueSubjectId)
     return;
-  const { unverifyAccountAgent } = await import('../semantic/account-agents.ts');
-  await unverifyAccountAgent(pool, { account: input.accountId, receipt: input.receiptId });
+  await agentIdentityMaintenance().unverifyAccountAgent(pool, { account: input.accountId, receipt: input.receiptId });
 }
 
 export async function removeAgentVerificationPage(pool: Pool, input: AgentVerificationReversal): Promise<void> {

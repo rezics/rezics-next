@@ -1,8 +1,8 @@
 import { QueryClientContext, replaceEqualDeep, type QueryClient, type QueryKey } from '@tanstack/react-query';
 import { useContext, useLayoutEffect, useMemo, useRef, useSyncExternalStore } from 'react';
-import type { ReadCredentialMode } from '../kernel/credential';
+import type { ReadCredentialMode } from '../reader/lifetime/contract';
 import { getLocale } from '../paraglide/runtime.js';
-import { sessionQuery } from '../session/query';
+import { sessionQueryKey } from '../reader/lifetime/index';
 import type { LoadedThreadPage } from './thread-page';
 
 type SessionRecord = { state?: unknown; subject?: unknown; csrfToken?: unknown };
@@ -112,7 +112,7 @@ let sourceSequence = 0;
 const sourceContextId = crypto.randomUUID();
 
 function sessionCache(client: QueryClient) {
-  const query = client.getQueryCache().find({ queryKey: sessionQuery.queryKey, exact: true });
+  const query = client.getQueryCache().find({ queryKey: sessionQueryKey, exact: true });
   const record = query?.state.data as SessionRecord | undefined;
   const state = typeof record?.state === 'string' ? record.state : 'unknown';
   const subject = typeof record?.subject === 'string' && record.subject ? record.subject : null;
@@ -192,7 +192,7 @@ function observeThreadPageCache(client: QueryClient) {
       previousQueryStates.delete(queryObject);
       fetchRevertStates.delete(queryObject);
     }
-    if (keyId(query.queryKey) === keyId(sessionQuery.queryKey)) {
+    if (keyId(query.queryKey) === keyId(sessionQueryKey)) {
       const next = JSON.stringify(sessionCache(client));
       const action = type === 'updated' ? cacheEvent.action?.type : undefined;
       const authorityEvent =
@@ -762,7 +762,7 @@ export class ThreadPageCaller {
         if (this.queryStarted) this.queryStartTerminalRevision = this.source.queryTerminalRevision(this.queryKey);
       }
     }
-    const sessionEvent = matchingKey(event.query.queryKey, sessionQuery.queryKey);
+    const sessionEvent = matchingKey(event.query.queryKey, sessionQueryKey);
     for (const continuation of this.refreshContinuations) {
       if (!continuation.active) continue;
       if (ownedContinuations.has(continuation)) continue;

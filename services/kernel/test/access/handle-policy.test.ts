@@ -11,7 +11,7 @@ import {
   normalizeHandle,
 } from '../../src/access/lifecycle.ts';
 import { RESERVED_HANDLES } from '../../src/access/handle-policy.ts';
-import { readPublicAccountByHandle } from '../../src/access/account-data.ts';
+import { readPublicAccountByHandle } from '../../src/access/public-identity.ts';
 import { admittedAccess, authenticateAccount } from '../support/admitted-access.ts';
 
 const pool = createPool(process.env.DATABASE_URL!);

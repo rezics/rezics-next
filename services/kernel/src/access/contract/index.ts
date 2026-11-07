@@ -54,6 +54,7 @@ export { RealmClaimDeniedError } from './realm-claim.ts';
 export type {
   AccessApplication,
   AccessApplicationPorts,
+  AccessAccountAgentLink,
   AccountIdentityOriginal,
   AdmitOriginalWorkInput,
   ApproveRealmClaimApplicationInput,
@@ -79,3 +80,10 @@ export type {
   RetainIdentityInput,
   SearchErasurePort,
 } from './ports.ts';
+export type { AccessFollowCountAccount, AccessFollowCountProducer } from './follow-counts.ts';
+export type { AccessReadingIdentity, AccessReadingObservation, AccessReadingPorts } from './reading.ts';
+export type {
+  AccessAccountStatement,
+  AccessAccountStatementDeclaration,
+  AccessAccountStatementDescriptor,
+} from './account-statements.ts';

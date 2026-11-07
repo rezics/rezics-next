@@ -47,7 +47,7 @@ mock.module('../src/checkout/subject-offers', () => ({
 }));
 const { QueryClient, QueryClientProvider } = await import('@tanstack/react-query');
 const { createRoot } = await import('react-dom/client');
-const { SubjectOffersRegion } = await import('../src/checkout/subject-offers-region');
+const { CurrentSubjectOffersRegion: SubjectOffersRegion } = await import('../src/routes/-subject-purchase');
 const { m } = await import('../src/paraglide/messages.js');
 const { setLocale } = await import('../src/paraglide/runtime.js');
 afterAll(async () => {

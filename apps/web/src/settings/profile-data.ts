@@ -1,3 +1,4 @@
+import { serverSettingsTimer } from './adapters/ambient';
 import { withProfileDeadline } from './profile-request-deadline';
 import type { KernelClient } from '@rezics/client';
 import { isNotFound, isRedirect } from '@tanstack/react-router';
@@ -224,6 +225,7 @@ export async function saveProfileRecord(
   const result = await withProfileDeadline(
     (bounded) => client.accounts({ accountId }).patch(body, { headers, fetch: { cache: 'no-store', signal: bounded } }),
     signal,
+    serverSettingsTimer(),
   );
   if (!result.error && result.data) {
     const ack = parseProfilePatchAck(result.data, accountId);
@@ -308,21 +310,25 @@ export async function runSaveProfile(data: {
         });
       const client = kernelClient();
       return serializeProfileResult(
-        await withProfileDeadline(async (signal) => {
-          // Preflight and PATCH share one absolute wait. Recovery keeps the original body and key.
-          const current = await loadProfileRecord(client, authorization, accountId, undefined, signal);
-          if (!profilePatchAdmitted(profileChanges(data.before, data.after), current.editing))
-            return { ok: false as const, status: 403, message: '' };
-          return saveProfileRecord(
-            client,
-            authorization,
-            accountId,
-            profileCommandValues(data.before),
-            profileCommandValues(data.after),
-            data.idempotencyKey,
-            signal,
-          );
-        }, request.signal),
+        await withProfileDeadline(
+          async (signal) => {
+            // Preflight and PATCH share one absolute wait. Recovery keeps the original body and key.
+            const current = await loadProfileRecord(client, authorization, accountId, undefined, signal);
+            if (!profilePatchAdmitted(profileChanges(data.before, data.after), current.editing))
+              return { ok: false as const, status: 403, message: '' };
+            return saveProfileRecord(
+              client,
+              authorization,
+              accountId,
+              profileCommandValues(data.before),
+              profileCommandValues(data.after),
+              data.idempotencyKey,
+              signal,
+            );
+          },
+          request.signal,
+          serverSettingsTimer(),
+        ),
       );
     } catch (error) {
       profileControlFlow(error);

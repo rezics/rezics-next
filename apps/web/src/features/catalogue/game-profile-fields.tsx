@@ -100,7 +100,7 @@ function GameItemControl({
   const label = pickText(definition.labels, locale);
   const value = part.value.type === 'value' && typeof part.value.content === 'string' ? part.value.content : '';
   const related = value ? context.public.related[value] : undefined;
-  const relatedName = related ? pickText(related.labels, locale) : undefined;
+  const relatedName = related ? pickText(related.labels ?? {}, locale) : undefined;
   const target = value ? picked.find((item) => item.id === value) : undefined;
   return (
     <div className="min-w-0 space-y-2">

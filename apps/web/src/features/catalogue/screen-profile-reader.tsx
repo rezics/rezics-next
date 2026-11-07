@@ -1,22 +1,21 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useLocation } from '@tanstack/react-router';
-import { useId, useLayoutEffect, useRef, useSyncExternalStore, type ComponentProps, type MouseEvent } from 'react';
+import { useId, useLayoutEffect, useRef, useSyncExternalStore, type MouseEvent } from 'react';
 import { ContentItemHeading } from '@rezics/ui/content-item';
 import { buttonVariants } from '@rezics/ui/shadcn/button';
 import type { SubjectRead } from '@rezics/client';
 import { releaseDigest, type Release } from '@rezics/definitions';
-import { pickText } from '@rezics/composition';
+import { PAGE_GLOBAL_CONTEXT, pickText } from '@rezics/composition';
 import { m } from '../../paraglide/messages.js';
 import { PlainLink, spoilerLevel, type PageLink, type Stmt } from '../pages/shared';
-import { SpoilerGate } from '../pages/values';
-import { CandidateValue } from '../pages/data';
 import { ScreenProfileEntry } from './screen-profile-entry';
 import { catalogueEntries } from './catalogue-entry';
 import { isScreenType, screenReaderVisit, type ScreenReaderVisit } from './screen-profile';
 import { screenGroupLabel } from './screen-profile-fields';
 import type { ScreenGroup } from './screen-profile';
-import { candidateContext } from '../../subject/candidates';
 import { browserObservation } from '../../session';
+import { useScreenReadingApplication } from './screen-reading-application';
+import type { ScreenPageValueProps } from './screen-reading-port';
 import { loadScreenProfileFactsForReader, loadScreenProfileForReader } from './screen-episode-reader/actions';
 import {
   screenEpisodeCursorIntent,
@@ -26,7 +25,7 @@ import {
 } from './screen-episode-reader/navigation';
 import { ScreenEpisodeList } from './screen-episode-reader/view';
 import type { ScreenEpisodeRead, ScreenProfileReaderLoad } from './screen-episode-reader/read';
-import { useScreenEpisodeVisit } from './screen-episode-reader/visit/owner';
+import { useScreenEpisodeVisit, type ScreenEpisodeVisit } from './screen-episode-reader/visit/owner';
 import { ProfileBoundNotes, ProfileLibraryNote, ProfileSourceList } from './music-reader-view';
 import type { ProfileBound, ProfileReaderState } from './music-reader';
 import {
@@ -72,17 +71,10 @@ function statementOf(read: SubjectRead, occurrence: ScreenCurrentOccurrence): St
     : undefined;
 }
 
-function ScreenPart({
-  part,
-  read,
-  locale,
-}: {
-  part: ComponentProps<typeof CandidateValue>['snak'];
-  read: SubjectRead;
-  locale: string;
-}) {
+function ScreenPart({ part, read, locale }: { part: ScreenPageValueProps['snak']; read: SubjectRead; locale: string }) {
+  const { PageValue } = useScreenReadingApplication();
   return (
-    <CandidateValue
+    <PageValue
       snak={part}
       related={read.related}
       subject={read.subject.id}
@@ -117,6 +109,7 @@ function ScreenOccurrence({
   targetId?: string | undefined;
   identity: string;
 }) {
+  const { PageValue, SpoilerGate } = useScreenReadingApplication();
   const o = options(locale);
   const propertyLabel = pickText(release.properties[property]?.labels ?? {}, locale);
   const content = (
@@ -131,7 +124,7 @@ function ScreenOccurrence({
           {propertyLabel.text}
         </h3>
       ) : null}
-      <CandidateValue
+      <PageValue
         snak={statement}
         related={read.related}
         subject={read.subject.id}
@@ -300,7 +293,7 @@ export function ScreenProfileReader({
   episodeOrigin?: ScreenEpisodeOrigin;
   readerSpoilerLevel?: number;
   episodeVisitKey?: string;
-  episodeVisit?: ReturnType<typeof useScreenEpisodeVisit>;
+  episodeVisit?: ScreenEpisodeVisit;
   currentVisit?: ScreenCurrentVisit;
   inspection?: ScreenCurrentOccurrence;
   unsupportedCorrection?: boolean;
@@ -487,6 +480,7 @@ export function ScreenProfileOverview({
   readerSpoilerLevel?: number;
 }) {
   const location = useLocation();
+  const { visitReturn } = useScreenReadingApplication();
   const queryClient = useQueryClient();
   const observationStore = browserObservation(queryClient);
   const observation = useSyncExternalStore(
@@ -582,7 +576,7 @@ export function ScreenProfileOverview({
     currentDefinition === publicRead.subject.release &&
     releaseDigest(release) === currentDefinition &&
     sourceAddress &&
-    (currentPublic.subject.context === candidateContext || !!selectedRealm) &&
+    (currentPublic.subject.context === PAGE_GLOBAL_CONTEXT || !!selectedRealm) &&
     (!selectedRealm || selectedRealm === realmKey)
       ? {
           version: 1,
@@ -685,7 +679,7 @@ export function ScreenProfileOverview({
       : (query.data?.episodes ?? (query.isError ? { ok: false, reason: 'unavailable' } : undefined));
   const episodeSourceKey = JSON.stringify([profileSourceKey, release ? releaseDigest(release) : '']);
   const settledKey = JSON.stringify([query.dataUpdatedAt, query.errorUpdatedAt, query.fetchStatus, query.failureCount]);
-  const directReturn = screenEpisodeReturn(location.searchStr, locale);
+  const directReturn = screenEpisodeReturn(location.searchStr, locale, visitReturn);
   const episodeVisit = useScreenEpisodeVisit({
     sourceKey: episodeSourceKey,
     pageKey,

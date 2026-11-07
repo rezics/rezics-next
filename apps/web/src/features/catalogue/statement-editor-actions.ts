@@ -10,14 +10,8 @@ import {
   type CandidateRead,
   type CandidateResult,
 } from '../../subject/candidates';
-import {
-  proposeStatement,
-  proposalInput,
-  readStatementEditor,
-  type EditorAddress,
-  type EditorRead,
-  type ProposalResult,
-} from './statement-editor';
+import { proposeStatement, proposalInput, readStatementEditor } from './statement-edit-application';
+import type { EditorAddress, EditorRead, ProposalResult } from './statement-editor-contract';
 
 const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 export function editorAddress(value: unknown): EditorAddress {

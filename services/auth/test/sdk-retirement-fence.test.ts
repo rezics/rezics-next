@@ -1,6 +1,6 @@
 import { expect, test } from 'bun:test';
 import { completeCopy, copiesAbsent, eraseCopy } from '../src/erasure-copy.ts';
-import { authSdkRetirementReadiness, readAuthSdkFence } from '../src/sdk-retirement-fence.ts';
+import { authSdkFundedReadiness, authSdkRetirementReadiness, readAuthSdkFence } from '../src/sdk-retirement-fence.ts';
 import { nativeFixture } from './support/erasure-native.ts';
 
 test('Bind permanent native SDK writer fence to existing Auth copy retirement', async () => {
@@ -34,6 +34,7 @@ test('Bind permanent native SDK writer fence to existing Auth copy retirement', 
     // No manually inserted ready flag, synthetic SDK result or fake ACK.
     expect(await completeCopy(f.pool, copy.workflow_id)).toBe(true);
     expect(authSdkRetirementReadiness().ready).toBe(true);
+    expect(authSdkFundedReadiness().ready).toBe(true);
     expect(await eraseCopy(f.pool, copy.workflow_id)).toBe(true);
     expect(await copiesAbsent(f.pool, copy.workflow_id)).toBe(true);
     const receipt = await readAuthSdkFence(copy.workflow_id);

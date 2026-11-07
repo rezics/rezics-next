@@ -3,10 +3,30 @@ import { createRequire } from 'node:module';
 import { act, createElement as h, type ReactNode } from 'react';
 import type { KernelClient, SubjectRead } from '@rezics/client';
 import { bundledRelease } from '@rezics/definitions/bundled';
-import { readSourceConcept, type ConceptRead } from '../src/features/catalogue/source-concept-explorer';
+import en from '../messages/en.json';
+import type { ConceptRead } from '../src/features/catalogue/source-concept-explorer';
 import type { ConceptInput } from '../src/features/pages/source-concept-reading/visit';
 
 mock.module('cloudflare:workers', () => ({ env: {} }));
+function paraglideMessages() {
+  return {
+    m: new Proxy(
+      {},
+      {
+        get(_target, key) {
+          return (values: Record<string, string> = {}) => {
+            const message = en[String(key) as keyof typeof en];
+            return String(message ?? '').replace(/\{(\w+)\}/g, (_match, name: string) => values[name] ?? '');
+          };
+        },
+      },
+    ),
+  };
+}
+mock.module('../src/paraglide/messages.js', paraglideMessages);
+mock.module('../src/paraglide/messages/_index.js', paraglideMessages);
+
+const { readSourceConcept } = await import('../src/features/catalogue/source-concept-explorer');
 const id = '00000000-0000-4000-8000-00000000c001';
 const target = '00000000-0000-4000-8000-00000000c002';
 const origin = `/en/subjects/${target}/classification/graph`;
@@ -423,6 +443,213 @@ test('unadmitted, unsupported, hidden and exact-empty pages keep their native me
         expect(hierarchy(host).textContent).not.toContain(target);
       }
       if (key !== 'exact') expect(host.textContent).not.toContain('native read confirms no narrower concepts');
+    }
+  });
+});
+
+test('mounted membership pages genre and keywords independently, continues sparse windows, and retires replaced-reader addresses', async () => {
+  const { SourceConceptView } = await import('../src/features/pages/source-concept-view');
+  const { CandidateReaderBoundary } = await import('../src/subject/candidate-lifetime');
+  const genreWork = '00000000-0000-4000-8000-00000000c010';
+  const keywordWork = '00000000-0000-4000-8000-00000000c011';
+  await mounted(async ({ host, render }) => {
+    const pending = pendingReads();
+    const show = (reader = 'reader-A', token = 'session-A') =>
+      render(
+        h(CandidateReaderBoundary, {
+          observed: { state: 'signed-in', subject: reader, csrfToken: token },
+          address: id,
+          children: h(SourceConceptView, { id, locale: 'en', role, transport: pending }),
+        }),
+      );
+    await show();
+    const first = await response(pending.calls[0]!.input);
+    if (!first.ok) throw new Error('expected concept');
+    first.membership = {
+      ...first.membership,
+      state: 'available',
+      exactEmpty: false,
+      streams: {
+        'schema:genre': {
+          property: 'schema:genre',
+          state: 'available',
+          rows: [
+            {
+              id: genreWork,
+              label: 'Genre work',
+              lang: 'en',
+              type: 'schema:VideoGame',
+              property: 'schema:genre',
+              workPage: true,
+              citations: [{ url: 'https://vndb.org/v17' }],
+            },
+          ],
+          next: 'genre-next',
+          exactEmpty: false,
+          unknownTotal: false,
+          withheld: 0,
+        },
+        'schema:keywords': {
+          property: 'schema:keywords',
+          state: 'available',
+          rows: [],
+          next: 'keyword-next',
+          exactEmpty: false,
+          unknownTotal: false,
+          withheld: 0,
+        },
+      },
+      rows: [
+        {
+          id: genreWork,
+          label: 'Genre work',
+          lang: 'en',
+          type: 'schema:VideoGame',
+          property: 'schema:genre',
+          workPage: true,
+          citations: [{ url: 'https://vndb.org/v17' }],
+        },
+      ],
+    };
+    await act(async () => pending.calls[0]!.resolve(first));
+    expect(host.querySelector('[data-concept-membership-property="schema:genre"]')?.textContent).toContain(
+      'Genre work',
+    );
+    expect(host.querySelector('[data-membership-state="sparse"]')).toBeTruthy();
+    const genreNext = [...host.querySelectorAll('[data-slot="concept-membership-stream"]')]
+      .find((node) => node.getAttribute('data-concept-membership-property') === 'schema:genre')!
+      .querySelectorAll('button');
+    await act(async () => {
+      const button = [...genreNext].find((node) => node.textContent === 'Show more works')!;
+      expect(button.disabled).toBe(false);
+      button.click();
+    });
+    expect(pending.calls[1]!.input).toEqual({
+      membership: { 'schema:genre': 'genre-next' },
+      session: 'receipt-A',
+    });
+    const continued = await response(pending.calls[1]!.input);
+    if (!continued.ok) throw new Error('expected continued concept');
+    continued.membership = {
+      ...continued.membership,
+      state: 'available',
+      streams: {
+        'schema:genre': {
+          property: 'schema:genre',
+          state: 'available',
+          rows: [],
+          cursor: 'genre-next',
+          next: null,
+          exactEmpty: true,
+          unknownTotal: false,
+          withheld: 0,
+        },
+        'schema:keywords': {
+          property: 'schema:keywords',
+          state: 'available',
+          rows: [
+            {
+              id: keywordWork,
+              label: 'Keyword work',
+              lang: 'en',
+              type: 'schema:Book',
+              property: 'schema:keywords',
+              workPage: true,
+              citations: [],
+            },
+          ],
+          next: 'keyword-next',
+          exactEmpty: false,
+          unknownTotal: false,
+          withheld: 0,
+        },
+      },
+      rows: [
+        {
+          id: keywordWork,
+          label: 'Keyword work',
+          lang: 'en',
+          type: 'schema:Book',
+          property: 'schema:keywords',
+          workPage: true,
+          citations: [],
+        },
+      ],
+    };
+    await act(async () => pending.calls[1]!.resolve(continued));
+    expect(host.querySelector('[data-membership-state="empty"]')).toBeTruthy();
+    expect(host.textContent).toContain('Keyword work');
+    expect(links(hierarchy(host))).toEqual(['First rows']);
+    await show('reader-B', 'session-B');
+    await pending.complete(2);
+    expect(pending.calls[2]!.input.membership).toBeUndefined();
+    expect(pending.calls[2]!.input.cursor).toBeUndefined();
+  });
+});
+
+test('a terminal empty membership window with unknown or inexact count does not claim exact zero', async () => {
+  const { SourceConceptView } = await import('../src/features/pages/source-concept-view');
+  await mounted(async ({ host, render }) => {
+    for (const [key, stream, state] of [
+      [
+        'unknown',
+        {
+          property: 'schema:genre' as const,
+          state: 'available' as const,
+          rows: [],
+          next: null,
+          exactEmpty: false,
+          unknownTotal: true,
+          withheld: 0,
+        },
+        'unknown',
+      ],
+      [
+        'exact',
+        {
+          property: 'schema:genre' as const,
+          state: 'available' as const,
+          rows: [],
+          next: null,
+          exactEmpty: true,
+          unknownTotal: false,
+          withheld: 0,
+        },
+        'empty',
+      ],
+    ] as const) {
+      const initial = await response({});
+      if (!initial.ok) throw new Error('expected concept');
+      const emptyKeywords = {
+        property: 'schema:keywords' as const,
+        state: 'available' as const,
+        rows: [],
+        next: null,
+        exactEmpty: true,
+        unknownTotal: false,
+        withheld: 0,
+      };
+      initial.membership = {
+        state: 'available',
+        rows: [],
+        next: null,
+        exactEmpty: stream.exactEmpty && emptyKeywords.exactEmpty,
+        withheld: 0,
+        streams: { 'schema:genre': stream, 'schema:keywords': emptyKeywords },
+      };
+      await render(
+        h(SourceConceptView, {
+          key,
+          id,
+          locale: 'en',
+          role,
+          initial,
+          transport: { read: async () => initial },
+        }),
+      );
+      expect(
+        host.querySelector(`[data-concept-membership-property="schema:genre"][data-membership-state="${state}"]`),
+      ).toBeTruthy();
     }
   });
 });

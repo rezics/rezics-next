@@ -12,8 +12,9 @@ import { agentPath } from '../features/pages/agent';
 import { agentViewQuery } from '../features/pages/agent-queries';
 import { useProfileReading } from '../accounts/public-profile/reader-presentation/adapter';
 import { SubjectLink, subjectPageMessages, viewTabLabels } from '../features/pages/route-support';
-import { CollectionWindowsContext, useCollectionWindows } from '../accounts/public-profile/collection-windows/host';
+import { AccountCollectionWindowsScope, useAccountCollectionWindows } from '../accounts/public-profile/page-binding';
 import { PublicProfilePage } from '../accounts/public-profile/page';
+import { publicAccountProfileBinding } from './accounts/-public-profile-binding';
 import { m } from '../paraglide/messages.js';
 import { getLocale } from '../paraglide/runtime.js';
 import { validatePublicOrigin } from '../shell/origin';
@@ -174,7 +175,7 @@ function NamedAccountViewRoute({
     enabled: data.kind === 'page',
     owner: data,
   });
-  const windows = useCollectionWindows({
+  const windows = useAccountCollectionWindows({
     ...(data.kind === 'page' ? { page: data.page } : {}),
     failure: data.kind === 'state' ? data.state : undefined,
     owner: handle,
@@ -197,10 +198,13 @@ function NamedAccountViewRoute({
   if (data.kind === 'state')
     return <PublicAccountState page state={data.state} retry={() => void router.invalidate()} />;
   return (
-    <CollectionWindowsContext.Provider value={windows}>
+    <AccountCollectionWindowsScope value={windows}>
       <PublicProfilePage
         key={cursor ?? 'first'}
+        profile={publicAccountProfileBinding}
         page={data.page}
+        sourceQueryKey={query.queryKey}
+        verification={data.verification}
         cursor={data.cursor ?? null}
         locale={locale}
         {...(view === 'posts' || view === 'reviews' || view === 'discussion'
@@ -230,6 +234,6 @@ function NamedAccountViewRoute({
         publicRealms={data.publicRealms}
         renderJsonLd={false}
       />
-    </CollectionWindowsContext.Provider>
+    </AccountCollectionWindowsScope>
   );
 }

@@ -1,5 +1,5 @@
 import { afterAll, expect, test } from 'bun:test';
-import { createCurrentTextDisclosure } from '../../src/search/disclosure/current-text.ts';
+import { createCurrentTextDisclosure } from '../../src/search/current-text-adapter.ts';
 import { applySubjectKeys } from '../../src/search/indexer.ts';
 import { createSubjectIndex, subjectAlias, subjectIndexName } from '../../src/search/indices.ts';
 import { compileMatchEvidence, projectMatchEvidence } from '../../src/search/match-evidence.ts';

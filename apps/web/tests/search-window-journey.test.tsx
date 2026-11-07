@@ -3,50 +3,49 @@ import { dirname } from 'node:path';
 import { act } from 'react';
 import type { SearchPageData } from '../src/search/search';
 import type { SearchLoaderDeps } from '../src/search/search-params';
+import { searchSessionLifetime } from '../src/search/scoped-search-lifetime';
 import { discoveryExample } from '../src/kernel/fake/search-discovery';
-import { readSearchOutcome, searchUnavailablePage } from '../src/search/search-recovery';
+import { readSearchOutcome, searchPageForRecovery, searchUnavailablePage } from '../src/search/search-recovery';
 import { discoveryRequest } from '../src/search/search-request';
 
 const reads: { params: SearchLoaderDeps; signal?: AbortSignal; finish: (status?: number) => void }[] = [];
-mock.module('../src/search/search', () => ({
-  readSearch: ({
-    data,
-    signal,
-  }: {
-    data: { query: string; cursor?: string; ratingPopulation?: string; facetValues: Record<string, string[]> };
-    signal?: AbortSignal;
-  }) => {
-    const params: SearchLoaderDeps = {
-      query: data.query,
-      facets: data.facetValues,
-      cursor: data.cursor,
-      ratingPopulation: data.ratingPopulation,
-      type: undefined,
-      sort: undefined,
-    };
-    return new Promise<SearchPageData>((resolve, reject) =>
-      reads.push({
-        params,
-        signal,
-        finish: async (status = 200) => {
-          try {
-            const outcome = await readSearchOutcome(
-              discoveryRequest(params, ['en']),
-              async () => ({
-                status,
-                data: { ...discoveryExample, next: params.cursor ? null : 'native-next' },
-                error: status === 409 ? { code: 'search_restart_required' } : undefined,
-              }),
-              signal,
-            );
-            resolve({ ...searchUnavailablePage(params), ...outcome });
-          } catch (error) {
-            reject(error);
-          }
-        },
-      }),
-    );
+mock.module('../src/search/search-query-options', () => ({
+  searchApplication: {
+    queryKey: (locale: string, params: SearchLoaderDeps, reader?: string) => [
+      'search',
+      'discovery-v1',
+      searchSessionLifetime(locale, params, reader),
+    ],
+    loadingPage: (params: SearchLoaderDeps) =>
+      searchPageForRecovery(searchUnavailablePage(params), { status: 'loading' }),
+    unavailablePage: (params: SearchLoaderDeps) => searchUnavailablePage(params),
   },
+  searchQueryOptions: (locale: string, params: SearchLoaderDeps, reader?: string) => ({
+    queryKey: ['search', 'discovery-v1', searchSessionLifetime(locale, params, reader)],
+    queryFn: ({ signal }: { signal: AbortSignal }) =>
+      new Promise<SearchPageData>((resolve, reject) =>
+        reads.push({
+          params,
+          signal,
+          finish: async (status = 200) => {
+            try {
+              const outcome = await readSearchOutcome(
+                discoveryRequest(params, ['en']),
+                async () => ({
+                  status,
+                  data: { ...discoveryExample, next: params.cursor ? null : 'native-next' },
+                  error: status === 409 ? { code: 'search_restart_required' } : undefined,
+                }),
+                signal,
+              );
+              resolve({ ...searchUnavailablePage(params), ...outcome });
+            } catch (error) {
+              reject(error);
+            }
+          },
+        }),
+      ),
+  }),
 }));
 
 const { Window } = await import(
@@ -70,7 +69,7 @@ const { QueryClient, QueryClientProvider, notifyManager } = await import('@tanst
 const { createBrowserHistory, createRootRouteWithContext, createRoute, createRouter, Outlet, RouterProvider } =
   await import('@tanstack/react-router');
 const { useSearchQuery } = await import('../src/search/use-search-query');
-const { searchQueryOptions } = await import('../src/search/search-queries');
+const { searchQueryOptions } = await import('../src/search/search-query-options');
 const { discoverySearchHref, searchLoaderDeps, searchParams } = await import('../src/search/search-params');
 const { useSearchWindow } = await import('../src/search/search-window');
 const { SearchResultsRegion } = await import('../src/search/search-regions/results');

@@ -1,3 +1,4 @@
+import { SavedQueryConditionInput } from '../src/search/saved-query-condition-input';
 import { afterAll, describe, expect, mock, test } from 'bun:test';
 import { dirname } from 'node:path';
 import { act, type ReactNode } from 'react';
@@ -332,7 +333,14 @@ describe('Saved dynamic rule creation editing choices and selected publication a
     const alice = rule();
     const navigation: string[] = [];
     const show = (page: RulePage, id: string | null = 'alpha') =>
-      ui.render(<CollectionRuleCurrent page={page} collectionId={id} navigate={(value) => navigation.push(value)} />);
+      ui.render(
+        <CollectionRuleCurrent
+          ConditionInput={SavedQueryConditionInput}
+          page={page}
+          collectionId={id}
+          navigate={(value) => navigation.push(value)}
+        />,
+      );
     try {
       await show(alice);
       expect(ui.host.textContent).toContain('alice-private-release');
@@ -417,7 +425,8 @@ describe('Saved dynamic rule creation editing choices and selected publication a
   test('label q/cursor provenance is fenced; uncertain create/edit retain exact payload and key through refresh and nonempty CSRF rotation', async () => {
     for (const id of ['alpha', null]) {
       const ui = await mounted();
-      const show = (page: RulePage) => ui.render(<CollectionRuleCurrent page={page} collectionId={id} />);
+      const show = (page: RulePage) =>
+        ui.render(<CollectionRuleCurrent ConditionInput={SavedQueryConditionInput} page={page} collectionId={id} />);
       try {
         await show(rule('alice', id));
         await ui.perform(() => ui.button(m.search_apply()).click());

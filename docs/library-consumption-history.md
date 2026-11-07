@@ -38,6 +38,7 @@ from Web response counts.
 
 Journal read/update and occurrence reopen/retire are separately gated with their installed operation names. Their
 server calls use the generated client with the current request's authorization header and exact native command key.
+Diary occurrence and page types come from that generated client, never Kernel source files.
 
 Focused tests cover partial-date preservation and exact native-summary pass-through. Three-scale loader/controller
 growth acceptance and browser evidence remain deferred to the normal dev verifier; they were not run in this increment.

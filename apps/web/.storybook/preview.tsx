@@ -5,8 +5,11 @@ import { setLocale } from '../src/paraglide/runtime.js';
 import './preview.css';
 import { setFakeAdmitted } from '../src/kernel/fake';
 import { connectedStoryProviders } from '../src/stories/connected-story';
+import { pageRenderBinding } from '../src/features/catalogue/page-render-binding';
+import { installSemanticRenderPort } from '../src/features/pages/subject-page-application';
 
 configure({ asyncUtilTimeout: 15_000 });
+installSemanticRenderPort(pageRenderBinding);
 
 const locales = ['en', 'zh-Hant', 'zh-Hans', 'ja', 'ko', 'de', 'fr', 'es'] as const;
 

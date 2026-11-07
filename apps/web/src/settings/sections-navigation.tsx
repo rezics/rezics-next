@@ -1,6 +1,6 @@
 import { m } from '../paraglide/messages.js';
 import type { MouseEvent } from 'react';
-import type { OperationAdmission } from '../kernel/exposure';
+import type { SettingsOperationAdmission } from './ports/shell';
 
 export type SettingsSection = {
   id:
@@ -62,7 +62,7 @@ export function SectionsNavigation({
   onSelect,
 }: {
   sections: readonly SettingsSection[];
-  admission?: OperationAdmission;
+  admission?: SettingsOperationAdmission;
   selected?: SettingsSection['id'];
   onSelect?: (id: SettingsSection['id'], event: MouseEvent<HTMLAnchorElement>) => void;
 }) {

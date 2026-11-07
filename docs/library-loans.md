@@ -90,6 +90,8 @@ most 100 keys per work step. No separate cleanup scheduler or retention timer wa
 
 ## Installed web journey
 
+Decision: the `/library/loans` route imports Library `loans-current.tsx`, `loans-query.ts` and `loans-actions.ts` together with Web session/head composition. Loans pages consume the owning Web exposure, query, platform-closed, session and heading entries and Search page text.
+
 Decision: until whole-Kernel declaration emission publishes `copy-loans`, `@rezics/client` overlays the mounted
 GET/POST/PATCH/return contracts and yields when that envelope exists. Web uses only those official types.
 

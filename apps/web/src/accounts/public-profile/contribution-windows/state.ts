@@ -1,16 +1,20 @@
-export type ContributionWindowView = 'posts' | 'reviews' | 'discussion';
-export type ContributionCoordinate = string | null;
-export type ContributionWindowOwner = {
-  accountId: string;
-  view: ContributionWindowView;
-  locale: string;
-  published: boolean;
-};
-export type ContributionWindowAction = 'next' | 'previous' | 'first' | 'retry';
-export type ContributionWindowOutcome = 'admitted' | 'failed' | 'pending';
+import type {
+  ContributionWindowView,
+  ContributionCoordinate,
+  ContributionWindowOwner,
+  ContributionWindowAction,
+  ContributionWindowOutcome,
+} from '../../../features/pages/account-profile-port';
+export type {
+  ContributionWindowView,
+  ContributionCoordinate,
+  ContributionWindowOwner,
+  ContributionWindowAction,
+  ContributionWindowOutcome,
+} from '../../../features/pages/account-profile-port';
+export { contributionCoordinateIsBounded } from '../../../features/pages/account-profile-port';
 
 const predecessorLimit = 8;
-const cursorLimit = 4096;
 
 type Move = {
   from: ContributionCoordinate;
@@ -331,8 +335,4 @@ export function cancelContributionWindowFocus(host: Window = window): void {
 export function retireContributionWindow(host: Window = window): void {
   const visit = liveVisits.get(host);
   if (visit) retireVisit(host, visit);
-}
-
-export function contributionCoordinateIsBounded(cursor: unknown): cursor is string {
-  return typeof cursor === 'string' && cursor.length > 0 && cursor.length <= cursorLimit;
 }

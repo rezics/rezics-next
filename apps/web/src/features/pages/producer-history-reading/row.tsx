@@ -4,7 +4,7 @@ import { Button } from '@rezics/ui/shadcn/button';
 import type { ProducerHistoryRead, ProducerHistoryRow, ProducerHistoryStream } from '../../catalogue/producer-history';
 import { producerHistoryCorrection } from '../../catalogue/producer-history';
 import { CandidateValue } from '../data';
-import { subjectHref } from '../../../subject/subject-href';
+import { subjectHref } from '../../../subject/load-subject';
 import { m } from '../../../paraglide/messages.js';
 import { actionClass, focusClass } from './presentation';
 

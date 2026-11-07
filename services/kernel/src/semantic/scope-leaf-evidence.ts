@@ -1,3 +1,4 @@
+import type { ScopeEvidenceReader } from './contract/index.ts';
 import { createHash } from 'node:crypto';
 import type { Release } from '@rezics/definitions';
 import type { Source } from '@rezics/definitions/bulk';
@@ -86,16 +87,7 @@ export type LeafRequest = Readonly<{
   budget: LeafWork;
 }>;
 
-type LeafWorkContext<W extends ScopeWorkContext = ScopeWorkContext> = W extends ScopeWorkContext
-  ? Readonly<{ actor?: never; nativeT?: never; work: W }>
-  : never;
-
-export type LeafOptions = Readonly<{
-  access: Access;
-  routeKey: Uint8Array;
-  deadline: number;
-}> &
-  (Readonly<{ actor: Actor; nativeT?: AuthoritativeTime; work?: never }> | LeafWorkContext);
+export type LeafOptions = ScopeEvidenceReader<Access, Actor, AuthoritativeTime, ScopeWorkContext>;
 
 export type LeafReader = (pool: Pool, request: LeafRequest, options: LeafOptions) => Promise<LeafEvidence>;
 

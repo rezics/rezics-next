@@ -3,6 +3,9 @@ import { readingFixture } from '../src/kernel/fake/settings-preferences-reading'
 import { readingNeedsNavigationDecision } from '../src/settings/reading-navigation';
 import type { ReadingIO } from '../src/settings/reading-preferences';
 import { managedReadTimeout } from '../src/settings/managed-read-deadline';
+import { createBrowserSettingsAmbient } from '../src/settings/adapters/ambient';
+
+const settingsAmbient = createBrowserSettingsAmbient();
 
 mock.module('cloudflare:workers', () => ({ env: {} }));
 const { ReadingDraftRecovery } = await import('../src/settings/reading-card');
@@ -59,6 +62,7 @@ test('rejected choices survive failed and successful reads until explicit save o
         },
       },
       owner(),
+      settingsAmbient,
     );
     await editor.edit({ spoilerLevel: 1 });
     await editor.edit({ suitability: 'show' });
@@ -106,7 +110,7 @@ test('rejected choices survive failed and successful reads until explicit save o
 
 test('an explicit edit back to the old baseline survives conflict rebasing', async () => {
   const fixture = readingFixture('conflict');
-  const editor = new ReadingDraftRecovery(fixture.initial, fixture.io, owner());
+  const editor = new ReadingDraftRecovery(fixture.initial, fixture.io, owner(), settingsAmbient);
   await editor.edit({ spoilerLevel: 1 });
   expect(editor.snapshot().phase).toBe('conflict');
   await editor.edit({ spoilerLevel: 0 });
@@ -144,7 +148,7 @@ test('a narrowed current choice keeps the old draft local until every changed va
       };
     },
   };
-  const editor = new ReadingDraftRecovery(fixture.initial, io, owner());
+  const editor = new ReadingDraftRecovery(fixture.initial, io, owner(), settingsAmbient);
   readFails = false;
   await editor.reload();
   expect(editor.snapshot().phase).toBe('idle');
@@ -175,7 +179,7 @@ test('a narrowed current choice keeps the old draft local until every changed va
 
 test('loading current values retains the exact uncertain original and later edits through independent recovery', async () => {
   const fixture = readingFixture('lost');
-  const editor = new ReadingDraftRecovery(fixture.initial, fixture.io, owner());
+  const editor = new ReadingDraftRecovery(fixture.initial, fixture.io, owner(), settingsAmbient);
   await editor.edit({ spoilerLevel: 1 });
   const original = editor.snapshot().pending;
   await editor.edit({ suitability: 'show' });
@@ -237,7 +241,7 @@ test('a read Retry-After keeps its absolute deadline without blocking exact orig
       return fixture.io.read();
     },
   };
-  const editor = new ReadingDraftRecovery(fixture.initial, io, owner());
+  const editor = new ReadingDraftRecovery(fixture.initial, io, owner(), settingsAmbient);
   await editor.edit({ spoilerLevel: 1 });
   const original = editor.snapshot().pending;
   await editor.reload();
@@ -270,7 +274,7 @@ test('a confirmed command keeps later edit-back and recovers a failed current re
         return new Promise((resolve) => (releaseRead = resolve));
       },
     };
-    const editor = new ReadingDraftRecovery(fixture.initial, io, owner());
+    const editor = new ReadingDraftRecovery(fixture.initial, io, owner(), settingsAmbient);
     await editor.edit({ spoilerLevel: 1 });
     const original = editor.snapshot().pending;
     await editor.edit({ spoilerLevel: 0 });
@@ -308,7 +312,7 @@ test('a confirmed command keeps later edit-back and recovers a failed current re
     expect(fixture.calls[2]).toMatchObject({ expectedVersion: 2, spoilerLevel: 0 });
     expect(fixture.calls[2]).not.toHaveProperty('suitability');
     const live = readingFixture('conflict');
-    const review = new ReadingDraftRecovery(live.initial, live.io, owner());
+    const review = new ReadingDraftRecovery(live.initial, live.io, owner(), settingsAmbient);
     await review.edit({ spoilerLevel: 1 });
     await review.reload();
     review.useCurrent();

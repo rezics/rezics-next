@@ -18,7 +18,6 @@ import {
   refuseExcessWorkerCheckHostRun,
   refuseOrdinaryProductTestCheck,
   settleWorkerCheckHostBudget,
-  verifierFailureRevertsLanding,
   workerCheckBudgetDirectory,
   workerCheckHostBudgetLimit,
   workerCheckHostCommandReached,
@@ -582,7 +581,20 @@ test('an ordinary product check is the typecheck of changed workspaces; test, na
       false,
     ),
   ).toBeUndefined();
+  expect(
+    ordinaryProductCheckRefusal(
+      [
+        'sh',
+        '-c',
+        'bun run --cwd services/kernel typecheck; s=$?; bun run --cwd services/auth typecheck || s=1; bun run --cwd apps/web typecheck || s=1; exit $s',
+      ],
+      false,
+    ),
+  ).toBeUndefined();
   expect(ordinaryProductCheckRefusal(['bun', 'test', 'apps/web/tests/library.test.ts'], false)).toBe(
+    WORKER_CHECK_TESTS_AFTER_LANDING,
+  );
+  expect(ordinaryProductCheckRefusal(['bun', 'scripts/check-startup.ts'], false)).toBe(
     WORKER_CHECK_TESTS_AFTER_LANDING,
   );
   expect(ordinaryProductCheckRefusal(['bun', 'apps/auth/scripts/isolated.ts', 'bun', 'test'], false)).toBe(
@@ -651,15 +663,4 @@ test('verification, proof-run, control-plane, urgent and requires briefs keep th
   } finally {
     directory.close();
   }
-});
-
-test('the verifier reverts typecheck and payment-path failures and repairs other test failures', () => {
-  expect(verifierFailureRevertsLanding({ command: ['bun', 'scripts/typecheck.ts'], closure: ['**'] })).toBe(true);
-  expect(
-    verifierFailureRevertsLanding({
-      command: ['bun', 'test', 'services/kernel/test/commerce/work.test.ts'],
-      closure: ['services/kernel/src/commerce/**'],
-    }),
-  ).toBe(true);
-  expect(verifierFailureRevertsLanding({ command: ['affected-check'], closure: ['services/kernel/**'] })).toBe(false);
 });

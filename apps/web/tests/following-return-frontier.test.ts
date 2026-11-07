@@ -89,6 +89,6 @@ test('Following return keeps the private list frontier on this history entry and
   const root = {
     querySelector: (selector: string) => (selector === `[data-follow-target="${targetId}"]` ? row : null),
   };
-  expect(followingReturnTrigger(root as never, targetId)).toBe(inspect);
-  expect(followingReturnTrigger(root as never, '0192f3a0-6c1e-7b2a-9d4e-000000000099')).toBeNull();
+  expect(followingReturnTrigger(root, targetId)).toBe(inspect);
+  expect(followingReturnTrigger(root, '0192f3a0-6c1e-7b2a-9d4e-000000000099')).toBeNull();
 });

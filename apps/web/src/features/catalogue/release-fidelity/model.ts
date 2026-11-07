@@ -265,7 +265,10 @@ export function relatedTarget(statement: Statement): string | undefined {
     : undefined;
 }
 
-export function relatedReadable(related: SubjectRead['related'], id: string): 'readable' | 'concealed' | 'unreadable' {
+export function relatedReadable(
+  related: Record<string, { labels?: Record<string, string> } | undefined>,
+  id: string,
+): 'readable' | 'concealed' | 'unreadable' {
   if (!Object.hasOwn(related, id)) return 'unreadable';
   const labels = related[id]?.labels ?? {};
   return Object.keys(labels).length

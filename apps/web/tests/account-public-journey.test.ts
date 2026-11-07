@@ -5,6 +5,9 @@ import { renderToString } from 'react-dom/server';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { planReads, platformRegistry, type CompositionDocument } from '@rezics/composition';
 import type { SubjectPageData } from '../src/features/pages/subject';
+import { createBrowserSettingsAmbient } from '../src/settings/adapters/ambient';
+
+const settingsAmbient = createBrowserSettingsAmbient();
 // Render-only tests do not invoke Worker bindings. API assertions below use the actual generated client.
 mock.module('cloudflare:workers', () => ({ env: {} }));
 
@@ -296,7 +299,7 @@ test('Default public identity and management presentation keeps long phone ident
   );
   expect(story).toContain('client.setQueryData(sessionQuery.queryKey,');
   expect(story).toContain('subject: human.id');
-  expect(story).toContain('new ManagedAccountReader(human.id, organization.id, read)');
+  expect(story).toContain('new ManagedAccountReader(human.id, organization.id, read, settingsAmbient)');
 });
 
 function renderContributions(page: SubjectPageData, locale = 'en', admitted: string[] = ['collections']) {

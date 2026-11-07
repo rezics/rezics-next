@@ -5,15 +5,17 @@ import { COMMAND_STEP_RETRIES } from '../work/retries.ts';
 import { projectRealmDiscovery } from './discovery-projection.ts';
 import { expireRealmDiscovery } from './discovery-expiry.ts';
 import { routeOf } from '../route/route.ts';
+import type { CommunityAmbient } from './ambient.ts';
 
 const CHANGED = 'com.rezics.community.realm-discovery.changed.v1';
 const PROJECT = 'community.discovery.project';
 const EXPIRE = 'community.discovery.expire';
 
 /** Source events wake the genuine log reader; neither event data nor a timer is contribution authority. */
-export async function registerDiscoveryWork(context: WorkContext): Promise<void> {
+export async function registerDiscoveryWork(context: WorkContext, ambient: CommunityAmbient): Promise<void> {
   const project = DBOS.registerStep(
-    async (realmId: string) => projectRealmDiscovery(context.pool, realmId, { clock: context.clock }),
+    async (realmId: string) =>
+      projectRealmDiscovery(context.pool, realmId, { clock: context.clock, deadlineNow: ambient.deadlineNow }),
     { name: 'community.discovery.apply', ...COMMAND_STEP_RETRIES },
   );
   const enqueue = DBOS.registerStep(
@@ -37,10 +39,10 @@ export async function registerDiscoveryWork(context: WorkContext): Promise<void>
     },
     { name: PROJECT },
   );
-  const expire = DBOS.registerStep(async () => expireRealmDiscovery(context.pool, { clock: context.clock }), {
-    name: 'community.discovery.expiry-step',
-    ...COMMAND_STEP_RETRIES,
-  });
+  const expire = DBOS.registerStep(
+    async () => expireRealmDiscovery(context.pool, { clock: context.clock, deadlineNow: ambient.deadlineNow }),
+    { name: 'community.discovery.expiry-step', ...COMMAND_STEP_RETRIES },
+  );
   // No draining loop: the next schedule continues the indexed due frontier, at most fifty keys per tick.
   DBOS.registerWorkflow(
     async () => {

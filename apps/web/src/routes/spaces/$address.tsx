@@ -5,11 +5,11 @@ import { useQuery } from '@tanstack/react-query';
 import { useQueryClient } from '@tanstack/react-query';
 import { useEffect, useMemo, useRef, useSyncExternalStore } from 'react';
 import { useRouter } from '@tanstack/react-router';
-import { personalRead } from '../../kernel/query';
-import { useSession } from '../../session/query';
-import { spaceQuery } from '../../community/space-queries';
+import { personalRead } from '../../session/reading-policy';
+import { useSession } from '../../session/index';
+import { spaceQuery } from '../../community';
 import { getLocale } from '../../paraglide/runtime.js';
-import { SpacePage } from '../../community/space-page';
+import { SpacePage } from '../../session/community-application';
 import {
   bindHydratedSpacePage,
   awaitSpacePageRead,
@@ -23,11 +23,11 @@ import {
   spacePageReadResultWasReplaced,
   spacePageSessionSource,
   SpacePageLifetimeHost,
-} from '../../community/space-page-lifetime';
-import type { SpacePageAdmission, SpacePageTarget } from '../../community/space-page-lifetime';
-import type { SpacePageData } from '../../community/space';
+} from '../../community';
+import type { SpacePageAdmission, SpacePageTarget } from '../../community';
+import type { SpacePageData } from '../../community';
 import { ClosedErrorPage } from '../../shell/closed';
-import { spacePageHead } from '../../community/space-head';
+import { spacePageHead } from '../../community';
 
 type SpaceLoaderData = { page: SpacePageData; admission: SpacePageAdmission };
 

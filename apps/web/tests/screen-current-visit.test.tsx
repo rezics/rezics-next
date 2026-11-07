@@ -83,6 +83,7 @@ mock.module('../src/kernel/client', () => ({
   acceptLanguage: () => 'en',
   preparePrivatePage: () => {},
 }));
+const { ScreenReadingBoundary } = await import('../src/features/pages/data');
 
 function reading(context = contextId): SubjectRead {
   return {
@@ -271,15 +272,19 @@ test('Screen correction visits preserve the selected reading, exact occurrence a
     responseContext = contextId;
     await act(async () =>
       ui.root.render(
-        h(ScreenProfileReader, {
-          locale: 'en',
-          public: publicRead,
-          release,
-          currentVisit,
-          inspection: currentVisit.occurrence,
-          returnHref,
-          visitIdentity: 'mounted-screen-current-visit',
-        }),
+        h(
+          ScreenReadingBoundary,
+          null,
+          h(ScreenProfileReader, {
+            locale: 'en',
+            public: publicRead,
+            release,
+            currentVisit,
+            inspection: currentVisit.occurrence,
+            returnHref,
+            visitIdentity: 'mounted-screen-current-visit',
+          }),
+        ),
       ),
     );
     const inspectLinks = [...ui.host.querySelectorAll('a')].filter(
@@ -302,14 +307,18 @@ test('Screen correction visits preserve the selected reading, exact occurrence a
     };
     await act(async () =>
       ui.root.render(
-        h(ScreenProfileReader, {
-          locale: 'en',
-          public: publicRead,
-          release,
-          inspection: staleVisit.occurrence,
-          visitIdentity: 'screen-current-visit-withheld-evidence',
-          returnNotice: true,
-        }),
+        h(
+          ScreenReadingBoundary,
+          null,
+          h(ScreenProfileReader, {
+            locale: 'en',
+            public: publicRead,
+            release,
+            inspection: staleVisit.occurrence,
+            visitIdentity: 'screen-current-visit-withheld-evidence',
+            returnNotice: true,
+          }),
+        ),
       ),
     );
     expect(ui.host.textContent).toContain(ui.m.screen_visit_occurrence_missing());
@@ -365,12 +374,16 @@ test('installed correction route rereads selected Contexts, retires A/B/A result
     getParentRoute: () => rootRoute,
     path: '/en/subjects/$id/$slug',
     component: () =>
-      h(ScreenProfileOverview, {
-        locale: 'en',
-        public: nativeSubject,
-        context: contextId,
-        realm: realmId,
-      }),
+      h(
+        ScreenReadingBoundary,
+        null,
+        h(ScreenProfileOverview, {
+          locale: 'en',
+          public: nativeSubject,
+          context: contextId,
+          realm: realmId,
+        }),
+      ),
   });
   const correctionRoute = installed.update({
     getParentRoute: () => rootRoute,

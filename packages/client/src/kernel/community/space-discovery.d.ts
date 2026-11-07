@@ -4,6 +4,7 @@ import type { Pool } from 'pg';
 import type { Effect } from '../events/effects.ts';
 import type { CloudEvent } from '../events/log.ts';
 import { type SpaceDiscoveryInvalidation } from './space-discovery-events.ts';
+import type { CommunityAmbient } from './ambient.ts';
 import { type SpaceDiscoveryDependencyReadiness } from './space-discovery-dependencies.ts';
 import { type SpaceDiscoveryTupleWitness, type SpaceDiscoveryTupleWitnessInput } from './space-discovery-source-fences.ts';
 export type { SpaceDiscoveryTupleWitness, SpaceDiscoveryTupleWitnessInput } from './space-discovery-source-fences.ts';
@@ -44,7 +45,7 @@ export type SpaceDiscoveryDependencies = Readonly<{
     pool: Pool;
     access: Access;
     clock: () => Date;
-}>;
+} & CommunityAmbient>;
 export interface SpaceDiscoverySource {
     /** Dependency capability is separate from census and current hydration. */
     dependencies(): Promise<SpaceDiscoveryDependencyReadiness>;

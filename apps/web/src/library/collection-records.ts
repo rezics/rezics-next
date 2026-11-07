@@ -1,6 +1,6 @@
 import type { KernelClient } from '@rezics/client';
 import { MediaProblem } from '../media/kernel';
-import { isPlatformClosedError, isPlatformClosedProblem, PlatformClosedError } from '../kernel/platform-closed';
+import { isPlatformClosedError, isPlatformClosedProblem, PlatformClosedError } from '../session/reading-policy';
 import type { SessionEnv } from '../session/client';
 import { prepareSession, viewerCredential } from '../session/request';
 import type { CollectionVisibility } from './reads';

@@ -2,6 +2,7 @@ import type { Meta, StoryObj } from '@storybook/react-vite';
 import { useEffect, useMemo, useState } from 'react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { GameReader } from '../features/catalogue/game-reader/view';
+import { WorkReadingBinding } from '../features/pages/work-reading-binding';
 import { gameExample } from '../features/catalogue/game-reader/examples';
 import { getLocale } from '../paraglide/runtime';
 import { AppShell } from '../shell/shell';
@@ -35,17 +36,19 @@ function RecoveryExample({ scenario = 'inspection' }: { scenario?: Scenario }) {
         <main className="mx-auto w-full max-w-5xl space-y-6 p-4 sm:p-8">
           <h1 className="text-3xl font-semibold">Harbour game</h1>
           <QueryClientProvider client={client}>
-            <GameReader
-              {...fixture.address}
-              locale={locale}
-              realm="games"
-              source={source}
-              reader={null}
-              transport={fixture.read}
-              refresh={async () => {
-                setGeneration((value) => value + 1);
-              }}
-            />
+            <WorkReadingBinding>
+              <GameReader
+                {...fixture.address}
+                locale={locale}
+                realm="games"
+                source={source}
+                reader={null}
+                transport={fixture.read}
+                refresh={async () => {
+                  setGeneration((value) => value + 1);
+                }}
+              />
+            </WorkReadingBinding>
           </QueryClientProvider>
         </main>
       </AppShell>

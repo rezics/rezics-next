@@ -29,11 +29,45 @@ import {
   importerScopes,
   stackProcessCommands,
   walkSetupScripts,
+  webLaunchEnvironment,
 } from '../scripts/dev-stack.ts';
 import { localJwksTransport, readMembershipWorkConfig } from '../../kernel/src/access/membership-work-config.ts';
 import { developmentEnv } from '../../kernel/scripts/database.ts';
 import { rateLimitBudgets } from '../../kernel/src/access/write-rate-budgets.ts';
 import { readPoolAcquireTimeoutMillis } from '../../kernel/src/database/pool.ts';
+import { AUTH_STARTUP_TESTS, STARTUP_UNIT_TESTS, startupCommands } from '../../../scripts/check-startup.ts';
+
+test('walk host Kernel Access authenticates a seeded persona against issuer JWKS', async () => {
+  const source = await readFile(resolve(import.meta.dir, '../scripts/dev-stack.ts'), 'utf8');
+  expect(source).toContain('jwksUrl = issuerPublicJwksUrl(origins.issuer)');
+  expect(source).toContain('access: (mounted) => createAccess({ ...mounted, auth: kernelAuth })');
+  expect(source).toContain('const actor = await access.authenticate(bearer, context)');
+  expect(source).toContain("if (actor.kind !== 'account') throw new Error('Local persona is not an account')");
+});
+
+test('integrated startup keeps the full regression selection and original native acceptance', () => {
+  const focused = startupCommands(false);
+  expect(focused[0]!.argv.slice(2)).toEqual([...STARTUP_UNIT_TESTS]);
+  expect(focused.find((step) => step.phase === 'auth-composition')!.argv.slice(2)).toEqual([...AUTH_STARTUP_TESTS]);
+  expect(focused.find((step) => step.phase === 'kernel-startup')!.argv).toContain('test/check.test.ts');
+  expect(focused.find((step) => step.phase === 'kernel-startup')!.argv).toContain(
+    'test/history/record-source-set.test.ts',
+  );
+  expect(focused.find((step) => step.phase === 'web-programs-and-ratings')!.argv).toEqual([
+    'bun',
+    'apps/web/scripts/focused.ts',
+    '--private-network',
+    '--',
+    'bun',
+    'test',
+    'scripts/typecheck.test.ts',
+    'tests/seeded-content-ratings-reviews.test.ts',
+    'tests/subject-entry-state-review.test.tsx',
+  ]);
+  const acceptance = startupCommands(true);
+  expect(acceptance[0]!.argv).toContain('scripts/typecheck.test.ts');
+  expect(acceptance.at(-1)!.argv).toEqual(['bun', 'test', 'services/auth/test/dev-stack.test.ts']);
+});
 
 test('walk host Kernel Access authenticates a seeded persona against issuer JWKS', async () => {
   const source = await readFile(resolve(import.meta.dir, '../scripts/dev-stack.ts'), 'utf8');
@@ -446,6 +480,20 @@ test('parallel local startup has a configured connection allowance while the ord
   );
 });
 
+test('walk Web launch uses the product Vite child and does not raise Node heap', () => {
+  const child = webLaunchEnvironment({
+    PATH: '/bin',
+    REZICS_TEST_RUNTIME: '1',
+    NODE_OPTIONS: '--max-old-space-size=8192',
+    AUTH_ORIGIN: 'http://127.0.0.1:20022',
+  });
+  expect(child.REZICS_TEST_RUNTIME).toBeUndefined();
+  expect(child.CLOUDFLARE_VITE_FORCE_LOCAL).toBe('true');
+  expect(child.CLOUDFLARE_CF_FETCH_ENABLED).toBe('false');
+  expect(child.AUTH_ORIGIN).toBe('http://127.0.0.1:20022');
+  expect(child.NODE_OPTIONS).toBe('--max-old-space-size=8192');
+});
+
 test('walk stacks start Kernel without a watcher and can omit Vite until mounted pages', () => {
   expect(stackProcessCommands({}).some((command) => command.includes('dev'))).toBe(true);
   expect(stackProcessCommands({ REZICS_WALK_STACK_SLOT: '1' }).some((command) => command.at(-1) === 'start')).toBe(
@@ -475,4 +523,18 @@ test('an authorized password rotation retains the original registration input', 
   } finally {
     await rm(directory, { recursive: true, force: true });
   }
+});
+
+test('installed host receives management operations and independent reads from its native account binding', async () => {
+  const source = await readFile(resolve(import.meta.dir, '../scripts/dev-stack.ts'), 'utf8');
+  const assembly = source.slice(
+    source.indexOf('export async function assemble('),
+    source.indexOf('export async function provisionPersona('),
+  );
+  expect(assembly).toContain('accountOperations: bindings.accountOperations');
+  expect(assembly).toContain('accountManagementReads: bindings.accountManagementReads');
+  expect(assembly).toContain('workflow: proofs');
+  expect(assembly).toContain('referenceKeys: config.tokens');
+  expect(assembly).toContain('await host.stop()');
+  expect(assembly).toContain('await kernelPool.end()');
 });

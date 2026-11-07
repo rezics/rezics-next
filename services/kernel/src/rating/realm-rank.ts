@@ -159,7 +159,12 @@ export interface RealmRankOrderSource {
     Readonly<{ partition: number; epoch: number; position: bigint; figures: readonly RealmRankFigureProof[] }>
   >;
 }
-type Dependencies = { pool: Pool; access: Access; tokens: KeyRing } & RatingCapabilityOptions;
+type Dependencies = {
+  pool: Pool;
+  access: Access;
+  tokens: KeyRing;
+  deadlineNow?: () => number;
+} & RatingCapabilityOptions;
 type Row = Omit<RealmRankCandidate, 'count' | 'mean' | 'score' | 'asOf'> & {
   count: string;
   mean: string;

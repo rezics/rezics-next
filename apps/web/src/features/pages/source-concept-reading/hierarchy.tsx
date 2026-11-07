@@ -1,6 +1,6 @@
 import { Button } from '@rezics/ui/shadcn/button';
 import { m } from '../../../paraglide/messages.js';
-import { subjectHref } from '../../../subject/subject-href';
+import { subjectHref } from '../../../subject/load-subject';
 import { catalogueEntries } from '../../catalogue/catalogue-entry';
 import { validConceptCursor, type ConceptHierarchyRow } from '../../catalogue/source-concept-explorer';
 import { conceptVisitHistoryLimit } from './navigation';

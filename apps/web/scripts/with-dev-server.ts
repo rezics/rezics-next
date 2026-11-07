@@ -1,8 +1,13 @@
 import { join, resolve } from 'node:path';
 import { startDevServer, type DevServerOptions } from '../tests/support/dev-server.ts';
-import { sharedDevServerEnvName, writeSharedDevServer } from '../tests/support/dev-server-fixture.ts';
+import {
+  sharedDevServerEnvName,
+  workerFixtureOverlay,
+  writeSharedDevServer,
+} from '../tests/support/dev-server-fixture.ts';
 import { prepareViteDepCache } from '../tests/support/vite-dep-cache-build.ts';
 import { materializeViteDepCache } from '../tests/support/vite-dep-cache.ts';
+import { testWorkerBindingsEnvName } from '../src/test-runtime-binding-config.ts';
 import { readExampleWorkerVars } from './dev-vars.ts';
 
 const app = resolve(import.meta.dir, '..');
@@ -23,6 +28,26 @@ export function sharedViteChildEnvironment(
     CLOUDFLARE_VITE_FORCE_LOCAL: 'true',
     CLOUDFLARE_CF_FETCH_ENABLED: 'false',
   };
+  if (extras.cacheDirectory) child.WEB_VITE_CACHE_DIR = extras.cacheDirectory;
+  const overlay = workerFixtureOverlay(child);
+  if (overlay) child[testWorkerBindingsEnvName] = JSON.stringify(overlay);
+  return child;
+}
+
+/**
+ * Product walk Web is not the test runtime. Force local Cloudflare Vite without fixture Worker bindings
+ * or a Node heap override; walk optimizeDeps then compiles the visited page on demand.
+ */
+export function walkViteChildEnvironment(
+  env: NodeJS.ProcessEnv,
+  extras: { cacheDirectory?: string } = {},
+): NodeJS.ProcessEnv {
+  const child: NodeJS.ProcessEnv = {
+    ...env,
+    CLOUDFLARE_VITE_FORCE_LOCAL: 'true',
+    CLOUDFLARE_CF_FETCH_ENABLED: 'false',
+  };
+  delete child.REZICS_TEST_RUNTIME;
   if (extras.cacheDirectory) child.WEB_VITE_CACHE_DIR = extras.cacheDirectory;
   return child;
 }

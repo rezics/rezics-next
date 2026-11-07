@@ -1,18 +1,10 @@
-import type { KernelClient, ReadingPageResponse } from '@rezics/client';
 import type { ContributionActionsInput, ContributionReference } from './receiver';
+import type { AuthorContributionActionsResponse } from './wire';
 import type { ContributionOperation } from './current';
 
-type Account = ReturnType<KernelClient['accounts']>;
-type MountedMethod = Account extends { 'contribution-actions': { post: infer Method } } ? Method : never;
-type MountedResult<Method> = Method extends (...args: never[]) => infer Result ? Awaited<Result> : never;
-type MountedData<Result> = Result extends { data: infer Data } ? NonNullable<Data> : never;
-
-/** Deliberately never until the complete-input publisher installs the official callable and DTO. */
-export type MountedContributionActionsResponse = MountedData<MountedResult<MountedMethod>>;
-
-/** The existing mounted native action contract, not a replacement contribution response DTO. */
-export type NativeContributionAdvice = Pick<ReadingPageResponse, 'viewer' | 'actions'> & {
-  currentness: Pick<ReadingPageResponse['currentness'], 'actions'>;
+/** The installed callable's viewer and action advice; the selector reads nothing else from a response. */
+export type NativeContributionAdvice = Pick<AuthorContributionActionsResponse, 'viewer' | 'actions'> & {
+  currentness: Pick<AuthorContributionActionsResponse['currentness'], 'actions'>;
 };
 
 export type ContributionAdviceState =
@@ -76,8 +68,8 @@ export function contributionCommandTarget(reference: ContributionReference, oper
 }
 
 /**
- * Exact advice selection against the existing native mounted declaration. This does not parse an unknown
- * contribution wire response, grant command authority, or acknowledge a write from a readback.
+ * Exact advice selection against the installed callable's action advice. It grants no command authority and
+ * acknowledges no write from a readback; each command owner still admits its exact operation itself.
  */
 export function contributionOperationAdvice({
   reference,

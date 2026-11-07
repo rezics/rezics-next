@@ -15,6 +15,7 @@ import { subjectTabs } from '../src/features/pages/views';
 import { subjectPageMessages, viewTabLabels } from '../src/features/pages/route-support';
 import { subjectHref } from '../src/subject/subject-href';
 import { screenProfileFixture } from '../src/kernel/fake/catalogue-screen-profile';
+import { ScreenReadingBoundary } from '../src/features/pages/data';
 import recordedSubject from '../src/kernel/recorded/subject.json';
 
 mock.module('cloudflare:workers', () => ({ env: {} }));
@@ -54,7 +55,9 @@ test('screen overview uses its released reader label and description instead of 
   const label = type.labels.en!;
   const description = type.descriptions!.en!;
   const html = renderToStaticMarkup(
-    <ScreenProfileReader locale="en" release={loaded.release} public={loaded.public} />,
+    <ScreenReadingBoundary>
+      <ScreenProfileReader locale="en" release={loaded.release} public={loaded.public} />
+    </ScreenReadingBoundary>,
   );
   expect(html).toContain(`<span lang="en">${label[0]!.toLocaleUpperCase('en')}${label.slice(1)}</span>`);
   expect(html).toContain(`lang="en">${description}</p>`);

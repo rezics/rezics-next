@@ -1,5 +1,5 @@
 import type { KernelClient } from '@rezics/client';
-import { isPlatformClosedError } from '../../kernel/platform-closed';
+import { isPlatformClosedError } from '../../session/reading-policy';
 import type { SessionEnv } from '../../session/client';
 import { prepareSession, requestCsrfToken, sessionSubject, viewerCredential } from '../../session/request';
 import { mapSourceAdmissionPort, type SourceAdmissionCustody } from '../rich-private-entry/admission';

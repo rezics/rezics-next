@@ -1,3 +1,4 @@
+import { serverSettingsTimer } from '../../settings/adapters/ambient';
 import type { KernelClient } from '@rezics/client';
 import * as v from 'valibot';
 import {
@@ -13,7 +14,7 @@ import {
   type EditableProfileFailure,
   type ObservedProfile,
   type ProfilePatch,
-} from '../../settings/preferences';
+} from '../../settings/ports/profile-editor';
 
 const id = v.pipe(v.string(), v.regex(/^[0-9a-f]{8}-[0-9a-f]{4}-[78][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/));
 export const selection = v.strictObject({ accountId: id, viewerId: id });
@@ -134,6 +135,7 @@ export async function writeTarget(
         fetch: { cache: 'no-store', signal: bounded },
       }),
     signal,
+    serverSettingsTimer(),
   );
   if (result.error || !result.data)
     return {

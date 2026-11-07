@@ -2,7 +2,7 @@ import { aniListLabelRequests } from './label-native';
 import type { KernelClient } from '@rezics/client';
 import { readSubjectLabelAssignments } from '../subject-labels.ts';
 import { archiveTransportLost } from '../archive-entry-recovery/native';
-import { isPlatformClosedError } from '../../kernel/platform-closed';
+import { isPlatformClosedError } from '../../session/reading-policy';
 import { QUESTION } from '../../features/pages/subject-ratings';
 import { readHomeQuestion } from '../../features/pages/home-feed-questions';
 import type { SessionEnv } from '../../session/client';

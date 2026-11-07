@@ -77,14 +77,20 @@ export function cgroupArgs(env: NodeJS.ProcessEnv = process.env): string[] {
   return env.KERNEL_CHECK_ON_REMOTE ? [`--cgroup-parent=${env.REZICS_CHECK_SLICE || 'rezics-check.slice'}`] : [];
 }
 
+/** Docker memory pair so a walk volume's file cache cannot fill the host run slice. */
+export function containerMemoryArgs(value: string | undefined, name: string): string[] {
+  if (!value) return [];
+  if (!/^[1-9][0-9]{0,3}m$/.test(value)) throw new Error(`${name} must be 1-9999m, received ${JSON.stringify(value)}`);
+  return ['--memory', value, '--memory-swap', value];
+}
+
+/** Walk stacks set a smaller heap; mmap and unbounded file cache of seeded indexes blow the 6 GiB run slice. */
 export function searchRunArgs(image: string, env: NodeJS.ProcessEnv = process.env): string[] {
-  const javaOpts = env.OPENSEARCH_JAVA_OPTS ?? '-Xms512m -Xmx512m';
-  const memory = env.KERNEL_SEARCH_MEMORY;
   return [
     'run',
     '-d',
-    ...cgroupArgs(),
-    ...(memory ? ['--memory', memory] : []),
+    ...cgroupArgs(env),
+    ...containerMemoryArgs(env.KERNEL_SEARCH_MEMORY, 'KERNEL_SEARCH_MEMORY'),
     '--name',
     container,
     '-p',
@@ -100,7 +106,10 @@ export function searchRunArgs(image: string, env: NodeJS.ProcessEnv = process.en
     '-e',
     'DISABLE_INSTALL_DEMO_CONFIG=true',
     '-e',
-    `OPENSEARCH_JAVA_OPTS=${javaOpts}`,
+    'DISABLE_PERFORMANCE_ANALYZER_AGENT_CLI=true',
+    '-e',
+    `OPENSEARCH_JAVA_OPTS=${env.OPENSEARCH_JAVA_OPTS?.trim() || '-Xms512m -Xmx512m'}`,
+    ...(env.KERNEL_SEARCH_ALLOW_MMAP === '0' ? ['-e', 'node.store.allow_mmap=false'] : []),
     image,
   ];
 }

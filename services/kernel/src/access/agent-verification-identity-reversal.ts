@@ -13,22 +13,12 @@ import {
 } from '../command/command.ts';
 import { partitionOf, routeOf } from '../route/route.ts';
 import { deadlineFor, withRequestDeadline } from '../request/deadline.ts';
-import {
-  identityBindingData,
-  readAcceptedAccountIdentityBinding,
-  readAccountIdentityUndo,
-} from '../semantic/identity-adapters/identity-epoch-binding.ts';
-import { identityEpochStore, identityJobPartition } from '../semantic/identity-adapters/index.ts';
+import { agentIdentityMaintenance } from './adapters/bind.ts';
 import type { IdentityNativeReceipt } from '../semantic/identity-epoch-contract.ts';
 import type {
   IdentitySourceConsumerReference,
   IdentitySourceConsumerContext,
 } from '../semantic/identity-source-consumer-custody.ts';
-import {
-  currentIdentitySourceConsumerMaintenance,
-  isLiveIdentitySourceConsumerMaintenance,
-  reserveIdentitySourceConsumerNativeWork,
-} from '../semantic/identity-source-consumer-maintenance.ts';
 import { classifyUnavailability } from './unavailable.ts';
 import {
   accountIdentityUnavailable,
@@ -51,7 +41,6 @@ import readTechnical from './agent-verification-identity-technical-read.sql';
 import obligations from './agent-verification-identity-reversal-obligations.sql';
 import select from './agent-verification-identity-reversal-read.sql';
 import insert from './agent-verification-identity-reversal-insert.sql';
-import retainedReference from '../semantic/identity-source-consumer-custody-select.sql';
 
 type Receipt = AccountIdentitySource['input']['receipt'];
 const json = (value: unknown): string =>
@@ -90,9 +79,8 @@ export type AccountIdentityReversalWrite = Readonly<{
 /** The original accepted reader locks the real claim. Additional exact native points
  * bind its undo generation/commit, owner incarnation and restoration domain. */
 async function bound(tx: CommandTransaction, source: AccountIdentitySource): Promise<Bound | null> {
-  const accepted = await readAcceptedAccountIdentityBinding(tx, source.input);
-  if (!accepted) return null;
-  const data = identityBindingData(accepted);
+  const data = await agentIdentityMaintenance().acceptedBinding(tx, source.input);
+  if (!data) return null;
   const generation = (
     await tx.query<{
       undo_generation: string;
@@ -110,7 +98,7 @@ async function bound(tx: CommandTransaction, source: AccountIdentitySource): Pro
     data.state !== 'accepted' ||
     data.digest !== source.digest ||
     data.key !== receiptKey(source.input.receipt) ||
-    data.home !== identityJobPartition(data.job) ||
+    data.home !== agentIdentityMaintenance().jobPartition(data.job) ||
     normalized(data.receipt) !== normalized(source.input.receipt)
   )
     return null;
@@ -147,7 +135,7 @@ export function prepareAccountIdentityReversalSettlement(
   const deadline = Math.min(deadlineFor(5000), Date.now() + 5000);
   input = structuredClone(input);
   return withRequestDeadline(deadline, async () => {
-    const prior = await readAccountIdentityUndo(pool, {
+    const prior = await agentIdentityMaintenance().readUndo(pool, {
       kind: 'account-agent.verify',
       account: input.accountId,
       receipt: input.verificationReceiptId,
@@ -208,25 +196,11 @@ async function published(pool: Pool, entry: Bound, deadline: number): Promise<vo
   const read = async () =>
     (
       await runCommand(pool, { partition: entry.binding.home, deadline }, async (tx) => {
-        const saved = await identityEpochStore().readJob(tx, job);
         // Native job/control ownership is checked at its own home, released before Source.
-        const current = (
-          await tx.query(
-            `SELECT j.scope_digest FROM semantic.identity_epoch_job j
-       JOIN semantic.identity_epoch_native_commit n ON n.partition_no=j.partition_no
-        AND n.transaction_id=j.recorded_transaction_id AND n.purpose='admission'
-       JOIN core.partition p ON p.partition_no=j.partition_no AND p.write_state='active'
-        AND p.moved_to IS NULL AND p.epoch=n.epoch AND p.position>=n.position
-       JOIN semantic.identity_epoch_control c ON c.partition_no=j.partition_no
-       WHERE j.partition_no=$1 AND j.job_id=$2 AND j.epoch=$3 AND j.state='published'
-        AND c.published_epoch>=j.epoch AND c.pending_job IS DISTINCT FROM j.job_id
-       FOR SHARE OF j,n,p,c`,
-            [entry.binding.home, job.jobId, job.epoch.toString()],
-          )
-        ).rows[0];
+        const { saved, scope } = await agentIdentityMaintenance().readPublishedScope(tx, entry.binding);
         return noEffect(
           saved &&
-            current?.scope_digest === entry.binding.scope &&
+            scope === entry.binding.scope &&
             normalized(saved.receipt) === normalized(entry.source.input.receipt) &&
             normalized(saved.intent) === normalized(entry.source.input.intent)
             ? saved
@@ -249,7 +223,7 @@ async function published(pool: Pool, entry: Bound, deadline: number): Promise<vo
       normalized(progress.receipt.job) !== normalized(job)
     )
       throw accountIdentityUnavailable('incomplete original native publication receipt');
-    const reconciled = await identityEpochStore().reconcileStepReceipt(pool, progress.receipt);
+    const reconciled = await agentIdentityMaintenance().store().reconcileStepReceipt(pool, progress.receipt);
     if (reconciled.state !== 'complete' || normalized(reconciled) !== normalized(progress))
       throw accountIdentityUnavailable('unreconciled original native publication receipt');
   }
@@ -429,23 +403,7 @@ async function settlementFor(tx: CommandTransaction, reference: IdentitySourceCo
   // Source has already retained this exact reference at this home. This indexed
   // association binds barrier/role even after original personal attribution clears.
   // It is not root authority: Accounts/History independently verify the live root.
-  const retained = (
-    await tx.query(retainedReference.sql, [
-      reference.source.partition,
-      receiptKey(r),
-      reference.sourceDigest,
-      reference.source.epoch,
-      reference.source.position.toString(),
-      reference.source.transactionId,
-      reference.job.jobId,
-      reference.job.epoch.toString(),
-      reference.barrier.accountId,
-      reference.barrier.accountRoute,
-      reference.barrier.version,
-      reference.barrier.at,
-      reference.erasedRole,
-    ])
-  ).rows[0];
+  const retained = await agentIdentityMaintenance().retainedReference(tx, reference);
   if (!retained) return null;
   for (let i = 0; i < 2; i++) {
     const expected = entries[i]!;
@@ -492,8 +450,8 @@ export async function readAccountIdentityReversalSettlement(
 ): Promise<AccountIdentityReversalSettlement | null> {
   const read = ACCOUNT_IDENTITY_REVERSAL_READ_DECLARATION();
   if (
-    !isLiveIdentitySourceConsumerMaintenance(pool, context.identityConsumerWork, context.deadline) ||
-    !reserveIdentitySourceConsumerNativeWork(
+    !agentIdentityMaintenance().isLiveMaintenance(pool, context.identityConsumerWork, context.deadline) ||
+    !agentIdentityMaintenance().reserveNativeWork(
       pool,
       context.identityConsumerWork,
       accountIdentityNativeStep(read.work),
@@ -530,11 +488,16 @@ export async function verifyAccountIdentityReversalSettlement(
 ): Promise<boolean> {
   if (!live(tx, reference)) return false;
   const resources = currentCommandResources(tx);
-  const work = currentIdentitySourceConsumerMaintenance(resources.pool, resources.deadline);
+  const work = agentIdentityMaintenance().currentMaintenance(resources.pool, resources.deadline);
   const verify = ACCOUNT_IDENTITY_REVERSAL_VERIFY_DECLARATION();
   if (
     !work ||
-    !reserveIdentitySourceConsumerNativeWork(resources.pool, work, accountIdentityNativeStep(verify.work), verify.work)
+    !agentIdentityMaintenance().reserveNativeWork(
+      resources.pool,
+      work,
+      accountIdentityNativeStep(verify.work),
+      verify.work,
+    )
   )
     return false;
   const data = (proof as Proof | null)?.[locator];

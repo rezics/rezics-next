@@ -46,13 +46,12 @@ import {
 import { createLifecycleCommands, LifecycleDeniedError, normalizeLookupHandle } from './lifecycle.ts';
 import {
   readAgentPages,
-  readPublicAccountByAgent,
-  readPublicAccountByHandle,
   readPublicIdentities,
   type PublicIdentity,
   type PublicHandleIdentity,
   type PublicAccountProfile,
 } from './account-data.ts';
+import { readPublicAccountByAgent, readPublicAccountByHandle } from './public-identity.ts';
 import { createGrantCommands, GrantDeniedError } from './grant-commands.ts';
 import { RealmLastOwnerError } from './resource-access-errors.ts';
 import { readResourceGrants, type GrantReadPage } from './grant-read.ts';

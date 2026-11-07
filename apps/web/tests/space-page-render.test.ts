@@ -24,7 +24,7 @@ mock.module('../src/session/query', () => ({
   useSession: () => currentSession,
 }));
 
-const { SpacePage } = await import('../src/community/space-page');
+const { SpacePage } = await import('../src/session/community-application');
 const { loadSpacePage, loadRealmMembership } = await import('../src/community/space');
 const { readSetup } = await import('../src/community/space-setup');
 const { realmMembershipQuery } = await import('../src/community/realm-membership-queries');
@@ -154,7 +154,7 @@ test('required board unavailability remains a failed Space load rather than an e
 });
 
 async function renderShelf(realm: RealmHome) {
-  const { RealmShelf } = await import('../src/community/space-page');
+  const { RealmShelf } = await import('../src/session/community-application');
   const transport = {
     boards: mock(async () => ({ kind: 'denied' as const })),
     publications: mock(async () => ({ kind: 'denied' as const })),

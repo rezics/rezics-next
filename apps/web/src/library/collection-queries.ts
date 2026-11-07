@@ -8,7 +8,7 @@ import { getRequest, setResponseHeader, setResponseStatus } from '@tanstack/reac
 import { env } from 'cloudflare:workers';
 import { nameSubjectTypes } from '../subject/definitions';
 import { kernelClient } from '../kernel/client';
-import { personalRead, publicRead, readQueryKey } from '../kernel/query';
+import { personalRead, publicRead, readQueryKey } from '../session/reading-policy';
 import type { ReadCredentialMode } from '../kernel/credential';
 import type { SessionEnv } from '../session/client';
 import {

@@ -14,6 +14,9 @@ import { ProfileAvatarUpload, type AvatarUpload } from '../src/settings/profile-
 import type { ProfileValues } from '../src/settings/profile-data';
 import { ProfileEditor, type ProfileAttempt } from '../src/settings/profile-write';
 import { managedReadTimeout } from '../src/settings/managed-read-deadline';
+import { createBrowserSettingsAmbient } from '../src/settings/adapters/ambient';
+
+const settingsAmbient = createBrowserSettingsAmbient();
 
 function deferred<T>() {
   let resolve!: (value: T) => void;
@@ -120,6 +123,7 @@ test('A selected avatar has an immediate honest local preview while the existing
   const writes: ProfileAttempt[] = [];
   const editor = new ProfileEditor(
     {
+      ambient: settingsAmbient,
       save: async (attempt) => {
         writes.push(attempt);
         return { ok: true, profile: attempt.after };
@@ -169,7 +173,11 @@ test('A selected avatar has an immediate honest local preview while the existing
 test('Cancel, replacement or account change cannot apply a late upload to the wrong draft or discard the previous saved avatar', async () => {
   const initial = profile();
   const editor = new ProfileEditor(
-    { read: async () => initial, save: async (attempt) => ({ ok: true, profile: attempt.after }) },
+    {
+      ambient: settingsAmbient,
+      read: async () => initial,
+      save: async (attempt) => ({ ok: true, profile: attempt.after }),
+    },
     initial,
   );
   const boundary = await mounted(editor);
@@ -202,7 +210,11 @@ test('Cancel, replacement or account change cannot apply a late upload to the wr
   boundary.disconnect();
   const next = profile('account-two');
   const nextEditor = new ProfileEditor(
-    { read: async () => next, save: async (attempt) => ({ ok: true, profile: attempt.after }) },
+    {
+      ambient: settingsAmbient,
+      read: async () => next,
+      save: async (attempt) => ({ ok: true, profile: attempt.after }),
+    },
     next,
   );
   const nextBoundary = await mounted(nextEditor);
@@ -221,6 +233,7 @@ test('upload failure retries only the owned file, removal stays a draft, and una
   const writes: ProfileAttempt[] = [];
   const editor = new ProfileEditor(
     {
+      ambient: settingsAmbient,
       read: async () => ({ ...initial, avatar: null }),
       save: async (attempt) => {
         writes.push(attempt);
@@ -268,6 +281,7 @@ test('an uncertain profile save retains its immutable retry and local draft unti
   const writes: ProfileAttempt[] = [];
   const editor = new ProfileEditor(
     {
+      ambient: settingsAmbient,
       read: async () => ({ ...initial, avatar: summary('uploaded-avatar') }),
       save: async (attempt) => {
         writes.push(attempt);
@@ -370,6 +384,7 @@ function refusal(reason: UploadRefusalReason, mediaId?: string, retryAfter?: num
 function recoveryEditor(initial = profile()) {
   return new ProfileEditor(
     {
+      ambient: settingsAmbient,
       read: async () => initial,
       save: async (attempt) => ({ ok: true, profile: attempt.after }),
     },
@@ -642,7 +657,11 @@ test('phase deadlines retire stalled crop and upload work, close a late bitmap, 
 test('upload admission follows current advice independently of profile-reference editing', async () => {
   const initial = profile();
   const writable = new ProfileEditor(
-    { read: async () => initial, save: async (attempt) => ({ ok: true, profile: attempt.after }) },
+    {
+      ambient: settingsAmbient,
+      read: async () => initial,
+      save: async (attempt) => ({ ok: true, profile: attempt.after }),
+    },
     initial,
   );
   const denied = await mounted(writable, async () => adviceResult(advice(initial.accountId, [])));
@@ -661,6 +680,7 @@ test('upload admission follows current advice independently of profile-reference
 
   const readOnly = new ProfileEditor(
     {
+      ambient: settingsAmbient,
       read: async () => initial,
       save: async (attempt) => ({ ok: true, profile: attempt.after }),
       canWrite: () => false,

@@ -4,6 +4,7 @@ import { act, createElement, StrictMode, useReducer } from 'react';
 import definitions from '../src/kernel/recorded/definitions-release.json';
 import type { PersonalLibraryEntry } from '../src/library/entries-read';
 import type { Release } from '../src/subject/definitions';
+import { performanceAmbientTree } from './performance-ambient';
 
 // Constructed native-shaped HTTP inputs exercise the default composition; they are not native proof.
 test('selected loaded entries use ordinary paged label search and serialized assignment, retain exact unknown recovery and stop at a changed page or owner', async () => {

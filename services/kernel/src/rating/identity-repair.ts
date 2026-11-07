@@ -23,6 +23,7 @@ import {
 } from './identity-work-frame.ts';
 import { applyRatingIdentityPage } from './segment-identity.ts';
 import {
+  IDENTITY_REPAIR_HANDOFF_PENDING_REASON,
   identityMappingDigest,
   RatingIdentityVotePending,
   unavailableRatingIdentityProducer,
@@ -208,6 +209,8 @@ export function createRatingIdentityRepairCommands(config: {
           if (active !== (page.mode === 'repair')) throw new RepairPending('voter-eligibility-changed');
           const authority = page.mode === 'repair' ? await producer.hold(tx, page) : null;
           if (authority?.status === 'pending') {
+            // Continuation events commit the retained preparing obligation under this original
+            // voter command. A pending observation without events rolls the attempt back.
             if (authority.events?.length)
               return { value: { status: 'pending', reason: authority.reason }, events: [...authority.events] };
             throw new RepairPending(authority.reason);
@@ -255,7 +258,7 @@ export function createRatingIdentityRepairCommands(config: {
               transactionId: command.transactionId,
             }))
           )
-            throw new RepairPending('semantic-repair-obligation-handoff-pending');
+            throw new RepairPending(IDENTITY_REPAIR_HANDOFF_PENDING_REASON);
           const data: RatingIdentityPageEvent = {
             voterId,
             workId: page.workId,

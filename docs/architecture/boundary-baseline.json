@@ -345,16 +345,6 @@
           "rule": "rule 2",
           "file": "services/importer/src/source-observation.ts",
           "edge": "value import \"../../kernel/src/rating/source-provider.ts\" #1 => services/kernel/src/rating/source-provider.ts"
-        },
-        {
-          "rule": "rule 3",
-          "file": "services/importer/src/batch-cli.ts",
-          "edge": "value import \"./cli.ts\" #1 => services/importer/src/cli.ts (value-import cycle)"
-        },
-        {
-          "rule": "rule 3",
-          "file": "services/importer/src/cli.ts",
-          "edge": "value import \"./batch-cli.ts\" #1 => services/importer/src/batch-cli.ts (value-import cycle)"
         }
       ]
     },
@@ -3172,11 +3162,6 @@
         {
           "rule": "rule 2",
           "file": "services/kernel/src/community/realm-claim-review.ts",
-          "edge": "value import \"../access/access-clock.ts\" #1 => services/kernel/src/access/access-clock.ts"
-        },
-        {
-          "rule": "rule 2",
-          "file": "services/kernel/src/community/realm-claim-review.ts",
           "edge": "value import \"../access/account-data.ts\" #1 => services/kernel/src/access/account-data.ts"
         },
         {
@@ -3743,21 +3728,6 @@
           "rule": "rule 3",
           "file": "services/kernel/src/community/member-count.ts",
           "edge": "value import \"./party-locator.ts\" #1 => services/kernel/src/community/party-locator.ts (value-import cycle)"
-        },
-        {
-          "rule": "rule 3",
-          "file": "services/kernel/src/community/own-realms-view.ts",
-          "edge": "value import \"./own-realms-viewer.ts\" #1 => services/kernel/src/community/own-realms-viewer.ts (value-import cycle)"
-        },
-        {
-          "rule": "rule 3",
-          "file": "services/kernel/src/community/own-realms-viewer.ts",
-          "edge": "value import \"./own-realms.ts\" #1 => services/kernel/src/community/own-realms.ts (value-import cycle)"
-        },
-        {
-          "rule": "rule 3",
-          "file": "services/kernel/src/community/own-realms.ts",
-          "edge": "value import \"./own-realms-view.ts\" #1 => services/kernel/src/community/own-realms-view.ts (value-import cycle)"
         },
         {
           "rule": "rule 3",
@@ -11681,37 +11651,7 @@
         {
           "rule": "rule 2",
           "file": "services/kernel/src/http/kernel.ts",
-          "edge": "value import \"../community/actions.ts\" #1 => services/kernel/src/community/actions.ts"
-        },
-        {
-          "rule": "rule 2",
-          "file": "services/kernel/src/http/kernel.ts",
           "edge": "value import \"../community/following-space-targets.ts\" #1 => services/kernel/src/community/following-space-targets.ts"
-        },
-        {
-          "rule": "rule 2",
-          "file": "services/kernel/src/http/kernel.ts",
-          "edge": "value import \"../community/participation.ts\" #1 => services/kernel/src/community/participation.ts"
-        },
-        {
-          "rule": "rule 2",
-          "file": "services/kernel/src/http/kernel.ts",
-          "edge": "value import \"../community/realm.ts\" #1 => services/kernel/src/community/realm.ts"
-        },
-        {
-          "rule": "rule 2",
-          "file": "services/kernel/src/http/kernel.ts",
-          "edge": "value import \"../community/realm.ts\" #2 => services/kernel/src/community/realm.ts"
-        },
-        {
-          "rule": "rule 2",
-          "file": "services/kernel/src/http/kernel.ts",
-          "edge": "value import \"../community/routes.ts\" #1 => services/kernel/src/community/routes.ts"
-        },
-        {
-          "rule": "rule 2",
-          "file": "services/kernel/src/http/kernel.ts",
-          "edge": "value import \"../community/space.ts\" #1 => services/kernel/src/community/space.ts"
         },
         {
           "rule": "rule 2",
@@ -18471,46 +18411,6 @@
         },
         {
           "rule": "rule 2",
-          "file": "apps/web/src/accounts/profile-editor/actions.ts",
-          "edge": "type import \"../../session/client\" #1 => apps/web/src/session/client.ts"
-        },
-        {
-          "rule": "rule 2",
-          "file": "apps/web/src/accounts/profile-editor/editor.ts",
-          "edge": "value import \"../../settings/profile-data\" #1 => apps/web/src/settings/profile-data.ts"
-        },
-        {
-          "rule": "rule 2",
-          "file": "apps/web/src/accounts/profile-editor/editor.ts",
-          "edge": "value import \"../../settings/profile-write\" #1 => apps/web/src/settings/profile-write.ts"
-        },
-        {
-          "rule": "rule 2",
-          "file": "apps/web/src/accounts/profile-editor/page.tsx",
-          "edge": "value import \"../../session/browser-state\" #1 => apps/web/src/session/browser-state.ts"
-        },
-        {
-          "rule": "rule 2",
-          "file": "apps/web/src/accounts/profile-editor/page.tsx",
-          "edge": "value import \"../../session/query\" #1 => apps/web/src/session/query.ts"
-        },
-        {
-          "rule": "rule 2",
-          "file": "apps/web/src/accounts/profile-editor/page.tsx",
-          "edge": "value import \"../../settings/profile\" #1 => apps/web/src/settings/profile.tsx"
-        },
-        {
-          "rule": "rule 2",
-          "file": "apps/web/src/accounts/profile-editor/page.tsx",
-          "edge": "value import \"../../settings/public-views\" #1 => apps/web/src/settings/public-views.tsx"
-        },
-        {
-          "rule": "rule 2",
-          "file": "apps/web/src/accounts/profile-editor/page.tsx",
-          "edge": "value import \"../../shell/page-heading\" #1 => apps/web/src/shell/page-heading.tsx"
-        },
-        {
-          "rule": "rule 2",
           "file": "apps/web/src/accounts/profile-editor/request.ts",
           "edge": "type import \"../../session/client\" #1 => apps/web/src/session/client.ts"
         },
@@ -18982,11 +18882,6 @@
         },
         {
           "rule": "rule 2",
-          "file": "apps/web/src/session/auth-page-routes.ts",
-          "edge": "value import \"../settings/account-safety-links\" #1 => apps/web/src/settings/account-safety-links.ts"
-        },
-        {
-          "rule": "rule 2",
           "file": "apps/web/src/session/client.ts",
           "edge": "value import \"../media/kernel.ts\" #1 => apps/web/src/media/kernel.ts"
         },
@@ -19002,23 +18897,8 @@
         },
         {
           "rule": "rule 2",
-          "file": "apps/web/src/shell/account-menu-security.ts",
-          "edge": "value import \"../settings/account-safety-links\" #1 => apps/web/src/settings/account-safety-links.ts"
-        },
-        {
-          "rule": "rule 2",
           "file": "apps/web/src/shell/feature-slots.tsx",
           "edge": "type import \"../features/pages/subject-slots\" #1 => apps/web/src/features/pages/subject-slots.tsx"
-        },
-        {
-          "rule": "rule 2",
-          "file": "apps/web/src/shell/phone-navigation.tsx",
-          "edge": "type import \"../inbox/inbox-read\" #1 => apps/web/src/inbox/inbox-read.ts"
-        },
-        {
-          "rule": "rule 2",
-          "file": "apps/web/src/shell/phone-navigation.tsx",
-          "edge": "value import \"../inbox/unread-badge\" #1 => apps/web/src/inbox/unread-badge.tsx"
         },
         {
           "rule": "rule 2",
@@ -19038,11 +18918,6 @@
         {
           "rule": "rule 2",
           "file": "apps/web/src/shell/shell.tsx",
-          "edge": "value import \"../inbox/unread-badge\" #1 => apps/web/src/inbox/unread-badge.tsx"
-        },
-        {
-          "rule": "rule 2",
-          "file": "apps/web/src/shell/shell.tsx",
           "edge": "value import \"../search/header-search/filter-region\" #1 => apps/web/src/search/header-search/filter-region.tsx"
         },
         {
@@ -19054,16 +18929,6 @@
           "rule": "rule 2",
           "file": "apps/web/src/shell/side-nav.tsx",
           "edge": "value import \"../library/history-current-origin\" #1 => apps/web/src/library/history-current-origin.tsx"
-        },
-        {
-          "rule": "rule 2",
-          "file": "apps/web/src/shell/top-bar.tsx",
-          "edge": "type import \"../inbox/inbox-read\" #1 => apps/web/src/inbox/inbox-read.ts"
-        },
-        {
-          "rule": "rule 2",
-          "file": "apps/web/src/shell/top-bar.tsx",
-          "edge": "value import \"../inbox/unread-badge\" #1 => apps/web/src/inbox/unread-badge.tsx"
         },
         {
           "rule": "rule 2",
@@ -19950,26 +19815,6 @@
         {
           "rule": "rule 2",
           "file": "apps/web/src/routes/access/$resourceId.tsx",
-          "edge": "value import \"../../shell/head\" #1 => apps/web/src/shell/head.ts"
-        },
-        {
-          "rule": "rule 2",
-          "file": "apps/web/src/routes/accounts/$accountId.profile.tsx",
-          "edge": "value import \"../../accounts/profile-editor/page\" #1 => apps/web/src/accounts/profile-editor/page.tsx"
-        },
-        {
-          "rule": "rule 2",
-          "file": "apps/web/src/routes/accounts/$accountId.profile.tsx",
-          "edge": "value import \"../../session/guard\" #1 => apps/web/src/session/guard.ts"
-        },
-        {
-          "rule": "rule 2",
-          "file": "apps/web/src/routes/accounts/$accountId.profile.tsx",
-          "edge": "value import \"../../shell/head-context\" #1 => apps/web/src/shell/head-context.ts"
-        },
-        {
-          "rule": "rule 2",
-          "file": "apps/web/src/routes/accounts/$accountId.profile.tsx",
           "edge": "value import \"../../shell/head\" #1 => apps/web/src/shell/head.ts"
         },
         {
@@ -21144,16 +20989,6 @@
         },
         {
           "rule": "rule 2",
-          "file": "apps/web/src/routes/inbox.tsx",
-          "edge": "value import \"../inbox/inbox-page\" #1 => apps/web/src/inbox/inbox-page.tsx"
-        },
-        {
-          "rule": "rule 2",
-          "file": "apps/web/src/routes/inbox.tsx",
-          "edge": "value import \"../inbox/inbox-read\" #1 => apps/web/src/inbox/inbox-read.ts"
-        },
-        {
-          "rule": "rule 2",
           "file": "apps/web/src/routes/index.tsx",
           "edge": "type import \"../features/pages/home-feed-spaces\" #1 => apps/web/src/features/pages/home-feed-spaces.ts"
         },
@@ -21711,11 +21546,6 @@
           "rule": "rule 2",
           "file": "apps/web/src/routes/library/index.tsx",
           "edge": "value import \"../../session/unavailable\" #1 => apps/web/src/session/unavailable.ts"
-        },
-        {
-          "rule": "rule 2",
-          "file": "apps/web/src/routes/library/index.tsx",
-          "edge": "value import \"../../settings/shelf-preferences-current\" #1 => apps/web/src/settings/shelf-preferences-current.tsx"
         },
         {
           "rule": "rule 2",
@@ -22970,37 +22800,7 @@
         {
           "rule": "rule 2",
           "file": "apps/web/src/routes/settings.tsx",
-          "edge": "value import \"../session/guard\" #1 => apps/web/src/session/guard.ts"
-        },
-        {
-          "rule": "rule 2",
-          "file": "apps/web/src/routes/settings.tsx",
           "edge": "value import \"../session/private-page\" #1 => apps/web/src/session/private-page.tsx"
-        },
-        {
-          "rule": "rule 2",
-          "file": "apps/web/src/routes/settings.tsx",
-          "edge": "value import \"../session/query\" #1 => apps/web/src/session/query.ts"
-        },
-        {
-          "rule": "rule 2",
-          "file": "apps/web/src/routes/settings.tsx",
-          "edge": "value import \"../settings/actions\" #1 => apps/web/src/settings/actions.ts"
-        },
-        {
-          "rule": "rule 2",
-          "file": "apps/web/src/routes/settings.tsx",
-          "edge": "value import \"../settings/settings-page\" #1 => apps/web/src/settings/settings-page.tsx"
-        },
-        {
-          "rule": "rule 2",
-          "file": "apps/web/src/routes/settings.tsx",
-          "edge": "value import \"../shell/head-context\" #1 => apps/web/src/shell/head-context.ts"
-        },
-        {
-          "rule": "rule 2",
-          "file": "apps/web/src/routes/settings.tsx",
-          "edge": "value import \"../shell/head\" #1 => apps/web/src/shell/head.ts"
         },
         {
           "rule": "rule 2",
@@ -27613,11 +27413,6 @@
         {
           "rule": "rule 2",
           "file": "apps/web/src/library/shelf-preferences-current.tsx",
-          "edge": "type import \"../settings/shelf-preferences-current\" #1 => apps/web/src/settings/shelf-preferences-current.tsx"
-        },
-        {
-          "rule": "rule 2",
-          "file": "apps/web/src/library/shelf-preferences-current.tsx",
           "edge": "value import \"../session/observation\" #1 => apps/web/src/session/observation.ts"
         },
         {
@@ -27954,27 +27749,7 @@
         {
           "rule": "rule 2",
           "file": "apps/web/src/inbox/inbox-entry-state.tsx",
-          "edge": "value import \"../session/query\" #1 => apps/web/src/session/query.ts"
-        },
-        {
-          "rule": "rule 2",
-          "file": "apps/web/src/inbox/inbox-entry-state.tsx",
           "edge": "value import \"../threads/write-prompts\" #1 => apps/web/src/threads/write-prompts.tsx"
-        },
-        {
-          "rule": "rule 2",
-          "file": "apps/web/src/inbox/inbox-query.ts",
-          "edge": "value import \"../kernel/query\" #1 => apps/web/src/kernel/query.ts"
-        },
-        {
-          "rule": "rule 2",
-          "file": "apps/web/src/inbox/inbox-read.ts",
-          "edge": "type import \"../session/client\" #1 => apps/web/src/session/client.ts"
-        },
-        {
-          "rule": "rule 2",
-          "file": "apps/web/src/inbox/inbox-read.ts",
-          "edge": "value import \"../kernel/platform-closed\" #1 => apps/web/src/kernel/platform-closed.ts"
         },
         {
           "rule": "rule 2",
@@ -27983,108 +27758,13 @@
         },
         {
           "rule": "rule 2",
-          "file": "apps/web/src/inbox/inbox-read.ts",
-          "edge": "value import \"../session/request\" #1 => apps/web/src/session/request.ts"
-        },
-        {
-          "rule": "rule 2",
-          "file": "apps/web/src/inbox/inbox-viewer.ts",
-          "edge": "value import \"../session/query\" #1 => apps/web/src/session/query.ts"
-        },
-        {
-          "rule": "rule 2",
-          "file": "apps/web/src/settings/account-rename-actions.ts",
-          "edge": "type import \"../session/client\" #1 => apps/web/src/session/client.ts"
-        },
-        {
-          "rule": "rule 2",
-          "file": "apps/web/src/settings/account-rename-actions.ts",
-          "edge": "value import \"../session/auth-page-routes\" #1 => apps/web/src/session/auth-page-routes.ts"
-        },
-        {
-          "rule": "rule 2",
-          "file": "apps/web/src/settings/account-rename-data.ts",
-          "edge": "type import \"../session/client\" #1 => apps/web/src/session/client.ts"
-        },
-        {
-          "rule": "rule 2",
-          "file": "apps/web/src/settings/account-rename-data.ts",
-          "edge": "value import \"../kernel/platform-closed\" #1 => apps/web/src/kernel/platform-closed.ts"
-        },
-        {
-          "rule": "rule 2",
-          "file": "apps/web/src/settings/account-rename-data.ts",
-          "edge": "value import \"../session/request\" #1 => apps/web/src/session/request.ts"
-        },
-        {
-          "rule": "rule 2",
-          "file": "apps/web/src/settings/account-safety.tsx",
-          "edge": "value import \"../session/query\" #1 => apps/web/src/session/query.ts"
-        },
-        {
-          "rule": "rule 2",
           "file": "apps/web/src/settings/account-safety.tsx",
           "edge": "value import \"../threads/write-prompts\" #1 => apps/web/src/threads/write-prompts.tsx"
         },
         {
           "rule": "rule 2",
-          "file": "apps/web/src/settings/actions.server.ts",
-          "edge": "type import \"../session/client\" #1 => apps/web/src/session/client.ts"
-        },
-        {
-          "rule": "rule 2",
-          "file": "apps/web/src/settings/actions.ts",
-          "edge": "type import \"../library/reads\" #1 => apps/web/src/library/reads.ts"
-        },
-        {
-          "rule": "rule 2",
-          "file": "apps/web/src/settings/actions.ts",
-          "edge": "type import \"../session/client\" #1 => apps/web/src/session/client.ts"
-        },
-        {
-          "rule": "rule 2",
-          "file": "apps/web/src/settings/actions.ts",
-          "edge": "value import \"../session/request\" #1 => apps/web/src/session/request.ts"
-        },
-        {
-          "rule": "rule 2",
-          "file": "apps/web/src/settings/collection-privacy-data.ts",
-          "edge": "value import \"../kernel/platform-closed\" #1 => apps/web/src/kernel/platform-closed.ts"
-        },
-        {
-          "rule": "rule 2",
-          "file": "apps/web/src/settings/collection-privacy-data.ts",
-          "edge": "value import \"../library/reads\" #1 => apps/web/src/library/reads.ts"
-        },
-        {
-          "rule": "rule 2",
           "file": "apps/web/src/settings/collection-privacy-data.ts",
           "edge": "value import \"../media/kernel\" #1 => apps/web/src/media/kernel.ts"
-        },
-        {
-          "rule": "rule 2",
-          "file": "apps/web/src/settings/collection-privacy-recovery.ts",
-          "edge": "type import \"../library/reads\" #1 => apps/web/src/library/reads.ts"
-        },
-        {
-          "rule": "rule 2",
-          "file": "apps/web/src/settings/collection-privacy.tsx",
-          "edge": "type import \"../library/reads\" #1 => apps/web/src/library/reads.ts"
-        },
-        {
-          "rule": "rule 2",
-          "file": "apps/web/src/settings/collection-privacy.tsx",
-          "edge": "value import \"../kernel/exposure\" #1 => apps/web/src/kernel/exposure.ts"
-        },
-        {
-          "rule": "rule 2",
-          "file": "apps/web/src/settings/collection-privacy.tsx",
-          "edge": "value import \"../session/query\" #1 => apps/web/src/session/query.ts"
-        },
-        {
-          "rule": "rule 2",
-          "file": "apps/web/src/settings/display-preferences.tsx",
-          "edge": "value import \"../shell/appearance-controls\" #1 => apps/web/src/shell/appearance-controls.tsx"
         },
         {
           "rule": "rule 2",
@@ -28094,57 +27774,7 @@
         {
           "rule": "rule 2",
           "file": "apps/web/src/settings/managed-account-actions-read.ts",
-          "edge": "type import \"../session/client\" #1 => apps/web/src/session/client.ts"
-        },
-        {
-          "rule": "rule 2",
-          "file": "apps/web/src/settings/managed-account-actions-read.ts",
-          "edge": "value import \"../accounts/profile-editor/request\" #1 => apps/web/src/accounts/profile-editor/request.ts"
-        },
-        {
-          "rule": "rule 2",
-          "file": "apps/web/src/settings/managed-account-actions-read.ts",
           "edge": "value import \"../media/kernel\" #1 => apps/web/src/media/kernel.ts"
-        },
-        {
-          "rule": "rule 2",
-          "file": "apps/web/src/settings/managed-account-actions-read.ts",
-          "edge": "value import \"../session/auth-page-routes\" #1 => apps/web/src/session/auth-page-routes.ts"
-        },
-        {
-          "rule": "rule 2",
-          "file": "apps/web/src/settings/managed-account-actions.tsx",
-          "edge": "value import \"../accounts/profile-editor/page\" #1 => apps/web/src/accounts/profile-editor/page.tsx"
-        },
-        {
-          "rule": "rule 2",
-          "file": "apps/web/src/settings/managed-account-actions.tsx",
-          "edge": "value import \"../session/query\" #1 => apps/web/src/session/query.ts"
-        },
-        {
-          "rule": "rule 2",
-          "file": "apps/web/src/settings/managed-account-detail-read.ts",
-          "edge": "type import \"../session/client\" #1 => apps/web/src/session/client.ts"
-        },
-        {
-          "rule": "rule 2",
-          "file": "apps/web/src/settings/managed-account-detail-read.ts",
-          "edge": "value import \"../kernel/platform-closed\" #1 => apps/web/src/kernel/platform-closed.ts"
-        },
-        {
-          "rule": "rule 2",
-          "file": "apps/web/src/settings/managed-account-detail-read.ts",
-          "edge": "value import \"../media/kernel\" #1 => apps/web/src/media/kernel.ts"
-        },
-        {
-          "rule": "rule 2",
-          "file": "apps/web/src/settings/managed-account-detail-read.ts",
-          "edge": "value import \"../session/request\" #1 => apps/web/src/session/request.ts"
-        },
-        {
-          "rule": "rule 2",
-          "file": "apps/web/src/settings/managed-account-detail.tsx",
-          "edge": "value import \"../session/query\" #1 => apps/web/src/session/query.ts"
         },
         {
           "rule": "rule 2",
@@ -28154,17 +27784,7 @@
         {
           "rule": "rule 2",
           "file": "apps/web/src/settings/managed-accounts-read.ts",
-          "edge": "value import \"../kernel/platform-closed\" #1 => apps/web/src/kernel/platform-closed.ts"
-        },
-        {
-          "rule": "rule 2",
-          "file": "apps/web/src/settings/managed-accounts-read.ts",
           "edge": "value import \"../media/kernel\" #1 => apps/web/src/media/kernel.ts"
-        },
-        {
-          "rule": "rule 2",
-          "file": "apps/web/src/settings/managed-accounts.tsx",
-          "edge": "value import \"../session/query\" #1 => apps/web/src/session/query.ts"
         },
         {
           "rule": "rule 2",
@@ -28173,43 +27793,8 @@
         },
         {
           "rule": "rule 2",
-          "file": "apps/web/src/settings/managed-session-reader.ts",
-          "edge": "value import \"../session/query\" #1 => apps/web/src/session/query.ts"
-        },
-        {
-          "rule": "rule 2",
-          "file": "apps/web/src/settings/preferences.ts",
-          "edge": "type import \"../library/reads\" #1 => apps/web/src/library/reads.ts"
-        },
-        {
-          "rule": "rule 2",
-          "file": "apps/web/src/settings/preferences.ts",
-          "edge": "type import \"../session/client\" #1 => apps/web/src/session/client.ts"
-        },
-        {
-          "rule": "rule 2",
-          "file": "apps/web/src/settings/preferences.ts",
-          "edge": "value import \"../kernel/platform-closed\" #1 => apps/web/src/kernel/platform-closed.ts"
-        },
-        {
-          "rule": "rule 2",
-          "file": "apps/web/src/settings/preferences.ts",
-          "edge": "value import \"../library/dynamic-collection\" #1 => apps/web/src/library/dynamic-collection.ts"
-        },
-        {
-          "rule": "rule 2",
           "file": "apps/web/src/settings/preferences.ts",
           "edge": "value import \"../media/kernel\" #1 => apps/web/src/media/kernel.ts"
-        },
-        {
-          "rule": "rule 2",
-          "file": "apps/web/src/settings/preferences.ts",
-          "edge": "value import \"../session/request\" #1 => apps/web/src/session/request.ts"
-        },
-        {
-          "rule": "rule 2",
-          "file": "apps/web/src/settings/preferences.ts",
-          "edge": "value import \"../session/unavailable\" #1 => apps/web/src/session/unavailable.ts"
         },
         {
           "rule": "rule 2",
@@ -28233,138 +27818,13 @@
         },
         {
           "rule": "rule 2",
-          "file": "apps/web/src/settings/profile-write-query.ts",
-          "edge": "value import \"../kernel/query\" #1 => apps/web/src/kernel/query.ts"
-        },
-        {
-          "rule": "rule 2",
-          "file": "apps/web/src/settings/profile-write-query.ts",
-          "edge": "value import \"../session/query\" #1 => apps/web/src/session/query.ts"
-        },
-        {
-          "rule": "rule 2",
-          "file": "apps/web/src/settings/profile-write.ts",
-          "edge": "value import \"../kernel/platform-closed\" #1 => apps/web/src/kernel/platform-closed.ts"
-        },
-        {
-          "rule": "rule 2",
           "file": "apps/web/src/settings/profile.tsx",
           "edge": "value import \"../threads/upload\" #1 => apps/web/src/threads/upload.ts"
         },
         {
           "rule": "rule 2",
-          "file": "apps/web/src/settings/settings-draft-state.ts",
-          "edge": "type import \"../session/query\" #1 => apps/web/src/session/query.ts"
-        },
-        {
-          "rule": "rule 2",
-          "file": "apps/web/src/settings/settings-page.tsx",
-          "edge": "value import \"../kernel/exposure\" #1 => apps/web/src/kernel/exposure.ts"
-        },
-        {
-          "rule": "rule 2",
-          "file": "apps/web/src/settings/settings-page.tsx",
-          "edge": "value import \"../session/query\" #1 => apps/web/src/session/query.ts"
-        },
-        {
-          "rule": "rule 2",
-          "file": "apps/web/src/settings/settings-page.tsx",
-          "edge": "value import \"../shell/page-heading\" #1 => apps/web/src/shell/page-heading.tsx"
-        },
-        {
-          "rule": "rule 2",
-          "file": "apps/web/src/settings/settings-session-owner.ts",
-          "edge": "value import \"../session/query\" #1 => apps/web/src/session/query.ts"
-        },
-        {
-          "rule": "rule 2",
-          "file": "apps/web/src/settings/shelf-preferences-current.tsx",
-          "edge": "type import \"../session/client\" #1 => apps/web/src/session/client.ts"
-        },
-        {
-          "rule": "rule 2",
-          "file": "apps/web/src/settings/shelf-preferences-current.tsx",
-          "edge": "value import \"../session/request\" #1 => apps/web/src/session/request.ts"
-        },
-        {
-          "rule": "rule 2",
-          "file": "apps/web/src/settings/shelf-preferences.tsx",
-          "edge": "type import \"../library/shelf-types-read\" #1 => apps/web/src/library/shelf-types-read.ts"
-        },
-        {
-          "rule": "rule 2",
-          "file": "apps/web/src/settings/shelf-preferences.tsx",
-          "edge": "value import \"../library/shelf-columns\" #1 => apps/web/src/library/shelf-columns.tsx"
-        },
-        {
-          "rule": "rule 2",
-          "file": "apps/web/src/settings/shelf-preferences.tsx",
-          "edge": "value import \"../library/shelf-params\" #1 => apps/web/src/library/shelf-params.ts"
-        },
-        {
-          "rule": "rule 2",
-          "file": "apps/web/src/settings/shelf-preferences.tsx",
-          "edge": "value import \"../library/shelf-preferences\" #1 => apps/web/src/library/shelf-preferences.ts"
-        },
-        {
-          "rule": "rule 2",
-          "file": "apps/web/src/settings/shelf-type-defaults/editor.tsx",
-          "edge": "value import \"../../library/shelf-params\" #1 => apps/web/src/library/shelf-params.ts"
-        },
-        {
-          "rule": "rule 2",
-          "file": "apps/web/src/settings/shelf-type-defaults/editor.tsx",
-          "edge": "value import \"../../library/shelf-types-read\" #1 => apps/web/src/library/shelf-types-read.ts"
-        },
-        {
-          "rule": "rule 2",
-          "file": "apps/web/src/settings/verification-actions.ts",
-          "edge": "type import \"../session/client\" #1 => apps/web/src/session/client.ts"
-        },
-        {
-          "rule": "rule 2",
-          "file": "apps/web/src/settings/verification-actions.ts",
-          "edge": "value import \"../kernel/languages\" #1 => apps/web/src/kernel/languages.ts"
-        },
-        {
-          "rule": "rule 2",
           "file": "apps/web/src/settings/verification-actions.ts",
           "edge": "value import \"../search/suggestions\" #1 => apps/web/src/search/suggestions.ts"
-        },
-        {
-          "rule": "rule 2",
-          "file": "apps/web/src/settings/verification-actions.ts",
-          "edge": "value import \"../session/request\" #1 => apps/web/src/session/request.ts"
-        },
-        {
-          "rule": "rule 2",
-          "file": "apps/web/src/settings/verification-subject-chooser.tsx",
-          "edge": "value import \"../session/query\" #1 => apps/web/src/session/query.ts"
-        },
-        {
-          "rule": "rule 2",
-          "file": "apps/web/src/settings/verification.tsx",
-          "edge": "value import \"../kernel/exposure\" #1 => apps/web/src/kernel/exposure.ts"
-        },
-        {
-          "rule": "rule 2",
-          "file": "apps/web/src/settings/verification.tsx",
-          "edge": "value import \"../kernel/query\" #1 => apps/web/src/kernel/query.ts"
-        },
-        {
-          "rule": "rule 2",
-          "file": "apps/web/src/settings/verification.tsx",
-          "edge": "value import \"../session/query\" #1 => apps/web/src/session/query.ts"
-        },
-        {
-          "rule": "rule 2",
-          "file": "apps/web/src/settings/verification.tsx",
-          "edge": "value import \"../subject/subject-href\" #1 => apps/web/src/subject/subject-href.ts"
-        },
-        {
-          "rule": "rule 2",
-          "file": "apps/web/src/settings/watch-native.ts",
-          "edge": "value import \"../kernel/platform-closed\" #1 => apps/web/src/kernel/platform-closed.ts"
         },
         {
           "rule": "rule 2",
@@ -28400,16 +27860,6 @@
           "rule": "rule 3",
           "file": "<module:web-performance>",
           "edge": "web-performance => web-search (module dependency cycle)"
-        },
-        {
-          "rule": "rule 3",
-          "file": "apps/web/src/settings/managed-account-actions-read.ts",
-          "edge": "value import \"./managed-account-detail-read\" #1 => apps/web/src/settings/managed-account-detail-read.ts (value-import cycle)"
-        },
-        {
-          "rule": "rule 3",
-          "file": "apps/web/src/settings/managed-account-detail-read.ts",
-          "edge": "value import \"./managed-account-actions-read\" #1 => apps/web/src/settings/managed-account-actions-read.ts (value-import cycle)"
         }
       ]
     },

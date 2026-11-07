@@ -1,3 +1,4 @@
+import { LibraryApplicationBoundary } from '../src/session/library-application';
 import { afterAll, expect, mock, spyOn, test } from 'bun:test';
 import { dirname } from 'node:path';
 import { act, createElement, StrictMode, useLayoutEffect, useRef, type ReactNode, type ComponentProps } from 'react';
@@ -8,6 +9,7 @@ import type { CopiesPageData, CopyItem, CopyWriteResult, CopyRemoveResult } from
 import type { SessionEnv } from '../src/session/client';
 import { CopyConflictReview } from '../src/library/copy-conflict-review';
 import { m } from '../src/paraglide/messages.js';
+import { SessionRecoveryPage } from '../src/session';
 
 // UNRUN at this source boundary. Installed DOM, real route, CopyForm and UndoNotice;
 // native services and visual/browser acceptance remain the controller's later proof.
@@ -112,6 +114,14 @@ test('closed conflict review reports the platform recovery state', () => {
   );
   expect(markup).toContain('role="status"');
   expect(markup).toContain(m.platform_closed_message());
+});
+test('Copies session recovery uses the public prompt and locale-safe sign-in without a router', () => {
+  const html = renderToStaticMarkup(
+    createElement(SessionRecoveryPage, { pathname: '/zh-Hant/library/copies', locale: 'zh-Hant' }),
+  );
+  expect(html).toContain('data-route-state="unavailable"');
+  expect(html).toContain(m.dependency_unavailable_heading({}, { locale: 'zh-Hant' }));
+  expect(html).toContain('href="/auth/sign-in?return_to=%2Fzh-Hant%2Flibrary%2Fcopies"');
 });
 mock.module('@tanstack/react-start/server', () => ({
   ...start,
@@ -611,7 +621,9 @@ test('three routed inventory windows retain admitted predecessors, retry the exa
   await act(async () =>
     root.render(
       <QueryClientProvider client={client}>
-        <RouterProvider router={router} />
+        <LibraryApplicationBoundary>
+          <RouterProvider router={router} />
+        </LibraryApplicationBoundary>
       </QueryClientProvider>,
     ),
   );
@@ -839,9 +851,11 @@ test('The actual Copies route retires retained private rows and editor state on 
   const tree = () => (
     <StrictMode>
       <QueryClientProvider client={client}>
-        <RouterContextProvider router={router}>
-          <Page />
-        </RouterContextProvider>
+        <LibraryApplicationBoundary>
+          <RouterContextProvider router={router}>
+            <Page />
+          </RouterContextProvider>
+        </LibraryApplicationBoundary>
       </QueryClientProvider>
     </StrictMode>
   );
@@ -1143,13 +1157,21 @@ test('The actual Copies route retires retained private rows and editor state on 
     const retainedDelete = Object.entries(button(m.library_copy_delete_confirm(), form())).find(([key]) =>
       key.startsWith('__reactProps$'),
     )![1] as { onClick: () => void };
+    const listsBeforeUnknown = lists.length;
     await show({ state: 'unknown', csrfToken: null });
     absent('B');
+    expect(host.querySelector('[data-route-state="unavailable"]')).not.toBeNull();
+    expect(host.querySelector('[data-session-sign-in]')?.getAttribute('href')).toBe(
+      '/auth/sign-in?return_to=%2Fen%2Flibrary%2Fcopies',
+    );
+    expect(lists).toHaveLength(listsBeforeUnknown);
     expect(host.querySelector('[role="alertdialog"]')).toBeNull();
     await act(async () => retainedDelete.onClick());
     expect(removals).toHaveLength(0);
     await show({ state: 'signed-out', csrfToken: null });
     absent('B');
+    expect(host.querySelector('[data-route-state="unavailable"]')).toBeNull();
+    expect(host.textContent).toContain(m.library_sign_in());
     await show(viewer('B'), false);
     absent('B');
     await show(viewer('B'));
@@ -1338,8 +1360,14 @@ test('The actual Copies route retires retained private rows and editor state on 
     await inspect('B');
     await submit();
     const signoutWrite = writes.at(-1)!;
+    const listsBeforeUnavailable = lists.length;
     await show({ state: 'unavailable', csrfToken: null });
     absent('B');
+    expect(host.querySelector('[data-route-state="unavailable"]')).not.toBeNull();
+    expect(host.querySelector('[data-session-sign-in]')?.getAttribute('href')).toBe(
+      '/auth/sign-in?return_to=%2Fen%2Flibrary%2Fcopies',
+    );
+    expect(lists).toHaveLength(listsBeforeUnavailable);
     await act(async () => signoutWrite.resolve({ ok: true, copy: copy('B') }));
     absent('B');
     search = { subjectId: id(10), kind: 'old.print', status: 'retired', cursor: 'held-cursor' };

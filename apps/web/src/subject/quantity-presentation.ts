@@ -1,5 +1,4 @@
 import { pickText } from '@rezics/composition';
-import type { Related } from './types';
 
 /** The read-only label projection quantity consumers may use without owning subject state. */
 export type QuantityUnitLabels = Readonly<Record<string, { labels?: Record<string, string> }>>;
@@ -50,7 +49,7 @@ function greater(left: string, right: string): boolean {
 }
 
 /** Read only a native quantity shape; preserve every signed digit and each disclosed bound verbatim. */
-export function quantityPresentation(content: unknown, related: Related, locale: string) {
+export function quantityPresentation(content: unknown, related: QuantityUnitLabels, locale: string) {
   if (!content || typeof content !== 'object' || Array.isArray(content)) return null;
   const value = content as Record<string, unknown>;
   if (

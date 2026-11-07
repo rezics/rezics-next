@@ -13,7 +13,7 @@ import type { KernelClient } from '@rezics/client';
 import { m } from '../paraglide/messages.js';
 import type { Locale } from '../paraglide/runtime.js';
 import { MediaProblem } from '../media/kernel';
-import { isPlatformClosedError } from '../kernel/platform-closed';
+import { isPlatformClosedError } from '../session/reading-policy';
 import type { SessionEnv } from '../session/client';
 import type { ProgressLabelInput } from './progress-label';
 import { libraryAnyStateLabel, libraryStateLabel, libraryStateOptions, type LibraryStateChoice } from './profiles';

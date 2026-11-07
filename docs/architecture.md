@@ -81,8 +81,18 @@ capabilities it registers. The kinds are:
    construction are eager. Third-party packages are outside this repository graph. Process entry points run only
    when explicitly launched. Composition roots collect declared registrations before starting their resources.
 
+Decision: Auth retention's contract, core and application modules form an inward-only graph.
+The application owns preparation/checkpoint and maintenance admission over ports; the Auth adapter
+binds SQL, supported SDK scan and the existing native retirement capability. The cursor store has
+no orchestration import. Dispatch pricing is pure Auth-owned vocabulary; SDK retirement APIs,
+permanent fences and independent signing/request stores keep their existing owners.
+
 Decision: Kernel computed values use memoized getters that retain value identity; literal-only leaves remain eager.
 The syntax-tree architecture check enforces this at file boundaries, including within an architecture module.
+Access account-fence SQL is the `agent-verification-identity-literals.ts` public entry; Community UUID and
+log-position strings are `community/contract/literals.ts`; Rating identity page size is
+`identity-work-frame-limits.ts`. Callers import those leaves. They do not evaluate identity work, the contract
+barrel or the native work-frame at load. Repair vectors keep local arithmetic from the page-size leaf.
 
 Decision: Semantic subject facts, item projection and canonical identity run through registered contract, core,
 application and adapter modules. Inward code uses Semantic-owned ports for Library custody, Search currentness,
@@ -98,6 +108,15 @@ production declaration as public entries; Search and composition import those po
 `identity-epoch-coordinator.ts` so the Semantic barrel does not close a coordinator value cycle. Search and Library
 import Source maintenance from `identity-source-consumer-maintenance.ts`; identity-adapters does not re-export those
 values, because that edge closed a maintenance cycle.
+Access public account identity and native Access ports import Semantic mapping from `semantic/agents.ts`. Original
+recovery, read snapshots, Source custody and maintenance stay on those public entries; Semantic `access-capabilities.ts`
+re-exports only mapping, so Access reads do not close a value-import cycle through recovery or Source maintenance.
+Public identity subject overlay uses optional `IdentitySemanticPort.readPublicSubject`; native Access implements it from
+`semantic/public-subject-facts.ts`. A missing binding keeps that overlay null rather than granting a subject or inventing
+a history declaration. `public-identity.ts` does not value-import Semantic `subject.ts` or `link-keys.ts`. Grant denial
+and unavailability errors are the Access public entries `resource-access-errors.ts` and `unavailable.ts`.
+Identity Rating repair values stay on `identity-rating-repair-producer.ts`; Source custody imports Library
+`collection-native-work.ts`; composition binds Kind raw input so Access `access-capabilities.ts` is not a Kind/Source hub.
 
 Decision: `config-check-runtime.ts` constructs check runners and reloads train settings from supplied dependencies; `createRuntime` keeps process, store and lifecycle ownership.
 
@@ -106,7 +125,8 @@ landing's final candidate. It needs no database and runs in seconds. Workers run
 before handoff. Receive changes through that manifest and check using actual public edges; do not add another writer,
 an alias edge or an allowance. Every worker prompt carries the compact module-map rows for the modules that own the
 brief's paths, plus those modules' allowed dependencies, and a one-line pointer to `docs/architecture/modules.json` for
-the rest.
+the rest. The shared formatter groups public entries by directory and enforces the 6,800-character bound on full and
+path-selected maps; an overflowing selected map keeps the owned module's public entries and allowed dependencies.
 
 The production Kernel has one `createKernel` composition for module, route, event and resource registrations. Queue
 registration completes before DBOS launch, and the composition injects one clock. Exposure, initializer and event
@@ -118,6 +138,13 @@ pure grant, page, ledger, identity-matching, publication-admission and catalogue
 Applications run against Library-owned ports; `composition/library.ts` binds native SQL catalogs and Access/Search/Semantic/Content
 adapters during ordinary `createKernelRuntimeDefaults`, server and worker construction. Search filter-leaf
 classification is a composition port, so the Search preparation adapter does not value-import Search.
+
+Collection mutation contracts own metadata/history and cleanup ports. Pure core plans use measured SQL sizes;
+the application orders create, metadata/rule, publication-phase and retention effects. Native adapters preserve the
+original command transaction and existing SQL. Composition binds Access rule admission, publication begin and Source
+retirement, so episode readers and history storage do not import those native command implementations. Mechanical
+work/deadline helpers are a leaf shared with command support. The Library adapter declares its inward application
+dependency, and Access exposes its existing command-admission/error leaves for process composition.
 
 Content's `community-projection/index.ts` is a registered pure core with no dependencies. Board and Realm adapters
 supply selected native activity values and actor identity through that public entry, including its contract types;

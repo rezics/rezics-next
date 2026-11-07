@@ -1,12 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
-import {
-  bootSmokeRepairBrief,
-  testFailureRepairBrief,
-  type BootSmokeRepair,
-  type TestFailureRepair,
-} from './dev-verifier.ts';
+import { testFailureRepairBrief, type TestFailureRepair } from './dev-verifier.ts';
 import type { SqliteManagerInbox } from './inbox.ts';
 import type { WorkerJob } from './job.ts';
 import type { PageDataRepair } from './page-data.ts';
@@ -28,7 +23,7 @@ export type RuntimeRepairRoutingDependencies = {
 
 function dispatchOwnedRepair(
   { tasks, store, inbox, settings }: RuntimeRepairRoutingDependencies,
-  repair: BootSmokeRepair,
+  repair: TestFailureRepair,
   markdown: string,
   directory: string,
   created: string,
@@ -60,25 +55,15 @@ function dispatchOwnedRepair(
   });
 }
 
-function dispatchBootSmokeRepair(dependencies: RuntimeRepairRoutingDependencies, repair: BootSmokeRepair): void {
-  dispatchOwnedRepair(
-    dependencies,
-    repair,
-    bootSmokeRepairBrief(repair, dependencies.settings.policy?.verifier),
-    'boot-smoke-repairs',
-    `Urgent boot-smoke repair for ${repair.test} at ${repair.commit}.`,
-    `Boot smoke still fails on ${repair.test} at ${repair.commit}.`,
-  );
-}
-
 function dispatchTestFailureRepair(dependencies: RuntimeRepairRoutingDependencies, repair: TestFailureRepair): void {
+  const tests = repair.failures.map((failure) => failure.test);
   dispatchOwnedRepair(
     dependencies,
     repair,
     testFailureRepairBrief(repair, dependencies.settings.policy?.verifier),
     'test-failure-repairs',
-    `Urgent test-failure repair for ${repair.test} at ${repair.commit}.`,
-    `Test ${repair.test} still fails at ${repair.commit}.`,
+    `Urgent repair for ${tests.length} failing tests at ${repair.commit}: ${tests.join(', ')}.`,
+    `These tests still fail at ${repair.commit}: ${tests.join(', ')}.`,
   );
 }
 
@@ -144,7 +129,6 @@ export async function routePageDataRepair(
 
 export function createRuntimeRepairRouting(dependencies: RuntimeRepairRoutingDependencies) {
   return {
-    dispatchBootSmokeRepair: (repair: BootSmokeRepair) => dispatchBootSmokeRepair(dependencies, repair),
     dispatchTestFailureRepair: (repair: TestFailureRepair) => dispatchTestFailureRepair(dependencies, repair),
     routePageDataRepair: (repair: PageDataRepair) =>
       routePageDataRepair(

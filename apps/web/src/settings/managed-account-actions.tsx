@@ -3,27 +3,24 @@ import { Button, buttonVariants } from '@rezics/ui/shadcn/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@rezics/ui/shadcn/card';
 import { cn } from '@rezics/ui/utils';
 import { m } from '../paraglide/messages.js';
-import { useSession } from '../session/query';
-import { accountProfileHref } from '../accounts/profile-editor/page';
+import { useAccounts } from './managed-account-capabilities';
 import {
   managedNavigationGuard,
   useManagedReaderLifetime,
   useManagedSessionReader,
   type ManagedSessionReader,
 } from './managed-session-reader';
+import { useSettingsAmbient } from './adapters/ambient-view.tsx';
 import { usePreferenceRetry } from './preference-failure-retry';
 import {
   ManagedAccountActionsRead,
   managedAccountActionNames,
-  readManagedAccountActions,
   type ManagedAccountActionsIO,
   type ManagedAccountActionsTarget,
   type ManagedActionName,
   type ManagedAuthNavigation,
 } from './managed-account-actions-read';
 
-const nativeIO: ManagedAccountActionsIO = (data, signal) =>
-  readManagedAccountActions({ data, ...(signal ? { signal } : {}) });
 const labels: Record<ManagedActionName, () => string> = {
   profile: () => m.managed_actions_profile(),
   rename: () => m.managed_actions_rename(),
@@ -43,18 +40,13 @@ type ViewerProps = ActionsProps & {
   owner?: ManagedSessionReader;
 };
 
-function TargetActions({
-  viewerId,
-  csrfToken,
-  authCsrfToken,
-  io = nativeIO,
-  authNavigation,
-  owner,
-  ...target
-}: ViewerProps) {
+function TargetActions({ viewerId, csrfToken, authCsrfToken, io, authNavigation, owner, ...target }: ViewerProps) {
+  const accounts = useAccounts();
+  const ambient = useSettingsAmbient();
+  const actionIO = io ?? accounts.readActions;
   const read = useMemo(
-    () => new ManagedAccountActionsRead({ accountId: target.accountId, viewerId }, io, owner?.isCurrent),
-    [target.accountId, viewerId, io, owner],
+    () => new ManagedAccountActionsRead({ accountId: target.accountId, viewerId }, actionIO, ambient, owner?.isCurrent),
+    [ambient, target.accountId, viewerId, actionIO, owner],
   );
   useManagedReaderLifetime(read.dispose, owner);
   const { result, pending, retryAt } = useSyncExternalStore(read.subscribe, read.snapshot, read.snapshot);
@@ -121,7 +113,7 @@ function TargetActions({
               const href =
                 action.state === 'available'
                   ? name === 'profile'
-                    ? accountProfileHref(target.accountId)
+                    ? accounts.profileHref(target.accountId)
                     : authAction?.state === 'available'
                       ? authAction.href
                       : null
@@ -180,7 +172,7 @@ export function ManagedAccountActionsForViewer(props: ViewerProps) {
 
 /** Session changes and target selection discard previous capabilities before any new private read. */
 export function ManagedAccountActions(props: ActionsProps) {
-  const session = useSession();
+  const { session } = useAccounts();
   const owner = useManagedSessionReader(
     session.subject,
     JSON.stringify([props.accountId, props.nativeAccountKind, props.operated, props.self]),

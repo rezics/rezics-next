@@ -6,7 +6,7 @@ import {
   readAccountIdentitySource,
   verifyAccountIdentityTechnicalSource,
 } from '../access/agent-verification-identity.ts';
-import { IDENTITY_HISTORY_ORIGINAL_LIBRARY_DECLARATION } from '../library/access-capabilities.ts';
+import { IDENTITY_HISTORY_ORIGINAL_LIBRARY_DECLARATION } from '../library/identity-original-work.ts';
 import { declareLibraryIdentityCustodyOperation } from '../library/identity-original-work.ts';
 import {
   readLibraryScopeEffectsPage,

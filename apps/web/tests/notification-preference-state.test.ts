@@ -14,6 +14,9 @@ import {
   type SettingsPage,
 } from '../src/settings/preferences';
 import { NotificationEditor, notificationIntentAllowed } from '../src/settings/notification-recovery';
+import { createBrowserSettingsAmbient } from '../src/settings/adapters/ambient';
+
+const settingsAmbient = createBrowserSettingsAmbient();
 
 mock.module('cloudflare:workers', () => ({ env: {} }));
 
@@ -285,10 +288,14 @@ test('compulsory and unknown kinds never become edits; missing actions refuse wr
     actions: [{ name: 'edit', expectedVersion: 7 }],
   };
   const transport = harness(() => Response.json({ ...envelope, page: gated }), 'POST');
-  const editor = new NotificationEditor(gated, {
-    save: (input) => changeNotifications(transport.client, transport.request, transport.env, input),
-    read: () => loadSettingsPage(transport.client, transport.request, transport.env),
-  });
+  const editor = new NotificationEditor(
+    gated,
+    {
+      save: (input) => changeNotifications(transport.client, transport.request, transport.env, input),
+      read: () => loadSettingsPage(transport.client, transport.request, transport.env),
+    },
+    settingsAmbient,
+  );
   await editor.edit('moderation_decision', false, 7);
   await editor.edit('unknown', false, 7);
   await editor.restore(7);
@@ -300,12 +307,16 @@ test('compulsory and unknown kinds never become edits; missing actions refuse wr
     ...settingsPreferencePage({ ...optional, reply: true }, 7),
     actions: [],
   };
-  const idle = new NotificationEditor(locked, {
-    save: async () => {
-      throw new Error('unadmitted write');
+  const idle = new NotificationEditor(
+    locked,
+    {
+      save: async () => {
+        throw new Error('unadmitted write');
+      },
+      read: async () => ({ signedIn: false }),
     },
-    read: async () => ({ signedIn: false }),
-  });
+    settingsAmbient,
+  );
   await idle.edit('reply', false, 7);
   await idle.restore(7);
   expect(idle.snapshot().draft.reply).toBe(true);
@@ -329,10 +340,14 @@ test('a definite notification refusal guards row autosave, Restore and Reload un
             : Response.json(accountEnvelope({ ...optional, reply: false }, 8)),
         'POST',
       );
-      const editor = new NotificationEditor(page, {
-        save: (input) => changeNotifications(transport.client, transport.request, transport.env, input),
-        read: () => loadSettingsPage(transport.client, transport.request, transport.env),
-      });
+      const editor = new NotificationEditor(
+        page,
+        {
+          save: (input) => changeNotifications(transport.client, transport.request, transport.env, input),
+          read: () => loadSettingsPage(transport.client, transport.request, transport.env),
+        },
+        settingsAmbient,
+      );
       await editor.edit('reply', false, 7);
       const failed = editor.snapshot();
       expect(failed).toMatchObject({
@@ -420,11 +435,15 @@ test('delayed original and recovery reads preserve local drafts, exact replay an
       return Response.json(accountEnvelope(currentNotifications, step === 5 ? 10 : 11));
     }, 'POST');
     const confirmed: number[] = [];
-    const editor = new NotificationEditor(page, {
-      save: (input) => changeNotifications(transport.client, transport.request, transport.env, input),
-      read: () => loadSettingsPage(transport.client, transport.request, transport.env),
-      confirmed: (version) => confirmed.push(version),
-    });
+    const editor = new NotificationEditor(
+      page,
+      {
+        save: (input) => changeNotifications(transport.client, transport.request, transport.env, input),
+        read: () => loadSettingsPage(transport.client, transport.request, transport.env),
+        confirmed: (version) => confirmed.push(version),
+      },
+      settingsAmbient,
+    );
     await editor.edit('reply', false, 7);
     const pending = editor.snapshot().pending;
     now += 10_000;
@@ -527,18 +546,22 @@ test('notification Save and current-read deadlines preserve original intent and 
   let reads = 0;
   const confirmed: number[] = [];
   const deadlines = controlledManagedDeadlines();
-  const editor = new NotificationEditor(page, {
-    save: (input) => {
-      saves.push(input);
-      return saves.length === 1 ? firstSave.promise : replaySave.promise;
+  const editor = new NotificationEditor(
+    page,
+    {
+      save: (input) => {
+        saves.push(input);
+        return saves.length === 1 ? firstSave.promise : replaySave.promise;
+      },
+      read: () => {
+        const index = reads++;
+        readStarts[index]?.resolve(undefined);
+        return index === 0 ? stalledRead.promise : recoveredRead.promise;
+      },
+      confirmed: (version) => confirmed.push(version),
     },
-    read: () => {
-      const index = reads++;
-      readStarts[index]?.resolve(undefined);
-      return index === 0 ? stalledRead.promise : recoveredRead.promise;
-    },
-    confirmed: (version) => confirmed.push(version),
-  });
+    settingsAmbient,
+  );
   try {
     const initialSave = editor.edit('reply', false, 7);
     const original = editor.snapshot().pending!.input;
@@ -647,30 +670,34 @@ test('a shorter current-read refusal keeps the original wait and current advice 
     const writes: NotificationChange[] = [];
     let reads = 0;
     const saved = { ...optional, reply: false };
-    const editor = new NotificationEditor(page, {
-      save: async (input) => {
-        writes.push(input);
-        return writes.length === 1
-          ? {
-              ok: false,
-              reason: 'unavailable',
-              failure: { status: 503, code: 'dependency_unavailable', retryAfter: '120' },
-            }
-          : { ok: true, notifications: saved, version: 8, page: settingsPreferencePage(saved, 8) };
+    const editor = new NotificationEditor(
+      page,
+      {
+        save: async (input) => {
+          writes.push(input);
+          return writes.length === 1
+            ? {
+                ok: false,
+                reason: 'unavailable',
+                failure: { status: 503, code: 'dependency_unavailable', retryAfter: '120' },
+              }
+            : { ok: true, notifications: saved, version: 8, page: settingsPreferencePage(saved, 8) };
+        },
+        read: async () => {
+          reads++;
+          if (reads === 1)
+            return {
+              signedIn: true,
+              state: 'unavailable',
+              failure: { status: 403, code: 'forbidden', retryable: false, retryAfter: '20' },
+              securityHref: null,
+            };
+          if (reads === 4) return settings(saved, 8);
+          return settings(optional, 7, reads !== 2);
+        },
       },
-      read: async () => {
-        reads++;
-        if (reads === 1)
-          return {
-            signedIn: true,
-            state: 'unavailable',
-            failure: { status: 403, code: 'forbidden', retryable: false, retryAfter: '20' },
-            securityHref: null,
-          };
-        if (reads === 4) return settings(saved, 8);
-        return settings(optional, 7, reads !== 2);
-      },
-    });
+      settingsAmbient,
+    );
     await editor.edit('reply', false, 7);
     const pending = editor.snapshot().pending!;
     const original = pending.input;
@@ -736,6 +763,7 @@ test('disposal clears retained notification state and ignores late reads, writes
   const fenced = new NotificationEditor(
     page,
     { save: async () => ({ ok: false, reason: 'unavailable' }), read: async () => ({ signedIn: false }) },
+    settingsAmbient,
     false,
     () => 7,
     () => current,
@@ -751,15 +779,19 @@ test('disposal clears retained notification state and ignores late reads, writes
 
   let finishWrite!: (result: NotificationWriteResult) => void;
   const writes: NotificationChange[] = [];
-  const writer = new NotificationEditor(page, {
-    save: (input) => {
-      writes.push(input);
-      return new Promise<NotificationWriteResult>((resolve) => {
-        finishWrite = resolve;
-      });
+  const writer = new NotificationEditor(
+    page,
+    {
+      save: (input) => {
+        writes.push(input);
+        return new Promise<NotificationWriteResult>((resolve) => {
+          finishWrite = resolve;
+        });
+      },
+      read: async () => ({ signedIn: false }),
     },
-    read: async () => ({ signedIn: false }),
-  });
+    settingsAmbient,
+  );
   const saving = writer.edit('reply', false, 7);
   const retainedRetry = () => writer.retry();
   writer.dispose();
@@ -783,15 +815,19 @@ test('disposal clears retained notification state and ignores late reads, writes
 
   let finishRead!: (result: SettingsPage) => void;
   let reads = 0;
-  const reader = new NotificationEditor(page, {
-    save: async () => ({ ok: false, reason: 'unavailable' }),
-    read: () => {
-      reads++;
-      return new Promise<SettingsPage>((resolve) => {
-        finishRead = resolve;
-      });
+  const reader = new NotificationEditor(
+    page,
+    {
+      save: async () => ({ ok: false, reason: 'unavailable' }),
+      read: () => {
+        reads++;
+        return new Promise<SettingsPage>((resolve) => {
+          finishRead = resolve;
+        });
+      },
     },
-  });
+    settingsAmbient,
+  );
   const reloading = reader.reload();
   const retainedReload = () => reader.reload();
   reader.dispose();
@@ -813,10 +849,14 @@ test('conflict returns the current page, prunes forbidden kinds and keeps a stil
     () => Response.json({ code: 'conflict', page: current }, { status: 409, headers: { 'retry-after': '30' } }),
     'POST',
   );
-  const editor = new NotificationEditor(extra, {
-    save: (input) => changeNotifications(transport.client, transport.request, transport.env, input),
-    read: () => loadSettingsPage(transport.client, transport.request, transport.env),
-  });
+  const editor = new NotificationEditor(
+    extra,
+    {
+      save: (input) => changeNotifications(transport.client, transport.request, transport.env, input),
+      read: () => loadSettingsPage(transport.client, transport.request, transport.env),
+    },
+    settingsAmbient,
+  );
   expect(editor.snapshot().draft.legacy_digest).toBe(false);
   await editor.edit('reply', false, 7);
   expect(editor.snapshot()).toMatchObject({
@@ -841,21 +881,25 @@ test('reviewed reset stays unavailable on edit-only advice until a deliberate cu
   const resetAllowed = settingsPreferencePage(optional, 8);
   const writes: NotificationChange[] = [];
   let allowReset = false;
-  const editor = new NotificationEditor(page, {
-    save: async (input) => {
-      writes.push(input);
-      return writes.length === 1
-        ? { ok: false, reason: 'conflict', page: editOnly }
-        : { ok: true, notifications: optional, version: 9, page: settingsPreferencePage(optional, 9) };
+  const editor = new NotificationEditor(
+    page,
+    {
+      save: async (input) => {
+        writes.push(input);
+        return writes.length === 1
+          ? { ok: false, reason: 'conflict', page: editOnly }
+          : { ok: true, notifications: optional, version: 9, page: settingsPreferencePage(optional, 9) };
+      },
+      read: async () => ({
+        signedIn: true,
+        preferences: { spoilerLevel: 1, suitability: 'blur', version: 8 },
+        notifications: optional,
+        page: allowReset ? resetAllowed : editOnly,
+        securityHref: null,
+      }),
     },
-    read: async () => ({
-      signedIn: true,
-      preferences: { spoilerLevel: 1, suitability: 'blur', version: 8 },
-      notifications: optional,
-      page: allowReset ? resetAllowed : editOnly,
-      securityHref: null,
-    }),
-  });
+    settingsAmbient,
+  );
   const capturedSubmit = () => editor.submit(7);
 
   await editor.restore(7);
@@ -910,6 +954,7 @@ test('mixed supported and removed deliberate kinds survive refresh until discard
           securityHref: null,
         }),
       },
+      settingsAmbient,
       true,
     );
     await editor.edit('reply', false, 7);

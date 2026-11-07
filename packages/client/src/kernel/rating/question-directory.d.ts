@@ -5,6 +5,7 @@ import type { QuestionGrain } from './question-authoring.ts';
 type Dependencies = {
     pool: Pool;
     access: Access;
+    deadlineNow?: () => number;
 };
 export type QuestionMetadata = NonNullable<Awaited<ReturnType<typeof questionRead.run>>>;
 export type RatingQuestionView = {

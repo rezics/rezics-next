@@ -120,3 +120,35 @@ test('HTTP execution rewrites only over-budget invalid problems', async () => {
   await expect(searchHttpExecute({ text: 'ok' }, async () => 'ready')).resolves.toBe('ready');
   expect(searchNativeAuthoredBytes({ text: 'lantern' })).toBeLessThan(SEARCH_VISIT_OPERAND_BUDGET);
 });
+
+test('native disclosure refusals use the installed HTTP family and operand-budget mapping', async () => {
+  const { SearchOperationError } = await import('../../src/search/operation-outcomes.ts');
+  for (const code of [
+    'index_not_ready',
+    'semantic_not_ready',
+    'dependency_unavailable',
+    'search_restart_required',
+  ] as const) {
+    const error = await searchHttpExecute({}, async () => {
+      throw new SearchOperationError(code);
+    }).catch((error: unknown) => error);
+    expect(error).toBeInstanceOf(ProblemError);
+    expect(error).toMatchObject({ code });
+    if (code === 'index_not_ready' || code === 'semantic_not_ready')
+      expect(error).toMatchObject({ headers: { 'retry-after': '1' } });
+  }
+  const refusal = () => {
+    throw new SearchOperationError('unsupported_query', {
+      errors: [{ pointer: '/text', code: 'invalid_format' }],
+      extensions: { textDiagnostic: { reason: 'unclosed_phrase' } },
+    });
+  };
+  await expect(searchHttpExecute({ text: 'short' }, async () => refusal())).rejects.toMatchObject({
+    code: 'unsupported_query',
+    errors: [{ pointer: '/text', code: 'invalid_format' }],
+    extensions: { textDiagnostic: { reason: 'unclosed_phrase' } },
+  });
+  await expect(
+    searchHttpExecute('x'.repeat(SEARCH_VISIT_OPERAND_BUDGET + 1), async () => refusal()),
+  ).rejects.toMatchObject({ code: 'search_restart_required', errors: undefined, extensions: undefined });
+});

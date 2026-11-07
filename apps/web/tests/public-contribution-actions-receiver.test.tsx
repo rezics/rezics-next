@@ -2,7 +2,6 @@ import { expect, test } from 'bun:test';
 import {
   contributionActionsInput,
   ContributionActionsReceiver,
-  unavailableAuthorContributionActionsWire,
 } from '../src/accounts/public-profile/contribution-actions/receiver';
 
 const id = '00000000-0000-4000-8000-000000000001';
@@ -27,10 +26,21 @@ test('only a bounded native selection supplies the exact immutable input', () =>
   expect(Object.isFrozen(admitted)).toBe(true);
 });
 
-test('production remains unavailable without the installed publisher method', async () => {
-  const receiver = new ContributionActionsReceiver(input(), unavailableAuthorContributionActionsWire, () => true);
+test('an unavailable transport is a failed selected read and retains its exact input for retry', async () => {
+  const selected = input();
+  const receiver = new ContributionActionsReceiver(
+    selected,
+    {
+      read: async (request) => {
+        expect(request).toBe(selected);
+        throw new Error('Private advice unavailable');
+      },
+    },
+    () => true,
+  );
   await receiver.refresh();
-  expect(receiver.snapshot()).toEqual({ state: 'unavailable' });
+  expect(receiver.snapshot()).toEqual({ state: 'failed' });
+  expect(receiver.advice()).toBeUndefined();
 });
 
 test('refresh coalesces; failed retries preserve the selected page and original frontier', async () => {
@@ -95,9 +105,34 @@ test('an observed away episode cannot revive when its identity looks equal on re
     () => current,
   );
   await receiver.refresh();
+  const ready = receiver.snapshot();
   current = false;
+  expect(receiver.snapshot()).toBe(ready);
+  expect(receiver.isCurrent()).toBe(false);
   expect(receiver.snapshot()).toEqual({ state: 'retired' });
   current = true;
   await receiver.refresh();
   expect(receiver.snapshot()).toEqual({ state: 'retired' });
+});
+
+test('paired snapshot reads stay referentially stable and never retire from getSnapshot', async () => {
+  let current = true;
+  const notifications: string[] = [];
+  const receiver = new ContributionActionsReceiver(
+    input(),
+    {
+      async read() {
+        return 'private';
+      },
+    },
+    () => current,
+  );
+  receiver.subscribe(() => notifications.push(receiver.snapshot().state));
+  await receiver.refresh();
+  current = false;
+  const first = receiver.snapshot();
+  const second = receiver.snapshot();
+  expect(first).toBe(second);
+  expect(first.state).toBe('ready');
+  expect(notifications).toEqual(['pending', 'ready']);
 });

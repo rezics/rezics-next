@@ -63,7 +63,9 @@ import {
   finishCopyResult,
   type CopyRole,
 } from './erasure-copy.ts';
-import { AUTH_WORKFLOW_APPLICATION, installWorkflowRequestRetention } from './retention.ts';
+import { bindAuthSdkMaintenance, unbindAuthSdkMaintenance } from './sdk-retirement-fence.ts';
+import { AUTH_WORKFLOW_APPLICATION } from './contract/index.ts';
+import { installWorkflowRequestRetention } from './adapters/request-retention.ts';
 import { coordinateMembership } from './membership-workflows.ts';
 import { completeDeletedClientReductionOwner } from './account-workflows.ts';
 import { answerRevocation, REVOKE_SESSIONS_STEP, sessionRevocation, stepFailureMessage } from './session-revocation.ts';
@@ -1653,6 +1655,7 @@ export function createAccountWorkflows<Context = WorkflowContext>(options: Accou
     return (releasing ??= (async () => {
       try {
         try {
+          unbindAuthSdkMaintenance(copyClient);
           await copyClient?.destroy();
         } finally {
           copyClient = undefined;
@@ -1710,6 +1713,7 @@ export function createAccountWorkflows<Context = WorkflowContext>(options: Accou
           applicationName: AUTH_WORKFLOW_APPLICATION,
           logger: authWorkflowLogger,
         });
+        bindAuthSdkMaintenance(options.systemDatabasePool ?? database, copyClient);
         await copyClient.registerQueue('auth.account-copies');
         copyWriter = createCopyWriter(database, copyClient);
       } else {

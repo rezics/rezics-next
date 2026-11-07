@@ -1,22 +1,18 @@
 import { configureTestReceiptKeys } from '../support/receipt-keys.ts';
 import {
-  bindAuthDeletionHandleRead,
   createAuthHost,
   createBarrierProofVerifier,
   createProvisioningEvidenceVerifier,
   createNativeWorkflowProofPorts,
   type AuthService,
-  type AccountOperationAccess,
 } from '@rezics/auth';
 import { exportJWK, generateKeyPair, type JWK } from 'jose';
 import { Client, Pool } from 'pg';
 import { createAuthDatabase } from '../support/auth-database.ts';
 import { createAccess, INTERNAL_ACTIONS } from '../../src/access/index.ts';
-import { createAuthDeletionHandleRead, createNativeAccountBindings } from '../../src/access/native-account-bindings.ts';
-import { createAccountManagementReadAccess } from '../../src/access/management-source.ts';
+import { createNativeAccountBindings } from '../../src/access/native-account-bindings.ts';
 import { createWorkflowApprovals } from '../../src/access/workflow-approvals.ts';
 import { LIFECYCLE_ACTIONS } from '../../src/access/lifecycle.ts';
-import { admitGroup, PlatformClosedError } from '../../src/access/gates/admission.ts';
 
 async function cloneAuthDatabase(): Promise<{ url: string; close(): Promise<void> }> {
   const name = `native_auth_${Bun.randomUUIDv7().replaceAll('-', '')}`;
@@ -131,46 +127,8 @@ export async function nativeFixture(
       signing: { activeKid: privateKey.kid, privateKeys: [privateKey] },
       trustedAccess: bindings.trustedAccess,
       access: bindings.workflowPorts,
-      accountOperations: (() => {
-        const workflowApprovals = createWorkflowApprovals({
-          pool,
-          access,
-          actions,
-          referenceKeys,
-          creationBinding: (input: { registrationId: string; operationKey: string }) => proofs.creationBinding(input),
-        });
-        const context = () => ({ pool, deadline: Date.now() + 10000 });
-        const deletionHandle = createAuthDeletionHandleRead({ pool, access });
-        const ports: AccountOperationAccess = {
-          context,
-          readOperatorTransferState: createAccountManagementReadAccess({ pool, access }).readOperatorTransferState,
-          readDeletionHandle: (token, accountId, ctx) => deletionHandle.readDeletionHandle(token, accountId, ctx),
-          approve: (token, input, ctx) => workflowApprovals.approve(token, input as never, ctx as never),
-          resolveForCaller: (token, reference, operation, ctx) =>
-            workflowApprovals.resolveForCaller(token, reference, operation as never, ctx as never),
-          async admitGroup(token, group, ctx) {
-            const bounded = ctx as ReturnType<typeof context>;
-            const actor = await access.authenticate(token, bounded);
-            try {
-              await admitGroup({
-                pool,
-                access: () => access,
-                actor,
-                group,
-                clientAction: 'organization:create',
-                deadline: bounded.deadline,
-                clock: () => new Date(),
-              });
-              return true;
-            } catch (error) {
-              if (error instanceof PlatformClosedError) return false;
-              throw error;
-            }
-          },
-        };
-        bindAuthDeletionHandleRead(ports, deletionHandle);
-        return ports;
-      })(),
+      accountOperations: bindings.accountOperations,
+      accountManagementReads: bindings.accountManagementReads,
       stagingKey: new Uint8Array(32).fill(93),
       maintenanceSchedule: '0 0 1 1 *',
       executorId: 'ordinary-native-executor',

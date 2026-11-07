@@ -626,6 +626,8 @@ Reuse copies one complete grouped reference, in part order, onto up to sixteen c
 
 Facts correction binds current proposal authority to the active Global Context and candidate inspection to the exact disclosed Subject. Candidate decision (`context:accept`) and selection (`context:adopt`) remain separate operations. Decision: Facts correction reads one batched action projection for the disclosed `semantic.subject` and fixed Global Context; proposal, candidate inspection, editorial decision, and selection use their mounted operations independently, and an unavailable component disables dependent fresh commands.
 
+Decision: statement summaries render through the catalogue-owned `StatementReadingPort`. Shared request/result vocabulary lives in `statement-editor-contract`; read, propose and reload matching live in `statement-edit-application`. The editor view is the installed adapter and binds live `CandidateValue`; Subject page composition (`pages/data` and the tags mount) binds the same adapter. Uncomposed readers use the isolated value renderer. Summaries do not import the editor view. Tests pin isolated default rendering, the live CandidateValue binding, and reload matching; native/browser walks stay on the hourly Goal.
+
 ### Bound action projection for cited fact correction
 
 - Touches: one disclosed Subject, its active released scalar definitions, at most twelve changed rows with complete qualifiers and references, the existing candidate comparison, and deduplicated native Subject and Global Context action references.

@@ -15,6 +15,7 @@
       "browser": "./src/bundled-browser.ts",
       "default": "./src/bundled.ts"
     },
+    "./reviewed-vocabulary": "./src/reviewed-vocabulary.ts",
     "./validate": "./src/validate.ts",
     "./bulk": "./src/bulk.ts",
     "./media-import": "./src/media-import.ts",

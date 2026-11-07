@@ -178,12 +178,33 @@ test('a failed postgres create reaps the check nonce', () => {
   const calls: string[][] = [];
   const docker = (args: string[]): string => {
     calls.push(args);
-    if (args[0] === 'run') throw new Error('spawnSync docker ETIMEDOUT');
+    if (args[0] === 'run') throw new Error('docker run failed with status 125: daemon error');
+    return args[0] === 'ps' ? 'half-pg' : '';
+  };
+  expect(() => startPostgresContainer(docker, { nonce: 'nonce-check' })).toThrow(/status 125/);
+  expect(calls[0]).toContain(`${KERNEL_CHECK_PID_LABEL}=${process.pid}`);
+  expect(calls[0]).toContain(`${KERNEL_CHECK_NONCE_LABEL}=nonce-check`);
+  expect(calls[1]).toEqual(['ps', '-aq', '--filter', `label=${KERNEL_CHECK_NONCE_LABEL}=nonce-check`]);
+  expect(calls[2]).toEqual(['rm', '-f', '-v', 'half-pg']);
+  expect(calls.filter((args) => args[0] === 'run')).toHaveLength(1);
+});
+
+test('a postgres spawn timeout reaps the nonce, retries once, then keeps the second failure', () => {
+  const calls: string[][] = [];
+  const docker = (args: string[]): string => {
+    calls.push(args);
+    if (args[0] === 'run') throw Object.assign(new Error('spawnSync docker ETIMEDOUT'), { code: 'ETIMEDOUT' });
     return args[0] === 'ps' ? 'half-pg' : '';
   };
   expect(() => startPostgresContainer(docker, { nonce: 'nonce-check' })).toThrow(/ETIMEDOUT/);
-  expect(calls[0]).toContain(`${KERNEL_CHECK_PID_LABEL}=${process.pid}`);
-  expect(calls[0]).toContain(`${KERNEL_CHECK_NONCE_LABEL}=nonce-check`);
+  const runs = calls.filter((args) => args[0] === 'run');
+  expect(runs).toHaveLength(2);
+  expect(runs[0]).toContain(`${KERNEL_CHECK_NONCE_LABEL}=nonce-check`);
+  const retryNonce = runs[1]!
+    .find((arg, index) => runs[1]![index - 1] === '--label' && arg.startsWith(`${KERNEL_CHECK_NONCE_LABEL}=`))
+    ?.slice(`${KERNEL_CHECK_NONCE_LABEL}=`.length);
+  expect(retryNonce).toBeDefined();
+  expect(retryNonce).not.toBe('nonce-check');
   expect(calls[1]).toEqual(['ps', '-aq', '--filter', `label=${KERNEL_CHECK_NONCE_LABEL}=nonce-check`]);
   expect(calls[2]).toEqual(['rm', '-f', '-v', 'half-pg']);
 });

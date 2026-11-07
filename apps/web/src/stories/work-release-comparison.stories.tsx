@@ -7,6 +7,7 @@ import {
 } from '../features/catalogue/game-reader/comparison-example';
 import type { GameReaderTransport } from '../features/catalogue/game-reader/model';
 import { GameReader } from '../features/catalogue/game-reader/view';
+import { WorkReadingBinding } from '../features/pages/work-reading-binding';
 import { getLocale } from '../paraglide/runtime';
 import { m } from '../paraglide/messages.js';
 import { AppShell } from '../shell/shell';
@@ -28,7 +29,9 @@ function WorkReleaseComparisonStory({ scenario = 'partial' }: { scenario?: Compa
       <AppShell>
         <main className="mx-auto w-full max-w-5xl space-y-6 p-4 sm:p-8">
           <h1 className="text-3xl font-semibold">Harbour game</h1>
-          <GameReader {...fixture.address} locale={locale} source={fixture} reader={null} transport={transport} />
+          <WorkReadingBinding>
+            <GameReader {...fixture.address} locale={locale} source={fixture} reader={null} transport={transport} />
+          </WorkReadingBinding>
         </main>
       </AppShell>
     </PatternStory>

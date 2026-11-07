@@ -1,10 +1,10 @@
-import { profileChanges, type ProfileValues } from '../../settings/profile-data';
+import { profileChanges, type ProfileValues } from '../../settings/ports/profile-editor';
 import {
   ProfileEditor,
   profileFieldErrors,
   type ProfileEditorIO,
   type ProfileScope,
-} from '../../settings/profile-write';
+} from '../../settings/ports/profile-editor';
 
 /** An approval belongs to this instance's exact viewer/target and visible, locked draft. */
 export class AccountProfileEditor extends ProfileEditor {

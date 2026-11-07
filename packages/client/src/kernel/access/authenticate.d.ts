@@ -1,11 +1,13 @@
 import { type IdentityExpiry } from './identity-expiry.ts';
 import { type KernelClock } from '../clock.ts';
+import { requireAccessDeadline } from './unavailable.ts';
 import { type FetchImplementation } from 'jose';
 import { type AccessClient, type AccessContext, type AccountActor } from '../request/access.ts';
 import { type DurableIdentity } from './durable-identity.ts';
 import type { AuthoritativeTime } from '../command/command.ts';
 import { type ApprovedIdentity } from './approved-identity.ts';
 import { type Account } from './account-data.ts';
+export { requireAccessDeadline };
 export type AuthenticationConfig = {
     issuer: string;
     audience: string;
@@ -48,4 +50,3 @@ export declare function createAuthenticator(configuration?: AuthenticationConfig
 };
 /** Native read time minted from this exact admitted SQL observation. Caller releases it. */
 export declare function readNativeAccessTime(context: AccessContext, clock?: KernelClock, instant?: string): Promise<AuthoritativeTime>;
-export {};

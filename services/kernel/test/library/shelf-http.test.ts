@@ -149,6 +149,7 @@ beforeAll(async () => {
     pool: db.pool,
     tokens: testTokens(),
     clock,
+    deadlineNow: () => Date.now(),
     access: admittedAccess,
   });
   access = composition.resolveAccess({ actions: productionActions() });

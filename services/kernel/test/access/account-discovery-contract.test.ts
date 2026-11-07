@@ -4,7 +4,8 @@ import { createHash } from 'node:crypto';
 import { createPool, withConnection } from '../../src/database/pool.ts';
 import { newId, partitionOf, routeOf } from '../../src/route/route.ts';
 import { pageActiveAccounts } from '../../src/access/active-account-page.ts';
-import { readAccount, readPublicIdentities, readPublicAccountByHandle } from '../../src/access/account-data.ts';
+import { readAccount, readPublicIdentities } from '../../src/access/account-data.ts';
+import { readPublicAccountByHandle } from '../../src/access/public-identity.ts';
 import { readPublicViews } from '../../src/access/public-views.ts';
 import {
   createLifecycleCommands,

@@ -1,11 +1,12 @@
 import { pickText } from '@rezics/composition';
 import { Button } from '@rezics/ui/shadcn/button';
 import { m } from '../../paraglide/messages.js';
-import { useCatalogueLifetime } from '../../subject/candidate-lifetime';
+import { useCandidateReading, type CandidateReading } from './candidate-reading-application';
+import { subjectHref } from '../../subject/load-subject';
 import { useLayoutEffect, useMemo } from 'react';
 import { defaultReader, type Reader } from '../../subject/reader';
 import { useSession } from '../../session/query';
-import { FollowTargetControl } from '../../library/follow-target-control';
+import { useSearchLibraryActionHost } from '../../search/library-action-port';
 import { ConceptAssociations, ConceptAliases, ConceptWorksDisclosure } from './source-concept-reading/associations';
 import { catalogueEntries } from '../catalogue/catalogue-entry';
 import type { ConceptRead } from '../catalogue/source-concept-explorer';
@@ -52,9 +53,11 @@ type Props = {
 };
 
 export function SourceConceptView(props: Props) {
-  const admission = useCatalogueLifetime(
-    JSON.stringify(['concept-explore', props.id, props.locale, props.role, props.returnTo]),
-  );
+  const admission = useCandidateReading({
+    candidate: 'concept-explore',
+    locale: props.locale,
+    address: [props.id, props.role, props.returnTo],
+  });
   return <ConceptVisitView key={admission.generation} {...props} admission={admission} />;
 }
 
@@ -84,7 +87,7 @@ function ConceptVisitView({
   transport: ConceptTransport;
   initial?: ConceptRead | undefined;
   reader?: Reader | undefined;
-  admission: ReturnType<typeof useCatalogueLifetime>;
+  admission: CandidateReading;
   worksRoute?: ConceptWorksRouteState | undefined;
   onWorksChange?: ((patch: ConceptWorksRoutePatch, options?: { replace?: boolean }) => void) | undefined;
   conceptVisit?: ConceptVisitDescriptor | undefined;
@@ -107,16 +110,21 @@ function ConceptVisitView({
     onAddressChange: onHierarchyChange,
   });
   const { read, error, busy } = visit;
-  const source = useCatalogueLifetime(
-    JSON.stringify([
-      read?.public.subject.id,
-      read?.public.subject.context,
-      read?.public.subject.release,
-      read?.public.subject.revision,
-      read?.session,
-    ]),
+  const source = useCandidateReading(
+    {
+      candidate: 'concept-source',
+      locale,
+      address: [
+        read?.public.subject.id,
+        read?.public.subject.context,
+        read?.public.subject.release,
+        read?.public.subject.revision,
+        read?.session,
+      ],
+    },
     admission,
   );
+  const { FollowTarget } = useSearchLibraryActionHost();
   const followOrigin = useMemo(() => ({ lifetime: source, isCurrent: source.active }), [source]);
   const { state: sessionState } = useSession();
   const title = pickText(read?.public.subject.labels ?? {}, locale);
@@ -201,7 +209,7 @@ function ConceptVisitView({
           >
             {title.text || m.concept_explore_title({}, o)}
           </h1>
-          {read?.admitted && <FollowTargetControl targetId={read.public.subject.id} origin={followOrigin} />}
+          {read?.admitted && <FollowTarget targetId={read.public.subject.id} origin={followOrigin} />}
         </div>
         {read?.definition && (
           <p className="max-w-prose whitespace-pre-line" lang={read.definition.lang ?? undefined}>
@@ -339,10 +347,17 @@ function ConceptVisitView({
               <ConceptMembershipReading
                 membership={read.membership}
                 locale={locale}
-                returnTo={returnTo}
-                hrefFor={(base, row) => subjectVisitHref(base, addressFor({ section: 'works', row: row.id }))}
+                hrefFor={(row) =>
+                  subjectVisitHref(
+                    subjectHref({ id: row.id, label: row.label }, locale).href,
+                    addressFor({ section: 'works', row: row.id }),
+                  )
+                }
                 busy={busy}
                 onRetry={() => void visit.refresh()}
+                onNext={(property) => void visit.membershipNext(property)}
+                onPrevious={(property) => void visit.membershipPrevious(property)}
+                indexFor={(property) => visit.membershipIndexFor(property)}
               />
 
               <section className="space-y-2" aria-labelledby="concept-actions-heading">

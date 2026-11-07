@@ -196,6 +196,15 @@ function processGroupIsAbsent(group: number): boolean {
     throw new Error(`process group visibility unknown for group ${group}`, { cause: error });
   }
 }
+/** True only when the kernel reports no such group; any other answer leaves the full identity checks to decide. */
+function groupKnownAbsent(group: number): boolean {
+  if (!Number.isSafeInteger(group) || group <= 1) return false;
+  try {
+    return processGroupIsAbsent(group);
+  } catch {
+    return false;
+  }
+}
 function emptyGroupUnconfirmedMessage(group: number): string {
   return `process group visibility unknown for group ${group}: no live members visible`;
 }
@@ -437,6 +446,9 @@ export async function terminateProcessGroup(
   policy = defaultPolicy.process,
 ): Promise<void> {
   if (!identity) return;
+  // Signal zero answers for an absent group, zombies included, without scanning /proc. Maintenance reaps every recorded
+  // attempt whose worktree is gone, and one /proc scan per attempt outgrew its 45-second budget on 2026-11-07.
+  if (groupKnownAbsent(identity.group)) return;
   const members = await checkedProcessGroupAfterZombies(identity, graceMs, policy);
   if (!members.length) return;
   for (const member of members) {
@@ -529,4 +541,82 @@ export async function stopProcessesUnder(
   await signal(remaining, 'SIGKILL');
   await Promise.all(remaining.map((member) => waitForProcess(member, undefined, undefined, policy)));
   return found.length;
+}
+
+/** Kind of worker launch the manager host offloads onto a child so its own event loop stays free. */
+export type HostStartKind = 'start' | 'retry' | 'released' | 'first';
+export const HOST_START_KINDS = ['start', 'retry', 'released', 'first'] as const;
+export type HostProcessResult = {
+  code: number | null;
+  signal: NodeJS.Signals | null;
+  stdout: string;
+  stderr: string;
+  stdoutBuffer: Buffer;
+};
+export type HostProcessOptions = {
+  cwd?: string;
+  env?: NodeJS.ProcessEnv;
+  timeoutMs?: number;
+  maxBuffer?: number;
+};
+
+/**
+ * Run a child without blocking the caller's event loop. The manager host uses this for git, tmux, systemd-notify and
+ * the start/retry children: a spawnSync sleep of the same length would miss the watchdog ping.
+ */
+export function runHostProcess(
+  command: string,
+  args: readonly string[] = [],
+  options: HostProcessOptions = {},
+): Promise<HostProcessResult> {
+  return new Promise((resolve, reject) => {
+    const child = spawn(command, [...args], {
+      cwd: options.cwd,
+      env: options.env,
+      stdio: ['ignore', 'pipe', 'pipe'],
+    });
+    const chunks: Buffer[] = [];
+    const errors: Buffer[] = [];
+    const max = options.maxBuffer ?? 8 * 1024 * 1024;
+    let stdoutBytes = 0;
+    let stderrBytes = 0;
+    child.stdout?.on('data', (chunk: Buffer) => {
+      if (stdoutBytes >= max) return;
+      const slice = chunk.byteLength + stdoutBytes > max ? chunk.subarray(0, max - stdoutBytes) : chunk;
+      chunks.push(slice);
+      stdoutBytes += slice.byteLength;
+    });
+    child.stderr?.on('data', (chunk: Buffer) => {
+      if (stderrBytes >= max) return;
+      const slice = chunk.byteLength + stderrBytes > max ? chunk.subarray(0, max - stderrBytes) : chunk;
+      errors.push(slice);
+      stderrBytes += slice.byteLength;
+    });
+    let settled = false;
+    const timer =
+      options.timeoutMs !== undefined
+        ? setTimeout(() => {
+            child.kill('SIGTERM');
+          }, options.timeoutMs)
+        : undefined;
+    const finish = (error?: Error, result?: HostProcessResult) => {
+      if (settled) return;
+      settled = true;
+      if (timer) clearTimeout(timer);
+      if (error) reject(error);
+      else resolve(result!);
+    };
+    child.once('error', (error) => finish(error));
+    child.once('close', (code, signal) => {
+      const stdoutBuffer = Buffer.concat(chunks);
+      const stderrBuffer = Buffer.concat(errors);
+      finish(undefined, {
+        code,
+        signal,
+        stdout: stdoutBuffer.toString('utf8'),
+        stderr: stderrBuffer.toString('utf8'),
+        stdoutBuffer,
+      });
+    });
+  });
 }

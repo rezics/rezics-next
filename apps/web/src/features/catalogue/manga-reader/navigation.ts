@@ -1,5 +1,5 @@
 import type { PageContinuation } from '@rezics/composition';
-import { subjectHref, subjectViewHref } from '../../../subject/subject-href';
+import { subjectHref, subjectViewHref } from '../../../subject/load-subject';
 
 /** A locator is browsing intent. It contains no assertion body, permission or correction operands. */
 export type MangaOccurrence = {

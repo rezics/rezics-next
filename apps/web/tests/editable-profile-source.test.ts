@@ -19,6 +19,9 @@ import {
 } from '../src/settings/profile-data';
 import { ProfileEditor } from '../src/settings/profile-write';
 import { MediaProblem } from '../src/media/kernel';
+import { createBrowserSettingsAmbient } from '../src/settings/adapters/ambient';
+
+const settingsAmbient = createBrowserSettingsAmbient();
 
 const profile = editableProfile();
 const editing = {
@@ -89,6 +92,7 @@ test('the editable source accepts additive envelope fields but rejects malformed
       }) as typeof fetch,
     });
     const editor = new ProfileEditor({
+      ambient: settingsAmbient,
       read: () => loadProfileRecord(client, 'Bearer unchanged', profile.id),
       save: async () => {
         writes++;
@@ -136,6 +140,7 @@ test('the official private GET supplies field advice and keeps unsupported local
       })) as typeof fetch,
   });
   const editor = new ProfileEditor({
+    ambient: settingsAmbient,
     read: () => loadProfileRecord(client, 'Bearer unchanged', profile.id),
     save: async () => {
       throw new Error('Must not write');
@@ -162,6 +167,7 @@ test('native denial status survives the server boundary while transport failures
     expect(() => profileReadValue(result)).toThrow(EditableProfileReadError);
     const editor = new ProfileEditor(
       {
+        ambient: settingsAmbient,
         read: async () => profileReadValue(JSON.parse(JSON.stringify(result))),
         save: async () => {
           throw new Error('Must not write');
@@ -226,6 +232,7 @@ test('private profile recovery preserves actual native problem metadata and dela
       },
     });
     const editor = new ProfileEditor({
+      ambient: settingsAmbient,
       read: async () => profileReadValue(result),
       save: async () => {
         throw new Error('Must not write');
@@ -351,6 +358,7 @@ test('native applicability and each public-view flag gate complete patches witho
   expect(profilePatchAdmitted({ publicViews: { posts: true } }, advice)).toBe(false);
   let writes = 0;
   const editor = new ProfileEditor({
+    ambient: settingsAmbient,
     read: async () => ({
       accountId: profile.id,
       kind: 'actor',

@@ -60,7 +60,7 @@ export type FeedActionBarProps = {
   reactionStatus?: HomeFeedReactionStatus | undefined;
   plain?: boolean | undefined;
   /** Detail pages retain the existing reply-intent owner. */
-  reply?: { onReply(): void; disabled?: boolean } | { href: string } | undefined;
+  reply?: { onReply(): void; disabled?: boolean; label?: string } | { href: string } | undefined;
   /** An existing Subject/Library control, or navigation to its admitted owner. No private row reads. */
   library?: { href: string } | { control: ReactNode } | undefined;
   /** Existing author/report menu. Its owner retains edit, erasure and report ceremonies. */
@@ -379,7 +379,9 @@ function ActionVisit({
     safeReplyCount === undefined
       ? undefined
       : `${new Intl.NumberFormat(locale, { notation: 'compact' }).format(safeReplyCount)}${replyCountIsLowerBound ? '+' : ''}`;
-  const replyName = exactReplyCount === undefined ? replyLabel : `${replyLabel} ${exactReplyCount}`;
+  const replyName =
+    (reply && 'onReply' in reply ? reply.label : undefined) ??
+    (exactReplyCount === undefined ? replyLabel : `${replyLabel} ${exactReplyCount}`);
   const replyContent = (
     <>
       <ReplyIcon aria-hidden />

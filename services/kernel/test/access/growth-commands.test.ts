@@ -3,7 +3,8 @@ import { createHash } from 'node:crypto';
 import { afterAll, beforeAll, expect, test } from 'bun:test';
 import type { PoolClient } from 'pg';
 import { admittedAccess, authenticateAccount } from '../support/admitted-access.ts';
-import { readAccount, readOrganizationRole, readPublicAccount } from '../../src/access/account-data.ts';
+import { readAccount, readOrganizationRole } from '../../src/access/account-data.ts';
+import { readPublicAccount } from '../../src/access/public-identity.ts';
 import { createDelegationCommands, readAssignment } from '../../src/access/delegation-commands.ts';
 import { createGrantCommands, GrantDeniedError } from '../../src/access/grant-commands.ts';
 import {

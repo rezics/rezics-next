@@ -1,5 +1,5 @@
+import type { CommunityAmbient } from './ambient.ts';
 import { registerDiscoveryWork } from './discovery-register.ts';
-import { createSpaceDiscoveryEffect } from './space-discovery.ts';
 import { publishNativeSpaceDiscoveryWitness } from './space-discovery-publisher.ts';
 import {
   initializeSpaceDiscoveryDependencies,
@@ -18,17 +18,16 @@ import {
 import { SPACE_DISCOVERY_INVALIDATED } from './space-discovery-events.ts';
 import { maintainRealmMemberCounts } from './member-count.ts';
 import { PARTITIONS, partitionOf } from '../route/route.ts';
-import { createPartyLocatorEffect } from './party-locator.ts';
-import { createRevisionLocatorEffect } from './revision-locator.ts';
-import { createCommunityAccountErasureEffect, registerCommunityAccountErasureWork } from './account-erasure.ts';
+import { registerCommunityAccountErasureWork } from './account-erasure.ts';
+import { communityDeclaredEffects } from './adapters/effects.ts';
 import { createHash } from 'node:crypto';
 import { DBOS } from '@dbos-inc/dbos-sdk';
 import type { MembershipWorkInput, MembershipWorkResult } from '@rezics/auth-contract';
 import { enqueueMembership } from '../access/membership-work.ts';
 import { AuthenticationError, type Access } from '../request/access.ts';
 import { COMMAND_STEP_RETRIES } from '../work/retries.ts';
+import type { Effect } from '../events/effects.ts';
 import type { WorkContext, WorkModule } from '../work/registry.ts';
-import { createMemberLocatorEffect } from './member-locator.ts';
 import { createFollowCommands } from '../library/follows.ts';
 import { REALM_JOIN_WORKFLOW, REALM_LEAVE_WORKFLOW, type RealmMembershipWorkInput } from './join.ts';
 
@@ -62,8 +61,7 @@ const followAccess: Access = {
 };
 
 /** Registers the Realm join and leave workflows. Accounts must already be registered. */
-export function registerCommunityWork({ pool, client, clock, addEffects }: WorkContext): void {
-  addEffects([createMemberLocatorEffect(pool)]);
+export function registerCommunityWork({ pool, client, clock }: WorkContext): void {
   const follows = createFollowCommands({ pool, access: followAccess, clock });
   const enqueueJoin = DBOS.registerStep(
     async (input: RealmMembershipWorkInput, childId: string) => {
@@ -104,66 +102,74 @@ export function registerCommunityWork({ pool, client, clock, addEffects }: WorkC
   );
 }
 
-export const communityWorkModule: WorkModule = {
-  name: 'community',
-  async register(context) {
-    context.addEffects([createRevisionLocatorEffect(context.pool), createSpaceDiscoveryEffect(context.pool)]);
-    await registerSpaceDiscoveryDependencies(context);
-    registerCommunityWork(context);
-    // Use the existing maintenance queue and native command segments. DBOS
-    // retains partition locators/continuation only; source progress stays native.
-    const countSegment = DBOS.registerStep((partition: number) => maintainRealmMemberCounts(context.pool, partition), {
-      name: 'community.member-count.segment',
-      ...COMMAND_STEP_RETRIES,
-    });
-    const continueCount = DBOS.registerStep(
-      async (partition: number) => {
-        await context.client.enqueue(
-          {
-            workflowName: 'community.member-count.continue',
-            queueName: 'maintenance',
-            workflowID: `community:member-count:${createHash('sha256').update(`${DBOS.workflowID}:${partition}`).digest('hex')}`,
-            workflowIDReusePolicy: 'return-existing',
-          },
-          partition,
-        );
-      },
-      { name: 'community.member-count.enqueue', ...COMMAND_STEP_RETRIES },
-    );
-    const countBatch = async (start: number) => {
-      let partition = start;
-      // Bound workflow history as well as each native segment. Only the home
-      // locator crosses the continuation; the source frontier stays native.
-      for (let segment = 0; segment < 50 && partition < PARTITIONS; segment++) {
-        if (!(await countSegment(partition))) partition++;
-      }
-      if (partition < PARTITIONS) await continueCount(partition);
-    };
-    DBOS.registerWorkflow(countBatch, { name: 'community.member-count.continue' });
-    DBOS.registerWorkflow(
-      async () => {
-        await countBatch(0);
-      },
-      { name: 'community.member-count.upkeep' },
-    );
-    await context.client.applySchedules([
-      {
-        scheduleName: 'community.member-count.every-10-minutes',
-        workflowName: 'community.member-count.upkeep',
-        schedule: '*/10 * * * *',
-        queueName: 'maintenance',
-        cronTimezone: 'UTC',
-        automaticBackfill: false,
-      },
-    ]);
-    registerCommunityAccountErasureWork(context);
-    await registerDiscoveryWork(context);
-    context.addEffects([
-      createPartyLocatorEffect(context.pool, context.clock),
-      createCommunityAccountErasureEffect(context),
-    ]);
-  },
-};
+/** Community's worker registration. Domain time comes from the work context; `ambient` supplies the request deadline clock. */
+export function createCommunityWorkModule(ambient: CommunityAmbient): WorkModule {
+  return {
+    name: 'community',
+    async register(context) {
+      context.addEffects(
+        communityDeclaredEffects({
+          pool: context.pool,
+          clock: context.clock,
+          client: context.client,
+        }) as Effect[],
+      );
+      await registerSpaceDiscoveryDependencies(context);
+      registerCommunityWork(context);
+      // Use the existing maintenance queue and native command segments. DBOS
+      // retains partition locators/continuation only; source progress stays native.
+      const countSegment = DBOS.registerStep(
+        (partition: number) => maintainRealmMemberCounts(context.pool, partition),
+        {
+          name: 'community.member-count.segment',
+          ...COMMAND_STEP_RETRIES,
+        },
+      );
+      const continueCount = DBOS.registerStep(
+        async (partition: number) => {
+          await context.client.enqueue(
+            {
+              workflowName: 'community.member-count.continue',
+              queueName: 'maintenance',
+              workflowID: `community:member-count:${createHash('sha256').update(`${DBOS.workflowID}:${partition}`).digest('hex')}`,
+              workflowIDReusePolicy: 'return-existing',
+            },
+            partition,
+          );
+        },
+        { name: 'community.member-count.enqueue', ...COMMAND_STEP_RETRIES },
+      );
+      const countBatch = async (start: number) => {
+        let partition = start;
+        // Bound workflow history as well as each native segment. Only the home
+        // locator crosses the continuation; the source frontier stays native.
+        for (let segment = 0; segment < 50 && partition < PARTITIONS; segment++) {
+          if (!(await countSegment(partition))) partition++;
+        }
+        if (partition < PARTITIONS) await continueCount(partition);
+      };
+      DBOS.registerWorkflow(countBatch, { name: 'community.member-count.continue' });
+      DBOS.registerWorkflow(
+        async () => {
+          await countBatch(0);
+        },
+        { name: 'community.member-count.upkeep' },
+      );
+      await context.client.applySchedules([
+        {
+          scheduleName: 'community.member-count.every-10-minutes',
+          workflowName: 'community.member-count.upkeep',
+          schedule: '*/10 * * * *',
+          queueName: 'maintenance',
+          cronTimezone: 'UTC',
+          automaticBackfill: false,
+        },
+      ]);
+      registerCommunityAccountErasureWork(context, ambient);
+      await registerDiscoveryWork(context, ambient);
+    },
+  };
+}
 
 /** A workflow performs at most twenty native pages. Continuations and periodic
  * recovery carry locators only; the durable owner frontier decides completion.

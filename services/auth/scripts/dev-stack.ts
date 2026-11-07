@@ -482,7 +482,6 @@ export async function assemble(options?: {
     { createAccess, accessActionCatalogue },
     { createNativeAccountBindings },
     { readConfig },
-    { createAccountManagementReadAccess },
   ] = await Promise.all([
     import('../src/index.ts'),
     import('../../kernel/src/http/kernel.ts'),
@@ -490,7 +489,6 @@ export async function assemble(options?: {
     import('../../kernel/src/access/index.ts'),
     import('../../kernel/src/access/native-account-bindings.ts'),
     import('../../kernel/src/server.ts'),
-    import('../../kernel/src/access/management-source.ts'),
   ]);
   const env = options?.env ?? (await kernelEnvironment());
   const config = readConfig(env);
@@ -548,7 +546,8 @@ export async function assemble(options?: {
     access: bindings.workflowPorts,
     siteActions: actions,
     ...(options?.recoveryDelivery ? { recoveryDelivery: options.recoveryDelivery } : {}),
-    accountManagementReads: createAccountManagementReadAccess({ pool: kernelPool, access }),
+    accountOperations: bindings.accountOperations,
+    accountManagementReads: bindings.accountManagementReads,
     // The local widget and verifier never call Cloudflare. Production composition is unchanged.
     turnstile: {
       secret: 'loopback-only',
@@ -799,6 +798,16 @@ async function serveHost() {
   if (kernel) console.log(`Kernel: ${origins.kernel}`);
 }
 
+export function webLaunchEnvironment(env: NodeJS.ProcessEnv): NodeJS.ProcessEnv {
+  const child: NodeJS.ProcessEnv = {
+    ...env,
+    CLOUDFLARE_VITE_FORCE_LOCAL: 'true',
+    CLOUDFLARE_CF_FETCH_ENABLED: 'false',
+  };
+  delete child.REZICS_TEST_RUNTIME;
+  return child;
+}
+
 async function launch(action: 'pages' | 'web', args: string[]) {
   const pages = action === 'pages';
   const website = await developmentWebsiteConfiguration();
@@ -820,7 +829,7 @@ async function launch(action: 'pages' | 'web', args: string[]) {
     {
       cwd: root,
       env: {
-        ...process.env,
+        ...(pages ? process.env : webLaunchEnvironment(process.env)),
         AUTH_ORIGIN: origins.native,
         ...developmentWebsiteBindings(keys, website),
         ...developmentMediaBindings(await kernelEnvironment(), keys),

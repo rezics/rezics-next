@@ -38,6 +38,7 @@ import { newId, partitionOf, routeOf } from '../../src/route/route.ts';
 import { GLOBAL_CONTEXT } from '../../src/semantic/definitions.ts';
 import { checkGrowth, openGrowthDatabase, seed, type GrowthDatabase, type Population } from '../support/growth.ts';
 import { trustedAccessPorts } from '../support/trusted-access.ts';
+import { testReceiptKeys } from '../support/receipt-keys.ts';
 import { dropTestDatabase } from '../support/drop-test-database.ts';
 
 const issuer = 'https://realm-participation.auth.test';
@@ -433,6 +434,7 @@ beforeAll(async () => {
     pool,
     routeKey,
     tokens,
+    receiptKeys: testReceiptKeys(),
     access: (config) => {
       installedAccessConfig = config;
       access = createAccess({
@@ -461,7 +463,7 @@ beforeAll(async () => {
     }),
   );
   if (!access) throw new Error('Kernel access was not installed');
-  membership = createRealmMembership({ clock: () => new Date(), pool, access });
+  membership = createRealmMembership({ clock: () => new Date(), deadlineNow: () => Date.now(), pool, access });
   roleReader = membership.roleReader;
   service = await createAuthService({
     database: authPool,
@@ -505,6 +507,7 @@ beforeAll(async () => {
       pool,
       client: workClient,
       env: { KERNEL_ROUTE_KEY: Buffer.from(routeKey).toString('base64url') },
+      receiptKeys: testReceiptKeys(),
     },
   );
   await workRuntime.launch();
@@ -541,7 +544,12 @@ test('Realm participation preparation uses the enclosing request deadline', asyn
       return false;
     },
   };
-  const check = createRealmParticipationCheck({ clock: () => new Date(), pool: {} as Pool, access });
+  const check = createRealmParticipationCheck({
+    clock: () => new Date(),
+    deadlineNow: () => Date.now(),
+    pool: {} as Pool,
+    access,
+  });
   const requestDeadline = Date.now() + budgetMs;
   const started = performance.now();
   await expect(
@@ -713,7 +721,12 @@ test.serial('native participation preparation uses one bounded connection and th
     const resource = { route, id: realmId };
     const observed: { action: string; at: string | null; client: AccessClient }[] = [];
     const checkedAccess = accessObservingTime(observed, singleAccess);
-    const check = createRealmParticipationCheck({ clock: () => new Date(), pool: singlePool, access: checkedAccess });
+    const check = createRealmParticipationCheck({
+      clock: () => new Date(),
+      deadlineNow: () => Date.now(),
+      pool: singlePool,
+      access: checkedAccess,
+    });
     let proof: RealmParticipationResult | undefined;
     let commandAt: string | undefined;
     let committed = false;
@@ -870,6 +883,7 @@ test.serial(
     const client = clientReplacingClockRead('1999-01-01 00:00:00+00');
     const observed: { action: string; at: string | null; client: AccessClient }[] = [];
     const allowed = await createRealmParticipationCheck({
+      deadlineNow: () => Date.now(),
       pool,
       access: accessObservingTime(observed),
       clock: () => fixed,
@@ -914,6 +928,7 @@ test.serial("inside a command both checks use the command's time", async () => {
         denied: () => new Error('Realm participation command denied'),
         async prepare(attempt) {
           const allowed = await createRealmParticipationCheck({
+            deadlineNow: () => Date.now(),
             pool,
             access: accessObservingTime(observed),
             clock: () => {

@@ -1,6 +1,6 @@
 import type { OperationalTransaction } from '../command/operational.ts';
 import { type CanonicalRawKey } from './canonical-source-store.ts';
-import { NativeCollectionWork } from './collection-source-work.ts';
+import { NativeCollectionWork } from './collection-native-work.ts';
 import type { NativeSourceIdentity, NativeSourceCustody } from './native-source-custody.ts';
 import { type CollectionKindPreparationLocator } from './collection-kind-work-admission.ts';
 export { COLLECTION_KIND_INPUT_BYTE_LIMIT, COLLECTION_KIND_INPUT_DECLARATION, COLLECTION_KIND_INPUT_QUANTUM, COLLECTION_KIND_INPUT_RAW_LIMIT, collectionKindInputWork, } from './collection-kind-input-bounds.ts';

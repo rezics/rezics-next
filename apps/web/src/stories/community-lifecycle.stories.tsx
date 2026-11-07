@@ -5,7 +5,7 @@ import { ContainerLifecycleControls } from '../community/container-lifecycle-con
 import type { ContainerLifecycleAdapter } from '../community/container-lifecycle';
 import { localizeHref } from '../paraglide/runtime.js';
 import { m } from '../paraglide/messages.js';
-import { SpacePage } from '../community/space-page';
+import { SpacePage } from '../session/community-application';
 import type { SpacePageData } from '../community/space';
 import { AppShell } from '../shell/shell';
 import space from '../kernel/recorded/space.json';

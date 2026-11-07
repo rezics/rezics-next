@@ -18,6 +18,7 @@ export declare function readRealmPresentationImages(deps: Readonly<{
     pool: Pool;
     access: Access;
     clock: () => Date;
+    deadlineNow?: () => number;
 }>, input: Readonly<{
     realmId: string;
     avatarMediaId: string | null;

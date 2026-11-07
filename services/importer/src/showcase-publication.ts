@@ -172,6 +172,15 @@ export class ShowcaseJournal implements BangumiCoverSourceJournal, BangumiPerson
       ) STRICT;
       CREATE INDEX IF NOT EXISTS showcase_action_decision_action
         ON showcase_action_decision(action_key,id);
+      CREATE TABLE IF NOT EXISTS showcase_adopt_generation (
+        identity TEXT PRIMARY KEY,
+        generation INTEGER NOT NULL
+      ) STRICT;
+      CREATE TABLE IF NOT EXISTS showcase_adopt_pending (
+        identity TEXT NOT NULL,
+        action_key TEXT NOT NULL,
+        PRIMARY KEY (identity, action_key)
+      ) STRICT;
     `);
     // Native fixture creates need their acknowledged UUID alongside the sealed action.
     const actionColumns = this.#db.query<{ name: string }, []>('PRAGMA table_info(showcase_action)').all();
@@ -339,6 +348,60 @@ export class ShowcaseJournal implements BangumiCoverSourceJournal, BangumiPerson
     );
   }
 
+  /** Pending adopt actions, bounded independently of command history. */
+  preparedAdoptActions(): JournalActionRow[] {
+    return this.#db
+      .query<JournalActionRow, [string, number]>(
+        "SELECT * FROM showcase_action WHERE state='prepared' AND action_key LIKE ? ORDER BY action_key LIMIT ?",
+      )
+      .all('adopt:%', showcaseLimits.candidates);
+  }
+
+  recordPendingAdopt(identity: string, actionKey: string): void {
+    this.#db
+      .query('INSERT OR IGNORE INTO showcase_adopt_pending(identity,action_key) VALUES(?,?)')
+      .run(identity, actionKey);
+  }
+
+  /** Identity-bound prepared adopt rows; other subjects and properties cannot hide them. */
+  pendingAdoptActions(identity: string): JournalActionRow[] {
+    return this.#db
+      .query<JournalActionRow, [string, number]>(
+        `SELECT a.action_key, a.body_digest, a.body_json, a.idempotency_key, a.state, a.error_code, a.result_id
+         FROM showcase_adopt_pending p
+         INNER JOIN showcase_action a ON a.action_key=p.action_key
+         WHERE p.identity=? AND a.state='prepared'
+         ORDER BY p.action_key
+         LIMIT ?`,
+      )
+      .all(identity, showcaseAdoptInvocationBound);
+  }
+
+  /** One bounded page of prepared adopt actions after `after`, for resumable previous-format discovery. */
+  preparedAdoptPage(after: string): JournalActionRow[] {
+    return this.#db
+      .query<JournalActionRow, [string, string, number]>(
+        "SELECT * FROM showcase_action WHERE state='prepared' AND action_key LIKE ? AND action_key > ? ORDER BY action_key LIMIT ?",
+      )
+      .all('adopt:%', after, showcaseAdoptInvocationBound);
+  }
+
+  adoptGeneration(identity: string): number {
+    return (
+      this.#db
+        .query<{ generation: number }, [string]>('SELECT generation FROM showcase_adopt_generation WHERE identity=?')
+        .get(identity)?.generation ?? 0
+    );
+  }
+
+  advanceAdoptGeneration(identity: string, generation: number): void {
+    this.#db
+      .query(
+        'INSERT INTO showcase_adopt_generation(identity,generation) VALUES(?,?) ON CONFLICT(identity) DO UPDATE SET generation=excluded.generation',
+      )
+      .run(identity, generation);
+  }
+
   /** Recorded replacements of refused actions, oldest first; each names the refusal it superseded. */
   actionDecisions(actionKey: string): ShowcaseActionDecision[] {
     return this.#db
@@ -355,17 +418,23 @@ export class ShowcaseJournal implements BangumiCoverSourceJournal, BangumiPerson
   }
 
   acknowledgeAction(actionKey: string, resultId?: string): void {
-    this.#db
-      .query(
-        "UPDATE showcase_action SET state='acknowledged',error_code=NULL,result_id=COALESCE(result_id,?) WHERE action_key=?",
-      )
-      .run(resultId ?? null, actionKey);
+    this.#db.transaction(() => {
+      this.#db
+        .query(
+          "UPDATE showcase_action SET state='acknowledged',error_code=NULL,result_id=COALESCE(result_id,?) WHERE action_key=?",
+        )
+        .run(resultId ?? null, actionKey);
+      this.#db.query('DELETE FROM showcase_adopt_pending WHERE action_key=?').run(actionKey);
+    })();
   }
 
   refuseAction(actionKey: string, errorCode: string): void {
-    this.#db
-      .query("UPDATE showcase_action SET state='refused',error_code=? WHERE action_key=?")
-      .run(errorCode, actionKey);
+    this.#db.transaction(() => {
+      this.#db
+        .query("UPDATE showcase_action SET state='refused',error_code=? WHERE action_key=?")
+        .run(errorCode, actionKey);
+      this.#db.query('DELETE FROM showcase_adopt_pending WHERE action_key=?').run(actionKey);
+    })();
   }
 
   sealIntent(manifest: ShowcaseManifest): void {
@@ -822,6 +891,218 @@ function actionKey(kind: 'accept' | 'adopt', identity: string, digest: string): 
 
 function actionIdempotencyKey(action: string, body: unknown): string {
   return showcaseDigest({ action, body });
+}
+
+type AdoptBody = {
+  context: string;
+  property: string;
+  mode: 'replace';
+  expected_head: number | null;
+  selection: { candidate: string; rank: 'normal' | 'preferred' }[];
+};
+
+function sealedAdoptBody(value: unknown): AdoptBody | null {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
+  const body = value as Record<string, unknown>;
+  if (
+    body.mode !== 'replace' ||
+    typeof body.property !== 'string' ||
+    typeof body.context !== 'string' ||
+    !Array.isArray(body.selection)
+  )
+    return null;
+  const expected_head =
+    typeof body.expected_head === 'number' && Number.isSafeInteger(body.expected_head) ? body.expected_head : null;
+  const selection = body.selection.flatMap((entry) => {
+    if (!entry || typeof entry !== 'object' || Array.isArray(entry)) return [];
+    const item = entry as Record<string, unknown>;
+    if (typeof item.candidate !== 'string' || (item.rank !== 'normal' && item.rank !== 'preferred')) return [];
+    return [{ candidate: item.candidate, rank: item.rank as 'normal' | 'preferred' }];
+  });
+  return { context: body.context, property: body.property, mode: 'replace', expected_head, selection };
+}
+
+function generationAdoptKey(subjectId: string, property: string, intent: string, generation: number): string {
+  return actionKey('adopt', `${subjectId}:${property}`, showcaseDigest({ intent, generation }));
+}
+
+function legacyAdoptKey(subjectId: string, property: string, intent: string): string {
+  return actionKey('adopt', `${subjectId}:${property}`, showcaseDigest({ intent }));
+}
+
+function previousBodyAdoptKey(subjectId: string, property: string, intent: string, body: unknown): string {
+  return actionKey('adopt', `${subjectId}:${property}`, showcaseDigest({ intent, body }));
+}
+
+function adoptIdentity(subjectId: string, property: string, intent: string): string {
+  return `${subjectId}:${property}:${intent}`;
+}
+
+export const showcaseAdoptInvocationBound = 32;
+
+function previousFormatPreparedKeys(
+  journal: ShowcaseJournal,
+  subjectId: string,
+  property: string,
+  intent: string,
+  identity: string,
+): string[] {
+  const found: string[] = [];
+  const consider = (prior: JournalActionRow) => {
+    const body = JSON.parse(prior.body_json) as unknown;
+    if (prior.action_key === previousBodyAdoptKey(subjectId, property, intent, body)) found.push(prior.action_key);
+  };
+  for (const prior of journal.pendingAdoptActions(identity)) consider(prior);
+  if (found.length) return found;
+  let after = '';
+  for (;;) {
+    const rows = journal.preparedAdoptPage(after);
+    if (!rows.length) break;
+    for (const prior of rows) consider(prior);
+    if (found.length) break;
+    if (rows.length < showcaseAdoptInvocationBound) break;
+    after = rows.at(-1)!.action_key;
+  }
+  return found;
+}
+
+/** Identity-bound resume keys: pending originals first, then previous-format, then a bounded generation window. */
+export function adoptResumeKeys(
+  journal: ShowcaseJournal,
+  subjectId: string,
+  property: string,
+  intent: string,
+  planned: unknown,
+): string[] {
+  const identity = adoptIdentity(subjectId, property, intent);
+  const keys = [
+    previousBodyAdoptKey(subjectId, property, intent, planned),
+    ...journal.pendingAdoptActions(identity).map((row) => row.action_key),
+    ...previousFormatPreparedKeys(journal, subjectId, property, intent, identity),
+    legacyAdoptKey(subjectId, property, intent),
+  ];
+  for (let generation = 0; generation < showcaseAdoptInvocationBound; generation += 1)
+    keys.push(generationAdoptKey(subjectId, property, intent, generation));
+  const recorded = journal.adoptGeneration(identity);
+  if (recorded > showcaseAdoptInvocationBound) {
+    const from = Math.max(showcaseAdoptInvocationBound, recorded - showcaseAdoptInvocationBound);
+    for (let generation = from; generation < recorded; generation += 1)
+      keys.push(generationAdoptKey(subjectId, property, intent, generation));
+  }
+  return [...new Set(keys)];
+}
+
+function nextFreshAdoptAction(
+  journal: ShowcaseJournal,
+  subjectId: string,
+  property: string,
+  intent: string,
+): string | null {
+  const identity = adoptIdentity(subjectId, property, intent);
+  for (const candidate of adoptResumeKeys(journal, subjectId, property, intent, { identity })) {
+    const prior = journal.action(candidate);
+    if (prior?.state === 'prepared') return candidate;
+  }
+  for (let generation = 0; generation < showcaseAdoptInvocationBound; generation += 1) {
+    const action = generationAdoptKey(subjectId, property, intent, generation);
+    if (!journal.action(action)) return action;
+  }
+  const recorded = journal.adoptGeneration(identity);
+  const start = Math.max(showcaseAdoptInvocationBound, recorded);
+  for (let generation = showcaseAdoptInvocationBound; generation < start; generation += 1) {
+    const action = generationAdoptKey(subjectId, property, intent, generation);
+    if (journal.action(action)?.state === 'prepared') return action;
+  }
+  let generation = start;
+  for (let step = 0; step < showcaseAdoptInvocationBound; step += 1) {
+    const action = generationAdoptKey(subjectId, property, intent, generation);
+    const prior = journal.action(action);
+    if (prior?.state === 'prepared') return action;
+    if (!prior) {
+      journal.advanceAdoptGeneration(identity, generation + 1);
+      return action;
+    }
+    generation += 1;
+  }
+  return null;
+}
+
+export async function sendDurableAdopt(input: {
+  journal: ShowcaseJournal;
+  review: Pick<ShowcaseReviewPort, 'adoptReviewedCandidates'>;
+  subjectId: string;
+  intent: string;
+  planned: AdoptBody;
+  current: { selection: readonly { candidate: string; rank: string }[] } | null;
+}): Promise<
+  | { status: 'complete'; snapshot?: AdoptionSnapshot }
+  | { status: 'refused'; code: string }
+  | { status: 'interrupted'; code: string }
+  | { status: 'bound' }
+> {
+  const identity = adoptIdentity(input.subjectId, input.planned.property, input.intent);
+  for (let step = 0; step < showcaseAdoptInvocationBound; step += 1) {
+    const keys = adoptResumeKeys(input.journal, input.subjectId, input.planned.property, input.intent, input.planned);
+    let action = '';
+    let body = input.planned;
+    let found = false;
+    for (const candidate of keys) {
+      const prior = input.journal.action(candidate);
+      if (prior?.state !== 'prepared') continue;
+      const sealed = sealedAdoptBody(JSON.parse(prior.body_json));
+      if (!sealed) throw new TypeError('Prepared showcase adopt body is invalid');
+      action = candidate;
+      body = sealed;
+      found = true;
+      break;
+    }
+    if (!found) {
+      for (const candidate of keys) {
+        const prior = input.journal.action(candidate);
+        if (prior?.state === 'refused' && permanentReviewRefusal(prior.error_code))
+          return { status: 'refused', code: prior.error_code! };
+        if (prior?.state !== 'acknowledged') continue;
+        const sealed = sealedAdoptBody(JSON.parse(prior.body_json));
+        if (
+          sealed &&
+          sameAdoptionSelection(sealed.selection, input.planned.selection) &&
+          input.current &&
+          sameAdoptionSelection(input.current.selection, input.planned.selection)
+        )
+          return { status: 'complete' };
+      }
+      if (input.current && sameAdoptionSelection(input.current.selection, input.planned.selection))
+        return { status: 'complete' };
+      const fresh = nextFreshAdoptAction(input.journal, input.subjectId, input.planned.property, input.intent);
+      if (fresh) {
+        action = fresh;
+        body = input.planned;
+        found = true;
+      }
+    }
+    if (!found) return { status: 'bound' };
+    input.journal.recordPendingAdopt(identity, action);
+    const idempotencyKey = actionIdempotencyKey(action, body);
+    const sealedBody = input.journal.prepareAction(action, body, idempotencyKey) as AdoptBody;
+    const sealedKey = input.journal.action(action)!.idempotency_key;
+    try {
+      const receipt = await input.review.adoptReviewedCandidates(input.subjectId, sealedBody, sealedKey);
+      input.journal.acknowledgeAction(action);
+      if (!sameAdoptionSelection(body.selection, input.planned.selection)) continue;
+      return {
+        status: 'complete',
+        snapshot: { head: receipt.adoption.head, selection: receipt.adoption.selection },
+      };
+    } catch (error) {
+      const code = errorCode(error);
+      if (permanentReviewRefusal(code)) {
+        input.journal.refuseAction(action, code);
+        return { status: 'refused', code };
+      }
+      return { status: 'interrupted', code };
+    }
+  }
+  return { status: 'bound' };
 }
 
 function errorCode(error: unknown): string {
@@ -2551,37 +2832,23 @@ export async function publishShowcase(input: {
         .sort(([left], [right]) => left.localeCompare(right))
         .map(([candidate, rank]) => ({ candidate, rank })),
     };
-    const action = actionKey('adopt', `${childId}:skos:broader`, showcaseDigest({ intent: manifest.digest, body }));
-    const idempotencyKey = actionIdempotencyKey(action, body);
-    const priorAction = input.journal.action(action);
-    if (priorAction?.state === 'refused' && permanentReviewRefusal(priorAction.error_code)) {
-      omissions.push({ provider: 'vndb', sourceKey: group.record.sourceKey, code: priorAction.error_code! });
+    const adopted = await sendDurableAdopt({
+      journal: input.journal,
+      review: input.review,
+      subjectId: childId,
+      intent: manifest.digest,
+      planned: body,
+      current: currentAdoption,
+    });
+    if (adopted.status !== 'complete') {
+      const code = adopted.status === 'bound' ? 'adoption-generation-bound' : adopted.code;
+      omissions.push({ provider: 'vndb', sourceKey: group.record.sourceKey, code });
       for (const { binding, assertion } of group.edges)
-        setParentOutcome(binding, 'withheld', assertion.candidateId, priorAction.error_code!);
+        setParentOutcome(binding, 'withheld', assertion.candidateId, code);
       withheldParentTags.add(refresh?.tagId ?? group.edges[0]?.binding.child ?? '');
       continue;
     }
-    if (!currentAdoption || !sameAdoptionSelection(currentAdoption.selection, body.selection)) {
-      const sealedBody = input.journal.prepareAction(action, body, idempotencyKey) as typeof body;
-      const sealedKey = input.journal.action(action)!.idempotency_key;
-      try {
-        const receipt = await input.review.adoptReviewedCandidates(childId, sealedBody, sealedKey);
-        adoptionSnapshots.set(adoptionKey, {
-          head: receipt.adoption.head,
-          selection: receipt.adoption.selection,
-        });
-        input.journal.acknowledgeAction(action);
-      } catch (error) {
-        input.journal.refuseAction(action, errorCode(error));
-        omissions.push({ provider: 'vndb', sourceKey: group.record.sourceKey, code: errorCode(error) });
-        for (const { binding, assertion } of group.edges)
-          setParentOutcome(binding, 'withheld', assertion.candidateId, errorCode(error));
-        withheldParentTags.add(refresh?.tagId ?? group.edges[0]?.binding.child ?? '');
-        continue;
-      }
-    } else if (priorAction && priorAction.state !== 'acknowledged') {
-      input.journal.acknowledgeAction(action);
-    }
+    if (adopted.snapshot) adoptionSnapshots.set(adoptionKey, adopted.snapshot);
     pageCache.delete(groupKey(childId, 'skos:broader'));
     publicSubjects.delete(childId);
     for (const edge of currentEdges) {
@@ -2901,37 +3168,27 @@ export async function publishShowcase(input: {
         .sort(([left], [right]) => left.localeCompare(right))
         .map(([candidate, rank]) => ({ candidate, rank })),
     };
-    const action = actionKey('adopt', `${id}:${group.property}`, showcaseDigest({ intent: manifest.digest, body }));
-    const idempotencyKey = actionIdempotencyKey(action, body);
-    const priorAction = input.journal.action(action);
-    if (priorAction?.state === 'refused' && permanentReviewRefusal(priorAction.error_code)) {
+    const adopted = await sendDurableAdopt({
+      journal: input.journal,
+      review: input.review,
+      subjectId: id,
+      intent: manifest.digest,
+      planned: body,
+      current: currentAdoption,
+    });
+    if (adopted.status !== 'complete') {
       omissions.push({
         provider: group.record.provider,
         sourceKey: group.record.sourceKey,
-        code: priorAction.error_code!,
+        code: adopted.status === 'bound' ? 'adoption-generation-bound' : adopted.code,
       });
       if (group.property !== 'schema:image') stoppedGroups.add(groupKey(id, group.property));
       continue;
     }
-    if (currentAdoption && sameAdoptionSelection(currentAdoption.selection, body.selection)) {
-      if (priorAction && priorAction.state !== 'acknowledged') input.journal.acknowledgeAction(action);
-      continue;
-    }
-    const sealedBody = input.journal.prepareAction(action, body, idempotencyKey) as typeof body;
-    const sealedKey = input.journal.action(action)!.idempotency_key;
-    try {
-      const receipt = await input.review.adoptReviewedCandidates(id, sealedBody, sealedKey);
-      adoptionSnapshots.set(key, {
-        head: receipt.adoption.head,
-        selection: receipt.adoption.selection,
-      });
-      input.journal.acknowledgeAction(action);
+    if (adopted.snapshot) {
+      adoptionSnapshots.set(key, adopted.snapshot);
       pageCache.delete(groupKey(id, group.property));
       publicSubjects.delete(id);
-    } catch (error) {
-      input.journal.refuseAction(action, errorCode(error));
-      omissions.push({ provider: group.record.provider, sourceKey: group.record.sourceKey, code: errorCode(error) });
-      if (group.property !== 'schema:image') stoppedGroups.add(groupKey(id, group.property));
     }
   }
 

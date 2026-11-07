@@ -22,8 +22,8 @@ authenticated Collection detail read before showing editable metadata. It uses t
 visibility and CAS revision. Saving sends the existing `collection.update` command with title and description while
 preserving visibility; it does not read or rewrite the private rule. The saved rule keeps its accepted immutable
 release. Rule editing remains at `/collections/{id}/rule` under its own current owner checks. Publication stays a
-separate owner action: `SavedQueryPublicationAction` opens `/collections/{id}/publish` without rewriting metadata
-or the private rule.
+separate owner action on the saved-results header: `SavedQueryPublicationAction` opens `/collections/{id}/publish`
+without rewriting metadata or the private rule.
 
 Delete requires a review of the Collection title, exact ID and current revision. Confirmation sends the existing
 `collection.delete` command. A confirmed delete returns to the same bounded directory page and removes only the
@@ -41,3 +41,7 @@ The Web binding uses the installed Collection detail, metadata update and delete
 and writes. Commerce retains native authorization, revision/CAS and deletion semantics. Its remaining Web-facing
 producer gaps are complete paged dynamic owner metadata, dynamic member preparation and their required native outcome
 proof; Web adds no endpoint or successful fixture for those gaps.
+
+The new-rule route composes Library's `SavedQueryEditor` with Search's `SavedQueryConditionInput` adapter.
+The carried private selection still enters the existing owner-bound rule editor; the injected presentation neither
+owns the handoff nor sends a command. Settings and Inbox Library contracts remain independent of this binding.

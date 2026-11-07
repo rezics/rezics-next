@@ -100,6 +100,33 @@ test('an empty worker-ended prefix is not fingerprinted and does not open an inc
   }
 }, 15_000);
 
+test('typing settlements on several tasks open no shared incident', () => {
+  const h = harness();
+  try {
+    const inbox = new SqliteManagerInbox(h.store.db, h.settings.integration.inboxDirectory);
+    for (const reason of [
+      'Worktree content changed after the last check-host typecheck.',
+      'Last check-host run failed its typecheck.',
+    ])
+      for (let index = 0; index < 3; index++) {
+        const task = h.tasks.dispatch(h.briefFile);
+        const attempt = h.store.nextAttempt({ taskId: task.id, attempt: 0 }, (number) => ({
+          ...incidentAttempt(task.id, number, null),
+          failureKind: 'tool',
+          exitCode: 0,
+          result: `${reason} Settlement records a typing failure with that run's log, so this attempt is retried instead of landing.\n(check log unavailable)`,
+        }));
+        expect(recordToolBlockerFailure(h.store, h.store.task(task.id), attempt, h.settings, inbox)).toEqual({
+          incident: null,
+          opened: false,
+        });
+      }
+    expect(listOpenToolIncidents(h.store)).toEqual([]);
+  } finally {
+    h.dispose();
+  }
+}, 15_000);
+
 test('a failed notice is recovered through the SQLite inbox without reopening the incident or probe', async () => {
   const h = harness(),
     now = Date.now(),

@@ -4,6 +4,7 @@ import { readFileSync, readdirSync, statSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { workerLocalContainerError } from '../../../scripts/stack-run.ts';
+import { cgroupArgs, containerMemoryArgs } from './search.ts';
 
 const directory = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 export const POSTGRES_IMAGE = 'postgres:19rc1@sha256:b3cb7405059fd06f9ebae4aad4780b3788dfdd2acef1ac248ad9d56ced8abb06';
@@ -231,6 +232,43 @@ function docker(args: string[]): string {
   return command('docker', args);
 }
 
+const boundedPostgres = [
+  '-c',
+  'shared_buffers=32MB',
+  '-c',
+  'work_mem=2MB',
+  '-c',
+  'maintenance_work_mem=32MB',
+  '-c',
+  'huge_pages=off',
+  '-c',
+  'max_connections=50',
+] as const;
+
+/** Walk stacks cap anonymous memory and volume file cache so Postgres cannot fill the host run slice. */
+export function databaseRunArgs(env: NodeJS.ProcessEnv = process.env): string[] {
+  return [
+    'run',
+    '-d',
+    ...cgroupArgs(env),
+    ...containerMemoryArgs(env.KERNEL_DATABASE_MEMORY, 'KERNEL_DATABASE_MEMORY'),
+    '--name',
+    container,
+    '-p',
+    `127.0.0.1:${port}:5432`,
+    '-v',
+    `${volume}:/var/lib/postgresql`,
+    '-e',
+    'POSTGRES_USER=rezics',
+    '-e',
+    'POSTGRES_PASSWORD=rezics',
+    '-e',
+    'POSTGRES_DB=rezics',
+    POSTGRES_IMAGE,
+    ...(env.KERNEL_DATABASE_BOUNDED === '1' ? [...boundedPostgres] : []),
+  ];
+}
+
 async function up(freshDatabase = false): Promise<void> {
   const refusal = await workerLocalContainerError(process.env, process.cwd());
   if (refusal) throw new Error(refusal);
@@ -240,23 +278,7 @@ async function up(freshDatabase = false): Promise<void> {
     if (running !== 'true') docker(['start', container]);
   } else {
     docker(['volume', 'create', volume]);
-    docker([
-      'run',
-      '-d',
-      '--name',
-      container,
-      '-p',
-      `127.0.0.1:${port}:5432`,
-      '-v',
-      `${volume}:/var/lib/postgresql`,
-      '-e',
-      'POSTGRES_USER=rezics',
-      '-e',
-      'POSTGRES_PASSWORD=rezics',
-      '-e',
-      'POSTGRES_DB=rezics',
-      POSTGRES_IMAGE,
-    ]);
+    docker(databaseRunArgs());
   }
   const url = databaseUrl(port);
   try {

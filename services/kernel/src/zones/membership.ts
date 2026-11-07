@@ -12,13 +12,13 @@ import {
   type CollectionSourceEvidence,
 } from '../library/collection-source.ts';
 import type { WorkAllowance, WorkDimensions, WorkReceipt } from '../library/contract/work-dimensions.ts';
-import { CollectionSourceLedger } from '../library/collection-source-work.ts';
 import {
   readCanonicalSourceState,
   seekCanonicalSourceGroup,
   type CanonicalAllowance,
   type CanonicalWork,
 } from '../library/canonical-source-store.ts';
+import { createZoneCollectionWork, type ZoneCollectionWorkHost } from './collection-port.ts';
 import { readNativeCollectionScopeIdentity } from '../library/collection-source-native.ts';
 import type { Access, Actor } from '../request/access.ts';
 import { routeOf } from '../route/route.ts';
@@ -86,8 +86,9 @@ export function compareZoneKeys(order: ZoneOrder, a: ZoneKey, b: ZoneKey): numbe
 
 /** One request reservation, shared by discovery, aliases, rejected/lookahead/reread keys and final use.
  * Native metadata is an independent axis; public ordered cost is a breakdown of the same receipt.
+ * The Library ledger is constructed through the Zone collection port at call time, never at module load.
  */
-class ZoneWorkLedger extends CollectionSourceLedger {
+class ZoneWorkLedger {
   private selected = 'target';
   private structuralKeys = 0;
   private ordered = zeroScopeWork();
@@ -95,6 +96,13 @@ class ZoneWorkLedger extends CollectionSourceLedger {
     string,
     { limit: WorkDimensions; used: WorkDimensions; engine: number; structural: boolean }
   >();
+  constructor(private readonly host: ZoneCollectionWorkHost) {}
+  get initial(): WorkAllowance {
+    return this.host.initial;
+  }
+  get deadline(): number {
+    return this.host.deadline;
+  }
   select(key: string, order: ZoneOrder, size: number): void {
     this.selected = key;
     if (this.reads.has(key)) return;
@@ -116,8 +124,8 @@ class ZoneWorkLedger extends CollectionSourceLedger {
             },
     });
   }
-  override allowance(): WorkAllowance {
-    let root = super.allowance();
+  allowance(): WorkAllowance {
+    let root = this.host.remaining();
     const read = this.reads.get(this.selected);
     if (!read) return root;
     if (read.structural)
@@ -145,16 +153,36 @@ class ZoneWorkLedger extends CollectionSourceLedger {
       ) as unknown as WorkDimensions,
     };
   }
-  override take(receipt: WorkReceipt): void {
+  take(receipt: WorkReceipt): void {
     const read = this.reads.get(this.selected);
     if (scopeWorkAxes.some((axis) => receipt.used[axis] > this.allowance().remaining[axis])) return zoneUnavailable();
-    super.take(receipt);
+    this.host.consume(receipt);
     if (read?.structural) this.structuralKeys += receipt.used.candidateKeys;
     else if (read)
       for (const axis of scopeWorkAxes)
         this.ordered = { ...this.ordered, [axis]: this.ordered[axis] + receipt.used[axis] };
     if (read)
       for (const axis of scopeWorkAxes) read.used = { ...read.used, [axis]: read.used[axis] + receipt.used[axis] };
+  }
+  async run<T extends { work: WorkReceipt }>(call: (allowance: WorkAllowance) => Promise<T>): Promise<T> {
+    try {
+      const result = await call(this.allowance());
+      this.take(result.work);
+      return result;
+    } catch (error) {
+      if (error instanceof Error && 'work' in error) {
+        const receipt = error.work;
+        if (this.host.isReceipt(receipt)) this.take(receipt);
+      }
+      throw error;
+    }
+  }
+  bounded<T>(
+    cost: Partial<WorkDimensions>,
+    operation: () => Promise<T>,
+    actual?: (result: T) => Partial<WorkDimensions>,
+  ): Promise<T> {
+    return this.host.bounded(this.allowance(), cost, operation, actual, (receipt) => this.take(receipt));
   }
   orderedAvailable(): boolean {
     return (this.reads.get(this.selected)?.engine ?? 0) <= 4;
@@ -177,17 +205,19 @@ export function zoneWork(deadline: number, orderedSlots: readonly number[] = [])
     ? Math.min(816, orderedSlots.reduce((sum, size) => sum + Math.min(600, 6 * size + 3), 0) + 256)
     : 256;
   const ledger = new (ZoneWork())(
-    scopeAllowance(candidates, crypto.randomUUID(), {
-      candidateKeys: candidates,
-      nativeRows: 65536,
-      identityMetadataRows: 16384,
-      emptySeeks: 256,
-      nativePoints: orderedSlots.length ? 6784 : 4096,
-      witnessKeys: 8192,
-      statements: 8192,
-      bytes: 4 * 1024 * 1024,
-    }),
-    deadline,
+    createZoneCollectionWork(
+      scopeAllowance(candidates, crypto.randomUUID(), {
+        candidateKeys: candidates,
+        nativeRows: 65536,
+        identityMetadataRows: 16384,
+        emptySeeks: 256,
+        nativePoints: orderedSlots.length ? 6784 : 4096,
+        witnessKeys: 8192,
+        statements: 8192,
+        bytes: 4 * 1024 * 1024,
+      }),
+      deadline,
+    ),
   );
   ledger.select('target', 'id', 1);
   return ledger;

@@ -4,7 +4,8 @@ import { type Access } from '../request/access.ts';
 import type { KeyRing } from '../tokens/seal.ts';
 import type { WorkClient } from '../work/client.ts';
 import type { definitionRoutes } from '../semantic/http/definitions.ts';
-export type CommunityRouteDependencies = {
+import type { CommunityAmbient } from './ambient.ts';
+export type CommunityRouteDependencies = CommunityAmbient & {
     pool: Pool;
     routeKey: Uint8Array;
     clock: () => Date;

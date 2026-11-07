@@ -5,11 +5,16 @@ import { tmpdir } from 'node:os';
 import { dirname, join, relative, resolve, sep, isAbsolute } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { expect, test } from 'bun:test';
-import { createServer as createViteServer } from 'vite';
+import { createServer as createViteServer, type Plugin, type ViteDevServer } from 'vite';
 import { resolveWebViteConfig } from './support/vite-config';
 import { shouldGenerateLocalization } from '../vite.config.ts';
 import {
+  bindViteDepCacheAlign,
+  elysiaTypeboxLiveModuleCode,
   viteEnvironmentDepHashes,
+  webViteClientOptimizeDepsFor,
+  webViteTypeboxWorkerGraph,
+  webViteWalkClientOptimizeDeps,
   webViteWarmSsrEnvName,
   webViteWorkerSsrOptimizeDeps,
   webViteWorkerSsrResolve,
@@ -19,6 +24,7 @@ const appRoot = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const workspaceRoot = resolve(appRoot, '../..');
 const workerInclude = [...webViteWorkerSsrOptimizeDeps.include];
 const workerSelectorImport = 'use-sync-external-store/shim/with-selector';
+const typeboxGraph = webViteTypeboxWorkerGraph;
 
 function pluginNames(config: Awaited<ReturnType<typeof resolveWebViteConfig>>): string[] {
   return (config.plugins ?? [])
@@ -81,6 +87,17 @@ test('test Worker bindings are startup-only and production has no fixture header
     if (previousBindings === undefined) delete process.env.WEB_TEST_WORKER_BINDINGS;
     else process.env.WEB_TEST_WORKER_BINDINGS = previousBindings;
   }
+});
+
+test('the dep-cache align hook is a Vite Plugin configureServer', () => {
+  const plugin: Plugin = {
+    name: 'web-vite-dep-cache-align',
+    enforce: 'pre',
+    configureServer(server: ViteDevServer) {
+      return bindViteDepCacheAlign('/cache', server.environments);
+    },
+  };
+  expect(plugin.enforce).toBe('pre');
 });
 
 async function makeDirectoryOutsideAllow(allow: readonly string[]): Promise<string> {
@@ -231,6 +248,27 @@ test('WEB_VITE_CACHE_DIR selects the host-local optimizeDeps cache and allows re
   }
 }, 30_000);
 
+test('a walk stack compiles the visited client page on demand instead of crawling every route', async () => {
+  const previousSlot = process.env.REZICS_WALK_STACK_SLOT;
+  const previousCache = process.env.WEB_VITE_CACHE_DIR;
+  process.env.REZICS_WALK_STACK_SLOT = '2';
+  delete process.env.WEB_VITE_CACHE_DIR;
+  try {
+    expect(webViteClientOptimizeDepsFor({ REZICS_WALK_STACK_SLOT: '2' })).toEqual(webViteWalkClientOptimizeDeps);
+    expect(webViteWalkClientOptimizeDeps.holdUntilCrawlEnd).toBe(false);
+    expect(webViteWalkClientOptimizeDeps.entries).toEqual([]);
+    const config = await resolveWebViteConfig({ command: 'serve', mode: 'development' }, appRoot);
+    expect(config.optimizeDeps?.holdUntilCrawlEnd).toBe(false);
+    expect(config.optimizeDeps?.entries).toEqual([]);
+    expect(config.cacheDir).toBe(resolve(workspaceRoot, '.temp/web-vite', '2'));
+  } finally {
+    if (previousSlot === undefined) delete process.env.REZICS_WALK_STACK_SLOT;
+    else process.env.REZICS_WALK_STACK_SLOT = previousSlot;
+    if (previousCache === undefined) delete process.env.WEB_VITE_CACHE_DIR;
+    else process.env.WEB_VITE_CACHE_DIR = previousCache;
+  }
+}, 30_000);
+
 test('SSR warm pre-bundles Worker includes without the Cloudflare plugin or worktree source', async () => {
   const previous = process.env[webViteWarmSsrEnvName];
   process.env[webViteWarmSsrEnvName] = '1';
@@ -239,6 +277,16 @@ test('SSR warm pre-bundles Worker includes without the Cloudflare plugin or work
     expect(config.environments?.ssr?.optimizeDeps?.noDiscovery).toBe(true);
     expect(config.environments?.ssr?.optimizeDeps?.include).toEqual([...webViteWorkerSsrOptimizeDeps.include]);
     expect(config.environments?.ssr?.resolve?.conditions).toEqual([...webViteWorkerSsrResolve.conditions]);
+    const aliases = config.environments?.ssr?.resolve?.alias;
+    const typeboxAlias = Array.isArray(aliases)
+      ? aliases.find(
+          (entry) =>
+            entry && typeof entry === 'object' && 'find' in entry && entry.find === typeboxGraph.first.specifier,
+        )
+      : undefined;
+    expect(typeboxAlias && 'replacement' in typeboxAlias ? typeboxAlias.replacement : undefined).toBe(
+      typeboxGraph.first.resolved,
+    );
     expect(config.ssr).toMatchObject({ target: 'webworker', noExternal: true });
     const plugins = (config.plugins ?? []).flatMap((plugin) => (Array.isArray(plugin) ? plugin : [plugin]));
     expect(
@@ -319,6 +367,28 @@ test('Vite serves resolved workspace dependencies while keeping files outside it
   }
 });
 
+test('the Worker TypeBox stubs load live ESM from the installed Elysia files', async () => {
+  const config = await resolveWebViteConfig({ command: 'serve', mode: 'test' }, appRoot);
+  const plugins = (config.plugins ?? []).flatMap((plugin) => (Array.isArray(plugin) ? plugin : [plugin]));
+  const typebox = plugins.find(
+    (plugin) =>
+      plugin !== null && typeof plugin === 'object' && 'name' in plugin && plugin.name === 'web-worker-typebox-esm',
+  ) as
+    | {
+        applyToEnvironment?: (environment: { name: string }) => boolean;
+        load?: ((id: string) => unknown) | { handler: (id: string) => unknown };
+      }
+    | undefined;
+  const load = typeof typebox?.load === 'function' ? typebox.load : typebox?.load?.handler;
+  expect(typebox).toBeDefined();
+  expect(typebox?.applyToEnvironment?.({ name: 'ssr' })).toBe(true);
+  expect(typebox?.applyToEnvironment?.({ name: 'client' })).toBe(false);
+  const rewritten = load?.(typeboxGraph.first.importer) as { code?: string } | string | undefined;
+  const code = typeof rewritten === 'string' ? rewritten : rewritten?.code;
+  expect(code).toBe(elysiaTypeboxLiveModuleCode(typeboxGraph.first.importer));
+  expect(code).toContain('typebox-type-live.mjs');
+});
+
 test('the Worker selector dependency resolves to ESM while the client keeps the package implementation', async () => {
   const config = await resolveWebViteConfig({ command: 'serve', mode: 'test' }, appRoot);
   const plugins = (config.plugins ?? []).flatMap((plugin) => (Array.isArray(plugin) ? plugin : [plugin]));
@@ -348,9 +418,15 @@ test('SSR optimizeDeps keeps explicit Worker include, noDiscovery, calendar excl
       '-e',
       `
         import assert from 'node:assert/strict';
+        import { resolve } from 'node:path';
         import { resolveConfig } from 'vite';
         const workerInclude = ${JSON.stringify(workerInclude)};
         const calendar = ['react-day-picker', 'date-fns', '@date-fns/tz'];
+        const typebox = ${JSON.stringify({
+          specifier: typeboxGraph.first.specifier,
+          importer: typeboxGraph.first.importer,
+          resolved: typeboxGraph.first.resolved,
+        })};
         for (const command of ['serve', 'build']) {
           const config = await resolveConfig({ logLevel: 'silent' }, command, 'development');
           const targets = [['ssr', config.ssr.optimizeDeps]];
@@ -375,6 +451,10 @@ test('SSR optimizeDeps keeps explicit Worker include, noDiscovery, calendar excl
               (optimizeDeps.include ?? []).includes('react-dom/server.edge'),
               command + ':' + name + ':worker-server-entry',
             );
+            assert.ok(
+              (optimizeDeps.include ?? []).includes(typebox.specifier),
+              command + ':' + name + ':typebox-export',
+            );
             for (const pkg of ['react', 'react-dom', 'react-dom/server'])
               assert.equal(
                 (optimizeDeps.exclude ?? []).includes(pkg),
@@ -390,19 +470,32 @@ test('SSR optimizeDeps keeps explicit Worker include, noDiscovery, calendar excl
             if (name === 'client') continue;
             resolvers.push([name, environment.resolve]);
           }
-          for (const [name, resolve] of resolvers) {
-            const entries = Array.isArray(resolve.alias) ? resolve.alias : [];
+          for (const [name, resolveAlias] of resolvers) {
+            const entries = Array.isArray(resolveAlias.alias) ? resolveAlias.alias : [];
             const mapped = entries.find((entry) => entry && entry.find === 'urlpattern-polyfill');
             assert.ok(mapped, command + ':' + name + ':urlpattern-polyfill alias');
             assert.equal(String(mapped.replacement).endsWith('index.cjs'), false, command + ':' + name + ':esm');
             assert.ok(String(mapped.replacement).endsWith('index.js'), command + ':' + name + ':' + mapped.replacement);
+            const typeboxAlias = entries.find((entry) => entry && entry.find === typebox.specifier);
+            assert.ok(typeboxAlias, command + ':' + name + ':typebox-alias');
+            assert.equal(typeboxAlias.replacement, typebox.resolved, command + ':' + name + ':typebox-export-file');
+            assert.equal(
+              String(typeboxAlias.replacement).includes('elysia/dist/type/typebox/'),
+              false,
+              command + ':' + name + ':not-relative-elysia',
+            );
             if (name !== 'root')
               assert.equal(
-                (resolve.conditions ?? [])[0] === 'import',
+                (resolveAlias.conditions ?? [])[0] === 'import',
                 false,
                 command + ':' + name + ':workerd-conditions',
               );
           }
+          const resolveId = config.createResolver();
+          const fromApp = await resolveId(typebox.specifier, resolve('src/server.ts'), false, true);
+          const fromElysia = await resolveId(typebox.specifier, typebox.importer, false, true);
+          assert.equal(fromApp, typebox.resolved, command + ':app-typebox-export');
+          assert.equal(fromElysia, typebox.resolved, command + ':workspace-typebox-export');
         }
       `,
     ],

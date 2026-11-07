@@ -1,3 +1,4 @@
+import { SavedQueryConditionInput } from '../src/search/saved-query-condition-input';
 import { afterAll, expect, mock, spyOn, test } from 'bun:test';
 import { dirname } from 'node:path';
 import { act, StrictMode, useLayoutEffect } from 'react';
@@ -745,6 +746,7 @@ test('An uncertain saved-rule update keeps its original command and confirms the
     settle(() =>
       root.render(
         <CollectionRuleEditor
+          ConditionInput={SavedQueryConditionInput}
           page={rule}
           viewerId="owner"
           collectionId={id}

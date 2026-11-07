@@ -10,7 +10,7 @@ import type { Access, Actor } from '../request/access.ts';
 import type { CollectionMemberRow, CollectionRow } from './collection-model.ts';
 import type { ListingStamp } from './listing-freshness-contract.ts';
 import type { RawOrdinalCollectionPrefix, ReadRawOrdinalCollectionPrefix } from './collection-source-order.ts';
-import type { ScopeWorkContext } from '../search/scope-work-context.ts';
+import type { ScopeWorkContext } from './adapters/preparation-work.ts';
 import { isDeepStrictEqual } from 'node:util';
 import { CANONICAL_SOURCE_RAW_KEY_LIMIT, COLLECTION_SOURCE_WORK_GROUP_LIMIT } from './canonical-source-limits.ts';
 export { COLLECTION_SOURCE_DRIVER_COUNT } from './canonical-source-limits.ts';

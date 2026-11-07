@@ -3,36 +3,25 @@ import { RevisionProvenance } from '../../threads/revision-provenance-view';
 import { conversationActivity, formatConversationReplyCount, threadActivity } from '../../threads/activity';
 import { fullDateTime, timeText } from '../../threads/byline';
 import { NativeDocumentImage } from '../../threads/document-media';
+import type { PageAuthor } from '../../identity/read';
 import type { CommunityCard, CommunityNativeCard } from './subject-community-card';
 import { Byline } from '../../threads/byline';
 import { SpoilerGate } from './values';
 
 export function CommunityNativeByline({
-  card,
+  author,
   createdAt,
   now,
   locale,
 }: {
-  card: CommunityNativeCard;
+  author?: PageAuthor | undefined;
   createdAt: string;
   now: string;
   locale: string;
 }) {
-  const author = card.author;
-  const name = author?.displayName || author?.handle || m.thread_author_unknown({}, { locale: locale as never });
   return (
     <div data-slot="community-native-author" className="min-w-0 text-sm [overflow-wrap:anywhere]">
-      {author?.handle && /^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$/.test(author.handle) ? (
-        <a
-          className="inline-flex min-h-11 min-w-11 items-center text-primary hover:underline"
-          href={`/${locale}/@${encodeURIComponent(author.handle)}`}
-        >
-          <bdi>{name}</bdi>
-        </a>
-      ) : (
-        <bdi>{name}</bdi>
-      )}
-      <Byline author={undefined} createdAt={createdAt} now={now} showAuthor={false} size="sm" />
+      <Byline locale={locale} author={author} createdAt={createdAt} now={now} showAuthor size="sm" />
     </div>
   );
 }

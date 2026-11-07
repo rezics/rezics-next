@@ -9,11 +9,14 @@ import { evaluateAdmission, insertSourceDestination, type SourceDestinationRefus
 
 type Ownership = { pid: number; birth: string; capability: string };
 export type ImportOwnership = Readonly<{ source: string; capability: string }>;
+export type ImportProcessIdentity = Readonly<{ pid: number; birth: string }>;
 export type ImportSessionOptions = {
   instrumentDatabase?: (database: Database) => Database;
   create?: boolean;
   existing?: boolean;
   descriptor?: FileHandle;
+  /** Host-bound process birth identity for this attempt; defaults to the live /proc reading. */
+  processIdentity?: ImportProcessIdentity;
 };
 export type ActiveGenerationPeek = Readonly<{
   run: Run;
@@ -62,6 +65,11 @@ export function importOwnerIsBusy(owner: Readonly<{ pid: number; birth: string }
   return importOwnerAvailability(owner) !== 'stale';
 }
 
+/** Bind once at the CLI host; nested coordinators reuse this attempt identity. */
+export function readImportProcessIdentity(pid = process.pid): ImportProcessIdentity {
+  return { pid, birth: processIdentity(pid).birth };
+}
+
 /** Missing owner table means no live holder; declaration must not create it while refusing. */
 export function readImportOwner(database: Database, source: string): { pid: number; birth: string } | null {
   const table = database
@@ -79,12 +87,17 @@ export function readImportOwner(database: Database, source: string): { pid: numb
 export class ImportSession {
   readonly store: RunStore<SourceProjection>;
   readonly bindings: RecordBindings;
-  private readonly identity = processIdentity(process.pid).birth;
+  private readonly pid: number;
+  private readonly identity: string;
   private readonly held = new Map<string, ImportOwnership>();
   private readonly descriptor: FileHandle | undefined;
   private closed = false;
 
   constructor(path: string | Database, options: ImportSessionOptions = {}) {
+    const bound = options.processIdentity ?? readImportProcessIdentity();
+    if (!wellFormedOwner(bound)) throw new Error('Process birth identity unavailable');
+    this.pid = bound.pid;
+    this.identity = bound.birth;
     if ((options.create === false || options.existing) && typeof path === 'string') {
       if (!existsSync(path) || !statSync(path).isFile())
         throw new Error('No importer state database exists at the given path.');
@@ -173,7 +186,7 @@ export class ImportSession {
         db.prepare(`INSERT INTO import_owners(source,pid,birth,capability) VALUES(?,?,?,?)
         ON CONFLICT(source) DO UPDATE SET pid=excluded.pid,birth=excluded.birth,capability=excluded.capability`).run(
           source,
-          process.pid,
+          this.pid,
           this.identity,
           capability,
         );
@@ -209,7 +222,7 @@ export class ImportSession {
         db.prepare(`INSERT INTO import_owners(source,pid,birth,capability) VALUES(?,?,?,?)
         ON CONFLICT(source) DO UPDATE SET pid=excluded.pid,birth=excluded.birth,capability=excluded.capability`).run(
           source,
-          process.pid,
+          this.pid,
           this.identity,
           capability,
         );

@@ -1,6 +1,7 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import { useMemo } from 'react';
 import { GameReader } from '../features/catalogue/game-reader/view';
+import { WorkReadingBinding } from '../features/pages/work-reading-binding';
 import { gameExample, type GameExample } from '../features/catalogue/game-reader/examples';
 import { getLocale } from '../paraglide/runtime';
 import { AppShell } from '../shell/shell';
@@ -14,7 +15,9 @@ function GameReaderStory({ scenario = 'work' }: { scenario?: GameExample }) {
       <AppShell>
         <main className="mx-auto w-full max-w-5xl space-y-6 p-4 sm:p-8">
           <h1 className="text-3xl font-semibold">Harbour game</h1>
-          <GameReader {...fixture.address} locale={locale} source={fixture} reader={null} transport={fixture.read} />
+          <WorkReadingBinding>
+            <GameReader {...fixture.address} locale={locale} source={fixture} reader={null} transport={fixture.read} />
+          </WorkReadingBinding>
         </main>
       </AppShell>
     </PatternStory>

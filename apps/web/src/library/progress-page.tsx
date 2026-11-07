@@ -29,7 +29,7 @@ import {
   type MouseEvent as ReactMouseEvent,
 } from 'react';
 import { CancelledError, useQuery, useQueryClient } from '@tanstack/react-query';
-import { personalRead } from '../kernel/query';
+import { personalRead } from '../session/reading-policy';
 import {
   progressIndexAdmission,
   progressIndexSession,
@@ -40,7 +40,7 @@ import {
 } from './progress-index-origin';
 import { useLibraryWorkspaceAdmission } from './library-workspace-admission';
 import { useHistoryAddress } from './history-current-origin';
-import { useSession } from '../session/query';
+import { useSession } from '../session';
 import { m } from '../paraglide/messages.js';
 import { getLocale } from '../paraglide/runtime.js';
 import { subjectHref } from '../subject/subject-href';

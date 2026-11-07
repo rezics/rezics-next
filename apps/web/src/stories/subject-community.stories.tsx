@@ -134,13 +134,14 @@ export const Empty: Story = {
     docs: {
       description: {
         story:
-          'Illustrative terminal Global empty region. Creation remains unavailable until Content supplies current action advice for the exact Subject and place.',
+          'Illustrative terminal Global empty region. No Board is supplied, so the native entry is not_selected and offers no creation affordance.',
       },
     },
   },
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);
-    await expect(await canvas.findByText(m.subject_community_board_unavailable())).toBeVisible();
+    await expect(await canvas.findByText(m.subject_reviews_empty())).toBeVisible();
+    await expect(canvas.queryByText(m.subject_community_board_unavailable())).toBeNull();
     await expect(canvas.queryByRole('link', { name: m.subject_choose_review_board() })).toBeNull();
   },
 };

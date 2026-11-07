@@ -1,6 +1,18 @@
 import {
-  NATIVE_RECENT_QUERY_TEXT_LIMIT,
   RECENT_HISTORY_LIMIT,
+  RECENT_LIFETIME_MS,
+  RECENT_NATIVE_QUERY_TEXT_LIMIT,
+  RECENT_QUEUE_LIMIT,
+  RecentSyncError,
+  freshRecentJournal,
+  type RecentJournal,
+  type RecentNativeEntry,
+  type RecentNativeItem,
+  type RecentNativePage,
+  type RecentPending,
+  type RecentSearchTransport,
+} from './recent-contract';
+import {
   readRecentDocument,
   writeRecentDocument,
   recentId,
@@ -11,33 +23,17 @@ import {
 } from './recent-history';
 import { createRecentPageProgress, RECENT_HISTORY_READ_PAGE_LIMIT } from './recent-page-progress';
 import { admitRecentPage, recentItemAction } from './recent-response';
-import {
-  recentRetryDeadlineBlocks,
-  type RecentRetryAdmission,
-  type RecentRetryDeadline,
-} from './recent-retry-admission';
-import type { RecentEntry as NativeEntry, RecentItem, RecentPage, Pending } from './recent';
-import { admitRecentJournal, freshRecentJournal, type RecentJournal } from './recent-journal';
+import { recentRetryDeadlineBlocks, type RecentRetryDeadline } from './recent-retry-admission';
+import { admitRecentJournal } from './recent-journal';
 
-export class RecentSyncError extends Error {
-  constructor(readonly code: 'unavailable' | 'conflict') {
-    super(code);
-    this.name = 'RecentSyncError';
-  }
-}
-export type RecentSearchTransport = {
-  read(
-    cursor: string | undefined,
-    signal: AbortSignal,
-  ): Promise<{ accountId: string | null; page: RecentPage | null; code?: string } & RecentRetryAdmission>;
-  write(
-    input: { accountId: string; expectedRevision: number; pending: Pending },
-    signal: AbortSignal,
-  ): Promise<
-    | ({ ok: false; code: string } & RecentRetryAdmission)
-    | { ok: true; value: { id: string | null; revision: number; lastUsed: string } }
-  >;
+export { RecentSyncError };
+export type {
+  RecentSearchTransport,
+  RecentNativeItem as RecentItem,
+  RecentNativePage as RecentPage,
+  RecentPending as Pending,
 };
+
 export type RecentSearchSyncAdapter = RecentSyncAdapter & {
   retry(entries: readonly RecentEntry[], signal: AbortSignal): Promise<void>;
   refresh(entries: readonly RecentEntry[], signal: AbortSignal): Promise<void>;
@@ -48,13 +44,14 @@ export type RecentSearchSyncOptions = {
   bucket: string;
   currentBucket(): string | null;
   storage: RecentStorage;
+  transport: RecentSearchTransport;
+  now?(): number;
+  createId?(): string;
   onRemote?(entries: readonly RecentEntry[]): void;
-  transport?: RecentSearchTransport;
 };
-const lifetime = 90 * 86400000;
 const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 /** Browser labels, links and avatars are never part of a native command. */
-export function nativeRecentEntry(entry: RecentEntry): NativeEntry | undefined {
+export function nativeRecentEntry(entry: RecentEntry): RecentNativeEntry | undefined {
   const ref = entry.scope;
   if (ref !== undefined && !ref) return;
   const scope =
@@ -65,7 +62,7 @@ export function nativeRecentEntry(entry: RecentEntry): NativeEntry | undefined {
         : undefined;
   if (ref && !scope) return;
   if (entry.query.trim()) {
-    if (entry.query.length > NATIVE_RECENT_QUERY_TEXT_LIMIT) return;
+    if (entry.query.length > RECENT_NATIVE_QUERY_TEXT_LIMIT) return;
     return {
       kind: 'query',
       text: entry.query,
@@ -75,7 +72,7 @@ export function nativeRecentEntry(entry: RecentEntry): NativeEntry | undefined {
   }
   if (scope) return { kind: 'scope', scope };
 }
-export function localRecentEntry(item: RecentItem): RecentEntry {
+export function localRecentEntry(item: RecentNativeItem): RecentEntry {
   const ref = item.entry.scope;
   const action = recentItemAction(item);
   const scope = ref
@@ -107,19 +104,6 @@ function journalOf(document: RecentDocument): RecentJournal {
   if (!journal) throw new RecentSyncError('unavailable');
   return journal;
 }
-const transport: RecentSearchTransport = {
-  async read(cursor, signal) {
-    const { readRecent } = await import('./recent');
-    signal.throwIfAborted();
-    return readRecent({ data: cursor, signal });
-  },
-  async write(input, signal) {
-    const { writeRecent } = await import('./recent');
-    const { sessionCsrfToken } = await import('../session/query');
-    signal.throwIfAborted();
-    return writeRecent({ data: input, signal, headers: { 'X-CSRF-Token': sessionCsrfToken() ?? '' } });
-  },
-};
 // Only mutual exclusion lives here, never history or native data. The journal is in the sole local history key.
 const turns = new Map<string, Promise<unknown>>();
 async function serial<T>(bucket: string, work: () => Promise<T>): Promise<T> {
@@ -141,8 +125,9 @@ async function serial<T>(bucket: string, work: () => Promise<T>): Promise<T> {
 
 /** Reconciles visits/removals once, retaining the exact receipt and observed revision across retries. */
 export function createRecentSearchSyncAdapter(options: RecentSearchSyncOptions): RecentSearchSyncAdapter {
-  const { accountId, bucket, storage, currentBucket, onRemote } = options;
-  const api = options.transport ?? transport;
+  const { accountId, bucket, storage, currentBucket, onRemote, transport: api } = options;
+  const now = options.now ?? Date.now;
+  const createId = options.createId ?? (() => crypto.randomUUID());
   const lifetimeAbort = new AbortController();
   let needsRead = true;
   let retryDeadline: RecentRetryDeadline | undefined;
@@ -152,14 +137,14 @@ export function createRecentSearchSyncAdapter(options: RecentSearchSyncOptions):
       throw new DOMException('Recent account changed', 'AbortError');
   };
   const refuseNative = () => {
-    if (recentRetryDeadlineBlocks(retryDeadline)) throw new RecentSyncError('unavailable');
+    if (recentRetryDeadlineBlocks(retryDeadline, now())) throw new RecentSyncError('unavailable');
   };
   const admitRetry = (deadline: RecentRetryDeadline | undefined) => {
     if (deadline === undefined || !Number.isFinite(deadline)) return;
     retryDeadline = retryDeadline === undefined ? deadline : Math.max(retryDeadline, deadline);
   };
   const load = () => readRecentDocument(storage, bucket);
-  const nativeKey = (entry: NativeEntry | undefined) => {
+  const nativeKey = (entry: RecentNativeEntry | undefined) => {
     if (!entry) return;
     const scope = entry.scope;
     return JSON.stringify([
@@ -183,10 +168,10 @@ export function createRecentSearchSyncAdapter(options: RecentSearchSyncOptions):
       )
     )
       document.entries = [...snapshot];
-    journal.pending = journal.pending.filter((p) => Date.parse(p.queuedAt) > Date.now() - lifetime);
-    const push = (change: Pending['change'], extra: Partial<RecentJournal['pending'][number]> = {}) => {
-      if (journal.pending.length >= 100) throw new RecentSyncError('unavailable');
-      journal.pending.push({ key: crypto.randomUUID(), change, queuedAt: new Date().toISOString(), ...extra });
+    journal.pending = journal.pending.filter((p) => Date.parse(p.queuedAt) > now() - RECENT_LIFETIME_MS);
+    const push = (change: RecentPending['change'], extra: Partial<RecentJournal['pending'][number]> = {}) => {
+      if (journal.pending.length >= RECENT_QUEUE_LIMIT) throw new RecentSyncError('unavailable');
+      journal.pending.push({ key: createId(), change, queuedAt: new Date(now()).toISOString(), ...extra });
     };
     // Do not rebase an unacknowledged command, even when its response was lost.
     if (document.clear) {
@@ -204,10 +189,10 @@ export function createRecentSearchSyncAdapter(options: RecentSearchSyncOptions):
       delete journal.observed[id];
     }
     document.removed = [];
-    document.entries = document.entries.filter((e) => e.visitedAt > Date.now() - lifetime);
+    document.entries = document.entries.filter((e) => e.visitedAt > now() - RECENT_LIFETIME_MS);
     for (const entry of document.entries) {
       if (journal.observed[entry.id] === entry.visitedAt) continue;
-      let native = nativeRecentEntry(entry);
+      const native = nativeRecentEntry(entry);
       if (native) {
         // A visit not yet attempted can be coalesced; attempted receipt bodies are immutable.
         journal.pending = journal.pending.filter(
@@ -221,7 +206,7 @@ export function createRecentSearchSyncAdapter(options: RecentSearchSyncOptions):
     return { document, journal };
   }
   async function read(signal: AbortSignal) {
-    const progress = createRecentPageProgress<RecentItem>();
+    const progress = createRecentPageProgress<RecentNativeItem>();
     let cursor: string | undefined, revision: number | undefined;
     for (let request = 0; request < RECENT_HISTORY_READ_PAGE_LIMIT; request++) {
       live(signal);
@@ -243,7 +228,7 @@ export function createRecentSearchSyncAdapter(options: RecentSearchSyncOptions):
     }
     throw new RecentSyncError('unavailable');
   }
-  function merge(rows: RecentItem[], revision: number, signal: AbortSignal) {
+  function merge(rows: RecentNativeItem[], revision: number, signal: AbortSignal) {
     live(signal);
     const { document, journal } = reconcile();
     if (journal.pending.length) return false;
@@ -302,7 +287,7 @@ export function createRecentSearchSyncAdapter(options: RecentSearchSyncOptions):
           if (!journal.pending.length) merge(page.rows, page.revision, signal);
           needsRead = false;
         }
-        for (let n = 0; n < 100; n++) {
+        for (let n = 0; n < RECENT_QUEUE_LIMIT; n++) {
           live(signal);
           ({ document, journal } = reconcile());
           const pending = journal.pending[0];

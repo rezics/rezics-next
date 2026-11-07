@@ -2,10 +2,12 @@ import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { expect, test } from 'bun:test';
 import {
+  KERNEL_DERIVED_NONCE_LABEL,
   migrationFingerprint,
   openApiCacheMatches,
   openApiSourceFingerprint,
   reusableDerivedDatabase,
+  startThrowawayDatabaseContainer,
   throwawayDatabaseRunArgs,
 } from './derived.ts';
 import { cleanupStale } from './check.ts';
@@ -55,11 +57,12 @@ test('derived caches invalidate on migration, source, output, and container chan
 });
 
 test('throwaway databases use --rm and refuse Linux namespace paths as Docker networks', () => {
-  const args = throwawayDatabaseRunArgs(7);
+  const args = throwawayDatabaseRunArgs(7, 'nonce-7');
   expect(args[0]).toBe('run');
   expect(args).toContain('--stop-timeout');
   expect(args).toContain('--rm');
   expect(args).toContain('rezics.kernel.derived.pid=7');
+  expect(args).toContain(`${KERNEL_DERIVED_NONCE_LABEL}=nonce-7`);
   expect(args).not.toContain('--network');
   expect(args).toContain('-p');
   expect(() => dockerNetworkArgs({ REZICS_DOCKER_NETWORK: 'ns:/proc/9/ns/net' })).toThrow(
@@ -72,7 +75,7 @@ test('throwaway databases use --rm and refuse Linux namespace paths as Docker ne
   const previous = process.env.REZICS_ISOLATED_STACK_CONTAINER;
   process.env.REZICS_ISOLATED_STACK_CONTAINER = 'isolated-pause';
   try {
-    const isolated = throwawayDatabaseRunArgs(7);
+    const isolated = throwawayDatabaseRunArgs(7, 'nonce-7');
     expect(isolated).toContain('--network');
     expect(isolated).toContain('container:isolated-pause');
     expect(isolated).toContain(`/tmp/rzpg-7:/var/run/postgresql`);
@@ -81,6 +84,26 @@ test('throwaway databases use --rm and refuse Linux namespace paths as Docker ne
     if (previous === undefined) delete process.env.REZICS_ISOLATED_STACK_CONTAINER;
     else process.env.REZICS_ISOLATED_STACK_CONTAINER = previous;
   }
+});
+
+test('a derived docker run spawn timeout reaps the nonce, retries once, then keeps the second failure', () => {
+  const calls: string[][] = [];
+  const docker = (args: string[]): string => {
+    calls.push(args);
+    if (args[0] === 'run') throw Object.assign(new Error('spawnSync docker ETIMEDOUT'), { code: 'ETIMEDOUT' });
+    return args[0] === 'ps' ? 'created-unstarted' : '';
+  };
+  expect(() => startThrowawayDatabaseContainer(7, 'nonce-fail', docker)).toThrow(/ETIMEDOUT/);
+  const runs = calls.filter((args) => args[0] === 'run');
+  expect(runs).toHaveLength(2);
+  expect(runs[0]).toContain(`${KERNEL_DERIVED_NONCE_LABEL}=nonce-fail`);
+  expect(calls[1]).toEqual(['ps', '-aq', '--filter', `label=${KERNEL_DERIVED_NONCE_LABEL}=nonce-fail`]);
+  expect(calls[2]).toEqual(['rm', '-f', '-v', 'created-unstarted']);
+  const retryNonce = runs[1]!
+    .find((arg, index) => runs[1]![index - 1] === '--label' && arg.startsWith(`${KERNEL_DERIVED_NONCE_LABEL}=`))
+    ?.slice(`${KERNEL_DERIVED_NONCE_LABEL}=`.length);
+  expect(retryNonce).toBeDefined();
+  expect(retryNonce).not.toBe('nonce-fail');
 });
 
 test('stale derived databases whose owner pid is gone are removed with their volumes', () => {

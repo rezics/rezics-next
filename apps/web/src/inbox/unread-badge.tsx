@@ -1,5 +1,6 @@
 import { useQuery } from '@tanstack/react-query';
 import { Button } from '@rezics/ui/shadcn/button';
+import { useInboxAmbient } from './adapters/ambient-view.tsx';
 import { unreadCountFetchBlocked, unreadCountQueryFor, unreadCountRetryAt } from './inbox-query';
 import type { NativeInboxFailure, UnreadCount } from './inbox-read';
 import { useInboxViewer } from './inbox-viewer';
@@ -40,8 +41,9 @@ export function UnreadBadgeView({ data, failed = false }: { data?: UnreadCount |
 }
 
 export function useInboxUnreadCount() {
+  const { now } = useInboxAmbient();
   const { viewer } = useInboxViewer();
-  const query = useQuery(unreadCountQueryFor(viewer));
+  const query = useQuery(unreadCountQueryFor(viewer, now));
   const current = viewer?.isCurrent() ? viewer : null;
   return { ...query, data: current ? query.data : undefined, viewer: current };
 }
@@ -83,11 +85,12 @@ function unreadSummaryCopy(
 }
 
 export function InboxUnreadSummary() {
+  const { now } = useInboxAmbient();
   const { viewer, data, isPending, isError, isFetching, refetch } = useInboxUnreadCount();
   const failure = data?.signedIn && data.state === 'unavailable' ? data.failure : undefined;
   usePreferenceRetry(failure, viewer ? unreadCountRetryAt(viewer) : 0);
   if (!viewer) return null;
-  const blocked = unreadCountFetchBlocked(viewer);
+  const blocked = unreadCountFetchBlocked(viewer, now());
   const copy = unreadSummaryCopy(data, isPending, isError);
   return (
     <section role="status" aria-label={m.inbox_unread_summary()} aria-busy={isFetching} className="mt-4 space-y-2">
@@ -101,7 +104,7 @@ export function InboxUnreadSummary() {
           className="h-auto min-h-11 max-w-full whitespace-normal py-2"
           disabled={blocked || isFetching || !viewer.isCurrent()}
           onClick={() => {
-            if (!viewer.isCurrent() || unreadCountFetchBlocked(viewer) || isFetching) return;
+            if (!viewer.isCurrent() || unreadCountFetchBlocked(viewer, now()) || isFetching) return;
             void refetch({ cancelRefetch: false });
           }}
         >

@@ -1,4 +1,5 @@
 import type { Pool } from 'pg';
+import type { AuthDeletionHandleRead } from '@rezics/auth';
 import type { KernelClock } from '../clock.ts';
 import {
   authoritativeTimeValue,
@@ -195,6 +196,33 @@ export function createAccountManagementReadAccess(deps: Dependencies) {
     async readOperatorTransferState(token: string, input: OperatorTransferStateInput, context: { deadline: number }) {
       const actor = await deps.access.authenticate(token, { pool: deps.pool, deadline: context.deadline });
       return readOperatorTransferState(deps, actor, input, context);
+    },
+  };
+}
+
+/** Confirmation observes the requested target, including an organization or
+ * automation managed by a different human. It returns no private profile and
+ * confers no deletion authority: the transport still resolves its caller-bound
+ * approval and the native tombstone command repeats current authority checks.
+ * A missing/terminal handle skips confirmation; an unavailable read must throw.
+ */
+export function createAuthDeletionHandleRead(deps: Dependencies): AuthDeletionHandleRead {
+  return {
+    async readDeletionHandle(token, accountId, context) {
+      const { deadline } = context as { deadline: number };
+      requireAccessDeadline(deadline);
+      const route = routeOf(accountId);
+      if (route === null) throw new ManagementSourceRefusedError('invalid');
+      await deps.access.authenticate(token, { pool: deps.pool, deadline });
+      return within(deadline, () =>
+        withConnection(deps.pool, async (connection) => {
+          const client = deadlineClient(connection, deadline);
+          await home(client, route);
+          const target = await readAccount(client, route, accountId);
+          requireAccessDeadline(deadline);
+          return target?.state === 'deleted' ? null : (target?.handle ?? null);
+        }),
+      );
     },
   };
 }

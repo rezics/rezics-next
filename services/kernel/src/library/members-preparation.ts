@@ -127,12 +127,8 @@ export function preparationDefinitionBases(
   return [...unique.values()];
 }
 
-export type PreparationLocator = Readonly<{
-  route: number;
-  ownerAccountId: string;
-  collectionId: string;
-  episodeId: string;
-}>;
+export type { PreparationLocator } from './contract/preparation-work.ts';
+import type { PreparationLocator } from './contract/preparation-work.ts';
 /** Exact retained native episode inputs. Data only; never admission or disclosure authority. */
 export type MembersPreparationWorkDefinition = Readonly<{
   definition: PreparationDefinition;

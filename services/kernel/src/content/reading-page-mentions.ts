@@ -1,12 +1,21 @@
-import type { DocumentNode, DocumentSnapshot } from '@rezics/document';
 import { t } from 'elysia';
-import type { Static } from 'typebox';
+import type { DocumentSnapshot } from '@rezics/document';
+import type { ReadingPagePost } from './contract/index.ts';
 import type { Pool } from 'pg';
-import { classifyUnavailability } from '../access/unavailable.ts';
-import { readPublicIdentities, type PublicIdentity } from '../access/account-data.ts';
-import { ProblemError } from '../http/problem.ts';
 import { routeOf } from '../route/route.ts';
 import type { PostEntry } from './reads.ts';
+import { selectReadingPageMentions as selectMentions } from './application/index.ts';
+import { readingPageCapabilities } from './adapters/reading-page-bind.ts';
+export {
+  currentReadingPageMentions,
+  readingPageMentionIdentityViews,
+  unavailableReadingPageMentions,
+} from './application/index.ts';
+export type {
+  ReadingPageMentions,
+  ReadingPageMentionSource as SelectedReadingPageMentionSource,
+  SelectedReadingPageMentionInventory,
+} from './contract/index.ts';
 
 const closed = { additionalProperties: false } as const;
 const mentionId = t.String({ format: 'uuid' });
@@ -44,128 +53,13 @@ export const ReadingPageMentionsSchema = t.Object(
   closed,
 );
 
-export type ReadingPageMentions = Static<typeof ReadingPageMentionsSchema>;
-export type SelectedReadingPageMentionInventory = Readonly<{
-  identities: readonly string[];
-  sources: readonly SelectedReadingPageMentionSource[];
-  overflow: boolean;
-}>;
-
-export type ReadingPageMentionPost = Readonly<{
-  id: string;
-  threadId: string;
-  availability: PostEntry['availability'];
-  revisionId?: string;
-  sha256: string | null;
-  body: DocumentSnapshot | null;
-}>;
-
-export type SelectedReadingPageMentionSource = ReadingPageMentions['sources'][number];
-
-function isAccountId(value: string): boolean {
-  return routeOf(value) !== null;
+export function selectReadingPageMentions(posts: readonly ReadingPageMentionPost[]) {
+  return selectMentions(posts, (id) => routeOf(id) !== null);
+}
+/** Older direct consumers may omit a deadline; page composition always forwards its original budget. */
+export function readReadingPageMentions(pool: Pool, posts: readonly PostEntry[], deadline?: number) {
+  return readingPageCapabilities().readMentions(pool, selectReadingPageMentions(posts), deadline);
 }
 
-function visitMentions(node: DocumentNode, visit: (id: string) => void): void {
-  const id = node.type === 'mention' ? node.attrs?.accountId : undefined;
-  if (typeof id === 'string' && isAccountId(id)) visit(id);
-  for (const child of node.content ?? []) visitMentions(child, visit);
-}
-
-/** Select only current readable bodies, preserving their page and document order. */
-export function selectReadingPageMentions(
-  posts: readonly ReadingPageMentionPost[],
-): SelectedReadingPageMentionInventory {
-  const identities: string[] = [];
-  const selected = new Set<string>();
-  const sources: SelectedReadingPageMentionSource[] = [];
-  for (const [pageIndex, post] of posts.entries()) {
-    if (post.availability !== 'available' || !post.body || !post.revisionId || !post.sha256) continue;
-    const references = new Set<string>();
-    let overflow = false;
-    visitMentions(post.body.doc, (id) => {
-      if (selected.has(id)) references.add(id);
-      else if (identities.length < 100) {
-        identities.push(id);
-        selected.add(id);
-        references.add(id);
-      } else overflow = true;
-    });
-    sources.push({
-      postId: post.id,
-      threadId: post.threadId,
-      revisionId: post.revisionId,
-      sha256: post.sha256,
-      pageIndex,
-      references: [...references],
-      overflow,
-    });
-  }
-  return { identities, sources, overflow: sources.some((source) => source.overflow) };
-}
-
-export function readingPageMentionIdentityViews(ids: readonly string[], accounts: readonly PublicIdentity[]) {
-  const byId = new Map<string, PublicIdentity>();
-  for (const account of accounts) if (!byId.has(account.id)) byId.set(account.id, account);
-  const seen = new Set<string>();
-  const identities: ReadingPageMentions['identities'] = [];
-  for (const id of ids) {
-    if (seen.has(id)) continue;
-    seen.add(id);
-    const account = byId.get(id);
-    identities.push(
-      !account
-        ? { id, state: 'concealed' }
-        : account.state === 'deleted'
-          ? { id, state: 'erased' }
-          : { id, state: 'active', handle: account.handle },
-    );
-  }
-  return identities;
-}
-
-export function currentReadingPageMentions(
-  selection: SelectedReadingPageMentionInventory,
-  accounts: readonly PublicIdentity[],
-): ReadingPageMentions {
-  return {
-    state: 'current',
-    retryable: false,
-    overflow: selection.overflow,
-    sources: [...selection.sources],
-    identities: readingPageMentionIdentityViews(selection.identities, accounts),
-  };
-}
-
-export function unavailableReadingPageMentions(selection: SelectedReadingPageMentionInventory): ReadingPageMentions {
-  return {
-    state: 'unavailable',
-    retryable: true,
-    overflow: selection.overflow,
-    sources: [...selection.sources],
-    identities: [],
-  };
-}
-
-/** One bounded call through Access's existing public identity projection. */
-export async function readReadingPageMentions(pool: Pool, posts: readonly PostEntry[]): Promise<ReadingPageMentions> {
-  const selection = selectReadingPageMentions(posts);
-  if (!selection.identities.length) return currentReadingPageMentions(selection, []);
-
-  const routes = selection.identities.map((id) => {
-    const route = routeOf(id);
-    if (route === null) throw new TypeError('Reading page mention id must be a routable account');
-    return route;
-  });
-  try {
-    const accounts = await readPublicIdentities(pool, routes, selection.identities);
-    return currentReadingPageMentions(selection, accounts);
-  } catch (error) {
-    if (
-      classifyUnavailability(error) === undefined &&
-      !(error instanceof ProblemError && error.code === 'dependency_unavailable')
-    )
-      throw error;
-    return unavailableReadingPageMentions(selection);
-  }
-}
+export type ReadingPageMentionPost = Omit<ReadingPagePost, 'body' | 'mediaIds'> &
+  Readonly<{ body: DocumentSnapshot | null }>;

@@ -7,3 +7,7 @@ export function routeOf(id: string): number | null {
   const hex = id.replaceAll('-', '');
   return (Number.parseInt(hex.slice(20, 22), 16) << 8) | Number.parseInt(hex.slice(22, 24), 16);
 }
+
+export function partitionOf(route: number): number {
+  return route >>> 4;
+}

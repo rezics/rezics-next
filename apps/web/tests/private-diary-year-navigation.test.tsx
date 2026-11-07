@@ -9,11 +9,11 @@ import {
   readDiaryPage,
   readReportedYearSummary,
   type ConsumptionSummary,
+  type DiaryOccurrence as KernelDiaryOccurrence,
   type DiaryPage,
   type ReportedYearSummary,
 } from '../src/library/private-diary/native';
 import type { PrivateDiaryLoad } from '../src/library/private-diary/server';
-import type { DiaryOccurrence as KernelDiaryOccurrence } from '../../../services/kernel/src/library/diary-model';
 
 mock.module('../src/kernel/exposure', () => ({ useOperation: () => true }));
 let nativeClient: ReturnType<typeof createKernelClient>;

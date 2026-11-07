@@ -1,4 +1,4 @@
-import { browserObservation, type BrowserReader } from '../session/observation';
+import { browserObservation, type BrowserReader } from '../reader/lifetime/index';
 import { getLocale } from '../paraglide/runtime.js';
 import type { QueryClient } from '@tanstack/react-query';
 import type { ReporterStatus } from './reporter-status-model';

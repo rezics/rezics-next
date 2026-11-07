@@ -4,7 +4,7 @@ import { env } from 'cloudflare:workers';
 import { nameSubjectTypes, readRelease } from '../subject/definitions';
 import { resolveCopyProfile, type CopySubjectResult } from './copies-profiles';
 import { presentCopyListContext, unavailableCopyListContext } from './copy-reading-context/read';
-import { isPlatformClosedError, isPlatformClosedProblem } from '../kernel/platform-closed';
+import { isPlatformClosedError, isPlatformClosedProblem } from '../session/reading-policy';
 import { readSessionIdentity } from '../session/state';
 import { getLocale } from '../paraglide/runtime.js';
 import { prepareSession, viewerCredential, sessionSubject, requestCsrfToken } from '../session/request';

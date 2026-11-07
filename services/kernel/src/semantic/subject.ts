@@ -72,13 +72,13 @@ import { matchesTarget } from './targets.ts';
 import createRevision from './create-revision.sql';
 import insertSubject from './create-subject.sql';
 import changePartitionSubjectCount from './change-partition-subject-count.sql';
-import readLabelsStatement from './read-labels.sql';
 import readLabelChoicesStatement from './read-label-choices.sql';
 import readRelatedStatement from './read-related.sql';
 import readSubjectStatement from './read-subject.sql';
 import readSubjectIdentity from './read-subject-identity.sql';
-import readTypesStatement from './read-item-types.sql';
 import readHiddenStatement from './subject-read-hidden.sql';
+import { readItemDetails, type ItemTypeDetails } from './public-subject-facts.ts';
+export { readItemDetails, readItemTypes, readLabels, type ItemTypeDetails } from './public-subject-facts.ts';
 import { readRelease as getRelease } from './definitions.ts';
 import { layeredRelease } from './extensions.ts';
 import { writeFacts } from './write-facts.ts';
@@ -975,12 +975,6 @@ export async function readSubject(
 
 type Queryable = Pick<PoolClient, 'query'>;
 
-export type ItemTypeDetails = {
-  type: string;
-  agentAccountId: string | null;
-  agentVerified: boolean;
-};
-
 export function accountSource(tx: CommandTransaction, statementSubjects: readonly string[]): AgentSelfSource | null {
   const basis = currentCommand(tx).basis;
   if (!basis || basis.actorAccountId === null) return null;
@@ -1020,60 +1014,6 @@ function groupsOf(ids: readonly string[]): Map<number, string[]> {
     groups.set(partition, group);
   }
   return groups;
-}
-
-/** Item targets of one write, one primary-key probe per id and one statement per partition. */
-export async function readItemDetails(
-  client: Queryable,
-  ids: readonly string[],
-): Promise<Map<string, ItemTypeDetails>> {
-  if (ids.length > BATCH_LIMIT + 1) throw new TypeError('An item type and account agent check accepts at most 257 ids');
-  const details = new Map<string, ItemTypeDetails>();
-  for (const [partition, subjectIds] of groupsOf(ids)) {
-    const result = (await readTypesStatement.run(client, {
-      partition_no: partition,
-      routes: subjectIds.map((id) => routeOf(id)!),
-      subject_ids: subjectIds,
-    })) as
-      | { id: string; type: string; agent_account_id: string | null; agent_verified: boolean }[]
-      | { id: string; type: string; agent_account_id: string | null; agent_verified: boolean }
-      | null;
-    const rows = result == null ? [] : Array.isArray(result) ? result : [result];
-    for (const row of rows)
-      details.set(row.id, {
-        type: row.type,
-        agentAccountId: row.agent_account_id,
-        agentVerified: row.agent_verified,
-      });
-  }
-  return details;
-}
-
-export async function readItemTypes(client: Queryable, ids: readonly string[]): Promise<Map<string, string>> {
-  assertBatch(ids, 'An item type check accepts at most 256 ids');
-  const details = await readItemDetails(client, ids);
-  return new Map([...details].map(([id, detail]) => [id, detail.type]));
-}
-
-export async function readLabels(
-  pool: Pool | CommandTransaction,
-  ids: readonly string[],
-): Promise<Map<string, Item['labels']>> {
-  assertBatch(ids, 'A label fill accepts at most 256 ids');
-  const labels = new Map<string, Item['labels']>();
-  await Promise.all(
-    [...groupsOf(ids)].map(async ([partition, subjectIds]) => {
-      const rows = listed(
-        (await readLabelsStatement.run(pool, {
-          partition_no: partition,
-          routes: subjectIds.map((id) => routeOf(id)!),
-          subject_ids: subjectIds,
-        })) as { id: string; labels: Record<string, string> }[] | { id: string; labels: Record<string, string> } | null,
-      );
-      for (const row of rows) labels.set(row.id, row.labels ?? {});
-    }),
-  );
-  return labels;
 }
 
 /** Chosen-label inputs use one statement per partition, including the original-language slot. */

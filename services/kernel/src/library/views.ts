@@ -12,7 +12,8 @@ import type {
 } from './following-space-contract.ts';
 import { ContributionAttributionSchema, type ContributionAttribution } from '../access/contribution-attribution.ts';
 import { readContributionAttributions } from '../access/public-identity.ts';
-import { readAccount, readPublicAccount } from '../access/account-data.ts';
+import { readAccount } from '../access/account-data.ts';
+import { readPublicAccount } from '../access/public-identity.ts';
 import type { KernelClock } from '../clock.ts';
 import { readSpace, spaceReadEligibility } from '../community/space.ts';
 import { createResourcePublicEligibility } from '../access/public-eligibility.ts';

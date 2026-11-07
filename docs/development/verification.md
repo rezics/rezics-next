@@ -46,17 +46,24 @@ Decision: typecheck repairs preserve existing test assertions and update fixture
 Decision: under minimal verification a type error blocks a worker's success, and a failing payment, payout, order settlement, points or balance test blocks it when those paths changed. Other tests are not part of the attempt check; the wrapper refuses a test file, native, browser or growth command before any upload, with a message that tests run after landing in the dev verifier. Type errors, boot failures and payment-path failures keep current verifier handling: type errors and payment-path failures revert the landing, boot failures dispatch an urgent repair without reverting. A test failure outside those paths creates or updates one repair for the owning manager and never reverts the landing.
 
 Decision: environment walks run per Goal, not per outcome. An implementation brief declares no `native` or `browser`
-`acceptance.requires`; its outcome lands on typing like any other. Each Goal keeps at most one walk-and-repair task
-running; it walks dev on a seeded stack as each persona and briefs what fails as repairs. Goal dispatch and retry refuse
-a second such brief while one of that Goal is ready, running, held or landing. Outcomes that each carried
-their own walk rarely landed: on 2026-11-06, 2 of 81 tasks integrated after 12:00 UTC carried one, while 14 of 29
-running tasks did, at 17 hours and 3.7 attempts on average.
+`acceptance.requires`; its outcome lands on typing like any other. Each Goal keeps at most one walk task running; it
+walks dev on a seeded stack as each persona. Goal dispatch and retry refuse a second such brief while one of that Goal
+is ready, running, held or landing. Outcomes that each carried their own walk rarely landed: on 2026-11-06, 2 of 81
+tasks integrated after 12:00 UTC carried one, while 14 of 29 running tasks did, at 17 hours and 3.7 attempts on average.
+
+Decision: a walk repairs only what it needs to keep walking. It sends each failing journey, and each blocker that is
+separable or lies in another owner's code, to the owning manager. That manager dispatches it at once as an urgent repair
+brief, which runs in parallel with the walk. While managers read the walk as the owner of every repair, walks repaired
+serially and backlogs stayed empty. From 03:00 to 04:00 UTC on 2026-11-07, 9 workers ran and 284 product lines landed.
+
+Decision: ordinary product worker-check commands typecheck changed workspaces before landing and refuse test, native, browser and growth commands before upload. Urgent, control-plane, proof-run and acceptance-requires briefs keep their declared checks when the host-run budget is off.
 
 Decision: the worker owns and completes the private-follow host fixture, Auth-persona served journey, and 64/512/4096
 fixed-neighborhood growth measurement case in the feature worktree. Capability promotion still waits for the installed
 controller-owned native/browser run after integration; the worker's minimal check covers changed-workspace typing
 and selected outcome tests. Typed transport, FULL withhold, frozen command frame and list-frontier return remain
-ordinary clean-workspace checks.
+ordinary clean-workspace checks. Private follow native/browser/growth capability stays open until that installed
+controller-owned driver and Auth-persona walk pass after integration.
 
 Decision: Web's focused runner (`apps/web/scripts/focused.ts`) canonicalizes explicit test-file selectors to the child
 `apps/web` working directory before isolated per-file execution. Repository-relative (`apps/web/tests/foo.test.ts`),
@@ -64,6 +71,9 @@ application-relative (`tests/foo.test.ts`) and absolute paths that resolve insid
 child file. Option operands and their values stay unchanged. Each named file still gets a fresh runtime. A zero-match
 log is not execution evidence. Pin current-reader recovery in the existing Subject community, CollectionList, Copies
 session and Person Location tests; Auth metadata uses the existing protocol cases plus a consumed-body fallback.
+
+Decision: mapper-enabled workspaces (Kernel, Auth, Web) typecheck one at a time inside an admitted slice so their
+tsc/Reylo runs cannot stack past the 6 GiB per-run memory cap; leaf packages may run in parallel.
 
 Acceptance names the narrowest command that proves the change. Managers name a full web or kernel check only for a
 workspace-wide change; the train and promotion own whole-workspace checks.
@@ -105,12 +115,13 @@ waking the model for “still running”. Worker admission and heavy-check admis
 Remote-check stderr splits connection work, Git snapshot staging, GitHub fetch and rsync; overlay rsync after a
 successful fetch is the expected upload. Remaining command-time cost is `bun install` and the admitted command.
 Connection count is bounded by configured hosts, not by polls or concurrent runs: one ControlMaster socket per host
-under `$XDG_RUNTIME_DIR/rezics-ssh` (relocated under `/tmp` when OpenSSH's unix_listener suffix would overflow); a hung
-placement probe recovers that master once per host per minute and five minutes of probe-timeout skips report one
-environment event.
+under `$XDG_RUNTIME_DIR/rezics-ssh` (relocated under `/tmp` when OpenSSH's unix_listener suffix would overflow). A
+placement-probe timeout recovers only an affirmatively dead ControlMaster, at most once per host per minute, under the
+same exclusive lease lock that acquisition holds shared; a delayed control check remains uncertainty. Five minutes of
+probe-timeout skips report one environment event and do not retire a live master.
 Throwaway Kernel/compiler PostgreSQL uses `--rm` plus labelled owner-pid cleanup so a killed owner or failed startup
 leaves no owned container. `docker run` and `rm -f` use Auth's 120-second spawn timeout, including host-lifetime Python
-cleanup; inspect/exec/ps/port probes use 5 seconds. Signal-path removal is detached so a 200ms SIGKILL cannot abort it. A failed create reaps its nonce. Data stays on a labelled volume, not a 1 GiB tmpfs. Isolated-stack databases attach with `container:<id>`, never `ns:/proc/...`, and publish
+cleanup; inspect/exec/ps/port probes use 5 seconds. Ordinary compiler-database cleanup verifies container and volume settlement and keeps native compiler status; signal-path removal is detached so a 200ms SIGKILL cannot abort it. A failed create reaps its nonce. Data stays on a labelled volume, not a 1 GiB tmpfs. Isolated-stack databases attach with `container:<id>`, never `ns:/proc/...`, and publish
 PostgreSQL through an independent TCP-to-Unix child rather than a same-process proxy, and wait for in-container
 `pg_isready` plus a protocol reply before migrations. Empty-directory source and result manifests share the
 `directory\0` digest.
@@ -397,8 +408,10 @@ comparison copy, never in the checkout or frozen files.
 
 Use `bun check --no-script -p tsconfig.json` in the eleven workspaces below, both in
 their check commands and their root-invoked typecheck scripts. `--no-script` is required
-because each workspace defines a `check` script. Keep generation before checking the
-websites. Both checkers reported zero errors for every workspace in the paired run.
+because each workspace defines a `check` script. Leaf packages `access`, `bounds`, `money`,
+`operations`, `progress` and `search-text` define the same `check` script so a root-file
+typecheck can gate them. Keep generation before checking the websites. Both checkers
+reported zero errors for every workspace in the paired run.
 The regression fixture also compares diagnostic locations, error codes and messages
 for incompatible imported types, exact optional properties and indexed access, and
 checks that the corrected source passes both tools.

@@ -42,6 +42,7 @@ for (const [key, value] of Object.entries(globals))
 const { createRoot } = await import('react-dom/client');
 const { QueryClient, QueryClientProvider } = await import('@tanstack/react-query');
 const offersApi = await import('../src/checkout/creator-offers');
+const readBindings = await import('../src/routes/-creator-offer-read');
 const { CreatorOffersPage } = await import('../src/checkout/creator-offers-page');
 const { CreatorOffersCurrent } = await import('../src/checkout/creator-offers-current');
 const { creatorOfferFixture: fixture, configuredPriceExample } = await import('../src/kernel/fake/creator-offers');
@@ -183,7 +184,7 @@ describe('same row management handoff', () => {
         const current = data();
         let result: CreatorOfferResult = outcome === 'saved' ? { kind: 'saved', id: fixture.id } : { kind: outcome };
         const writes = spyOn(offersApi, 'manageCreatorOffer').mockImplementation(async () => result);
-        const reads = spyOn(offersApi, 'readCreatorOffersCurrent').mockImplementation(async () => {
+        const reads = spyOn(readBindings.creatorOfferReaders, 'list').mockImplementation(async () => {
           throw new Error('Unexpected read');
         });
         try {
@@ -279,7 +280,7 @@ describe('current received source and private inspection retirement', () => {
     }
     admit();
     const pending: ((value: CreatorOffersCurrentRead) => void)[] = [];
-    const reads = spyOn(offersApi, 'readCreatorOffersCurrent').mockImplementation(
+    const reads = spyOn(readBindings.creatorOfferReaders, 'list').mockImplementation(
       () => new Promise((resolve) => pending.push(resolve)),
     );
     const initial: CreatorOffersCurrentRead = {
@@ -291,7 +292,7 @@ describe('current received source and private inspection retirement', () => {
       await act(async () =>
         privatePage.root.render(
           <QueryClientProvider client={client}>
-            <CreatorOffersCurrent initial={initial} locale="en" />
+            <CreatorOffersCurrent readers={readBindings.creatorOfferReaders} initial={initial} locale="en" />
           </QueryClientProvider>,
         ),
       );

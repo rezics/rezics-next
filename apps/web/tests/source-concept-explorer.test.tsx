@@ -2,14 +2,30 @@ import { expect, mock, test } from 'bun:test';
 import type { KernelClient, SubjectRead } from '@rezics/client';
 import type { Release } from '@rezics/definitions';
 import { bundledRelease } from '@rezics/definitions/bundled';
-import {
-  conceptTypeAdmitted,
-  readSourceConcept,
-  validConceptCursor,
-} from '../src/features/catalogue/source-concept-explorer';
-import { catalogueEntries } from '../src/features/catalogue/catalogue-entry';
+import en from '../messages/en.json';
 
 mock.module('cloudflare:workers', () => ({ env: {} }));
+function paraglideMessages() {
+  return {
+    m: new Proxy(
+      {},
+      {
+        get(_target, key) {
+          return (values: Record<string, string> = {}) => {
+            const message = en[String(key) as keyof typeof en];
+            return String(message ?? '').replace(/\{(\w+)\}/g, (_match, name: string) => values[name] ?? '');
+          };
+        },
+      },
+    ),
+  };
+}
+mock.module('../src/paraglide/messages.js', paraglideMessages);
+mock.module('../src/paraglide/messages/_index.js', paraglideMessages);
+
+const { conceptTypeAdmitted, readSourceConcept, validConceptCursor } =
+  await import('../src/features/catalogue/source-concept-explorer');
+const { catalogueEntries } = await import('../src/features/catalogue/catalogue-entry');
 
 const concept = '00000000-0000-4000-8000-00000000c001';
 const schemeA = '00000000-0000-4000-8000-00000000c002';
@@ -392,4 +408,109 @@ test('anonymous explorer reads current work membership and keeps unavailable inv
     },
   ]);
   expect(read.ok && read.narrower.state).toBe('available');
+  expect(read.ok && read.membership.streams['schema:genre'].state).toBe('available');
+  expect(read.ok && read.membership.streams['schema:keywords'].state).toBe('unavailable');
+});
+
+test('genre and keyword membership page independently, continue empty sparse windows, and keep exact-zero distinct from unknown totals', async () => {
+  const genreWork = '00000000-0000-4000-8000-00000000c011';
+  const keywordWork = '00000000-0000-4000-8000-00000000c012';
+  const calls: { property: string; cursor?: string; language?: string; limit?: number }[] = [];
+  const pages: Record<
+    string,
+    { links: unknown[]; next: string | null; count?: { value: number; exact: boolean }; caught_up?: boolean }
+  > = {
+    'schema:genre': {
+      links: [
+        {
+          subject: genreWork,
+          statement: genreWork,
+          summary: { id: genreWork, type: 'schema:VideoGame', label: { value: 'Genre work', language: 'en' } },
+        },
+      ],
+      next: 'genre-next',
+      caught_up: true,
+    },
+    'schema:keywords': { links: [], next: 'keyword-next', caught_up: true },
+  };
+  const native = {
+    subjects: () => ({
+      get: async () => ({ status: 200, data: item('ok') }),
+      links: {
+        get: async ({ query }: { query: { property: string; cursor?: string; language?: string; limit?: number } }) => {
+          if (query.property === 'skos:broader')
+            return {
+              status: 200,
+              data: { links: [], next: null, freshness: { caught_up: true }, count: { value: 0, exact: true } },
+            };
+          calls.push(query);
+          const page = pages[query.property] ?? { links: [], next: null, caught_up: true };
+          return {
+            status: 200,
+            data: {
+              links: page.links,
+              next: page.next,
+              freshness: { caught_up: page.caught_up ?? true },
+              ...(page.count ? { count: page.count } : {}),
+            },
+          };
+        },
+      },
+    }),
+  } as unknown as KernelClient;
+  const first = await readSourceConcept(native, 'Bearer reader', bundledRelease, concept, 'ja', {});
+  expect(first.ok && first.membership.streams['schema:genre'].next).toBe('genre-next');
+  expect(first.ok && first.membership.streams['schema:keywords'].next).toBe('keyword-next');
+  expect(first.ok && first.membership.streams['schema:keywords'].rows).toEqual([]);
+  expect(first.ok && first.membership.streams['schema:genre'].exactEmpty).toBe(false);
+  expect(first.ok && first.narrower.state).toBe('available');
+  expect(calls.filter((call) => call.property === 'schema:genre' || call.property === 'schema:keywords')).toEqual([
+    { property: 'schema:genre', language: 'ja', limit: 20 },
+    { property: 'schema:keywords', language: 'ja', limit: 20 },
+  ]);
+
+  pages['schema:genre'] = { links: [], next: null, count: { value: 0, exact: true }, caught_up: true };
+  pages['schema:keywords'] = {
+    links: [
+      {
+        subject: keywordWork,
+        statement: keywordWork,
+        summary: { id: keywordWork, type: 'schema:Book', label: { value: 'Keyword work', language: 'ja' } },
+      },
+    ],
+    next: null,
+    caught_up: true,
+  };
+  const continued = await readSourceConcept(native, 'Bearer reader', bundledRelease, concept, 'ja', {
+    membership: { 'schema:genre': 'genre-next' },
+    session: 'reader-A',
+  });
+  expect(continued.ok && continued.membership.streams['schema:genre'].exactEmpty).toBe(true);
+  expect(continued.ok && continued.membership.streams['schema:genre'].unknownTotal).toBe(false);
+  expect(continued.ok && continued.membership.streams['schema:keywords'].rows[0]?.id).toBe(keywordWork);
+  expect(continued.ok && continued.narrower.cursor).toBeUndefined();
+  expect(calls.at(-2)).toEqual({ property: 'schema:genre', language: 'ja', limit: 20, cursor: 'genre-next' });
+  expect(calls.at(-1)).toEqual({ property: 'schema:keywords', language: 'ja', limit: 20 });
+
+  pages['schema:genre'] = { links: [], next: null, caught_up: true };
+  const unknown = await readSourceConcept(native, 'Bearer reader', bundledRelease, concept, 'ja', {
+    membership: { 'schema:genre': 'genre-next' },
+  });
+  expect(unknown.ok && unknown.membership.streams['schema:genre'].exactEmpty).toBe(false);
+  expect(unknown.ok && unknown.membership.streams['schema:genre'].unknownTotal).toBe(true);
+
+  pages['schema:genre'] = { links: [], next: null, count: { value: 0, exact: false }, caught_up: true };
+  const inexact = await readSourceConcept(native, 'Bearer reader', bundledRelease, concept, 'ja', {
+    membership: { 'schema:genre': 'genre-next' },
+  });
+  expect(inexact.ok && inexact.membership.streams['schema:genre'].exactEmpty).toBe(false);
+  expect(inexact.ok && inexact.membership.streams['schema:genre'].unknownTotal).toBe(true);
+
+  expect(
+    (
+      await readSourceConcept(native, 'Bearer reader', bundledRelease, concept, 'ja', {
+        membership: { 'schema:genre': '界'.repeat(1366) },
+      })
+    ).ok,
+  ).toBe(false);
 });

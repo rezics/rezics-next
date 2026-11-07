@@ -4,7 +4,9 @@ import { requestForStory } from '../../.storybook/react-start';
 import settingsPreferencesRecording from '../kernel/recorded/settings-preferences.json';
 import { setFakeVerificationState } from '../kernel/fake/verification';
 import { m } from '../paraglide/messages.js';
+import { SettingsShellProvider } from '../settings';
 import { SignedOutSettings } from '../settings/settings-page';
+import { boundSettingsShellPort } from '../shell/app-shell';
 import { PageHeading } from '../shell/page-heading';
 import { PageStory, pageReady } from './page';
 import { selectSettingsCategory } from './settings-category-navigation';
@@ -22,16 +24,18 @@ const levelTitles = [m.settings_spoiler_0_title, m.settings_spoiler_1_title, m.s
 
 function SignedOutSettingsPreview() {
   return (
-    <main id="main-content" tabIndex={-1} className="min-w-0 p-6 outline-none">
-      <div className="mx-auto w-full max-w-5xl">
-        <article className="max-w-2xl space-y-8 text-foreground">
-          <header>
-            <PageHeading>{m.settings_heading()}</PageHeading>
-          </header>
-          <SignedOutSettings returnTo="/settings" />
-        </article>
-      </div>
-    </main>
+    <SettingsShellProvider port={boundSettingsShellPort}>
+      <main id="main-content" tabIndex={-1} className="min-w-0 p-6 outline-none">
+        <div className="mx-auto w-full max-w-5xl">
+          <article className="max-w-2xl space-y-8 text-foreground">
+            <header>
+              <PageHeading>{m.settings_heading()}</PageHeading>
+            </header>
+            <SignedOutSettings returnTo="/settings" />
+          </article>
+        </div>
+      </main>
+    </SettingsShellProvider>
   );
 }
 

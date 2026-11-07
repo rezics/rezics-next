@@ -1,7 +1,7 @@
 import type { KernelClient, SubjectRead } from '@rezics/client';
 import { pickText } from '@rezics/composition';
 import type { Release } from '@rezics/definitions';
-import { candidateFailure, type CandidateFailure } from '../../../subject/candidates';
+import { candidateFailure, type CandidateFailure } from '../visit-host-port';
 import { relationFields } from '../../../subject/relation-candidates';
 
 /** Native graph.ts: per-expansion neighbour page, not a vertex or whole-graph cap. */

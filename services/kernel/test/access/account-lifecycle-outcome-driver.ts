@@ -25,7 +25,8 @@ import type {
 import { migrate as migrateAuth } from '../../../auth/scripts/database.ts';
 import { credentialEffectTransport } from '../../../auth/src/host.ts';
 import { accountOperationTransport } from '../../../auth/src/account-operations-transport.ts';
-import { readAccount, readPublicAccount } from '../../src/access/account-data.ts';
+import { readAccount } from '../../src/access/account-data.ts';
+import { readPublicAccount } from '../../src/access/public-identity.ts';
 import { bootstrapGovernance, PLATFORM_RESOURCE } from '../../src/access/bootstrap-governance.ts';
 import { COMMITTED_CONTINUATION_ACTIONS, ContinuationDeniedError } from '../../src/access/committed-continuations.ts';
 import { createNativeAccountBindings } from '../../src/access/native-account-bindings.ts';

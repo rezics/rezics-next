@@ -6,6 +6,7 @@ import {
   type FilterRelease,
 } from '@rezics/filter';
 import { searchFilterWithScope, type SearchResourceScope } from '../advanced-scope';
+import type { FacetState } from './request';
 
 export type RefinementRelease = FilterRelease & {
   digest?: string;
@@ -18,6 +19,11 @@ export type RefinementProperty = {
   datatype: string;
   units: readonly string[];
   help?: string;
+};
+export type RefinementData = {
+  key: string;
+  properties: RefinementProperty[];
+  initial?: FacetState;
 };
 export type RefinementApplicability = Readonly<{
   type: 'all' | 'partial' | 'none' | 'unknown';

@@ -167,3 +167,62 @@ test('continued inventory resumes its exact Edition and returns to only that re-
     navigate.mockRestore();
   }
 });
+
+test('checkout review capability returns to the exact inventory and loses its receipt after credential renewal', async () => {
+  const { creatorSaleEditionReview } = await import('../src/content-editions/sale-review');
+  const { CreatorOfferOriginScope, CreatorOfferOriginAddressPanel } =
+    await import('../src/checkout/creator-offer-editor');
+  const editionId = '019a2100-0000-7000-8000-000000000001';
+  const accountId = 'review-creator';
+  const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  client.setQueryData(['session'], { state: 'signed-in', subject: accountId, csrfToken: 'original' });
+  const token = createCreatorEditionOrigin({ accountId, cursor: 'review/+==', editionId })!;
+  const host = document.createElement('main');
+  document.body.append(host);
+  const root = createRoot(host);
+  const router = createRouter({
+    routeTree: createRootRoute({ component: () => null }),
+    history: createMemoryHistory(),
+  });
+  const navigate = spyOn(router, 'navigate').mockResolvedValue(undefined);
+  const render = (showPanel = true) => (
+    <RouterContextProvider router={router}>
+      <QueryClientProvider client={client}>
+        <CreatorOfferOriginScope token={token} editionId={editionId} review={creatorSaleEditionReview}>
+          {showPanel ? <CreatorOfferOriginAddressPanel /> : <p>Preparing current offer</p>}
+        </CreatorOfferOriginScope>
+      </QueryClientProvider>
+    </RouterContextProvider>
+  );
+  try {
+    await act(async () => root.render(render()));
+    expect(host.querySelector('[data-creator-edition-origin="current"]')).not.toBeNull();
+    expect(host.textContent).toContain(editionId);
+    const returnButton = [...host.querySelectorAll('button')].find(
+      (button) => button.textContent === m.creator_edition_origin_return(),
+    )!;
+    await act(async () => returnButton.click());
+    const href = (navigate.mock.calls.at(-1)![0] as { href: string }).href;
+    const destination = new URL(href, 'https://site.test');
+    expect(destination.pathname).toBe('/fr/editions');
+    expect(destination.searchParams.get('cursor')).toBe('review/+==');
+    expect(destination.searchParams.get('editionOrigin')).toBe(token);
+    expect(destination.searchParams.has('accountId')).toBe(false);
+    // The receipt owner survives a reader's temporary preparing state without its panel.
+    await act(async () => root.render(render(false)));
+    await act(async () => {
+      client.setQueryData(['session'], { state: 'signed-in', subject: accountId, csrfToken: 'renewed' });
+    });
+    await act(async () => root.render(render()));
+    expect(host.querySelector('[data-creator-edition-origin="lost"]')).not.toBeNull();
+    expect(
+      [...host.querySelectorAll('button')].some((button) => button.textContent === m.creator_edition_origin_return()),
+    ).toBe(false);
+    expect(readCreatorEditionOrigin(token, accountId, editionId).kind).toBe('lost');
+  } finally {
+    await act(async () => root.unmount());
+    navigate.mockRestore();
+    client.clear();
+    host.remove();
+  }
+});

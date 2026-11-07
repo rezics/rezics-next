@@ -6,7 +6,6 @@ export { accountStandingCheck, type AccountStandingInput, type AccountStandingDe
 export { ERASURE_PARTICIPANTS, ERASURE_PARTICIPANT_VERSION, acknowledgeErasure, readErasureStatus, resolveRetention, recordLateErasureItem, resolveLateErasureItem, ERASURE_LOCATOR_EFFECTS, type RetentionException, type ErasureOutcome, type ErasureStatus, } from './erasure.ts';
 export { readPublicViews, type PublicViews } from './public-views.ts';
 export { contributionAttribution, contributionDeleted, contributionFromPublicIdentity, ContributionAttributionSchema, type ContributionAttribution, type DeletedContributionAttribution, type LiveContributionAttribution, } from './contribution-attribution.ts';
-export { readContributionAttributions } from './public-identity.ts';
 export { applyAccountAgentEffect, createAccountAgentEffect } from './account-agent-effect.ts';
 export { AccessUnavailableError } from './unavailable.ts';
 export { createContentEditionBuyerFact, type ContentEditionBenefit, type ContentEditionBuyerFact, type ContentEditionBuyerFactInput, type ContentEditionBuyerFactReader, } from './authenticated-benefit.ts';

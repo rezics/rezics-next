@@ -1,6 +1,11 @@
 import { afterAll, beforeAll, expect, test } from 'bun:test';
+import { IDENTITY_REPAIR_MEMBERSHIP_CAP } from '../../src/rating/identity-repair-bounds.ts';
 import { createRatingIdentityRepairCommands } from '../../src/rating/identity-repair.ts';
 import pageVotes from '../../src/rating/segment-identity-page.sql';
+import {
+  IDENTITY_REPAIR_CROSS_HOME_REASON,
+  IDENTITY_REPAIR_HANDOFF_PENDING_REASON,
+} from '../../src/rating/segment-identity-guard.ts';
 import { STANDARD_QUESTION_ID } from '../../src/rating/votes.ts';
 import { newId } from '../../src/route/route.ts';
 import { openGrowthDatabase, type GrowthDatabase } from '../support/growth.ts';
@@ -13,7 +18,8 @@ beforeAll(async () => {
 afterAll(async () => {
   await database?.close();
 });
-const { key, voter, seed, producer, admit, select, binding, rows, effects } = ratingIdentityFixture(() => database);
+const { key, voter, seed, seedMemberships, producer, admit, select, binding, rows, effects, continuations } =
+  ratingIdentityFixture(() => database);
 
 test('durable pages remain bounded and pending without a producer, then resume through an empty terminal receipt', async () => {
   const actor = await voter();
@@ -201,4 +207,59 @@ test('repoint and rollback repair reuse original vote identity', async () => {
     if (next.status !== 'admitted') throw new Error(next.reason);
     ref = next.frame;
   }
+});
+
+test('later votes beyond the captured upper key stay off the admitted page', async () => {
+  const actor = await voter();
+  await seedMemberships(actor);
+  const targets = Array.from({ length: 65 }, () => newId(route)).sort();
+  for (const target of targets.slice(0, 64)) await seed(actor, target);
+  const fixture = producer((id) => id);
+  const commands = createRatingIdentityRepairCommands({ pool: database.pool, producer: fixture.port });
+  const ref = await admit(commands, actor);
+  await seed(actor, targets[64]!);
+  const page = await select(commands, actor, ref);
+  expect(page.votes).toHaveLength(64);
+  expect(page.through).toEqual({ questionId: STANDARD_QUESTION_ID, targetId: targets[63]! });
+  expect(page.votes.map((vote) => vote.targetId)).not.toContain(targets[64]);
+  expect((await commands.commit(actor, binding(page), key())).value.status).toBe('committed');
+  const later = (await rows(actor)).find((row) => row.target_id === targets[64]);
+  expect(later).toMatchObject({ counted_target: null, units: 7, revision: 1 });
+  const memberships = await database.admin.query(
+    'SELECT count(*)::int AS n FROM rating.voter_realm WHERE voter_id=$1 AND state<>$2',
+    [actor.accountId, 'uncounted'],
+  );
+  expect(memberships.rows[0]?.n).toBe(IDENTITY_REPAIR_MEMBERSHIP_CAP);
+});
+
+test('pending hold events commit retained continuation and handoff failure rolls back', async () => {
+  const actor = await voter();
+  const original = newId(route);
+  await seed(actor, original);
+  const fixture = producer((id) => id);
+  const commands = createRatingIdentityRepairCommands({ pool: database.pool, producer: fixture.port });
+  const ref = await admit(commands, actor);
+  const page = await select(commands, actor, ref);
+  const before = await rows(actor);
+  fixture.setPending(IDENTITY_REPAIR_CROSS_HOME_REASON, true);
+  expect((await commands.commit(actor, binding(page), key())).value).toEqual({
+    status: 'pending',
+    reason: IDENTITY_REPAIR_CROSS_HOME_REASON,
+  });
+  expect(await rows(actor)).toEqual(before);
+  expect(await effects(actor)).toEqual([]);
+  expect((await continuations())[0]).toMatchObject({
+    kind: 'prepare',
+    originals: [original],
+  });
+  expect((await select(commands, actor, ref)).pageId).toBe(page.pageId);
+  fixture.setPending('');
+  fixture.setHandoff(false);
+  expect((await commands.commit(actor, binding(page), key())).value).toMatchObject({
+    reason: IDENTITY_REPAIR_HANDOFF_PENDING_REASON,
+  });
+  expect(await rows(actor)).toEqual(before);
+  fixture.setHandoff(true);
+  expect((await commands.commit(actor, binding(page), key())).value.status).toBe('committed');
+  expect((await rows(actor))[0]).toMatchObject({ counted_target: original, units: 7, revision: 1 });
 });

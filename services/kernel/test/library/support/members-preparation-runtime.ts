@@ -14,7 +14,7 @@ import {
 import { accessCheck, actorOf } from '../../../src/request/access.ts';
 import { newId, partitionOf, routeOf } from '../../../src/route/route.ts';
 import { bindExecutionContract } from '../../../src/command/execution-contract.ts';
-import { historyExecutionPort } from '../../../src/history/adapters/operational-work.ts';
+import { historyExecutionPort } from '../../../src/history/application/index.ts';
 import { createWorkClient } from '../../../src/work/client.ts';
 import { WORK_QUEUES } from '../../../src/work/queues.ts';
 import { workExecutionPort } from '../../../src/work/selected-runtime.ts';

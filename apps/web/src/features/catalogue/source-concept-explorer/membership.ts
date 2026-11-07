@@ -1,12 +1,12 @@
-import type { KernelClient } from '@rezics/client';
+import type { KernelClient, SubjectLinksResponse } from '@rezics/client';
 import type { Release } from '@rezics/definitions';
-import { CONCEPT_PAGE_CAP, typeExtends } from '../../pages/graph-browser';
 
-export type ConceptHierarchyState = 'available' | 'lagging' | 'preparing' | 'unavailable' | 'unsupported';
-const membershipEvidenceBytes = 1024 * 1024;
-
+export const membershipPageCap = 20;
+export const membershipEvidenceBytes = 1024 * 1024;
+export const membershipContinuationLimit = 4096;
 export const membershipProperties = ['schema:genre', 'schema:keywords'] as const;
 export type MembershipProperty = (typeof membershipProperties)[number];
+export type ConceptHierarchyState = 'available' | 'lagging' | 'preparing' | 'unavailable' | 'unsupported';
 
 export type ConceptMembershipRow = {
   id: string;
@@ -18,17 +18,37 @@ export type ConceptMembershipRow = {
   citations: { url: string }[];
 };
 
+export type ConceptMembershipStream = {
+  property: MembershipProperty;
+  state: ConceptHierarchyState;
+  rows: ConceptMembershipRow[];
+  cursor?: string;
+  next: string | null;
+  exactEmpty: boolean;
+  unknownTotal: boolean;
+  withheld: number;
+};
+
 export type ConceptMembership = {
   state: ConceptHierarchyState;
   rows: ConceptMembershipRow[];
   next: string | null;
   exactEmpty: boolean;
   withheld: number;
+  streams: Record<MembershipProperty, ConceptMembershipStream>;
 };
 
+export type ConceptMembershipCursors = Partial<Record<MembershipProperty, string>>;
+
 type Definitions = Pick<Release, 'types' | 'properties'> & { digest?: string };
-type LinkPage = NonNullable<Awaited<ReturnType<ReturnType<KernelClient['subjects']>['links']['get']>>['data']>;
-type LinkAssertion = NonNullable<LinkPage['links'][number]['assertion']>;
+type LinkAssertion = NonNullable<SubjectLinksResponse['links'][number]['assertion']>;
+
+export function typeExtends(release: Definitions, type: string, target: string, seen = new Set<string>()): boolean {
+  if (type === target) return true;
+  if (seen.has(type)) return false;
+  seen.add(type);
+  return (release.types[type]?.bases ?? []).some((base) => typeExtends(release, base, target, seen));
+}
 
 function headersOf(authorization?: string, session?: string) {
   return {
@@ -66,8 +86,66 @@ function membershipInverse(release: Definitions, property: MembershipProperty): 
   return inverse === 'rezics:workInGenre' || inverse === 'rezics:taggedSubject';
 }
 
-export function emptyMembership(state: ConceptHierarchyState = 'unsupported'): ConceptMembership {
-  return { state, rows: [], next: null, exactEmpty: false, withheld: 0 };
+export function validMembershipCursor(cursor: string | undefined): boolean {
+  return cursor === undefined || new TextEncoder().encode(cursor).byteLength <= membershipContinuationLimit;
+}
+
+export function emptyMembershipStream(
+  property: MembershipProperty,
+  state: ConceptHierarchyState = 'unsupported',
+  cursor?: string,
+): ConceptMembershipStream {
+  return {
+    property,
+    state,
+    rows: [],
+    ...(cursor ? { cursor } : {}),
+    next: null,
+    exactEmpty: false,
+    unknownTotal: false,
+    withheld: 0,
+  };
+}
+
+function streamsOf(
+  state: ConceptHierarchyState,
+  cursor?: ConceptMembershipCursors,
+): Record<MembershipProperty, ConceptMembershipStream> {
+  return {
+    'schema:genre': emptyMembershipStream('schema:genre', state, cursor?.['schema:genre']),
+    'schema:keywords': emptyMembershipStream('schema:keywords', state, cursor?.['schema:keywords']),
+  };
+}
+
+export function emptyMembership(
+  state: ConceptHierarchyState = 'unsupported',
+  cursor?: ConceptMembershipCursors,
+): ConceptMembership {
+  const streams = streamsOf(state, cursor);
+  return { state, rows: [], next: null, exactEmpty: false, withheld: 0, streams };
+}
+
+function combineMembership(streams: Record<MembershipProperty, ConceptMembershipStream>): ConceptMembership {
+  const admitted = membershipProperties.map((property) => streams[property]);
+  const rows = admitted.flatMap((stream) => stream.rows);
+  const withheld = admitted.reduce((sum, stream) => sum + stream.withheld, 0);
+  const next = admitted.find((stream) => stream.next)?.next ?? null;
+  const preparing = admitted.some((stream) => stream.state === 'preparing');
+  const unavailable = admitted.some((stream) => stream.state === 'unavailable');
+  const lagging = admitted.some((stream) => stream.state === 'lagging');
+  const unsupported = admitted.every((stream) => stream.state === 'unsupported');
+  const state: ConceptHierarchyState = unsupported
+    ? 'unsupported'
+    : preparing
+      ? 'preparing'
+      : unavailable
+        ? 'unavailable'
+        : lagging
+          ? 'lagging'
+          : 'available';
+  const exactEmpty =
+    state === 'available' && admitted.every((stream) => stream.state === 'unsupported' || stream.exactEmpty);
+  return { state, rows, next, exactEmpty, withheld, streams };
 }
 
 /** Inverse genre/keyword pages of currently adopted work membership. Hierarchy continuation stays separate. */
@@ -77,48 +155,68 @@ export async function readConceptMembership(
   release: Definitions,
   id: string,
   locale: string,
-  input: { session?: string | undefined },
+  input: { session?: string | undefined; cursors?: ConceptMembershipCursors | undefined },
 ): Promise<{ membership: ConceptMembership; session?: string; oversized?: true; failure?: number }> {
   const admitted = membershipProperties.filter((property) => membershipInverse(release, property));
   if (!admitted.length)
-    return { membership: emptyMembership('unsupported'), ...(input.session ? { session: input.session } : {}) };
+    return {
+      membership: emptyMembership('unsupported', input.cursors),
+      ...(input.session ? { session: input.session } : {}),
+    };
+
+  for (const property of membershipProperties) {
+    if (!validMembershipCursor(input.cursors?.[property]))
+      return { membership: emptyMembership('unavailable', input.cursors), failure: 400 };
+  }
 
   let session = input.session;
-  const rows: ConceptMembershipRow[] = [];
-  let withheld = 0;
-  let next: string | null = null;
-  let exactEmpty = true;
-  let caughtUp = true;
-  let preparing = false;
-  let unavailable = false;
-
-  for (const property of admitted) {
+  const streams = streamsOf('unsupported', input.cursors);
+  for (const property of membershipProperties) {
+    if (!admitted.includes(property)) {
+      streams[property] = emptyMembershipStream(property, 'unsupported', input.cursors?.[property]);
+      continue;
+    }
+    const cursor = input.cursors?.[property];
     try {
       const page = await client.subjects({ id }).links.get({
-        query: { property, language: locale, limit: CONCEPT_PAGE_CAP },
+        query: {
+          property,
+          language: locale,
+          limit: membershipPageCap,
+          ...(cursor ? { cursor } : {}),
+        },
         headers: headersOf(authorization, session),
       });
       if (page.status === 401 || page.status === 403 || page.status === 404)
-        return { membership: emptyMembership('unavailable'), failure: page.status, ...(session ? { session } : {}) };
+        return {
+          membership: emptyMembership('unavailable', input.cursors),
+          failure: page.status,
+          ...(session ? { session } : {}),
+        };
       if (page.status !== 200 || !page.data || !('links' in page.data)) {
         const code = page.data && 'code' in page.data ? page.data.code : undefined;
-        if (page.status === 503 && code === 'semantic_not_ready') preparing = true;
-        else unavailable = true;
-        exactEmpty = false;
+        streams[property] = {
+          ...emptyMembershipStream(
+            property,
+            page.status === 503 && code === 'semantic_not_ready' ? 'preparing' : 'unavailable',
+            cursor,
+          ),
+        };
         continue;
       }
       const data = page.data;
       if (
-        data.links.length > CONCEPT_PAGE_CAP ||
+        data.links.length > membershipPageCap ||
         new TextEncoder().encode(JSON.stringify(data)).byteLength > membershipEvidenceBytes
       )
-        return { membership: emptyMembership('unavailable'), oversized: true, ...(session ? { session } : {}) };
+        return {
+          membership: emptyMembership('unavailable', input.cursors),
+          oversized: true,
+          ...(session ? { session } : {}),
+        };
       session = tokenOf(page) ?? session;
-      if (!data.freshness.caught_up) caughtUp = false;
-      if (data.next) next = data.next;
-      if (!(data.freshness.caught_up === true && data.count?.exact === true && data.count.value === 0))
-        exactEmpty = exactEmpty && data.links.length === 0 && !data.next;
-      if (data.links.length) exactEmpty = false;
+      const rows: ConceptMembershipRow[] = [];
+      let withheld = 0;
       for (const row of data.links) {
         const summary = row.summary;
         const label = summary?.label;
@@ -140,27 +238,26 @@ export async function readConceptMembership(
           citations: citationUrls(row.assertion),
         });
       }
+      const caughtUp = data.freshness.caught_up === true;
+      const exactZero = caughtUp && data.count?.exact === true && data.count.value === 0;
+      const terminalEmpty = rows.length === 0 && !data.next;
+      streams[property] = {
+        property,
+        state: caughtUp ? 'available' : 'lagging',
+        rows,
+        ...(cursor ? { cursor } : {}),
+        next: data.next,
+        exactEmpty: exactZero,
+        unknownTotal: terminalEmpty && !exactZero,
+        withheld,
+      };
     } catch {
-      unavailable = true;
-      exactEmpty = false;
+      streams[property] = emptyMembershipStream(property, 'unavailable', cursor);
     }
   }
 
-  const state: ConceptHierarchyState = preparing
-    ? 'preparing'
-    : unavailable
-      ? 'unavailable'
-      : caughtUp
-        ? 'available'
-        : 'lagging';
   return {
-    membership: {
-      state,
-      rows,
-      next,
-      exactEmpty: state === 'available' && exactEmpty && !rows.length && !next,
-      withheld,
-    },
+    membership: combineMembership(streams),
     ...(session ? { session } : {}),
   };
 }

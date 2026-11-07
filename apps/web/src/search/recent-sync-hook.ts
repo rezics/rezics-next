@@ -1,6 +1,4 @@
-import { QueryClientContext } from '@tanstack/react-query';
-import { useContext, useEffect, useLayoutEffect, useRef, useState } from 'react';
-import { AnonymousSessionContext, useSession } from '../session/query';
+import { useLayoutEffect, useRef, useState, useSyncExternalStore } from 'react';
 import {
   recentBucket,
   recentHistoryKey,
@@ -8,12 +6,8 @@ import {
   type RecentStorage,
   type RecentHistoryOwner,
 } from './recent-history';
-import { createRecentSearchSyncAdapter, type RecentSearchSyncAdapter } from './recent-sync';
-import {
-  currentHeaderSearchSession,
-  headerSearchSessionKey,
-  observeHeaderSearchSession,
-} from './header-search/session-key';
+import type { RecentSearchSyncAdapter } from './recent-sync';
+import { useRecentSearchOperation } from './recent-host';
 
 /** Session credentials stay in the BFF. The browser supplies only its matching account bucket. */
 export function useRecentSearchSyncAdapter(
@@ -22,19 +16,17 @@ export function useRecentSearchSyncAdapter(
   storage?: RecentStorage,
   owner?: RecentHistoryOwner,
 ): RecentSearchSyncAdapter | undefined {
-  const session = useSession();
-  const client = useContext(QueryClientContext);
-  const anonymous = useContext(AnonymousSessionContext);
+  const { host, createSyncAdapter } = useRecentSearchOperation();
+  const session = useSyncExternalStore(host.observeSession, host.readSession, host.readSession);
   const expected = recentBucket(session.state, session.subject);
-  const sessionKey = headerSearchSessionKey(session);
+  const sessionKey = session.sessionKey;
   const current = useRef({
     bucket,
     expected,
     sessionKey,
     owner,
     storage,
-    client,
-    anonymous,
+    host,
   });
   current.current = {
     bucket,
@@ -42,8 +34,7 @@ export function useRecentSearchSyncAdapter(
     sessionKey,
     owner,
     storage,
-    client,
-    anonymous,
+    host,
   };
   const previous = useRef<string | null>(null);
   const [epoch, setEpoch] = useState(0);
@@ -52,12 +43,12 @@ export function useRecentSearchSyncAdapter(
     sessionKey: string;
     epoch: number;
     storage: RecentStorage;
-    client: typeof client;
+    host: typeof host;
     anonymous: boolean;
     owner: RecentHistoryOwner | undefined;
     adapter: RecentSearchSyncAdapter;
   }>();
-  useEffect(() => {
+  useLayoutEffect(() => {
     if (owner?.() === false) return;
     const old = previous.current;
     previous.current = expected;
@@ -77,9 +68,8 @@ export function useRecentSearchSyncAdapter(
 
   useLayoutEffect(() => {
     if (
-      anonymous ||
+      session.anonymous ||
       owner?.() === false ||
-      !client ||
       !storage ||
       session.state !== 'signed-in' ||
       !session.subject ||
@@ -91,17 +81,17 @@ export function useRecentSearchSyncAdapter(
       return;
     }
     const observationIsCurrent = () =>
-      !anonymous &&
+      !host.readSession().anonymous &&
       owner?.() !== false &&
       current.current.owner === owner &&
-      current.current.client === client &&
+      current.current.host === host &&
       current.current.storage === storage &&
       current.current.bucket === bucket &&
       current.current.expected === expected &&
       current.current.sessionKey === sessionKey &&
-      headerSearchSessionKey(currentHeaderSearchSession(client)) === sessionKey;
+      host.readSession().sessionKey === sessionKey;
     let retired = false;
-    const adapter = createRecentSearchSyncAdapter({
+    const adapter = createSyncAdapter({
       accountId: session.subject,
       bucket: expected,
       storage,
@@ -117,7 +107,7 @@ export function useRecentSearchSyncAdapter(
       setBound((value) => (value?.adapter === adapter ? undefined : value));
       setEpoch((value) => value + 1);
     };
-    const unsubscribe = observeHeaderSearchSession(client, retire);
+    const unsubscribe = host.observeRetirement(retire);
     if (!observationIsCurrent()) retire();
     else
       setBound({
@@ -125,8 +115,8 @@ export function useRecentSearchSyncAdapter(
         sessionKey,
         epoch,
         storage,
-        client,
-        anonymous,
+        host,
+        anonymous: session.anonymous,
         owner,
         adapter,
       });
@@ -137,21 +127,33 @@ export function useRecentSearchSyncAdapter(
         adapter.dispose();
       }
     };
-  }, [anonymous, bucket, client, epoch, expected, owner, session.state, session.subject, sessionKey, storage]);
+  }, [
+    bucket,
+    createSyncAdapter,
+    epoch,
+    expected,
+    host,
+    owner,
+    session.anonymous,
+    session.state,
+    session.subject,
+    sessionKey,
+    storage,
+  ]);
 
-  return session.state === 'signed-in' &&
-    !anonymous &&
+  const currentSession = host.readSession();
+  return currentSession.state === 'signed-in' &&
+    !currentSession.anonymous &&
     owner?.() !== false &&
-    client &&
     bucket === expected &&
     sessionKey !== null &&
-    headerSearchSessionKey(currentHeaderSearchSession(client)) === sessionKey &&
+    currentSession.sessionKey === sessionKey &&
     bound?.bucket === bucket &&
     bound.owner === owner &&
     bound.sessionKey === sessionKey &&
     bound.epoch === epoch &&
     bound.storage === storage &&
-    bound.client === client &&
+    bound.host === host &&
     !bound.anonymous
     ? bound.adapter
     : undefined;

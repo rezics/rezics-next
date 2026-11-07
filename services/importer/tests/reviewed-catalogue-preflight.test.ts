@@ -2,7 +2,7 @@ import { expect, test } from 'bun:test';
 import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { resolve } from 'node:path';
-import seeds from '../../../packages/definitions/src/reviewed-vocabulary.json';
+import { reviewedVocabularyInventory as seeds } from '@rezics/definitions/reviewed-vocabulary';
 import {
   reviewedCatalogueOwner,
   reviewedCatalogueKey,

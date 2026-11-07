@@ -8,8 +8,8 @@ import { Input } from '@rezics/ui/shadcn/input';
 import { Textarea } from '@rezics/ui/shadcn/textarea';
 import { Field, FieldLabel, FieldGroup, FieldDescription } from '@rezics/ui/shadcn/field';
 import { NativeSelect, NativeSelectOption } from '@rezics/ui/shadcn/native-select';
-import { ConditionEditor, type ConditionExtension } from '../search/condition-editor';
-import { localizedLabel } from '../search/results';
+import type { SavedQueryConditionInput, SavedQueryOwnerExtension } from './saved-query-editor/presentation';
+import { pickText } from '@rezics/composition';
 import { m } from '../paraglide/messages.js';
 import { getLocale } from '../paraglide/runtime.js';
 import { PageHeading } from '../shell/page-heading';
@@ -142,7 +142,7 @@ function OwnerFields({
   locale: string;
 }) {
   const owner = value.owner;
-  const label = (labels: Record<string, string>) => localizedLabel(labels, locale).text;
+  const label = (labels: Record<string, string>) => pickText(labels, locale).text;
   if ('presence' in owner) return <p>{m.library_rule_presence()}</p>;
   if ('label' in owner)
     return (
@@ -242,6 +242,7 @@ function OwnerFields({
 const alwaysCurrent = () => true;
 
 type EditorProps = {
+  ConditionInput: SavedQueryConditionInput;
   page: RulePage;
   viewerId: string | null;
   collectionId: string | null;
@@ -434,6 +435,7 @@ function RuleLifetime({
 function RuleForm({
   page,
   sourceAvailable,
+  ConditionInput,
   save,
   captureSave,
   reload,
@@ -509,7 +511,7 @@ function RuleForm({
     isCurrent: () => isCurrent() && !confirmed.current,
     focus: () => (document.activeElement instanceof HTMLElement ? document.activeElement : null),
   });
-  const extension: ConditionExtension = {
+  const extension: SavedQueryOwnerExtension = {
     choices: [
       { label: m.library_rule_presence(), value: presence },
       { label: m.library_rule_state(), value: { owner: { state: { profileId: '', stateSetId: '', in: [] } } } },
@@ -866,7 +868,7 @@ function RuleForm({
                 </div>
               </Field>
             )}
-            <ConditionEditor
+            <ConditionInput
               value={filter}
               onChange={(value) => {
                 if (isCurrent() && !captured.current) setFilter(value);
@@ -874,7 +876,6 @@ function RuleForm({
               locale={locale}
               metadata={choices.release.metadata ?? { types: {}, properties: {} }}
               extension={extension}
-              embedded
             />
             <DynamicRuleReview
               filter={reviewFilter}

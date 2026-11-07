@@ -1,3 +1,4 @@
+import { SavedQueryConditionInput } from '../../search/saved-query-condition-input';
 import { createFileRoute } from '@tanstack/react-router';
 import { CollectionRuleCurrent } from '../../library/collection-rule-current';
 import { readCollectionRule } from '../../library/collection-rule-actions';
@@ -26,6 +27,7 @@ function EditRulePage() {
   const resultsHref = savedQueryRuleReturn(returnTo, id, getLocale());
   return (
     <CollectionRuleCurrent
+      ConditionInput={SavedQueryConditionInput}
       page={loaded}
       collectionId={id}
       resultsHref={resultsHref}

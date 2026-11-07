@@ -1,19 +1,17 @@
 import { searchRetryAt } from './search-recovery-retry';
-
-/** Absolute native retry instant; a minimum delay, never a request schedule. */
-export type RecentRetryDeadline = number;
-export type RecentRetryAdmission = { retryAt?: RecentRetryDeadline };
+import type { RecentRetryAdmission, RecentRetryDeadline } from './recent-contract';
+export type { RecentRetryAdmission, RecentRetryDeadline };
 
 export function admitRecentRetryDeadline(
   hint: string | null | undefined,
-  now = Date.now(),
+  now: number,
 ): RecentRetryDeadline | undefined {
   return searchRetryAt(hint ?? null, now);
 }
 
 export function admitRecentRetryHeaders(
   headers: HeadersInit | undefined,
-  now = Date.now(),
+  now: number,
 ): RecentRetryDeadline | undefined {
   if (headers === undefined) return;
   try {
@@ -23,6 +21,6 @@ export function admitRecentRetryHeaders(
   }
 }
 
-export function recentRetryDeadlineBlocks(deadline: RecentRetryDeadline | undefined, now = Date.now()): boolean {
+export function recentRetryDeadlineBlocks(deadline: RecentRetryDeadline | undefined, now: number): boolean {
   return deadline !== undefined && deadline > now;
 }

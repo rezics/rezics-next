@@ -144,6 +144,7 @@ type Dependencies = {
     pool: Pool;
     access: Access;
     tokens: KeyRing;
+    deadlineNow?: () => number;
 } & RatingCapabilityOptions;
 export declare class RealmRankQuestionUnavailableError extends Error {
     readonly reason: 'unavailable' | 'retired';

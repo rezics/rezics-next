@@ -6,6 +6,11 @@ PostgreSQL uses an accepted RC or GA; betas belong in development or staging.
 Check current upstream guidance before adopting an upgrade. Pin the result, inspect its changes and verify affected
 contracts. Coordinate broad lockfile changes with other writers.
 
+Decision: when a failure traces to an outdated dependency, fix it by upgrading that dependency. This needs no further
+approval at any scope: a major version, the toolchain, the runtime, a container image or a database engine within the
+PostgreSQL rule above. Brief it as an urgent repair that names the failure, the version the fix needs and the
+upstream change that provides it. Do not add a local workaround for a defect that a newer release fixes.
+
 Prefer an upstream fix to a local patch. A necessary patch identifies its defect, reproducer, acceptance and removal
 condition. Apply dependency patches through the package manager. Never modify cache-shared node_modules in place.
 

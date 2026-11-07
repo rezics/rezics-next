@@ -1,6 +1,6 @@
 import { isCalendarDate } from '@rezics/filter';
 import type { KernelClient, Loan, LoanFilter, LoanMutation, LoanPage, LoanWrite } from '@rezics/client';
-import { isPlatformClosedError, isPlatformClosedProblem, PlatformClosedError } from '../kernel/platform-closed';
+import { isPlatformClosedError, isPlatformClosedProblem, PlatformClosedError } from '../session/reading-policy';
 import type { SessionEnv } from '../session/client';
 import { prepareSession, viewerCredential } from '../session/request';
 

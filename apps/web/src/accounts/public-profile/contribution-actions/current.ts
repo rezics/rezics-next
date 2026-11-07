@@ -1,7 +1,13 @@
 import type { QueryClient } from '@tanstack/react-query';
-import { addressLease, operationLease, readLease } from '../../../reader/lease';
-import { normalizeSessionObservation, sessionQueryKey } from '../../../session/browser-state';
-import { browserObservation, type BrowserObservationSnapshot } from '../../../session/observation';
+import {
+  addressLease,
+  browserObservation,
+  normalizeSessionObservation,
+  operationLease,
+  readLease,
+  sessionQueryKey,
+  type BrowserObservationSnapshot,
+} from '../../../session';
 
 export type ContributionOperation = 'reaction' | 'watch' | 'report' | 'reply';
 

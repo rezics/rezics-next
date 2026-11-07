@@ -12,6 +12,7 @@ import * as consumer from '../../src/search/public-filter-consumer.ts';
 import * as definitions from '../../src/semantic/definitions.ts';
 import * as indices from '../../src/search/indices.ts';
 import { createDefaultPublicFilterRuntime } from '../../src/search/public-runtime.ts';
+import { composeSearchSemanticSource } from '../../src/composition/search-semantic.ts';
 
 const cost = {
   inputKeys: 0,
@@ -128,6 +129,7 @@ function queriedOf(physicalTarget: string, observation: string): PublicFilterQue
 }
 
 function runtime() {
+  composeSearchSemanticSource();
   return createDefaultPublicFilterRuntime({
     pool: { connect: async () => ({}), query: async () => ({ rows: [] }) } as unknown as Pool,
     routeKey: new Uint8Array(32),
@@ -153,7 +155,8 @@ test('a Subject continuation and multistep repair survive request cleanup; expli
   const resumed = await publicRuntime.resumeRequest(queried, context());
   expect(resumed).not.toBe(first.operations);
   expect((await resumed.query(queried, context())).status).toBe('queried');
-  await publicRuntime.bindRequest({ plan, snapshot: 'prepared' }, context());
+  const nextRequest = await publicRuntime.bindRequest({ plan, snapshot: 'prepared' }, context());
+  expect(nextRequest.capture.status).toBe('captured');
   expect(factories).toHaveLength(1);
 
   const job: PublicFilterConsumerJob = first.capture.repair;
@@ -164,6 +167,8 @@ test('a Subject continuation and multistep repair survive request cleanup; expli
   expect(factories[0]!.closed).toBe(0);
 
   await resumed.closeObservation(queried, context());
+  if (nextRequest.capture.status !== 'captured') throw new Error('next capture required');
+  await nextRequest.operations.closeObservation(nextRequest.capture.queried, context());
   expect(factories[0]!.observations.size).toBe(0);
   expect((await resumed.query(queried, context())).status).toBe('unavailable');
   await resumed.close();

@@ -295,7 +295,7 @@ const { sessionQuery } = await import('../src/session/query');
 const { captureSpacePageAdmission, SpacePageLifetimeContext, SpacePageLifetimeHost, spacePageAdmissionIsCurrent } =
   await import('../src/community/space-page-lifetime');
 const { useShelfList } = await import('../src/community/space-queries');
-const { RealmShelf } = await import('../src/community/space-page');
+const { RealmShelf } = await import('../src/session/community-application');
 const { readRealmBoards, readRealmPublications } = await import('../src/community/space-actions');
 const { setLocale } = await import('../src/paraglide/runtime.js');
 const { m } = await import('../src/paraglide/messages.js');

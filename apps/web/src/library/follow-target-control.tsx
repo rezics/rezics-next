@@ -1,7 +1,7 @@
 import { QueryClient, QueryClientContext, queryOptions, useQuery } from '@tanstack/react-query';
 import { useContext, useRef, useState } from 'react';
 import { useOperation } from '../kernel/exposure';
-import { personalRead } from '../kernel/query';
+import { personalRead } from '../session/reading-policy';
 import { getLocale } from '../paraglide/runtime.js';
 import {
   assertHistoryCurrent,

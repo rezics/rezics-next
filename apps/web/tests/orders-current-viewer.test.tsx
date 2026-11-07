@@ -602,7 +602,8 @@ test('mounted paired buyer windows survive exact receipt/Edition return and comm
   const { EditionRoute } = await import('../src/routes/editions/$id');
   const { fromPlainText } = await import('@rezics/document');
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
-  const visit = new BuyerHistoryVisit(client);
+  const { checkoutCurrentVisit } = await import('../src/session/index');
+  const visit = new BuyerHistoryVisit(checkoutCurrentVisit(client));
   const rootRoute = createRootRoute();
   const search = (value: Record<string, unknown>) => ({
     ...purchaseHistorySearch(value),

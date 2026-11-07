@@ -1116,11 +1116,25 @@ export class WorkerTasks {
     }
     this.assertLocalAcceptanceCustody(task, nextBrief);
     const ref = { taskId, attempt: task.currentAttempt };
+    const pendingIntent = this.store.retryIntent(ref);
+    const freshSessionOnly =
+      options.freshSession === true &&
+      options.brief === undefined &&
+      Object.keys(options).every((key) => key === 'freshSession' || key === 'expectedAttempt');
+    if (freshSessionOnly && pendingIntent?.status === 'pending') {
+      // Preserve the pending intent's order and options; the retry runner consumes this flag at launch.
+      this.store.updateRetryIntent(ref, (intent) => {
+        intent.options.freshSession = true;
+      });
+      return;
+    }
     const incidentHeld = !toolIncidentRetryAllowed(this.store, ref);
     // A held task's brief can change while its retry waits for dependencies: refusing it made managers cancel held
     // tasks and lose their branches. The pending retry then starts the amended brief.
     // A product retry still waiting to start takes an amended brief; the pending retry then starts that brief.
-    const amendPending = devProduct && options.brief !== undefined;
+    const amendPending =
+      (devProduct && options.brief !== undefined) ||
+      (options.freshSession === true && pendingIntent?.status === 'pending');
     if (task.state !== 'held' && !amendPending && !incidentHeld && this.store.retryIntent(ref)?.status === 'pending')
       throw new Error('a retry is already pending');
     if (task.state === 'held') {
@@ -1161,6 +1175,7 @@ export class WorkerTasks {
                 this.store.updateRetryIntent(ref, (value) => {
                   value.status = 'pending';
                   delete value.nextAttempt;
+                  if (options.freshSession && pendingIntent?.status === 'pending') value.options.freshSession = true;
                 });
               } else {
                 const retryOptions = { ...options };
@@ -1197,7 +1212,7 @@ export class WorkerTasks {
     const retryOptions = { ...options };
     delete retryOptions.brief;
     delete retryOptions.expectedAttempt;
-    delete retryOptions.freshSession;
+    if (pendingIntent?.status !== 'pending') delete retryOptions.freshSession;
     let priorityChanged = false;
     try {
       this.store.recordExplicitRetry(
@@ -1746,7 +1761,9 @@ export class WorkerTasks {
             ? { pool: predecessor.pool, cli: predecessor.profile.cli, model: predecessor.profile.model }
             : null;
       const resumeSession =
+        // Cursor never resumes stored sessions, regardless of the provider-side store's size.
         !task.freshSession &&
+        !options.freshSession &&
         !(heldRelease && briefChange && !continuingCheckWait) &&
         oldSession &&
         resumeFrom &&

@@ -1,14 +1,12 @@
 import { cataloguePageBody, PageReadError, pageReadError, type NativePageBody } from './page-read-failure';
 export { PageReadError, pageReadError } from './page-read-failure';
 import { selectedStreamDocument, type SubjectStreams } from './subject-streams';
-import { mangaObservedOrigin } from '../catalogue/manga-public-visit';
 import { SubjectArtworkSession } from '../catalogue/subject-artwork/session';
-import { supportsReleasedWorkNames } from '../catalogue/work-names/model';
 import { subjectCatalogueTagDefinitions } from './subject-catalogue-metadata/index';
 import { WorkNamesEntry } from '../catalogue/work-names/entry';
 import { GameProfileEntry, gameProfileEntry } from '../catalogue/game-profile-entry';
-import { GameOverview } from '../catalogue/game-reader/entry';
-import { gameReaderEntry, type GameReaderRead, type GameStatement } from '../catalogue/game-reader/model';
+import { GameOverview } from './work-reading-binding';
+import type { GameReaderRead, GameStatement } from '../catalogue/game-reader/model';
 import { EditorialEntry } from '../catalogue/editorial-entry';
 import { AddonProfileEntry } from '../catalogue/addon-profile-entry';
 import { SubjectFactsEntry } from '../catalogue/subject-facts-entry';
@@ -17,13 +15,6 @@ import type { PublicFigure } from './subject-ratings';
 import { CreateSubjectEntry } from '../catalogue/create-subject-entry';
 import { AuthoredFieldEntry } from '../catalogue/authored-field-entry';
 import { RecipeEditorEntry } from '../catalogue/recipe-editor-entry';
-import { RecipeCurrentVisitReturn } from '../catalogue/recipe-current-visit-view';
-import {
-  parseRecipeCurrentReturn,
-  recipeCorrectionHref,
-  recipeCurrentReturnState,
-  recipePublicSubjectHref,
-} from '../catalogue/recipe-current-visit';
 import { CharacterProfileEntry } from '../catalogue/character-profile-entry';
 import { CharacterRelationshipsEntry } from '../catalogue/character-relationships/entry';
 import { ScreenProfileEntry } from '../catalogue/screen-profile-entry';
@@ -42,7 +33,6 @@ import { StoryArcOverview } from '../catalogue/story-arc-reader/entry';
 import { RecordingOverview } from '../catalogue/recording-reader/overview';
 import { recordingType } from '../catalogue/recording-reader/model';
 import { StoryArcProfileEntry } from '../catalogue/story-arc-profile-entry';
-import { storyArcPublicOrigin } from '../catalogue/story-arc-public-visit';
 import { MangaProfileEntry } from '../catalogue/manga-profile-entry';
 import { LiteraryProfileEntry } from '../catalogue/literary-profile-entry';
 import { LiteraryReaderEntry } from '../catalogue/literary-reader/entry';
@@ -56,17 +46,9 @@ import { publicationOverlayKind, publicPublicationStatements, type PublicationDe
 import { PeopleProfileEntry } from '../catalogue/people-profile-entry';
 import { PersonOverview } from '../catalogue/person-reader/reader';
 import { CharacterOverview } from './showcase-people/character';
-import { CharacterAssociationBridge } from '../catalogue/character-public-reading/bridge';
 import { OrganizationOverview } from '../catalogue/organization-reader/overview';
 import { ProducerHistoryEntry } from '../catalogue/producer-history/entry';
 import { AlbumProfileEntry } from '../catalogue/album-profile-entry';
-import {
-  albumCurrentVisitSourceAddress,
-  createAlbumCurrentVisitLink,
-  type AlbumCurrentReading,
-  type AlbumCurrentVisitOrigin,
-} from '../catalogue/album-current-visit-model';
-import { AlbumCurrentVisitReturn } from '../catalogue/album-current-visit';
 import { SubjectTermsEntry } from '../catalogue/subject-terms-entry';
 import { PublicationEditorEntry } from '../catalogue/publication-editor-entry';
 import type { SubjectRead, KernelClient } from '@rezics/client';
@@ -96,7 +78,7 @@ import {
 } from 'react';
 import { requestLanguages } from '../../kernel/languages.ts';
 import { originalLanguage } from '../../subject/language';
-import { accountOf } from './account-read';
+import { accountOf } from './account-profile-reading';
 import { defaultReader, type Reader } from '../../subject/reader';
 import type { RelationDefinition } from '../../subject/relations';
 import type { Related, Subject, Summary } from '../../subject/types';
@@ -107,6 +89,7 @@ import {
   PageData,
   pageText,
   PublicationOverlayView,
+  StatementReadingBinding,
   SubjectSources,
   SubjectSourcesLink,
   type PageMessages,
@@ -130,7 +113,7 @@ import { subjectUrlForView } from '../../subject/subject-href';
 import { ContextNavigation, contextHref } from './context-navigation';
 import { candidateContext } from '../../subject/candidates';
 import { subjectVisitReturn, withSubjectVisitReturn, zoneVisitReturn } from './subject-visit-navigation';
-import { MangaReaderEntry } from '../catalogue/manga-reader/entry';
+import { MangaReaderEntry } from './work-reading-binding';
 import { isMangaReaderType } from '../catalogue/manga-reader/model';
 import { mangaReaderAddress } from '../catalogue/manga-reader/navigation';
 import type { WorkFranchiseReadingProps, WorkFranchiseSelection } from './showcase-work';
@@ -138,12 +121,29 @@ import { WorkFranchiseOverview } from './showcase-work/overview';
 import { showcaseWorkKind } from './showcase-work/model';
 import { WorkConceptTagsRoute } from './showcase-work/tags-view';
 import {
-  consumeGameClassificationReturn,
-  gameClassificationReturn,
-  gameClassificationReturnStorageKey,
-  type GameClassificationReturn,
-} from '../catalogue/game-current-visit-descriptor';
-import { gameGroups, gameType, type GameGroup } from '../catalogue/game-profile';
+  AlbumCurrentVisitReturn,
+  CharacterAssociationBridge,
+  RecipeCurrentVisitReturn,
+  albumCurrentVisitSourceAddress,
+  consumeGameClassificationReceipt,
+  createAlbumCurrentVisitLink,
+  gameClassificationDescriptor,
+  mangaObservedOrigin,
+  parseRecipeCurrentReturn,
+  readTermsPageAuthority,
+  recipeCorrectionHref,
+  recipeCurrentReturnState,
+  recipePublicSubjectHref,
+  selectSubjectPageProfiles,
+  storyArcPublicOrigin,
+} from './subject-page-application';
+import type {
+  AlbumCurrentReading,
+  AlbumCurrentVisitOrigin,
+  GameClassificationReturn,
+  GameGroup,
+  TermsPageAuthority,
+} from './semantic-render-port';
 
 const subjectIdPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 
@@ -163,41 +163,13 @@ function pageComponents(framed: boolean) {
   return framed ? componentSets.framed : componentSets.page;
 }
 
-export type SubjectPageData = {
-  /** The subject the page is for; an agent page always has one, a route page none. */
-  subject: string | null;
-  /** The account an agent page is for, as the page read named it. */
-  account?: { id: string; handle: string };
-  context?: SelectedContext | undefined;
-  /** The requested selector survives a native Global fallback without inventing Realm metadata. */
-  requestedRealm?: string | undefined;
-  /** BFF cache identity of this reading; never native read authority. */
-  requestedReader?: string | null | undefined;
-  continuation?: PageContinuation | undefined;
-  streams?: SubjectStreams | undefined;
-  community?: SubjectCommunity;
-  profile: string;
-  template: { scope: 'base' | 'generic' | 'route' | 'type'; key: string | null };
-  document: PageDocument;
-  /** The views the subject's templates define; absent when the kernel did not say. */
-  views?: string[];
-  /** Bounded active file/group vocabulary carried by the native page response. */
-  catalogue?: {
-    state: 'released' | 'unsupported' | 'unavailable';
-    type: string;
-    digest?: string;
-    definitions?: Pick<Release, 'types' | 'properties'>;
-    directions?: ReleasedRelationDirectionResult[];
-  };
-  /** Caller-bound native action state; page responses containing it are private and no-store. */
-  viewer?: NativePageBody['viewer'];
-  /** Native Access envelope for the selected subject; private and no-store with viewer. */
-  actions?: NativePageBody['actions'];
+import type { SubjectPageData as PageModel } from './page-model';
+export type SubjectPageData = PageModel & {
   /** Optional current Terms operation advice, independent of public names and subject-level actions. */
-  termsAuthority?: import('../catalogue/subject-terms').TermsPageAuthority;
-  reads: Record<string, { status: number; body: unknown; retryAt?: number; headers?: Record<string, string> }>;
+  termsAuthority?: TermsPageAuthority;
 };
-
+import { pageContext } from './page-model';
+export { pageContext } from './page-model';
 export type SubjectPageLoad =
   | { kind: 'missing' }
   | { kind: 'redirect'; id: string; target?: 'account' }
@@ -225,16 +197,6 @@ function placesType(content: readonly unknown[], type: string): boolean {
         (isRecord(node.props) &&
           Object.values(node.props).some((value) => Array.isArray(value) && placesType(value, type)))),
   );
-}
-
-/** The context the page's reads are planned in. */
-export function pageContext(page: Pick<SubjectPageData, 'subject' | 'account' | 'context' | 'continuation'>) {
-  return {
-    subject: page.subject,
-    account: page.account ?? null,
-    ...(page.context ? { context: page.context } : {}),
-    ...(page.continuation ? { continuation: page.continuation } : {}),
-  };
 }
 
 /** A successful planned projection must name the page's already admitted Subject. */
@@ -285,6 +247,7 @@ export async function loadSubjectPage(
   locale = 'en',
   options: {
     realm?: string | undefined;
+    board?: string | undefined;
     continuation?: PageContinuation | undefined;
     stream?: string | undefined;
     authorization?: string | undefined;
@@ -297,7 +260,12 @@ export async function loadSubjectPage(
   try {
     result = await client.pages.$read.post(
       {
-        target: { subject: id, ...(view ? { view } : {}), ...(options.realm ? { realm: options.realm } : {}) },
+        target: {
+          subject: id,
+          ...(view ? { view } : {}),
+          ...(options.realm ? { realm: options.realm } : {}),
+          ...(options.board ? { board: options.board } : {}),
+        },
         ...(options.continuation ? { continuation: options.continuation } : {}),
         ...(options.stream ? { stream: options.stream } : {}),
         languages: requestLanguages(locale),
@@ -348,6 +316,7 @@ export async function loadSubjectPage(
           ...catalogue,
           subject: id,
           ...(options.realm ? { requestedRealm: options.realm } : {}),
+          ...(options.board ? { board: options.board, requestedBoard: options.board } : {}),
         },
       };
     }
@@ -362,10 +331,12 @@ export async function loadSubjectPage(
     const eligible =
       reading &&
       currentPage.catalogue?.state === 'released' &&
-      supportsReleasedWorkNames(reading.subject.type, currentPage.catalogue.definitions);
+      selectSubjectPageProfiles({
+        type: reading.subject.type,
+        definitions: currentPage.catalogue.definitions,
+      }).releasedWorkNames;
     let termsAuthority;
     if (eligible) {
-      const { readTermsPageAuthority } = await import('../catalogue/subject-terms-request');
       assertSubjectPageReadActive(options.signal);
       termsAuthority = await readTermsPageAuthority(
         client,
@@ -381,6 +352,7 @@ export async function loadSubjectPage(
         ...page,
         subject: page.subject ?? null,
         ...(options.realm ? { requestedRealm: options.realm } : {}),
+        ...(options.board ? { board: options.board, requestedBoard: options.board } : {}),
         ...(termsAuthority ? { termsAuthority } : {}),
       },
     };
@@ -636,11 +608,21 @@ function currentGameReturn(
     descriptor.type !== read.subject.type ||
     descriptor.release !== page.catalogue.digest ||
     descriptor.reader !== (page.requestedReader ?? null) ||
-    !gameReaderEntry(read.subject.type, read.summary?.types)
+    !selectSubjectPageProfiles({
+      type: read.subject.type,
+      summaryTypes: read.summary?.types,
+      definitions: release,
+    }).gameReader
   )
     return { status: 'changed' };
   if (!release.properties[descriptor.property]) return { status: 'unknown' };
-  if (!gameGroups(release, read.subject.type).classification.includes(descriptor.property))
+  if (
+    !selectSubjectPageProfiles({
+      type: read.subject.type,
+      summaryTypes: read.summary?.types,
+      definitions: release,
+    }).gameGroups.classification.includes(descriptor.property)
+  )
     return { status: 'unsupported' };
   const statements = read.subject.statements[descriptor.property] ?? [];
   if (!statements.length) return { status: 'no-value' };
@@ -698,14 +680,18 @@ export function gamePageInitial(
   locale: string,
   reader: Reader = defaultReader,
 ): GameReaderRead | undefined {
-  if (!gameReaderEntry(subject.type, summary?.types) && publicationOverlayKind(subject.type, definitions) !== 'game')
-    return;
+  const profiles = selectSubjectPageProfiles({
+    type: subject.type,
+    summaryTypes: summary?.types,
+    definitions,
+  });
+  if (!profiles.gameReader && publicationOverlayKind(subject.type, definitions) !== 'game') return;
   const admitted =
-    gameType(definitions, subject.type) &&
+    profiles.gameType &&
     !catalogueTypeIsA(definitions, subject.type, 'wd:Q20631656') &&
     !catalogueTypeIsA(definitions, subject.type, 'wd:Q209163');
   const groups = admitted
-    ? (Object.entries(gameGroups(definitions, subject.type)) as [GameGroup, string[]][]).map(([id, properties]) => ({
+    ? (Object.entries(profiles.gameGroups) as [GameGroup, string[]][]).map(([id, properties]) => ({
         id,
         fields: properties.flatMap((property) => {
           const statements = publicPublicationStatements(subject, property, reader, locale);
@@ -804,8 +790,10 @@ export function SubjectPage({
   recoverCatalogueFileReader,
   recoverMusicReleaseReader,
   readingAdmission,
+  communityQueryKey,
 }: {
   page: SubjectPageData;
+  communityQueryKey?: readonly unknown[] | undefined;
   verification?: VerificationConfig;
   refreshCommunityAdvice?: () => Promise<void>;
   /** Re-enter the current Subject route loader for catalogue-file recovery. */
@@ -866,6 +854,13 @@ export function SubjectPage({
 }) {
   const overview = view === 'overview';
   const read = subjectBody(page);
+  const semanticProfiles = read
+    ? selectSubjectPageProfiles({
+        type: read.subject.type,
+        summaryTypes: read.summary?.types,
+        definitions: page.catalogue?.state === 'released' ? page.catalogue.definitions : undefined,
+      })
+    : undefined;
   const visitReturn = subjectVisitReturn(returnTo, locale);
   const mangaSubject = read && !page.account && isMangaReaderType(read.subject.type) ? read.subject : undefined;
   const literarySubject =
@@ -945,23 +940,21 @@ export function SubjectPage({
           });
         })()
       : undefined;
-  const returnDescriptor = currentAddress
-    ? gameClassificationReturn(new URL(currentAddress, 'https://rezics.invalid').hash)
-    : undefined;
+  const returnDescriptor = gameClassificationDescriptor(currentAddress);
   const descriptorKey = returnDescriptor ? JSON.stringify(returnDescriptor) : '';
   const [receivedGameReturn, setReceivedGameReturn] = useState<
     { address: string; descriptor: GameClassificationReturn; received: boolean } | undefined
   >();
   useEffect(() => {
     if (!currentAddress || !returnDescriptor) {
-      if (currentAddress) window.sessionStorage.removeItem(gameClassificationReturnStorageKey);
+      consumeGameClassificationReceipt(window.sessionStorage, currentAddress, returnDescriptor);
       setReceivedGameReturn(undefined);
       return;
     }
     setReceivedGameReturn({
       address: currentAddress,
       descriptor: returnDescriptor,
-      received: consumeGameClassificationReturn(window.sessionStorage, currentAddress),
+      received: consumeGameClassificationReceipt(window.sessionStorage, currentAddress, returnDescriptor),
     });
   }, [currentAddress, descriptorKey]);
   const received = receivedGameReturn?.address === currentAddress ? receivedGameReturn : undefined;
@@ -1381,15 +1374,17 @@ export function SubjectPage({
     <>
       {bar}
       {read && !page.account && (showcaseWork || page.catalogue?.state === 'released') && (
-        <WorkConceptTagsRoute
-          subject={read.subject}
-          related={read.related}
-          definitions={subjectCatalogueTagDefinitions(read.subject, page.catalogue)}
-          locale={locale}
-          {...(realm !== undefined ? { realm } : {})}
-          {...(currentHref !== undefined ? { currentHref } : {})}
-          spoilerThreshold={(reader ?? defaultReader).spoilerLevel}
-        />
+        <StatementReadingBinding>
+          <WorkConceptTagsRoute
+            subject={read.subject}
+            related={read.related}
+            definitions={subjectCatalogueTagDefinitions(read.subject, page.catalogue)}
+            locale={locale}
+            {...(realm !== undefined ? { realm } : {})}
+            {...(currentHref !== undefined ? { currentHref } : {})}
+            spoilerThreshold={(reader ?? defaultReader).spoilerLevel}
+          />
+        </StatementReadingBinding>
       )}
       {invite}
     </>
@@ -1681,7 +1676,7 @@ export function SubjectPage({
                   ) : null}
                 </div>
               ) : null}
-              {overview && read && !page.account && gameReaderEntry(read.subject.type, read.summary?.types) ? (
+              {overview && read && !page.account && semanticProfiles?.gameReader ? (
                 <GameOverview
                   source={page}
                   reader={page.requestedReader ?? null}
@@ -1696,11 +1691,7 @@ export function SubjectPage({
                   {...(gameInitial ? { initial: gameInitial } : {})}
                 />
               ) : null}
-              {overview &&
-              read &&
-              !page.account &&
-              !gameReaderEntry(read.subject.type, read.summary?.types) &&
-              gameReading ? (
+              {overview && read && !page.account && !semanticProfiles?.gameReader && gameReading ? (
                 <PublicationOverlayView
                   reading={{ kind: 'game', fields: gameReading.fields }}
                   subject={read.subject}
@@ -1805,7 +1796,9 @@ export function SubjectPage({
                 />
               ) : null}
               <SubjectCommunityRefreshContext.Provider value={refreshCommunityAdvice}>
-                <SubjectCommunityContext.Provider value={page.community}>
+                <SubjectCommunityContext.Provider
+                  value={page.community ? { ...page.community, queryKey: communityQueryKey } : undefined}
+                >
                   <SubjectCommunityVerificationContext.Provider value={verification}>
                     <CompositionRender
                       document={composition.remaining}

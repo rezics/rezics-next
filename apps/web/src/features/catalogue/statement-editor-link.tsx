@@ -1,6 +1,6 @@
 import { m } from '../../paraglide/messages.js';
 import { useSession } from '../../session/query';
-import { subjectHref } from '../../subject/subject-href';
+import { subjectHref } from '../../subject/load-subject';
 
 /** Insert-only join from a current selected fact. Relation, document and term editors keep their owners. */
 export function StatementCorrectionLink({

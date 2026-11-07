@@ -205,10 +205,14 @@ export class ManagerSessionTransport {
       if (activeTurnId) await client.request('turn/interrupt', { threadId, turnId: activeTurnId });
     }
   }
-  registerCodexViewer(spec: Pick<ManagerSpec, 'id' | 'pool' | 'cwd'>, threadId: string, client: AppServer): void {
+  async registerCodexViewer(
+    spec: Pick<ManagerSpec, 'id' | 'pool' | 'cwd'>,
+    threadId: string,
+    client: AppServer,
+  ): Promise<void> {
     const viewer = [spec.pool.executable ?? 'codex', 'resume', threadId];
     if (client.endpoint) viewer.push('--remote', client.endpoint);
-    this.services.windows.register(
+    await this.services.windows.register(
       spec.id,
       [
         'env',
@@ -220,18 +224,23 @@ export class ManagerSessionTransport {
       spec.cwd,
     );
   }
-  registerClaudeSession(spec: ManagerSpec, sessionId: string, prompt: string): void {
-    this.services.windows.register(
+  async registerClaudeSession(spec: ManagerSpec, sessionId: string, prompt: string): Promise<void> {
+    await this.services.windows.register(
       spec.id,
       this.claudeArgv(spec, ['--session-id', sessionId], this.openingPointer(spec, prompt)),
       spec.cwd,
     );
   }
-  reviveClaude(spec: ManagerSpec, sessionId: string, pending: boolean, waking: { id: number }[]): number[] {
+  async reviveClaude(
+    spec: ManagerSpec,
+    sessionId: string,
+    pending: boolean,
+    waking: { id: number }[],
+  ): Promise<number[]> {
     if (!pending) return [];
-    const alive = this.services.windows.alive?.(spec.id);
+    const alive = await this.services.windows.alive?.(spec.id);
     if (alive === false) {
-      this.services.windows.respawn?.(
+      await this.services.windows.respawn?.(
         spec.id,
         this.claudeArgv(
           spec,
@@ -245,7 +254,7 @@ export class ManagerSessionTransport {
     // A live session that ended its turn without a watcher never wakes on its own (web sat 2 h on 13 unread events on
     // 2026-10-26): type the wake into it, once per event.
     if (!waking.length || !this.services.windows.prompt) return [];
-    this.services.windows.prompt(
+    await this.services.windows.prompt(
       spec.id,
       `${waking.length} new inbox event(s): read them with bun tools/goal/src/cli.ts inbox read ${spec.id}, act and acknowledge; start bun tools/goal/src/cli.ts inbox wait ${spec.id} in the background before you end the turn.`,
     );

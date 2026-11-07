@@ -8,7 +8,7 @@ import { useId, useRef, useState, type FormEvent } from 'react';
 import { useCollectionCurrentAdmission } from './collection-current-admission';
 import { coverSrc } from '../media/cover-src';
 import { m } from '../paraglide/messages.js';
-import { useSession } from '../session/query';
+import { useSession } from '../session';
 import { searchContentSubjects } from '../threads/content-subject-search';
 import { addCollectionMember } from './collection-edit';
 

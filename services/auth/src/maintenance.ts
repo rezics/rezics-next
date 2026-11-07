@@ -1,16 +1,15 @@
 import { DBOS } from '@dbos-inc/dbos-sdk';
 import type { AuthService } from './index.ts';
-import { SigningRotationPending } from './signing.ts';
+import { createRetentionMaintenance } from './application/index.ts';
 import { CONSENT_ERASURE_BATCH } from './consent-erasure.ts';
 import { metadataConfigurationStores } from './metadata-scrub.ts';
 import {
-  readWorkflowRetentionConfig,
-  runWorkflowRetentionSweep,
   WORKFLOW_RETENTION_WORKFLOW,
   WORKFLOW_RETENTION_SCHEDULE,
   WORKFLOW_RETENTION_SCHEDULE_EXPRESSION,
   type WorkflowRetentionConfig,
-} from './retention.ts';
+} from './contract/index.ts';
+import { readWorkflowRetentionConfig } from './core/index.ts';
 
 export const AUTH_SYSTEM_SCHEMA = 'auth_dbos';
 export const AUTH_MAINTENANCE_SCHEDULE = 'auth-maintenance';
@@ -38,19 +37,11 @@ export function registerAuthMaintenance(
     );
 
   const sweepExpiredSessions = step('sweepExpiredSessions', () => auth.internal.pruneExpiredSessions(1000));
-  const retireSigningKeys = step('retireSigningKeys', async () => {
-    // The live singleton has at most three slots. CAS and retention are owned by
-    // the signing primitive; no archive enumeration or key rows enter history.
-    try {
-      const state = await auth.internal.signing.status();
-      if (!state.retiring) return 0;
-      await auth.internal.signing.prune({ expectedGeneration: state.generation });
-      return 1;
-    } catch (error) {
-      if (error instanceof SigningRotationPending) return 0;
-      throw error;
-    }
+  const retentionMaintenance = createRetentionMaintenance({
+    signing: auth.internal.signing,
+    retainWorkflowHistory: (days) => auth.internal.retainWorkflowHistory(days),
   });
+  const retireSigningKeys = step('retireSigningKeys', retentionMaintenance.retireSigningKeys);
   const sweepExpiredVerifications = step('sweepExpiredVerifications', () => auth.internal.pruneExpiredVerifications());
   const nativeErasure = step('nativeErasure', redrive);
   const kindConsent = step('kindConsentInvalidations', async () =>
@@ -76,7 +67,7 @@ export function registerAuthMaintenance(
   );
 
   const retainWorkflows = step('retainWorkflows', () =>
-    runWorkflowRetentionSweep(retention.retentionDays, DBOS, new Date(), auth.internal?.retireWorkflowCopy),
+    retentionMaintenance.retainWorkflowHistory(retention.retentionDays),
   );
   const retentionTick = DBOS.registerWorkflow(
     async (_scheduledAt: Date, _context: unknown): Promise<void> => {

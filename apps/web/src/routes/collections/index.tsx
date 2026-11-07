@@ -1,8 +1,13 @@
 import {
+  readPublicCollectionDiscovery,
+  renderPublicCollection,
+  type PublicCollectionDiscoveryState,
+} from '../../search/public-collection-directory';
+import {
   parsePublicCollectionDirectoryAddress,
   publicCollectionDirectoryHref,
   type PublicCollectionDirectoryAddress,
-} from '../../library/public-collection-discovery/address';
+} from '../../search/contracts/collection-directory';
 import { type MouseEvent, useLayoutEffect, useRef } from 'react';
 import { createFileRoute, useRouter } from '@tanstack/react-router';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
@@ -12,7 +17,6 @@ import { getLocale } from '../../paraglide/runtime.js';
 import { m } from '../../paraglide/messages.js';
 import { PublicCollectionDiscoveryPage } from '../../library/public-collection-discovery/page';
 import { publicCollectionDiscoveryQueryOptions } from '../../library/public-collection-discovery/query';
-import type { PublicCollectionDiscoveryState } from '../../library/public-collection-discovery/read';
 import {
   collectionWindowHref,
   publicCollectionWindowVisit,
@@ -39,7 +43,9 @@ export const Route = createFileRoute('/collections/')({
   loader: ({ deps, context }) => {
     if (deps.invalidCursor || deps.invalidSelection) return undefined;
     const locale = getLocale();
-    return context.queryClient.ensureQueryData(publicCollectionDiscoveryQueryOptions(locale, deps));
+    return context.queryClient.ensureQueryData(
+      publicCollectionDiscoveryQueryOptions(locale, deps, readPublicCollectionDiscovery),
+    );
   },
   head: ({ match }) =>
     pageHead(
@@ -66,10 +72,14 @@ export const Route = createFileRoute('/collections/')({
       ...(address.order === undefined ? {} : { order: address.order }),
     };
     const query = useQuery({
-      ...publicCollectionDiscoveryQueryOptions(locale, {
-        ...selection,
-        ...(address.cursor === undefined ? {} : { cursor: address.cursor }),
-      }),
+      ...publicCollectionDiscoveryQueryOptions(
+        locale,
+        {
+          ...selection,
+          ...(address.cursor === undefined ? {} : { cursor: address.cursor }),
+        },
+        readPublicCollectionDiscovery,
+      ),
       enabled: !invalidCursor && !invalidSelection,
     });
     const source = query.data;
@@ -122,6 +132,7 @@ export const Route = createFileRoute('/collections/')({
     };
     return (
       <PublicCollectionDiscoveryPage
+        renderCollection={renderPublicCollection}
         state={state}
         locale={locale}
         selection={selection}

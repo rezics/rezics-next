@@ -5,18 +5,36 @@ import { facetProperties, type FilterRelease } from '@rezics/filter';
 import { spoilerLevel } from '../../pages/shared';
 import { personEvidenceFits } from '../person-reader/model';
 import { candidateFailure, type CandidateFailure } from '../../../subject/candidates';
-import { CONCEPT_PAGE_CAP, typeExtends } from '../../pages/graph-browser';
 import { conditionMetadata, type ConditionMetadata } from '../../../search/condition-editor-model';
 import {
   emptyMembership,
   readConceptMembership,
+  typeExtends,
+  validMembershipCursor,
   type ConceptHierarchyState,
   type ConceptMembership,
+  type ConceptMembershipCursors,
 } from './membership';
 
-export type { ConceptHierarchyState, ConceptMembership, ConceptMembershipRow } from './membership';
-export { emptyMembership, readConceptMembership, membershipProperties } from './membership';
+export type {
+  ConceptHierarchyState,
+  ConceptMembership,
+  ConceptMembershipCursors,
+  ConceptMembershipRow,
+  ConceptMembershipStream,
+  MembershipProperty,
+} from './membership';
+export {
+  emptyMembership,
+  membershipContinuationLimit,
+  membershipPageCap,
+  membershipProperties,
+  readConceptMembership,
+  typeExtends,
+  validMembershipCursor,
+} from './membership';
 
+export const conceptPageCap = 20;
 export const conceptContinuationLimit = 4096;
 export function validConceptCursor(cursor: string | undefined): boolean {
   return cursor === undefined || new TextEncoder().encode(cursor).byteLength <= conceptContinuationLimit;
@@ -231,12 +249,18 @@ export async function readSourceConcept(
   locale: string,
   input: {
     cursor?: string | undefined;
+    membership?: ConceptMembershipCursors | undefined;
     session?: string | undefined;
     role?: string | undefined;
   },
 ): Promise<ConceptRead> {
   try {
     if (!validConceptCursor(input.cursor)) return candidateFailure(400);
+    if (
+      input.membership &&
+      Object.values(input.membership).some((cursor) => cursor !== undefined && !validMembershipCursor(cursor))
+    )
+      return candidateFailure(400);
     const headers = headersOf(authorization, input.session);
     const query = { language: locale, includeViewerActions: true };
     const current = await client.subjects({ id }).get({ query, headers });
@@ -266,7 +290,7 @@ export async function readSourceConcept(
           ...(input.cursor ? { cursor: input.cursor } : {}),
         },
         works: { state: 'unsupported', types: [], properties: [], metadata: null },
-        membership: emptyMembership('unsupported'),
+        membership: emptyMembership('unsupported', input.membership),
         viewerActions,
         spoiler: false,
         ...(session ? { session } : {}),
@@ -362,14 +386,14 @@ export async function readSourceConcept(
           query: {
             property: conceptRequested.broader,
             language: locale,
-            limit: CONCEPT_PAGE_CAP,
+            limit: conceptPageCap,
             ...(input.cursor ? { cursor: input.cursor } : {}),
           },
           headers: headersOf(authorization, session),
         });
         if (page.status === 200 && page.data && 'links' in page.data) {
           if (
-            page.data.links.length > CONCEPT_PAGE_CAP ||
+            page.data.links.length > conceptPageCap ||
             new TextEncoder().encode(JSON.stringify(page.data)).byteLength > conceptEvidenceBounds.bytes
           )
             return { ok: false, reason: 'unavailable', oversized: true };
@@ -410,7 +434,10 @@ export async function readSourceConcept(
     const spoiler = Object.values(current.data.subject.statements).some((statements) =>
       statements.some((statement) => spoilerLevel(statement) > 0),
     );
-    const membershipRead = await readConceptMembership(client, authorization, release, id, locale, { session });
+    const membershipRead = await readConceptMembership(client, authorization, release, id, locale, {
+      session,
+      ...(input.membership ? { cursors: input.membership } : {}),
+    });
     if (membershipRead.failure) return candidateFailure(membershipRead.failure);
     if (membershipRead.oversized) return { ok: false, reason: 'unavailable', oversized: true };
     session = membershipRead.session ?? session;

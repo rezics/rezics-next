@@ -5,3 +5,11 @@ export {
   purchaseReaderOriginIsCurrent,
   type PurchaseReaderOrigin,
 } from './purchase-return';
+
+export type {
+  CheckoutCurrentVisit,
+  CreatorEditionReview,
+  CreatorEditionReviewProps,
+  CreatorEditionMetadataReader,
+  CreatorOfferReaders,
+} from './capabilities';

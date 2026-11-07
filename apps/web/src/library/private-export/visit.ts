@@ -1,6 +1,6 @@
 import { QueryClientContext } from '@tanstack/react-query';
 import { useContext, useMemo, useSyncExternalStore } from 'react';
-import { sessionQuery } from '../../session/query';
+import { sessionQuery } from '../../session';
 
 type SessionValue = { state?: string; subject?: string | null; csrfToken?: string | null };
 

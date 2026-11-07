@@ -5,6 +5,10 @@ import { ProfileLinks } from '../src/settings/profile-links';
 import { ProfileEditor, profileFieldErrors, type ProfileAttempt } from '../src/settings/profile-write';
 import type { ProfileValues } from '../src/settings/profile-data';
 import { m } from '../src/paraglide/messages.js';
+import { createBrowserSettingsAmbient } from '../src/settings/adapters/ambient';
+import { performanceAmbientTree } from './performance-ambient';
+
+const settingsAmbient = createBrowserSettingsAmbient();
 
 const duplicate = { label: 'Notes', url: 'https://example.test/notes' };
 const initial: ProfileValues = {
@@ -21,16 +25,19 @@ test('five duplicate links remain separate named rows with visible labels and ad
   const links = initial.links.map((link, index) => (index === 2 ? { ...link, url: 'http://example.test' } : link));
   const errors = profileFieldErrors({ ...initial, links });
   const html = renderToStaticMarkup(
-    createElement(ProfileLinks, {
-      links,
-      disabled: false,
-      onChange: () => {
-        throw new Error('Rendering must not edit the draft');
-      },
-      ids: 'profile',
-      errors,
-      fieldError: (field) => (errors[field] ? createElement('p', { id: `profile-${field}-error` }, 'Use HTTPS') : null),
-    }),
+    performanceAmbientTree(
+      createElement(ProfileLinks, {
+        links,
+        disabled: false,
+        onChange: () => {
+          throw new Error('Rendering must not edit the draft');
+        },
+        ids: 'profile',
+        errors,
+        fieldError: (field) =>
+          errors[field] ? createElement('p', { id: `profile-${field}-error` }, 'Use HTTPS') : null,
+      }),
+    ),
   );
   expect(html.match(/<fieldset\b/g)).toHaveLength(5);
   for (let index = 0; index < 5; index++) {
@@ -52,6 +59,7 @@ test('editing and removing a middle duplicate preserves all other rows and the d
   let current = structuredClone(initial);
   const editor = new ProfileEditor(
     {
+      ambient: settingsAmbient,
       read: async () => structuredClone(current),
       save: (attempt) => {
         attempts.push(attempt);

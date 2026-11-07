@@ -1,7 +1,6 @@
 import { useLayoutEffect, useSyncExternalStore, type MouseEvent as ReactMouseEvent } from 'react';
 import { useRouter, type AnyRouter } from '@tanstack/react-router';
-import type { QueryClient } from '@tanstack/react-query';
-import { browserObservation } from '../session/observation';
+import type { CheckoutCurrentVisit } from './capabilities';
 import { purchaseReaderOriginFromState } from './purchase-return';
 import type { BuyerCurrentOrigin } from './buyer-current-origin';
 import {
@@ -48,7 +47,7 @@ export class BuyerHistoryVisit {
   private listeners = new Set<() => void>();
   private focus: { ticket: BuyerHistoryIntent; initiator: Element } | undefined;
   private connected = false;
-  constructor(private readonly client: QueryClient) {}
+  constructor(private readonly currentVisit: CheckoutCurrentVisit) {}
 
   snapshot = () => this.revision;
   subscribe = (notify: () => void) => {
@@ -59,7 +58,7 @@ export class BuyerHistoryVisit {
   };
   private publish() {
     this.revision++;
-    browserObservation(this.client).publish(() => this.listeners.forEach((notify) => notify()));
+    this.currentVisit.publish(() => this.listeners.forEach((notify) => notify()));
   }
   clear = () => {
     this.windows.retire();
@@ -85,22 +84,7 @@ export class BuyerHistoryVisit {
   /** No observer, root provider, private body cache, global registry or persistent storage. */
   mount(router: AnyRouter) {
     this.connected = true;
-    const observation = browserObservation(this.client);
-    const retirement = observation.subscribeRetirement(this.clear);
-    const cache = observation.subscribeCache((event) => {
-      const current = observation.getSnapshot();
-      const key = event.query.queryKey;
-      if (
-        current.state === 'signed-in' &&
-        key[0] === 'exposure' &&
-        key[1] === 'viewer' &&
-        key[2] === current.observation.subject &&
-        key[3] === current.observation.id &&
-        event.type === 'updated' &&
-        ['success', 'error', 'invalidate'].includes(event.action.type)
-      )
-        this.clear();
-    });
+    const retirement = this.currentVisit.subscribeRetirement(this.clear);
     const navigation = router.subscribe('onBeforeNavigate', ({ fromLocation, toLocation }) => {
       if (fromLocation?.href === toLocation.href) return;
       const from = fromLocation && buyerRoute(fromLocation.publicHref);
@@ -156,7 +140,6 @@ export class BuyerHistoryVisit {
     return () => {
       this.connected = false;
       retirement();
-      cache();
       navigation();
       document.removeEventListener('click', click);
       document.removeEventListener('focusin', focus);

@@ -9,6 +9,7 @@ import { developmentShowcaseSelection } from '../../../scripts/datasets/cross-me
 import { ImportTransportError } from '../src/import-client.ts';
 import {
   CrossMediaDumpFiles,
+  collectSelectedDumpRows,
   crossMediaAliases,
   planCrossMediaSeed,
   seedCrossMedia,
@@ -17,6 +18,7 @@ import {
 } from '../src/cross-media-seed.ts';
 import { sourceRecordMetadataFixture } from './transport-driver.ts';
 import { importVndbReleaseFidelity } from '../src/selected-import.ts';
+import { CrossMediaTableScanLimitError } from '../src/showcase-contract.ts';
 import {
   decodeVndbReleased,
   developmentStatusConceptUri,
@@ -24,6 +26,7 @@ import {
   developmentStatusTaxonomy,
   planVndbReleaseFidelity,
   readVndbReleaseBindings,
+  vndbReleaseScanLimits,
 } from '../src/vndb-release-fidelity.ts';
 
 /** Authored COPY tables. These are not observed public dump evidence. */
@@ -507,3 +510,114 @@ test('default selected-family traversal acquires directed release endpoints and 
     await rm(directory, { recursive: true, force: true });
   }
 }, 60_000);
+
+test('a dump entry_meta scan limit is a release gap rather than a seed crash', async () => {
+  const duck = new Error('Cross-media vndb/entry_meta exceeded its bounded scan');
+  duck.name = 'CrossMediaTableScanLimitError';
+  const tables: CrossMediaTables = {
+    async *rows(_provider, table) {
+      if (table === 'vn') {
+        yield { id: 'v1', olang: 'ja', devstatus: '0' };
+        return;
+      }
+      if (table === 'entry_meta') throw duck;
+      if (table === 'vn_titles') {
+        yield { id: 'v1', lang: 'ja', official: 't', title: 'Authored work', latin: null };
+        return;
+      }
+    },
+  };
+  const named = await planVndbReleaseFidelity(tables, { selectedWorkIds: ['v1'] });
+  expect(named.gaps.some((gap) => gap.reason.includes('row or byte bound'))).toBe(true);
+
+  const files: CrossMediaTables = {
+    async *rows(_provider, table) {
+      if (table === 'vn') {
+        yield { id: 'v1', olang: 'ja', devstatus: '0' };
+        return;
+      }
+      if (table === 'entry_meta') throw new CrossMediaTableScanLimitError('vndb', table);
+    },
+  };
+  const dumped = await planVndbReleaseFidelity(files, { selectedWorkIds: ['v1'] });
+  expect(dumped.gaps.some((gap) => gap.reason.includes('row or byte bound'))).toBe(true);
+});
+
+test('selected VNDB entry_meta rows continue from the exact unread dump offset', async () => {
+  const directory = await mkdtemp(join(tmpdir(), 'vndb-entry-meta-continuation-'));
+  try {
+    const db = join(directory, 'db');
+    await mkdir(db, { recursive: true });
+    await writeFile(join(db, 'entry_meta.header'), 'id\trevision\tlastmod\n');
+    await writeFile(join(db, 'entry_meta'), 'c1\t1\t2026-10-25 00:00:00+00\nv1\t7\t2026-10-25 00:00:00+00\n');
+    const dump = new CrossMediaDumpFiles(join(directory, 'bangumi'), directory);
+    const pending = new Set(['v1']);
+    const found = new Map<string, number>();
+    await collectSelectedDumpRows(dump, 'vndb', 'entry_meta', {
+      limits: { maxRows: 1, maxBytes: 1024 },
+      select: (row) => pending.has(String(row.id ?? '')),
+      onRow(row) {
+        found.set(String(row.id), Number(row.revision));
+        pending.delete(String(row.id));
+      },
+      done: () => pending.size === 0,
+      onLimit() {
+        throw new Error('entry_meta stopped before the selected revision was found');
+      },
+    });
+    expect(found).toEqual(new Map([['v1', 7]]));
+
+    const duckFound = new Map<string, number>();
+    const duckRemaining = new Set(['v1']);
+    const duck: CrossMediaTables = {
+      async *rows(_provider, _table, limits) {
+        if ((limits?.resumeBytes ?? 0) === 0) {
+          yield { id: 'c1', revision: 1 };
+          const error = new Error('Cross-media vndb/entry_meta exceeded its bounded scan');
+          error.name = 'CrossMediaTableScanLimitError';
+          Object.assign(error, { resumeBytes: 48 });
+          throw error;
+        }
+        yield { id: 'v1', revision: 9 };
+      },
+    };
+    await collectSelectedDumpRows(duck, 'vndb', 'entry_meta', {
+      limits: { maxRows: 2, maxBytes: 1024 },
+      select: (row) => duckRemaining.has(String(row.id ?? '')),
+      onRow(row) {
+        duckFound.set(String(row.id), Number(row.revision));
+        duckRemaining.delete(String(row.id));
+      },
+      done: () => duckRemaining.size === 0,
+      onLimit() {
+        throw new Error('a duplicate module scan-limit error stopped continuation');
+      },
+    });
+    expect(duckFound).toEqual(new Map([['v1', 9]]));
+  } finally {
+    await rm(directory, { recursive: true, force: true });
+  }
+});
+
+test('release scan limits fit the pinned 2026-11-04 dump tables', () => {
+  expect(vndbReleaseScanLimits.entry_meta?.maxRows).toBeGreaterThanOrEqual(495_184);
+  expect(vndbReleaseScanLimits.entry_meta?.maxBytes).toBeGreaterThanOrEqual(17_493_195);
+  expect(vndbReleaseScanLimits.releases?.maxRows).toBeGreaterThanOrEqual(160_532);
+  expect(vndbReleaseScanLimits.releases?.maxBytes).toBeGreaterThanOrEqual(15_913_985);
+});
+
+test('dump table scan overflow uses the contract error the release planner catches', async () => {
+  const directory = await mkdtemp(join(tmpdir(), 'vndb-scan-overflow-'));
+  try {
+    const db = join(directory, 'db');
+    await mkdir(db, { recursive: true });
+    await writeFile(join(db, 'entry_meta.header'), 'id\trevision\tlastmod\n');
+    await writeFile(join(db, 'entry_meta'), 'v1\t1\t2026-10-25 00:00:00+00\nv2\t1\t2026-10-25 00:00:00+00\n');
+    const tables = new CrossMediaDumpFiles(join(directory, 'bangumi'), directory);
+    await expect(async () => {
+      for await (const row of tables.rows('vndb', 'entry_meta', { maxRows: 1, maxBytes: 64 * 1024 * 1024 })) void row;
+    }).toThrow(CrossMediaTableScanLimitError);
+  } finally {
+    await rm(directory, { recursive: true, force: true });
+  }
+});

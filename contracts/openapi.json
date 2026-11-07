@@ -309640,6 +309640,7 @@
                                 "mediaIds",
                                 "voteCitation",
                                 "revisedAt",
+                                "attribution",
                                 "availability",
                                 "body"
                               ],
@@ -309956,6 +309957,7 @@
                                 "mediaIds",
                                 "voteCitation",
                                 "revisedAt",
+                                "attribution",
                                 "availability",
                                 "removed",
                                 "body"
@@ -310329,6 +310331,7 @@
                             "mediaIds",
                             "voteCitation",
                             "revisedAt",
+                            "attribution",
                             "availability",
                             "removed",
                             "body"

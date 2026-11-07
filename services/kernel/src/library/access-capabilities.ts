@@ -1,17 +1,15 @@
 /** Access-owned Library capabilities. Imported only through this public entry. */
-export {
-  collectionKindInputWork,
-  resolveCollectionKindRawInput,
-  type CollectionKindInputBinding,
-  type CollectionKindInputResult,
-  type CollectionKindRawInputBody,
+export { collectionKindInputWork } from './collection-kind-input-bounds.ts';
+export type {
+  CollectionKindInputBinding,
+  CollectionKindInputResult,
+  CollectionKindRawInputBody,
 } from './collection-kind-input.ts';
-export { IDENTITY_HISTORY_ORIGINAL_LIBRARY_DECLARATION } from './collection-source-work.ts';
 export {
   NativeCollectionWork,
   bindNativeCollectionWorkLifetime,
   instrumentNativeCollectionWork,
   requireNativeCollectionFootprint,
   withNativeCollectionWorkAllowance,
-} from './collection-source-work.ts';
+} from './collection-native-work.ts';
 export type { WorkAllowance, WorkDimensions, WorkReceipt } from './contract/work-dimensions.ts';

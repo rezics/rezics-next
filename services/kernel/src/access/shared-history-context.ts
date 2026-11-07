@@ -6,7 +6,7 @@ import {
   runCommand,
   type CommandTransaction,
 } from '../command/command.ts';
-import { enrollContextRoleProvenance } from '../semantic/context-role-provenance.ts';
+import { enrollContextRoleProvenance } from '../semantic/access-capabilities.ts';
 import { runOperationalTransaction } from '../command/operational.ts';
 import type { Resource } from '../request/access.ts';
 import { partitionOf } from '../route/route.ts';

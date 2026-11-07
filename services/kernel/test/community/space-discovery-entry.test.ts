@@ -56,7 +56,7 @@ test('native current identity and admitted destinations follow address and carri
   };
   const read = () =>
     readSpaceDiscoveryEntryBatch(
-      { clock: () => new Date(), pool: system.database.pool, access: system.access },
+      { clock: () => new Date(), pool: system.database.pool, access: system.access, deadlineNow: () => Date.now() },
       system.actors.author.actor,
       [space.spaceId],
       Date.now() + 30000,
@@ -86,7 +86,7 @@ test('native current identity and admitted destinations follow address and carri
   expect(carried.destination).toEqual({ kind: 'realm', realmId: realm.realmId });
   expect(carried.actions.status).toBe('available');
   const withoutAdvice = await readSpaceDiscoveryEntryBatch(
-    { clock: () => new Date(), pool: system.database.pool, access: system.access },
+    { clock: () => new Date(), pool: system.database.pool, access: system.access, deadlineNow: () => Date.now() },
     system.actors.author.actor,
     [space.spaceId],
     Date.now() + 30000,

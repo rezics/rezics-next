@@ -15,7 +15,7 @@ import type {
 import collectionInsert from './collection-store-collection-insert.sql';
 import collectionRead from './collection-store-collection-read.sql';
 import collectionUpdate from './collection-store-collection-update.sql';
-import { initializeCollectionMetadataHistory } from './collection-metadata-history.ts';
+import { collectionMutationApplication } from './collection-mutation.ts';
 import collectionTombstone from './collection-store-collection-tombstone.sql';
 import collectionDeletionRead from './collection-store-collection-deletion-read.sql';
 import collectionRestore from './collection-store-collection-restore.sql';
@@ -30,7 +30,7 @@ import memberRestore from './collection-store-collection-member-restore.sql';
 import memberRetentionRead from './collection-store-collection-member-retention-read.sql';
 import membersList from './collection-store-collection-members-list.sql';
 import membersRespace from './collection-store-collection-members-respace.sql';
-import { executeCollectionRetentionQuery } from './collection-retention-bounds.ts';
+import { executeCollectionRetentionQuery } from './collection-retention-execution.ts';
 
 type Client = Pick<PoolClient, 'query'>;
 type WriteContext = { transactionId: string; time: string };
@@ -107,27 +107,23 @@ export async function insertCollection(
   collection: CollectionDraft,
   context: WriteContext,
 ): Promise<Collection> {
-  const rows = await collectionInsert.run(queryClient(client), {
-    route,
-    id: collection.id,
-    curator_account_id: collection.curatorAccountId,
-    title: collection.title,
-    description: collection.description,
-    visibility: collection.visibility,
-    presentation_kind: collection.presentationKind ?? null,
-    cover_media_id: collection.coverMediaId ?? null,
-    ...write(context),
+  return collectionMutationApplication().create(client, { route, collection, ...context }, async () => {
+    const rows = await collectionInsert.run(queryClient(client), {
+      route,
+      id: collection.id,
+      curator_account_id: collection.curatorAccountId,
+      title: collection.title,
+      description: collection.description,
+      visibility: collection.visibility,
+      presentation_kind: collection.presentationKind ?? null,
+      cover_media_id: collection.coverMediaId ?? null,
+      ...write(context),
+    });
+    const row = rows[0];
+    if (!row) throw new Error('Collection insert returned no row');
+    const result = asCollection(row as CollectionResult);
+    return result;
   });
-  const row = rows[0];
-  if (!row) throw new Error('Collection insert returned no row');
-  const result = asCollection(row as CollectionResult);
-  await initializeCollectionMetadataHistory(client, {
-    route,
-    collection,
-    transactionId: context.transactionId,
-    time: context.time,
-  });
-  return result;
 }
 
 export async function readCollection(client: Client, route: number, id: string): Promise<Collection | null> {

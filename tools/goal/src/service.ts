@@ -1,10 +1,19 @@
 import { defaultPolicy } from './policy.ts';
-import { spawn } from 'node:child_process';
 import { mkdirSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
 import { createConnection } from 'node:net';
 import { homedir, userInfo } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
-import { sameProcess, signalProcessIdentity, waitForProcess, type ProcessIdentity } from './process.ts';
+import {
+  HOST_START_KINDS,
+  runHostProcess,
+  sameProcess,
+  signalProcessIdentity,
+  waitForProcess,
+  type HostStartKind,
+  type ProcessIdentity,
+} from './process.ts';
+
+export { HOST_START_KINDS, runHostProcess, type HostStartKind } from './process.ts';
 
 export const HOST_UNIT = 'rezics-goal-host.service';
 export const VERIFIER_UNIT = 'rezics-goal-verifier.service';
@@ -235,29 +244,90 @@ export async function ensureServiceHost(
     throw new Error(`Manager host socket unavailable after starting ${HOST_UNIT}: ${socket}`);
 }
 
+let currentHostOperation: string | undefined;
+let lastHostOperation: string | undefined;
+
+/** Name the host work that is occupying this event loop so a stall log can point at it. */
+export async function runHostOperation<T>(name: string, work: () => T | Promise<T>): Promise<T> {
+  const previous = currentHostOperation;
+  currentHostOperation = name;
+  lastHostOperation = name;
+  try {
+    return await work();
+  } finally {
+    currentHostOperation = previous;
+  }
+}
+
+/**
+ * Log an event-loop stall over policy.stallMs with the operation that caused it, at most once per
+ * policy.stallLogEveryMs. The timer only fires after the stall ends, so the gap is the stall length.
+ */
+export function startHostStallMonitor(
+  log: (line: string) => void = (line) => console.error(line),
+  policy = defaultPolicy.service,
+  now: () => number = () => performance.now(),
+): () => void {
+  let lastTurn = now();
+  let lastLog = Number.NEGATIVE_INFINITY;
+  const timer = setInterval(
+    () => {
+      const at = now();
+      const gap = at - lastTurn;
+      lastTurn = at;
+      if (gap < policy.stallMs || at - lastLog < policy.stallLogEveryMs) return;
+      lastLog = at;
+      log(`event-loop stall: ${Math.round(gap)}ms during ${currentHostOperation ?? lastHostOperation ?? 'unknown'}`);
+    },
+    Math.max(10, Math.min(1000, Math.floor(policy.stallMs / 4))),
+  );
+  timer.unref();
+  return () => clearInterval(timer);
+}
+
+/** Launch a worker start, retry, released start or first start in a child of the manager host. */
+export function offloadHostTask(
+  taskId: string,
+  kind: HostStartKind,
+  options: { cli: string; cwd: string; env?: NodeJS.ProcessEnv },
+): Promise<void> {
+  if (!(HOST_START_KINDS as readonly string[]).includes(kind)) throw new Error(`Unknown host start kind: ${kind}`);
+  return runHostProcess(process.execPath, [options.cli, '_host-start', kind, taskId], {
+    cwd: options.cwd,
+    ...(options.env ? { env: options.env } : {}),
+  }).then((result) => {
+    if (result.code !== 0)
+      throw new Error(result.stderr.trim() || `_host-start ${kind} ${taskId}: exit ${result.code}`);
+  });
+}
+
 /** Notifications come from this event loop, so an unresponsive host cannot keep its watchdog alive. */
 export async function startHostHeartbeat(
   env = process.env,
   notify: ((message: string) => Promise<void>) | undefined = undefined,
   policy = defaultPolicy.service,
 ): Promise<() => void> {
+  const stopStall = startHostStallMonitor(undefined, policy);
   notify ??= async (message) => {
-    await new Promise<void>((resolve, reject) => {
-      const child = spawn('systemd-notify', [`--pid=${process.pid}`, message], { stdio: ['ignore', 'ignore', 'pipe'] });
-      let error = '';
-      child.stderr?.on('data', (chunk) => {
-        error = (error + chunk).slice(-policy.diagnosticCharacters);
-      });
-      child.once('error', reject);
-      child.once('exit', (code) =>
-        code === 0 ? resolve() : reject(new Error(error || `systemd-notify: exit ${code}`)),
+    const result = await runHostProcess('systemd-notify', [`--pid=${process.pid}`, message]);
+    if (result.code !== 0)
+      throw new Error(
+        (result.stderr.trim() || `systemd-notify: exit ${result.code}`).slice(-policy.diagnosticCharacters),
       );
-    });
   };
-  if (!env.NOTIFY_SOCKET) return () => {};
-  await notify('READY=1');
-  const watchdog = Number(env.WATCHDOG_USEC);
-  if (!Number.isFinite(watchdog) || watchdog <= 0) throw new Error('Systemd watchdog interval is missing or invalid');
+  if (!env.NOTIFY_SOCKET)
+    return () => {
+      stopStall();
+    };
+  let watchdog: number;
+  try {
+    await notify('READY=1');
+    watchdog = Number(env.WATCHDOG_USEC);
+    if (!Number.isFinite(watchdog) || watchdog <= 0) throw new Error('Systemd watchdog interval is missing or invalid');
+  } catch (error) {
+    stopStall();
+    throw error;
+  }
   let sending = false;
   const timer = setInterval(
     () => {
@@ -273,5 +343,8 @@ export async function startHostHeartbeat(
     Math.max(1, Math.floor(watchdog / 2000)),
   );
   timer.unref();
-  return () => clearInterval(timer);
+  return () => {
+    clearInterval(timer);
+    stopStall();
+  };
 }

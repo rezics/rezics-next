@@ -6,7 +6,7 @@ import saveFrame from './identity-work-frame-save.sql';
 import readLimit from './identity-work-frame-limit.sql';
 import pageVotes from './segment-identity-page.sql';
 
-export const RATING_IDENTITY_PAGE_SIZE = 64;
+export { RATING_IDENTITY_PAGE_SIZE } from './identity-work-frame-limits.ts';
 export type IdentityVoteKey = { questionId: string; targetId: string };
 export type IdentityVote = IdentityVoteKey & {
   units: number | null;

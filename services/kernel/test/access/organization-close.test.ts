@@ -2,12 +2,8 @@ import { suspendAccount } from '../support/native-suspension-driver.ts';
 import { afterAll, expect, test } from 'bun:test';
 import { createPool } from '../../src/database/pool.ts';
 import { newId, routeOf } from '../../src/route/route.ts';
-import {
-  readAccount,
-  readOrganizationRole,
-  readPublicAccountByHandle,
-  readPublicIdentities,
-} from '../../src/access/account-data.ts';
+import { readAccount, readOrganizationRole, readPublicIdentities } from '../../src/access/account-data.ts';
+import { readPublicAccountByHandle } from '../../src/access/public-identity.ts';
 import {
   createLifecycleCommands,
   createLifecycleInternals,

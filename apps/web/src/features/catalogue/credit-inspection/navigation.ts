@@ -1,5 +1,5 @@
 import { catalogueDigest } from '@rezics/definitions/catalogue';
-import { subjectViewHref } from '../../../subject/subject-href';
+import { subjectViewHref } from '../../../subject/load-subject';
 import type { CreditAssertion, CreditVisit } from './model';
 
 /** A single address and exact assertion locator. Never a retained authorized body or an editor request. */

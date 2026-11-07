@@ -1,3 +1,4 @@
+import { SavedQueryConditionInput } from '../src/search/saved-query-condition-input';
 import { expect, test } from 'bun:test';
 import { dirname } from 'node:path';
 import { act, StrictMode, type ComponentProps } from 'react';
@@ -41,6 +42,7 @@ async function mount(save: Props['save'] = async () => ({ ok: false, reason: 'in
   window.document.body.append(host);
   const root = createRoot(host);
   let props: Props = {
+    ConditionInput: SavedQueryConditionInput,
     page,
     viewerId: 'alice',
     collectionId: null,

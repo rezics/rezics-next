@@ -3,7 +3,9 @@ import { statementBytes } from '../database/statement-bytes.ts';
 import ordinalPage from './collection-source-native-ordinal.sql';
 import { types, type Pool, type PoolClient, type QueryResult, type QueryConfig } from 'pg';
 import { declareBound, type Bound } from '@rezics/bounds';
-import { deadlineClient } from '../access/authenticate.ts';
+import { requireLibraryDomain } from './domain-binding.ts';
+const deadlineClient = <T extends object>(client: T, deadline: number): T =>
+  requireLibraryDomain().authorization.deadlineClient(client, deadline);
 import {
   currentOperationalResources,
   hasLiveOperationalTransaction,
@@ -132,15 +134,8 @@ import outputHead from './collection-source-output-head.sql';
 import outputPage from './collection-source-output-page.sql';
 import outputProbe from './collection-source-output-probe.sql';
 
-export type NativeCollectionOrdinalPageBound = Readonly<{
-  limit: number;
-  requestBytes: number;
-  resultBytes: number;
-  /** Complete legacy Source footprint, including request bindings and the result projection ceiling. */
-  work: WorkDimensions;
-  /** Projection-only dimensions used by the shared native SQL dispatcher. */
-  projection: Readonly<Partial<WorkDimensions>>;
-}>;
+export type { NativeCollectionOrdinalPageBound } from './contract/source.ts';
+import type { NativeCollectionOrdinalPageBound } from './contract/source.ts';
 
 /** The single native ordinal statement's literal and schema-width bounds. */
 export function nativeCollectionOrdinalPageBound(limit: number): NativeCollectionOrdinalPageBound {
@@ -208,21 +203,7 @@ const normal = (sql: string) =>
     .replace(/--[^\n]*/g, '')
     .replace(/\s+/g, ' ')
     .trim();
-export function COLLECTION_SOURCE_NATIVE_SAVED_PROBE_COST(): Bound {
-  return memoizedValue(COLLECTION_SOURCE_NATIVE_SAVED_PROBE_COST, () =>
-    declareBound({
-      candidateKeys: 35,
-      engineRequests: 0,
-      identityMetadataRows: 0,
-      nativeRows: 512,
-      emptySeeks: 16,
-      nativePoints: 64,
-      witnessKeys: 35,
-      statements: 16,
-      bytes: 2_200_000,
-    }),
-  );
-}
+export { COLLECTION_SOURCE_NATIVE_SAVED_PROBE_COST } from './collection-source-probe-bounds.ts';
 
 function costs() {
   return memoizedValue(costs, () =>

@@ -52,6 +52,8 @@ admission, not proof that the requested edition window succeeded. No former rele
 Decision: Previous uses a bounded backward stack with no Forward command; after retirement, recovery reruns the
 installed current-Subject route loader without restoring transient edition selection or reveal consent.
 
+Decision: Game edition and evidence values render through the catalogue-owned `WorkReadingPort`. Page composition (`work-reading-binding.tsx`) binds the live `CandidateValue` adapter; the reader no longer imports `pages/data`. Edition inspection, comparison and recovery are module-local render adapters over the existing window application.
+
 `GameOverview` consumes that recovery through `router.invalidate({ sync: true })`; the installed Subject loader
 fetches its stale-time-zero Subject query and supplies a new source. A matching result or repeated click cannot reset
 the retired lease. While recovery fails or yields no new source, only safe unlabelled current Subject/Details routes

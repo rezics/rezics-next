@@ -2,6 +2,7 @@ import { expect, mock, test } from 'bun:test';
 import { dirname } from 'node:path';
 import { act, createElement, StrictMode } from 'react';
 import definitions from '../src/kernel/recorded/definitions-release.json';
+import { performanceAmbientTree } from './performance-ambient';
 
 // One source outcome using the existing default page/adapter DOM harness. Native and browser proof are separate.
 test('a reader chooses an indexed Type absent from loaded entries, retains the native predicate and display, and recovers no matches and picker failure', async () => {

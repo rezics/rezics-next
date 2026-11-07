@@ -78,6 +78,22 @@ fake-port and ordinary composition tests pin the domain; cost stays on the exist
 contracts. Native identity-epoch, actor/request/deadline, proof identity, Source custody, original/terminal admission
 and architecture acceptance remain the later capability repair.
 
+## Rating identity repair
+
+Decision: Rating identity-repair Cost is `src/rating/identity-repair-bounds.ts` plus the Cost subsections in
+[Rating](src/rating/README.md#cost-identity-repair-commit). Ordinary installed commands bind Semantic
+`createIdentityRatingRepairProducer` through `installIdentityRatingRepairProducer` and
+`createInstalledIdentityRepairCommands`; omitting the producer on the command factory remains the unavailable
+seam. Anchors: 64-vote pages, 100 capped memberships, three counted writes per vote, eight continuation events,
+65,536-byte selection. Admit captures the upper key; later votes stay off that generation and mark `later_vote`
+on the retained obligation. Same-home hold locks `core.partition` through COMMIT; foreign homes persist a preparing
+obligation and continuation events under the original actor/request/deadline; failed complete rolls the page back.
+Growth: independently grow unrelated voters, same-voter receipts and current input at 256/1024/4096; empty
+completion grows later input beyond the captured upper key. `checkGrowth` captures every reached pool and keeps
+background work separate. Injected hold/complete fixtures do not reprice installed native work. Fewest tests:
+extend identity-repair, identity-repair-native, growth-identity-repair and realm-rank-repair; pin later-vote and
+pending-event handoff there; no new stories. Native/growth execution stays with the dev verifier.
+
 ## History domain composition
 
 Decision: `history-complete-current-architecture-receiving` keeps History contract, core and application inward and

@@ -1,3 +1,4 @@
+import type { SearchNativeRecoveryFamily } from './operation-outcomes.ts';
 import type {
   PublicFilterConsumerCapture,
   PublicFilterConsumerContext,
@@ -45,4 +46,16 @@ export async function advanceSearchRecovery(
   context: PublicFilterConsumerContext,
 ): Promise<PublicFilterConsumerRepair> {
   return operations.repairStep(job, context);
+}
+
+/** Generation or identity change restarts; preparation is never a successful empty page. */
+export function searchNativePageTransition(input: {
+  family: SearchNativeRecoveryFamily;
+  generationChanged?: boolean;
+  identityChanged?: boolean;
+}): SearchPageRecoveryTransition {
+  if (input.generationChanged || input.identityChanged || input.family === 'restart') return 'restart';
+  if (input.family === 'index-not-ready' || input.family === 'source-not-ready') return 'preparing';
+  if (input.family === 'ready') return 'ready';
+  return 'retry';
 }

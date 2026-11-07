@@ -267,7 +267,11 @@ export function selectConditions(input: {
   else if (registeredProof(brief, authorization)) selected.push('registered-proof');
   // A brief that names its own native or browser acceptance (a seeded walk, for example) runs it in this attempt;
   // minimal mode defers only checks a brief does not ask for.
-  else if (minimalVerification(input.stateDirectory) && !brief.acceptance?.requires?.length)
+  else if (
+    minimalVerification(input.stateDirectory) &&
+    !brief.acceptance?.requires?.length &&
+    brief.goal !== 'control-plane'
+  )
     selected.push('minimal-verification');
   else {
     const { runner, local } = wrapperRunner(task.worktree, brief);
@@ -304,7 +308,7 @@ function promptView(input: WorkerPromptInput): PromptView {
   const research = brief.kind === 'research';
   const product = devProductBrief(brief);
   const manager = brief.manager ?? brief.goal ?? '<your manager>';
-  const owned = brief.acceptance?.workerOwned === true;
+  const owned = brief.acceptance?.workerOwned === true && brief.goal !== 'control-plane';
   const { runner, local } = wrapperRunner(task.worktree, brief);
   const command = brief.acceptance?.command;
   const exactCommand = command?.map(shellQuote).join(' ') ?? '<the declared acceptance argv>';

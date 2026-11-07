@@ -281,7 +281,7 @@ existing repair owner and pending producer boundary rather than supplying anothe
 | Work retention: [Work cleanup and replay](../../services/kernel/src/work/README.md#installed-queue-controls-and-cleanup-replay), [writer retirement](../../services/kernel/src/work/README.md#native-workflow-writer-retirement) | `test/work/growth-retention.test.ts`: empty/short/full at 64/512/4096, eligible backlog, operations fanout 1/8/64, per-family cascade, payload-byte, mixed-max, unrelated payload, sparse/deep, two-batch sweep; `test/work/retention.test.ts`: eight families, mixed-max bytes, empty reselection, cancellation, surviving child/nonterminal/foreign, registered recovery before/after durable checkpoints with frozen cutoff/application, owned row/byte/fence readback and repeated empty | Deletion rows follow owned payload, admitted bytes and FK cascades, not selected workflow count. Growth pins `Cost.statements + Cost.controlStatements` to 1/7/14. Already-passing operations fanout stays distinct from complete cascade series. Recovery uses the production selector, frozen start snapshot and attempt-owned cleanup. Bound revision `e06e70f8c26d1f3175633ca1ecf08507f0ccd5b0` passed empty 0/1, short 90/5+2, full/backlog 107304/5+2, operations fanout 90/160/720, sweep 41868/10+4; selector Index Only Scan; background 0.                                                                                                                                                                                                                                       |
 | Workflow discovery and reads: [Work indexed discovery](../../services/kernel/src/work/README.md#bounded-legacy-membership-child-discovery)                                                                                       | `test/work/growth-work-client.test.ts`: `Workflow step listing with the legacy leave fallback stays within its bound as workflow history grows`; `Work client status and step reads stay within their bound as workflow history grows`; `Indexed legacy leave child discovery stays bounded as unrelated workflow history grows`                                                                                                                                                             | Decision: Keep the linear fallback diagnostic unchanged and measure `WorkClient.discoverLegacyLeaveChild` separately with constant rows/statements, logarithmic blocks, stable continuation/deep pages, absent workflow, exhausted terminal page, and both adopted keys in raw plans. Bound revision: `fad62db0e1be11c16601101701ac5faaaa87eaf5`. Owner command: `bun run --cwd services/kernel check test/work/growth-work-client.test.ts`. Diagnostics report rows, blocks and statements at 64/512/4096 and `dbos.work_legacy_leave_parent_input_identity` (`realmId/memberAccountId/reservationId`) and `dbos.work_legacy_leave_child_input_identity` (`principal.id/memberAccountId/reservationId`), both including `workflow_uuid`; the controller records the post-integration run. |
 | Rating job continuation: [Rating Cost](../../services/kernel/src/rating/README.md#cost)                                                                                                                                          | `test/rating/growth-segment-job.test.ts`: segment, eligibility and re-key pages; `test/rating/segment-job.test.ts`: registered workflow, cursor replay and join/leave reversal                                                                                                                                                                                                                                                                                                               | Measure each delivered page at three scales, including interruption, replay and empty completion. Existing outcome checks and page size caps do not replace examined-work evidence.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        |
-| Rating identity repair: [owner contract](../../services/kernel/src/rating/README.md#identity-repair)                                                                                                                             | `test/rating/identity-repair.test.ts`: pending/resume/empty terminal receipt, atomic rollback/lost-response replay, changed-vote fencing and cancellation/withdrawal                                                                                                                                                                                                                                                                                                                         | `test/rating/growth-identity-repair.test.ts` measures commit, both receipt replay paths, interrupted handoff rollback, eligible cancellation, withdrawal continuation, separate empty completion and unavailable-authority pending. Production Semantic hold/complete acceptance remains with its active owner; injected page evidence cannot establish that authority.                                                                                                                                                                                                                                                                                                                                                                                                                    |
+| Rating identity repair: [owner contract](../../services/kernel/src/rating/README.md#identity-repair) and [Cost](../../services/kernel/src/rating/README.md#cost-identity-repair-commit)                                          | `test/rating/identity-repair.test.ts`: pending/resume/empty terminal, later votes past the upper key, pending-event continuation plus handoff rollback; `test/rating/identity-repair-native.test.ts`: installed 64-page/empty terminal, redirect/competing/clear, replay/cancel/withdrawal, later_vote trigger, foreign preparing continuation, repeated-empty receipts, membership cap; `test/rating/realm-rank-repair.test.ts` rank convergence uses the injected seam only                | Seam `test/rating/growth-identity-repair.test.ts` measures commit/replay/rollback/cancel/withdrawal/empty/unavailable pending at 256/1024/4096 with 64 votes and 100 memberships. Installed `checkGrowth` in the same file uses Content-style native host plus `createInstalledIdentityRepairCommands` and Semantic `createIdentityRatingRepairProducer`; injected hold/complete cannot reprice that work. Native/growth execution stays with the dev verifier.                                                                                                                                                                                                                                                                                                                            |
 
 Decision: pin complete installed retention cleanup with the four named native suites only (compact selector/migration
 pins including observed-statement, rollback/replay and engine-envelope, registered interrupt/resume, and growth
@@ -300,7 +300,8 @@ suite receives an absolute path.
 
 Decision: independently grow unrelated voters, same-voter retained withdrawal receipts and voter input at
 256/1,024/4,096 while fixing the other axes at 256 and the selected nonempty page at the owner limit of 64;
-empty completion grows later input beyond the admitted upper key.
+empty completion grows later input beyond the admitted upper key. Installed growth uses the bound Semantic
+producer and Content-style native host; injected hold/complete seam results stay a separate evidence class.
 
 The repair growth suite reuses the outcome fixtures and delivered admission/selection/commit/cancellation commands.
 For each measured step, at most 64 votes and 100 capped memberships feed a fixed number of full-key vote/winner
@@ -311,11 +312,14 @@ actual native examined rows, blocks and statements, retaining background work an
 Preparation and outcome reads remain outside measured commands; interrupted handoff verifies rollback before
 resumption, and withdrawal verifies that repeated cancellation retains the prior checkpoint.
 
-These are Rating transaction/page seam scenarios with an explicitly injected producer fixture. The production
-unavailable-producer scenario must stay pending with unchanged selection/checkpoint and no effects or receipt;
-local withdrawal uses no producer. Production Semantic exact currentness and held obligations remain unavailable
-and separately owned. The suite is registered for future acceptance; no native pass follows from a preparation
-failure or from its presence in this inventory.
+Seam series inject a page producer and cannot prove Semantic hold/complete. Installed series bind
+`createIdentityRatingRepairProducer` through `installIdentityRatingRepairProducer` /
+`createInstalledIdentityRepairCommands` and grow the same axes plus later input past the captured upper key.
+Unavailable-producer stays pending with unchanged selection/checkpoint and no effects or receipt; local withdrawal
+uses no producer. Native/growth execution is deferred to the dev verifier; typing is the worker gate.
+
+Decision: fewest tests: extend identity-repair, identity-repair-native, growth-identity-repair and
+realm-rank-repair; pin later-vote and pending-event handoff in those suites; no new stories.
 
 Use these explicit groups through their existing workspace runners; each group contains at most twelve files.
 These commands specify future acceptance, with no execution or promotion claim:
@@ -336,6 +340,54 @@ and assertion failures retain their native diagnostics. Broader acceptance runs 
 worker validation policy.
 
 Cost assertions exclude database-engine invisible MVCC versions; ordinary design-visible traversal still counts.
+
+### Auth workflow retention
+
+The [Auth owner derivation](../../services/auth/README.md#workflow-history-retention)
+admits at most 1000 raw workflow keys through the supported SDK
+`openWorkflowStatusScan` / `readWorkflowStatusScanPage` producer and persists that
+continuation across native maintenance ticks. This permits O(H) complete sweeps while
+bounding every page, including all rejected candidates and pending consumers.
+Fewest tests: extend the two existing growth suites, retention causal cases and SDK
+binding cases; use the existing genuine erasure fixture and consumable target helper.
+Do not substitute returned counts or a callback stub for retirement-body work.
+Pin one-arg funded close, `deleteWorkflows` payload deletion, unavailable funded
+admission and same-identity replay on the existing binding suite. Auth does not
+query `auth_dbos.workflow_status`; producer inclusive `completed_at <= createdBefore`
+eligibility is received as-is.
+
+Frozen full/short, zero-eligible and drain/repeated-empty titles remain in the Auth
+inventory. Each independently grows workflow rows, old-created/recent-completed
+terminal history, request bindings and irrelevant accounts/custody roles at 256/1024/4096. The
+full/short registered maintenance path consumes actual registration results and an
+HTTP revoke request, closes native writers, deletes payload/FK families and verifies
+raw absence. Missing consumer custody stays pending. Timestamp ties, late inserts
+inside the captured upper key, 60-page continuation, original-cut recovery,
+interruption and replay stay causal cases; old synthetic technical bindings have no
+source proof and must be retained. Personal closure is Auth's one-argument
+`closeAuthSdkWriters`, which funds Accounts' `retireWorkflow(id, invocation)` from
+the original finite operation (`maxAttempts=1`, ceiling 8) and receives
+`{fence, attempts, failedWork}` as `readonly {attempt,dispatch}[]`. Aggregate
+counters are ignored. Work `SDK_RETIREMENT_DISPATCH` prices the envelope and retire
+body; maintain/delete identities are not used. Failed funded work remains charged.
+Scan-page connection retry stays an explicit unbounded producer bound.
+Decision: fewest tests extend those existing suites only; no new suite.
+
+Run through the Auth owning runner:
+
+```sh
+bun run --cwd services/auth check test/retention.test.ts test/growth-retention.test.ts test/growth-empty-retention.test.ts test/sdk-retirement-binding.test.ts test/sdk-retirement-fence.test.ts
+```
+
+Acceptance remains open until integrated native execution records its source revision,
+exact command, independently seeded axes, foreground and background statements/plans,
+examined rows, hits/reads and request/response bytes, including every consumer, closure,
+FK and request trigger in the original operation context. Raw pages, not deletion
+counts, price empty work. Test existence and clean typing provide no native pass.
+Personal closure accounts failed funded attempts and resumes the original writer
+identity after uncertain COMMIT; timeout never proves absence. Scan-page connection
+retry still has no finite attempt limit. Selection uses the received scan producer;
+no Auth-owned SDK SQL or synthetic fence is supplied here.
 
 ### Control-plane operation coverage
 

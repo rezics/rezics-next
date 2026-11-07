@@ -1,4 +1,8 @@
 import { expect, test } from 'bun:test';
+import { agentIdentityMaintenance } from '../../src/access/adapters/bind.ts';
+import { statementBytes } from '../../src/database/statement-bytes.ts';
+import acceptedAccountClaim from '../../src/semantic/identity-epoch-binding-accepted-account.sql';
+import retainedReference from '../../src/semantic/identity-source-consumer-custody-select.sql';
 import { COMMAND_DISPATCH_ALLOWANCE } from '../../src/command/dispatch-lifetime.ts';
 import { IDENTITY_SOURCE_ORIGINAL_SCHEDULE } from '../../src/semantic/identity-source-maintenance-config.ts';
 import { originalWorkVector, scaleOriginalControl, sumOriginalControl } from '../../src/access/core/index.ts';
@@ -54,4 +58,35 @@ test('reversal read and verify match settlementFor, with Core only on the read w
   expect(read.work).toEqual(sumOriginalControl(COMMAND_DISPATCH_ALLOWANCE.effect.work, verify.work));
   expect(read.work.statements).toBeGreaterThan(verify.work.statements);
   expect(verify.work.statements).toBeGreaterThan(3);
+});
+
+test('native Semantic producer declarations preserve accepted-binding and retained-reference work', () => {
+  const producer = agentIdentityMaintenance();
+  expect(ACCOUNT_IDENTITY_ACCEPTED_BINDING_DECLARATION()).toBe(producer.acceptedBindingDeclaration());
+  expect(producer.acceptedBindingDeclaration()).toEqual({
+    work: {
+      candidateKeys: 0,
+      identityMetadataRows: 0,
+      witnessKeys: 0,
+      nativeRows: 5,
+      nativePoints: 5,
+      statements: 1,
+      emptySeeks: 1,
+      bytes: statementBytes(acceptedAccountClaim) + 4 + 36 + 64 + 8192 + 36,
+    },
+    engineRequests: 0,
+  });
+  expect(producer.retainedReferenceDeclaration()).toEqual({
+    work: {
+      candidateKeys: 0,
+      identityMetadataRows: 0,
+      witnessKeys: 0,
+      nativeRows: 6,
+      nativePoints: 6,
+      statements: 1,
+      emptySeeks: 1,
+      bytes: statementBytes(retainedReference) + 4 + 64 + 64 + 8 + 36 + 36 + 8 + 36 + 4 + 64,
+    },
+    engineRequests: 0,
+  });
 });

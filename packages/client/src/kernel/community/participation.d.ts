@@ -38,6 +38,8 @@ export declare function createRealmParticipationCheck(input: {
     pool: Pool;
     access: Access;
     clock: () => Date;
+    /** Real wall time for the participation read's request deadline. */
+    deadlineNow: () => number;
 }): RealmParticipationCheck;
 /** Installs the Realm's member-group role only while the Realm is protected.
  * The command must already be authorized against this exact Realm.

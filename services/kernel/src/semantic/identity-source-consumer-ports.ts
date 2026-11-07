@@ -1,7 +1,7 @@
 import type { Pool } from 'pg';
 import type { CommandTransaction } from '../command/command.ts';
 import type { WorkAllowance, WorkDimensions } from '../library/contract/work-dimensions.ts';
-import type { NativeCollectionWork } from '../library/access-capabilities.ts';
+import type { NativeCollectionWork } from '../library/collection-native-work.ts';
 import type {
   AccountIdentityReversalSettlement,
   AccountIdentitySource,

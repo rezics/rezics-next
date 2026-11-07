@@ -7,6 +7,7 @@ import { m } from '../../paraglide/messages.js';
 import { ProfileCard } from '../../settings/profile';
 import type { AvatarResume, AvatarUpload } from '../../settings/profile-avatar-upload';
 import { UploadRefusal } from '../../threads/upload';
+import { createBrowserSettingsAmbient } from '../../settings/adapters/ambient';
 import { ProfileEditor } from '../../settings/profile-write';
 import { rebaseProfile } from '../../settings/profile-write';
 import { PageHeading } from '../../shell/page-heading';
@@ -33,6 +34,7 @@ function Example({ scenario = 'complete' }: { scenario?: Scenario }) {
     let resumes = 0;
     const editor = new ProfileEditor(
       {
+        ambient: createBrowserSettingsAmbient(),
         read: () =>
           scenario === 'save'
             ? new Promise((resolve) => {

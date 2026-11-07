@@ -8,12 +8,11 @@ import type { KeyRing } from '../tokens/seal.ts';
 import { ProblemError } from '../http/problem.ts';
 import { isDeepStrictEqual } from 'node:util';
 import { activeRelease } from '../semantic/definitions.ts';
-import { publicFilterSource } from '../semantic/public-filter-source.ts';
+import { searchSourcePublicationApplication } from './source-publication-application.ts';
 import { createWorkClient } from '../work/client.ts';
-import type { Pool } from 'pg';
 import { deadlineClient } from '../access/authenticate.ts';
 import { discardConnection, withConnection } from '../database/pool.ts';
-import { readListPresentationFacts } from '../semantic/list-presentation.ts';
+import { readListPresentationFacts } from '../semantic/index.ts';
 import {
   prepareViewerFacts,
   readViewerFacts,
@@ -47,7 +46,10 @@ import {
   discoveryGenerations,
 } from './generations.ts';
 import { discoveryIndexName } from './indices.ts';
-import { createCurrentTextDisclosure } from './disclosure/current-text.ts';
+import { createSearchDisclosureApplication } from './disclosure-application.ts';
+import { analyzeInstalled } from './engine-analysis.ts';
+import type { SearchDisclosureApplication } from './disclosure-application.ts';
+import { SearchOperationError } from './operation-outcomes.ts';
 import { createFreshness } from './freshness.ts';
 import { searchObservation } from './search-context.ts';
 import type { PublicDiscoveryConsumerOperations } from './public-filter-consumer-contract.ts';
@@ -61,6 +63,9 @@ import {
 
 export type DefaultDiscoverySearchConfig = DefaultPublicFilterRuntimeConfig & {
   keys: KeyRing;
+  disclosure?: SearchDisclosureApplication;
+  /** Real wall time for the space-entry deadlines of discovery pages, supplied by composition. */
+  deadlineNow: () => number;
   spaceEntryActions?: SpaceEntryActionRuntime;
   spaceEntryFollow?: SpaceEntryFollowProducer;
 };
@@ -254,12 +259,17 @@ export function createDefaultDiscoverySearch(
 ): DefaultDiscoverySearch {
   const freshness = new Map<number, ReturnType<typeof createFreshness>>();
   const runtime = createDefaultPublicFilterRuntime(config);
-  const source = publicFilterSource(config);
+  const source = searchSourcePublicationApplication().publicFilterSource(config);
   const { subjects, accounts } = producers;
-  const textDisclosures = new Map<string, ReturnType<typeof createCurrentTextDisclosure>>();
+  const disclosureApplication =
+    config.disclosure ??
+    createSearchDisclosureApplication({
+      analyze: (index, analyzer, text) => analyzeInstalled(config.search, index, { analyzer, text }),
+    });
+  const textDisclosures = new Map<string, ReturnType<SearchDisclosureApplication['currentText']>>();
   const currentTextMatches = (physicalTarget: string, subject: IndexedSubject, query: TextNode) => {
     let disclosure = textDisclosures.get(physicalTarget);
-    if (!disclosure) disclosure = createCurrentTextDisclosure(config.search, physicalTarget);
+    if (!disclosure) disclosure = disclosureApplication.currentText(physicalTarget);
     textDisclosures.delete(physicalTarget);
     textDisclosures.set(physicalTarget, disclosure);
     if (textDisclosures.size > 4) textDisclosures.delete(textDisclosures.keys().next().value!);
@@ -349,17 +359,21 @@ export function createDefaultDiscoverySearch(
         };
       });
       const read = await createRetainedDiscoverySearch({
+        disclosure: disclosureApplication,
         consumer,
         source,
         keys: config.keys,
         prepareConceptFilter: (input) =>
-          prepareConceptDiscoveryFilter({
-            ...input,
-            pool: config.pool,
-            prefix: config.prefix,
-            routeKey: config.routeKey,
-            now: () => config.clock().getTime(),
-          }),
+          prepareConceptDiscoveryFilter(
+            {
+              ...input,
+              pool: config.pool,
+              prefix: config.prefix,
+              routeKey: config.routeKey,
+              now: () => config.clock().getTime(),
+            },
+            disclosureApplication,
+          ),
         now: () => config.clock().getTime(),
         resolve: async () => ({ ...current, registry }),
         currentTextMatches,
@@ -424,7 +438,7 @@ export function createDefaultDiscoverySearch(
       return wrapped;
     };
     const operation = execute().catch((error: unknown) => {
-      if (error instanceof ProblemError) throw error;
+      if (error instanceof ProblemError || error instanceof SearchOperationError) throw error;
       if (error instanceof CollectionDiscoveryReadinessError) throw error;
       throw new ProblemError('index_not_ready', { headers: { 'retry-after': '1' } });
     });
@@ -533,7 +547,12 @@ export function createDefaultDiscoverySearch(
             ));
           return { page: reviewedPage, viewerCurrent };
         } catch (error) {
-          if (error instanceof ProblemError || error instanceof CollectionDiscoveryReadinessError) throw error;
+          if (
+            error instanceof ProblemError ||
+            error instanceof SearchOperationError ||
+            error instanceof CollectionDiscoveryReadinessError
+          )
+            throw error;
           throw new ProblemError('index_not_ready', { headers: { 'retry-after': '1' } });
         }
       });

@@ -5,6 +5,7 @@ import {
   officialProfileRead,
   type EditableProfile,
 } from '../../settings/editable-profile-source';
+import { createBrowserSettingsAmbient } from '../../settings/adapters/ambient';
 import { rebaseProfile, type ProfileEditorIO } from '../../settings/profile-write';
 import { storyViewerId } from './identities';
 
@@ -46,6 +47,7 @@ export function createProfileStoryIO(scenario: ProfileScenario): ProfileEditorIO
   const receipts = new Set<string>();
   let failed = false;
   return {
+    ambient: createBrowserSettingsAmbient(),
     read: async () => {
       if (scenario === 'unavailable' && !failed) {
         failed = true;

@@ -3,12 +3,17 @@ import { processIdentity, sameProcess } from './process.ts';
 import { expect, test } from 'bun:test';
 import { mkdirSync, readFileSync, statSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
+import { defaultPolicy } from './policy.ts';
 import {
+  HOST_START_KINDS,
   installService,
   stopLegacySupervisor,
   reportServices,
+  runHostOperation,
+  runHostProcess,
   SERVICE_UNITS,
   startHostHeartbeat,
+  startHostStallMonitor,
   type ServiceCommand,
 } from './service.ts';
 import { runMaintenance } from './maintenance.ts';
@@ -219,4 +224,73 @@ test('maintenance reaps recorded groups in deleted worktrees and spares workers 
     await Promise.all(exited);
     dir.close();
   }
+});
+
+test('a 5-second child through the host process helper delays a concurrent timer by less than 200 ms', async () => {
+  let last = performance.now();
+  let worst = 0;
+  const timer = setInterval(() => {
+    const now = performance.now();
+    worst = Math.max(worst, now - last);
+    last = now;
+  }, 10);
+  try {
+    const result = await runHostProcess('sleep', ['5']);
+    expect(result.code).toBe(0);
+  } finally {
+    clearInterval(timer);
+  }
+  expect(worst).toBeLessThan(200);
+}, 15_000);
+
+test('the host logs an event-loop stall over 10 seconds with the operation, at most once a minute', async () => {
+  const lines: string[] = [];
+  const stop = startHostStallMonitor((line) => lines.push(line), {
+    ...defaultPolicy.service,
+    stallMs: 40,
+    stallLogEveryMs: 250,
+  });
+  const occupy = (ms: number) => {
+    const end = performance.now() + ms;
+    while (performance.now() < end) {}
+  };
+  try {
+    await runHostOperation('store write', () => occupy(80));
+    await Bun.sleep(60);
+    expect(lines.some((line) => /event-loop stall: \d+ms during store write/.test(line))).toBe(true);
+    const first = lines.length;
+    await runHostOperation('store write', () => occupy(80));
+    await Bun.sleep(60);
+    expect(lines).toHaveLength(first);
+    await Bun.sleep(250);
+    await runHostOperation('retry intents', () => occupy(80));
+    await Bun.sleep(60);
+    expect(lines.some((line) => /event-loop stall: \d+ms during retry intents/.test(line))).toBe(true);
+  } finally {
+    stop();
+  }
+});
+
+test('manager recovery, retry intents, landing and verifier sweeps use no synchronous child process', async () => {
+  for (const file of ['service.ts', 'manager-host.ts', 'managers.ts']) {
+    expect(readFileSync(join(import.meta.dir, file), 'utf8')).not.toMatch(/\b(?:spawnSync|execSync|execFileSync)\b/);
+  }
+  let last = performance.now();
+  let worst = 0;
+  const timer = setInterval(() => {
+    const now = performance.now();
+    worst = Math.max(worst, now - last);
+    last = now;
+  }, 10);
+  try {
+    await runHostOperation('manager recovery', () => runHostProcess(process.execPath, ['-e', '']));
+    await runHostOperation('retry intents', () => runHostProcess(process.execPath, ['-e', '']));
+    await runHostOperation('landing sweep', () => runHostProcess(process.execPath, ['-e', '']));
+    await runHostOperation('verifier sweep', () => runHostProcess(process.execPath, ['-e', '']));
+    for (const kind of HOST_START_KINDS)
+      await runHostProcess(process.execPath, ['-e', ''], { env: { ...process.env, GOAL_HOST_START: kind } });
+  } finally {
+    clearInterval(timer);
+  }
+  expect(worst).toBeLessThan(200);
 });

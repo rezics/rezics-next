@@ -1,3 +1,7 @@
+import { AccountPageApplication } from '../../features/pages/account-page-application';
+import type { AccountProfilePort } from '../../features/pages/account-profile-port';
+import { accountProfilePageBinding } from './page-binding';
+import type { QueryKey } from '@tanstack/react-query';
 import type { ComponentProps } from 'react';
 import { SubjectPage } from '../../features/pages/subject';
 import { ContributionActionsPageScope } from './contribution-actions/host';
@@ -12,12 +16,17 @@ export function PublicProfilePage({
   reading,
   cursor = null,
   contributionWindowRoute,
+  sourceQueryKey,
+  profile = accountProfilePageBinding,
   ...props
 }: ComponentProps<typeof SubjectPage> & {
   publicRealms: boolean;
   cursor?: string | null;
+  sourceQueryKey?: QueryKey | undefined;
   reading?: ProfileReading;
   contributionWindowRoute?: ContributionWindowRoute;
+  /** Ordinary routes and stories install Threads/Report engines through this binding. */
+  profile?: AccountProfilePort;
 }) {
   const isContributionView = props.view === 'posts' || props.view === 'reviews' || props.view === 'discussion';
   const handle = props.page.account?.handle;
@@ -33,23 +42,35 @@ export function PublicProfilePage({
       })
     : null;
   return (
-    <ContributionWindowRouteScope route={windowRoute}>
-      <ContributionActionsPageScope page={props.page} cursor={cursor} view={props.view ?? 'overview'}>
-        <ProfileReadingResponse value={reading?.response ?? 'public'}>
-          <SubjectPage
-            {...props}
-            {...(reading ? { reader: reading.reader } : {})}
-            curation={
-              <>
-                {reading && <ProfileReadingStatus reading={reading} locale={props.locale} />}
-                {props.page.account && (
-                  <PublicAccountLinks handle={props.page.account.handle} locale={props.locale} realms={publicRealms} />
-                )}
-              </>
-            }
-          />
-        </ProfileReadingResponse>
-      </ContributionActionsPageScope>
-    </ContributionWindowRouteScope>
+    <AccountPageApplication profile={profile}>
+      <ContributionWindowRouteScope route={windowRoute}>
+        <ContributionActionsPageScope
+          page={props.page}
+          cursor={cursor}
+          view={props.view ?? 'overview'}
+          verification={props.verification}
+          sourceQueryKey={sourceQueryKey}
+        >
+          <ProfileReadingResponse value={reading?.response ?? 'public'}>
+            <SubjectPage
+              {...props}
+              {...(reading ? { reader: reading.reader } : {})}
+              curation={
+                <>
+                  {reading && <ProfileReadingStatus reading={reading} locale={props.locale} />}
+                  {props.page.account && (
+                    <PublicAccountLinks
+                      handle={props.page.account.handle}
+                      locale={props.locale}
+                      realms={publicRealms}
+                    />
+                  )}
+                </>
+              }
+            />
+          </ProfileReadingResponse>
+        </ContributionActionsPageScope>
+      </ContributionWindowRouteScope>
+    </AccountPageApplication>
   );
 }

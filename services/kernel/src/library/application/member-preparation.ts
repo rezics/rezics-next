@@ -5,10 +5,29 @@ import type {
   IdentityDisclosureCapability,
   LibraryActor,
   MemberPreparationResult,
+  MembersWorkDefinition,
+  MembersWorkDefinitionCapability,
   OccurrenceDraft,
   SearchPreparationCapability,
 } from '../contract/index.ts';
 import { admissionTerm, orderedOccurrences, repeatedSubjectCount, sumAdmission } from '../core/index.ts';
+
+/** Members episode getter. Search supplies current-work rechecks around this native read. */
+export function createMembersWorkDefinitionApplication<Definition extends MembersWorkDefinition>(
+  capability: Readonly<{
+    readWorkDefinition: (
+      input: Parameters<MembersWorkDefinitionCapability['readWorkDefinition']>[0],
+    ) => Promise<Definition | null>;
+  }>,
+) {
+  return {
+    readWorkDefinition(
+      input: Parameters<MembersWorkDefinitionCapability['readWorkDefinition']>[0],
+    ): Promise<Definition | null> {
+      return capability.readWorkDefinition(input);
+    },
+  };
+}
 
 export function createMemberPreparationApplication(capabilities: {
   searchPreparation: SearchPreparationCapability;

@@ -1,5 +1,5 @@
 import type { KernelClient } from '@rezics/client';
-import { isPlatformClosedProblem } from '../kernel/platform-closed';
+import { isPlatformClosedProblem } from '../session/reading-policy';
 import type { SubjectSummary } from '../media/summary';
 import type { ProgressLabelInput } from './progress-label';
 

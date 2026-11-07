@@ -1,5 +1,4 @@
-import type { Pool } from 'pg';
-import type { Access, Actor } from '../request/access.ts';
+import type { Release } from '@rezics/definitions';
 
 /** Raw identities, including duplicates, before any source deduplication. */
 export const COPY_WORK_DISCLOSURE_MAX_RAW = 100;
@@ -10,13 +9,36 @@ export const COPY_WORK_DISCLOSURE_LOOKAHEAD = COPY_WORK_DISCLOSURE_MAX_WORKS + 1
 /** Released copy/release-to-work property. Same UUID, digest or label is never membership. */
 export const COPY_WORK_PROPERTY = 'schema:exampleOfWork';
 
-export type CopyWorkDisclosureDependencies = {
-  pool: Pool;
-  access: Access;
-  actor: Actor;
-  routeKey: Uint8Array;
-  deadline: number;
-};
+export type CopyWorkAdmission = 'admitted' | 'scope' | 'unsupported';
+
+function isType(release: Pick<Release, 'types'>, type: string, target: string, seen = new Set<string>()): boolean {
+  if (type === target) return true;
+  if (seen.has(type)) return false;
+  seen.add(type);
+  return (release.types[type]?.bases ?? []).some((base) => isType(release, base, target, seen));
+}
+
+/** One released policy shared by the native prefilter and Semantic result classification. */
+export function admittedCopyWork(
+  release: Release,
+  type: string,
+  isRelationProperty: (release: Release, property: string) => boolean,
+): CopyWorkAdmission {
+  const definition = release.types[type];
+  if (!definition || !definition.properties.includes(COPY_WORK_PROPERTY)) return 'scope';
+  const property = release.properties[COPY_WORK_PROPERTY];
+  if (
+    !property ||
+    property.datatype !== 'wikibase-item' ||
+    !isRelationProperty(release, COPY_WORK_PROPERTY) ||
+    property.relation?.group !== 'derivation' ||
+    !(property.targets ?? []).some(
+      (target) => isType(release, 'schema:CreativeWork', target) || isType(release, target, 'schema:CreativeWork'),
+    )
+  )
+    return 'unsupported';
+  return 'admitted';
+}
 
 export type CopyWorkDisclosureRequest = Readonly<{
   identities: readonly string[];

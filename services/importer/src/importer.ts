@@ -64,7 +64,7 @@ import {
 import type { ClassificationAssociation } from './import-contract.ts';
 import { DumpInputError } from './dump-input.ts';
 import { readDump } from './dumps.ts';
-import { ImportSession, type ImportOwnership } from './import-session.ts';
+import { ImportSession, type ImportOwnership, type ImportProcessIdentity } from './import-session.ts';
 import type { Candidate, Owner } from './record-bindings.ts';
 import type { DeferredCover, Omission, Pending, Run, SourceProjection, Staged } from './run-store.ts';
 import { createSourceRegistration } from './source-registry.ts';
@@ -198,6 +198,8 @@ export type ImporterOptions = {
   onConversionOutput?(output: ImportConversion): void;
   afterBulkSuccess?(request: BatchWriteRequest, result: BatchWriteResult): void | Promise<void>;
   instrumentDatabase?: (database: Database) => Database;
+  /** Host-bound process birth identity; nested CLI runs reuse the attempt identity. */
+  processIdentity?: ImportProcessIdentity;
   now?(): number;
   sleep?(ms: number, signal: AbortSignal): Promise<void>;
   observer?: {
@@ -289,6 +291,7 @@ export class Importer {
         ...(options.instrumentDatabase ? { instrumentDatabase: options.instrumentDatabase } : {}),
         ...(options.create === false ? { create: false } : {}),
         ...(options.existing ? { existing: true } : {}),
+        ...(options.processIdentity ? { processIdentity: options.processIdentity } : {}),
       });
   }
 

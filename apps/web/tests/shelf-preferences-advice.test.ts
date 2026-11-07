@@ -1,6 +1,9 @@
 import { expect, mock, test } from 'bun:test';
 import { withShelfAdvice, type PreferenceChange, type ReadingPreferences } from '../src/settings/preferences';
 import { controlledDeadlines } from './fixtures/shelf-deadline';
+import { createBrowserSettingsAmbient } from '../src/settings/adapters/ambient';
+
+const settingsAmbient = createBrowserSettingsAmbient();
 
 const start = await import('../.storybook/react-start');
 mock.module('@tanstack/react-start', () => start);
@@ -28,6 +31,7 @@ test('missing or denied shelf advice cannot edit, while an original uncertain co
       },
     },
     owner,
+    settingsAmbient,
   );
   missing.edit({ layout: 'table' }, 'layout');
   await missing.submit();
@@ -45,6 +49,7 @@ test('missing or denied shelf advice cannot edit, while an original uncertain co
       },
     },
     owner,
+    settingsAmbient,
   );
   locked.edit({ layout: 'grid' }, 'layout');
   await locked.submit(true);
@@ -63,6 +68,7 @@ test('missing or denied shelf advice cannot edit, while an original uncertain co
       },
     },
     owner,
+    settingsAmbient,
   );
   pending.edit({ layout: 'table' }, 'layout');
   await pending.submit();
@@ -97,6 +103,7 @@ test('a stalled reset becomes uncertain and its late receipt cannot settle the o
       save: (input) => ((original = input), new Promise((resolve) => (finish = resolve))),
     },
     owner,
+    settingsAmbient,
   );
   try {
     let settled = false;
@@ -155,6 +162,7 @@ test('changed native advice fences a captured type callback and its dispatch', a
       },
     },
     owner,
+    settingsAmbient,
   );
   const captured = draft.editTypeLayout.bind(draft);
   captured('schema:Book', 'table');
@@ -229,6 +237,7 @@ test('structured refusals retain the original intent and one absolute retry dead
         },
       },
       owner,
+      settingsAmbient,
     );
     draft.edit({ layout: 'table' }, 'layout');
     await draft.submit();
@@ -327,6 +336,7 @@ test('a fresh Shelf read can run during the original command wait without changi
         },
       },
       owner,
+      settingsAmbient,
     );
     draft.edit({ layout: 'table' }, 'layout');
     await draft.submit();
@@ -411,6 +421,7 @@ test('dirty review keep then Save uses the current version and only intended ope
         version = next;
       },
     },
+    settingsAmbient,
   );
   draft.edit({ layout: 'table' }, 'layout');
   await draft.reload();
@@ -451,6 +462,7 @@ test('keep cannot dispatch an unresolved original or an unsupported whole patch'
       },
     },
     owner,
+    settingsAmbient,
   );
   pending.edit({ layout: 'table' }, 'layout');
   await pending.submit();
@@ -487,6 +499,7 @@ test('keep cannot dispatch an unresolved original or an unsupported whole patch'
       },
     },
     owner,
+    settingsAmbient,
   );
   unsupported.editTypeLayout('schema:Book', 'table');
   await unsupported.reload();

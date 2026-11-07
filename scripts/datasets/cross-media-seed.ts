@@ -12,8 +12,14 @@ import {
   type ShowcasePersonalListUpload,
 } from '../../services/importer/src/showcase-personal-list.ts';
 import { seedReviewedCatalogue } from '../../services/importer/src/reviewed-catalogue.ts';
+import {
+  installReviewedCatalogueComposition,
+  releasedReviewedVocabulary,
+} from '../../services/importer/src/showcase-cross-media.ts';
 import { createSeedDenialDiagnostics } from '../../services/importer/src/showcase-denial-diagnostics.ts';
+import { formatSeedError } from '../../services/importer/src/seed-cli.ts';
 import { fetchCrossMediaDumps, type CrossMediaDumpPaths } from './fetch-dumps.ts';
+import { releaseWalkFileCache } from '../walk-memory.ts';
 import { ShowcaseJournal, type ShowcasePublicationResult } from '../../services/importer/src/showcase-publication.ts';
 import {
   createDevelopmentShowcaseClient,
@@ -163,14 +169,18 @@ export async function runDevelopmentSeed(
     authOrigin: auth,
     scopes: [...IMPORTER_SCOPES, 'subject:read', 'context:accept', 'context:adopt'],
   });
-  const reviewedCatalogue = await (options.seedCatalogue ?? seedReviewedCatalogue)({
-    path: state,
-    port: createImportTransport({
-      origin: api,
-      tokenProvider,
-      onDeniedResponse: createSeedDenialDiagnostics(join(dirname(state), 'diagnostics')),
-    }),
+  const catalogueTransport = createImportTransport({
+    origin: api,
+    tokenProvider,
+    onDeniedResponse: createSeedDenialDiagnostics(join(dirname(state), 'diagnostics')),
   });
+  const reviewedCatalogue = await (options.seedCatalogue
+    ? options.seedCatalogue({ path: state, port: catalogueTransport })
+    : installReviewedCatalogueComposition({
+        path: state,
+        transport: catalogueTransport,
+        vocabulary: releasedReviewedVocabulary(),
+      }).seed());
   const args = [
     '--bangumi',
     dumps.bangumi,
@@ -213,6 +223,7 @@ export async function runDevelopmentSeed(
       ? {}
       : { sourceSnapshotAsOf: dumps.sourceSnapshots.vndb.timestamp.slice(0, 10) }),
     composePersona: (context) => seedDevelopmentShowcase({ ...context, accountId: account, request }),
+    ...(process.env.REZICS_WALK_SMOL === '1' ? { onDumpTableReleased: releaseWalkFileCache } : {}),
   });
   if (!importedResult) throw new TypeError('Cross-media seed did not return its native result handoff');
 
@@ -325,6 +336,12 @@ export async function runDevelopmentSeed(
   }
   return composedReport;
 }
+
+/** Seed CLI prints bounded operation metadata; remote bodies and credentials stay off the walk log. */
+export function seedFailureDetail(error: unknown): string {
+  return formatSeedError(error);
+}
+
 if (import.meta.main) {
   try {
     const args = Bun.argv.slice(2);
@@ -332,7 +349,7 @@ if (import.meta.main) {
       if ((await runDevelopmentSeed()).state !== 'complete') process.exitCode = 1;
     } else await runCrossMediaSeedCli(args);
   } catch (error) {
-    process.stderr.write(`${error instanceof Error ? error.message : 'Cross-media seed failed'}\n`);
+    process.stderr.write(`${seedFailureDetail(error)}\n`);
     process.exitCode = 1;
   }
 }

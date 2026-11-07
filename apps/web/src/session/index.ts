@@ -5,7 +5,12 @@ export {
   type BrowserReader,
   type BrowserCacheEvent,
 } from './observation';
-export { cachedBrowserSession, sessionQueryKey, type BrowserSession } from './browser-state';
+export {
+  cachedBrowserSession,
+  normalizeSessionObservation,
+  sessionQueryKey,
+  type BrowserSession,
+} from './browser-state';
 export {
   addressLease,
   readLease,
@@ -14,3 +19,9 @@ export {
   type ReadLease,
   type OperationLease,
 } from '../reader/lease';
+export { SessionRecoveryPage } from './recovery';
+export { sessionQuery, useSession, sessionCsrfToken, AnonymousSessionContext } from './query';
+export { ReaderNavigationContext, useReaderNavigationHost } from '../reader/lifetime/index';
+export type { ReaderNavigation } from '../reader/lifetime/contract';
+
+export { checkoutCurrentVisit } from './checkout-visit';

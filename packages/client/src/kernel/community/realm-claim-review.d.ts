@@ -59,6 +59,7 @@ export declare function listRealmClaimRequests(deps: {
     pool: Pool;
     access: Access;
     clock: () => Date;
+    deadlineNow: () => number;
 }, actor: Actor, input: {
     realmId: string;
     cursor?: string;

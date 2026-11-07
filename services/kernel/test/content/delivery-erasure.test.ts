@@ -11,6 +11,7 @@ import { readErasureStatus } from '../../src/access/erasure.ts';
 import { routeOf } from '../../src/route/route.ts';
 import { bootstrapRelease, GLOBAL_CONTEXT } from '../../src/semantic/definitions.ts';
 import { accountDeletionRuntime, deletePersona, drainEffects } from '../support/account-deletion.ts';
+import { workerTestEnv } from '../support/worker-env.ts';
 import { createNativeContentSystemWithWriteRateOverrides, type NativeContentSystem } from './support/native-system.ts';
 import { HIGH_RATE_OVERRIDES, seedGovernanceAuthority } from './support/disclosure-fixtures.ts';
 
@@ -256,13 +257,13 @@ async function startWorker(options: { holdAccountUploadIndex?: boolean } = {}) {
       ...(options.holdAccountUploadIndex ? ['--hold-account-upload-index'] : []),
     ],
     {
-      env: {
+      env: workerTestEnv({
         ...process.env,
         DATABASE_URL: url,
         CONTENT_TEST_STORAGE: fake.endpoint,
         CONTENT_TEST_ROUTE_KEY: Buffer.from(system.routeKey).toString('base64url'),
         CONTENT_TEST_DISABLE_ERASURE_PARTICIPANT: 'false',
-      },
+      }),
       stdio: 'pipe',
     },
   );

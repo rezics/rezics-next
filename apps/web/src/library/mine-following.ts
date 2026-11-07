@@ -22,6 +22,12 @@ import {
 
 type FollowRead = FollowListPage;
 type RawFollow = FollowEdge;
+/** Agent-subject FULL target: kernel contribution attribution, omitted from the Eden list union. */
+type AccountFollowTarget = {
+  id: string;
+  kind: string;
+  displayName: string | null;
+};
 
 export type MineFollow = {
   targetId: string;
@@ -47,7 +53,7 @@ export type MineFollowingPage = {
 };
 
 /** FULL follow targets are a catalogue summary, a live account identity, an id-free deletion, or unavailable. */
-function followSubject(target: RawFollow['target']): LibrarySubject | null {
+function followSubject(target: RawFollow['target'] | AccountFollowTarget): LibrarySubject | null {
   if (!target || !('id' in target)) return null;
   if ('type' in target) {
     return subjectOf({
@@ -58,12 +64,13 @@ function followSubject(target: RawFollow['target']): LibrarySubject | null {
       ...('cover' in target ? { cover: target.cover } : {}),
     });
   }
-  if (!('kind' in target)) return null;
+  const identity = target as unknown as { id: string; kind?: string; displayName?: string | null };
+  if (typeof identity.kind !== 'string') return null;
   return {
-    id: target.id,
-    type: target.kind,
-    types: [target.kind],
-    label: libraryLabel(target.displayName, target.id),
+    id: identity.id,
+    type: identity.kind,
+    types: [identity.kind],
+    label: libraryLabel(identity.displayName, identity.id),
     cover: null,
   };
 }

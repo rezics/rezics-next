@@ -4,6 +4,10 @@ import { act } from 'react';
 import { ProfileEditor, type ProfileAttempt } from '../src/settings/profile-write';
 import type { ProfileValues } from '../src/settings/profile-data';
 import { m } from '../src/paraglide/messages.js';
+import { createBrowserSettingsAmbient } from '../src/settings/adapters/ambient';
+import { performanceAmbientTree } from './performance-ambient';
+
+const settingsAmbient = createBrowserSettingsAmbient();
 
 mock.module('cloudflare:workers', () => ({ env: {} }));
 
@@ -40,6 +44,7 @@ test('explicit activity save recovers refusal and uncertainty without losing lat
   const sent: ProfileAttempt[] = [];
   const editor = new ProfileEditor(
     {
+      ambient: settingsAmbient,
       read: async () => current,
       save: async (attempt) => {
         sent.push(attempt);

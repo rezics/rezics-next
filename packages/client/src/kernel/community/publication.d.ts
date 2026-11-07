@@ -1,6 +1,7 @@
 import { type Actor } from '../request/access.ts';
 import type { SpaceDependencies } from './space.ts';
-export type PublicationDependencies = SpaceDependencies;
+import type { CommunityAmbient } from './ambient.ts';
+export type PublicationDependencies = SpaceDependencies & CommunityAmbient;
 export type PublicationContext = Readonly<{
     idempotencyKey: string;
     deadline: number;

@@ -1,6 +1,6 @@
 import { queryOptions } from '@tanstack/react-query';
 import { personalRead, publicRead, readQueryKey } from '../kernel/query';
-import type { ReadCredentialMode } from '../kernel/credential';
+import type { ReadCredentialMode } from '../reader/lifetime/contract';
 import { readBoardPage, readThreadPage, readThreadSlug } from './reads';
 import { readThreadPersonal } from './reads';
 

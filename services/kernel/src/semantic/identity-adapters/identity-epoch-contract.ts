@@ -43,7 +43,30 @@ import type {
 import type { mergeSubjects } from '../merges.ts';
 import type { verifyAccountAgent, unverifyAccountAgent } from '../account-agents.ts';
 import type { Release } from '@rezics/definitions';
-import type { ReviewedPersonExpectation } from '../reviewed-person-identity.ts';
+import { partitionOf, routeOf } from '../../route/route.ts';
+import {
+  classifyIdentityRemainder,
+  serializeIdentityValue,
+  type IdentityTransformSource,
+} from '../identity-core/index.ts';
+import { IdentityEpochStoreError } from '../contract/identity-errors.ts';
+import { IDENTITY_EPOCH_HOME_AVAILABLE } from '../events.ts';
+
+export type ReviewedPersonSource = {
+  source: 'bangumi' | 'vndb' | 'bangumi_cross_media' | 'vndb_cross_media';
+  externalId: string;
+};
+export type ReviewedPersonEndpoint = {
+  subject: string;
+  revision: number;
+  securityRevision: string;
+  source: ReviewedPersonSource['source'];
+  externalId: string;
+  claimTransactionId: string;
+  property: 'wdt:P6298' | 'wdt:P3180';
+  value: string;
+};
+export type ReviewedPersonExpectation = { endpoints: [ReviewedPersonEndpoint, ReviewedPersonEndpoint] };
 
 export type MergeSubjects = typeof mergeSubjects;
 export type VerifyAccountAgent = typeof verifyAccountAgent;
@@ -103,6 +126,53 @@ export async function commandAuthorityAt(authority: IdentityAdmissionAuthority, 
     ...(authority.clock === undefined ? {} : { clock: authority.clock }),
     ...(authorization === undefined ? {} : { authorization }),
   };
+}
+
+function routed(id: string): number {
+  const value = routeOf(id);
+  if (value === null) throw new TypeError('Identity original must be a native routed ID');
+  return value;
+}
+
+export const identityJobPartition = (job: IdentityJobRef) => partitionOf(routed(job.jobId));
+
+export function identityReceiptValue(receipt: IdentityReceipt) {
+  return receipt.kind === 'subject.merge'
+    ? {
+        kind: receipt.kind,
+        command: { ...receipt.command, digest: Buffer.from(receipt.command.digest).toString('base64') },
+      }
+    : receipt;
+}
+
+export function identityReceiptKey(receipt: IdentityReceipt): string {
+  return receipt.kind === 'subject.merge'
+    ? serializeIdentityValue([receipt.kind, receipt.command.actorAccountId, receipt.command.kind, receipt.command.key])
+    : serializeIdentityValue([receipt.kind, receipt.account, receipt.receipt]);
+}
+
+export function identityEpochRemainderTerminal(
+  intent: IdentityIntent,
+  sources: readonly IdentityTransformSource[],
+): string | null {
+  const result = classifyIdentityRemainder(intent, sources);
+  if (result.state === 'unavailable')
+    throw new IdentityEpochStoreError(
+      'identity_epoch_unavailable',
+      'Identity source, native group generation or bootstrap closure is not current',
+    );
+  if (result.state === 'stale')
+    throw new IdentityEpochStoreError('identity_effect_stale', 'Identity effect does not match the current home gate');
+  if (result.state === 'overflow')
+    throw new IdentityEpochStoreError(
+      'identity_group_overflow',
+      'Resulting identity group exceeds 4096 complete originals',
+    );
+  return result.terminal;
+}
+
+export function identityHomeAvailable(partition: number, after = '00000000-0000-0000-0000-000000000000') {
+  return { type: IDENTITY_EPOCH_HOME_AVAILABLE, data: { partition, after } };
 }
 export type IdentityEpochStore = Readonly<{
   /** Bootstrap topology home. Job control homes are encoded in native job IDs. */

@@ -1,7 +1,7 @@
 import type { SourceId } from '@rezics/conversion';
 import { createImporter, type Importer, type ImporterOptions, type ImportRunResult } from './importer.ts';
 import { createImportTransport } from './import-client.ts';
-import { createReviewedCatalogueLookup } from './reviewed-catalogue.ts';
+import { composeReviewedCatalogueHost, releasedReviewedVocabulary } from './showcase-cross-media.ts';
 import { createMediaResolver } from './media-resolver.ts';
 import { createSourceRegistration } from './source-registry.ts';
 import type {
@@ -27,7 +27,7 @@ import {
 import { ImportSession } from './import-session.ts';
 import { ResumeStateError } from './resume-state.ts';
 import { throwIfAborted } from './dump-input.ts';
-import type { ImportCliOptions, ImportCliResult } from './cli.ts';
+import type { ImportCliOptions, ImportCliResult } from './cli-contract.ts';
 import {
   SourceDestinationError,
   mismatchMessage,
@@ -586,7 +586,10 @@ export async function runResumeCli(argv: readonly string[], options: ImportCliOp
           },
         };
         if (config.source === 'bangumi')
-          importerOptions.identifierLookup = createReviewedCatalogueLookup(importer.session.bindings, slot.transport);
+          importerOptions.identifierLookup = composeReviewedCatalogueHost({
+            transport: slot.transport,
+            vocabulary: releasedReviewedVocabulary(),
+          }).lookup(importer.session.bindings);
         options.observer?.onCoordinator?.({
           importer,
           registration,

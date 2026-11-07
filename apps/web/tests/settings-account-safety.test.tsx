@@ -1,11 +1,16 @@
+import { AccountsQueryProvider as QueryClientProvider } from './fixtures/accounts-composition';
 import { expect, spyOn, test } from 'bun:test';
 import { dirname } from 'node:path';
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { QueryClient } from '@tanstack/react-query';
 import { act } from 'react';
 import { createRoot } from 'react-dom/client';
 import { sessionQuery } from '../src/session/query';
 import { AccountRenameRegion, AccountSafetyCard, AccountSafetySection } from '../src/settings/account-safety';
 import { m } from '../src/paraglide/messages.js';
+import { createBrowserSettingsAmbient } from '../src/settings/adapters/ambient';
+import { performanceAmbientTree } from './performance-ambient';
+
+const settingsAmbient = createBrowserSettingsAmbient();
 
 const accountId = '123e4567-e89b-42d3-a456-426614174000';
 const renameHref = 'https://auth.test/account/rename';
@@ -21,6 +26,7 @@ test('rename recovery refreshes only its read and retires expired credentials be
       sent.push('expired');
       return { context: null, failures: [{ kind: 'denied', status: 403 }] };
     },
+    settingsAmbient,
     'alice',
     () => token === 'expired',
     () => {
@@ -39,10 +45,14 @@ test('rename recovery refreshes only its read and retires expired credentials be
   refresh.resolve();
   await retry;
   expect(sent).toEqual(['expired']);
-  const recovered = new AccountRenameRegion(async () => {
-    sent.push(token);
-    return { context };
-  }, 'alice');
+  const recovered = new AccountRenameRegion(
+    async () => {
+      sent.push(token);
+      return { context };
+    },
+    settingsAmbient,
+    'alice',
+  );
   const done = recovered.mount();
   await recovered.reload();
   expect(sent).toEqual(['expired', 'fresh']);

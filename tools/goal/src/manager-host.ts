@@ -14,7 +14,7 @@ import { ManagerSessions } from './managers.ts';
 import { defaultPolicy } from './policy.ts';
 import { sameProcess, terminateProcessGroup, type ProcessIdentity } from './process.ts';
 import { currentCodeVersion } from './runtime-version.ts';
-import { startHostHeartbeat } from './service.ts';
+import { runHostOperation, startHostHeartbeat } from './service.ts';
 
 /** Socket server, registry, shutdown and periodic host scheduling; CLI dispatch stays in `integration-cli.ts`. */
 
@@ -238,7 +238,7 @@ export async function serveManagers(runtime: IntegrationRuntime): Promise<void> 
     if (!runtime.recoverOrphans) return Promise.resolve();
     // A sweep may wait for adopted workers. Let later timer ticks start their own sweep so
     // newly orphaned tasks and retry intents are considered while those workers are running.
-    return runtime.recoverOrphans();
+    return runHostOperation('orphan recovery', () => runtime.recoverOrphans!());
   };
   // A host keeps the tools/goal it loaded. Once main publishes another revision it starts no new attempt and stops
   // after its active requests, and systemd starts it on the published code. Retirement waits until this host has run
@@ -290,7 +290,7 @@ export async function serveManagers(runtime: IntegrationRuntime): Promise<void> 
     stopHeartbeat = await startHostHeartbeat(undefined, undefined, policy.service);
     let reportRecoveryProgress!: () => void;
     const recoveryProgress = new Promise<void>((resolve) => (reportRecoveryProgress = resolve));
-    void managers.recover(reportRecoveryProgress).catch((error) => {
+    void runHostOperation('manager recovery', () => managers.recover(reportRecoveryProgress)).catch((error) => {
       console.error('manager recovery failed:', error);
       reportRecoveryProgress();
     });
@@ -307,7 +307,9 @@ export async function serveManagers(runtime: IntegrationRuntime): Promise<void> 
     console.log('ready');
     const remind = () => {
       try {
-        runtime.dispatchDailyStepAudit?.();
+        runHostOperation('daily step audit', () => runtime.dispatchDailyStepAudit?.()).catch((error) =>
+          console.error(error),
+        );
       } catch (error) {
         console.error(error);
       }
@@ -359,20 +361,22 @@ export async function serveManagers(runtime: IntegrationRuntime): Promise<void> 
       reapedAt = Date.now();
       // Docker and task projection run after a yield: a slow daemon must not hold the manager socket.
       reaping = Promise.resolve()
-        .then(async () => {
-          await sweepAbandonedResources({
-            tasks: readTerminalTaskOwners(runtime.db),
-            stateDirectory: runtime.stateDirectory,
-            containers: policy.containers,
-            graceMs: 1000,
-          });
-          await reapContainersAsync(
-            runtime.db,
-            runtime.stateDirectory,
-            Date.now(),
-            runtime.managerServices.policy?.containers,
-          );
-        })
+        .then(() =>
+          runHostOperation('container reaper', async () => {
+            await sweepAbandonedResources({
+              tasks: readTerminalTaskOwners(runtime.db),
+              stateDirectory: runtime.stateDirectory,
+              containers: policy.containers,
+              graceMs: 1000,
+            });
+            await reapContainersAsync(
+              runtime.db,
+              runtime.stateDirectory,
+              Date.now(),
+              runtime.managerServices.policy?.containers,
+            );
+          }),
+        )
         .catch((error) => console.error(error))
         .finally(() => {
           reaping = undefined;
@@ -385,7 +389,7 @@ export async function serveManagers(runtime: IntegrationRuntime): Promise<void> 
         if (widthSweepRunning) return;
         widthSweepRunning = true;
         void Promise.resolve()
-          .then(() => runtime.sweepWidth!())
+          .then(() => runHostOperation('width sweep', () => runtime.sweepWidth!()))
           .catch((error) => console.error('width sweep failed:', error))
           .finally(() => {
             widthSweepRunning = false;

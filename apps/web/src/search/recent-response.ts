@@ -1,10 +1,11 @@
 import * as v from 'valibot';
 import { admitsRecentDestination, recentReplayDestination } from './recent-replay';
 export { recentScopePath } from './recent-replay';
-import type { RecentEntry, RecentItem, RecentPage } from './recent';
+import { RECENT_NATIVE_REVISION_MAX } from './recent-contract';
+import type { RecentNativeEntry, RecentNativeItem, RecentNativePage } from './recent-contract';
 
 const id = v.pipe(v.string(), v.uuid());
-const revision = v.pipe(v.number(), v.safeInteger(), v.minValue(0), v.maxValue(2_147_483_646));
+const revision = v.pipe(v.number(), v.safeInteger(), v.minValue(0), v.maxValue(RECENT_NATIVE_REVISION_MAX));
 const language = v.pipe(v.string(), v.minLength(1), v.maxLength(35), v.regex(/^[A-Za-z]{2,8}(?:-[A-Za-z0-9]{1,8})*$/));
 const cover = v.nullable(
   v.strictObject({
@@ -55,7 +56,7 @@ const pageSchema = v.strictObject({
   revision,
 });
 
-function nativeQuery(entry: RecentEntry): boolean {
+function nativeQuery(entry: RecentNativeEntry): boolean {
   if (entry.kind !== 'query') return true;
   const languages = entry.languages;
   return (
@@ -66,7 +67,7 @@ function nativeQuery(entry: RecentEntry): boolean {
 }
 
 /** Admit a complete native Recent page before reconciliation. Partial rows never succeed. */
-export function admitRecentPage(value: unknown): RecentPage | undefined {
+export function admitRecentPage(value: unknown): RecentNativePage | undefined {
   const parsed = v.safeParse(pageSchema, value);
   if (!parsed.success) return;
   for (const item of parsed.output.recentSearches) {
@@ -80,7 +81,7 @@ export function admitRecentPage(value: unknown): RecentPage | undefined {
   return parsed.output;
 }
 
-export function recentItemAction(item: RecentItem): string | undefined {
+export function recentItemAction(item: RecentNativeItem): string | undefined {
   return item.display && admitsRecentDestination(item.entry, item.display.href)
     ? recentReplayDestination(item.entry)
     : undefined;

@@ -1,5 +1,5 @@
 import type { KernelClient } from '@rezics/client';
-import { isPlatformClosedError, isPlatformClosedProblem } from '../kernel/platform-closed';
+import { isPlatformClosedError, isPlatformClosedProblem } from '../session/reading-policy';
 import type { SessionEnv } from '../session/client';
 import { readSubjectSlotSession, type SubjectLabelUndo } from './subject-slot';
 import { subjectOf, type LibrarySubject } from './reads';

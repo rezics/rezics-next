@@ -8,6 +8,7 @@ import {
   ShelfStaleCursorRecovery,
   shelfPageResetCursor,
 } from '../src/library/shelf-address-recovery';
+import { performanceAmbientTree } from './performance-ambient';
 import {
   SHELF_CURSOR_MAX_LENGTH,
   shelfAddressCorrectionHref,
@@ -35,7 +36,7 @@ test('invalid selectors need an explicit field correction while valid address ch
   ]);
   expect(validateShelfSearch({ label, state: 'planned' }).label).toBe(label);
   const correction = renderToStaticMarkup(
-    createElement(ShelfAddressRecovery, { locale: 'en', search, issues: ['label'] }),
+    performanceAmbientTree(createElement(ShelfAddressRecovery, { locale: 'en', search, issues: ['label'] })),
   );
   expect(correction).toContain('role="alert"');
   expect(correction).toContain('Label');
@@ -69,7 +70,9 @@ test('opaque cursors are bounded and stale recovery removes only the page cursor
     size: 's',
     cursor,
   };
-  const recovery = renderToStaticMarkup(createElement(ShelfStaleCursorRecovery, { locale: 'en', search }));
+  const recovery = renderToStaticMarkup(
+    performanceAmbientTree(createElement(ShelfStaleCursorRecovery, { locale: 'en', search })),
+  );
   expect(recovery).toContain('role="status"');
   expect(recovery).toContain('Use this first page');
   const firstPage = new URL(shelfAddressCorrectionHref('en', search, 'cursor'), 'https://site.test');

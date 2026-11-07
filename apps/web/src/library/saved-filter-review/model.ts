@@ -1,5 +1,5 @@
 import { facetProperties, type FilterDocument, type FilterRange, type FilterRelease } from '@rezics/filter';
-import type { ConditionMetadata } from '../../search/condition-editor-model';
+import type { ConditionMetadata } from '../../search/contracts/condition-metadata';
 import type { ReviewRelease } from './read';
 
 export type CurrentFieldState = 'available' | 'missing-label' | 'removed' | 'changed' | 'unavailable';

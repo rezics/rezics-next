@@ -10,6 +10,13 @@ import type {
   InboxSeenResult,
 } from '../src/inbox/inbox-read';
 import { readyInboxPage } from '../src/inbox/inbox-read';
+import { createBrowserInboxAmbient } from '../src/inbox/adapters/ambient.ts';
+import { InboxAmbientProvider } from '../src/inbox/adapters/ambient-view.tsx';
+import { createBrowserSettingsAmbient } from '../src/settings/adapters/ambient.ts';
+import { SettingsAmbientProvider } from '../src/settings/adapters/ambient-view.tsx';
+
+const inboxAmbient = createBrowserInboxAmbient();
+const settingsAmbient = createBrowserSettingsAmbient();
 
 let sessionSubject = 'alice';
 let sessionToken = 'original-token';
@@ -152,16 +159,24 @@ async function mount(
   const root = createRoot(host);
   const tree = () =>
     createElement(
-      QueryClientProvider,
-      { client },
+      SettingsAmbientProvider,
+      { ambient: settingsAmbient },
       createElement(
-        RouterContextProvider,
-        { router },
+        InboxAmbientProvider,
+        { ambient: inboxAmbient },
         createElement(
-          Fragment,
-          null,
-          badge ? createElement(UnreadBadge) : null,
-          createElement(InboxPageView, { loadPage, ...(acknowledgeNotice ? { acknowledgeNotice } : {}) }),
+          QueryClientProvider,
+          { client },
+          createElement(
+            RouterContextProvider,
+            { router },
+            createElement(
+              Fragment,
+              null,
+              badge ? createElement(UnreadBadge) : null,
+              createElement(InboxPageView, { loadPage, ...(acknowledgeNotice ? { acknowledgeNotice } : {}) }),
+            ),
+          ),
         ),
       ),
     );
@@ -232,7 +247,17 @@ async function mountRouted(
   const root = createRoot(host);
   await router.load();
   await act(async () => {
-    root.render(createElement(QueryClientProvider, { client }, createElement(RouterProvider, { router })));
+    root.render(
+      createElement(
+        SettingsAmbientProvider,
+        { ambient: settingsAmbient },
+        createElement(
+          InboxAmbientProvider,
+          { ambient: inboxAmbient },
+          createElement(QueryClientProvider, { client }, createElement(RouterProvider, { router })),
+        ),
+      ),
+    );
   });
   await tick();
   const settle = async (ready: () => boolean) => {
@@ -466,7 +491,7 @@ test('a failed unread summary stays unavailable on a usable page, and Retry-Afte
     expect(view.host.textContent).toContain('Private reply displayed');
     expect(view.host.textContent).toContain(m.inbox_triage_mark());
     const viewer = currentInboxViewer(view.client)!;
-    const key = unreadCountQueryFor(viewer).queryKey;
+    const key = unreadCountQueryFor(viewer, inboxAmbient.now).queryKey;
     const captured = () => view.client.refetchQueries({ queryKey: key });
     await act(async () => {
       await view.client.refetchQueries({ queryKey: key });
@@ -497,7 +522,7 @@ test('a failed unread summary stays unavailable on a usable page, and Retry-Afte
       subject: 'bob',
       csrfToken: 'original-token',
     });
-    await expect(fetchInboxUnreadCount(viewer)).rejects.toThrow('Inbox viewer changed');
+    await expect(fetchInboxUnreadCount(viewer, inboxAmbient.now)).rejects.toThrow('Inbox viewer changed');
   } finally {
     Date.now = clock;
     await view.unmount();

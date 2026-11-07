@@ -7,7 +7,7 @@ import {
   type CollectionListPresentations,
 } from './collection-presentation';
 import { notFound } from '@tanstack/react-router';
-import { isPlatformClosedError, isPlatformClosedProblem } from '../kernel/platform-closed';
+import { isPlatformClosedError, isPlatformClosedProblem } from '../session/reading-policy';
 import type { KernelClient } from '@rezics/client';
 import type { SessionEnv } from '../session/client';
 import type { ReadCredentialMode } from '../kernel/credential';

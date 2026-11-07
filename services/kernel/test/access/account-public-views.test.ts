@@ -3,7 +3,7 @@ import { configureTestReceiptKeys } from '../support/receipt-keys.ts';
 import { afterAll, expect, test } from 'bun:test';
 import { createHash } from 'node:crypto';
 import { createPool } from '../../src/database/pool.ts';
-import { readPublicAccountByHandle } from '../../src/access/account-data.ts';
+import { readPublicAccountByHandle } from '../../src/access/public-identity.ts';
 import { readPublicViews } from '../../src/access/index.ts';
 import { createLifecycleCommands, createLifecycleInternals, LIFECYCLE_ACTIONS } from '../../src/access/lifecycle.ts';
 import { newId } from '../../src/route/route.ts';

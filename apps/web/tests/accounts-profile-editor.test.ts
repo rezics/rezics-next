@@ -7,6 +7,9 @@ import { AccountProfileEditor } from '../src/accounts/profile-editor/editor';
 import { parseSubmission, profilePageReadError, readTarget, writeTarget } from '../src/accounts/profile-editor/data';
 import type { ProfilePatch, ProfileValues } from '../src/settings/profile-data';
 import { officialProfileRead } from '../src/settings/editable-profile-source';
+import { createBrowserSettingsAmbient } from '../src/settings/adapters/ambient';
+
+const settingsAmbient = createBrowserSettingsAmbient();
 
 const accountId = '00000000-0000-7000-8000-000000000002';
 const viewerId = '00000000-0000-7000-8000-000000000001';
@@ -75,6 +78,7 @@ function boundary() {
     }) as typeof fetch,
   });
   const editor = new AccountProfileEditor({
+    ambient: settingsAmbient,
     read: async () => {
       const page = await readTarget(client, 'Bearer current-viewer', target);
       if (page.state !== 'ready') throw profilePageReadError(page);
@@ -196,6 +200,7 @@ test('Closed input and wrong-target native output never create a replacement tar
   ).toThrow();
   expect(api.writes).toHaveLength(0);
   const otherEditor = new AccountProfileEditor({
+    ambient: settingsAmbient,
     read: async () => ({ ...profile(), accountId: otherId }),
     save: async () => {
       throw new Error('Unexpected write');

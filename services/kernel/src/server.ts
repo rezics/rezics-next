@@ -13,7 +13,7 @@ import { createWorkClient } from './work/client.ts';
 import { readContentConfig } from './content/config.ts';
 import type { ContentRuntime } from './content/runtime.ts';
 import type { NativeAuthorErasureWorkflows } from './content/operation-contract.ts';
-import { configureReceiptKeys, readReceiptKeyRing } from './command/receipt-key.ts';
+import { configureReceiptKeys } from './command/receipt-key.ts';
 import {
   createKernelCreditSearchSource,
   createKernelRuntimeDefaults,
@@ -167,7 +167,7 @@ export function startServer(config: ServerConfig): Promise<RunningServer> & Runn
     await setupSemantic(pool, bundledRelease);
     await setupContent(pool);
     await setupPresentation(pool);
-    workClient = createWorkClient(config.databaseUrl);
+    workClient = createWorkClient(config.databaseUrl, pool);
     // Observe startup rejection immediately; the webhook and stop still receive it.
     void workClient.catch(() => {});
     const client = workClient;
@@ -179,6 +179,7 @@ export function startServer(config: ServerConfig): Promise<RunningServer> & Runn
       openSearch === undefined || searchConfig === undefined || rated === undefined
         ? undefined
         : createSearchService({
+            disclosure: defaults.searchDisclosure(openSearch),
             pool,
             client: openSearch,
             prefix: searchConfig.prefix,
@@ -193,6 +194,8 @@ export function startServer(config: ServerConfig): Promise<RunningServer> & Runn
             realmSubjectsForReader: (reader) => createRealmSubjectSearchSource({ pool, reader }),
             cursors: config.tokens,
             clock: defaults.clock,
+            facetAccess: defaults.facetAccess,
+            library: defaults.libraryScope,
             publicFilters: () => {
               if (!publicFilters) throw new Error('Public Search Access composition is incomplete');
               return publicFilters;
@@ -242,6 +245,7 @@ export function startServer(config: ServerConfig): Promise<RunningServer> & Runn
             search: openSearch,
             prefix: searchConfig.prefix,
             clock: defaults.clock,
+            facetAccess: defaults.facetAccess,
             ...(creditSearch === undefined ? {} : { creditSearch }),
           });
           const producers = createDiscoveryProducerEntry({
@@ -254,6 +258,7 @@ export function startServer(config: ServerConfig): Promise<RunningServer> & Runn
           });
           discovery = createDefaultDiscoverySearch(
             {
+              disclosure: defaults.searchDisclosure(openSearch),
               spaceEntryActions: viewerActions,
               pool,
               routeKey: config.routeKey,
@@ -261,7 +266,9 @@ export function startServer(config: ServerConfig): Promise<RunningServer> & Runn
               search: openSearch,
               prefix: searchConfig.prefix,
               keys: config.tokens,
+              deadlineNow: defaults.deadlineNow,
               clock: defaults.clock,
+              facetAccess: defaults.facetAccess,
             },
             producers,
           );

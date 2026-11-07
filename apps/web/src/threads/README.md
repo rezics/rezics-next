@@ -17,6 +17,22 @@ reads.
 
 Decision: The expanded reader stays in page flow on phones and uses a bounded side panel beside writing on desktop.
 
+## Browser reader integration
+
+Decision: Threads and moderation reporter history/status use the session-owned
+[browser reader lifetime boundary](../session/README.md#supported-reader-lifetime). Activity, erasure, pins,
+slow mode, authoring and revision return consume its cache-only observation or pure credential-mode vocabulary.
+The existing shell session hook installs the shared cache observation once; isolated mounts continue with their
+QueryClient and browser address without a Router requirement. Default navigation uses the existing optional Router;
+Performance and the train own attachment to their shared session provider once its public export is delivered. Native authorization and disclosure remain in prepared server reads.
+
+A successful session replacement, even equal data or account A/B/A, cannot restore a retired callback. Slow mode
+aborts its old caller synchronously. Locale and address retirement also reject deferred focus. Thread/native page
+identity, exposure, exact uncertain intent, credential and idempotency key remain with their existing feature owners;
+the reader boundary never reconstructs, retries or upgrades a command. Existing outcome assertions remain unchanged;
+`tests/thread-reader-boundary.test.tsx` adds cache replacement, synchronous abort, isolated host and navigation ABA
+coverage. Runtime acceptance runs after integration; workspace typing is the worker acceptance.
+
 ## Board pins
 
 The pin and unpin consumer contract, native-order presentation and pending Content binding are documented in
@@ -305,6 +321,10 @@ without changing report submission, verification, session retirement or copy rec
 Decision: an uncertain report keeps its original body, sender, credential and idempotency key in the `PostActions`
 owner; its recovery region offers deliberate retry or discard without echoing the private report text.
 
+Decision: public-profile contribution actions consume Threads through `threads/contract/contribution-actions.ts` and
+the bound adapters on `threads/index.ts`. ThreadWatch, ThreadReactions and PostComposer remain the one watch,
+reaction and reply engines; the profile host does not import those implementations.
+
 Decision: Work Library actions navigate to the existing Subject Library slot; post actions create no Library mutation
 or mount read. Browser share/copy results belong to the current session/source visit. The board owner consumes the
 exported port as described in [feed actions](../features/feed/README.md#card-actions), retaining pins and slow mode.
@@ -341,6 +361,8 @@ Long links and table cells wrap; native media keeps its supplied alt text, credi
 Spoiler and image-recovery controls retain phone targets and keyboard focus. Detail documents stay selectable and
 complete. The exact-revision page uses the same body composition and its existing localized return-to-post link;
 opening provenance/history never substitutes a current head for the selected immutable revision.
+The provenance interface test checks that return link and the selected revision identity; history entries retain
+their exact-revision URLs. The immutable page does not need a redundant link to itself.
 
 Rendering adds no loader, observer or network read. One media index, one bounded outline projection and the renderer give O(B+V) work
 within the existing native document/media limits. Prepared multilingual stories cover the post/revision/return
@@ -679,3 +701,11 @@ Accounts admits identities.
   TopBar the sticky header, Share stays in the post action bar, and FeedActionBar supplies Reply.
   Decision: lifetime tests wait for the actual page and personal request spies rather than a fixed number of microtasks.
   Decision: owned page publication keeps the Query stamp; an owned cancel/remove boundary lasts until its work settles, including CancelledError; route-change and locale retirement flush abandon before a successor capture; a continuation that has not bound a page query does not retire from predecessor cancel/remove and does not remove a successor cache it never started; same-account token refresh keeps the reply command; echo snapshots do not disable Send; external cache-notification retirement still cancels asynchronously without touching a newer live caller; StrictMode remount reuses the same connection generation; refresh navigation compares the de-localized thread path. See [thread page lifetime](thread-page-lifetime.md#thread-refresh-and-recovery).
+
+Decision: page-context media delegates to the existing document-media receiver, retaining the actual page index,
+post/thread/revision/digest and declared attachment binding. Per-post mentions use the same receiver as the page
+map: the first disclosed identity wins, including an unavailable identity, and only actual references in that exact
+body occurrence may render. Existing media, mention, thread-reading and page-context tests retain their assertions;
+the duplicate-identity rendering case and a continued-page image pin cover these concrete receiving defects.
+The unified Reply action retains the post-specific accessible name in the reader. Pagination assertions select
+the named continuation navigation rather than the preceding Following-kind navigation; exact cursor assertions remain.

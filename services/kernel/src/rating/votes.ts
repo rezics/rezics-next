@@ -7,20 +7,19 @@ import type { KernelClock } from '../clock.ts';
 import { authoritativeTimeValue, commandAttemptDeadline, type CommandEvent } from '../command/command.ts';
 import type { SessionComponent } from '../tokens/session.ts';
 import { withConnection } from '../database/pool.ts';
-import { withReadTransaction } from '../semantic/read.ts';
-import {
-  createIdentityRatingCommitParticipant,
-  readIdentityRatingReview,
-  type IdentityRatingCommitParticipant,
-  type IdentityRatingCommitPreparation,
-} from '../semantic/index.ts';
+import type {
+  IdentityRatingCommitPreparation,
+  IdentityRatingCommitParticipant as CommitParticipant,
+} from '../semantic/contract/index.ts';
+import type { CommandTransaction } from '../command/command.ts';
+import { ratingVoteSemantic, type RatingVoteSemantic } from './adapters/vote-semantic.ts';
+type IdentityRatingCommitParticipant = CommitParticipant<CommandTransaction>;
 import {
   LibraryNotFoundError,
   createLibraryCommandRunner,
   libraryCommandReceiptDigestForActor,
   requireRoute,
 } from '../library/command-support.ts';
-import { resolveSubject } from '../library/subject-anchor.ts';
 import type { Access, AccountActor, Actor } from '../request/access.ts';
 import { partitionOf, routeOf } from '../route/route.ts';
 import { deadlineFor } from '../request/deadline.ts';
@@ -32,13 +31,8 @@ import {
   type RatingQuestionScale,
 } from './question-scale.ts';
 import { readVotePopulations } from './voter-realms.ts';
-import { produceIdentityRatingVoteChange } from '../semantic/identity-rating-producer.ts';
-import {
-  admitIdentityRatingEffect,
-  IdentityRatingAdmissionPendingError,
-  readIdentityRatingEpochs,
-  compareIdentityRatingEpochs,
-} from '../semantic/identity-rating-admission.ts';
+import { produceIdentityRatingVoteChange } from './vote-event.ts';
+import { IdentityRatingAdmissionPendingError, compareVoteIdentityEpochs } from './vote-admission.ts';
 import {
   normalizeVoteReviewGuard,
   ownVoteReviewWitness,
@@ -142,7 +136,13 @@ export class RatingQuestionRetiredError extends Error {
   }
 }
 
-type Dependencies = { pool: Pool; access: Access; capabilities?: RatingCapabilities; clock?: KernelClock };
+type Dependencies = {
+  pool: Pool;
+  access: Access;
+  capabilities?: RatingCapabilities;
+  clock?: KernelClock;
+  semantic?: RatingVoteSemantic;
+};
 type Queryable = Pick<Pool | PoolClient, 'query'>;
 type QuestionRow = NonNullable<Awaited<ReturnType<typeof questionRead.run>>>;
 type VoteRow = NonNullable<Awaited<ReturnType<typeof voteRead.run>>>;
@@ -252,7 +252,7 @@ export async function prepareVoteTarget(
     if (input.units !== null && question.lifecycleState === 'retired') throw new RatingQuestionRetiredError();
     validateUnits(question, input.units);
   }
-  const target = await resolveSubject(config, actor, input.targetId, undefined, { pool: config.pool, deadline });
+  const target = await (config.semantic ?? ratingVoteSemantic()).resolve(config, actor, input.targetId, deadline);
   if (!target) throw new LibraryNotFoundError();
   return { question, target };
 }
@@ -352,9 +352,11 @@ export function createVoteCommands(config: Dependencies) {
     pool,
     ...(clock === undefined ? {} : { clock }),
   });
-  const countedVoteReader = createOwnCountedVoteReader({ pool, access: config.access });
+  const semantic = config.semantic ?? ratingVoteSemantic();
+  config = { ...config, semantic };
+  const countedVoteReader = createOwnCountedVoteReader({ pool, access: config.access, semantic });
   const questionAdmission = createQuestionVoteAdmission();
-  const identityParticipant = createIdentityRatingCommitParticipant();
+  const identityParticipant = semantic.createCommitParticipant();
 
   /** Prepare once before starting a command; only receipt needs bounded retention after scrubbing. */
   function preparePutVote(
@@ -442,7 +444,7 @@ export function createVoteCommands(config: Dependencies) {
             let error: VoteReviewUnavailableError | null = null;
             if (guard) {
               try {
-                epochs = await readIdentityRatingEpochs(
+                epochs = await semantic.epochs(
                   pool,
                   [input.targetId, current.target.subjectId].map((id) => partitionOf(requireRoute(id))),
                   deadline,
@@ -475,7 +477,7 @@ export function createVoteCommands(config: Dependencies) {
               throw new VoteReviewStaleError('question_changed');
             if (resolved.subjectId !== guard.subject.canonicalId) throw new VoteReviewStaleError('subject_changed');
             if (prepared.error) throw prepared.error;
-            compareIdentityRatingEpochs(guard.subject.epochs, prepared.epochs);
+            compareVoteIdentityEpochs(guard.subject.epochs, prepared.epochs);
           }
           const route = requireRoute(owner.accountId);
           const previousRow = await voteLock.run(queryClient(tx), {
@@ -516,7 +518,7 @@ export function createVoteCommands(config: Dependencies) {
             await identityParticipant.admit(tx, prepared.identityAdmission);
             // Recompare the legacy published-home witness under the same owner
             // fence, including a matching no-op. Preparation alone cannot fence it.
-            const identity = await admitIdentityRatingEffect(tx, {
+            const identity = await semantic.admit(tx, {
               requestedTargetId: input.targetId,
               resolvedTargetId: resolved.subjectId,
               expectedEpochs: guard.subject.epochs,
@@ -535,7 +537,7 @@ export function createVoteCommands(config: Dependencies) {
             throw new VoteUnchanged(previous);
 
           if (!guard) {
-            const admission = await admitIdentityRatingEffect(tx, {
+            const admission = await semantic.admit(tx, {
               requestedTargetId: input.targetId,
               resolvedTargetId: resolved.subjectId,
             });
@@ -657,8 +659,9 @@ export function createVoteCommands(config: Dependencies) {
   async function readOwnVote(actor: Actor, questionId: string, targetId: string): Promise<Vote | null> {
     const owner = voteAccount(actor);
     if (routeOf(questionId) === null || routeOf(targetId) === null) return null;
-    await findQuestion(config, actor, questionId);
-    if (!(await resolveSubject(config, actor, targetId))) return null;
+    const deadline = deadlineFor(5_000);
+    await findQuestion(config, actor, questionId, deadline);
+    if (!(await semantic.resolve(config, actor, targetId, deadline))) return null;
     const route = requireRoute(owner.accountId);
     return withConnection(pool, async (client) => {
       const current = await readAccount(client, route, owner.accountId);
@@ -706,7 +709,7 @@ export function createVoteCommands(config: Dependencies) {
     )
       throw new VoteReviewUnavailableError('question_observation_unavailable');
 
-    const readResult = await withReadTransaction(
+    const readResult = await semantic.snapshot(
       pool,
       (client) => countedVoteReader.read(client, request, preparation),
       deadline,
@@ -724,7 +727,7 @@ export function createVoteCommands(config: Dependencies) {
       );
     const observation = current.observations[0]!;
     if (observation.state === 'unavailable') throw new VoteReviewUnavailableError('identity_observation_unavailable');
-    const identity = await readIdentityRatingReview(pool, {
+    const identity = await semantic.review(pool, {
       requestedOriginalId: targetId,
       canonicalTerminalId: observation.countingTargetId,
       deadline,

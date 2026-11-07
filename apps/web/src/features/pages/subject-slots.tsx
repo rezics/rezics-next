@@ -12,6 +12,8 @@ import { CharacterRelationshipsEntry } from '../catalogue/character-relationship
 import { CharacterRelationshipsGroups } from './character-relationships';
 import type { CharacterRelationshipsRead } from '../catalogue/character-relationships/reading';
 import { ClassificationAssessmentSection } from './subject-classification-assessment-view';
+import { renderWorkTagReading } from './subject-page-application';
+import type { WorkTagReadingProps } from './semantic-render-port';
 import type { ClassificationAssessmentHandlers } from './subject-classification-assessment-view';
 import type { ClassificationAssessmentSession } from './subject-classification-assessment-controller';
 import type { Statistic } from './subject-ratings';
@@ -208,7 +210,9 @@ export function SubjectExploreSlot({
   );
 }
 
-export { WorkTagReading as SubjectConceptTags } from '../catalogue/work-tag-reading/entry';
+export function SubjectConceptTags(props: WorkTagReadingProps) {
+  return renderWorkTagReading(props);
+}
 
 /** Additive Organization companion; no extra subject fetch and no View-enum widening. */
 export function OrganizationHistorySlot({

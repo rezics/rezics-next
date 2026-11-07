@@ -1377,10 +1377,13 @@ compiler, with eight locale labels and inverse display data. It connects distinc
 source/canonical meanings without equivalence, merge or filter expansion;
 `schema:sameAs` external identity and exact mapping retain their own meanings.
 No measurement, cardinality or existing Book/anime/filter profile changes follow.
-`src/reviewed-vocabulary.json` is the finite authored seed input consumed by the
-explicit Importer operator tool; it contains citations and explicit metadata
-rights, not native IDs or publication authority. Released data and both web
-definition recordings are generated through the normal release/record scripts.
+`src/reviewed-vocabulary.json` is the finite authored seed input. The public
+entry `@rezics/definitions/reviewed-vocabulary` publishes that inventory as
+immutable, revision-bound data (`reviewed-vocabulary@1`): citations and
+metadata rights, not native IDs or publication authority. Importer consumes
+this entry through its vocabulary port; it does not import the JSON privately.
+Released data and both web definition recordings are generated through the
+normal release/record scripts.
 The reviewed inventory includes the VNDB development-status scheme
 (`https://vndb.org/development-status`, codes 0/1/2), the VNDB release-completeness
 scheme (`https://rezics.com/schemes/vndb/release-types`, complete/partial/trial;

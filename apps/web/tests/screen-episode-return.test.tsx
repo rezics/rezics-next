@@ -24,6 +24,8 @@ const observation = { state: 'signed-out' };
 let ScreenProfileReader: typeof ScreenProfileReaderComponent;
 let useScreenEpisodeVisit: typeof ScreenEpisodeVisitHook;
 let screenEpisodeReturn: typeof ScreenEpisodeReturnFunction;
+let ScreenReadingBoundary: typeof import('../src/features/pages/data').ScreenReadingBoundary;
+let subjectVisitReturn: (value: unknown, locale?: string) => string | undefined;
 
 function statement(id: string, parentId: string): NonNullable<ScreenEpisodeEntry['statement']> {
   return {
@@ -140,30 +142,34 @@ function Journey({ initial }: { initial: string }) {
     read,
     loading: holdSeasonRead && id === seasonId,
     settledKey: `${retryCount}:${cursor ?? 'first'}`,
-    directReturn: screenEpisodeReturn(origin.searchStr, 'en'),
+    directReturn: screenEpisodeReturn(origin.searchStr, 'en', subjectVisitReturn),
   });
   return h(
-    NavigateContext.Provider,
-    { value: (next: string) => setHref(next) },
+    ScreenReadingBoundary,
+    null,
     h(
-      'button',
-      { type: 'button', onClick: () => setHref('/en/subjects/00000000-0000-4000-8000-000000000905/elsewhere') },
-      'Leave reading',
+      NavigateContext.Provider,
+      { value: (next: string) => setHref(next) },
+      h(
+        'button',
+        { type: 'button', onClick: () => setHref('/en/subjects/00000000-0000-4000-8000-000000000905/elsewhere') },
+        'Leave reading',
+      ),
+      h(ScreenProfileReader, {
+        locale: 'en',
+        public: subject(id, type),
+        ...(read ? { episodeRead: read } : {}),
+        episodeLoading: holdSeasonRead && id === seasonId,
+        onEpisodeRetry: () => {
+          retryCursors.push(cursor ?? 'first');
+          setRetryCount((count) => count + 1);
+        },
+        episodeOrigin: origin,
+        episodeVisitKey: pageKey,
+        episodeVisit: visit,
+        link: TestLink as PageLink,
+      }),
     ),
-    h(ScreenProfileReader, {
-      locale: 'en',
-      public: subject(id, type),
-      ...(read ? { episodeRead: read } : {}),
-      episodeLoading: holdSeasonRead && id === seasonId,
-      onEpisodeRetry: () => {
-        retryCursors.push(cursor ?? 'first');
-        setRetryCount((count) => count + 1);
-      },
-      episodeOrigin: origin,
-      episodeVisitKey: pageKey,
-      episodeVisit: visit,
-      link: TestLink as PageLink,
-    }),
   );
 }
 
@@ -175,6 +181,8 @@ async function mountedJourney(startHref = initialHref) {
     .useScreenEpisodeVisit;
   screenEpisodeReturn = (await import('../src/features/catalogue/screen-episode-reader/navigation'))
     .screenEpisodeReturn;
+  ScreenReadingBoundary = (await import('../src/features/pages/data')).ScreenReadingBoundary;
+  subjectVisitReturn = (await import('../src/features/pages/subject-visit-navigation')).subjectVisitReturn;
   const window = new Window({ url: `https://site.invalid${startHref}` });
   const keys = [
     'window',

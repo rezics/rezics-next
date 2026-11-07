@@ -289,6 +289,36 @@ test('a minimal-verification launch of a brief that requires browser checks reco
   }
 });
 
+test('a control-plane worker runs its declared acceptance command even under minimal verification', () => {
+  const directory = mkdtempSync(join(tmpdir(), 'prompt-control-plane-'));
+  try {
+    writeFileSync(join(directory, 'verification-mode'), 'minimal\n');
+    const rendered = renderWorkerPrompt({
+      task: worker(
+        contract({
+          goal: 'control-plane',
+          acceptance: {
+            command: ['bun', 'test', 'tools/goal/src/dev-verifier.test.ts'],
+            tests: ['verifier rounds'],
+            failing: true,
+            workerOwned: true,
+          },
+        }),
+      ),
+      mainCheckout: MAIN,
+      stateDirectory: directory,
+    });
+    expect(rendered.prompt).toContain('run your acceptance command once after your last relevant edit');
+    expect(rendered.prompt).toContain(
+      "run the exact declared local command `'bun' 'test' 'tools/goal/src/dev-verifier.test.ts'",
+    );
+    expect(rendered.prompt).not.toContain('they run after landing in the dev verifier');
+    expect(rendered.deferredAcceptance).toEqual([]);
+  } finally {
+    rmSync(directory, { recursive: true, force: true });
+  }
+});
+
 test('dispatch lints report local state, main checkout and superseded check instructions without refusal', () => {
   expect(assertBriefDispatchable('See `.temp/goal/notes.md`.')[0]).toContain(BRIEF_AUTHORITY_HINT);
   expect(assertBriefDispatchable(`Keep files under ${MAIN}.`, MAIN)[0]).toContain(BRIEF_AUTHORITY_HINT);

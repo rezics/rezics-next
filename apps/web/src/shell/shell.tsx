@@ -3,7 +3,8 @@ import { TopBar, ShellTopActions } from './top-bar';
 import { SideNavProvider, useSideNavCommunities } from './side-nav';
 import { RezicsMark } from './mobile-mark';
 import { PhoneNavigation, PhoneCreationProvider, PhoneUnreadDot, phoneTabClass } from './phone-navigation';
-import { useOperation } from '../kernel/exposure';
+import { useOperation, useOperationAdmission } from '../kernel/exposure';
+import { subjectHref } from '../subject/subject-href';
 import { cn } from '@rezics/ui/utils';
 import { Button, buttonVariants } from '@rezics/ui/shadcn/button';
 import { Toaster } from '@rezics/ui/shadcn/toast';
@@ -28,7 +29,8 @@ import { PageHeading } from './page-heading';
 import { RouteState } from './route-state';
 import { ShellSearch } from '../search/header-search/shell-search';
 import { HeaderSearchFilterProvider } from '../search/header-search/filter-region';
-import { UnreadBadge } from '../inbox/unread-badge';
+import { createInboxShellPort, InboxShellProvider, UnreadBadge } from '../inbox';
+import { createSettingsShellPort, SettingsShellProvider } from '../settings';
 import {
   Folders,
   Globe,
@@ -457,20 +459,34 @@ export type AppShellProps = {
   communities?: React.ReactNode;
   notifications?: React.ReactNode;
 };
+const inboxShell = createInboxShellPort();
+const settingsShell = createSettingsShellPort({
+  AppearanceControls,
+  PageHeading,
+  subjectHref: (subject, locale) => ({ href: subjectHref(subject, locale).href }),
+  useOperation: (operation) => useOperation(operation),
+  useOperationAdmission: (operation) => useOperationAdmission(operation),
+});
+export const boundSettingsShellPort = settingsShell;
+
 export function AppShell({ children, navigation, subjectPurchase, search, communities, notifications }: AppShellProps) {
   return (
-    <NavigationProvider {...(navigation ? { contributions: navigation } : {})}>
-      <FeatureSlotsProvider {...(subjectPurchase ? { subjectPurchase } : {})}>
-        <Toaster>
-          <AppearancePreferenceSync />
-          <SideNavProvider communities={communities}>
-            <ShellContent search={search} notifications={notifications}>
-              {children}
-            </ShellContent>
-          </SideNavProvider>
-        </Toaster>
-      </FeatureSlotsProvider>
-    </NavigationProvider>
+    <SettingsShellProvider port={settingsShell}>
+      <InboxShellProvider port={inboxShell}>
+        <NavigationProvider {...(navigation ? { contributions: navigation } : {})}>
+          <FeatureSlotsProvider {...(subjectPurchase ? { subjectPurchase } : {})}>
+            <Toaster>
+              <AppearancePreferenceSync />
+              <SideNavProvider communities={communities}>
+                <ShellContent search={search} notifications={notifications}>
+                  {children}
+                </ShellContent>
+              </SideNavProvider>
+            </Toaster>
+          </FeatureSlotsProvider>
+        </NavigationProvider>
+      </InboxShellProvider>
+    </SettingsShellProvider>
   );
 }
 function ShellContent({

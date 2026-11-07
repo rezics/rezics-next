@@ -1,3 +1,4 @@
+import { testReceiptKeys } from '../support/receipt-keys.ts';
 import { afterAll, beforeAll, expect, test } from 'bun:test';
 import { fromPlainText } from '@rezics/document';
 import { createKernel } from '../../src/http/kernel.ts';
@@ -18,7 +19,7 @@ let app: ReturnType<typeof createKernel>;
 
 beforeAll(async () => {
   db = await openGrowthDatabase();
-  app = createKernel({ pool: db.pool, routeKey, tokens, receiptKeys: tokens });
+  app = createKernel({ pool: db.pool, routeKey, tokens, receiptKeys: testReceiptKeys() });
   db.pool.options.max = 1;
 });
 

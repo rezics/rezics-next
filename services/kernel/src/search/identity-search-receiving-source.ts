@@ -4,8 +4,7 @@ import { noEffect, runCommand } from '../command/command.ts';
 import { subjectListingSource } from '../library/listing-counts.ts';
 import { partitionOf, routeOf } from '../route/route.ts';
 import { readRelease } from '../semantic/definitions.ts';
-import { publicFilterSource } from '../semantic/public-filter-source.ts';
-import { createPublicFilterSourceBinding } from '../semantic/public-filter-source-binding.ts';
+import { createPublicFilterSourceBinding, publicFilterSource } from '../semantic/index.ts';
 import { subjectSource } from '../semantic/search-source.ts';
 import {
   identityEpochStore,

@@ -1,6 +1,6 @@
 /** Stable Collection Source vocabulary. Pure types and numeric limits; no adapter or foreign imports. */
 
-import type { WorkAllowance, WorkReceipt } from './work-dimensions.ts';
+import type { WorkAllowance, WorkDimensions, WorkReceipt } from './work-dimensions.ts';
 import type { LibraryActor } from './actors.ts';
 
 export const CANONICAL_SOURCE_RAW_KEY_LIMIT = 100;
@@ -11,6 +11,75 @@ export const ORDINARY_COLLECTION_PREFIX_ROUNDS = 3;
 
 /** Exact structural reference assignable from Semantic's IdentityBasis; no second brand or identity authority. */
 export type NativeIdentityBasis = Readonly<{ digest: string }>;
+
+/** Native activation locator. Current source generation is a different field on the public-output identity. */
+export type NativeOutputActivation = Readonly<{
+  transactionId: string;
+  position: string;
+  sourceGeneration: string;
+}>;
+
+export type NativePublicOutputIdentity = Readonly<{
+  scope: 'public_output';
+  route: number;
+  collectionId: string;
+  incarnation: string;
+  generation: string;
+  ownerEpoch: number;
+  receivingEpoch: string;
+  effectKey: string;
+  outputGeneration: string;
+  activation: NativeOutputActivation;
+}>;
+
+export type NativeAccountSourceIdentity = Readonly<
+  {
+    route: number;
+    collectionId: string;
+    accountId: string;
+    incarnation: string;
+    generation: string;
+    ownerEpoch: number;
+    receivingEpoch: string;
+    effectKey: string;
+  } & (
+    | {
+        scope: 'curated' | 'private_builtin';
+        outputGeneration?: never;
+        publicationTransactionId?: never;
+        publicationPosition?: never;
+      }
+    | {
+        scope: 'active_explicit_output';
+        outputGeneration: string;
+        publicationTransactionId: string;
+        publicationPosition: string;
+      }
+  )
+>;
+
+/** Lookup hints only. Native records, not possession of this value, establish custody. */
+export type NativeSourceIdentity = NativeAccountSourceIdentity | NativePublicOutputIdentity;
+
+export type CollectionSourceRawKey = Readonly<{
+  driver: 'member' | 'entry' | 'label' | 'session' | 'copy' | 'output';
+  storedSubjectId: string;
+  factId: string;
+}>;
+
+export type NativeCollectionOrdinalPageBound = Readonly<{
+  limit: number;
+  requestBytes: number;
+  resultBytes: number;
+  work: WorkDimensions;
+  projection: Readonly<Partial<WorkDimensions>>;
+}>;
+
+export type CanonicalSourceReceivingCost = Readonly<{
+  state: WorkDimensions;
+  seek: WorkDimensions;
+  group: (limit: number) => WorkDimensions;
+}>;
 
 export interface CollectionSourceBasis {
   /** Commitment to the ACTUAL native query/meaning/profile/identity/projection compatibility inputs below. */

@@ -5,8 +5,7 @@ import { fetchGuideRelease } from '../catalogue/definition-guide';
 import { loadSubjectPage, subjectBody, type SubjectPageData } from './subject';
 import { isRecord } from './shared';
 import type { OverviewValue, Section } from './overview';
-import { creditVisit, type CreditVisit } from '../catalogue/credit-inspection/model';
-import { characterWorkStream } from '../catalogue/character-work-visit/intent';
+import { creditVisit, type CreditVisit, characterWorkStream } from '../catalogue/character-reading-application';
 
 export const connectionGroups = ['relations', 'characters', 'credits'] as const;
 export type ConnectionGroup = (typeof connectionGroups)[number];

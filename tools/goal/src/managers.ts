@@ -14,6 +14,7 @@ import { readGoalDocuments, renderManagerOpening } from './prompts.ts';
 import { recordFlow } from './flow.ts';
 import type { PromptBudgetManifest } from './types.ts';
 import type { ProcessIdentity } from './process.ts';
+import { runHostOperation } from './service.ts';
 import type { ManagerWindows } from './windows.ts';
 
 export { managerOwnership, ownedGoals, readManagerOwnership, resolveGoalManager } from './manager-ownership.ts';
@@ -479,9 +480,9 @@ export class ManagerSessions {
   }
   // A Claude manager hears its inbox through its own background watcher, so a session that exited never sees new
   // events; the next event resumes it in its window.
-  private reviveClaude(state: ManagedManagerState): void {
+  private async reviveClaude(state: ManagedManagerState): Promise<void> {
     if (!state.threadId) return;
-    const notified = this.transport.reviveClaude(
+    const notified = await this.transport.reviveClaude(
       state,
       state.threadId,
       this.inbox.pending(state.id).length > 0,
@@ -548,7 +549,7 @@ export class ManagerSessions {
         state.goalState = await this.transport.setActiveGoal(client, spec, threadId);
         state.status = 'running';
         this.save(state);
-        this.transport.registerCodexViewer(state, threadId, client);
+        await this.transport.registerCodexViewer(state, threadId, client);
         const continuationFile = history?.length ? this.continuationPath(spec) : undefined;
         const opening =
           continuationFile && existsSync(continuationFile) ? this.opening(spec, continuationFile) : this.opening(spec);
@@ -566,7 +567,7 @@ export class ManagerSessions {
         state.threadId = randomUUID();
         const opening = this.opening(spec);
         state.promptManifest = opening.manifest;
-        this.transport.registerClaudeSession(spec, state.threadId, opening.prompt);
+        await this.transport.registerClaudeSession(spec, state.threadId, opening.prompt);
         state.status = 'running';
         this.recordPromptLaunch(state);
       }
@@ -920,7 +921,7 @@ export class ManagerSessions {
     try {
       await this.pauseRemote(state);
     } finally {
-      this.services.windows.unregister(id);
+      await this.services.windows.unregister(id);
     }
   }
   stop(id: string): Promise<void> {
@@ -938,7 +939,7 @@ export class ManagerSessions {
     let state = this.get(id);
     if (isResidentSupermanager(state)) return;
     if (state.status !== 'running') return;
-    if (state.engine === 'claude') return this.reviveClaude(state);
+    if (state.engine === 'claude') return await this.reviveClaude(state);
     const client = await this.transport.client(state.pool);
     let prefix = this.consumeGoalReadings(state);
     for (const event of this.inbox.notifications(id)) {
@@ -1110,6 +1111,9 @@ export class ManagerSessions {
 
   /** Rejoin persisted threads on host restart and retry committed, unsignalled inbox deliveries. */
   async recover(onProgress?: () => void): Promise<void> {
+    return runHostOperation('manager recovery', () => this.recoverInternal(onProgress));
+  }
+  private async recoverInternal(onProgress?: () => void): Promise<void> {
     const states = this.list()
       .filter(isManagedManager)
       .filter(
@@ -1177,8 +1181,8 @@ export class ManagerSessions {
           this.save(current);
           if (current.engine === 'codex' && current.threadId) {
             const client = await this.transport.client(current.pool);
-            this.services.windows.unregister(current.id);
-            this.transport.registerCodexViewer(current, current.threadId, client);
+            await this.services.windows.unregister(current.id);
+            await this.transport.registerCodexViewer(current, current.threadId, client);
           }
           if (await this.handleGoalUpdate(current)) return;
           if (!(await this.checkLimits(current))) {

@@ -10,12 +10,19 @@ import {
   continueIdentityRepairGeneration,
 } from '../../src/rating/identity-repair-run.ts';
 import { RATING_IDENTITY_PAGE_SIZE } from '../../src/rating/identity-work-frame.ts';
-import { identityMappingDigest, unavailableRatingIdentityProducer } from '../../src/rating/segment-identity-guard.ts';
+import {
+  identityMappingDigest,
+  unavailableRatingIdentityProducer,
+  IDENTITY_REPAIR_CROSS_HOME_REASON,
+  IDENTITY_REPAIR_LATER_VOTE_REASON,
+} from '../../src/rating/segment-identity-guard.ts';
 import { partitionOf } from '../../src/route/route.ts';
 import { newId } from '../../src/route/route.ts';
-import { IDENTITY_EPOCH_PROGRESS } from '../../src/semantic/events.ts';
+import { IDENTITY_EPOCH_PROGRESS, IDENTITY_RATING_REPAIR_CONTINUATION } from '../../src/semantic/events.ts';
+import { IDENTITY_REPAIR_MEMBERSHIP_CAP } from '../../src/rating/identity-repair-bounds.ts';
 import {
   IDENTITY_REPAIR_NATIVE_AT,
+  laterIdentities,
   openIdentityRepairNative,
   type IdentityRepairNativeHost,
 } from './support/identity-repair-native.ts';
@@ -31,6 +38,7 @@ afterAll(async () => {
 test('installed module application admits, pages at 64, commits an empty terminal, and reads mapping receipt checkpoint independently', async () => {
   const voter = await host.actor();
   const beyond = host.originals[66]!;
+  await host.seedMemberships(voter, IDENTITY_REPAIR_MEMBERSHIP_CAP);
   for (const original of host.originals.slice(0, 66)) await host.seedVote(voter, original);
   const started = await admitIdentityRepairGeneration(
     host.commands,
@@ -94,6 +102,11 @@ test('installed module application admits, pages at 64, commits an empty termina
     expect(identityMappingDigest(obligation?.mappings ?? [])).toBe(mappingDigest);
   }
   expect((await host.read.voteEffects(voter.accountId)).length).toBeGreaterThan(0);
+  expect(
+    (await host.read.voteEffects(voter.accountId)).every(
+      (effect) => effect.populations.length === IDENTITY_REPAIR_MEMBERSHIP_CAP + 1,
+    ),
+  ).toBe(true);
 });
 
 test('exact redirect, competing originals and a terminal clear keep original vote keys', async () => {
@@ -270,6 +283,112 @@ test('installed hold keeps the partition owner through COMMIT; omitted factory p
     const otherPage = await isolated.select(other, await isolated.admit(other));
     expect((await seam.commit(other, isolated.binding(otherPage), isolated.key())).value).toMatchObject({
       reason: 'semantic-exact-currentness-and-held-repair-obligation-unavailable',
+    });
+  } finally {
+    await isolated.close();
+  }
+});
+
+test('later votes beyond the captured upper key stay off the page and mark later_vote on the bound obligation', async () => {
+  const isolated = await openIdentityRepairNative({ identities: 2 });
+  try {
+    const voter = await isolated.actor();
+    const original = isolated.originals[0]!;
+    const last = isolated.originals.slice().sort().at(-1)!;
+    await isolated.seedVote(voter, original);
+    const ref = await isolated.admit(voter);
+    const later = laterIdentities(last, 3);
+    for (const target of later) await isolated.seedVote(voter, target);
+    const page = await isolated.select(voter, ref);
+    expect(page.votes.map((vote) => vote.targetId)).toEqual([original]);
+    expect(later.some((target) => page.votes.some((vote) => vote.targetId === target))).toBe(false);
+    expect((await isolated.commands.commit(voter, isolated.binding(page), isolated.key())).value.status).toBe(
+      'committed',
+    );
+    const extra = laterIdentities(later.at(-1)!, 1)[0]!;
+    await isolated.seedVote(voter, extra);
+    const votes = await isolated.read.countedVotes(voter.accountId);
+    expect(votes.find((vote) => vote.targetId === original)?.countedTargetId).toBe(isolated.terminal(original));
+    for (const target of [...later, extra])
+      expect(votes.find((vote) => vote.targetId === target)).toMatchObject({
+        countedTargetId: null,
+        units: 7,
+        revision: 1,
+      });
+    expect((await isolated.read.obligations(voter.accountId)).some((row) => row.laterVote)).toBe(true);
+    expect(IDENTITY_REPAIR_LATER_VOTE_REASON).toBe('identity-repair-later-vote');
+  } finally {
+    await isolated.close();
+  }
+});
+
+test('foreign originals persist a preparing obligation and continuation under the original voter command', async () => {
+  const isolated = await openIdentityRepairNative({ identities: 2, foreignIndexes: [1] });
+  try {
+    const voter = await isolated.actor();
+    const foreign = isolated.foreignOriginals[0]!;
+    await isolated.seedVote(voter, foreign);
+    const ref = await isolated.admit(voter);
+    const page = await isolated.select(voter, ref);
+    const before = await isolated.read.countedVotes(voter.accountId);
+    expect((await isolated.commands.commit(voter, isolated.binding(page), isolated.key())).value).toMatchObject({
+      status: 'pending',
+      reason: IDENTITY_REPAIR_CROSS_HOME_REASON,
+    });
+    expect(await isolated.read.countedVotes(voter.accountId)).toEqual(before);
+    expect((await isolated.read.obligations(voter.accountId))[0]).toMatchObject({
+      state: 'preparing',
+      pageId: page.pageId,
+    });
+    const continuations = (
+      await isolated.db.admin.query(`SELECT data FROM core.outbox WHERE type = $1 ORDER BY position, event_seq`, [
+        IDENTITY_RATING_REPAIR_CONTINUATION,
+      ])
+    ).rows.map((row) => row.data);
+    expect(continuations[0]).toMatchObject({
+      kind: 'prepare',
+      originals: [foreign],
+    });
+    expect((await isolated.select(voter, ref)).pageId).toBe(page.pageId);
+    expect(await isolated.read.checkpoint(voter.accountId)).toMatchObject({
+      state: 'active',
+      selectedPageId: page.pageId,
+    });
+  } finally {
+    await isolated.close();
+  }
+});
+
+test('repeated empty terminal receipts replay without a second native page', async () => {
+  const isolated = await openIdentityRepairNative({ identities: 1 });
+  try {
+    const voter = await isolated.actor();
+    await isolated.seedVote(voter, isolated.root);
+    const ref = await isolated.admit(voter);
+    const first = await isolated.select(voter, ref);
+    expect(first.votes).toHaveLength(1);
+    expect((await isolated.commands.commit(voter, isolated.binding(first), isolated.key())).value.status).toBe(
+      'committed',
+    );
+    const empty = await isolated.select(voter, ref);
+    expect(empty.votes).toHaveLength(0);
+    expect(empty.terminal).toBe(true);
+    const requestKey = isolated.key();
+    const committed = await isolated.commands.commit(voter, isolated.binding(empty), requestKey);
+    expect(committed.value).toMatchObject({ status: 'committed', receipt: { terminal: true } });
+    expect((await isolated.commands.commit(voter, isolated.binding(empty), requestKey)).value).toEqual(committed.value);
+    expect((await isolated.commands.commit(voter, isolated.binding(empty), isolated.key())).value).toEqual(
+      committed.value,
+    );
+    expect((await isolated.commands.select(voter, ref, isolated.key())).value).toMatchObject({
+      status: 'pending',
+      reason: 'stale-work',
+    });
+    const receipts = await isolated.read.receipts(voter.accountId);
+    expect(receipts.filter((receipt) => receipt.terminal)).toHaveLength(1);
+    expect(await isolated.read.checkpoint(voter.accountId)).toMatchObject({
+      state: 'complete',
+      selectedPageId: null,
     });
   } finally {
     await isolated.close();

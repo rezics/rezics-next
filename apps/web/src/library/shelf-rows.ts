@@ -39,7 +39,7 @@ import {
 import { displayLibraryTitle } from './title';
 import { mutateSubjectLabelAction } from './subject-slot-actions';
 import type { LibraryLabelSummary } from './subject-labels.ts';
-import { useSession } from '../session/query';
+import { useSession } from '../session';
 import { readShelfLabelAssignment } from './labels-actions';
 import { captureShelfLabelEntry, executeShelfLabelRequest, type ShelfLabelKind } from './shelf-label-request';
 import { ShelfSummaryAcknowledgement } from './shelf-summary-current';

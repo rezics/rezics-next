@@ -59,6 +59,9 @@ function ports(store: Partial<IdentityRecoveryStorePort> = {}): AccessApplicatio
     },
     identity: {
       accountAgentId: (accountId) => `agent:${accountId}`,
+      async accountAgentsForSubjects() {
+        return new Map();
+      },
       async readOriginalAccountAgentIdentity() {
         return original;
       },

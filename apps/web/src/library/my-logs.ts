@@ -1,6 +1,6 @@
 import { BookOpenText } from 'lucide-react';
 import { m } from '../paraglide/messages.js';
-import { isPlatformClosedError } from '../kernel/platform-closed';
+import { isPlatformClosedError } from '../session/reading-policy';
 import { createNavigation } from '../shell/navigation';
 import type { PublishedLogPage } from './logs-read';
 

@@ -2,11 +2,16 @@ import { useContext, useLayoutEffect, useRef, useState, useSyncExternalStore } f
 import { QueryClientContext } from '@tanstack/react-query';
 import { browserObservation } from '../../../session';
 import { m } from '../../../paraglide/messages.js';
-import { OverviewContext, type OverviewValue } from '../../pages/overview';
-import { createConnectionWindow, connectionReturn, type ConnectionRead } from '../../pages/subject-connections-window';
 import { useSubjectCommunityReading } from '../../pages/subject-community-lifetime';
 import { CharacterWorkRows } from '../character-work-visit/view';
-import { characterWorkStream } from '../character-work-visit/intent';
+import {
+  characterWorkStream,
+  useCharacterPage,
+  useCharacterReadingSlots,
+  type CharacterConnectionRead,
+  type CharacterConnectionWindow,
+  type CharacterPage,
+} from '../character-reading-port';
 import { CharacterAssociationContext } from './bridge';
 
 const groups = ['characters', 'credits'] as const;
@@ -14,11 +19,12 @@ const noSubscribe = () => () => {};
 const noBinding = () => undefined;
 const action = 'inline-flex min-h-11 min-w-11 items-center py-2 underline focus-visible:outline-2';
 
-export type CharacterAssociations = { source: object; viewer: string | null; read?: ConnectionRead };
+export type CharacterAssociations = { source: object; viewer: string | null; read?: CharacterConnectionRead };
 
 /** A local presentation of the two existing native windows, with no document or per-row reader. */
 export function CharacterPublicReading({ source, viewer, read }: CharacterAssociations) {
-  const value = useContext(OverviewContext);
+  const value = useCharacterPage();
+  const { read: readSlot } = useCharacterReadingSlots();
   const bridge = useContext(CharacterAssociationContext);
   const binding = useSyncExternalStore(bridge?.subscribe ?? noSubscribe, bridge?.snapshot ?? noBinding, noBinding);
   const descriptor = JSON.stringify([
@@ -34,9 +40,9 @@ export function CharacterPublicReading({ source, viewer, read }: CharacterAssoci
   const owned = useRef<{
     source: object;
     descriptor: string;
-    read: ConnectionRead;
+    read: CharacterConnectionRead;
     serial: number;
-    window: ReturnType<typeof createConnectionWindow>;
+    window: CharacterConnectionWindow;
   } | null>(null);
   if (!value?.subject) return null;
   if (!lifetime.available) {
@@ -62,7 +68,7 @@ export function CharacterPublicReading({ source, viewer, read }: CharacterAssoci
       descriptor,
       read,
       serial: (owned.current?.serial ?? 0) + 1,
-      window: createConnectionWindow(
+      window: readSlot.createWindow(
         {
           id: value.subject,
           locale: value.locale,
@@ -84,12 +90,13 @@ function AssociationWindows({
   viewer,
   managed = false,
 }: {
-  window: ReturnType<typeof createConnectionWindow>;
-  value: OverviewValue;
+  window: CharacterConnectionWindow;
+  value: CharacterPage;
   viewer: string | null;
   managed?: boolean;
 }) {
   const client = useContext(QueryClientContext);
+  const { read: readSlot } = useCharacterReadingSlots();
   const [retired, setRetired] = useState(false);
   const snapshot = useSyncExternalStore(window.subscribe, window.snapshot, window.snapshot);
   const heading = useRef<HTMLDivElement>(null);
@@ -98,7 +105,6 @@ function AssociationWindows({
   useLayoutEffect(() => {
     if (!managed) window.activate();
     const observation = client ? browserObservation(client) : undefined;
-    // Establish the initial observation before subscribing to subsequent in-stack retirements.
     const disconnect = observation?.subscribe(() => {});
     const retire = () => {
       window.retire();
@@ -172,7 +178,7 @@ function AssociationWindows({
                     current={current}
                     value={value}
                     kind={kind}
-                    returnWindow={connectionReturn(current, page)}
+                    returnWindow={readSlot.connectionReturn(current, page)}
                   />
                   {Array.isArray(section.body.links) && !section.body.links.length && (
                     <p role="status">{m.subject_relation_empty_page({}, o)}</p>

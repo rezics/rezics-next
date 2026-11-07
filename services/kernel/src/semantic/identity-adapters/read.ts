@@ -1,9 +1,12 @@
-/** Bounded native mapping and published-identity reads without loading the store or binding graph. */
+/** Bounded native mapping and published-identity reads. Constructed from bound native read capabilities. */
 export {
+  IDENTITY_RATING_REPAIR_MAX_ORIGINALS,
   readIdentityBasis,
   readIdentityHome,
   readIdentityMappings,
+  readIdentityRatingEvidenceInTransaction,
   readIdentityRatingReview,
+  readIdentityRepairEvidenceInTransaction,
 } from './identity-epoch-read.ts';
 export type {
   BasisRead,
@@ -13,4 +16,5 @@ export type {
   IdentityRatingReviewOperand,
   IdentityRatingReviewResult,
   IdentityRatingReviewUnavailableReason,
+  IdentityRepairEvidence,
 } from './identity-epoch-read.ts';

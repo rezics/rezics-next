@@ -1,6 +1,6 @@
 import { QueryClientContext, type QueryClient } from '@tanstack/react-query';
 import { useCallback, createContext, useContext, useLayoutEffect, useState, useSyncExternalStore } from 'react';
-import { sessionQuery } from '../session/query';
+import { productionSettingsShellPort } from './adapters/shell';
 
 /** Read custody and write credentials belong to one successful installed observation, never to retained query data alone. */
 export class SettingsSessionOwner {
@@ -16,13 +16,13 @@ export class SettingsSessionOwner {
     token: string | null,
     subject?: string | null,
   ) {
-    const query = client.getQueryState(sessionQuery.queryKey);
+    const query = productionSettingsShellPort.sessionQueryState(client);
     this.subject = subject ?? query?.data?.subject ?? null;
     this.token = token;
     if (!this.matches()) this.retired = true;
   }
   private matches() {
-    const query = this.client.getQueryState(sessionQuery.queryKey);
+    const query = productionSettingsShellPort.sessionQueryState(this.client);
     return (
       query?.status === 'success' &&
       query.data?.state === 'signed-in' &&
@@ -59,7 +59,7 @@ export class SettingsSessionOwner {
     this.mounted = true;
     if (this.readCurrent() && !this.release) {
       this.release = this.client.getQueryCache().subscribe(({ query, type }) => {
-        if (query.queryKey.length !== 1 || query.queryKey[0] !== sessionQuery.queryKey[0]) return;
+        if (!productionSettingsShellPort.isSessionQuery(query.queryKey)) return;
         if (type === 'removed') this.retire();
         else this.readCurrent();
       });
@@ -105,7 +105,7 @@ export function useSettingsSessionOwner(
     !inherited && client
       ? new SettingsSessionOwner(
           client,
-          token === undefined ? (client.getQueryData(sessionQuery.queryKey)?.csrfToken ?? null) : token,
+          token === undefined ? (productionSettingsShellPort.sessionQueryData(client)?.csrfToken ?? null) : token,
           subject,
         )
       : null,

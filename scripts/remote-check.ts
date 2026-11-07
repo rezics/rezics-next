@@ -26,10 +26,6 @@
 // The command runs in <directory> (relative to the workspace root, default the root) after `bun install`, inside the
 // host's capped systemd slice, and its exit code is this script's exit code. The workspace uploads before a run takes
 // <n> slots (default 1) on that host; those slots cover only the remote command, not upload, output retrieval or cleanup.
-// A waiting upload stays on that host while it has a free slot. After two minutes with none, if another performance
-// host can start the run now, the check uploads there, takes the slot, and releases the first copy for host cleanup.
-// Another move needs two more minutes full on the new host. Gate and landing-priority runs keep today's waiter order
-// on the host they move to.
 // Admission depends on free slots, held memory reservations, per-run MemoryMax packing, slice headroom that counts
 // inactive file cache, and free disk. Each run has a nested slice shared with its containers, MemoryMax (default 6 GiB,
 // host memoryPerRunGiB) and MemorySwapMax 0; its cpu.stat and memory.peak report CPU seconds, average cores and peak
@@ -334,8 +330,6 @@ export type RemoteCheck = {
   hostsFile?: string;
   /** Test seam for the queued slot status heartbeat. */
   waitRepeatMs?: number;
-  /** Test seam for how long a full upload host may hold a waiter before a move; defaults to two minutes. */
-  placementMoveMs?: number;
   /** Called for each probe round that finds at least one responding host. */
   answered?: () => void;
   /** Called with the host's name once its slot is held and the command is about to start. */
@@ -804,7 +798,6 @@ export function parseRunLifetimeFailure(output: string): RunLifetimeFailure | nu
 }
 const DEFAULT_LIVENESS_INTERVAL_MS = 60_000;
 export const DEFAULT_TRANSFER_TIMEOUT_MS = 120_000;
-const DEFAULT_PLACEMENT_MOVE_MS = 120_000;
 // Base refresh and installs for dozens of concurrent checks exceeded three minutes on 2026-11-02.
 export const DEFAULT_PREPARATION_TIMEOUT_MS = 900_000;
 // Shared DEFAULT_CONTROL_PROBE_TIMEOUT_MS is check-ssh.ts. A 5 s probe failed 109 checks with exit 75 before any
@@ -1545,6 +1538,9 @@ for run in ${ROOT}/runs/*; do
     if [ "$age" -gt 600 ]; then
       run_id=\${run##*/}
       run_slice=rezics-check-$(printf '%s' "$run_id" | tr '-' '_').slice
+      if [ -e "$run/command-started" ] && python3 -c ${quote(supervisorActiveProgram)} "$run"; then
+        continue
+      fi
       run_directory=$run
       ${cleanupCommands(false)}
       echo "remote-check: stopped stale run $run_id (alive file age $age s)" >&2
@@ -1660,7 +1656,11 @@ if [ -n "$run_id" ]; then
 fi
 cleanup_orphan() {
   if [ -n "$run_id" ] && [ -n "$run_directory" ] && [ ! -e "$run_directory/exit-status" ]; then
-    ${cleanupCommands()}
+    if [ -e "$run_directory/command-started" ]; then
+      echo "remote-check: preserving started run $run_id for stale-run cleanup" >&2
+    else
+      ${cleanupCommands()}
+    fi
   fi
   for slot in $reserved_slots; do rm -f -- "${ROOT}/slots/$slot.memory"; done
 }
@@ -1709,6 +1709,17 @@ while current(pid,started):
 function stopSupervisor(directory: string): string {
   return `python3 -c ${quote(supervisorStopProgram)} ${directory}`;
 }
+
+const supervisorActiveProgram = String.raw`import json,sys
+from pathlib import Path
+try:
+    record=json.loads((Path(sys.argv[1])/'.remote-check-supervisor').read_text())
+    pid=int(record['pid']); started=str(record['started'])
+    fields=Path('/proc/'+str(pid)+'/stat').read_text().rsplit(')',1)[1].split()
+except (OSError,ValueError,KeyError,IndexError,TypeError):
+    sys.exit(1)
+sys.exit(0 if fields[19]==started and fields[0] not in ['Z','X'] else 1)
+`;
 
 /** Shared exact-path and owner validation used at both source and prepared-input lifecycle boundaries. */
 const producerControlValidationPython = String.raw`import math,re
@@ -2004,11 +2015,20 @@ def verified(entry, key, allocated=None):
         return None
 
 
+# First page-in of the ~50MiB statically linked Task binary after frozen install exceeds the 5s Docker probe window
+# on a busy check host. This bound is identity verification, not inspect/exec.
+NATIVE_BINARY_VERSION_TIMEOUT = 30
+
+
 def verify_native_packages(root, entries):
     checks = []
+    seen = set()
     for name in entries:
         parts = Path(name).parts
         if not name.endswith('/package.json') or 'node_modules' not in parts:
+            continue
+        # Bun's content-addressed store is a second copy of the same identity; verify the public package only.
+        if '.bun' in parts:
             continue
         # Package fixtures and example manifests are not installed package identities.
         last_node_modules = len(parts) - 1 - tuple(reversed(parts)).index('node_modules')
@@ -2016,8 +2036,11 @@ def verify_native_packages(root, entries):
         if not (len(package_parts) == 2 or (len(package_parts) == 3 and package_parts[0].startswith('@'))):
             continue
         package = json.loads((root / name).read_text())
+        identity = (package.get('name'), package.get('version', ''))
+        if identity in seen:
+            continue
         package_root = (root / name).parent
-        version = package.get('version', '')
+        version = identity[1]
         if package.get('name') == 'workerd':
             match = re.fullmatch(r'1\.(\d{4})(\d{2})(\d{2})\.\d+', version)
             if match is None:
@@ -2027,6 +2050,7 @@ def verify_native_packages(root, entries):
             actual = subprocess.check_output([str(package_root / 'bin/workerd'), '--version'], text=True, cwd=package_root).strip()
             if actual != expected:
                 raise RuntimeError('workerd@' + version + ' binary version mismatch: ' + actual)
+            seen.add(identity)
             checks.append({'name': 'workerd', 'version': version, 'binaryVersion': actual})
         elif package.get('name') == 'bun':
             if version.split('+')[0] != os.environ['REMOTE_CHECK_PREPARATION_VERSION']:
@@ -2035,8 +2059,19 @@ def verify_native_packages(root, entries):
             subprocess.run([str(binary), '--eval',
                             'process.exit(Bun.revision === process.argv[1] ? 0 : 1)',
                             os.environ['REMOTE_CHECK_PREPARATION_REVISION']], check=True, cwd=package_root)
+            seen.add(identity)
             checks.append({'name': 'bun', 'version': version,
                            'revision': os.environ['REMOTE_CHECK_PREPARATION_REVISION']})
+        elif package.get('name') == '@go-task/cli':
+            # The JS launcher can download on demand. Require the installed binary before cache publication;
+            # native startup must never download into a cache-shared package during an admitted command.
+            actual = subprocess.check_output([str(package_root / 'bin/task'), '--version'],
+                                             text=True, cwd=package_root,
+                                             timeout=NATIVE_BINARY_VERSION_TIMEOUT).strip()
+            if re.search(r'(?:^|\s)v?' + re.escape(version) + r'(?:\s|$)', actual) is None:
+                raise RuntimeError('@go-task/cli@' + version + ' binary version mismatch: ' + actual)
+            seen.add(identity)
+            checks.append({'name': '@go-task/cli', 'version': version, 'binaryVersion': actual})
     return sorted(checks, key=lambda item: (item['name'], item['version']))
 
 
@@ -2050,7 +2085,7 @@ def native_entries(root, entries):
         try:
             package = json.loads((root / name).read_text())
             identity = package.get('name', '')
-            if identity in ['workerd', 'bun'] or identity.startswith(('@cloudflare/workerd-', '@oven/bun-')):
+            if identity in ['workerd', 'bun', '@go-task/cli'] or identity.startswith(('@cloudflare/workerd-', '@oven/bun-')):
                 packages.append((root / name).parent)
         except (OSError, ValueError):
             pass
@@ -3644,7 +3679,20 @@ function runMemoryLimitShell(directory: string, memoryPerRunGiB: number): string
   const lastTestFile = quote(`${directory}/.last-test-file`);
   const reported = quote(`${directory}/.memory-limit-reported`);
   const bytes = Math.round(memoryPerRunGiB * 2 ** 30);
-  return `apply_run_memory_limit() {
+  return `resolve_run_slice_cgroup() {
+  slice_cgroup=$(systemctl show --property=ControlGroup --value "$REZICS_CHECK_SLICE" 2>/dev/null || true)
+  case "$slice_cgroup" in /*) return 0 ;; esac
+  slice_cgroup=$(awk -F: '$1 == "0" { print $3; exit }' /proc/self/cgroup 2>/dev/null || true)
+  case "$slice_cgroup" in /*) ;; *) slice_cgroup=; return 1 ;; esac
+  case "$REZICS_CHECK_SLICE" in ?*)
+    case "$slice_cgroup" in *"$REZICS_CHECK_SLICE"*)
+      slice_cgroup="\${slice_cgroup%%"$REZICS_CHECK_SLICE"*}$REZICS_CHECK_SLICE"
+    ;;
+    esac
+  ;;
+  esac
+}
+apply_run_memory_limit() {
   slice_cgroup=$(systemctl show --property=ControlGroup --value "$REZICS_CHECK_SLICE" 2>/dev/null)
   case "$slice_cgroup" in /*)
     printf '%s\\n' ${bytes} > "/sys/fs/cgroup$slice_cgroup/memory.max" 2>/dev/null || true
@@ -3693,6 +3741,14 @@ reclaim_run_file_cache() {
       esac
     fi
     ;;
+  esac
+}
+reclaim_run_inactive_file() {
+  resolve_run_slice_cgroup || return 0
+  inactive=$(awk '$1 == "inactive_file" { print $2 }' "/sys/fs/cgroup$slice_cgroup/memory.stat" 2>/dev/null || true)
+  case "$inactive" in ''|0|*[!0-9]*) ;; *)
+    printf '%s\\n' "$inactive" > "/sys/fs/cgroup$slice_cgroup/memory.reclaim" 2>/dev/null || true
+  ;;
   esac
 }
 apply_run_memory_limit`;
@@ -3859,6 +3915,7 @@ host=$REMOTE_CHECK_HOST
     install_finished=$(date +%s%N)
     awk -v elapsed="$((install_finished - install_started))" -v host="$host" 'BEGIN { printf "remote-check: bun install %.3f s on %s\\n", elapsed / 1000000000, host }' >&2
     if [ "$code" -eq 0 ]; then reclaim_run_file_cache; fi
+    reclaim_run_inactive_file
     if [ "$code" -eq 0 ]; then
       export PATH="$(dirname "$bun"):$PWD/node_modules/.bin:$PATH"
       ${preparationScript}
@@ -4150,9 +4207,84 @@ function localRsyncSupportsZstd(): boolean {
 /** Reads the command's recorded exit status when ssh itself reports 255. */
 function statusScript(directory: string): string {
   return `# REMOTE_CHECK_STATUS
+if [ -d ${quote(directory)} ]; then touch ${quote(`${directory}/.alive`)} || exit 75; fi
 if [ -e ${quote(`${directory}/exit-status`)} ]; then cat -- ${quote(`${directory}/exit-status`)}
 elif [ -e ${quote(`${directory}/command-started`)} ]; then printf 'STARTED\\n'
 else printf 'NOT_STARTED\\n'; fi`;
+}
+
+type RemoteCommandStatus = { kind: 'not-started' } | { kind: 'started' } | { kind: 'completed'; code: number };
+
+function parseRemoteCommandStatus(
+  host: Host,
+  status: { code: number; output: string; stdout: string },
+): RemoteCommandStatus {
+  const recorded = status.stdout.trim();
+  const parsed = /^(?:0|[1-9]\d{0,2})$/.test(recorded) ? Number(recorded) : Number.NaN;
+  const invalid =
+    status.code !== 0 ||
+    (!Number.isInteger(parsed) && recorded !== 'NOT_STARTED' && recorded !== 'STARTED') ||
+    parsed > 255;
+  if (invalid)
+    throw new RemoteTransportError(host.name, 'remote command', status.code || REMOTE_TRANSPORT_FAILURE, false);
+  if (recorded === 'NOT_STARTED') return { kind: 'not-started' };
+  if (recorded === 'STARTED') return { kind: 'started' };
+  return { kind: 'completed', code: parsed };
+}
+
+/** Reconnects with bounded status probes and waits for this run's host-owned terminal result. */
+async function waitForRemoteCommandStatus(
+  host: Host,
+  connectionId: string,
+  directory: string,
+  deadlineAt: number,
+  options: RemoteCheck,
+  signal: AbortSignal,
+): Promise<RemoteCommandStatus | { kind: 'unreachable' }> {
+  let reconnectStartedAt = performance.now();
+  let reconnectPending = true;
+  let consecutiveDrops = 0;
+  const pollMs = Math.max(1, Math.min(options.pollMs ?? 1_000, 1_000));
+  const retryBaseMs = options.retryBackoffMs ?? 1_000;
+  const probe = async (timeoutMs: number): Promise<RemoteCommandStatus | null> => {
+    let response: { code: number; output: string; stdout: string };
+    try {
+      response = await boundedSsh(host, connectionId, statusScript(directory), 'remote command status', timeoutMs);
+    } catch (error) {
+      if (!(error instanceof RemoteTransportError)) throw error;
+      if (!reconnectPending) reconnectStartedAt = performance.now();
+      reconnectPending = true;
+      consecutiveDrops += 1;
+      return null;
+    }
+    if (response.code !== 0) {
+      if (!reconnectPending) reconnectStartedAt = performance.now();
+      reconnectPending = true;
+      consecutiveDrops += 1;
+      return null;
+    }
+    if (reconnectPending) {
+      const elapsed = ((performance.now() - reconnectStartedAt) / 1_000).toFixed(3);
+      console.error(`remote-check: reconnected to ${host.name} in ${elapsed} s`);
+      reconnectPending = false;
+    }
+    consecutiveDrops = 0;
+    return parseRemoteCommandStatus(host, response);
+  };
+
+  while (Date.now() < deadlineAt) {
+    assertExecutionAllowed(options, signal);
+    const remainingMs = deadlineAt - Date.now();
+    const status = await probe(Math.max(1, Math.min(5_000, remainingMs)));
+    if (status && status.kind !== 'started') return status;
+    const delay = status ? pollMs : Math.min(30_000, retryBaseMs * 2 ** Math.min(consecutiveDrops - 1, 5));
+    await sleep(Math.max(1, Math.min(delay, deadlineAt - Date.now())), signal);
+  }
+
+  // The remote lifetime supervisor publishes the deadline result itself. Give it one final short probe after its
+  // deadline; only a reachable host that still reports STARTED is stopped by the controller's existing rescue path.
+  assertExecutionAllowed(options, signal);
+  return (await probe(1_000)) ?? { kind: 'unreachable' };
 }
 
 /** Tracked and untracked files that exist, without Git's own data, installed packages and local scratch space. */
@@ -4189,11 +4321,6 @@ function commandUsesBun(command: string[]): boolean {
 
 type Lease = { host: Host; release: () => Promise<void>; registerRun?: (id: string) => Promise<void> };
 type SessionLease = Lease & { exited: Promise<number>; isActive: () => boolean };
-type PlacementMove = { moveTo: Host; from: string; waitedMs: number };
-
-function isPlacementMove(value: Lease | PlacementMove | null): value is PlacementMove {
-  return value !== null && 'moveTo' in value;
-}
 
 /** The promise's value, or null once the time is up; the timer never outlives the wait. */
 async function within<T>(ms: number, promise: Promise<T>): Promise<T | null> {
@@ -4631,7 +4758,7 @@ async function probeHost(host: Host, uploadedDirectory?: string): Promise<HostPr
   }
   if (result.error === 'probe timed out') {
     if (await recoverHungHostMaster(host, directory)) {
-      console.error(`remote-check: recovered hung ControlMaster on ${host.name}`);
+      console.error(`remote-check: recovered dead ControlMaster on ${host.name}`);
       result = await runPlacementProbe(host, uploadedDirectory);
       if (result.probe) {
         await clearPlacementProbeTimeout(directory, host.name);
@@ -5208,8 +5335,7 @@ async function acquire(
   connectionId?: string,
   transferTimeoutMs = DEFAULT_TRANSFER_TIMEOUT_MS,
   uploadedDirectory?: string,
-  placementMoveMs = DEFAULT_PLACEMENT_MOVE_MS,
-): Promise<Lease | PlacementMove | null> {
+): Promise<Lease | null> {
   let answered = false;
   let slots = requestedSlots;
   let warnedGateReduction = false;
@@ -5226,7 +5352,6 @@ async function acquire(
   const waitStarted = performance.now();
   const wait = checkWaitRecorder();
   wait.begin();
-  let placementFullSince: number | undefined;
   let acquiredHost: string | undefined;
   const skippedHosts = new Map<string, string>();
   const loggedSkipLines = new Set<string>();
@@ -5473,28 +5598,6 @@ async function acquire(
           marker = (await takeMultiSlotMarker(target.host, multiWaiterId, slots, signal, connectionId)) ?? undefined;
         }
       }
-      if (placement && uploadedDirectory) {
-        const placementRank = ranked[0];
-        if (!placementRank || placementRank.freeSlots >= slots) placementFullSince = undefined;
-        else {
-          placementFullSince ??= performance.now();
-          if (performance.now() - placementFullSince >= placementMoveMs) {
-            const destination = startableHosts(allRanked, slots, gate).find(
-              (entry) =>
-                entry.freeSlots >= slots &&
-                (entry.host.name !== placement.name ||
-                  entry.host.address !== placement.address ||
-                  entry.host.identity !== placement.identity),
-            );
-            if (destination)
-              return {
-                moveTo: destination.host,
-                from: placement.name,
-                waitedMs: performance.now() - waitStarted,
-              };
-          }
-        }
-      }
       announceWait(allRanked);
       wait.record();
       await sleep(pollMs, signal);
@@ -5596,23 +5699,23 @@ async function boundedSsh(
   script: string,
   step: string,
   timeoutMs: number,
-): Promise<{ code: number; output: string }> {
+): Promise<{ code: number; output: string; stdout: string }> {
   const child = Bun.spawn([sshExecutable(), ...sshOptions(host, connectionId), host.address, script], {
     stdin: 'ignore',
     stdout: 'pipe',
     stderr: 'pipe',
   });
-  const output = Promise.all([
+  const streams = Promise.all([
     new Response(child.stdout).text(),
     child.stderr instanceof ReadableStream ? new Response(child.stderr).text() : Promise.resolve(''),
-  ]).then(([stdout, stderr]) => stdout + stderr);
+  ]).then(([stdout, stderr]) => ({ output: stdout + stderr, stdout }));
   const code = await within(timeoutMs, child.exited);
   if (code === null) {
     await stopAndReap(child);
-    await output;
+    await streams;
     throw new RemoteTransportError(host.name, step, REMOTE_TRANSPORT_FAILURE);
   }
-  return { code, output: await output };
+  return { code, ...(await streams) };
 }
 
 async function closeControlMaster(host: Host, _connectionId?: string): Promise<void> {
@@ -6863,6 +6966,7 @@ async function runLeased(
   const { host, id, directory, connectionId } = prepared;
   let leaseReleased = false;
   let commandTerminal = false;
+  let preserveRemoteRun = false;
   let run: ReturnType<typeof Bun.spawn> | undefined;
   let transportChildReaped = true;
   let native: RemotePhysicalRunReceipt | null = null;
@@ -6934,22 +7038,28 @@ async function runLeased(
     run = options.spawnWithCustody ? await options.spawnWithCustody({ host: host.name, run: id }, launch) : launch();
     transportChildReaped = false;
     const maxMs = effectiveRunLifetimeMs(options.estimateMs, options.maxMs);
+    const deadlineAt = Date.now() + maxMs + 1_000;
     const heartbeatMs = options.livenessIntervalMs ?? DEFAULT_LIVENESS_INTERVAL_MS;
-    let heartbeatStopped = false;
+    const heartbeatChildren = new Set<ReturnType<typeof Bun.spawn>>();
     const heartbeat = setInterval(() => {
-      if (!heartbeatStopped) {
-        Bun.spawn([sshExecutable(), ...sshOptions(host, connectionId), host.address, heartbeatScript(directory)], {
-          stdin: 'ignore',
-          stdout: 'ignore',
-          stderr: 'ignore',
-        });
+      // A slow SSH channel must not accumulate another child every interval.
+      if (heartbeatChildren.size !== 0) return;
+      try {
+        const child = Bun.spawn(
+          [sshExecutable(), ...sshOptions(host, connectionId), host.address, heartbeatScript(directory)],
+          { stdin: 'ignore', stdout: 'ignore', stderr: 'ignore' },
+        );
+        heartbeatChildren.add(child);
+        void child.exited.then(() => heartbeatChildren.delete(child));
+      } catch (error) {
+        primaryFailure ??= error;
       }
     }, heartbeatMs);
     const commandResult = finished(run, signal);
     let deadlineTimer: ReturnType<typeof setTimeout> | undefined;
     const deadlineResult = new Promise<null>((resolve) => {
       // The host owns the deadline and receipt. This later controller guard only recovers a broken host monitor.
-      deadlineTimer = setTimeout(() => resolve(null), maxMs + 1_000);
+      deadlineTimer = setTimeout(() => resolve(null), Math.max(1, deadlineAt - Date.now()));
     });
     try {
       const completed = await Promise.race([commandResult.then((value) => value), deadlineResult]);
@@ -6972,28 +7082,25 @@ async function runLeased(
         commandTerminal = completed !== 255;
       }
     } finally {
-      heartbeatStopped = true;
       clearInterval(heartbeat);
       if (deadlineTimer) clearTimeout(deadlineTimer);
+      // No heartbeat channel may touch the run after its result is collected or its directory is removed.
+      await Promise.all([...heartbeatChildren].map(stopAndReap));
     }
     assertExecutionAllowed(options, signal);
     if (code === 255) {
-      const status = await boundedSsh(host, connectionId, statusScript(directory), 'remote command status', 15_000);
+      const status = await waitForRemoteCommandStatus(host, connectionId, directory, deadlineAt, options, signal);
       assertExecutionAllowed(options, signal);
-      const recorded = status.output.trim();
-      const parsed = /^(?:0|[1-9]\d{0,2})$/.test(recorded) ? Number(recorded) : Number.NaN;
-      if (
-        status.code !== 0 ||
-        (!Number.isInteger(parsed) && recorded !== 'NOT_STARTED' && recorded !== 'STARTED') ||
-        parsed > 255
-      ) {
-        throw new RemoteTransportError(host.name, 'remote command', status.code || REMOTE_TRANSPORT_FAILURE, false);
+      if (status.kind === 'unreachable') {
+        preserveRemoteRun = true;
+        throw new RemoteTransportError(host.name, 'remote command', REMOTE_TRANSPORT_FAILURE, false);
       }
-      if (recorded === 'NOT_STARTED') {
+      if (status.kind === 'not-started') {
         commandTerminal = true;
         throw new RemoteTransportError(host.name, 'remote command startup', 255, true);
       }
-      if (recorded === 'STARTED') {
+      if (status.kind === 'started') {
+        console.error(`remote-check: deadline reached after ${maxMs} ms`);
         const stopped = await boundedSsh(host, connectionId, stopRunScript(id), 'remote command stop', 15_000);
         if (stopped.code !== 0 || !stopped.output.includes('STOPPED'))
           throw new RemoteTransportError(
@@ -7002,11 +7109,13 @@ async function runLeased(
             stopped.code || REMOTE_TRANSPORT_FAILURE,
             false,
           );
+        await run.exited;
         commandTerminal = true;
-        throw new RemoteTransportError(host.name, 'remote command', 255, false);
+        code = REMOTE_DEADLINE_EXIT;
+      } else {
+        code = status.code;
+        commandTerminal = true;
       }
-      code = parsed;
-      commandTerminal = true;
     }
     try {
       await releaseLease();
@@ -7104,7 +7213,15 @@ async function runLeased(
       );
     } finally {
       try {
-        cleanup = await cleanupPreparedRun(prepared);
+        if (preserveRemoteRun) {
+          cleanup = {
+            ...cleanup,
+            status: 'unknown',
+            failures: ['started remote run retained for stale-run cleanup after transport loss'],
+          };
+        } else {
+          cleanup = await cleanupPreparedRun(prepared);
+        }
       } catch (error) {
         const reason = error instanceof Error ? error.message.slice(0, 512) : 'remote cleanup could not be verified';
         cleanupFailures.push(reason);
@@ -7254,74 +7371,54 @@ async function runWithTransportRetries(
       },
     );
     if (!host) return null;
-    const prepareOnHost = async (target: Host): Promise<PreparedRun> => {
-      const id = `${Date.now().toString(36)}-${randomUUID().slice(0, 8)}`;
-      const next: PreparedRun = {
-        host: target,
-        id,
-        directory: `${ROOT}/runs/${id}`,
-        connectionId: randomUUID().slice(0, 8),
-        ...(options.expectedSourceSha256 === undefined ? {} : { expectedSourceSha256: options.expectedSourceSha256 }),
-      };
-      await options.allocated?.({ host: target.name, run: id });
-      assertExecutionAllowed(options, signal);
-      next.connectionId = await probeControl(target, next.connectionId, controlProbeTimeout(options));
-      Object.assign(next, await uploadRun(target, next.connectionId, id, options, files, signal, transfer));
-      return next;
+    const id = `${Date.now().toString(36)}-${randomUUID().slice(0, 8)}`;
+    const prepared: PreparedRun = {
+      host,
+      id,
+      directory: `${ROOT}/runs/${id}`,
+      connectionId: randomUUID().slice(0, 8),
+      ...(options.expectedSourceSha256 === undefined ? {} : { expectedSourceSha256: options.expectedSourceSha256 }),
     };
-    let prepared: PreparedRun | undefined;
     let managedByRun = false;
     let uploaded = false;
     try {
-      prepared = await prepareOnHost(host);
+      await options.allocated?.({ host: host.name, run: id });
+      assertExecutionAllowed(options, signal);
+      prepared.connectionId = await probeControl(host, prepared.connectionId, controlProbeTimeout(options));
+      Object.assign(prepared, await uploadRun(host, prepared.connectionId, id, options, files, signal, transfer));
       uploaded = true;
       assertExecutionAllowed(options, signal);
       const slotWaitStarted = performance.now();
-      while (prepared) {
-        const outcome = await acquire(
-          [prepared.host],
-          slots,
-          options.estimateMs,
-          options.pollMs ?? 5000,
-          signal,
-          false,
-          () => {
-            answered = true;
-            onAnswered?.();
-          },
-          options.gate ?? false,
-          options.waitRepeatMs,
-          memoryReservationBytes,
-          options.priority,
-          hostsForRound,
-          prepared.host,
-          prepared.connectionId,
-          transferTimeout(options),
-          prepared.directory,
-          options.placementMoveMs,
-        );
-        if (!outcome) {
-          await cleanupPreparedRun(prepared);
-          uploaded = false;
-          prepared = undefined;
-          break;
-        }
-        if (isPlacementMove(outcome)) {
-          console.error(
-            `remote-check: moving uploaded placement from ${outcome.from} to ${outcome.moveTo.name} after ${(outcome.waitedMs / 1000).toFixed(3)} s wait`,
-          );
-          const next = await prepareOnHost(outcome.moveTo);
-          uploaded = true;
-          await cleanupPreparedRun(prepared);
-          prepared = next;
-          continue;
-        }
-        prepared.host = outcome.host;
-        managedByRun = true;
-        return await runLeased(outcome, prepared, options, slotWaitStarted, signal);
+      const lease = await acquire(
+        [host],
+        slots,
+        options.estimateMs,
+        options.pollMs ?? 5000,
+        signal,
+        false,
+        () => {
+          answered = true;
+          onAnswered?.();
+        },
+        options.gate ?? false,
+        options.waitRepeatMs,
+        memoryReservationBytes,
+        options.priority,
+        hostsForRound,
+        host,
+        prepared.connectionId,
+        transferTimeout(options),
+        prepared.directory,
+      );
+      if (!lease) {
+        await cleanupPreparedRun(prepared);
+        continue;
       }
+      prepared.host = lease.host;
+      managedByRun = true;
+      return await runLeased(lease, prepared, options, slotWaitStarted, signal);
     } catch (error) {
-      if (!managedByRun && uploaded && prepared) await cleanupPreparedRun(prepared);
+      if (!managedByRun && uploaded) await cleanupPreparedRun(prepared);
       assertExecutionAllowed(options, signal);
       if (
         !(error instanceof RemoteTransportError) ||
@@ -7541,20 +7638,18 @@ function parse(argv: string[]): RemoteCheck {
   }
   if (!existsSync(workspace)) throw new Error(`Workspace does not exist: ${workspace}`);
   const pollMs = process.env.REMOTE_CHECK_POLL_MS === undefined ? undefined : Number(process.env.REMOTE_CHECK_POLL_MS);
+  if (pollMs !== undefined && (!Number.isSafeInteger(pollMs) || pollMs < 1))
+    throw new Error('REMOTE_CHECK_POLL_MS must be a positive integer');
   const retryBackoffMs =
     process.env.REMOTE_CHECK_RETRY_BACKOFF_MS === undefined
       ? undefined
       : Number(process.env.REMOTE_CHECK_RETRY_BACKOFF_MS);
+  if (retryBackoffMs !== undefined && (!Number.isSafeInteger(retryBackoffMs) || retryBackoffMs < 1))
+    throw new Error('REMOTE_CHECK_RETRY_BACKOFF_MS must be a positive integer');
   const waitRepeatMs =
     process.env.REMOTE_CHECK_WAIT_REPEAT_MS === undefined ? undefined : Number(process.env.REMOTE_CHECK_WAIT_REPEAT_MS);
   if (waitRepeatMs !== undefined && (!Number.isSafeInteger(waitRepeatMs) || waitRepeatMs < 1))
     throw new Error('REMOTE_CHECK_WAIT_REPEAT_MS must be a positive integer');
-  const placementMoveMs =
-    process.env.REMOTE_CHECK_PLACEMENT_MOVE_MS === undefined
-      ? undefined
-      : Number(process.env.REMOTE_CHECK_PLACEMENT_MOVE_MS);
-  if (placementMoveMs !== undefined && (!Number.isSafeInteger(placementMoveMs) || placementMoveMs < 1))
-    throw new Error('REMOTE_CHECK_PLACEMENT_MOVE_MS must be a positive integer');
   const cancellation = executionCancellationFromEnvironment();
   return {
     hosts: readHosts(hostsFile),
@@ -7575,7 +7670,6 @@ function parse(argv: string[]): RemoteCheck {
     ...(pollMs === undefined ? {} : { pollMs }),
     ...(retryBackoffMs === undefined ? {} : { retryBackoffMs }),
     ...(waitRepeatMs === undefined ? {} : { waitRepeatMs }),
-    ...(placementMoveMs === undefined ? {} : { placementMoveMs }),
     hostsFile,
   };
 }

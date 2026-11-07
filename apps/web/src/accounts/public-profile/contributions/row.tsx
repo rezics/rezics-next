@@ -19,6 +19,7 @@ import {
   restoreContributionRecovery,
   contributionReturnOccurrence,
 } from './navigation';
+import { ContributionRowActions } from './row-actions';
 
 export type ContributionKind = 'reply' | 'review' | 'discussion';
 
@@ -275,6 +276,7 @@ function ContributionVisit({
               {m.exact_revision_heading({}, options)}
             </a>
           ) : null}
+          <ContributionRowActions item={item} locale={locale} href={href} />
         </div>
       }
     />

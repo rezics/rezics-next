@@ -4641,6 +4641,17 @@ CREATE TABLE public.auth_workflow_request (
 
 
 --
+-- Name: auth_workflow_retention; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.auth_workflow_retention (
+    singleton boolean DEFAULT true NOT NULL,
+    continuation jsonb,
+    CONSTRAINT auth_workflow_retention_singleton_check CHECK (singleton)
+);
+
+
+--
 -- Name: jwks; Type: TABLE; Schema: public; Owner: -
 --
 
@@ -5426,6 +5437,14 @@ ALTER TABLE ONLY public.auth_signing_key
 
 ALTER TABLE ONLY public.auth_workflow_request
     ADD CONSTRAINT auth_workflow_request_pkey PRIMARY KEY (workflow_id);
+
+
+--
+-- Name: auth_workflow_retention auth_workflow_retention_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.auth_workflow_retention
+    ADD CONSTRAINT auth_workflow_retention_pkey PRIMARY KEY (singleton);
 
 
 --
