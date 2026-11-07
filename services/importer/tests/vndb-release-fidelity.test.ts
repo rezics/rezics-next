@@ -10,6 +10,7 @@ import { ImportTransportError } from '../src/import-client.ts';
 import {
   CrossMediaDumpFiles,
   collectSelectedDumpRows,
+  CrossMediaTableScanLimitError,
   crossMediaAliases,
   planCrossMediaSeed,
   seedCrossMedia,

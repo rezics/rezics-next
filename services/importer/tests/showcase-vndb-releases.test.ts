@@ -26,6 +26,7 @@ import {
   sameShowcaseVndbReleaseClassifications,
 } from '../src/showcase-vndb-releases.ts';
 import { captureShowcaseCommands, ShowcaseJournal } from '../src/showcase-publication.ts';
+import { ImportTransportError } from '../src/import-client.ts';
 import { planVndbReleasePlatforms } from '../src/vndb-release-platforms.ts';
 import { sourceRecordMetadataFixture } from './transport-driver.ts';
 import { seedShowcaseVndbReleases } from '../src/selected-import.ts';
@@ -946,3 +947,42 @@ test('malformed and retracted source states withhold only affected claims', asyn
     await rm(directory, { recursive: true, force: true });
   }
 }, 30_000);
+
+test('a refused classification batch keeps HTTP status on the remaining request', async () => {
+  const directory = await mkdtemp(join(tmpdir(), 'classification-refused-'));
+  let journal: ShowcaseJournal | undefined;
+  try {
+    const tables = family({
+      platforms: [{ id: 'r1', platform: 'win' }],
+      media: [{ id: 'r1', media: 'cd' }],
+    });
+    const plan = await planCrossMediaSeed(tables);
+    journal = new ShowcaseJournal(join(directory, 'showcase.sqlite'));
+    const port: CrossMediaPort = {
+      ...localReviewPort([], new Map()),
+      async batch(request) {
+        return {
+          results: request.commands.map((command) => ({
+            key: command.key,
+            status: 403,
+            problem: { type: 'about:blank', title: 'Forbidden', status: 403, code: 'forbidden', retryable: false },
+          })),
+        };
+      },
+    };
+    const captured = captureShowcaseCommands(port, journal);
+    try {
+      await prepareShowcaseVndbReleaseClassifications({ plan, port: captured, journal, stage: 'schemes' });
+      throw new Error('expected classification refusal');
+    } catch (error) {
+      expect(error).toBeInstanceOf(ImportTransportError);
+      expect((error as ImportTransportError).status).toBe(403);
+      expect((error as ImportTransportError).code).toBe('forbidden');
+      expect((error as ImportTransportError).path).toBe('/v1/subjects:batchWrite');
+    }
+    expect(journal.preparedCommands().some((row) => row.command.op === 'create')).toBe(true);
+  } finally {
+    journal?.close();
+    await rm(directory, { recursive: true, force: true });
+  }
+});

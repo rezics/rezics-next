@@ -75,6 +75,7 @@ export type ReviewedCatalogueSeedInput = {
   signal?: AbortSignal;
   vocabulary?: ReviewedVocabularyPort;
   ledger?: ReviewedCatalogueLedger;
+  wait?: (ms: number) => Promise<void>;
 };
 
 export type ReviewedBangumiTagBinding = Readonly<{
