@@ -2,7 +2,7 @@ import { memoizedValue } from '../memoized.ts';
 import { Compile } from 'typebox/compile';
 import type { Pool } from 'pg';
 import { authoritativeTimeValue, currentCommand, type CommandTransaction } from '../command/command.ts';
-import { GrantDeniedError } from '../access/grant-commands.ts';
+import { GrantDeniedError } from '../access/contract/index.ts';
 import type { Access, Actor } from '../request/access.ts';
 import { partitionOf, routeOf } from '../route/route.ts';
 import type { ReadContext } from './model.ts';

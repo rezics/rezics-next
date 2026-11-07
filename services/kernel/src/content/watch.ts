@@ -1,5 +1,5 @@
 import type { Pool, PoolClient } from 'pg';
-import { readAccount } from '../access/account-data.ts';
+import { readAccount } from './access-port.ts';
 import type { Access } from '../request/access.ts';
 import type { Actor } from '../request/access.ts';
 import { ProblemError } from '../http/problem.ts';

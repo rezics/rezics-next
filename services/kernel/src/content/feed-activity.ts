@@ -1,5 +1,5 @@
 import type { Pool } from 'pg';
-import { readAccount } from '../access/account-data.ts';
+import { readAccount } from './access-port.ts';
 import { systemClock, type KernelClock } from '../clock.ts';
 import { authoritativeTimeValue, noEffect, runCommand } from '../command/command.ts';
 import { ProblemError } from '../http/problem.ts';

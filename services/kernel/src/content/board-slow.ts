@@ -1,9 +1,8 @@
 import { createHash, createHmac } from 'node:crypto';
 import canonicalize from 'canonicalize';
 import type { Pool } from 'pg';
-import { resourceAuthorization } from '../access/index.ts';
-import { GrantDeniedError } from '../access/grant-commands.ts';
-import { deadlineClient } from '../access/authenticate.ts';
+import { resourceAuthorization, deadlineClient } from './access-port.ts';
+import { GrantDeniedError } from '../access/contract/index.ts';
 import {
   authoritativeTimeValue,
   principalCommandIdentity,

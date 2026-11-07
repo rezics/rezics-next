@@ -1,14 +1,18 @@
 import { createHash } from 'node:crypto';
 import canonicalize from 'canonicalize';
 import type { Pool } from 'pg';
-import { initializeResourceGrants, parentCreationAuthorization } from '../access/index.ts';
+import {
+  initializeResourceGrants,
+  parentCreationAuthorization,
+  accessCommandAttempt,
+  deadlineClient,
+  within,
+  permissionEvidenceDeadline,
+} from './access-port.ts';
 import { installResourceRoleCatalogue, resourceRoleCatalogue } from '../access/resource-roles.ts';
-import { accessCommandAttempt } from '../access/command-admission.ts';
-import { deadlineClient, within } from '../access/authenticate.ts';
 import { deriveAccess } from '../access/derived-access.ts';
-import { GrantDeniedError } from '../access/grant-commands.ts';
+import { GrantDeniedError } from '../access/contract/index.ts';
 import { requireAccessDeadline } from '../access/unavailable.ts';
-import { permissionEvidenceDeadline } from '../access/permission.ts';
 import {
   authoritativeTimeValue,
   principalCommandIdentity,

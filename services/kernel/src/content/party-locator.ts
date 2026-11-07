@@ -2,7 +2,7 @@ import type { Pool, PoolClient } from 'pg';
 import { DBOS } from '@dbos-inc/dbos-sdk';
 import { Value } from 'typebox/value';
 import { noEffect, runCommand } from '../command/command.ts';
-import { recordLateErasureItem, resolveLateErasureItem, readErasureStatus } from '../access/erasure.ts';
+import { recordLateErasureItem, resolveLateErasureItem, readErasureStatus } from './access-port.ts';
 import { withConnection } from '../database/pool.ts';
 import type { Effect } from '../events/effects.ts';
 import { readPartition } from '../partition/partition.ts';

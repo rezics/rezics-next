@@ -9,7 +9,7 @@ import { createAuthDatabase } from '../support/auth-database.ts';
 import { readAccount } from '../../src/access/account-data.ts';
 import { AccessUnavailableError, createAccess } from '../../src/access/index.ts';
 import { installCommandAdmission } from '../../src/access/command-admission.ts';
-import { GrantDeniedError } from '../../src/access/grant-commands.ts';
+import { GrantDeniedError } from '../../src/access/contract/index.ts';
 import { problemResponse } from '../../src/http/problem.ts';
 import { beginAuthorErasure, readOperation } from '../../src/content/operations.ts';
 import type {

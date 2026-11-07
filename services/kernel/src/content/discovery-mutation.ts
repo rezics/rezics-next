@@ -16,7 +16,7 @@ import {
   type PrincipalCommandIdentity,
   type PrincipalCommandReceipt,
 } from '../command/command.ts';
-import { GrantDeniedError } from '../access/grant-commands.ts';
+import { GrantDeniedError } from '../access/contract/index.ts';
 import { withConnection } from '../database/pool.ts';
 import type { Effect } from '../events/effects.ts';
 import { partitionOf, routeOf } from '../route/route.ts';

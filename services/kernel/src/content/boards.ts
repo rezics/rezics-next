@@ -1,4 +1,4 @@
-import { deadlineClient, within } from '../access/authenticate.ts';
+import { deadlineClient, within } from './access-port.ts';
 import { accessCheck, type AccessCheck, type Actor } from '../request/access.ts';
 import { discardConnection, withConnection } from '../database/pool.ts';
 import { readPartition } from '../partition/partition.ts';

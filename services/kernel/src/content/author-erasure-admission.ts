@@ -1,4 +1,4 @@
-import { readNativeAccessTime } from '../access/authenticate.ts';
+import { readNativeAccessTime } from './access-port.ts';
 import { authoritativeTimeValue, releaseOperationalTime } from '../command/command.ts';
 import { accessCheck, type AccountActor } from '../request/access.ts';
 import { routeOf } from '../route/route.ts';

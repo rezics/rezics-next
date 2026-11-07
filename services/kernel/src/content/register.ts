@@ -1,7 +1,7 @@
 import { tryContentApplication } from './adapters/bind.ts';
 import { contentDeclaredEvents } from './declared-catalogue.ts';
 import { registerModerationDirectoryWork } from './moderation-directory-work.ts';
-import { createAccess } from '../access/index.ts';
+import { createAccess } from './access-port.ts';
 import resourceRoles from '../access/resource-roles.json';
 import { readMembershipRouteKey } from '../access/membership-work-config.ts';
 import {
