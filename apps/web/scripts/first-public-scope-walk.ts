@@ -214,7 +214,10 @@ async function gotoPage(page: Page, url: string): Promise<{ status: number; url:
   return { status: response?.status() ?? 0, url: page.url() };
 }
 
-async function shellOk(page: Page, locale: string): Promise<{ lang: string; main: number; banner: number; nav: number }> {
+async function shellOk(
+  page: Page,
+  locale: string,
+): Promise<{ lang: string; main: number; banner: number; nav: number }> {
   const lang = (await page.locator('html').getAttribute('lang')) ?? '';
   if (lang !== locale) throw new Error(`html lang was ${JSON.stringify(lang)}, expected ${locale}`);
   const main = await page.getByRole('main').count();
@@ -226,9 +229,11 @@ async function shellOk(page: Page, locale: string): Promise<{ lang: string; main
 }
 
 async function subjectHrefs(page: Page): Promise<string[]> {
-  return page.locator('a[href*="/subjects/"]').evaluateAll((nodes) =>
-    [...new Set(nodes.map((node) => (node as HTMLAnchorElement).getAttribute('href') ?? '').filter(Boolean))],
-  );
+  return page
+    .locator('a[href*="/subjects/"]')
+    .evaluateAll((nodes) => [
+      ...new Set(nodes.map((node) => (node as HTMLAnchorElement).getAttribute('href') ?? '').filter(Boolean)),
+    ]);
 }
 
 async function clickFirstSubject(page: Page, current: string): Promise<string> {
@@ -279,8 +284,7 @@ async function returnTo(page: Page, expected: string): Promise<void> {
   const now = page.url();
   const want = new URL(expected);
   const got = new URL(now);
-  if (got.pathname !== want.pathname)
-    throw new Error(`return landed on ${now}, expected pathname ${want.pathname}`);
+  if (got.pathname !== want.pathname) throw new Error(`return landed on ${now}, expected pathname ${want.pathname}`);
 }
 
 async function pageRead(stack: Stack, subject: string, view?: string): Promise<{ status: number; value: Json }> {
@@ -404,7 +408,10 @@ async function walkViewToChild(
   const before = ctx.page.url();
   const child = await clickFirstSubject(ctx.page, before);
   await returnTo(ctx.page, before);
-  if (!ctx.page.url().includes(options.returnPathIncludes) && !new URL(ctx.page.url()).pathname.endsWith(new URL(viewUrl).pathname))
+  if (
+    !ctx.page.url().includes(options.returnPathIncludes) &&
+    !new URL(ctx.page.url()).pathname.endsWith(new URL(viewUrl).pathname)
+  )
     throw new Error(`return was ${ctx.page.url()}, not the ${tab} page`);
   return publicFields({ origin, viewUrl, continued, child, nativeStatus: native.status, return: ctx.page.url() });
 }
@@ -531,9 +538,12 @@ async function walkW31(ctx: WalkContext): Promise<unknown> {
   await realmLink.click();
   await hydrated(ctx.page);
   if (!ctx.signIn.ok)
-    throw Object.assign(new Error(`public home reached ${ctx.page.url()}; membership unreached: ${ctx.signIn.detail}`), {
-      unreached: true,
-    });
+    throw Object.assign(
+      new Error(`public home reached ${ctx.page.url()}; membership unreached: ${ctx.signIn.detail}`),
+      {
+        unreached: true,
+      },
+    );
   return { directory: realms.url, opened: ctx.page.url(), spaces: spaces.status };
 }
 
@@ -565,8 +575,7 @@ async function walkW35(ctx: WalkContext): Promise<unknown> {
   if (robots.status !== 200) throw new Error(`robots.txt HTTP ${robots.status}`);
   if (!/Sitemap:\s+\S+\/sitemap\.xml/i.test(robots.text)) throw new Error('robots.txt has no Sitemap line');
   const index = await http(`${ctx.stack.web}/sitemap.xml`);
-  if (index.status !== 200 && index.status !== 503)
-    throw new Error(`sitemap.xml HTTP ${index.status}`);
+  if (index.status !== 200 && index.status !== 503) throw new Error(`sitemap.xml HTTP ${index.status}`);
   const shards = [...index.text.matchAll(/<loc>([^<]*sitemap-[^<]+)<\/loc>/g)].map((match) => match[1]!);
   const shardResults: { url: string; status: number }[] = [];
   for (const loc of shards) {
@@ -574,8 +583,7 @@ async function walkW35(ctx: WalkContext): Promise<unknown> {
     shardResults.push({ url: loc, status: shard.status });
     if (shard.status >= 400 && shard.status !== 503) throw new Error(`sitemap shard ${loc} HTTP ${shard.status}`);
   }
-  if (index.status === 200 && shards.length === 0)
-    throw new Error('sitemap index has no eligible shards');
+  if (index.status === 200 && shards.length === 0) throw new Error('sitemap index has no eligible shards');
   return {
     subject,
     canonical,
@@ -592,12 +600,14 @@ const walkers: Partial<Record<PathId, (ctx: WalkContext) => Promise<unknown>>> =
   W02: walkW02,
   W03: (ctx) => walkViewToChild(ctx, 'Editions', { next: true, returnPathIncludes: '/editions' }),
   W04: (ctx) => walkViewToChild(ctx, 'Contents', { next: true, returnPathIncludes: '/contents' }),
-  W05: (ctx) => walkViewToChild(ctx, 'Cast', { returnPathIncludes: 'cast' }).catch(() =>
-    walkViewToChild(ctx, 'Credits', { returnPathIncludes: '/credits' }),
-  ),
-  W06: (ctx) => walkViewToChild(ctx, 'Crew', { returnPathIncludes: 'crew' }).catch(() =>
-    walkViewToChild(ctx, 'Credits', { returnPathIncludes: '/credits' }),
-  ),
+  W05: (ctx) =>
+    walkViewToChild(ctx, 'Cast', { returnPathIncludes: 'cast' }).catch(() =>
+      walkViewToChild(ctx, 'Credits', { returnPathIncludes: '/credits' }),
+    ),
+  W06: (ctx) =>
+    walkViewToChild(ctx, 'Crew', { returnPathIncludes: 'crew' }).catch(() =>
+      walkViewToChild(ctx, 'Credits', { returnPathIncludes: '/credits' }),
+    ),
   W07: walkW07,
   W08: walkW08,
   W09: walkW09,
@@ -644,9 +654,8 @@ export async function run(): Promise<PathResult[]> {
     }
   };
 
-  const { retireDevelopmentSeedState, retireStaleSeedJournals, kernelEnvironment } = await import(
-    '../../../services/auth/scripts/dev-stack.ts'
-  );
+  const { retireDevelopmentSeedState, retireStaleSeedJournals, kernelEnvironment } =
+    await import('../../../services/auth/scripts/dev-stack.ts');
   await retireDevelopmentSeedState(root);
   const kernelEnv = await kernelEnvironment();
   if (kernelEnv.DATABASE_URL) await retireStaleSeedJournals(root, kernelEnv.DATABASE_URL);
@@ -675,7 +684,10 @@ export async function run(): Promise<PathResult[]> {
   let browser: Browser | undefined;
   try {
     const signIn = await probeSignIn(stack);
-    await writeFile(join(evidenceDir, 'sign-in-probe.json'), `${JSON.stringify({ stack, signIn, seed: publicFields(seed) }, null, 2)}\n`);
+    await writeFile(
+      join(evidenceDir, 'sign-in-probe.json'),
+      `${JSON.stringify({ stack, signIn, seed: publicFields(seed) }, null, 2)}\n`,
+    );
     browser = await chromium.launch({ headless: true, env: { ...process.env, TMPDIR: '/tmp/rw' } });
     const context: BrowserContext = await browser.newContext({ locale: 'en-US', viewport: desktop });
     const page = await context.newPage();

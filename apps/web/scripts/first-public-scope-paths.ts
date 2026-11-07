@@ -121,7 +121,11 @@ export const FIRST_PUBLIC_SCOPE_PATHS = [
     job: 'Signed-in Inbox → reply, mention or moderation notice → current destination and preference',
     auth: 'signed-in',
   },
-  { id: 'W34', job: 'Configured static Zone address → localized routed page → native browser return', auth: 'anonymous' },
+  {
+    id: 'W34',
+    job: 'Configured static Zone address → localized routed page → native browser return',
+    auth: 'anonymous',
+  },
   {
     id: 'W35',
     job: 'Anonymous page → canonical, sharing and JSON-LD → robots and every eligible sitemap shard',
