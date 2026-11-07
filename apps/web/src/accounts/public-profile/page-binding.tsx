@@ -1,5 +1,12 @@
 import { useContext, useMemo } from 'react';
-import type { AccountProfilePort, ContributionListInput } from '../../features/pages/account-profile-port';
+import {
+  unavailableContributionActions,
+  type AccountProfilePort,
+  type ContributionActionCapabilities,
+  type ContributionListInput,
+} from '../../features/pages/account-profile-port';
+
+export type { ContributionActionCapabilities };
 import { accountCollectionWindowReading } from '../../features/pages/account-page-application';
 import type { SubjectPageData } from '../../features/pages/page-model';
 import { CollectionWindowsContext, CollectionWindowControls, useCollectionWindows } from './collection-windows/host';
@@ -9,23 +16,32 @@ import { ContributionWindowControls } from './contribution-windows/controls';
 import { useContributionWindowRoute } from './contribution-windows/route';
 import { retireContributionWindow } from './contribution-windows/state';
 
-/** Bind the native action wire here, alongside the Accounts-owned receipt and reader lifetime. */
-function ContributionList(input: ContributionListInput) {
-  return <ContributionActionsHost {...input} wire={contributionActionsWire} />;
+function bindContributionList(actions: ContributionActionCapabilities) {
+  return function ContributionList(input: ContributionListInput) {
+    return <ContributionActionsHost {...input} actions={actions} wire={contributionActionsWire} />;
+  };
 }
 
-/** Explicit value installed by PublicProfilePage, with no load-time registration. */
-export const accountProfilePageBinding: AccountProfilePort = {
-  useCollectionWindow: () => useContext(CollectionWindowsContext) !== null,
-  useContributionPage: useContributionActionsPageScope,
-  useContributionRoute: () => useContributionWindowRoute() !== null,
-  retireContributionWindow: () => {
-    if (typeof window !== 'undefined') retireContributionWindow(window);
-  },
-  CollectionControls: CollectionWindowControls,
-  ContributionControls: ContributionWindowControls,
-  ContributionList,
-};
+/** Bind Threads/Report engines here, alongside the Accounts-owned receipt and session lifetime. */
+export function bindAccountProfilePage(
+  actions: ContributionActionCapabilities = unavailableContributionActions,
+): AccountProfilePort {
+  return {
+    useCollectionWindow: () => useContext(CollectionWindowsContext) !== null,
+    useContributionPage: useContributionActionsPageScope,
+    useContributionRoute: () => useContributionWindowRoute() !== null,
+    retireContributionWindow: () => {
+      if (typeof window !== 'undefined') retireContributionWindow(window);
+    },
+    CollectionControls: CollectionWindowControls,
+    ContributionControls: ContributionWindowControls,
+    ContributionList: bindContributionList(actions),
+    contributionActions: actions,
+  };
+}
+
+/** Explicit value installed by PublicProfilePage when the composition root has not bound engines. */
+export const accountProfilePageBinding = bindAccountProfilePage();
 
 /** Route lifetime stays above cursor-keyed pages; planning belongs to the page application. */
 export function useAccountCollectionWindows({

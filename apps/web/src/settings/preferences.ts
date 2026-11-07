@@ -10,7 +10,7 @@ import {
   type PreferenceShelfAdvice,
 } from '@rezics/client';
 import { MediaProblem } from '../media/kernel';
-import { isPlatformClosedError } from '../kernel/platform-closed';
+import { isPlatformClosedError, isSessionUnavailableError } from './ports/vocabulary';
 import { dynamicCollectionTitle } from '../library/settings-adapter';
 import {
   collectionVisibilities,
@@ -27,7 +27,6 @@ import {
 import { getLocale } from '../paraglide/runtime.js';
 import type { SessionEnv } from '../session/client';
 import { prepareSession, sessionSubject, viewerCredential } from '../session/request';
-import { isSessionUnavailableError } from '../session/unavailable';
 import { securityHrefFromIssuer } from './account-safety-links';
 import {
   collectionPrivacyFailure,

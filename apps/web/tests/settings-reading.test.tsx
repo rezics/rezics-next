@@ -4,6 +4,10 @@ import { renderToStaticMarkup } from 'react-dom/server';
 import { readingAdviceFor, type ReadingIO } from '../src/settings/reading-preferences';
 import type { SettingsPage } from '../src/settings/preferences';
 import { m } from '../src/paraglide/messages.js';
+import { createBrowserSettingsAmbient } from '../src/settings/adapters/ambient';
+import { performanceAmbientTree } from './performance-ambient';
+
+const settingsAmbient = createBrowserSettingsAmbient();
 
 mock.module('cloudflare:workers', () => ({ env: {} }));
 const { ReadingCard, ReadingDraftRecovery } = await import('../src/settings/reading-card');
@@ -13,21 +17,28 @@ advice.reading.defaults = { spoilerLevel: 2, suitability: 'show' };
 const denied = readingAdviceFor({ spoilerLevel: 1, suitability: 'blur' }, false);
 const initial = { spoilerLevel: 1 as const, suitability: 'blur' as const, version: 3, advice };
 const createEditor = (io: ReadingIO, current: () => boolean = () => true, version: () => number = () => 3) =>
-  new ReadingDraftRecovery(initial, io, {
-    canRead: current,
-    canWrite: current,
-    version,
-    onVersionChange: () => {},
-  });
+  new ReadingDraftRecovery(
+    initial,
+    io,
+    {
+      canRead: current,
+      canWrite: current,
+      version,
+      onVersionChange: () => {},
+    },
+    settingsAmbient,
+  );
 
 test('the reading card explains confirmed values, native defaults and an inert sample', () => {
   const html = renderToStaticMarkup(
-    createElement(ReadingCard, {
-      initial,
-      version: 3,
-      csrfToken: 'csrf',
-      onVersionChange: () => {},
-    }),
+    performanceAmbientTree(
+      createElement(ReadingCard, {
+        initial,
+        version: 3,
+        csrfToken: 'csrf',
+        onVersionChange: () => {},
+      }),
+    ),
   );
   expect(html).toContain(m.settings_reading_preview_legend());
   expect(html).toContain(m.settings_reading_preview_confirmed());
@@ -45,22 +56,26 @@ test('the reading card explains confirmed values, native defaults and an inert s
 
 test('unknown choice data is unavailable and a readable owner without update stays inspectable', () => {
   const missing = renderToStaticMarkup(
-    createElement(ReadingCard, {
-      initial: { spoilerLevel: 1, suitability: 'blur', version: 3 },
-      version: 3,
-      csrfToken: 'csrf',
-      onVersionChange: () => {},
-    }),
+    performanceAmbientTree(
+      createElement(ReadingCard, {
+        initial: { spoilerLevel: 1, suitability: 'blur', version: 3 },
+        version: 3,
+        csrfToken: 'csrf',
+        onVersionChange: () => {},
+      }),
+    ),
   );
   expect(missing).toContain(m.settings_reading_choices_unavailable_title());
   expect(missing).not.toContain(m.settings_spoiler_1_title());
   const readOnly = renderToStaticMarkup(
-    createElement(ReadingCard, {
-      initial: { ...initial, advice: denied },
-      version: 3,
-      csrfToken: 'csrf',
-      onVersionChange: () => {},
-    }),
+    performanceAmbientTree(
+      createElement(ReadingCard, {
+        initial: { ...initial, advice: denied },
+        version: 3,
+        csrfToken: 'csrf',
+        onVersionChange: () => {},
+      }),
+    ),
   );
   expect(readOnly).toContain(m.settings_spoiler_1_title());
   expect(readOnly).toContain(m.settings_reading_read_only_title());
@@ -82,12 +97,17 @@ test('a readable-but-not-editable reload keeps an unresolved original', async ()
     }),
   };
   let writable = true;
-  const editor = new ReadingDraftRecovery(initial, fixture, {
-    canRead: () => true,
-    canWrite: () => writable,
-    version: () => 3,
-    onVersionChange: () => {},
-  });
+  const editor = new ReadingDraftRecovery(
+    initial,
+    fixture,
+    {
+      canRead: () => true,
+      canWrite: () => writable,
+      version: () => 3,
+      onVersionChange: () => {},
+    },
+    settingsAmbient,
+  );
   await editor.edit({ spoilerLevel: 0 });
   expect(editor.snapshot().pending).not.toBeNull();
   const original = editor.snapshot().pending;

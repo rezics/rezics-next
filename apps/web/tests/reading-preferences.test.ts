@@ -11,11 +11,15 @@ import {
   readReading,
   sendReading,
 } from '../src/settings/reading-preferences';
+import { performanceAmbientTree } from './performance-ambient';
 import { loadSettingsPage, presentPreferencePage } from '../src/settings/preferences';
 import { preferenceRetryDeadline } from '../src/settings/preference-failure-retry';
 import { createKernelClient } from '@rezics/client';
 import type { SessionEnv } from '../src/session/client';
 import type { SessionStore } from '../src/session/store';
+import { createBrowserSettingsAmbient } from '../src/settings/adapters/ambient';
+
+const settingsAmbient = createBrowserSettingsAmbient();
 
 mock.module('cloudflare:workers', () => ({ env: {} }));
 const { ReadingCard } = await import('../src/settings/reading-card');
@@ -86,15 +90,20 @@ test('malformed native reading choices do not become a guessed editor', async ()
   if (!('preferences' in page)) throw new Error('expected values');
   expect(page.preferences.advice).toBeUndefined();
   expect(ownerMayChangeReading(page.preferences.advice)).toBe(false);
-  expect(await readReading({ read: async () => page }, 0)).toMatchObject({ ok: false, reason: 'unavailable' });
+  expect(await readReading({ read: async () => page }, 0, settingsAmbient.timer)).toMatchObject({
+    ok: false,
+    reason: 'unavailable',
+  });
 });
 
 test('shared-version interleaving keeps the original key and uses the newer reviewed version', async () => {
   const fixture = readingFixture('lost');
-  const original = readingMutation(fixture.initial, { spoilerLevel: 1, suitability: 'blur' })!;
-  expect(await sendReading(fixture.io, original, false, latest)).toMatchObject({ kind: 'uncertain' });
+  const original = readingMutation(fixture.initial, { spoilerLevel: 1, suitability: 'blur' }, settingsAmbient.id)!;
+  expect(await sendReading(fixture.io, original, false, latest, settingsAmbient.timer)).toMatchObject({
+    kind: 'uncertain',
+  });
   fixture.concurrent({ spoilerLevel: 2 });
-  const recovered = await sendReading(fixture.io, original, true, () => 2);
+  const recovered = await sendReading(fixture.io, original, true, () => 2, settingsAmbient.timer);
   expect(recovered).toMatchObject({
     kind: 'confirmed',
     receipt: { spoilerLevel: 1, version: 1 },
@@ -102,7 +111,11 @@ test('shared-version interleaving keeps the original key and uses the newer revi
   });
   expect(fixture.calls[1]).toBe(original);
   if (recovered.kind !== 'confirmed') throw new Error('expected confirmation');
-  const reviewed = readingMutation(recovered.preferences, { spoilerLevel: 1, suitability: 'show' })!;
+  const reviewed = readingMutation(
+    recovered.preferences,
+    { spoilerLevel: 1, suitability: 'show' },
+    settingsAmbient.id,
+  )!;
   expect(reviewed.expectedVersion).toBe(2);
   expect(reviewed.idempotencyKey).not.toBe(original.idempotencyKey);
 });
@@ -116,25 +129,27 @@ test('reset is an explicit native-default patch of the reviewed version', () => 
     version: 9,
     advice,
   };
-  const reset = readingReset(known)!;
+  const reset = readingReset(known, settingsAmbient.id)!;
   expect(reset).toMatchObject({ expectedVersion: 9, spoilerLevel: 1, suitability: 'blur' });
   const atDefaultsAdvice = readingAdviceFor({ spoilerLevel: 1, suitability: 'blur' });
   atDefaultsAdvice.reading.defaults = { spoilerLevel: 1, suitability: 'blur' };
   const atDefaults = { spoilerLevel: 1 as const, suitability: 'blur' as const, version: 9, advice: atDefaultsAdvice };
-  expect(readingReset(atDefaults)).toBeNull();
-  expect(readingReset({ ...known, advice: undefined })).toBeNull();
+  expect(readingReset(atDefaults, settingsAmbient.id)).toBeNull();
+  expect(readingReset({ ...known, advice: undefined }, settingsAmbient.id)).toBeNull();
 });
 
 test('a lost acknowledgement retry confirms its command while current values still need readback', async () => {
   const fixture = readingFixture('unavailable');
-  const input = readingMutation(fixture.initial, { spoilerLevel: 1, suitability: 'blur' })!;
-  expect(await sendReading(fixture.io, input, false, latest)).toMatchObject({ kind: 'uncertain' });
-  expect(await sendReading(fixture.io, input, true, latest)).toMatchObject({
+  const input = readingMutation(fixture.initial, { spoilerLevel: 1, suitability: 'blur' }, settingsAmbient.id)!;
+  expect(await sendReading(fixture.io, input, false, latest, settingsAmbient.timer)).toMatchObject({
+    kind: 'uncertain',
+  });
+  expect(await sendReading(fixture.io, input, true, latest, settingsAmbient.timer)).toMatchObject({
     kind: 'confirmed-read-failed',
     receipt: { spoilerLevel: 1, version: 1 },
   });
   expect(fixture.calls[1]).toBe(input);
-  expect(await readReading(fixture.io, 0)).toMatchObject({ ok: false, reason: 'unavailable' });
+  expect(await readReading(fixture.io, 0, settingsAmbient.timer)).toMatchObject({ ok: false, reason: 'unavailable' });
 });
 
 test('a singleton suitability choice has a read-only presentation and keeps native effective/default values', () => {
@@ -142,13 +157,15 @@ test('a singleton suitability choice has a read-only presentation and keeps nati
   const advice = readingAdviceFor({ spoilerLevel: 0, suitability: 'blur' });
   advice.reading.supported.suitability = ['blur'];
   const markup = renderToStaticMarkup(
-    createElement(ReadingCard, {
-      initial: { ...fixture.initial, advice },
-      version: 0,
-      csrfToken: null,
-      onVersionChange: () => {},
-      io: fixture.io,
-    }),
+    performanceAmbientTree(
+      createElement(ReadingCard, {
+        initial: { ...fixture.initial, advice },
+        version: 0,
+        csrfToken: null,
+        onVersionChange: () => {},
+        io: fixture.io,
+      }),
+    ),
   );
 
   expect(markup).not.toContain('role="switch"');

@@ -13,6 +13,12 @@ import {
   createSubjectScopeEvidence,
 } from '../semantic/adapters/index.ts';
 import { bindContextAccess } from '../semantic/context-access-port.ts';
+import { createZoneResourceAccess } from '../zones/adapters/index.ts';
+import {
+  bindZoneResourceAccess,
+  bindZoneResourceApplication,
+  createZoneResourceApplication,
+} from '../zones/resource-application.ts';
 import { withRealmDisclosureWork } from '../search/adapters/index.ts';
 import { contentHttpDeclaration, mountContentHttp, type ContentHttpRoutes } from '../content/http.ts';
 import { createOperationCatalogue } from '@rezics/operations';
@@ -420,6 +426,7 @@ export function createKernelAccessResolver(options: {
 export function createKernel(dependencies: KernelDependencies): Kernel {
   bindOrdinaryContentLifecycle(nativeContentLifecycle());
   bindContextAccess(nativeContextAccess());
+  bindZoneResourceApplication(createZoneResourceApplication(bindZoneResourceAccess(createZoneResourceAccess())));
   const declared = contentHttpDeclaration();
   const contentRuntime = ensureContentApplication({
     ...(dependencies.clock ? { clock: dependencies.clock } : {}),

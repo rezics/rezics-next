@@ -1,8 +1,9 @@
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@rezics/ui/shadcn/card';
 import { m } from '../paraglide/messages.js';
-import { AppearanceControls } from '../shell/appearance-controls';
+import { useSettingsShell } from './adapters/shell';
 
 export function DisplayPreferences() {
+  const { AppearanceControls } = useSettingsShell();
   return (
     <Card>
       <CardHeader>

@@ -4,6 +4,7 @@ import { createRoot } from 'react-dom/client';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { QueryClient, QueryClientProvider, useQuery } from '@tanstack/react-query';
 import { dirname } from 'node:path';
+import { performanceAmbientTree } from './performance-ambient';
 mock.module('cloudflare:workers', () => ({ env: {} }));
 const { PublicProfilePage } = await import('../src/accounts/public-profile/page');
 const { contributionDestination } = await import('../src/accounts/public-profile/contributions/row');
@@ -61,7 +62,7 @@ function app(page: ReturnType<typeof contributionPage>, locale = 'en') {
 test('review subject and historical citation preserve exact keys, destinations and all existing locales', () => {
   const { page, row } = pageFor();
   for (const locale of locales) {
-    const html = renderToStaticMarkup(app(page, locale));
+    const html = renderToStaticMarkup(performanceAmbientTree(app(page, locale)));
     expect(html).toContain('data-profile-contribution-kind="review"');
     expect(html).toContain('Prepared reviewed work');
     expect(html).toContain('prepared-question');
@@ -76,7 +77,7 @@ test('review subject and historical citation preserve exact keys, destinations a
 
 test('reply and parent destinations stay separate; hidden text, missing context and concealed rows stay truthful', () => {
   const { page, row } = pageFor('posts');
-  const html = renderToStaticMarkup(app(page));
+  const html = renderToStaticMarkup(performanceAmbientTree(app(page)));
   expect(html).toContain(`?post=${row.id}#post-${row.id}`);
   expect(html).toContain('data-profile-conversation');
   expect(html).toContain('post=prepared-parent#post-prepared-parent');
@@ -85,9 +86,9 @@ test('reply and parent destinations stay separate; hidden text, missing context 
   const body = Object.values(page.reads).find((entry) => isRecord(entry.body) && Array.isArray(entry.body.posts))!.body;
   if (!isRecord(body) || !Array.isArray(body.posts) || !isRecord(body.posts[0])) throw new Error('Missing posts');
   delete body.posts[0].parentContext;
-  expect(renderToStaticMarkup(app(page))).toContain('data-profile-context="unavailable"');
+  expect(renderToStaticMarkup(performanceAmbientTree(app(page)))).toContain('data-profile-context="unavailable"');
   body.posts[0].visibility = 'private';
-  expect(renderToStaticMarkup(app(page))).not.toContain(`?post=${row.id}`);
+  expect(renderToStaticMarkup(performanceAmbientTree(app(page)))).not.toContain(`?post=${row.id}`);
   expect(contributionDestination({ id: 'post', thread: { title: 'Not a locator' } }, 'reply', 'en')).toBeUndefined();
   expect(
     contributionDestination({ id: 'post', threadId: 'actual', thread: { id: 'other', title: 'Wrong' } }, 'reply', 'ja'),
@@ -105,13 +106,13 @@ test('Discussion publication follows Posts independently of Reviews, including m
       for (const profile of result.body.accounts)
         if (isRecord(profile)) profile.publicViews = { posts: true, reviews: false, collections: false, realms: false };
   }
-  expect(renderToStaticMarkup(app(page))).toContain('data-slot="account-threads"');
+  expect(renderToStaticMarkup(performanceAmbientTree(app(page)))).toContain('data-slot="account-threads"');
   for (const result of Object.values(page.reads)) {
     if (!isRecord(result.body) || !Array.isArray(result.body.accounts)) continue;
     for (const profile of result.body.accounts)
       if (isRecord(profile)) profile.publicViews = { posts: false, reviews: true };
   }
-  expect(renderToStaticMarkup(app(page))).not.toContain('data-slot="account-threads"');
+  expect(renderToStaticMarkup(performanceAmbientTree(app(page)))).not.toContain('data-slot="account-threads"');
   expect(viewIsPublic(undefined, 'discussion')).toBe(false);
 });
 
@@ -121,7 +122,7 @@ test('a contribution window beyond the native twenty-row bound is unavailable', 
     if (isRecord(result.body) && Array.isArray(result.body.posts))
       result.body.posts = Array.from({ length: 21 }, (_, index) => ({ ...row, id: `post-${index}` }));
   }
-  const html = renderToStaticMarkup(app(page));
+  const html = renderToStaticMarkup(performanceAmbientTree(app(page)));
   expect(html).not.toContain('data-profile-contribution-kind="reply"');
   expect(html).toContain(m.subject_section_failed());
 });

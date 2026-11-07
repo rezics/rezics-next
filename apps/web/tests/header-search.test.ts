@@ -1,7 +1,9 @@
 import { expect, test } from 'bun:test';
-import { createElement } from 'react';
+import { createElement, type ReactNode } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { HeaderSearch, HeaderSearchView } from '../src/search/header-search/header-search';
+import { RecentSearchBinding } from '../src/session/recent-search-binding';
 import { headerSearchAction } from '../src/search/header-search/authority';
 import { initialHeaderSearchState, reduceHeaderSearchState } from '../src/search/header-search/state';
 import type { SearchScope, SearchScopeKind } from '../src/search/header-search/types';
@@ -129,8 +131,14 @@ test('expanded composer uses the panel top rounding and outlines the actual inpu
   expect(input).toContain('focus-visible:outline-foreground');
 });
 
+function renderConnected(node: ReactNode) {
+  return renderToStaticMarkup(
+    createElement(QueryClientProvider, { client: new QueryClient() }, createElement(RecentSearchBinding, null, node)),
+  );
+}
+
 test('separate HeaderSearch instances keep their shortcut help and form references unique', () => {
-  const markup = renderToStaticMarkup(
+  const markup = renderConnected(
     createElement(
       'div',
       null,
@@ -156,7 +164,7 @@ test('separate HeaderSearch instances keep their shortcut help and form referenc
 });
 
 test('duplicate instances keep query and scoped names attached to their own visible shortcut and input help', () => {
-  const markup = renderToStaticMarkup(
+  const markup = renderConnected(
     createElement(
       'div',
       null,

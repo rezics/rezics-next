@@ -4,12 +4,12 @@ import { createFileRoute, redirect } from '@tanstack/react-router';
 import { useQueryClient } from '@tanstack/react-query';
 import { useEffect, useMemo, useRef, useSyncExternalStore } from 'react';
 import { useRouter } from '@tanstack/react-router';
-import { realmPageQuery } from '../../community/space-queries';
-import { SpacePage } from '../../community/space-page';
+import { realmPageQuery } from '../../community';
+import { SpacePage } from '../../session/community-application';
 import { getLocale } from '../../paraglide/runtime.js';
 import { ClosedErrorPage } from '../../shell/closed';
-import { spacePageHead } from '../../community/space-head';
-import type { SpacePageData } from '../../community/space';
+import { spacePageHead } from '../../community';
+import type { SpacePageData } from '../../community';
 import {
   awaitSpacePageRead,
   bindHydratedSpacePage,
@@ -22,8 +22,8 @@ import {
   spacePageReadResultWasReplaced,
   spacePageSessionSource,
   SpacePageLifetimeHost,
-} from '../../community/space-page-lifetime';
-import type { SpacePageAdmission, SpacePageTarget } from '../../community/space-page-lifetime';
+} from '../../community';
+import type { SpacePageAdmission, SpacePageTarget } from '../../community';
 
 type RealmLoaderData = { page: SpacePageData; admission: SpacePageAdmission };
 

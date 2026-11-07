@@ -1,7 +1,7 @@
 import type { Pool } from 'pg';
 import { createNativeSearchDisclosure } from '../search/index.ts';
 import { composeLibraryDomain } from './library.ts';
-import { composeZoneCollection } from './zones.ts';
+import { composeZones } from './zones.ts';
 import { createWriteRateLimiter, type WriteRateLimiter } from '../access/write-rate.ts';
 import { createAccess, type AccessConfig } from '../access/index.ts';
 import type { AuthenticationConfig } from '../access/authenticate.ts';
@@ -98,7 +98,7 @@ export function createKernelRuntimeDefaults(overrides: KernelRuntimeOverrides = 
   composeSemanticAdapters();
   composeSearchSemanticSource();
   composeLibraryDomain();
-  composeZoneCollection();
+  composeZones();
   installSemanticCopyWork();
   const env = overrides.env ?? process.env;
   const tokens = overrides.tokens ?? readTokenKeys(env);

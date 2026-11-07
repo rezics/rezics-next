@@ -27,11 +27,11 @@ import { Alert, AlertDescription, AlertTitle } from '@rezics/ui/shadcn/alert';
 import { ListRow, ListRowControl, ListRowLink } from '@rezics/ui/list-row';
 import { m } from '../paraglide/messages.js';
 import { getLocale } from '../paraglide/runtime.js';
-import { useOperation } from '../kernel/exposure';
-import { useSession } from '../session/query';
+import { useSettingsOperation, useSettingsSession } from './adapters/shell';
 import type { CollectionVisibility } from './ports/library';
 import { readOwnedCollection, readOwnedCollectionsPage, saveCollectionVisibility } from './actions';
 import type { OwnedCollection } from './preferences';
+import { useSettingsAmbient } from './adapters/ambient-view.tsx';
 import { usePreferenceRetry } from './preference-failure-retry';
 import type { CollectionPrivacyFailure } from './collection-privacy-data';
 import { useSettingsNavigationDraft } from './reading-navigation';
@@ -109,8 +109,8 @@ export function CollectionRow(props: CollectionRowProps) {
 }
 
 function AdmittedCollectionRow(props: OwnedRowProps) {
-  const canSave = useOperation('collection.update');
-  const canRead = useOperation('collection.get');
+  const canSave = useSettingsOperation('collection.update');
+  const canRead = useSettingsOperation('collection.get');
   return <CollectionRowView {...props} canSave={canSave} canRead={canRead} />;
 }
 
@@ -121,6 +121,7 @@ function CollectionRowView({
   canSave,
   canRead,
 }: OwnedRowProps & { canSave: boolean; canRead: boolean }) {
+  const ambient = useSettingsAmbient();
   const mayWrite = () => (owner ? owner.isCurrent() : !!io);
   const isCurrent = useSettingsLiveness(owner?.readCurrent ?? (() => !!io));
   const [editor] = useState(
@@ -137,6 +138,7 @@ function CollectionRowView({
                 throw new Error('Settings viewer unavailable');
               },
             }),
+        ambient,
         isCurrent,
         () => isCurrent() && mayWrite(),
       ),
@@ -415,8 +417,8 @@ function CollectionRowView({
 
 /** Mounts afresh whenever the prepared account or operation admission changes. */
 export function CollectionPrivacySection() {
-  const admitted = useOperation('account.collections');
-  const { state, subject, csrfToken } = useSession();
+  const admitted = useSettingsOperation('account.collections');
+  const { state, subject, csrfToken } = useSettingsSession();
   return admitted && state === 'signed-in' && subject ? (
     <CollectionPrivacyView key={JSON.stringify([subject, csrfToken])} />
   ) : null;
@@ -429,11 +431,16 @@ export function CollectionPrivacyView({
   read?: CollectionPrivacyPageRead;
   io?: CollectionPrivacyIO;
 }) {
+  const ambient = useSettingsAmbient();
   const owner = useSettingsSessionOwner(undefined, undefined, !!io || read !== nativePageRead);
   const isCurrent = useSettingsLiveness(owner?.readCurrent ?? (() => read !== nativePageRead));
   const [pager] = useState(
     () =>
-      new CollectionPrivacyPager((cursor) => (owner ? owner.guardRead(() => read(cursor)) : read(cursor)), isCurrent),
+      new CollectionPrivacyPager(
+        (cursor) => (owner ? owner.guardRead(() => read(cursor)) : read(cursor)),
+        ambient,
+        isCurrent,
+      ),
   );
   useSettingsDisposal(pager.dispose);
   const state = useSyncExternalStore(pager.subscribe, pager.snapshot, pager.snapshot);

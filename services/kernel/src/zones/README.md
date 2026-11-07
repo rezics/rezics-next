@@ -3,6 +3,13 @@
 [Zones](../../../../docs/zones.md), [membership](../../../../docs/zone-membership.md) and
 [filtered lists](../../../../docs/filtered-lists.md) own behavior.
 
+Zone resource create, configure, publish, current-owner reads, mutation and platform hold/purge/takedown go through
+`resource-access-port.ts` and the constructed `resource-application.ts`. `composeZoneResource`, `createKernel` and
+`zoneRoutes` bind Access's public producer (`access/zone-resource-adapter.ts`) via `adapters/resource-access.ts`.
+HTTP maps admission (`requireAccount`, `If-Match`) and outcomes (status, Location, ETag, cache) onto that instance.
+Parent locks, CAS, compiled page authorization, current owner fences, History enrollment and native participant
+cleanup stay in `resource-head.ts` and the owner command bodies. Collection remains the separate Library port.
+
 `http.ts` mounts `GET /v1/zones/{id}/collections`, `GET /v1/zones/{id}/subjects` and one `zone.read_page` composition in `page-runtime.ts`.
 Zone membership work and mounted Collection reads go through `collection-port.ts`. `composeZoneCollection` and `zoneRoutes`
 bind `library/zone-collection-adapter.ts`, which supplies `CollectionSourceLedger`, `readCollection`, `collectionReadView`

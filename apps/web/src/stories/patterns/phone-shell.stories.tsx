@@ -13,6 +13,7 @@ import { searchQueryOptions } from '../../search/search-query-options';
 import { searchLoaderDeps } from '../../search/search-params';
 import { searchFacetStoryPaths } from '../../kernel/fake/search-facets';
 import type { UnreadCount } from '../../inbox/inbox-read';
+import { useInboxAmbient } from '../../inbox/adapters/ambient-view.tsx';
 import { unreadCountQueryFor } from '../../inbox/inbox-query';
 import { currentInboxViewer } from '../../inbox/inbox-viewer';
 import { sessionQuery, useSession } from '../../session/query';
@@ -148,6 +149,7 @@ const readyRealms = fn<SearchRealmDiscoveryLoader>(async ({ cursor }) => ({
 }));
 function Connected({ state, loadRealms = emptyRealms }: { state: State; loadRealms?: SearchRealmDiscoveryLoader }) {
   const client = useQueryClient();
+  const { now } = useInboxAmbient();
   const [entries, setEntries] = useState(() => {
     client.setQueryData(sessionQuery.queryKey, {
       state: 'signed-in',
@@ -165,7 +167,7 @@ function Connected({ state, loadRealms = emptyRealms }: { state: State; loadReal
             basis: 'current-visible-unread',
             witness: { kind: 'current-disclosure', at: '2026-11-04T00:00:00.000Z' },
           };
-    client.setQueryData<UnreadCount>(unreadCountQueryFor(currentInboxViewer(client)).queryKey, () => unread);
+    client.setQueryData<UnreadCount>(unreadCountQueryFor(currentInboxViewer(client), now).queryKey, () => unread);
     return state === 'recent'
       ? rememberRecent(rememberRecent([], recording.query), '', {
           kind: 'Realm',

@@ -27,7 +27,7 @@ import {
 import { ImportSession } from './import-session.ts';
 import { ResumeStateError } from './resume-state.ts';
 import { throwIfAborted } from './dump-input.ts';
-import type { ImportCliOptions, ImportCliResult } from './cli.ts';
+import type { ImportCliOptions, ImportCliResult } from './cli-contract.ts';
 import {
   SourceDestinationError,
   mismatchMessage,

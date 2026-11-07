@@ -11,6 +11,7 @@ import {
 } from '../src/settings/adapters/accounts';
 import { accountRenamePresentedFailure } from '../src/settings/account-rename-data';
 import { readAccountRenameContext, readAccountRenameContextResult } from '../src/settings/adapters/accounts';
+import { performanceAmbientTree } from './performance-ambient';
 import { AccountSafetyCard } from '../src/settings/account-safety';
 import { accountRenameHref, securityHrefFromIssuer } from '../src/settings/account-safety-links';
 import { m } from '../src/paraglide/messages.js';
@@ -27,13 +28,15 @@ const render = (
   env: Parameters<typeof authManagementPageHref>[0] = deployment,
 ) =>
   renderToStaticMarkup(
-    createElement(AccountSafetyCard, {
-      state: 'signed-in',
-      securityHref: securityHrefFromIssuer(env.AUTH_ISSUER),
-      csrfToken: null,
-      onReload() {},
-      renameAccount: accountRenameNavigation(env, renameAccount),
-    }),
+    performanceAmbientTree(
+      createElement(AccountSafetyCard, {
+        state: 'signed-in',
+        securityHref: securityHrefFromIssuer(env.AUTH_ISSUER),
+        csrfToken: null,
+        onReload() {},
+        renameAccount: accountRenameNavigation(env, renameAccount),
+      }),
+    ),
   );
 
 function transport(handle: string | null, resource?: object, profileId = accountId) {
@@ -134,7 +137,7 @@ test('missing, denied, malformed and foreign native capability cannot enable ren
   expect(await transport(null, undefined, 'someone-else').read()).toBeNull();
   expect(render(null)).not.toContain('/account/rename');
   const signedOut = renderToStaticMarkup(
-    createElement(AccountSafetyCard, { state: 'signed-out', returnTo: '/settings' }),
+    performanceAmbientTree(createElement(AccountSafetyCard, { state: 'signed-out', returnTo: '/settings' })),
   );
   expect(signedOut).not.toContain('/account/rename');
 });
@@ -229,14 +232,16 @@ test('native profile and capability failures retain bounded status/problem/delay
       expect(JSON.stringify(result)).not.toContain(problem.detail);
       expect(JSON.stringify(result)).not.toContain(problem.arbitrary);
       const html = renderToStaticMarkup(
-        createElement(AccountSafetyCard, {
-          state: 'signed-in',
-          securityHref,
-          csrfToken: 'current-csrf',
-          onReload() {},
-          renameAccount: accountRenameNavigation(deployment, result.context),
-          renameRead: { loading: false, reload() {}, failures: result.failures },
-        }),
+        performanceAmbientTree(
+          createElement(AccountSafetyCard, {
+            state: 'signed-in',
+            securityHref,
+            csrfToken: 'current-csrf',
+            onReload() {},
+            renameAccount: accountRenameNavigation(deployment, result.context),
+            renameRead: { loading: false, reload() {}, failures: result.failures },
+          }),
+        ),
       );
       expect(html).toContain(m.settings_account_rename_failed());
       expect(html).toContain(m.settings_retry_wait());
@@ -263,14 +268,16 @@ test('explicit native denial differs from unavailable capability and absent depl
     const result = await readAccountRenameContextResult(client, 'Bearer private-website-token', accountId);
     expect(result.failures).toHaveLength(2);
     const html = renderToStaticMarkup(
-      createElement(AccountSafetyCard, {
-        state: 'signed-in',
-        securityHref,
-        csrfToken: 'current-csrf',
-        onReload() {},
-        renameAccount: null,
-        renameRead: { loading: false, reload() {}, failures: result.failures },
-      }),
+      performanceAmbientTree(
+        createElement(AccountSafetyCard, {
+          state: 'signed-in',
+          securityHref,
+          csrfToken: 'current-csrf',
+          onReload() {},
+          renameAccount: null,
+          renameRead: { loading: false, reload() {}, failures: result.failures },
+        }),
+      ),
     );
     expect(html).toContain(message);
     expect(html).not.toContain('/account/rename');
@@ -290,14 +297,21 @@ test('mixed native failures present unavailable before denied and never enable n
   ];
   expect(accountRenamePresentedFailure(failures)).toEqual(failures[1]);
   const html = renderToStaticMarkup(
-    createElement(AccountSafetyCard, {
-      state: 'signed-in',
-      securityHref,
-      csrfToken: 'current-csrf',
-      onReload() {},
-      renameAccount: { accountId, handle: 'alice', available: true, href: 'https://auth.example.test/account/rename' },
-      renameRead: { loading: false, reload() {}, failures },
-    }),
+    performanceAmbientTree(
+      createElement(AccountSafetyCard, {
+        state: 'signed-in',
+        securityHref,
+        csrfToken: 'current-csrf',
+        onReload() {},
+        renameAccount: {
+          accountId,
+          handle: 'alice',
+          available: true,
+          href: 'https://auth.example.test/account/rename',
+        },
+        renameRead: { loading: false, reload() {}, failures },
+      }),
+    ),
   );
   expect(html).toContain(m.settings_account_rename_unavailable());
   expect(html).not.toContain(m.settings_account_rename_denied());

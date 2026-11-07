@@ -6,7 +6,7 @@ Following a Realm means following its carrying Space; the shell reads at most 10
 
 Library and Collections stay visible as unavailable destinations while session or operation admission is absent.
 
-Navigation reads are private and bound to the current account, locale and operation admission. Unread counts use the inbox's existing current-viewer query and blue badges.
+Navigation reads are private and bound to the current account, locale and operation admission. Unread counts use the inbox's existing current-viewer query and blue badges. AppShell binds Inbox's shell port so the badge observes that same session query, and Settings' shell port so display, heading, subject addresses and exposure use the installed shell and kernel implementations.
 
 Decision: locale selection uses router-managed document navigation, preserving the current page, query and fragment
 in browser history and honoring leave-page blockers. The destination rereads native data and renders translated UI;

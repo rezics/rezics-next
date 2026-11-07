@@ -6,6 +6,7 @@ import { m } from '../../paraglide/messages.js';
 import { getLocale } from '../../paraglide/runtime.js';
 import { AccountsProvider } from '../../settings/managed-account-capabilities';
 import { accountProfileHref } from '../../accounts/profile-editor/address';
+import { useSettingsAmbient } from '../../settings/adapters/ambient-view.tsx';
 import { ManagedAccountActionsForViewer } from '../../settings/managed-account-actions';
 import { type ManagedAccountActionsIO } from '../../settings/managed-account-actions-read';
 import { loadManagedAccountActions } from '../../settings/adapters/accounts';
@@ -22,72 +23,78 @@ async function unusedCapability(): Promise<never> {
   throw new Error('This action story does not consume other account capabilities');
 }
 function Example({ outcome = 'available', authEntry }: { outcome?: Outcome; authEntry?: AuthEntry }) {
+  const ambient = useSettingsAmbient();
   const organization = authEntry === 'organization' || authEntry === 'undeployed';
   const operated = authEntry === 'transfer';
   const accountId = organization ? organizationId : operated ? operatedId : viewerId;
   const reader = useMemo(
     () =>
-      new ManagedAccountReader(viewerId, accountId, (input) => {
-        // Illustrative fixtures only, through the existing management GET/parser and server projection.
-        // They are not recorded native outcomes, an authority source, or execution/approval proof.
-        const resource = { route: 0, id: accountId };
-        const operations = organization
-          ? [
-              { operationId: 'auth.organization.membership', action: 'organization:membership', resource },
-              { operationId: 'auth.organization.delete', action: 'account:delete', resource },
-            ]
-          : operated
+      new ManagedAccountReader(
+        viewerId,
+        accountId,
+        (input) => {
+          // Illustrative fixtures only, through the existing management GET/parser and server projection.
+          // They are not recorded native outcomes, an authority source, or execution/approval proof.
+          const resource = { route: 0, id: accountId };
+          const operations = organization
             ? [
-                {
-                  operationId: 'auth.operator.transfer',
-                  action: 'account:manage',
-                  resource: { route: 0x1234, id: sourceId },
-                },
+                { operationId: 'auth.organization.membership', action: 'organization:membership', resource },
+                { operationId: 'auth.organization.delete', action: 'account:delete', resource },
               ]
-            : [{ operationId: 'auth.account.rename', action: 'account:update', resource }];
-        const client = createKernelClient('https://kernel.test', {
-          fetch: Object.assign(
-            async () =>
-              Response.json({
-                account: {
-                  id: accountId,
-                  kind: organization ? 'organization' : 'actor',
-                  handle: null,
-                  displayName: null,
-                },
-                self: accountId === viewerId,
-                role: organization ? 'owner' : null,
-                operator: operated
-                  ? { id: sourceId, kind: 'actor', handle: null, displayName: 'Illustrative source operator' }
-                  : null,
-                relation: operated
-                  ? {
-                      operatorAccountId: sourceId,
-                      reservationId: organizationId,
-                      version: 'illustrative-private-version',
-                    }
-                  : null,
-                members: { state: 'ready', items: [], next: null },
-                responsibilities: { items: [], next: null },
-                ...(authEntry
-                  ? {
-                      authActions:
-                        authEntry === 'unavailable' ? { state: 'unavailable' } : { state: 'ready', operations },
-                    }
-                  : {}),
-              }),
-            { preconnect() {} },
-          ),
-        });
-        return loadManagedAccountDetail(client, 'Bearer illustrative-story-viewer', input, {
-          AUTH_ISSUER: 'https://auth.test',
-          AUTH_MANAGEMENT_PAGE_ROUTES:
-            authEntry === 'undeployed'
-              ? '[]'
-              : '["/account/rename","/organizations/members","/operators/transfer","/organizations/delete"]',
-        });
-      }),
-    [accountId, organization, operated, authEntry],
+            : operated
+              ? [
+                  {
+                    operationId: 'auth.operator.transfer',
+                    action: 'account:manage',
+                    resource: { route: 0x1234, id: sourceId },
+                  },
+                ]
+              : [{ operationId: 'auth.account.rename', action: 'account:update', resource }];
+          const client = createKernelClient('https://kernel.test', {
+            fetch: Object.assign(
+              async () =>
+                Response.json({
+                  account: {
+                    id: accountId,
+                    kind: organization ? 'organization' : 'actor',
+                    handle: null,
+                    displayName: null,
+                  },
+                  self: accountId === viewerId,
+                  role: organization ? 'owner' : null,
+                  operator: operated
+                    ? { id: sourceId, kind: 'actor', handle: null, displayName: 'Illustrative source operator' }
+                    : null,
+                  relation: operated
+                    ? {
+                        operatorAccountId: sourceId,
+                        reservationId: organizationId,
+                        version: 'illustrative-private-version',
+                      }
+                    : null,
+                  members: { state: 'ready', items: [], next: null },
+                  responsibilities: { items: [], next: null },
+                  ...(authEntry
+                    ? {
+                        authActions:
+                          authEntry === 'unavailable' ? { state: 'unavailable' } : { state: 'ready', operations },
+                      }
+                    : {}),
+                }),
+              { preconnect() {} },
+            ),
+          });
+          return loadManagedAccountDetail(client, 'Bearer illustrative-story-viewer', input, {
+            AUTH_ISSUER: 'https://auth.test',
+            AUTH_MANAGEMENT_PAGE_ROUTES:
+              authEntry === 'undeployed'
+                ? '[]'
+                : '["/account/rename","/organizations/members","/operators/transfer","/organizations/delete"]',
+          });
+        },
+        ambient,
+      ),
+    [accountId, ambient, organization, operated, authEntry],
   );
   const { authNavigation } = useSyncExternalStore(reader.subscribe, reader.snapshot, reader.snapshot);
   useEffect(() => {

@@ -3,6 +3,10 @@ import { dirname } from 'node:path';
 import { act } from 'react';
 import { QueryClient } from '@tanstack/react-query';
 import * as start from '../.storybook/react-start';
+import { createBrowserSettingsAmbient } from '../src/settings/adapters/ambient';
+import { performanceAmbientTree } from './performance-ambient';
+
+const settingsAmbient = createBrowserSettingsAmbient();
 import type {
   DetailRequest,
   DetailResult,
@@ -106,7 +110,7 @@ function button(host: Element, label: string) {
 
 test('recognizable account and operator lead; supplied IDs stay selectable in closed disclosures and unknown rows never use an ID as a name', async () => {
   setLocale('de', { reload: false });
-  const reader = new ManagedAccountReader(viewer, target, async () => ready());
+  const reader = new ManagedAccountReader(viewer, target, async () => ready(), settingsAmbient);
   await reader.load();
   const { host, close } = await mount(reader);
   try {
@@ -139,10 +143,15 @@ test('recognizable account and operator lead; supplied IDs stay selectable in cl
 test('whole-detail retry recovers initial and refreshed reads without leaving a Refresh bypass during Retry-After', async () => {
   let result: DetailResult = { ok: false, failure: { status: 503, transient: true } };
   const calls: DetailRequest[] = [];
-  const reader = new ManagedAccountReader(viewer, target, async (input) => {
-    calls.push(input);
-    return result;
-  });
+  const reader = new ManagedAccountReader(
+    viewer,
+    target,
+    async (input) => {
+      calls.push(input);
+      return result;
+    },
+    settingsAmbient,
+  );
   const refresh = reader.load.bind(reader);
   await reader.load();
   const { host, close } = await mount(reader);
@@ -171,10 +180,15 @@ test('each feed retries its exact failed cursor and restarts only itself; first-
   for (const section of ['members', 'responsibilities'] satisfies DetailSection[]) {
     const calls: DetailRequest[] = [];
     let result = ready();
-    const reader = new ManagedAccountReader(viewer, target, async (input) => {
-      calls.push(input);
-      return result;
-    });
+    const reader = new ManagedAccountReader(
+      viewer,
+      target,
+      async (input) => {
+        calls.push(input);
+        return result;
+      },
+      settingsAmbient,
+    );
     await reader.load();
     const sibling = section === 'members' ? 'responsibilities' : 'members';
     const retained = reader.snapshot()[sibling];
@@ -211,7 +225,7 @@ test('each feed retries its exact failed cursor and restarts only itself; first-
 test('nameless supplied identities remain distinct from unavailable identities', async () => {
   const value = detail();
   value.account = { ...value.account, displayName: null, handle: null };
-  const reader = new ManagedAccountReader(viewer, target, async () => ready(value));
+  const reader = new ManagedAccountReader(viewer, target, async () => ready(value), settingsAmbient);
   await reader.load();
   const { host, close } = await mount(reader);
   try {
@@ -228,10 +242,15 @@ test('each continuation retains its page during Retry-After and disables both re
   for (const section of ['members', 'responsibilities'] satisfies DetailSection[]) {
     let result = ready();
     const calls: DetailRequest[] = [];
-    const reader = new ManagedAccountReader(viewer, target, async (input) => {
-      calls.push(input);
-      return result;
-    });
+    const reader = new ManagedAccountReader(
+      viewer,
+      target,
+      async (input) => {
+        calls.push(input);
+        return result;
+      },
+      settingsAmbient,
+    );
     await reader.load();
     const retained = reader.snapshot()[section].page;
     const { host, close } = await mount(reader);

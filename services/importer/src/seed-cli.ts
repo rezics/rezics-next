@@ -1,5 +1,5 @@
 import { CredentialDeniedError, CredentialServiceError } from './credentials.ts';
-import { ImportTransportError } from './import-client.ts';
+import { formatImportTransportError, ImportTransportError } from './import-client.ts';
 import type { ImportRequestDiagnostics } from './import-fetch.ts';
 
 type CredentialFailure = CredentialDeniedError | CredentialServiceError;
@@ -31,21 +31,7 @@ function credentialCause(error: unknown): CredentialFailure | undefined {
 export function formatSeedError(error: unknown): string {
   if (error instanceof ImportTransportError) {
     const cause = credentialCause(error.cause);
-    const outer = details(
-      {
-        ...(error.method === undefined ? {} : { method: error.method }),
-        ...(error.origin === undefined ? {} : { origin: error.origin }),
-        ...(error.path === undefined ? {} : { path: error.path }),
-        ...(error.failurePhase === undefined ? {} : { phase: error.failurePhase }),
-        ...(error.status === undefined ? {} : { status: error.status }),
-        ...(error.code === undefined ? {} : { code: error.code }),
-        ...(error.networkCode === undefined ? {} : { networkCode: error.networkCode }),
-        ...(error.correlationId === undefined ? {} : { correlationId: error.correlationId }),
-      },
-      error.status === undefined ? 'transport' : 'http',
-    );
-    const classification = safeField(error.phase, /^[A-Za-z][A-Za-z0-9]{0,31}$/u, 32);
-    return `Import transport failed ${outer}${classification ? ` classification=${classification}` : ''}${cause ? ` auth{${details(cause.diagnostics ?? {}, 'credential')}}` : ''}`;
+    return `${formatImportTransportError(error)}${cause ? ` auth{${details(cause.diagnostics ?? {}, 'credential')}}` : ''}`;
   }
   if (error instanceof CredentialDeniedError || error instanceof CredentialServiceError)
     return `Credential request failed ${details(error.diagnostics ?? {}, 'credential')}`;

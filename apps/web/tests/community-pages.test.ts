@@ -14,7 +14,7 @@ mock.module('../src/community/realm-membership', () => ({
   RealmMembership: () => createElement('button', { className: 'h-10 px-4' }, 'Join'),
 }));
 
-const { SpacePage } = await import('../src/community/space-page');
+const { SpacePage } = await import('../src/session/community-application');
 const { MyRealmsPageView } = await import('../src/community/my-realms-page');
 const { loadSpacePage } = await import('../src/community/space');
 

@@ -4,6 +4,7 @@ import { useState } from 'react';
 import { AccountProfileEditor } from '../../accounts/profile-editor/editor';
 import { AccountProfileView } from '../../accounts/profile-editor/page';
 import type { Failure, ProfilePage } from '../../accounts/profile-editor/data';
+import { createBrowserSettingsAmbient } from '../../settings/adapters/ambient';
 import type { ProfileValues } from '../../settings/profile-data';
 
 const profile: ProfileValues = {
@@ -20,6 +21,7 @@ function Example({ failure, confirmation = false }: { failure?: Failure; confirm
   const [editor] = useState(() => {
     const editor = new AccountProfileEditor(
       {
+        ambient: createBrowserSettingsAmbient(),
         read: async () => {
           throw new Error('No native transport in this presentation fixture');
         },

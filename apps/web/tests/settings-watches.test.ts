@@ -3,6 +3,9 @@ import { QueryClient } from '@tanstack/react-query';
 import { sessionQuery } from '../src/session/query';
 import { SettingsSessionOwner } from '../src/settings/settings-session-owner';
 import { WatchController, watchPageLimit } from '../src/settings/watch-controller';
+import { createBrowserSettingsAmbient } from '../src/settings/adapters/ambient';
+
+const settingsAmbient = createBrowserSettingsAmbient();
 import {
   unavailableWatchManagement,
   type ManagedWatch,
@@ -53,7 +56,7 @@ function setup(io: WatchManagementIO) {
   client.setQueryData(sessionQuery.queryKey, identity);
   const owner = new SettingsSessionOwner(client, identity.csrfToken, identity.subject);
   owner.mount();
-  const controller = new WatchController(io, owner);
+  const controller = new WatchController(io, owner, settingsAmbient);
   controller.mount();
   return { client, owner, controller };
 }
@@ -365,7 +368,7 @@ test('definite removal refusal keeps its endpoint wait across current reads, kin
     await controller.selectKind('thread');
     expect(controller.snapshot().writeRetryAt).toBe(startedAt + 5000);
     controller.retire();
-    const remounted = new WatchController(io, owner, owner);
+    const remounted = new WatchController(io, owner, settingsAmbient, owner);
     await remounted.first();
     expect(remounted.snapshot()).toMatchObject({ read: 'ready', writeRetryAt: startedAt + 5000 });
     await remounted.stop(readable.subscriptionId);

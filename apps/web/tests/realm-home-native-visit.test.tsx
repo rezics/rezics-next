@@ -116,7 +116,7 @@ const { bindNativeRealmHomeOperations, readNativeRealmHome, nativeRealmHomeShelv
   await import('../src/community/realm-home-native');
 const { readRealmJoinAdvice: readInstalledRealmJoinAdvice } = await import('../src/community/native-operations');
 const { loadSpacePageWithOrigin } = await import('../src/community/space');
-const { SpacePage, RealmShelf } = await import('../src/community/space-page');
+const { SpacePage, RealmShelf } = await import('../src/session/community-application');
 const { bindSpacePageResult, captureSpacePageAdmission, SpacePageLifetimeHost, releaseSpacePageSessionSource } =
   await import('../src/community/space-page-lifetime');
 const { releaseRealmMembershipLifetime } = await import('../src/community/realm-membership-lifetime');

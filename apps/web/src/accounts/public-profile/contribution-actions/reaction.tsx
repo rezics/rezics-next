@@ -1,8 +1,12 @@
 import { useState } from 'react';
 import { m } from '../../../paraglide/messages.js';
-import { ThreadReactions, type ThreadReactionsProps } from '../../../threads/thread-reactions';
+import type {
+  ContributionReactionKind,
+  ContributionReactionTransport,
+} from '../../../features/pages/account-profile-port';
 import { contributionOperationLeaseId } from './current';
 import { contributionOperationAdvice, originalContributionReference } from './advice';
+import { useContributionActionCapabilities } from './host';
 import { ContributionAdvicePresentation, type ContributionPresentation } from './presentation';
 
 /** Prepared native composition. Only the official contribution adapter may supply production slots. */
@@ -16,13 +20,14 @@ export function ContributionReaction({
   ...watermark
 }: {
   presentation: ContributionPresentation;
-  counts: ThreadReactionsProps['counts'];
-  value: ThreadReactionsProps['value'];
+  counts: Partial<Record<ContributionReactionKind, number>>;
+  value: ContributionReactionKind | null;
   returnTo: string;
   refreshAdvice?: (() => Promise<void>) | undefined;
-  preparedTransport?: ThreadReactionsProps['preparedTransport'];
-  sourceWatermark?: ThreadReactionsProps['sourceWatermark'];
+  preparedTransport?: ContributionReactionTransport;
+  sourceWatermark?: { epoch: number; position: string };
 }) {
+  const { Reaction } = useContributionActionCapabilities();
   const { input, row, source, reader, isCurrent, locale } = presentation;
   const reference = originalContributionReference(input, row);
   const kind = reference?.type === 'content.post' ? 'post' : 'thread';
@@ -69,7 +74,7 @@ export function ContributionReaction({
       retainChildren={retaining && state !== 'available'}
     >
       {retaining && reference && lease ? (
-        <ThreadReactions
+        <Reaction
           key={`${contributionOperationLeaseId(lease)}:${discardedVisit}`}
           onDiscard={() => setDiscardedVisit((value) => value + 1)}
           target={{ kind, id: reference.id }}

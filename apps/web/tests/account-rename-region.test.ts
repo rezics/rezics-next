@@ -9,6 +9,10 @@ import type { AccountRenameResult } from '../src/settings/account-rename-actions
 import { AccountRenameRegion, AccountSafetySection, readCurrentAccountRename } from '../src/settings/account-safety';
 import { loadSettingsPage } from '../src/settings/preferences';
 import { officialProfileRead } from '../src/settings/editable-profile-source';
+import { createBrowserSettingsAmbient } from '../src/settings/adapters/ambient';
+import { performanceAmbientTree } from './performance-ambient';
+
+const settingsAmbient = createBrowserSettingsAmbient();
 
 const accountId = '123e4567-e89b-42d3-a456-426614174000';
 const csrfToken = 'A'.repeat(22);
@@ -104,13 +108,15 @@ test('ordinary settings and recovery stay GET-only while the isolated rename rea
 
 test('account safety server render starts loading without treating a historical response as current capability', () => {
   const html = renderToStaticMarkup(
-    createElement(AccountSafetySection, {
-      state: 'signed-in',
-      securityHref: 'https://auth.example.test/security',
-      csrfToken,
-      onReload() {},
-      renameAccount: { accountId, handle: 'old', available: true },
-    }),
+    performanceAmbientTree(
+      createElement(AccountSafetySection, {
+        state: 'signed-in',
+        securityHref: 'https://auth.example.test/security',
+        csrfToken,
+        onReload() {},
+        renameAccount: { accountId, handle: 'old', available: true },
+      }),
+    ),
   );
   expect(html).toContain('role="status"');
   expect(html).not.toContain('/account/rename');
@@ -125,12 +131,16 @@ test('Preserve native failure guidance while loading account safety preserving n
     context: { accountId, handle: 'alice', available: true, href: 'https://auth.example.test/account/rename' },
   };
   let resolve!: (value: AccountRenameResult) => void;
-  const region = new AccountRenameRegion(() => {
-    calls++;
-    return new Promise((done) => {
-      resolve = done;
-    });
-  }, accountId);
+  const region = new AccountRenameRegion(
+    () => {
+      calls++;
+      return new Promise((done) => {
+        resolve = done;
+      });
+    },
+    settingsAmbient,
+    accountId,
+  );
   let unmount = region.mount();
   try {
     unmount();
@@ -171,12 +181,12 @@ test('Preserve native failure guidance while loading account safety preserving n
     expect(region.snapshot().context).toBeNull();
     await region.reload();
     expect(calls).toBe(3);
-    const nextActor = new AccountRenameRegion(async () => ready, 'another-actor');
+    const nextActor = new AccountRenameRegion(async () => ready, settingsAmbient, 'another-actor');
     const leaveNext = nextActor.mount();
     await nextActor.reload();
     expect(nextActor.snapshot().context).toBeNull();
     leaveNext();
-    const nextCsrf = new AccountRenameRegion(async () => ready, accountId);
+    const nextCsrf = new AccountRenameRegion(async () => ready, settingsAmbient, accountId);
     const leaveCsrf = nextCsrf.mount();
     await nextCsrf.reload();
     expect(nextCsrf.snapshot().context).toEqual(ready.context);
@@ -192,10 +202,14 @@ test('account safety honors HTTP-date waits exactly and never invents a wait for
   try {
     for (const retryAfter of [new Date(Date.now() + 60_000).toUTCString(), 'invalid', undefined]) {
       let calls = 0;
-      const region = new AccountRenameRegion(async () => {
-        calls++;
-        return { context: null, failures: [{ kind: 'failed', status: 503, ...(retryAfter ? { retryAfter } : {}) }] };
-      }, accountId);
+      const region = new AccountRenameRegion(
+        async () => {
+          calls++;
+          return { context: null, failures: [{ kind: 'failed', status: 503, ...(retryAfter ? { retryAfter } : {}) }] };
+        },
+        settingsAmbient,
+        accountId,
+      );
       const leave = region.mount();
       await region.reload();
       const deadline = retryAfter?.endsWith('GMT') ? Date.now() + 60_000 : 0;
@@ -214,10 +228,14 @@ test('returning under the same viewer rereads current destinations without retai
     context: { accountId, handle: 'alice', available: true, href: 'https://auth.example.test/account/rename' },
   };
   const calls: string[] = [];
-  const region = new AccountRenameRegion(async () => {
-    calls.push('rename');
-    return ready;
-  }, accountId);
+  const region = new AccountRenameRegion(
+    async () => {
+      calls.push('rename');
+      return ready;
+    },
+    settingsAmbient,
+    accountId,
+  );
   const leave = region.mount();
   try {
     await region.reload();
@@ -265,6 +283,7 @@ test('retired module loading never issues a later account request, and a late su
   expect(reads).toBe(0);
   const region = new AccountRenameRegion(
     async () => ready,
+    settingsAmbient,
     accountId,
     () => current,
   );

@@ -1,7 +1,8 @@
 import { createFileRoute, useRouterState } from '@tanstack/react-router';
-import { InboxPageView } from '../inbox/inbox-page';
-import { setInboxResponsePolicy } from '../inbox/inbox-read';
+import { createInboxShellPort, InboxPageView, InboxShellProvider, setInboxResponsePolicy } from '../inbox';
 import { m } from '../paraglide/messages.js';
+
+const inboxShell = createInboxShellPort();
 
 export const Route = createFileRoute('/inbox')({
   loader: () => setInboxResponsePolicy(),
@@ -17,5 +18,9 @@ function InboxRoutePage() {
       return typeof key === 'string' ? key : state.location.href;
     },
   });
-  return <InboxPageView historyKey={historyKey} />;
+  return (
+    <InboxShellProvider port={inboxShell}>
+      <InboxPageView historyKey={historyKey} />
+    </InboxShellProvider>
+  );
 }

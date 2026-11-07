@@ -45,11 +45,16 @@ publish React notifications through this same observer without changing speciali
 
 Decision: outage recovery retains only a bounded, query-free local return path in a short-lived HttpOnly login cookie; callback credentials and private query state are never replayed. An indeterminate private route offers explicit session retry and safe sign-in with that same bounded path. Neither action admits a private loader until a current signed-in observation succeeds.
 
+Decision: Recent Search mounts `RecentSearchBinding` beside the Library application boundary. That host supplies the session observer, storage event source, clock and native Recent transport; the Search application does not read `session/query` or `session/browser-state` for this operation.
+
 ## Public module entry
 
 `session/index.ts` is the public browser adapter entry for observation and read/operation/address leases.
-It also exports the installed `sessionQuery`, `useSession`, `sessionCsrfToken` and `AnonymousSessionContext` for
-consumer-owned application composition. These are the original producer bindings, not another session policy.
+It also exports `normalizeSessionObservation`, `ReaderNavigationContext` and the installed `sessionQuery`,
+`useSession`, `sessionCsrfToken` and `AnonymousSessionContext` for consumer-owned application composition,
+including public-profile contribution action lifetime. These are the original producer bindings, not another
+session policy, without a second fetch, cache or provider. Settings and Inbox bind them through their own shell
+ports rather than importing `query.ts`.
 `session/reading-policy.ts` is a pure entry for the existing public/personal query defaults, credential-mode keys and
 platform-closed error/problem recognition. It loads no React observer, query cache or session fetch. Native and
 browser readers share the original error class, including its serialized route-boundary recognition.

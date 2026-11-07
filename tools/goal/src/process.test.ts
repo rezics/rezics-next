@@ -53,6 +53,25 @@ test('PID start time and boot identity fence PID reuse; SIGKILL removes an uncoo
     await terminateProcessGroup(identity, 20);
   }
 });
+test('an exited group returns without scanning /proc, even for a stale identity', async () => {
+  const child = spawn(process.execPath, ['-e', "console.log('ready')"], { detached: true, stdio: ['ignore', 'pipe', 'ignore'] });
+  const identity = await new Promise<NonNullable<ReturnType<typeof processIdentity>>>((resolve, reject) => {
+    child.stdout!.once('data', () => resolve(processIdentity(child.pid!)!));
+    child.once('error', reject);
+  });
+  await new Promise<void>((resolve) => (child.exitCode !== null ? resolve() : child.once('exit', () => resolve())));
+  const scans = spyOn(fs, 'readdirSync');
+  try {
+    const started = Date.now();
+    await terminateProcessGroup(identity, 1000);
+    await terminateProcessGroup({ ...identity, start: '0' }, 1000);
+    expect(Date.now() - started).toBeLessThan(500);
+    expect(scans.mock.calls.filter(([path]) => String(path) === '/proc')).toEqual([]);
+  } finally {
+    scans.mockRestore();
+  }
+});
+
 test('a server that left its group is stopped by its working directory, and processes elsewhere are spared', async () => {
   const root = tempDirectory(),
     inside = join(root, 'worktree', 'apps', 'web'),

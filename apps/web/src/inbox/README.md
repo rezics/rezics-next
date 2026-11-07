@@ -1,5 +1,13 @@
 # Inbox
 
+**Decision:** Inbox consumes the installed session query and browser observation through a consumer-owned shell port bound at the inbox route and app shell. The adapter binds `sessionQuery`, `useSession` and `browserObservation` from the session public entry (`session/index.ts`). One `adapters/shell.ts` owns that binding and the React provider; a same-basename `.tsx` is not kept because both emit `shell.js`. Count, page and acknowledgement keys stay on that observation; the port does not start another fetch or cache. The shell receives UnreadBadge from the Inbox feature entry. Fewest tests: pin the shared session query key, public session bindings and unread-count prefix; keep the existing inbox suites.
+
+**Decision:** Inbox page, acknowledgement and unread-count recovery consume explicit `InboxAmbient` (`now`, `id`, `timer`). `Date.now`, `crypto.randomUUID` and `setTimeout` live only in the named browser/server adapters; root composition binds `createPerformanceAmbient()`. Acknowledgement identities, absolute Retry-After deadlines, current-viewer retirement and deliberate retry stay unchanged. Existing inbox suites pin this by passing the clock; no extra stories. React providers live in `adapters/ambient-view.tsx` so Bun transpile does not collide with `adapters/ambient.ts`.
+
+**Cost:** One process-wide adapter. No extra native round-trips. Count coalescing still shares one observation per viewer episode. Retry-After is observed once as an absolute deadline; expiry enables the retry control and does not fetch.
+
+Eliminated ambient sites: Inbox page acknowledgement keys, retry admission, observation recovery and unread-count query admission. Remaining adapter sites: `inbox/adapters/ambient.ts` (clock, UUID, timer) and `inbox/adapters/ambient-view.tsx` (route-bound provider).
+
 Inbox reads the signed-in account's private `GET /v1/accounts/{accountId}/notifications` page. The native response is
 the disclosure boundary: each closed item supplies its current actor and target state, owner summary, allowed open
 identity, one-item mark-seen identity and unread state. The reader sends All or Unread selection with the page size;

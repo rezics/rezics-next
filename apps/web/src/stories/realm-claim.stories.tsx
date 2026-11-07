@@ -6,7 +6,7 @@ import type { RealmClaimAdapter, RealmClaimRead } from '../community/realm-claim
 import type { RealmClaimStatus } from '../community/realm-claim-status';
 import { localizeHref } from '../paraglide/runtime.js';
 import { m } from '../paraglide/messages.js';
-import { SpacePage } from '../community/space-page';
+import { SpacePage } from '../session/community-application';
 import { AppShell } from '../shell/shell';
 import { PatternStory } from './page';
 import { claimExampleAdapter, eligible, orphan, receipt } from './patterns/realm-claim/example';

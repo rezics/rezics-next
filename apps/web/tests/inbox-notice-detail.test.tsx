@@ -3,6 +3,7 @@ import { dirname } from 'node:path';
 import { act, createElement } from 'react';
 import type { NoticeInboxItem } from '@rezics/client';
 import * as start from '../.storybook/react-start';
+import { performanceAmbientTree } from './performance-ambient';
 
 mock.module('@tanstack/react-start', () => start);
 mock.module('@tanstack/react-start/server', () => ({

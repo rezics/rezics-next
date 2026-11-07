@@ -12,6 +12,7 @@ import {
   verificationQueryKey,
   type VerificationSnapshot,
 } from '../src/settings/verification-recovery';
+import { performanceAmbientTree } from './performance-ambient';
 import { readingMutation, sendReading } from '../src/settings/reading-preferences';
 import type {
   CollectionVisibilityWrite,
@@ -21,6 +22,9 @@ import type {
   SettingsPage,
 } from '../src/settings/preferences';
 import type { VerificationCommandResult } from '../src/settings/verification-core';
+import { createBrowserSettingsAmbient } from '../src/settings/adapters/ambient';
+
+const settingsAmbient = createBrowserSettingsAmbient();
 
 mock.module('@tanstack/react-start', () => start);
 mock.module('@tanstack/react-start/server', () => ({
@@ -159,15 +163,20 @@ for (const [name, transition] of Object.entries(transitions)) {
             return { ok: false, reason: 'unavailable' };
           },
         }),
+        settingsAmbient,
         h.owner.isCurrent,
       );
-      const pager = new CollectionPrivacyPager(async () => {
-        dispatches++;
-        return { ok: true, value: { collections: [collection], next: 'cursor' } };
-      }, h.owner.isCurrent);
+      const pager = new CollectionPrivacyPager(
+        async () => {
+          dispatches++;
+          return { ok: true, value: { collections: [collection], next: 'cursor' } };
+        },
+        settingsAmbient,
+        h.owner.isCurrent,
+      );
       const verification = new VerificationRecovery(
         'alice',
-        verificationRecoveryIO(h.owner, h.client, {
+        verificationRecoveryIO(h.owner, h.client, settingsAmbient, {
           read: async () => {
             dispatches++;
             return empty;
@@ -181,11 +190,13 @@ for (const [name, transition] of Object.entries(transitions)) {
             return { ok: false, status: 503, message: 'unknown' };
           },
         }),
+        settingsAmbient,
         h.owner.isCurrent,
       );
       const notification = new NotificationEditor(
         page.page,
         preferences.notifications,
+        settingsAmbient,
         false,
         () => confirmed,
         h.owner.isCurrent,
@@ -257,9 +268,16 @@ test('late Reading and Notifications receipts cannot confirm versions; exact dis
       return notices.promise;
     },
   });
-  const original = readingMutation(page.preferences, { spoilerLevel: 1, suitability: 'blur' })!;
-  const result = sendReading(io.reading, original, true, () => 4);
-  const editor = new NotificationEditor(page.page, io.notifications, false, () => 4, h.owner.isCurrent);
+  const original = readingMutation(page.preferences, { spoilerLevel: 1, suitability: 'blur' }, settingsAmbient.id)!;
+  const result = sendReading(io.reading, original, true, () => 4, settingsAmbient.timer);
+  const editor = new NotificationEditor(
+    page.page,
+    io.notifications,
+    settingsAmbient,
+    false,
+    () => 4,
+    h.owner.isCurrent,
+  );
   const sending = editor.edit('reply', false, 4);
   const attempt = editor.snapshot().pending!;
   const frozen = JSON.stringify(attempt);
@@ -310,9 +328,16 @@ test('late preference and privacy page reads cannot replace old snapshots or rel
       saveNotifications: async () => ({ ok: false, reason: 'unavailable' }),
     },
   );
-  const editor = new NotificationEditor(page.page, io.notifications, false, () => 4, h.owner.isCurrent);
+  const editor = new NotificationEditor(
+    page.page,
+    io.notifications,
+    settingsAmbient,
+    false,
+    () => 4,
+    h.owner.isCurrent,
+  );
   const reload = editor.reload();
-  const pager = new CollectionPrivacyPager(() => list.promise, h.owner.isCurrent);
+  const pager = new CollectionPrivacyPager(() => list.promise, settingsAmbient, h.owner.isCurrent);
   const load = pager.load();
   const before = editor.snapshot();
   const beforeList = pager.snapshot();
@@ -347,10 +372,12 @@ test('privacy original retry is exact; retirement prevents late row writes and r
         return pending.promise;
       },
     }),
+    settingsAmbient,
     h.owner.isCurrent,
   );
   const pager = new CollectionPrivacyPager(
     async () => ({ ok: true, value: { collections: [collection], next: 'next' } }),
+    settingsAmbient,
     h.owner.isCurrent,
   );
   const unregister = pager.registerRow(row);
@@ -400,7 +427,8 @@ test('Verification original request remains immutable and a retired query cannot
   };
   const controller = new VerificationRecovery(
     'alice',
-    verificationRecoveryIO(h.owner, h.client, transport),
+    verificationRecoveryIO(h.owner, h.client, settingsAmbient, transport),
+    settingsAmbient,
     h.owner.isCurrent,
   );
   try {
@@ -416,13 +444,19 @@ test('Verification original request remains immutable and a retired query cannot
     expect(sent[1]).toBe(sent[0]);
     expect(Object.isFrozen(attempt.input)).toBe(true);
     expect(Object.isFrozen((attempt.input as { links: unknown[] }).links)).toBe(true);
-    const oldReader = verificationRecoveryIO(h.owner, h.client, { ...transport, read: () => late.promise });
+    const oldReader = verificationRecoveryIO(h.owner, h.client, settingsAmbient, {
+      ...transport,
+      read: () => late.promise,
+    });
     const pending = oldReader.read('alice').catch(() => null);
     transitions['synchronous subject away and back'](h.client);
     const fresh = new SettingsSessionOwner(h.client, identity.csrfToken);
     const release = fresh.mount();
     const current = { ...empty, subjectTitle: 'fresh status' };
-    const freshReader = verificationRecoveryIO(fresh, h.client, { ...transport, read: async () => current });
+    const freshReader = verificationRecoveryIO(fresh, h.client, settingsAmbient, {
+      ...transport,
+      read: async () => current,
+    });
     expect(await freshReader.read('alice')).toEqual(current);
     late.resolve({ ...empty, subjectTitle: 'late private status' });
     await pending;
@@ -567,7 +601,7 @@ test('Verification late request settlement keeps the original unknown command an
   const commands: { token: string; input: unknown }[] = [];
   const controller = new VerificationRecovery(
     'alice',
-    verificationRecoveryIO(h.owner, h.client, {
+    verificationRecoveryIO(h.owner, h.client, settingsAmbient, {
       read: async () => {
         reads++;
         return empty;
@@ -580,6 +614,7 @@ test('Verification late request settlement keeps the original unknown command an
         throw new Error('Unexpected withdrawal');
       },
     }),
+    settingsAmbient,
     h.owner.isCurrent,
   );
   try {
@@ -615,6 +650,7 @@ test('a late privacy row read cannot adopt values or resolve an immutable uncert
         return read.promise;
       },
     }),
+    settingsAmbient,
     h.owner.isCurrent,
   );
   try {
@@ -657,10 +693,12 @@ test('Reading production recovery retries the identical frozen command with its 
     },
   });
   try {
-    const input = readingMutation(page.preferences, { spoilerLevel: 1, suitability: 'blur' })!;
+    const input = readingMutation(page.preferences, { spoilerLevel: 1, suitability: 'blur' }, settingsAmbient.id)!;
     const bytes = JSON.stringify(input);
-    expect(await sendReading(io.reading, input, false, () => 4)).toMatchObject({ kind: 'uncertain' });
-    expect(await sendReading(io.reading, input, true, () => 4)).toMatchObject({
+    expect(await sendReading(io.reading, input, false, () => 4, settingsAmbient.timer)).toMatchObject({
+      kind: 'uncertain',
+    });
+    expect(await sendReading(io.reading, input, true, () => 4, settingsAmbient.timer)).toMatchObject({
       kind: 'confirmed',
       preferences: receipt,
     });
@@ -669,7 +707,9 @@ test('Reading production recovery retries the identical frozen command with its 
     expect(tokens).toEqual(['original-token', 'original-token']);
     expect(reads).toBe(1);
     transitions['token rotation and back'](h.client);
-    expect(await sendReading(io.reading, input, true, () => 4)).toMatchObject({ kind: 'uncertain' });
+    expect(await sendReading(io.reading, input, true, () => 4, settingsAmbient.timer)).toMatchObject({
+      kind: 'uncertain',
+    });
     expect(calls).toHaveLength(2);
     expect(reads).toBe(1);
   } finally {
@@ -703,7 +743,7 @@ test('Verification withdrawal uses the original explicit token and keeps its exa
   };
   const controller = new VerificationRecovery(
     'alice',
-    verificationRecoveryIO(h.owner, h.client, {
+    verificationRecoveryIO(h.owner, h.client, settingsAmbient, {
       read: async () => current,
       request: async () => {
         throw new Error('Unexpected request');
@@ -714,6 +754,7 @@ test('Verification withdrawal uses the original explicit token and keeps its exa
         throw new Error('Lost withdrawal response');
       },
     }),
+    settingsAmbient,
     h.owner.isCurrent,
   );
   try {
@@ -789,7 +830,7 @@ test('Signed-in Settings readers work without CSRF while native writes and retir
       return { ok: false, reason: 'forbidden' };
     },
   });
-  const verification = verificationRecoveryIO(h.owner, h.client, {
+  const verification = verificationRecoveryIO(h.owner, h.client, settingsAmbient, {
     read: async () => {
       reads.push('verification');
       return empty;
@@ -806,13 +847,20 @@ test('Signed-in Settings readers work without CSRF while native writes and retir
   const notifications = new NotificationEditor(
     page.page,
     io.notifications,
+    settingsAmbient,
     false,
     () => 4,
     h.owner.readCurrent,
     h.owner.isCurrent,
   );
-  const row = new CollectionPrivacyEditor(collection, privacy, h.owner.readCurrent, h.owner.isCurrent);
-  const controller = new VerificationRecovery('alice', verification, h.owner.readCurrent, h.owner.isCurrent);
+  const row = new CollectionPrivacyEditor(collection, privacy, settingsAmbient, h.owner.readCurrent, h.owner.isCurrent);
+  const controller = new VerificationRecovery(
+    'alice',
+    verification,
+    settingsAmbient,
+    h.owner.readCurrent,
+    h.owner.isCurrent,
+  );
   try {
     expect(h.owner.readCurrent()).toBe(true);
     expect(h.owner.isCurrent()).toBe(false); // The existing writer contract is still token-requiring.
@@ -896,6 +944,7 @@ for (const [name, transition] of Object.entries(transitions)) {
     const notices = new NotificationEditor(
       page.page,
       preferences.notifications,
+      settingsAmbient,
       false,
       () => 4,
       h.owner.readCurrent,
@@ -912,6 +961,7 @@ for (const [name, transition] of Object.entries(transitions)) {
           throw new Error('Unexpected write');
         },
       }),
+      settingsAmbient,
       h.owner.readCurrent,
       h.owner.isCurrent,
     );
@@ -921,11 +971,12 @@ for (const [name, transition] of Object.entries(transitions)) {
           dispatched++;
           return pendingList.promise;
         }),
+      settingsAmbient,
       h.owner.readCurrent,
     );
     const verification = new VerificationRecovery(
       'alice',
-      verificationRecoveryIO(h.owner, h.client, {
+      verificationRecoveryIO(h.owner, h.client, settingsAmbient, {
         read: () => {
           dispatched++;
           return pendingVerification.promise;
@@ -937,6 +988,7 @@ for (const [name, transition] of Object.entries(transitions)) {
           throw new Error('Unexpected withdrawal');
         },
       }),
+      settingsAmbient,
       h.owner.readCurrent,
       h.owner.isCurrent,
     );
@@ -1008,7 +1060,7 @@ test('a fresh token owner can write only with its own explicit credential after 
         return { ok: false, reason: 'conflict' };
       },
     });
-    const verification = verificationRecoveryIO(fresh, h.client, {
+    const verification = verificationRecoveryIO(fresh, h.client, settingsAmbient, {
       read: async () => empty,
       request: async (_, __, token) => {
         tokens.push(token);

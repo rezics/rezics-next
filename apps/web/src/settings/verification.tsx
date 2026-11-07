@@ -5,12 +5,14 @@ import { Button } from '@rezics/ui/shadcn/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@rezics/ui/shadcn/card';
 import { Field, FieldDescription, FieldGroup, FieldLabel } from '@rezics/ui/shadcn/field';
 import { Textarea } from '@rezics/ui/shadcn/textarea';
-import { personalRead } from '../kernel/query';
-import { useOperation } from '../kernel/exposure';
 import { m } from '../paraglide/messages.js';
 import { getLocale } from '../paraglide/runtime.js';
-import { subjectHref } from '../subject/subject-href';
-import { useSession } from '../session/query';
+import {
+  productionSettingsShellPort,
+  useSettingsOperation,
+  useSettingsSession,
+  useSettingsShell,
+} from './adapters/shell';
 import {
   unwrapVerificationRead,
   type AgentVerificationRequest,
@@ -44,6 +46,8 @@ import {
   searchVerificationSubjects,
   withdrawVerificationAction,
 } from './verification-actions';
+import { useSettingsAmbient } from './adapters/ambient-view.tsx';
+import type { SettingsAmbient } from './ports/ambient';
 import { withVerificationDeadline } from './verification-request-deadline';
 
 import {
@@ -107,11 +111,13 @@ function VerificationState({
   verification: AgentVerificationRequest | null;
   subjectTitle: string | null;
 }) {
+  const { subjectHref } = useSettingsShell();
   const accountId = verification?.accountId;
   const subjectId = verification?.catalogueSubjectId;
   const locale = getLocale();
   const titleKey = JSON.stringify([accountId, subjectId, locale]);
   const [hydrated, setHydrated] = useState<{ key: string; title: string | null } | null>(null);
+  const ambient = useSettingsAmbient();
   useEffect(() => {
     if (!accountId || !subjectId || suppliedTitle) return;
     const request = new AbortController();
@@ -122,13 +128,14 @@ function VerificationState({
           signal,
         }),
       request.signal,
+      ambient.timer,
     )
       .then((title) => {
         if (!request.signal.aborted) setHydrated({ key: titleKey, title });
       })
       .catch(() => {});
     return () => request.abort();
-  }, [accountId, subjectId, locale, suppliedTitle, titleKey]);
+  }, [accountId, ambient.timer, subjectId, locale, suppliedTitle, titleKey]);
   const subjectTitle = suppliedTitle ?? (hydrated?.key === titleKey ? hydrated.title : null);
   if (!verification) return null;
   if (verification.state === 'pending')
@@ -169,8 +176,8 @@ function VerificationState({
 }
 
 export function VerificationSection() {
-  const { state, csrfToken, subject } = useSession();
-  const admitted = useOperation('agent_verification.request');
+  const { state, csrfToken, subject } = useSettingsSession();
+  const admitted = useSettingsOperation('agent_verification.request');
   if (!admitted || state !== 'signed-in' || !subject) return null;
   return <ViewerVerification key={JSON.stringify([subject, csrfToken])} accountId={subject} csrfToken={csrfToken} />;
 }
@@ -179,6 +186,7 @@ export function VerificationSection() {
 export function verificationRecoveryIO(
   owner: SettingsSessionOwner,
   client: QueryClient,
+  ambient: SettingsAmbient,
   transport = {
     read: (accountId: string, signal?: AbortSignal) =>
       readVerificationState({ data: { accountId }, ...(signal ? { signal } : {}) }).then((result) =>
@@ -230,13 +238,14 @@ export function verificationRecoveryIO(
         await client.cancelQueries({ queryKey: key, exact: true });
         if (!isCurrent()) throw new Error('Settings viewer changed');
         return client.fetchQuery({
-          ...personalRead,
+          ...productionSettingsShellPort.personalRead,
           queryKey: key,
           queryFn: ({ signal }) =>
             readGuard(async () => {
               const result = await withVerificationDeadline(
                 (child) => transport.read(accountId, child),
                 AbortSignal.any([signal, scope(caller)]),
+                ambient.timer,
               );
               if (
                 result.accountId !== owner.subject ||
@@ -252,25 +261,35 @@ export function verificationRecoveryIO(
     request: (accountId, input, caller) =>
       guard((token) => {
         if (accountId !== owner.subject) throw new Error('Verification account changed');
-        return withVerificationDeadline((signal) => transport.request(accountId, input, token, signal), scope(caller));
+        return withVerificationDeadline(
+          (signal) => transport.request(accountId, input, token, signal),
+          scope(caller),
+          ambient.timer,
+        );
       }),
     withdraw: (accountId, input, caller) =>
       guard((token) => {
         if (accountId !== owner.subject) throw new Error('Verification account changed');
-        return withVerificationDeadline((signal) => transport.withdraw(accountId, input, token, signal), scope(caller));
+        return withVerificationDeadline(
+          (signal) => transport.withdraw(accountId, input, token, signal),
+          scope(caller),
+          ambient.timer,
+        );
       }),
   };
 }
 
 function ViewerVerification({ accountId, csrfToken }: { accountId: string; csrfToken: string | null }) {
   const queryClient = useQueryClient();
+  const ambient = useSettingsAmbient();
   const owner = useSettingsSessionOwner(csrfToken, accountId)!;
   const isCurrent = useSettingsLiveness(owner.readCurrent);
   const [controller] = useState(
     () =>
       new VerificationRecovery(
         accountId,
-        verificationRecoveryIO(owner, queryClient, undefined, isCurrent),
+        verificationRecoveryIO(owner, queryClient, ambient, undefined, isCurrent),
+        ambient,
         isCurrent,
         () => isCurrent() && owner.isCurrent(),
       ),

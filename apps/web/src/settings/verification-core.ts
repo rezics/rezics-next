@@ -1,9 +1,10 @@
 import type { KernelClient } from '@rezics/client';
-import { isPlatformClosedError } from '../kernel/platform-closed';
+import { isPlatformClosedError } from './ports/vocabulary';
 import { MediaProblem } from '../media/kernel';
 import { m } from '../paraglide/messages.js';
 import { validateVerificationDraft } from './verification-validation';
 import { settingsCommandKeyHeader } from './command-headers';
+import { serverSettingsTimer } from './adapters/ambient';
 import { withVerificationDeadline } from './verification-request-deadline';
 
 export type VerificationInput = {
@@ -193,6 +194,7 @@ export async function readVerification(
     const result = await withVerificationDeadline(
       (signal) => client.accounts({ accountId }).verification.get({ headers: { authorization }, fetch: { signal } }),
       caller,
+      serverSettingsTimer(),
     );
     if (result.error) throw new VerificationReadError(nativeFailure(result));
     const data: unknown = result.data;
@@ -229,6 +231,7 @@ export async function requestVerification(
           },
         ),
       caller,
+      serverSettingsTimer(),
     );
     if (result.status === 201 && validRequest(result.data?.verificationRequest, accountId))
       return { ok: true, verificationRequest: result.data!.verificationRequest };
@@ -260,6 +263,7 @@ export async function withdrawVerification(
           },
         ),
       caller,
+      serverSettingsTimer(),
     );
     if (result.status === 200 && validRequest(result.data?.verificationRequest, accountId))
       return { ok: true, verificationRequest: result.data!.verificationRequest };
@@ -280,15 +284,19 @@ export async function readVerificationTitle(
   caller?: AbortSignal,
 ): Promise<string | null> {
   try {
-    return await withVerificationDeadline(async (signal) => {
-      const subject = await client.subjects({ id: subjectId }).get({ headers: { authorization }, fetch: { signal } });
-      const labels = subject.error ? undefined : subject.data?.subject?.labels;
-      return labels
-        ? (languages.map((language) => labels[language]).find((label) => label !== undefined) ??
-            Object.values(labels)[0] ??
-            null)
-        : null;
-    }, caller);
+    return await withVerificationDeadline(
+      async (signal) => {
+        const subject = await client.subjects({ id: subjectId }).get({ headers: { authorization }, fetch: { signal } });
+        const labels = subject.error ? undefined : subject.data?.subject?.labels;
+        return labels
+          ? (languages.map((language) => labels[language]).find((label) => label !== undefined) ??
+              Object.values(labels)[0] ??
+              null)
+          : null;
+      },
+      caller,
+      serverSettingsTimer(),
+    );
   } catch {
     return null;
   }
@@ -296,15 +304,19 @@ export async function readVerificationTitle(
 
 /** A fresh, caller-bound release read cannot inherit a stalled shared display-cache promise. */
 export async function readVerificationEligibility(client: KernelClient, authorization: string, caller?: AbortSignal) {
-  return withVerificationDeadline(async (signal) => {
-    const options = { headers: { authorization }, fetch: { signal } };
-    const active = await client.definitions.active.get(options);
-    const digest = active.data?.digest;
-    if (active.error || !digest) throw new Error('Eligibility unavailable');
-    signal.throwIfAborted();
-    const released = await client.definitions.releases({ digest }).get(options);
-    if (released.error || released.data?.digest !== digest || !released.data.release)
-      throw new Error('Eligibility unavailable');
-    return released.data.release;
-  }, caller);
+  return withVerificationDeadline(
+    async (signal) => {
+      const options = { headers: { authorization }, fetch: { signal } };
+      const active = await client.definitions.active.get(options);
+      const digest = active.data?.digest;
+      if (active.error || !digest) throw new Error('Eligibility unavailable');
+      signal.throwIfAborted();
+      const released = await client.definitions.releases({ digest }).get(options);
+      if (released.error || released.data?.digest !== digest || !released.data.release)
+        throw new Error('Eligibility unavailable');
+      return released.data.release;
+    },
+    caller,
+    serverSettingsTimer(),
+  );
 }

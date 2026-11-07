@@ -17,6 +17,8 @@ adds no baseline allowance and no old/new allow-OR. Source compatibility is no n
 
 Decision: resource-role identifier helpers are functions so circular Access composition can resolve during module load.
 
+Decision: Zone resource command and read operations consume Access through the public producer `zone-resource-adapter.ts`. Composition binds that producer onto the Zone-owned Access port; Zone does not import command-admission, parent-creation, resource-authorization, resource-initialization, account-data or account-viewer-actions for this operation. Parent locks, History enrollment and participant cleanup stay in Zone owner commands.
+
 ## Domain composition
 
 Decision: native erasure completion acknowledges the coordinator through a required Access adapter port composed
@@ -63,6 +65,8 @@ public identity stays nullable until the anchored Account proves deletion.
 Acceptance choice: retain existing verification, reversal, recovery and source-work assertions; focused capability
 tests pin exact receipt/Pool/deadline forwarding, error identity and scoped reset. Native composition supplies the
 producer declarations. Typing is the worker gate; runtime journeys remain with the integrated Goal walks.
+
+Decision: `adapters/account-statements.ts` is the Access-owned account-read and account-share SQL descriptor for Library progress planning. Account row work stays on Access's native work port; Library charges statement text and original binds. Existing account, grant and unavailability policies remain.
 
 ## Pure policy core consumer
 

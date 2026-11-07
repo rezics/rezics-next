@@ -1,6 +1,13 @@
 import { WatchesSection } from './watches';
 import type { WatchManagementIO } from './watch-native';
-import { sessionQuery, useSession } from '../session/query';
+import {
+  productionSettingsShellPort,
+  useSettingsOperation,
+  useSettingsOperationAdmission,
+  useSettingsSession,
+  useSettingsShell,
+} from './adapters/shell';
+import type { SettingsSessionObservation } from './ports/shell';
 import { useQueryClient, type QueryClient, type QueryState } from '@tanstack/react-query';
 import {
   useState,
@@ -17,7 +24,6 @@ import { Alert, AlertDescription, AlertTitle } from '@rezics/ui/shadcn/alert';
 import { Button } from '@rezics/ui/shadcn/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@rezics/ui/shadcn/card';
 import { m } from '../paraglide/messages.js';
-import { PageHeading } from '../shell/page-heading';
 import { ProfileSection } from './profile';
 import { ReadingCard } from './reading-card';
 import { BoundCollectionPrivacySection, BoundShelfPreferencesCard } from './adapters/library-view.tsx';
@@ -29,7 +35,6 @@ import type { NativePreferenceFailure, SettingsPage } from './preferences';
 import { usePreferenceRetry } from './preferences';
 import { VerificationSection } from './verification';
 import { observeVerificationRead, verificationQueryKey } from './verification-recovery';
-import { useOperation, useOperationAdmission } from '../kernel/exposure';
 import { AccountSafetyCard, AccountSafetySection } from './account-safety';
 import { ManagedAccountsSection } from './managed-accounts';
 import type { ManagedAccountsIO } from './managed-accounts-read';
@@ -335,10 +340,10 @@ function SettingsSections({
   ShelfCard?: typeof BoundShelfPreferencesCard;
   PrivacySection?: typeof BoundCollectionPrivacySection;
 }) {
-  const collectionsAdmission = useOperationAdmission('account.collections');
+  const collectionsAdmission = useSettingsOperationAdmission('account.collections');
   const collectionsAdmitted = collectionsAdmission === 'available';
-  const verificationAdmitted = useOperation('agent_verification.request');
-  const { subject: verificationAccountId } = useSession();
+  const verificationAdmitted = useSettingsOperation('agent_verification.request');
+  const { subject: verificationAccountId } = useSettingsSession();
   const queryClient = useQueryClient();
   // The shared operation hook observes the enrolled viewer exposure used by these sections.
   const observeVerification = useCallback(
@@ -542,8 +547,8 @@ const sessionRetries = new WeakMap<QueryClient, Promise<void>>();
 export function retrySettingsSession(client: QueryClient, invalidate: () => Promise<unknown>): Promise<void> {
   const pending = sessionRetries.get(client);
   if (pending) return pending;
-  const retry = client
-    .fetchQuery({ ...sessionQuery, staleTime: 0 })
+  const retry = productionSettingsShellPort
+    .refreshSession(client)
     .then((session) => {
       // Unavailable or identity-less responses cannot authorize another private page read.
       if (session.state === 'unavailable' || (session.state === 'signed-in' && !session.subject)) return;
@@ -563,7 +568,7 @@ export function SettingsSessionRecovery({
   retryFailed = false,
   onRetry,
 }: {
-  state: ReturnType<typeof useSession>['state'];
+  state: SettingsSessionObservation['state'];
   sessionRead?: Pick<QueryState, 'status' | 'fetchStatus'> | undefined;
   retrying?: boolean;
   retryFailed?: boolean;
@@ -669,7 +674,7 @@ export function SettingsPageView({
   page: SettingsPage;
   csrfToken: string | null;
   /** Supplied only by the guarded route, from its request's established session query. */
-  requestSession?: ReturnType<typeof useSession> | null;
+  requestSession?: SettingsSessionObservation | null;
   managedAccountsIO?: ManagedAccountsIO | undefined;
   watchesIO?: WatchManagementIO | undefined;
   preferenceIO?: PreferenceIO;
@@ -684,20 +689,14 @@ export function SettingsPageView({
     () => true,
     () => false,
   );
-  const browserSession = useSession();
+  const { PageHeading, subscribeSessionQuery, sessionQueryState } = useSettingsShell();
+  const browserSession = useSettingsSession();
   // Observe the installed query, as Inbox does; useSession owns the initial request.
   const observeSession = useCallback(
-    (changed: () => void) =>
-      queryClient.getQueryCache().subscribe(({ query }) => {
-        if (query.queryKey.length === 1 && query.queryKey[0] === sessionQuery.queryKey[0]) changed();
-      }),
-    [queryClient],
+    (changed: () => void) => subscribeSessionQuery(queryClient, changed),
+    [queryClient, subscribeSessionQuery],
   );
-  const sessionRead = useSyncExternalStore(
-    observeSession,
-    () => queryClient.getQueryState(sessionQuery.queryKey),
-    serverSessionRead,
-  );
+  const sessionRead = useSyncExternalStore(observeSession, () => sessionQueryState(queryClient), serverSessionRead);
   const [generation, setGeneration] = useState(0);
   const [retrying, setRetrying] = useState(false);
   const [retryFailed, setRetryFailed] = useState(false);

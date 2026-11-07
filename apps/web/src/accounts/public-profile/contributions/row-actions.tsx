@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { useRouterState } from '@tanstack/react-router';
 import { m } from '../../../paraglide/messages.js';
 import type { Locale } from '../../../paraglide/runtime.js';
-import type { VerificationConfig } from '../../../report/turnstile';
+import type { VerificationConfig } from '../../../features/pages/account-profile-port';
 import {
   contributionCommandTarget,
   type ContributionAdviceState,
@@ -107,6 +107,7 @@ function ContributionRowActionOwners({
     ...presentation,
     ...('notice' in section && !presentation.restriction ? { restriction: section.notice } : {}),
   });
+  const sourceWatermark = 'value' in reactions ? reactions.value.watermark : lastReaction?.watermark;
   return (
     <div
       role="group"
@@ -123,9 +124,9 @@ function ContributionRowActionOwners({
         presentation={restrict(reactions)}
         counts={'value' in reactions ? reactions.value.counts : (lastReaction?.counts ?? {})}
         value={'value' in reactions ? reactions.value.value : (lastReaction?.value ?? null)}
-        sourceWatermark={'value' in reactions ? reactions.value.watermark : lastReaction?.watermark}
         returnTo={returnTo}
         refreshAdvice={refreshAdvice}
+        {...(sourceWatermark ? { sourceWatermark } : {})}
       />
       {verification ? (
         <ContributionReport

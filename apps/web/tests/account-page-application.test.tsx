@@ -10,6 +10,7 @@ import type {
   ContributionListInput,
   CollectionControlsInput,
 } from '../src/features/pages/account-profile-port';
+import { unavailableContributionActions } from '../src/features/pages/account-profile-port';
 
 mock.module('@tanstack/react-start', () => start);
 mock.module('cloudflare:workers', () => ({ env: {} }));
@@ -107,6 +108,7 @@ function renderWindow(input: { page: SubjectPageData; section?: Section; hidden?
       lists.push(props);
       return <>{props.children}</>;
     },
+    contributionActions: unavailableContributionActions,
   };
   const html = renderToString(
     <AccountPageApplication profile={binding}>

@@ -10,6 +10,7 @@ import {
   useManagedSessionReader,
   type ManagedSessionReader,
 } from './managed-session-reader';
+import { useSettingsAmbient } from './adapters/ambient-view.tsx';
 import { usePreferenceRetry } from './preference-failure-retry';
 import {
   ManagedAccountActionsRead,
@@ -41,10 +42,11 @@ type ViewerProps = ActionsProps & {
 
 function TargetActions({ viewerId, csrfToken, authCsrfToken, io, authNavigation, owner, ...target }: ViewerProps) {
   const accounts = useAccounts();
+  const ambient = useSettingsAmbient();
   const actionIO = io ?? accounts.readActions;
   const read = useMemo(
-    () => new ManagedAccountActionsRead({ accountId: target.accountId, viewerId }, actionIO, owner?.isCurrent),
-    [target.accountId, viewerId, actionIO, owner],
+    () => new ManagedAccountActionsRead({ accountId: target.accountId, viewerId }, actionIO, ambient, owner?.isCurrent),
+    [ambient, target.accountId, viewerId, actionIO, owner],
   );
   useManagedReaderLifetime(read.dispose, owner);
   const { result, pending, retryAt } = useSyncExternalStore(read.subscribe, read.snapshot, read.snapshot);

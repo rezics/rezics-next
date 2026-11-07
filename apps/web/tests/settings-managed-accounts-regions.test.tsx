@@ -8,6 +8,7 @@ import type {
   ManagedAccountsPage,
   ManagedAccountsResult,
 } from '../src/settings/managed-accounts-read';
+import { performanceAmbientTree } from './performance-ambient';
 import { installManagedModuleMocks } from './fixtures/managed-module-mocks';
 
 // UNRUN: real component, router, session admission and inventory; only supplied IO/DOM are illustrative.

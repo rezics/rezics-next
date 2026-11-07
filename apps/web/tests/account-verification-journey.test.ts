@@ -25,6 +25,9 @@ import {
 import { readAccountRenameContext } from '../src/settings/adapters/accounts';
 import { accountRenameHref, accountSafetyLinks, securityHrefFromIssuer } from '../src/settings/account-safety-links';
 import { officialProfileRead } from '../src/settings/editable-profile-source';
+import { createBrowserSettingsAmbient } from '../src/settings/adapters/ambient';
+
+const settingsAmbient = createBrowserSettingsAmbient();
 
 const accountId = '0192f3a0-6c1e-7b2a-9d4e-000100000001';
 const requestId = '0192f3a0-6c1e-7b2a-9d4e-000000000001';
@@ -256,19 +259,23 @@ test('an applicant reads current status, keeps original operands through uncerta
     throw new Error(`Unexpected applicant path: ${url.pathname}`);
   });
   const sent: unknown[] = [];
-  const controller = new VerificationRecovery(accountId, {
-    read: async (currentAccountId) => ({
-      accountId: currentAccountId,
-      ...(await readVerification(client, currentAccountId, 'Bearer applicant')),
-      subjectTitle: 'Mira',
-    }),
-    request: async (currentAccountId, input) => {
-      sent.push(input);
-      return requestVerification(client, currentAccountId, 'Bearer applicant', input);
+  const controller = new VerificationRecovery(
+    accountId,
+    {
+      read: async (currentAccountId) => ({
+        accountId: currentAccountId,
+        ...(await readVerification(client, currentAccountId, 'Bearer applicant')),
+        subjectTitle: 'Mira',
+      }),
+      request: async (currentAccountId, input) => {
+        sent.push(input);
+        return requestVerification(client, currentAccountId, 'Bearer applicant', input);
+      },
+      withdraw: async (currentAccountId, input) =>
+        withdrawVerification(client, currentAccountId, 'Bearer applicant', input.idempotencyKey),
     },
-    withdraw: async (currentAccountId, input) =>
-      withdrawVerification(client, currentAccountId, 'Bearer applicant', input.idempotencyKey),
-  });
+    settingsAmbient,
+  );
   try {
     await controller.reload();
     expect(canRequestVerification(controller.snapshot().current)).toBe(true);
@@ -388,26 +395,30 @@ test('signed-in safety destinations, admitted subject request, revisit, withdraw
   expect(accountRenameHref(links?.security ?? null)).toBe(`${issuer}/account/rename`);
   expect(links).toEqual({ security: `${issuer}/security`, deletion: `${issuer}/account/delete` });
   const sent: unknown[] = [];
-  const controller = new VerificationRecovery(accountId, {
-    read: async (currentAccountId) => {
-      const status = await readVerification(client, currentAccountId, 'Bearer applicant');
-      return {
-        accountId: currentAccountId,
-        ...status,
-        subjectTitle: status.verificationRequest
-          ? await readVerificationTitle(client, status.verificationRequest.catalogueSubjectId, 'Bearer applicant', [
-              'en',
-            ])
-          : null,
-      };
+  const controller = new VerificationRecovery(
+    accountId,
+    {
+      read: async (currentAccountId) => {
+        const status = await readVerification(client, currentAccountId, 'Bearer applicant');
+        return {
+          accountId: currentAccountId,
+          ...status,
+          subjectTitle: status.verificationRequest
+            ? await readVerificationTitle(client, status.verificationRequest.catalogueSubjectId, 'Bearer applicant', [
+                'en',
+              ])
+            : null,
+        };
+      },
+      request: async (currentAccountId, input) => {
+        sent.push(input);
+        return requestVerification(client, currentAccountId, 'Bearer applicant', input);
+      },
+      withdraw: async (currentAccountId, input) =>
+        withdrawVerification(client, currentAccountId, 'Bearer applicant', input.idempotencyKey),
     },
-    request: async (currentAccountId, input) => {
-      sent.push(input);
-      return requestVerification(client, currentAccountId, 'Bearer applicant', input);
-    },
-    withdraw: async (currentAccountId, input) =>
-      withdrawVerification(client, currentAccountId, 'Bearer applicant', input.idempotencyKey),
-  });
+    settingsAmbient,
+  );
   try {
     await controller.reload();
     expect(canRequestVerification(controller.snapshot().current)).toBe(true);

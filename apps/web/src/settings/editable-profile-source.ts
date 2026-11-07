@@ -1,3 +1,4 @@
+import { serverSettingsTimer } from './adapters/ambient';
 import { withProfileDeadline } from './profile-request-deadline';
 import type { KernelClient } from '@rezics/client';
 import * as v from 'valibot';
@@ -228,6 +229,7 @@ export function createEditableProfileSource(client: KernelClient, viewerAccountI
             fetch: { cache: 'no-store', signal: bounded },
           }),
         signal,
+        serverSettingsTimer(),
       );
       if (result.error || !result.data) {
         const failure = nativeProfileFailure(result.status, result.error?.value, result.headers);

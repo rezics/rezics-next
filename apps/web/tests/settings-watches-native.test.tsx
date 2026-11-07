@@ -2,6 +2,9 @@ import { expect, mock, test } from 'bun:test';
 import { createKernelClient } from '@rezics/client';
 import { getLocale } from '../src/paraglide/runtime.js';
 import { WatchController } from '../src/settings/watch-controller';
+import { createBrowserSettingsAmbient } from '../src/settings/adapters/ambient';
+
+const settingsAmbient = createBrowserSettingsAmbient();
 mock.module('cloudflare:workers', () => ({ env: {} }));
 const { decodeWatchPage, readWatchInventoryNative, removeWatchNative } = await import('../src/settings/watch-native');
 
@@ -212,6 +215,7 @@ test('fixed 20-row watch visits release controllers and ignore unrelated invento
             },
           },
           { subject: 'alice', readCurrent: () => true, credential: () => 'csrf', subscribe: () => () => {} },
+          settingsAmbient,
         );
         activeControllers++;
         maxActiveControllers = Math.max(maxActiveControllers, activeControllers);
@@ -272,6 +276,7 @@ test('uncertain removal retries the original command and a retired owner callbac
         return () => {};
       },
     },
+    settingsAmbient,
   );
   controller.mount();
   await controller.first();
@@ -305,6 +310,7 @@ test('uncertain removal retries the original command and a retired owner callbac
         return () => {};
       },
     },
+    settingsAmbient,
   );
   current = true;
   lateController.mount();

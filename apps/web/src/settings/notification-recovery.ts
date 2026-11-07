@@ -9,7 +9,7 @@ import type {
 } from './preferences';
 import { optionalNotifications, preferencePageAllows } from './preferences';
 import { withManagedReadDeadline } from './managed-read-deadline';
-import { preferenceRetryDeadline } from './preference-failure-retry';
+import { preferenceRetryDeadline, type SettingsAmbient } from './ports/ambient';
 
 type Snapshot = { notifications: NotificationPreferences; version: number; page: PreferencePage };
 type Attempt = Readonly<{
@@ -145,6 +145,7 @@ export class NotificationEditor {
   constructor(
     initial: PreferencePage,
     private io: NotificationEditorIO,
+    private ambient: SettingsAmbient,
     initialFailed = false,
     private sharedVersion: () => number = () => initial.version,
     private isCurrent: () => boolean = () => true,
@@ -177,10 +178,10 @@ export class NotificationEditor {
     this.listeners.forEach((listener) => listener());
   }
   private waitingForCommand() {
-    return Date.now() < this.state.commandRetryAt;
+    return this.ambient.now() < this.state.commandRetryAt;
   }
   private waitingForRead() {
-    return Date.now() < this.state.readRetryAt;
+    return this.ambient.now() < this.state.readRetryAt;
   }
   private minimumVersion(version = 0) {
     this.versionFloor = Math.max(this.versionFloor, version, this.sharedVersion(), this.state.known.version);
@@ -347,7 +348,7 @@ export class NotificationEditor {
     const input = Object.freeze({
       expectedVersion: this.state.known.version,
       notifications: notifications === null ? null : Object.freeze({ ...notifications }),
-      idempotencyKey: crypto.randomUUID(),
+      idempotencyKey: this.ambient.id(),
     });
     const intent =
       this.state.intent === null
@@ -389,7 +390,7 @@ export class NotificationEditor {
     });
     let result: NotificationWriteResult;
     try {
-      result = await withManagedReadDeadline(() => this.io.save(attempt.input));
+      result = await withManagedReadDeadline(() => this.io.save(attempt.input), undefined, this.ambient.timer);
       if (!this.live() || !this.canWrite()) return;
     } catch {
       this.update({ phase: 'uncertain', commandReason: 'unavailable', commandFailure: undefined });
@@ -404,7 +405,7 @@ export class NotificationEditor {
       const command = {
         commandReason: result.reason,
         commandFailure: result.failure,
-        commandRetryAt: preferenceRetryDeadline(result.failure?.retryAfter),
+        commandRetryAt: preferenceRetryDeadline(result.failure?.retryAfter, this.ambient.now()),
         ...(retireAdvice ? { currentAdvice: null } : {}),
       };
       if (
@@ -493,7 +494,7 @@ export class NotificationEditor {
     if (!this.live()) return null;
     this.update({ currentAdvice: null, readReason: undefined, readFailure: undefined });
     try {
-      const page = await withManagedReadDeadline(() => this.io.read());
+      const page = await withManagedReadDeadline(() => this.io.read(), undefined, this.ambient.timer);
       if (!this.live()) return null;
       if (
         !page.signedIn ||
@@ -516,6 +517,7 @@ export class NotificationEditor {
           readFailure: page.signedIn && 'failure' in page ? page.failure : undefined,
           readRetryAt: preferenceRetryDeadline(
             page.signedIn && 'failure' in page ? page.failure.retryAfter : undefined,
+            this.ambient.now(),
           ),
         });
         return null;

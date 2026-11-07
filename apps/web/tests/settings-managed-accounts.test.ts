@@ -14,6 +14,9 @@ import { managedAccountTarget, selectAdmittedManagedAccountTarget } from '../src
 
 import { MediaProblem } from '../src/media/kernel';
 import { preferenceRetryDeadline } from '../src/settings/preference-failure-retry';
+import { createBrowserSettingsAmbient } from '../src/settings/adapters/ambient';
+
+const settingsAmbient = createBrowserSettingsAmbient();
 
 const viewer = '019a0000-0000-7000-8000-000000000001';
 const organization = '019a0000-0000-7000-8000-000000000002';
@@ -59,11 +62,15 @@ test('A signed-in human can reach their own identity, independent organization m
   const calls: object[] = [];
   const initial = page();
   initial.organizations = { state: 'preparing', items: [], next: null };
-  const inventory = new ManagedAccountsInventory(viewer, async (cursors) => {
-    calls.push(cursors);
-    if (cursors.operatorsCursor) return ready({ ...page(), responsibilities: { items: [], next: null } });
-    return ready(initial);
-  });
+  const inventory = new ManagedAccountsInventory(
+    viewer,
+    async (cursors) => {
+      calls.push(cursors);
+      if (cursors.operatorsCursor) return ready({ ...page(), responsibilities: { items: [], next: null } });
+      return ready(initial);
+    },
+    settingsAmbient,
+  );
   await inventory.load();
   expect(inventory.snapshot().account?.id).toBe(viewer);
   expect(inventory.snapshot().organizations.state).toBe('preparing');
@@ -95,17 +102,21 @@ test('a managed-account URL opens detail only for the exact native admitted targ
 test('each feed retains its opaque cursor and usable page across transient failure, then replaces that page', async () => {
   const calls: object[] = [];
   let fail = true;
-  const inventory = new ManagedAccountsInventory(viewer, async (cursors) => {
-    calls.push(cursors);
-    if (!cursors.organizationsCursor && !cursors.operatorsCursor) return ready(page());
-    if (cursors.organizationsCursor && fail) {
-      fail = false;
-      return unavailable;
-    }
-    if (cursors.organizationsCursor)
-      return ready({ ...page(), organizations: { state: 'ready', items: [], next: 'next signed organization' } });
-    return ready({ ...page(), responsibilities: { ...page().responsibilities, next: null } });
-  });
+  const inventory = new ManagedAccountsInventory(
+    viewer,
+    async (cursors) => {
+      calls.push(cursors);
+      if (!cursors.organizationsCursor && !cursors.operatorsCursor) return ready(page());
+      if (cursors.organizationsCursor && fail) {
+        fail = false;
+        return unavailable;
+      }
+      if (cursors.organizationsCursor)
+        return ready({ ...page(), organizations: { state: 'ready', items: [], next: 'next signed organization' } });
+      return ready({ ...page(), responsibilities: { ...page().responsibilities, next: null } });
+    },
+    settingsAmbient,
+  );
   await inventory.load();
   await inventory.more('organizations');
   expect(inventory.snapshot().organizations.items).toHaveLength(1);
@@ -127,21 +138,25 @@ test('each feed retains its opaque cursor and usable page across transient failu
 test('many next pages keep one native window per feed and the first duplicate within that window', async () => {
   for (const feed of ['organizations', 'responsibilities'] as const) {
     let sequence = 0;
-    const inventory = new ManagedAccountsInventory(viewer, async () => {
-      const value = page();
-      const key = `${++sequence}`.padStart(12, '0');
-      const id = `019a0000-0000-7000-8000-${key}`;
-      value.organizations.items = Array.from({ length: 20 }, (_, index) => ({
-        ...page().organizations.items[0]!,
-        account: { ...page().organizations.items[0]!.account, id, displayName: index === 0 ? 'First' : 'Duplicate' },
-      }));
-      value.responsibilities.items = Array.from({ length: 20 }, (_, index) => ({
-        ...page().responsibilities.items[0]!,
-        reservationId: id,
-        state: index === 0 ? 'reconciling' : 'current',
-      }));
-      return ready(value);
-    });
+    const inventory = new ManagedAccountsInventory(
+      viewer,
+      async () => {
+        const value = page();
+        const key = `${++sequence}`.padStart(12, '0');
+        const id = `019a0000-0000-7000-8000-${key}`;
+        value.organizations.items = Array.from({ length: 20 }, (_, index) => ({
+          ...page().organizations.items[0]!,
+          account: { ...page().organizations.items[0]!.account, id, displayName: index === 0 ? 'First' : 'Duplicate' },
+        }));
+        value.responsibilities.items = Array.from({ length: 20 }, (_, index) => ({
+          ...page().responsibilities.items[0]!,
+          reservationId: id,
+          state: index === 0 ? 'reconciling' : 'current',
+        }));
+        return ready(value);
+      },
+      settingsAmbient,
+    );
     await inventory.load();
     const sibling = feed === 'organizations' ? 'responsibilities' : 'organizations';
     const retained = inventory.snapshot()[sibling];
@@ -169,14 +184,18 @@ test('many next pages keep one native window per feed and the first duplicate wi
 
 test('denial clears all private pages and invalidates in-flight siblings; disposal and wrong-viewer completions never revive them', async () => {
   let finish: (result: ManagedAccountsResult) => void = () => {};
-  const inventory = new ManagedAccountsInventory(viewer, async (cursors) => {
-    if (cursors.operatorsCursor)
-      return new Promise((resolve) => {
-        finish = resolve;
-      });
-    if (cursors.organizationsCursor) return { ok: false, kind: 'denied', status: 403, code: 'forbidden' };
-    return ready(page());
-  });
+  const inventory = new ManagedAccountsInventory(
+    viewer,
+    async (cursors) => {
+      if (cursors.operatorsCursor)
+        return new Promise((resolve) => {
+          finish = resolve;
+        });
+      if (cursors.organizationsCursor) return { ok: false, kind: 'denied', status: 403, code: 'forbidden' };
+      return ready(page());
+    },
+    settingsAmbient,
+  );
   await inventory.load();
   const pending = inventory.more('responsibilities');
   await inventory.more('organizations');
@@ -191,14 +210,17 @@ test('denial clears all private pages and invalidates in-flight siblings; dispos
       new Promise((resolve) => {
         finish = resolve;
       }),
+    settingsAmbient,
   );
   const loading = stale.load();
   stale.dispose();
   finish(ready(page()));
   await loading;
   expect(stale.snapshot().account).toBeNull();
-  const changed = new ManagedAccountsInventory(viewer, async () =>
-    ready({ ...page(), account: { ...page().account, id: operated } }),
+  const changed = new ManagedAccountsInventory(
+    viewer,
+    async () => ready({ ...page(), account: { ...page().account, id: operated } }),
+    settingsAmbient,
   );
   await changed.load();
   expect(changed.snapshot().account).toBeNull();
@@ -350,8 +372,7 @@ test('delayed feed failures share the longest endpoint wait while exact recovery
       }
       return ready({ ...page(), [feed]: { ...page()[feed], items: [], next: null } });
     },
-    undefined,
-    () => now,
+    createBrowserSettingsAmbient({ now: () => now }),
   );
   await inventory.load();
   await Promise.all([inventory.more('organizations'), inventory.more('responsibilities')]);
@@ -401,8 +422,8 @@ test('directory response waits fence refresh and sibling controls, survive admit
           finish = resolve;
         });
       },
+      createBrowserSettingsAmbient({ now: () => now }),
       () => current,
-      () => now,
     );
     const refresh = () => inventory.load();
     const next = () => inventory.more('organizations');
@@ -450,8 +471,7 @@ test('directory response waits fence refresh and sibling controls, survive admit
     const replacement = new ManagedAccountsInventory(
       viewer,
       async () => ready(page()),
-      undefined,
-      () => now,
+      createBrowserSettingsAmbient({ now: () => now }),
     );
     await replacement.load();
     expect(replacement.snapshot().account?.id).toBe(viewer);
@@ -462,12 +482,16 @@ test('directory response waits fence refresh and sibling controls, survive admit
 test('busy initial and selected-feed actions coalesce and disposal permanently retires the lifecycle', async () => {
   const calls: ManagedAccountsCursors[] = [];
   let finish: (result: ManagedAccountsResult) => void = () => {};
-  const inventory = new ManagedAccountsInventory(viewer, (cursors) => {
-    calls.push(cursors);
-    return new Promise((resolve) => {
-      finish = resolve;
-    });
-  });
+  const inventory = new ManagedAccountsInventory(
+    viewer,
+    (cursors) => {
+      calls.push(cursors);
+      return new Promise((resolve) => {
+        finish = resolve;
+      });
+    },
+    settingsAmbient,
+  );
   const loading = inventory.load();
   await inventory.load();
   expect(calls).toEqual([{}]);
@@ -519,8 +543,10 @@ test('Recover a managed inventory feed from a rejected cursor preserving exact o
               : Response.json(replacement);
         }) as typeof fetch,
       });
-      const inventory = new ManagedAccountsInventory(viewer, (cursors) =>
-        loadManagedAccounts(client, 'Bearer viewer', viewer, cursors),
+      const inventory = new ManagedAccountsInventory(
+        viewer,
+        (cursors) => loadManagedAccounts(client, 'Bearer viewer', viewer, cursors),
+        settingsAmbient,
       );
       await inventory.firstPage(feed);
       await inventory.load();
@@ -568,12 +594,16 @@ test('first-page replacement coalesces busy actions and preserves an in-flight s
       const sibling = feed === 'organizations' ? 'responsibilities' : 'organizations';
       const calls: ManagedAccountsCursors[] = [];
       const pending: ((result: ManagedAccountsResult) => void)[] = [];
-      const inventory = new ManagedAccountsInventory(viewer, async (cursors) => {
-        calls.push(cursors);
-        if (calls.length === 1) return ready(page());
-        if (calls.length === 2) return managedAccountsFailure(400, { code: 'invalid_cursor' });
-        return new Promise((resolve) => pending.push(resolve));
-      });
+      const inventory = new ManagedAccountsInventory(
+        viewer,
+        async (cursors) => {
+          calls.push(cursors);
+          if (calls.length === 1) return ready(page());
+          if (calls.length === 2) return managedAccountsFailure(400, { code: 'invalid_cursor' });
+          return new Promise((resolve) => pending.push(resolve));
+        },
+        settingsAmbient,
+      );
       await inventory.load();
       await inventory.more(feed);
       const siblingRead = inventory.more(sibling);
@@ -630,13 +660,17 @@ test('a failed first-page read retains stale pages and explicit recovery until a
     const fresh = page();
     fresh.organizations = { state: 'preparing', items: [], next: null };
     fresh.responsibilities = { items: [], next: null };
-    const inventory = new ManagedAccountsInventory(viewer, async (cursors) => {
-      calls.push(cursors);
-      if (calls.length === 1) return ready(page());
-      if (calls.length === 3) return failure;
-      if (calls.length === 5) return ready(fresh);
-      return managedAccountsFailure(409, { code: 'stale_cursor' });
-    });
+    const inventory = new ManagedAccountsInventory(
+      viewer,
+      async (cursors) => {
+        calls.push(cursors);
+        if (calls.length === 1) return ready(page());
+        if (calls.length === 3) return failure;
+        if (calls.length === 5) return ready(fresh);
+        return managedAccountsFailure(409, { code: 'stale_cursor' });
+      },
+      settingsAmbient,
+    );
     await inventory.load();
     const original = inventory.snapshot();
     await inventory.more(feed);
@@ -664,12 +698,16 @@ test('denied or wrong-viewer first-page results clear both feeds and invalidate 
   for (const outcome of ['denied', 'wrong-viewer', 'wrong-kind', 'disposed', 'reloaded'] as const) {
     const pending: ((result: ManagedAccountsResult) => void)[] = [];
     let calls = 0;
-    const inventory = new ManagedAccountsInventory(viewer, async () => {
-      calls++;
-      if (calls === 1 || calls === 5) return ready(page());
-      if (calls === 2) return managedAccountsFailure(400, { code: 'invalid_cursor' });
-      return new Promise((resolve) => pending.push(resolve));
-    });
+    const inventory = new ManagedAccountsInventory(
+      viewer,
+      async () => {
+        calls++;
+        if (calls === 1 || calls === 5) return ready(page());
+        if (calls === 2) return managedAccountsFailure(400, { code: 'invalid_cursor' });
+        return new Promise((resolve) => pending.push(resolve));
+      },
+      settingsAmbient,
+    );
     await inventory.load();
     await inventory.more('organizations');
     const sibling = inventory.more('responsibilities');
@@ -707,12 +745,16 @@ test('initial, preparing and exhausted feeds do not offer cursor recovery or iss
     const initial = page();
     initial.organizations = { state: state === 'preparing' ? 'preparing' : 'ready', items: [], next: null };
     initial.responsibilities.next = null;
-    const inventory = new ManagedAccountsInventory(viewer, async (cursors) => {
-      calls.push(cursors);
-      return state === 'initial-failure' || calls.length > 1
-        ? managedAccountsFailure(400, { code: 'invalid_cursor' })
-        : ready(initial);
-    });
+    const inventory = new ManagedAccountsInventory(
+      viewer,
+      async (cursors) => {
+        calls.push(cursors);
+        return state === 'initial-failure' || calls.length > 1
+          ? managedAccountsFailure(400, { code: 'invalid_cursor' })
+          : ready(initial);
+      },
+      settingsAmbient,
+    );
     await inventory.load();
     await inventory.more('organizations');
     await inventory.firstPage('organizations');
@@ -732,8 +774,10 @@ test('two three-page feeds reread admitted predecessors and terminal First; fail
       return new Promise<Response>((resolve) => replies.push(resolve));
     }) as typeof fetch,
   });
-  const inventory = new ManagedAccountsInventory(viewer, (cursors) =>
-    loadManagedAccounts(client, 'Bearer viewer', viewer, cursors),
+  const inventory = new ManagedAccountsInventory(
+    viewer,
+    (cursors) => loadManagedAccounts(client, 'Bearer viewer', viewer, cursors),
+    settingsAmbient,
   );
   const answer = async (number: number, index = 0, failed = false) => {
     await new Promise((resolve) => setTimeout(resolve, 0));
@@ -822,11 +866,15 @@ test('two three-page feeds reread admitted predecessors and terminal First; fail
 test('only an admitted full refresh resets coordinates, and earlier feed results cannot republish across it', async () => {
   const replies: ((result: ManagedAccountsResult) => void)[] = [];
   const calls: ManagedAccountsCursors[] = [];
-  const inventory = new ManagedAccountsInventory(viewer, async (cursors) => {
-    calls.push(cursors);
-    if (calls.length <= 2) return ready(page());
-    return new Promise((resolve) => replies.push(resolve));
-  });
+  const inventory = new ManagedAccountsInventory(
+    viewer,
+    async (cursors) => {
+      calls.push(cursors);
+      if (calls.length <= 2) return ready(page());
+      return new Promise((resolve) => replies.push(resolve));
+    },
+    settingsAmbient,
+  );
   await inventory.load();
   await inventory.more('organizations');
   const accepted = inventory.snapshot().organizations;
@@ -858,10 +906,13 @@ test('only an admitted full refresh resets coordinates, and earlier feed results
 
 test('latest cross-feed navigation retires older admission while older rows still settle', async () => {
   const replies: ((result: ManagedAccountsResult) => void)[] = [];
-  const inventory = new ManagedAccountsInventory(viewer, async () =>
-    replies.length === 0 && !inventory.snapshot().account
-      ? ready(page())
-      : new Promise((resolve) => replies.push(resolve)),
+  const inventory = new ManagedAccountsInventory(
+    viewer,
+    async () =>
+      replies.length === 0 && !inventory.snapshot().account
+        ? ready(page())
+        : new Promise((resolve) => replies.push(resolve)),
+    settingsAmbient,
   );
   await inventory.load();
   expect(inventory.snapshot().navigation?.organizations).toEqual([organization]);

@@ -1,4 +1,4 @@
-import type { ImportCliOptions, ImportCliResult } from './cli.ts';
+import type { ImportCliOptions, ImportCliResult } from './cli-contract.ts';
 import type { ImportProgressEvent, ImportProgressMode, ImportProgressSink } from './import-progress.ts';
 import {
   BATCH_PREFLIGHT_NOTE,
@@ -425,12 +425,16 @@ function failure(error: unknown): BatchCliResult {
   return resultOf(code, '', `${terminalSafe(message)}\n`);
 }
 
-async function runSingleSource(argv: readonly string[], options: ImportCliOptions): Promise<ImportCliResult> {
-  const module = await import('./cli.ts');
-  return module.runImportCli(argv, options);
-}
+export type BatchSingleSourceExecutor = (
+  argv: readonly string[],
+  options: ImportCliOptions,
+) => Promise<ImportCliResult>;
 
-export async function runBatchCli(argv: readonly string[], options: BatchCliOptions = {}): Promise<BatchCliResult> {
+export async function runBatchCli(
+  argv: readonly string[],
+  options: BatchCliOptions = {},
+  execute: { runSingleSource: BatchSingleSourceExecutor },
+): Promise<BatchCliResult> {
   let parsed: ParsedBatchArgs | 'help';
   try {
     parsed = parseBatchArgs(argv, options.testOrigin);
@@ -490,7 +494,7 @@ export async function runBatchCli(argv: readonly string[], options: BatchCliOpti
     }
     const capture: { event: ImportProgressEvent | null } = { event: null };
     const progressSink = wrapProgressSink(options.progressSink, job, plan.jobs.length, parsed.progressMode, capture);
-    const result = await runSingleSource(ordinaryImportArgv(job, parsed.credentials, parsed.progressMode), {
+    const result = await execute.runSingleSource(ordinaryImportArgv(job, parsed.credentials, parsed.progressMode), {
       ...(options.fetch ? { fetch: options.fetch } : {}),
       ...(options.signal ? { signal: options.signal } : {}),
       ...(options.clock ? { clock: options.clock } : {}),

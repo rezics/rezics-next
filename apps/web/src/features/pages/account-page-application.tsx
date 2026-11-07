@@ -9,6 +9,7 @@ import { Failed, Preview, sectionClass, useOverview, viewHref } from './overview
 import { isRecord, linkClass, linkColor } from './shared';
 import {
   contributionCoordinateIsBounded,
+  unavailableContributionActions,
   type AccountProfilePort,
   type AccountListFailure,
   type ContributionWindowOwner,
@@ -25,6 +26,7 @@ const noProfileRoute: AccountProfilePort = {
   CollectionControls: () => null,
   ContributionControls: () => null,
   ContributionList: ({ children }) => <>{children}</>,
+  contributionActions: unavailableContributionActions,
 };
 const AccountProfileContext = createContext<AccountProfilePort>(noProfileRoute);
 

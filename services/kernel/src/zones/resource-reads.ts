@@ -1,23 +1,27 @@
-import type { Pool, PoolClient } from 'pg';
+import type { Pool } from 'pg';
 import type { CompositionDocument } from '@rezics/composition';
 import { createHash } from 'node:crypto';
-import { readAccount } from '../access/account-data.ts';
-import { requireAccessDeadline } from '../access/unavailable.ts';
 import { authoritativeTimeValue, mintReadTime } from '../command/command.ts';
-import { withConnection } from '../database/pool.ts';
-import { ProblemError } from '../http/problem.ts';
+import { ProblemError } from '../http/problem-error.ts';
 import { readPartition } from '../partition/partition.ts';
-import { accessCheck, AuthenticationError, type Access, type AccountActor, type Actor } from '../request/access.ts';
 import { partitionOf, routeOf } from '../route/route.ts';
 import { decodeListCursor, encodeListCursor, type ListCursorBinding } from '../tokens/list-cursor.ts';
-import type { KeyRing } from '../tokens/seal.ts';
 import type { ZoneConfigurationResponse, ZoneMetadataResponse, ZoneOwned, ZonePublic } from './contract.ts';
 import { zoneReadable, zoneReadEligibility, zoneWithheld } from './eligibility.ts';
 import { hasWithholding } from './takedown.ts';
 import { hasZoneOwnerRole, ownerZoneKeys, readZoneHead, type ZoneHead, zoneOwnerIsActive } from './resource-store.ts';
+import {
+  zoneResourceAccess,
+  type ZoneAccessHandle,
+  type ZoneAccountActor,
+  type ZoneActor,
+  type ZoneQueryClient,
+  type ZoneResourceAccessPort,
+  type ZoneResourceRuntimeDependencies,
+} from './resource-access-port.ts';
 
-export function requireZoneAccount(actor: Actor): asserts actor is AccountActor {
-  if (actor.kind !== 'account') throw new AuthenticationError(401, 'Bearer');
+export function requireZoneAccount(actor: ZoneActor): asserts actor is ZoneAccountActor {
+  if (actor.kind !== 'account') throw zoneResourceAccess().authenticationRequired();
 }
 export function zoneIdentity(id: string) {
   const route = routeOf(id);
@@ -75,27 +79,14 @@ export type ZoneCollectionBasis = {
   visibility: ZoneHead['visibility'];
   ownerId: string | null;
 };
+
 export async function zoneReadTransaction<T>(
   pool: Pool,
-  work: (client: PoolClient) => Promise<T>,
+  work: (client: ZoneQueryClient) => Promise<T>,
   deadline?: number,
+  ports: ZoneResourceAccessPort = zoneResourceAccess(),
 ): Promise<T> {
-  return withConnection(pool, async (client) => {
-    await client.query('BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY');
-    try {
-      if (deadline !== undefined) {
-        requireAccessDeadline(deadline);
-        await client.query(`SET LOCAL statement_timeout = '${Math.max(1, Math.floor(deadline - Date.now()))}ms'`);
-      }
-      const result = await work(client);
-      if (deadline !== undefined) requireAccessDeadline(deadline);
-      await client.query('COMMIT');
-      return result;
-    } catch (error) {
-      await client.query('ROLLBACK');
-      throw error;
-    }
-  });
+  return ports.withReadTransaction(pool, work, deadline);
 }
 
 /** Copy the admitted document, never the retained original. Appearance tokens are omitted;
@@ -118,58 +109,85 @@ function publicDocument(row: ZoneHead, index: number): CompositionDocument {
   return document;
 }
 
-export function createZoneReads(dependencies: { pool: Pool; access: Access; tokens: KeyRing; clock: () => Date }) {
+export type ZoneReadDependencies = ZoneResourceRuntimeDependencies & {
+  ports?: ZoneResourceAccessPort;
+};
+
+/** Current metadata, configuration, owner listing and authorized page descriptors. Access is the bound port. */
+export function createZoneReads(dependencies: ZoneReadDependencies) {
   const { pool, access, tokens, clock } = dependencies;
-  async function publicRow(actor: Actor, id: string, deadline: number): Promise<ZoneHead> {
+  const ports = dependencies.ports ?? zoneResourceAccess();
+  async function publicRow(actor: ZoneActor, id: string, deadline: number): Promise<ZoneHead> {
     const identity = zoneIdentity(id);
     const resource = { ...identity, eligibility: zoneReadEligibility(identity) };
-    const readCheck = await accessCheck(access, actor, 'zone:read', resource, { pool, deadline });
-    return zoneReadTransaction(pool, async (client) => {
-      const time = await mintReadTime(client, clock);
-      const row = await readZoneHead(client, identity.route, id);
-      if (!row || !row.configuration || !row.mounts || row.state === 'purged' || !zoneReadable(row))
-        throw new ProblemError('not_found');
-      if (!(await zoneOwnerIsActive(client, row))) throw new ProblemError('not_found');
-      if (!(await readCheck(client, time))) {
-        if (actor.kind === 'account') {
-          const account = await readAccount(client, routeOf(actor.accountId)!, actor.accountId);
-          if (!account || account.state !== 'active' || account.fenced) throw new ProblemError('forbidden');
+    const readCheck = await ports.checkAction(access, actor, 'zone:read', resource, { pool, deadline });
+    return zoneReadTransaction(
+      pool,
+      async (client) => {
+        const time = await mintReadTime(client, clock);
+        const row = await readZoneHead(client, identity.route, id);
+        if (!row || !row.configuration || !row.mounts || row.state === 'purged' || !zoneReadable(row))
+          throw new ProblemError('not_found');
+        if (!(await zoneOwnerIsActive(client, row))) throw new ProblemError('not_found');
+        if (!(await readCheck(client, time))) {
+          if (actor.kind === 'account') {
+            const account = await ports.readAccount(client, routeOf(actor.accountId)!, actor.accountId);
+            if (!account || account.state !== 'active' || account.fenced) throw new ProblemError('forbidden');
+          }
+          throw new ProblemError('not_found');
         }
-        throw new ProblemError('not_found');
-      }
-      return row;
-    });
+        return row;
+      },
+      undefined,
+      ports,
+    );
   }
-  function read(actor: Actor, id: string, configuration: false, deadline: number): Promise<ZoneMetadataResponse>;
-  function read(actor: Actor, id: string, configuration: true, deadline: number): Promise<ZoneConfigurationResponse>;
-  async function read(actor: Actor, id: string, configuration: boolean, deadline: number) {
+  function read(actor: ZoneActor, id: string, configuration: false, deadline: number): Promise<ZoneMetadataResponse>;
+  function read(
+    actor: ZoneActor,
+    id: string,
+    configuration: true,
+    deadline: number,
+  ): Promise<ZoneConfigurationResponse>;
+  async function read(actor: ZoneActor, id: string, configuration: boolean, deadline: number) {
     if (configuration) requireZoneAccount(actor);
     if (!configuration) return { zone: zonePublic(await publicRow(actor, id, deadline)) };
     const identity = zoneIdentity(id);
     const resource = { ...identity, eligibility: zoneReadEligibility(identity) };
     const context = { pool, deadline };
-    const readCheck = await accessCheck(access, actor, 'zone:read', resource, context);
-    const configureCheck = configuration ? await accessCheck(access, actor, 'zone:configure', identity, context) : null;
-    return zoneReadTransaction(pool, async (client) => {
-      const time = await mintReadTime(client, clock);
-      const at = authoritativeTimeValue(time);
-      const row = await readZoneHead(client, identity.route, id);
-      if (!row || !row.configuration || !row.mounts || row.state === 'purged') throw new ProblemError('not_found');
-      if (!(await zoneOwnerIsActive(client, row))) throw new ProblemError('not_found');
-      const allowed = await readCheck(client, time);
-      requireZoneAccount(actor);
-      const owner = await hasZoneOwnerRole(client, identity.route, id, actor.accountId, at);
-      const editable = await configureCheck!(client, time);
-      if (row.state === 'deleted') {
-        if (!owner || !allowed) throw new ProblemError('forbidden');
-        if (!row.restoreUntil || Date.parse(at) >= Date.parse(row.restoreUntil)) throw new ProblemError('not_found');
-      } else if (!editable && !(owner && allowed)) throw new ProblemError('forbidden');
-      // Stored configuration carries the retained originals of any takedown; only the owner reads it then.
-      if (!owner && hasWithholding(row)) throw new ProblemError('forbidden');
-      return { zone: zoneOwned(row), configuration: row.configuration, mounts: row.mounts };
-    });
+    const readCheck = await ports.checkAction(access, actor, 'zone:read', resource, context);
+    const configureCheck = configuration
+      ? await ports.checkAction(access, actor, 'zone:configure', identity, context)
+      : null;
+    return zoneReadTransaction(
+      pool,
+      async (client) => {
+        const time = await mintReadTime(client, clock);
+        const at = authoritativeTimeValue(time);
+        const row = await readZoneHead(client, identity.route, id);
+        if (!row || !row.configuration || !row.mounts || row.state === 'purged') throw new ProblemError('not_found');
+        if (!(await zoneOwnerIsActive(client, row))) throw new ProblemError('not_found');
+        const allowed = await readCheck(client, time);
+        requireZoneAccount(actor);
+        const owner = await hasZoneOwnerRole(client, identity.route, id, actor.accountId, at);
+        const editable = await configureCheck!(client, time);
+        if (row.state === 'deleted') {
+          if (!owner || !allowed) throw new ProblemError('forbidden');
+          if (!row.restoreUntil || Date.parse(at) >= Date.parse(row.restoreUntil)) throw new ProblemError('not_found');
+        } else if (!editable && !(owner && allowed)) throw new ProblemError('forbidden');
+        // Stored configuration carries the retained originals of any takedown; only the owner reads it then.
+        if (!owner && hasWithholding(row)) throw new ProblemError('forbidden');
+        return { zone: zoneOwned(row), configuration: row.configuration, mounts: row.mounts };
+      },
+      undefined,
+      ports,
+    );
   }
-  async function list(actor: Actor, query: { limit?: number; cursor?: string; deleted?: boolean }, deadline: number) {
+  async function list(
+    actor: ZoneActor,
+    query: { limit?: number; cursor?: string; deleted?: boolean },
+    deadline: number,
+  ) {
     requireZoneAccount(actor);
     const route = routeOf(actor.accountId)!;
     const limit = query.limit ?? 20;
@@ -198,7 +216,7 @@ export function createZoneReads(dependencies: { pool: Pool; access: Access; toke
     const considered = keys.slice(0, limit);
     const checks = await Promise.all(
       considered.map(({ id }) =>
-        accessCheck(
+        ports.checkAction(
           access,
           actor,
           'zone:read',
@@ -207,76 +225,81 @@ export function createZoneReads(dependencies: { pool: Pool; access: Access; toke
         ),
       ),
     );
-    return zoneReadTransaction(pool, async (client) => {
-      const time = await mintReadTime(client, clock);
-      const at = authoritativeTimeValue(time);
-      const account = await readAccount(client, route, actor.accountId);
-      if (
-        !account ||
-        account.kind !== 'actor' ||
-        account.state !== 'active' ||
-        account.fenced ||
-        account.minimumAuthnEpoch > BigInt(actor.authnEpoch)
-      )
-        throw new ProblemError('forbidden');
-      const partition = await readPartition(client, partitionOf(route));
-      if (!partition) throw new ProblemError('partition_unavailable');
-      const security = createHash('sha256')
-        .update(
-          JSON.stringify([
-            account.transactionId,
-            account.minimumAuthnEpoch.toString(),
-            actor.authnEpoch,
-            actor.clientId,
-            actor.requestedBy,
-            [...actor.scopes].sort(),
-          ]),
-        )
-        .digest('hex');
-      if (
-        cursor?.ok &&
-        (cursor.epoch !== partition.epoch ||
-          cursor.after[1] !== partition.position.toString() ||
-          cursor.after[2] !== security)
-      )
-        throw new ProblemError('stale_cursor');
-      const zones: ZoneOwned[] = [];
-      for (const [index, key] of considered.entries()) {
-        const row = await readZoneHead(client, route, key.id);
+    return zoneReadTransaction(
+      pool,
+      async (client) => {
+        const time = await mintReadTime(client, clock);
+        const at = authoritativeTimeValue(time);
+        const account = await ports.readAccount(client, route, actor.accountId);
         if (
-          !row ||
-          row.ownerId !== actor.accountId ||
-          row.state !== state ||
-          !row.configuration ||
-          zoneWithheld(row, '')
+          !account ||
+          account.kind !== 'actor' ||
+          account.state !== 'active' ||
+          account.fenced ||
+          account.minimumAuthnEpoch > BigInt(actor.authnEpoch)
         )
-          continue;
-        if (query.deleted && (!row.restoreUntil || Date.parse(at) >= Date.parse(row.restoreUntil))) continue;
+          throw new ProblemError('forbidden');
+        const partition = await readPartition(client, partitionOf(route));
+        if (!partition) throw new ProblemError('partition_unavailable');
+        const security = createHash('sha256')
+          .update(
+            JSON.stringify([
+              account.transactionId,
+              account.minimumAuthnEpoch.toString(),
+              actor.authnEpoch,
+              actor.clientId,
+              actor.requestedBy,
+              [...actor.scopes].sort(),
+            ]),
+          )
+          .digest('hex');
         if (
-          !(await checks[index]!(client, time)) ||
-          !(await hasZoneOwnerRole(client, route, key.id, actor.accountId, at))
+          cursor?.ok &&
+          (cursor.epoch !== partition.epoch ||
+            cursor.after[1] !== partition.position.toString() ||
+            cursor.after[2] !== security)
         )
-          continue;
-        zones.push(zoneOwned(row));
-      }
-      const last = considered.at(-1);
-      return {
-        zones,
-        next:
-          keys.length > limit && last
-            ? await encodeListCursor(
-                tokens,
-                binding,
-                { epoch: partition.epoch, after: [last.id, partition.position.toString(), security] },
-                clock(),
-              )
-            : null,
-      };
-    });
+          throw new ProblemError('stale_cursor');
+        const zones: ZoneOwned[] = [];
+        for (const [index, key] of considered.entries()) {
+          const row = await readZoneHead(client, route, key.id);
+          if (
+            !row ||
+            row.ownerId !== actor.accountId ||
+            row.state !== state ||
+            !row.configuration ||
+            zoneWithheld(row, '')
+          )
+            continue;
+          if (query.deleted && (!row.restoreUntil || Date.parse(at) >= Date.parse(row.restoreUntil))) continue;
+          if (
+            !(await checks[index]!(client, time)) ||
+            !(await hasZoneOwnerRole(client, route, key.id, actor.accountId, at))
+          )
+            continue;
+          zones.push(zoneOwned(row));
+        }
+        const last = considered.at(-1);
+        return {
+          zones,
+          next:
+            keys.length > limit && last
+              ? await encodeListCursor(
+                  tokens,
+                  binding,
+                  { epoch: partition.epoch, after: [last.id, partition.position.toString(), security] },
+                  clock(),
+                )
+              : null,
+        };
+      },
+      undefined,
+      ports,
+    );
   }
-  async function page(actor: Actor, id: string, route: string | null, deadline: number) {
+  async function page(actor: ZoneActor, id: string, route: string | null, deadline: number) {
     const identity = zoneIdentity(id);
-    const check = await accessCheck(
+    const check = await ports.checkAction(
       access,
       actor,
       'zone:read',
@@ -292,7 +315,7 @@ export function createZoneReads(dependencies: { pool: Pool; access: Access; toke
         if (!(await zoneOwnerIsActive(client, row))) throw new ProblemError('not_found');
         if (!(await check(client, time))) {
           if (actor.kind === 'account') {
-            const account = await readAccount(client, routeOf(actor.accountId)!, actor.accountId);
+            const account = await ports.readAccount(client, routeOf(actor.accountId)!, actor.accountId);
             if (!account || account.state !== 'active' || account.fenced) throw new ProblemError('forbidden');
           }
           throw new ProblemError('not_found');
@@ -327,12 +350,13 @@ export function createZoneReads(dependencies: { pool: Pool; access: Access; toke
         };
       },
       deadline,
+      ports,
     );
   }
   return {
-    metadata: (actor: Actor, id: string, deadline: number) => read(actor, id, false, deadline),
-    configuration: (actor: Actor, id: string, deadline: number) => read(actor, id, true, deadline),
-    async collectionBasis(actor: Actor, id: string, deadline: number): Promise<ZoneCollectionBasis> {
+    metadata: (actor: ZoneActor, id: string, deadline: number) => read(actor, id, false, deadline),
+    configuration: (actor: ZoneActor, id: string, deadline: number) => read(actor, id, true, deadline),
+    async collectionBasis(actor: ZoneActor, id: string, deadline: number): Promise<ZoneCollectionBasis> {
       const row = await publicRow(actor, id, deadline);
       return {
         mounts: row.mounts!.filter((_, index) => !zoneWithheld(row, `/mounts/${index}`)),
@@ -346,3 +370,5 @@ export function createZoneReads(dependencies: { pool: Pool; access: Access; toke
     page,
   };
 }
+
+export type { ZoneAccessHandle, ZoneAccountActor, ZoneActor, ZoneQueryClient };
