@@ -11,15 +11,17 @@ import {
   utimesSync,
   writeFileSync,
 } from 'node:fs';
+import { spawn } from 'node:child_process';
 import { dirname, join, resolve } from 'node:path';
 import { expect, test } from 'bun:test';
 import { SqliteManagerInbox } from './inbox.ts';
 import { WorkerJob } from './job.ts';
 import { openDb } from './db.ts';
+import { hasLiveProcessUnderAsync } from './process.ts';
 import { WorkerStore } from './store.ts';
 import { harness } from './test-support.ts';
 import { git } from './tasks.ts';
-import { removeOwnedTree } from './task-workspace.ts';
+import { gitListsWorktree, removeOwnedTree } from './task-workspace.ts';
 import {
   removeFinishedWorktree,
   IO_PRESSURE_LIMIT,
@@ -36,6 +38,21 @@ function setup(
     row.state = state;
   });
   return { h, task: h.store.task(task.id) };
+}
+async function maxLoopGap<T>(work: () => Promise<T>, intervalMs = 5): Promise<{ gap: number; result: T }> {
+  let last = performance.now();
+  let maximum = 0;
+  const timer = setInterval(() => {
+    const now = performance.now();
+    maximum = Math.max(maximum, now - last);
+    last = now;
+  }, intervalMs);
+  try {
+    const result = await work();
+    return { gap: maximum, result };
+  } finally {
+    clearInterval(timer);
+  }
 }
 function fake(overrides: Partial<LifetimeRuntime> = {}): LifetimeRuntime {
   return {
@@ -105,6 +122,56 @@ test('a task worktree is removed after integration, merge or cancellation while 
     } finally {
       h.dispose();
     }
+  }
+}, 30_000);
+
+test('orphan worktree maintenance yields during tree cleanup and keeps a live stray cwd', async () => {
+  const { h, task } = setup('integrated');
+  const heavy = join(task.worktree, '.temp/orphan-cleanup');
+  const stray = join(h.settings.worktreeRoot, 'orphan-live-cwd');
+  for (let directory = 0; directory < 80; directory++) {
+    const path = join(heavy, String(directory));
+    mkdirSync(path, { recursive: true });
+    for (let file = 0; file < 125; file++) writeFileSync(join(path, `${file}.txt`), 'owned');
+    chmodSync(path, 0o555);
+  }
+  mkdirSync(stray, { recursive: true });
+  writeFileSync(join(stray, 'payload'), 'keep while a process owns this cwd');
+  const child = spawn(process.execPath, ['-e', 'setInterval(() => {}, 1000)'], {
+    cwd: stray,
+    stdio: 'ignore',
+  });
+  try {
+    await new Promise<void>((resolveSpawn, reject) => {
+      child.once('spawn', resolveSpawn);
+      child.once('error', reject);
+    });
+    expect(await hasLiveProcessUnderAsync(stray)).toBe(true);
+
+    const { gap, result: removed } = await maxLoopGap(() => removeFinishedWorktree(h.settings, h.store));
+    expect(removed).toBe(task.id);
+    expect(gap).toBeLessThan(200);
+    expect(existsSync(task.worktree)).toBe(false);
+    expect(existsSync(stray)).toBe(true);
+
+    const exited = new Promise<void>((resolveExit) => child.once('exit', () => resolveExit()));
+    child.kill('SIGTERM');
+    await exited;
+    await removeFinishedWorktree(h.settings, h.store);
+    expect(existsSync(stray)).toBe(false);
+    expect(h.store.task(task.id).state).toBe('integrated');
+    expect(gitListsWorktree(h.root, task.worktree)).toBe(false);
+  } finally {
+    if (child.exitCode === null && child.signalCode === null) {
+      const exited = new Promise<void>((resolveExit) => child.once('exit', () => resolveExit()));
+      child.kill('SIGTERM');
+      await exited;
+    }
+    for (let directory = 0; directory < 80; directory++) {
+      const path = join(heavy, String(directory));
+      if (existsSync(path)) chmodSync(path, 0o755);
+    }
+    h.dispose();
   }
 }, 30_000);
 

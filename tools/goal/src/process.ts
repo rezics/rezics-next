@@ -1,5 +1,5 @@
 import { readdirSync, readFileSync, readlinkSync, statSync } from 'node:fs';
-import { readdir } from 'node:fs/promises';
+import { readlink as readlinkAsync, readdir } from 'node:fs/promises';
 import { spawn } from 'node:child_process';
 import { resolve } from 'node:path';
 import { defaultPolicy } from './policy.ts';
@@ -179,6 +179,50 @@ export function hasLiveProcessUnder(directory: string, procRoot = '/proc'): bool
     }
   }
   return false;
+}
+/** Async, chunked counterpart for maintenance sweeps that must keep manager RPC and heartbeat turns responsive. */
+export async function hasLiveProcessUnderAsync(directory: string, procRoot = '/proc'): Promise<boolean | null> {
+  const root = resolve(directory);
+  let entries: string[];
+  try {
+    entries = (await readdir(procRoot)).filter((name) => /^\d+$/.test(name));
+  } catch {
+    return null;
+  }
+  let unknown = false;
+  for (let index = 0; index < entries.length; index += PROC_SCAN_CHUNK) {
+    const chunk = entries.slice(index, index + PROC_SCAN_CHUNK);
+    const locations = await Promise.all(
+      chunk.map(async (name): Promise<{ pid: number; cwd?: string; unknown?: true }> => {
+        try {
+          return {
+            pid: Number(name),
+            cwd: (await readlinkAsync(`${procRoot}/${name}/cwd`)).replace(/ \(deleted\)$/, ''),
+          };
+        } catch (error) {
+          const code = (error as NodeJS.ErrnoException).code;
+          // Match hasLiveProcessUnder: the kernel hides cwd for some other-user and non-dumpable processes.
+          if (['ENOENT', 'ESRCH', 'EACCES', 'EPERM'].includes(code ?? '')) return { pid: Number(name) };
+          return { pid: Number(name), unknown: true };
+        }
+      }),
+    );
+    for (const location of locations) {
+      if (location.unknown) {
+        unknown = true;
+        continue;
+      }
+      const cwd = location.cwd;
+      if (!cwd || (cwd !== root && !cwd.startsWith(`${root}/`))) continue;
+      try {
+        if (inspectProcessIdentity(location.pid, procRoot)) return true;
+      } catch {
+        return null;
+      }
+    }
+    if (index + PROC_SCAN_CHUNK < entries.length) await new Promise<void>((resolveYield) => setImmediate(resolveYield));
+  }
+  return unknown ? null : false;
 }
 export function groupMembers(group: number, procRoot = '/proc'): ProcessIdentity[] {
   return readdirSync(procRoot)
