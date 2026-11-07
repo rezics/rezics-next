@@ -19,7 +19,8 @@ export async function publicationJob(f: Fixture, source: PublicFilterSource, con
     source,
     sourceKeys: createSubjectSourceKeyPages(f.db.pool, f.config.routeKey, f.config.access),
     binding,
-    readPublicationCompletion: (request, context) => readNativePublicFilterPublicationCompletion(binding, request, context),
+    readPublicationCompletion: (request, context) =>
+      readNativePublicFilterPublicationCompletion(binding, request, context),
     clock: f.config.clock,
     meaning: f.meaning,
     writerGuard: {

@@ -41,7 +41,4 @@ export type SearchNativePublicationCompletionReader = (
   request: SearchNativePublicationRequest,
   context: PublicFilterConsumerContext,
 ) => Promise<SearchNativePublicationCompletion>;
-export type SearchIdentityMapping = Awaited<
-  ReturnType<SearchSemanticSourcePort['readIdentityMappings']>
->[number];
-
+export type SearchIdentityMapping = Awaited<ReturnType<SearchSemanticSourcePort['readIdentityMappings']>>[number];

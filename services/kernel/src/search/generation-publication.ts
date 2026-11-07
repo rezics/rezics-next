@@ -67,7 +67,8 @@ export type SearchGenerationPublication = Readonly<{
     consumer: PublicFilterConsumer,
     context: PublicFilterConsumerContext,
   ): Promise<
-    { status: 'preparing'; job: GenerationPublicationJob; cost: SearchPublicFilterCost } | PublicFilterConsumerUnavailable
+    | { status: 'preparing'; job: GenerationPublicationJob; cost: SearchPublicFilterCost }
+    | PublicFilterConsumerUnavailable
   >;
   step(
     job: GenerationPublicationJob,

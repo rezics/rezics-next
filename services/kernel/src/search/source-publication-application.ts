@@ -71,4 +71,3 @@ export function searchSourcePublicationApplication(): SearchSourcePublicationApp
   if (!installed) throw new TypeError('Search Semantic source port is not installed');
   return installed;
 }
-

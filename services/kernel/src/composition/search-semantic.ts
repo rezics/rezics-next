@@ -23,4 +23,3 @@ export function composeSearchSemanticSource(): void {
   });
   bindSearchSemanticSourcePort(port);
 }
-

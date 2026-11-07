@@ -756,7 +756,8 @@ export type SearchWriterPublicationGuard = SearchWriterGuard &
       fence: SearchWriterPublicationFence,
       context: PublicFilterConsumerContext,
     ): Promise<
-      { status: 'held'; fence: SearchWriterPublicationFence; cost: SearchPublicFilterCost } | PublicFilterConsumerUnavailable
+      | { status: 'held'; fence: SearchWriterPublicationFence; cost: SearchPublicFilterCost }
+      | PublicFilterConsumerUnavailable
     >;
     releasePublication(
       fence: SearchWriterPublicationFence,
