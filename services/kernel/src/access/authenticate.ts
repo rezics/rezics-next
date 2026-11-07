@@ -12,7 +12,7 @@ import timeRead from './permission-time.sql';
 import { MAX_CONSENTED_SCOPES, MAX_CONSENTED_SCOPE_OCTETS } from '@rezics/auth-contract';
 import { identityExpired, type IdentityExpiry } from './identity-expiry.ts';
 import { systemClock, type KernelClock } from '../clock.ts';
-import { AccessUnavailableError, throwAccessUnavailable } from './unavailable.ts';
+import { AccessUnavailableError, requireAccessDeadline, throwAccessUnavailable } from './unavailable.ts';
 import { AsyncLocalStorage } from 'node:async_hooks';
 import { createRemoteJWKSet, customFetch, errors, jwtVerify, type FetchImplementation, type JWTPayload } from 'jose';
 import { withConnection } from '../database/pool.ts';
@@ -38,6 +38,8 @@ import {
   runOriginalAuthentication,
   type OriginalAuthenticationInvocation,
 } from './authentication-work.ts';
+
+export { requireAccessDeadline };
 
 export type AuthenticationConfig = {
   issuer: string;

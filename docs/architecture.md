@@ -101,6 +101,8 @@ values, because that edge closed a maintenance cycle.
 Access public account identity and native Access ports import Semantic mapping from `semantic/agents.ts`. Original
 recovery, read snapshots, Source custody and maintenance stay on those public entries; Semantic `access-capabilities.ts`
 re-exports only mapping, so Access reads do not close a value-import cycle through recovery or Source maintenance.
+Identity Rating repair values stay on `identity-rating-repair-producer.ts`; Source custody imports Library
+`collection-native-work.ts`; composition binds Kind raw input so Access `access-capabilities.ts` is not a Kind/Source hub.
 
 Decision: `config-check-runtime.ts` constructs check runners and reloads train settings from supplied dependencies; `createRuntime` keeps process, store and lifecycle ownership.
 

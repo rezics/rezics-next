@@ -1,7 +1,6 @@
 import { createHash } from 'node:crypto';
 import type { Pool } from 'pg';
-import { deadlineClient } from '../access/authenticate.ts';
-import { requireAccessDeadline } from '../access/unavailable.ts';
+import { deadlineClient, requireAccessDeadline } from '../access/authenticate.ts';
 import {
   currentCommand,
   currentCommandResources,
@@ -16,7 +15,7 @@ import {
   IDENTITY_RATING_REPAIR_MAX_ORIGINALS,
   readIdentityRepairEvidenceInTransaction,
   type IdentityRepairEvidence,
-} from './identity-adapters/identity-epoch-read.ts';
+} from './identity-adapters/read.ts';
 import lockOwner from './identity-rating-commit-participant-lock-owner.sql';
 import { IDENTITY_RATING_REPAIR_CONTINUATION } from './events.ts';
 
