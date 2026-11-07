@@ -200,6 +200,22 @@ Owned evidence: `.temp/goal/checks/worker-check-d2764b95-6e78-4d35-83a8-b70604fa
 The remote runner recorded cleanup of its databases, process group and artifact staging. No walk stack was admitted
 or started by this receiving round.
 
+The focused native receiving command after Mapping fixture reconciliation was
+`bun scripts/worker-check.ts -- bun run --cwd services/kernel check test/search/identity-receiving-native.test.ts`.
+At `6efbbf6073f15a333f7a1e622b94204c8445f37b`, compiler and quality checks passed. The suite returned
+**1 pass / 7 fail, 66 assertions, 22.55 seconds**. Mapping completion and its genuine receipt reconciliation are now
+observed. All seven remaining cases fail at `collection-native-work.ts:327` `reserve`, through
+`identity-search-receiving-work.ts:168`, with `dependency_unavailable`. Their intended interruption and receiving
+completion assertions remain unreached; no expected failure was weakened to accept this refusal.
+One retained failure reports native points 1 and statements 3, other axes zero; the SQL footprint is unretained.
+The existing finite-work/output-custody owner receives this failure separately from startup.
+
+The command also returned an independent cleanup failure after 240.207 seconds:
+`spawnSync docker ETIMEDOUT ["docker","rm","-f","-v","0603c5d8049b690ca6f5f4eba12359652f1af2f10b9febb813be9f40ef04ac0a"]`.
+The original check runner retains cleanup custody; no unrelated Docker resources are changed. Whole command exit 1,
+319.226 seconds on host b. Evidence:
+`.temp/goal/checks/worker-check-c93c0287-7474-46b3-97ed-f4f12771a817-2026-11-07T12-40-21.558Z-35896e8b.log`.
+
 ### Last observed dev census
 
 Observed revision: `2aa83f1adb21aca8b4718d7ba5193176bf14c521`. One ordinary admitted walk used
