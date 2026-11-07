@@ -56,11 +56,14 @@ separable or lies in another owner's code, to the owning manager. That manager d
 brief, which runs in parallel with the walk. While managers read the walk as the owner of every repair, walks repaired
 serially and backlogs stayed empty. From 03:00 to 04:00 UTC on 2026-11-07, 9 workers ran and 284 product lines landed.
 
+Decision: ordinary product worker-check commands typecheck changed workspaces before landing and refuse test, native, browser and growth commands before upload. Urgent, control-plane, proof-run and acceptance-requires briefs keep their declared checks when the host-run budget is off.
+
 Decision: the worker owns and completes the private-follow host fixture, Auth-persona served journey, and 64/512/4096
 fixed-neighborhood growth measurement case in the feature worktree. Capability promotion still waits for the installed
 controller-owned native/browser run after integration; the worker's minimal check covers changed-workspace typing
 and selected outcome tests. Typed transport, FULL withhold, frozen command frame and list-frontier return remain
-ordinary clean-workspace checks.
+ordinary clean-workspace checks. Private follow native/browser/growth capability stays open until that installed
+controller-owned driver and Auth-persona walk pass after integration.
 
 Decision: Web's focused runner (`apps/web/scripts/focused.ts`) canonicalizes explicit test-file selectors to the child
 `apps/web` working directory before isolated per-file execution. Repository-relative (`apps/web/tests/foo.test.ts`),
@@ -112,12 +115,13 @@ waking the model for “still running”. Worker admission and heavy-check admis
 Remote-check stderr splits connection work, Git snapshot staging, GitHub fetch and rsync; overlay rsync after a
 successful fetch is the expected upload. Remaining command-time cost is `bun install` and the admitted command.
 Connection count is bounded by configured hosts, not by polls or concurrent runs: one ControlMaster socket per host
-under `$XDG_RUNTIME_DIR/rezics-ssh` (relocated under `/tmp` when OpenSSH's unix_listener suffix would overflow); a hung
-placement probe recovers that master once per host per minute and five minutes of probe-timeout skips report one
-environment event.
+under `$XDG_RUNTIME_DIR/rezics-ssh` (relocated under `/tmp` when OpenSSH's unix_listener suffix would overflow). A
+placement-probe timeout recovers only an affirmatively dead ControlMaster, at most once per host per minute, under the
+same exclusive lease lock that acquisition holds shared; a delayed control check remains uncertainty. Five minutes of
+probe-timeout skips report one environment event and do not retire a live master.
 Throwaway Kernel/compiler PostgreSQL uses `--rm` plus labelled owner-pid cleanup so a killed owner or failed startup
 leaves no owned container. `docker run` and `rm -f` use Auth's 120-second spawn timeout, including host-lifetime Python
-cleanup; inspect/exec/ps/port probes use 5 seconds. Signal-path removal is detached so a 200ms SIGKILL cannot abort it. A failed create reaps its nonce. Data stays on a labelled volume, not a 1 GiB tmpfs. Isolated-stack databases attach with `container:<id>`, never `ns:/proc/...`, and publish
+cleanup; inspect/exec/ps/port probes use 5 seconds. Ordinary compiler-database cleanup verifies container and volume settlement and keeps native compiler status; signal-path removal is detached so a 200ms SIGKILL cannot abort it. A failed create reaps its nonce. Data stays on a labelled volume, not a 1 GiB tmpfs. Isolated-stack databases attach with `container:<id>`, never `ns:/proc/...`, and publish
 PostgreSQL through an independent TCP-to-Unix child rather than a same-process proxy, and wait for in-container
 `pg_isready` plus a protocol reply before migrations. Empty-directory source and result manifests share the
 `directory\0` digest.

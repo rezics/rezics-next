@@ -19,9 +19,12 @@ import { cgroupArgs } from './search.ts';
 import {
   dockerNetworkArgs,
   isolatedPostgresSocketDir,
+  newCompilerNonce,
   ownerProcessIdentity,
   postgresPublishArgs,
+  reapLabeledContainers,
   resolvePostgresListenUrl,
+  retryDockerCreateOnce,
   sharesIsolatedStackNetwork,
 } from '../../../scripts/compiler-database.ts';
 import { withCommandPhase } from './command-phases.ts';
@@ -307,12 +310,15 @@ function ownerIdentityLabels(pid: number): { pid: string; start: string; boot: s
   return { pid: String(pid), start, boot };
 }
 
+export const KERNEL_DERIVED_NONCE_LABEL = 'rezics.kernel.derived.nonce';
+
 /** One-run compiler database: slice-confined, disk-backed, never a checkout bind mount. `--rm` drops it when it exits. */
-export function throwawayDatabaseRunArgs(pid = process.pid): string[] {
+export function throwawayDatabaseRunArgs(pid = process.pid, nonce = newCompilerNonce(pid)): string[] {
   const owner = ownerIdentityLabels(pid);
-  const labels = [`rezics.kernel.derived.pid=${owner.pid}`];
+  const labels = [`rezics.kernel.derived.pid=${owner.pid}`, `${KERNEL_DERIVED_NONCE_LABEL}=${nonce}`];
   if (owner.start) labels.push(`rezics.kernel.derived.start=${owner.start}`);
   if (owner.boot) labels.push(`rezics.kernel.derived.boot=${owner.boot}`);
+  const volumeLabels = labels.filter((label) => !label.startsWith(`${KERNEL_DERIVED_NONCE_LABEL}=`));
   const network = dockerNetworkArgs();
   return [
     'run',
@@ -325,7 +331,7 @@ export function throwawayDatabaseRunArgs(pid = process.pid): string[] {
     ...labels.flatMap((label) => ['--label', label]),
     ...postgresPublishArgs(pid, network),
     '--mount',
-    `type=volume,destination=/var/lib/postgresql,${labels.map((label) => `volume-label=${label}`).join(',')}`,
+    `type=volume,destination=/var/lib/postgresql,${volumeLabels.map((label) => `volume-label=${label}`).join(',')}`,
     '-e',
     'POSTGRES_USER=rezics',
     '-e',
@@ -340,6 +346,23 @@ export function throwawayDatabaseRunArgs(pid = process.pid): string[] {
     '-c',
     'full_page_writes=off',
   ];
+}
+
+/** Start the one-run derived container; a timeout reaps that nonce and retries once. */
+export function startThrowawayDatabaseContainer(
+  pid = process.pid,
+  nonce = newCompilerNonce(pid),
+  dockerCommand: typeof docker = docker,
+): string {
+  const start = (attemptNonce: string): string => {
+    try {
+      return dockerCommand(throwawayDatabaseRunArgs(pid, attemptNonce));
+    } catch (error) {
+      reapLabeledContainers(KERNEL_DERIVED_NONCE_LABEL, attemptNonce, dockerCommand);
+      throw error;
+    }
+  };
+  return retryDockerCreateOnce(nonce, start, () => newCompilerNonce(pid));
 }
 
 function reusableDatabaseUrl(migrations: string): { container: string; url: string } {
@@ -440,7 +463,7 @@ export async function withThrowawayDatabase<T>(
     } else {
       await withCommandPhase('database-image', async () => {
         process.stdout.write(`Derived database owner ${ownerProcessIdentity()}\n`);
-        container = docker(throwawayDatabaseRunArgs());
+        container = startThrowawayDatabaseContainer();
         const listen = await resolvePostgresListenUrl(container);
         derivedListenStop = listen.stop;
         url = listen.url;

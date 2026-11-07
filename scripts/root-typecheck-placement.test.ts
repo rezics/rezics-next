@@ -80,7 +80,7 @@ appendFileSync(${JSON.stringify(join(root, 'consumers'))}, JSON.stringify({ name
   };
 }
 
-test.each([0, 23, 75, 130, 143])(
+test.each([0, 23, 75, 124, 130, 143])(
   'root and direct entrypoints never replay a placed status %i locally',
   async (status) => {
     const f = fixture();
@@ -315,8 +315,10 @@ test('root default database branch composes placement before loading any compile
     `
 import { mock } from 'bun:test';
 import assert from 'node:assert/strict';
+import * as compilerDatabase from ${JSON.stringify(join(repository, 'scripts/compiler-database.ts'))};
 const events = [];
 mock.module(${JSON.stringify(join(repository, 'scripts/compiler-database.ts'))}, () => ({
+  ...compilerDatabase,
   prepareCompilerDatabase: async () => { events.push('database'); throw new Error('local database'); },
 }));
 const { typecheck } = await import(${JSON.stringify(join(repository, 'scripts/typecheck.ts'))});
@@ -400,7 +402,7 @@ appendFileSync(${JSON.stringify(join(f.root, 'commands'))}, ${JSON.stringify(exe
 import { run${workspace === 'kernel' ? 'Kernel' : 'Auth'}Typecheck } from ${JSON.stringify(join(repository, `services/${workspace}/scripts/typecheck.ts`))};
 // Bun's package-script launcher prepends ancestor node_modules bins. Confine both lookup paths to inert executables.
 process.env.PATH = ${JSON.stringify(bin)};
-process.exitCode = await run${workspace === 'kernel' ? 'Kernel' : 'Auth'}Typecheck(process.env, {
+process.exit(await run${workspace === 'kernel' ? 'Kernel' : 'Auth'}Typecheck(process.env, {
   recognize: () => (${JSON.stringify(admitted())}),
   place: async () => { throw new Error('nested placement'); },
   ${
@@ -408,7 +410,7 @@ process.exitCode = await run${workspace === 'kernel' ? 'Kernel' : 'Auth'}Typeche
       ? `prepareSqlAnalysis: async (env) => ({ available: false, environment: env, analyzedFiles: 0, totalFiles: 0, writtenEntries: 0, dispose() {} }),`
       : ''
   }
-});
+}));
 `,
     );
   }
