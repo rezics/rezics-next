@@ -64,6 +64,20 @@ test('walk process environment does not inherit check-host cgroup placement', ()
   expect(cgroupArgs(env)).toEqual([]);
 });
 
+test('walk process environment binds seed KERNEL_ORIGIN and AUTH_ORIGIN to the slot', () => {
+  const env = walkProcessEnvironment('6a6ca25b-b24d-431b-bc8f-615cef277eda', 3, {
+    KERNEL_ORIGIN: 'http://127.0.0.1:4100',
+    AUTH_ORIGIN: 'http://127.0.0.1:4200',
+    KERNEL_PORT: '4100',
+    PATH: '/bin',
+  });
+  expect(env.KERNEL_ORIGIN).toBe('http://127.0.0.1:20033');
+  expect(env.KERNEL_PORT).toBe('20033');
+  expect(env.AUTH_ORIGIN).toBe('http://127.0.0.1:20031');
+  expect(env.REZICS_LOCAL_STACK_KERNEL_ORIGIN).toBe('http://127.0.0.1:20033');
+  expect(env.REZICS_LOCAL_STACK_ISSUER_ORIGIN).toBe('http://127.0.0.1:20031');
+});
+
 test('walk docker wrapper keeps attempt labels and omits the check-host cgroup', async () => {
   const directory = await mkdtemp(`${import.meta.dir}/../.temp/walk-docker-`);
   await writeFile(`${directory}/docker`, '#!/bin/sh\nprintf "%s\\n" "$@"\n');

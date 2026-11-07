@@ -350,7 +350,7 @@ export async function waitUntilWalkReady(options: {
   }
 }
 
-/** The variables that give one admitted stack its own names, ports and origins. */
+/** The variables that give one admitted stack its own names, ports and origins, including seed KERNEL_ORIGIN. */
 export function walkStackEnvironment(task: string, index: number): Record<string, string> {
   const names = walkStackNames(task, index);
   const ports = walkStackPorts(index);
@@ -366,6 +366,9 @@ export function walkStackEnvironment(task: string, index: number): Record<string
     REZICS_LOCAL_STACK_ISSUER_ORIGIN: origin(ports.issuer),
     REZICS_LOCAL_STACK_NATIVE_ORIGIN: origin(ports.native),
     REZICS_LOCAL_STACK_KERNEL_ORIGIN: origin(ports.kernel),
+    KERNEL_ORIGIN: origin(ports.kernel),
+    KERNEL_PORT: String(ports.kernel),
+    AUTH_ORIGIN: origin(ports.issuer),
     REZICS_WALK_STACK_SLOT: String(index),
   };
 }
