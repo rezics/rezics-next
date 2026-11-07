@@ -1,8 +1,9 @@
 import { expect, test } from 'bun:test';
-import { existsSync, mkdtempSync, rmSync, symlinkSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { planTestCommandLanes } from '../scripts/isolated.ts';
+import { resolveWebTestSelection } from '../scripts/selection.ts';
 
 // Containers starting and stopping on the host add and remove network interfaces while tests run. Chromium aborts
 // in-flight requests, even to 127.0.0.1, with net::ERR_NETWORK_CHANGED whenever an interface changes, so a page whose
@@ -40,14 +41,29 @@ test('UI-only selections stay in the private lane with every CLI argument preser
 
 test('native-only selections run in the host lane', () => {
   const command = ['bun', 'test', '--timeout', '4000', 'tests/native/stack.host.test.ts'];
-  expect(planTestCommandLanes(command, join(root, 'apps/web'))).toEqual([{ args: command, isolate: false }]);
+  expect(planTestCommandLanes(command, join(root, 'apps/web'))).toEqual([
+    {
+      args: ['bun', 'test', '--path-ignore-patterns=node_modules/**', '--timeout', '4000', 'tests/native/stack.host.test.ts'],
+      isolate: false,
+    },
+  ]);
 });
 
 test('mixed UI and native selections preserve the original arguments in separate lanes', () => {
   const command = ['bun', 'test', '--timeout', '4000', 'tests/shell.test.ts', 'tests/native/stack.host.test.ts'];
   expect(planTestCommandLanes(command, join(root, 'apps/web'))).toEqual([
     { args: ['bun', 'test', '--timeout', '4000', 'tests/shell.test.ts'], isolate: true },
-    { args: ['bun', 'test', '--timeout', '4000', 'tests/native/stack.host.test.ts'], isolate: false },
+    {
+      args: [
+        'bun',
+        'test',
+        '--path-ignore-patterns=node_modules/**',
+        '--timeout',
+        '4000',
+        'tests/native/stack.host.test.ts',
+      ],
+      isolate: false,
+    },
   ]);
 });
 
@@ -61,12 +77,95 @@ test('the recorder remains a host-lane exception in a mixed selection', () => {
 
 test('a default package selection routes all native receipts and the recorder to the host lane', () => {
   const lanes = planTestCommandLanes(['bun', 'test'], join(root, 'apps/web'));
-  expect(lanes).toHaveLength(2);
+  expect(lanes).toHaveLength(3);
   expect(lanes[0]!.isolate).toBe(true);
   expect(lanes[0]!.args.every((argument) => !argument.endsWith('.host.test.ts'))).toBe(true);
-  expect(lanes[1]!.isolate).toBe(false);
-  expect(lanes[1]!.args.some((argument) => argument.endsWith('native-site-foundation.host.test.ts'))).toBe(true);
-  expect(lanes[1]!.args.some((argument) => argument.endsWith('record-script.test.ts'))).toBe(true);
+  expect(lanes[1]).toEqual({ args: ['bun', 'scripts/check.ts', '--auth-binding-host'], isolate: false });
+  expect(lanes[2]!.isolate).toBe(false);
+  expect(lanes[2]!.args).toContain('--path-ignore-patterns=node_modules/**');
+  expect(lanes[2]!.args.some((argument) => argument.endsWith('native-site-foundation.host.test.ts'))).toBe(true);
+  expect(lanes[2]!.args.some((argument) => argument.endsWith('record-script.test.ts'))).toBe(true);
+});
+
+test('repository selectors expand once, keep path-shaped option operands, and split host and UI argv', () => {
+  mkdirSync(join(root, '.temp'), { recursive: true });
+  const fixtureRoot = mkdtempSync(join(root, '.temp/network-selection-'));
+  const appDirectory = join(fixtureRoot, 'apps', 'web');
+  const nativeDirectory = join(appDirectory, 'tests', 'native');
+  mkdirSync(nativeDirectory, { recursive: true });
+  mkdirSync(join(appDirectory, 'tests'), { recursive: true });
+  for (const file of [
+    join(nativeDirectory, 'native.host.test.ts'),
+    join(nativeDirectory, 'native-sibling.host.test.ts'),
+    join(appDirectory, 'tests', 'ui.test.ts'),
+  ])
+    writeFileSync(file, '');
+
+  try {
+    const command = [
+      'bun',
+      'test',
+      '--timeout',
+      '4000',
+      '--preload',
+      'apps/web/tests/native/option-value.test.ts',
+      'apps/web/tests/native/native.host.test.ts',
+      'tests/native/*.host.test.ts',
+      'tests/ui.test.ts',
+    ];
+    const selection = resolveWebTestSelection(command, {
+      rootDirectory: fixtureRoot,
+      appDirectory,
+      invocationDirectory: fixtureRoot,
+      source: 'repository test entrypoint',
+    });
+    expect(selection.selectedFiles).toEqual([
+      'tests/native/native.host.test.ts',
+      'tests/native/native-sibling.host.test.ts',
+      'tests/ui.test.ts',
+    ]);
+    expect(selection.normalizedArgv).toEqual([
+      'bun',
+      'test',
+      '--timeout',
+      '4000',
+      '--preload',
+      'apps/web/tests/native/option-value.test.ts',
+      'tests/native/native.host.test.ts',
+      'tests/native/native-sibling.host.test.ts',
+      'tests/ui.test.ts',
+    ]);
+    expect(planTestCommandLanes(selection.command, appDirectory, selection, fixtureRoot)).toEqual([
+      {
+        args: [
+          'bun',
+          'test',
+          '--timeout',
+          '4000',
+          '--preload',
+          'apps/web/tests/native/option-value.test.ts',
+          'tests/ui.test.ts',
+        ],
+        isolate: true,
+      },
+      {
+        args: [
+          'bun',
+          'test',
+          '--path-ignore-patterns=node_modules/**',
+          '--timeout',
+          '4000',
+          '--preload',
+          'apps/web/tests/native/option-value.test.ts',
+          'tests/native/native.host.test.ts',
+          'tests/native/native-sibling.host.test.ts',
+        ],
+        isolate: false,
+      },
+    ]);
+  } finally {
+    rmSync(fixtureRoot, { recursive: true, force: true });
+  }
 });
 
 for (const pkg of packages) {

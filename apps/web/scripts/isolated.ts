@@ -4,40 +4,74 @@ import { join, resolve } from 'node:path';
 import { ensureMessagesReady } from './messages-ready.ts';
 import { stackRun, testKeepsFiles } from '../../../scripts/stack-run.ts';
 import { commandNeedsSharedDevServer, privateNetworkCommand, webTestPrivateNetworkEnvName } from './with-dev-server.ts';
+import {
+  admitWebHostTestCommand,
+  appendTestFiles,
+  isWebHostTestFile,
+  readWebTestSelectionContext,
+  resolveWebTestSelection,
+  selectedWebTestFiles,
+  testCommandForFiles,
+  writeWebTestSelectionContext,
+  webTestSelectionContextEnvironment,
+  type WebTestSelection,
+  type WebTestSelectionContext,
+} from './selection.ts';
 
 export type TestCommandLane = { args: string[]; isolate: boolean };
 
 const testFilePattern = /\.test\.[cm]?[jt]sx?$/u;
-const nativeHostPattern = /\.host\.test\.[cm]?[jt]sx?$/u;
+const authHostFile = 'tests/auth-binding.host.test.ts';
 const recorderPattern = /(?:^|\/)record-script\.test\.[cm]?[jt]sx?$/u;
 
-export function planTestCommandLanes(appCommand: string[], appDirectory?: string): TestCommandLane[] {
+export function planTestCommandLanes(
+  appCommand: string[],
+  appDirectory?: string,
+  selection?: WebTestSelectionContext,
+  invocationDirectory = appDirectory ?? process.cwd(),
+): TestCommandLane[] {
   if (appCommand[0] !== 'bun' || appCommand[1] !== 'test') return [{ args: appCommand.slice(), isolate: true }];
 
-  const selected = appCommand.filter((argument) => testFilePattern.test(argument));
+  const resolved = appDirectory && !selection
+    ? resolveWebTestSelection(appCommand, {
+        rootDirectory: resolve(appDirectory, '../..'),
+        appDirectory,
+        invocationDirectory,
+        source: 'apps/web/scripts/isolated.ts',
+      })
+    : undefined;
+  const command = selection?.normalizedArgv.slice() ?? resolved?.command ?? appCommand.slice();
+  const selected = selection?.selectedFiles.slice() ?? resolved?.selectedFiles ?? selectedWebTestFiles(command);
   if (selected.length === 0) {
     if (!appDirectory) return [{ args: appCommand.slice(), isolate: true }];
-    const allFiles = listTestFiles(appDirectory);
-    const hostFiles = allFiles.filter(isHostLaneTest);
+    const allFiles = listTestFiles(appDirectory).sort();
+    const authFiles = allFiles.filter((file) => file === authHostFile);
+    const hostFiles = allFiles.filter((file) => isHostLaneTest(file) && file !== authHostFile);
     const isolatedFiles = allFiles.filter((file) => !isHostLaneTest(file));
     const lanes: TestCommandLane[] = [];
-    if (isolatedFiles.length) lanes.push({ args: [...appCommand, ...isolatedFiles], isolate: true });
-    if (hostFiles.length) lanes.push({ args: [...appCommand, ...hostFiles], isolate: false });
-    return lanes.length ? lanes : [{ args: appCommand.slice(), isolate: true }];
+    if (isolatedFiles.length) lanes.push({ args: appendTestFiles(command, isolatedFiles), isolate: true });
+    if (authFiles.length) lanes.push({ args: ['bun', 'scripts/check.ts', '--auth-binding-host'], isolate: false });
+    if (hostFiles.length)
+      lanes.push({ args: admitWebHostTestCommand(appendTestFiles(command, hostFiles)), isolate: false });
+    return lanes.length ? lanes : [{ args: command, isolate: true }];
   }
 
-  const hostFiles = selected.filter(isHostLaneTest);
-  if (hostFiles.length === 0) return [{ args: appCommand.slice(), isolate: true }];
-  if (hostFiles.length === selected.length) return [{ args: appCommand.slice(), isolate: false }];
-  const hostSet = new Set(hostFiles);
-  return [
-    { args: appCommand.filter((argument) => !testFilePattern.test(argument) || !hostSet.has(argument)), isolate: true },
-    { args: appCommand.filter((argument) => !testFilePattern.test(argument) || hostSet.has(argument)), isolate: false },
-  ];
+  const authFiles = selected.filter((file) => file === authHostFile);
+  const hostFiles = selected.filter((file) => isHostLaneTest(file) && file !== authHostFile);
+  const isolatedFiles = selected.filter((file) => !isHostLaneTest(file));
+  const lanes: TestCommandLane[] = [];
+  if (isolatedFiles.length) lanes.push({ args: testCommandForFiles(command, isolatedFiles), isolate: true });
+  if (authFiles.length) lanes.push({ args: ['bun', 'scripts/check.ts', '--auth-binding-host'], isolate: false });
+  if (hostFiles.length)
+    lanes.push({
+      args: admitWebHostTestCommand(testCommandForFiles(command, hostFiles)),
+      isolate: false,
+    });
+  return lanes.length ? lanes : [{ args: command, isolate: true }];
 }
 
 function isHostLaneTest(file: string): boolean {
-  return nativeHostPattern.test(file) || recorderPattern.test(file);
+  return isWebHostTestFile(file) || recorderPattern.test(file);
 }
 
 function listTestFiles(directory: string, parent = ''): string[] {
@@ -53,11 +87,10 @@ function listTestFiles(directory: string, parent = ''): string[] {
 
 async function main(): Promise<void> {
   const rawCommand = process.argv.slice(2);
-  const testCommand = rawCommand.indexOf('test');
-  const command =
-    testCommand < 0
-      ? rawCommand
-      : rawCommand.map((argument, index) => (index > testCommand ? argument.replace(/^apps\/web\//u, '') : argument));
+  const existingContext = readWebTestSelectionContext();
+  const routed = rawCommand.length === 1 && rawCommand[0] === '--routed-selection';
+  if (routed && !existingContext) throw new Error('--routed-selection requires the placed Web test selection context');
+  const command = routed ? existingContext!.normalizedArgv.slice() : rawCommand;
 
   if (command.length === 0) {
     process.stderr.write('Usage: bun scripts/isolated.ts <command> [arguments...]\n');
@@ -67,20 +100,30 @@ async function main(): Promise<void> {
 
   const app = resolve(import.meta.dir, '..');
   const root = resolve(app, '../..');
-  const appCommand =
+  const selection: WebTestSelection | undefined =
     command[0] === 'bun' && command[1] === 'test'
-      ? command.map((argument, index) =>
-          index > 1 && argument.startsWith('apps/web/') ? resolve(root, argument) : argument,
-        )
-      : command;
+      ? routed && existingContext
+        ? { ...existingContext, executionCwd: app, command: existingContext.normalizedArgv.slice() }
+        : resolveWebTestSelection(command, {
+            rootDirectory: root,
+            appDirectory: app,
+            invocationDirectory: process.cwd(),
+            source: 'apps/web/scripts/isolated.ts',
+          })
+      : undefined;
+  const appCommand = selection?.command ?? command;
   const stateRoot = process.env.WEB_TEST_STATE_DIR;
+  const routedCommand = selection
+    ? ['bun', 'scripts/isolated.ts', '--routed-selection']
+    : ['bun', 'scripts/isolated.ts', ...command];
+  const stackEnvironment = selection ? writeWebTestSelectionContext(selection) : process.env;
 
   process.exitCode = await stackRun(
     {
       label: 'web isolated',
       root,
       cwd: app,
-      command: ['bun', 'scripts/isolated.ts', ...command],
+      command: routedCommand,
       // A state directory or a report the caller names is read back from this machine.
       keepsFiles: stateRoot !== undefined || testKeepsFiles(appCommand),
     },
@@ -93,7 +136,7 @@ async function main(): Promise<void> {
       let isolated = false;
 
       // Docker-backed native receipts and the recorder use the host lane; native Chromium still isolates itself.
-      const commands = planTestCommandLanes(appCommand, app);
+      const commands = planTestCommandLanes(appCommand, app, selection, selection?.invocationCwd ?? process.cwd());
 
       if (linux) {
         try {
@@ -112,6 +155,7 @@ async function main(): Promise<void> {
       if (!stateRoot) temporary = mkdtempSync(join(tmpdir(), 'rezics-web-test-'));
       const childEnvironment = {
         ...process.env,
+        ...stackEnvironment,
         PUBLIC_ORIGIN: 'http://127.0.0.1:3000',
         REZICS_TEST_RUNTIME: '1',
         WEB_TEST_STATE_DIR: stateRoot ?? join(temporary!, 'cloudflare-state'),
@@ -143,7 +187,10 @@ async function main(): Promise<void> {
             'KERNEL_ORIGIN',
           ])
             delete testEnvironment[name];
+          if (run.args[0] === 'bun' && run.args[1] === 'test')
+            delete testEnvironment[webTestSelectionContextEnvironment];
           const child = Bun.spawn(invocation, {
+            cwd: app,
             env: testEnvironment,
             stdin: 'inherit',
             stdout: 'inherit',
@@ -174,6 +221,7 @@ async function main(): Promise<void> {
         if (temporary) rmSync(temporary, { recursive: true, force: true });
       }
     },
+    stackEnvironment,
   );
 }
 
