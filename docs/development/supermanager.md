@@ -51,17 +51,23 @@ unresolved owner deadlocks. Managers remain responsible for deciding and deliver
 supermanager or maintainer is unreachable, concerned managers settle a choice after one exchange, record reasons and
 proceed: producers decide interfaces and outcome owners decide shared choices. Only genuinely dependent work waits.
 
-A watchdog script supervises this resident session without model tokens. It treats the supermanager as stuck when a
-manager's question or blocker has had no reply for 30 minutes and the session transcript has not changed for 30
-minutes.
+The token-free watcher leaves every message intact in the native manager inbox. It sends one short mailbox
+notification when actionable personally unread mail is at least 60 seconds old and the registered session has been
+explicitly idle for ten seconds. Busy turns, long tools and transcript silence never establish idleness. Codex
+activity comes from its identity-verified transcript's turn lifecycle; an unsupported activity source stays unknown.
+New mail coalesces while the resident is busy or a notification is outstanding. Reading, acknowledging or inspecting
+another manager's mail does not consume the resident's personal inbox.
 
-Recover in this order, stopping as soon as it responds:
+The authenticated resident reads full event bodies with `inbox read <manager>`, oldest unread page first. Only returned
+rows advance its durable personal cursor. An explicit `--cursor <id>` on the first owner read can bootstrap a backlog
+already consumed; later reads continue the stored cursor. Acknowledgement is not a delivery receipt. The watcher
+uses `--start-after <id>` only until that personal cursor exists, and requires `--transcript <path>` for activity.
+Its transport journal prevents repeating an already staged or submitted notification across retries and restarts.
+Recovery and hourly producers emit native inbox events; they do not type separate prompts into the resident window.
 
-1. The watchdog types a one-line note into the resident window naming the waiting items.
-2. After ten more minutes without activity, it alerts the project's Telegram group with the resume command.
-3. Whoever answers the alert resumes the registered provider session in that same window and thread: Codex uses
-   `codex resume <registered-thread-id>`; Claude uses
-   `claude --resume <registered-thread-id> --permission-mode bypassPermissions`. Never start a second supermanager.
+If operator recovery is needed, resume the registered provider session in the same window and thread: Codex uses
+`codex resume <registered-thread-id>`; Claude uses
+`claude --resume <registered-thread-id> --permission-mode bypassPermissions`. Never start a second supermanager.
 
 The resident may be an external Codex or Claude session. Register it from that session with
 `bun tools/goal/src/cli.ts manager register-supermanager`; its native `CODEX_THREAD_ID` or `CLAUDE_CODE_SESSION_ID`

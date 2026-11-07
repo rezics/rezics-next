@@ -2,9 +2,14 @@
 import { Database } from 'bun:sqlite';
 import { parseArgs } from 'node:util';
 import { dirname, join } from 'node:path';
-import { SqliteManagerInbox } from '../src/inbox.ts';
+import { SqliteManagerInbox, residentInboxCursor } from '../src/inbox.ts';
 import { openDb } from '../src/db.ts';
-import { ResidentWakeBridge, residentIdentity, tmuxResidentSender } from '../src/resident-wake.ts';
+import {
+  CodexResidentActivity,
+  ResidentWakeBridge,
+  residentIdentity,
+  tmuxResidentSender,
+} from '../src/resident-wake.ts';
 
 const { values } = parseArgs({
   options: {
@@ -15,6 +20,7 @@ const { values } = parseArgs({
     pane: { type: 'string' },
     'tmux-command': { type: 'string', default: 'tmux' },
     'start-after': { type: 'string' },
+    transcript: { type: 'string' },
     emit: { type: 'boolean' },
     summary: { type: 'string' },
     source: { type: 'string', default: 'operator' },
@@ -38,18 +44,23 @@ if (values.emit) {
   }
 } else {
   if (!values['tmux-socket'] || !values.pane) throw new Error('--tmux-socket and --pane are required');
-  const startAfter = Number(values['start-after'] ?? 0);
-  if (!Number.isSafeInteger(startAfter) || startAfter < 0)
+  if (!values.transcript) throw new Error('--transcript is required for explicit resident activity');
+  const startAfter = values['start-after'] === undefined ? undefined : Number(values['start-after']);
+  if (startAfter !== undefined && (!Number.isSafeInteger(startAfter) || startAfter < 0))
     throw new Error('--start-after must be a nonnegative event id');
   const db = new Database(values.db, { readonly: true, strict: true });
   db.exec('PRAGMA busy_timeout = 5000');
   const cursor = values.cursor ?? join(dirname(values.db), 'watch', 'supermanager-delivery.json');
+  const activity = new CodexResidentActivity(values.transcript);
   const bridge = new ResidentWakeBridge(
     db,
     values.manager,
     cursor,
-    tmuxResidentSender(values['tmux-socket'], values.pane, values['tmux-command'], `${cursor}.transport.json`),
+    tmuxResidentSender(values['tmux-socket'], values.pane, values['tmux-command'], `${cursor}.transport.json`, () =>
+      residentInboxCursor(db, values.manager),
+    ),
     startAfter,
+    (resident) => activity.read(resident),
   );
   let stopped = false;
   process.once('SIGTERM', () => {
@@ -63,7 +74,7 @@ if (values.emit) {
     do {
       try {
         const count = bridge.flush();
-        if (count) console.log(`${new Date().toISOString()} delivered ${count} resident events`);
+        if (count) console.log(`${new Date().toISOString()} notified resident of ${count} unread events`);
         if (lastError) console.log(`${new Date().toISOString()} resident delivery recovered`);
         lastError = undefined;
       } catch (error) {

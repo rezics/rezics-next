@@ -2043,14 +2043,19 @@ The supermanager sets direction and the managers own the work. This applies to e
 #### Resident event delivery
 
 The resident watchdog service runs `bun tools/goal/scripts/supermanager-watch.ts --db <store> --tmux-socket
-<socket> --pane <target>`. It reads the registered provider and thread from the store and delivers real inbox events
-within its two-second coalescing interval, independently of read, acknowledgement and host notification state.
-A separate atomic `--cursor <file>` checkpoints successful verified tmux submission; failed transport retains pending
-IDs. Wakes contain a short notice; event bodies stay in the inbox. A companion transport journal records staged text
-before typing and submission afterwards, so display-check retries and watcher restarts never append the same paste.
-An unconfirmed paste stays pending until its marker is visible; inspect the resident draft before resetting its journal.
-Worker info and successful manager renewal notices stay quiet. There are no periodic model turns.
-An initial `--start-after <id>` explicitly selects the historical backlog boundary when no cursor exists.
+<socket> --pane <target> --transcript <path>`. It reads the registered provider and thread from the store and verifies
+the Codex transcript's session identity. Incremental turn lifecycle events establish busy or idle state; silence,
+long tools and old-turn completions never establish idleness. Unsupported provider activity stays unknown.
+The two-second token-free loop sends a fixed short mailbox notification only when actionable personally unread mail
+is at least 60 seconds old and the session has been explicitly idle for ten seconds. All event bodies remain in the
+native inbox. Worker info and successful manager renewal notices stay quiet. There are no periodic model turns.
+The atomic `--cursor <file>` and transport journal retain one outstanding notification per unread period across
+retries and restarts; new mail coalesces until consumed. Waking never consumes messages. Global read, acknowledgement
+and host notification flags are independent of the resident owner's durable personal read cursor.
+When no personal cursor exists, `--start-after <id>` explicitly selects the genuinely consumed backlog boundary.
+Bootstrap the same boundary with the authenticated owner's first `inbox read <manager> --cursor <id>`; subsequent
+owner reads always continue the durable cursor and advance only over returned rows. Recovery producers emit inbox
+events and never independently type a wake. Operator recovery can still resume the registered provider session.
 The same script accepts `--emit --source hourly-report --summary <report>` to write the existing report's computed
 alarm into the native inbox. Metrics remain owned by the hourly report; the bridge does not recompute them.
 
@@ -2063,7 +2068,10 @@ recipient's message read or acknowledged, set notification state, wake a manager
 `inbox wait` and `inbox ack` retain their per-recipient behavior. `inbox read` returns one bounded page of that
 recipient's unacknowledged wakeable events, oldest id first, and marks only those rows read. Pages use the same size as
 shared queries (default 50, maximum 100) and include `hasMore` and `nextCursor`. Remaining unread events stay pending.
-`inbox wait` returns one unread page, so a later wait continues from the remaining work.
+`inbox wait` returns one unread page, so a later wait continues from the remaining work. For the authenticated
+resident owner's `inbox read`, personal consumption replaces shared flags: it returns full oldest personally unread
+events even when another manager already read or acknowledged them. Shared queries and foreign readers do not advance
+this cursor. Other managed managers retain the existing read behavior.
 
 ```sh
 bun tools/goal/src/cli.ts inbox log [--from <manager>] [--to <manager>] [--goal <goal>] [--task <task>] \
