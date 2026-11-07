@@ -29,6 +29,7 @@ import {
   isWebHostTestFile,
   readWebTestSelectionContext,
   resolveWebTestSelection,
+  testSelectorArgumentIndices,
   webTestSelectionContextEnvironment,
   writeWebTestSelectionContext,
   type WebTestSelection,
@@ -415,9 +416,12 @@ export async function runHostTests(
 }
 
 /** Runs the Auth-backed Web host fixture in Auth's database lane without widening the general Web host suite. */
-async function runAuthBindingHostTest(env: NodeJS.ProcessEnv = process.env): Promise<void> {
+async function runAuthBindingHostTest(
+  env: NodeJS.ProcessEnv = process.env,
+  testArguments: string[] = [],
+): Promise<void> {
   const routed = await routeWebCheck(
-    { root, cwd: app, command: ['bun', 'scripts/check.ts', '--auth-binding-host'] },
+    { root, cwd: app, command: ['bun', 'scripts/check.ts', '--auth-binding-host', ...testArguments] },
     env,
   );
   if (routed !== null) {
@@ -425,7 +429,7 @@ async function runAuthBindingHostTest(env: NodeJS.ProcessEnv = process.env): Pro
     return;
   }
   const file = 'apps/web/tests/auth-binding.host.test.ts';
-  const remoteCommand = ['bun', '../../apps/web/scripts/check.ts', '--auth-binding-host'];
+  const remoteCommand = ['bun', '../../apps/web/scripts/check.ts', '--auth-binding-host', ...testArguments];
   const code = await databaseCheck(remoteCommand, async () => {
     const database = ownDatabase();
     try {
@@ -449,12 +453,15 @@ async function runAuthBindingHostTest(env: NodeJS.ProcessEnv = process.env): Pro
         directory: root,
         files: [file],
         partial: true,
+        testArguments,
         createDatabase: (name) => psql(`CREATE DATABASE ${name} TEMPLATE ${TEMPLATE_DATABASE}`),
         dropDatabase: (name) => psql(`DROP DATABASE IF EXISTS ${name} WITH (FORCE)`),
         environment: (name) => {
           const url = database.url.replace(`/${TEMPLATE_DATABASE}?`, `/${name}?`);
+          const testEnvironment: NodeJS.ProcessEnv = { ...env };
+          delete testEnvironment[webTestSelectionContextEnvironment];
           return {
-            ...env,
+            ...testEnvironment,
             AUTH_CHECK_CONTAINER: database.container,
             AUTH_CHECK_LANE_OWNER: String(process.pid),
             DATABASE_URL: url,
@@ -541,7 +548,7 @@ export async function runWebHostTests(
 
 export type WebCheckRuntime = {
   hostTests?: WebHostTestRuntime;
-  authBindingHostTest?: (env: NodeJS.ProcessEnv) => Promise<void>;
+  authBindingHostTest?: (env: NodeJS.ProcessEnv, testArguments: string[]) => Promise<void>;
   /** Lets focused routing tests inspect the exact owning cwd and retained selection context. */
   route?: typeof routeWebCheck;
   invocationDirectory?: string;
@@ -628,12 +635,15 @@ export async function main(args: string[], runtime: WebCheckRuntime = {}): Promi
   const workerReport = browserWorkerRequest(currentArgs)?.report;
   const returned = workerReport ? [workspacePath(root, workerReport)] : ['apps/web/.cache/check-timings.json'];
   if (currentArgs.includes('--prepare-only')) returned.push('apps/web/.dev.vars');
-  const routed = await (runtime.route ?? routeWebCheck)({
-    root,
-    cwd: app,
-    command: ['bun', 'scripts/check.ts', ...routeCommand],
-    returns: returned,
-  }, routeEnvironment);
+  const routed = await (runtime.route ?? routeWebCheck)(
+    {
+      root,
+      cwd: app,
+      command: ['bun', 'scripts/check.ts', ...routeCommand],
+      returns: returned,
+    },
+    routeEnvironment,
+  );
   if (routed !== null) {
     process.exitCode = routed;
     return;
@@ -651,8 +661,10 @@ export async function main(args: string[], runtime: WebCheckRuntime = {}): Promi
     return;
   }
   if (currentArgs[0] === '--auth-binding-host') {
-    if (currentArgs.length !== 1) throw new Error('Usage: bun apps/web/scripts/check.ts --auth-binding-host');
-    await (runtime.authBindingHostTest ?? runAuthBindingHostTest)(process.env);
+    const testArguments = currentArgs.slice(1);
+    const selectors = testSelectorArgumentIndices(['bun', 'test', ...testArguments], 'bun-test');
+    if (selectors.length > 0) throw new Error('--auth-binding-host accepts Bun test options, not file selectors');
+    await (runtime.authBindingHostTest ?? runAuthBindingHostTest)(process.env, testArguments);
     return;
   }
   if (currentArgs[0] === '--host') {

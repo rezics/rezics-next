@@ -3,6 +3,7 @@ import { mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'nod
 import { join, relative, resolve } from 'node:path';
 import { main, runHostTests, runWebHostTests } from '../scripts/check.ts';
 import { readWebTestSelectionContext } from '../scripts/selection.ts';
+import { testCommand } from '../../../scripts/test-lanes.ts';
 
 const app = resolve(import.meta.dir, '..');
 const root = resolve(app, '../..');
@@ -161,8 +162,48 @@ test('the explicit Auth-only entry stays focused and propagates a lane failure',
     }),
   ).rejects.toThrow('auth lane failed');
   await expect(main(['--auth-binding-host', 'tests/auth-binding.host.test.ts'])).rejects.toThrow(
-    'Usage: bun apps/web/scripts/check.ts --auth-binding-host',
+    '--auth-binding-host accepts Bun test options, not file selectors',
   );
+
+  let authArguments: string[] = [];
+  await main(
+    [
+      '--auth-binding-host',
+      '--timeout',
+      '12345',
+      '--preload',
+      'apps/web/tests/native/option-value.test.ts',
+      '--test-name-pattern',
+      'binding',
+    ],
+    {
+      route: async () => null,
+      authBindingHostTest: async (_env, arguments_) => {
+        authArguments = arguments_;
+      },
+    },
+  );
+  expect(authArguments).toEqual([
+    '--timeout',
+    '12345',
+    '--preload',
+    'apps/web/tests/native/option-value.test.ts',
+    '--test-name-pattern',
+    'binding',
+  ]);
+  expect(testCommand('apps/web/tests/auth-binding.host.test.ts', 'auth-report.xml', undefined, authArguments)).toEqual([
+    'test',
+    '--timeout',
+    '12345',
+    '--reporter=junit',
+    '--reporter-outfile=auth-report.xml',
+    '--dots',
+    '--preload',
+    'apps/web/tests/native/option-value.test.ts',
+    '--test-name-pattern',
+    'binding',
+    './apps/web/tests/auth-binding.host.test.ts',
+  ]);
 });
 
 test('Auth and native host failures remain nonzero and the Auth lane cleanup runs', async () => {
@@ -206,7 +247,12 @@ test('selected host files retain repository or Web argv through placement and Bu
   const tests = join(selectionDirectory, 'tests', 'native');
   const marker = join(selectionDirectory, 'executed.txt');
   mkdirSync(tests, { recursive: true });
-  for (const name of ['selected.host.test.ts', 'selected-sibling.host.test.ts', 'glob-one.host.test.ts', 'glob-two.host.test.ts']) {
+  for (const name of [
+    'selected.host.test.ts',
+    'selected-sibling.host.test.ts',
+    'glob-one.host.test.ts',
+    'glob-two.host.test.ts',
+  ]) {
     writeFileSync(
       join(tests, name),
       `import { appendFileSync } from 'node:fs';
@@ -237,11 +283,7 @@ test(${JSON.stringify(name)}, () => appendFileSync(${JSON.stringify(marker)}, ${
       hostTests: {
         runNative: async (_files, env, execution) => {
           expect(execution?.cwd).toBe(app);
-          expect(execution?.command.slice(0, 3)).toEqual([
-            'bun',
-            'test',
-            '--path-ignore-patterns=node_modules/**',
-          ]);
+          expect(execution?.command.slice(0, 3)).toEqual(['bun', 'test', '--path-ignore-patterns=node_modules/**']);
           const childEnvironment = { ...env };
           delete childEnvironment.REZICS_WEB_TEST_SELECTION_CONTEXT;
           const result = Bun.spawnSync([process.execPath, ...execution!.command.slice(1)], {
@@ -261,18 +303,21 @@ test(${JSON.stringify(name)}, () => appendFileSync(${JSON.stringify(marker)}, ${
     const relativeToWeb = `${relative(app, selectionDirectory)}/tests/native/selected.host.test.ts`;
     const absolute = join(tests, 'selected.host.test.ts');
     const quotedGlob = `apps/web/${relative(app, selectionDirectory)}/tests/native/glob-*.host.test.ts`;
+    const absoluteGlob = join(tests, 'glob-*.host.test.ts');
     await executeSelection(relativeToRoot, root);
     await executeSelection(relativeToWeb, app);
     await executeSelection(absolute, app);
     await executeSelection(quotedGlob, root);
+    await executeSelection(absoluteGlob, app);
 
-    expect(observed.map(({ cwd }) => cwd)).toEqual([app, app, app, app]);
-    expect(observed.map(({ invocationCwd }) => invocationCwd)).toEqual([root, app, app, root]);
-    expect(observed.map(({ source }) => source)).toEqual(Array(4).fill('apps/web/scripts/check.ts'));
+    expect(observed.map(({ cwd }) => cwd)).toEqual([app, app, app, app, app]);
+    expect(observed.map(({ invocationCwd }) => invocationCwd)).toEqual([root, app, app, root, app]);
+    expect(observed.map(({ source }) => source)).toEqual(Array(5).fill('apps/web/scripts/check.ts'));
     expect(observed.map(({ files }) => files)).toEqual([
       [relative(app, join(tests, 'selected.host.test.ts'))],
       [relative(app, join(tests, 'selected.host.test.ts'))],
       [relative(app, join(tests, 'selected.host.test.ts'))],
+      [relative(app, join(tests, 'glob-one.host.test.ts')), relative(app, join(tests, 'glob-two.host.test.ts'))],
       [relative(app, join(tests, 'glob-one.host.test.ts')), relative(app, join(tests, 'glob-two.host.test.ts'))],
     ]);
     expect(observed.map(({ argv }) => argv)).toEqual([
@@ -280,9 +325,12 @@ test(${JSON.stringify(name)}, () => appendFileSync(${JSON.stringify(marker)}, ${
       ['--host', relativeToWeb],
       ['--host', absolute],
       ['--host', quotedGlob],
+      ['--host', absoluteGlob],
     ]);
     expect(readFileSync(marker, 'utf8').trim().split('\n').sort()).toEqual([
       'glob-one.host.test.ts',
+      'glob-one.host.test.ts',
+      'glob-two.host.test.ts',
       'glob-two.host.test.ts',
       'selected.host.test.ts',
       'selected.host.test.ts',

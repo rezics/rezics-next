@@ -180,8 +180,9 @@ denial of a file outside those roots; host TMPDIR is not an external fixture. An
 `bun run test:host`, so bunfig's host-file exclusion does not hide a named file.
 
 Decision: Web test selectors resolve once to Web-relative files, retain original argv, invocation cwd and source through
-check-host routing, and execute from `apps/web`; explicit native files use Bun's ignore override, while Auth binding
-keeps its Auth-owned database lane. From the repository root, select native files with
+check-host routing, and execute from `apps/web`; absolute globs preserve their workspace-relative directories and
+explicit native files use Bun's ignore override. Auth binding stays in its Auth-owned database lane with the original
+Bun options and operands carried to its per-file test command. From the repository root, select native files with
 `bun apps/web/scripts/check.ts --host 'tests/native/*.host.test.ts'`; from `apps/web`, use
 `bun scripts/check.ts --host 'tests/native/*.host.test.ts'`. A regular selected check may mix UI and native files; each
 file stays in its existing lane. Repository-relative `apps/web/...`, Web-relative `tests/...`, absolute in-workspace

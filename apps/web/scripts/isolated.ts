@@ -11,6 +11,7 @@ import {
   readWebTestSelectionContext,
   resolveWebTestSelection,
   selectedWebTestFiles,
+  testCommandOptions,
   testCommandForFiles,
   writeWebTestSelectionContext,
   webTestSelectionContextEnvironment,
@@ -32,14 +33,15 @@ export function planTestCommandLanes(
 ): TestCommandLane[] {
   if (appCommand[0] !== 'bun' || appCommand[1] !== 'test') return [{ args: appCommand.slice(), isolate: true }];
 
-  const resolved = appDirectory && !selection
-    ? resolveWebTestSelection(appCommand, {
-        rootDirectory: resolve(appDirectory, '../..'),
-        appDirectory,
-        invocationDirectory,
-        source: 'apps/web/scripts/isolated.ts',
-      })
-    : undefined;
+  const resolved =
+    appDirectory && !selection
+      ? resolveWebTestSelection(appCommand, {
+          rootDirectory: resolve(appDirectory, '../..'),
+          appDirectory,
+          invocationDirectory,
+          source: 'apps/web/scripts/isolated.ts',
+        })
+      : undefined;
   const command = selection?.normalizedArgv.slice() ?? resolved?.command ?? appCommand.slice();
   const selected = selection?.selectedFiles.slice() ?? resolved?.selectedFiles ?? selectedWebTestFiles(command);
   if (selected.length === 0) {
@@ -50,7 +52,11 @@ export function planTestCommandLanes(
     const isolatedFiles = allFiles.filter((file) => !isHostLaneTest(file));
     const lanes: TestCommandLane[] = [];
     if (isolatedFiles.length) lanes.push({ args: appendTestFiles(command, isolatedFiles), isolate: true });
-    if (authFiles.length) lanes.push({ args: ['bun', 'scripts/check.ts', '--auth-binding-host'], isolate: false });
+    if (authFiles.length)
+      lanes.push({
+        args: ['bun', 'scripts/check.ts', '--auth-binding-host', ...testCommandOptions(command)],
+        isolate: false,
+      });
     if (hostFiles.length)
       lanes.push({ args: admitWebHostTestCommand(appendTestFiles(command, hostFiles)), isolate: false });
     return lanes.length ? lanes : [{ args: command, isolate: true }];
@@ -61,7 +67,11 @@ export function planTestCommandLanes(
   const isolatedFiles = selected.filter((file) => !isHostLaneTest(file));
   const lanes: TestCommandLane[] = [];
   if (isolatedFiles.length) lanes.push({ args: testCommandForFiles(command, isolatedFiles), isolate: true });
-  if (authFiles.length) lanes.push({ args: ['bun', 'scripts/check.ts', '--auth-binding-host'], isolate: false });
+  if (authFiles.length)
+    lanes.push({
+      args: ['bun', 'scripts/check.ts', '--auth-binding-host', ...testCommandOptions(command)],
+      isolate: false,
+    });
   if (hostFiles.length)
     lanes.push({
       args: admitWebHostTestCommand(testCommandForFiles(command, hostFiles)),

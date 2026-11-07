@@ -95,7 +95,9 @@ export function testSelectorArgumentIndices(
       const optionalBailCount = option === '--bail' && /^\d+$/u.test(command[index + 1] ?? '');
       if (
         equals < 0 &&
-        (bunValueOptions.has(option) || optionalBailCount || (commandKind === 'web-check' && checkValueOptions.has(option)))
+        (bunValueOptions.has(option) ||
+          optionalBailCount ||
+          (commandKind === 'web-check' && checkValueOptions.has(option)))
       )
         skipNext = true;
       continue;
@@ -132,14 +134,16 @@ export function mapWebTestSelector(
 }
 
 function absoluteGlob(selector: string, app: string): string {
-  const wildcard = selector.search(globCharacters);
-  const prefix = selector.slice(0, wildcard);
+  const normalized = resolve(selector);
+  const wildcard = normalized.search(globCharacters);
+  const prefix = normalized.slice(0, wildcard);
   const separator = prefix.lastIndexOf(sep);
   const directory = resolve(separator < 0 ? app : prefix.slice(0, separator) || sep);
   if (!within(app, directory)) throw new Error(`Web test selector is outside the Web workspace: ${selector}`);
-  const suffix = selector.slice(directory.length + (selector[directory.length] === sep ? 1 : 0));
+  const suffix = normalized.slice(directory.length + (normalized[directory.length] === sep ? 1 : 0));
   const pattern = posix(suffix);
-  return pattern || '*';
+  const workspaceDirectory = posix(relative(app, directory));
+  return [workspaceDirectory, pattern || '*'].filter(Boolean).join('/');
 }
 
 function resolvePattern(
@@ -187,10 +191,7 @@ function matchingFiles(pattern: string, app: string, isGlob: boolean): string[] 
 }
 
 /** Resolves every selected Web test once, preserving non-selector tokens and expanding each glob in sorted order. */
-export function resolveWebTestSelection(
-  command: string[],
-  options: ResolveWebTestSelectionOptions,
-): WebTestSelection {
+export function resolveWebTestSelection(command: string[], options: ResolveWebTestSelectionOptions): WebTestSelection {
   const app = resolve(options.appDirectory);
   const root = resolve(options.rootDirectory);
   const invocationCwd = resolve(options.invocationDirectory ?? process.cwd());
@@ -204,19 +205,23 @@ export function resolveWebTestSelection(
   for (const argumentIndex of indices) {
     const input = command[argumentIndex]!;
     const glob = globCharacters.test(input);
-    const resolved = resolvePattern(input, { ...options, rootDirectory: root, appDirectory: app, invocationDirectory: invocationCwd });
+    const resolved = resolvePattern(input, {
+      ...options,
+      rootDirectory: root,
+      appDirectory: app,
+      invocationDirectory: invocationCwd,
+    });
     const matches = matchingFiles(resolved.pattern, app, glob);
     if (matches.length === 0) {
       throw new Error(
         `Web test selector matched no files: ${JSON.stringify(input)}; invocation cwd=${invocationCwd}; execution cwd=${app}; argv=${JSON.stringify(command)}`,
       );
     }
-    const files = matches
-      .filter((file) => {
-        if (selected.has(file)) return false;
-        selected.add(file);
-        return true;
-      });
+    const files = matches.filter((file) => {
+      if (selected.has(file)) return false;
+      selected.add(file);
+      return true;
+    });
     replacements.set(argumentIndex, files);
     const source: WebTestSelector['source'] =
       resolved.source === 'absolute'
@@ -258,7 +263,9 @@ export function resolveWebTestSelection(
 }
 
 /** Reuses the original selection trace when a placed command is re-entered on its owning check host. */
-export function readWebTestSelectionContext(environment: NodeJS.ProcessEnv = process.env): WebTestSelectionContext | undefined {
+export function readWebTestSelectionContext(
+  environment: NodeJS.ProcessEnv = process.env,
+): WebTestSelectionContext | undefined {
   const encoded = environment[webTestSelectionContextEnvironment];
   if (!encoded) return undefined;
   const value: unknown = JSON.parse(Buffer.from(encoded, 'base64url').toString('utf8'));
@@ -308,6 +315,13 @@ export function selectedWebTestFiles(
 ): string[] {
   if (selection) return selection.selectedFiles.slice();
   return testSelectorArgumentIndices(command, commandKind).map((index) => command[index]!);
+}
+
+/** Preserve Bun options and operands when one selected file moves to another owning execution lane. */
+export function testCommandOptions(command: string[]): string[] {
+  if (!isBunTest(command)) return [];
+  const selectors = new Set(testSelectorArgumentIndices(command, 'bun-test'));
+  return command.filter((_argument, index) => index >= 2 && !selectors.has(index));
 }
 
 /** Keep every flag and operand in place while retaining only the requested selector files. */

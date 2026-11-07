@@ -43,7 +43,14 @@ test('native-only selections run in the host lane', () => {
   const command = ['bun', 'test', '--timeout', '4000', 'tests/native/stack.host.test.ts'];
   expect(planTestCommandLanes(command, join(root, 'apps/web'))).toEqual([
     {
-      args: ['bun', 'test', '--path-ignore-patterns=node_modules/**', '--timeout', '4000', 'tests/native/stack.host.test.ts'],
+      args: [
+        'bun',
+        'test',
+        '--path-ignore-patterns=node_modules/**',
+        '--timeout',
+        '4000',
+        'tests/native/stack.host.test.ts',
+      ],
       isolate: false,
     },
   ]);
@@ -94,6 +101,7 @@ test('repository selectors expand once, keep path-shaped option operands, and sp
   const nativeDirectory = join(appDirectory, 'tests', 'native');
   mkdirSync(nativeDirectory, { recursive: true });
   mkdirSync(join(appDirectory, 'tests'), { recursive: true });
+  writeFileSync(join(appDirectory, 'tests', 'auth-binding.host.test.ts'), '');
   for (const file of [
     join(nativeDirectory, 'native.host.test.ts'),
     join(nativeDirectory, 'native-sibling.host.test.ts'),
@@ -106,9 +114,12 @@ test('repository selectors expand once, keep path-shaped option operands, and sp
       'bun',
       'test',
       '--timeout',
-      '4000',
+      '12345',
       '--preload',
       'apps/web/tests/native/option-value.test.ts',
+      '--test-name-pattern',
+      'binding',
+      'apps/web/tests/auth-binding.host.test.ts',
       'apps/web/tests/native/native.host.test.ts',
       'tests/native/*.host.test.ts',
       'tests/ui.test.ts',
@@ -120,6 +131,7 @@ test('repository selectors expand once, keep path-shaped option operands, and sp
       source: 'repository test entrypoint',
     });
     expect(selection.selectedFiles).toEqual([
+      'tests/auth-binding.host.test.ts',
       'tests/native/native.host.test.ts',
       'tests/native/native-sibling.host.test.ts',
       'tests/ui.test.ts',
@@ -128,12 +140,25 @@ test('repository selectors expand once, keep path-shaped option operands, and sp
       'bun',
       'test',
       '--timeout',
-      '4000',
+      '12345',
       '--preload',
       'apps/web/tests/native/option-value.test.ts',
+      '--test-name-pattern',
+      'binding',
+      'tests/auth-binding.host.test.ts',
       'tests/native/native.host.test.ts',
       'tests/native/native-sibling.host.test.ts',
       'tests/ui.test.ts',
+    ]);
+    const absoluteGlob = resolveWebTestSelection(['bun', 'test', join(nativeDirectory, '*.host.test.ts')], {
+      rootDirectory: fixtureRoot,
+      appDirectory,
+      invocationDirectory: fixtureRoot,
+      source: 'repository test entrypoint',
+    });
+    expect(absoluteGlob.selectedFiles).toEqual([
+      'tests/native/native-sibling.host.test.ts',
+      'tests/native/native.host.test.ts',
     ]);
     expect(planTestCommandLanes(selection.command, appDirectory, selection, fixtureRoot)).toEqual([
       {
@@ -141,9 +166,11 @@ test('repository selectors expand once, keep path-shaped option operands, and sp
           'bun',
           'test',
           '--timeout',
-          '4000',
+          '12345',
           '--preload',
           'apps/web/tests/native/option-value.test.ts',
+          '--test-name-pattern',
+          'binding',
           'tests/ui.test.ts',
         ],
         isolate: true,
@@ -151,12 +178,28 @@ test('repository selectors expand once, keep path-shaped option operands, and sp
       {
         args: [
           'bun',
+          'scripts/check.ts',
+          '--auth-binding-host',
+          '--timeout',
+          '12345',
+          '--preload',
+          'apps/web/tests/native/option-value.test.ts',
+          '--test-name-pattern',
+          'binding',
+        ],
+        isolate: false,
+      },
+      {
+        args: [
+          'bun',
           'test',
           '--path-ignore-patterns=node_modules/**',
           '--timeout',
-          '4000',
+          '12345',
           '--preload',
           'apps/web/tests/native/option-value.test.ts',
+          '--test-name-pattern',
+          'binding',
           'tests/native/native.host.test.ts',
           'tests/native/native-sibling.host.test.ts',
         ],
