@@ -3,14 +3,20 @@ import { MAX_PAGE_DOCUMENTS, pageDocumentReferences } from '@rezics/composition'
 import type { Release } from '@rezics/definitions';
 import { serializeDocument } from '@rezics/document';
 import { createHash } from 'node:crypto';
-import { readDocument, type DocumentReadDependencies } from '../content/document-read.ts';
+import {
+  readCurrentContentDocument,
+  type CurrentContentDocumentRuntime,
+} from '../content/adapters/index.ts';
 import { publicDocument, type PublicDocumentView } from '../content/document-public.ts';
-import type { AnchoredPosition, ReadContext } from '../content/model.ts';
+import type { Actor } from '../request/access.ts';
 import type { Item } from './item.ts';
 
 export { globalReadEligibility, relatedReadEligibility } from './eligibility.ts';
 export { readItemDetails, readItemTypes, readSubjectPageStates } from './public-subject-facts.ts';
 export type { ItemTypeDetails, SubjectPageState } from './public-subject-facts.ts';
+
+type AnchoredPosition = { partition: { partitionNo: number }; epoch: number; position: bigint };
+type ReadContext = { actor: Actor; deadline: number };
 
 /** Preview limits apply before body transfer and again to the complete retained DTO. */
 export function characterDocumentBounds() {
@@ -48,7 +54,7 @@ export function characterDocumentProperties(
  * This does not read an editor or grant any editorial operation.
  */
 export async function readCharacterPublicDocuments(
-  dependencies: DocumentReadDependencies,
+  dependencies: CurrentContentDocumentRuntime,
   subject: Item,
   release: Release,
   context: ReadContext,
@@ -63,7 +69,12 @@ export async function readCharacterPublicDocuments(
   // No Subject read, candidate scan or historical selection is performed here.
   let bytes = 2; // JSON object braces; each admitted entry also charges its key and separator.
   for (const reference of references) {
-    const result = await readDocument(dependencies, reference.document, context, characterDocumentBounds().sourceBytes);
+    const result = await readCurrentContentDocument(dependencies, {
+      id: reference.document,
+      actor: context.actor,
+      deadline: context.deadline,
+      maxSourceBytes: characterDocumentBounds().sourceBytes,
+    });
     if (!result) continue;
     anchors.push(...result.anchors);
     const document = result.document;

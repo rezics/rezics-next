@@ -1099,6 +1099,15 @@ export { endResourceDenial, recordResourceDenial } from './resource-denials.ts';
 export { grantGroupRole } from './resource-group-grant.ts';
 export { installStandingParentGrant } from './standing-parent.ts';
 export type { ResourceRoleCatalogue } from './resource-roles.ts';
+export {
+  compileViewerActionBindings,
+  readViewerActions,
+  viewerActionBindingActions,
+  type ViewerActionBinding,
+  type ViewerActionBindings,
+  type ViewerActionResource,
+  type ViewerActionResources,
+} from './viewer-actions.ts';
 
 export {
   createWorkflowApprovals,

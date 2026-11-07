@@ -164,6 +164,15 @@ export type { CharacterDocumentRelease } from './character-public-reading-docume
 export { globalReadEligibility, relatedReadEligibility } from './eligibility.ts';
 export { readItemDetails, readItemTypes, readSubjectPageStates } from './public-subject-facts.ts';
 export type { ItemTypeDetails, SubjectPageState } from './public-subject-facts.ts';
+export {
+  createSubjectReadingApplication,
+  type SubjectReadingApplication,
+  type SubjectReadingPageAnswer,
+  type SubjectReadingPageRequest,
+  type SubjectReadingPageResult,
+  type SubjectReadingPorts,
+  type SubjectReadingRuntime,
+} from './subject-reading-application.ts';
 
 export type * from './identity-scope-types.ts';
 export {
