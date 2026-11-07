@@ -144,6 +144,23 @@ are at least as new as the catalogues; `messages.js` mtime alone is not enough. 
 Cloudflare-denied `cloudflare.config.ts` dependencies from disk; the browser deny list stays unchanged. The shared Vite
 process fills missing Worker bindings from `.dev.vars.example` without writing `.dev.vars`, forces local Cloudflare
 bindings, and pins the Worker `optimizeDeps` after plugin merge so an isolated network never crawls the Worker graph.
+Decision: focused preparation, `storybook-dev --app` and Vite's serve hook share one app-local generation lock. Each
+caller checks freshness while holding it, compiles only incomplete or stale catalogues, and confirms the barrel,
+runtime and every catalogue leaf are complete before routes or Vite import them. A completed compile is reused by
+the next startup; partial output is completed before imports. Preparation and compiler lines report the stage, child
+PID, attempt, exit status and elapsed time. The generation parent stays lightweight; only its isolated worker imports
+the Paraglide compiler, and captured output keeps a bounded tail while preserving the original compiler failure.
+Decision: message preparation owns the full `bun run generate` process group; cancellation forwards its signal,
+escalates to SIGKILL after one second, and waits up to five seconds for the group to settle before releasing the shared
+lock. Readiness keeps the existing budget, waits for useful `/en` HTML, and reports the actual probe, fetch, or child
+exit cause. Only ECONNREFUSED maps to hydration startup; a closed-listener probe does not invent that code. Original
+browser assertions remain.
+Decision: `storybook-dev --app` logs its entry stage before loading physical check-host custody; finite Vite admission
+uses the lightweight `web-check-custody.ts` helper, and operator policy loads only when `--operator` is present. The
+receiving source revision `e5fd604190034f643a182acd908768d7fa64f831` predates integration `016cc7320e6e0b7ab0690e6f1e7fa3bbb1e12f05`
+and still used synchronous generation, so that timeout does not establish a failure in the integrated producer. The
+entry's eager Web placement and operator imports also ran before any startup stage could be reported; they now run only
+after the entry stage or on the explicit operator path.
 Decision: Vite owns test fixture transformation. `server.ts` does not import fixture bindings or honour a request
 header overlay; `WEB_TEST_WORKER_BINDINGS` is captured when Vite starts and injected into `test-runtime-bindings.ts`.
 The Worker selector shim resolves `use-sync-external-store/shim/with-selector` to the ESM adapter and leaves the

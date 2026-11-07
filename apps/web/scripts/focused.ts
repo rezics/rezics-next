@@ -4,6 +4,7 @@ import { isAbsolute, join, relative, resolve, sep } from 'node:path';
 import { ensureMessagesReady } from './messages-ready.ts';
 import { hasWebCheckCustody, routeWebCheck } from './check-placement.ts';
 import { commandNeedsSharedDevServer, privateNetworkCommand, webTestPrivateNetworkEnvName } from './with-dev-server.ts';
+import { ownBunProcess } from '../tests/support/server-custody.ts';
 
 const app = resolve(import.meta.dir, '..');
 const signals = [
@@ -74,23 +75,53 @@ export type FocusedRunnerOptions = {
   appDirectory?: string;
   env?: NodeJS.ProcessEnv;
   privateNetwork?: boolean;
-  prepare?: (appDirectory: string, env: NodeJS.ProcessEnv) => number | Promise<number>;
+  prepare?: (appDirectory: string, env: NodeJS.ProcessEnv, signal?: AbortSignal) => number | Promise<number>;
   onStart?: (runtime: { pid?: number; stateDirectory: string }) => void;
   onOutput?: (stream: 'stdout' | 'stderr', chunk: Uint8Array) => void;
   place?: (run: { root: string; cwd: string; command: string[] }, env: NodeJS.ProcessEnv) => Promise<number | null>;
 };
 
-async function prepareFocusedRun(appDirectory: string, env: NodeJS.ProcessEnv): Promise<number> {
-  const messages = ensureMessagesReady(appDirectory, env);
+export async function prepareFocusedRun(
+  appDirectory: string,
+  env: NodeJS.ProcessEnv,
+  signal?: AbortSignal,
+): Promise<number> {
+  const messages = await ensureMessagesReady(appDirectory, env, signal === undefined ? {} : { signal });
   if (messages !== 0) return messages;
   const generated = Bun.spawn(['bun', 'run', 'generate:routes'], {
     cwd: appDirectory,
     env,
+    detached: true,
     stdin: 'inherit',
     stdout: 'inherit',
     stderr: 'inherit',
   });
-  return generated.exited;
+  const custody = ownBunProcess(generated, {
+    label: 'Focused Web route generator',
+    termGraceMs: 2_000,
+    settleTimeoutMs: 5_000,
+  });
+  let cleanup: Promise<void> | undefined;
+  let cleanupError: unknown;
+  const stop = () =>
+    (cleanup ??= custody.close().catch((error) => {
+      cleanupError = error;
+      throw error;
+    }));
+  const abort = () => {
+    void stop().catch(() => {});
+  };
+  signal?.addEventListener('abort', abort, { once: true });
+  if (signal?.aborted) abort();
+  try {
+    const status = await generated.exited;
+    await stop();
+    if (cleanupError) throw cleanupError;
+    return status;
+  } finally {
+    signal?.removeEventListener('abort', abort);
+    await stop();
+  }
 }
 
 function processGroupAlive(pid: number): boolean {
@@ -205,12 +236,14 @@ export async function runFocusedCommand(command: string[], options: FocusedRunne
   let child: Bun.Subprocess<'inherit', 'pipe', 'pipe'> | undefined;
   let runtimeStopped = false;
   let receivedSignal: NodeJS.Signals | undefined;
+  const preparationAbort = new AbortController();
   let forceTimer: ReturnType<typeof setTimeout> | undefined;
   let outputError: unknown;
   const forwarders: Array<readonly [NodeJS.Signals, () => void]> = [];
 
   const forward = (signal: NodeJS.Signals) => {
     receivedSignal ??= signal;
+    preparationAbort.abort(signal);
     const pid = child?.pid;
     if (pid) signalProcessGroup(pid, signal);
     if (pid) {
@@ -226,7 +259,13 @@ export async function runFocusedCommand(command: string[], options: FocusedRunne
 
   try {
     const prepare = options.prepare ?? prepareFocusedRun;
-    const prepared = await prepare(appDirectory, childEnvironment);
+    let prepared: number;
+    try {
+      prepared = await prepare(appDirectory, childEnvironment, preparationAbort.signal);
+    } catch (error) {
+      if (receivedSignal) return 128 + signals.find(([signal]) => signal === receivedSignal)![1];
+      throw error;
+    }
     if (receivedSignal) return 128 + signals.find(([signal]) => signal === receivedSignal)![1];
     if (prepared !== 0) return prepared;
 
@@ -292,7 +331,7 @@ if (import.meta.main) {
     const { command, privateNetwork } = parseArguments(process.argv.slice(2));
     process.exitCode = await runFocusedCommand(command, { privateNetwork });
   } catch (error) {
-    console.error(error instanceof Error ? error.message : error);
+    console.error(error instanceof Error ? (error.stack ?? error.message) : error);
     process.exitCode = 1;
   }
 }
