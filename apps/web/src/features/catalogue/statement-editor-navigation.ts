@@ -1,4 +1,4 @@
-import type { StatementInput } from './statement-editor';
+import type { StatementInput } from './statement-editor-contract';
 
 /** Navigation compares the full native correction and reuses localized draft/pending discard wording without changing command identity. */
 export function statementDraftChanged(original: StatementInput | null, draft: StatementInput | null) {

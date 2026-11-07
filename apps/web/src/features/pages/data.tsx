@@ -16,7 +16,7 @@ import { type CoverRatio } from '@rezics/ui/cover';
 import { MetaLine } from '@rezics/ui/meta-line';
 import { TypeList, TypeListContext } from './type-list';
 import type { TypeListTarget } from './type-list-model';
-import { createContext, useContext, type ReactNode } from 'react';
+import { createContext, useContext, useMemo, type ReactNode } from 'react';
 import { coverSrc } from '../../media/cover-src';
 import { coverOf, coverSubject } from '../../media/summary';
 import { m } from '../../paraglide/messages.js';
@@ -37,6 +37,11 @@ import { SubjectPageCover } from './subject-page-cover';
 import { SubjectArtwork, SubjectArtworkBoundary } from '../catalogue/subject-artwork/view';
 import { CharacterRelationshipsSlot, SubjectPurchaseSlot } from './subject-slots';
 import { StatementCorrectionLink } from '../catalogue/statement-editor-link';
+import {
+  StatementReadingProvider,
+  type StatementReadingPort,
+  type StatementReadingValueProps,
+} from '../catalogue/statement-reading';
 import { ValueExplanationEntry } from '../catalogue/value-explanation-entry';
 import { SourceTagWeight } from '../catalogue/source-tag-weight';
 import {
@@ -322,6 +327,20 @@ export function CandidateValue({
       labels: { documentSpoiler: '', spoilerShow: '', cover: { withheld: '', reveal: '', credit: '', via: '' } },
     }) ?? <span>{m.candidate_value_unavailable({}, { locale: locale as never })}</span>
   );
+}
+
+function PageStatementValue({ snak, related, locale, link }: StatementReadingValueProps) {
+  return <CandidateValue snak={snak} related={related as Related} locale={locale} link={link as PageLink} />;
+}
+
+/** Pages adapter: the live CandidateValue surface for statement summaries and editor reads. */
+export function createPageStatementReadingPort(): StatementReadingPort {
+  return { renderValue: (props) => <PageStatementValue {...props} /> };
+}
+
+export function StatementReadingBinding({ children }: { children: ReactNode }) {
+  const port = useMemo(createPageStatementReadingPort, []);
+  return <StatementReadingProvider port={port}>{children}</StatementReadingProvider>;
 }
 
 export function PublicationOverlayView({
@@ -1114,48 +1133,50 @@ export function PageData({
     ...(memberHref ? { memberHref } : {}),
   };
   return (
-    <SubjectArtworkBoundary
-      source={artworkSource ?? reads}
-      identity={JSON.stringify([
-        subject,
-        context,
-        artworkContext,
-        continuation,
-        artworkRelease,
-        cacheReader,
-        reader,
-        locale,
-        readingView,
-      ])}
-      label={overviewSubjectLabel || resolved.unlabelled}
-    >
-      <overview.OverviewContext.Provider value={overviewValue}>
-        <TypeListContext.Provider
-          value={{
-            ...(listTarget ? { target: listTarget } : {}),
-            ...(fullList ? { full: fullList } : {}),
-            ...(listCursor !== undefined ? { cursor: listCursor } : {}),
-            ...(listHref ? { listHref } : {}),
-            ...(memberHref ? { memberHref } : {}),
-          }}
-        >
-          <PageContext.Provider
+    <StatementReadingBinding>
+      <SubjectArtworkBoundary
+        source={artworkSource ?? reads}
+        identity={JSON.stringify([
+          subject,
+          context,
+          artworkContext,
+          continuation,
+          artworkRelease,
+          cacheReader,
+          reader,
+          locale,
+          readingView,
+        ])}
+        label={overviewSubjectLabel || resolved.unlabelled}
+      >
+        <overview.OverviewContext.Provider value={overviewValue}>
+          <TypeListContext.Provider
             value={{
-              locale,
-              messages: resolved,
-              nodes,
-              subject,
-              agentHeader: profile !== undefined,
-              sources,
-              link,
-              ...(zoneRatio ? { ratio: zoneRatio } : {}),
+              ...(listTarget ? { target: listTarget } : {}),
+              ...(fullList ? { full: fullList } : {}),
+              ...(listCursor !== undefined ? { cursor: listCursor } : {}),
+              ...(listHref ? { listHref } : {}),
+              ...(memberHref ? { memberHref } : {}),
             }}
           >
-            {children}
-          </PageContext.Provider>
-        </TypeListContext.Provider>
-      </overview.OverviewContext.Provider>
-    </SubjectArtworkBoundary>
+            <PageContext.Provider
+              value={{
+                locale,
+                messages: resolved,
+                nodes,
+                subject,
+                agentHeader: profile !== undefined,
+                sources,
+                link,
+                ...(zoneRatio ? { ratio: zoneRatio } : {}),
+              }}
+            >
+              {children}
+            </PageContext.Provider>
+          </TypeListContext.Provider>
+        </overview.OverviewContext.Provider>
+      </SubjectArtworkBoundary>
+    </StatementReadingBinding>
   );
 }
 

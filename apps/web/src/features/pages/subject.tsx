@@ -107,6 +107,7 @@ import {
   PageData,
   pageText,
   PublicationOverlayView,
+  StatementReadingBinding,
   SubjectSources,
   SubjectSourcesLink,
   type PageMessages,
@@ -1396,15 +1397,17 @@ export function SubjectPage({
     <>
       {bar}
       {read && !page.account && (showcaseWork || page.catalogue?.state === 'released') && (
-        <WorkConceptTagsRoute
-          subject={read.subject}
-          related={read.related}
-          definitions={subjectCatalogueTagDefinitions(read.subject, page.catalogue)}
-          locale={locale}
-          {...(realm !== undefined ? { realm } : {})}
-          {...(currentHref !== undefined ? { currentHref } : {})}
-          spoilerThreshold={(reader ?? defaultReader).spoilerLevel}
-        />
+        <StatementReadingBinding>
+          <WorkConceptTagsRoute
+            subject={read.subject}
+            related={read.related}
+            definitions={subjectCatalogueTagDefinitions(read.subject, page.catalogue)}
+            locale={locale}
+            {...(realm !== undefined ? { realm } : {})}
+            {...(currentHref !== undefined ? { currentHref } : {})}
+            spoilerThreshold={(reader ?? defaultReader).spoilerLevel}
+          />
+        </StatementReadingBinding>
       )}
       {invite}
     </>

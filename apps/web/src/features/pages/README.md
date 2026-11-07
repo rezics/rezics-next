@@ -221,6 +221,8 @@ is derived. Absent weight, unsupported semantics and unreadable supplied evidenc
 The independently reachable evidence control uses the existing StatementSummary, value and qualifier readers,
 including the assertion's own references and released labels with their fallback language. The raw supported
 meaning comes from the immutable release; the preview does not publish or map provider evidence.
+Decision: tag evidence summaries consume `StatementSummary` through the catalogue-owned `StatementReadingPort`;
+Subject composition binds live `CandidateValue` and the summary does not import the statement editor view.
 
 Native `schema:genre` and `schema:keywords` associations do not imply a weight exists. VNDB dump votes and Bangumi
 public metadata are not converted to the Kana aggregate by this UI. The producer's live preparation retains its
