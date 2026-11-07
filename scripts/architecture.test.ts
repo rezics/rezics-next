@@ -150,7 +150,7 @@ describe('architecture boundaries', () => {
     put(
       root,
       'src/peer.ts',
-      'export const value = Object.assign({}, { count: 1 }); export function make() { return value; }',
+      'export const value = Object.assign({}, { count: 1 }); export function make() { return value; } export class Base {}',
     );
     put(
       root,
@@ -163,6 +163,7 @@ describe('architecture boundaries', () => {
       'src/main.ts',
       `
       import { value as remote, make } from './peer';
+      import { Base as RemoteBase } from './peer';
       import * as peer from './peer';
       import { LIMIT } from './literals';
       import type { Value } from './types';
@@ -183,6 +184,7 @@ describe('architecture boundaries', () => {
       type Schema = typeof remote;
       class Fields { instance = remote; static value = remote; method() { return remote; } }
       class Deferred { instance = remote; method() { return remote; } }
+      class Inherited extends RemoteBase {}
     `,
     );
     const reads = findLoadTimeReads(root, buildGraph(root, current)).filter((read) => read.file === 'src/main.ts');
@@ -198,6 +200,7 @@ describe('architecture boundaries', () => {
       'nestedArrow',
     ]);
     expect(reads.every((read) => read.line > 0 && read.column > 0 && read.specifier === './peer')).toBe(true);
+    expect(reads.some((read) => read.initializer === 'ClassDeclaration' && read.binding === 'RemoteBase')).toBe(true);
   });
 
   test('enforces Kernel load-time reads and rechecks a changed literal leaf against the full graph', () => {
@@ -247,16 +250,7 @@ describe('architecture boundaries', () => {
           .filter((file) => file.startsWith('services/kernel/src/'))
           .sort(),
       ),
-    ).toEqual([
-      {
-        binding: 'CollectionSourceLedger',
-        column: 30,
-        file: 'services/kernel/src/zones/membership.ts',
-        initializer: 'ClassDeclaration',
-        line: 90,
-        specifier: '../library/collection-source-work.ts',
-      },
-    ]);
+    ).toEqual([]);
   }, 60_000);
 
   test('requires an owner and reason on every ratchet group', () => {
@@ -346,15 +340,43 @@ describe('architecture boundaries', () => {
     expect(overflowing).toContain('mod000|');
   });
 
-  test('keeps a path-selected module map complete when it fits the worker map budget', () => {
+  test('keeps path-selected maps bounded and preserves owned Search entries when dependencies overflow', () => {
     const committed = loadManifest(process.cwd());
     const selected = formatModuleMap(committed, ['services/kernel/src/search/query.ts']);
-    expect(selected).toContain('ksearch|');
+    const searchRow = selected.split('\n').find((row) => row.startsWith('ksearch|'))!;
+    expect(searchRow).toMatch(/^ksearch\|d\|/);
+    expect(searchRow).toContain('k/search:');
+    expect(searchRow).toContain('index.ts');
     expect(selected).toContain(MODULE_MAP_POINTER);
-    expect(selected).not.toContain(MODULE_MAP_TRUNCATION);
     expect(selected).not.toMatch(/^wsearch\|/m);
     expect(selected.length).toBeLessThanOrEqual(MAX_MODULE_MAP_CHARACTERS);
-    expect(selected).toMatch(/^ksearch\|d\|/m);
+
+    const fitting = manifest([
+      {
+        id: 'owned',
+        kind: 'adapter',
+        owner: 'platform',
+        paths: ['src/owned/**'],
+        publicEntries: ['src/owned/index.ts'],
+        allowedDependencies: ['dependency'],
+        capabilities: [],
+      },
+      {
+        id: 'dependency',
+        kind: 'core',
+        owner: 'platform',
+        paths: ['src/dependency/**'],
+        publicEntries: ['src/dependency/index.ts'],
+        allowedDependencies: [],
+        capabilities: [],
+      },
+    ]);
+    const complete = formatModuleMap(fitting, ['src/owned/index.ts']);
+    expect(complete).toContain('owned|');
+    expect(complete).toContain('dependency|');
+    expect(complete).toContain(MODULE_MAP_POINTER);
+    expect(complete).not.toContain(MODULE_MAP_TRUNCATION);
+    expect(complete.length).toBeLessThanOrEqual(MAX_MODULE_MAP_CHARACTERS);
 
     const overflowing = manifest([
       {
@@ -383,9 +405,9 @@ describe('architecture boundaries', () => {
     expect(overflow.length).toBeLessThanOrEqual(MAX_MODULE_MAP_CHARACTERS);
     expect(overflow).toContain('owned|');
     expect(overflow).toContain('src/owned:{index.ts,public.ts}');
-    expect(overflow).toContain('dep00,dep01');
     expect(overflow).toContain(MODULE_MAP_POINTER);
     expect(overflow).toContain(MODULE_MAP_TRUNCATION);
+    expect(overflow).toContain('dep00,dep01');
   });
 
   test('registers extracted packages and admitted source edges at public entries', () => {
@@ -395,7 +417,7 @@ describe('architecture boundaries', () => {
     const sourceGroups = [
       'packages/access/package.json packages/access/src/index.ts packages/bounds/package.json packages/bounds/src/index.ts packages/operations/package.json packages/operations/src/index.ts packages/operations/src/protocol.ts',
       'services/kernel/src/access/gates/admission.ts services/kernel/src/access/gates/catalogue.ts services/kernel/src/access/gates/declaration.ts services/kernel/src/access/gates/management-read.ts services/kernel/src/access/gates/visibility.ts services/kernel/src/access/permission.ts services/kernel/src/access/policy-core.ts services/kernel/src/access/policy-filter.ts services/kernel/src/library/collection-list-policy.ts',
-      'services/kernel/src/history/core/operational-work-axes.ts services/kernel/src/history/core/operational-work-budget.ts services/kernel/src/library/collection-source-work-native.ts services/kernel/src/search/scope-members-source-declaration.ts services/kernel/src/work/selected-runtime-cost.ts services/kernel/src/work/selected-runtime.ts',
+      'services/kernel/src/history/core/operational-work-axes.ts services/kernel/src/history/core/operational-work-budget.ts services/kernel/src/library/canonical-source-bounds.ts services/kernel/src/library/collection-command-work.ts services/kernel/src/library/collection-directory-bounds.ts services/kernel/src/library/collection-kind-input-bounds.ts services/kernel/src/library/collection-order-bounds.ts services/kernel/src/library/collection-publication-bounds.ts services/kernel/src/library/collection-retention-bounds.ts services/kernel/src/library/collection-rule-edit-bounds.ts services/kernel/src/library/collection-rule-read-bounds.ts services/kernel/src/library/collection-selected-publication-bounds.ts services/kernel/src/library/collection-source-native.ts services/kernel/src/library/collection-source-probe-bounds.ts services/kernel/src/library/collection-source-work-native.ts services/kernel/src/library/command-support.ts services/kernel/src/library/copy-operation-bounds.ts services/kernel/src/library/core/collection-history.ts services/kernel/src/library/core/identity-bounds.ts services/kernel/src/library/core/page-plan.ts services/kernel/src/library/entry-operation-bounds.ts services/kernel/src/library/follow-operation-bounds.ts services/kernel/src/library/identity-native-bounds.ts services/kernel/src/library/identity-original-work.ts services/kernel/src/library/label-command-admission.ts services/kernel/src/library/label-operation-bounds.ts services/kernel/src/library/loan-operation-bounds.ts services/kernel/src/library/members-preparation-budget.ts services/kernel/src/library/members-preparation-source-declaration.ts services/kernel/src/library/native-public-output-bounds.ts services/kernel/src/library/native-source-custody-bounds.ts services/kernel/src/library/pin-operation-bounds.ts services/kernel/src/library/published-log-bounds.ts services/kernel/src/library/published-log-native.ts services/kernel/src/library/session-operation-bounds.ts services/kernel/src/library/shelf-maintenance-bounds.ts services/kernel/src/library/shelf-maintenance-statement-bounds.ts services/kernel/src/library/subject-collection-read-bounds.ts services/kernel/src/search/service-scope-order.ts services/kernel/src/semantic/adapters/collection-reduction.ts services/kernel/src/semantic/public-filter-collection-reduction-work.ts services/kernel/src/work/adapters/native.ts services/kernel/src/work/core/selected-cost.ts',
       'services/kernel/src/http/headers.ts services/kernel/src/http/kernel.ts services/kernel/src/http/operation-adapter.ts services/kernel/src/library/continue-routes.ts services/kernel/src/library/operation-declarations.ts services/kernel/src/library/progress-routes.ts services/kernel/src/content/feed-operation-declarations.ts services/kernel/src/content/feed-routes.ts',
       'services/kernel/src/content/community-projection/index.ts services/kernel/src/content/board-page.ts services/kernel/src/content/conversation-activity.ts services/kernel/src/content/feed-conversation-activity.ts services/kernel/src/content/realm-community.ts services/kernel/src/content/subject-threads-cards.ts',
       'apps/web/src/routes/editions/$id.tsx apps/web/src/routes/search.tsx apps/web/src/checkout/reader-origin.ts apps/web/src/search/search.tsx apps/web/src/kernel/client.ts apps/web/src/inbox/inbox-read.ts apps/web/src/settings/account-rename-actions.ts apps/web/src/settings/actions.server.ts apps/web/src/settings/actions.ts apps/web/src/settings/managed-account-actions-read.ts apps/web/src/settings/managed-account-detail-read.ts apps/web/src/settings/shelf-preferences-current.tsx apps/web/src/settings/verification-actions.ts',
@@ -458,6 +480,7 @@ describe('architecture boundaries', () => {
     expect(module('kernel-content-community-projection')?.publicEntries).toContain(
       'services/kernel/src/content/community-projection/index.ts',
     );
+    expect(module('kernel-semantic')?.publicEntries).toContain('services/kernel/src/semantic/context-literals.ts');
     expect(module('web-commerce')?.publicEntries).toContain('apps/web/src/checkout/reader-origin.ts');
     expect(module('web-search')?.publicEntries).toContain('apps/web/src/search/search.tsx');
     expect(module('web-search')?.publicEntries).toContain('apps/web/src/search/library-action-port.tsx');
@@ -471,7 +494,7 @@ describe('architecture boundaries', () => {
     expectImports(
       '@rezics/bounds',
       'packages/bounds/src/index.ts',
-      'services/kernel/src/history/core/operational-work-axes.ts services/kernel/src/history/core/operational-work-budget.ts services/kernel/src/library/canonical-source-bounds.ts services/kernel/src/library/label-command-admission.ts services/kernel/src/library/collection-directory-bounds.ts services/kernel/src/library/collection-history-bounds.ts services/kernel/src/library/collection-kind-input-bounds.ts services/kernel/src/library/collection-order-bounds.ts services/kernel/src/library/collection-publication-bounds.ts services/kernel/src/library/collection-retention-bounds.ts services/kernel/src/library/collection-rule-edit-bounds.ts services/kernel/src/library/collection-rule-read-bounds.ts services/kernel/src/library/collection-selected-publication-bounds.ts services/kernel/src/library/collection-source-native.ts services/kernel/src/library/collection-source-work-native.ts services/kernel/src/library/command-support.ts services/kernel/src/library/copy-operation-bounds.ts services/kernel/src/library/core/identity-bounds.ts services/kernel/src/library/core/page-plan.ts services/kernel/src/library/entry-operation-bounds.ts services/kernel/src/library/follow-operation-bounds.ts services/kernel/src/library/identity-native-bounds.ts services/kernel/src/library/identity-original-work.ts services/kernel/src/library/label-operation-bounds.ts services/kernel/src/library/loan-operation-bounds.ts services/kernel/src/library/members-preparation-budget.ts services/kernel/src/library/native-public-output-bounds.ts services/kernel/src/library/native-source-custody-bounds.ts services/kernel/src/library/pin-operation-bounds.ts services/kernel/src/library/published-log-bounds.ts services/kernel/src/library/published-log-native.ts services/kernel/src/library/session-operation-bounds.ts services/kernel/src/library/shelf-maintenance-bounds.ts services/kernel/src/library/subject-collection-read-bounds.ts services/kernel/src/search/scope-members-source-declaration.ts services/kernel/src/search/service-scope-order.ts services/kernel/src/semantic/public-filter-collection-reduction-work.ts services/kernel/src/work/adapters/native.ts services/kernel/src/work/core/selected-cost.ts',
+      'services/kernel/src/history/core/operational-work-axes.ts services/kernel/src/history/core/operational-work-budget.ts services/kernel/src/library/canonical-source-bounds.ts services/kernel/src/library/collection-command-work.ts services/kernel/src/library/collection-directory-bounds.ts services/kernel/src/library/collection-kind-input-bounds.ts services/kernel/src/library/collection-order-bounds.ts services/kernel/src/library/collection-publication-bounds.ts services/kernel/src/library/collection-retention-bounds.ts services/kernel/src/library/collection-rule-edit-bounds.ts services/kernel/src/library/collection-rule-read-bounds.ts services/kernel/src/library/collection-selected-publication-bounds.ts services/kernel/src/library/collection-source-native.ts services/kernel/src/library/collection-source-probe-bounds.ts services/kernel/src/library/collection-source-work-native.ts services/kernel/src/library/command-support.ts services/kernel/src/library/copy-operation-bounds.ts services/kernel/src/library/core/collection-history.ts services/kernel/src/library/core/identity-bounds.ts services/kernel/src/library/core/page-plan.ts services/kernel/src/library/entry-operation-bounds.ts services/kernel/src/library/follow-operation-bounds.ts services/kernel/src/library/identity-native-bounds.ts services/kernel/src/library/identity-original-work.ts services/kernel/src/library/label-command-admission.ts services/kernel/src/library/label-operation-bounds.ts services/kernel/src/library/loan-operation-bounds.ts services/kernel/src/library/members-preparation-budget.ts services/kernel/src/library/members-preparation-source-declaration.ts services/kernel/src/library/native-public-output-bounds.ts services/kernel/src/library/native-source-custody-bounds.ts services/kernel/src/library/pin-operation-bounds.ts services/kernel/src/library/published-log-bounds.ts services/kernel/src/library/published-log-native.ts services/kernel/src/library/session-operation-bounds.ts services/kernel/src/library/shelf-maintenance-bounds.ts services/kernel/src/library/shelf-maintenance-statement-bounds.ts services/kernel/src/library/subject-collection-read-bounds.ts services/kernel/src/search/service-scope-order.ts services/kernel/src/semantic/adapters/collection-reduction.ts services/kernel/src/semantic/public-filter-collection-reduction-work.ts services/kernel/src/work/adapters/native.ts services/kernel/src/work/core/selected-cost.ts',
     );
     expectImports(
       '@rezics/operations',

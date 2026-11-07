@@ -11,9 +11,9 @@ import readContextStatement from './read-context.sql';
 import readGlobalContext from './context-read-global.sql';
 import readCommunityContext from './context-read-community.sql';
 import readContextCreator from './context-read-creator.sql';
+import { CONTEXT_GLOBAL_ID } from './context-literals.ts';
 import type { ResourceEligibility } from '../access/index.ts';
 import {
-  CONTEXT_GLOBAL_ID,
   contextAccess,
   type ContextAccessPort,
   type ContextAccountActor,

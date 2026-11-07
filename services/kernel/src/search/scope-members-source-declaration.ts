@@ -11,5 +11,5 @@ import { MEMBERS_PREPARATION_SOURCE_PATHS as preparationSourcePaths } from '../l
 
 /** Preserve Search's callable entry over the single Library-owned schedule. */
 export function MEMBERS_PREPARATION_SOURCE_PATHS() {
-  return preparationSourcePaths;
+  return preparationSourcePaths();
 }

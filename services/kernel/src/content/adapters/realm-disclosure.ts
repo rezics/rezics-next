@@ -16,6 +16,7 @@ export type RealmSubjectParentObservation = RealmObservation<AnchoredPosition>;
 type Observation = RealmSubjectParentObservation;
 const hash = (value: unknown): string => createHash('sha256').update(JSON.stringify(value)).digest('hex');
 const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
+const nativeSnapshot: typeof snapshot = (...args) => snapshot(...args);
 /** A reanchored home must retain its epoch and move only forward. Unrelated
  * commits may advance position without changing any of the exact observations.
  * A new epoch needs a new census attempt, never reuse of this prepared evidence.
@@ -94,7 +95,7 @@ function validate(input: RealmSubjectDisclosureInput): RealmSubjectDisclosureInp
 
 export const nativeRealmEvidenceHost = {
   hash,
-  snapshot,
+  snapshot: nativeSnapshot,
   point: nativePoint,
   async time(client: AccessClient) {
     const at = await realmSubjectPoint<{ at: string }>(

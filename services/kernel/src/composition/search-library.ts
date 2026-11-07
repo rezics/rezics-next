@@ -12,22 +12,22 @@ import { createMembersPreparation } from '../library/members-preparation.ts';
 import type { WorkAllowance } from '../library/contract/work-dimensions.ts';
 import type { SearchLibraryScopePort } from '../search/library-scope-port.ts';
 
-const searchLibraryScopePort: SearchLibraryScopePort = Object.freeze({
-  source: Object.freeze({
-    create: createCollectionSource,
-    readWorkState: readCollectionSourceWorkState,
-    readWorkGroup: readCollectionSourceWorkGroup,
-    canonicalReceivingCost: CANONICAL_SOURCE_RECEIVING_COST,
-    collectionWorkGroupLimit: COLLECTION_SOURCE_WORK_GROUP_LIMIT,
-    ordinalPageBound: nativeCollectionOrdinalPageBound,
-  }),
-  members: Object.freeze({
-    createNativeCollectionWork: (allowance: WorkAllowance, deadline: number) =>
-      new NativeCollectionWork(allowance, deadline),
-    createPreparation: createMembersPreparation,
-  }),
-});
+let searchLibraryScopePort: SearchLibraryScopePort | undefined;
 
 export function createSearchLibraryScopePort(): SearchLibraryScopePort {
-  return searchLibraryScopePort;
+  return (searchLibraryScopePort ??= Object.freeze({
+    source: Object.freeze({
+      create: createCollectionSource,
+      readWorkState: readCollectionSourceWorkState,
+      readWorkGroup: readCollectionSourceWorkGroup,
+      canonicalReceivingCost: CANONICAL_SOURCE_RECEIVING_COST,
+      collectionWorkGroupLimit: COLLECTION_SOURCE_WORK_GROUP_LIMIT,
+      ordinalPageBound: nativeCollectionOrdinalPageBound,
+    }),
+    members: Object.freeze({
+      createNativeCollectionWork: (allowance: WorkAllowance, deadline: number) =>
+        new NativeCollectionWork(allowance, deadline),
+      createPreparation: createMembersPreparation,
+    }),
+  }));
 }

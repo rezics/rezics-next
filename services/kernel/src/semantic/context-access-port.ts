@@ -1,8 +1,6 @@
 import type { Pool, PoolClient } from 'pg';
 import type { AuthoritativeTime, CommandAuthorization, CommandTransaction } from '../command/command.ts';
-
-/** Seeded Global Context identity. Directory and lifecycle treat this row as non-personal. */
-export const CONTEXT_GLOBAL_ID = '00000000-0000-8000-8000-000000000000';
+export { CONTEXT_GLOBAL_ID } from './context-literals.ts';
 
 export type ContextQueryClient = Pick<PoolClient, 'query'>;
 /** Installed Access object; composition binds the native evaluator. */

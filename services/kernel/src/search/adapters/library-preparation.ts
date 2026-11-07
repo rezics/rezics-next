@@ -13,7 +13,8 @@ import { meterMembersDefinition, withMembersWorkBudget } from '../scope-members-
 import { readScopeWorkDefinition } from '../scope-work-context.ts';
 import type { NativeScopeWork } from '../../library/adapters/index.ts';
 
-export const nativeLibraryScopeWork: NativeScopeWork = { readDefinition: readScopeWorkDefinition };
+const readDefinition: typeof readScopeWorkDefinition = (...args) => readScopeWorkDefinition(...args);
+export const nativeLibraryScopeWork: NativeScopeWork = { readDefinition };
 
 type OrderedSource = ReturnType<typeof createSearchScopeSource>;
 
