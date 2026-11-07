@@ -13,6 +13,18 @@ Runtime lookup and discovery rebuild are separate from worker registration and g
 and Library definition reads retain memoized factories and typed forwarding. Outcome bases stay with subclasses;
 compatibility exports preserve value identity. Acceptance is typing.
 
+Decision: Search Source, publication, scope, discovery and identity receiving consume Semantic, Access, Library,
+Content and Community natives through installed consumer-owned ports bound at composition. Global catalogue
+population is a Search leaf. Library scoped-Source construction lives in composition. Same-client transactions,
+Source admission, identity observations, typed outcomes, replay and settlement keep their producer functions.
+Native-port wiring acceptance compares every installed capability with its direct binding and the publication
+application; behavior assertions stay unchanged. Native, browser and broader acceptance run after integration.
+
+Decision: the process root owns one lazy, memoized `SearchNativePorts` supplier per default worker module list.
+Semantic and Search registration share that typed instance after the worker pool is ready; Search passes it into
+erasure, rated Source and runtime construction. HTTP defaults and preloads install through the same complete binding
+seam, while supplied application instances retain their producer object.
+
 [Rejected text query repair](text-query-repair.md) owns bounded parser diagnostics and deliberate in-place correction.
 
 Search owns the subject search projection, indexing consumers, disclosure checks, query API, freshness and index
@@ -2208,6 +2220,10 @@ runtime and work client.
 Decision: default Search returns its real runner before initial Subject inventory completes; the owned refresh and
 relays carry a cancellable native-request lifetime, and stop aborts and drains that work. Worker service startup is
 not Search readiness: the installed default producers and current native catalogue output remain the read gate.
+
+Decision: mixed Discovery generations sharing a Pool use one relay supervisor, capped by the configured demand and
+`relayConcurrencyForPool(pool)`. This reserves capacity for source reads, receiving and lifecycle commands; a complete
+replacement receiver/relay set is installed only after preparation, and pause, retirement and stop drain that owner.
 
 Cost: retaining the operation adds no capture or root, and at most one owner snapshot per Subject
 home or per 100-key Account chunk. The checker reuses these snapshots instead of repeating those

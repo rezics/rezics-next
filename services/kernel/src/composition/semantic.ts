@@ -33,9 +33,9 @@ import { createSubjectReadingApplication, type SubjectReadingApplication } from 
 import { createPublicIdentityOutputCapture } from '../semantic/identity-public-output-capture.ts';
 import { requireLibraryDomain } from '../library/domain-binding.ts';
 import { createNativeSubjectReadingPort, installNativeSubjectReadingApplication } from '../semantic/adapters/index.ts';
+import type { SearchNativePorts } from '../search/composition.ts';
 import {
   bindSourceBindingApplication,
-  createIdentitySourceSupportReader,
   createSourceBindingApplication,
   createNativePublicFilterSourceBinding,
   createNativePublicFilterSource,
@@ -59,11 +59,12 @@ let sourceBindingApplicationInstalled = false;
  */
 export function composeSemanticIdentityParticipants(
   context: SemanticCompositionContext,
+  nativePorts?: SearchNativePorts,
 ): IdentityEpochParticipantPorts<Pool> | null {
   const config = readSearchConfig(context.env);
   const routeKey = config && context.env.KERNEL_ROUTE_KEY ? readMembershipRouteKey(context.env) : null;
   if (!config || !routeKey) return null;
-  // Semantic registers before Search services start; supply its real Source reader factory here.
+  // The process root supplies Search's real producer object before this participant is built.
   const search = createOpenSearch(config.url);
   const access = context.getAuthorization?.().access;
   const receiving =
@@ -75,7 +76,7 @@ export function composeSemanticIdentityParticipants(
           routeKey,
           access,
           clock: context.clock,
-          identitySourceSupportReaderFactory: createIdentitySourceSupportReader,
+          identitySourceSupportReaderFactory: nativePorts!.createIdentitySourceSupportReader,
           work: searchReceivingProductionDeclaration(),
         })
       : undefined;
@@ -140,9 +141,12 @@ export function composePublicIdentityOutputCapture(config: Parameters<typeof cre
 }
 
 /** Ordinary process composition: identity participants plus Rating review and Content lifecycle adapters. */
-export function composeSemanticDomain(context: SemanticCompositionContext): NativeSemanticDomain | null {
+export function composeSemanticDomain(
+  context: SemanticCompositionContext,
+  searchNativePorts?: SearchNativePorts,
+): NativeSemanticDomain | null {
   composeSemanticAdapters();
-  const participants = composeSemanticIdentityParticipants(context);
+  const participants = composeSemanticIdentityParticipants(context, searchNativePorts);
   if (!participants) return null;
   return createNativeSemanticDomain(participants, {
     libraryCustody: Object.freeze({

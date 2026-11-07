@@ -59,11 +59,14 @@ export function createOutcomeWorkerClock(supplied?: KernelClock) {
 }
 
 /** Owns only the existing native worker executable; it never provisions fixture state. */
-export function startOutcomeWorkerProcess(env: Record<string, string | undefined>, frozenInstant?: number) {
+export function startOutcomeWorkerProcess(
+  env: Record<string, string | undefined>,
+  options: { frozenInstant?: number; searchDisabled?: boolean } = {},
+) {
   const lifecycle = randomUUID();
   const initialClock: OutcomeClockState = {
     lifecycle,
-    ...(frozenInstant === undefined ? {} : { instant: outcomeClockInstant(frozenInstant) }),
+    ...(options.frozenInstant === undefined ? {} : { instant: outcomeClockInstant(options.frozenInstant) }),
   };
   const child = fork(`${import.meta.dir}/outcome-worker.ts`, [], {
     execPath: process.execPath,
@@ -176,7 +179,13 @@ export function startOutcomeWorkerProcess(env: Record<string, string | undefined
   // The initial explicit instant is installed before startWorker can register or launch work.
   // Child startup imports the production composition before installing the RPC listener.
   // Do not start the init deadline until that listener confirms it can receive requests.
-  const ready = ipcReady.then(() => rpc.request<WorkerStats>('init', { env, clock: initialClock }));
+  const ready = ipcReady.then(() =>
+    rpc.request<WorkerStats>('init', {
+      env,
+      clock: initialClock,
+      ...(options.searchDisabled ? { searchDisabled: true } : {}),
+    }),
+  );
   let readyFailure: unknown;
   void ready.catch((error) => {
     readyFailure = error;

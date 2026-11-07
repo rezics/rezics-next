@@ -34,6 +34,7 @@ import { registerSubjectPagePublicationWork } from './publication-work.ts';
 import { linkProjection } from './links.ts';
 import { installIdentityEpochBootstrap } from './identity-epoch-bootstrap-install.ts';
 import { synchronizeAccountAgent } from '../access/account-agent-effect.ts';
+import type { SearchNativePorts } from '../search/composition.ts';
 import type { CloudEvent } from '../events/log.ts';
 import { beginSemanticErasure, createSemanticLocatorEffect, SEMANTIC_ERASURE_SCHEDULED } from './account-erasure.ts';
 import { registerSemanticErasureWork } from './account-erasure-work.ts';
@@ -64,7 +65,10 @@ export function createSemanticErasureEffect(pool: Parameters<typeof synchronizeA
 export type SemanticIdentityParticipantComposer = (context: WorkContext) => IdentityEpochParticipantPorts<Pool> | null;
 export type SemanticDomainComposer = (
   context: WorkContext,
+  searchNativePorts?: SearchNativePorts,
 ) => IdentityEpochParticipantPorts<Pool> | NativeSemanticDomain | null;
+
+type SearchNativePortsComposer = () => SearchNativePorts | Promise<SearchNativePorts>;
 
 function installedDomain(composed: IdentityEpochParticipantPorts<Pool> | NativeSemanticDomain | null): {
   participants: IdentityEpochParticipantPorts<Pool> | null;
@@ -76,10 +80,14 @@ function installedDomain(composed: IdentityEpochParticipantPorts<Pool> | NativeS
 }
 
 /** Native relation projection shares the worker pool and registered service lifecycle. */
-export function createSemanticWorkModule(composeParticipants: SemanticDomainComposer): WorkModule {
+export function createSemanticWorkModule(
+  composeParticipants: SemanticDomainComposer,
+  composeSearchNativePorts?: SearchNativePortsComposer,
+): WorkModule {
   return {
     name: 'semantic',
     async register(context) {
+      const searchNativePorts = await composeSearchNativePorts?.();
       // Establish the writer cut before DBOS can resume an old bootstrap delivery.
       await installIdentityEpochBootstrap(context.pool);
       const config = readMembershipWorkConfig(context.env);
@@ -100,7 +108,7 @@ export function createSemanticWorkModule(composeParticipants: SemanticDomainComp
       await registerRecordRetentionWork(context);
       await registerIdentityScopedObservationWork(context);
       registerProviderReviewWork(context);
-      const { participants, domain } = installedDomain(composeParticipants(context));
+      const { participants, domain } = installedDomain(composeParticipants(context, searchNativePorts));
       registerSemanticDomain(context.pool, domain);
       if (domain) bindDefaultSemanticDomain(domain);
       registerIdentityEpochCoordinator(context, participants);

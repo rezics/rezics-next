@@ -33,16 +33,27 @@ function phase(name: string) {
   process.stderr.write(`outcome-worker phase=${name}\n`);
 }
 
-function initEnv(params: unknown): Record<string, string | undefined> {
-  if (!record(params) || Object.keys(params).some((key) => key !== 'env' && key !== 'clock') || !record(params.env)) {
-    throw new Error('init requires {env} and optional private clock state');
+function initEnv(params: unknown): {
+  env: Record<string, string | undefined>;
+  searchDisabled: boolean;
+} {
+  if (
+    !record(params) ||
+    Object.keys(params).some((key) => key !== 'env' && key !== 'clock' && key !== 'searchDisabled') ||
+    !record(params.env) ||
+    ('searchDisabled' in params && typeof params.searchDisabled !== 'boolean')
+  ) {
+    throw new Error('init requires {env}, optional private clock state and optional Search-disabled mode');
   }
   const env: Record<string, string | undefined> = {};
   for (const [key, value] of Object.entries(params.env)) {
     if (typeof value !== 'string' && value !== undefined) throw new Error('env values must be strings');
     env[key] = value;
   }
-  return { ...process.env, ...workerTestEnv(env) };
+  return {
+    env: { ...process.env, ...workerTestEnv(env) },
+    searchDisabled: params.searchDisabled === true,
+  };
 }
 
 /** One production SDK composition, shared by the child and explicit pool instrumentation. */
@@ -94,7 +105,7 @@ export function createOutcomeWorker(overrides: Pick<WorkerConfig, 'kernelPool' |
     })());
   }
 
-  async function init(env: Record<string, string | undefined>): Promise<WorkerStats> {
+  async function init(env: Record<string, string | undefined>, searchDisabled: boolean): Promise<WorkerStats> {
     try {
       phase('startWorker:start');
       worker = await startWorker(
@@ -147,14 +158,16 @@ export function createOutcomeWorker(overrides: Pick<WorkerConfig, 'kernelPool' |
         },
         env,
       );
+      const searchModeReady = searchDisabled
+        ? searchServices === 0 && observations.searchStarterInvocations === 0
+        : searchServices === 1 && observations.searchStarterInvocations === 1;
       if (
-        searchServices !== 1 ||
-        observations.searchStarterInvocations !== 1 ||
+        !searchModeReady ||
         !observations.defaultModules.includes('semantic') ||
         !(observations.startedServices.semantic! > 0)
       ) {
         throw new Error(
-          'Integrated default worker must start exactly one search service and real default semantic services',
+          'Integrated default worker must register the selected Search mode and real default semantic services',
         );
       }
       phase('startWorker:ready');
@@ -177,11 +190,11 @@ export function createOutcomeWorker(overrides: Pick<WorkerConfig, 'kernelPool' |
     if (!['init', 'indexing', 'rebuild', 'requestRebuild', 'stats', 'clock', 'close'].includes(method))
       throw new Error(`Unknown control: ${method}`);
     if (method === 'init') {
-      const env = initEnv(params);
+      const options = initEnv(params);
       if (initialized) throw new Error('Outcome worker init already attempted');
       if (record(params) && 'clock' in params) workerClock.initialize(params.clock);
       initialized = true;
-      return (starting = init(env));
+      return (starting = init(options.env, options.searchDisabled));
     }
     if (method === 'close') {
       noParams(params);
