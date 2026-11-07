@@ -32,6 +32,10 @@ nothing; it becomes frozen with its executable acceptance. Existing frozen tests
 every applicable cell and exact scenario execution, zero skips/todos, real native Access, production HTTP/default
 workers where relevant, and recorded revision evidence.
 
+Decision: Label unique-key points keep MATERIALIZED input, Access ROW-bounded primary-key range and `OFFSET 0`;
+prefix/FULL growth allow only that `OFFSET 0` fence and still refuse `LIKE`. Auth setup does not copy `DATABASE_URL`
+into `process.env`, so Reylo keeps cached analysis during host-scope tests.
+
 Decision: pin the 17 first-public journey path IDs in one focused walk-source test; add no extra stories. Native,
 browser and growth evidence is the sole Goal walk
 `bun services/auth/scripts/dev-stack.ts walk -- bun apps/web/scripts/first-public-journeys-walk.ts`.

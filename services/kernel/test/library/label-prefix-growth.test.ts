@@ -87,7 +87,11 @@ function assertPlans(raw: Capture) {
     }
   }
   expect(labels.some((n) => n['Index Name'] === 'personal_label_live_name')).toBe(true);
-  expect(raw.statements.some((s) => /\bOFFSET\b|\bLIKE\b/i.test(s))).toBe(false);
+  expect(raw.statements.some((s) => /\bLIKE\b/i.test(s))).toBe(false);
+  for (const statement of raw.statements) {
+    const offsets = statement.match(/\bOFFSET\s+\S+/gi) ?? [];
+    for (const offset of offsets) expect(/^OFFSET\s+0$/i.test(offset)).toBe(true);
+  }
 }
 
 test('native prefix generic prepared seeks charge fixed windows across 64 512 4096 matching nonmatching deleted names and same-partition owners', async () => {

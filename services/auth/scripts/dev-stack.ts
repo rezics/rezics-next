@@ -166,7 +166,6 @@ export function developmentMediaBindings(
 
 /** Build the same mounted Kernel declarations used by the host; no request-time discovery. */
 export async function developmentWebsiteConfiguration(env?: Record<string, string>) {
-  if (env?.DATABASE_URL) process.env.DATABASE_URL = env.DATABASE_URL;
   await import('reylo/register');
   const [{ createKernel }, { readConfig }, { actionCatalogue }, { accessActionCatalogue }] = await Promise.all([
     import('../../kernel/src/http/kernel.ts'),

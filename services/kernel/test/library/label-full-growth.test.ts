@@ -342,7 +342,11 @@ test('FULL label HTTP charges all native pools at 64 512 4096 catalogue entries 
             relation.identity?.kind === 'index' && relation.identity.name === 'label_assignment_reserved_source',
         ),
       ).toBe(true);
-      expect(folded.statements.some((s) => /\bOFFSET\b/i.test(s))).toBe(false);
+      expect(folded.statements.some((s) => /\bLIKE\b/i.test(s))).toBe(false);
+      for (const statement of folded.statements) {
+        const offsets = statement.match(/\bOFFSET\s+\S+/gi) ?? [];
+        for (const offset of offsets) expect(/^OFFSET\s+0$/i.test(offset)).toBe(true);
+      }
       evidence.push({ scale, capture: folded, cost });
     },
     operation,

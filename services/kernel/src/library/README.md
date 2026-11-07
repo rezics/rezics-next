@@ -132,8 +132,9 @@ Label catalogue, assignment and parent SQL use typed input CTEs and LATERAL prim
 points so generic prepared plans cannot Seq Scan an owner catalogue. Those `ORDER BY` lists name the index
 columns in index order. Point reads take a typed `MATERIALIZED` input row and LATERAL unique
 `(route, account_id, label_id)` so the inner is a parameterized `personal_label_pkey` nested loop. `ORDER BY`
-names that primary key. `OFFSET 0` keeps the inner from flattening. They do not `LIMIT 1` or `OR include_deleted` in SQL: `NOT MATERIALIZED` inlined the CTE and Seq Scanned a
-small catalogue (FULL warmup 34/34 nodes), `LIMIT 1` lets Seq Scan stop early, and `OR` hides the unique index. The store filters
+names that primary key. The inner is an Access ROW-bounded primary-key range plus `OFFSET 0`, so a custom plan
+that inlines the UUID cannot Seq Scan a small catalogue. They do not `LIMIT 1` or `OR include_deleted` in SQL: `NOT MATERIALIZED` inlined the CTE and Seq Scanned a
+small catalogue (FULL warmup 34/34 nodes), equality filters Seq Scan when the UUID is a constant, `LIMIT 1` lets Seq Scan stop early, and `OR` hides the unique index. The store filters
 `include_deleted` on that row. They project `createdAt` as insert RETURNING does so Reylo still decodes timestamptz
 text. A unique point may be one row or a one-element array; UNION ALL pages are arrays, so the store takes that row
 or the first array element. They do not UNION ALL `include_deleted`. Existing Label command, HTTP and growth suites

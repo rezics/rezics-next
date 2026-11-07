@@ -20,9 +20,11 @@ The Source adapter ABI keeps Search `ScopeWorkContext`; contract `work` stays un
 catalogue, assignment and reserved-source SQL drives from the one-row request through typed input CTEs and LATERAL
 primary-key or reserved-source points, with `ORDER BY` naming the index columns in index order. Point reads take a typed
 `MATERIALIZED` input row and LATERAL unique `(route, account_id, label_id)` so the inner is a parameterized
-`personal_label_pkey` nested loop. `ORDER BY` names that primary key. `OFFSET 0` keeps the inner from flattening.
-They do not `LIMIT 1` or `OR include_deleted` in
-SQL: `NOT MATERIALIZED` inlined the CTE and Seq Scanned a small catalogue (FULL warmup 34/34 nodes), `LIMIT 1` lets Seq Scan stop early, and `OR` hides the unique
+`personal_label_pkey` nested loop. `ORDER BY` names that primary key. The inner is an Access ROW-bounded
+primary-key range (`>=` and `<=` the same tuple) plus `OFFSET 0`, so a custom plan that inlines the UUID cannot
+Seq Scan a small catalogue. They do not `LIMIT 1` or `OR include_deleted` in
+SQL: `NOT MATERIALIZED` inlined the CTE and Seq Scanned a small catalogue (FULL warmup 34/34 nodes), equality
+filters Seq Scan when the UUID is a constant, `LIMIT 1` lets Seq Scan stop early, and `OR` hides the unique
 index. The store filters `include_deleted` on that row. Restore and rename lock the exact parent rather than scanning the owner catalogue. Those
 growth suites remain the oracles; this landing adds no parallel Label suite.
 Decision: native Label fixtures create the steward's Global `definitions:publish` / `definitions:activate` grants
@@ -50,10 +52,12 @@ request deadline and one Semantic `prepareReadDecisions` page, not per-subject A
 A concealed or moved Source on FULL by-label withholds (`subject: null`) through `withholdChangedSource`;
 it does not 503 the assignment page or shrink the raw cursor.
 The folded FULL warmup still sees 34 `personal_label` parent
-observations and zero sequential scans. Point reads use that typed MATERIALIZED LATERAL unique-key inner with
-`OFFSET 0`; the store filters
+observations and zero sequential scans. Point reads use that typed MATERIALIZED LATERAL unique-key inner with the ROW-bounded
+primary-key range and `OFFSET 0`; the store filters
 `include_deleted` on the unique row so a generic prepared plan cannot hide `personal_label_pkey` behind
-`OR deleted_at IS NULL`, inline a `NOT MATERIALIZED` CTE, or stop a Seq Scan at `LIMIT 1`. They project `createdAt` as insert RETURNING does. The
+`OR deleted_at IS NULL`, inline a `NOT MATERIALIZED` CTE, stop a Seq Scan at `LIMIT 1`, or Seq Scan a small
+catalogue after inlining the UUID. Prefix continuation may dispatch that `OFFSET 0` point read; it still
+refuses `LIKE` and nonzero `OFFSET`. They project `createdAt` as insert RETURNING does. The
 store takes a unique point as a row or the first array element. They do not UNION ALL `include_deleted`. Prefix
 still UNION ALLs `upper_bound`, and its `ORDER BY` names `personal_label_live_name`
 `(route, account_id, normalized_name)`. Restore, rename, assignment point and desired-tuple seeks name the

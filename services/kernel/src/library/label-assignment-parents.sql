@@ -1,9 +1,11 @@
 -- Unique PK as a parameterized nested-loop inner so generic prepared plans
 -- use personal_label_pkey. NOT MATERIALIZED inlined the one-row CTE; LATERAL
--- LIMIT 1 Seq Scanned because LIMIT 1 lets Seq Scan stop early. MATERIALIZED
--- input plus OFFSET 0 keep the inner from flattening. ORDER BY names the
--- primary key with no LIMIT. Filter deleted parents in the store after this
--- unique row.
+-- LIMIT 1 Seq Scanned because LIMIT 1 lets Seq Scan stop early. Equality
+-- filters still Seq Scan when a custom plan inlines the UUID. MATERIALIZED
+-- input, Access ROW-bounded primary-key range, and OFFSET 0 keep
+-- personal_label_pkey even when the CTE values are constants. ORDER BY names
+-- the primary key with no LIMIT. Filter deleted parents in the store after
+-- this unique row.
 WITH input AS MATERIALIZED (
   SELECT :route::integer AS route, :account_id::uuid AS account_id
 ), keys AS MATERIALIZED (
@@ -16,8 +18,10 @@ CROSS JOIN LATERAL (
   SELECT label.label_id AS "labelId", label.revision, label.deleted_at::text AS "deletedAt",
          label.purge_after::text AS "purgeAfter"
   FROM library.personal_label AS label
-  WHERE label.route = input.route AND label.account_id = input.account_id
-    AND label.label_id = keys.label_id
+  WHERE ROW(label.route, label.account_id, label.label_id)
+          >= ROW(input.route, input.account_id, keys.label_id)
+    AND ROW(label.route, label.account_id, label.label_id)
+          <= ROW(input.route, input.account_id, keys.label_id)
   ORDER BY label.route, label.account_id, label.label_id
   OFFSET 0
   FOR SHARE
