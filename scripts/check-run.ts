@@ -103,6 +103,8 @@ import {
   type CheckRunReturnDisposition,
   type CheckRunStateOptions,
   type CheckRunTransportChildIdentity,
+  type CheckRunTransportIdentityState,
+  type CheckRunReconciliation,
 } from './check-run-settlement.ts';
 
 export type CheckRunArguments = {
@@ -1192,6 +1194,40 @@ function remoteCleanupIsVerified(remote: RemoteCheckSettlement | undefined): boo
     remote.cleanup.runDirectoryRemoved === true &&
     remote.cleanup.failures.length === 0,
   );
+}
+
+/** Preserve a bound remote cleanup result even when pre-command failure left no native receipt. */
+export function reconcileCheckRunPhysicalCleanup(
+  physical: { host: string; run: string },
+  record: CheckRunInvocationRecord,
+  remote: RemoteCheckSettlement,
+  transportIdentity: CheckRunTransportIdentityState,
+): CheckRunReconciliation {
+  if (
+    remote.native !== null ||
+    remote.host !== physical.host ||
+    remote.run !== physical.run ||
+    !remoteCleanupIsVerified(remote)
+  )
+    return {
+      disposition: 'unknown',
+      reason: 'original physical cleanup is incomplete or mismatched; no replacement was started',
+      transportIdentity,
+    };
+  return {
+    disposition: 'physical-cleanup',
+    observation: {
+      schema: 1,
+      invocationId: record.invocationId,
+      nonce: record.nonce,
+      binding: record.binding,
+      physical,
+      remote: remote.cleanup,
+      reconciliationTransportChildReaped: remote.transportChildReaped,
+      transportIdentity,
+      transportChildReaped: remote.transportChildReaped && transportIdentity === 'gone-or-replaced',
+    },
+  };
 }
 
 type PreparedCheckRunState = {
@@ -2603,6 +2639,7 @@ export async function reconcileRegisteredCheckRun(
   stateOptions: CheckRunStateOptions = {},
 ): Promise<CheckRunInvocationRecord> {
   let initial = await getCheckRunStatus(invocationId, stateOptions);
+  if (initial.physicalCleanup) return initial;
   if (
     initial.final &&
     (initial.final.cleanup.disposition === 'settled' || initial.finalCustody?.reconciliation === 'settled')
@@ -2694,11 +2731,7 @@ export async function reconcileRegisteredCheckRun(
         ...remote,
         transportChildReaped: remote.transportChildReaped && originalTransportReaped,
       };
-      if (!remote.native)
-        return {
-          ...unknown('original physical run has no retained native terminal receipt; no replacement was started'),
-          transportIdentity: originalTransportIdentity,
-        };
+      if (!remote.native) return reconcileCheckRunPhysicalCleanup(physical, record, remote, originalTransportIdentity);
       const remoteNativeDigest = checkRunNativeReceiptDigest(remote.native);
       if (
         record.native &&
