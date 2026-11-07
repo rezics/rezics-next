@@ -92,7 +92,9 @@ author activity, all three Board orders and thread posts, including first/contin
 Decision: those two native files plus the frozen composed page cases are the fewest tests for the named families;
 no extra stories. A suspended bearer fails authentication (401/403) before a taken-down thread is named; concealment
 404 is for authenticable readers. Ranking HTTP personas sign JWT iat/exp on wall time because Access validates
-credentials on wall time while the kernel clock drives ranking formulas. Author-item growth captures keep a one-item
+credentials on wall time while the kernel clock drives ranking formulas. Each mounted HTTP request starts its
+envelope from wall time so a held late-revocation or leaked ALS deadline cannot shrink the next command; inner
+`deadlineFor` may only inherit that envelope. Author-item growth captures keep a one-item
 page and fold large other-author neighbourhoods so Access permission-check plan notices stay inside the 32MiB
 telemetry cap; they bootstrap the bundled
 definitions release so review subject observation is a current source. The Goal walk on an admitted seeded stack reuses that driver, seed-journal cleanup and Performance

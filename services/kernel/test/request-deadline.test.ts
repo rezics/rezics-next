@@ -66,6 +66,19 @@ test('concurrent requests keep their own deadlines', async () => {
   expect([first, second]).toEqual([1_000, 2_000]);
 });
 
+test('a later HTTP request starts a fresh envelope instead of a leaked ALS deadline', async () => {
+  const leaked = Date.now() + 25;
+  const before = Date.now();
+  const seen = await withRequestDeadline(leaked, async () => {
+    const response = await app.handle(new Request('http://kernel.test/v1/deadline'));
+    expect(response.status).toBe(200);
+    return (await response.json()) as Seen;
+  });
+  expect(seen.job).toBeGreaterThan(leaked);
+  expect(seen.job).toBeGreaterThanOrEqual(before + 1_234);
+  expect(seen.scoped).toBe(seen.job);
+});
+
 test('outside a request a deadline is now plus the budget', () => {
   const before = Date.now();
   const deadline = deadlineFor(5_000);
