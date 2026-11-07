@@ -161,6 +161,9 @@ Web, Auth, Kernel, Importer and UI workspaces sequentially in one typing invocat
 test also pins a mixed root-fixture/self-hosted-editor selection; all other assertions and stories stay unchanged.
 The sole eighteen-path dev verification retains native/browser/default-worker, growth, cleanup, installed root and
 promoted-revision proof; source integration and typing establish none of those runtime outcomes.
+The reconciled Web, Auth, Kernel, Importer and UI workspaces passed the combined typing command. Worker source
+completion preserves every original acceptance assertion; intermittent compiler database lifetime failures remain
+with the existing infrastructure owner and do not establish a runtime repair.
 
 ## realms-and-spaces
 

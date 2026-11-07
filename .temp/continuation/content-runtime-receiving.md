@@ -30,19 +30,32 @@ and promoted-commit evidence stay separate. The independent identity-readiness f
 Accounts e249 alone owns leader settlement with actual143/nonzero/group absence; no custody writer is added.
 The failure descriptions below are prior observations, not results on this integrated revision.
 
-## Current typing infrastructure handback
+## Typing completion and infrastructure handback
 
 The combined typing command on 54559bc014 is:
 `bun scripts/worker-check.ts -- sh -c 'bun run --cwd apps/web typecheck; s=$?; bun run --cwd services/auth typecheck || s=1; bun run --cwd services/kernel typecheck || s=1; bun run --cwd services/importer typecheck || s=1; bun run --cwd packages/ui typecheck || s=1; exit $s'`.
 Checks f50e3114-e462-4959-b230-84ec490223fd and 29fdb03e-3e70-4ab9-9949-613a4fa69a79 both exited 1 on the
 unchanged source. Their full logs under .temp/check-logs were read. Neither emitted TypeScript diagnostics;
 Importer and UI explicitly reported no type errors, and Web completed both compiler programs. Kernel typing
-is not established: the first run lost its compiler database before SQL type analysis/compilation and the retry
+was not established by either failed check: the first run lost its compiler database before SQL type analysis/compilation and the retry
 failed at native pg_dump. Both cleanup paths reported that the database container's removal was already in
 progress. The existing compiler-database/lifecycle owner receives this concrete class failure: preserve database
 reachability through schema capture and compilation, then prove one owned cleanup. No local placement override,
 process manipulation, custody writer or SQL/type suppression is introduced. Earlier typing receipts cannot make
-this changed integrated Kernel source a pass.
+this changed integrated Kernel source a pass without a completed check.
+
+The already-admitted retry on d459854766 settled through controller custody: check
+77aa626c-a7e7-4cae-951f-cb90a5726251 exited 0 for the exact combined command above. Its returned log is
+`.temp/check-logs/77aa626c-a7e7-4cae-951f-cb90a5726251.log`. Web, Auth, Kernel, Importer and UI typing now
+pass on the reconciled source. Kernel completed schema analysis, TypeScript compilation and cleanup; Importer
+and UI explicitly reported no type errors in 506 and 246 files. No further retry is submitted. The later owner
+instruction to repair the compiler lifecycle before additional identical retries is retained: this terminal pass
+establishes typing, not a causal repair of either earlier database lifetime failure. The existing compiler owner
+still owns that class failure and its exact first exit/removal cause.
+
+Worker source reconciliation and changed-workspace typing are complete. All eighteen journeys, reaction-count
+and six Editing cases, native/default-worker/browser/growth/root/cleanup and promoted-revision acceptance remain
+dev verification. No runtime recovery, independent identity-readiness repair or promotion is inferred.
 
 The latest native6f/startup23db packets remain receiving obligations for their existing owners. Source-fence and
 policy assertions, original reaction counts, all eighteen paths and six Editing cases remain intact. Native6f's
