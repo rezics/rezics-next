@@ -37,7 +37,8 @@ export function formatSeedError(error: unknown): string {
     return `Credential request failed ${details(error.diagnostics ?? {}, 'credential')}`;
   if (error instanceof Error) {
     const name = safeField(error.name, /^[A-Za-z][A-Za-z0-9]{0,63}$/u, 64) ?? 'Error';
-    return `Cross-media seed failed (${name})`;
+    const detail = safeField(error.message, /^[A-Za-z0-9][A-Za-z0-9 .,:;_/+(){}[\]-]{0,239}$/u, 240);
+    return detail ? `Cross-media seed failed (${name}): ${detail}` : `Cross-media seed failed (${name})`;
   }
   return 'Cross-media seed failed';
 }

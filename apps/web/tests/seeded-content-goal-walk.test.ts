@@ -64,6 +64,7 @@ test('the Content Goal walk names every first-scope row and summarises passing, 
   expect(source).toContain('html[data-hydrated]');
   expect(source).toContain("getByRole('button', { name: 'Sign in', exact: true })");
   expect(source).toContain('withIssuerSeedProxy');
+  expect(source).toContain('walkIssuerForward');
   expect(source).toContain('AUTH_ORIGIN: process.env.REZICS_LOCAL_STACK_ISSUER_ORIGIN');
   expect(source).not.toMatch(/AUTH_JWKS_URL\s*=/);
 });
