@@ -27,6 +27,10 @@ supplies Account repair/enrollment, authorization and deadline classification th
 runtime defaults compose this application before Search runtime factories are used. Existing pool, route key, Access,
 request deadline, transaction, reached-child work and publication writer ownership flow through unchanged.
 
+The installed WorkModule journey streams actual authorization, registration, SDK launch and service phases before
+startup cleanup. A failure retains the first producer error alongside its last phase; readiness, native convergence
+and shutdown still require the original assertions and deadlines.
+
 Decision: `composeSemanticIdentityParticipants` supplies the Source reader factory while constructing the fixed
 worker participant because Semantic registration precedes Search service startup. It passes the real typed
 `createIdentitySourceSupportReader` into the receiving configuration; each receiving adapter creates its own reader

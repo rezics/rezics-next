@@ -35,8 +35,11 @@ const program = `
   let launches = 0;
   const registerWorkflow = DBOS.registerWorkflow;
   spyOn(DBOS, 'registerWorkflow').mockImplementation((workflow, config) => {
+    phase('workflow-register:' + config?.name);
     if (config?.name === 'semantic.identityEpoch') identityRegistrations++;
-    return registerWorkflow.call(DBOS, workflow, config);
+    const registered = registerWorkflow.call(DBOS, workflow, config);
+    phase('workflow-registered:' + config?.name);
+    return registered;
   });
   const launch = DBOS.launch;
   spyOn(DBOS, 'launch').mockImplementation(async (...args) => {
@@ -80,7 +83,17 @@ const program = `
       async register(context) {
         phase('register:' + module.name);
         const nativeContext = context;
-        context = { ...context, addService(start) {
+        context = { ...context, getAuthorization() {
+          phase('authorization:' + module.name);
+          try {
+            const authorization = nativeContext.getAuthorization();
+            phase('authorized:' + module.name);
+            return authorization;
+          } catch (error) {
+            console.error('semantic-work-authorization-error:', error);
+            throw error;
+          }
+        }, addService(start) {
           nativeContext.addService(async () => {
             phase('service-start:' + module.name);
             const service = await start();
@@ -89,7 +102,12 @@ const program = `
           });
         }};
         if (module.name !== 'semantic') {
-          await module.register(context);
+          try {
+            await module.register(context);
+          } catch (error) {
+            console.error('semantic-work-registration-error:' + module.name, error);
+            throw error;
+          }
           phase('registered:' + module.name);
           return;
         }
