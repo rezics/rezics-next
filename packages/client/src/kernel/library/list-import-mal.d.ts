@@ -8,7 +8,7 @@ import type { ProgressSessionJournalDate } from './progress-model.ts';
 import type { createSessionCommands } from './sessions.ts';
 import type { Entry } from './entry-model.ts';
 import { type MalRow } from './list-import-mal-parser.ts';
-import { type RatingQuestion, type VoteReviewGuard } from '../rating/votes.ts';
+import { createVoteCommands, type RatingQuestion, type VoteReviewGuard } from '../rating/votes.ts';
 import { type MalLabelReview, type MalLabelSelection, type MalLabelOutcome } from './list-import-mal-tags.ts';
 import { type EntryImportMetadataOutcome, type EntryImportMetadataProposals } from './list-import-entry-metadata.ts';
 import { progressResults, type ProgressAdoptionCheckpoint, type ProgressAdoptionInput, type ProgressAdoptionPlan } from './list-import-progress-adoption.ts';
@@ -188,6 +188,7 @@ export type MalMetadataReviewInput = {
     row: number;
     sourceReviewToken: string;
 };
+type NativeVotes = Pick<ReturnType<typeof createVoteCommands>, 'readVoteReview' | 'readRatingQuestion' | 'putVoteOutcome' | 'preparePutVote' | 'reconcilePutVote' | 'readOwnVote'>;
 type Dependencies = {
     pool: Pool;
     access: Access;
@@ -195,6 +196,7 @@ type Dependencies = {
     routeKey: Uint8Array;
     journal: ReturnType<typeof createSessionCommands>;
     clock?: KernelClock;
+    votes?: NativeVotes;
 };
 export declare function malMetadataProposals(row: MalRow): EntryImportMetadataProposals;
 /** One source's bounded composition of current Semantic observations and native Library commands. */

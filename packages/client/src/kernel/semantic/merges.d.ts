@@ -43,8 +43,8 @@ export type SubjectMergeAdmission = {
         id: string;
     };
 };
-/** Ordinary HTTP admission. Completes the catalogue redirect in the persist command;
- * callers observe publication through GET /v1/subjectIdentityOperations/{id}. */
+/** Ordinary HTTP admission. Retains the identity job; mapping applies the catalogue
+ * redirect. Callers observe publication through GET /v1/subjectIdentityOperations/{id}. */
 export declare function admitMergeSubjects(pool: Pool, options: {
     subjects: string[];
     survivor?: string;

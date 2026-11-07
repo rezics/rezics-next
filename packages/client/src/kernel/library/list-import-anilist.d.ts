@@ -1,20 +1,23 @@
 import type { Pool } from 'pg';
 import type { KernelClock } from '../clock.ts';
-import { type Access, type Actor } from '../request/access.ts';
+import { type Access, type AccountActor, type Actor } from '../request/access.ts';
 import type { KeyRing } from '../tokens/seal.ts';
 import type { LibraryProfileDescriptor } from './profile.ts';
 import { type AniListLabelReview, type AniListLabelWork } from './list-import-anilist-labels.ts';
 import { type AniListRow } from './list-import-anilist-parser.ts';
 import { type ImportConsumptionDateIntent, type ImportConsumptionDateReview, type ImportDateAction, type ImportDateField, type ImportDateSessionIdentity } from './import-consumption.ts';
-import { type RatingQuestion, type VoteReviewGuard, type VoteReviewCurrentVote } from '../rating/votes.ts';
+import { createVoteCommands, type PreparedPutVote, type RatingQuestion, type VoteReviewGuard, type VoteReviewCurrentVote } from '../rating/votes.ts';
+import type { VoteObservation } from '../rating/vote-observation.ts';
 import { type EntryImportMetadataOutcome, type EntryImportMetadataProposals, type EntryImportMetadataReview, type EntryImportMetadataView } from './list-import-entry-metadata.ts';
 import { progressResults, type ProgressAdoptionCheckpoint, type ProgressAdoptionInput, type ProgressAdoptionPlan, type ProgressProfileBinding } from './list-import-progress-adoption.ts';
+type NativeVotes = Pick<ReturnType<typeof createVoteCommands>, 'readVoteReview' | 'readRatingQuestion' | 'putVoteOutcome' | 'preparePutVote' | 'reconcilePutVote'>;
 type Dependencies = {
     pool: Pool;
     access: Access;
     tokens: KeyRing;
     routeKey: Uint8Array;
     clock?: KernelClock;
+    votes?: NativeVotes;
 };
 export type AniListMatch = {
     state: 'matched' | 'ambiguous' | 'unmatched' | 'unavailable';
@@ -143,6 +146,9 @@ export type AniListStored = {
     outcome?: AniListOutcome;
     labelReview?: AniListLabelReview;
     labelWork?: Record<number, AniListLabelWork>;
+    scoreCommand?: PreparedPutVote;
+    scoreCommandActor?: AccountActor;
+    scoreObservation?: VoteObservation;
 };
 type Header = {
     document: unknown;
