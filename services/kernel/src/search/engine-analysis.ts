@@ -1,9 +1,9 @@
+import { CJK_ANALYZER, NAME_PREFIX_ANALYZER, type EngineToken } from './disclosure/admission.ts';
+export { CJK_ANALYZER, NAME_PREFIX_ANALYZER, type EngineToken } from './disclosure/admission.ts';
 import { OpenSearchError, SearchUnavailableError, type OpenSearch } from './opensearch.ts';
 
 /** Released development analysis plugin. The unmodified upstream image does not install it. */
 export const ANALYSIS_ICU_PLUGIN = 'analysis-icu';
-export const CJK_ANALYZER = 'cjk_bigram_v2';
-export const NAME_PREFIX_ANALYZER = 'name_prefix';
 export const NAME_KEY_NORMALIZER = 'name_key';
 
 export const ENGINE_ANALYSIS_LIMITS = Object.freeze({
@@ -11,13 +11,6 @@ export const ENGINE_ANALYSIS_LIMITS = Object.freeze({
   concurrency: 16,
   plugins: 256,
 });
-
-export type EngineToken = Readonly<{
-  token: string;
-  position: number;
-  startOffset: number;
-  endOffset: number;
-}>;
 
 export type EngineAnalyzeRequest = Readonly<{
   text: string;

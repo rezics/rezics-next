@@ -24,10 +24,23 @@ and `withRealmDisclosureWork`, the native Access-to-Search bridge. It keeps rese
 bounds, caller deadline and root unchanged. Content consumes a port; its native sparse cursor and allowance stay
 with their original owners.
 
-Decision: `disclosure-application.ts` owns candidate admission, current-text matching, owner revalidation,
-concept preparation and source/index recovery. `createKernelRuntimeDefaults().searchDisclosure`
-binds the physical analyzer through `search/index.ts`; concept adapters bind relation/store ports. `operation-outcomes.ts` owns refusal/correction and operand-retention vocabulary. `searchHttpExecute`
-maps native refusals through `http/operation-problems.ts`.
+Decision: construct one complete native disclosure application and pass it through both ordinary Subject and mixed
+Search. `disclosure-application.ts` sequences owner admission, nested context hydration, exact owner revalidation,
+concept preparation and final CURRENT disclosure through explicit capabilities. `discovery-hydration.ts` binds registry
+owners and native readers; it does not decide the sequence. `disclosure/owner-current.ts` reads and compares owner
+records through the supplied current reader, preserving the original request/reader/identity epoch. Missing final rows
+withhold hits; changed rows restart the page. Owner batches remain 100 within a 200-candidate window, in input order.
+
+`disclosure/admission.ts` owns pure text selection, concept selection and matching vocabulary; same-statement Boolean
+rules stay in the existing pure current-leaf/filter planner. `disclosure/check.ts` consumes Source and release-observer
+capabilities for bounded current and inverse witness checks. Character/Person context uses that checker and pure text
+selection without importing hit hydration. `disclosure/current-text.ts` consumes an analysis capability, with one cache
+per matcher; `current-text-adapter.ts` supplies the physical analyzer for isolated callers.
+`createKernelRuntimeDefaults().searchDisclosure` binds the same complete application through `search/index.ts`;
+`default-discovery.ts` passes it to candidate checks, owner hydration, concept preparation and final disclosure.
+`operation-outcomes.ts` declares every native refusal class, including unavailable, coverage and owner restart, without
+importing adapter implementations or evaluating foreign inheritance. Compatibility entries re-export those exact
+constructors. Only `searchHttpExecute` and `http/operation-problems.ts` construct HTTP problems from native refusals.
 
 Search, suggest and facets retain `invalid`, `invalid-cursor`, `session`, `closed`, `denied`, `restart`,
 `index-not-ready`, `source-not-ready`, `unavailable` and `ready`. Source preparation is `503 semantic_not_ready`;

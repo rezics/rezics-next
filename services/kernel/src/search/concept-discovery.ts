@@ -2,7 +2,7 @@ import type { DiscoveryFilterDocument } from '@rezics/filter';
 import type { Pool } from 'pg';
 import { relationSource } from '../semantic/search-relations.ts';
 import { createConceptBrowseStore } from './concept-browse-store.ts';
-import { prepareConceptDisclosure } from './disclosure-application.ts';
+import { prepareConceptDisclosure, type SearchDisclosureApplication } from './disclosure-application.ts';
 
 /** Bind the native relation owner and retained store; orchestration stays in Search application. */
 export async function prepareConceptDiscoveryFilter(
@@ -17,9 +17,12 @@ export async function prepareConceptDiscoveryFilter(
     countCandidateLimit: number;
     now?: () => number;
   }>,
+  disclosure: Pick<SearchDisclosureApplication, 'prepareConceptFilter'> = {
+    prepareConceptFilter: prepareConceptDisclosure,
+  },
 ) {
   const source = relationSource(input.pool, input.routeKey);
-  return prepareConceptDisclosure(
+  return disclosure.prepareConceptFilter(
     { ...input, now: input.now ?? Date.now },
     {
       browse: source.conceptBrowse,

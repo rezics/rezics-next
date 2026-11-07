@@ -54,8 +54,9 @@ export { uniqueCanonicalRows } from '../presentation/slot-bodies.ts';
 import type { OpenSearch } from './opensearch.ts';
 import { analyzeInstalled } from './engine-analysis.ts';
 import { createSearchDisclosureApplication } from './disclosure-application.ts';
+export type { SearchDisclosureApplication } from './disclosure-application.ts';
 
-/** Concrete native binding used by Kernel composition and isolated service construction. */
+/** Complete native application: one installed instance owns matching, owner hydration, concept admission and final disclosure. */
 export function createNativeSearchDisclosure(search: OpenSearch) {
   return createSearchDisclosureApplication({
     analyze: (index, analyzer, text) => analyzeInstalled(search, index, { analyzer, text }),

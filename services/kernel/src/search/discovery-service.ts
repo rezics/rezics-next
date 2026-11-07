@@ -47,7 +47,11 @@ import type {
   PublicFilterQueriedObservation,
   PublicFilterConsumerRefill,
 } from './public-filter-consumer-contract.ts';
-import { finishDiscoveryDisclosure, revalidateOwnerCurrentSummaries } from './disclosure-application.ts';
+import {
+  finishDiscoveryDisclosure,
+  revalidateOwnerCurrentSummaries,
+  type SearchDisclosureApplication,
+} from './disclosure-application.ts';
 import { openPublicFilterCoveragePage } from './public-filter-coverage-page.ts';
 import {
   admitTaggedWorkPlan,
@@ -127,6 +131,7 @@ export type RetainedDiscoverySearch = (
 ) => Promise<RetainedDiscoveryRead>;
 
 type DiscoveryConfiguration = {
+  disclosure?: SearchDisclosureApplication;
   consumer: PublicDiscoveryConsumerOperations;
   source: PublicFilterSource;
   keys: KeyRing;
@@ -327,6 +332,7 @@ function executeDiscoverySearch(
   config: DiscoveryConfiguration,
   retain: (page: DiscoveryPage, current: RetainedPrimaryReader) => Promise<void>,
 ): DiscoverySearch {
+  const disclosure = config.disclosure ?? { finishDiscoveryDisclosure, revalidateOwnerCurrentSummaries };
   const execute: DiscoverySearch = async (principal, request, context) => {
     const { registry, release, digest } = await config.resolve(request);
     // Directory capability is advertised on a ready Collection adapter. An omitted producer must not
@@ -560,8 +566,8 @@ function executeDiscoverySearch(
             identities,
             readCurrent: adapter.readCurrent,
             async revalidate(summaries, context) {
-              const revalidated = await revalidateOwnerCurrentSummaries(
-                registry as DiscoveryRegistry & DiscoveryOwnerRegistry,
+              const revalidated = await disclosure.revalidateOwnerCurrentSummaries(
+                { readCurrent: (kind, ids, context) => registry.getOwnerAdapter!(kind).readCurrent(ids, context) },
                 [...summaries].map(([id, value]) => ({ candidate: id, kind: 'collection' as const, id, value })),
                 context,
               );
@@ -636,10 +642,17 @@ function executeDiscoverySearch(
                   inSpace.has(`${candidate.key.owner}:${candidate.key.kind}:${candidate.key.id}`),
                 )
               : result.hits;
-            const current = await currentDiscoveryCandidates(registry, selectedCandidates, admitted.filter, release, {
-              ...currentContext,
-              ...(matchEvidencePlan ? { matchEvidencePlan } : {}),
-            });
+            const current = await currentDiscoveryCandidates(
+              registry,
+              selectedCandidates,
+              admitted.filter,
+              release,
+              {
+                ...currentContext,
+                ...(matchEvidencePlan ? { matchEvidencePlan } : {}),
+              },
+              config.disclosure,
+            );
             const selected = selectCurrentPredicatePage(selectedCandidates, current, {
               limit: admitted.limit - hits.length,
               exhausted: window.exhausted,
@@ -794,10 +807,17 @@ function executeDiscoverySearch(
                   inSpace.has(`${candidate.key.owner}:${candidate.key.kind}:${candidate.key.id}`),
                 )
               : result.hits;
-            const current = await currentDiscoveryCandidates(registry, selected, admitted.countFilter, release, {
-              ...currentContext,
-              ...(matchEvidencePlan ? { matchEvidencePlan } : {}),
-            });
+            const current = await currentDiscoveryCandidates(
+              registry,
+              selected,
+              admitted.countFilter,
+              release,
+              {
+                ...currentContext,
+                ...(matchEvidencePlan ? { matchEvidencePlan } : {}),
+              },
+              config.disclosure,
+            );
             const subjects: { id: string; type: string }[] = [];
             for (const candidate of selected) {
               const hit = current.get(candidate);
@@ -836,7 +856,7 @@ function executeDiscoverySearch(
           }
         }
         const execution = last;
-        const page = await finishDiscoveryDisclosure(coverage, async () => {
+        const page = await disclosure.finishDiscoveryDisclosure(coverage, async () => {
           await spacePopulation?.finish();
           const entries = kindDirectory;
           if (kindAfter && !entries.some((entry) => entry.kind === kindAfter)) throw invalid('/kindPage/cursor');
