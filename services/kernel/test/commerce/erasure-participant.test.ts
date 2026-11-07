@@ -36,7 +36,7 @@ import {
   type TestKernel,
 } from '../support/test-kernel.ts';
 import { KERNEL_WORK_MODULES } from '../support/default-work-modules.ts';
-import { drainTombstone, startCommerceErasureWorker } from './support/erasure-worker.ts';
+import { awaitEffectsCaughtUp, drainTombstone, startCommerceErasureWorker } from './support/erasure-worker.ts';
 import { createNativeEditionFixture, type NativeContentEdition } from './support/native-edition-fixture.ts';
 import {
   encodeNativeKeyRing,
@@ -542,6 +542,11 @@ describe('native genuine-order retention', () => {
         held.release();
       }
     }
+    // SIGKILL would otherwise leave the in-flight late-pay envelope pending across restart.
+    await awaitEffectsCaughtUp(pool, EFFECTS_DRAIN_MS, () => ({
+      output: worker?.output.slice(-2000) ?? '',
+      errors: worker?.errors.slice(-2000) ?? '',
+    }));
     await stopCommerceWorker();
     await Bun.sleep(Math.max(0, expiresAt.getTime() - Date.now() + 25));
     expect(await advanceCommerceErasure(pool, buyer.accountId)).toBe('resolve');

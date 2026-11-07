@@ -19,11 +19,50 @@ async function waitUntil<T>(read: () => Promise<T>, accept: (value: T) => boolea
   }
 }
 
+/** The next envelope after each effects checkpoint, oldest first. */
+export async function readPendingEffects(pool: Pool, limit = 8) {
+  return (
+    await pool.query<{
+      partition: number;
+      position: string;
+      type: string;
+      payload_state: string;
+      recorded_at: string;
+    }>(
+      `SELECT o.partition_no AS partition, o.position::text AS position, o.type, o.payload_state,
+              to_char(o.recorded_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"') AS recorded_at
+         FROM core.outbox o
+         LEFT JOIN core.consumer_checkpoint c
+           ON c.partition_no = o.partition_no AND c.consumer = $1
+        WHERE o.position = COALESCE(c.position, 0) + 1
+          AND o.event_seq = 0
+        ORDER BY o.recorded_at ASC, o.partition_no
+        LIMIT $2`,
+      [EFFECTS_CONSUMER, limit],
+    )
+  ).rows;
+}
+
 /** Wait until the production effects relay has ticked and has no pending envelopes. */
-export async function awaitEffectsCaughtUp(pool: Pool, ms = 90_000): Promise<void> {
+export async function awaitEffectsCaughtUp(
+  pool: Pool,
+  ms = 90_000,
+  detail?: () => Promise<unknown> | unknown,
+): Promise<void> {
   await waitUntil(
-    () => withConnection(pool, (client) => readConsumerLag(client, EFFECTS_CONSUMER)),
-    (lag) => lag !== null && lag.oldestPendingAt === null && Date.now() - lag.observedAt.getTime() < 5_000,
+    async () => {
+      const lag = await withConnection(pool, (client) => readConsumerLag(client, EFFECTS_CONSUMER));
+      const caughtUp =
+        lag !== null && lag.oldestPendingAt === null && Date.now() - lag.observedAt.getTime() < 5_000;
+      if (caughtUp) return { caughtUp: true as const };
+      return {
+        caughtUp: false as const,
+        lag,
+        pending: await readPendingEffects(pool),
+        ...(detail === undefined ? {} : { detail: await detail() }),
+      };
+    },
+    (value) => value.caughtUp,
     ms,
   );
 }
@@ -82,6 +121,7 @@ export async function startCommerceErasureWorker(pool: Pool, client: WorkClient,
       for await (const bytes of running.stderr as ReadableStream<Uint8Array>) errors += new TextDecoder().decode(bytes);
     })(),
   ]);
+  const tail = () => ({ output: output.slice(-2000), errors: errors.slice(-2000) });
   try {
     await waitUntil(
       async () => {
@@ -92,7 +132,7 @@ export async function startCommerceErasureWorker(pool: Pool, client: WorkClient,
       90_000,
     );
     for (const queue of await client.listQueues()) await queue.setMinPollingIntervalMs(5);
-    await awaitEffectsCaughtUp(pool);
+    await awaitEffectsCaughtUp(pool, 90_000, tail);
   } catch (error) {
     running.kill('SIGKILL');
     await running.exited;

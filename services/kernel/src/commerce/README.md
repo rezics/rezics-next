@@ -1017,7 +1017,9 @@ startWorker's live default composition under `workerTestEnv`, decorated so only 
 account tombstones; `KERNEL_WORK_MODULES` pins registration names only. Semantic's overflowing Subject-source
 page stays that owner's repair. Financial outcome-driver children use the same live composition. Readiness waits for
 the effects consumer to catch up and the 5ms queue poll. Tombstone drain waits for that envelope, not a moving
-partition head. Paid-order checks wait for committed entitlement and settlement rows. Ceiling is 120s.
+partition head. Paid-order checks wait for committed entitlement and settlement rows. After late-pay and deletion
+release their holds, catch-up runs again before SIGKILL so expiry restart does not inherit an in-flight envelope.
+Ceiling is 120s.
 The board-read current-role projection stays with Accounts.
 Decision: paid genuine-order settlement uses the parent kernel's Content Access and Auth-database
 consent; the worker child's second Access cannot restore mechanical sale authority until that

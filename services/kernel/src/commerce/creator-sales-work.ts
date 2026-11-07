@@ -182,8 +182,10 @@ export async function admitCreatorSale(client: Client, event: CloudEvent): Promi
       throw new Error('Creator sale event receipt provenance conflict');
     return;
   }
-  if (nativeOrder.state !== 'active' || nativeOrder.authn_fenced)
-    throw new CommandUnavailableError('fenced', partition);
+  // Terminal fencing is not an effects-checkpoint failure. Throwing here holds the
+  // buyer-home checkpoint and blocks later tombstones and expiry restart catch-up.
+  // The creator-sales sweep retries the order; this envelope must still advance.
+  if (nativeOrder.state !== 'active' || nativeOrder.authn_fenced) return;
   const receipt = await client.query(
     `INSERT INTO commerce.creator_sale_receipt(partition_no,position,event_seq,epoch,event_id,route,order_id,source_revision)
      VALUES($1,$2,$3,$4,$5,$6,$7,$8) ON CONFLICT DO NOTHING RETURNING event_id`,
