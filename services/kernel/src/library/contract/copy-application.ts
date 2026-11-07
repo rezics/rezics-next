@@ -82,7 +82,12 @@ export interface CopyApplicationPorts<N extends CopyNativeTypes> {
       prepared: Prepared,
     ) => Promise<{ value: N['copy']; events: CopyEvent[] }>,
   ): Promise<N['outcome']>;
-  admitAttempt(owner: LibraryAccountActor, action: string, attempt: N['attempt'], deadline: number): Promise<void>;
+  admitAttempt(
+    owner: LibraryAccountActor,
+    action: 'copy:create' | 'copy:update' | 'copy:delete',
+    attempt: N['attempt'],
+    deadline: number,
+  ): Promise<void>;
   plans: {
     gate(route: number, accountId: string): CopyOperationPlan;
     mutation(operation: CopyMutationOperation, input: CopyMutationOperationInput): CopyOperationPlan;
@@ -137,7 +142,7 @@ export interface CopyApplicationPorts<N extends CopyNativeTypes> {
     route: number,
     accountId: string,
     copyId: string,
-  ): Promise<{ deletionId: string | null; revision: number; expired: boolean } | null>;
+  ): Promise<{ deletionId: string | null; revision: number; expired: boolean | null } | null>;
   restore(
     tx: N['transaction'],
     command: N['command'],

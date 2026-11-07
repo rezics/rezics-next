@@ -2620,14 +2620,14 @@ Execution belongs to the controller; no growth measurement is claimed for these 
 
 ### Copy application boundary
 
-`contract/copy-*` owns Copy values and envelopes; `core/copy-*` normalizes input and composes inclusive nine-axis plans. `application/copies.ts` owns account-first
+`contract/copy-*` owns values/envelopes; `core/copy-*` normalizes input and composes nine-axis plans. `application/copies.ts` owns account-first
 admission, receipt-safe preparation, mutations, restore authority, sparse keysets and final fences.
 Ports retain actor, Pool/transaction, attempt, command-time witness, deadline, receipt classes/work. Access owns
 account/state/share SQL/bounds; Semantic supplies releases/list context.
 Server/worker and standalone factories share producers/runner; session work consumes its existing contract.
 
 Acceptance choice: worker typing; six `copy-application.test.ts` cases pin admission, contexts, replay, final fences,
-sparse inventory and restore authority. Existing Copy/native/cost assertions and Financial/Web sole walks retain
+sparse inventory and restore authority. Copy/native/cost assertions and Financial/Web sole walks retain
 native/browser/currentness/growth integration acceptance.
 
 ### Copy create

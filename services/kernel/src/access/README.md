@@ -5,10 +5,10 @@
 [Architecture](../../../../docs/architecture.md): catalogue, closed-operand `decide`, bounded explanations,
 conformance and residuals live in `packages/access/src/index.ts`; imports point inward.
 Kernel owns facts, qualified completeness, proofs, time, floors/fences, admission, audit and execution. Exposure is independent. Core/Collection residuals are integrated; remaining profiles add no
-baseline allowance or allow-OR. Compatibility does not prove native acceptance.
+baseline allowance or allow-OR. Compatibility is not native acceptance.
 
-Copy consumes `contract/copy-account.ts` through `adapters/copy-account.ts`: account/state/share SQL, finite bounds
-and authentication floor before private-state/receipt disclosure. Error, Access, Pool, actor, time/deadline identities remain.
+Copy: `contract/copy-account.ts`, `adapters/copy-account.ts`: account/state/share SQL, finite bounds
+and authn floor before private-state/receipt disclosure. Error, Access, Pool, actor, time/deadline identities remain.
 
 [Accounts](../../../../docs/accounts.md) owns product identity, delegation, consent and preferences;
 [Deletion](../../../../docs/deletion.md) owns erasure/restore policy;
