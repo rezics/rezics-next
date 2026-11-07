@@ -36,6 +36,11 @@ include `hasMore`; when more records remain, `nextAfter` is the attempt number t
 The text form also prints whether more attempts remain and the continuation attempt number.
 Attempt inspection only retrieves the requested data; the manager host handles orphan recovery.
 
+`goal status` reports counts for all tasks by Goal and state, then lists compact rows for tasks that still need
+attention. It retains held, ready, running, landing and stopped tasks; integrated, merged, cancelled and verified
+tasks appear in the counts only. Use `goal status <task>` for the full task brief, and `goal attempts --task <task>` or
+`goal report` for historical detail.
+
 ## Testing
 
 `bun tools/goal/scripts/test-timings.ts` runs this package's tests in isolated processes, at most sixteen files at

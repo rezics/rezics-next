@@ -1,4 +1,4 @@
-import { expect, test } from 'bun:test';
+import { expect, spyOn, test } from 'bun:test';
 import { spawnSync } from 'node:child_process';
 import { mkdirSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
@@ -8,7 +8,7 @@ import { openDb } from './db.ts';
 import { prepareOwnerDecisionPrompt } from './owner-decisions.ts';
 import { WorkerStore } from './store.ts';
 import { WorkerTasks } from './tasks.ts';
-import { brief, temporaryDirectory } from './test-support.ts';
+import { brief, harness, temporaryDirectory } from './test-support.ts';
 import type { Attempt, Settings, Task } from './types.ts';
 import { runWorkerCommand } from './worker-commands.ts';
 
@@ -84,6 +84,7 @@ test('diagnostics are read-only, tolerate unknown dependencies and use controlle
       reads.retryIntent++;
       return { status: 'pending' };
     },
+    events: () => [],
     attempts: () => [],
     records: () => [],
     runningAttemptsByPool: () => ({}),
@@ -150,6 +151,11 @@ test('diagnostics are read-only, tolerate unknown dependencies and use controlle
   expect(status.reapedLastHour).toEqual({ processes: 0, containers: 0, volumes: 0, bytes: 0 });
   expect(status.strayDirectories).toBe(0);
   expect(status.strayBytesReclaimedLastHour).toBe(0);
+  expect(status.taskCounts).toEqual({
+    total: all.length,
+    byGoal: { unknown: all.length },
+    byState: { held: 3, ready: 1 },
+  });
   expect(JSON.parse(output[1]!).trains).toEqual(status.trains);
   expect(status.tasks.map(({ id }: Task) => id)).toEqual(all.map(({ id }) => id));
   for (const malformed of status.tasks.slice(2))
@@ -175,6 +181,158 @@ test('diagnostics are read-only, tolerate unknown dependencies and use controlle
   ).rejects.toThrow('unknown attempt');
   expect(reads).toEqual({ tasks: 1, task: 0, attempt: 5, retryIntent: 4, incidentHistory: 0 });
   expect(mutations).toBe(0);
+});
+
+test('global status summarizes large history while retaining full single-task briefs and active waits', async () => {
+  const h = harness();
+  const largeBrief = `brief-marker:${'b'.repeat(1_500_000)}`;
+  const largeHistory = `history-marker:${'h'.repeat(1_500_000)}`;
+  const location = (id: string) => ({
+    briefPath: join(h.root, `${id}.md`),
+    worktree: h.root,
+    branch: `worker/${id}`,
+    base: 'fixture-base',
+  });
+  const makeAttempt = (taskId: string, attempt: number, state: Attempt['state'], result = ''): Attempt => ({
+    taskId,
+    attempt,
+    state,
+    profile: { cli: 'codex', model: 'fixture-model', effort: 'low', poolClass: 'codex' },
+    pool: 'fixture',
+    tableVersion: 'fixture',
+    experiment: null,
+    startedAt: new Date().toISOString(),
+    endedAt: state === 'exited' ? new Date().toISOString() : null,
+    process: null,
+    driver: null,
+    logPath: join(h.settings.stateDirectory, 'runs', taskId, `${attempt}.jsonl`),
+    evidencePath: join(h.settings.stateDirectory, 'evidence', taskId, String(attempt)),
+    auxiliaryProcesses: [],
+    session: state === 'waiting' ? 'fixture-session' : null,
+    fixRound: 0,
+    consulted: false,
+    previousFailure: null,
+    failure: null,
+    escalation: null,
+    before: null,
+    after: null,
+    exitCode: state === 'exited' ? 0 : null,
+    result,
+    blocker: null,
+    approaches: [],
+  });
+  const create = (id: string, goal: string, markdown: string, after: string[] = []) =>
+    h.store.createTask(
+      { ...brief(), goal, manager: 'owner', after, markdown },
+      location(id),
+      'implementation',
+      id,
+    );
+
+  try {
+    const archive = create('archive', 'history', largeBrief);
+    h.store.nextAttempt({ taskId: archive.id, attempt: 0 }, (attempt) =>
+      makeAttempt(archive.id, attempt, 'exited', largeHistory),
+    );
+    h.store.updateTask({ taskId: archive.id, attempt: 1 }, (task) => {
+      task.state = 'integrated';
+    });
+    const merged = create('merged-history', 'history', largeBrief);
+    h.store.updateTask({ taskId: merged.id, attempt: 0 }, (task) => {
+      task.state = 'merged';
+    });
+    const cancelled = create('cancelled-history', 'history', largeBrief);
+    h.store.updateTask({ taskId: cancelled.id, attempt: 0 }, (task) => {
+      task.state = 'cancelled';
+    });
+    const dependency = create('live-dependency', 'live', 'dependency');
+    h.store.updateTask({ taskId: dependency.id, attempt: 0 }, (task) => {
+      task.state = 'running';
+    });
+    const active = create('live-held', 'live', largeBrief, [dependency.id]);
+    h.store.nextAttempt({ taskId: active.id, attempt: 0 }, (attempt) =>
+      makeAttempt(active.id, attempt, 'exited'),
+    );
+    h.store.updateTask({ taskId: active.id, attempt: 1 }, (task) => {
+      task.state = 'held';
+    });
+    h.store.saveRetryIntent({ taskId: active.id, attempt: 1 }, {});
+    const terminating = create('live-termination', 'live', 'termination');
+    h.store.nextAttempt({ taskId: terminating.id, attempt: 0 }, (attempt) =>
+      makeAttempt(terminating.id, attempt, 'running'),
+    );
+    h.store.updateTask({ taskId: terminating.id, attempt: 1 }, (task) => {
+      task.state = 'running';
+    });
+    h.store.updateAttempt({ taskId: terminating.id, attempt: 1 }, (attempt) => {
+      attempt.terminationIntent = {
+        operation: 'stop',
+        requestedAt: new Date().toISOString(),
+        state: 'requested',
+        processIdentity: 'known',
+        process: null,
+        auxiliaryProcesses: [],
+      };
+    });
+
+    const attemptRead = spyOn(h.store, 'attempt');
+    const globalOutput: string[] = [];
+    await runWorkerCommand('status', [], {
+      settings: h.settings,
+      store: h.store,
+      tasks: h.tasks,
+      env: {},
+      print: (value) => globalOutput.push(value),
+    });
+
+    expect(Buffer.byteLength(globalOutput[0]!)).toBeLessThan(16_384);
+    expect(globalOutput[0]).not.toContain('brief-marker:');
+    expect(globalOutput[0]).not.toContain('history-marker:');
+    const status = JSON.parse(globalOutput[0]!);
+    expect(status.taskCounts).toEqual({
+      total: 6,
+      byGoal: { history: 3, live: 3 },
+      byState: { cancelled: 1, held: 1, integrated: 1, merged: 1, running: 2 },
+    });
+    expect(status.tasks.map((task: Task) => task.id)).toEqual([dependency.id, active.id, terminating.id]);
+    expect(status.tasks[1]).toMatchObject({
+      id: active.id,
+      sequence: active.sequence,
+      brief: { goal: 'live', manager: 'owner' },
+      state: 'held',
+      currentAttempt: 1,
+      dependencies: [{ id: dependency.id, state: 'running', ready: false }],
+      waitingFor: [dependency.id],
+      pendingRetry: { reason: 'dependencies', waitingFor: [dependency.id] },
+    });
+    expect(status.tasks[1].brief).not.toHaveProperty('markdown');
+    expect(status.tasks[1].brief).not.toHaveProperty('paths');
+    expect(status.tasks[2]).toMatchObject({
+      id: terminating.id,
+      state: 'running',
+      currentAttempt: 1,
+      terminationRequest: { operation: 'stop', state: 'requested', processIdentity: 'known' },
+    });
+    expect(attemptRead).toHaveBeenCalledTimes(2);
+
+    attemptRead.mockClear();
+    const singleOutput: string[] = [];
+    await runWorkerCommand('status', [active.id], {
+      settings: h.settings,
+      store: h.store,
+      tasks: h.tasks,
+      env: {},
+      print: (value) => singleOutput.push(value),
+    });
+    const single = JSON.parse(singleOutput[0]!);
+    expect(single).toMatchObject(h.store.task(active.id));
+    expect(single.brief.markdown).toBe(largeBrief);
+    expect(single.brief.paths).toEqual(brief().paths);
+    expect(Buffer.byteLength(singleOutput[0]!)).toBeGreaterThan(1_500_000);
+    expect(attemptRead).toHaveBeenCalledTimes(1);
+  } finally {
+    h.dispose();
+  }
 });
 
 test('attempts selects a bounded task page and keeps the complete JSON export available', async () => {

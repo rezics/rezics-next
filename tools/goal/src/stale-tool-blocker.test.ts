@@ -261,7 +261,24 @@ test('three distinct tasks with one normalized blocker open one incident and hol
       toolIncidents: Array<{ line: string; taskIds: string[]; probe: { taskId: string }; nextProbeAt: string }>;
       tasks: Array<{ id: string; currentAttempt: number; pendingRetry?: { reason: string } }>;
     };
-    expect(status).toEqual(expected);
+    expect(status).toMatchObject({
+      devVerification: expected.devVerification,
+      toolIncidents: expected.toolIncidents,
+      trains: expected.trains,
+      taskCounts: { total: cohort.length },
+      tasks: expectedTasks.map((task) => ({
+        id: task.id,
+        sequence: task.sequence,
+        brief: { goal: task.brief.goal, manager: task.brief.manager },
+        taskClass: task.taskClass,
+        state: task.state,
+        currentAttempt: task.currentAttempt,
+        urgent: false,
+        ...(task.dependencies ? { dependencies: task.dependencies } : {}),
+        ...(task.waitingFor ? { waitingFor: task.waitingFor } : {}),
+        ...(task.pendingRetry ? { pendingRetry: task.pendingRetry } : {}),
+      })),
+    });
     expect(cohortRead).toHaveBeenCalledTimes(1);
     expect(taskRead).not.toHaveBeenCalled();
     expect(attemptRead).toHaveBeenCalledTimes(cohort.filter((task) => task.currentAttempt > 0).length);
@@ -302,7 +319,7 @@ test('three distinct tasks with one normalized blocker open one incident and hol
       tasks: h.tasks,
       print: (value) => qualifiedOutput.push(value),
     });
-    expect(JSON.parse(qualifiedOutput.at(-1)!)).toEqual({
+    expect(JSON.parse(qualifiedOutput.at(-1)!)).toMatchObject({
       ...expectedTasks[0],
       toolIncidents: [incident],
       trains: expected.trains,
@@ -334,7 +351,7 @@ test('three distinct tasks with one normalized blocker open one incident and hol
       tasks: h.tasks,
       print: (value) => finishedProbeOutput.push(value),
     });
-    expect(JSON.parse(finishedProbeOutput.at(-1)!)).toEqual({
+    expect(JSON.parse(finishedProbeOutput.at(-1)!)).toMatchObject({
       ...h.store.task(taskIds[0]!),
       urgent: false,
       pendingRetry: { reason: 'start' },
