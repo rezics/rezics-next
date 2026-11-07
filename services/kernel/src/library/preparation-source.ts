@@ -38,16 +38,11 @@ function addWork(...values: readonly WorkDimensions[]): WorkDimensions {
     bytes: 0,
   };
   for (const value of values)
-    for (const axis of Object.keys(dimensions) as (keyof WorkDimensions)[])
-      dimensions[axis] += value[axis];
+    for (const axis of Object.keys(dimensions) as (keyof WorkDimensions)[]) dimensions[axis] += value[axis];
   return Object.freeze(dimensions);
 }
 
-async function observe(
-  context: PreparationSourceContext,
-  subjectId: string,
-  full: boolean,
-) {
+async function observe(context: PreparationSourceContext, subjectId: string, full: boolean) {
   const route = routeOf(subjectId);
   if (route === null) throw new TypeError('Invalid preparation source');
   const partition = partitionOf(route);
@@ -57,11 +52,22 @@ async function observe(
     withReadTransaction(
       pool,
       async (client) => {
-        const read = async (maxTypeBytes: number): Promise<PreparationSourceRead<{
-          stamp: { partition: number; epoch: number; position: bigint };
-          identity: { sourceId: string; partition: number; epoch: number; revision: number; transactionId: string; redirect: string | null } | null;
-          type: string | null;
-        }>> => {
+        const read = async (
+          maxTypeBytes: number,
+        ): Promise<
+          PreparationSourceRead<{
+            stamp: { partition: number; epoch: number; position: bigint };
+            identity: {
+              sourceId: string;
+              partition: number;
+              epoch: number;
+              revision: number;
+              transactionId: string;
+              redirect: string | null;
+            } | null;
+            type: string | null;
+          }>
+        > => {
           const owner = await readPartition(client, partition);
           if (!owner) throw new CommandUnavailableError('deadline', partition);
           if (owner.writeState === 'moved') throw new CommandUnavailableError('moved', partition, owner.movedTo);
@@ -79,9 +85,7 @@ async function observe(
             semanticWork: addWork(version.work, ...(itemTypes ? [itemTypes.work] : [])),
           };
         };
-        const observed = execution
-          ? await execution.read(client, subjectId, full, observations, read)
-          : await read(0);
+        const observed = execution ? await execution.read(client, subjectId, full, observations, read) : await read(0);
         return observed.value;
       },
       deadline,

@@ -81,13 +81,18 @@ export type LibrarySemanticScopeRevalidation = Readonly<{
 export interface LibrarySemanticObservationCapability {
   readonly canonical: Readonly<{
     mappingWork(originals: readonly string[]): WorkDimensions;
-    scopeCommitWork(input: Readonly<{
-      route: number;
-      collectionId: string;
-      sourceFence: string;
-      observation: LibrarySemanticScopeObservation;
-    }>): WorkDimensions;
-    readMappings(pool: Pool, originals: readonly string[]): Promise<LibrarySemanticObservationResult<readonly LibrarySemanticMapping[]>>;
+    scopeCommitWork(
+      input: Readonly<{
+        route: number;
+        collectionId: string;
+        sourceFence: string;
+        observation: LibrarySemanticScopeObservation;
+      }>,
+    ): WorkDimensions;
+    readMappings(
+      pool: Pool,
+      originals: readonly string[],
+    ): Promise<LibrarySemanticObservationResult<readonly LibrarySemanticMapping[]>>;
     registerScope(pool: Pool, input: LibrarySemanticScopeRegistration): Promise<LibrarySemanticScopeResult>;
     revalidateScope(pool: Pool, input: LibrarySemanticScopeRevalidation): Promise<LibrarySemanticScopeResult>;
     commitScopeCapture(
@@ -110,19 +115,23 @@ export interface LibrarySemanticObservationCapability {
       pool: Pool,
       originals: readonly string[],
     ): Promise<LibrarySemanticObservationResult<readonly LibrarySemanticMapping[]>>;
-    readSubjectReference(input: Readonly<{
-      pool: Pool;
-      subjectId: string;
-      check(client: Pick<PoolClient, 'query'>): Promise<boolean>;
-    }>): Promise<LibrarySemanticObservationResult<Readonly<
-      | { state: 'present' }
-      | { state: 'absent' }
-      | { state: 'redirect'; from: string; to: string }
-    >>>;
-    observeSubjects(input: Readonly<{
-      context: LibrarySemanticSummaryContext;
-      ids: readonly string[];
-    }>): Promise<LibrarySemanticObservationResult<LibrarySemanticSummaryObservation>>;
+    readSubjectReference(
+      input: Readonly<{
+        pool: Pool;
+        subjectId: string;
+        check(client: Pick<PoolClient, 'query'>): Promise<boolean>;
+      }>,
+    ): Promise<
+      LibrarySemanticObservationResult<
+        Readonly<{ state: 'present' } | { state: 'absent' } | { state: 'redirect'; from: string; to: string }>
+      >
+    >;
+    observeSubjects(
+      input: Readonly<{
+        context: LibrarySemanticSummaryContext;
+        ids: readonly string[];
+      }>,
+    ): Promise<LibrarySemanticObservationResult<LibrarySemanticSummaryObservation>>;
   }>;
   readonly shelf: Readonly<{
     identityVersionWork(subjectId: string): WorkDimensions;
@@ -130,11 +139,13 @@ export interface LibrarySemanticObservationCapability {
     readIdentityVersion(
       client: Pick<PoolClient, 'query'>,
       subjectId: string,
-    ): Promise<LibrarySemanticObservationResult<Readonly<{
-      revision: number;
-      transactionId: string;
-      redirect: string | null;
-    }> | null>>;
+    ): Promise<
+      LibrarySemanticObservationResult<Readonly<{
+        revision: number;
+        transactionId: string;
+        redirect: string | null;
+      }> | null>
+    >;
     readItemTypes(
       client: Pick<PoolClient, 'query'>,
       subjectIds: readonly string[],

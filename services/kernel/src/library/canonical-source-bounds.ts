@@ -448,16 +448,17 @@ export function canonicalSourceMappingBound(
 ): CanonicalSourceSqlBound {
   if (!Number.isSafeInteger(originalCount) || originalCount < 0 || originalCount > CANONICAL_SOURCE_RAW_KEY_LIMIT)
     throw new RangeError('Canonical Source mapping page must contain at most 100 originals');
-  if (originalCount === 0) return sqlBound({
-    candidateKeys: 0,
-    nativeRows: 0,
-    identityMetadataRows: 0,
-    emptySeeks: 0,
-    nativePoints: 0,
-    witnessKeys: 0,
-    statements: 0,
-    bytes: 0,
-  });
+  if (originalCount === 0)
+    return sqlBound({
+      candidateKeys: 0,
+      nativeRows: 0,
+      identityMetadataRows: 0,
+      emptySeeks: 0,
+      nativePoints: 0,
+      witnessKeys: 0,
+      statements: 0,
+      bytes: 0,
+    });
   const owner = observations ?? librarySemanticObservations();
   let unit = mappingUnitBounds.get(owner);
   if (!unit) {
@@ -590,20 +591,23 @@ function executionEnvelope() {
   );
 }
 
-const termsByObservation = new WeakMap<LibrarySemanticObservationCapability, ReturnType<typeof buildCanonicalSourceTerms>>();
+const termsByObservation = new WeakMap<
+  LibrarySemanticObservationCapability,
+  ReturnType<typeof buildCanonicalSourceTerms>
+>();
 function buildCanonicalSourceTerms(observations: LibrarySemanticObservationCapability) {
   return Object.freeze({
-      observation: observation(),
-      begin: begin(),
-      rawWindow: canonicalSourceRawWindowBound(CANONICAL_SOURCE_RAW_KEY_LIMIT),
-      mapping: canonicalSourceMappingBound(CANONICAL_SOURCE_RAW_KEY_LIMIT, observations),
-      repairWrite: repairWrite(CANONICAL_SOURCE_RAW_KEY_LIMIT),
-      publish: publish(),
-      readback: readback(),
-      seek: CANONICAL_SOURCE_STATEMENTS().seek.bound,
-      group: canonicalSourceGroupStatement(CANONICAL_SOURCE_RAW_KEY_LIMIT).bound,
-      executionEnvelope: executionEnvelope(),
-    });
+    observation: observation(),
+    begin: begin(),
+    rawWindow: canonicalSourceRawWindowBound(CANONICAL_SOURCE_RAW_KEY_LIMIT),
+    mapping: canonicalSourceMappingBound(CANONICAL_SOURCE_RAW_KEY_LIMIT, observations),
+    repairWrite: repairWrite(CANONICAL_SOURCE_RAW_KEY_LIMIT),
+    publish: publish(),
+    readback: readback(),
+    seek: CANONICAL_SOURCE_STATEMENTS().seek.bound,
+    group: canonicalSourceGroupStatement(CANONICAL_SOURCE_RAW_KEY_LIMIT).bound,
+    executionEnvelope: executionEnvelope(),
+  });
 }
 export function CANONICAL_SOURCE_TERMS(
   observations: LibrarySemanticObservationCapability = librarySemanticObservations(),
@@ -643,27 +647,30 @@ export function CANONICAL_SOURCE_COMPLETED_READBACK() {
   return memoizedValue(CANONICAL_SOURCE_COMPLETED_READBACK, () => readback());
 }
 
-const declarationByObservation = new WeakMap<LibrarySemanticObservationCapability, ReturnType<typeof buildCanonicalSourceDeclaration>>();
+const declarationByObservation = new WeakMap<
+  LibrarySemanticObservationCapability,
+  ReturnType<typeof buildCanonicalSourceDeclaration>
+>();
 function buildCanonicalSourceDeclaration(observations: LibrarySemanticObservationCapability) {
   return Object.freeze({
-      status: 'complete' as const,
-      axes: CANONICAL_SOURCE_AXES(),
-      limits: Object.freeze({
-        rawKeys: CANONICAL_SOURCE_RAW_KEY_LIMIT,
-        zoneAggregate: CANONICAL_SOURCE_ZONE_AGGREGATE,
-        generations: CANONICAL_SOURCE_GENERATION_CAPACITY,
-        scopes: CANONICAL_SOURCE_SCOPE_CAPACITY,
-        attempts: CANONICAL_SOURCE_ATTEMPTS(),
-        identitySweepHomes: CANONICAL_SOURCE_IDENTITY_SWEEP_HOMES,
-        identitySweeps: CANONICAL_SOURCE_IDENTITY_SWEEPS,
-      }),
-      statements: CANONICAL_SOURCE_STATEMENTS(),
-      terms: CANONICAL_SOURCE_TERMS(observations),
-      repair: CANONICAL_SOURCE_REPAIR_STEP(observations),
-      publication: CANONICAL_SOURCE_PUBLICATION_STEP(),
-      readback: CANONICAL_SOURCE_COMPLETED_READBACK(),
-      receiving: CANONICAL_SOURCE_RECEIVING_COST(),
-    });
+    status: 'complete' as const,
+    axes: CANONICAL_SOURCE_AXES(),
+    limits: Object.freeze({
+      rawKeys: CANONICAL_SOURCE_RAW_KEY_LIMIT,
+      zoneAggregate: CANONICAL_SOURCE_ZONE_AGGREGATE,
+      generations: CANONICAL_SOURCE_GENERATION_CAPACITY,
+      scopes: CANONICAL_SOURCE_SCOPE_CAPACITY,
+      attempts: CANONICAL_SOURCE_ATTEMPTS(),
+      identitySweepHomes: CANONICAL_SOURCE_IDENTITY_SWEEP_HOMES,
+      identitySweeps: CANONICAL_SOURCE_IDENTITY_SWEEPS,
+    }),
+    statements: CANONICAL_SOURCE_STATEMENTS(),
+    terms: CANONICAL_SOURCE_TERMS(observations),
+    repair: CANONICAL_SOURCE_REPAIR_STEP(observations),
+    publication: CANONICAL_SOURCE_PUBLICATION_STEP(),
+    readback: CANONICAL_SOURCE_COMPLETED_READBACK(),
+    receiving: CANONICAL_SOURCE_RECEIVING_COST(),
+  });
 }
 export function CANONICAL_SOURCE_DECLARATION(
   observations: LibrarySemanticObservationCapability = librarySemanticObservations(),
