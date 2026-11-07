@@ -14,7 +14,10 @@ import {
   verifyAccountIdentityReversalSettlement,
 } from '../access/agent-verification-identity.ts';
 import { readAccountIdentityTechnicalSource } from '../access/agent-verification-identity-retention.ts';
-import { AccessUnavailableError, classifyUnavailability } from '../access/unavailable.ts';
+import {
+  AccessUnavailableError,
+  classifyUnavailability as classifyAccessUnavailability,
+} from '../access/unavailable.ts';
 import { withReadTransaction } from './read.ts';
 import { importedTupleRouteOf } from './adapters/imported-route.ts';
 import { nativeRatingReview } from './adapters/rating-review.ts';
@@ -85,7 +88,7 @@ export function createNativeIdentityCapabilities(): NativeIdentityCapabilities {
       assertSource: assertAccountIdentitySource,
       readTechnicalSource: readAccountIdentityTechnicalSource,
       verifyReversalSettlement: verifyAccountIdentityReversalSettlement,
-      classifyUnavailability,
+      classifyUnavailability: (error: unknown) => classifyAccessUnavailability(error) !== undefined,
     }),
   });
 }

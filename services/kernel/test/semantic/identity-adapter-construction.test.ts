@@ -1,9 +1,13 @@
 import { expect, test } from 'bun:test';
 import type { Pool } from 'pg';
+import { AccessUnavailableError } from '../../src/access/unavailable.ts';
 import type { CommandResult, CommandTransaction, CurrentCommand } from '../../src/command/command.ts';
 import { IdentityEpochStoreError as ContractStoreError } from '../../src/semantic/contract/identity-errors.ts';
 import type { NativeIdentityCapabilities } from '../../src/semantic/identity-adapter-port.ts';
-import { installIdentityAdapterRuntime } from '../../src/semantic/identity-adapter-runtime.ts';
+import {
+  createNativeIdentityCapabilities,
+  installIdentityAdapterRuntime,
+} from '../../src/semantic/identity-adapter-runtime.ts';
 import { IdentityEpochStoreError, identityEpochStore } from '../../src/semantic/identity-adapters/index.ts';
 import type { IdentityIntent } from '../../src/semantic/identity-adapters/identity-epoch-contract.ts';
 import { IdentityEpochStoreError as ClosureStoreError } from '../../src/semantic/identity-terminal-closure-errors.ts';
@@ -255,4 +259,10 @@ test('ordinary identity, reviewed Person and Rating participant use the same con
   } finally {
     installIdentityAdapterRuntime();
   }
+});
+
+test('live native capabilities report Access unavailability as boolean', () => {
+  const caps = createNativeIdentityCapabilities();
+  expect(caps.accountIdentity.classifyUnavailability(new Error('other'))).toBe(false);
+  expect(caps.accountIdentity.classifyUnavailability(new AccessUnavailableError('deadline'))).toBe(true);
 });
