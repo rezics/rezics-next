@@ -1,5 +1,21 @@
 import { expect, test } from 'bun:test';
 import { citedAnimeCreditTargets, journeyTargets, selectJourneyWorks } from '../src/showcase-bangumi-journey.ts';
+import {
+  FIRST_PUBLIC_IMPORT_ROWS,
+  firstPublicRow,
+  licensedVndbArchive,
+  selectPublished,
+  walkInventorySummary,
+  type WalkInventory,
+} from '../src/imports-public-journey.ts';
+import {
+  BOOK_OWNER_GRANT_ACTIONS,
+  admitOrdinaryOwnerGrantStatus,
+  grantOrdinaryOwnerActions,
+  ordinaryOwnerGrantBody,
+  ordinaryOwnerGrantKey,
+  ordinaryOwnerGrantResource,
+} from '../src/ordinary-owner-grants.ts';
 
 function publishedRow(sourceKey: string, provider = 'bangumi') {
   return {
@@ -94,4 +110,102 @@ test('anime Work targets require the selected Bangumi credit row and preserve it
       kind: 'person',
     }),
   ]);
+});
+
+test('the first-public walk names twelve operator and catalogue rows once each', () => {
+  expect(FIRST_PUBLIC_IMPORT_ROWS.map((row) => row.id)).toEqual([
+    'I01',
+    'I02',
+    'I03',
+    'I04',
+    'I05',
+    'I06',
+    'I07',
+    'I08',
+    'I09',
+    'I10',
+    'I11',
+    'I12',
+  ]);
+  expect(firstPublicRow('I03').path).toContain('Open Library');
+  expect(firstPublicRow('I11').path).toContain('499');
+  const published = journeyTargets.map((target) => publishedRow(target.sourceKey));
+  expect(selectPublished(published, 'bangumi', '2815').sourceKey).toBe('2815');
+  expect(() => selectPublished(published, 'bangumi', 'missing')).toThrow('published bangumi:missing has 0 rows');
+});
+
+test('ordinary owner grants use one action, a stable receipt key, and admit replay', () => {
+  const account = '11111111-1111-4111-8111-111111111111';
+  const resource = ordinaryOwnerGrantResource();
+  expect(BOOK_OWNER_GRANT_ACTIONS).toEqual(['statement:propose', 'context:accept', 'context:adopt']);
+  expect(ordinaryOwnerGrantBody(account, 'context:adopt')).toEqual({
+    resource,
+    subject: { kind: 'account', id: account },
+    actions: ['context:adopt'],
+    valid: '(,)',
+  });
+  expect(ordinaryOwnerGrantKey(resource, account, 'context:adopt')).toBe(
+    `accounts.grant:0:${resource.id}:${account}:context:adopt`,
+  );
+  expect(admitOrdinaryOwnerGrantStatus(201)).toBe(true);
+  expect(admitOrdinaryOwnerGrantStatus(409)).toBe(true);
+  expect(admitOrdinaryOwnerGrantStatus(403)).toBe(false);
+});
+
+test('ordinary owner grants post one action at a time and treat 409 as replay', async () => {
+  const account = '11111111-1111-4111-8111-111111111111';
+  const posted: { action: string; key: string }[] = [];
+  await grantOrdinaryOwnerActions({
+    accountId: account,
+    actions: BOOK_OWNER_GRANT_ACTIONS,
+    post: async ({ body, idempotencyKey }) => {
+      posted.push({ action: body.actions[0]!, key: idempotencyKey });
+      return { status: posted.length === 1 ? 201 : 409, text: '' };
+    },
+  });
+  expect(posted.map((row) => row.action)).toEqual([...BOOK_OWNER_GRANT_ACTIONS]);
+  expect(posted[1]!.key).toContain('context:accept');
+  await expect(
+    grantOrdinaryOwnerActions({
+      accountId: account,
+      actions: ['context:adopt'],
+      post: async () => ({ status: 403, text: 'forbidden' }),
+    }),
+  ).rejects.toThrow('Grant context:adopt');
+});
+
+test('the licensed VNDB walk archive starts with TIMESTAMP then db/vn.header', async () => {
+  const chunks: Uint8Array[] = [];
+  for await (const chunk of licensedVndbArchive()) chunks.push(chunk);
+  expect(new TextDecoder().decode(chunks[0]!.subarray(0, 9))).toBe('TIMESTAMP');
+  expect(new TextDecoder().decode(chunks[1]!.subarray(0, 12))).toBe('db/vn.header');
+  expect(chunks.at(-1)?.byteLength).toBe(1024);
+});
+
+test('the walk inventory reports passing over twelve and the slowest failing journey', () => {
+  const inventory: WalkInventory = {
+    command: 'bun services/auth/scripts/dev-stack.ts walk -- bun services/importer/src/imports-public-journey.ts',
+    revision: 'abc',
+    startedAt: '2026-11-07T00:00:00Z',
+    endedAt: '2026-11-07T00:10:00Z',
+    passing: 10,
+    total: 12,
+    slowestFailing: {
+      id: 'I06',
+      path: 'Game/Release/counterpart',
+      elapsedMs: 12_000,
+      cause: 'seed published no Game identity',
+    },
+    rows: FIRST_PUBLIC_IMPORT_ROWS.map((row) => ({
+      id: row.id,
+      path: row.path,
+      result: row.id === 'I06' || row.id === 'I09' ? 'failing' : 'passing',
+      elapsedMs: row.id === 'I06' ? 12_000 : 100,
+      cause: row.id === 'I06' ? 'seed published no Game identity' : row.id === 'I09' ? 'no tag' : null,
+      evidence: {},
+    })),
+  };
+  expect(walkInventorySummary(inventory)).toBe(
+    '10/12 passing; slowest failing I06 12000ms seed published no Game identity; 2 failing',
+  );
 });
