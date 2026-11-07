@@ -84,7 +84,7 @@ test('the command-state producer reserves on the current Access ledger before di
         mode === 'present' ? { kind: 'actor', state: 'active', fenced: false, minimumAuthnEpoch: BigInt(floor) } : null,
       );
       expect(settled).toHaveLength(1);
-      expect(settled[0]).toMatchObject({ keys: 1, points: 1, rows: 2, emptySeeks: mode === 'absent' ? 1 : 0 });
+      expect(settled[0]).toMatchObject({ keys: 1, points: 2, rows: 2, emptySeeks: mode === 'absent' ? 1 : 0 });
       expect(settled[0]!.bytes).toBeGreaterThan(0);
     }
   }

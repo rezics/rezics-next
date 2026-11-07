@@ -27,11 +27,14 @@ const accounts = {
   editor: '019a1b2c-3d4e-7f00-8a00-ed170e000002',
 };
 const realAccess = await createRealAccess(admin, accounts, [
+  'gate:definition_publication',
   'definitions:publish',
   'definitions:activate',
   'definitions:read',
 ]);
 beforeAll(async () => {
+  for (const persona of ['steward', 'editor'] as const)
+    await realAccess.grant({ route: 0, id: GLOBAL_CONTEXT }, persona, 'gate:definition_publication');
   await realAccess.grant({ route: 0, id: GLOBAL_CONTEXT }, 'steward', 'definitions:publish');
   await realAccess.grant({ route: 0, id: GLOBAL_CONTEXT }, 'steward', 'definitions:activate');
 });

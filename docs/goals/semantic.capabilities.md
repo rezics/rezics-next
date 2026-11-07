@@ -81,6 +81,10 @@ The native fixture runs the standard link relay and supplies dedicated receipt k
 causal sessions per credential and records failed requests before throwing, without storing bearer secrets.
 Receiving the installed Access and publication bindings preserves existing actor, deadline, Pool, grants and current
 read assertions; source review does not establish receiving acceptance.
+Receiving fixtures follow the installed six-step membership protocol, charged account-state dispatch and explicit
+definition-publication gate. Advanced merge checks read the accepted operation, independent redirect and merge
+revision. Proposal retry and sealed-journal recovery retain original assertions and dedicated receipt keys; only
+the seeded native proposal, separate adoption and current fact readback establish convergence.
 
 ## Evidence stages
 

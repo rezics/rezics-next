@@ -308,15 +308,19 @@ test('native platform grants expose real development commands while preserving r
   );
   const subjects = [await person('Development identity one'), await person('Development identity two')];
   const merged = await call('editor', 'POST', '/v1/subjects:merge', { subjects });
-  status(merged, 200);
-  expect(merged.body).toMatchObject({
-    survivor: expect.any(String),
-    redirected: expect.any(String),
-    revision: expect.any(Number),
-  });
-  const redirect = await call('anonymous', 'GET', `/v1/subjects/${merged.body.redirected}`);
+  status(merged, 202);
+  expect(merged.body).toEqual({ operation: { id: expect.any(String) } });
+  expect(merged.headers.get('location')).toBe(`/v1/subjectIdentityOperations/${merged.body.operation.id}`);
+  const operation = await call('editor', 'GET', `/v1/subjectIdentityOperations/${merged.body.operation.id}`);
+  status(operation, 200);
+  expect(operation.body).toEqual({ operation: { id: merged.body.operation.id, done: false } });
+  const [survivor, redirected] = [...subjects].sort();
+  const redirect = await call('anonymous', 'GET', `/v1/subjects/${redirected}`);
   status(redirect, 308);
-  expect(redirect.headers.get('location')).toBe(`/v1/subjects/${merged.body.survivor}`);
+  expect(redirect.headers.get('location')).toBe(`/v1/subjects/${survivor}`);
+  const history = await call('anonymous', 'GET', `/v1/subjects/${redirected}/revisions`);
+  status(history, 200);
+  expect(history.body.revisions).toContainEqual(expect.objectContaining({ kind: 'merge', revision: 2 }));
   const ungranted = ids((await call('anonymous', 'GET', '/v1/openapi.json')).body);
   for (const id of gated) expect(ungranted).not.toContain(id);
 }, 180_000);

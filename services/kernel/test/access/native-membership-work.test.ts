@@ -143,7 +143,16 @@ async function registered() {
   }) as never);
   try {
     await createAccountsWorkModule().register(context);
-    expect(step.mock.calls.filter((call) => call[1]?.name?.startsWith('accounts.membership.'))).toHaveLength(4);
+    expect(
+      step.mock.calls
+        .map((call) => call[1]?.name)
+        .filter((name) => name?.startsWith('accounts.membership.'))
+        .sort(),
+    ).toEqual(
+      ['reserve', 'publish', 'terminalize', 'release', 'finalize', 'cancel']
+        .map((name) => `accounts.membership.${name}`)
+        .sort(),
+    );
     expect(DBOS.isInitialized()).toBe(false);
   } finally {
     step.mockRestore();
