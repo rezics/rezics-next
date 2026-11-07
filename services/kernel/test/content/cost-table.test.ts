@@ -118,7 +118,9 @@ test('every Board Cost row resolves to its producer case and a declared test tit
   };
   const rows = readCostTable(readme);
   const expectedOperations = boardOperationChecks.map(([operation]) => operation).sort();
-  const boardRows = rows.filter((row) => expectedOperations.includes(row.operation as (typeof expectedOperations)[number]));
+  const boardRows = rows.filter((row) =>
+    expectedOperations.includes(row.operation as (typeof expectedOperations)[number]),
+  );
 
   expect(boardRows.map((row) => row.operation).sort()).toEqual(expectedOperations);
   for (const [operation, path, title] of boardOperationChecks) {

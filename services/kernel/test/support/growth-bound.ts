@@ -340,9 +340,7 @@ function backgroundGrew(samples: readonly GrowthSample[]): boolean {
     'backgroundResponseBytes',
   ];
   const first = samples[0]!.cost;
-  return samples.slice(1).some(({ cost }) =>
-    metrics.some((metric) => (cost[metric] ?? 0) > (first[metric] ?? 0)),
-  );
+  return samples.slice(1).some(({ cost }) => metrics.some((metric) => (cost[metric] ?? 0) > (first[metric] ?? 0)));
 }
 
 function formatBackgroundContext(samples: readonly GrowthSample[]): string[] {

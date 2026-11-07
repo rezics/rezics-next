@@ -112,10 +112,15 @@ test('growth bounds reject negative measured work and invalid optional evidence'
       allBounds('constant'),
     ),
   ).toThrow(TypeError);
-  expect(() => growthViolations(series([1, 8, 64], [1, 1, 1]).map((sample) => ({
-    ...sample,
-    cost: { ...sample.cost, backgroundRows: -1 },
-  })), allBounds('constant'))).toThrow(/backgroundRows/);
+  expect(() =>
+    growthViolations(
+      series([1, 8, 64], [1, 1, 1]).map((sample) => ({
+        ...sample,
+        cost: { ...sample.cost, backgroundRows: -1 },
+      })),
+      allBounds('constant'),
+    ),
+  ).toThrow(/backgroundRows/);
   expect(growthViolations(series([1, 8, 64], [0, 0, 0]), allBounds('constant'))).toEqual([]);
 });
 
@@ -478,12 +483,7 @@ test('background growth is classified separately from the linear family', () => 
 });
 
 test('independent background rows, buffers, and bytes remain visible when statement count is flat', () => {
-  const metrics = [
-    'backgroundRows',
-    'backgroundBlocks',
-    'backgroundRequestBytes',
-    'backgroundResponseBytes',
-  ] as const;
+  const metrics = ['backgroundRows', 'backgroundBlocks', 'backgroundRequestBytes', 'backgroundResponseBytes'] as const;
   for (const metric of metrics) {
     const samples = series([1, 8, 64], [10, 10, 10]).map((sample, index) => ({
       ...sample,
