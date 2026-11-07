@@ -11,6 +11,7 @@ type Dependencies = {
     routeKey: Uint8Array;
     capabilities?: RatingCapabilities;
     clock?: KernelClock;
+    deadlineNow?: () => number;
 };
 /** Private account-owned vote transport. Commands remain responsible for partition ownership and current account state. */
 /** HTTP registrations are data; composition inspects these before mounting handlers. */

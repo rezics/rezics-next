@@ -18,7 +18,8 @@ export type { IdentityRepairOperation, IdentityRepairWork } from './identity-rep
 export { createIdentityRepairRead } from './identity-repair-read.ts';
 export { admitIdentityRepairGeneration, continueIdentityRepairGeneration, runIdentityRepairGeneration, } from './identity-repair-run.ts';
 export type { RatingCapabilities, RatingAmbient } from './contract/capabilities.ts';
-export { bindRatingIdentityProducer, ratingIdentityProducer, UNAVAILABLE_IDENTITY_REPAIR_REASON, IDENTITY_REPAIR_HANDOFF_PENDING_REASON, IDENTITY_REPAIR_LATER_VOTE_REASON, IDENTITY_REPAIR_CROSS_HOME_REASON, } from './segment-identity-guard.ts';
+export type { RatingIdentityAuthority, RatingIdentityMapping, RatingIdentityProducer, } from './segment-identity-guard.ts';
+export { bindRatingIdentityProducer, ratingIdentityProducer, unavailableRatingIdentityProducer, UNAVAILABLE_IDENTITY_REPAIR_REASON, IDENTITY_REPAIR_HANDOFF_PENDING_REASON, IDENTITY_REPAIR_LATER_VOTE_REASON, IDENTITY_REPAIR_CROSS_HOME_REASON, } from './segment-identity-guard.ts';
 export type RatingHttpApp = ReturnType<typeof ratingRoutes> & ReturnType<typeof sourceStatisticRoutes>;
 type HttpDependencies = Omit<Parameters<typeof ratingRoutes>[1], 'pool' | 'capabilities'>;
 type ApplicationDependencies = Omit<HttpDependencies, 'access'> & {
@@ -9354,7 +9355,9 @@ export declare function createRatingDefinition(): {
     };
 };
 export type RatingDefinition = ReturnType<typeof createRatingDefinition>;
-/** The host lends its resources. Construction opens no connection and starts no process or service. */
+/** The host lends its resources. Construction opens no connection and starts no process or service.
+ * Omitting `producer` uses the composition-bound Semantic instance; passing one is the command-factory seam.
+ */
 export declare function createRatingModule(options: {
     pool: Pool;
     capabilities: RatingCapabilities;

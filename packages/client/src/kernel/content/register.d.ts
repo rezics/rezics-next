@@ -2,6 +2,7 @@ import { contentDeclaredEvents } from './declared-catalogue.ts';
 import { type CurrentConsentReader } from '../access/auth-consent.ts';
 import type { KernelClock } from '../clock.ts';
 import type { Pool } from 'pg';
+import { type CommunityAmbient } from '../community/index.ts';
 import { contentEffects, contentNoticeEffects } from './relays.ts';
 import type { WorkModule } from '../work/registry.ts';
 import type { MediaStorage } from './media-storage.ts';
@@ -11,7 +12,7 @@ import type { ContentPool } from './contract/index.ts';
 /** Standalone fixture/caller Access with the shared role catalogue. Default
  * production registration uses WorkContext's fully mounted authorization instead.
  * Reads outside a command bind this kernel clock. */
-export declare function createContentWorkAccess(clock: KernelClock, pool?: Pool): import("../request/access.ts").Access;
+export declare function createContentWorkAccess(clock: KernelClock, pool?: Pool, ambient?: CommunityAmbient): import("../request/access.ts").Access;
 /** A configured dependency is absent. The call touches no storage, network or operation state. */
 export declare class ContentDependencyUnavailableError extends Error {
     readonly code: 'dependency_unavailable';

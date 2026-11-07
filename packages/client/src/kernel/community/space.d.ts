@@ -1,6 +1,7 @@
 import type { Pool } from 'pg';
 import { type ResourceEligibility } from '../access/index.ts';
 import type { Access, AccessCheck, AccessClient, Actor, Resource } from '../request/access.ts';
+import { type CommunityAmbient } from './ambient.ts';
 export type SpaceDependencies = Readonly<{
     pool: Pool;
     access: Access;
@@ -47,12 +48,12 @@ export declare function readSpace(client: AccessClient, spaceId: string, time: s
 /** Read the Space and its exact Realm slot together. Callers supply Space authorization;
  * the derived Realm id always uses the ordinary Realm reader and its own authorization.
  */
-export declare function readSpaceForViewer(deps: Pick<SpaceDependencies, 'pool' | 'access'>, actor: Actor, spaceId: string, time: string, context: {
+export declare function readSpaceForViewer(deps: Pick<SpaceDependencies, 'pool' | 'access'> & Partial<CommunityAmbient>, actor: Actor, spaceId: string, time: string, context: {
     deadline: number;
 }, check?: AccessCheck): Promise<(Space & {
     realmId: string | null;
 }) | null>;
-export declare function spaceReadEligibility(identity: Resource): ResourceEligibility;
+export declare function spaceReadEligibility(identity: Resource, clock?: () => Date): ResourceEligibility;
 export declare function createSpace(deps: SpaceDependencies, actor: Actor, input: SpaceInput, context: SpaceContext): Promise<import("../command/command.ts").CommandOutcome<{
     spaceId: string;
     revisionId: string;
