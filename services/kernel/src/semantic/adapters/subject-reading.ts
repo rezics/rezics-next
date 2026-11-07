@@ -112,7 +112,7 @@ export function installNativeSubjectReadingApplication(
 
 /** Compatibility clients share the application installed by composition, creating it lazily for old hosts. */
 export function nativeSubjectReadingApplication(): SubjectReadingApplication {
-  return installNativeSubjectReadingApplication(
-    () => createSubjectReadingApplication(createNativeSubjectReadingPort() as SubjectReadingPorts),
+  return installNativeSubjectReadingApplication(() =>
+    createSubjectReadingApplication(createNativeSubjectReadingPort() as SubjectReadingPorts),
   );
 }

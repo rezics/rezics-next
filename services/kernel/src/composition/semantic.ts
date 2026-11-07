@@ -30,10 +30,7 @@ import { composeSemanticContext } from './semantic-context.ts';
 import { resolveIdentityAdapterRuntime } from '../semantic/identity-adapter-runtime.ts';
 import { composeZoneResource } from './zones.ts';
 import { createSubjectReadingApplication, type SubjectReadingApplication } from '../semantic/index.ts';
-import {
-  createNativeSubjectReadingPort,
-  installNativeSubjectReadingApplication,
-} from '../semantic/adapters/index.ts';
+import { createNativeSubjectReadingPort, installNativeSubjectReadingApplication } from '../semantic/adapters/index.ts';
 import {
   bindSourceBindingApplication,
   createSourceBindingApplication,
