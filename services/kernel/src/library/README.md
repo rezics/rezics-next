@@ -157,6 +157,19 @@ slot, parallel reader, route, writer, score cache or GET repair is introduced.
 
 ## Module layers and measured boundary
 
+Decision: Copy lists and disclosed curated-member presentation consume `LibraryCursorCapability`; only
+`composition/library.ts` selects Platform's native opaque cursor codec. Binding parameters, original keys, epoch
+checks and sparse continuations remain unchanged. Presentation identity consumes Library's `SubjectIdentityCapability`
+with its work-bearing reference result, while Semantic owns the existing public `SubjectSummarySchema`,
+`SubjectSummary` and complete `IdentityMapping` vocabulary. The manifest declares Library's contract dependency and
+Platform's cursor entry; no replacement summary, identity reader or cursor engine is introduced.
+
+Acceptance choice: extend the existing copy construction and domain composition cases for cursor forwarding, native
+scope/tamper refusal and native Semantic dispatch; retain historical/current meaning, unavailable identity and
+disclosure assertions.
+Worker acceptance is changed-workspace typing; focused tests and original native/growth/product receiving checks run
+in the dev verifier.
+
 Copy applications retain one supplied native account authority, released-definition reader, profile-source reader
 and work catalog through create/read/list/update/delete/restore, inventory and condition presentation. Composition
 binds the same real producers for server, worker and standalone presentation preloads. Compatibility factories

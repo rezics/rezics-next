@@ -7,7 +7,6 @@ import { accessCheck } from '../../request/access-check.ts';
 import type { Actor } from '../../request/access.ts';
 import { deadlineFor } from '../../request/deadline.ts';
 import { routeOf } from '../../route/route.ts';
-import { decodeCursor, encodeCursor } from '../../tokens/cursor.ts';
 import { createCollectionReads } from '../collection-reads.ts';
 import collectionRead from '../collection-reads-collection.sql';
 import memberPage from '../collection-reads-members.sql';
@@ -102,7 +101,7 @@ export async function readNativeFullMembers(
         }
         let after: { ordinalKey: string; memberId: string } | null = null;
         if (options.cursor !== undefined) {
-          const cursor = decodeCursor(deps.tokens, binding, options.cursor);
+          const cursor = ports.cursors.decode(deps.tokens, binding, options.cursor);
           if (
             !cursor.ok ||
             cursor.after.length !== 2 ||
@@ -154,7 +153,7 @@ export async function readNativeFullMembers(
     members,
     next:
       page.rows.length > limit && last
-        ? encodeCursor(deps.tokens, binding, { epoch: page.epoch, after: [last.ordinalKey, last.id] })
+        ? ports.cursors.encode(deps.tokens, binding, { epoch: page.epoch, after: [last.ordinalKey, last.id] })
         : null,
   };
 }

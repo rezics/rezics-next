@@ -1,6 +1,7 @@
 import { createLibraryAccessPorts } from '../access/adapters/library.ts';
 import { createNativeCopyAccountAdmission, nativeCopyAccountWork } from '../access/adapters/copy-account.ts';
 import { nativeReleasedDefinitions, nativeCopyListContext } from '../semantic/adapters/index.ts';
+import { decodeCursor, encodeCursor } from '../tokens/cursor.ts';
 import { createLibraryObservationApplication } from '../semantic/index.ts';
 import {
   createLibrarySubjectIdentityAdapter,
@@ -272,6 +273,7 @@ function stubSource(): PreparedCollectionSource {
 function nativeLibraryPresentation(semanticObservations: LibraryCapabilities['semanticObservations']) {
   return createNativeLibraryPresentation({
     semanticObservations,
+    cursors: { decode: decodeCursor, encode: encodeCursor },
     identity: createLibrarySubjectIdentityAdapter(semanticObservations),
     readMappings: (pool, ids) => readLibraryIdentityMappings(semanticObservations, pool, ids),
     accountEligibility: createLibraryAccountEligibilityAdapter(),
@@ -302,7 +304,11 @@ function composeLibraryCopies(): void {
     profileSource,
     work,
   });
-  bindLibraryCopy({ producers, work, ports: (config) => createNativeCopyPorts(config, producers(config)) });
+  bindLibraryCopy({
+    producers,
+    work,
+    ports: (config) => createNativeCopyPorts(config, producers(config), { decode: decodeCursor, encode: encodeCursor }),
+  });
 }
 
 /** Preloads install the same native presentation as server/worker without a placeholder Collection Source. */

@@ -203,7 +203,26 @@ test('native detail, source, inventory and owner reads retain the supplied produ
         },
       },
     };
-    const ports = createNativeCopyPorts({ pool, access, tokens: { current: 1, keys: new Map() } }, producers);
+    const tokens = { current: 1, keys: new Map() };
+    const binding = { operation: 'library.copy.list', parameters: { accountId: owner.accountId } };
+    const continuation = { epoch: 7, after: [copy.createdAt, copy.id] };
+    const decoded = { ok: true as const, ...continuation };
+    const ports = createNativeCopyPorts({ pool, access, tokens }, producers, {
+      decode(keys, scope, cursor) {
+        expect(keys).toBe(tokens);
+        expect(scope).toBe(binding);
+        expect(cursor).toBe('opaque-native-cursor');
+        return decoded;
+      },
+      encode(keys, scope, cursor) {
+        expect(keys).toBe(tokens);
+        expect(scope).toBe(binding);
+        expect(cursor).toBe(continuation);
+        return 'opaque-native-cursor';
+      },
+    });
+    expect(ports.encodeCursor(binding, continuation)).toBe('opaque-native-cursor');
+    expect(ports.decodeCursor(binding, 'opaque-native-cursor')).toBe(decoded);
     expect(await ports.source(owner, copy.subjectId, at, deadline)).toEqual({ source, anchor });
     const detail = await ports.presentation(
       owner,
