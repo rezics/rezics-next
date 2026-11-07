@@ -1,8 +1,6 @@
 import { isIP } from 'node:net';
 import { resolve } from 'node:path';
-import { requireWebCheckCustody } from './check-placement.ts';
 import { ensureMessagesReady } from './messages-ready.ts';
-import { operatorEntry } from './operator-entry.ts';
 
 const webRoot = resolve(import.meta.dir, '..');
 const repoRoot = resolve(webRoot, '../..');
@@ -42,7 +40,6 @@ export function storybookLaunchPlan(
   env: Record<string, string | undefined> = process.env,
   roots: { web: string; ui: string } = { web: webRoot, ui: uiRoot },
 ): LaunchPlan {
-  args = operatorEntry(args, env).args;
   if (args[0] === '--app') {
     const forwarded = args.slice(1);
     const hosts = storybookHosts(forwarded);
@@ -121,8 +118,20 @@ async function runChild(command: string, args: string[], cwd: string): Promise<v
 
 if (import.meta.main) {
   try {
-    const plan = storybookLaunchPlan(process.argv.slice(2));
-    if (plan.kind === 'vite') requireWebCheckCustody(repoRoot, webRoot);
+    process.stderr.write('[web-startup] stage=entry start\n');
+    let args = process.argv.slice(2);
+    if (args.includes('--operator')) {
+      const { operatorEntry } = await import('./operator-entry.ts');
+      args = operatorEntry(args).args;
+    }
+    const plan = storybookLaunchPlan(args);
+    process.stderr.write('[web-startup] stage=entry exit=0\n');
+    if (plan.kind === 'vite') {
+      process.stderr.write('[web-startup] stage=check-custody start\n');
+      const { requireWebCheckCustody } = await import('./web-check-custody.ts');
+      requireWebCheckCustody(repoRoot, webRoot);
+      process.stderr.write('[web-startup] stage=check-custody exit=0\n');
+    }
     let generated = 0;
     if (webServeNeedsGeneratedMessages(plan.kind)) {
       const startedAt = performance.now();

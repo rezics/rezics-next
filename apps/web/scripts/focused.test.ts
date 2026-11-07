@@ -1,8 +1,15 @@
 import { afterAll, expect, test } from 'bun:test';
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { focusedChildTestCommand, focusedChildTestFile, focusedTestCommands, runFocusedCommand } from './focused.ts';
+import {
+  focusedChildTestCommand,
+  focusedChildTestFile,
+  focusedTestCommands,
+  prepareFocusedRun,
+  runFocusedCommand,
+} from './focused.ts';
+import { processIdentity } from '../tests/support/server-custody.ts';
 
 const leftoverRoot = mkdtempSync(join(tmpdir(), 'rezics-web-check-leftover-'));
 
@@ -147,3 +154,51 @@ test('repo-relative, app-relative and absolute selectors execute the same child 
     rmSync(root, { recursive: true, force: true });
   }
 });
+
+test('canceling focused route generation settles its owned descendants', async () => {
+  if (process.platform !== 'linux') return;
+  const root = mkdtempSync(join(tmpdir(), 'rezics-focused-route-cancel-'));
+  const appDirectory = join(root, 'apps', 'web');
+  const pidFile = join(root, 'route-descendant.pid');
+  const abort = new AbortController();
+  let preparation: Promise<number> | undefined;
+  try {
+    mkdirSync(join(appDirectory, 'messages'), { recursive: true });
+    mkdirSync(join(appDirectory, 'src', 'paraglide', 'messages'), { recursive: true });
+    writeFileSync(join(appDirectory, 'messages', 'en.json'), '{}\n');
+    writeFileSync(
+      join(appDirectory, 'src', 'paraglide', 'messages.js'),
+      `export { access_account } from './messages/access_account.js';\n`,
+    );
+    writeFileSync(join(appDirectory, 'src', 'paraglide', 'runtime.js'), 'export const locales = ["en"];\n');
+    writeFileSync(join(appDirectory, 'src', 'paraglide', 'messages', 'access_account.js'), 'export {}\n');
+    writeFileSync(
+      join(appDirectory, 'package.json'),
+      JSON.stringify({ scripts: { 'generate:routes': 'bun route.js' } }),
+    );
+    writeFileSync(
+      join(appDirectory, 'route.js'),
+      `import { spawn } from 'node:child_process';\n` +
+        `import { writeFileSync } from 'node:fs';\n` +
+        `const child = spawn(process.execPath, ['-e', 'process.on("SIGTERM", () => {}); setInterval(() => {}, 1000)'], { stdio: 'ignore' });\n` +
+        `child.once('spawn', () => writeFileSync(${JSON.stringify(pidFile)}, String(child.pid)));\n` +
+        `process.on('SIGTERM', () => {});\n` +
+        `setInterval(() => {}, 1000);\n`,
+    );
+
+    preparation = prepareFocusedRun(appDirectory, process.env, abort.signal);
+    const deadline = Date.now() + 5_000;
+    while (!existsSync(pidFile) && Date.now() < deadline) await Bun.sleep(10);
+    expect(existsSync(pidFile)).toBe(true);
+    const descendant = Number(readFileSync(pidFile, 'utf8'));
+    abort.abort('SIGTERM');
+
+    expect(await preparation).not.toBe(0);
+    const identity = processIdentity(descendant);
+    expect(identity === undefined || identity.state === 'Z').toBe(true);
+  } finally {
+    abort.abort('SIGTERM');
+    if (preparation) await preparation.catch(() => {});
+    rmSync(root, { recursive: true, force: true });
+  }
+}, 15_000);

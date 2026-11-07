@@ -235,6 +235,44 @@ function exitCodeForSignal(signal: NodeJS.Signals): number {
   return 128 + (osConstants.signals[signal] ?? 1);
 }
 
+const GENERATOR_TERM_GRACE_MS = 1_000;
+const GENERATOR_SETTLE_TIMEOUT_MS = 5_000;
+
+function processGroupAlive(pid: number): boolean {
+  try {
+    process.kill(-pid, 0);
+    return true;
+  } catch (error) {
+    const code = (error as NodeJS.ErrnoException).code;
+    if (code === 'ESRCH') return false;
+    if (code === 'EPERM') return true;
+    throw error;
+  }
+}
+
+function signalProcessGroup(pid: number, signal: NodeJS.Signals): void {
+  try {
+    process.kill(-pid, signal);
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code !== 'ESRCH') throw error;
+  }
+}
+
+async function settleGeneratorGroup(pid: number): Promise<void> {
+  const gracefulDeadline = Date.now() + GENERATOR_TERM_GRACE_MS;
+  while (processGroupAlive(pid) && Date.now() < gracefulDeadline) {
+    await new Promise<void>((resolve) => setTimeout(resolve, 25));
+  }
+  if (processGroupAlive(pid)) signalProcessGroup(pid, 'SIGKILL');
+
+  const settleDeadline = Date.now() + GENERATOR_SETTLE_TIMEOUT_MS;
+  while (processGroupAlive(pid) && Date.now() < settleDeadline) {
+    await new Promise<void>((resolve) => setTimeout(resolve, 25));
+  }
+  if (processGroupAlive(pid))
+    throw new Error(`Paraglide generator process group ${pid} remains alive after SIGKILL`);
+}
+
 async function runGenerator(
   appDirectory: string,
   env: NodeJS.ProcessEnv,
@@ -242,24 +280,43 @@ async function runGenerator(
   onStart: (pid: number | undefined) => void,
 ): Promise<number> {
   throwIfAborted(signal);
+  // `bun run` owns a script and compiler descendants; cancellation must settle their shared process group.
   const child = spawn('bun', ['run', 'generate'], {
     cwd: appDirectory,
     env,
+    detached: process.platform !== 'win32',
     stdio: 'inherit',
   });
   onStart(child.pid);
-  const onAbort = () => child.kill(signal ? signalForAbort(signal) : 'SIGTERM');
+  let settling: Promise<void> | undefined;
+  const onAbort = () => {
+    const stopSignal = signal ? signalForAbort(signal) : 'SIGTERM';
+    const pid = child.pid;
+    if (pid === undefined || process.platform === 'win32') {
+      child.kill(stopSignal);
+      return;
+    }
+    signalProcessGroup(pid, stopSignal);
+    settling ??= settleGeneratorGroup(pid);
+    void settling.catch(() => {});
+  };
   signal?.addEventListener('abort', onAbort, { once: true });
   if (signal?.aborted) onAbort();
   try {
-    return await new Promise<number>((resolve, reject) => {
+    const code = await new Promise<number>((resolve, reject) => {
       child.once('error', reject);
       child.once('close', (code, childSignal) => {
         resolve(code ?? (childSignal ? exitCodeForSignal(childSignal) : 1));
       });
     });
+    if (signal?.aborted) {
+      await settling;
+      return exitCodeForSignal(signalForAbort(signal));
+    }
+    return code;
   } finally {
     signal?.removeEventListener('abort', onAbort);
+    if (settling) await settling;
   }
 }
 
