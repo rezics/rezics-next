@@ -12,6 +12,7 @@ import {
 } from './check-run.ts';
 import {
   acceptCheckRunFinalSettlement,
+  acceptCheckRunPhysicalCleanup,
   allocateCheckRunPhysical,
   beginCheckRunAllocation,
   cancelCheckRunInvocation,
@@ -85,7 +86,10 @@ type InvocationFixture = {
   transportChild: CheckRunTransportChildIdentity;
 };
 
-async function preparedInvocation(persist = true): Promise<InvocationFixture> {
+async function preparedInvocation(
+  persist = true,
+  bindingOverrides: Partial<CheckRunInvocationBinding> = {},
+): Promise<InvocationFixture> {
   const root = fixtureRoot();
   const candidate = privateDirectory(root, 'candidate');
   const state = privateDirectory(root, 'state');
@@ -106,15 +110,18 @@ async function preparedInvocation(persist = true): Promise<InvocationFixture> {
     snapshot: { ...snapshot, sourceSha256: snapshot.sourceSha256 },
   };
   const preparationIntent = writeCheckRunPreparationIntent(checkRunPreparationIntentFile(descriptor), intent);
-  const registration = await registerCheckRunInvocation(binding(), {
-    stateDirectory: state,
-    invocationId,
-    candidateWorkspace: candidate,
-    snapshot,
-    returns: [],
-    preparationIntent,
-    descriptorFile: descriptor,
-  });
+  const registration = await registerCheckRunInvocation(
+    { ...binding(), ...bindingOverrides },
+    {
+      stateDirectory: state,
+      invocationId,
+      candidateWorkspace: candidate,
+      snapshot,
+      returns: [],
+      preparationIntent,
+      descriptorFile: descriptor,
+    },
+  );
   if (persist) {
     const preparedDescriptor = await persistCheckRunPreparedInvocation(registration, {
       stateDirectory: state,
@@ -1108,4 +1115,164 @@ test('incomplete or foreign precommand cleanup cannot discharge the original inv
   });
   expect(rejected.physicalCleanup).toBeUndefined();
   expect(rejected.failure).toContain('original physical cleanup is incomplete or mismatched');
+});
+
+function cleanupOnlyHosts() {
+  return JSON.stringify({
+    hosts: [
+      {
+        name: 'a',
+        address: 'root@cleanup.example',
+        identity: '/keys/fixture',
+        performance: true,
+        memoryMaxGiB: 16,
+        cpuQuotaPercent: 800,
+        slots: 8,
+      },
+    ],
+  });
+}
+
+test('cleanup-only reconciliation survives a removed candidate and changed producer without executing or restoring returns', async () => {
+  const configuration = cleanupOnlyHosts();
+  const fixture = await preparedInvocation(true, { hostsSha256: digest(configuration) });
+  const options = { stateDirectory: fixture.state };
+  const hosts = join(fixture.root, 'hosts.json');
+  writeFileSync(hosts, configuration);
+  await queueAndStart(fixture, false, false);
+  mkdirSync(fixture.workspace, { recursive: true });
+  writeFileSync(join(fixture.workspace, 'frozen.ts'), 'original frozen source');
+  rmSync(fixture.candidate, { recursive: true });
+  await setCheckRunUnknown(
+    fixture.registration.invocationId,
+    fixture.registration.nonce,
+    'remote-check: failed during slot take before a result',
+    options,
+  );
+  const before = await getCheckRunStatus(fixture.registration.invocationId, options);
+  let observations = 0;
+  const dependencies = {
+    reconcileRemote: async (request: Parameters<typeof import('./remote-check.ts').reconcileRemoteRun>[0]) => {
+      observations++;
+      expect(request.physical).toEqual(before.physical);
+      expect(request.expectedSourceSha256).toBe(before.binding.sourceSha256);
+      expect(request.returns).toEqual([]);
+      expect(request.workspace).toBe(fixture.state);
+      expect(request.allowedHosts).toEqual(['a']);
+      expect('command' in request).toBe(false);
+      return precommandCleanup();
+    },
+  };
+  // Normal result receiving still rejects this retained old producer, without calling a transport.
+  expect(
+    (await reconcileRegisteredCheckRun(before.invocationId, hosts, options, dependencies)).physicalCleanup,
+  ).toBeUndefined();
+  expect(observations).toBe(0);
+  const recovered = await reconcileRegisteredCheckRun(
+    before.invocationId,
+    hosts,
+    { ...options, cleanupOnly: true },
+    dependencies,
+  );
+  expect(observations).toBe(1);
+  expect(recovered.physicalCleanup?.remote.status).toBe('verified');
+  expect(recovered.physicalCleanup?.transportIdentity).toBe('unknown');
+  expect(recovered.physicalCleanup?.transportChildReaped).toBe(false);
+  expect(recovered.native).toBeNull();
+  expect(recovered.final).toBeNull();
+  expect(recovered.failure).toBe(before.failure);
+  expect(recovered.binding).toEqual(before.binding);
+  expect(recovered.snapshot).toEqual(before.snapshot);
+  expect(recovered.snapshotCustody).toBe('owned');
+  expect(readFileSync(join(fixture.workspace, 'frozen.ts'), 'utf8')).toBe('original frozen source');
+  expect(
+    await reconcileRegisteredCheckRun(before.invocationId, undefined, { ...options, cleanupOnly: true }, dependencies),
+  ).toEqual(recovered);
+  expect(observations).toBe(1);
+  const cli = spawnSync(
+    process.execPath,
+    [settlementCli, 'reconcile', before.invocationId, '--cleanup-only', '--state-dir', fixture.state],
+    { encoding: 'utf8' },
+  );
+  expect(cli.status).toBe(0);
+  expect(JSON.parse(cli.stdout).physicalCleanup).toEqual(recovered.physicalCleanup);
+});
+
+test('cleanup-only reconciliation rejects foreign hosts and binding changes and retains incomplete custody as unknown', async () => {
+  const configuration = cleanupOnlyHosts();
+  const fixture = await preparedInvocation(true, { hostsSha256: digest(configuration) });
+  const options = { stateDirectory: fixture.state, cleanupOnly: true };
+  const hosts = join(fixture.root, 'hosts.json');
+  await queueAndStart(fixture, false, false);
+  await setCheckRunUnknown(
+    fixture.registration.invocationId,
+    fixture.registration.nonce,
+    'original slot-take failure',
+    options,
+  );
+  let observations = 0;
+  const observer = async () => {
+    observations++;
+    return precommandCleanup();
+  };
+  writeFileSync(hosts, configuration + '\n');
+  await expect(
+    reconcileRegisteredCheckRun(fixture.registration.invocationId, hosts, options, { reconcileRemote: observer }),
+  ).rejects.toThrow('host configuration differs');
+  expect(observations).toBe(0);
+  writeFileSync(hosts, configuration);
+  const incomplete = precommandCleanup();
+  incomplete.cleanup.containersRemoved = false;
+  for (const remote of [incomplete, { ...precommandCleanup(), run: 'replacement-run' }]) {
+    const unknown = await reconcileRegisteredCheckRun(fixture.registration.invocationId, hosts, options, {
+      reconcileRemote: async () => remote,
+    });
+    expect(unknown.physicalCleanup).toBeUndefined();
+    expect(unknown.phase).toBe('unknown');
+    expect(unknown.failure).toBe('original slot-take failure');
+    expect(unknown.native).toBeNull();
+    expect(unknown.final).toBeNull();
+  }
+  const record = await getCheckRunStatus(fixture.registration.invocationId, options);
+  const observed = reconcileCheckRunPhysicalCleanup(record.physical!, record, precommandCleanup(), 'unknown');
+  if (observed.disposition !== 'physical-cleanup') throw new Error('expected cleanup observation');
+  await expect(
+    acceptCheckRunPhysicalCleanup(record.invocationId, { ...observed.observation, nonce: '0'.repeat(64) }, options),
+  ).rejects.toThrow('original invocation binding');
+  await expect(
+    acceptCheckRunPhysicalCleanup(
+      record.invocationId,
+      { ...observed.observation, binding: { ...record.binding, argvSha256: '9'.repeat(64) } },
+      options,
+    ),
+  ).rejects.toThrow('original invocation binding');
+  expect((await getCheckRunStatus(record.invocationId, options)).physicalCleanup).toBeUndefined();
+});
+
+test('cleanup-only receiving preserves an existing native outcome and immutable final without accepting a new result', async () => {
+  const configuration = cleanupOnlyHosts();
+  const fixture = await preparedInvocation(true, { hostsSha256: digest(configuration) });
+  const options = { stateDirectory: fixture.state };
+  const hosts = join(fixture.root, 'hosts.json');
+  writeFileSync(hosts, configuration);
+  await queueAndStart(fixture);
+  await acceptFinal(fixture, finalFor(fixture, 'unknown'));
+  const before = await getCheckRunStatus(fixture.registration.invocationId, options);
+  const after = await reconcileRegisteredCheckRun(
+    before.invocationId,
+    hosts,
+    { ...options, cleanupOnly: true },
+    {
+      reconcileRemote: async (request) => {
+        expect(request.returns).toEqual([]);
+        return precommandCleanup();
+      },
+      reapTransport: async () => 'gone-or-replaced',
+    },
+  );
+  expect(after.native).toEqual(before.native);
+  expect(after.final).toEqual(before.final);
+  expect(after.finalCustody).toEqual(before.finalCustody);
+  expect(after.snapshot).toEqual(before.snapshot);
+  expect(after.physicalCleanup?.remote.status).toBe('verified');
 });
