@@ -6,6 +6,9 @@ type-preparation create receipt and one no-effect revalidation receipt; only cre
 Session writes resolve accepted releases by their stored digest through Library's composed identity-disclosure
 capability and validate against both original and current profiles. That no-effect revalidation may issue its one
 `shelf_writer_owner` `ON CONFLICT DO NOTHING` initialization statement; it does not write an entry or deletion row.
+Before a stale native delete guard is checked, owner sequencing also ensures the corresponding `progress_head` with its
+`ON CONFLICT DO UPDATE` statement. Its exact rejected-command inventory is these two statements; the conflict rolls
+back the transaction and no live entry or retained deletion row is written.
 
 Decision: retain the original 64/512/4096 native growth axes while seeding one retained entry per fresh account and
 one live same-owner entry per unique subject. Seed the Semantic source subjects through the supported historical
