@@ -6,7 +6,7 @@ import { exportJWK, generateKeyPair } from 'jose';
 import { kernelTestDatabase, testDatabase } from '../../scripts/database.ts';
 import { configureTestReceiptKeys } from '../../../kernel/test/support/receipt-keys.ts';
 import { workerTestEnv } from '../../../kernel/test/support/worker-env.ts';
-import { bindAuthDeletionHandleRead, createAuthHost, type AccountOperationAccess } from '../../src/index.ts';
+import { createAuthHost } from '../../src/index.ts';
 import { createNativeWorkflowProofPorts } from '../../src/native-workflow-proofs.ts';
 import { createProvisioningEvidenceVerifier } from '../../src/provisioning-evidence.ts';
 import { createBarrierProofVerifier } from '../../src/barrier-proofs.ts';
@@ -145,19 +145,7 @@ export async function nativeFixture(options: { openPool?: (url: string) => Promi
     referenceKeys,
     creationBinding: proofs.creationBinding,
   });
-  const context = () => ({ pool: kernel, deadline: Date.now() + 30_000 });
-  const deletionHandle = modules.createAuthDeletionHandleRead({ pool: kernel, access });
-  const accountOperations: AccountOperationAccess = {
-    context,
-    async admitGroup() {
-      throw new Error('This fixture does not exercise gated groups');
-    },
-    readDeletionHandle: (token, accountId, ctx) => deletionHandle.readDeletionHandle(token, accountId, ctx),
-    approve: (token, input, ctx) => approvals.approve(token, input as never, ctx as never),
-    resolveForCaller: (token, reference, operation, ctx) =>
-      approvals.resolveForCaller(token, reference, operation as never, ctx as never),
-  };
-  bindAuthDeletionHandleRead(accountOperations, deletionHandle);
+  const context = bindings.accountManagementReads.context;
   const deliveries: { accountId: string; token: string }[] = [];
   const key = {
     ...(await exportJWK((await generateKeyPair('ES256', { extractable: true })).privateKey)),
@@ -173,7 +161,8 @@ export async function nativeFixture(options: { openPool?: (url: string) => Promi
     signing: { activeKid: key.kid, privateKeys: [key] },
     trustedAccess: bindings.trustedAccess,
     access: bindings.workflowPorts,
-    accountOperations,
+    accountOperations: bindings.accountOperations,
+    accountManagementReads: bindings.accountManagementReads,
     recoveryDelivery: {
       async deliver(message) {
         deliveries.push(message);

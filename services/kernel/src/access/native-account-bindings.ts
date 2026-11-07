@@ -48,7 +48,9 @@ import { createOperatorCommands, OperatorDeniedError } from './operator.ts';
 import { createRecoveryCompletion } from './recovery-completion.ts';
 
 import { createAuthBindings, AuthBindingDeniedError } from './auth-bindings.ts';
-import { bindAuthErasureAcknowledgement, type AuthDeletionHandleRead } from '@rezics/auth';
+import { bindAuthErasureAcknowledgement } from '@rezics/auth';
+import { createAuthHostManagement } from './auth-host-management.ts';
+export { createAuthDeletionHandleRead } from './management-source.ts';
 import { acknowledgeErasure } from './erasure.ts';
 import { createRegistrationProofBindings } from './registration-proof.ts';
 import { createAuthBarrierCapabilities } from './auth-barriers.ts';
@@ -59,11 +61,7 @@ import {
   ContinuationDeniedError,
   COMMITTED_CONTINUATION_RESUME_BUDGET_MS,
 } from './committed-continuations.ts';
-import {
-  createWorkflowApprovals,
-  workflowApprovalBinding,
-  WorkflowApprovalUnavailableError,
-} from './workflow-approvals.ts';
+import { workflowApprovalBinding, WorkflowApprovalUnavailableError } from './workflow-approvals.ts';
 import { readAccount } from './account-data.ts';
 import { routeOf } from '../route/route.ts';
 import { seal, unseal } from '../tokens/seal.ts';
@@ -109,6 +107,8 @@ export type NativeAccountBindingsConfig = {
 };
 
 export type NativeAccountBindings = {
+  accountOperations: ReturnType<typeof createAuthHostManagement>['accountOperations'];
+  accountManagementReads: ReturnType<typeof createAuthHostManagement>['accountManagementReads'];
   trustedAccess: TrustedAccessPorts & AutomatedOperatorAccess & OperatorTransferPageAccess;
   workflowPorts: AccountWorkflowPorts<LifecycleRequest>;
   lifecycle: ReturnType<typeof createLifecycleCommands>;
@@ -118,20 +118,6 @@ export type NativeAccountBindings = {
   delegations: ReturnType<typeof createDelegationCommands>;
   continuations: ReturnType<typeof createCommittedContinuations>;
 };
-
-/** Live current-handle reader for Auth deletion execute confirmation. */
-export function createAuthDeletionHandleRead(deps: { pool: Pool; access: Access }): AuthDeletionHandleRead {
-  return {
-    async readDeletionHandle(token, accountId, context) {
-      const actor = await deps.access.authenticate(token, context as { pool: Pool; deadline: number });
-      if (actor.kind !== 'account' || actor.accountId !== accountId) return null;
-      const route = routeOf(accountId);
-      if (route === null) return null;
-      const account = await readAccount(deps.pool, route, accountId);
-      return account?.handle ?? null;
-    },
-  };
-}
 
 export class NativeAccountBindingsUnavailableError extends Error {
   constructor() {
@@ -261,7 +247,7 @@ export function createNativeAccountBindings(config: NativeAccountBindingsConfig)
     referenceKeys,
     accessTokenForProof: (proof) => config.auth().internal.accessTokenForProof(proof),
   });
-  const approvals = createWorkflowApprovals({
+  const management = createAuthHostManagement({
     pool,
     access,
     actions,
@@ -269,6 +255,7 @@ export function createNativeAccountBindings(config: NativeAccountBindingsConfig)
     creationBinding: (input: { registrationId: string; operationKey: string }) =>
       workflow.creationBinding?.(input) ?? Promise.resolve(null),
   });
+  const { approvals } = management;
   // Construction remains independent of the Auth host and database handles.
   let credential: ReturnType<typeof createCredentialCapability> | undefined;
   const credentialCapability = () =>
@@ -480,6 +467,8 @@ export function createNativeAccountBindings(config: NativeAccountBindingsConfig)
     },
   });
   return {
+    accountOperations: management.accountOperations,
+    accountManagementReads: management.accountManagementReads,
     trustedAccess,
     workflowPorts,
     lifecycle,
