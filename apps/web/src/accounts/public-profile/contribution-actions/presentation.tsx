@@ -2,8 +2,9 @@ import { useState, type ReactNode } from 'react';
 import { Button } from '@rezics/ui/shadcn/button';
 import { m } from '../../../paraglide/messages.js';
 import type { Locale } from '../../../paraglide/runtime.js';
-import { ThreadWatch, type ThreadWatchProps } from '../../../threads/thread-watch';
-import type { OperationLease } from '../../../reader/lease';
+import type { OperationLease } from '../../../session';
+import type { ContributionWatchNative } from '../../../features/pages/account-profile-port';
+import { useContributionActionCapabilities } from './host';
 import type { ContributionOperation } from './current';
 import type { ContributionActionsInput } from './receiver';
 import {
@@ -86,7 +87,7 @@ export function ContributionAdvicePresentation({
   );
 }
 
-/** Post watch uses its containing thread. ThreadWatch alone owns the point command and uncertain recovery. */
+/** Post watch uses its containing thread. The bound ThreadWatch adapter owns the point command. */
 export function ContributionWatch({
   presentation,
   watching,
@@ -97,9 +98,10 @@ export function ContributionWatch({
   presentation: ContributionPresentation;
   watching: boolean;
   returnTo: string;
-  refreshAdvice?: ThreadWatchProps['refreshAdvice'];
-  native?: ThreadWatchProps['native'];
+  refreshAdvice?: () => Promise<void>;
+  native?: ContributionWatchNative;
 }) {
+  const { Watch } = useContributionActionCapabilities();
   const { input, row, source, reader, isCurrent, locale } = presentation;
   const reference = originalContributionReference(input, row);
   const state = !isCurrent()
@@ -140,7 +142,7 @@ export function ContributionWatch({
       retainChildren={retaining && state !== 'available'}
     >
       {retaining && target && reader && lease ? (
-        <ThreadWatch
+        <Watch
           threadId={target.id}
           session="signed-in"
           sessionKnown

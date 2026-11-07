@@ -1,4 +1,5 @@
 import { AccountPageApplication } from '../../features/pages/account-page-application';
+import type { AccountProfilePort } from '../../features/pages/account-profile-port';
 import { accountProfilePageBinding } from './page-binding';
 import type { QueryKey } from '@tanstack/react-query';
 import type { ComponentProps } from 'react';
@@ -16,6 +17,7 @@ export function PublicProfilePage({
   cursor = null,
   contributionWindowRoute,
   sourceQueryKey,
+  profile = accountProfilePageBinding,
   ...props
 }: ComponentProps<typeof SubjectPage> & {
   publicRealms: boolean;
@@ -23,6 +25,8 @@ export function PublicProfilePage({
   sourceQueryKey?: QueryKey | undefined;
   reading?: ProfileReading;
   contributionWindowRoute?: ContributionWindowRoute;
+  /** Ordinary routes and stories install Threads/Report engines through this binding. */
+  profile?: AccountProfilePort;
 }) {
   const isContributionView = props.view === 'posts' || props.view === 'reviews' || props.view === 'discussion';
   const handle = props.page.account?.handle;
@@ -38,7 +42,7 @@ export function PublicProfilePage({
       })
     : null;
   return (
-    <AccountPageApplication profile={accountProfilePageBinding}>
+    <AccountPageApplication profile={profile}>
       <ContributionWindowRouteScope route={windowRoute}>
         <ContributionActionsPageScope
           page={props.page}

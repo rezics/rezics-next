@@ -1,17 +1,17 @@
 import { useEffect, useState } from 'react';
 import { m } from '../../../paraglide/messages.js';
-import type { VerificationConfig } from '../../../report/turnstile';
-import { PostActions } from '../../../report/content-actions';
-import type { OperationLease } from '../../../reader/lease';
+import type { OperationLease } from '../../../session';
+import type { VerificationConfig } from '../../../features/pages/account-profile-port';
 import { contributionOperationLeaseId, type ContributionOperation } from './current';
 import { contributionOperationAdvice, originalContributionReference, type ContributionAdviceState } from './advice';
+import { useContributionActionCapabilities } from './host';
 import { ContributionAdvicePresentation, type ContributionPresentation } from './presentation';
 
 function isReportLease(lease: OperationLease<ContributionOperation> | undefined): lease is OperationLease<'report'> {
   return lease?.operation === 'report';
 }
 
-/** Compose report advice with PostActions; that owner retains private report text and exact retry operands. */
+/** Compose report advice with the bound PostActions owner; that owner retains private report text. */
 export function ContributionReport({
   presentation,
   canonicalHref,
@@ -95,6 +95,7 @@ function ContributionReportVisit({
   verification: VerificationConfig;
   refreshAdvice?: (() => Promise<void>) | undefined;
 }) {
+  const { Report } = useContributionActionCapabilities();
   const [admitted, setAdmitted] = useState(ready);
   useEffect(() => {
     if (ready) setAdmitted(true);
@@ -114,7 +115,7 @@ function ContributionReportVisit({
       retainChildren={retaining && state !== 'available'}
     >
       {retaining && target && lease ? (
-        <PostActions
+        <Report
           target={target}
           {...(reference?.sourceRevisionId ? { revisionId: reference.sourceRevisionId } : {})}
           canonicalHref={canonicalHref}

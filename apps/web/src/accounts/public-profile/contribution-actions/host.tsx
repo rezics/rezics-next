@@ -16,14 +16,22 @@ import {
 } from 'react';
 import type { PageRead } from '@rezics/composition';
 import { m } from '../../../paraglide/messages.js';
-import { browserObservation } from '../../../session/observation';
-import { normalizeSessionObservation, sessionQueryKey } from '../../../session/browser-state';
+import {
+  browserObservation,
+  normalizeSessionObservation,
+  ReaderNavigationContext,
+  sessionQueryKey,
+  type BrowserObservationSnapshot,
+  type OperationLease,
+} from '../../../session';
 import { ContributionActionsAddress } from './current';
-import type { BrowserObservationSnapshot } from '../../../session/observation';
-import type { OperationLease } from '../../../reader/lease';
 import type { ContributionOperation } from './current';
-import type { SubjectPageData } from '../../../features/pages/subject';
-import { isRecord } from '../../../features/pages/shared';
+import type { SubjectPageData } from '../../../features/pages/page-model';
+import {
+  unavailableContributionActions,
+  type ContributionActionCapabilities,
+  type VerificationConfig,
+} from '../../../features/pages/account-profile-port';
 import {
   contributionActionsInput,
   ContributionActionsReceiver,
@@ -31,7 +39,6 @@ import {
   type ContributionActionsState,
 } from './receiver';
 import type { AuthorContributionActionsResponse, AuthorContributionActionsWire } from './wire';
-import type { VerificationConfig } from '../../../report/turnstile';
 
 export type ContributionActionsPageScopeValue = {
   page: SubjectPageData;
@@ -157,9 +164,29 @@ export type ContributionActionsHostValue = {
 };
 
 const ContributionActionsHostContext = createContext<ContributionActionsHostValue | null>(null);
+const ContributionActionsCapabilitiesContext =
+  createContext<ContributionActionCapabilities>(unavailableContributionActions);
+
+export function ContributionActionsCapabilities({
+  value,
+  children,
+}: {
+  value: ContributionActionCapabilities;
+  children: ReactNode;
+}) {
+  return (
+    <ContributionActionsCapabilitiesContext.Provider value={value}>
+      {children}
+    </ContributionActionsCapabilitiesContext.Provider>
+  );
+}
 
 export function useContributionActionsHost() {
   return useContext(ContributionActionsHostContext);
+}
+
+export function useContributionActionCapabilities() {
+  return useContext(ContributionActionsCapabilitiesContext);
 }
 
 const unavailable: ContributionActionsState<AuthorContributionActionsResponse> = { state: 'unavailable' };
@@ -188,6 +215,7 @@ export function ContributionActionsHost({
   reviewsPublished,
   rows,
   wire,
+  actions: suppliedActions,
   children,
 }: {
   accountId: string;
@@ -203,10 +231,13 @@ export function ContributionActionsHost({
   reviewsPublished: boolean;
   rows: readonly Record<string, unknown>[];
   wire: AuthorContributionActionsWire<AuthorContributionActionsResponse>;
+  actions?: ContributionActionCapabilities;
   children: ReactNode;
 }) {
   const client = useQueryClient();
-  const router = useRouter();
+  const navigationHost = useContext(ReaderNavigationContext);
+  const router = useRouter({ warn: false });
+  const actions = suppliedActions ?? unavailableContributionActions;
   const sourceKey = useContributionActionsPageScope()?.sourceQueryKey;
   const sourceQuery = sourceKey ? client.getQueryCache().find({ queryKey: sourceKey, exact: true }) : undefined;
   const sourceCount = sourceQuery?.state.dataUpdateCount;
@@ -249,26 +280,28 @@ export function ContributionActionsHost({
   }, []);
 
   useClientLayoutEffect(() => {
-    const leave = router.subscribe('onBeforeNavigate', () => bumpNavigation(false));
-    const load = router.subscribe('onBeforeLoad', () => bumpNavigation(false));
-    const resolved = router.subscribe('onResolved', () => bumpNavigation(true));
     const hide = () => bumpNavigation(false);
     const show = () => bumpNavigation(true);
     const visibility = () => bumpNavigation(document.visibilityState !== 'hidden');
+    const leave = router?.subscribe('onBeforeNavigate', hide);
+    const load = router?.subscribe('onBeforeLoad', hide);
+    const resolved = router?.subscribe('onResolved', show);
+    const stop = navigationHost?.subscribe(hide);
     window.addEventListener('pagehide', hide);
     window.addEventListener('pageshow', show);
     window.addEventListener('popstate', hide);
     document.addEventListener('visibilitychange', visibility);
     return () => {
-      leave();
-      load();
-      resolved();
+      leave?.();
+      load?.();
+      resolved?.();
+      stop?.();
       window.removeEventListener('pagehide', hide);
       window.removeEventListener('pageshow', show);
       window.removeEventListener('popstate', hide);
       document.removeEventListener('visibilitychange', visibility);
     };
-  }, [bumpNavigation, router]);
+  }, [bumpNavigation, navigationHost, router]);
 
   const input = contributionActionsInput(accountId, view, cursor, selection);
   const signedIn = reader.state === 'signed-in';
@@ -364,40 +397,45 @@ export function ContributionActionsHost({
       ? `/${encodeURIComponent(locale)}/auth/sign-in?return_to=${encodeURIComponent(window.location.pathname + window.location.search + window.location.hash)}`
       : undefined;
   return (
-    <ContributionActionsHostContext.Provider value={hostValue}>
-      <div data-slot="contribution-actions-host" data-action-state={state.state} className="contents">
-        {signInHref ? (
-          <p className="text-sm">
-            <a
-              href={signInHref}
-              className="inline-flex min-h-11 items-center text-primary underline underline-offset-4"
+    <ContributionActionsCapabilities value={actions}>
+      <ContributionActionsHostContext.Provider value={hostValue}>
+        <div data-slot="contribution-actions-host" data-action-state={state.state} className="contents">
+          {signInHref ? (
+            <p className="text-sm">
+              <a
+                href={signInHref}
+                className="inline-flex min-h-11 items-center text-primary underline underline-offset-4"
+              >
+                {m.profile_contribution_actions_sign_in()}
+              </a>
+            </p>
+          ) : null}
+          {hydrated && (reader.state === 'unknown' || (showReadStatus && state.state === 'pending')) ? (
+            <p role="status" className="text-sm text-muted-foreground">
+              {m.profile_contribution_actions_preparing()}
+            </p>
+          ) : null}
+          {showReadStatus && (state.state === 'failed' || state.state === 'unavailable') ? (
+            <p
+              role={state.state === 'failed' ? 'alert' : 'status'}
+              className="flex flex-wrap items-center gap-2 text-sm"
             >
-              {m.profile_contribution_actions_sign_in()}
-            </a>
-          </p>
-        ) : null}
-        {hydrated && (reader.state === 'unknown' || (showReadStatus && state.state === 'pending')) ? (
-          <p role="status" className="text-sm text-muted-foreground">
-            {m.profile_contribution_actions_preparing()}
-          </p>
-        ) : null}
-        {showReadStatus && (state.state === 'failed' || state.state === 'unavailable') ? (
-          <p role={state.state === 'failed' ? 'alert' : 'status'} className="flex flex-wrap items-center gap-2 text-sm">
-            <span>{m.profile_contribution_actions_unavailable()}</span>
-            {state.state === 'failed' ? (
-              <Button type="button" variant="outline" onClick={() => void retry()} disabled={!isCurrent()}>
-                {m.public_account_retry()}
-              </Button>
-            ) : null}
-          </p>
-        ) : null}
-        {showReadStatus && state.state === 'retired' ? (
-          <p role="status" className="text-sm text-muted-foreground">
-            {m.profile_contribution_actions_retired()}
-          </p>
-        ) : null}
-        {children}
-      </div>
-    </ContributionActionsHostContext.Provider>
+              <span>{m.profile_contribution_actions_unavailable()}</span>
+              {state.state === 'failed' ? (
+                <Button type="button" variant="outline" onClick={() => void retry()} disabled={!isCurrent()}>
+                  {m.public_account_retry()}
+                </Button>
+              ) : null}
+            </p>
+          ) : null}
+          {showReadStatus && state.state === 'retired' ? (
+            <p role="status" className="text-sm text-muted-foreground">
+              {m.profile_contribution_actions_retired()}
+            </p>
+          ) : null}
+          {children}
+        </div>
+      </ContributionActionsHostContext.Provider>
+    </ContributionActionsCapabilities>
   );
 }
