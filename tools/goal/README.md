@@ -1272,7 +1272,12 @@ resident session after stopping the previous resident and its watchdog. Replacem
 registered thread, invalidates its authority and retains the configured manager identity and inbox. A changed or
 missing previous thread refuses the transfer; ordinary registration cannot overwrite another resident. Restart the
 manager host on the updated code before using Codex registration or replacement. Resume the watchdog against the
-new provider and registered thread after the transfer. The supermanager grants with
+new provider and registered thread after the transfer.
+
+Decision: register the resident supermanager from the current external Codex thread; any later transfer must atomically
+compare the previous registered thread and invalidate its identity.
+
+The supermanager grants with
 `bun tools/goal/src/cli.ts priority grant <task>`. The owning manager consumes the one-use grant with
 `bun tools/goal/src/cli.ts priority <task> critical`, or by retrying with a critical brief after a grant exists.
 `bun tools/goal/src/cli.ts priority revoke <task> <grant-id>` revokes an unused grant by its grantor. The owner may

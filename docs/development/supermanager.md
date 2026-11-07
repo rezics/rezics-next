@@ -59,8 +59,8 @@ Recover in this order, stopping as soon as it responds:
 
 1. The watchdog types a one-line note into the resident window naming the waiting items.
 2. After ten more minutes without activity, it alerts the project's Telegram group with the resume command.
-3. Whoever answers the alert restarts the session in that same window and registered thread with
-   `claude --resume <registered-thread-id> --permission-mode bypassPermissions`. Never start a second supermanager.
+3. Whoever answers the alert resumes the registered provider thread in that same window, using that provider's resume
+   command. Never start a second supermanager.
 
 While the resident is stuck, managers keep independent work moving under the owner-agreement rules and escalate only
 architecture, scope or choices requiring the maintainer.
