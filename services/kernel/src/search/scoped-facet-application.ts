@@ -17,6 +17,7 @@ import {
   type ScopedFacetAdmission,
   type ScopedFacetCandidatePage,
   type ScopedFacetIdentity,
+  type ScopedFacetMembership,
   type ScopedFacetObservation,
   type ScopedFacetPorts,
 } from './scoped-facet-source.ts';
@@ -121,6 +122,19 @@ function closed<Observe extends boolean>(
   ? Extract<ScopedFacetObservation, { status: 'unready' | 'unavailable' }>
   : Extract<ScopedFacetCandidatePage, { status: FacetAccessClosedStatus }> {
   return { status: observe ? foldFacetAccessObserveStatus(status) : status, cost } as ReturnType<typeof closed<Observe>>;
+}
+
+type MatchedFacetMembership = Extract<ScopedFacetMembership, { status: 'matched' }>;
+type ScopedFacetMember = MatchedFacetMembership['subjects'][number]['member'];
+
+function membershipSubjects(
+  subjects: readonly string[],
+  values: readonly (ScopedFacetMember | undefined)[],
+): MatchedFacetMembership['subjects'] {
+  return subjects.map((subject, index) => ({
+    subject,
+    member: values[index] ?? ('not_proven' as const),
+  }));
 }
 
 function evaluationReservation(work: ScopeWork, subjects: readonly string[]) {
@@ -240,7 +254,7 @@ export function createServiceScopeFacetPorts(
         return {
           status: 'matched' as const,
           identity: request.identity,
-          subjects: subjects.map((subject, index) => ({ subject, member: result.values[index] ?? 'not_proven' })),
+          subjects: membershipSubjects(subjects, result.values),
         };
       });
       const cost = workCost(request);
@@ -418,10 +432,7 @@ export function createServiceRealmScopeFacetPorts(access?: FacetAccessObservatio
         return {
           status: 'matched' as const,
           identity: request.identity,
-          subjects: subjects.map((subject, index) => ({
-            subject,
-            member: result.values[index] === 'not_proven' ? 'not_proven' : result.values[index] === true,
-          })),
+          subjects: membershipSubjects(subjects, result.values),
         };
       });
       const cost = workCost(request);
