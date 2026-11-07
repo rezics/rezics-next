@@ -34,7 +34,7 @@ test('Web caches SQL types per schema and times both compiler programs', async (
   let schema = 'create table example (id integer);';
   const generated: number[] = [];
   const output: string[] = [];
-  let compilerView: string | undefined;
+  let compilerView = '';
   const env = { DATABASE_URL: 'postgres://rezics:rezics@127.0.0.1:5432/rezics', KERNEL_DATABASE_CONTAINER: 'fixture' };
   const dependencies = {
     prepareSqlAnalysis: (source: NodeJS.ProcessEnv) =>
