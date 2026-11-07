@@ -87,6 +87,10 @@ CONTENT_USER_CASES_DRIVER=/absolute/path/to/native-driver.ts bun test specs/cont
 The second command uses the bound native driver. Existing board-sort tests do not establish the late point-read or
 page outcomes.
 
+Decision: the Content Goal seeded walk uses the existing thread-board driver, seed-journal cleanup and Performance
+`waitUntilWalkReady` hydration recovery. First-scope rows are walked as named journeys on one admitted stack; no extra
+stories. Command: `bun services/auth/scripts/dev-stack.ts walk -- bun apps/web/scripts/seeded-content-goal-walk.ts`.
+
 ## realms-and-spaces
 
 Scope row: **Realms and Spaces**. Stage: **specified red** for the complete capability.

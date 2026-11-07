@@ -30,6 +30,10 @@ export async function openThreadBoardSystem() {
     const author = { id: system.actors.author.actor.accountId, bearer: system.actors.author.bearer };
     const member = { id: system.actors.other.actor.accountId, bearer: system.actors.other.bearer };
     const outsider = { id: system.actors.moderator.actor.accountId, bearer: system.actors.moderator.bearer };
+    const suspended = {
+      id: system.actors.suspended.actor.accountId,
+      bearer: system.actors.suspended.bearer,
+    };
     const pool = system.database.pool;
     const databaseUrl = pool.options.connectionString;
     if (!databaseUrl) throw new Error('Thread/Board fixture database URL is missing');
@@ -219,6 +223,8 @@ export async function openThreadBoardSystem() {
       member,
       outsider,
       moderator,
+      suspended,
+      request: send,
       subjectId: subject.id,
       board,
       thread,
