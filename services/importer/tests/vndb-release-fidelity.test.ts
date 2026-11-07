@@ -19,7 +19,6 @@ import {
 } from '../src/cross-media-seed.ts';
 import { sourceRecordMetadataFixture } from './transport-driver.ts';
 import { importVndbReleaseFidelity } from '../src/selected-import.ts';
-import { CrossMediaTableScanLimitError } from '../src/showcase-contract.ts';
 import {
   decodeVndbReleased,
   developmentStatusConceptUri,

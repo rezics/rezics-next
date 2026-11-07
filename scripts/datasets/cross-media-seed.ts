@@ -18,7 +18,7 @@ import {
   seedShowcasePersonalList,
   type ShowcasePersonalListUpload,
 } from '../../services/importer/src/showcase-personal-list.ts';
-import { ReviewedCatalogueProblemError, seedReviewedCatalogue } from '../../services/importer/src/reviewed-catalogue.ts';
+import { ReviewedCatalogueCommandError, formatReviewedCatalogueCommandError, seedReviewedCatalogue } from '../../services/importer/src/reviewed-catalogue.ts';
 import {
   installReviewedCatalogueComposition,
   releasedReviewedVocabulary,
@@ -346,7 +346,7 @@ export async function runDevelopmentSeed(
 
 /** Seed CLI prints bounded operation metadata; remote bodies and credentials stay off the walk log. */
 export function seedFailureDetail(error: unknown): string {
-  return formatSeedError(error);
+  return error instanceof ReviewedCatalogueCommandError ? formatReviewedCatalogueCommandError(error) : formatSeedError(error);
 }
 
 if (import.meta.main) {
@@ -357,7 +357,7 @@ if (import.meta.main) {
     } else await runCrossMediaSeedCli(args);
   } catch (error) {
     const directory = resolve(import.meta.dir, '../../.temp/cross-media-seed');
-    const reviewed = error instanceof ReviewedCatalogueProblemError ? error.remaining : undefined;
+    const reviewed = error instanceof ReviewedCatalogueCommandError ? error.remaining : undefined;
     const journal = remainingRequestFromPreparedJournal(join(directory, 'showcase.sqlite'));
     const transport = error instanceof ImportTransportError ? remainingRequestFromTransport(error) : undefined;
     const remaining =
