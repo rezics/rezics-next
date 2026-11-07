@@ -73,12 +73,14 @@ test('native ports retain one supplied producer set and forward live operands un
     accountId: '00000000-0000-4000-8000-000000000001',
     scopes: ['follow:list', 'library_entry:list', 'progress_session:list'],
     authnEpoch: 7,
+    clientId: 'web',
+    requestedBy: null,
   };
   const calls: unknown[] = [];
   const page = { subjects: [], next: 'owner-next' };
   const summaries = new Map();
   let created = 0;
-  const suppliers = {
+  const suppliers: FeedNativeSuppliers = {
     continuation: {
       list: async (...args: unknown[]) => {
         calls.push(args);
@@ -99,11 +101,20 @@ test('native ports retain one supplied producer set and forward live operands un
     admit: async (...args: unknown[]) => {
       calls.push(args);
     },
-  } satisfies Partial<FeedNativeSuppliers>;
+    readCollection: async () => {
+      throw new Error('Unexpected Collection read');
+    },
+    readPublication: async () => {
+      throw new Error('Unexpected publication read');
+    },
+    readAccounts: async () => {
+      throw new Error('Unexpected Account read');
+    },
+  };
   const capabilities: FeedProducerCapabilities = {
     create: () => {
       created++;
-      return suppliers as FeedNativeSuppliers;
+      return suppliers;
     },
     isDeadline: () => false,
     isAdmissionFailure: () => false,

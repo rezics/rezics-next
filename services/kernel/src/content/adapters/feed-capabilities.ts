@@ -5,7 +5,7 @@ import type { KeyRing } from '../../tokens/seal.ts';
 import type { WorkClient } from '../../work/client.ts';
 import type { AccountDiscoverySummary, DiscoverySearch } from '../../search/index.ts';
 import type { SearchService } from '../../search/service-scope.ts';
-import type { ViewerPersonalActionsReader } from '../../library/adapters/index.ts';
+import type { CollectionResourceView, ViewerPersonalActionsReader } from '../../library/adapters/index.ts';
 import type { ReadingPageViewerActionRuntime } from '../reading-page.ts';
 import type { FeedActivityStore, FeedActivityTarget } from '../feed-activity.ts';
 import type {
@@ -53,16 +53,7 @@ export type FeedNativeSuppliers = Readonly<{
     query: { targets: readonly FeedActivityTarget[] },
     deadline: number,
   ): Promise<readonly { target: FeedActivityTarget; status: 'following' | 'not_following' | 'unavailable' }[]>;
-  readCollection(
-    actor: Actor,
-    id: string,
-    deadline: number,
-  ): Promise<{
-    id: string;
-    title: string;
-    description: string | null;
-    visibility: string;
-  }>;
+  readCollection(actor: Actor, id: string, deadline: number): Promise<CollectionResourceView>;
   readPublication(
     realmId: string,
     id: string,
