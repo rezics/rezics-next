@@ -2,7 +2,7 @@ import { expect, test } from 'bun:test';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { Value } from 'typebox/value';
-import { continuePageSchema } from '../../src/library/transport-contract.ts';
+import { continuePageSchema } from '../../src/library/adapters/continue-page.ts';
 
 const source = resolve(import.meta.dir, '../../src');
 const transpiler = new Bun.Transpiler({ loader: 'ts', target: 'bun' });

@@ -20,3 +20,4 @@ export {
 } from './reading-page-mentions.ts';
 
 export { createContentRealmApplication } from './realm.ts';
+export { createFeedApplication } from './feed.ts';

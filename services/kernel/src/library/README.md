@@ -31,8 +31,11 @@ Decision: an activated public Collection output is retained through its original
 
 The ordinary page formula is `c = min(600, 6L + 3)`: a fixed 64-row/16-point/16-witness/3-seek/12-statement/80-KiB term plus `c` repetitions of 16 rows, 8 points, 8 witnesses and 5,120 bytes. The fixed term includes initial/final Source preparation and currentness, identity and authority checks, and transaction controls; the per-candidate term includes canonical membership and negative/order work. The existing plan caps pages at three prefix rounds, 100 groups per prefix, 100 aliases per canonical group and six Source drivers. FULL adds at most 100 repetitions of its 32-row/2-identity-row/8-point/12-statement/64-KiB facts term. `engineRequests` is zero for this SQL-only Library plan; the adapter rejects a nonzero value rather than folding it into the older eight-axis SQL observer. `owner-filter-growth.test.ts` is the named growth oracle; this declaration does not claim native acceptance.
 
-transport-contract.ts owns the public Progress and Continue response schemas. Their wire/security metadata comes
-from the declarations composed by createKernel; native commands, currentness and disclosure remain Library-owned.
+Library contract owns Continue session and page vocabulary. `adapters/continue-page.ts` owns the closed Continue
+HTTP schema and the native Continue adapter Content binds at composition. The page schema stays a TypeBox object
+so Feed can compose `.properties`; the Continue list operation pins that object to the disclosed page. Progress session schemas remain on `transport-contract.ts`. Wire/security metadata comes from the declarations composed by createKernel; native
+commands, currentness and disclosure remain Library-owned. Semantic's disclosed Subject summary is attached on
+FULL views through Semantic's public summary schema, not a copied DTO.
 [Session operation contracts](performance-contract.md) own journal receipt identity and the native derivation boundary.
 
 Private [consumption statistics](../../../../docs/library-consumption-statistics.md) are mounted

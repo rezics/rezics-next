@@ -79,3 +79,12 @@ export type {
   SemanticProgressIdentityDescriptor,
   SemanticProgressIdentityStatement,
 } from './progress-identity.ts';
+export type {
+  CoverCredit,
+  CoverSummary,
+  PublicSummaryQuery,
+  PublicSummaryRead,
+  RelatedSubjectSummary,
+  SubjectSummary,
+} from './summaries.ts';
+

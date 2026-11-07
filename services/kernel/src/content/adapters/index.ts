@@ -19,3 +19,12 @@ export { createNativeReadingPageCapabilities, type ContentReadingAccess } from '
 export { createNativeContentRealmApplication, type NativeRealmProducers } from './realm.ts';
 export { nativeRealmEvidenceHost } from './realm-disclosure.ts';
 export { bindContentRealmApplication, contentRealmApplication } from './realm-binding.ts';
+export {
+  bindFeedCapabilities,
+  feedCapabilities,
+  tryFeedCapabilities,
+  unbindFeedCapabilities,
+  type FeedProducerCapabilities,
+} from './feed-bind.ts';
+export { createNativeFeedPorts, type FeedDependencies } from './feed-native.ts';
+export { createNativeFeedCapabilities } from './feed-capabilities.ts';

@@ -7,6 +7,8 @@ import {
   createNativeContentRealmApplication,
   nativeRealmEvidenceHost,
   bindContentRealmApplication,
+  bindFeedCapabilities,
+  createNativeFeedCapabilities,
 } from '../content/adapters/index.ts';
 import { createNativeAccessReadingPorts } from '../access/adapters/index.ts';
 import { createRealmScopeEvidence } from '../community/adapters/index.ts';
@@ -22,6 +24,7 @@ export function composeContentReading(): void {
 /** Ordinary server and worker composition bind the actual independent owner producers. */
 export function composeContentApplication(ambient?: Partial<ContentAmbient>): ContentApplication {
   composeContentReading();
+  bindFeedCapabilities(createNativeFeedCapabilities());
   const application = ensureContentApplication(ambient ?? {});
   const parent = createRealmScopeEvidence(nativeRealmEvidenceHost);
   const subject = createSubjectScopeEvidence(nativeRealmEvidenceHost);

@@ -564,6 +564,7 @@
         "services/kernel/src/library/listing-counts.ts",
         "services/kernel/src/library/access-capabilities.ts",
         "services/kernel/src/library/work-module.ts",
+        "services/kernel/src/library/adapters/continue-page.ts",
         "services/kernel/src/library/adapters/index.ts",
         "services/kernel/src/library/domain-binding.ts",
         "services/kernel/src/library/identity-original-work.ts",
@@ -691,6 +692,9 @@
         "services/kernel/src/semantic/adapters/agent-identity-maintenance.ts",
         "services/kernel/src/semantic/adapters/collection-reduction.ts",
         "services/kernel/src/semantic/adapters/progress-identity-statements.ts",
+        "services/kernel/src/semantic/adapters/public-summary-schema.ts",
+        "services/kernel/src/semantic/adapters/public-summary.ts",
+
         "services/kernel/src/semantic/adapters/index.ts",
         "services/kernel/src/semantic/credit-search.ts",
         "services/kernel/src/semantic/deletion/index.ts",
@@ -1739,6 +1743,7 @@
         "services/kernel/src/semantic/contract/item-values.ts",
         "services/kernel/src/semantic/contract/domain-ports.ts",
         "services/kernel/src/semantic/contract/subject-values.ts",
+        "services/kernel/src/semantic/contract/summaries.ts",
         "services/kernel/src/semantic/contract/index.ts"
       ],
       "allowedDependencies": [],

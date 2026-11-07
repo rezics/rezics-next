@@ -1,5 +1,11 @@
 # Semantic
 
+Decision: disclosed Subject and cover summaries live in `contract/summaries.ts`. HTTP schemas are
+`adapters/public-summary-schema.ts`; the native reader adapter is `adapters/public-summary.ts`. Content Home
+and Library Continue consume those public entries. `http/summaries.ts` re-exports the schema for existing
+routes. Wire shapes are unchanged. Cover credit obligations stay the CC literals; schemas stay TypeBox objects
+so callers can spread `.properties` and `.anyOf`.
+
 Decision: public-filter Collection reduction exposes the native statement declaration through
 `adapters/collection-reduction.ts`, using `contract` statement names. That descriptor has no command work-association
 implementation. Native reduction executes the identical SQL and serialized-bind plan from that adapter; Library

@@ -176,3 +176,16 @@ export type {
 } from './preparation-work.ts';
 
 export { OWNER_FILTER_CLOSURE_REFERENCE_LIMIT, OWNER_FILTER_CLOSURE_ORIGINAL_LIMIT } from './preparation-limits.ts';
+
+export type {
+  ContinueActor,
+  ContinueListQuery,
+  ContinuePage,
+  ContinueProgressPresentation,
+  ContinueProgressRecording,
+  ContinueReads,
+  ContinueSession,
+  ContinueSessionMeasure,
+  ContinueSubject,
+  ContinueSubjectFacts,
+} from './continue.ts';

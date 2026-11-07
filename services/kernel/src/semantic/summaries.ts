@@ -1,6 +1,5 @@
 import type { AccessWorkAccounting } from '../access/work.ts';
 import type { Release } from '@rezics/definitions';
-import type { MediaImportRequest } from '@rezics/definitions/media-import';
 import type { Pool, PoolClient } from 'pg';
 import type { ContentCoverRef } from './contract/domain-ports.ts';
 import { contentLifecycleOf } from './adapters/ports.ts';
@@ -22,25 +21,8 @@ import readSummaries from './summaries-read.sql';
 import readRepresentativeEditions from './summaries-representative-editions.sql';
 import { currentReadSnapshot, withReadTransaction } from './read.ts';
 
-export type CoverSummary = {
-  media: string;
-  width: number;
-  height: number;
-  placeholder: { thumbhash: string; color: string };
-  variants: { format: 'avif' | 'webp'; width: number }[];
-  focalPoint: { x: number; y: number } | null;
-  credit: MediaImportRequest['credit'];
-};
-export type SubjectSummary = {
-  id: string;
-  type: string;
-  types: string[];
-  label: { value: string; language: string } | null;
-  creativeWork: boolean;
-  cover: CoverSummary | null;
-};
-/** A merged original keeps its id; its summary is the survivor's and `redirect` names that survivor. */
-export type RelatedSubjectSummary = SubjectSummary & { redirect?: string };
+export type { CoverCredit, CoverSummary, RelatedSubjectSummary, SubjectSummary } from './contract/summaries.ts';
+import type { SubjectSummary } from './contract/summaries.ts';
 export type SummaryDependencies = {
   /** Compatibility input; the executor binds the live same-pool snapshot, never a pool.query facade. */
   client: Pick<PoolClient, 'query'>;
