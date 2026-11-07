@@ -21,6 +21,7 @@ import type { ReactionCountFreshness, ViewerReactionKind } from './reads.ts';
 import type { ReactionTarget } from './reactions.ts';
 import { FeedParentContextSchema, FeedReviewContextSchema } from './feed-context-schema.ts';
 import type { FeedParentContext, FeedReviewContext } from './model.ts';
+import type { FeedItem, FeedPage } from './contract/index.ts';
 
 const closed = { additionalProperties: false } as const;
 const nullable = t.Union([t.String(), t.Null()]);
@@ -484,8 +485,7 @@ export function FeedPageSchema() {
     ),
   );
 }
-export type FeedItem = Static<ReturnType<typeof FeedItemSchema>>;
-export type FeedPage = Static<ReturnType<typeof FeedPageSchema>>;
+export type { FeedItem, FeedPage };
 export type FeedSourceState = Static<typeof FeedSourceStateSchema>;
-export type FeedItemWire = FeedItem;
-export type FeedPageWire = FeedPage;
+export type FeedItemWire = Static<ReturnType<typeof FeedItemSchema>>;
+export type FeedPageWire = Static<ReturnType<typeof FeedPageSchema>>;

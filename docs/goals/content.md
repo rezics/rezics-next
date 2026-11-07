@@ -113,7 +113,7 @@ presentation ports. Library and Semantic own the real Continue and disclosed-sum
 binds them once. HTTP mapping stays on the existing feed route. Missing authority is unavailable. Fewest
 tests pin those states in `feed-application.test.ts` and `feed-composition.test.ts`; the existing Content walk
 keeps runtime acceptance. No extra stories. Destination kinds stay distinct union members so thread, subject,
-collection and account extract; public summary/Continue schemas stay TypeBox objects for composition. Cover
+collection and account extract; public summary/Continue schemas stay TypeBox objects for composition and stamp the Content contract page types. Cover
 credit obligations stay the CC literals. Existing feed tests keep their assertions.
 
 Decision: compose Realm community, exact disclosure and Subject scope as one Content application over

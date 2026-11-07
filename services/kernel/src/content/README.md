@@ -599,6 +599,7 @@ on `feed-routes.ts`. Missing continuation, summary or discovery authority is una
 an all-candidate fallback. Focused application/composition tests pin missing authority, exact kind conjunction,
 sparse Continue resume and the 20/160/6 bounds; runtime proof stays with the existing Content walk. No extra
 stories. Destination kinds stay distinct union members; public summary and Continue schemas stay TypeBox objects.
+The mounted Feed page schemas stamp the Content contract page types so GET /v1/feedItems stays a closed route.
 `feed-discovery.ts` maps Search's delivered Subject/Account and public Collection/review/Space summaries with
 exhaustive dispatch and exact route, kind and primary identity checks. It translates only the public
 `library/collection` and `community/space` keys to Content's `commerce/collection` and `content/space` feed
