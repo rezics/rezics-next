@@ -391,7 +391,7 @@ test('readiness captures config without inventing listen and preserves its cause
     await waitForStack(child as unknown as ChildProcess, ['http://web/en'], 1000, 16384, 1, captured, {
       now: () => now,
       tree: () => [{ pid: 1234, start: '100', parent: 12, executable: '/actual/bun' }],
-      probe: (async () => {
+      probe: async () => {
         if (!emitted) {
           child.stdout.write('Vite localization config current attempt 0\n');
           child.stderr.write('Error:');
@@ -399,7 +399,7 @@ test('readiness captures config without inventing listen and preserves its cause
           emitted = true;
         }
         throw new Error('ECONNREFUSED');
-      }) as typeof fetch,
+      },
       pause: async (ms) => {
         now += ms;
       },

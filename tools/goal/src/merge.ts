@@ -95,7 +95,13 @@ export function gateEnvironment(parent: NodeJS.ProcessEnv = process.env, stateDi
   };
 }
 
-export type GateResult = { passed: boolean; output: string; timedOut: boolean; commandExitCode?: number | null };
+export type GateResult = {
+  passed: boolean;
+  output: string;
+  timedOut: boolean;
+  commandExitCode?: number | null;
+  wrapperExitCode?: number | null;
+};
 /** Cancellation belongs to one invocation, never to all commands in a controller process. */
 export type GateRunOptions = { signal?: AbortSignal };
 export type GateRunner = (

@@ -932,7 +932,7 @@ export async function waitForStack(
   stopTimeoutMs: number,
   captured: PageDataCapture,
   dependencies: {
-    probe?: typeof fetch;
+    probe?: (input: string, init?: RequestInit) => Promise<Response>;
     now?: () => number;
     pause?: (ms: number) => Promise<void>;
     signal?: typeof signalGroup;

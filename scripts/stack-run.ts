@@ -317,7 +317,7 @@ export async function runOnCheckHost(
           ...(run.returns === undefined && profile === undefined && env.GROWTH_PROFILE === undefined
             ? {}
             : { returns: [...(run.returns ?? []), ...(profile === undefined ? [] : [profile])] }),
-          settled: run.settled,
+          ...(run.settled === undefined ? {} : { settled: run.settled }),
           started: (host) => {
             run.started?.(host);
             console.error(`stack-run: ${run.label}${priority ? ` priority ${priority}` : ''} on ${host}`);
