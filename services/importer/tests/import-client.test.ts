@@ -443,6 +443,6 @@ test('an HTTP refusal names the status without remote diagnostic text', async ()
     .catch((error: unknown) => error);
   expect(failure).toBeInstanceOf(ImportTransportError);
   expect((failure as ImportTransportError).status).toBe(503);
-  expect((failure as ImportTransportError).message).toBe('Import transport request failed HTTP 503');
+  expect((failure as ImportTransportError).message).toBe('Import transport request failed HTTP 503 unavailable');
   expect(JSON.stringify(failure)).not.toContain('private remote diagnostic');
 });

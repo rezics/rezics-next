@@ -295,6 +295,12 @@ export function definitionRoutes(
     409: problemSchema('stale_cursor'),
     503: problemSchema('semantic_not_ready', 'overloaded', 'deadline_exceeded'),
   };
+  const activeReadResponse = {
+    200: activeResponse,
+    401: unauthorized(),
+    404: problemSchema('not_found'),
+    503: problemSchema('overloaded', 'deadline_exceeded'),
+  };
   return app
     .get(
       '/v1/definitionTypes',
@@ -751,14 +757,33 @@ export function definitionRoutes(
       },
     )
     .get(
+      '/v1/definitions',
+      {
+        response: activeReadResponse,
+        detail: {
+          operationId: 'definitions.read',
+          'x-exposure': 'public',
+          'x-action': 'definitions:read',
+          security: [{ bearerAuth: [] }, {}],
+        },
+      },
+      async ({ authorize, admission, job }) => {
+        const check = await authorize({
+          ...resource(),
+          ...(includeEligibility ? { eligibility: globalReadEligibility('definitions:read') } : {}),
+        });
+        const active = await admission.run('normal', job, async () => {
+          if (!(await withConnection(pool, (client) => check(client)))) throw new ProblemError('not_found');
+          return activeRelease(pool);
+        });
+        if (!active) throw new ProblemError('not_found');
+        return { digest: active.digest, head: active.head };
+      },
+    )
+    .get(
       '/v1/definitions/active',
       {
-        response: {
-          200: activeResponse,
-          401: unauthorized(),
-          404: problemSchema('not_found'),
-          503: problemSchema('overloaded', 'deadline_exceeded'),
-        },
+        response: activeReadResponse,
         detail: {
           operationId: 'definitions.read_active',
           'x-exposure': 'public',

@@ -226,6 +226,11 @@ test('the kernel contract documents the definition operations', () => {
     'x-action': 'definitions:read',
     security: [{ bearerAuth: [] }, {}],
   });
+  expect(paths['/v1/definitions']!.get).toMatchObject({
+    operationId: 'definitions.read',
+    'x-action': 'definitions:read',
+    security: [{ bearerAuth: [] }, {}],
+  });
   expect(paths['/v1/definitions/active']!.get).toMatchObject({ operationId: 'definitions.read_active' });
   const activation = paths['/v1/definitions/releases/{digest}:activate']!.post!;
   expect(activation).toMatchObject({ operationId: 'definitions.activate', 'x-action': 'definitions:activate' });

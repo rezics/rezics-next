@@ -158,8 +158,12 @@ test('the first-public inventory names 31 unique user-visible journeys', () => {
 });
 
 test('released definitions expose bundled Book fields, targets and eight locale labels', async () => {
+  const listed = await call('GET', '/v1/definitions');
+  requireStatus(listed, 200, 'definitions');
   const active = await call('GET', '/v1/definitions/active');
   requireStatus(active, 200, 'active definitions');
+  expect(listed.body.digest).toBe(bundledDigest);
+  expect(listed.body.head).toBe(active.body.head);
   expect(active.body.digest).toBe(bundledDigest);
   const release = await call('GET', `/v1/definitions/releases/${encodeURIComponent(bundledDigest)}`);
   requireStatus(release, 200, 'bundled release');

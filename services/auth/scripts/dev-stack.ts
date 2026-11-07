@@ -864,8 +864,9 @@ export function walkSetupScripts(env: Record<string, string | undefined> = proce
 }
 
 /**
- * Starts native Auth, the worker and Kernel first. Kernel reads issuer JWKS from native Auth, so Auth pages and Web
- * can wait until seeding finishes on an admitted walk. Local `task dev` still starts pages after Kernel.
+ * Starts native Auth, Kernel, then the worker. Kernel bootstraps the bundled release before worker discovery
+ * reads it. Kernel reads issuer JWKS from native Auth, so Auth pages and Web can wait until seeding finishes on
+ * an admitted walk. Local `task dev` still starts pages after Kernel.
  * Explicit deferred account walks serve Kernel HTTP from the Auth host and omit the worker and OpenSearch.
  */
 async function start() {
@@ -919,14 +920,13 @@ async function start() {
     if (env.REZICS_WALK_DEFER_FRONTENDS === '1') {
       await phase('identity', untilReady([...plan.nativeReady, `${origins.kernel}/health`], [identity]));
     } else {
-      const worker = launch(['bun', 'run', '--cwd', 'services/kernel', 'worker'], 'pipe');
-      await phase(
-        'identity',
-        Promise.all([untilOutput(worker, 'Worker ready'), untilReady(plan.nativeReady, [identity, worker])]),
-      );
+      await phase('identity', untilReady(plan.nativeReady, [identity]));
       if (stopping) return;
       const kernel = launch(plan.kernel);
-      await phase('kernel', untilReady(plan.kernelReady, [kernel, worker, identity]));
+      await phase('kernel', untilReady(plan.kernelReady, [kernel, identity]));
+      if (stopping) return;
+      const worker = launch(['bun', 'run', '--cwd', 'services/kernel', 'worker'], 'pipe');
+      await phase('worker', untilOutput(worker, 'Worker ready'));
       if (stopping) return;
       if (!plan.deferPages) {
         const pages = launch(['bun', 'services/auth/scripts/dev-stack.ts', 'pages']);

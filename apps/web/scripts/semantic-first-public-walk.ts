@@ -103,17 +103,41 @@ async function child(
   return status;
 }
 
-async function probe(url: string): Promise<{ url: string; status: number; error?: string }> {
+type TypedProbe = { url: string; status: number; error?: string; code?: string; digest?: string; phase: string };
+
+async function typedProbe(url: string, phase: string): Promise<TypedProbe> {
   try {
     const response = await fetch(url, { signal: AbortSignal.timeout(15_000), redirect: 'manual' });
-    await response.body?.cancel().catch(() => undefined);
-    return { url, status: response.status };
+    const text = await response.text();
+    let body: { code?: unknown; digest?: unknown } | undefined;
+    try {
+      body = text ? (JSON.parse(text) as { code?: unknown; digest?: unknown }) : undefined;
+    } catch {
+      body = undefined;
+    }
+    const code = typeof body?.code === 'string' ? body.code : undefined;
+    const digest = typeof body?.digest === 'string' ? body.digest : undefined;
+    return {
+      url,
+      status: response.status,
+      phase,
+      ...(code === undefined ? {} : { code }),
+      ...(digest === undefined ? {} : { digest }),
+    };
   } catch (error) {
     const code =
       error && typeof error === 'object' && 'code' in error ? String((error as { code: unknown }).code) : undefined;
     const name = error instanceof Error ? error.name : 'fetch-failed';
-    return { url, status: 0, error: code || name };
+    return { url, status: 0, phase, error: code || name };
   }
+}
+
+function describeProbe(probe: TypedProbe, expected: string): string {
+  const actual =
+    probe.status === 0
+      ? probe.error ?? 'unreachable'
+      : `HTTP ${probe.status}${probe.code ? ` ${probe.code}` : ''}${probe.digest ? ` digest=${probe.digest}` : ''}`;
+  return `${probe.phase} GET ${probe.url} ${actual} (expected ${expected})`;
 }
 
 async function parseEnv(path: string): Promise<Record<string, string>> {
@@ -366,35 +390,60 @@ async function main() {
   await mkdir(evidenceDir, { recursive: true, mode: 0o700 });
   const revision = (await Bun.$`git -C ${root} rev-parse HEAD`.text()).trim();
   const readiness = {
-    jwks: await probe(`${stack.native}/.well-known/jwks.json`),
-    definitions: await probe(`${stack.kernel}/v1/definitions`),
+    jwks: await typedProbe(`${stack.native}/.well-known/jwks.json`, 'identity'),
+    definitions: await typedProbe(`${stack.kernel}/v1/definitions`, 'kernel'),
+    active: await typedProbe(`${stack.kernel}/v1/definitions/active`, 'kernel'),
   };
   await writeFile(join(evidenceDir, 'readiness.json'), `${JSON.stringify({ stack, readiness }, null, 2)}\n`, {
     mode: 0o600,
   });
   if (readiness.jwks.status === 0)
-    throw new Error(`native Auth JWKS ${readiness.jwks.url} ${readiness.jwks.error ?? 'unreachable'}`);
-  if (readiness.definitions.status === 0)
-    throw new Error(`Kernel definitions ${readiness.definitions.url} ${readiness.definitions.error ?? 'unreachable'}`);
+    throw new Error(describeProbe(readiness.jwks, 'HTTP 200 JWKS'));
+  const kernelCause =
+    readiness.definitions.status === 200 || readiness.active.status === 200
+      ? undefined
+      : describeProbe(
+          readiness.definitions.status !== 0 ? readiness.definitions : readiness.active,
+          'HTTP 200 digest',
+        );
+  if (readiness.definitions.status === 0 && readiness.active.status === 0)
+    throw new Error(kernelCause ?? describeProbe(readiness.definitions, 'HTTP 200 digest'));
   await retireDevelopmentSeedState(root);
   const kernelEnv = await kernelEnvironment();
   if (kernelEnv.DATABASE_URL) await retireStaleSeedJournals(root, kernelEnv.DATABASE_URL);
   await child(['bun', 'services/auth/scripts/dev-stack.ts', 'persona'], 'persona');
-  const seedEnv = {
-    ...process.env,
-    ...(await parseEnv(join(root, '.temp/local-stack/seed.env'))),
-    AUTH_ORIGIN: stack.native,
-    KERNEL_ORIGIN: stack.kernel,
-  };
-  const seedCode = await child(['bun', 'scripts/datasets/cross-media-seed.ts', '--dev'], 'seed', seedEnv, {
-    allowFailure: true,
-  });
-  const seedCause =
-    seedCode === 0 ? undefined : ((await lastLogLine('seed')) ?? `seed exited ${seedCode} without a log line`);
-  if (seedCause)
+  let seedCode = 0;
+  let seedCause: string | undefined;
+  if (!kernelCause) {
+    const seedEnv = {
+      ...process.env,
+      ...(await parseEnv(join(root, '.temp/local-stack/seed.env'))),
+      AUTH_ORIGIN: stack.native,
+      KERNEL_ORIGIN: stack.kernel,
+    };
+    seedCode = await child(['bun', 'scripts/datasets/cross-media-seed.ts', '--dev'], 'seed', seedEnv, {
+      allowFailure: true,
+    });
+    seedCause =
+      seedCode === 0
+        ? undefined
+        : `seed ${((await lastLogLine('seed')) ?? `exited ${seedCode} without a log line`)}`;
+  }
+  const setupRecord = kernelCause ?? seedCause;
+  if (setupRecord)
     await writeFile(
       join(evidenceDir, 'setup-failure.json'),
-      `${JSON.stringify({ utc: new Date().toISOString(), error: seedCause, seedExit: seedCode, stack, readiness }, null, 2)}\n`,
+      `${JSON.stringify(
+        {
+          utc: new Date().toISOString(),
+          error: setupRecord,
+          seedExit: seedCode,
+          stack,
+          readiness,
+        },
+        null,
+        2,
+      )}\n`,
       { mode: 0o600 },
     );
   let frontends: { stop(): Promise<void> } = { stop: async () => undefined };
@@ -443,7 +492,7 @@ async function main() {
       }
       await signIn.close();
     }
-    const setupCause = editorCause ?? seedCause;
+    const setupCause = editorCause ?? kernelCause ?? seedCause;
     if (setupCause && !editor) {
       for (const row of FIRST_PUBLIC_JOURNEYS) {
         if (row.id === 'released-definitions' || row.id === 'catalogue-browsing') continue;
@@ -895,6 +944,7 @@ async function main() {
     stack,
     seedExit: seedCode,
     seedCause: seedCause ?? null,
+    kernelCause: kernelCause ?? null,
     editorCause: editorCause ?? null,
     frontendCause: frontendCause ?? null,
     passing: passing.length,

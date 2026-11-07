@@ -49,7 +49,7 @@ export const FIRST_PUBLIC_JOURNEYS: readonly FirstPublicJourney[] = [
     id: 'released-definitions',
     name: 'Released definitions',
     path: '/{locale}/catalogue/definitions',
-    native: 'GET /v1/definitions/active, /v1/definitions/releases/{digest}, /v1/definitionTypes?typeId=',
+    native: 'GET /v1/definitions, /v1/definitions/active, /v1/definitions/releases/{digest}, /v1/definitionTypes?typeId=',
     browser: '/en/catalogue/definitions?type=schema:Book',
   },
   {

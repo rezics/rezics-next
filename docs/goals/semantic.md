@@ -67,6 +67,9 @@ the independent terminal proof is walked after the page cursor.
 Decision: fewest tests pin the 31 first-public catalogue and Zone paths: one kernel native suite over the bundled
 release plus one admitted seeded walk that marks each row from execution. Fixtures and typing are not native or
 browser passes. Web owns rendering and navigation; Semantic owns native meaning, decisions and static Zone pages.
+Walk Kernel GET `/v1/definitions` is the public active-release producer (same digest as `/v1/definitions/active`);
+start waits for HTTP 200, then starts the worker so discovery reads the bootstrapped release. Seed 503 names the
+problem code. Canonical Auth/JWKS stays with Accounts.
 
 ## Ownership
 

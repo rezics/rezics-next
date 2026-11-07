@@ -269,10 +269,16 @@ export function importConnectionClassifier(error: unknown, depth = 0): string | 
   return undefined;
 }
 
-function transportMessage(status?: number, phase?: ImportTransportPhase, connection?: string): string {
+function transportMessage(
+  status?: number,
+  phase?: ImportTransportPhase,
+  connection?: string,
+  code?: string,
+): string {
   const parts = ['Import transport request failed'];
   if (phase) parts.push(`at ${phase}`);
   if (status !== undefined) parts.push(`HTTP ${status}`);
+  if (code) parts.push(code);
   if (connection) parts.push(connection);
   return parts.join(' ');
 }
@@ -288,7 +294,7 @@ export class ImportTransportError extends Error {
     readonly phase?: ImportTransportPhase,
     readonly connection?: string,
   ) {
-    super(transportMessage(status, phase, connection));
+    super(transportMessage(status, phase, connection, code));
     this.name = 'ImportTransportError';
   }
 }

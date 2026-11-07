@@ -147,14 +147,25 @@ export async function walkStackPortsAvailable(ports: WalkPorts): Promise<boolean
   return walkPortsAvailable(Object.values(ports));
 }
 
+/** Walk Kernel `/v1/definitions` is the active-release producer: HTTP 200 only. */
+export function walkDefinitionsPath(url: string): boolean {
+  try {
+    return new URL(url).pathname.replace(/\/$/, '') === '/v1/definitions';
+  } catch {
+    return false;
+  }
+}
+
 /**
  * Whether `url` currently answers below HTTP 500. A listener that accepts TCP and never writes
  * must not stall the walk's ten-minute ready wait: abort and a hard budget both settle as not ready.
+ * Kernel `/v1/definitions` is ready only on HTTP 200 so a missing-route 404 cannot admit the stack.
  */
 export async function walkHttpAnswers(url: string, budgetMs = 2_000): Promise<boolean> {
   return await Promise.race([
     fetch(url, { signal: AbortSignal.timeout(budgetMs) }).then(
-      (response) => response.status < 500,
+      (response) =>
+        walkDefinitionsPath(url) ? response.status === 200 : response.status > 0 && response.status < 500,
       () => false,
     ),
     Bun.sleep(budgetMs + 500).then(() => false),
@@ -170,6 +181,13 @@ export const SEEDED_WEB_READY_PATH = '/en';
 export function walkUrlNeedsHtml(url: string): boolean {
   const path = new URL(url).pathname;
   return path === '/' || path === '' || WALK_PAGE_LOCALE.test(path);
+}
+
+/** Pages and Kernel definitions need HTTP 200; JWKS may answer any non-500. */
+export function walkReadyHttpStatus(url: string, status: number): boolean {
+  if (status < 1) return false;
+  if (walkUrlNeedsHtml(url) || walkDefinitionsPath(url)) return status === 200;
+  return status < 500;
 }
 
 export function walkPageBodyIsUseful(body: string): boolean {
@@ -195,7 +213,7 @@ export async function walkUsefulPageResponse(url: string, budgetMs = 2_000): Pro
   ]);
 }
 
-/** Pages need HTML; JWKS and Kernel definitions need a non-500 reply. */
+/** Pages need HTML; JWKS needs a non-500 reply; Kernel `/v1/definitions` needs HTTP 200. */
 export async function walkReadyResponse(url: string, budgetMs = 2_000): Promise<boolean> {
   return walkUrlNeedsHtml(url) ? walkUsefulPageResponse(url, budgetMs) : walkHttpAnswers(url, budgetMs);
 }
@@ -246,7 +264,9 @@ export async function walkReadyFetchObservation(url: string, budgetMs = 2_000): 
               ? { ready: true }
               : { ready: false, status: response.status };
           }
-          return response.status < 500 ? { ready: true } : { ready: false, status: response.status };
+          return walkReadyHttpStatus(url, response.status)
+            ? { ready: true }
+            : { ready: false, status: response.status };
         },
         (error: unknown): WalkFetchObservation => ({ ready: false, error }),
       ),
