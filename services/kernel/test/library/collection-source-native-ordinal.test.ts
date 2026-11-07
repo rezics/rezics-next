@@ -21,7 +21,7 @@ afterAll(async () => {
 });
 
 test('raw ordinal progress retains duplicate occurrences and settles deleted rows without disclosing their payload', async () => {
-  const source = await f.collection('private'),
+  const source = await f.collection('private', 'curated'),
     subjectId = await f.createSubject('game'),
     path = `/v1/collections/${source.collectionId}`;
   const memberIds: string[] = [];
