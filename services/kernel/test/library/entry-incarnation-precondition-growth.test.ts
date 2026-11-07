@@ -456,6 +456,16 @@ test('fresh guard work remains bounded across 64 512 and 4096 unrelated live ret
       growthSubjectCount: 4096,
     });
     const f = native;
+    async function refreshFixtureActors() {
+      // Keep the long-running fixture actors inside Access's native identity freshness window.
+      for (const who of [f.owner, f.steward, f.other]) {
+        who.bearer = await accountToken(who.actor);
+        who.actor = await f.access.authenticate(who.bearer, { pool: f.pool, deadline: deadlineFor(30000) });
+      }
+    }
+    // Historical source seeding and identity catch-up above can outlive Access's
+    // 180-second observation window before the first measured command begins.
+    await refreshFixtureActors();
     const target = f.baselineSubject;
     let current = (
       await fixtureRequest(() => f.commands.putEntry(f.owner.actor, target, { state: 'planned' }, entryKey()))
@@ -519,13 +529,6 @@ test('fresh guard work remains bounded across 64 512 and 4096 unrelated live ret
         ),
       ).toEqual({ ...old.deleted, replayed: true });
     };
-    async function refreshFixtureActors() {
-      // Keep the long-running fixture actors inside Access's native identity freshness window.
-      for (const who of [f.owner, f.steward, f.other]) {
-        who.bearer = await accountToken(who.actor);
-        who.actor = await f.access.authenticate(who.bearer, { pool: f.pool, deadline: deadlineFor(30000) });
-      }
-    }
     const report = await checkGrowth(growth, {
       name: 'fresh native incarnation admission success rejection replay and ABA',
       scales: [64, 512, 4096],
