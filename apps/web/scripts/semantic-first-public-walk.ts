@@ -9,7 +9,12 @@ import { randomUUID } from 'node:crypto';
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { join, resolve } from 'node:path';
 import { chromium, type Browser, type BrowserContext, type Page } from 'playwright';
-import { startSeededFrontends } from '../../../services/auth/scripts/dev-stack.ts';
+import {
+  kernelEnvironment,
+  retireDevelopmentSeedState,
+  retireStaleSeedJournals,
+  startSeededFrontends,
+} from '../../../services/auth/scripts/dev-stack.ts';
 import {
   FIRST_PUBLIC_JOURNEYS,
   type FirstPublicJourneyId,
@@ -49,7 +54,7 @@ const root = resolve(import.meta.dir, '../../..');
 const evidenceDir = join(root, '.temp/semantic-first-public-walk');
 const token = randomUUID().slice(0, 8);
 
-type Stack = { web: string; issuer: string; kernel: string };
+type Stack = { web: string; issuer: string; native: string; kernel: string };
 type Result = {
   id: FirstPublicJourneyId;
   name: string;
@@ -73,11 +78,17 @@ function stackOrigins(): Stack {
   return {
     web: loopback('REZICS_LOCAL_STACK_WEB_ORIGIN'),
     issuer: loopback('REZICS_LOCAL_STACK_ISSUER_ORIGIN'),
+    native: loopback('REZICS_LOCAL_STACK_NATIVE_ORIGIN'),
     kernel: loopback('REZICS_LOCAL_STACK_KERNEL_ORIGIN'),
   };
 }
 
-async function child(command: string[], name: string, env: NodeJS.ProcessEnv = process.env): Promise<void> {
+async function child(
+  command: string[],
+  name: string,
+  env: NodeJS.ProcessEnv = process.env,
+  options: { allowFailure?: boolean } = {},
+): Promise<number> {
   await mkdir(evidenceDir, { recursive: true, mode: 0o700 });
   const log = Bun.file(join(evidenceDir, `${name}.log`));
   const handle = await log.writer();
@@ -86,7 +97,23 @@ async function child(command: string[], name: string, env: NodeJS.ProcessEnv = p
   proc.stderr.on('data', (chunk: Buffer) => handle.write(chunk));
   const code = await new Promise<number | null>((done) => proc.on('close', done));
   await handle.end();
-  if (code !== 0) throw new Error(`${name} exited ${code}; see .temp/semantic-first-public-walk/${name}.log`);
+  const status = code ?? 1;
+  if (status !== 0 && !options.allowFailure)
+    throw new Error(`${name} exited ${status}; see .temp/semantic-first-public-walk/${name}.log`);
+  return status;
+}
+
+async function probe(url: string): Promise<{ url: string; status: number; error?: string }> {
+  try {
+    const response = await fetch(url, { signal: AbortSignal.timeout(15_000), redirect: 'manual' });
+    await response.body?.cancel().catch(() => undefined);
+    return { url, status: response.status };
+  } catch (error) {
+    const code =
+      error && typeof error === 'object' && 'code' in error ? String((error as { code: unknown }).code) : undefined;
+    const name = error instanceof Error ? error.name : 'fetch-failed';
+    return { url, status: 0, error: code || name };
+  }
 }
 
 async function parseEnv(path: string): Promise<Record<string, string>> {
@@ -127,33 +154,53 @@ function fetchCall(stack: Stack): KernelCall {
 
 async function accessToken(stack: Stack, email: string, password: string): Promise<string> {
   const bindings = await parseEnv(join(root, 'apps/web/.dev.vars'));
-  const signin = await fetch(`${stack.issuer}/signin`, {
-    method: 'POST',
-    headers: { origin: stack.issuer, 'content-type': 'application/json' },
-    body: JSON.stringify({
-      email,
-      password,
-      client_id: bindings.WEBSITE_CLIENT_ID ?? 'rezics-website',
-      scope: bindings.WEBSITE_SCOPES,
-    }),
+  const body = JSON.stringify({
+    email,
+    password,
+    client_id: bindings.WEBSITE_CLIENT_ID ?? 'rezics-website',
+    scope: bindings.WEBSITE_SCOPES,
   });
-  if (!signin.ok) throw new Error(`website sign-in for ${email} failed: HTTP ${signin.status}`);
-  const issued = await fetch(`${stack.issuer}/token`, {
-    method: 'POST',
-    headers: {
-      origin: stack.issuer,
-      'content-type': 'application/json',
-      cookie: signin.headers
-        .getSetCookie()
-        .map((cookie) => cookie.split(';')[0])
-        .join('; '),
-    },
-    body: '{}',
-  });
-  if (!issued.ok) throw new Error(`token for ${email} failed: HTTP ${issued.status}`);
-  const body = (await issued.json()) as { access_token?: string };
-  if (!body.access_token) throw new Error(`token for ${email} omitted access_token`);
-  return body.access_token;
+  let last = 'website sign-in failed';
+  for (const origin of [stack.issuer, stack.native]) {
+    const signin = await fetch(`${origin}/signin`, {
+      method: 'POST',
+      headers: { origin, 'content-type': 'application/json' },
+      body,
+    }).catch((error: unknown) => error);
+    if (signin instanceof Error || !('ok' in signin)) {
+      const code =
+        signin && typeof signin === 'object' && 'code' in signin ? String((signin as { code: unknown }).code) : '';
+      last = `website sign-in for ${email} at ${origin} ${code || (signin instanceof Error ? signin.name : 'failed')}`;
+      continue;
+    }
+    if (!signin.ok) {
+      last = `website sign-in for ${email} at ${origin} HTTP ${signin.status}`;
+      continue;
+    }
+    const issued = await fetch(`${origin}/token`, {
+      method: 'POST',
+      headers: {
+        origin,
+        'content-type': 'application/json',
+        cookie: signin.headers
+          .getSetCookie()
+          .map((cookie) => cookie.split(';')[0])
+          .join('; '),
+      },
+      body: '{}',
+    });
+    if (!issued.ok) {
+      last = `token for ${email} at ${origin} HTTP ${issued.status}`;
+      continue;
+    }
+    const token = (await issued.json()) as { access_token?: string };
+    if (!token.access_token) {
+      last = `token for ${email} at ${origin} omitted access_token`;
+      continue;
+    }
+    return token.access_token;
+  }
+  throw new Error(last);
 }
 
 async function hydrated(page: Page): Promise<void> {
@@ -303,16 +350,60 @@ async function createAndRead(
   return { native: { id: created.id, type, public: publicRead.status }, browser: { create: browser, reader } };
 }
 
+async function lastLogLine(name: string): Promise<string | undefined> {
+  const text = await readFile(join(evidenceDir, `${name}.log`), 'utf8').catch(() => '');
+  const lines = text
+    .split('\n')
+    .map((line) => line.trim())
+    .filter(Boolean);
+  return lines.at(-1);
+}
+
 async function main() {
   const stack = stackOrigins();
   await mkdir(evidenceDir, { recursive: true, mode: 0o700 });
   const revision = (await Bun.$`git -C ${root} rev-parse HEAD`.text()).trim();
+  const readiness = {
+    jwks: await probe(`${stack.native}/.well-known/jwks.json`),
+    definitions: await probe(`${stack.kernel}/v1/definitions`),
+  };
+  await writeFile(join(evidenceDir, 'readiness.json'), `${JSON.stringify({ stack, readiness }, null, 2)}\n`, {
+    mode: 0o600,
+  });
+  if (readiness.jwks.status === 0)
+    throw new Error(`native Auth JWKS ${readiness.jwks.url} ${readiness.jwks.error ?? 'unreachable'}`);
+  if (readiness.definitions.status === 0)
+    throw new Error(`Kernel definitions ${readiness.definitions.url} ${readiness.definitions.error ?? 'unreachable'}`);
+  await retireDevelopmentSeedState(root);
+  const kernelEnv = await kernelEnvironment();
+  if (kernelEnv.DATABASE_URL) await retireStaleSeedJournals(root, kernelEnv.DATABASE_URL);
   await child(['bun', 'services/auth/scripts/dev-stack.ts', 'persona'], 'persona');
-  const seedEnv = { ...process.env, ...(await parseEnv(join(root, '.temp/local-stack/seed.env'))) };
-  await child(['bun', 'scripts/datasets/cross-media-seed.ts', '--dev'], 'seed', seedEnv);
+  const seedEnv = {
+    ...process.env,
+    ...(await parseEnv(join(root, '.temp/local-stack/seed.env'))),
+    AUTH_ORIGIN: stack.native,
+    KERNEL_ORIGIN: stack.kernel,
+  };
+  const seedCode = await child(['bun', 'scripts/datasets/cross-media-seed.ts', '--dev'], 'seed', seedEnv, {
+    allowFailure: true,
+  });
+  const seedCause =
+    seedCode === 0 ? undefined : ((await lastLogLine('seed')) ?? `seed exited ${seedCode} without a log line`);
+  if (seedCause)
+    await writeFile(
+      join(evidenceDir, 'setup-failure.json'),
+      `${JSON.stringify({ utc: new Date().toISOString(), error: seedCause, seedExit: seedCode, stack, readiness }, null, 2)}\n`,
+      { mode: 0o600 },
+    );
   const frontends = await startSeededFrontends();
   const keys = JSON.parse(await readFile(join(root, '.temp/local-stack/keys.json'), 'utf8')) as { password: string };
-  const editor = await accessToken(stack, 'developer@rezics.test', keys.password);
+  let editor = '';
+  let editorCause: string | undefined;
+  try {
+    editor = await accessToken(stack, 'developer@rezics.test', keys.password);
+  } catch (error) {
+    editorCause = error instanceof Error ? error.message : String(error);
+  }
   const call = fetchCall(stack);
   await mkdir('/tmp/rw', { recursive: true, mode: 0o700 });
   const browser: Browser = await chromium.launch({ headless: true, env: { ...process.env, TMPDIR: '/tmp/rw' } });
@@ -321,22 +412,38 @@ async function main() {
   const results: Result[] = [];
   const session: Session = { stack, call, editor, anonymous, member, revision };
   try {
-    const signIn = await member.newPage();
-    await signIn.goto(`${stack.web}/en/auth/sign-in?return_to=${encodeURIComponent('/en/catalogue/new')}`, {
-      waitUntil: 'domcontentloaded',
-      timeout: 180_000,
-    });
-    for (let attempt = 0; attempt < 4 && new URL(signIn.url()).origin === stack.issuer; attempt++) {
-      await hydrated(signIn);
-      const email = signIn.locator('input[type="email"]');
-      if (await email.count()) {
-        await email.fill('developer@rezics.test');
-        await signIn.locator('input[type="password"]').fill(keys.password);
+    if (editor) {
+      const signIn = await member.newPage();
+      await signIn.goto(`${stack.web}/en/auth/sign-in?return_to=${encodeURIComponent('/en/catalogue/new')}`, {
+        waitUntil: 'domcontentloaded',
+        timeout: 180_000,
+      });
+      for (let attempt = 0; attempt < 4 && new URL(signIn.url()).origin === stack.issuer; attempt++) {
+        await hydrated(signIn);
+        const email = signIn.locator('input[type="email"]');
+        if (await email.count()) {
+          await email.fill('developer@rezics.test');
+          await signIn.locator('input[type="password"]').fill(keys.password);
+        }
+        await signIn.locator('form button[type="submit"]').first().click();
+        await signIn.waitForLoadState('domcontentloaded');
       }
-      await signIn.locator('form button[type="submit"]').first().click();
-      await signIn.waitForLoadState('domcontentloaded');
+      await signIn.close();
     }
-    await signIn.close();
+    const setupCause = editorCause ?? seedCause;
+    if (setupCause && !editor) {
+      for (const row of FIRST_PUBLIC_JOURNEYS) {
+        if (row.id === 'released-definitions' || row.id === 'catalogue-browsing') continue;
+        results.push({
+          id: row.id,
+          name: row.name,
+          status: 'Failing',
+          ms: 0,
+          persona: 'anonymous',
+          failure: fail(row.id, row.native, setupCause, ownerOf(setupCause)),
+        });
+      }
+    }
 
     results.push(await journey(session, 'released-definitions', () => releasedDefinitions(session)));
     results.push(
@@ -356,6 +463,9 @@ async function main() {
         return { native: { id, count: subjects.length }, browser: { profile, reader } };
       }),
     );
+    if (!editor) {
+      // Sign-in is unavailable: anonymous definition and catalogue rows already ran; remaining rows keep the setup cause.
+    } else {
     results.push(
       await journey(session, 'generic-creation', () =>
         createAndRead(session, 'schema:Book', `Walk book ${token}`, '/en/catalogue/new'),
@@ -757,6 +867,7 @@ async function main() {
         };
       }),
     );
+    }
   } finally {
     await browser.close();
     await frontends.stop();
@@ -769,6 +880,9 @@ async function main() {
     revision,
     utc: new Date().toISOString(),
     stack,
+    seedExit: seedCode,
+    seedCause: seedCause ?? null,
+    editorCause: editorCause ?? null,
     passing: passing.length,
     total: FIRST_PUBLIC_JOURNEYS.length,
     slowestFailing: slowest

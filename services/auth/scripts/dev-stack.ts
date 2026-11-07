@@ -698,7 +698,7 @@ export async function provisionPersona(composition: Awaited<ReturnType<typeof as
       REZICS_DEV_PERSONA_CLIENT: personaClient,
       REZICS_DEV_SHOWCASE_ACCOUNT_KEY: resolve(directory, 'importer.jwk'),
       REZICS_DEV_SHOWCASE_CLIENT: showcaseClient,
-      AUTH_ORIGIN: origins.issuer,
+      AUTH_ORIGIN: process.env.REZICS_WALK_STACK_SLOT ? origins.native : origins.issuer,
       KERNEL_ORIGIN: origins.kernel,
     })
       .map(([name, value]) => `${name}=${value}`)
