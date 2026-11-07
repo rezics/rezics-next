@@ -7,20 +7,23 @@ locator-only workflow intent with each new episode. Touch uses current `collecti
 only the exact live episode's LRU timestamp. Step admission locks only its exact live episode under Core's active
 partition and owner fences.
 
-This slice does not establish Source currentness, result readiness, or disclosure authority. `source_identity` and
-`source_observation` remain unbound until the complete funded Source child and current physical authority are
-available. `readRetainedDefinition` recovers the exact canonical definition on the same live, fenced client,
+Reservation metadata does not establish Source currentness, result readiness, or disclosure authority.
+`source_identity` and `source_observation` remain unbound until the funded Source child establishes current physical
+authority. `readRetainedDefinition` recovers the exact canonical definition on the same live, fenced client,
 checking its digest, namespace, shared expansion and immutable release bytes. Obsolete episodes return `null`.
-`readWorkDefinition` still fails with typed unavailable for a live reservation until current Source authority is
-bound; the registered producer also remains unavailable. This is not native result acceptance or an empty page.
+`readWorkDefinition` requires the admitted Source phase and its current authority; a live reservation outside that
+phase returns typed unavailable. Prepared-result readback independently checks committed completion, current Source
+and disclosure before returning a page. Missing authority is never an empty page.
 
 Decision: recover retained immutable meaning independently of Source admission; definition recovery never grants
 execution, readiness or disclosure authority.
 
 # Members preparation
 
-The native reservation schema, request operations and exact step-admission boundary are present. The registered producer and prepared-result readback require their actual released Source and physical authority; reservation metadata never establishes a ready member result.
-Contract review and native fixture evidence precede the independent bounded producer.
+The native reservation schema, request operations, exact step-admission boundary and bounded producer use their
+actual released Source and physical authority; reservation metadata never establishes a ready member result.
+Prepared-result readback rechecks current Source and disclosure after the producer commits. Native end-to-end and
+growth evidence remains owned by the receiving Semantic and Search walks after integration.
 [The interface](members-preparation.ts) implements private native episode reservation, read touch and exact step
 admission. The [runtime inventory](README.md#members-costs-and-unavailable-authority) distinguishes installed owned
 bodies from missing foreign authority. Runtime admission (`runtime: true`) opens History from documented static
@@ -96,6 +99,10 @@ Reservation must recheck the exact current active curated header and owner bindi
 the earlier successful read and an explicit grant alone cannot substitute for current Collection liveness.
 Use the existing private-read concealment: `accessCommandAuthorization` receives `not_found` as its denial,
 including when its native command-admission preparation refuses a terminal owner.
+Reservation and touch use the same `collectionReadEligibility` producer as the mounted reader, for the exact current
+Collection resource. Private evidence returns false and retains the curator grant path; no synthetic eligibility or
+prior read substitutes for that evidence or the transaction's current-header check. The original native
+authorization, intent and growth assertions are retained to verify this shared binding.
 A batch covers distinct definitions for that ONE Collection. This is sufficient to specify two reads and an intent
 with multiple locators without claiming all common-page reads are supported. This initial interface does not
 narrow the required full common-page capability. Cross-Collection/source batches
@@ -109,6 +116,10 @@ partition, `accounts:[principal.id]`, the existing WorkClient and the shorter re
 No authorization callback/permission flag is exposed by this interface. Core mints authoritative time without a
 held connection, prepares Access, begins SERIALIZABLE, finalizes current authorization, takes active partition and
 account SHARE fences, executes body, finalizes Access and commits. The implementation cannot rearrange these gates.
+Reserve and touch do not pass the feature's `KernelClock` as Core's command clock. Core-minted attempt time governs
+Access and request deadlines remain wall-clock budgets; `KernelClock` supplies only the `last_read_at` lifecycle
+instant used for idle expiry and touch. Freezing or advancing idle time must not backdate Access against a newly
+created grant or extend the request deadline.
 Work steps use Core mode `work-step` with exactly the locator's owner account and partition; retake active account
 and partition fences before the episode lock. No step authorizes disclosure. Every later read still needs current
 source/subject/foreign/tuple/identity safety checks, including exclusions and order.
@@ -199,6 +210,10 @@ This composition is a private allocation seam, not native integration or a relea
 
 Decision: use the shared native child-transfer allocator, require explicit Source and native authority, and preserve
 the existing request retry policy rather than adding a retry-count cap.
+
+Decision: Preserve existing Members lifecycle assertions and add no duplicate native story; make the shared native
+output fixtures contract-correct by granting the actual owner family scopes and promoting a private dynamic
+Collection to public before explicit generation tests.
 
 ### Approved C3 composition
 

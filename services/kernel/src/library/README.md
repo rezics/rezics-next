@@ -3247,6 +3247,8 @@ LRU/idle retirement. `createMembersPreparation` uses Core request admission and 
 duplicate admission neither touches nor enqueues. An explicit History original registers the actual
 reservation original and locator-only intent on the same transaction. The returned private transfers retain their
 original deadline and Pool and can be consumed only after successful COMMIT; a locator grants no transfer authority.
+Reserve and touch pass the same `collectionReadEligibility` producer as the mounted reader for the exact Collection
+resource; private evidence still falls through to the curator grant path.
 Runtime admission (`runtime: true`) opens that History original from documented static bounds; it does not require
 a NativeCollectionWork parent. The native runtime association, selected apply/completion and bounded cleanup bodies
 are retained for that integration. Metadata-only reservation does not install an original association or capture
@@ -3295,6 +3297,8 @@ Collection note reading, Dynamic recovery, locale, mutation and uncertain-intent
   opens History from those bounds without a NativeCollectionWork parent. Metadata reservations, duplicate and
   actual-read touch paths remain independent. A complete whole-call Source/Library declaration is also required for
   native product acceptance.
+- Decision: Reserve and touch use Core-minted Access time; the injected KernelClock controls only Members idle
+  timestamps and expiry, while request deadlines remain wall-clock budgets.
 - Growth check: the focused reservation/concurrency/rollback, real-default-consumer, stale/terminal and mounted
   recovery cases are authored but unrun. Compiler status establishes no native budget, finite useful page or erasure
   acceptance. The controller owns those deferred checks.
