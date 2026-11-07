@@ -3294,6 +3294,8 @@ Collection note reading, Dynamic recovery, locale, mutation and uncertain-intent
   opens History from those bounds without a NativeCollectionWork parent. Metadata reservations, duplicate and
   actual-read touch paths remain independent. A complete whole-call Source/Library declaration is also required for
   native product acceptance.
+- Decision: Reserve and touch use Core-minted Access time; the injected KernelClock controls only Members idle
+  timestamps and expiry, while request deadlines remain wall-clock budgets.
 - Growth check: the focused reservation/concurrency/rollback, real-default-consumer, stale/terminal and mounted
   recovery cases are authored but unrun. Compiler status establishes no native budget, finite useful page or erasure
   acceptance. The controller owns those deferred checks.

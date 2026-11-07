@@ -109,6 +109,10 @@ partition, `accounts:[principal.id]`, the existing WorkClient and the shorter re
 No authorization callback/permission flag is exposed by this interface. Core mints authoritative time without a
 held connection, prepares Access, begins SERIALIZABLE, finalizes current authorization, takes active partition and
 account SHARE fences, executes body, finalizes Access and commits. The implementation cannot rearrange these gates.
+Reserve and touch do not pass the feature's `KernelClock` as Core's command clock. Core-minted attempt time governs
+Access and request deadlines remain wall-clock budgets; `KernelClock` supplies only the `last_read_at` lifecycle
+instant used for idle expiry and touch. Freezing or advancing idle time must not backdate Access against a newly
+created grant or extend the request deadline.
 Work steps use Core mode `work-step` with exactly the locator's owner account and partition; retake active account
 and partition fences before the episode lock. No step authorizes disclosure. Every later read still needs current
 source/subject/foreign/tuple/identity safety checks, including exclusions and order.

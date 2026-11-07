@@ -457,13 +457,15 @@ export function createMembersPreparationNative(config: {
           workClient: config.workClient,
           authorization,
           deadline,
-          clock,
           ...(options.history ? { operationalHistory: options.history } : {}),
         },
         async (tx) => {
           const nowToken = commandTime(tx);
           if (!nowToken) throw new ProblemError('dependency_unavailable');
-          const now = authoritativeTimeValue(nowToken);
+          // Access uses Core's attempt time. The injected KernelClock owns only
+          // this feature's trusted idle lifecycle, so it cannot backdate the
+          // command's authorization against current resource grants.
+          const now = clock().toISOString();
           const collection = (
             await tx.query<{
               collection_id: string;
@@ -693,12 +695,11 @@ export function createMembersPreparationNative(config: {
           workClient: config.workClient,
           authorization,
           deadline,
-          clock,
         },
         async (tx) => {
           const nowToken = commandTime(tx);
           if (!nowToken) return false;
-          const now = authoritativeTimeValue(nowToken);
+          const now = clock().toISOString();
           const collection = (
             await tx.query<{ incarnation: string; generation: string }>(currentCollectionSQL(), [
               locator.route,
