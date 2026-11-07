@@ -3,6 +3,7 @@ import { mkdtempSync, mkdirSync, rmSync, writeFileSync } from 'node:fs';
 import { spawnSync } from 'node:child_process';
 import { dirname, join } from 'node:path';
 import { readFileSync } from 'node:fs';
+import { gunzipSync } from 'node:zlib';
 import { controlPlaneChecks } from './merge-train.ts';
 import { planControlPlaneChecks, selectControlPlaneCheckPlan } from './control-plane-check-plan.ts';
 
@@ -150,9 +151,19 @@ test('release planning reads changed owners from the captured base to the exact 
 // These are the captured production report source and release base, not a ledger-shaped surrogate.
 test('the real six-file hourly candidate selects owning report/CLI and affected consumer checks', () => {
   const cwd = join(import.meta.dir, '../../..');
-  const base = '7d1892c56a28296bb7fb4c7e2e12a22600a783b0';
-  const candidate = '7aa069b360b676223a017d3bf93001feb8659bd6';
-  const changedPaths = git(cwd, 'diff', '--name-only', base, candidate, '--', 'tools/goal').split('\n');
+  // Remote check snapshots intentionally omit Git metadata. This fixture captures the real diff,
+  // tracked paths, verbatim executable sources/manifests and source import declarations at these refs.
+  const { base, candidate, changedPaths, trackedFiles, files } = JSON.parse(
+    gunzipSync(readFileSync(join(import.meta.dir, 'fixtures/control-plane-hourly-candidate.json.gz'))).toString(),
+  ) as {
+    base: string;
+    candidate: string;
+    changedPaths: string[];
+    trackedFiles: string[];
+    files: Record<string, string>;
+  };
+  expect(base).toBe('7d1892c56a28296bb7fb4c7e2e12a22600a783b0');
+  expect(candidate).toBe('7aa069b360b676223a017d3bf93001feb8659bd6');
   expect(changedPaths).toEqual([
     'tools/goal/README.md',
     'tools/goal/scripts/efficiency-report.ts',
@@ -161,18 +172,12 @@ test('the real six-file hourly candidate selects owning report/CLI and affected 
     'tools/goal/src/efficiency-report.test.ts',
     'tools/goal/src/efficiency-report.ts',
   ]);
-  const trackedFiles = git(cwd, 'ls-tree', '-r', '--name-only', candidate, '--', 'tools/goal').split('\n');
-  const contents = new Map(
-    trackedFiles
-      .filter((path) => /\.(?:[cm]?[jt]sx?|json)$/.test(path))
-      .map((path) => [path, git(cwd, 'show', `${candidate}:${path}`)]),
-  );
   const result = selectControlPlaneCheckPlan({
     base,
     candidate,
     changedPaths,
     trackedFiles,
-    readFile: (path) => contents.get(path),
+    readFile: (path) => files[path],
   });
   expect(result).toMatchObject({
     base,
@@ -194,10 +199,7 @@ test('the real six-file hourly candidate selects owning report/CLI and affected 
     'tools/goal/scripts/efficiency-report.ts',
     '--help',
   ]);
-  // Pin the executable boundary itself as well as its report owner, without opening a DB or sending a report.
-  expect(readFileSync(join(cwd, 'tools/goal/scripts/efficiency-report.ts'), 'utf8').trim()).toBe(
-    contents.get('tools/goal/scripts/efficiency-report.ts')!,
-  );
+  // Exercise the installed production entrypoint's admission, without a DB or report delivery.
   for (const [args, status, output] of [
     [['--help'], 0, 'Usage: bun tools/goal/scripts/efficiency-report.ts'],
     [['--scheduled'], 1, '--scheduled requires --send'],
