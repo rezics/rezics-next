@@ -2034,7 +2034,7 @@ for (const probeFails of [false, true])
       for (const task of tasks) await h.start(task);
       const manifest = acceptedBatch(h, tasks);
       let fulls = 0,
-        probes = 0,
+        focusedRuns = 0,
         compatibility = 0;
       const result = await batchTrain(h, async (command, cwd) => {
         if (command.includes('tools/goal/scripts/check-compatibility.ts')) compatibility++;
@@ -2047,13 +2047,13 @@ for (const probeFails of [false, true])
           };
         }
         if (command[0] === 'bun' && command[1] === 'test') {
-          probes++;
+          focusedRuns++;
           expect(command).toEqual(['bun', 'test', '--timeout', '30000', suspect]);
           return { passed: !probeFails, timedOut: false, output: 'focused negative observation\n' };
         }
         return { passed: true, timedOut: false, output: '' };
       }).releaseControlPlaneBatch(manifest);
-      expect([fulls, probes, compatibility]).toEqual([2, probeFails ? 1 : 2, 1]);
+      expect([fulls, focusedRuns, compatibility]).toEqual([2, probeFails ? 1 : 3, 1]);
       expect(result.members.find((member) => member.taskId === tasks[0]!.id)).toMatchObject({
         disposition: 'excluded',
         phase: 'native',
