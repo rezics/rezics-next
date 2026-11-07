@@ -65,9 +65,12 @@ export type PageDataOptions = {
   inbox: Pick<ManagerInbox, 'deliver'>;
   routeDefect: (repair: PageDataRepair) => Promise<PageDataRepairRoute>;
   now?: () => Date;
-  runStack?: (
-    head: string,
-  ) => Promise<{ output: string; exitCode: number; registry?: ReadonlyMap<string, SectionConfig> }>;
+  runStack?: (head: string) => Promise<{
+    output: string;
+    exitCode: number;
+    registry?: ReadonlyMap<string, SectionConfig>;
+    stackOutput?: string;
+  }>;
 };
 
 export type SectionConfig = Pick<PageDataSection, 'page' | 'persona' | 'section' | 'name' | 'goal' | 'files'>;
@@ -89,6 +92,7 @@ export class PageDataStackError extends Error {
     readonly phase: StackFailurePhase,
     message: string,
     readonly firstErrorLine = safeLine(message),
+    readonly output = '',
   ) {
     super(message);
     this.name = 'PageDataStackError';
@@ -280,6 +284,10 @@ function safeLine(value: string): string {
     .slice(0, 500);
 }
 
+function safeOutput(value: string): string {
+  return value.replace(secretPattern, '[redacted]');
+}
+
 export function parsePageDataOutput(output: string, registry: ReadonlyMap<string, SectionConfig>): PageDataSection[] {
   const results: PageDataSection[] = [];
   const seen = new Set<string>();
@@ -422,22 +430,46 @@ function supermanagerNotice(
   action: 'boot' | 'check',
   head: string,
   line: string,
+  logPath: string,
   at: string,
 ): void {
   const detail = safeLine(line) || `Page-data ${action} failed without an error line`;
+  const prefix = `Page-data ${action} failed at ${head}: `;
+  const suffix = `; output log: ${logPath}`;
+  const available = Math.max(0, defaultPolicy.inbox.managerMessageCharacters - prefix.length - suffix.length);
+  const summary = `${prefix}${detail.slice(0, available)}${suffix}`;
   recordFlow(options.db, {
     taskId: pageDataTaskId,
     attempt: Math.max(Date.parse(at), dbMaxPageDataAttempt(options.db) + 1),
     stage: 'verification',
     action: action === 'boot' ? 'page-data-boot-failure' : 'page-data-check-failure',
     at,
-    detail: JSON.stringify({ head, firstErrorLine: detail }),
+    detail: JSON.stringify({ head, firstErrorLine: detail, logPath }),
   });
   options.inbox.deliver({
     managerId: options.settings.integration.supermanager,
     kind: 'environment',
-    summary: `Page-data ${action} failed at ${head}: ${detail}`.slice(0, defaultPolicy.inbox.managerMessageCharacters),
+    summary,
   });
+}
+
+function writePageDataFailureLog(
+  stateDirectory: string,
+  runId: number,
+  phase: StackFailurePhase,
+  output: string,
+): string {
+  const directory = join(stateDirectory, 'page-data-failures');
+  mkdirSync(directory, { recursive: true });
+  const path = join(directory, `${runId}-${phase}.log`);
+  writeFileSync(path, safeOutput(output), { encoding: 'utf8', mode: 0o600, flag: 'wx' });
+  return path;
+}
+
+function combineFailureOutput(stackOutput: string, commandOutput: string): string {
+  if (!stackOutput) return commandOutput;
+  if (!commandOutput || stackOutput === commandOutput) return stackOutput;
+  return `=== page-data stack ===\n${stackOutput}\n=== page-data command ===\n${commandOutput}`;
 }
 
 function loadLastSuccessfulRun(db: Database): PageDataRun | undefined {
@@ -465,22 +497,30 @@ export async function runPageDataCycle(options: PageDataOptions): Promise<'skipp
     const latestAttempt = dbMaxPageDataAttempt(options.db);
     const runId = Math.max(Date.parse(at), latestAttempt + 1);
     const head = firstParent(options.settings.mainCheckout, options.settings.integrationBranch);
-    let output: string;
+    let output = '';
+    let stackOutput = '';
     let registryForRun: ReadonlyMap<string, SectionConfig> | undefined;
     try {
       const result = await (
         options.runStack ?? ((sourceHead) => runDedicatedPageDataStack(options.settings, sourceHead))
       )(head);
-      if (result.exitCode !== 0 && result.exitCode !== 1)
-        throw new PageDataStackError(
-          'check',
-          result.output.split(/\r?\n/).find(Boolean) ?? `page-data-check exited ${result.exitCode}`,
-        );
       output = result.output;
+      stackOutput = result.stackOutput ?? '';
+      if (result.exitCode !== 0 && result.exitCode !== 1) {
+        const line = result.output.trim()
+          ? terminalErrorLine(result.output)
+          : `page-data-check exited ${result.exitCode}`;
+        throw new PageDataStackError('check', line, line, combineFailureOutput(stackOutput, result.output));
+      }
       registryForRun = result.registry;
     } catch (error) {
-      const failure = error instanceof PageDataStackError ? error : new PageDataStackError('boot', errorMessage(error));
-      supermanagerNotice(options, failure.phase, head, failure.firstErrorLine, at);
+      const failure =
+        error instanceof PageDataStackError
+          ? error
+          : new PageDataStackError('boot', errorMessage(error), undefined, stackOutput);
+      const transcript = failure.output || combineFailureOutput(stackOutput, output || failure.message);
+      const logPath = writePageDataFailureLog(options.settings.stateDirectory, runId, failure.phase, transcript);
+      supermanagerNotice(options, failure.phase, head, failure.firstErrorLine, logPath, at);
       return 'failed';
     }
 
@@ -489,7 +529,9 @@ export async function runPageDataCycle(options: PageDataOptions): Promise<'skipp
     try {
       sections = parsePageDataOutput(output, registry);
     } catch (error) {
-      supermanagerNotice(options, 'check', head, errorMessage(error), at);
+      const transcript = combineFailureOutput(stackOutput, output);
+      const logPath = writePageDataFailureLog(options.settings.stateDirectory, runId, 'check', transcript);
+      supermanagerNotice(options, 'check', head, errorMessage(error), logPath, at);
       return 'failed';
     }
     const previous = loadLastSuccessfulRun(options.db);
@@ -564,8 +606,8 @@ function pageDataSettings(settings: Settings): PageDataPolicy {
   return settings.policy?.pageData ?? defaultPolicy.pageData;
 }
 
-/** Skip Task `$ ` echoes and keep the first substantive error, with credentials already redacted by safeLine. */
-export function firstSubstantiveErrorLine(value: string): string {
+/** Prefer the final substantive error from a process that exited; resilient background retries appear earlier. */
+export function terminalErrorLine(value: string): string {
   const lines = value
     .split(/\r?\n/)
     .map((line) => line.trim())
@@ -573,15 +615,20 @@ export function firstSubstantiveErrorLine(value: string): string {
   const skipped = (line: string) =>
     line.startsWith('$ ') || /^task:\s/i.test(line) || line.startsWith('+ ') || /^task \S/.test(line);
   const candidates = lines.filter((line) => !skipped(line));
-  const preferred = candidates.find((line) => /\b(?:error|fatal|fail(?:ed|ure)?|panic|exception)\b/i.test(line));
-  const chosen = preferred ?? candidates[0];
-  const logReference = candidates.find((line) => /^see\s+\S+/i.test(line));
+  const preferred = candidates.filter((line) => /\b(?:error|fatal|fail(?:ed|ure)?|panic|exception)\b/i.test(line));
+  const chosen = preferred.at(-1) ?? candidates.at(-1);
+  const logReference = [...candidates].reverse().find((line) => /^see\s+\S+/i.test(line));
   const combined = chosen && logReference && logReference !== chosen ? `${chosen}; ${logReference}` : chosen;
   return safeLine(combined ?? 'process failed without output');
 }
 
+/** Retained as the public name used by existing callers. */
+export function firstSubstantiveErrorLine(value: string): string {
+  return terminalErrorLine(value);
+}
+
 function externalErrorLine(value: string): string {
-  return firstSubstantiveErrorLine(value);
+  return terminalErrorLine(value);
 }
 
 async function freePort(): Promise<number> {
@@ -712,6 +759,13 @@ function boundedAppend(current: string, chunk: string, maximum: number): string 
 }
 
 type ProcessResult = { exitCode: number; stdout: string; stderr: string; output: string };
+type BoundedOutput = { value: string };
+
+function commandOutput(stdout: string, stderr: string): string {
+  if (!stdout) return stderr;
+  if (!stderr) return stdout;
+  return `${stdout}\n=== stderr ===\n${stderr}`;
+}
 
 function signalGroup(child: ChildProcess, signal: NodeJS.Signals): void {
   if (!child.pid) return;
@@ -754,23 +808,31 @@ async function runCommand(
     code = await closed;
   } catch (error) {
     const firstErrorLine = externalErrorLine(errorMessage(error));
-    throw new PageDataStackError(phase, `${command} ${args.join(' ')} failed: ${firstErrorLine}`, firstErrorLine);
+    throw new PageDataStackError(
+      phase,
+      `${command} ${args.join(' ')} failed: ${firstErrorLine}`,
+      firstErrorLine,
+      commandOutput(stdout, stderr),
+    );
   } finally {
     clearTimeout(timeout);
     if (killTimer) clearTimeout(killTimer);
   }
+  const output = commandOutput(stdout, stderr);
   const diagnostic = externalErrorLine(stderr || stdout);
   if (timedOut)
     throw new PageDataStackError(
       phase,
       `${command} ${args.join(' ')} timed out after ${timeoutMs} ms: ${diagnostic}`,
       diagnostic,
+      output,
     );
   if (!allowedExitCodes.includes(code ?? -1))
     throw new PageDataStackError(
       phase,
       `${command} ${args.join(' ')} exited ${String(code)}: ${diagnostic}`,
       diagnostic,
+      output,
     );
   return { exitCode: code ?? -1, stdout, stderr, output: stdout };
 }
@@ -781,15 +843,14 @@ async function waitForStack(
   timeoutMs: number,
   outputLimit: number,
   stopTimeoutMs: number,
-): Promise<string> {
-  let output = '';
-  let stderr = '';
+  captured: BoundedOutput,
+): Promise<void> {
   let spawnFailure: Error | undefined;
-  child.stdout?.on('data', (chunk: Buffer) => (output = boundedAppend(output, chunk.toString(), outputLimit)));
+  child.stdout?.on('data', (chunk: Buffer) => {
+    captured.value = boundedAppend(captured.value, chunk.toString(), outputLimit);
+  });
   child.stderr?.on('data', (chunk: Buffer) => {
-    const value = chunk.toString();
-    stderr = boundedAppend(stderr, value, outputLimit);
-    output = boundedAppend(output, value, outputLimit);
+    captured.value = boundedAppend(captured.value, chunk.toString(), outputLimit);
   });
   const closed = new Promise<number | null>((resolve) => {
     child.once('error', (error) => {
@@ -801,10 +862,16 @@ async function waitForStack(
   const deadline = Date.now() + timeoutMs;
   let lastFailure = '';
   while (Date.now() < deadline) {
-    if (spawnFailure) throw new PageDataStackError('boot', errorMessage(spawnFailure));
+    if (spawnFailure) {
+      const line = errorMessage(spawnFailure);
+      throw new PageDataStackError('boot', line, line, captured.value);
+    }
     if (child.exitCode !== null || child.signalCode !== null) {
-      const line = externalErrorLine(stderr || output) || `Local stack exited ${child.exitCode ?? child.signalCode}`;
-      throw new PageDataStackError('boot', line, line);
+      await closed;
+      const line = captured.value.trim()
+        ? terminalErrorLine(captured.value)
+        : `Local stack exited ${child.exitCode ?? child.signalCode}`;
+      throw new PageDataStackError('boot', line, line, captured.value);
     }
     let ready = true;
     for (const origin of origins) {
@@ -816,18 +883,19 @@ async function waitForStack(
         }
       } catch (error) {
         ready = false;
-        lastFailure = errorMessage(error);
+        lastFailure = `${origin} ${errorMessage(error)}`;
       }
     }
-    if (ready) return output;
+    if (ready) return;
     await new Promise((resolve) => setTimeout(resolve, 500));
   }
   if (child.exitCode === null && child.signalCode === null) signalGroup(child, 'SIGTERM');
   await Promise.race([closed, new Promise((resolve) => setTimeout(resolve, stopTimeoutMs))]);
   if (child.exitCode === null && child.signalCode === null) signalGroup(child, 'SIGKILL');
+  await closed;
   const line =
-    externalErrorLine(stderr) || lastFailure || externalErrorLine(output) || 'Local stack did not become ready';
-  throw new PageDataStackError('boot', line, line);
+    lastFailure || (captured.value.trim() ? terminalErrorLine(captured.value) : 'Local stack did not become ready');
+  throw new PageDataStackError('boot', line, line, captured.value);
 }
 
 async function stopStack(child: ChildProcess, timeoutMs: number): Promise<void> {
@@ -865,7 +933,12 @@ function dependencyFilesChanged(cwd: string, oldHead: string | undefined, head: 
 async function runDedicatedPageDataStack(
   settings: Settings,
   head: string,
-): Promise<{ output: string; exitCode: number; registry: ReadonlyMap<string, SectionConfig> }> {
+): Promise<{
+  output: string;
+  exitCode: number;
+  registry: ReadonlyMap<string, SectionConfig>;
+  stackOutput: string;
+}> {
   const policy = pageDataSettings(settings);
   const { file, worktree, stack, names } = await stackConfiguration(settings);
   refreshWorktree(settings, worktree, head);
@@ -889,7 +962,12 @@ async function runDedicatedPageDataStack(
     env = stackEnvironment(worktree, config, names, settings.mainCheckout);
   }
   const seeded = join(settings.stateDirectory, 'page-data-seeded');
+  const stackCapture: BoundedOutput = { value: '' };
   let child: ChildProcess | undefined;
+  let checked: ProcessResult | undefined;
+  let registry: ReadonlyMap<string, SectionConfig> | undefined;
+  let failed = false;
+  let failure: unknown;
   try {
     await runCommand(
       bun,
@@ -927,79 +1005,96 @@ async function runDedicatedPageDataStack(
     );
     env = stackEnvironment(worktree, config, names, settings.mainCheckout);
 
-    try {
-      child = spawn(bun, ['services/auth/scripts/dev-stack.ts', 'start'], {
-        cwd: worktree,
-        env,
-        detached: true,
-        stdio: ['ignore', 'pipe', 'pipe'],
-      });
-      await waitForStack(
-        child,
-        [
-          `http://127.0.0.1:${config.webPort}/en`,
-          `http://127.0.0.1:${config.issuerPort}/.well-known/openid-configuration`,
-          `http://127.0.0.1:${config.nativePort}/.well-known/openid-configuration`,
-          `http://127.0.0.1:${config.kernelPort}/health`,
-        ],
-        policy.bootTimeoutMs,
-        policy.outputBytes,
-        policy.stopTimeoutMs,
-      );
+    child = spawn(bun, ['services/auth/scripts/dev-stack.ts', 'start'], {
+      cwd: worktree,
+      env,
+      detached: true,
+      stdio: ['ignore', 'pipe', 'pipe'],
+    });
+    await waitForStack(
+      child,
+      [
+        `http://127.0.0.1:${config.webPort}/en`,
+        `http://127.0.0.1:${config.issuerPort}/.well-known/openid-configuration`,
+        `http://127.0.0.1:${config.nativePort}/.well-known/openid-configuration`,
+        `http://127.0.0.1:${config.kernelPort}/health`,
+      ],
+      policy.bootTimeoutMs,
+      policy.outputBytes,
+      policy.stopTimeoutMs,
+      stackCapture,
+    );
 
-      if (!existsSync(seeded)) {
-        await runCommand(
-          bun,
-          ['services/auth/scripts/dev-stack.ts', 'persona'],
-          worktree,
-          env,
-          policy.seedTimeoutMs,
-          policy.outputBytes,
-          'boot',
-          [0],
-          policy.stopTimeoutMs,
-        );
-        env = { ...env, ...readEnvFile(join(worktree, '.temp/local-stack/seed.env')) };
-        await runCommand(
-          bun,
-          ['scripts/datasets/cross-media-seed.ts', '--dev'],
-          worktree,
-          env,
-          policy.seedTimeoutMs,
-          policy.outputBytes,
-          'boot',
-          [0],
-          policy.stopTimeoutMs,
-        );
-        mkdirSync(join(worktree, '.temp/local-stack'), { recursive: true });
-        writeFileSync(seeded, `${head}\n`, { flag: 'w' });
-      }
-
-      const checked = await runCommand(
+    if (!existsSync(seeded)) {
+      await runCommand(
         bun,
-        [
-          'scripts/page-data-check.ts',
-          '--base-url',
-          `http://127.0.0.1:${config.webPort}`,
-          '--kernel',
-          `http://127.0.0.1:${config.kernelPort}`,
-          '--auth-origin',
-          `http://127.0.0.1:${config.issuerPort}`,
-        ],
+        ['services/auth/scripts/dev-stack.ts', 'persona'],
         worktree,
         env,
-        policy.checkTimeoutMs,
+        policy.seedTimeoutMs,
         policy.outputBytes,
-        'check',
-        [0, 1],
+        'boot',
+        [0],
         policy.stopTimeoutMs,
       );
-      return { output: checked.stdout, exitCode: checked.exitCode, registry: sectionRegistry(worktree) };
-    } finally {
-      if (child) await stopStack(child, policy.stopTimeoutMs);
+      env = { ...env, ...readEnvFile(join(worktree, '.temp/local-stack/seed.env')) };
+      await runCommand(
+        bun,
+        ['scripts/datasets/cross-media-seed.ts', '--dev'],
+        worktree,
+        env,
+        policy.seedTimeoutMs,
+        policy.outputBytes,
+        'boot',
+        [0],
+        policy.stopTimeoutMs,
+      );
+      mkdirSync(join(worktree, '.temp/local-stack'), { recursive: true });
+      writeFileSync(seeded, `${head}\n`, { flag: 'w' });
     }
+
+    checked = await runCommand(
+      bun,
+      [
+        'scripts/page-data-check.ts',
+        '--base-url',
+        `http://127.0.0.1:${config.webPort}`,
+        '--kernel',
+        `http://127.0.0.1:${config.kernelPort}`,
+        '--auth-origin',
+        `http://127.0.0.1:${config.issuerPort}`,
+      ],
+      worktree,
+      env,
+      policy.checkTimeoutMs,
+      policy.outputBytes,
+      'check',
+      [0, 1],
+      policy.stopTimeoutMs,
+    );
+    registry = sectionRegistry(worktree);
   } catch (error) {
-    if (error instanceof PageDataStackError) throw error;
-    throw new PageDataStackError('boot', errorMessage(error));
+    failed = true;
+    failure = error;
+  } finally {
+    if (child) await stopStack(child, policy.stopTimeoutMs);
   }
+  if (failed) {
+    if (failure instanceof PageDataStackError)
+      throw new PageDataStackError(
+        failure.phase,
+        failure.message,
+        failure.firstErrorLine,
+        combineFailureOutput(stackCapture.value, failure.output || failure.message),
+      );
+    const message = errorMessage(failure);
+    throw new PageDataStackError('boot', message, undefined, stackCapture.value || message);
+  }
+  const result = checked!;
+  return {
+    output: result.stdout,
+    exitCode: result.exitCode,
+    registry: registry!,
+    stackOutput: stackCapture.value,
+  };
 }

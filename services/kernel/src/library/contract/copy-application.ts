@@ -230,4 +230,5 @@ export interface CopyAccountAuthority<Client, Owner, Time> {
 }
 export interface CopyReleasedDefinitions<Source, Release> {
   read(source: Source, digest: string, options?: Readonly<{ composed?: boolean }>): Promise<Release | null>;
+  active(source: Source): Promise<{ digest: string; release: Release } | null>;
 }

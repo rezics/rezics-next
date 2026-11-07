@@ -18,6 +18,8 @@ export {
 } from './identity-statements.ts';
 export { createSearchPreparationAdapter, type SearchPreparationAdapterPorts } from './search-scope.ts';
 export { createContentPublicationAdapter, type ContentPublicationAdapterPorts } from './publication-foreign.ts';
+export { createNativePublicOutputAdapter, type NativePublicOutputAdapterPorts } from './native-public-output.ts';
+export { observeNativePublicCollectionOutput } from '../collection-source-native.ts';
 export { createNativeSourceCaptureAdapter } from './native-source.ts';
 export {
   createScopedSearchLibraryOperations,
@@ -82,3 +84,10 @@ export type {
   NativeLibraryPresentationPorts,
   LibraryPresentationDependencies,
 } from './presentation.ts';
+
+/** Copy construction leaves used only by composition. */
+export { readLibraryProfileSourceObservation, readLibraryProfileAnchor } from '../profile-source.ts';
+export { createNativeCopyProducers } from './copy-producers.ts';
+export { createCopyOperationPlans } from '../copy-operation-bounds.ts';
+export type { NativeCopyDefinitions, CopyProfileSource } from '../copy-model.ts';
+export { createLibraryCommandRunner } from '../command-support.ts';

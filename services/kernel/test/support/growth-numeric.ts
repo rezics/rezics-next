@@ -34,6 +34,63 @@ function finiteResult(value: number, label: string): number {
   return value;
 }
 
+/** Arithmetic range failure while evaluating an approximate growth model. */
+export class GrowthModelArithmeticError extends TypeError {
+  constructor(message: string) {
+    super(message);
+    this.name = 'GrowthModelArithmeticError';
+  }
+}
+
+function modelFiniteResult(value: number, label: string): number {
+  if (!Number.isFinite(value)) throw new GrowthModelArithmeticError(`${label} is not representable as a finite number`);
+  return value;
+}
+
+function requireModelOperands(values: readonly number[], label: string): void {
+  for (const value of values)
+    if (!Number.isFinite(value)) throw new GrowthModelArithmeticError(`${label} requires finite operands`);
+}
+
+/** IEEE-754 rounded addition for approximate model calculations. */
+export function modelAdd(left: number, right: number, label: string): number {
+  requireModelOperands([left, right], label);
+  return modelFiniteResult(left + right, label);
+}
+
+/** IEEE-754 rounded subtraction for approximate model calculations. */
+export function modelSubtract(left: number, right: number, label: string): number {
+  requireModelOperands([left, right], label);
+  return modelFiniteResult(left - right, label);
+}
+
+/** IEEE-754 rounded multiplication; an underflowed derived term may round to zero. */
+export function modelMultiply(left: number, right: number, label: string): number {
+  requireModelOperands([left, right], label);
+  return modelFiniteResult(left * right, label);
+}
+
+/** IEEE-754 rounded division; an underflowed derived ratio may round to zero. */
+export function modelDivide(numerator: number, denominator: number, label: string): number {
+  requireModelOperands([numerator, denominator], label);
+  if (denominator === 0) throw new GrowthModelArithmeticError(`${label} cannot divide by zero`);
+  return modelFiniteResult(numerator / denominator, label);
+}
+
+/** Compensated sum for short, normalized model terms. */
+export function modelSum(values: readonly number[], label: string): number {
+  let sum = 0;
+  let correction = 0;
+  for (const value of values) {
+    requireModelOperands([value], label);
+    const next = modelFiniteResult(sum + value, label);
+    const residual = Math.abs(sum) >= Math.abs(value) ? sum - next + value : value - next + sum;
+    correction = modelAdd(correction, residual, `${label} correction`);
+    sum = next;
+  }
+  return modelAdd(sum, correction, label);
+}
+
 export function checkedAdd(left: number, right: number, label: string): number {
   const result = finiteResult(left + right, label);
   if (right !== 0 && result === left) throw new TypeError(`${label} loses a non-zero contribution`);
@@ -79,14 +136,29 @@ function binaryParts(value: number): { readonly mantissa: number; readonly expon
 
 /** Computes a*b/c without overflowing a representable final ratio in an intermediate product. */
 export function checkedMultiplyDivide(a: number, b: number, c: number, label: string): number {
+  return multiplyDivide(a, b, c, label, false);
+}
+
+/** Computes a*b/c with IEEE-754 rounding for approximate model calculations. */
+export function modelMultiplyDivide(a: number, b: number, c: number, label: string): number {
+  return multiplyDivide(a, b, c, label, true);
+}
+
+function multiplyDivide(a: number, b: number, c: number, label: string, allowUnderflow: boolean): number {
   for (const [operand, value] of [
     ['a', a],
     ['b', b],
     ['c', c],
   ] as const) {
-    requireFiniteNumber(value, `${label} operand ${operand}`);
+    if (allowUnderflow) {
+      if (!Number.isFinite(value))
+        throw new GrowthModelArithmeticError(`${label} operand ${operand} must be a finite number`);
+    } else requireFiniteNumber(value, `${label} operand ${operand}`);
   }
-  if (c === 0) throw new TypeError(`${label} cannot divide by zero`);
+  if (c === 0) {
+    if (allowUnderflow) throw new GrowthModelArithmeticError(`${label} cannot divide by zero`);
+    throw new TypeError(`${label} cannot divide by zero`);
+  }
   if (a === 0 || b === 0) return 0;
   const left = binaryParts(a);
   const right = binaryParts(b);
@@ -101,10 +173,20 @@ export function checkedMultiplyDivide(a: number, b: number, c: number, label: st
     mantissa *= 2;
     exponent -= 1;
   }
-  if (exponent > 1023) throw new TypeError(`${label} is not representable as a finite number`);
-  if (exponent < -1074) throw new TypeError(`${label} is too small to represent without underflow`);
-  const result = finiteResult(mantissa * 2 ** exponent, label);
-  if (result === 0) throw new TypeError(`${label} is too small to represent without underflow`);
+  if (exponent > 1023) {
+    if (allowUnderflow) throw new GrowthModelArithmeticError(`${label} is not representable as a finite number`);
+    throw new TypeError(`${label} is not representable as a finite number`);
+  }
+  if (allowUnderflow && exponent < -1075) return (a < 0 !== b < 0) !== c < 0 ? -0 : 0;
+  if (allowUnderflow && exponent === -1075) {
+    const result = mantissa > 1 ? Number.MIN_VALUE : 0;
+    return (a < 0 !== b < 0) !== c < 0 ? -result : result;
+  }
+  if (!allowUnderflow && exponent < -1074) throw new TypeError(`${label} is too small to represent without underflow`);
+  const result = allowUnderflow
+    ? modelFiniteResult(mantissa * 2 ** exponent, label)
+    : finiteResult(mantissa * 2 ** exponent, label);
+  if (!allowUnderflow && result === 0) throw new TypeError(`${label} is too small to represent without underflow`);
   const isNegative = (a < 0 !== b < 0) !== c < 0;
   return isNegative ? -result : result;
 }

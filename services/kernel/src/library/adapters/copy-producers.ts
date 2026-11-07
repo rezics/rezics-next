@@ -1,11 +1,7 @@
-/** Standalone factory compatibility uses the same native producers that ordinary composition binds. */
-import { createNativeCopyAccountAdmission } from '../access-port.ts';
-import { nativeReleasedDefinitions } from '../../semantic/adapters/index.ts';
-import type { NativeCopyConfig, NativeCopyProducers } from './copies.ts';
+/** Compatibility construction uses the installed native producers, including standalone preloads. */
+import { requireLibraryCopyBinding } from '../domain-binding.ts';
+import type { NativeCopyConfig, NativeCopyProducers } from '../copy-model.ts';
 
 export function createNativeCopyProducers(config: NativeCopyConfig): NativeCopyProducers {
-  return { account: createNativeCopyAccountAdmission(config), definitions: nativeReleasedDefinitions() };
-}
-export function copyReleasedDefinitions() {
-  return nativeReleasedDefinitions();
+  return requireLibraryCopyBinding().producers(config);
 }

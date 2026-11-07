@@ -28,7 +28,10 @@ test('a series is compatible with a declared bound when some allowed family plac
   const fiveScales = [1, 4, 16, 64, 256];
   const logSlope = 2 / Math.log(4);
   const staircase = fiveScales.map((scale) => 10 + logSlope * Math.log(scale));
-  expect(boundsFor(fiveScales, staircase, 'logarithmic').outcome).toBe('compatible');
+  const logarithmic = boundsFor(fiveScales, staircase, 'logarithmic');
+  expect(logarithmic.outcome).toBe('compatible');
+  expect(logarithmic.families.logarithmic.factor).toBe(0);
+  expect(logarithmic.families.logarithmic.residuals.every(Number.isFinite)).toBe(true);
   expect(boundsFor(fiveScales, staircase, 'constant').outcome).toBe('violation');
 
   const threeScales = [1, 4, 16];
@@ -86,7 +89,9 @@ test('a feasible family fit stays compatible when its slope interval has room', 
     return { scale, repetitions: [value, value, value], uncertainty: value * 0.95 };
   });
 
-  expect(classifySeries(points, 'logarithmic').outcome).toBe('compatible');
+  const result = classifySeries(points, 'logarithmic');
+  expect(result.outcome).toBe('compatible');
+  expect(Object.values(result.families).every(({ residuals }) => residuals.every(Number.isFinite))).toBe(true);
 });
 
 test('an index staircase admits bounded level changes on top of an allowed family and reports its values', () => {
@@ -97,6 +102,7 @@ test('an index staircase admits bounded level changes on top of an allowed famil
   expect(result.staircase).toHaveLength(scales.length);
   expect(result.staircase[0]).toBe(0);
   expect(result.staircase.some((value) => value > 0)).toBe(true);
+  expect(result.families.logarithmic.residuals.every(Number.isFinite)).toBe(true);
   for (let index = 1; index < result.staircase.length; index += 1) {
     const rise = result.staircase[index]! - result.staircase[index - 1]!;
     expect(rise).toBeGreaterThanOrEqual(0);

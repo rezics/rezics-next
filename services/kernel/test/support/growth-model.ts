@@ -1,9 +1,10 @@
 import {
-  checkedAdd,
-  checkedDivide,
-  checkedMultiply,
-  checkedMultiplyDivide,
-  checkedSubtract,
+  modelAdd,
+  modelDivide,
+  modelMultiply,
+  modelMultiplyDivide,
+  modelSum,
+  modelSubtract,
   GROWTH_REPETITION_CAPACITY,
   numericExtent,
   requireDenseArray,
@@ -100,14 +101,14 @@ function familyCoordinates(points: readonly SeriesPoint[], family: GrowthFamily)
         const coordinate =
           Number.isFinite(relativeDifference) && (relativeDifference !== 0 || difference === 0)
             ? Math.log1p(relativeDifference)
-            : checkedSubtract(Math.log(scale), Math.log(firstScale), 'Logarithmic scale coordinate');
+            : modelSubtract(Math.log(scale), Math.log(firstScale), 'Logarithmic scale coordinate');
         if (!Number.isFinite(coordinate)) throw new TypeError('Logarithmic scale coordinate is not finite');
         return coordinate;
       });
       break;
     case 'linear':
       coordinates = points.map(({ scale }) => {
-        const ratio = checkedDivide(scale, firstScale, 'Linear scale ratio');
+        const ratio = modelDivide(scale, firstScale, 'Linear scale ratio');
         const coordinate = ratio - 1;
         if (!Number.isFinite(coordinate) || (scale > firstScale && coordinate === 0))
           throw new TypeError('Linear scale coordinate is not representable');
@@ -124,7 +125,7 @@ function familyCoordinates(points: readonly SeriesPoint[], family: GrowthFamily)
 }
 
 function roundingTolerance(left: number, right: number): number {
-  return checkedMultiply(
+  return modelMultiply(
     ROUNDING_ULPS * Number.EPSILON,
     Math.max(1, Math.abs(left), Math.abs(right)),
     'Feasibility rounding tolerance',
@@ -133,7 +134,7 @@ function roundingTolerance(left: number, right: number): number {
 
 function noGreaterThan(left: number, right: number): boolean {
   return (
-    left <= right || checkedSubtract(left, right, 'Feasibility comparison difference') <= roundingTolerance(left, right)
+    left <= right || modelSubtract(left, right, 'Feasibility comparison difference') <= roundingTolerance(left, right)
   );
 }
 
@@ -162,26 +163,21 @@ function isFeasible(
   let maximumB = Number.POSITIVE_INFINITY;
   for (const lower of lowerLines) {
     for (const upper of upperLines) {
-      const coefficient = checkedSubtract(upper.x, lower.x, 'Feasibility slope coefficient');
-      const available = checkedSubtract(upper.intercept, lower.intercept, 'Feasibility intercept gap');
+      const coefficient = modelSubtract(upper.x, lower.x, 'Feasibility slope coefficient');
+      const available = modelSubtract(upper.intercept, lower.intercept, 'Feasibility intercept gap');
       if (coefficient === 0) {
         if (!noGreaterThan(0, available)) return false;
       } else if (coefficient > 0) {
         const limit = available / coefficient;
         if (limit === Number.NEGATIVE_INFINITY) return false;
         if (limit !== Number.POSITIVE_INFINITY) {
-          if (!Number.isFinite(limit) || (available !== 0 && limit === 0))
-            throw new TypeError('Feasibility maximum slope is not representable');
+          if (!Number.isFinite(limit)) throw new TypeError('Feasibility maximum slope is not representable');
           if (limit < 0 && !noGreaterThan(0, limit)) return false;
           maximumB = Math.min(maximumB, Math.max(0, limit));
         }
       } else {
         const limit = available / coefficient;
-        if (
-          limit === Number.POSITIVE_INFINITY ||
-          (!Number.isFinite(limit) && limit !== Number.NEGATIVE_INFINITY) ||
-          (available !== 0 && limit === 0)
-        )
+        if (limit === Number.POSITIVE_INFINITY || (!Number.isFinite(limit) && limit !== Number.NEGATIVE_INFINITY))
           throw new TypeError('Feasibility minimum slope is not representable');
         if (limit !== Number.NEGATIVE_INFINITY) minimumB = Math.max(minimumB, limit);
       }
@@ -192,27 +188,27 @@ function isFeasible(
   // Prefer the interior of a feasible range so rounding at its edge does not reject a valid intercept.
   const b =
     Number.isFinite(maximumB) && maximumB > minimumB
-      ? checkedAdd(
+      ? modelAdd(
           minimumB,
-          checkedSubtract(maximumB, minimumB, 'Feasible slope interval width') / 2,
+          modelSubtract(maximumB, minimumB, 'Feasible slope interval width') / 2,
           'Feasible slope midpoint',
         )
       : minimumB;
   const lowerA = Math.max(
     0,
     ...intervals.map(({ lower }, index) =>
-      checkedSubtract(
+      modelSubtract(
         lower,
-        checkedMultiply(b, coordinates[index]!, 'Feasible lower prediction'),
+        modelMultiply(b, coordinates[index]!, 'Feasible lower prediction'),
         'Feasible lower intercept',
       ),
     ),
   );
   const upperA = Math.min(
     ...intervals.map(({ upper }, index) =>
-      checkedSubtract(
+      modelSubtract(
         upper,
-        checkedMultiply(b, coordinates[index]!, 'Feasible upper prediction'),
+        modelMultiply(b, coordinates[index]!, 'Feasible upper prediction'),
         'Feasible upper intercept',
       ),
     ),
@@ -224,12 +220,21 @@ function expandedIntervals(
   medians: readonly number[],
   uncertainties: readonly number[],
   factor: number,
+  clampFactorRange = false,
 ): SeriesInterval[] {
   return medians.map((median, index) => {
-    const allowance = checkedMultiply(uncertainties[index]!, factor, 'Expanded uncertainty interval');
+    const product = uncertainties[index]! * factor;
+    const allowance =
+      clampFactorRange && !Number.isFinite(product)
+        ? Number.MAX_VALUE
+        : modelMultiply(uncertainties[index]!, factor, 'Expanded uncertainty interval');
+    const upper = median + allowance;
     return {
-      lower: Math.max(0, checkedSubtract(median, allowance, 'Expanded uncertainty lower bound')),
-      upper: checkedAdd(median, allowance, 'Expanded uncertainty upper bound'),
+      lower: Math.max(0, modelSubtract(median, allowance, 'Expanded uncertainty lower bound')),
+      upper:
+        clampFactorRange && !Number.isFinite(upper)
+          ? Number.MAX_VALUE
+          : modelAdd(median, allowance, 'Expanded uncertainty upper bound'),
     };
   });
 }
@@ -250,14 +255,8 @@ function uncertaintyFactor(
   uncertainties: readonly number[],
   family: GrowthFamily,
 ): number {
-  const fitsAt = (factor: number): boolean => {
-    try {
-      return isFeasible(coordinates, runningMaximumEnvelope(expandedIntervals(medians, uncertainties, factor)), family);
-    } catch (error) {
-      if (error instanceof TypeError) return false;
-      throw error;
-    }
-  };
+  const fitsAt = (factor: number): boolean =>
+    isFeasible(coordinates, runningMaximumEnvelope(expandedIntervals(medians, uncertainties, factor, true)), family);
   if (fitsAt(0)) return 0;
   if (uncertainties.every((uncertainty) => uncertainty === 0)) return Number.POSITIVE_INFINITY;
 
@@ -274,9 +273,9 @@ function uncertaintyFactor(
   }
 
   while (high - low > 1e-9) {
-    const middle = checkedAdd(
+    const middle = modelAdd(
       low,
-      checkedSubtract(high, low, 'Uncertainty factor search width') / 2,
+      modelSubtract(high, low, 'Uncertainty factor search width') / 2,
       'Uncertainty factor midpoint',
     );
     if (middle === low || middle === high) break;
@@ -310,8 +309,8 @@ function leastSquaresFit(
 
     let average = values[0]!;
     for (let index = 1; index < values.length; index += 1) {
-      const difference = checkedSubtract(values[index]!, average, `${label} mean difference`);
-      average = checkedAdd(average, checkedDivide(difference, index + 1, `${label} incremental mean`), `${label} mean`);
+      const difference = modelSubtract(values[index]!, average, `${label} mean difference`);
+      average = modelAdd(average, modelDivide(difference, index + 1, `${label} incremental mean`), `${label} mean`);
     }
     return average;
   };
@@ -319,32 +318,26 @@ function leastSquaresFit(
   if (family === 'constant') return { a: meanY, b: 0 };
 
   const meanX = mean(coordinates, 'Coordinate');
-  const xDifferences = coordinates.map((x) => checkedSubtract(x, meanX, 'Regression coordinate difference'));
-  const yDifferences = medians.map((y) => checkedSubtract(y, meanY, 'Regression median difference'));
+  const xDifferences = coordinates.map((x) => modelSubtract(x, meanX, 'Regression coordinate difference'));
+  const yDifferences = medians.map((y) => modelSubtract(y, meanY, 'Regression median difference'));
   const xScale = Math.max(...xDifferences.map(Math.abs));
   const yScale = Math.max(...yDifferences.map(Math.abs));
   if (xScale === 0) throw new TypeError('Regression coordinates have no representable spread');
-  let variance = 0;
-  let covariance = 0;
+  const varianceTerms: number[] = [];
+  const covarianceTerms: number[] = [];
   for (let index = 0; index < count; index += 1) {
-    const x = checkedDivide(xDifferences[index]!, xScale, 'Normalized regression coordinate');
-    const y = yScale === 0 ? 0 : checkedDivide(yDifferences[index]!, yScale, 'Normalized regression median');
-    variance = checkedAdd(
-      variance,
-      checkedMultiply(x, x, 'Normalized regression variance term'),
-      'Regression variance',
-    );
-    covariance = checkedAdd(
-      covariance,
-      checkedMultiply(x, y, 'Normalized regression covariance term'),
-      'Regression covariance',
-    );
+    const x = modelDivide(xDifferences[index]!, xScale, 'Normalized regression coordinate');
+    const y = yScale === 0 ? 0 : modelDivide(yDifferences[index]!, yScale, 'Normalized regression median');
+    varianceTerms.push(modelMultiply(x, x, 'Normalized regression variance term'));
+    covarianceTerms.push(modelMultiply(x, y, 'Normalized regression covariance term'));
   }
 
-  const normalizedB = checkedDivide(covariance, variance, 'Normalized regression slope');
-  const unconstrainedB = yScale === 0 ? 0 : checkedMultiplyDivide(normalizedB, yScale, xScale, 'Regression slope');
-  const fittedMean = checkedMultiply(unconstrainedB, meanX, 'Regression fitted mean');
-  const unconstrainedA = checkedSubtract(meanY, fittedMean, 'Regression intercept');
+  const variance = modelSum(varianceTerms, 'Regression variance');
+  const covariance = modelSum(covarianceTerms, 'Regression covariance');
+  const normalizedB = modelDivide(covariance, variance, 'Normalized regression slope');
+  const unconstrainedB = yScale === 0 ? 0 : modelMultiplyDivide(normalizedB, yScale, xScale, 'Regression slope');
+  const fittedMean = modelMultiply(unconstrainedB, meanX, 'Regression fitted mean');
+  const unconstrainedA = modelSubtract(meanY, fittedMean, 'Regression intercept');
   return { a: unconstrainedA, b: unconstrainedB };
 }
 
@@ -359,9 +352,9 @@ function familyFit(
     a,
     b,
     residuals: medians.map((median, index) =>
-      checkedSubtract(
+      modelSubtract(
         median,
-        checkedAdd(a, checkedMultiply(b, coordinates[index]!, 'Regression fitted value'), 'Regression prediction'),
+        modelAdd(a, modelMultiply(b, coordinates[index]!, 'Regression fitted value'), 'Regression prediction'),
         'Regression residual',
       ),
     ),
@@ -382,7 +375,7 @@ function allowedFamilies(bound: GrowthModelBound): readonly GrowthFamily[] {
 
 type Inequality = Readonly<{ coefficients: readonly number[]; limit: number }>;
 
-/** Fourier-Motzkin elimination gives exact linear feasibility for the small (at most five scale) model. */
+/** Fourier-Motzkin elimination evaluates the small (at most five scale) model with rounded arithmetic. */
 function staircaseFit(
   points: readonly SeriesPoint[],
   intervals: readonly SeriesInterval[],
@@ -443,16 +436,16 @@ function staircaseFit(
             index === variable
               ? []
               : [
-                  checkedAdd(
-                    checkedDivide(value, up, 'Staircase upper elimination coefficient'),
-                    checkedDivide(lower.coefficients[index]!, down, 'Staircase lower elimination coefficient'),
+                  modelAdd(
+                    modelDivide(value, up, 'Staircase upper elimination coefficient'),
+                    modelDivide(lower.coefficients[index]!, down, 'Staircase lower elimination coefficient'),
                     'Staircase eliminated coefficient',
                   ),
                 ],
           ),
-          limit: checkedAdd(
-            checkedDivide(upper.limit, up, 'Staircase upper elimination limit'),
-            checkedDivide(lower.limit, down, 'Staircase lower elimination limit'),
+          limit: modelAdd(
+            modelDivide(upper.limit, up, 'Staircase upper elimination limit'),
+            modelDivide(lower.limit, down, 'Staircase lower elimination limit'),
             'Staircase eliminated limit',
           ),
         });
@@ -469,22 +462,17 @@ function staircaseFit(
     let upper = Number.POSITIVE_INFINITY;
     for (const inequality of stages[variables - variable - 1]!) {
       const coefficient = inequality.coefficients[variable]!;
-      const rest = inequality.coefficients.reduce(
-        (sum, value, index) =>
-          index === variable
-            ? sum
-            : checkedAdd(
-                sum,
-                checkedMultiply(value, solution[index]!, 'Staircase constraint term'),
-                'Staircase constraint sum',
-              ),
-        0,
+      const rest = modelSum(
+        inequality.coefficients.flatMap((value, index) =>
+          index === variable ? [] : [modelMultiply(value, solution[index]!, 'Staircase constraint term')],
+        ),
+        'Staircase constraint sum',
       );
       if (coefficient > 0)
         upper = Math.min(
           upper,
-          checkedDivide(
-            checkedSubtract(inequality.limit, rest, 'Staircase upper bound numerator'),
+          modelDivide(
+            modelSubtract(inequality.limit, rest, 'Staircase upper bound numerator'),
             coefficient,
             'Staircase upper bound',
           ),
@@ -492,23 +480,19 @@ function staircaseFit(
       else if (coefficient < 0)
         lower = Math.max(
           lower,
-          checkedDivide(
-            checkedSubtract(inequality.limit, rest, 'Staircase lower bound numerator'),
+          modelDivide(
+            modelSubtract(inequality.limit, rest, 'Staircase lower bound numerator'),
             coefficient,
             'Staircase lower bound',
           ),
         );
-      else if (rest > inequality.limit && checkedSubtract(rest, inequality.limit, 'Staircase feasibility gap') > 1e-8)
+      else if (rest > inequality.limit && modelSubtract(rest, inequality.limit, 'Staircase feasibility gap') > 1e-8)
         return undefined;
     }
-    if (lower > upper && checkedSubtract(lower, upper, 'Staircase variable range') > 1e-8) return undefined;
+    if (lower > upper && modelSubtract(lower, upper, 'Staircase variable range') > 1e-8) return undefined;
     solution[variable] =
       Number.isFinite(lower) && Number.isFinite(upper)
-        ? checkedAdd(
-            lower,
-            checkedSubtract(upper, lower, 'Staircase variable interval') / 2,
-            'Staircase variable midpoint',
-          )
+        ? modelAdd(lower, modelSubtract(upper, lower, 'Staircase variable interval') / 2, 'Staircase variable midpoint')
         : Number.isFinite(lower)
           ? lower
           : Number.isFinite(upper)
@@ -535,7 +519,7 @@ export function classifySeries(
   const intervals = runningMaximumEnvelope(expandedIntervals(medians, uncertainties, 1));
   const adjacentDifferences = medians
     .slice(1)
-    .map((median, index) => checkedSubtract(median, medians[index]!, 'Adjacent median difference'));
+    .map((median, index) => modelSubtract(median, medians[index]!, 'Adjacent median difference'));
   const families = Object.fromEntries(
     FAMILIES.map((family) => {
       const coordinates = familyCoordinates(points, family);
@@ -563,8 +547,8 @@ export function classifySeries(
 
   const confidenceIntervals = runningMaximumEnvelope(
     ranges.map(({ lower, upper }, index) => ({
-      lower: Math.max(0, checkedSubtract(lower, uncertainties[index]!, 'Confidence interval lower bound')),
-      upper: checkedAdd(upper, uncertainties[index]!, 'Confidence interval upper bound'),
+      lower: Math.max(0, modelSubtract(lower, uncertainties[index]!, 'Confidence interval lower bound')),
+      upper: modelAdd(upper, uncertainties[index]!, 'Confidence interval upper bound'),
     })),
   );
   let evidenceFits = ordinaryCompatible(confidenceIntervals);

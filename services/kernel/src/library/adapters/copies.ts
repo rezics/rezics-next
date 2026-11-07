@@ -1,4 +1,3 @@
-import type { Pool } from 'pg';
 import {
   authoritativeTimeValue,
   mintReadTime,
@@ -6,17 +5,14 @@ import {
   type AuthoritativeTime,
   type CommandTransaction,
 } from '../../command/command.ts';
-import type { KernelClock } from '../../clock.ts';
 import { withConnection } from '../../database/pool.ts';
 import { receiptKeysFor } from '../../command/receipt-key.ts';
 import { ProblemError } from '../../http/problem-error.ts';
 import { readPartition } from '../../partition/partition.ts';
-import type { Access, AccountActor } from '../../request/access.ts';
+import type { AccountActor } from '../../request/access.ts';
 import { withRequestDeadline } from '../../request/deadline.ts';
 import { newId, partitionOf } from '../../route/route.ts';
 import { decodeCursor, encodeCursor } from '../../tokens/cursor.ts';
-import type { KeyRing } from '../../tokens/seal.ts';
-import { createLibraryCommandRunner } from '../command-support.ts';
 import { LibraryNotFoundError, requireRoute, sameAccountRoute, workStepDeadline } from '../collection-command-work.ts';
 import type { Copy, CopyChanges } from '../entry-model.ts';
 import * as store from '../entry-store.ts';
@@ -25,24 +21,19 @@ import { admitEntryAttempt } from '../entry-lifecycle.ts';
 import { resolveSubject } from '../subject-anchor.ts';
 import { decodeLibraryProfilePin } from '../profile-pin.ts';
 import {
+  createCopyOperationPlans,
   bindCopyCommandOperation,
   consumeCopyCommandAttempt,
-  copyAccountGatePlan,
   copyDetailReadStatementPlan,
-  copyInventoryOperationPlan,
-  copyMutationOperationPlan,
   copyPrivateReadStatementPlan,
-  copyPresentationOperationPlan,
-  copyReadOperationPlan,
   copyRetentionReadStatementPlan,
   copyRetentionRestoreStatementPlan,
   executeCopyOperation,
 } from '../copy-operation-bounds.ts';
-import {
-  readLibraryProfileSourceObservation,
-  sameLibraryProfileAnchor,
-  type LibraryProfileSource,
-} from '../profile-source.ts';
+import type { LibraryProfileSource } from '../profile-source.ts';
+import { sameCopyProfileAnchor } from '../copy-model.ts';
+import type { NativeCopyConfig, NativeCopyProducers, CopySourceObservation } from '../copy-model.ts';
+export type { NativeCopyConfig, NativeCopyProducers } from '../copy-model.ts';
 import { deadlineClient, within } from '../access-port.ts';
 import type { CopyPresentation } from '../copy-model.ts';
 import { prepareCopyPresentation } from '../copy-presentation.ts';
@@ -54,22 +45,10 @@ import {
   type CopyConditionPatch,
 } from '../copy-condition.ts';
 import type { CommandAttempt, CommandOutcome } from '../../command/command.ts';
-import type { Release } from '@rezics/definitions';
-import type {
-  CopyApplicationPorts,
-  CopyPatch,
-  CopyAccountAuthority,
-  CopyReleasedDefinitions,
-} from '../contract/index.ts';
+import type { CopyApplicationPorts, CopyPatch } from '../contract/index.ts';
 import { CopyConflictError } from '../contract/index.ts';
 
-export type NativeCopyConfig = { pool: Pool; access: Access; tokens: KeyRing; clock?: KernelClock };
 type Command = { transactionId: string; time: AuthoritativeTime };
-type SourceObservation = Awaited<ReturnType<typeof readLibraryProfileSourceObservation>>;
-export type NativeCopyProducers = {
-  account: CopyAccountAuthority<CommandTransaction, AccountActor, AuthoritativeTime>;
-  definitions: CopyReleasedDefinitions<Pool | CommandTransaction, Release>;
-};
 export type NativeCopyTypes = {
   transaction: CommandTransaction;
   time: AuthoritativeTime;
@@ -79,7 +58,7 @@ export type NativeCopyTypes = {
   copy: Copy;
   fact: NonNullable<Awaited<ReturnType<typeof store.readCopyFact>>>;
   source: LibraryProfileSource;
-  observation: SourceObservation;
+  observation: CopySourceObservation;
   retained: NonNullable<Awaited<ReturnType<ReturnType<typeof copyPrivateReadStatementPlan>['run']>>>;
   detail: {
     copy: Copy;
@@ -117,13 +96,19 @@ function merged(current: Copy, patch: CopyPatch): CopyChanges {
 }
 
 /** A missing row and another account's row are the same result, so a conflict cannot disclose either. */
-async function lockOwned(tx: CommandTransaction, route: number, accountId: string, copyId: string): Promise<Copy> {
+async function lockOwned(
+  tx: CommandTransaction,
+  route: number,
+  accountId: string,
+  copyId: string,
+  profileReadWork: NativeCopyProducers['work']['sessionProfileMigrationWork'],
+): Promise<Copy> {
   await tx.query('SELECT copy_id FROM library.copy WHERE route = $1 AND copy_id = $2 AND account_id = $3 FOR UPDATE', [
     route,
     copyId,
     accountId,
   ]);
-  const current = await store.readCopy(tx, route, copyId);
+  const current = await store.readCopy(tx, route, copyId, profileReadWork);
   if (!current || current.accountId !== accountId) throw new LibraryNotFoundError();
   return current;
 }
@@ -149,7 +134,8 @@ export function createNativeCopyPorts(
   producers: NativeCopyProducers,
 ): CopyApplicationPorts<NativeCopyTypes> {
   const { pool, access, tokens, clock } = config;
-  const runner = createLibraryCommandRunner({ pool, ...(clock === undefined ? {} : { clock }) });
+  const plans = createCopyOperationPlans(producers.work);
+  const runner = producers.commands;
   async function readOnly<T>(
     owner: AccountActor,
     body: (client: CommandTransaction) => Promise<T>,
@@ -174,7 +160,7 @@ export function createNativeCopyPorts(
     original: NativeCopyTypes['observation'],
     latest: NativeCopyTypes['observation'],
   ): LibraryProfileSource {
-    if (original && !sameLibraryProfileAnchor(original.anchor, latest?.anchor ?? null))
+    if (original && !sameCopyProfileAnchor(original.anchor, latest?.anchor ?? null))
       throw new ProblemError('semantic_not_ready');
     if (!original && latest) throw new ProblemError('semantic_not_ready');
     if (!original || !latest) return null;
@@ -259,21 +245,16 @@ export function createNativeCopyPorts(
       );
     },
     admitAttempt: (owner, action, attempt, deadline) => admitEntryAttempt(config, owner, action, attempt, deadline),
-    plans: {
-      gate: copyAccountGatePlan,
-      mutation: copyMutationOperationPlan,
-      read: copyReadOperationPlan,
-      presentation: copyPresentationOperationPlan,
-      inventory: copyInventoryOperationPlan,
-    },
+    plans,
     execute: executeCopyOperation,
     bind: bindCopyCommandOperation,
     consume: consumeCopyCommandAttempt,
     source: (owner, subjectId, at, deadline) =>
-      readLibraryProfileSourceObservation({ pool, access, actor: owner, at, deadline }, subjectId),
+      producers.profileSource.observe({ pool, access, actor: owner, at, deadline }, subjectId),
     currentSource: preparedCurrentSource,
-    read: store.readCopy,
-    lock: lockOwned,
+    read: (tx, route, copyId) => store.readCopy(tx, route, copyId, producers.work.sessionProfileMigrationWork),
+    lock: (tx, route, accountId, copyId) =>
+      lockOwned(tx, route, accountId, copyId, producers.work.sessionProfileMigrationWork),
     fact: store.readCopyFact,
     noOpenLoan: assertNoOpenLoan,
     async insert(tx, command, route, accountId, copyId, input, source) {
@@ -400,11 +381,18 @@ export function createNativeCopyPorts(
     },
     observeDetail,
     presentation: (owner, fact, at, deadline, languages) =>
-      prepareCopyPresentation({ pool, access, actor: owner, at, deadline }, fact, languages, producers.definitions),
+      prepareCopyPresentation(
+        { pool, access, actor: owner, at, deadline },
+        fact,
+        languages,
+        producers.definitions,
+        producers.profileSource,
+      ),
     partition: (tx, route) => readPartition(tx, partitionOf(route)).then((partition) => partition ?? null),
     decodeCursor: (binding, cursor) => decodeCursor(tokens, binding, cursor),
     encodeCursor: (binding, cursor) => encodeCursor(tokens, binding, cursor),
-    page: store.pageCopies,
+    page: (tx, route, accountId, page, subjectId, kind, status) =>
+      store.pageCopies(tx, route, accountId, page, subjectId, kind, status, producers.work.sessionProfileMigrationWork),
     inventoryValues: readCopyInventoryValues,
     inventory: (values, deadline, languages) =>
       prepareCopyInventory(pool, values, deadline, languages, producers.definitions),

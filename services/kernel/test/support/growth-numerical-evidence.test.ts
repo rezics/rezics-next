@@ -2,6 +2,14 @@ import { expect, test } from 'bun:test';
 import { growthViolations } from './growth-bound.ts';
 import { costOf } from './growth-cost.ts';
 import { medianCounted } from './growth-counters.ts';
+import { checkedAdd, modelAdd, modelSum } from './growth-numeric.ts';
+
+test('rounded model arithmetic accepts sub-ULP terms while exact arithmetic still detects lost contributions', () => {
+  const subUlp = Number.EPSILON / 4;
+  expect(modelAdd(1, subUlp, 'Regression term')).toBe(1);
+  expect(modelSum([1, subUlp, -1], 'Normalized regression covariance')).toBe(subUlp);
+  expect(() => checkedAdd(1, subUlp, 'Counted work')).toThrow(/loses a non-zero contribution/);
+});
 
 test('negative physical plan work is rejected before cost evidence exists', () => {
   expect(() =>

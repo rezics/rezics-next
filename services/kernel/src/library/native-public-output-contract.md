@@ -6,12 +6,15 @@ output page, native lock, native hold or native transfer establishes none of tha
 The native addition uses the existing public observation and output page algorithm. Working/private Source
 observations, publication writer authorization and account Source custody are separate authorities.
 
+Decision: composition builds the native operation from Library's metadata observation and Semantic's persisted disposition lock, installs it as the Library application, and supplies that operation set directly to Semantic capture.
+
 ## Public tuple and receiving identity
 
 The six callable operations are exported from `collection-source-native.ts` and implemented in
-`native-public-output-custody.ts`; their shared types live in `native-public-output-contract.ts`. They import the
-existing `NativePublicOutputIdentity`, `NativeOutputActivation`, `CollectionOutputPublication`, `CollectionOutputRef`,
-`IdentityNativeReceipt`, `ListingStamp`, raw key and eight-axis work types.
+`native-public-output-custody.ts`; their shared types live in the public Library contract
+`contract/native-public-output.ts`. `native-public-output-contract.ts` remains a compatibility type re-export. The
+contract uses the existing `NativePublicOutputIdentity`, `NativeOutputActivation`, publication/reference shape,
+native receipt, listing stamp, raw key and eight-axis work types without importing Semantic or the native source adapter.
 
 A public tuple requires an active public or unlisted dynamic Collection, its active unfenced same-home curator,
 the original active unmoved partition epoch, and the actual selected COMPLETE publication. The publication check
@@ -56,10 +59,9 @@ changed/unavailable without disposing custody.
 ## Receiving disposition and atomic transitions
 
 Transfer and release take only the exact capture/hold/binding selector and expected native disposition receipt.
-They resolve `lockPublicIdentityOutputCaptureDisposition` from the real
-`semantic/identity-scoped-public-source.ts` owner module. There is no injected callback, caller evidence payload,
-boolean completion proof, compatibility adapter, account identity cast or substitute canonical ledger. If that
-export is absent, the normal unavailable result names the exact module/export and performs no transition.
+Composition supplies `resolvePublicIdentityOutputCaptureDisposition` from Semantic's actual producer implementation
+to the native adapter. This required capability resolves persisted Semantic state on the original command; there is
+no caller evidence payload, boolean completion proof, account identity cast or substitute canonical ledger.
 
 The native receiving operand type `LockedPublicOutputDisposition` describes the persisted record needed from that
 lock: the full original binding and accepted receipt, exact disposition component, staged/committed provenance,

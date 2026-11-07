@@ -1,5 +1,6 @@
 import { createAccountTokenProvider, IMPORTER_SCOPES } from './credentials.ts';
 import { createImportTransport } from './import-client.ts';
+import { formatReviewedCatalogueSeedError } from './reviewed-catalogue-contract.ts';
 import { createReviewedCatalogueApplication } from './reviewed-catalogue-application.ts';
 import { releasedReviewedVocabulary } from './reviewed-vocabulary-port.ts';
 
@@ -36,11 +37,18 @@ export async function runReviewedCatalogueSeedCli(argv: readonly string[]): Prom
   process.stdout.write(`${JSON.stringify(result)}\n`);
 }
 
+export function writeReviewedCatalogueSeedFailure(
+  error: unknown,
+  stream: { write(chunk: string): unknown } = process.stderr,
+): void {
+  stream.write(`${formatReviewedCatalogueSeedError(error)}\n`);
+}
+
 if (import.meta.main) {
   try {
     await runReviewedCatalogueSeedCli(Bun.argv.slice(2));
-  } catch {
-    process.stderr.write('Reviewed vocabulary seeding failed.\n');
+  } catch (error) {
+    writeReviewedCatalogueSeedFailure(error);
     process.exitCode = 1;
   }
 }

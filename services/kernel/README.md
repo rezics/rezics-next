@@ -15,6 +15,16 @@ existing snapshot-based row and byte batch admission without a separate target-n
 
 ## Commands
 
+Native test composition loads SQL-backed adapters only after a database environment exists. The test preload
+installs the ordinary native hook eagerly for configured processes; an unconfigured boot imports only the deferred
+test entry and invokes it inside `withThrowawayDatabase`, after migrations and Reylo analysis are ready. Both paths
+call `composition/preload.ts` with the same module identity and preserve its Semantic-before-Search binding order.
+Library's pure ordinary page plan and database provisioning tooling load no native adapters. Library continues to
+consume Access's typed Account reader through composition, with the caller's transaction, authority and deadline.
+Acceptance choice: retain the existing pure Collection budget and real seeded API/Auth/worker/effect/replay boot
+assertions, adding a native binding identity assertion after deferred installation. Workspace typing is worker
+acceptance; the existing boot smoke verifies both database paths after integration.
+
 Run `bun run --cwd services/kernel typecheck` through the [compiler placement contract](../../docs/development/compiler-check-placement.md).
 The command runs TypeScript plus construct on an approved check host against one migrated compiler database.
 An explicit `DATABASE_URL` requires an already admitted physical run. Unavailable placement fails closed;

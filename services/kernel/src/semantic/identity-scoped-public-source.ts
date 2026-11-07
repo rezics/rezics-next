@@ -1,6 +1,11 @@
 import { createHash, randomUUID } from 'node:crypto';
 import canonicalize from 'canonicalize';
-import type { CommandTransaction } from '../command/command.ts';
+import type { CommandTransaction, AuthoritativeTime } from '../command/command.ts';
+import type { Pool } from 'pg';
+import type {
+  PublicOutputCommandContext,
+  PublicOutputDispositionSelection,
+} from '../library/contract/native-public-output.ts';
 import { currentCommand, runCommand } from '../command/command.ts';
 import { readPartition } from '../partition/partition.ts';
 import type {
@@ -373,8 +378,8 @@ export async function verifyPublicIdentitySourceCaptureLocator(
 /** Native receiving uses only persisted Semantic selectors on the actual shared command. */
 export async function lockPublicIdentityOutputCaptureDisposition(
   tx: CommandTransaction,
-  selection: import('../library/native-public-output-contract.ts').PublicOutputDispositionSelection,
-  context: import('../library/native-public-output-contract.ts').PublicOutputCommandContext,
+  selection: PublicOutputDispositionSelection,
+  context: PublicOutputCommandContext<Pool, AuthoritativeTime>,
 ) {
   const { resolvePublicIdentityOutputCaptureDisposition } = await import('./identity-public-output-capture.ts');
   return resolvePublicIdentityOutputCaptureDisposition(tx, selection, context);
