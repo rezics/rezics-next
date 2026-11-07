@@ -21,10 +21,9 @@ export async function createSettingsViteRuntime(
   plugins: Plugin[] = [],
 ): Promise<SettingsViteRuntime> {
   const previous = new Map<string, string | undefined>(
-    ['REZICS_TEST_RUNTIME', testWorkerBindingsEnvName, 'WEB_TEST_STATE_INSTANCE_DIR', 'WEB_VITE_CACHE_DIR'].map((key) => [
-      key,
-      process.env[key],
-    ]),
+    ['REZICS_TEST_RUNTIME', testWorkerBindingsEnvName, 'WEB_TEST_STATE_INSTANCE_DIR', 'WEB_VITE_CACHE_DIR'].map(
+      (key) => [key, process.env[key]],
+    ),
   );
   const stateDirectory = await mkdtemp(join(workspaceRoot, '.temp/settings-vite-state-'));
   const cacheDirectory = await mkdtemp(join(workspaceRoot, '.temp/settings-vite-cache-'));

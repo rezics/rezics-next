@@ -6,10 +6,7 @@ import {
   EditableProfileReadError,
   officialProfileRead,
 } from '../src/settings/editable-profile-source';
-import {
-  loadProfileRecord,
-  saveProfileRecord,
-} from '../src/settings/profile-data';
+import { loadProfileRecord, saveProfileRecord } from '../src/settings/profile-data';
 import {
   profileReadResult,
   profileReadSetupFailure,
