@@ -1,5 +1,5 @@
 import { expect, test } from 'bun:test';
-import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, readdir, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { citedAnimeCreditTargets, journeyTargets, selectJourneyWorks } from '../src/showcase-bangumi-journey.ts';
@@ -11,6 +11,7 @@ import {
   planCrossMediaSeed,
   type CrossMediaTables,
 } from '../src/cross-media-seed.ts';
+import { ImportTransportError } from '../src/import-client.ts';
 import {
   FIRST_PUBLIC_IMPORT_ROWS,
   applyWalkInventoryToCapabilities,
@@ -18,7 +19,10 @@ import {
   currentAnimeCharacterIds,
   firstPublicRow,
   licensedVndbArchive,
+  retireWalkJournals,
   selectPublished,
+  walkChildFailure,
+  walkFailureCause,
   walkInventorySummary,
   walkRepairBrief,
   walkRepairSkipReason,
@@ -339,6 +343,45 @@ test('ordinary CLI admits loopback HTTP Auth with the kernel test origin', async
   );
   expect(remote.code).toBe(2);
   expect(remote.stderr).toContain('Invalid importer arguments.');
+});
+
+test('leftover walk journals are archived before persona so wiped slot databases cannot replay native IDs', async () => {
+  const repository = await mkdtemp(join(tmpdir(), 'imports-walk-journals-'));
+  try {
+    const seed = join(repository, '.temp/cross-media-seed');
+    const walk = join(repository, '.temp/imports-walk/i01');
+    await mkdir(seed, { recursive: true });
+    await mkdir(walk, { recursive: true });
+    await writeFile(join(seed, 'state.sqlite'), 'old-seed-ids');
+    await writeFile(join(walk, 'state.sqlite'), 'old-operator-ids');
+    await retireWalkJournals(repository);
+    expect(await Bun.file(join(seed, 'state.sqlite')).exists()).toBe(false);
+    expect(await Bun.file(join(walk, 'state.sqlite')).exists()).toBe(false);
+    const archives = join(repository, '.temp/local-stack/seed-archives');
+    const archived = await readdir(archives);
+    expect(archived.some((name) => name.startsWith('cross-media-seed-'))).toBe(true);
+    expect(archived.some((name) => name.startsWith('imports-walk-'))).toBe(true);
+  } finally {
+    await rm(repository, { recursive: true, force: true });
+  }
+});
+
+test('operator causes keep ImportTransportError status and seed causes keep the stderr TypeError', () => {
+  expect(walkFailureCause(new ImportTransportError(404))).toBe('Import transport request failed 404');
+  expect(walkFailureCause(new ImportTransportError(403, 'about:blank', 'forbidden'))).toBe(
+    'Import transport request failed 403 about:blank forbidden',
+  );
+  expect(
+    walkChildFailure(
+      'seed',
+      1,
+      'Invalid record binding operation\nded its bounded scan\n',
+      'TypeError: Invalid record binding operation\n',
+    ).message,
+  ).toBe('seed exited 1: TypeError: Invalid record binding operation');
+  expect(walkChildFailure('seed', 1, 'noise\n', 'Invalid record binding operation\n').message).toBe(
+    'seed exited 1: Invalid record binding operation',
+  );
 });
 
 test('bounded VNDB entry_meta pages continue until selected revisions are found', async () => {

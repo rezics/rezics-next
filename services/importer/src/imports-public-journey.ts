@@ -6,13 +6,14 @@
  * read. Catalogue rows share one fresh seed. A row failure is recorded; independent rows continue.
  */
 import assert from 'node:assert/strict';
+import { randomUUID } from 'node:crypto';
 import { readFileSync } from 'node:fs';
-import { mkdir, readFile, writeFile } from 'node:fs/promises';
+import { mkdir, readFile, rename, writeFile } from 'node:fs/promises';
 import { resolve } from 'node:path';
 import { bangumiRecordUrl } from '@rezics/conversion/cross-media-entities';
 import { createAccountTokenProvider, IMPORTER_SCOPES, VNDB_IMPORTER_SCOPES } from './credentials.ts';
 import { runImportCli } from './cli.ts';
-import { createImportTransport } from './import-client.ts';
+import { createImportTransport, ImportTransportError } from './import-client.ts';
 import { ImportSession } from './import-session.ts';
 import { GLOBAL_CONTEXT, selectedSynopsisQueryFromPublic } from './public-bulk-client.ts';
 import { BOOK_OWNER_GRANT_ACTIONS, grantOrdinaryOwnerActions } from './ordinary-owner-grants.ts';
@@ -295,22 +296,51 @@ export function firstPublicRow(id: FirstPublicImportRowId) {
   return FIRST_PUBLIC_IMPORT_ROWS.find((row) => row.id === id)!;
 }
 
-function causeOf(error: unknown): string {
-  return error instanceof Error ? error.message.split('\n')[0]!.slice(0, 240) : String(error).slice(0, 240);
+const CHILD_ERROR_LINE = /^(?:error:|Error:|TypeError:|remote-check:.*failed|task: Failed)/;
+
+export function walkFailureCause(error: unknown): string {
+  if (error instanceof ImportTransportError) {
+    return ['Import transport request failed', error.status, error.type, error.code, error.phase]
+      .filter((part) => part !== undefined && part !== '')
+      .join(' ')
+      .slice(0, 240);
+  }
+  const text = error instanceof Error ? error.message : String(error);
+  return text.split('\n')[0]!.slice(0, 240);
+}
+
+export function walkChildFailure(name: string, code: number, stdout: string, stderr: string): Error {
+  const lines = `${stdout}\n${stderr}`.split('\n');
+  const marked = lines.find((line) => CHILD_ERROR_LINE.test(line.trim()));
+  const fromStderr = stderr.split('\n').findLast((line) => line.trim().length > 0);
+  const fromStdout = stdout.split('\n').findLast((line) => line.trim().length > 0);
+  const error = marked?.trim() || fromStderr?.trim() || fromStdout?.trim();
+  return new Error(`${name} exited ${code}${error ? `: ${error}` : ''}`);
+}
+
+/** Slot ports reuse a database URL after wipe; leftover native IDs cannot replay. Sibling seeded walks archive first. */
+export async function retireWalkJournals(repository = root): Promise<void> {
+  const archives = resolve(repository, '.temp/local-stack/seed-archives');
+  await mkdir(archives, { recursive: true, mode: 0o700 });
+  for (const name of ['cross-media-seed', 'imports-walk'] as const) {
+    try {
+      await rename(resolve(repository, '.temp', name), resolve(archives, `${name}-${randomUUID()}`));
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error;
+    }
+  }
 }
 
 async function command(name: string, args: string[], env: NodeJS.ProcessEnv = process.env) {
   await mkdir(evidenceRoot, { recursive: true, mode: 0o700 });
-  const log = Bun.file(resolve(evidenceRoot, `${name}.log`));
-  const child = Bun.spawn(args, { cwd: root, env, stdout: log, stderr: log });
-  const code = await child.exited;
-  if (code !== 0) {
-    const lines = (await log.text()).split('\n');
-    const error =
-      lines.find((line) => /^(?:error:|Error:|remote-check:.*failed|task: Failed)/.test(line)) ??
-      lines.findLast((line) => line.trim().length > 0);
-    throw new Error(`${name} exited ${code}${error ? `: ${error}` : ''}`);
-  }
+  const child = Bun.spawn(args, { cwd: root, env, stdout: 'pipe', stderr: 'pipe' });
+  const [stdout, stderr, code] = await Promise.all([
+    new Response(child.stdout).text(),
+    new Response(child.stderr).text(),
+    child.exited,
+  ]);
+  await writeFile(resolve(evidenceRoot, `${name}.log`), `${stdout}${stderr}`, { mode: 0o600 });
+  if (code !== 0) throw walkChildFailure(name, code, stdout, stderr);
 }
 
 async function parseEnv(path: string): Promise<Record<string, string>> {
@@ -751,8 +781,8 @@ async function walkRow(
       path: meta.path,
       result: 'failing',
       elapsedMs: Date.now() - started,
-      cause: causeOf(error),
-      evidence: { error: causeOf(error) },
+      cause: walkFailureCause(error),
+      evidence: { error: walkFailureCause(error) },
     };
   }
 }
@@ -760,6 +790,7 @@ async function walkRow(
 export async function runImportsPublicJourney(): Promise<WalkInventory> {
   const startedAt = new Date().toISOString();
   const revision = (await Bun.$`git rev-parse HEAD`.cwd(root).text()).trim();
+  await retireWalkJournals();
   await mkdir(evidenceRoot, { recursive: true, mode: 0o700 });
   const origins = stackOrigins();
   const pages = await startWalkStackActions(['pages'], [`${origins.issuer}/.well-known/openid-configuration`]);
@@ -771,7 +802,7 @@ export async function runImportsPublicJourney(): Promise<WalkInventory> {
     persona = await loadPersona();
     await grantOwner(persona);
   } catch (error) {
-    sharedStartup = causeOf(error);
+    sharedStartup = walkFailureCause(error);
   }
 
   const operatorIds = ['I01', 'I02', 'I03', 'I04'] as const;
@@ -808,7 +839,7 @@ export async function runImportsPublicJourney(): Promise<WalkInventory> {
       publication = loaded.publication;
       selectJourneyWorks(publication.published);
     } catch (error) {
-      seedCause = causeOf(error);
+      seedCause = walkFailureCause(error);
     }
   }
 
