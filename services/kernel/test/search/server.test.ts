@@ -1,14 +1,21 @@
 import { afterAll, expect, test } from 'bun:test';
 import { randomBytes } from 'node:crypto';
 import { createPool } from '../../src/database/pool.ts';
+import { systemClock } from '../../src/clock.ts';
 import { subjectGenerations, subjectIndexName } from '../../src/search/indices.ts';
 import { createOpenSearch } from '../../src/search/opensearch.ts';
+import { startSearchIndexing } from '../../src/search/runner.ts';
 import { readSearchConfig, createSearchWorkModule } from '../../src/search/work.ts';
 import { createDiscoveryProducerEntry } from '../../src/composition/discovery.ts';
 import { createKernelRuntimeDefaults } from '../../src/composition/runtime-defaults.ts';
-import { composeSearchNativePorts } from '../../src/composition/search-native.ts';
+import { composeSearchNativeAccess, composeSearchNativePorts } from '../../src/composition/search-native.ts';
 import { ConfigError, readConfig, startServer } from '../../src/server.ts';
 import type { WorkContext, WorkService } from '../../src/work/registry.ts';
+import { createWorkClient, type WorkClient } from '../../src/work/client.ts';
+import { WORK_QUEUES } from '../../src/work/queues.ts';
+import type { Effect } from '../../src/events/effects.ts';
+import { testReceiptKeysEnv } from '../support/receipt-keys.ts';
+import { workerTestEnv } from '../support/worker-env.ts';
 
 const databaseUrl = process.env.DATABASE_URL;
 const searchUrl = process.env.OPENSEARCH_URL;
@@ -18,12 +25,19 @@ const pool = createPool(databaseUrl);
 const search = createOpenSearch(searchUrl);
 const kernelDirectory = new URL('../..', import.meta.url).pathname;
 const key = () => randomBytes(32).toString('base64url');
-const env = { DATABASE_URL: databaseUrl, KERNEL_ROUTE_KEY: key(), KERNEL_SESSION_KEYS: `1:${key()}`, KERNEL_PORT: '0' };
+const env = {
+  DATABASE_URL: databaseUrl,
+  KERNEL_ROUTE_KEY: key(),
+  KERNEL_SESSION_KEYS: `1:${key()}`,
+  ...testReceiptKeysEnv(),
+  KERNEL_PORT: '0',
+};
 const searchWorkModule = createSearchWorkModule(
   createDiscoveryProducerEntry,
   createKernelRuntimeDefaults,
   undefined,
   composeSearchNativePorts,
+  composeSearchNativeAccess,
 );
 const prefixes: string[] = [];
 afterAll(async () => {
@@ -59,31 +73,104 @@ async function eventually(check: () => Promise<boolean>, timeoutMs = 15_000): Pr
   }
 }
 
-/** Registers the search work module against a context that records its services. */
-async function registered(moduleEnv: Record<string, string>) {
-  const services: (() => WorkService | Promise<WorkService>)[] = [];
-  const context = {
+type WorkServiceStart = Parameters<WorkContext['addService']>[0];
+type SearchRunner = Awaited<ReturnType<typeof startSearchIndexing>>;
+type SearchWorkHost = {
+  context: WorkContext;
+  services: WorkServiceStart[];
+  effects: Effect[];
+  close(): Promise<void>;
+};
+
+/** Complete direct host for module-registration acceptance; only the SDK lifecycle is omitted. */
+async function workHost(moduleEnv: Record<string, string | undefined>): Promise<SearchWorkHost> {
+  const client: WorkClient = await createWorkClient(databaseUrl!, pool);
+  const services: WorkServiceStart[] = [];
+  const effects: Effect[] = [];
+  let closing: Promise<void> | undefined;
+  const context: WorkContext = {
     pool,
-    env: moduleEnv,
-    addService(start: () => WorkService | Promise<WorkService>) {
+    queues: WORK_QUEUES,
+    client,
+    env: { ...workerTestEnv(), ...env, ...moduleEnv },
+    clock: systemClock,
+    getAuthorization() {
+      throw new Error('Search module registration does not consume worker authorization');
+    },
+    addEffects(registered) {
+      effects.push(...registered);
+    },
+    addService(start) {
       services.push(start);
     },
-  } as unknown as WorkContext;
-  await searchWorkModule.register(context);
-  return services;
+  };
+  return {
+    context,
+    services,
+    effects,
+    close() {
+      return (closing ??= client.close());
+    },
+  };
+}
+
+/** Registers Search against the complete real pool/client/clock/effects host. */
+async function registered(moduleEnv: Record<string, string | undefined>): Promise<SearchWorkHost> {
+  const host = await workHost(moduleEnv);
+  try {
+    await searchWorkModule.register(host.context);
+    return host;
+  } catch (error) {
+    await host.close();
+    throw error;
+  }
 }
 
 /** The worker's indexing runner on its own prefix, once it has created generation 1. */
-async function indexing(prefix: string): Promise<WorkService> {
-  const services = await registered({
+async function indexing(prefix: string): Promise<SearchRunner> {
+  const host = await registered({
     OPENSEARCH_URL: searchUrl!,
     KERNEL_SEARCH_PREFIX: prefix,
     KERNEL_ROUTE_KEY: env.KERNEL_ROUTE_KEY,
   });
-  expect(services).toHaveLength(1);
-  const running = await services[0]!();
-  await eventually(async () => (await subjectGenerations(search, prefix)).active === 1);
-  return running;
+  const running: WorkService[] = [];
+  let runner: SearchRunner | undefined;
+  let stopping: Promise<void> | undefined;
+  const stop = () =>
+    (stopping ??= (async () => {
+      const errors: unknown[] = [];
+      for (const service of [...running].reverse()) {
+        try {
+          await service.stop();
+        } catch (error) {
+          errors.push(error);
+        }
+      }
+      try {
+        await host.close();
+      } catch (error) {
+        errors.push(error);
+      }
+      if (errors.length) throw new AggregateError(errors, 'Search server-test services did not drain');
+    })());
+  try {
+    for (const start of host.services) {
+      const service = await start();
+      running.push(service);
+      if ('pause' in service && typeof service.pause === 'function') runner = service as SearchRunner;
+    }
+    if (!runner) throw new Error('Configured Search host did not start its indexing runner');
+    await eventually(async () => (await subjectGenerations(search, prefix)).active === 1);
+    return {
+      pause: () => runner!.pause(),
+      resume: () => runner!.resume(),
+      refresh: () => runner!.refresh(),
+      stop,
+    };
+  } catch (error) {
+    await stop();
+    throw error;
+  }
 }
 
 const searchRequest = (origin: string, body: unknown) =>
@@ -121,7 +208,20 @@ test('a server without search configured answers search with index_not_ready', a
 });
 
 test('the search work module starts the indexing runner only when search is configured', async () => {
-  expect(await registered({})).toEqual([]);
+  const disabled = await registered({});
+  const disabledServices: WorkService[] = [];
+  try {
+    expect(disabled.services).toHaveLength(1);
+    expect(disabled.effects.map(({ name }) => name)).toContain('search_erasure');
+    for (const start of disabled.services) disabledServices.push(await start());
+    expect(disabledServices.every((service) => !('pause' in service))).toBe(true);
+  } finally {
+    try {
+      for (const service of [...disabledServices].reverse()) await service.stop();
+    } finally {
+      await disabled.close();
+    }
+  }
   const prefix = freshPrefix();
   const running = await indexing(prefix);
   await running.stop();
@@ -131,28 +231,23 @@ test('the search work module starts the indexing runner only when search is conf
 test('a configured Search worker refuses a missing or malformed route key', async () => {
   const malformed = 'not-a-canonical-route-key';
   for (const routeKey of [undefined, malformed]) {
-    const services: (() => WorkService | Promise<WorkService>)[] = [];
-    const context = {
-      pool,
-      env: {
-        OPENSEARCH_URL: searchUrl!,
-        KERNEL_SEARCH_PREFIX: freshPrefix(),
-        ...(routeKey === undefined ? {} : { KERNEL_ROUTE_KEY: routeKey }),
-      },
-      addService(start: () => WorkService | Promise<WorkService>) {
-        services.push(start);
-      },
-    } as unknown as WorkContext;
+    const host = await workHost({
+      OPENSEARCH_URL: searchUrl!,
+      KERNEL_SEARCH_PREFIX: freshPrefix(),
+      KERNEL_ROUTE_KEY: routeKey,
+    });
     let error: unknown;
     try {
-      await searchWorkModule.register(context);
+      await searchWorkModule.register(host.context);
     } catch (caught) {
       error = caught;
+    } finally {
+      await host.close();
     }
     expect(error).toBeInstanceOf(ConfigError);
     expect((error as Error).message).toBe('Invalid or missing KERNEL_ROUTE_KEY');
     expect((error as Error).message).not.toContain(malformed);
-    expect(services).toEqual([]);
+    expect(host.services).toEqual([]);
   }
 });
 

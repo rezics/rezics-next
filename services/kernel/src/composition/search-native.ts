@@ -62,6 +62,33 @@ import { readIdentitySourceProjection, subjectSource } from '../semantic/search-
 import { readScopeLeafEvidence } from '../semantic/scope-leaf-evidence.ts';
 import { readSubjectSummaries } from '../semantic/summaries.ts';
 import { bindSearchNativeCapabilities, type SearchNativePorts } from '../search/composition.ts';
+import { createKernelActionCatalogue } from '../http/kernel.ts';
+import type { Access } from '../request/access.ts';
+import type { SearchNativeAccessInput } from '../search/work.ts';
+
+/** Build the complete native Access without compiling an HTTP request host. */
+export function composeSearchNativeAccess(input: SearchNativeAccessInput): Access {
+  let access: Access | undefined;
+  createKernelActionCatalogue({
+    pool: input.pool,
+    routeKey: input.routeKey,
+    workClient: input.workClient,
+    tokens: input.defaults.tokens,
+    receiptKeys: input.defaults.receiptKeys,
+    writeRate: input.defaults.writeRate,
+    rateAttribution: input.defaults.rateAttribution,
+    clock: input.defaults.clock,
+    deadlineNow: input.defaults.deadlineNow,
+    access: input.defaults.access,
+    subjectReading: input.defaults.subjectReading,
+    ...(input.defaults.auth === undefined ? {} : { auth: input.defaults.auth }),
+    onAccessReady(nativeAccess) {
+      access = nativeAccess;
+    },
+  });
+  if (!access) throw new Error('Kernel composition did not supply Search Access');
+  return access;
+}
 
 /** Bind existing native producers to Search's consumer-owned ports. */
 export function composeSearchNativePorts(): SearchNativePorts {

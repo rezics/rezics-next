@@ -7,22 +7,29 @@ import { readConfig, startServer } from '../../src/server.ts';
 import { createSearchWorkModule } from '../../src/search/work.ts';
 import { createDiscoveryProducerEntry } from '../../src/composition/discovery.ts';
 import { createKernelRuntimeDefaults } from '../../src/composition/runtime-defaults.ts';
-import { composeSearchNativePorts } from '../../src/composition/search-native.ts';
+import { composeSearchNativeAccess, composeSearchNativePorts } from '../../src/composition/search-native.ts';
 import type { Source } from '@rezics/definitions/bulk';
 import { GLOBAL_CONTEXT } from '../../src/semantic/definitions.ts';
 import { createWriteRateLimiter } from '../../src/access/write-rate.ts';
 import { createKernel } from '../../src/http/kernel.ts';
 import { startSearchIndexing } from '../../src/search/runner.ts';
 import { setupSemantic } from '../../src/semantic/setup.ts';
-import type { WorkContext } from '../../src/work/registry.ts';
+import { systemClock } from '../../src/clock.ts';
+import { createWorkClient } from '../../src/work/client.ts';
+import { WORK_QUEUES } from '../../src/work/queues.ts';
+import type { WorkContext, WorkService } from '../../src/work/registry.ts';
+import type { Effect } from '../../src/events/effects.ts';
 import { createImportIdentityDriver } from '../imports/identity-driver.ts';
 import { identitySupport } from '../imports/identity-fixture.ts';
+import { testReceiptKeys, testReceiptKeysEnv } from '../support/receipt-keys.ts';
+import { workerTestEnv } from '../support/worker-env.ts';
 
 const searchWorkModule = createSearchWorkModule(
   createDiscoveryProducerEntry,
   createKernelRuntimeDefaults,
   undefined,
   composeSearchNativePorts,
+  composeSearchNativeAccess,
 );
 
 const databaseUrl = process.env.DATABASE_URL;
@@ -43,6 +50,8 @@ test('production Search API and default Search module use their real configured 
   const driver = createImportIdentityDriver();
   const prefix = `fence-${randomUUID().slice(0, 8)}-`;
   let worker: SearchRunner | undefined;
+  const startedWorkServices: WorkService[] = [];
+  let workClient: Awaited<ReturnType<typeof createWorkClient>> | undefined;
   let server: Awaited<ReturnType<typeof startServer>> | undefined;
   let identity: Awaited<ReturnType<typeof driver.open>> | undefined;
   try {
@@ -78,6 +87,7 @@ test('production Search API and default Search module use their real configured 
       access: identity.access,
       routeKey: identity.routeKey,
       tokens: identity.tokenKeys,
+      receiptKeys: testReceiptKeys(),
       writeRate: createWriteRateLimiter({ secret: randomUUID() }),
     });
     const routeKey = Buffer.from(identity.routeKey).toString('base64url');
@@ -86,22 +96,46 @@ test('production Search API and default Search module use their real configured 
       DATABASE_URL: url,
       KERNEL_ROUTE_KEY: routeKey,
       KERNEL_SESSION_KEYS: `1:${sessionKey}`,
+      ...testReceiptKeysEnv(),
       KERNEL_PORT: '0',
       OPENSEARCH_URL: searchUrl,
       KERNEL_SEARCH_PREFIX: prefix,
     });
     server = startServer(config);
 
-    const workServices: (() => SearchRunner | Promise<SearchRunner>)[] = [];
+    const workServices: Parameters<WorkContext['addService']>[0][] = [];
+    const effects: Effect[] = [];
+    workClient = await createWorkClient(url, pool);
     await searchWorkModule.register({
       pool,
-      env: { OPENSEARCH_URL: searchUrl, KERNEL_SEARCH_PREFIX: prefix, KERNEL_ROUTE_KEY: routeKey },
-      addService(start: () => SearchRunner | Promise<SearchRunner>) {
+      queues: WORK_QUEUES,
+      client: workClient,
+      env: workerTestEnv({
+        DATABASE_URL: url,
+        OPENSEARCH_URL: searchUrl,
+        KERNEL_SEARCH_PREFIX: prefix,
+        KERNEL_ROUTE_KEY: routeKey,
+        ...testReceiptKeysEnv(),
+      }),
+      clock: systemClock,
+      getAuthorization() {
+        throw new Error('Search source-fence registration does not consume worker authorization');
+      },
+      addEffects(registered) {
+        effects.push(...registered);
+      },
+      addService(start) {
         workServices.push(start);
       },
-    } as unknown as WorkContext);
-    expect(workServices).toHaveLength(1);
-    worker = await workServices[0]!();
+    } satisfies WorkContext);
+    expect(effects.map(({ name }) => name)).toContain('search_erasure');
+    expect(effects.map(({ name }) => name)).toContain('search_review_discovery_receiving');
+    for (const start of workServices) {
+      const service = await start();
+      startedWorkServices.push(service);
+      if ('pause' in service && typeof service.pause === 'function') worker = service as SearchRunner;
+    }
+    if (!worker) throw new Error('Configured Search WorkContext did not start its indexing runner');
     await eventually(async () => (await subjectGenerations(search, prefix)).active === 1);
 
     async function post(path: string, body: unknown, bearer = observer) {
@@ -272,14 +306,18 @@ test('production Search API and default Search module use their real configured 
       await server?.stop();
     } finally {
       try {
-        await worker?.stop();
+        for (const service of [...startedWorkServices].reverse()) await service.stop();
       } finally {
         try {
-          const generations = await subjectGenerations(search, prefix);
-          for (const generation of generations.generations)
-            await search.request('DELETE', `/${subjectIndexName(prefix, generation)}`);
+          await workClient?.close();
         } finally {
-          if (identity) await driver.release(identity);
+          try {
+            const generations = await subjectGenerations(search, prefix);
+            for (const generation of generations.generations)
+              await search.request('DELETE', `/${subjectIndexName(prefix, generation)}`);
+          } finally {
+            if (identity) await driver.release(identity);
+          }
         }
       }
     }

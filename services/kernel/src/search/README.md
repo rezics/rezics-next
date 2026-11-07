@@ -25,6 +25,10 @@ Semantic and Search registration share that typed instance after the worker pool
 erasure, rated Source and runtime construction. HTTP defaults and preloads install through the same complete binding
 seam, while supplied application instances retain their producer object.
 
+Decision: the Search worker obtains its Access from Kernel's complete native action catalogue without compiling an
+HTTP host. Each direct host composes one producer instance before rated Source, then carries that same instance into
+Search and erasure. Receipt keys are resolved and bound at the server entry before native work is prepared.
+
 [Rejected text query repair](text-query-repair.md) owns bounded parser diagnostics and deliberate in-place correction.
 
 Search owns the subject search projection, indexing consumers, disclosure checks, query API, freshness and index
