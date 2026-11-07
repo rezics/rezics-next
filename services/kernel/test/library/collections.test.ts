@@ -324,7 +324,8 @@ test('members keep first, after and last placement for repeated subjects', async
   expect(noted.value.note).toBe('Kept');
   expect(cleared.value.note).toBe('');
   expect(removed.value.id).toBe(first.value.id);
-  expect(stored).toMatchObject({ revision: 1, memberCount: 3, orderEpoch: 0 });
+  // Four adds, two moves and one removal advance the parent CAS revision; note edits do not.
+  expect(stored).toMatchObject({ revision: 8, memberCount: 3, orderEpoch: 0 });
   expect(Date.parse(stored!.updatedAt)).toBeGreaterThan(Date.parse(created.value.updatedAt));
   expect((await membersOf(id)).map((member) => member.id)).toEqual([
     promoted.value.id,
@@ -362,7 +363,9 @@ test('repeated inserts after one member stay within the ordinal limit and respac
   expect(respacedBeforeTwoHundredth).toBe(true);
   const stored = await read(created.value.id);
   const members = await membersOf(created.value.id);
-  expect(stored).toMatchObject({ revision: 1, memberCount: 301 });
+  // Creation + 301 insert writes + one parent respace write per order epoch.
+  expect(stored).toMatchObject({ memberCount: 301 });
+  expect(stored!.revision).toBe(302 + stored!.orderEpoch);
   expect(stored!.orderEpoch).toBeGreaterThan(0);
   expect(members).toHaveLength(301);
   expect(
@@ -515,10 +518,12 @@ test('refused personas and another account change nothing, and private collectio
     commands.updateCollection(other, 'not-a-collection', { revision: 1, title: 'Nope' }, key()),
   );
   const hidden = await caught(commands.updateCollection(other, id, { revision: 1, title: 'Nope' }, key()));
+  const hiddenDelete = await caught(commands.deleteCollection(other, id, 1, key()));
   const deleted = await caught(
     commands.updateCollection(other, unlisted.value.id, { revision: 2, title: 'Nope' }, key()),
   );
   expect(hidden).toEqual(unknownRefusal);
+  expect(hiddenDelete).toEqual(unknownRefusal);
   expect(malformed).toEqual(unknownRefusal);
   expect(deleted).toEqual(unknownRefusal);
   expect(unknownRefusal).toMatchObject({ code: 'not_found', message: 'Not Found' });
