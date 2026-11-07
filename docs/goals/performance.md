@@ -206,3 +206,6 @@ SQL leaves stay at zero engine/witness axes. FULL public snapshots withhold a ch
 history-state frontier so the public log URL never carries the private cursor. Seven Log suites plus five Search
 scope/work-context suites own the check; 64/512/4096 growth remains deferred. Fewest tests: extend operation-bounds
 and retract causal, plus one FULL withhold and one return-frontier pin.
+Decision: Workspace-import documentation is already consolidated in `scripts/README.md`, including the root `specs/`
+scope, consuming-manifest rules, parser categories and exclusions, syntax diagnostics, fixture command and 60-second
+repository-wide deadline. Performance records the receiving decision here without adding a parallel explanation.
