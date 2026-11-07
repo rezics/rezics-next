@@ -1,6 +1,8 @@
 import {
   DBOS,
   DBOSClient,
+  WorkflowRetirementBudgetError,
+  type WorkflowRetirementInvocation,
   type WorkflowRetirementOutcome,
   type WorkflowWriterFence,
   type WorkflowWriterState,
@@ -11,8 +13,14 @@ import type { NativeStepWork } from '../semantic/identity-epoch-contract.ts';
 import { ensureNativeWorkApplication } from './adapters/index.ts';
 import type { WorkRetirementInvocation } from './contract/index.ts';
 
+export { WorkflowRetirementBudgetError };
+
 export type SdkRetirementFence = WorkflowWriterFence;
-export type SdkRetirementClient = Pick<DBOSClient, 'retireWorkflow' | 'getWorkflowWriterFence'>;
+export type SdkRetirementClient = {
+  retireWorkflow(workflowID: string): Promise<WorkflowWriterFence>;
+  retireWorkflow(workflowID: string, invocation: WorkflowRetirementInvocation): Promise<WorkflowRetirementOutcome>;
+  getWorkflowWriterFence(workflowID: string): Promise<WorkflowWriterFence | null>;
+};
 export type SdkWriterState = WorkflowWriterState;
 export type SdkRetirementOutcome = WorkflowRetirementOutcome;
 

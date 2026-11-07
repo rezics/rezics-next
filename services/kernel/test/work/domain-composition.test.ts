@@ -2,6 +2,11 @@ import { expect, test } from 'bun:test';
 import { readFileSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import {
+  SDK_RETIREMENT_DISPATCH,
+  WORKFLOW_RETENTION_FAMILY_LIMITS,
+  WORKFLOW_RETENTION_NESTED_FK_STATEMENTS,
+  WORKFLOW_RETENTION_PAYLOAD_FAMILIES,
+  WORKFLOW_RETENTION_STATUS_DELETE_STATEMENTS,
   type WorkApplicationPorts,
   type WorkIntent,
   type WorkRetirementFence,
@@ -253,6 +258,72 @@ test('Work application enqueues, registers and retires against fake ports', asyn
   ).toEqual({ fence, attempts: 1, failedWork: [] });
   expect(await application.readRetirement(intent.workflowId)).toEqual(fence);
   expect(await application.lockWriterState(tx, writer, {})).toEqual(writer);
+});
+
+test('Work retirement maps funded dispatch names onto declared costs', async () => {
+  const reserved: unknown[] = [];
+  let portReserve: ((dispatch: string) => Promise<void>) | undefined;
+  const ports = fakePorts();
+  const application = createWorkApplication({
+    ...ports,
+    sdkRetirement: {
+      ...ports.sdkRetirement,
+      async invokeRetirement(_id, _client, invocation) {
+        portReserve = invocation.reserve;
+        return { fence, attempts: 1, failedWork: [] };
+      },
+    },
+  });
+  await application.invokeRetirement(
+    intent.workflowId,
+    {},
+    {
+      deadline: 1,
+      maxAttempts: 1,
+      reserve: async (cost) => {
+        reserved.push(cost);
+      },
+    },
+  );
+  await portReserve!('connect');
+  await portReserve!('commit');
+  expect(reserved).toEqual([SDK_RETIREMENT_DISPATCH.connect, SDK_RETIREMENT_DISPATCH.commit]);
+  await expect(portReserve!('unknown')).rejects.toThrow('Unpriced SDK retirement dispatch');
+});
+
+test('Work contract unions funded retirement costs with complete retention family copies', () => {
+  expect(Object.keys(SDK_RETIREMENT_DISPATCH)).toEqual([
+    'connect',
+    'rollback',
+    'begin',
+    'settings',
+    'reconcile',
+    'retire',
+    'commit',
+    'backoff',
+  ]);
+  expect(WORKFLOW_RETENTION_PAYLOAD_FAMILIES.map((family) => [family.table, family.copies, family.deletion])).toEqual([
+    ['workflow_status', 1, 'explicit'],
+    ['workflow_input', 1, 'explicit'],
+    ['workflow_output', 1, 'explicit'],
+    ['operation_outputs', 64, 'explicit'],
+    ['workflow_events', 8, 'cascade'],
+    ['workflow_events_history', 64, 'cascade'],
+    ['notifications', 64, 'cascade'],
+    ['streams', 64, 'cascade'],
+  ]);
+  expect(WORKFLOW_RETENTION_FAMILY_LIMITS).toEqual({
+    workflow_status: 1,
+    workflow_input: 1,
+    workflow_output: 1,
+    operation_outputs: 64,
+    workflow_events: 8,
+    workflow_events_history: 64,
+    notifications: 64,
+    streams: 64,
+  });
+  expect(WORKFLOW_RETENTION_NESTED_FK_STATEMENTS).toBe(4);
+  expect(WORKFLOW_RETENTION_STATUS_DELETE_STATEMENTS).toBe(5);
 });
 
 test('Work compose refuses a duplicate module without native SDK', async () => {

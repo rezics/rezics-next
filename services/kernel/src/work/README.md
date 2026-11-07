@@ -226,7 +226,8 @@ absolute epoch ms and is never reset; `maxAttempts` is an integer 1 through 8; `
 dispatch including failed attempts, recovery reads and backoff; ambient `AbortSignal` only supplements that budget.
 Work maps dispatch names through `SDK_RETIREMENT_DISPATCH` in [bounds.ts](contract/bounds.ts) and exposes
 `invokeSdkWorkflowRetirement`. One-argument `retireWorkflow(id)` remains the compatibility path Auth currently
-calls; Auth consumes the invocation on its existing `closeAuthSdkWriters` owner. Failed work is the reserved
+calls; Auth re-exports the invocation, outcome and budget-error contract from its retirement fence. Performance
+owns funded Auth consumption on `closeAuthSdkWriters`. Failed work is the reserved
 dispatches of unsuccessful attempts and is not refunded when a later attempt converges.
 
 The bounded attempt reuses `maintainWorkflowOnce` semantics: prepaid rollback, one READ COMMITTED transaction,
@@ -241,6 +242,10 @@ participant completion remain separate from source integration and typing. The n
 [sdk-retirement-fence.test.ts](../../test/work/sdk-retirement-fence.test.ts) await post-integration execution.
 Decision: pin the funded bound on that same file with five cases (persistent connect failure, lock deadline,
 transient recovery, exhausted attempts, lost COMMIT); keep original fence, scan and transaction assertions; no stories.
+Decision: Work contract bounds/index unions Performance payload-family copies and FK cascade/statement/row/byte
+declarations with this producer's funded-retirement constants and types; Auth re-exports the SDK invocation,
+outcome and budget-error contract, and Performance owns `closeAuthSdkWriters` consumption. Existing retirement,
+fence and selection assertions stay. J18 Goal walk owns native receiving. No duplicate retention producer.
 
 Retirement establishes technical SDK writer closure only. Genuine Source, consumer and root admission belong to
 their owners. SUCCESS, cancellation, an empty status read or a caller boolean cannot supply that authority. This
