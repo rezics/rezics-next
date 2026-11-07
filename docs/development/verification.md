@@ -46,11 +46,15 @@ Decision: typecheck repairs preserve existing test assertions and update fixture
 Decision: under minimal verification a type error blocks a worker's success, and a failing payment, payout, order settlement, points or balance test blocks it when those paths changed. Other tests are not part of the attempt check; the wrapper refuses a test file, native, browser or growth command before any upload, with a message that tests run after landing in the dev verifier. Type errors, boot failures and payment-path failures keep current verifier handling: type errors and payment-path failures revert the landing, boot failures dispatch an urgent repair without reverting. A test failure outside those paths creates or updates one repair for the owning manager and never reverts the landing.
 
 Decision: environment walks run per Goal, not per outcome. An implementation brief declares no `native` or `browser`
-`acceptance.requires`; its outcome lands on typing like any other. Each Goal keeps at most one walk-and-repair task
-running; it walks dev on a seeded stack as each persona and briefs what fails as repairs. Goal dispatch and retry refuse
-a second such brief while one of that Goal is ready, running, held or landing. Outcomes that each carried
-their own walk rarely landed: on 2026-11-06, 2 of 81 tasks integrated after 12:00 UTC carried one, while 14 of 29
-running tasks did, at 17 hours and 3.7 attempts on average.
+`acceptance.requires`; its outcome lands on typing like any other. Each Goal keeps at most one walk task running; it
+walks dev on a seeded stack as each persona. Goal dispatch and retry refuse a second such brief while one of that Goal
+is ready, running, held or landing. Outcomes that each carried their own walk rarely landed: on 2026-11-06, 2 of 81
+tasks integrated after 12:00 UTC carried one, while 14 of 29 running tasks did, at 17 hours and 3.7 attempts on average.
+
+Decision: a walk repairs only what it needs to keep walking. It sends each failing journey, and each blocker that is
+separable or lies in another owner's code, to the owning manager. That manager dispatches it at once as an urgent repair
+brief, which runs in parallel with the walk. While managers read the walk as the owner of every repair, walks repaired
+serially and backlogs stayed empty. From 03:00 to 04:00 UTC on 2026-11-07, 9 workers ran and 284 product lines landed.
 
 Decision: the worker owns and completes the private-follow host fixture, Auth-persona served journey, and 64/512/4096
 fixed-neighborhood growth measurement case in the feature worktree. Capability promotion still waits for the installed
