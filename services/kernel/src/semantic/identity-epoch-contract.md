@@ -1620,8 +1620,9 @@ installation enables the deferred birth guard and commits immutable `identity_ep
 custody. An interrupted cut rolls back atomically; a committed cut without native closure remains unavailable.
 Even all 4096 retained native topology closures cannot substitute for the missing installation receipt.
 While a cut exists without a valid installation, remaining() counts unclosed topology homes so bounded batches
-can finish; cutover stays blocked until the installation receipt. An empty selected frontier is a no-effect
-repair pass, not an unavailable failure. Generation-1 is the current Search physical owner until a live
+can finish; cutover stays blocked until the installation receipt. An empty selected frontier falls through to
+native repair and continuation selection; it is not itself unavailable. No-work frontiers emit no successor.
+Generation-1 is the current Search physical owner until a live
 generation is readable.
 
 A separately released home-0 command verifies the committed cut and installed guards and records the actual
@@ -1634,6 +1635,14 @@ source export, mapping, participant ACK, home closure or topology custody. Actua
 all 4096 native source-home closures, including empty homes. Standalone native legacy migration fixtures retain
 their original full topology behavior. Default DBOS effects, all registered queues and Community's 30s settle
 remain unchanged.
+
+Decision: each bounded default-worker bootstrap batch keeps the native source/export/receiving/ACK closure, then
+reads the durable topology and dirty-home frontier and emits one continuation only while work remains. Safe worker
+progress and failure reports identify partition/frontier, phase, operation and classified cause; they retain no
+credentials or source bodies. Composition continues to bind Search currentness/receiving and Library private-follow
+custody through `composeSemanticIdentityParticipants` on the worker's existing Pool, route key and Access; bootstrap
+does not synthesize either participant ACK. The actual Content-owned rerun remains responsible for native journey
+evidence.
 
 The installed deferred guard reads only the birth's source-local revision 1, self mapping, gate and native
 owner; all must commit in its actual transaction with a positive epoch and matching native transaction ID.
