@@ -49,11 +49,11 @@ FULL empty-shelf gate denials keep raw capture so private Library plans must be 
 growth folds native plan notices so Access formula EXPLAIN stays inside the telemetry cap, charging one
 provenance summary per notice rather than one telemetry entry per EXPLAIN node, and walks each notice
 under the per-tree node cap rather than the capture-wide 20 000-node telemetry budget; Seq Scan
-on Library relations stays refused. FULL entry tiles and active-session seeks unnest subject IDs through
-a MATERIALIZED keys CTE, then a MATERIALIZED one-row point CTE inside LATERAL with the same Access
-ROW-bounded `OFFSET 0` fence, so a custom plan cannot decorrelate the unnest into a hash join and Seq Scan
-`library.entry` or `progress_session`. Active-session `LIMIT 1` stays
-after that fence and still names `progress_session_active`. FULL assignment pages hydrate Subject summaries from the admitted
+on Library relations stays refused. FULL entry tiles and active-session seeks drive one integer step from the
+MATERIALIZED request row that carries the subject-id array, then a MATERIALIZED one-row point CTE
+inside LATERAL with the same Access ROW-bounded `OFFSET 0` fence, so a custom plan cannot hash-join
+unnest into a Seq Scan or Bitmap Heap Scan of `library.entry` or `progress_session`. Active-session
+`LIMIT 1` stays after that fence and still names `progress_session_active`. FULL assignment pages hydrate Subject summaries from the admitted
 request deadline and one Semantic `prepareReadDecisions` page, not per-subject Access point formulas.
 A concealed or moved Source on FULL by-label withholds (`subject: null`) through `withholdChangedSource`;
 it does not 503 the assignment page or shrink the raw cursor.

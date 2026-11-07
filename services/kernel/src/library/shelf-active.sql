@@ -1,23 +1,25 @@
 -- Correlated active-session points retain progress_session_active under generic
 -- prepared plans. Equality plus LIMIT 1 Seq Scanned a small session table.
--- Unnest joined directly to LATERAL was decorrelated into a hash join the same
--- way. MATERIALIZED keys plus a MATERIALIZED one-row point CTE inside LATERAL
--- keep each seek identical to the unique-key point: Access ROW-bounded
--- (route, account_id, subject_id) range and OFFSET 0. ORDER BY names that
--- index. Page LIMIT stays after OFFSET 0.
+-- Unnest as a sibling MATERIALIZED keys CTE was hash-joined the same way and
+-- its ORDER BY added a Sort the active index does not need. Drive one integer
+-- step from the MATERIALIZED request row that carries the subject-id array,
+-- then a MATERIALIZED one-row point CTE inside LATERAL, so each seek is the
+-- unique-key point: Access ROW-bounded (route, account_id, subject_id) range
+-- and OFFSET 0. ORDER BY names that index. Page LIMIT stays after OFFSET 0.
 WITH input AS MATERIALIZED (
-  SELECT :route::integer AS route, :account_id::uuid AS account_id
-), keys AS MATERIALIZED (
-  SELECT subject_id FROM unnest(:subject_ids::uuid[]) AS requested(subject_id) ORDER BY subject_id
+  SELECT :route::integer AS route, :account_id::uuid AS account_id,
+         :subject_ids::uuid[] AS subject_ids
 )
 SELECT active.id, active."subjectId", active."versionSubjectId", active.mode, active.unit,
        active.total, active.amount, active.locator, active.position, active."completedUnitCount",
        active.state, active.revision, active."startedAt", active."completedAt"
 FROM input
-CROSS JOIN keys
+CROSS JOIN LATERAL (
+  SELECT step.i FROM generate_series(1, cardinality(input.subject_ids)) AS step(i)
+) AS step
 CROSS JOIN LATERAL (
   WITH point AS MATERIALIZED (
-    SELECT input.route, input.account_id, keys.subject_id
+    SELECT input.route, input.account_id, input.subject_ids[step.i] AS subject_id
   )
   SELECT session.session_id AS id, session.subject_id AS "subjectId",
          session.version_subject_id AS "versionSubjectId",

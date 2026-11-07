@@ -34,9 +34,9 @@ workers where relevant, and recorded revision evidence.
 
 Decision: Label unique-key points and FULL assignment pages keep MATERIALIZED input, Access ROW-bounded index
 range and `OFFSET 0`; prefix/FULL growth allow only that `OFFSET 0` fence and still refuse `LIKE`. FULL entry tiles
-and active-session seeks unnest subject IDs through a MATERIALIZED keys CTE, then a MATERIALIZED one-row point CTE
-inside LATERAL with that same fence, so a custom plan cannot decorrelate the unnest into a hash join and Seq Scan
-`library.entry` or `progress_session`. Auth setup does
+and active-session seeks drive one integer step from the MATERIALIZED request row that carries the subject-id
+array, then a MATERIALIZED one-row point CTE inside LATERAL with that same fence, so a custom plan cannot
+hash-join unnest into a Seq Scan or Bitmap Heap Scan of `library.entry` or `progress_session`. Auth setup does
 not copy the host-scope `catalogue_only` URL into `process.env`, so Reylo keeps cached analysis when a real
 `DATABASE_URL` is already present. Seeded frontends wait until `/auth/sign-in` redirects before signed-in probes.
 
