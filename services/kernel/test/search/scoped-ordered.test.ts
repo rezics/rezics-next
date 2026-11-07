@@ -1,7 +1,7 @@
 import { expect, expectTypeOf, spyOn, test } from 'bun:test';
 import type { Pool } from 'pg';
 import { BOUND_AXES, isBound, sumBounds, withinCeiling } from '@rezics/bounds';
-import type { NativeOrdinalKey, RawOrdinalCollectionPrefix } from '../../src/library/collection-source-order.ts';
+import type { NativeOrdinalKey, RawOrdinalCollectionPrefix } from '../../src/library/contract/index.ts';
 import type { LeafOptions } from '../../src/semantic/scope-leaf-evidence.ts';
 import { createIdentityScopedObservations } from '../../src/semantic/identity-scoped-observations.ts';
 import type { IdentityScopedObservations } from '../../src/semantic/identity-scope-types.ts';
@@ -14,10 +14,9 @@ import {
   SEARCH_SCOPE_ORDINAL_OPERATION,
 } from '../../src/search/service-scope-order.ts';
 import { createSearchScopeForService } from '../../src/search/service-scope.ts';
-import { bindSearchLibraryScopePort } from '../../src/search/scope-application.ts';
 import { createSearchLibraryScopePort } from '../../src/composition/search-library.ts';
 
-bindSearchLibraryScopePort(createSearchLibraryScopePort());
+const library = createSearchLibraryScopePort();
 
 const nativePreconnect = globalThis.fetch.preconnect;
 
@@ -32,7 +31,7 @@ test('closed ordering API imports the canonical native ordinal key and raw row c
 });
 
 test('selected ordinal dispatch follows its complete immutable Source ceiling and one-row schedule', () => {
-  const plan = SEARCH_SCOPE_ORDINAL_OPERATION();
+  const plan = SEARCH_SCOPE_ORDINAL_OPERATION(library);
   expect(plan.axes).toEqual(BOUND_AXES);
   expect(plan.rawLimit).toBe(1);
   expect(plan.schedule).toMatchObject({
@@ -274,6 +273,7 @@ test('a real product-created catalogue subject has ordered native scope evidence
         prefix,
         source,
         cursors: config.tokens!,
+        library,
         ...(config.clock ? { clock: config.clock } : {}),
       });
       const resolver = createKernelAccessResolver({

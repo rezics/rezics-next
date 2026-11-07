@@ -15,6 +15,7 @@ export {
 export type {
   CanonicalCollectionCandidate,
   CanonicalCollectionPrefix,
+  CanonicalSourceReceivingCost,
   CollectionAliasProgress,
   CollectionSource,
   CollectionSourceAfter,
@@ -25,13 +26,19 @@ export type {
   CollectionSourceDriverOrdinal,
   CollectionSourceEvidence,
   CollectionSourceObservation,
+  CollectionSourceRawKey,
   CollectionSourceStamp,
   CollectionSubjectMembership,
   ContainsCollectionSubject,
+  NativeAccountSourceIdentity,
+  NativeCollectionOrdinalPageBound,
   NativeIdentityBasis,
   NativeOrdinalFrontier,
   NativeOrdinalKey,
   NativeOrdinalRow,
+  NativeOutputActivation,
+  NativePublicOutputIdentity,
+  NativeSourceIdentity,
   PrepareCollectionSource,
   PreparedCollectionSource,
   RawOrdinalCollectionPrefix,
@@ -50,6 +57,9 @@ export type {
   CollectionRuleAuthorityCapability,
   AuthorizationCapability,
   AuthorizationDecision,
+  CollectionSourceFactory,
+  CollectionSourceLimits,
+  CollectionSourceWorkCapability,
   ContentPublicationCapability,
   IdentityDisclosureCapability,
   IdentityNativeCapability,
@@ -60,6 +70,9 @@ export type {
   LibraryCoverCredit,
   LibraryCoverSummary,
   LibraryRelease,
+  MembersWorkDefinitionCapability,
+  NativeCollectionWorkFactory,
+  NativeCollectionWorkHandle,
   PreparedSearchScope,
   QueryText,
   SearchFilterLeafKind,
@@ -134,6 +147,12 @@ export type {
 export const COLLECTION_PUBLICATION_COMMAND = 'library.collection.publication.begin';
 export const COLLECTION_PUBLICATION_WORKFLOW = 'library.collectionPublication';
 
-export type { PreparationWorkCapability, PreparationSourcePrefix, ScopeWorkCapability } from './preparation-work.ts';
+export type {
+  MembersWorkDefinition,
+  PreparationLocator,
+  PreparationWorkCapability,
+  PreparationSourcePrefix,
+  ScopeWorkCapability,
+} from './preparation-work.ts';
 
 export { OWNER_FILTER_CLOSURE_REFERENCE_LIMIT, OWNER_FILTER_CLOSURE_ORIGINAL_LIMIT } from './preparation-limits.ts';

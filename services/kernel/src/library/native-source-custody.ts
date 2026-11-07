@@ -123,36 +123,13 @@ function nextCapture() {
   return memoizedValue(nextCapture, () => nativeSourceCustodyQueries().retirement.nextCapture);
 }
 
-import type { NativePublicOutputIdentity } from './native-source-output-types.ts';
-export type { NativeOutputActivation, NativePublicOutputIdentity } from './native-source-output-types.ts';
-
-/** Lookup hints only. Native records, not possession of this value, establish custody. */
-type AccountSourceIdentity = Readonly<
-  {
-    route: number;
-    collectionId: string;
-    accountId: string;
-    incarnation: string;
-    generation: string;
-    ownerEpoch: number;
-    receivingEpoch: string;
-    effectKey: string;
-  } & (
-    | {
-        scope: 'curated' | 'private_builtin';
-        outputGeneration?: never;
-        publicationTransactionId?: never;
-        publicationPosition?: never;
-      }
-    | {
-        scope: 'active_explicit_output';
-        outputGeneration: string;
-        publicationTransactionId: string;
-        publicationPosition: string;
-      }
-  )
->;
-export type NativeSourceIdentity = AccountSourceIdentity | NativePublicOutputIdentity;
+import type { NativeAccountSourceIdentity, NativeSourceIdentity } from './contract/source.ts';
+export type {
+  NativeAccountSourceIdentity,
+  NativeOutputActivation,
+  NativePublicOutputIdentity,
+  NativeSourceIdentity,
+} from './contract/source.ts';
 export type NativeSourceDriver =
   | 'member'
   | 'entry'
@@ -242,7 +219,7 @@ export interface NativeLibrarySourceCustody {
     | Unavailable
     | {
         status: 'complete';
-        capture: NativeSourceCapture & Readonly<{ identity: AccountSourceIdentity }>;
+        capture: NativeSourceCapture & Readonly<{ identity: NativeAccountSourceIdentity }>;
         work: WorkReceipt;
       }
   >;
@@ -303,7 +280,7 @@ function sameIdentity(state: NativeSourceIdentity, identity: NativeSourceIdentit
 function sameFrontier(state: NativeSourceFrontier, frontier: NativeSourceFrontier): boolean {
   return frontierKeys.every((key) => state[key] === frontier[key]);
 }
-function validate(identity: NativeSourceIdentity): asserts identity is AccountSourceIdentity {
+function validate(identity: NativeSourceIdentity): asserts identity is NativeAccountSourceIdentity {
   // Public output custody is supplied by its native producer, never the account predicate.
   if (identity.scope === 'public_output') throw new Refused('output_authority');
   const accountRoute = routeOf(identity.accountId);
@@ -343,27 +320,31 @@ function validate(identity: NativeSourceIdentity): asserts identity is AccountSo
     throw new Refused('binding');
   }
 }
+function accountIdentity(identity: NativeSourceIdentity): NativeAccountSourceIdentity {
+  validate(identity);
+  return identity;
+}
 /** Structural native bind validation only; this grants no Source or original authority. */
 export function validateNativeIdentitySource(identity: NativeSourceIdentity): void {
   validate(identity);
 }
 function parameters(identity: NativeSourceIdentity): Parameters {
-  validate(identity);
+  const account = accountIdentity(identity);
   return {
-    route: identity.route,
-    collection_id: identity.collectionId,
-    account_id: identity.accountId,
-    account_route: routeOf(identity.accountId),
-    partition_no: partitionOf(identity.route),
-    incarnation: identity.incarnation,
-    generation: identity.generation,
-    scope: identity.scope,
-    owner_epoch: identity.ownerEpoch,
-    receiving_epoch: identity.receivingEpoch,
-    effect_key: identity.effectKey,
-    output_generation: identity.outputGeneration ?? null,
-    publication_transaction_id: identity.publicationTransactionId ?? null,
-    publication_position: identity.publicationPosition ?? null,
+    route: account.route,
+    collection_id: account.collectionId,
+    account_id: account.accountId,
+    account_route: routeOf(account.accountId),
+    partition_no: partitionOf(account.route),
+    incarnation: account.incarnation,
+    generation: account.generation,
+    scope: account.scope,
+    owner_epoch: account.ownerEpoch,
+    receiving_epoch: account.receivingEpoch,
+    effect_key: account.effectKey,
+    output_generation: account.outputGeneration ?? null,
+    publication_transaction_id: account.publicationTransactionId ?? null,
+    publication_position: account.publicationPosition ?? null,
   };
 }
 function executor(
@@ -622,7 +603,7 @@ function nativeLibrarySourceCustody(
   }
 
   function live(input: { client: CommandTransaction; at: AuthoritativeTime; identity: NativeSourceIdentity }): void {
-    validate(input.identity);
+    const identity = accountIdentity(input.identity);
     if (commandTime(input.client) !== input.at) throw new Refused('binding');
     try {
       if (hasLiveOperationalTransaction(input.client)) {
@@ -630,14 +611,14 @@ function nativeLibrarySourceCustody(
         if (
           resources.pool !== pool ||
           resources.mode !== 'work-step' ||
-          resources.partition !== partitionOf(input.identity.route) ||
+          resources.partition !== partitionOf(identity.route) ||
           resources.accounts.length !== 1 ||
-          resources.accounts[0] !== input.identity.accountId
+          resources.accounts[0] !== identity.accountId
         )
           throw new Refused('binding');
       } else {
         const context = currentCommand(input.client);
-        if (context.partition !== partitionOf(input.identity.route) || context.time !== input.at)
+        if (context.partition !== partitionOf(identity.route) || context.time !== input.at)
           throw new Refused('binding');
       }
       authoritativeTimeValue(input.at);
@@ -652,7 +633,7 @@ function nativeLibrarySourceCustody(
         async (work, operationUse): Promise<NativeSourceRetirementResult> => {
           if (hasLiveOperationalTransaction(input.client)) throw new Refused('binding');
           live(input);
-          validate(input.identity);
+          const identity = accountIdentity(input.identity);
           if (!uuid.test(input.captureId) || !/^(0|[1-9][0-9]{0,18})$/.test(input.sourceGeneration))
             throw new Refused('binding');
           const run = executor(
@@ -673,7 +654,7 @@ function nativeLibrarySourceCustody(
           )
             throw new Refused('binding');
           const values = {
-            ...parameters(input.identity),
+            ...parameters(identity),
             capture_id: input.captureId,
             purge_after: episode.kind === 'deleted' ? episode.purgeAfter : null,
             time: authoritativeTimeValue(input.at),
@@ -689,7 +670,7 @@ function nativeLibrarySourceCustody(
           );
           if (
             !partition ||
-            partition.epoch !== input.identity.ownerEpoch ||
+            partition.epoch !== identity.ownerEpoch ||
             partition.writeState !== 'active' ||
             partition.movedTo !== null
           )
@@ -716,19 +697,19 @@ function nativeLibrarySourceCustody(
           }>(retireSource(), values);
           if (
             !source ||
-            source.accountId !== input.identity.accountId ||
-            source.incarnation !== input.identity.incarnation ||
+            source.accountId !== identity.accountId ||
+            source.incarnation !== identity.incarnation ||
             source.generation !== input.sourceGeneration ||
-            (input.identity.scope === 'curated'
+            (identity.scope === 'curated'
               ? source.kind !== 'curated'
-              : input.identity.scope === 'private_builtin'
+              : identity.scope === 'private_builtin'
                 ? source.kind !== 'dynamic' || (episode.kind !== 'terminal' && source.visibility !== 'private')
                 : source.kind !== 'dynamic' || source.builtin !== null)
           )
             return blocked('source');
           if (
-            (source.publicCustody && !(episode.kind === 'terminal' && input.identity.scope === 'private_builtin')) ||
-            input.identity.scope === 'active_explicit_output'
+            (source.publicCustody && !(episode.kind === 'terminal' && identity.scope === 'private_builtin')) ||
+            identity.scope === 'active_explicit_output'
           )
             return blocked('public_custody');
           if (

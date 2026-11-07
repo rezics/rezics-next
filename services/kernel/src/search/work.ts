@@ -31,6 +31,7 @@ import { isAdmittedSearchPrefix } from './consumer-name.ts';
 import type { SubjectSource } from './source.ts';
 import type { CreditSearchSource } from './credit-search.ts';
 import type { FacetAccessObservationPort } from './facet-access-port.ts';
+import { createSearchLibraryScopePort } from './adapters/library-scope.ts';
 
 export type SearchConfig = { url: string; prefix: string };
 
@@ -107,6 +108,7 @@ type SearchRuntimeDefaults = Required<
   >
 > & {
   facetAccess: FacetAccessObservationPort;
+  libraryScope: import('./library-scope-port.ts').SearchLibraryScopePort;
 };
 type SearchRuntimeDefaultsComposer = (input: { env: NodeJS.ProcessEnv; clock: KernelClock }) => SearchRuntimeDefaults;
 type CreditSearchSourceComposer = (pool: Pool, routeKey: Uint8Array) => CreditSearchSource;
@@ -314,12 +316,14 @@ export function createSearchWorkModule(
       const creditSearch = composeCreditSearch?.(context.pool, routeKey);
       const search = createOpenSearch(config.url);
       const source = createRatedSubjectSource(context.pool, routeKey, creditSearch).source;
+      const library = createSearchLibraryScopePort();
       collectionPublicationScopeRuntimes.set(context, {
         pool: context.pool,
         client: search,
         prefix: config.prefix,
         source,
         clock: context.clock,
+        library,
       });
       const listing = subjectListingSource(context.pool);
       context.addEffects([

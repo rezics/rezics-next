@@ -11,6 +11,21 @@ export {
 export { createSearchPreparationAdapter, type SearchPreparationAdapterPorts } from './search-scope.ts';
 export { createContentPublicationAdapter, type ContentPublicationAdapterPorts } from './publication-foreign.ts';
 export { createNativeSourceCaptureAdapter } from './native-source.ts';
+export {
+  createScopedSearchLibraryOperations,
+  type ScopedSearchLibraryOperations,
+  type ScopedCollectionSourceDeps,
+  type CollectionSourceWorkState,
+  type CollectionSourceRawKey,
+} from './scoped-source.ts';
+export { createCollectionSource } from '../collection-source.ts';
+export { nativeCollectionOrdinalPageBound } from '../collection-source-native.ts';
+export type { NativeCollectionOrdinalPageBound } from '../collection-source-native.ts';
+export { createMembersPreparation } from '../members-preparation.ts';
+export type { MembersPreparationWorkDefinition, PreparationLocator } from '../members-preparation.ts';
+export { NativeCollectionWork } from '../collection-native-work.ts';
+export type { NativeSourceIdentity } from '../native-source-custody.ts';
+export { CANONICAL_SOURCE_RECEIVING_COST } from '../canonical-source-bounds.ts';
 
 export { createNativeFollowCountReads, type NativeFollowCountReadPorts } from './follow-count-reads.ts';
 

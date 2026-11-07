@@ -1,12 +1,14 @@
-import { ProblemError } from '../http/problem.ts';
+import { SearchOperationError } from './operation-outcomes.ts';
 import type { LeafOptions } from '../semantic/scope-leaf-evidence.ts';
 import { createSearchScopeSource } from './scope-source.ts';
 import type { createSearchService } from './service.ts';
 import type { RealmSubjectSource } from '../content/index.ts';
+import type { SearchLibraryScopePort } from './library-scope-port.ts';
 
 export type SearchService = ReturnType<typeof createSearchService>;
 export type ScopeRuntime = Omit<Parameters<typeof createSearchScopeSource>[0], 'evidence'> & {
   realmSubjectsForReader?: (reader: LeafOptions) => RealmSubjectSource | undefined;
+  library?: SearchLibraryScopePort;
 };
 
 const runtimes = new WeakMap<SearchService, ScopeRuntime>();
@@ -35,12 +37,13 @@ export function createSearchScopeForService(
   options: LeafOptions,
 ): ReturnType<typeof createSearchScopeSource> {
   const runtime = runtimes.get(service);
-  if (!runtime) throw new ProblemError('index_not_ready', { headers: { 'retry-after': '1' } });
+  if (!runtime) throw new SearchOperationError('index_not_ready');
   const { realmSubjects: installedSubjects, realmSubjectsForReader, ...scopeRuntime } = runtime;
   const realmSubjects = realmSubjectsForReader ? realmSubjectsForReader(options) : installedSubjects;
   return createSearchScopeSource({
     ...scopeRuntime,
     ...(realmSubjects ? { realmSubjects } : {}),
     evidence: options,
+    ...(runtime.library ? { library: runtime.library } : {}),
   });
 }

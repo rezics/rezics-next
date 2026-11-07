@@ -8,9 +8,10 @@ the existing Search step ceiling, the maximum eight Collection source-state chec
 commit/rollback envelope. Its cost is a static dispatch description; it neither creates a ledger nor authorizes a
 Source observation. The id and ordinal branches remain mutually exclusive.
 
-Search receives the canonical source bounds, work-group limit and ordinal statement bound through the installed
-`SearchLibraryScopePort`. Its path schedule and total cost remain Search-owned; composition binds the existing
-Library source operations without changing the operation's disclosure or receipt rules.
+Search receives the canonical source bounds, work-group limit and ordinal statement bound through the supplied
+`SearchLibraryScopePort` instance each application closes over. Its path schedule and total cost remain Search-owned;
+composition constructs the Library source operations, limits and receiving costs without changing the operation's
+disclosure or receipt rules.
 
 The shared axes are candidateKeys, nativeRows, identityMetadataRows, nativePoints, witnessKeys, statements, bytes,
 emptySeeks and engineRequests. Library's existing `MEMBERS_PREPARATION_BRANCH_COST.sourceMetadata` is the one
@@ -73,13 +74,11 @@ Use the existing type homes and exact types:
 
 ```ts
 import type { OperationalTransaction } from '../command/operational.ts';
+import type { CollectionSourceObservation, NativeSourceIdentity, PreparationLocator } from '../library/contract/index.ts';
 import type {
   MembersPreparationWorkDefinition,
   PreparationDefinition,
-  PreparationLocator,
 } from '../library/members-preparation.ts';
-import type { CollectionSourceObservation } from '../library/collection-source.ts';
-import type { NativeSourceIdentity } from '../library/native-source-custody.ts';
 
 export type MembersPreparationWorkContext = Readonly<{
   kind: 'members-preparation';

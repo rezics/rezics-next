@@ -59,6 +59,7 @@ test('Implement the sole4b native MembersPreparation work-context handoff', asyn
       pool: native.db.pool,
       access: native.kernel.testAccess,
       deadline: Date.now() + 10_000,
+      library: (await import('../../src/search/adapters/library-scope.ts')).createSearchLibraryScopePort(),
     };
     let completed: MembersPreparationWorkContext | undefined;
     await runOperationalTransaction(
