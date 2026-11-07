@@ -90,6 +90,12 @@ retaining the primary error. Their original positive walks remain in `--acceptan
 stale-directory sweep remain authoritative; the linked receiving correction cancels additional durable move state.
 The Web received-value label needs only a subject identity, matching its existing caller and runtime behavior.
 
+Decision: receive Zone Collection port/preload binding `b96e751c2753` through this Driver's original Kernel/Auth/both-Web
+typing and full History preload. Zone owns the Collection port and work host; Library supplies the native adapter;
+composition binds it when that owner lands. Keep the six existing walk selections and unchanged work budgets. No extra
+startup task or native growth walk. Existing placement, compiler-database, check-startup and Auth config tests remain
+the fewest pins for native 23, placed 75/124/130/143 and cleanup.
+
 Additional sources: the integrated Search/History, History semantic return, Web compiler/settlement and integrated
 startup receiving decisions, their linked upload-move correction, and the installed Search, History, Web and SSH
 callers and tests. Regression changes distinguish affirmatively dead listeners from uncertain control checks;
