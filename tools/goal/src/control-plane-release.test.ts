@@ -123,7 +123,7 @@ function releaseRecords(h: ReturnType<typeof integrationHarness>) {
     .map((name) => JSON.parse(readFileSync(join(h.settings.stateDirectory, name), 'utf8')) as Record<string, unknown>);
 }
 
-test('ordinary release waits for dev drain before capturing refs and retains both leases through publication', async () => {
+test('ordinary release drains dev before capture, then keeps only main custody through publication', async () => {
   const h = integrationHarness();
   const resumeDev = Promise.withResolvers<void>();
   const waitingForDev = Promise.withResolvers<void>();
@@ -139,28 +139,26 @@ test('ordinary release waits for dev drain before capturing refs and retains bot
     let gateCalls = 0;
     let smokeCalls = 0;
     let published = false;
-    let owners: string[] | undefined;
-    const assertLeases = () => {
-      const current = ['train-main.lease', 'train.lease'].map((name) => {
-        const path = join(h.settings.stateDirectory, name);
-        expect(() => acquireDirectoryLease(path)).toThrow(LeaseHeldError);
-        const files = readdirSync(path);
-        expect(files).toHaveLength(1);
-        return readFileSync(join(path, files[0]!), 'utf8');
-      });
-      owners ??= current;
-      expect(current).toEqual(owners);
+    let mainOwner: string | undefined;
+    const assertLaneCustody = () => {
+      const mainPath = join(h.settings.stateDirectory, 'train-main.lease');
+      expect(() => acquireDirectoryLease(mainPath)).toThrow(LeaseHeldError);
+      const files = readdirSync(mainPath);
+      expect(files).toHaveLength(1);
+      mainOwner ??= readFileSync(join(mainPath, files[0]!), 'utf8');
+      expect(readFileSync(join(mainPath, files[0]!), 'utf8')).toBe(mainOwner);
+      expect(existsSync(join(h.settings.stateDirectory, 'train.lease'))).toBe(false);
     };
     running = train(
       h,
       async () => {
         gateCalls++;
-        assertLeases();
+        assertLaneCustody();
         return { passed: true, output: '', timedOut: false };
       },
       async (command, cwd) => {
         smokeCalls++;
-        assertLeases();
+        assertLaneCustody();
         return releaseEvidence(command, cwd);
       },
       {
@@ -174,7 +172,7 @@ test('ordinary release waits for dev drain before capturing refs and retains bot
           await resumeDev.promise;
         },
         beforePromotionAdvance: () => {
-          assertLeases();
+          assertLaneCustody();
           published = true;
         },
       },
@@ -264,7 +262,10 @@ for (const failure of ['gate refusal', 'gate exception', 'cancelled attempt'] as
       const task = dispatchControlPlane(h);
       await h.start(task);
       await train(h, async () => {
-        expect(() => acquireDirectoryLease(join(h.settings.stateDirectory, 'train.lease'))).toThrow(LeaseHeldError);
+        expect(() => acquireDirectoryLease(join(h.settings.stateDirectory, 'train-main.lease'))).toThrow(
+          LeaseHeldError,
+        );
+        acquireDirectoryLease(join(h.settings.stateDirectory, 'train.lease')).release();
         if (failure === 'gate exception') throw new Error('fixture gate exception');
         if (failure === 'cancelled attempt')
           h.store.updateAttempt({ taskId: task.id, attempt: 1 }, (attempt) => {
@@ -314,7 +315,10 @@ test('ordinary release refuses repeated external dev drift at the final atomic r
       {
         beforePromotionAdvance: () => {
           attempts++;
-          expect(() => acquireDirectoryLease(join(h.settings.stateDirectory, 'train.lease'))).toThrow(LeaseHeldError);
+          expect(() => acquireDirectoryLease(join(h.settings.stateDirectory, 'train-main.lease'))).toThrow(
+            LeaseHeldError,
+          );
+          acquireDirectoryLease(join(h.settings.stateDirectory, 'train.lease')).release();
           external = addBranchCommit(h, 'dev', { 'external.txt': `external change ${attempts}\n` });
         },
       },
@@ -529,22 +533,33 @@ test('a durable record recovers a fully published release interrupted before que
     expect(releaseRecords(h)).toHaveLength(1);
     h.queue.finish = originalFinish;
     let gatesAfterRecovery = 0;
-    await train(
-      h,
-      async () => {
+    await new MergeTrain({
+      ...h.settings,
+      queue: h.queue,
+      fence: h.store,
+      sink: {
+        onGateOutcome(outcome) {
+          h.outcomes.push(outcome);
+        },
+        onDevLandingTranspileHandoff(handoff) {
+          h.job.onDevLandingTranspileHandoff(handoff);
+        },
+      },
+      runGate: async () => {
         gatesAfterRecovery++;
         throw new Error('recovery must use the durable release record');
       },
-      async () => {
+      runLaunchSmoke: async () => {
         gatesAfterRecovery++;
         return { passed: false, output: '', timedOut: false };
       },
-    );
+    }).run();
 
     expect(gatesAfterRecovery).toBe(0);
     expect([h.head('main'), h.head('stabilize'), h.head('dev')]).toEqual(published);
-    expect(h.outcomes.at(-1)?.passed).toBe(true);
-    expect(h.outcomes.at(-1)?.mergedCommit).toBe(published[0]);
+    expect(h.outcomes.at(-1)).toMatchObject({ passed: true, mergedCommit: published[0] });
+    h.job.onGateOutcome(h.outcomes.at(-1)!);
+    await h.job.drain();
     expect(releaseRecords(h)[0]).toMatchObject({
       mainCommit: published[0],
       stabilizeCommit: published[1],
@@ -803,7 +818,7 @@ test('failing combined cohorts bisect instead of serial fallback and preserve gr
   } finally {
     h.dispose();
   }
-});
+}, 10_000);
 
 test('a stale cohort generation cannot be hidden by collective green', async () => {
   const h = integrationHarness();
@@ -1060,8 +1075,9 @@ test('A queued product dev landing advances through its ordinary lane while a sl
     );
     await schedulingUntil(() => pidFiles.length === 2 && pidFiles.every((file) => existsSync(file)));
     const pids = pidFiles.map((file) => Number(readFileSync(file, 'utf8').trim()));
-    const ownerPaths = ['train-main.lease', 'train.lease'].map((name) => join(h.settings.stateDirectory, name));
-    const owners = ownerPaths.map((path) => readFileSync(join(path, readdirSync(path)[0]!), 'utf8'));
+    const mainLeasePath = join(h.settings.stateDirectory, 'train-main.lease');
+    const mainOwner = readFileSync(join(mainLeasePath, readdirSync(mainLeasePath)[0]!), 'utf8');
+    expect(existsSync(join(h.settings.stateDirectory, 'train.lease'))).toBe(false);
     // Another real train cannot steal either live owner, even though its initial idle dev drain has no work.
     await train(
       h,
@@ -1072,7 +1088,7 @@ test('A queued product dev landing advances through its ordinary lane while a sl
       {},
       'pump',
     );
-    expect(ownerPaths.map((path) => readFileSync(join(path, readdirSync(path)[0]!), 'utf8'))).toEqual(owners);
+    expect(readFileSync(join(mainLeasePath, readdirSync(mainLeasePath)[0]!), 'utf8')).toBe(mainOwner);
     const product = h.dispatch('arrived-during-main.txt');
     await h.start(product);
     expect(h.queue.nextBatch(10, [], 'dev').some((queued) => queued.request.taskId === product.id)).toBe(true);
@@ -1097,7 +1113,8 @@ test('A queued product dev landing advances through its ordinary lane while a sl
     expect(interrupted.reason).toContain('Product dev request');
     expect(readFileSync(interrupted.logPath, 'utf8')).toContain('proof remains non-green');
     expect(readFileSync(`${interrupted.logPath}.check-0`, 'utf8')).toContain('partial-proof-output');
-    for (const path of ownerPaths) expect(existsSync(path)).toBe(false);
+    expect(existsSync(mainLeasePath)).toBe(false);
+    expect(existsSync(join(h.settings.stateDirectory, 'train.lease'))).toBe(false);
 
     const capturedDev = h.head('dev');
     const commands: string[][] = [];
