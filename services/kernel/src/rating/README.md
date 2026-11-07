@@ -1665,12 +1665,17 @@ Rating's port through `installIdentityRatingRepairProducer` (runtime defaults, `
 kernel test preload); `createRatingModule` does not import that factory. Ordinary `application().identityRepair`
 uses the bound producer and `createIdentityRepairRead` for independent counted-vote, ordered-outbox, receipt
 obligation/mapping-digest and checkpoint observations. Native installed-composition acceptance is
-`test/rating/identity-repair-native.test.ts`. Performance owns nested-cost review and 256/1024/4096 growth of the
-page seam.
+`test/rating/identity-repair-native.test.ts`. Performance Cost vectors live in `identity-repair-bounds.ts` and the
+Cost subsections below. `test/rating/growth-identity-repair.test.ts` keeps injected seam series distinct from
+installed native growth of the bound producer.
 
 Decision: ordinary installed Rating identity repair uses the Semantic producer bound by host composition; omitting
 the producer on the command factory remains the unavailable seam; later identity changes and votes beyond the
 captured upper key stay on the retained obligation and converge through another admitted generation.
+
+Decision: fewest tests for this Cost close: extend identity-repair, identity-repair-native, growth-identity-repair
+and realm-rank-repair; pin later-vote and pending-event handoff in those suites; keep injected seam `checkGrowth`
+distinct from installed native growth; no new stories. Native/growth execution stays with the dev verifier.
 
 ## Voter Realm membership
 
@@ -2257,6 +2262,52 @@ The retryable dependency failure returns no partial page or replacement cursor, 
 - Touches: Three released account-home snapshots verify the active account and actor lifecycle row. The current partial ballot index selects at most 21 raw keys; the optional selected key uses one primary-key lookup, and final actor-home verification probes at most 21 supplied keys. Current Semantic association reads are grouped by subject home and capped at 21 identities; at most 84 exact resolutions cover initial own disclosure, current set advice, aggregate advice and final own disclosure. Current summaries batch at most 42 supplied Subject ids by represented home. Native contribution reads use supplied-key joins capped at 21 identities per represented association home. Each admitted aggregate uses the two-pass source witness described in Cost: read aggregate; at most 21 selected aggregates participate.
 - Bound: Raw slots stay fixed at 20 plus one continuation sentinel; one selected slot may be promoted separately. The response has at most 21 entries, at most 42 compact summaries, labels at most 2,000 characters and a 1 MiB serialized body ceiling. Cursor length remains 4,096. No actor, subject, association-history or voter scan runs on the page request. Any unavailable nested read fails the whole request and preserves the caller's cursor frontier.
 - Growth check: `test/rating/own-classification-journey.test.ts` uses production Kernel and real Access while independently growing unrelated ballots, associations, identity revisions and authority history at 256/1024/4096. The measured native prefixes, all participating SQL, backend, row and block evidence are asserted alongside empty/ready pages, selected promotion, sparse continuation, binding mismatch, read-only, withdraw-only preparation and same-key replay.
+
+### Cost: identity-repair admit
+
+- Touches: Library own-account envelope (BEGIN, lock/statement timeout, authoritative time, account SHARE and
+  state, receipt probe, partition fence, COMMIT) then one identity-work-frame lock, the finite upper-key limit and
+  a frame save. Admission captures the last current vote key; votes inserted after that key never join this
+  generation. No mapping hold, vote write or obligation.
+- Bound: `IDENTITY_REPAIR_ADMIT` in `identity-repair-bounds.ts`. One voter frame. Engine MVCC is outside the claim.
+  Unrelated voters, retained receipts and later input do not expand examined rows or statements.
+- Growth check: `test/rating/growth-identity-repair.test.ts` injected seam admit is a prefix of every measured
+  commit/cancel path; installed growth reuses the bound producer through `createInstalledIdentityRepairCommands`.
+  Scales 256/1024/4096 on voters, receipts and input independently.
+
+### Cost: identity-repair select
+
+- Touches: The same own-account envelope, frame lock, one `segment-identity-page` seek of at most 64 votes between
+  the checkpoint and the captured upper key, and a frame save of the immutable selected page. Empty completion is
+  the same seek returning zero votes.
+- Bound: `IDENTITY_REPAIR_SELECT` / `IDENTITY_REPAIR_SELECT_EMPTY`. Page size 64; selection encoding 65,536 bytes.
+  A shorter returned page cannot reprice the 64-row seek.
+- Growth check: same suite; nonempty pages stay 64 votes while input grows past the upper key; empty completion
+  grows later input after the first committed page.
+
+### Cost: identity-repair commit
+
+- Touches: Envelope, receipt read, frame lock, page re-seek, eligibility, Semantic `hold` (same-home owner lock,
+  page obligation, owners/sources/control/current, insert) or a preparing hold with at most eight continuation
+  events, capped memberships (100), per-vote vote/winner locks and at most three counted writes, receipt insert,
+  frame save and `complete` handoff. Failed complete rolls the page back. Pending without events rolls back;
+  pending with continuation events commits the preparing obligation under the original actor, request and deadline.
+  Withdrawal skips hold/complete.
+- Bound: `IDENTITY_REPAIR_COMMIT_NONEMPTY`, `IDENTITY_REPAIR_COMMIT_EMPTY`, `IDENTITY_REPAIR_COMMIT_REPLAY`,
+  `IDENTITY_REPAIR_COMMIT_ROLLBACK`, `IDENTITY_REPAIR_COMMIT_PENDING_EVENTS`, `IDENTITY_REPAIR_WITHDRAWAL_COMMIT`
+  and `IDENTITY_REPAIR_UNAVAILABLE`. At most 64 originals, 100 memberships, three effects per vote, eight
+  continuation events. No runtime funding gate.
+- Growth check: seam series cover commit, replay, rollback, cancel, withdrawal, empty and unavailable pending.
+  Installed series cover nonempty commit on all three axes and empty completion as later input grows, reading
+  mappings, counted identities, effects, receipt/obligation and checkpoint independently. Injected hold/complete
+  results are not installed proof.
+
+### Cost: identity-repair cancel
+
+- Touches: Envelope, frame lock, eligibility and a frame save. Eligible cancel stops without vote writes;
+  ineligible cancel starts withdrawal pages and a later cancel keeps the withdrawal checkpoint.
+- Bound: `IDENTITY_REPAIR_CANCEL`.
+- Growth check: the seam cancel and withdrawal scenarios in `test/rating/growth-identity-repair.test.ts`.
 
 ## Construction
 

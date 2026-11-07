@@ -45,6 +45,14 @@ Visibility repair uses `IdentityRatingParent` as the native Performance boundary
 
 Decision: `createIdentityRatingRepairProducer()` from `identity-rating-repair-producer.ts` and `semantic/index.ts` is the native mapping/obligation producer for Rating identity repair. `hold(tx, page)` on the original voter command locks `core.partition` for that home, classifies at most 64 same-home original-to-visible-terminal mappings, and inserts a retained obligation covering later mapping changes and votes beyond the captured upper key. Empty terminal pages take the same path with no mappings. `complete` binds that obligation to the Rating receipt in the same transaction; a failed handoff rolls the page back. Foreign source or control homes persist a preparing obligation and emit at most eight one-partition prepare continuations; `prepare` locks that home, `handoff` writes the voter receipt, and `drain` pages later_change/later_vote plus trigger overflow 64 rows at a time. Released `readMapping` observations never implement hold. Composition installs the factory and binds Rating's port; Content retains vote/effect/receipt/checkpoint writes and does not import the Semantic factory. The two-key `createIdentityRatingCommitParticipant` remains the reviewed same-home vote guard and is not this 64-vote page authority.
 
+Rating Performance Cost for those hold/complete/drain multiplicities lives in
+[identity-repair Cost](../rating/README.md#cost-identity-repair-commit) and `identity-repair-bounds.ts`. Injected
+Rating page-seam fixtures are not this producer's native evidence. Later votes beyond the captured upper key set
+`later_vote` through the Rating vote trigger; pending continuation events commit the preparing obligation on the
+original voter command. Account identity-source consumer custody in
+[identity-source-consumer-custody-contract.md](identity-source-consumer-custody-contract.md) is a different
+receipt and does not implement this page obligation.
+
 ## Retained progress boundary
 
 Decision: native acknowledgement retains the exact page checkpoint; the consumer resumes after an acknowledged nonterminal page and verifies a native tombstone before replaying a reclaimed terminal page.
