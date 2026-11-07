@@ -41,6 +41,7 @@ import {
   type HostStartKind,
 } from './process.ts';
 import { assessUsageLimitRefusal, markExhausted } from './usage.ts';
+import { PoolUnavailableError } from './allowance.ts';
 import { StaleAttemptError } from './contracts.ts';
 import { acquireDirectoryLease, acquireDirectoryLeaseWaiting, LeaseHeldError, type DirectoryLease } from './lease.ts';
 import { classifyFailure, estimateOverrun } from './failures.ts';
@@ -248,16 +249,21 @@ export class WorkerJob implements GateOutcomeSink {
     private readonly offloadStart?: (taskId: string, kind: HostStartKind) => Promise<void>,
   ) {}
   async runHostTask(kind: HostStartKind, taskId: string): Promise<void> {
-    if (kind === 'retry') {
-      const task = this.tasks.store.task(taskId);
-      await this.runRetryIntent({ taskId, attempt: task.currentAttempt });
-      return;
+    try {
+      if (kind === 'retry') {
+        const task = this.tasks.store.task(taskId);
+        await this.runRetryIntent({ taskId, attempt: task.currentAttempt });
+        return;
+      }
+      if (kind === 'released') {
+        await this.startReleased(taskId);
+        return;
+      }
+      await this.start(taskId, kind === 'first' ? { expectedAttempt: 0 } : {});
+    } catch (error) {
+      if (error instanceof PoolUnavailableError) return;
+      throw error;
     }
-    if (kind === 'released') {
-      await this.startReleased(taskId);
-      return;
-    }
-    await this.start(taskId, kind === 'first' ? { expectedAttempt: 0 } : {});
   }
   private track(work: Promise<void>): void {
     const handled = work.catch((error) => {
@@ -294,7 +300,12 @@ export class WorkerJob implements GateOutcomeSink {
     if (this.offloadStart) {
       this.retryIntentsInProgress.add(key);
       try {
-        await this.offloadStart(ref.taskId, 'retry');
+        try {
+          await this.offloadStart(ref.taskId, 'retry');
+        } catch (error) {
+          if (error instanceof PoolUnavailableError) return;
+          throw error;
+        }
       } finally {
         this.retryIntentsInProgress.delete(key);
       }
@@ -380,11 +391,7 @@ export class WorkerJob implements GateOutcomeSink {
         }
       }
       const worker = await this.tasks.retry(task.id, { ...intent.options, expectedAttempt: ref.attempt });
-      task = store.task(task.id);
-      store.updateRetryIntent(ref, (value) => {
-        value.status = 'started';
-        value.nextAttempt = task.currentAttempt;
-      });
+      this.markRetryIntentStarted(ref);
       if (worker) await this.follow(worker);
     } catch (error) {
       // Another process holds the task: the intent stays pending for the next sweep.
@@ -401,6 +408,8 @@ export class WorkerJob implements GateOutcomeSink {
         });
         return;
       }
+      // Capacity refusal is an admission wait: leave the durable intent pending for the next existing recovery pass.
+      if (error instanceof PoolUnavailableError) return;
       throw error;
     } finally {
       this.retryIntentsInProgress.delete(key);
@@ -420,21 +429,42 @@ export class WorkerJob implements GateOutcomeSink {
     for (const intent of this.tasks.store.retryIntents().filter((value) => value.status === 'pending'))
       this.track(this.runRetryIntent({ taskId: intent.taskId, attempt: intent.attempt }));
   }
+  private markRetryIntentStarted(ref: AttemptRef): void {
+    const task = this.tasks.store.task(ref.taskId);
+    if (task.currentAttempt <= ref.attempt) return;
+    if (this.tasks.store.retryIntent(ref)?.status !== 'pending') return;
+    this.tasks.store.updateRetryIntent(ref, (value) => {
+      value.status = 'started';
+      value.nextAttempt = task.currentAttempt;
+    });
+  }
   async start(taskId: string, options: RetryOptions = {}): Promise<void> {
     if (!this.startsAllowed()) return;
+    const task = this.tasks.store.task(taskId);
+    const ref = { taskId, attempt: task.currentAttempt };
+    // READY0 has no attempt record yet to carry a capacity wait; keep its source and generation in the normal
+    // retry-intent store before handing work to a child or asking the pool selector.
+    if (task.currentAttempt === 0 && task.state === 'ready') this.tasks.store.saveRetryIntent(ref, {});
     if (this.offloadStart) {
-      await this.offloadStart(taskId, options.expectedAttempt === 0 ? 'first' : 'start');
+      try {
+        await this.offloadStart(taskId, options.expectedAttempt === 0 ? 'first' : 'start');
+      } catch (error) {
+        if (error instanceof PoolUnavailableError) return;
+        throw error;
+      }
       return;
     }
-    const task = this.tasks.store.task(taskId);
     if (
       task.currentAttempt > 0 &&
       holdRetryForToolIncident(this.tasks.store, { taskId, attempt: task.currentAttempt }, options)
     )
       return;
     try {
-      await this.follow(await this.tasks.retry(taskId, options));
+      const worker = await this.tasks.retry(taskId, options);
+      this.markRetryIntentStarted(ref);
+      await this.follow(worker);
     } catch (error) {
+      if (error instanceof PoolUnavailableError) return;
       if (error instanceof TaskHeldForDependenciesError || error instanceof ProofCapacityQueuedError) return;
       // Another process already started the attempt this start expected to create.
       if (options.expectedAttempt !== undefined && error instanceof StaleAttemptError) return;
@@ -518,6 +548,7 @@ export class WorkerJob implements GateOutcomeSink {
       } catch (error) {
         // Another process is starting it.
         if (error instanceof LeaseHeldError) return;
+        if (error instanceof PoolUnavailableError) return;
         if (!(error instanceof HeldTaskConflictError)) throw error;
         const task = this.tasks.store.task(taskId),
           ref = { taskId, attempt: task.currentAttempt };
