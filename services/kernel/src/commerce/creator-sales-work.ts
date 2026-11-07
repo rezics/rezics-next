@@ -454,7 +454,8 @@ export async function retryCreatorSaleAdmission(
         await tx.query<EventRow & { time: string }>(
           `SELECT event_seq,id,type,subject,
                   CASE WHEN id=$4::uuid AND octet_length(data::text)<=1024 THEN data ELSE NULL END AS data,
-                  epoch::text,payload_state,time::text
+                  epoch::text,payload_state,
+                  to_char(recorded_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"') AS time
            FROM core.outbox WHERE partition_no=$1 AND position=$2 AND event_seq=$3`,
           [partition, pending.position, pending.eventSeq, pending.eventId],
         )
