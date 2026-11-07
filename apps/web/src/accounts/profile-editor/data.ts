@@ -2,14 +2,14 @@ import { serverSettingsTimer } from '../../settings/adapters/ambient';
 import type { KernelClient } from '@rezics/client';
 import * as v from 'valibot';
 import {
-  createEditableProfileSource,
   EditableProfileReadError,
+  createEditableProfileSource,
+  loadProfileRecord,
   nativeProfileFailure,
   parseProfilePatchAck,
-  settingsCommandKeyHeader,
-  loadProfileRecord,
   profileFieldErrors,
   profilePatchAdmitted,
+  settingsCommandKeyHeader,
   withProfileDeadline,
   type EditableProfileFailure,
   type ObservedProfile,

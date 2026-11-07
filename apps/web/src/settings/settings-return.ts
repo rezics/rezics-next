@@ -1,5 +1,5 @@
 import { getLocale } from '../paraglide/runtime.js';
-import { profileCommandValues, type ProfileValues } from './profile-data';
+import { profileCommandValues, type ProfileValues } from './profile-model';
 import { isWatchReturnReceipt, type WatchReturnReceipt } from './watch-controller';
 
 export const settingsWatchReturnKey = '__rezicsSettingsWatchReturn';
