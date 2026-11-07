@@ -11,10 +11,12 @@ import { runCommand, noEffect, currentCommand } from '../command/command.ts';
 import { partitionOf, routeOf } from '../route/route.ts';
 import { readPartition } from '../partition/partition.ts';
 import { readRelease } from './definition-release-read.ts';
+import { nativeSourceQuery } from './native-source-query.ts';
 import { freeze } from './core/freeze.ts';
 import { withRequestDeadline } from '../request/deadline.ts';
+import { ProblemError } from '../http/problem-error.ts';
 import { CommandUnavailableError, requireAccessDeadline } from '../access/unavailable.ts';
-import { withConnection, discardConnection } from '../database/pool.ts';
+import { withConnection, discardConnection, withQueryAccounting } from '../database/pool.ts';
 import registerSource from './public-filter-source-binding-register.sql';
 import defineSource from './public-filter-source-binding-define.sql';
 import readDefinition from './public-filter-source-binding-definition.sql';
@@ -48,7 +50,7 @@ import repairKeys from './public-filter-source-binding-repair-keys.sql';
 import repairAdvance from './public-filter-source-binding-repair-advance.sql';
 import repairVersion from './public-filter-source-binding-repair-version.sql';
 import repairCurrent from './public-filter-source-binding-repair-current.sql';
-import type { Pool } from 'pg';
+import type { Pool, QueryResult } from 'pg';
 import type { Access } from '../access/index.ts';
 import type { AccountDiscoveryRepairObservation } from '../access/account-discovery-source.ts';
 import type {
@@ -758,7 +760,7 @@ export async function readNativePublicFilterSourceDefinition(
   if (!uuid.test(id)) throw new BindingError('definition_missing');
   if (!/^[a-f0-9]{64}$/.test(routeDigest)) throw new TypeError('Invalid Source route digest');
   if (!Number.isSafeInteger(maxBytes) || maxBytes < 0) throw new RangeError('Invalid Source definition byte bound');
-  const row = await readDefinition.run(db, {
+  const row = await nativeSourceQuery(db, readDefinition, {
     read_definition: id,
     max_bytes: maxBytes,
   });
@@ -802,41 +804,37 @@ function checkDeadline(context: PublicFilterConsumerContext): void {
   if (!Number.isFinite(context.deadline) || context.deadline <= Date.now()) throw new BindingError('deadline');
 }
 /** Charge native release lookups as well as Source SQL, including failed submissions. */
-function measuredPool(pool: Pool, cost: BindingCost): Pool {
-  function wrap<T extends object>(target: T): T {
-    return new Proxy(target, {
-      get(object, key) {
-        const value: unknown = Reflect.get(object, key, object);
-        if (key === 'query' && typeof value === 'function')
-          return async (text: string, values?: unknown[]) => {
-            // Authored native point queries declare their complete keyed relation
-            // footprint. Reserve it before submission, including misses, CAS loss
-            // and thrown attempts. A joined result is not another native row.
-            const native = /^\s*\/\* semantic\.native-keyed:(\d+):(\d+) \*\//.exec(text);
-            const writes = native !== null && /^\s*(?:\/\*[\s\S]*?\*\/\s*)*(?:INSERT|UPDATE|DELETE)\b/.test(text);
-            cost.statements++;
-            cost.inputKeys += native ? Number(native[2]) : (values?.length ?? 0);
-            cost.bytes += Buffer.byteLength(text) + Buffer.byteLength(encode(values));
-            if (native) {
-              cost.rows += Number(native[1]);
-              cost.dependencyPoints += Number(native[1]);
-              if (writes) cost.resultWrites++;
-            }
-            const result = await value.call(object, text, values);
-            if (!native) {
-              cost.rows += result.rowCount ?? 0;
-              cost.dependencyPoints += result.rowCount ?? 0;
-            }
-            cost.bytes += Buffer.byteLength(encode(result.rows));
-            if (!native && /\b(INSERT|UPDATE|DELETE)\b/.test(text)) cost.resultWrites += result.rowCount ?? 0;
-            return result;
-          };
-        if (key === 'connect' && typeof value === 'function') return async () => wrap(await value.call(object));
-        return typeof value === 'function' ? value.bind(object) : value;
+function measuredQueries<T>(cost: BindingCost, body: () => Promise<T>): Promise<T> {
+  return withQueryAccounting(
+    {
+      async query(text, parameters, dispatch) {
+        // Authored native point queries declare their complete keyed relation
+        // footprint. Reserve it before submission, including misses, CAS loss
+        // and thrown attempts. A joined result is not another native row.
+        const native = /^\s*\/\* semantic\.native-keyed:(\d+):(\d+) \*\//.exec(text);
+        const writes = native !== null && /^\s*(?:\/\*[\s\S]*?\*\/\s*)*(?:INSERT|UPDATE|DELETE)\b/.test(text);
+        cost.statements++;
+        cost.inputKeys += native ? Number(native[2]) : parameters.length;
+        cost.bytes += Buffer.byteLength(text) + Buffer.byteLength(encode(parameters));
+        if (native) {
+          cost.rows += Number(native[1]);
+          cost.dependencyPoints += Number(native[1]);
+          if (writes) cost.resultWrites++;
+        }
+        const result = await dispatch();
+        const { rowCount, rows } = result as QueryResult;
+        if (!native) {
+          cost.rows += rowCount ?? 0;
+          cost.dependencyPoints += rowCount ?? 0;
+        }
+        cost.bytes += Buffer.byteLength(encode(rows));
+        if (!native && /\b(INSERT|UPDATE|DELETE)\b/.test(text)) cost.resultWrites += rowCount ?? 0;
+        return result;
       },
-    });
-  }
-  return wrap(pool);
+      connection: (dispatch) => dispatch(),
+    },
+    body,
+  );
 }
 /** Shared constructor validation; routing is the existing native routeKey, never a callback. */
 function validatePublicFilterBindingConfiguration(pool: Pool, routing: Uint8Array, access: Access): void {
@@ -874,14 +872,14 @@ export function createNativePublicFilterSourceBinding(
     const deadline = context.deadline;
     try {
       checkDeadline({ deadline });
-      const result = await withRequestDeadline(deadline, () => work(cost, measuredPool(pool, cost)));
+      const result = await withRequestDeadline(deadline, () => measuredQueries(cost, () => work(cost, pool)));
       checkDeadline({ deadline });
       return result;
     } catch (error) {
       if (error instanceof BindingError) return fail(error.reason, cost);
       if (error instanceof TypeError || error instanceof RangeError) return fail('binding_mismatch', cost);
       const reason = ports.access.classifyUnavailability(error);
-      if (reason !== undefined || (error && typeof error === 'object' && 'code' in error))
+      if (reason !== undefined || (error instanceof ProblemError && error.code === 'dependency_unavailable'))
         return fail(Date.now() >= deadline ? 'deadline' : 'owner_unavailable', cost);
       throw error;
     }
@@ -923,7 +921,7 @@ export function createNativePublicFilterSourceBinding(
       throw new BindingError('binding_mismatch');
   }
   async function loadBootstrap(locator: string, db: Pool, knownDefinition?: PublicFilterSourceDefinition) {
-    const row = await readBootstrap.run(db, { bootstrap: nativeId(locator) });
+    const row = await nativeSourceQuery(db, readBootstrap, { bootstrap: nativeId(locator) });
     if (!row) throw new BindingError('observation_lost');
     if (knownDefinition && knownDefinition.readDefinition !== row.read_definition)
       throw new BindingError('binding_mismatch');
@@ -1044,7 +1042,7 @@ export function createNativePublicFilterSourceBinding(
     if (state.resumeBridge || state.subject !== null || state.projection !== null)
       throw new BindingError('binding_mismatch');
     if (state.phase === 'window') {
-      // measuredPool charges the projected row. The original enrollment, native
+      // Query accounting charges the projected row. The original enrollment, native
       // owner and retention checkpoint are three separately keyed inputs.
       cost.rows += 2;
       cost.dependencyPoints += 2;
@@ -1164,7 +1162,7 @@ export function createNativePublicFilterSourceBinding(
     )
       throw new BindingError('binding_mismatch');
     // A single home-local statement is the last source-home read after staged foreign projection work.
-    const current = await repairCurrent.run(db, {
+    const current = await nativeSourceQuery(db, repairCurrent, {
       partition_no: state.partition,
       bootstrap: nativeId(bootstrap),
       execution,
@@ -1313,7 +1311,7 @@ export function createNativePublicFilterSourceBinding(
       if (verified.status !== 'verified' || !(await readPublicFilterRepairVerification(db, chain, request.frontier)))
         return fail('owner_unavailable', cost);
     }
-    const old = await repairRead.run(db, {
+    const old = await nativeSourceQuery(db, repairRead, {
       bootstrap: id,
       execution: request.execution,
       predecessor: request.frontier ?? '',
@@ -1328,7 +1326,7 @@ export function createNativePublicFilterSourceBinding(
     let state: RepairState;
     if (replay) state = replay.input;
     else if (request.frontier !== null) {
-      const previous = await repairState.run(db, {
+      const previous = await nativeSourceQuery(db, repairState, {
         bootstrap: id,
         execution: request.execution,
         step: request.frontier,
@@ -1424,7 +1422,7 @@ export function createNativePublicFilterSourceBinding(
               : { ...next, subject: null, phase: 'scan' };
         } else throw new BindingError('binding_mismatch');
       } else if (state.phase === 'scan') {
-        const key = await repairKeys.run(db, {
+        const key = await nativeSourceQuery(db, repairKeys, {
           partition_no: state.partition,
           after_route: state.after?.route ?? state.partition * 16,
           after_id: state.after?.id ?? '00000000-0000-0000-0000-000000000000',
@@ -1468,14 +1466,14 @@ export function createNativePublicFilterSourceBinding(
             clock: ports.sourceOrigin(sourceReader(bootstrap.definition))?.clock ?? systemClock,
           },
           async (tx) => {
-            const existing = await repairVersion.run(tx, values);
+            const existing = await nativeSourceQuery(tx, repairVersion, values);
             if (existing && (existing.transaction_id === null || existing.native_xid === null))
               throw new BindingError('owner_unavailable');
             if (existing) return noEffect(existing);
             // The original advancement and its first genuine keyed privacy
             // baseline are both attempted writes, including a lost CAS.
             cost.resultWrites += 2;
-            const result = await repairAdvance.run(tx, {
+            const result = await nativeSourceQuery(tx, repairAdvance, {
               ...values,
               transaction_id: currentCommand(tx).transactionId,
             });
@@ -1612,7 +1610,7 @@ export function createNativePublicFilterSourceBinding(
     };
     if (replay && encode(record) !== encode(replay)) throw new BindingError('binding_mismatch');
     if (!old) {
-      const saved = await repairSave.run(db, {
+      const saved = await nativeSourceQuery(db, repairSave, {
         bootstrap: id,
         execution: request.execution,
         step,
@@ -1739,10 +1737,10 @@ export function createNativePublicFilterSourceBinding(
         const release = await readRelease(db, meaning.digest);
         if (!release || !isDeepStrictEqual(release, meaning.release) || !release.types[meaning.type])
           throw new BindingError('definition_missing');
-        const source = (await registerSource.run(db, { route_digest: routeDigest }))[0];
+        const source = (await nativeSourceQuery(db, registerSource, { route_digest: routeDigest }))[0];
         if (!source) throw new BindingError('owner_unavailable');
         const definition = (
-          await defineSource.run(db, {
+          await nativeSourceQuery(db, defineSource, {
             source_id: source.source_id,
             configuration: source.configuration,
             route_digest: routeDigest,
@@ -1807,7 +1805,7 @@ export function createNativePublicFilterSourceBinding(
       const inserted = existing
         ? { bootstrap: existing.row.bootstrap }
         : (
-            await beginBootstrap.run(db, {
+            await nativeSourceQuery(db, beginBootstrap, {
               bootstrap: randomUUID(),
               read_definition: resolved.definition.readDefinition,
               request_key: hash(encode({ consumer, snapshot })),
@@ -1862,7 +1860,7 @@ export function createNativePublicFilterSourceBinding(
         cost.rows++;
         const adopted = await adoptPublicFilterCoverageBaseline(db, baseline, receipt, deadline);
         const advanced = (
-          await accountPage.run(db, {
+          await nativeSourceQuery(db, accountPage, {
             bootstrap: inserted.bootstrap,
             after_partition: cut.row.account_after,
             next_partition: cut.row.account_after + 1,
@@ -2084,7 +2082,7 @@ export function createNativePublicFilterSourceBinding(
           encode(cut.bootstrap.covered) !== encode(joined.covered)
         )
           throw new BindingError('binding_mismatch');
-        const row = await repairRead.run(db, {
+        const row = await nativeSourceQuery(db, repairRead, {
           bootstrap: bootstrapId,
           execution: input.execution,
           predecessor: input.predecessor ?? '',
@@ -2096,7 +2094,7 @@ export function createNativePublicFilterSourceBinding(
         // Resolve the actual native predecessor, not an asserted matching cursor.
         // Its immutable successor binds the next input even on a crash/replay.
         if (input.predecessor !== null) {
-          const predecessor = await repairState.run(db, {
+          const predecessor = await nativeSourceQuery(db, repairState, {
             bootstrap: bootstrapId,
             execution: input.execution,
             step: input.predecessor,
@@ -2289,7 +2287,7 @@ export function createNativePublicFilterSourceBinding(
           if (state.owner === 'accounts') {
             expected = await nextAccountRepair(base, db, cost);
           } else {
-            const key = await repairKeys.run(db, {
+            const key = await nativeSourceQuery(db, repairKeys, {
               partition_no: state.partition,
               after_route: state.after?.route ?? state.partition * 16,
               after_id: state.after?.id ?? '00000000-0000-0000-0000-000000000000',
@@ -2323,7 +2321,7 @@ export function createNativePublicFilterSourceBinding(
             record.next.version === null
           )
             throw new BindingError('binding_mismatch');
-          const advancement = await repairVersion.run(db, {
+          const advancement = await nativeSourceQuery(db, repairVersion, {
             partition_no: record.input.partition,
             bootstrap: bootstrapId,
             execution: input.execution,
@@ -2430,7 +2428,7 @@ export function createNativePublicFilterSourceBinding(
           encode(cut.bootstrap.covered) !== encode(joined.covered)
         )
           throw new BindingError('binding_mismatch');
-        const row = await repairState.run(db, {
+        const row = await nativeSourceQuery(db, repairState, {
           bootstrap: nativeId(receipt.bootstrap),
           execution,
           step: receipt.step,
@@ -2523,7 +2521,7 @@ export function createNativePublicFilterSourceBinding(
           throw new BindingError('binding_mismatch');
         if (
           !(
-            await adoptBootstrap.run(db, {
+            await nativeSourceQuery(db, adoptBootstrap, {
               bootstrap: cut.row.bootstrap,
               observation: joined.queried.snapshot.observation,
             })
@@ -2542,7 +2540,7 @@ export function createNativePublicFilterSourceBinding(
       const id = request.bootstrap;
       return run(context, async (cost, db) => {
         const cut = await loadBootstrap(id, db);
-        const result = (await abortBootstrap.run(db, { bootstrap: cut.row.bootstrap }))[0];
+        const result = (await nativeSourceQuery(db, abortBootstrap, { bootstrap: cut.row.bootstrap }))[0];
         if (!result) throw new BindingError('configuration_changed');
         // Search's public lookup cannot distinguish closed from unknown/expired/uncertain native custody.
         // Persist the barrier and retain the cut; neither a timeout nor observation_lost proves closure.
@@ -2587,7 +2585,7 @@ export function createNativePublicFilterSourceBinding(
         if (encode(joined.covered) !== encode(cut.bootstrap.covered)) return { status: 'pending' as const, cost };
         if (
           !(
-            await adoptBootstrap.run(db, {
+            await nativeSourceQuery(db, adoptBootstrap, {
               bootstrap: cut.row.bootstrap,
               observation: joined.queried.snapshot.observation,
             })
@@ -2659,7 +2657,7 @@ export function createNativePublicFilterSourceBinding(
         encode(cut.bootstrap.covered) !== encode(joined.covered)
       )
         throw new BindingError('binding_mismatch');
-      const row = await repairRead.run(db, {
+      const row = await nativeSourceQuery(db, repairRead, {
         bootstrap: nativeId(request.bootstrap),
         execution: request.execution,
         predecessor: request.predecessor ?? '',

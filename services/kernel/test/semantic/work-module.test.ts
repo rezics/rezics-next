@@ -6,7 +6,9 @@ import { createKernel } from '../../src/http/kernel.ts';
 import { partitionOf, routeOf } from '../../src/route/route.ts';
 import { bootstrapRelease, GLOBAL_CONTEXT } from '../../src/semantic/definitions.ts';
 import { createSemanticWorkModule } from '../../src/semantic/work-module.ts';
+import { createWorkerAuthorization } from '../../src/work/authorization.ts';
 import { composeSemanticIdentityParticipants } from '../../src/composition/semantic.ts';
+import { composeSearchNativePorts } from '../../src/composition/search-native.ts';
 import { KERNEL_WORK_MODULES } from '../support/default-work-modules.ts';
 import { testReceiptKeys } from '../support/receipt-keys.ts';
 import { workerTestEnv } from '../support/worker-env.ts';
@@ -23,21 +25,39 @@ afterAll(async () => {
 
 // Each child owns the SDK singleton. Decorations observe the real default services and retain their handles.
 const program = `
-  import assert from 'node:assert/strict';
-  import { DBOS } from '@dbos-inc/dbos-sdk';
-  import { spyOn } from 'bun:test';
-  import * as relayModule from './src/events/relays.ts';
+  const phase = name => console.error('semantic-work-phase: ' + name);
+  phase('entry');
+  const { default: assert } = await import('node:assert/strict');
+  const { DBOS } = await import('@dbos-inc/dbos-sdk');
+  const { spyOn } = await import('bun:test');
+  phase('sdk-loaded');
+  const authorizationModule = await import('./src/work/authorization.ts');
+  phase('authorization-module-loaded');
+  const createWorkerAuthorization = authorizationModule.createWorkerAuthorization;
+  spyOn(authorizationModule, 'createWorkerAuthorization').mockImplementation((...args) => {
+    phase('authorization-factory');
+    const authorization = createWorkerAuthorization(...args);
+    phase('authorization-created');
+    return authorization;
+  });
+  const relayModule = await import('./src/events/relays.ts');
   let identityRegistrations = 0;
   let launches = 0;
   const registerWorkflow = DBOS.registerWorkflow;
   spyOn(DBOS, 'registerWorkflow').mockImplementation((workflow, config) => {
+    phase('workflow-register:' + config?.name);
     if (config?.name === 'semantic.identityEpoch') identityRegistrations++;
-    return registerWorkflow.call(DBOS, workflow, config);
+    const registered = registerWorkflow.call(DBOS, workflow, config);
+    phase('workflow-registered:' + config?.name);
+    return registered;
   });
   const launch = DBOS.launch;
-  spyOn(DBOS, 'launch').mockImplementation((...args) => {
+  spyOn(DBOS, 'launch').mockImplementation(async (...args) => {
+    phase('sdk-launch');
     launches++;
-    return launch.apply(DBOS, args);
+    const result = await launch.apply(DBOS, args);
+    phase('sdk-launched');
+    return result;
   });
   const startRelays = relayModule.startRelays;
   let projectors = 0;
@@ -49,57 +69,95 @@ const program = `
     }
     return startRelays(nativePool, relays, ...rest);
   });
+  phase('worker-import');
   const { readWorkerConfig, startWorker } = await import('./src/worker.ts');
-  import { createDiscoveryProducerEntry } from './src/composition/discovery.ts';
-  import { createKernelRuntimeDefaults } from './src/composition/runtime-defaults.ts';
-    import { createKernelWorkModules } from './src/composition/work-modules.ts';
-    import { composeSemanticIdentityParticipants } from './src/composition/semantic.ts';
-    const KERNEL_WORK_MODULES = createKernelWorkModules(
-      createDiscoveryProducerEntry,
-      createKernelRuntimeDefaults,
-      composeSemanticIdentityParticipants,
-    );
+  phase('worker-imported');
+  const workClient = await import('./src/work/client.ts');
+  const createWorkClient = workClient.createWorkClient;
+  spyOn(workClient, 'createWorkClient').mockImplementation(async (...args) => {
+    phase('client-create');
+    const client = await createWorkClient(...args);
+    phase('client-created');
+    return client;
+  });
   let pool;
   let starts = 0;
   let stops = 0;
   let registrations = 0;
-  assert.equal(KERNEL_WORK_MODULES.filter(m => m.name === 'semantic').length, 1);
-  const modules = KERNEL_WORK_MODULES.map(module => ({
-    name: module.name,
-    async register(context) {
-      if (module.name !== 'semantic') return module.register(context);
-      registrations++;
-      pool = context.pool;
-      assert.equal(DBOS.isInitialized(), false);
-      await module.register({ ...context, addEffects(effects) {
-        const erasure = effects.find(effect => effect.name === 'semantic_erasure');
+  const fail = process.env.SEMANTIC_START_FAILURE === 'true';
+  const decorate = nativeModules => {
+    phase('bindings-installed');
+    assert.equal(nativeModules.filter(m => m.name === 'semantic').length, 1);
+    const modules = nativeModules.map(module => ({
+      name: module.name,
+      async register(context) {
+        phase('register:' + module.name);
+        const nativeContext = context;
+        context = { ...context, getAuthorization() {
+          phase('authorization:' + module.name);
+          try {
+            const authorization = nativeContext.getAuthorization();
+            phase('authorized:' + module.name);
+            return authorization;
+          } catch (error) {
+            console.error('semantic-work-authorization-error:', error);
+            throw error;
+          }
+        }, addService(start) {
+          nativeContext.addService(async () => {
+            phase('service-start:' + module.name);
+            const service = await start();
+            phase('service-started:' + module.name);
+            return service;
+          });
+        }};
+        if (module.name !== 'semantic') {
+          try {
+            await module.register(context);
+          } catch (error) {
+            console.error('semantic-work-registration-error:' + module.name, error);
+            throw error;
+          }
+          phase('registered:' + module.name);
+          return;
+        }
+        registrations++;
+        pool = context.pool;
+        assert.equal(DBOS.isInitialized(), false);
+        const registeredEffects = [];
+        await module.register({ ...context, addEffects(effects) {
+          registeredEffects.push(...effects);
+          context.addEffects(effects);
+        }, addService(start) {
+          context.addService(async () => {
+            assert.equal(DBOS.isInitialized(), true);
+            const service = await start();
+            starts++;
+            return { async stop() {
+              assert.equal(pool.ended, false);
+              assert.equal(DBOS.isInitialized(), true);
+              await service.stop();
+              stops++;
+            }};
+          });
+        }});
+        const erasure = registeredEffects.find(effect => effect.name === 'semantic_erasure');
         assert.ok(erasure, 'Semantic registers its account tombstone effect even when no local data applies');
         assert.deepEqual(erasure.types, ['com.rezics.access.account-tombstoned.v1']);
-        const identity = effects.find(effect => effect.name === 'identity_epoch_admission');
+        const identity = registeredEffects.find(effect => effect.name === 'identity_epoch_admission');
         assert.ok(identity, 'Semantic registers durable resumption of the saved identity job');
         assert.deepEqual(identity.types, ['com.rezics.semantic.identity-epoch.admitted.v1']);
-        context.addEffects(effects);
-      }, addService(start) {
-        context.addService(async () => {
-          assert.equal(DBOS.isInitialized(), true);
-          const service = await start();
-          starts++;
-          return { async stop() {
-            assert.equal(pool.ended, false);
-            assert.equal(DBOS.isInitialized(), true);
-            await service.stop();
-            stops++;
-          }};
-        });
-      }});
-    }
-  }));
-  const fail = process.env.SEMANTIC_START_FAILURE === 'true';
-  if (fail) modules.push({ name: 'startup-failure', register(context) {
-    context.addService(() => { throw new Error('later starter failed'); });
-  }});
+        phase('registered:' + module.name);
+      }
+    }));
+    if (fail) modules.push({ name: 'startup-failure', register(context) {
+      context.addService(() => { throw new Error('later starter failed'); });
+    }});
+    return modules;
+  };
   try {
-    const worker = await startWorker(readWorkerConfig(process.env), modules);
+    phase('worker-start');
+    const worker = await startWorker(readWorkerConfig(process.env), decorate);
     assert.equal(fail, false);
     assert.equal(registrations, 1);
     assert.equal(identityRegistrations, 1);
@@ -158,22 +216,35 @@ function runtime(fail = false) {
   const read = (async () => {
     for await (const chunk of child.stdout) output += new TextDecoder().decode(chunk);
   })();
-  const errors = new Response(child.stderr).text();
+  let errors = '';
+  const readErrors = (async () => {
+    for await (const chunk of child.stderr) errors += new TextDecoder().decode(chunk);
+  })();
   return {
     application,
     child,
     output: () => output,
     async until(marker: string) {
-      await until(async () => {
-        if (output.includes(marker)) return true;
-        if (child.exitCode !== null) throw new Error(`${output}\n${await errors}`);
-        return false;
-      });
+      try {
+        await until(async () => {
+          if (output.includes(marker)) return true;
+          if (child.exitCode !== null) throw new Error(`Semantic child exited before ${marker}`);
+          return false;
+        });
+      } catch (error) {
+        throw new Error(`${error instanceof Error ? error.message : error}\n${output}\n${errors}`);
+      }
     },
     async finish() {
       const status = await child.exited;
       await read;
-      expect(status, `${output}\n${await errors}`).toBe(0);
+      await readErrors;
+      expect(status, `${output}\n${errors}`).toBe(0);
+    },
+    async dispose() {
+      if (child.exitCode === null) child.kill('SIGKILL');
+      await child.exited;
+      await Promise.all([read, readErrors]);
     },
   };
 }
@@ -210,8 +281,7 @@ test('default semantic WorkModule registers and starts the existing native seman
     ]);
     expect(rows).toEqual([]);
   } finally {
-    child.child.kill();
-    await child.child.exited;
+    await child.dispose();
   }
 }, 30_000);
 
@@ -369,8 +439,7 @@ test('actual native subject relation events converge through registered Semantic
     await admin.query('DROP TRIGGER IF EXISTS hold_semantic_checkpoint ON core.consumer_checkpoint');
     await admin.query('DROP FUNCTION IF EXISTS public.hold_semantic_checkpoint()');
     lock.release();
-    child.child.kill();
-    await child.child.exited;
+    await child.dispose();
   }
 }, 60_000);
 
@@ -379,15 +448,18 @@ test('default Semantic composition registers its real locator and bounded local 
   const { createWorkClient } = await import('../../src/work/client.ts');
   const { WORK_QUEUES } = await import('../../src/work/queues.ts');
   const client = await createWorkClient(databaseUrl!, pool);
+  const env = { ...process.env, ...workerTestEnv() };
+  const clock = () => new Date();
   try {
-    await createSemanticWorkModule(composeSemanticIdentityParticipants).register({
+    const authorization = createWorkerAuthorization({ pool, client, env, clock, receiptKeys: testReceiptKeys() });
+    await createSemanticWorkModule(composeSemanticIdentityParticipants, composeSearchNativePorts).register({
       pool,
-      env: process.env,
-      clock: () => new Date(),
+      env,
+      clock,
       queues: WORK_QUEUES,
       client,
       getAuthorization() {
-        throw new Error('Semantic fixture does not consume worker authorization');
+        return authorization;
       },
       addEffects(registered) {
         effects.push(...registered);

@@ -16,11 +16,14 @@ function writeRateFor(method: string, path: string, action: unknown): RateLimitD
 /** Composition declarations for mounted owners which predate the shared stage.
  * Route owners may supply their own declaration; unknown writes remain closed unless this overlay names them.
  */
-export function declareKernelWriteRates(app: {
-  routes: readonly { method: string; path: string; hooks?: { detail?: unknown } }[];
-}): void {
+type RateRoute = { method: string; path: string; hooks?: { detail?: unknown } };
+
+export function declareKernelWriteRates(
+  app: { routes: readonly RateRoute[] },
+  routes: readonly RateRoute[] = app.routes,
+): void {
   const rates = new Map(composedRates.get(app));
-  for (const route of app.routes) {
+  for (const route of routes) {
     const detail = route.hooks?.detail as Record<string, unknown> | undefined;
     const existing = detail?.['x-rate-limit'];
     if (existing !== undefined) {

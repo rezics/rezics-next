@@ -268,15 +268,17 @@ bun services/auth/scripts/dev-stack.ts walk -- <command...>
    Admission skips slots whose ports still have listeners, including containers surviving an interrupted launcher.
    Those listeners remain untouched; when all slots are occupied, the launch keeps its queue position.
 3. Runs `db up`, `search up` and `setup`, retires the previous seed journal for this fresh database, then starts native
-   Auth, the worker and Kernel. Kernel verifies issuer-origin JWKS and fetches that exact public document from native
-   Auth. Full-effect walks start Auth pages before Kernel so issuer-origin JWKS is available during seed; Web waits
-   until the journey seeds. An admitted stack runs Kernel without `--watch`.
-   The default lightweight Account mode (`REZICS_WALK_DEFER_FRONTENDS=1`) also omits OpenSearch, the Kernel worker and a second Kernel process, serves
-   Kernel HTTP from the Auth host, and waits for native JWKS and Kernel health instead; the child starts issuer then
-   Web when it needs mounted pages. Full-effect walks such as Content set `REZICS_WALK_DEFER_FRONTENDS=0`
-   explicitly so the real worker and Search can finish bootstrap and seed effects. Slot identities remain scoped in
-   either mode. Otherwise the walk `start` process waits for native JWKS and Kernel
-   `/v1/definitions`, for at most twenty minutes. Readiness first checks that the port accepts TCP, then fetches with
+   Auth, Kernel, then the worker so the bundled release exists before discovery. Kernel verifies issuer-origin JWKS
+   and fetches that exact public document from native Auth. Full-effect walks start Auth pages before Kernel so
+   issuer-origin JWKS is available during seed; Web waits until the journey seeds. An admitted stack runs Kernel
+   without `--watch`.
+   The default lightweight Account mode (`REZICS_WALK_DEFER_FRONTENDS=1`) also omits OpenSearch, the Kernel worker and a
+   second Kernel process, serves Kernel HTTP from the Auth host, and waits for native JWKS and Kernel health instead;
+   the child starts issuer then Web when it needs mounted pages. Full-effect walks such as Content set
+   `REZICS_WALK_DEFER_FRONTENDS=0` explicitly so the real worker and Search can finish bootstrap and seed effects. Slot
+   identities remain scoped in either mode. Otherwise the walk `start` process waits for native JWKS and Kernel
+   `/v1/definitions` HTTP 200 with the active digest, for at most twenty minutes. Readiness first checks that the port
+   accepts TCP, then fetches with
    the remaining window so a short abort cannot strand a compile; a hard request budget
    also bounds a listener that never writes. `db up` and `search up` retry once; a failed database bring-up first
    retires this task's containers. The walk `start` process stays up until SIGTERM or SIGINT and restarts a child that

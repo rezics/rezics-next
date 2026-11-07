@@ -1,9 +1,4 @@
-import { createServerFn, createServerOnlyFn } from '@tanstack/react-start';
-import { getRequest, setResponseHeader } from '@tanstack/react-start/server';
-import { env } from 'cloudflare:workers';
-import { kernelClient } from '../../kernel/client';
-import type { SessionEnv } from '../../session/client';
-import { prepareSession, viewerCredential } from '../../session/request';
+import { createServerFn } from '@tanstack/react-start';
 import { readReleaseForCaller } from '../../subject/definitions';
 import {
   fetchGuideActiveDigest,
@@ -13,7 +8,6 @@ import {
   readGuideDirectory,
   readGuideType,
   type GuideAddress,
-  type GuideFailure,
   type GuideLocale,
   type GuidePageRead,
   type GuideRead,
@@ -80,27 +74,11 @@ export function guideTypeRequest(value: unknown): { typeId: string; locale: Guid
   return { typeId: input.typeId, locale: locale(input.locale) };
 }
 
-async function withGuideReader<T extends { ok: boolean }>(
-  selectedLocale: GuideLocale,
-  read: (options: { client: ReturnType<typeof kernelClient>; headers: Record<string, string> }) => Promise<T>,
-): Promise<T | { ok: false; reason: GuideFailure }> {
-  setResponseHeader('cache-control', 'private, no-store');
-  try {
-    const request = getRequest();
-    const stale = await prepareSession(request, env as Partial<SessionEnv>);
-    if (stale) return { ok: false, reason: 'denied' };
-    const authorization = viewerCredential(request);
-    const headers = authorization ? { authorization } : {};
-    return await read({ client: kernelClient(selectedLocale), headers });
-  } catch {
-    return { ok: false, reason: 'unavailable' };
-  }
-}
-
 export const readDefinitionGuide = createServerFn({ method: 'GET' })
   .validator(guideReadRequest)
-  .handler(async ({ data }): Promise<GuideRead> =>
-    withGuideReader(data.locale, ({ client, headers }) =>
+  .handler(async ({ data }): Promise<GuideRead> => {
+    const { withGuideReader } = await import('./definition-guide-session.server');
+    return withGuideReader(data.locale, ({ client, headers }) =>
       readGuide(
         data.address,
         (digest) => readReleaseForCaller({ client, ...(digest ? { digest } : {}), headers }),
@@ -108,35 +86,23 @@ export const readDefinitionGuide = createServerFn({ method: 'GET' })
         (typeId) => readGuideType(client, typeId, data.locale, headers),
         () => fetchGuideActiveDigest(client, headers),
       ),
-    ),
-  );
+    );
+  });
 
 export const readDefinitionGuideDirectory = createServerFn({ method: 'GET' })
   .validator(guideDirectoryRequest)
-  .handler(async ({ data }): Promise<GuidePageRead> =>
-    withGuideReader(data.locale, ({ client, headers }) =>
+  .handler(async ({ data }): Promise<GuidePageRead> => {
+    const { withGuideReader } = await import('./definition-guide-session.server');
+    return withGuideReader(data.locale, ({ client, headers }) =>
       readGuideDirectory(client, data.locale, data.query, data.cursor, headers),
-    ),
-  );
+    );
+  });
 
 export const readDefinitionGuideType = createServerFn({ method: 'GET' })
   .validator(guideTypeRequest)
-  .handler(async ({ data }): Promise<GuideTypeRead> =>
-    withGuideReader(data.locale, ({ client, headers }) => readGuideType(client, data.typeId, data.locale, headers)),
-  );
-
-export const withCatalogueSession = createServerOnlyFn(async function withCatalogueSession<T>(
-  read: (input: { client: ReturnType<typeof kernelClient>; authorization: string }) => Promise<T>,
-): Promise<T | { ok: false; reason: 'denied' | 'signed-out' | 'unavailable' }> {
-  setResponseHeader('cache-control', 'private, no-store');
-  try {
-    const request = getRequest();
-    const stale = await prepareSession(request, env as Partial<SessionEnv>);
-    if (stale) return { ok: false, reason: 'denied' };
-    const authorization = viewerCredential(request);
-    if (!authorization) return { ok: false, reason: 'signed-out' };
-    return await read({ client: kernelClient(), authorization });
-  } catch {
-    return { ok: false, reason: 'unavailable' };
-  }
-});
+  .handler(async ({ data }): Promise<GuideTypeRead> => {
+    const { withGuideReader } = await import('./definition-guide-session.server');
+    return withGuideReader(data.locale, ({ client, headers }) =>
+      readGuideType(client, data.typeId, data.locale, headers),
+    );
+  });

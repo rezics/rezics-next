@@ -8,6 +8,7 @@ import { defineRateLimit } from '../../src/http/rate-limit.ts';
 import { MountedRouteCatalogue } from '../../src/http/request.ts';
 import { declareKernelWriteRates } from '../../src/http/write-rate-routes.ts';
 import type { WriteRateFamily } from '../../src/access/write-rate.ts';
+import { testReceiptKeys } from '../support/receipt-keys.ts';
 
 const pool = new Pool({ connectionString: process.env.DATABASE_URL });
 afterAll(() => pool.end());
@@ -30,6 +31,10 @@ const post = (path: string, body: unknown = {}) =>
     },
     body: JSON.stringify(body),
   });
+const nativeWrites = () => [
+  { path: `/v1/payoutStatements/${Bun.randomUUIDv7()}:markPaid`, body: { paidReference: 'wire' } },
+  { path: `/v1/offers/${Bun.randomUUIDv7()}:delist`, body: { expectedRevision: 1 } },
+];
 const detail = (action: string, family: WriteRateFamily = 'write') => ({
   operationId: action.replace(':', '.'),
   'x-action': action,
@@ -111,6 +116,7 @@ test('createKernel custom writes use post-mount composition declarations before 
   await openSelling();
   const spends: unknown[] = [];
   const app = createKernel({
+    receiptKeys: testReceiptKeys(),
     pool,
     routeKey: new Uint8Array(32),
     writeRate: {
@@ -133,8 +139,8 @@ test('createKernel custom writes use post-mount composition declarations before 
   });
   const lookup = spyOn(MountedRouteCatalogue.prototype, 'find');
   try {
-    for (const path of ['/v1/payoutStatements/one:markPaid', '/v1/offers/two:delist']) {
-      const response = await app.handle(post(path, { paidReference: 'wire' }));
+    for (const { path, body } of nativeWrites()) {
+      const response = await app.handle(post(path, body));
       expect(response.status).toBe(429);
       expect(response.headers.get('retry-after')).toBe('7');
       expect(await response.json()).toMatchObject({ code: 'rate_limited', effect_status: 'not_applied' });
@@ -162,9 +168,8 @@ test('no missing route or metadata write bypass and invalid whole body spends ze
   let effects = 0;
   const spends: unknown[] = [];
   const missingDetail = { operationId: 'item.missing', 'x-exposure': 'public' };
-  const app = createKernel({
+  const app = createApp({
     pool,
-    routeKey: new Uint8Array(32),
     writeRate: {
       async spend(_context, family, units) {
         spends.push([family, units]);
@@ -218,6 +223,7 @@ test('loopback custom writes retain native method/template selection and reject 
   await openSelling();
   const spends: unknown[] = [];
   const app = createKernel({
+    receiptKeys: testReceiptKeys(),
     pool,
     routeKey: new Uint8Array(32),
     writeRate: {
@@ -229,8 +235,8 @@ test('loopback custom writes retain native method/template selection and reject 
   });
   app.listen({ hostname: '127.0.0.1', port: 0 });
   try {
-    for (const path of ['/v1/payoutStatements/one:markPaid', '/v1/offers/two:delist']) {
-      const request = post(path, { paidReference: 'wire' });
+    for (const { path, body } of nativeWrites()) {
+      const request = post(path, body);
       const response = await fetch(new Request(`${app.server!.url.origin}${path}`, request));
       expect(response.status).toBe(429);
       expect(response.headers.get('retry-after')).toBe('9');

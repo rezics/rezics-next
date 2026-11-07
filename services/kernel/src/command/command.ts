@@ -641,7 +641,6 @@ async function executeCommand<T>(
       };
       const result = await checkout(async (client) => {
         commandPhase('transaction_body');
-        if (!dispatch) await client.query('BEGIN ISOLATION LEVEL SERIALIZABLE');
         const tx: CommandTransaction = { query: client.query.bind(client) };
         if (publisher) {
           const query = tx.query;

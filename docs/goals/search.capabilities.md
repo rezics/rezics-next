@@ -63,6 +63,16 @@ planned fallback. Neither browser interaction nor screenshot/capture was execute
 | Configured reading    | Open a configured Subject or static Zone page and read its declared lists in document order; unavailable slots leave supported siblings usable, and a current continuation/retry reaches the right list.                     | Public configured reader where the owning scope admits it                           | FAIL — setup persona; 90.471 s shared startup; dev `8c1b1fa29d01653fbc254ede3fd7b0950f6a0a70` | Same first startup failure; no independent native-ready public page survived; Subject/Zone list reading not executed. [Repair](#native-startup-repair).        |
 | Published composition | Publish an admitted shared profile or curated Collection presentation, open the selected public version while the editor has a later draft, and deliberately recover a refused/lost response to the actual published result. | Existing publication authority and public selected-version reading                  | FAIL — setup persona; 90.471 s shared startup; dev `8c1b1fa29d01653fbc254ede3fd7b0950f6a0a70` | Same first startup failure; no publication identity, selected public A, later draft B or response-loss recovery was created. [Repair](#native-startup-repair). |
 
+Receiving at `90be1ee714927d0681386e12fb12ea13355762c1` passed compiler and quality checks and the same seven native
+files; the command failed in 304.105 seconds on host a. The dynamic creation 403 is resolved. Both output suites now
+reach native `Conflict` at `collection-source-output.ts:119` from allocation at line 167; the unheld-output case still
+reaches the projection-plan failure and the following transfer case SQLSTATE 25006. The separate output-custody
+repair owns these observations. Work-module startup did not converge and reproduced alone; direct registration
+also reached its fixture's throwing authorization callback. That callback now returns the real mounted worker
+authorization, and child stderr is retained during readiness waits so a timeout cannot conceal its first diagnostic.
+No timeout or lifecycle assertion is relaxed. Evidence:
+`.temp/goal/checks/worker-check-191c3565-91de-46dd-beb0-8961a4fdd8aa-2026-11-07T11-05-47.789Z-cb565bff.log`.
+
 ### Native observation and operands
 
 Secret-free evidence is `.temp/search-walk/evidence.json` and `.temp/search-walk/startup.log` in this attempt.

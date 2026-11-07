@@ -11,6 +11,18 @@ growth-work-client, selected-runtime-native, sdk-transaction-fence, sdk-retireme
 fixtures remain the causal native set. Search keeps both `search_account_erasure` and `search_erasure` tombstone
 effects.
 
+Decision: ordinary composition supplies the native worker authorization factory before registering product work.
+The first Accounts registration must not synchronously load the Kernel module graph from inside a lazy
+`getAuthorization()` call. The installed worker lifecycle and default discovery journeys cover that startup path;
+authorization still uses the worker's original pool, client, clock, environment and receipt keys.
+Worker authorization and HTTP hosts share Kernel route assembly and catalogue validation. The worker resolves native
+Access from that completed assembly; only HTTP hosts compile request handlers and schemas. Worker startup never
+spends its registration budget compiling a transport it does not serve. The existing authorization tests retain
+native Content roles, action refusals, consent freshness and no-I/O assertions; installed lifecycle tests retain
+readiness, link convergence, failure cleanup and graceful drain under their original deadlines.
+The completed assembly reads Elysia's composed route view once for write rates, viewer bindings, guest security,
+path declarations and the native action catalogue. Those consumers share the same final declarations instead of
+recomposing hooks and schemas for each validation; HTTP handler compilation keeps its own transport lifecycle.
 Decision: direct WorkContext hosts supply the real pool, queue catalogue, client, clock and effect collector before
 registration, start every owned service, and drain them before closing the client. Search derives worker Access from
 the complete native action catalogue instead of compiling an unused HTTP host.

@@ -4,6 +4,7 @@ import { publicationJob } from './support/public-filter-binding.ts';
 import { expect, test } from 'bun:test';
 import {
   createPublicFilterSourceBinding,
+  advanceNativePublicFilterPreparation,
   readNativePublicFilterPublicationCompletion,
   type NativeSourceRepairLocator,
   type NativeSourceRepairStepVerification,
@@ -15,6 +16,26 @@ import {
   nativeProducer,
   readContext,
 } from './support/public-filter-source.ts';
+
+type SourceBinding = ReturnType<typeof createPublicFilterSourceBinding>;
+/** Drive the same bounded native preparation used by Search, retaining its original cut. */
+async function prepareSource(
+  binding: SourceBinding,
+  input: Parameters<SourceBinding['begin']>[0],
+): Promise<Awaited<ReturnType<SourceBinding['begin']>>> {
+  let result = await advanceNativePublicFilterPreparation(binding, input, readContext());
+  if (!result || !('bootstrap' in result)) throw new Error(`Native Source preparation: ${JSON.stringify(result)}`);
+  const original = result.bootstrap.id;
+  for (let step = 0; result.status === 'preparing'; step++) {
+    expect(step, 'Finite original home enrollment must complete').toBeLessThan(10000);
+    result = await advanceNativePublicFilterPreparation(binding, { bootstrap: original }, readContext());
+    if (!result || !('bootstrap' in result))
+      throw new Error(`Native Source preparation ${original}: ${JSON.stringify(result)}`);
+    expect(result.bootstrap.id).toBe(original);
+  }
+  if (result.status !== 'begun') throw new Error(`Native Source preparation: ${JSON.stringify(result)}`);
+  return result;
+}
 
 test('native public Source configuration and immutable meaning/read definition resolve without trusting caller identity', async () => {
   const { publicFilterSource } = await nativeProducer();
@@ -109,18 +130,22 @@ test('canonical retained observation execution joins preserve complete compiler 
     );
     expect(registered.status).toBe('registered');
     if (registered.status !== 'registered') throw new Error(registered.reason);
-    const begun = await binding.begin(
-      {
-        source,
-        meaning: f.meaning,
-        capture,
-        consumer: registered.consumer,
-        snapshot: 'prepared',
-      },
-      readContext(),
-    );
+    const begun = await prepareSource(binding, {
+      source,
+      meaning: f.meaning,
+      capture,
+      consumer: registered.consumer,
+      snapshot: 'prepared',
+    });
     expect(begun.status).toBe('begun');
     if (begun.status !== 'begun') throw new Error(begun.reason);
+    const enrollment = await f.db.pool.query(
+      `SELECT count(*)::integer AS homes, min(partition_no) AS first, max(partition_no) AS last
+       FROM semantic.public_filter_home_enrollment
+       WHERE bootstrap=$1::uuid AND complete AND receipt IS NOT NULL`,
+      [begun.bootstrap.id.slice(2)],
+    );
+    expect(enrollment.rows).toEqual([{ homes: 4096, first: 0, last: 4095 }]);
     const retained = await custody.retainPrepared(
       {
         registration: registered.registration,
@@ -178,7 +203,7 @@ test('canonical retained observation execution joins preserve complete compiler 
     if (created) await search.request('DELETE', `/${index}`);
     await f.close();
   }
-});
+}, 300000);
 
 test('native Source repair receipts revalidate original steps, replay, and current ownership without completing an incomplete cut', async () => {
   const { createPublicFilterCustody } = await import('../../src/search/public-filter-custody.ts');
@@ -225,16 +250,13 @@ test('native Source repair receipts revalidate original steps, replay, and curre
       readContext(),
     );
     if (registered.status !== 'registered') throw new Error(registered.reason);
-    const begun = await binding.begin(
-      {
-        source,
-        meaning: f.meaning,
-        capture,
-        consumer: registered.consumer,
-        snapshot: 'prepared',
-      },
-      readContext(),
-    );
+    const begun = await prepareSource(binding, {
+      source,
+      meaning: f.meaning,
+      capture,
+      consumer: registered.consumer,
+      snapshot: 'prepared',
+    });
     if (begun.status !== 'begun') throw new Error(begun.reason);
     const retained = await custody.retainPrepared(
       {
@@ -361,7 +383,7 @@ test('native Source repair receipts revalidate original steps, replay, and curre
     if (created) await search.request('DELETE', `/${index}`);
     await f.close();
   }
-});
+}, 300000);
 
 test('Native public Source repair step and complete original cut are durably revalidated before joining genuine Search dispatch settlement without current ACK or incomplete enumeration substitutes', async () => {
   const { readPublicFilterConsumerCustody, readPublicFilterRepairSettlement } =
@@ -582,7 +604,7 @@ test('Native public Source repair step and complete original cut are durably rev
       await f.close();
     }
   }
-});
+}, 300000);
 
 test('native Source retains and replays a durable empty repair-step locator list', async () => {
   const { createPublicFilterCustody } = await import('../../src/search/public-filter-custody.ts');
@@ -619,16 +641,13 @@ test('native Source retains and replays a durable empty repair-step locator list
       readContext(),
     );
     if (registered.status !== 'registered') throw new Error(registered.reason);
-    const begun = await binding.begin(
-      {
-        source,
-        meaning: f.meaning,
-        capture,
-        consumer: registered.consumer,
-        snapshot: 'prepared',
-      },
-      readContext(),
-    );
+    const begun = await prepareSource(binding, {
+      source,
+      meaning: f.meaning,
+      capture,
+      consumer: registered.consumer,
+      snapshot: 'prepared',
+    });
     if (begun.status !== 'begun') throw new Error(begun.reason);
     const retained = await custody.retainPrepared(
       {
@@ -706,4 +725,4 @@ test('native Source retains and replays a durable empty repair-step locator list
     if (created) await search.request('DELETE', `/${index}`);
     await f.close();
   }
-});
+}, 300000);

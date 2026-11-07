@@ -8,6 +8,10 @@ Compatibility exports preserve constructor identity and the sole prepared-work r
 `request/access-check.ts`. Architecture and workspace typing are acceptance for this behavior-preserving migration;
 existing behavior assertions and the focused port composition test run after integration.
 
+Decision: strict Content schema adapters expose their declared shape during catalogue composition and compile a
+TypeBox validator only on the first HTTP validation. A supplied custom validator owns validation directly. This
+keeps worker authorization free of transport compilation while preserving closed input and response contracts.
+
 Feed's mounted list operation consumes the shared immutable declaration catalogue through the
 Kernel transport adapter. Content retains the Feed query/result schemas and current disclosure
 composition; this route adds no publisher or generated-tree writer.

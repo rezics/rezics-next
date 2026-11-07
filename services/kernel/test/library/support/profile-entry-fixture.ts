@@ -27,6 +27,7 @@ import { createWriteRateLimiter } from '../../../src/access/write-rate.ts';
 import type { KernelClock } from '../../../src/clock.ts';
 import { createPool } from '../../../src/database/pool.ts';
 import { createKernel } from '../../../src/http/kernel.ts';
+import { composeLibraryDomain } from '../../../src/composition/library.ts';
 import { actionCatalogue } from '../../../src/http/request.ts';
 import { runCommand } from '../../../src/command/command.ts';
 import { createEntryCommands } from '../../../src/library/entries.ts';
@@ -191,6 +192,14 @@ export async function createProfileEntryFixture(
       requestDeadlineMs: 30_000,
       access(config) {
         return (access = admittedAccess(config));
+      },
+      onAccessReady(access) {
+        composeLibraryDomain({
+          pool,
+          access,
+          routeKey,
+          ...(options.clock === undefined ? {} : { clock: options.clock }),
+        });
       },
       writeRate: createWriteRateLimiter({
         secret: 'native-profile-entry-test-rate-secret',

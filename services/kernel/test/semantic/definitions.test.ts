@@ -1,3 +1,4 @@
+import { testReceiptKeys } from '../support/receipt-keys.ts';
 import { afterAll, beforeAll, expect, test } from 'bun:test';
 import { randomUUID } from 'node:crypto';
 import pg from 'pg';
@@ -26,17 +27,21 @@ const accounts = {
   editor: '019a1b2c-3d4e-7f00-8a00-ed170e000002',
 };
 const realAccess = await createRealAccess(admin, accounts, [
+  'gate:definition_publication',
   'definitions:publish',
   'definitions:activate',
   'definitions:read',
 ]);
 beforeAll(async () => {
+  for (const persona of ['steward', 'editor'] as const)
+    await realAccess.grant({ route: 0, id: GLOBAL_CONTEXT }, persona, 'gate:definition_publication');
   await realAccess.grant({ route: 0, id: GLOBAL_CONTEXT }, 'steward', 'definitions:publish');
   await realAccess.grant({ route: 0, id: GLOBAL_CONTEXT }, 'steward', 'definitions:activate');
 });
 
 const tokens: KeyRing = { current: 1, keys: new Map([[1, new Uint8Array(32).fill(5)]]) };
 const kernel = createKernel({
+  receiptKeys: testReceiptKeys(),
   pool,
   access: realAccess.access,
   tokens,
@@ -111,6 +116,7 @@ test('the Global Context is seeded and nothing is active at first', async () => 
   ]);
   expect(rows).toEqual([{ route: 0, kind: 'global', labels: { en: 'Global' } }]);
   expect((await call('GET', '/v1/definitions/active')).response.status).toBe(404);
+  expect((await call('GET', '/v1/definitions')).response.status).toBe(404);
   expect(await activeRelease(pool)).toBeNull();
 });
 
@@ -172,7 +178,9 @@ test('publishing and activating need their grant on the Global Context', async (
       resource: { route: 0, id: GLOBAL_CONTEXT },
     },
   ]);
-  expect((await call('POST', '/v1/definitions/releases', { key: key(), body })).response.status).toBe(401);
+  const anonymous = await call('POST', '/v1/definitions/releases', { key: key(), body });
+  expect(anonymous.response.status).toBe(403);
+  expect(anonymous.body.code).toBe('platform_closed');
   expect((await call('GET', `/v1/definitions/releases/${digest}`)).response.status).toBe(404);
   expect((await publish(body)).response.status).toBe(201);
   expect((await activate(digest, null, 'editor')).response.status).toBe(403);
@@ -192,6 +200,7 @@ test('activation is a compare-and-swap on the active head', async () => {
   expect(stale.body.code).toBe('stale_editorial_head');
   expect((await activate(two, 1)).body).toEqual({ digest: two, head: 2 });
   expect((await call('GET', '/v1/definitions/active')).body).toEqual({ digest: two, head: 2 });
+  expect((await call('GET', '/v1/definitions')).body).toEqual({ digest: two, head: 2 });
   expect((await activate(`sha256:${'1'.repeat(64)}`, 2)).response.status).toBe(404);
   expect((await activate(`sha256:${'1'.repeat(64)}`, 2, 'editor')).response.status).toBe(403);
   const reused = key();
@@ -225,6 +234,11 @@ test('the kernel contract documents the definition operations', () => {
   });
   expect(paths['/v1/definitions/releases/{digest}']!.get).toMatchObject({
     operationId: 'definitions.read_release',
+    'x-action': 'definitions:read',
+    security: [{ bearerAuth: [] }, {}],
+  });
+  expect(paths['/v1/definitions']!.get).toMatchObject({
+    operationId: 'definitions.read',
     'x-action': 'definitions:read',
     security: [{ bearerAuth: [] }, {}],
   });
