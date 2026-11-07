@@ -1,3 +1,4 @@
+import { LibraryApplicationBoundary } from '../src/session/library-application';
 import { afterAll, expect, mock, spyOn, test } from 'bun:test';
 import { dirname } from 'node:path';
 import { act, StrictMode, type ReactNode } from 'react';
@@ -371,9 +372,11 @@ async function mount(hydrate = false, initialLoader?: CurrentViewerProgressIndex
   const tree = () => (
     <StrictMode>
       <QueryClientProvider client={client}>
-        <RouterContextProvider router={router}>
-          <CurrentViewerProgressIndexPage loader={loader} requested={requested} />
-        </RouterContextProvider>
+        <LibraryApplicationBoundary>
+          <RouterContextProvider router={router}>
+            <CurrentViewerProgressIndexPage loader={loader} requested={requested} />
+          </RouterContextProvider>
+        </LibraryApplicationBoundary>
       </QueryClientProvider>
     </StrictMode>
   );
@@ -519,9 +522,11 @@ async function mountRouted() {
     root.render(
       <StrictMode>
         <QueryClientProvider client={client}>
-          <RouterContextProvider router={router}>
-            <RoutedProgress />
-          </RouterContextProvider>
+          <LibraryApplicationBoundary>
+            <RouterContextProvider router={router}>
+              <RoutedProgress />
+            </RouterContextProvider>
+          </LibraryApplicationBoundary>
         </QueryClientProvider>
       </StrictMode>,
     ),
@@ -557,9 +562,11 @@ async function renderCurrentViewerHtml(loader: CurrentViewerProgressIndex) {
   await router.load();
   return renderToString(
     <QueryClientProvider client={client}>
-      <RouterContextProvider router={router}>
-        <CurrentViewerProgressIndexPage loader={loader} requested={{ subjectId: loader.requested.subjectId }} />
-      </RouterContextProvider>
+      <LibraryApplicationBoundary>
+        <RouterContextProvider router={router}>
+          <CurrentViewerProgressIndexPage loader={loader} requested={{ subjectId: loader.requested.subjectId }} />
+        </RouterContextProvider>
+      </LibraryApplicationBoundary>
     </QueryClientProvider>,
   );
 }

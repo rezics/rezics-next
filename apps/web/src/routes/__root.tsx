@@ -33,6 +33,7 @@ import { importReviewNavigation } from '../features/import-review/navigation';
 import { communityNavigation } from '../community/navigation';
 import { libraryNavigation } from '../library/navigation';
 import { LocaleNavigationProvider } from '../shell/locale-navigation/context';
+import { LibraryApplicationBoundary } from '../session/library-application';
 import { OwnVotesReturnProvider } from '../ratings/own-votes/return';
 
 export const commerceNavigation = createNavigation([
@@ -140,9 +141,11 @@ export const Route = createRootRouteWithContext<{
 
 function RootRoutes() {
   return (
-    <OwnVotesReturnProvider>
-      <CurrentReadingOutlet />
-    </OwnVotesReturnProvider>
+    <LibraryApplicationBoundary>
+      <OwnVotesReturnProvider>
+        <CurrentReadingOutlet />
+      </OwnVotesReturnProvider>
+    </LibraryApplicationBoundary>
   );
 }
 

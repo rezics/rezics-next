@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
 import { CancelledError, useQuery, useQueryClient } from '@tanstack/react-query';
-import { useSession } from '../session/query';
+import { useSession } from './application';
 import { useLibraryWorkspaceAdmission } from './library-workspace-admission';
 import { personalRead } from '../kernel/query';
 import { m } from '../paraglide/messages.js';

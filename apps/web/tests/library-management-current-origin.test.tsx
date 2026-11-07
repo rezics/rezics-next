@@ -1,3 +1,4 @@
+import { LibraryApplicationBoundary } from '../src/session/library-application';
 import { afterAll, expect, mock, spyOn, test } from 'bun:test';
 import { dirname } from 'node:path';
 import { act, StrictMode, type ComponentProps, type ReactNode } from 'react';
@@ -206,9 +207,11 @@ test('Copies retains no A read/editor/Undo authority across pre-commit cache ABA
   const tree = () => (
     <StrictMode>
       <QueryClientProvider client={client}>
-        <RouterContextProvider router={router}>
-          <CopiesCurrent initial={initial} search={{ subjectId: id(10), cursor: 'signed+/cursor==' }} locale="en" />
-        </RouterContextProvider>
+        <LibraryApplicationBoundary>
+          <RouterContextProvider router={router}>
+            <CopiesCurrent initial={initial} search={{ subjectId: id(10), cursor: 'signed+/cursor==' }} locale="en" />
+          </RouterContextProvider>
+        </LibraryApplicationBoundary>
       </QueryClientProvider>
     </StrictMode>
   );
@@ -391,7 +394,9 @@ test('Labels consumes exact operation admission and actual rotated credentials; 
   const tree = () => (
     <StrictMode>
       <QueryClientProvider client={client}>
-        <LabelsCurrent initial={initial} search={{ q: 'Private', cursor: 'signed+/cursor==' }} locale="en" />
+        <LibraryApplicationBoundary>
+          <LabelsCurrent initial={initial} search={{ q: 'Private', cursor: 'signed+/cursor==' }} locale="en" />
+        </LibraryApplicationBoundary>
       </QueryClientProvider>
     </StrictMode>
   );

@@ -1054,6 +1054,8 @@
         "apps/web/src/library/saved-query-editor/presentation.ts"
       ],
       "publicEntries": [
+        "apps/web/src/library/application.tsx",
+        "apps/web/src/library/private-lifetime.tsx",
         "apps/web/src/library/follow-control.tsx",
         "apps/web/src/library/score-write.ts",
         "apps/web/src/library/loans-current.tsx",
@@ -1350,6 +1352,7 @@
         "apps/web/src/kernel/client.ts",
         "apps/web/src/session/index.ts",
         "apps/web/src/session/reader.ts",
+        "apps/web/src/session/library-application.tsx",
         "apps/web/src/session/client.ts",
         "apps/web/src/session/request.ts",
         "apps/web/src/subject/reader.ts",

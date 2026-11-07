@@ -1,3 +1,4 @@
+import { LibraryApplicationBoundary } from '../src/session/library-application';
 import { afterAll, expect, mock, spyOn, test } from 'bun:test';
 import { dirname } from 'node:path';
 import { act, type ReactNode } from 'react';
@@ -211,9 +212,11 @@ async function mount(
     act(async () =>
       root.render(
         <QueryClientProvider client={client}>
-          <RouterContextProvider router={router}>
-            <CopiesCurrent initial={initial} search={search} locale="en" />
-          </RouterContextProvider>
+          <LibraryApplicationBoundary>
+            <RouterContextProvider router={router}>
+              <CopiesCurrent initial={initial} search={search} locale="en" />
+            </RouterContextProvider>
+          </LibraryApplicationBoundary>
         </QueryClientProvider>,
       ),
     );

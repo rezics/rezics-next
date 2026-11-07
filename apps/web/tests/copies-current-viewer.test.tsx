@@ -1,3 +1,4 @@
+import { LibraryApplicationBoundary } from '../src/session/library-application';
 import { afterAll, expect, mock, spyOn, test } from 'bun:test';
 import { dirname } from 'node:path';
 import { act, createElement, StrictMode, useLayoutEffect, useRef, type ReactNode, type ComponentProps } from 'react';
@@ -620,7 +621,9 @@ test('three routed inventory windows retain admitted predecessors, retry the exa
   await act(async () =>
     root.render(
       <QueryClientProvider client={client}>
-        <RouterProvider router={router} />
+        <LibraryApplicationBoundary>
+          <RouterProvider router={router} />
+        </LibraryApplicationBoundary>
       </QueryClientProvider>,
     ),
   );
@@ -848,9 +851,11 @@ test('The actual Copies route retires retained private rows and editor state on 
   const tree = () => (
     <StrictMode>
       <QueryClientProvider client={client}>
-        <RouterContextProvider router={router}>
-          <Page />
-        </RouterContextProvider>
+        <LibraryApplicationBoundary>
+          <RouterContextProvider router={router}>
+            <Page />
+          </RouterContextProvider>
+        </LibraryApplicationBoundary>
       </QueryClientProvider>
     </StrictMode>
   );

@@ -6,3 +6,5 @@ export {
   useReaderResponseOrigin,
   type ReaderOrigin,
 } from '../reader/current-origin';
+
+export type { GatedOperation, OperationAdmission } from '../kernel/exposure';

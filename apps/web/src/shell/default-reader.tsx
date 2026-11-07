@@ -1,3 +1,4 @@
+import { LibraryApplicationBoundary } from '../session/library-application';
 import { QueryClient, QueryClientContext, QueryClientProvider } from '@tanstack/react-query';
 import { useContext, useState, type ReactNode } from 'react';
 
@@ -13,6 +14,10 @@ export function createDefaultReaderQueryClient() {
 export function DefaultReaderProvider({ children }: { children: ReactNode }) {
   const existing = useContext(QueryClientContext);
   const [fallback] = useState(createDefaultReaderQueryClient);
-  if (existing) return children;
-  return <QueryClientProvider client={fallback}>{children}</QueryClientProvider>;
+  if (existing) return <LibraryApplicationBoundary>{children}</LibraryApplicationBoundary>;
+  return (
+    <QueryClientProvider client={fallback}>
+      <LibraryApplicationBoundary>{children}</LibraryApplicationBoundary>
+    </QueryClientProvider>
+  );
 }

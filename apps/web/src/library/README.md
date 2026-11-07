@@ -422,3 +422,22 @@ and incarnation used by review currentness. Existing state-review tests cover re
 Decision: Kernel typecheck keeps SearchHit.matchEvidence on the saved-catalogue page fixture, one unused savedCatalogueMembers method on SearchService test doubles, and removes the duplicate second-scope method.
 
 Decision: check b33b1673 is the landing gate; type errors it printed sit outside changed files on base, so this landing does not repair whole-workspace web typecheck:root or loop the recorded native/web failures.
+
+## Application reading boundary
+
+Library declares its session, operation-admission, workspace and current-reader capabilities in `application.tsx`.
+The ordinary route boundary binds the existing Session and reader producers through `session/library-application.tsx`;
+it owns no account store, fetch, cache or alternative admission authority. Default isolated readers bind the same
+adapter. Presentation and query contracts retain their existing owners, including Continue's exposure presentation.
+Consumer fixtures install that adapter explicitly and retain their existing outcome assertions.
+
+Each archive section keeps an independent controller. Recovery observes actual session and exposure query
+incarnations, update counts and the browser reader observation rather than serialized session values. Replacement,
+including equal-value A/B/A, retires callbacks synchronously; route and locale replacement retire the local scope.
+Completed archive custody survives route changes for the current owner and erases its copied bytes synchronously
+when the application observes another owner or sign-out. Native envelopes, original uncertain operands, independent
+frontiers, bounded selection and admitted focus restoration remain with their existing controllers.
+
+Decision: bind Library consumer capabilities to the existing producers now; receive Performance's shared shell/session
+provider through the same capability surface when that producer is delivered. This adapter adds no competing provider.
+Typing is the worker gate; focused authored regressions and native/browser acceptance run after integration.
