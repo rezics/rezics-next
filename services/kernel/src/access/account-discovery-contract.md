@@ -55,6 +55,16 @@ module installs event wakeups and a bounded partition sweep by default. Source d
 `com.rezics.access.account-discovery-changed.v1` event with `{route, accountId, revision, source:'account'|'claim'}`.
 Delivery atomically replaces the exact pending obligation with that event; it is never a Search repair ACK.
 
+Recovery scheduling uses one serial worker for sweep and coalesced source-event wakeups, holding at most one
+pool connection. It starts one second after service launch and yields while foreground checkouts are waiting
+or only one pool slot remains. A full pass with no delivery or coverage progress sleeps for the named
+`ACCOUNT_DISCOVERY_IDLE_MS` (15 minutes); a source event wakes its home without restarting that idle pass.
+A productive pass continues catch-up. Classified unavailability retries the same home with exponential
+1–60 second backoff, which events cannot bypass; success resets the delay. Unexpected errors propagate.
+Stopping cancels the timer and drains the in-flight step. Persisted intents remain the recovery authority.
+`test/access/account-discovery-work.test.ts` pins startup/pool admission, empty-pass idle and timed recovery,
+event coalescing, pressure backoff/reset, unexpected failures and shutdown with a fake clock and pool.
+
 Migration `20261030161528_account_discovery.sql` takes an exclusive Account/claim/preferences install cut,
 initializes all 4096 census rows and existing source revisions, queues existing source keys, then installs native
 hooks before releasing writers. Every Account writer, preferences writer and claim writer participates, including
