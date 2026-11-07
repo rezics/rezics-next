@@ -1063,8 +1063,12 @@ filesystem component sizes and systemd microsecond conversions are fixed represe
 tasks (integrated, landed lines, worker-hours and lines per worker-hour) and declined offers by reason; see
 [Chained briefs](#chained-briefs). Decision: after one stable sort, `flowReport`
 builds one in-memory next-boundary and integration index; no per-request history rescan or second event store. It
-reports stage/Goal totals, efficiency, attempts per integrated task, and queue length and age. Its guard ledger prices registered attempt endings and landing refusals over seven days by
-firings, attempt-hours, next-attempt hours, tokens, rewritten share and landed share; repeated guards with at least 20
+reports stage/Goal totals, efficiency, attempts per integrated task, and live queue length and age from each task's
+current attempt when available. Post-integration promotion requests retain their own attempt. Alarm examples come
+from the breached queue and name distinct tasks; broader alarms use distinct tasks from the oldest queues. A later
+worker start settles a legacy start request for the same attempt, but does not supply a synthetic start-stage
+duration. Its guard ledger prices registered attempt endings and landing refusals over seven days by firings,
+attempt-hours, next-attempt hours, tokens, rewritten share and landed share; repeated guards with at least 20
 firings and under 10% rewritten are marked `repairable in place`. The hourly report groups guard endings by GuardId.
 It also counts launched worker and manager prompts over budget by layer. Missing lifecycle
 events stay unknown; reports do not backfill old tasks. Check-slot request,

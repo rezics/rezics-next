@@ -391,6 +391,19 @@ export async function launch(
       store.updateTask(attempt, (current) => {
         current.state = 'running';
       });
+      const latestStart = store.db
+        .query("SELECT action FROM flow_events WHERE task_id=? AND attempt=? AND stage='start' ORDER BY sequence DESC LIMIT 1")
+        .get(attempt.taskId, attempt.attempt) as { action: string } | null;
+      // A fresh launch gets this event from the task's transition to running. A resumed launch may already be
+      // running, so close its new request explicitly after the worker wrapper has started successfully.
+      if (latestStart?.action !== 'started')
+        recordFlow(store.db, {
+          taskId: attempt.taskId,
+          attempt: attempt.attempt,
+          stage: 'start',
+          action: 'started',
+          at: new Date().toISOString(),
+        });
       if (ownerDecisionPrompt.delivery) store.recordOwnerDecisionDelivery(attempt, ownerDecisionPrompt.delivery);
     });
   } catch (error) {

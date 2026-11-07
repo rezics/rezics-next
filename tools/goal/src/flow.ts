@@ -255,17 +255,21 @@ const waitEnds: Record<QueueStage, string[]> = {
 const requestActions = ['requested', 'enqueued'];
 const isQueueStage = (stage: FlowStage): stage is QueueStage => queueStages.includes(stage as QueueStage);
 
-function projectFlow(ordered: FlowEvent[]) {
+function projectFlow(ordered: FlowEvent[], currentAttempts: ReadonlyMap<string, number>) {
   const n = ordered.length;
   const byTask = new Map<string, FlowEvent[]>();
   const groups = new Map<string, number[]>();
   const nextQueueAt = new Int32Array(n).fill(-1);
   const nextWaitAt = new Int32Array(n).fill(-1);
+  const nextWorkerStartAt = new Int32Array(n).fill(-1);
+  const currentAttemptEvent = new Uint8Array(n).fill(1);
   const integrationCloses = new Uint8Array(n);
   const integrationsByTask = new Map<string, { attempt: number; at: string }[]>();
   const requestsByTask = new Map<string, number[]>();
   for (let i = 0; i < n; i++) {
     const event = ordered[i]!;
+    const currentAttempt = currentAttempts.get(event.taskId);
+    if (currentAttempt !== undefined && event.attempt !== currentAttempt) currentAttemptEvent[i] = 0;
     const taskEvents = byTask.get(event.taskId);
     if (taskEvents) taskEvents.push(event);
     else byTask.set(event.taskId, [event]);
@@ -283,6 +287,13 @@ function projectFlow(ordered: FlowEvent[]) {
       if (requests) requests.push(i);
       else requestsByTask.set(event.taskId, [i]);
     }
+  }
+  const nextWorkerStartByAttempt = new Map<string, number>();
+  for (let i = n - 1; i >= 0; i--) {
+    const event = ordered[i]!;
+    const key = `${event.taskId}\t${event.attempt}`;
+    nextWorkerStartAt[i] = nextWorkerStartByAttempt.get(key) ?? -1;
+    if (event.stage === 'worker' && event.action === 'started') nextWorkerStartByAttempt.set(key, i);
   }
   for (const indexes of groups.values()) {
     let queue = -1;
@@ -304,6 +315,15 @@ function projectFlow(ordered: FlowEvent[]) {
         wait = i;
     }
   }
+  // Older launches did not close a resumed start request. A later worker start is real start evidence,
+  // but it must not become a synthetic start-stage duration.
+  for (let i = 0; i < n; i++) {
+    if (ordered[i]!.stage !== 'start' || ordered[i]!.action !== 'requested' || nextQueueAt[i] !== -1) continue;
+    const started = nextWorkerStartAt[i]!;
+    if (started === -1) continue;
+    nextQueueAt[i] = started;
+    if (nextWaitAt[i] === -1) nextWaitAt[i] = started;
+  }
   for (const [taskId, requests] of requestsByTask) {
     const integrations = integrationsByTask.get(taskId) ?? [];
     let maxAttempt = Number.NEGATIVE_INFINITY;
@@ -318,7 +338,7 @@ function projectFlow(ordered: FlowEvent[]) {
       if (maxAttempt >= event.attempt) integrationCloses[i] = 1;
     }
   }
-  return { byTask, nextQueueAt, nextWaitAt, integrationCloses };
+  return { byTask, nextQueueAt, nextWaitAt, integrationCloses, currentAttemptEvent };
 }
 
 function stageDurations(events: FlowEvent[], stage: LifecycleStage): number[] {
@@ -341,6 +361,8 @@ function stageDurations(events: FlowEvent[], stage: LifecycleStage): number[] {
 
 export type FlowTask = Pick<Task, 'id'> & {
   brief: Pick<Task['brief'], 'goal' | 'urgent'>;
+  /** Current task generation, absent only for callers with no authoritative task snapshot. */
+  currentAttempt?: number;
   /** Authoritative store snapshot, also covering terminal tasks predating closure events. */
   terminalState?: Task['state'];
   /** Whether the task continues a landed task's warm session. */
@@ -385,10 +407,11 @@ export function readFlowTasks(db: Database): FlowTask[] {
   return (
     db
       .query(
-        "SELECT id, json_extract(body, '$.brief.goal') AS goal, json_extract(body, '$.brief.urgent') AS urgent, json_extract(body, '$.state') AS state, json_extract(body, '$.chain') IS NOT NULL AS chained FROM worker_tasks ORDER BY sequence",
+        "SELECT id, current_attempt AS currentAttempt, json_extract(body, '$.brief.goal') AS goal, json_extract(body, '$.brief.urgent') AS urgent, json_extract(body, '$.state') AS state, json_extract(body, '$.chain') IS NOT NULL AS chained FROM worker_tasks ORDER BY sequence",
       )
       .all() as {
       id: string;
+      currentAttempt: number;
       goal: string | null;
       urgent: number | null;
       state: Task['state'];
@@ -398,6 +421,7 @@ export function readFlowTasks(db: Database): FlowTask[] {
     .filter((row) => typeof row.goal === 'string')
     .map((row) => ({
       id: row.id,
+      currentAttempt: row.currentAttempt,
       brief: { goal: row.goal!, ...(row.urgent === 1 ? { urgent: true } : {}) },
       terminalState: row.state,
       chained: row.chained === 1,
@@ -406,7 +430,14 @@ export function readFlowTasks(db: Database): FlowTask[] {
 
 export function flowReport(events: FlowEvent[], tasks: FlowTask[], now = Date.now()) {
   const ordered = [...events].sort((a, b) => a.at.localeCompare(b.at));
-  const { byTask, nextQueueAt, nextWaitAt, integrationCloses } = projectFlow(ordered);
+  const currentAttempts = new Map<string, number>();
+  for (const task of tasks)
+    if (typeof task.currentAttempt === 'number' && Number.isSafeInteger(task.currentAttempt))
+      currentAttempts.set(task.id, task.currentAttempt);
+  const { byTask, nextQueueAt, nextWaitAt, integrationCloses, currentAttemptEvent } = projectFlow(
+    ordered,
+    currentAttempts,
+  );
   const stageSummaries = FLOW_STAGES.map((stage) => ({
     stage,
     ...summarize(
@@ -451,6 +482,7 @@ export function flowReport(events: FlowEvent[], tasks: FlowTask[], now = Date.no
     for (let i = 0; i < ordered.length; i++) {
       const event = ordered[i]!;
       if (event.stage !== stage || !requestActions.includes(event.action)) continue;
+      if (!currentAttemptEvent[i] && stage !== 'promotion') continue;
       if (terminal.has(event.taskId)) continue;
       if (stage !== 'promotion' && integrationCloses[i]) continue;
       if (nextQueueAt[i] !== -1) continue;
@@ -591,7 +623,9 @@ export function flowReport(events: FlowEvent[], tasks: FlowTask[], now = Date.no
             ? Math.max(0, Date.parse(end.at) - Date.parse(event.at))
             : boundary || terminal.has(event.taskId)
               ? 0
-              : Math.max(0, now - Date.parse(event.at));
+              : (q.stage === 'promotion' || currentAttemptEvent[i])
+                ? Math.max(0, now - Date.parse(event.at))
+                : 0;
         }
         return { stage: q.stage, ms };
       })
@@ -708,10 +742,25 @@ export function checkFlowAlarms(
       sent_at: string;
     } | null;
     if (old && now.getTime() - Date.parse(old.sent_at) < policy.flow.alertEveryMs) continue;
-    const top = [...report.queues]
-      .sort((a, b) => b.oldestAgeMs - a.oldestAgeMs)
-      .flatMap((q) => q.tasks)
-      .slice(0, policy.flow.waitingTaskExamples);
+    const stageQueue = report.queues.find((queue) => queue.stage === stage);
+    const exampleQueues = stageQueue
+      ? [stageQueue]
+      : key.startsWith('queue-')
+        ? []
+        : [...report.queues].sort((a, b) => b.oldestAgeMs - a.oldestAgeMs);
+    const seenTasks = new Set<string>();
+    const top: string[] = [];
+    const exampleLimit = Math.max(0, policy.flow.waitingTaskExamples);
+    for (const queue of exampleQueues) {
+      if (top.length >= exampleLimit) break;
+      for (const taskId of queue.tasks) {
+        if (seenTasks.has(taskId)) continue;
+        seenTasks.add(taskId);
+        top.push(taskId);
+        if (top.length >= exampleLimit) break;
+      }
+      if (top.length >= exampleLimit) break;
+    }
     inbox(`Flow alarm: stage ${stage}; measurement ${measurement}; top waiting tasks ${top.join(', ') || 'none'}`);
     db.query('INSERT OR REPLACE INTO flow_alarm_sends(threshold,sent_at) VALUES (?,?)').run(key, now.toISOString());
     sent.push(key);
