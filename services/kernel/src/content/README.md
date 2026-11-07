@@ -11,6 +11,8 @@ Decision: `nativeRealmEvidenceHost` keeps its stable host object and forwards `s
 The supported `document-public.ts` entry owns `PublicDocumentView`, `publicDocument` and the strict public schema shared
 by the native Document route and Semantic's Character preview. `document-routes.ts` retains the route compatibility
 exports; GET and DELETE behavior, document authority, disclosure and erasure remain in their existing owners.
+`adapters/subject-document.ts` exposes the current native document read through the public adapter index for Semantic's
+injected Subject reading port; it retains Content's disclosure, deadline, body and source-fence behavior.
 
 ## Native moderation directory
 
@@ -2782,6 +2784,18 @@ rows with null read advice when current download authority is denied.
 - Growth check: `test/content/own-media-http.test.ts` covers lifecycle/select/remove, native cursor binding/expiry/epoch rejection, fabricated actor denial, expiry before collection and collection during hydration with same-frontier retry. `test/content/own-media-read-advice.test.ts` exercises the mounted route and retained-row read advice through native Realm revocation, restoration and a concurrent change between advice rounds. Controller acceptance retains independent 256/1024/4096 unrelated-object/uploader, retired-object and lifecycle-history growth with fixed selected keys, homes and admitted bytes, strict physical-prefix and residual plans, per-pool Access/container/fence/variant work, physical rows, retained/materialized/serialized bytes, actual registered processing/collection phases, and empty/denied/stale branches.
 
 ## Source fences
+
+The mounted `GET /v1/sourceFences:check` first prepares `source_fence:read` on the sole Global Context, then
+authorizes in an independent root snapshot before reading the exact tuple in its own partition snapshot. Each
+root check obtains a native read time on a released connection, passes that same live time to Access preparation
+and final evaluation, and releases it in `finally`. After tuple checkout is released, the route resolves the current
+actor and repeats root preparation and authorization with a fresh native time. It keeps the original Pool and
+deadline throughout. No Access preparation or time acquisition occurs under a root or tuple checkout.
+Missing tuples produce `fenced: false` and `securityRevision: null` only after the native exact read succeeds;
+dependency failures propagate without facts or a session header. Successful responses are private, no-store and
+record the tuple and final root anchors in the ordinary session header. Commands recheck fences independently.
+The focused HTTP assertions cover released native time acquisition alongside the existing admitted, denied,
+revoked and exact-key controls; native, browser, seed and growth acceptance run after integration.
 
 `content.source_fences` retains one stable `(route, source, external_id, field_group)` tuple independently of
 subject identity. `takedownSourceFence` authorizes platform governance at the command's authoritative time before

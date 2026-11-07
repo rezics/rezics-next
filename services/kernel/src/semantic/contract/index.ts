@@ -80,3 +80,9 @@ export type {
   SemanticProgressIdentityStatement,
 } from './progress-identity.ts';
 export type { ReleasedDefinitions } from './released-definitions.ts';
+export type {
+  SubjectReadingFenceTuple,
+  SubjectReadingFence,
+  SubjectReadingNativePort,
+  SubjectReadingAuthorizationPort,
+} from './subject-reading.ts';

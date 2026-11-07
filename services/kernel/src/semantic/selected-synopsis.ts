@@ -1,5 +1,5 @@
 import type { Item, Snak, Statement } from './item.ts';
-import { GLOBAL_CONTEXT } from './definitions.ts';
+import { GLOBAL_SUBJECT_CONTEXT } from './contract/subject-values.ts';
 
 export type SelectedSynopsisInput = {
   statement: string;
@@ -61,7 +61,7 @@ export function parseSelectedSynopsis(value: string): SelectedSynopsisInput | un
 
 export function selectedSynopsisFact(subject: Item, input: SelectedSynopsisInput): Statement | undefined {
   if (
-    subject.context !== GLOBAL_CONTEXT ||
+    subject.context !== GLOBAL_SUBJECT_CONTEXT ||
     input.context !== subject.context ||
     input.realm ||
     subject.release !== input.release

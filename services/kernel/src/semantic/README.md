@@ -6,6 +6,14 @@ retention cost without loading execution. Publication, currentness and terminal 
 
 Decision: `adapters/progress-identity-statements.ts` owns definition-release and identity-mapping SQL descriptors for Library progress planning, using `contract/progress-identity.ts` statement names. Library composes those producer maxima; it does not import the SQL. Mapping, definition activation and type/reference bounds stay Semantic-owned.
 
+Decision: Native Subject detail, related summaries, current documents and covers, and correction advice execute through
+one injected `SubjectReadingApplication`; HTTP keeps parsing, cache/ETag headers and one-hop redirect mapping, while
+native adapters supply current Content and release/context reads. Request-local detail and summary Access preparation is
+passed as a `SubjectReadingAuthorizationPort`; selected synopsis and Character document reads use Content's public
+adapter capability. Nested reads use the same application instance and retain their existing Access, evidence,
+deadline, bounds, disclosure and redirect behavior. `subject.ts`, `summaries.ts` and `viewer-actions.ts` remain
+compatibility facades for installed callers.
+
 This module owns subject facts and their item projections, partition paging, and immutable definition releases with editorial activation history.
 
 `contract/released-definitions.ts` and `adapters/released-definitions.ts` expose the existing digest-validated producer;

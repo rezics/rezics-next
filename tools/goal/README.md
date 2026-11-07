@@ -134,7 +134,8 @@ integer so giving a stamp back cannot livelock admission.
 Decision: When SSH exits 255 after a check command starts, remote-check reconnects with short status probes and waits
 through retry backoff for that run's terminal status until its deadline; a terminal result follows normal result transfer,
 an unreachable run is left for stale-run cleanup, and `NOT_STARTED` keeps its startup retry. Each successful reconnect
-logs the host and elapsed time.
+logs the host and elapsed time. Existing remote-check tests pin recorded-exit 255, reconnect through status-loss, and
+startup `NOT_STARTED` retry; no extra suite. Status probes use a separate counter from the recorded-exit file so a command's own 255 stays 255. Host cache garbage deletion keeps parent directory streams open while descending, skips empty names and a child equal to the current path, and so a sweep drains large deep trees without looping.
 Decision: ordinary worker-check filesystem/record interpretation (result/run precedence, nested envelopes, exit aliases, local-runner liveness, owned terminal-log evidence) lives in `worker-check-observation.ts`. `WorkerJob` consumes its pending-or-terminal observation and resume text, and retains proof observation, final-report recovery, waiting/resume transitions and process launch. Tests pin identity/security and wake/resume journeys at the public check-wake and resume-check-protocol entries; the observation entry has one disposable-file witness.
 Decision: an owner decision that does not fit the prompt points to a worktree file; check logs are named by check id and copied whole into the worktree; worker temporary directories are short `/tmp` paths that settlement removes.
 

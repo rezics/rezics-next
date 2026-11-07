@@ -1,4 +1,5 @@
 import { initializeEventTypes } from '../events/catalogue.ts';
+import { composeSubjectReadingApplication } from '../composition/semantic.ts';
 import {
   ensureContentApplication,
   createNativeContentRealmApplication,
@@ -499,6 +500,7 @@ export function createKernel(dependencies: KernelDependencies): Kernel {
     opened ??= createWorkClient(url, dependencies.pool).then(bindKernelExecution);
     return opened;
   };
+  const subjectReading = composeSubjectReadingApplication();
   const subjects = subjectRoutes(
     createApp({
       ...dependencies,
@@ -515,6 +517,7 @@ export function createKernel(dependencies: KernelDependencies): Kernel {
         if (!viewerBindings) throw new ProblemError('dependency_unavailable');
         return viewerBindings;
       },
+      reading: subjectReading,
     },
   );
   let publication: SubjectPagePublication | undefined;
