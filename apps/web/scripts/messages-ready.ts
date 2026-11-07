@@ -255,7 +255,10 @@ function processGroupAlive(pid: number): boolean {
       }
       // `comm` is parenthesized and may contain spaces or parentheses. Fields after its last `)` begin
       // with state, parent PID, and process group ID.
-      const fields = stat.slice(stat.lastIndexOf(')') + 1).trim().split(/\s+/u);
+      const fields = stat
+        .slice(stat.lastIndexOf(')') + 1)
+        .trim()
+        .split(/\s+/u);
       if (Number(fields[2]) !== pid) continue;
       observedGroup = true;
       if (fields[0] !== 'Z' && fields[0] !== 'X') return true;

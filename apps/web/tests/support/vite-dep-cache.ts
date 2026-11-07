@@ -225,9 +225,7 @@ export function webViteClientOptimizeDepsFor(
   env: NodeJS.ProcessEnv = process.env,
   command: 'build' | 'serve' = 'build',
 ) {
-  return command === 'serve' || env.REZICS_WALK_STACK_SLOT
-    ? webViteWalkClientOptimizeDeps
-    : webViteClientOptimizeDeps;
+  return command === 'serve' || env.REZICS_WALK_STACK_SLOT ? webViteWalkClientOptimizeDeps : webViteClientOptimizeDeps;
 }
 
 export const webViteWorkerSsrOptimizeDeps = {

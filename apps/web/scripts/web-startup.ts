@@ -69,7 +69,8 @@ export function webStartupSelection(kind: string, env: NodeJS.ProcessEnv = proce
     cache: env.WEB_VITE_CACHE_DIR ? 'provided' : 'default',
     cloudflareLocal: env.CLOUDFLARE_VITE_FORCE_LOCAL === 'true' ? 'enabled' : 'unset',
     cloudflareFetch: env.CLOUDFLARE_CF_FETCH_ENABLED === 'false' ? 'disabled' : 'configured',
-    nativeTls: env.NATIVE_WEB_TEST_HOST || env.NATIVE_WEB_TEST_TLS_CERT || env.NATIVE_WEB_TEST_TLS_KEY ? 'enabled' : 'disabled',
+    nativeTls:
+      env.NATIVE_WEB_TEST_HOST || env.NATIVE_WEB_TEST_TLS_CERT || env.NATIVE_WEB_TEST_TLS_KEY ? 'enabled' : 'disabled',
   };
 }
 
@@ -106,8 +107,7 @@ function expectedLookupFailure(error: unknown): boolean {
 
 function executableCandidates(command: string, cwd: string, env: NodeJS.ProcessEnv): string[] {
   if (isAbsolute(command) || command.includes('/') || command.includes('\\')) return [resolve(cwd, command)];
-  const extensions =
-    process.platform === 'win32' ? ['', ...(env.PATHEXT ?? '.EXE;.CMD;.BAT;.COM').split(';')] : [''];
+  const extensions = process.platform === 'win32' ? ['', ...(env.PATHEXT ?? '.EXE;.CMD;.BAT;.COM').split(';')] : [''];
   return (env.PATH ?? '')
     .split(delimiter)
     .filter(Boolean)
@@ -177,26 +177,34 @@ export async function runWebStartupChild(
       stderr: 'inherit',
     });
   } catch (error) {
-    webStartupLog('child-spawn', {
-      outcome: 'failed',
-      command,
-      package: identity.packageId,
-      entry: identity.entry,
-      runtime: `bun@${Bun.version}`,
-    }, env);
+    webStartupLog(
+      'child-spawn',
+      {
+        outcome: 'failed',
+        command,
+        package: identity.packageId,
+        entry: identity.entry,
+        runtime: `bun@${Bun.version}`,
+      },
+      env,
+    );
     throw error;
   }
 
   const childPid = child.pid;
-  webStartupLog('child-start', {
-    outcome: 'started',
-    command,
-    package: identity.packageId,
-    entry: identity.entry,
-    runtime: `bun@${Bun.version}`,
-    parentPid: process.pid,
-    childPid: childPid ?? 'unknown',
-  }, env);
+  webStartupLog(
+    'child-start',
+    {
+      outcome: 'started',
+      command,
+      package: identity.packageId,
+      entry: identity.entry,
+      runtime: `bun@${Bun.version}`,
+      parentPid: process.pid,
+      childPid: childPid ?? 'unknown',
+    },
+    env,
+  );
   const onAbort = () => {
     const stopSignal = signal ? webStartupSignalName(signal) : 'SIGTERM';
     webStartupLog('child-signal', { childPid: childPid ?? 'unknown', signal: stopSignal }, env);
@@ -211,12 +219,16 @@ export async function runWebStartupChild(
     return signal?.aborted ? webStartupSignalExitCode(signal) : status;
   } finally {
     signal?.removeEventListener('abort', onAbort);
-    webStartupLog('child-exit', {
-      childPid: childPid ?? 'unknown',
-      outcome: status === undefined ? 'error' : 'settled',
-      exit: status ?? 'unknown',
-      interrupted: signal?.aborted ? webStartupSignalName(signal) : 'no',
-    }, env);
+    webStartupLog(
+      'child-exit',
+      {
+        childPid: childPid ?? 'unknown',
+        outcome: status === undefined ? 'error' : 'settled',
+        exit: status ?? 'unknown',
+        interrupted: signal?.aborted ? webStartupSignalName(signal) : 'no',
+      },
+      env,
+    );
   }
 }
 
