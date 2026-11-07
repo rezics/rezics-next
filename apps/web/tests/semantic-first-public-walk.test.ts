@@ -87,3 +87,83 @@ test('native handleCall forwards bearer, If-Match and JSON bodies', async () => 
   expect(answer.etag).toBe('"rev-2"');
   expect(answer.body).toEqual({ subject: { id: 'subject' } });
 });
+
+test('native walk credentials use the first-party scope array and issuer identity over native transport', async () => {
+  const { nativeWalkAccessToken } = await import('../scripts/semantic-first-public-native.ts');
+  const requests: Request[] = [];
+  const issue = (async (input: RequestInfo | URL, init?: RequestInit) => {
+    const request = input instanceof Request ? input : new Request(input, init);
+    requests.push(request);
+    return requests.length === 1
+      ? new Response('{}', { headers: { 'set-cookie': 'session=native; Path=/' } })
+      : Response.json({ access_token: 'native-token' });
+  }) as typeof fetch;
+  expect(
+    await nativeWalkAccessToken(
+      stack,
+      {
+        email: 'developer@rezics.test',
+        password: 'secret',
+        clientId: 'rezics-dev-semantic-walk',
+        scopes: ['subject:create', 'zone:configure'],
+      },
+      issue,
+    ),
+  ).toBe('native-token');
+  expect(requests.map((request) => [request.method, request.url, request.headers.get('origin')])).toEqual([
+    ['POST', `${stack.native}/signin`, stack.issuer],
+    ['POST', `${stack.native}/token`, stack.issuer],
+  ]);
+  expect(await requests[0]!.json()).toEqual({
+    email: 'developer@rezics.test',
+    password: 'secret',
+    client_id: 'rezics-dev-semantic-walk',
+    scope: ['subject:create', 'zone:configure'],
+  });
+  expect(requests[1]!.headers.get('cookie')).toBe('session=native');
+  let calls = 0;
+  await expect(
+    nativeWalkAccessToken(
+      stack,
+      {
+        email: 'developer@rezics.test',
+        password: 'wrong',
+        clientId: 'rezics-dev-semantic-walk',
+        scopes: [],
+      },
+      (async () => {
+        calls++;
+        return new Response('{}', { status: 401 });
+      }) as typeof fetch,
+    ),
+  ).rejects.toThrow('native persona sign-in failed: HTTP 401');
+  expect(calls).toBe(1);
+});
+
+test('inventory replaces multiline failures and binds both outcomes without changing authored paths', async () => {
+  const { updateFirstPublicInventory } = await import('../scripts/semantic-first-public-evidence.ts');
+  const source =
+    '# Inventory\n\n| Journey | User-visible path | Dev result |\n| --- | --- | --- |\n' +
+    '| Released definitions | `/ja/catalogue/definitions` → released Type | Failing timeout\nCall log:\n html[data-hydrated]\n |\n' +
+    '| Zone publication and navigation | `/en/zones/id` → about | Pending |\n\nKeep the owner contract.\n';
+  const results = [
+    { name: 'Released definitions', status: 'Passing' as const, persona: 'anonymous' },
+    {
+      name: 'Zone publication and navigation',
+      status: 'Failing' as const,
+      persona: 'editor+anonymous',
+      failure: { owner: 'web', actual: 'HTTP 404\nroute | missing <html>' },
+    },
+  ];
+  const actual = updateFirstPublicInventory(source, '123456789012abcdef', '2026-11-07T09:00:00.000Z', results);
+  expect(actual).toContain(
+    '| Released definitions | `/ja/catalogue/definitions` → released Type | Passing 123456789012 2026-11-07T09:00:00.000Z anonymous |',
+  );
+  expect(actual).toContain(
+    'Failing 123456789012 2026-11-07T09:00:00.000Z editor+anonymous; web: HTTP 404 route / missing &lt;html>',
+  );
+  expect(actual.split('\n').filter((line) => line.startsWith('|'))).toHaveLength(4);
+  expect(actual).not.toContain('Call log:');
+  expect(actual).toContain('Keep the owner contract.');
+  expect(updateFirstPublicInventory(actual, '123456789012abcdef', '2026-11-07T09:00:00.000Z', results)).toBe(actual);
+});

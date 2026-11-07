@@ -111,6 +111,7 @@ test('the Global Context is seeded and nothing is active at first', async () => 
   ]);
   expect(rows).toEqual([{ route: 0, kind: 'global', labels: { en: 'Global' } }]);
   expect((await call('GET', '/v1/definitions/active')).response.status).toBe(404);
+  expect((await call('GET', '/v1/definitions')).response.status).toBe(404);
   expect(await activeRelease(pool)).toBeNull();
 });
 
@@ -192,6 +193,7 @@ test('activation is a compare-and-swap on the active head', async () => {
   expect(stale.body.code).toBe('stale_editorial_head');
   expect((await activate(two, 1)).body).toEqual({ digest: two, head: 2 });
   expect((await call('GET', '/v1/definitions/active')).body).toEqual({ digest: two, head: 2 });
+  expect((await call('GET', '/v1/definitions')).body).toEqual({ digest: two, head: 2 });
   expect((await activate(`sha256:${'1'.repeat(64)}`, 2)).response.status).toBe(404);
   expect((await activate(`sha256:${'1'.repeat(64)}`, 2, 'editor')).response.status).toBe(403);
   const reused = key();
@@ -225,6 +227,11 @@ test('the kernel contract documents the definition operations', () => {
   });
   expect(paths['/v1/definitions/releases/{digest}']!.get).toMatchObject({
     operationId: 'definitions.read_release',
+    'x-action': 'definitions:read',
+    security: [{ bearerAuth: [] }, {}],
+  });
+  expect(paths['/v1/definitions']!.get).toMatchObject({
+    operationId: 'definitions.read',
     'x-action': 'definitions:read',
     security: [{ bearerAuth: [] }, {}],
   });

@@ -1,5 +1,4 @@
 import { createServerFn } from '@tanstack/react-start';
-import { withCatalogueSession } from '../definition-guide-actions';
 import { definitionPublicationNative } from './native';
 import {
   isPublicationDigest,
@@ -28,6 +27,7 @@ async function withPublisher<T>(
     native: ReturnType<typeof definitionPublicationNative>,
   ) => Promise<T | { ok: false; reason: PublicationFailure }>,
 ): Promise<T | { ok: false; reason: PublicationFailure }> {
+  const { withCatalogueSession } = await import('../definition-guide-session.server');
   return withCatalogueSession(({ client, authorization }) =>
     read(definitionPublicationNative(client, { authorization })),
   );

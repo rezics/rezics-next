@@ -9,6 +9,75 @@ remains: immutable definitions, third vertical, referenced candidates, Context a
 claims and disputes, one partition/revision per command, current Access, batched related labels, asynchronous incoming
 links with declared freshness, one-hop redirects, all required personas, main and root-gate evidence.
 
+## First-public-scope dev journeys
+
+This finishing table follows the two Semantic-owned **In** rows in [public scope](../scope.md): catalogue,
+editorial contributions, identity resolution, definitions and vertical editors; and Zones. One row is one
+user-visible path. The single Semantic walk executes every row on current dev by **2026-11-07 00:30 UTC**,
+then repeats hourly toward **09:30 UTC**. It replaces Pending with Passing or Failing, recording the dev revision,
+UTC time, native/browser evidence and first failing transition/repair owner. Pending is not a pass. A shared setup
+failure marks every dependent row Failing with that cause; it supplies no downstream success.
+
+| Journey | User-visible path | Dev result |
+| --- | --- | --- |
+| Released definitions | `/{locale}/catalogue/definitions` → choose released Type → inspect its actual fields, targets and accepting profile | Failing web waitFor: Timeout 180000ms exceeded; waiting for html[data-hydrated] |
+| Catalogue browsing | `/{locale}/catalogue/{profile}` → page actual released subjects → open the selected canonical reader | Failing search catalogue search HTTP 503: {"type":"https://rezics.com/problems/index_not_ready","title":"Search Index Not Ready","statu |
+| Generic creation | `/{locale}/catalogue/new` → choose released Type/data language → discover existing matches → create → independent returned-subject read | Passing b64fd8c5c743 2026-11-07T08:39:53.316Z editor+anonymous |
+| Book and series editing | `/{locale}/catalogue/literary` → create/correct Book or series → cite a work/edition relation → review → current reader | Failing accounts create schema:BookSeries returned HTTP 401: {"type":"https://rezics.com/problems/invalid_credentials","title":"Invalid C |
+| Recipe editing | `/{locale}/catalogue/recipe` → original ingredients/method/licence and diet/time facts → propose → separate editorial selection → public recipe | Failing accounts create schema:Recipe returned HTTP 401: {"type":"https://rezics.com/problems/invalid_credentials","title":"Invalid Crede |
+| Game and visual-novel editing | `/{locale}/catalogue/game` → choose released work/release grain → enter supported facts → submit → current distinct identity | Failing accounts create schema:VideoGame returned HTTP 401: {"type":"https://rezics.com/problems/invalid_credentials","title":"Invalid Cr |
+| Add-on editing | `/{locale}/catalogue/addon` → choose exact base work → create/correct add-on → current add-on and base relationship | Failing accounts create schema:VideoGame returned HTTP 401: {"type":"https://rezics.com/problems/invalid_credentials","title":"Invalid Cr |
+| Manga editing | `/{locale}/catalogue/manga` → create/correct series or volume at its own grain → submit → current reader | Failing web waitFor: Timeout 180000ms exceeded; waiting for html[data-hydrated] |
+| Screen editing | `/{locale}/catalogue/screen` → choose film/series/episode and classification → submit → current reader with correct work relations | Passing b64fd8c5c743 2026-11-07T08:39:53.316Z editor+anonymous |
+| Album editing | `/{locale}/catalogue/album` → released album facts and credits → review → submit → current reader | Passing b64fd8c5c743 2026-11-07T08:39:53.316Z editor+anonymous |
+| Publication editing | `/{locale}/catalogue/publication` → independently identified publication → review → submit → current publication reader | Failing accounts create schema:Book returned HTTP 401: {"type":"https://rezics.com/problems/invalid_credentials","title":"Invalid Credent |
+| Music-context editing | `/{locale}/catalogue/music-context` → current released context and exact related work → submit → current reader | Passing b64fd8c5c743 2026-11-07T08:39:53.316Z editor+anonymous |
+| File and release-group editing | `/{locale}/catalogue/file` → catalogue identity and supported relations → submit → current reader without hosted-file publication | Failing accounts create schema:MediaObject returned HTTP 401: {"type":"https://rezics.com/problems/invalid_credentials","title":"Invalid  |
+| Work-part editing | Subject → work-parts editor → create/correct exact story arc or part → submit → current ordered work relationship | Failing accounts create schema:Book returned HTTP 401: {"type":"https://rezics.com/problems/invalid_credentials","title":"Invalid Credent |
+| Character identity and credit | `/{locale}/catalogue/character?work={id}` → distinct fictional character → qualified work credit → submit → current Character and work readback | Failing accounts create wd:Q689445 returned HTTP 401: {"type":"https://rezics.com/problems/invalid_credentials","title":"Invalid Credenti |
+| Person and organization editing | `/{locale}/catalogue/people` → choose person/organization grain → names and qualified credits → submit → current catalogue identity | Failing accounts create schema:Person returned HTTP 401: {"type":"https://rezics.com/problems/invalid_credentials","title":"Invalid Crede |
+| Concept and scheme editing | `/{locale}/catalogue/concept` → choose existing released classification meaning → create/correct Concept or scheme → current reader | Failing accounts create skos:ConceptScheme returned HTTP 401: {"type":"https://rezics.com/problems/invalid_credentials","title":"Invalid  |
+| Multilingual terms | Subject → Contribute → names/descriptions → edit explicit language fields → resolve a stale comparison → confirm → current canonical reader | Failing accounts create schema:Book returned HTTP 401: {"type":"https://rezics.com/problems/invalid_credentials","title":"Invalid Credent |
+| Cited fact correction | Subject → Contribute → fact editor → cite exact value/qualifiers/references → propose → compare exact candidate and current public selection | Failing semantic propose candidate returned HTTP 404: {"type":"https://rezics.com/problems/not_found","title":"Not Found","status":404,"c |
+| Original authored text | Subject → authored editor → compose original licensed text → preview → propose → read exact candidate independently from selected public text | Failing semantic propose candidate returned HTTP 404: {"type":"https://rezics.com/problems/not_found","title":"Not Found","status":404,"c |
+| Relationship correction | Subject → relation editor → choose exact related identity and qualified statement → propose → review → current relationship | Failing accounts create schema:Person returned HTTP 401: {"type":"https://rezics.com/problems/invalid_credentials","title":"Invalid Crede |
+| Missing related work | Subject relationship editor → missing-work handoff → create actual released identity → return → propose intended relationship | Failing accounts create schema:BookSeries returned HTTP 401: {"type":"https://rezics.com/problems/invalid_credentials","title":"Invalid C |
+| Identifier evidence | Subject → identifiers → propose cited identifier → exact candidate comparison → separate current selected identifier read | Failing semantic propose candidate returned HTTP 404: {"type":"https://rezics.com/problems/not_found","title":"Not Found","status":404,"c |
+| Why this value and history | Subject selected value → Why this value → exact candidate/provenance → Sources/Changes → current reader with captured return | Failing web waitFor: Timeout 180000ms exceeded; waiting for html[data-hydrated] |
+| Context creation | `/{locale}/my/contexts/new` → choose current released settings → review → create → independent exact Context/defaults read | Failing accounts create Context returned HTTP 401: {"type":"https://rezics.com/problems/invalid_credentials","title":"Invalid Credentials |
+| Context editorial decisions | Subject → context-review for exact Context → competing cited candidates → accept/reject/abstain → separately adopt/rank → compare Context and Global | Failing semantic propose candidate returned HTTP 404: {"type":"https://rezics.com/problems/not_found","title":"Not Found","status":404,"c |
+| Statement consent | Subject → statement-consent → review exact affected statement and current authority → disclose/withdraw → independent current public read | Failing accounts create schema:Person returned HTTP 401: {"type":"https://rezics.com/problems/invalid_credentials","title":"Invalid Crede |
+| Subject lifecycle | Owned Subject → available delete/restore controls → confirmed native transition → progress/current reader with owner and public disclosure | Failing accounts create schema:Book returned HTTP 401: {"type":"https://rezics.com/problems/invalid_credentials","title":"Invalid Credent |
+| Zone creation and configuration | `/{locale}/my/zones/new` → create → `/my/zones/{id}/edit` → configure static routes/documents without source reads → save → native saved preview | Failing accounts create Zone returned HTTP 401: {"type":"https://rezics.com/problems/invalid_credentials","title":"Invalid Credentials"," |
+| Zone publication and navigation | Configured static Zone → publish → anonymous `/zones/{id}/{route}` → configured navigation → same-tab return with current Access | Failing semantic Zone creation did not return an id |
+| Zone lifecycle and moderation | Owned static Zone → delete → unavailable public route → restore → current route; authorized exact-pointer takedown/release → current owner/public readback | Failing semantic Zone creation did not return an id |
+
+Catalogue rows use existing released profiles and common editors. Walk anonymous reader, editor, Context acceptor,
+owner, outsider and suspended personas where applicable, through actual Auth/Access, native writes and independent
+readback. Canonical one-hop reading and exact original references apply throughout; advanced merge mutations are
+not a public creation step. Exercise en/zh-Hant/ja, touched labels across eight locales, phone/desktop and both themes.
+Web owns rendering/navigation; Imports owns connected provider-review UI; Semantic owns native meaning and decisions.
+
+The finishing denominator excludes custom definition publication, advanced identity mutations, reviewed vocabulary
+seeds, measured-input expansion, advanced Search/facets and personal dynamic queries. Zones count configured static
+routes without source reads; saved-scope/mounted-Collection unions, direct catalogue targets and retained preparation
+remain grant-closed. These scope boundaries do not erase the broader Goal's retained acceptance obligations below.
+After the first walk, dispatch complete repairs only for failing first-public journeys (same-day net-new violation
+repairs continue). Hourly reporting is one line: passing/31 and slowest failing journey with its causal owner.
+
+Decision: fewest tests pin the 31 user-visible first-public paths: one kernel native suite over bundled Types, proposals,
+Contexts and static Zones, plus one admitted seeded walk that executes every row with independent native readback and
+mounted pages. Walk `dev-stack.ts walk` stays on the worker host so `GOAL_ACCEPTANCE_REQUIRES` is not stripped.
+Native JSON sign-in uses a dedicated first-party development client with exact catalogue and static Zone scopes;
+the confidential website client remains OAuth-only. The native transport sends the issuer Origin, and editor tokens
+refresh between journeys before their five-minute lifetime ends. Every result binds revision, UTC, persona, request
+keys, credential fingerprints, operands and independent native responses; served-page evidence includes screenshots.
+Multiline failures remain one table row and HTTP page failures cannot count as success. Consent acceptance uses the
+account's discovered agent and an uncited private assertion, then checks public absence, disclosure and retraction.
+Walk Kernel GET `/v1/definitions` is the supported active-release producer, equivalent to `/v1/definitions/active`;
+a missing-route 404 is not readiness. Kernel starts before worker discovery. The stack restores generated bindings
+and releases its slot even if another cleanup fails. Fixtures and typing are not native or browser passes.
+
 ## Evidence stages
 
 | Stage      | Required evidence                                                                                                                                                                                     |

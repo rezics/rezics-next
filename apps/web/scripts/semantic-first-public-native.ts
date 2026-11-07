@@ -92,6 +92,39 @@ export async function websiteAccessToken(
   return token.access_token;
 }
 
+/** JSON sign-in uses a native first-party client; issuer identity stays in the Origin header. */
+export async function nativeWalkAccessToken(
+  stack: Pick<WalkStackOrigins, 'native' | 'issuer'>,
+  input: { email: string; password: string; clientId: string; scopes: readonly string[] },
+  fetchImpl: typeof fetch = fetch,
+): Promise<string> {
+  const signin = await fetchImpl(`${stack.native}/signin`, {
+    method: 'POST',
+    headers: websiteCredentialHeaders(stack.issuer),
+    body: JSON.stringify({
+      email: input.email,
+      password: input.password,
+      client_id: input.clientId,
+      scope: input.scopes,
+    }),
+  });
+  if (!signin.ok) throw new Error(`native persona sign-in failed: HTTP ${signin.status}`);
+  const cookie = signin.headers
+    .getSetCookie()
+    .map((entry) => entry.split(';')[0])
+    .join('; ');
+  const issued = await fetchImpl(`${stack.native}/token`, {
+    method: 'POST',
+    headers: websiteCredentialHeaders(stack.issuer, cookie),
+    body: '{}',
+  });
+  if (!issued.ok) throw new Error(`native persona token failed: HTTP ${issued.status}`);
+  const token = (await issued.json()) as { access_token?: string };
+  if (typeof token.access_token !== 'string' || !token.access_token)
+    throw new Error('native persona token omitted access_token');
+  return token.access_token;
+}
+
 export function cited(property: string, content: unknown) {
   return {
     property: { id: property },

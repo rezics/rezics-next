@@ -224,6 +224,7 @@ test('native platform grants expose real development commands while preserving r
   const publicIds = ids((await call('anonymous', 'GET', '/v1/openapi.json')).body);
   for (const id of gated) expect(publicIds).not.toContain(id);
   expect(publicIds).toContain('subject.create');
+  expect(publicIds).toContain('definitions.read');
   expect(publicIds).toContain('definitions.read_active');
   const generated = openApiDocument(app);
   const generatedOps = Object.values(generated.paths).flatMap((path) => Object.values(path));
