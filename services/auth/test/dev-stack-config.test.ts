@@ -31,6 +31,7 @@ import {
 import { developmentEnv } from '../../kernel/scripts/database.ts';
 import { rateLimitBudgets } from '../../kernel/src/access/write-rate-budgets.ts';
 import { readPoolAcquireTimeoutMillis } from '../../kernel/src/database/pool.ts';
+import { loopbackNativeJwksAllowed } from '../../kernel/src/access/auth-jwks-url.ts';
 
 test('seeded frontends wait for useful /en HTML through waitUntilWalkReady', async () => {
   const source = await readFile(resolve(import.meta.dir, '../scripts/dev-stack.ts'), 'utf8');
@@ -41,20 +42,23 @@ test('seeded frontends wait for useful /en HTML through waitUntilWalkReady', asy
 });
 
 test('isolated Kernel bindings verify the selected Auth issuer and bind the selected API port', () => {
-  expect(
-    developmentKernelBindings({
-      issuer: 'http://127.0.0.1:20021',
-      audience: 'https://api.rezics.test',
-      kernel: 'http://127.0.0.1:20023',
-      native: 'http://127.0.0.1:20022',
-    }),
-  ).toEqual({
+  const bindings = developmentKernelBindings({
+    issuer: 'http://127.0.0.1:20021',
+    audience: 'https://api.rezics.test',
+    kernel: 'http://127.0.0.1:20023',
+    native: 'http://127.0.0.1:20022',
+  });
+  expect(bindings).toEqual({
     AUTH_ISSUER: 'http://127.0.0.1:20021',
     AUTH_AUDIENCE: 'https://api.rezics.test',
     AUTH_JWKS_URL: 'http://127.0.0.1:20022/.well-known/jwks.json',
     KERNEL_HOSTNAME: '127.0.0.1',
     KERNEL_PORT: '20023',
   });
+  const issuer = new URL(bindings.AUTH_ISSUER);
+  const jwks = new URL(bindings.AUTH_JWKS_URL);
+  expect(loopbackNativeJwksAllowed(issuer, jwks)).toBe(true);
+  expect(loopbackNativeJwksAllowed(issuer, new URL('http://127.0.0.1:20022/jwks'))).toBe(false);
 });
 
 test('Auth page scope configuration carries trusted siteActions and records native fallback explicitly', () => {
