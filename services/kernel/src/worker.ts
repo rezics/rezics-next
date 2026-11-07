@@ -16,6 +16,7 @@ import { installNativeHistory } from './composition/history.ts';
 import { startContentApplication } from './composition/content.ts';
 import { composeLibraryDomain } from './composition/library.ts';
 import { createKernelWorkModules } from './composition/work-modules.ts';
+import { installIdentityRatingRepairProducer } from './composition/identity-rating-repair.ts';
 import { composeWork, type WorkModule } from './work/registry.ts';
 import { effectsRelay } from './events/effects.ts';
 import { relayConcurrencyForPool, startRelays } from './events/relays.ts';
@@ -83,6 +84,7 @@ export async function startWorker(
   composeWorkApplication();
   const community = composeCommunityApplication();
   installNativeHistory();
+  installIdentityRatingRepairProducer();
   const content = startContentApplication(config.clock ? { clock: config.clock } : undefined);
   const composed = () =>
     createKernelWorkModules(

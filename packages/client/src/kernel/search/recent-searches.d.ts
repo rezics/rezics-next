@@ -33,6 +33,7 @@ export declare const recentEntrySchema: import("typebox").TUnion<[import("typebo
 }>]>;
 export type RecentEntry = Static<typeof recentEntrySchema>;
 export type RecentDependencies = {
+    deadlineNow?: () => number;
     pool: Pool;
     access: Access;
     tokens: KeyRing;

@@ -2,12 +2,13 @@ import type { Pool } from 'pg';
 import type { definitionRoutes } from '../../semantic/http/definitions.ts';
 import { type Access, type AccessFactory } from '../../request/access.ts';
 import type { KeyRing } from '../../tokens/seal.ts';
-export declare function profileRoutes(app: ReturnType<typeof definitionRoutes>, { pool, access, tokens, routeKey, clock, }: {
+export declare function profileRoutes(app: ReturnType<typeof definitionRoutes>, { pool, access, tokens, routeKey, clock, deadlineNow, }: {
     pool: Pool;
     access?: Access | AccessFactory;
     tokens: KeyRing;
     routeKey: Uint8Array;
     clock: () => Date;
+    deadlineNow: () => number;
 }): import("elysia/types").AddRoute<"", "local", import("elysia").DefaultSingleton, {
     typebox: {};
     error: [{

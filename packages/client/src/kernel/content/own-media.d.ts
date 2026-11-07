@@ -8,6 +8,7 @@ export type OwnMediaDependencies = Readonly<{
     access: Access;
     tokens: KeyRing;
     clock: () => Date;
+    deadlineNow?: () => number;
 }>;
 /** Add a committed browser or imported reservation to the existing account-home erasure locator.
  * The upsert is safe to repeat when the original reservation key is replayed. */

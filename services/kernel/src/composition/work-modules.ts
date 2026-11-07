@@ -20,6 +20,7 @@ import { ratingNativeWorkModule } from '../rating/module.ts';
 import { workflowRetentionWorkModule } from '../work/retention.ts';
 import { importsWorkModule } from '../imports/erasure.ts';
 import { composeContentApplication } from './content.ts';
+import { installIdentityRatingRepairProducer } from './identity-rating-repair.ts';
 
 /** Accounts registration installs the Realm adapter before any Realm workflow runs.
  * Its Access is the production composition, so a step authorizes only the initiator
@@ -79,6 +80,7 @@ export function createKernelWorkModules(
   composeCreditSearch?: Parameters<typeof createSearchWorkModule>[2],
   communityAmbient: CommunityAmbient = systemCommunityAmbient,
 ): readonly WorkModule[] {
+  installIdentityRatingRepairProducer();
   const searchWorkModule = createSearchWorkModule(composeDiscovery, composeRuntimeDefaults, composeCreditSearch);
   const semanticWorkModule = createSemanticWorkModule(composeSemantic);
   const contentWorkModule = contentDeclaration().work(contentWorkAmbient(ambient));
