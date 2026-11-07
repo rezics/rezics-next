@@ -60,7 +60,10 @@ Decision: the process root supplies the complete Search native port before Seman
 The default module list shares one lazy supplier between Semantic and Search after pool preparation; HTTP and direct
 WorkModule hosts pass the same real producer explicitly. `composeSemanticIdentityParticipants` passes its typed
 `createIdentitySourceSupportReader` into the receiving configuration; each adapter creates its own reader from the
-supplied `{pool, routeKey, access, clock}` tuple. Native Source mapping, Access, custody, transaction and cost
+supplied `{pool, routeKey, access, clock}` tuple. Direct Search hosts obtain Access from the existing
+`createKernelAuthorization` entry, as workers do, without compiling HTTP handlers or capturing a callback.
+Configured-host fixtures serialize the same dedicated receipt ring used by native command fixtures.
+Native Source mapping, Access, custody, transaction and cost
 authority remain with their owner commands. Lifecycle observers collect every registered effect batch before
 asserting the complete effect set; startup, projection and shutdown retain their original deadlines and assertions.
 Native write fixtures submit valid boundary bodies and the current revision returned by publication transitions.
