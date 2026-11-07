@@ -371,6 +371,11 @@ test('operator causes keep ImportTransportError status and seed causes keep the 
   expect(walkFailureCause(new ImportTransportError(403, 'about:blank', 'forbidden'))).toBe(
     'Import transport request failed 403 about:blank forbidden',
   );
+  const nested = new ImportTransportError();
+  nested.cause = new TypeError('Import requests must target the configured API origin under /v1/');
+  expect(walkFailureCause(nested)).toBe(
+    'Import transport request failed Import requests must target the configured API origin under /v1/',
+  );
   expect(
     walkChildFailure(
       'seed',

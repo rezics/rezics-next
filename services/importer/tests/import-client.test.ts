@@ -1,6 +1,6 @@
 import { expect, test } from 'bun:test';
 import type { KernelClient, ReviewedPersonMerge } from '@rezics/client';
-import { createImportTransport } from '../src/import-client.ts';
+import { createImportTransport, ImportTransportError } from '../src/import-client.ts';
 import type {
   ClassificationAssociation,
   ImportSourceClassificationPutResult,
@@ -90,6 +90,36 @@ for (const status of [429, 503]) {
     });
   }
 }
+
+test('candidate listing keeps the kernel status when the Treaty reply has no Response', async () => {
+  const transport = createImportTransport({
+    origin: 'https://api.importer.test',
+    tokenProvider: async () => 'test-token',
+    client: {
+      subjects: () => ({
+        candidates: {
+          get: async () => ({
+            status: 403,
+            data: null,
+            error: { value: { type: 'about:blank', code: 'forbidden' } },
+          }),
+        },
+      }),
+    } as never,
+  });
+  try {
+    await transport.reviewedCandidates(subjectId, {
+      property: 'schema:name',
+      context: '00000000-0000-8000-8000-000000000000',
+      limit: 100,
+    });
+    throw new Error('expected denial');
+  } catch (error) {
+    expect(error).toBeInstanceOf(ImportTransportError);
+    expect((error as ImportTransportError).status).toBe(403);
+    expect((error as ImportTransportError).code).toBe('forbidden');
+  }
+});
 
 test('one batch deadline cancels a pending member retry and releases its timer', async () => {
   let expire!: () => void;

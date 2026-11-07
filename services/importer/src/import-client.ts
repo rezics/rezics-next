@@ -281,8 +281,14 @@ function httpFailure(reply: ClientResponse): ImportTransportError {
       : undefined;
   const code = field('code');
   const safeCode = typeof code === 'string' && /^[a-z0-9_-]{1,80}$/.test(code) ? code : undefined;
+  const status =
+    typeof reply.response?.status === 'number'
+      ? reply.response.status
+      : typeof reply.status === 'number'
+        ? reply.status
+        : undefined;
   return new ImportTransportError(
-    reply.response?.status,
+    status,
     safeType,
     safeCode,
     field('retryable') === true,
@@ -298,9 +304,12 @@ async function response(
   let reply: ClientResponse;
   try {
     reply = await call();
-  } catch {
+  } catch (error) {
     signal?.throwIfAborted();
-    throw new ImportTransportError();
+    if (error instanceof ImportTransportError) throw error;
+    const failure = new ImportTransportError();
+    failure.cause = error;
+    throw failure;
   }
   signal?.throwIfAborted();
   if (

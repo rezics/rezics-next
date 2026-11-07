@@ -300,13 +300,35 @@ const CHILD_ERROR_LINE = /^(?:error:|Error:|TypeError:|remote-check:.*failed|tas
 
 export function walkFailureCause(error: unknown): string {
   if (error instanceof ImportTransportError) {
-    return ['Import transport request failed', error.status, error.type, error.code, error.phase]
+    const nested =
+      error.status === undefined && error.cause instanceof Error
+        ? error.cause.message.split('\n')[0]!.slice(0, 120)
+        : undefined;
+    return ['Import transport request failed', error.status, error.type, error.code, error.phase, nested]
       .filter((part) => part !== undefined && part !== '')
       .join(' ')
       .slice(0, 240);
   }
   const text = error instanceof Error ? error.message : String(error);
   return text.split('\n')[0]!.slice(0, 240);
+}
+
+function isRetryableWalkTransport(error: unknown): boolean {
+  if (error instanceof ImportTransportError)
+    return error.status === 503 || error.phase === 'readiness' || error.phase === 'SubjectGET503';
+  return false;
+}
+
+async function retryWalkTransport<T>(run: () => Promise<T>): Promise<T> {
+  for (let attempt = 0; attempt < 5; attempt++) {
+    try {
+      return await run();
+    } catch (error) {
+      if (!isRetryableWalkTransport(error) || attempt === 4) throw error;
+      await Bun.sleep(200);
+    }
+  }
+  throw new Error('walk transport retry exhausted');
 }
 
 export function walkChildFailure(name: string, code: number, stdout: string, stderr: string): Error {
@@ -353,20 +375,30 @@ async function parseEnv(path: string): Promise<Record<string, string>> {
 }
 
 async function currentSubject(api: string, id: string) {
-  const response = await fetch(`${api}/v1/subjects/${id}`);
-  assert.equal(response.status, 200, `anonymous Subject ${id}`);
-  const body: unknown = await response.json();
-  if (
-    !isRecord(body) ||
-    !isRecord(body.subject) ||
-    typeof body.subject.id !== 'string' ||
-    typeof body.subject.type !== 'string' ||
-    !isRecord(body.subject.statements)
-  )
-    throw new TypeError(`Current Subject ${id} has an invalid response shape`);
-  return body as {
-    subject: { id: string; type: string; release?: string; context?: string; statements: Record<string, unknown[]> };
-  };
+  let last = 0;
+  for (let attempt = 0; attempt < 5; attempt++) {
+    const response = await fetch(`${api}/v1/subjects/${id}`);
+    last = response.status;
+    if (response.status === 503) {
+      if (attempt === 4) break;
+      await Bun.sleep(200);
+      continue;
+    }
+    assert.equal(response.status, 200, `anonymous Subject ${id}`);
+    const body: unknown = await response.json();
+    if (
+      !isRecord(body) ||
+      !isRecord(body.subject) ||
+      typeof body.subject.id !== 'string' ||
+      typeof body.subject.type !== 'string' ||
+      !isRecord(body.subject.statements)
+    )
+      throw new TypeError(`Current Subject ${id} has an invalid response shape`);
+    return body as {
+      subject: { id: string; type: string; release?: string; context?: string; statements: Record<string, unknown[]> };
+    };
+  }
+  throw new Error(`anonymous Subject ${id} returned ${last}`);
 }
 
 async function currentLinks(api: string, id: string, property: string) {
@@ -550,6 +582,7 @@ async function runOperator(id: 'I01' | 'I02' | 'I03' | 'I04', persona: SeedEnv):
   } finally {
     session.close();
   }
+  const denials: { method: string; path: string; status: number }[] = [];
   const review = createImportTransport({
     origin: persona.kernel,
     tokenProvider: await createAccountTokenProvider({
@@ -559,14 +592,19 @@ async function runOperator(id: 'I01' | 'I02' | 'I03' | 'I04', persona: SeedEnv):
       authOrigin: persona.auth,
       scopes: [...spec.scopes, 'context:accept', 'context:adopt'],
     }),
+    onDeniedResponse: async ({ method, path, response }) => {
+      denials.push({ method, path, status: response.status });
+    },
   });
   const adopted: { key: string; id: string; type: string; candidate: string }[] = [];
   for (const [key, id] of subjects) {
-    const page = await review.reviewedCandidates(id, {
-      property: spec.property,
-      context: GLOBAL_CONTEXT,
-      limit: 100,
-    });
+    const page = await retryWalkTransport(() =>
+      review.reviewedCandidates(id, {
+        property: spec.property,
+        context: GLOBAL_CONTEXT,
+        limit: 100,
+      }),
+    );
     const candidate = page.candidates.find(
       (row) =>
         'statement' in row &&
@@ -576,22 +614,26 @@ async function runOperator(id: 'I01' | 'I02' | 'I03' | 'I04', persona: SeedEnv):
         row.source.external_id === key,
     );
     assert.ok(candidate && 'id' in candidate, `${spec.source} ${key} has no current ${spec.property} candidate`);
-    await review.acceptReviewedCandidate(
-      id,
-      candidate.id,
-      { context: GLOBAL_CONTEXT, expected_head: null },
-      `${id}:${candidate.id}:accept`,
+    await retryWalkTransport(() =>
+      review.acceptReviewedCandidate(
+        id,
+        candidate.id,
+        { context: GLOBAL_CONTEXT, expected_head: null },
+        `${id}:${candidate.id}:accept`,
+      ),
     );
-    await review.adoptReviewedCandidates(
-      id,
-      {
-        context: GLOBAL_CONTEXT,
-        property: spec.property,
-        mode: 'replace',
-        selection: [{ candidate: candidate.id, rank: 'normal' }],
-        expected_head: null,
-      },
-      `${id}:${spec.property}:adopt`,
+    await retryWalkTransport(() =>
+      review.adoptReviewedCandidates(
+        id,
+        {
+          context: GLOBAL_CONTEXT,
+          property: spec.property,
+          mode: 'replace',
+          selection: [{ candidate: candidate.id, rank: 'normal' }],
+          expected_head: null,
+        },
+        `${id}:${spec.property}:adopt`,
+      ),
     );
     const read = await currentSubject(persona.kernel, id);
     assert.equal(read.subject.id, id);
@@ -615,7 +657,13 @@ async function runOperator(id: 'I01' | 'I02' | 'I03' | 'I04', persona: SeedEnv):
   } finally {
     reread.close();
   }
-  return { source: spec.source, first: first.stdout.trim(), reopen: again.stdout.trim(), adopted };
+  return {
+    source: spec.source,
+    first: first.stdout.trim(),
+    reopen: again.stdout.trim(),
+    adopted,
+    ...(denials.length > 0 ? { denials } : {}),
+  };
 }
 
 async function loadSeedReport(): Promise<{
