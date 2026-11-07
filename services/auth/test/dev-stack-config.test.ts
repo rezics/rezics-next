@@ -69,6 +69,14 @@ test('integrated startup keeps the full regression selection and original native
   expect(acceptance.at(-1)!.argv).toEqual(['bun', 'test', 'services/auth/test/dev-stack.test.ts']);
 });
 
+test('walk host Kernel Access authenticates a seeded persona against issuer JWKS', async () => {
+  const source = await readFile(resolve(import.meta.dir, '../scripts/dev-stack.ts'), 'utf8');
+  expect(source).toContain('jwksUrl = issuerPublicJwksUrl(origins.issuer)');
+  expect(source).toContain('access: (mounted) => createAccess({ ...mounted, auth: kernelAuth })');
+  expect(source).toContain('const actor = await access.authenticate(bearer, context)');
+  expect(source).toContain("if (actor.kind !== 'account') throw new Error('Local persona is not an account')");
+});
+
 test('seeded frontends wait for useful /en HTML through waitUntilWalkReady', async () => {
   const source = await readFile(resolve(import.meta.dir, '../scripts/dev-stack.ts'), 'utf8');
   expect(source).toContain('SEEDED_WEB_READY_PATH');
