@@ -69,11 +69,11 @@ export type ManagerSessionSnapshot = ManagerSpec & {
   pendingGoalReads?: string[];
 };
 export type ManagedManagerState = ManagerSessionSnapshot & { history?: ManagerSessionSnapshot[] };
-/** An existing Claude session registered for authority only; it is not a managed model session. */
+/** An existing provider session registered for authority only; it is not a managed model session. */
 type ResidentManagedFields = Exclude<keyof ManagerSessionSnapshot, 'kind' | 'id' | 'status' | 'threadId'>;
 export type ResidentSupermanagerState = Pick<ManagerSessionSnapshot, 'id' | 'status' | 'threadId'> & {
   kind: 'resident-supermanager';
-  provider: 'claude';
+  provider: 'codex' | 'claude';
   status: 'running';
   threadId: string;
   registeredAt: string;
@@ -254,12 +254,21 @@ export class ManagerSessions {
       )
       .run(state.id, JSON.stringify(state));
   }
-  /** Persist the already-running configured Claude supermanager without creating a managed session. */
-  registerResidentSupermanager(id: string, sessionId: string): Promise<ResidentSupermanagerState> {
+  /** Persist an external session; replacement compares the previous identity in the same write transaction. */
+  registerResidentSupermanager(
+    id: string,
+    sessionId: string,
+    options: { provider?: ResidentSupermanagerState['provider']; replaceSession?: string } = {},
+  ): Promise<ResidentSupermanagerState> {
     return this.serial(id, async () => {
       if (!id || id.trim() !== id) throw new Error('Configured supermanager identity is missing or malformed');
-      if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(sessionId))
-        throw new Error('Resident Claude session ID is malformed');
+      const provider = options.provider ?? 'claude';
+      if (provider !== 'claude' && provider !== 'codex') throw new Error('Resident provider is unsupported');
+      const validSession = (value: unknown) =>
+        typeof value === 'string' && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(value);
+      if (!validSession(sessionId)) throw new Error('Resident provider session ID is malformed');
+      if (options.replaceSession !== undefined && !validSession(options.replaceSession))
+        throw new Error('Previous resident session ID is malformed');
       let registered!: ResidentSupermanagerState;
       this.db
         .transaction(() => {
@@ -291,31 +300,33 @@ export class ManagerSessions {
             throw new Error(`Provider session is already assigned to manager ${assignedElsewhere.row.id}`);
 
           const current = parsed.find(({ row }) => row.id === id);
+          const state = current?.state as Partial<ResidentSupermanagerState> | undefined;
+          const resident =
+            state?.kind === 'resident-supermanager' &&
+            state.id === id &&
+            (state.provider === 'claude' || state.provider === 'codex') &&
+            state.status === 'running';
+          if (options.replaceSession !== undefined && (!resident || state?.threadId !== options.replaceSession))
+            throw new Error('Resident session replacement mismatch; the registered session has changed or is missing');
           if (current) {
-            const state = current.state as Partial<ResidentSupermanagerState> | undefined;
-            if (
-              state?.kind === 'resident-supermanager' &&
-              state.id === id &&
-              state.provider === 'claude' &&
-              state.status === 'running' &&
-              state.threadId === sessionId
-            ) {
+            if (!resident)
+              throw new Error(
+                `Manager ${id} already has a persisted session; refusing to replace it with a resident session`,
+              );
+            if (state?.threadId === sessionId && state.provider === provider) {
               registered = state as ResidentSupermanagerState;
               return;
             }
-            if (state?.kind === 'resident-supermanager' && state.status === 'running')
+            if (options.replaceSession === undefined)
               throw new Error(
-                `Resident supermanager ${id} is already registered to another session; explicit session replacement is unsupported`,
+                `Resident supermanager ${id} is already registered to another session; use --replace-session <previous-thread-id>`,
               );
-            throw new Error(
-              `Manager ${id} already has a persisted session; refusing to replace it with a resident session`,
-            );
           }
 
           registered = {
             kind: 'resident-supermanager',
             id,
-            provider: 'claude',
+            provider,
             threadId: sessionId,
             status: 'running',
             registeredAt: new Date(this.now()).toISOString(),
