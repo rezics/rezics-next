@@ -5,7 +5,7 @@ import type { PoolClient } from 'pg';
 import sharp from 'sharp';
 import canonicalize from 'canonicalize';
 import type { MediaImportRequest } from '@rezics/definitions/media-import';
-import { GrantDeniedError } from '../../src/access/grant-commands.ts';
+import { GrantDeniedError } from '../../src/access/contract/index.ts';
 import {
   initializeResourceGrants,
   parentCreationAuthorization,

@@ -1,6 +1,5 @@
 import { memoizedValue } from '../../memoized.ts';
 import { parseSelectedSynopsis } from '../selected-synopsis.ts';
-import { readDocument } from '../../content/document-read.ts';
 import {
   ReviewedPersonEndpointSchema,
   ReviewedPersonExpectationSchema,
@@ -16,7 +15,8 @@ import {
   StatementDisclosureDeniedError,
   StatementDisclosureNotFoundError,
 } from '../statement-disclosure.ts';
-import { readSubjectSummaries, summaryAuthorization } from '../summaries.ts';
+import type { SubjectReadingApplication } from '../subject-reading-application.ts';
+import { summaryAuthorization } from '../summaries.ts';
 import { languageRanges } from '../language.ts';
 import { CoverSummarySchema, RelatedSubjectSummarySchema, SubjectSummarySchema } from './summaries.ts';
 import { SourceSchema, BatchReferenceSchema } from '@rezics/definitions/bulk';
@@ -24,6 +24,7 @@ import { admitMergeSubjects, observeSubjectIdentityOperation, SubjectRedirectErr
 import { IdentityEpochStoreError } from '../identity-adapters/index.ts';
 import { withHeaders } from '@elysia/openapi';
 import { t } from 'elysia';
+import type { Static } from 'typebox';
 import type { KeyRing } from '../../tokens/seal.ts';
 import {
   adoptCandidates,
@@ -38,7 +39,7 @@ import { PageCursorError } from '../page.ts';
 import type { Pool } from 'pg';
 import { withConnection } from '../../database/pool.ts';
 import { isRelationProperty, relationSlotForApi, SubjectInputError, type Item, type Snak } from '../item.ts';
-import { createSubject, readRelated, readSubject, SubjectAccessDeniedError, subjectTarget } from '../subject.ts';
+import { createSubject, SubjectAccessDeniedError, subjectTarget } from '../subject.ts';
 import { DATA_TYPES, type DataType, type Release } from '@rezics/definitions';
 import { GrantDeniedError } from '../../access/grant-commands.ts';
 import { resourceAuthorization, type AuthorizationAnchor } from '../../access/resource-authorization.ts';
@@ -81,16 +82,14 @@ import { AccountAgentLabelEditError, AccountAgentWriteDeniedError } from '../age
 import readRedirect from '../read-redirect.sql';
 import { SourceRecordSchema } from '../source-records.ts';
 import { revisionResource, StaleRevisionAuthorshipError } from '../authorship.ts';
-import { readSubjectCorrectionActions } from '../viewer-actions.ts';
 import { workReleaseCardFieldLimit, workReleaseCardLimit } from '../work-release-cards.ts';
-import type { ViewerActionBindings } from '../../access/viewer-actions.ts';
+import type { ViewerActionBindings } from '../../access/index.ts';
 import { requireAccessDeadline } from '../../access/unavailable.ts';
 import { PublicDocumentViewSchema } from '../../content/document-public.ts';
-import { readCharacterPublicDocuments } from '../character-public-reading-documents.ts';
 import { withReadTransaction } from '../read.ts';
 import { readPartition } from '../../partition/partition.ts';
 import { readContributionLifecycle } from '../contribution-lifecycle-read.ts';
-import { compileViewerActionBindings } from '../../access/viewer-actions.ts';
+import { compileViewerActionBindings } from '../../access/index.ts';
 import readContributionLifecycleLocator from '../contribution-lifecycle-read-locator.sql';
 import {
   contributionAuthorResource,
@@ -395,6 +394,7 @@ function readResponse() {
     ),
   );
 }
+type SubjectReadResponse = Static<ReturnType<typeof readResponse>>;
 function WorkReleaseCardFieldSchema() {
   return memoizedValue(WorkReleaseCardFieldSchema, () =>
     t.Union([
@@ -667,6 +667,7 @@ type SubjectRouteDependencies = {
   access: () => Access;
   clock: () => Date;
   viewerActionBindings?: () => ViewerActionBindings;
+  reading: SubjectReadingApplication;
 };
 function invalidSubjectInput(error: SubjectInputError): ProblemError {
   return new ProblemError('invalid_request', { errors: error.violations });
@@ -725,37 +726,9 @@ function moderationError(error: unknown): never {
   throw error;
 }
 
-function relatedIds(subject: Item): { propertyIds: Set<string>; subjectIds: Set<string> } {
-  const propertyIds = new Set<string>();
-  const subjectIds = new Set<string>();
-  const visit = (snak: Snak) => {
-    propertyIds.add(snak.property.id);
-    if (
-      snak.property.data_type === 'wikibase-item' &&
-      snak.value.type === 'value' &&
-      typeof snak.value.content === 'string'
-    )
-      subjectIds.add(snak.value.content);
-  };
-  for (const [property, statements] of Object.entries(subject.statements)) {
-    propertyIds.add(property);
-    for (const statement of statements) {
-      statement.qualifiers.forEach(visit);
-      statement.references.forEach((reference) => reference.parts.forEach(visit));
-      if (
-        statement.property.data_type === 'wikibase-item' &&
-        statement.value.type === 'value' &&
-        typeof statement.value.content === 'string'
-      )
-        subjectIds.add(statement.value.content);
-    }
-  }
-  return { propertyIds, subjectIds };
-}
-
 function subjectRoutes(
   app: ReturnType<typeof createApp>,
-  { pool, routeKey, tokens, access, clock, viewerActionBindings }: SubjectRouteDependencies,
+  { pool, routeKey, tokens, access, clock, viewerActionBindings, reading }: SubjectRouteDependencies,
 ) {
   function contributionAuthorization(
     actor: AccountActor,
@@ -1289,216 +1262,59 @@ function subjectRoutes(
           (!reviewIdentity || !isReviewedPersonSource(reviewIdentity))
         )
           throw new ProblemError('invalid_request');
-        const route = routeOf(params.id);
-        if (route === null) throw new ProblemError('not_found');
+        if (routeOf(params.id) === null) throw new ProblemError('not_found');
         const languages = languageRanges(request.headers.get('accept-language'), query.language);
-        const authorizeSummary = summaryAuthorization(async (id, batch) => {
-          const route = routeOf(id)!;
-          return authorize({ route, id, eligibility: relatedReadEligibility({ route, id }, batch) });
-        });
-        const result = await admission.run('normal', job, () =>
-          readSubject(pool, params.id, async () => false, query.context ?? GLOBAL_CONTEXT, routeKey, {
-            languages,
-            ...(selectedSynopsis
-              ? {
-                  selectedSynopsis: {
-                    input: selectedSynopsis,
-                    admit: async () => {
-                      const admitted = await readDocument(
-                        { pool, access: access(), routeKey, now: () => Date.now() },
-                        selectedSynopsis.document,
-                        { actor, deadline: job.deadline },
-                      );
-                      for (const anchor of admitted?.anchors ?? [])
-                        session.record({
-                          partition: anchor.partition.partitionNo,
-                          epoch: anchor.epoch,
-                          position: anchor.position,
-                        });
-                      const document = admitted?.document;
-                      return (
-                        !!document &&
-                        document.availability === 'available' &&
-                        document.subjectId === params.id &&
-                        document.candidateId === selectedSynopsis.statement &&
-                        document.digest === selectedSynopsis.digest &&
-                        document.language === selectedSynopsis.language
-                      );
-                    },
-                  },
-                }
-              : {}),
-            ...(reviewIdentity ? { reviewIdentity } : {}),
-            authorize: authorizeSummary,
-            seen: [...session.components],
+        let bindings: ViewerActionBindings | undefined;
+        if (query.includeViewerActions) {
+          try {
+            bindings = viewerActionBindings?.();
+          } catch {
+            bindings = undefined;
+          }
+        }
+        const result = await reading.readPage({
+          runtime: {
+            pool,
+            access: access(),
+            actor,
+            routeKey,
             deadline: job.deadline,
-            prepareAuthorize: (id) => {
-              const resource = { route: routeOf(id)!, id };
+            clock,
+          },
+          subject: params.id,
+          context: query.context ?? GLOBAL_CONTEXT,
+          languages,
+          authorization: {
+            prepareDetail: (id) => {
+              const route = routeOf(id)!;
+              const resource = { route, id };
               return authorize({ ...resource, eligibility: subjectReadEligibility(resource) });
             },
-            readAs: (read) => readStatementAs(pool, access(), actor, job.deadline, read),
-          }).catch((error: unknown) => {
-            if (error instanceof SubjectRedirectError) return error;
-            throw error;
-          }),
-        );
-        if (!result) throw new ProblemError('not_found');
-        if (result instanceof SubjectRedirectError) {
+            prepareSummary: (id, related) => {
+              const route = routeOf(id)!;
+              const resource = { route, id };
+              return authorize({ ...resource, eligibility: relatedReadEligibility(resource, related) });
+            },
+          },
+          runNative: (read) => admission.run('normal', job, read),
+          readAs: (read) => readStatementAs(pool, access(), actor, job.deadline, read),
+          seen: [...session.components],
+          ...(selectedSynopsis ? { selectedSynopsis } : {}),
+          ...(reviewIdentity ? { reviewIdentity } : {}),
+          ...(query.includeViewerActions ? { includeViewerActions: true } : {}),
+          ...(query.includeDocuments ? { includeDocuments: true } : {}),
+          ...(bindings ? { viewerActionBindings: bindings } : {}),
+        });
+        if (result.kind === 'not-found') throw new ProblemError('not_found');
+        if (result.kind === 'redirect') {
           set.status = 308;
           set.headers.location = `/v1/subjects/${result.to}${new URL(request.url).search}`;
           return { redirect: { from: result.from, to: result.to } };
         }
-
-        const release = await readRelease(pool, result.subject.release);
-        if (!release) throw new Error('Subject revision release is missing');
-        const { propertyIds, subjectIds } = relatedIds(result.subject);
-        const related: Record<
-          string,
-          {
-            labels: Record<string, string>;
-            redirect?: string;
-            type?: string;
-            types?: string[];
-            cover?: import('../summaries.ts').CoverSummary | null;
-          }
-        > = {};
-        for (const property of propertyIds) {
-          const definition = release.properties[property];
-          if (definition) related[property] = { labels: definition.labels };
-        }
-        const relatedList = [...subjectIds];
-        if (relatedList.length > 256) throw new TypeError('A related read accepts at most 256 ids');
-        const checks = await Promise.all(
-          relatedList.map(async (id) => {
-            const relatedRoute = routeOf(id);
-            if (relatedRoute === null) return null;
-            const relatedResource = { route: relatedRoute, id };
-            return authorize({
-              ...relatedResource,
-              eligibility: relatedReadEligibility(relatedResource, relatedList),
-            });
-          }),
-        );
-        const references = await admission.run('normal', job, () =>
-          withConnection(pool, async (client) => {
-            const allowed: string[] = [];
-            for (let index = 0; index < relatedList.length; index++) {
-              const check = checks[index];
-              const id = relatedList[index];
-              if (!check || id === undefined || !(await check(client))) continue;
-              allowed.push(id);
-            }
-            return readRelated(client, allowed);
-          }),
-        );
-        const active = await activeRelease(pool);
-        let currentViewerActions:
-          | { state: 'available'; actions: { action: string; operations: string[] }[] }
-          | { state: 'unavailable' }
-          | undefined;
-        if (query.includeViewerActions) {
-          if (!active || !Object.hasOwn(active.release.types, result.subject.type) || !viewerActionBindings) {
-            currentViewerActions = { state: 'unavailable' };
-          } else {
-            let actionRead: Awaited<ReturnType<typeof readSubjectCorrectionActions>>;
-            try {
-              actionRead = await readSubjectCorrectionActions({
-                pool,
-                access: access(),
-                bindings: viewerActionBindings(),
-                actor,
-                clock,
-                subject: params.id,
-                type: result.subject.type,
-                revision: result.subject.revision,
-                deadline: job.deadline,
-              });
-            } catch {
-              actionRead = { state: 'unavailable' };
-            }
-            // Failed action advice is independent of the public Subject reading.
-            currentViewerActions =
-              actionRead.state === 'available'
-                ? { state: 'available', actions: actionRead.actions }
-                : { state: 'unavailable' };
-          }
-        }
-        const summaries = active
-          ? await readSubjectSummaries(
-              {
-                client: { query: pool.query.bind(pool) },
-                pool,
-                routeKey,
-                deadline: job.deadline,
-                release: active.release,
-                authorize: authorizeSummary,
-              },
-              Object.entries(references).map(([id, value]) => value.redirect ?? id),
-              { languages },
-            )
-          : new Map();
-        for (const [id, reference] of Object.entries(references)) {
-          const summary = summaries.get(reference.redirect ?? id);
-          if (summary) related[id] = { ...reference, type: summary.type, types: summary.types, cover: summary.cover };
-        }
-        if (selectedSynopsis && result.selectedSynopsis?.kind === 'matched') {
-          const fact = result.selectedSynopsis.fact;
-          const ids = new Set(
-            [fact, ...fact.qualifiers, ...fact.references.flatMap((reference) => reference.parts)].flatMap((snak) => [
-              snak.property.id,
-              ...(snak.property.data_type === 'wikibase-item' &&
-              snak.value.type === 'value' &&
-              typeof snak.value.content === 'string'
-                ? [snak.value.content]
-                : []),
-            ]),
-          );
-          const labels = Object.fromEntries(
-            Object.entries(related)
-              .filter(([id]) => ids.has(id))
-              .map(([id, entry]) => [id, { labels: entry.labels }]),
-          );
-          if (
-            Buffer.byteLength(
-              JSON.stringify({
-                input: selectedSynopsis,
-                result: result.selectedSynopsis,
-                labels,
-                subject: result.subject.labels,
-              }),
-              'utf8',
-            ) > 262144
-          )
-            result.selectedSynopsis = { kind: 'unavailable' };
-        }
-
-        const documentRead = query.includeDocuments
-          ? await readCharacterPublicDocuments(
-              { pool, access: access(), routeKey, now: () => Date.now() },
-              result.subject,
-              release,
-              { actor, deadline: job.deadline },
-              languages[0] ?? 'en',
-            )
-          : undefined;
-        for (const anchor of documentRead?.anchors ?? [])
-          session.record({ partition: anchor.partition.partitionNo, epoch: anchor.epoch, position: anchor.position });
-        session.record(result.component);
-        set.headers.etag = `"${result.subject.revision}"`;
-        set.headers['cache-control'] =
-          query.includeViewerActions || documentRead || reviewIdentity || selectedSynopsis
-            ? 'private, no-store'
-            : 'no-cache';
-        return {
-          subject: result.subject,
-          ...(result.selectedSynopsis ? { selectedSynopsis: result.selectedSynopsis } : {}),
-          ...(reviewIdentity ? { reviewedIdentity: result.reviewedIdentity ?? null } : {}),
-          account: result.account,
-          summary: result.summary,
-          related,
-          ...(documentRead ? { documents: documentRead.documents } : {}),
-          ...(currentViewerActions ? { viewerActions: currentViewerActions } : {}),
-        };
+        for (const anchor of result.anchors) session.record(anchor);
+        set.headers.etag = `"${result.revision}"`;
+        set.headers['cache-control'] = result.private ? 'private, no-store' : 'no-cache';
+        return result.answer as SubjectReadResponse;
       },
     )
     .post(

@@ -1,7 +1,8 @@
-import { KERNEL_CLIENT_OUTPUT, withKernelClientOutput } from '../../../scripts/check-output-tree.ts';
 import { statSync } from 'node:fs';
 import { dirname, isAbsolute, relative, resolve, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { keepCompilerStatusAfterCleanup } from '../../../scripts/compiler-database.ts';
+import { KERNEL_CLIENT_OUTPUT, withKernelClientOutput } from '../../../scripts/check-output-tree.ts';
 import { withThrowawayDatabase } from './derived.ts';
 import {
   compilerConfigArgs,
@@ -229,11 +230,8 @@ export async function runKernelTypecheck(
     try {
       return await withDatabase(compile, { analysis: false });
     } catch (error) {
-      const cause =
-        databasePhase === 'database-cleanup'
-          ? `compiler status ${compilerResult}; ${error instanceof Error ? error.message : String(error)}`
-          : error;
-      return compilerInfrastructureFailure(label, databasePhase, cause);
+      if (databasePhase === 'database-cleanup') return keepCompilerStatusAfterCleanup(compilerResult, error, label);
+      return compilerInfrastructureFailure(label, databasePhase, error);
     }
   };
   return emitClient
@@ -245,9 +243,9 @@ export async function runKernelTypecheck(
 
 if (import.meta.main) {
   try {
-    process.exitCode = await runKernelTypecheck();
+    process.exit(await runKernelTypecheck());
   } catch (error) {
     console.error(error);
-    process.exitCode = 1;
+    process.exit(1);
   }
 }

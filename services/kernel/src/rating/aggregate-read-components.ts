@@ -1,7 +1,7 @@
 import type { Pool, PoolClient } from 'pg';
 import { partitionReadClient } from '../database/read-snapshot.ts';
 import { partitionOf, routeOf } from '../route/route.ts';
-import { withReadTransaction } from '../semantic/read.ts';
+import { withReadTransaction } from './dependencies.ts';
 import type { RatingAggregate } from './aggregate-effect.ts';
 import readComponents from './aggregate-read.sql';
 import readFreshness from './aggregate-read-freshness.sql';

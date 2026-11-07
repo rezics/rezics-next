@@ -1,3 +1,4 @@
+import { serverSettingsTimer } from '../../settings/adapters/ambient';
 import * as v from 'valibot';
 import { createServerFn } from '@tanstack/react-start';
 import { getRequest, setResponseHeader } from '@tanstack/react-start/server';
@@ -9,7 +10,7 @@ import {
   profileSaveSetupFailure,
   serializeProfileResult,
   withProfileDeadline,
-} from '../../settings/preferences';
+} from '../../settings/ports/profile-editor';
 import { parseSubmission, readTarget, selection, writeTarget, type Selection, type ProfilePage } from './data';
 import { boundViewer } from './request';
 
@@ -46,6 +47,7 @@ export const saveAccountProfile = createServerFn({ method: 'POST' })
           ? await withProfileDeadline(
               (signal) => writeTarget(kernelClient(), authorization, data, signal),
               getRequest().signal,
+              serverSettingsTimer(),
             )
           : { ok: false as const, status: 403, message: '' },
       );

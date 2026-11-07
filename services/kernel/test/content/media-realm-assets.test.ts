@@ -5,7 +5,7 @@ import { createImageJob } from '../../src/content/image-job.ts';
 import { claimRealmPresentationMedia, readRealmPresentationImages } from '../../src/content/realm-media.ts';
 import { eraseAccountUploadItem } from '../../src/content/account-erasure-uploads.ts';
 import { runCommand } from '../../src/command/command.ts';
-import { GrantDeniedError } from '../../src/access/grant-commands.ts';
+import { GrantDeniedError } from '../../src/access/contract/index.ts';
 import { actionCatalogue } from '../../src/http/request.ts';
 import { newId, partitionOf, routeOf } from '../../src/route/route.ts';
 import { testAccess } from '../support/test-kernel.ts';

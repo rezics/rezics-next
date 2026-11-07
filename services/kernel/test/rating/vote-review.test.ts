@@ -1,3 +1,6 @@
+import { installRatingVoteSemantic } from '../../src/composition/rating-votes.ts';
+import { ratingVoteSemantic } from '../../src/rating/index.ts';
+import type { CommandTransaction } from '../../src/command/command.ts';
 import { withReadTransaction } from '../../src/semantic/read.ts';
 import { afterAll, beforeAll, expect, test } from 'bun:test';
 import { createVoteCommands, STANDARD_QUESTION_ID, type VoteReviewGuard } from '../../src/rating/votes.ts';
@@ -100,7 +103,65 @@ test('supported native guarded effects retain exact retries, current readback an
   try {
     await installIdentityEpochBootstrap(local.database.pool);
     const voter = (await local.identityCommand('rating:vote')).actor;
-    const votes = createVoteCommands({ pool: local.database.pool, access: local.access });
+    // Exercise the ordinary composition implementation through Rating's supplied application port.
+    installRatingVoteSemantic();
+    const native = ratingVoteSemantic();
+    const disclosureCalls: { actor: AccountActor; deadline: number; ids: readonly string[] }[] = [];
+    const reviewedPairs: { requestedOriginalId: string; canonicalTerminalId: string; deadline: number }[] = [];
+    const held: CommandTransaction[] = [];
+    let admissions = 0;
+    let mappingReads = 0;
+    const votes = createVoteCommands({
+      pool: local.database.pool,
+      access: local.access,
+      semantic: {
+        ...native,
+        mappings(pool, ids, deadline) {
+          expect(pool).toBe(local.database.pool);
+          expect(ids.length).toBeLessThanOrEqual(100);
+          mappingReads++;
+          expect(Number.isFinite(deadline)).toBe(true);
+          return native.mappings(pool, ids, deadline);
+        },
+        readable(context, actor, ids, deadline) {
+          expect(context.pool).toBe(local.database.pool);
+          expect(context.access).toBe(local.access);
+          expect(actor).toBe(voter);
+          disclosureCalls.push({ actor: actor as AccountActor, ids: [...ids], deadline });
+          return native.readable(context, actor, ids, deadline);
+        },
+        resolve(context, actor, id, deadline) {
+          expect(context.pool).toBe(local.database.pool);
+          expect(actor).toBe(voter);
+          expect(Number.isFinite(deadline)).toBe(true);
+          return native.resolve(context, actor, id, deadline);
+        },
+        review(pool, pair) {
+          expect(pool).toBe(local.database.pool);
+          reviewedPairs.push(pair);
+          return native.review(pool, pair);
+        },
+        createCommitParticipant() {
+          const participant = native.createCommitParticipant();
+          return {
+            prepare: (operand) => participant.prepare(operand),
+            async admit(tx, preparation) {
+              const result = await participant.admit(tx, preparation);
+              held.push(tx);
+              return result;
+            },
+          };
+        },
+        admit(tx, pair) {
+          // Both fences and the actual effect admission share the caller's native transaction.
+          if (pair.expectedEpochs) {
+            expect(held.at(-1)).toBe(tx);
+            admissions++;
+          }
+          return native.admit(tx, pair);
+        },
+      },
+    });
     // Select an ordinary native creation key; do not rewrite a Subject or its home.
     async function createLocalSubject() {
       let key = crypto.randomUUID();
@@ -111,6 +172,17 @@ test('supported native guarded effects retain exact retries, current readback an
     }
     const target = await createLocalSubject();
     const before = await votes.readVoteReview(voter, STANDARD_QUESTION_ID, target);
+    expect(mappingReads).toBe(4);
+    expect(disclosureCalls).toHaveLength(2);
+    expect(disclosureCalls.map((call) => call.ids)).toEqual([[target], [target]]);
+    expect(disclosureCalls[0]!.deadline).toBe(disclosureCalls[1]!.deadline);
+    expect(reviewedPairs).toEqual([
+      {
+        requestedOriginalId: target,
+        canonicalTerminalId: target,
+        deadline: disclosureCalls[0]!.deadline,
+      },
+    ]);
     expect(before.guard.subject.identity).toMatchObject({
       version: 1,
       requestedOriginalId: target,
@@ -133,6 +205,8 @@ test('supported native guarded effects retain exact retries, current readback an
     const committed = await votes.putVoteOutcome(voter, input(target, 0, storedGuard), prepared.receipt.requestKey);
     expect(committed.vote).toMatchObject({ units: 0, revision: 1 });
     expect(committed.component).not.toBeNull();
+    expect(admissions).toBeGreaterThanOrEqual(2);
+    expect(held.length).toBe(admissions);
     const current = await votes.readVoteReview(voter, STANDARD_QUESTION_ID, target);
     expect(current.currentVote).toMatchObject({ state: 'counted', units: 0, countedRevision: 1 });
     expect(await votes.putVoteOutcome(voter, input(target, 0, current.guard), crypto.randomUUID())).toEqual({

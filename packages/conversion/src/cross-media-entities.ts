@@ -2,7 +2,7 @@ import { readFileSync } from 'node:fs';
 import { isDeepStrictEqual, types as utilTypes } from 'node:util';
 import { bundledRelease } from '@rezics/definitions/bundled';
 import { checkStatementInput } from '@rezics/definitions/validate';
-import type { Release } from '@rezics/definitions';
+import type { Release } from '@rezics/definitions/contract';
 import {
   BATCH_LIMIT,
   checkBatchWrite,

@@ -5,7 +5,7 @@ import { RecipeEditorSession } from '../../features/catalogue/recipe-editor-sess
 import { getLocale } from '../../paraglide/runtime';
 import { m } from '../../paraglide/messages.js';
 import { parseRecipeVisit, recipeVisitByteLimit } from '../../features/catalogue/recipe-current-visit';
-import { candidateContext } from '../../subject/candidates';
+import { candidateContext } from '../../features/pages/visit-host-port';
 import { contextHref } from '../../features/pages/context-navigation';
 import { canonicalRedirect, keepSearch } from '../../subject/subject-href';
 

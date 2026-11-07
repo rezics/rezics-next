@@ -3,7 +3,7 @@ import { statementBytes } from '../database/statement-bytes.ts';
 import { declareBound, repeatBound, sumBounds, type Bound } from '@rezics/bounds';
 import { RELEASE_LIMITS } from '@rezics/definitions';
 import type { PoolClient } from 'pg';
-import type { CollectionListFilter } from '../access/policy-filter.ts';
+import type { CollectionListFilter } from './contract/index.ts';
 import curatorPage from './collection-reads-curator.sql';
 import publicPage from './collection-reads-curator-public.sql';
 import collectionRead from './collection-reads-collection.sql';

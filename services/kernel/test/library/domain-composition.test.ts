@@ -7,6 +7,10 @@ import {
 } from '../../src/composition/library.ts';
 import { createLibraryApplications } from '../../src/library/application/index.ts';
 import type { LibraryCapabilities } from '../../src/library/contract/capabilities.ts';
+import {
+  emptyProgressOperationCatalog,
+  EMPTY_COLLECTION_AUTHORIZATION_PREPARATION,
+} from '../../src/library/contract/index.ts';
 import type { LibraryActor } from '../../src/library/contract/actors.ts';
 import { preparedSource, type CollectionSourceObservation } from '../../src/library/contract/source.ts';
 import {
@@ -24,7 +28,7 @@ import { LIBRARY_IDENTITY_NATIVE_OPERATION_DECLARATIONS } from '../../src/librar
 import { LIBRARY_IDENTITY_SELECTED_STATEMENTS } from '../../src/library/identity-native-planner-projection.ts';
 import { preparePresentationSelection } from '../../src/library/collection-presentation.ts';
 import { libraryActorOf } from '../../src/library/contract/index.ts';
-import { admitComposedEntryProgress } from '../../src/library/command-support.ts';
+import { admitComposedEntryProgress, libraryCommandAuthorization } from '../../src/library/command-support.ts';
 
 const accountId = '00000000-0000-7000-8000-000000000001';
 const collectionId = '00000000-0000-7000-8000-000000000002';
@@ -92,6 +96,12 @@ function fakeCapabilities(
       },
       deadlineClient: (client) => client,
       within: (_deadline, work) => work(),
+      specializeCollectionList() {
+        return { status: 'unavailable' as const };
+      },
+      collectionAuthorizationPreparation() {
+        return EMPTY_COLLECTION_AUTHORIZATION_PREPARATION;
+      },
     },
     identityDisclosure: {
       async readRelease() {
@@ -185,6 +195,7 @@ function fakeCapabilities(
         return { source: source(authority), work: receipt(input.allowance.reservationId) };
       },
     },
+    progressCatalog: emptyProgressOperationCatalog(),
     accountAdmission: sumAdmission([admissionTerm('account', { statements: 1, nativeRows: 1 })]),
     ...overrides,
   };
@@ -358,6 +369,43 @@ test('Library applications run with fake capabilities through Source, members, p
   });
   expect(expired.admitted).toBe(false);
   expect(expired.admission.terms[0]?.name).toBe('deadline');
+
+  const funded = await domain.progressOperations.admit({
+    actor,
+    deadline: entryDeadline,
+    subjectId,
+    at: entryAt,
+  });
+  expect(funded).toMatchObject({
+    admitted: true,
+    original: `${subjectId}:original`,
+    terminal: `${subjectId}:terminal`,
+  });
+  expect(funded.admission.terms.map((term) => term.name)).toEqual([
+    'grant',
+    'identity-disclosure',
+    'progress-operation',
+  ]);
+  const startPlan = domain.progressOperations.planCommand(
+    'start',
+    {
+      accountId,
+      clientId: actor.clientId,
+      requestedBy: null,
+      kind: 'progress_session.start',
+      key: 'rk1.1.aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
+      input: { subjectId, versionSubjectId: null },
+    },
+    1,
+  );
+  expect(startPlan.total.engineRequests).toBe(0);
+  expect(startPlan.total.statements).toBeGreaterThan(0);
+  expect(domain.progressOperations.planCommand('journal', startPlan.original, 1).kind).toBe('journal');
+  expect((await domain.progressOperations.admit({ actor, deadline: Date.now() - 1, subjectId })).admitted).toBe(false);
+  expect(
+    (await domain.progressOperations.admit({ actor: { kind: 'anonymous' }, deadline: Date.now() + 1_000, subjectId }))
+      .admission.terms[0]?.name,
+  ).toBe('actor');
 
   const anonymous = await domain.entryProgress.admit({
     actor: { kind: 'anonymous' },
@@ -600,6 +648,25 @@ test('ordinary composeLibraryDomain installs native identity, authorization and 
         deadline: Date.now() + 1_000,
       }),
     ).toBeNull();
+    expect(domain.progressCatalog.access.accountRead.sql).toContain('access.account');
+    expect(domain.progressCatalog.semantic.releaseRead.sql).toContain('definition_release');
+    expect(domain.progressCatalog.semantic.mappingCurrent.sql).toContain('identity_epoch_group');
+    expect(domain.progressCatalog.semantic.itemTypes.sql).toContain('semantic.subject');
+    const nativeStart = domain.progressOperations.planCommand(
+      'start',
+      {
+        accountId,
+        clientId: actor.clientId,
+        requestedBy: null,
+        kind: 'progress_session.start',
+        key: 'rk1.1.aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
+        input: { subjectId, versionSubjectId: null },
+      },
+      1,
+    );
+    expect(nativeStart.total.engineRequests).toBe(0);
+    expect(nativeStart.original.accountId).toBe(accountId);
+    expect(domain.progressOperations.sourceWork(subjectId, true).statements).toBeGreaterThan(0);
     expect(typeof domain.searchPreparation.filterLeaves).toBe('function');
     expect(typeof domain.searchPreparation.ownerFilterHasOwnerLeaf).toBe('function');
     expect(await domain.identityDisclosure.readActiveRelease(undefined)).toBeNull();
@@ -621,6 +688,46 @@ test('ordinary composeLibraryDomain installs native identity, authorization and 
     unbindLibraryDomain();
     expect(peekLibraryDomain()).toBeUndefined();
   } finally {
+    if (previous) bindLibraryDomain(previous);
+  }
+});
+
+test('Library command authorization preserves native fallback and forwards composed command arguments', async () => {
+  const previous = peekLibraryDomain();
+  unbindLibraryDomain();
+  const access = {
+    async authenticate(): Promise<never> {
+      throw new Error('Authentication is not part of command preparation');
+    },
+    async authorize() {
+      return true;
+    },
+  };
+  const args: Parameters<typeof libraryCommandAuthorization> = [
+    access,
+    actor,
+    'library_entry:update',
+    { route: 1, id: accountId },
+    { pool: {} as never, deadline: Date.now() + 1_000 },
+    () => new Error('denied'),
+  ];
+  try {
+    const native = await libraryCommandAuthorization(...args);
+    expect(native.action).toBe(args[2]);
+    expect(native.resource).toEqual(args[3]);
+    expect(native.denied).toBe(args[5]);
+    const capabilities = fakeCapabilities();
+    const calls: (readonly unknown[])[] = [];
+    capabilities.authorization.commandAuthorization = async (...forwarded) => {
+      calls.push(forwarded);
+      return native;
+    };
+    bindLibraryDomain(createLibraryApplications(capabilities));
+    expect(await libraryCommandAuthorization(...args)).toBe(native);
+    expect(calls).toHaveLength(1);
+    for (const [index, value] of args.entries()) expect(calls[0]![index]).toBe(value);
+  } finally {
+    unbindLibraryDomain();
     if (previous) bindLibraryDomain(previous);
   }
 });

@@ -17,7 +17,7 @@ import {
   type CommandAttempt,
 } from '../command/command.ts';
 import { withConnection } from '../database/pool.ts';
-import { ProblemError } from '../http/problem.ts';
+import { ProblemError } from '../http/problem-error.ts';
 import type { Access, AccessContext, Actor } from '../request/access.ts';
 import { partitionOf, routeOf } from '../route/route.ts';
 import { scopeAllowance, zeroScopeWork } from '../search/scope-execution.ts';

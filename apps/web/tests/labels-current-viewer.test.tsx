@@ -1,3 +1,4 @@
+import { LibraryApplicationBoundary } from '../src/session/library-application';
 import { afterAll, expect, mock, spyOn, test } from 'bun:test';
 import { dirname } from 'node:path';
 import { act, StrictMode, useState, type ComponentProps } from 'react';
@@ -129,7 +130,7 @@ test('The actual private Labels route retires replaced-viewer names, dialogs, pe
     const kernel = await import('../src/kernel/client');
     const { Route } = await import('../src/routes/library/labels');
     const { LABELS_WINDOW_QUERY_KEY, labelsWindowOwner } = await import('../src/library/labels-window-navigation');
-    const { libraryWorkspaceAdmission } = await import('../src/library/library-workspace-admission');
+    const { workspaceAdmission: libraryWorkspaceAdmission } = await import('../src/session/library-application');
     const { browserObservation } = await import('../src/session/observation');
     const { sessionQueryKey } = await import('../src/session/browser-state');
     const nativeCalls: Request[] = [];
@@ -310,9 +311,11 @@ test('The actual private Labels route retires replaced-viewer names, dialogs, pe
     const tree = () => (
       <StrictMode>
         <QueryClientProvider client={queryClient}>
-          <notifications.Toaster>
-            <RouterProvider router={router} />
-          </notifications.Toaster>
+          <LibraryApplicationBoundary>
+            <notifications.Toaster>
+              <RouterProvider router={router} />
+            </notifications.Toaster>
+          </LibraryApplicationBoundary>
         </QueryClientProvider>
       </StrictMode>
     );

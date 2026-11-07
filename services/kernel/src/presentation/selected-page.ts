@@ -63,7 +63,15 @@ export async function selectPage(authority: Authority, realmId: string, subject:
 }
 
 /** Publication and protected-ban authority can change without changing the Realm head. Discard every old leaf. */
-export async function guardSelectedPage(authority: Authority, selected: SelectedPage): Promise<void> {
+export async function guardSelectedPage(
+  authority: Authority,
+  selected: {
+    context: { id: string };
+    realm: { realmId: string; contextId: string; headRevisionId: string };
+    publication: { publicationId: string } | null;
+    subject: string;
+  },
+): Promise<void> {
   await authority.run(async () => {
     const realm = await readRealm(authority.deps, authority.actor, selected.realm.realmId, {
       deadline: authority.deadline,

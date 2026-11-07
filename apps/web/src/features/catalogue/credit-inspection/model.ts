@@ -1,8 +1,8 @@
 import type { PageRead } from '@rezics/composition';
 import type { SubjectRead } from '@rezics/client';
 import type { SubjectSummary } from '../../../media/summary';
-import type { OverviewValue, Section } from '../../pages/overview';
-import type { Snak, Stmt } from '../../pages/shared';
+import type { CharacterPage, CharacterPageSection, Snak, Stmt } from '../character-reading-port';
+import { isRecord } from '../character-reading-port';
 import { candidateContext } from '../../../subject/candidates';
 export { creditWindowHref } from './navigation';
 import {
@@ -12,10 +12,6 @@ import {
   type RelationRead,
   type RelationSlot,
 } from '../../../subject/relation-candidates';
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === 'object' && value !== null && !Array.isArray(value);
-}
 
 export type CreditAssertion = {
   holder: string;
@@ -39,9 +35,9 @@ export type CreditVisit = {
 };
 
 export function creditVisit(
-  value: OverviewValue,
+  value: CharacterPage,
   node: string,
-  section: Section,
+  section: CharacterPageSection,
   view: string,
 ): CreditVisit | undefined {
   if (view !== 'works' || !value.subject || !section.ok || section.read.kind !== 'links') return;
@@ -51,7 +47,6 @@ export function creditVisit(
   );
   if (admission?.state !== 'admitted') return;
   const labels: Record<string, string> = {};
-  // The selected native page already bounds these rows, qualifiers and references. No vocabulary read is added.
   for (const row of Array.isArray(section.body.links) ? section.body.links : []) {
     if (!isRecord(row)) continue;
     const credit = creditAssertion(row);
@@ -194,7 +189,6 @@ export function creditCorrection(credit: CreditAssertion, visit: CreditVisit, re
     return { state: 'stale' };
   const field = read.fields.find((entry) => entry.id === statement.property.id);
   const candidate = read.page?.candidates.find((entry) => entry.id === statement.id && !entry.retracted);
-  // Only the authorized payload supplies a draft. Public filtering can omit facts a correction must preserve.
   if (!field || !candidate || !relationSlotMatches(candidate.statement, credit.slot, field))
     return { state: 'unavailable' };
   const authority = read.authority;

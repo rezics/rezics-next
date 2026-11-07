@@ -2,7 +2,7 @@ import type { PoolClient } from 'pg';
 import { STANDARD_QUESTION_ID } from './standard-question.ts';
 import { checkedRatingQuestionScale } from './question-scale.ts';
 import type { ShelfScoreQuestion } from '../library/shelf-contract.ts';
-import { ShelfReadUnavailableError } from '../library/shelf-reader-unavailable.ts';
+import { ShelfReadUnavailableError } from './dependencies.ts';
 
 /** Shared native meaning for shelf ordering and the independent viewer-facts consumer. */
 export async function readPersonalScoreQuestion(client: Pick<PoolClient, 'query'>): Promise<ShelfScoreQuestion> {

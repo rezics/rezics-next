@@ -5,6 +5,8 @@ import { ScreenProfileReader } from '../features/catalogue/screen-profile-reader
 import type { ScreenEpisodeEntry, ScreenEpisodeRead } from '../features/catalogue/screen-episode-reader/read';
 import { screenEpisodeReturn, type ScreenEpisodeOrigin } from '../features/catalogue/screen-episode-reader/navigation';
 import { useScreenEpisodeVisit } from '../features/catalogue/screen-episode-reader/visit/owner';
+import { subjectVisitReturn } from '../features/pages/subject-visit-navigation';
+import { ScreenReadingBoundary } from '../features/pages/data';
 
 const seriesId = '00000000-0000-4000-8000-000000000901';
 const seasonId = '00000000-0000-4000-8000-000000000902';
@@ -94,7 +96,7 @@ function ReaderStory({
   read?: ScreenEpisodeRead;
 }) {
   const address = `${origin.pathname}${origin.searchStr}${origin.hash ?? ''}`;
-  const directReturn = screenEpisodeReturn(origin.searchStr, 'en');
+  const directReturn = screenEpisodeReturn(origin.searchStr, 'en', subjectVisitReturn);
   const visit = useScreenEpisodeVisit({
     sourceKey: JSON.stringify([id, type, contextId, origin.pathname]),
     pageKey: address,
@@ -108,15 +110,17 @@ function ReaderStory({
     ...(directReturn ? { directReturn } : {}),
   });
   return (
-    <ScreenProfileReader
-      locale="en"
-      public={subject(id, type, label)}
-      {...(read ? { episodeRead: read } : {})}
-      episodeOrigin={origin}
-      episodeVisit={visit}
-      episodeVisitKey={address}
-      link={PlainLink}
-    />
+    <ScreenReadingBoundary>
+      <ScreenProfileReader
+        locale="en"
+        public={subject(id, type, label)}
+        {...(read ? { episodeRead: read } : {})}
+        episodeOrigin={origin}
+        episodeVisit={visit}
+        episodeVisitKey={address}
+        link={PlainLink}
+      />
+    </ScreenReadingBoundary>
   );
 }
 

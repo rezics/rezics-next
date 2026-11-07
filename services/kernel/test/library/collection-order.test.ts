@@ -369,6 +369,9 @@ test('Collection add, move and repair-begin declare complete nine-axis actor com
     expect(Object.hasOwn(COMMAND_HISTORY_KINDS, kind)).toBe(false);
   }
   expect(COLLECTION_ORDER_DECLARATION().limits.commandHistoryWrites).toBe(0);
+  expect(COLLECTION_ORDER_DECLARATION().limits.accessMemberships).toBe(1000);
+  expect(COLLECTION_ORDER_DECLARATION().terms.accessPreparation.engineRequests).toBe(0);
+  expect(COLLECTION_ORDER_DECLARATION().terms.accessPreparation.nativeRows).toBeGreaterThan(0);
   const edit = COLLECTION_ORDER_DECLARATION().paths.edit;
   const begin = COLLECTION_ORDER_DECLARATION().paths.begin;
   expect(edit.status).toBe('complete-static-no-admission');

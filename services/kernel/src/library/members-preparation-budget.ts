@@ -1,6 +1,6 @@
 import { memoizedValue } from '../memoized.ts';
 import { declareBound, type Bound } from '@rezics/bounds';
-import { ProblemError } from '../http/problem.ts';
+import { ProblemError } from '../http/problem-error.ts';
 import type { WorkDimensions } from './contract/work-dimensions.ts';
 import {
   OPERATIONAL_WORK_COST,

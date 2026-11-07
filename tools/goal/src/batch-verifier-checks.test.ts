@@ -15,6 +15,7 @@ import { verifyDev } from './dev-verifier.ts';
 import { git, processGroupRunner } from './merge.ts';
 import { integrationHarness } from './test-support.ts';
 import { typecheck } from '../../../scripts/typecheck.ts';
+import type { DevVerifierRun } from './types.ts';
 
 const rootTypecheck = readFileSync(resolve(import.meta.dir, '../../../scripts/typecheck.ts'), 'utf8');
 const rootGate = `export function resolveBunCommand(command: string[], _directory?: string): string[] { return command; }\n`;
@@ -333,7 +334,6 @@ test('23 ready landings advance while the independent verifier waits on an affec
     verifier = verifyDev({
       settings: h.settings,
       store: h.store,
-      inbox: { deliver() {} },
       runGate: async (command) => {
         if (command.includes('services/kernel')) {
           announceRemote();
@@ -444,12 +444,38 @@ test('postintegration verifier selects explicit affected, sibling and task accep
     h.settings.verifierChecks = [{ paths: ['apps/widget/**'], command: ['affected-widget'] }];
     h.settings.affectedTests = [{ paths: ['apps/**'], command: ['legacy-affected'] }];
     h.settings.siblingTests = { command: ['bun', 'test'] };
+    const seededAt = new Date(Date.now() - 3_700_000).toISOString();
+    h.store.saveDevVerifierRun({
+      key: 'dev-verifier-round:seed',
+      createdAt: seededAt,
+      evidence: {
+        commit: base,
+        command: ['dev-verifier-round'],
+        passed: true,
+        timedOut: false,
+        output: '',
+        logPath: '',
+        result: 'pass',
+      },
+      round: {
+        baseCommit: base,
+        headCommit: base,
+        startedAt: seededAt,
+        completedAt: seededAt,
+        durationMs: 0,
+        testsRun: 0,
+        passed: 0,
+        failed: 0,
+        unknown: 0,
+        fullSuite: true,
+        pendingChecks: [],
+      },
+    } satisfies DevVerifierRun);
 
     const commands: string[][] = [];
     await verifyDev({
       settings: h.settings,
       store: h.store,
-      inbox: { deliver() {} },
       runGate: async (command) => {
         commands.push([...command]);
         return { passed: true, output: '', timedOut: false };

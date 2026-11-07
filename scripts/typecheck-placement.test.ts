@@ -28,16 +28,25 @@ function spawnEnv(extra: NodeJS.ProcessEnv = {}): NodeJS.ProcessEnv {
 
 // These children exercise real compiler command composition with inert executables,
 // under explicitly injected physical evidence rather than an environment-only URL bypass.
+/** Leftover mapper work still on the event loop after the compiler and owned cleanup return. */
+function publishCompletedStatus(expression: string): string {
+  return `const status = await ${expression};
+queueMicrotask(() => { process.exitCode = 0; });
+setTimeout(() => { process.exit(0); }, 0);
+process.exit(status);`;
+}
+
 function admittedEntrypoint(workspace: string, directory: string): string {
   const fixture = join(directory, `${workspace}-admitted.ts`);
   writeFileSync(
     fixture,
     `
 import { run${workspace === 'kernel' ? 'Kernel' : 'Auth'}Typecheck } from ${JSON.stringify(join(repository, `services/${workspace}/scripts/typecheck.ts`))};
-process.exitCode = await run${workspace === 'kernel' ? 'Kernel' : 'Auth'}Typecheck(process.env, {
+${publishCompletedStatus(`run${workspace === 'kernel' ? 'Kernel' : 'Auth'}Typecheck(process.env, {
   recognize: () => (${JSON.stringify(physicalAdmission)}),
   place: async () => { throw new Error('nested host admission'); },
-});
+  ${workspace === 'kernel' ? `prepareSqlAnalysis: async (env) => ({ available: false, environment: env, analyzedFiles: 0, totalFiles: 0, writtenEntries: 0, dispose() {} }),` : ''}
+})`)}
 `,
   );
   return fixture;
@@ -566,6 +575,7 @@ test('auth preserves tsc failure status and diagnostic lines with an existing, l
   const directory = mkdtempSync(join(repository, '.temp/auth-typecheck-'));
   temporaryDirectories.push(directory);
   const tsc = join(directory, 'tsc');
+  const settled = join(directory, 'cleanup-settled');
   const diagnostic = 'src/example.ts(2,3): error TS2322: diagnostic stays exact\n';
   writeFileSync(
     tsc,
@@ -576,8 +586,12 @@ test('auth preserves tsc failure status and diagnostic lines with an existing, l
   writeFileSync(
     fixture,
     `import { runAuthTypecheck } from ${JSON.stringify(join(repository, 'services/auth/scripts/typecheck.ts'))};
-const prepareCompilerDatabase = async () => ({ url: 'postgres://fixture.test/auth', remove() {} });
-process.exitCode = await runAuthTypecheck(process.env, {
+const settled = ${JSON.stringify(settled)};
+const prepareCompilerDatabase = async () => ({
+  url: 'postgres://fixture.test/auth',
+  async remove() { await Bun.write(settled, 'settled'); },
+});
+${publishCompletedStatus(`runAuthTypecheck(process.env, {
   prepareCompilerDatabase,
   recognize: () => process.argv[2] === 'host'
     ? ({ outcome: 'refused', reason: 'cwd-outside-runs' }) : (${JSON.stringify(physicalAdmission)}),
@@ -585,13 +599,14 @@ process.exitCode = await runAuthTypecheck(process.env, {
     prepareCompilerDatabase, recognize: () => (${JSON.stringify(physicalAdmission)}),
     place: async () => { throw new Error('nested placement'); },
   }),
-});
+})`)}
 `,
   );
   for (const placement of ['existing', 'local', 'host']) {
     const env: NodeJS.ProcessEnv = spawnEnv({ PATH: `${directory}:${process.env.PATH}` });
     delete env.DATABASE_URL;
     if (placement === 'existing') env.DATABASE_URL = 'postgres://existing.test/auth';
+    rmSync(settled, { force: true });
     const result = spawnSync(process.execPath, [fixture, placement], {
       cwd: repository,
       encoding: 'utf8',
@@ -602,6 +617,8 @@ process.exitCode = await runAuthTypecheck(process.env, {
     expect(result.status).toBe(23);
     expect(result.stdout).toBe(diagnostic);
     expect(result.stderr).toBe('compiler stderr\n');
+    if (placement === 'existing') expect(existsSync(settled)).toBe(false);
+    else expect(readFileSync(settled, 'utf8')).toBe('settled');
   }
 });
 
@@ -703,7 +720,7 @@ test('A compiler database remains reachable from the actual selected typecheck p
   }
 });
 
-test('Compiler connection and SQL analysis failures keep their real diagnostics and status without disabling analysis', () => {
+test('Compiler connection and SQL diagnostic fixtures retain exact output, argv and native status', () => {
   mkdirSync(join(repository, '.temp'), { recursive: true });
   const directory = mkdtempSync(join(repository, '.temp/compiler-diagnostics-'));
   temporaryDirectories.push(directory);
@@ -830,7 +847,7 @@ test('direct compiler setup, launch and cleanup failures keep their cause, phase
                 },
                 [],
               );
-        expect(result).toBe(75);
+        expect(result).toBe(failedPhase === 'database-cleanup' ? 23 : 75);
         expect(removed).toBe(failedPhase === 'database-setup' ? 0 : 1);
         expect(compiled).toBe(failedPhase === 'database-setup' ? 0 : 1);
         const diagnostic = output.mock.calls.flat().join('\n');

@@ -1,3 +1,5 @@
+import { unbindContentRealmApplication } from './realm-binding.ts';
+import { unbindFeedCapabilities } from './feed-bind.ts';
 import type { ContentAmbient, ContentApplication } from '../contract/index.ts';
 
 let bound: ContentApplication | undefined;
@@ -19,6 +21,8 @@ export function tryContentApplication(): ContentApplication | undefined {
 /** Tests restore the process binding; createKernel rebinds native ports. */
 export function unbindContentApplication(): void {
   bound = undefined;
+  unbindContentRealmApplication();
+  unbindFeedCapabilities();
 }
 
 function boundAmbient(): ContentAmbient {

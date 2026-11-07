@@ -26,7 +26,7 @@ mock.module('../src/session/query', () => ({
     subject: signedIn ? 'reader' : null,
   }),
 }));
-const { SpacePage } = await import('../src/community/space-page');
+const { SpacePage } = await import('../src/session/community-application');
 const { loadSpacePage } = await import('../src/community/space');
 const { realmMembershipQuery } = await import('../src/community/realm-membership-queries');
 const { m } = await import('../src/paraglide/messages.js');

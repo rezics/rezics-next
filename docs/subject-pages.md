@@ -11,6 +11,13 @@ views are organised. Mechanisms live with their owners: covers in [Cover](../pac
 This page spans those modules because a reader experiences one page; splitting its rules across owners would let
 each owner ship a correct part and the page still fail.
 
+Decision: Configured Subject page composition owns profile selection, slot assembly and visit descriptor orchestration
+through the page-owned contract in `features/pages/semantic-render-port.ts` and application in
+`features/pages/subject-page-application.tsx`. The Semantic catalogue binding in
+`features/catalogue/page-render-binding.tsx` installs the current readers and descriptors at the Web route
+composition root; the page application owns the installed operation and its disclosure, continuation, receipt and
+work-budget semantics.
+
 ## Reader Type display
 
 Reader labels, cover proportions and explicit Schema.org hints come from the shared Web Type-directory
@@ -66,6 +73,8 @@ Decision: preserve native episode link order and position strings; an absent rel
 
 Decision: anime Movies, TVSeries, TVSeason, Episode and `rezics:AnimeRelease` publications remain separate Subject identities; only TVSeries and TVSeason browse episodes through the released inverse `schema:isPartOf` window.
 
+Decision: Screen profile and episode continuation construct through one Semantic reading application. Navigation descriptors stay dependency-free values; Search binds page values, spoiler gates, `subjectHref` and visit return at `OverviewRoot` and `ScreenReadingBoundary`. Fewest tests pin that seam; existing episode and current-visit assertions stay. No new stories.
+
 ### Screen episode reader Cost
 
 One screen profile read and one inverse link page suffice for a visit; the reader requests `WORK_PARTS_PAGE_CAP` (20)
@@ -80,6 +89,8 @@ Admitted public containment is independently readable through the [album content
 ## Read a game work and its editions
 
 Decision: Comparison cards retain the native inverse-link order of the current bounded release page.
+
+Decision: Game edition/evidence and Manga evidence values use the catalogue-owned WorkReadingPort; the Subject page binds CandidateValue at composition and the readers do not import pages/data.
 
 The ordinary Game and Visual Novel overview mounts the [Game reader](../apps/web/src/features/catalogue/game-reader/README.md).
 It groups admitted work facts, classifications, qualified credits and relations using the active immutable Release.
@@ -1831,6 +1842,8 @@ groups, and are labelled with the Context they come from.
 ## Character appearances and relationships
 
 The Character page composes adopted work appearances, Character-qualified voice credits and exact document previews. The visit retains at most two assertion windows of twenty rows each and 256 related-reference summaries, subject to tighter installed caps. The selected page and its evidence remain current; it does not drain cursors or hydrate each row separately.
+
+Decision: Character public preview, credited-work continuation and credit inspection consume Semantic-owned page, read and navigation slots installed by `PageData` through `character-reading-binding.tsx`. The application public entry is `character-reading-application.tsx`; the port vocabulary is `character-reading-port.ts`. Those operations no longer value-import overview, data, cover-list or subject-connections. Disclosure, continuation, receipt and work-budget semantics stay on the existing native windows. Search pages import the application entry. Adapters copy only defined optional fields between CharacterPage and OverviewValue so `exactOptionalPropertyTypes` holds. Tests: `character-reading-ports.test.ts` plus the existing Character/credit visit suites.
 
 Decision: the mounted Character profile presents two twelve-row association windows through the existing Connections
 reader, window controller and whole-association spoiler renderer. Target and original-evidence returns enter the

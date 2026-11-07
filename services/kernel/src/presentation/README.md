@@ -23,6 +23,19 @@ Route `/` is the site home template: a level-1 `Heading`, a `SearchBox`, the
 page's read cost is 48 of 128. `setupPresentation` bootstraps the profile once at startup, immediately after
 `setupSemantic`. When a profile is already active, that bootstrap is one pointer read.
 
+Configured Subject/Zone page reads and selected published profiles execute through one
+Presentation application constructed at Kernel composition (`composition/presentation.ts`,
+`createKernel`). HTTP keeps request parsing and transport mapping. Nested page-metadata,
+document overlays and profile selection use that same instance. Semantic document and
+metadata producers bind through a Presentation-owned port; Character exact document
+properties come from Semantic's public `character-public-reading-documents` producer.
+Selected published A remains the read authority over a captured working draft except on
+the unpublished preview operation.
+
+Decision: the fewest tests pin constructed-instance Character document bindings, selected
+published-A authority over working B, and port-supplied properties. Existing native and
+browser page walks remain the hourly acceptance.
+
 Build checks in `test/presentation/platform-profile.test.ts`:
 
 - the platform profile is valid and gives every bundled type a default page

@@ -13,8 +13,8 @@ import {
   type ReactNode,
 } from 'react';
 import { getLocale } from '../paraglide/runtime.js';
-import { sessionQuery } from '../session/query';
-import type { ReadCredentialMode } from '../kernel/credential';
+import { sessionQueryKey } from '../reader/lifetime/index';
+import type { ReadCredentialMode } from '../reader/lifetime/contract';
 import { BoardCommunityStatus } from './board-community';
 import type { BoardOpeningReactionOrigin } from './board-opening';
 import type { CommunityBoardPage } from './board-feed-data';
@@ -138,15 +138,15 @@ function sessionSource(client: QueryClient): SessionSource {
   const existing = sessionSources.get(client);
   if (existing) return existing;
 
-  const read = () => client.getQueryData<SessionValue>(sessionQuery.queryKey);
-  const state = () => client.getQueryState(sessionQuery.queryKey);
+  const read = () => client.getQueryData<SessionValue>(sessionQueryKey);
+  const state = () => client.getQueryState(sessionQueryKey);
   let revision = 0;
   const listeners = new Set<() => void>();
   client.getQueryCache().subscribe((event) => {
     const { query } = event;
     if (
-      query.queryKey.length !== sessionQuery.queryKey.length ||
-      query.queryKey.some((part: unknown, index: number) => part !== sessionQuery.queryKey[index])
+      query.queryKey.length !== sessionQueryKey.length ||
+      query.queryKey.some((part: unknown, index: number) => part !== sessionQueryKey[index])
     )
       return;
     if (

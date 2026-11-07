@@ -5,7 +5,7 @@ import { exportJWK, generateKeyPair, SignJWT } from 'jose';
 import type { Pool } from 'pg';
 import { bundledDigest, bundledRelease } from '@rezics/definitions/bundled';
 import { createAccess } from '../../src/access/index.ts';
-import { PROBLEMS, ProblemError } from '../../src/http/problem.ts';
+import { PROBLEMS, ProblemError } from '../../src/http/problem-error.ts';
 import {
   createCollectionReads,
   type CollectionResourceView,

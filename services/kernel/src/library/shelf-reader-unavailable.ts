@@ -1,5 +1,5 @@
 import { memoizedValue } from '../memoized.ts';
-import { ProblemError } from '../http/problem.ts';
+import { ProblemError } from '../http/problem-error.ts';
 
 /** Missing native evidence is retryable; it must never become a ready empty shelf. */
 export function ShelfReadUnavailableError() {

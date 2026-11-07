@@ -1,5 +1,5 @@
 import type { Pool } from 'pg';
-import { ProblemError } from '../http/problem.ts';
+import { ProblemError } from '../http/problem-error.ts';
 import { currentCommandResources, type CommandTransaction } from '../command/command.ts';
 import {
   activeIdentitySourceConsumerMaintenance,

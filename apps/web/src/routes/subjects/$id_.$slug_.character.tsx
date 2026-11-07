@@ -10,7 +10,7 @@ import {
 import { classificationHandoffSearch } from '../../features/catalogue/classification-create-return';
 import { getLocale } from '../../paraglide/runtime';
 import { m } from '../../paraglide/messages.js';
-import { candidateContext } from '../../subject/candidates';
+import { candidateContext } from '../../features/pages/visit-host-port';
 import { canonicalRedirect, keepSearch } from '../../subject/load-subject';
 
 const canonicalCharacter = createServerFn({ method: 'GET', strict: false })

@@ -1,7 +1,7 @@
 import { useCallback, useRef, useState } from 'react';
 import { buttonVariants } from '@rezics/ui/shadcn/button';
 import { m } from '../../../../paraglide/messages.js';
-import { subjectHref, subjectUrlForView } from '../../../../subject/subject-href';
+import { subjectHref, subjectUrlForView } from '../../../../subject/load-subject';
 import { contextHref } from '../../../pages/context-navigation';
 import { useReaderFocus } from './focus';
 import { action, linkClass } from './controls';

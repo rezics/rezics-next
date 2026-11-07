@@ -4,7 +4,7 @@ import { createDiscoveryMutationEffect, recoverDiscoveryMutations } from './disc
 import { nativeReceiptKeyCandidates } from '../command/receipt-key.ts';
 import type { Pool } from 'pg';
 import canonicalize from 'canonicalize';
-import { within, deadlineClient } from '../access/authenticate.ts';
+import { within, deadlineClient } from './access-port.ts';
 import type { CurrentConsentReader } from '../access/auth-consent.ts';
 import type { Access } from '../request/access.ts';
 import type { KernelClock } from '../clock.ts';

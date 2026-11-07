@@ -9,7 +9,6 @@ import commandNoEffectFence from '../command/no-effect-fence.sql';
 import readReceipt from '../command/read-receipt.sql';
 import { COMMAND_STEP_RETRIES } from '../work/retries.ts';
 import { PARTITIONS } from '../route/route.ts';
-import { runLibraryBoundedStep } from './command-support.ts';
 import { WORK_STEP_DEADLINE_MS } from './work-step-deadline.ts';
 import { NATIVE_SOURCE_CUSTODY_RETIREMENT_PAGE_BOUND } from './native-source-custody-bounds.ts';
 import collectionRead from './collection-store-collection-read.sql';
@@ -43,11 +42,11 @@ import shelfRunRead from './shelf-maintenance-run-read.sql';
 import shelfWriterInitialize from './shelf-counter-owner-initialize.sql';
 import shelfWriterRead from './shelf-counter-owner-read.sql';
 import shelfWriterComplete from './shelf-counter-owner-complete.sql';
-import { PUBLIC_FILTER_COLLECTION_REDUCTION_DECLARATION } from '../semantic/public-filter-collection-reduction-work.ts';
-import { shelfMaintenanceStatementPlan } from './shelf-maintenance-bounds.ts';
+import { PUBLIC_FILTER_COLLECTION_REDUCTION_DECLARATION } from '../semantic/adapters/collection-reduction.ts';
+import { shelfMaintenanceStatementPlan } from './shelf-maintenance-statement-bounds.ts';
 
 type Query = Readonly<{ sql: string; params: readonly string[] }>;
-type StatementId =
+export type StatementId =
   | 'accountShare'
   | 'commandTime'
   | 'receiptRead'
@@ -1348,36 +1347,6 @@ export function withCollectionRetentionEngineRequest<T>(path: CollectionRetentio
   return dispatch();
 }
 
-/** Bind the actual occurrence's SQL, ordered serialized operands, schema projection and result cap. */
-export function executeCollectionRetentionQuery<Client, Input extends object, Result>(
-  id: StatementId,
-  query: Readonly<{ sql: string; params: readonly string[]; run(client: Client, input: Input): Promise<Result> }>,
-  client: Client,
-  input: Input,
-): Promise<Result> {
-  const shape = shapes()[id];
-  if (shape.query.sql !== query.sql) throw new TypeError(`Collection retention owner/query mismatch: ${id}`);
-  const bound = runtimeStatementBound(id, input as Readonly<Record<string, unknown>>);
-  if (bound.engineRequests !== 0) throw new TypeError('Collection retention SQL cannot consume engine requests');
-  return runLibraryBoundedStep(`library.collection-retention.${id}`, bound, () => query.run(client, input));
-}
-
-/** Bind BEGIN/COMMIT/ROLLBACK and fixed SET controls with their actual SQL bytes. */
-export function executeCollectionRetentionControl<T>(
-  operation: 'discover.begin' | 'discover.timeout' | 'discover.commit' | 'discover.rollback',
-  dispatch: (sql: string) => Promise<T>,
-): Promise<T> {
-  const sql = {
-    'discover.begin': 'BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY',
-    'discover.timeout': "SET LOCAL statement_timeout = '5000ms'",
-    'discover.commit': 'COMMIT',
-    'discover.rollback': 'ROLLBACK',
-  }[operation];
-  const bound = control(sql);
-  if (bound.engineRequests !== 0) throw new TypeError('Collection retention SQL cannot consume engine requests');
-  return runLibraryBoundedStep(`library.collection-retention.${operation}`, bound, () => dispatch(sql));
-}
-
 /** Export the pure arithmetic projection for tests and owner composition. */
 export function collectionRetentionMaximumStatement(id: StatementId): Bound {
   return shapeBounds.get(shapes()[id])!;
@@ -1391,4 +1360,23 @@ export function COLLECTION_RETENTION_SEGMENT_BOUND() {
 }
 export function COLLECTION_RETENTION_SQL_AXES() {
   return memoizedValue(COLLECTION_RETENTION_SQL_AXES, () => BOUND_AXES);
+}
+
+/** Exact SQL identity and serialized binds for native dispatch. */
+export function collectionRetentionQueryBound(
+  id: StatementId,
+  sql: string,
+  input: Readonly<Record<string, unknown>>,
+): Bound {
+  if (shapes()[id].query.sql !== sql) throw new TypeError(`Collection retention owner/query mismatch: ${id}`);
+  return runtimeStatementBound(id, input);
+}
+export const COLLECTION_RETENTION_CONTROLS = Object.freeze({
+  'discover.begin': 'BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY',
+  'discover.timeout': "SET LOCAL statement_timeout = '5000ms'",
+  'discover.commit': 'COMMIT',
+  'discover.rollback': 'ROLLBACK',
+});
+export function collectionRetentionControlBound(sql: string): Bound {
+  return control(sql);
 }

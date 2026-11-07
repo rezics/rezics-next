@@ -15,6 +15,7 @@ import { Button } from '@rezics/ui/shadcn/button';
 import { createProfileStoryIO, type ProfileScenario } from '../../kernel/fake/settings-profile';
 import { m } from '../../paraglide/messages.js';
 import { ProfileCard } from '../../settings/profile';
+import { settingsContent } from '../../settings/adapters/presentation';
 import { PublicViewsCard } from '../../settings/public-views';
 import { ProfileEditor, type ProfileAttempt } from '../../settings/profile-write';
 import { ProfileNavigation } from '../../settings/profile-navigation';
@@ -95,7 +96,7 @@ function ProfileExample({
           </Link>
         </nav>
         <section aria-label={m.settings_profile_heading()}>
-          <ProfileCard editor={editor} />
+          <ProfileCard editor={editor} content={settingsContent} />
         </section>
         <section id="public-activity" aria-label={m.settings_public_activity_heading()}>
           <PublicViewsCard editor={editor} />

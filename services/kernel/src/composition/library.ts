@@ -1,5 +1,25 @@
+import { createNativeCopyAccountAdmission } from '../access/adapters/index.ts';
+import { nativeReleasedDefinitions, nativeCopyListContext } from '../semantic/adapters/index.ts';
+import {
+  createLibrarySubjectIdentityAdapter,
+  observeLibrarySubjectSummaries,
+  readLibraryIdentityMappings,
+} from '../semantic/adapters/index.ts';
+import {
+  createLibraryAccountEligibilityAdapter,
+  observeLibraryPublicAccount,
+  observeLibraryAttributions,
+  createResourcePublicEligibility,
+} from '../access/adapters/index.ts';
+import { observeLibrarySpaceSummary } from '../community/adapters/index.ts';
+import { nativeFollowCountRuntime } from './library-follow-counts.ts';
+import { createLibraryPreparationWork, nativeLibraryScopeWork } from '../search/adapters/index.ts';
 /** Library process composition. Binds native SQL and foreign Access/Search/Semantic/Content adapters. */
 
+import { commandAccessContext } from '../access/command-admission.ts';
+import { GrantDeniedError } from '../access/resource-access-errors.ts';
+import accountCommandState from '../access/account-command-state.sql';
+import type { AuthoritativeTime } from '../command/command.ts';
 import { accessCheck, accessCommandAuthorization, type Access, type Actor } from '../request/access.ts';
 import type { Pool } from 'pg';
 import type { FilterDocument } from '@rezics/filter';
@@ -18,8 +38,19 @@ import { activeRelease, readRelease } from '../semantic/definitions.ts';
 import { compileCurrentOwnerFilter } from '../search/current-filter-plan.ts';
 import { createSearchScopeForService, type SearchService } from '../search/service-scope.ts';
 import { routeOf } from '../route/route.ts';
-import { createIdentityNativeApplication, createLibraryApplications } from '../library/application/index.ts';
 import {
+  createIdentityNativeApplication,
+  createLibraryApplications,
+  createCollectionMutationApplication,
+} from '../library/application/index.ts';
+import {
+  admitCollectionPublicationStep,
+  retireNativeCollectionCapturePage,
+  purgeSavedCollectionPage,
+  createNativeCollectionPublicationEpisodes,
+  readBuiltinPublicationRule,
+  createNativeCollectionMutationPorts,
+  createNativeCopyPorts,
   createAuthorizationAdapter,
   type AuthorizationAdapterPorts,
   createContentPublicationAdapter,
@@ -27,12 +58,16 @@ import {
   createIdentityDisclosureAdapter,
   type IdentityDisclosureAdapterPorts,
   createIdentityNativeCatalog,
+  createProgressOperationCatalog,
   createNativeSourceCaptureAdapter,
+  createNativeLibraryPresentation,
   createSearchPreparationAdapter,
   type SearchPreparationAdapterPorts,
 } from '../library/adapters/index.ts';
+import { createLibraryCollectionPolicyMethods } from '../access/adapters/collection-policy.ts';
 import {
   bindLibraryDomain,
+  bindLibraryPresentation,
   peekLibraryDomain,
   requireLibraryDomain,
   unbindLibraryDomain,
@@ -47,6 +82,7 @@ import {
 import { admissionTerm, sumAdmission } from '../library/core/index.ts';
 
 function nativeAuthorizationPorts(): AuthorizationAdapterPorts {
+  const collectionPolicy = createLibraryCollectionPolicyMethods();
   return {
     async admitCollectionRead(input) {
       try {
@@ -87,6 +123,12 @@ function nativeAuthorizationPorts(): AuthorizationAdapterPorts {
     },
     within(deadline, work) {
       return within(deadline, work);
+    },
+    specializeCollectionList(input) {
+      return collectionPolicy.specializeCollectionList(input);
+    },
+    collectionAuthorizationPreparation() {
+      return collectionPolicy.collectionAuthorizationPreparation();
     },
   };
 }
@@ -188,6 +230,8 @@ export type LibraryComposeOptions = Readonly<{
   ordinaryPage?: boolean;
   sourceCapture?: LibraryCapabilities['sourceCapture'];
   capabilities?: Partial<LibraryCapabilities>;
+  scopeWork?: import('../library/adapters/index.ts').NativeScopeWork;
+  preparationWork?: import('../library/adapters/index.ts').NativePreparationWorkFactory;
 }>;
 
 function stubSource(): PreparedCollectionSource {
@@ -205,7 +249,25 @@ function stubSource(): PreparedCollectionSource {
   };
 }
 
-export function composeLibraryDomain(options: LibraryComposeOptions = {}): LibraryDomain {
+function nativeLibraryPresentation() {
+  return createNativeLibraryPresentation({
+    identity: createLibrarySubjectIdentityAdapter(),
+    readMappings: readLibraryIdentityMappings,
+    accountEligibility: createLibraryAccountEligibilityAdapter(),
+    createResourcePublicEligibility,
+    observeSubjects: observeLibrarySubjectSummaries,
+    observeAccount: observeLibraryPublicAccount,
+    observeAttributions: observeLibraryAttributions,
+    observeSpace: observeLibrarySpaceSummary,
+  });
+}
+
+/** Preloads install the same native presentation as server/worker without a placeholder Collection Source. */
+export function composeLibraryPresentation(): void {
+  bindLibraryPresentation(nativeLibraryPresentation());
+}
+
+export function composeLibraryDomain(options: LibraryComposeOptions = {}): ReturnType<typeof bindLibraryDomain> {
   const identityNative =
     options.capabilities?.identityNative ?? createIdentityNativeApplication(createIdentityNativeCatalog());
   const sourceCapture =
@@ -255,12 +317,81 @@ export function composeLibraryDomain(options: LibraryComposeOptions = {}): Libra
       options.capabilities?.contentPublication ??
       createContentPublicationAdapter(nativeContentPublicationPorts(options)),
     identityNative,
+    progressCatalog: options.capabilities?.progressCatalog ?? createProgressOperationCatalog(),
+    collectionRetentionNative: options.capabilities?.collectionRetentionNative ?? {
+      retireCapture(tx, input) {
+        return retireNativeCollectionCapturePage(tx as Parameters<typeof retireNativeCollectionCapturePage>[0], input);
+      },
+      purgeSaved(tx, input) {
+        return purgeSavedCollectionPage(tx as Parameters<typeof purgeSavedCollectionPage>[0], input);
+      },
+    },
+    collectionPublicationNative: options.capabilities?.collectionPublicationNative ?? {
+      createCommands(config) {
+        return createNativeCollectionPublicationEpisodes(
+          config as Parameters<typeof createNativeCollectionPublicationEpisodes>[0],
+          { commandAccessContext, deadlineClient, denied: () => new GrantDeniedError() },
+        );
+      },
+      readBuiltinRule(client, route, collectionId) {
+        return readBuiltinPublicationRule(
+          client as Parameters<typeof readBuiltinPublicationRule>[0],
+          route,
+          collectionId,
+        );
+      },
+      admitStep(tx, locator) {
+        return admitCollectionPublicationStep(tx as Parameters<typeof admitCollectionPublicationStep>[0], locator);
+      },
+    },
+    collectionRuleAuthority: options.capabilities?.collectionRuleAuthority ?? {
+      async readAccount(client, route, accountId) {
+        const row = await accountCommandState.run(client as Parameters<typeof accountCommandState.run>[0], {
+          route,
+          account_id: accountId,
+        });
+        return row ? { ...row, minimumAuthnEpoch: BigInt(row.minimumAuthnEpoch) } : null;
+      },
+      async admitGroup(input) {
+        await admitGroup({
+          pool: input.pool as Pool,
+          access: () => input.access as Access,
+          actor: input.actor,
+          group: input.action === 'progress_session:read' ? 'reading_progress' : 'personal_library',
+          clientAction: input.action,
+          deadline: input.deadline,
+          clock: () => new Date(authoritativeTimeValue(input.at as AuthoritativeTime)),
+        });
+      },
+      compileOwnerFilter(filter) {
+        compileCurrentOwnerFilter(filter as FilterDocument);
+      },
+      denied() {
+        return new GrantDeniedError();
+      },
+    },
+    collectionMutations:
+      options.capabilities?.collectionMutations ??
+      createCollectionMutationApplication(createNativeCollectionMutationPorts()),
     sourceCapture,
     accountAdmission:
       options.capabilities?.accountAdmission ?? sumAdmission([admissionTerm('composition', { statements: 1 })]),
     ...extras,
   };
-  return bindLibraryDomain(createLibraryApplications(capabilities));
+  const previous = peekLibraryDomain();
+  return bindLibraryDomain({
+    ...createLibraryApplications(capabilities),
+    copyContext: nativeCopyListContext(),
+    copyPorts: (config) =>
+      createNativeCopyPorts(config, {
+        account: createNativeCopyAccountAdmission(config),
+        definitions: nativeReleasedDefinitions(),
+      }),
+    presentation: nativeLibraryPresentation(),
+    followCounts: nativeFollowCountRuntime(),
+    preparationWork: options.preparationWork ?? previous?.preparationWork ?? createLibraryPreparationWork,
+    scopeWork: options.scopeWork ?? previous?.scopeWork ?? nativeLibraryScopeWork,
+  });
 }
 
 export { peekLibraryDomain, bindLibraryDomain, requireLibraryDomain, unbindLibraryDomain };

@@ -3,7 +3,7 @@ import { useRouter } from '@tanstack/react-router';
 import { useMemo, useSyncExternalStore } from 'react';
 import { operationIsAdmitted } from '../kernel/exposure';
 import { viewerExposureLifetime, viewerExposureQuery, type ViewerExposure } from '../kernel/viewer-exposure';
-import { sessionQuery, type useSession } from '../session/query';
+import { sessionQuery, type useSession } from '../session';
 import type { SubjectReference } from './subject-ref';
 import { subjectSlotReturnTo } from './subject-slot-return-context';
 

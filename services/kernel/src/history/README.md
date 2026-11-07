@@ -7,9 +7,10 @@ vocabulary, receiving and operational types, error classes, and the typed `Histo
 `contract/ports.ts`. `kernel-history-core` owns pure operational cost declarations. `kernel-history-application`
 exports the receiving, record, operational, shared-work and identity facades; they invoke only the installed contract
 capability. `kernel-history-adapters` implements that capability with native Postgres operations, command execution,
-and Access, Semantic, Search, Zones and Work owner bindings. The Semantic record-source-set producer is loaded
-lazily from `../../semantic/record-source-set.ts`, matching the adapter type import; a missing owner file stays
-unavailable. Native `beginSemanticRecordSourceSet` is the sole Accounts declaration; History consumers must not
+and Access, Semantic, Search, Zones and Work owner bindings. Ordinary composition binds the typed Semantic
+record-source-set functions from `../../semantic/record-source-set.ts` before installing History; the adapter's
+lazy getter resolves that same public entry for isolated consumers, and a missing owner file stays unavailable.
+Native `beginSemanticRecordSourceSet` is the sole Accounts declaration; History consumers must not
 declare the same command set again. Its seal callback is registered work, so a History consumer of that set emits a
 domain event and associates the outbox copy with the same set rather than returning `noEffect`. Same-home mismatch
 verification uses a well-formed 64-hex digest that is not the sealed snapshot; malformed digests remain Semantic
@@ -59,6 +60,8 @@ declares the command set; a History consumer that declares again is a repeated d
 the seal-guard callback, so those commands cannot return `noEffect`; the History consumer test emits the same
 outbox event as Semantic's owner test, and the sealed copies keep `command-receipt/v1`, `durable-work/v1` and
 `outbox-event/v1`.
+
+Decision: `installNativeHistory` binds Semantic's typed record-source-set producer before installing the History capability. Test preloads and worker startup use that same explicit composition path.
 
 ## Zone receipts, outbox events and current closure boundary
 

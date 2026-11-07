@@ -4,8 +4,8 @@ import { ratingCapabilities } from './adapters/ambient.ts';
 import { createHash } from 'node:crypto';
 import canonicalize from 'canonicalize';
 import type { Pool } from 'pg';
-import { resourceAuthorization } from '../access/index.ts';
-import { GrantDeniedError } from '../access/grant-commands.ts';
+import { resourceAuthorization, GrantDeniedError } from './dependencies.ts';
+
 import type { KernelClock } from '../clock.ts';
 import realmRead from '../community/realm-read.sql';
 import type { Access, Actor } from '../request/access.ts';

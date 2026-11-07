@@ -1,4 +1,4 @@
-import type { DataType, Release } from '@rezics/definitions';
+import type { DataType, Release } from '@rezics/definitions/contract';
 import type { ItemApplication } from './item-application.ts';
 import type { SubjectFactStorePort } from '../contract/domain-ports.ts';
 import type { Item, ItemFact, ItemFactRow } from '../contract/item-values.ts';

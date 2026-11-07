@@ -53,6 +53,7 @@ test('history removals and clear keep focus useful, announce completion, and lea
   const { m } = await import('../src/paraglide/messages.js');
   const { RecentHistoryView } = await import('../src/search/recent');
   const { useRecentHistory } = await import('../src/search/recent-history-hook');
+  const { RecentSearchBinding } = await import('../src/session/recent-search-binding');
   setLocale('en', { reload: false });
   const host = window.document.createElement('main');
   window.document.body.append(host);
@@ -99,7 +100,15 @@ test('history removals and clear keep focus useful, announce completion, and lea
   const status = () => host.querySelector('[aria-live="polite"]')?.textContent;
 
   try {
-    await act(async () => root.render(createElement(QueryClientProvider, { client }, createElement(Harness))));
+    await act(async () =>
+      root.render(
+        createElement(
+          QueryClientProvider,
+          { client },
+          createElement(RecentSearchBinding, null, createElement(Harness)),
+        ),
+      ),
+    );
     await act(async () => {
       remove('Beta').focus();
       remove('Beta').click();

@@ -1,6 +1,6 @@
 import { memoizedValue } from '../memoized.ts';
-import { readAccountDiscoverySummaries } from '../access/account-discovery-source.ts';
-import { readViewerActions, type ViewerActionBindings } from '../access/viewer-actions.ts';
+import { readAccountDiscoverySummaries, readViewerActions } from './access-port.ts';
+import type { ViewerActionBindings } from '../access/content-adapter.ts';
 import { classifyUnavailability } from '../access/unavailable.ts';
 import { ProblemError } from '../http/problem.ts';
 import type { Access, Actor } from '../request/access.ts';
@@ -1362,7 +1362,7 @@ export async function readContentReadingPage(
   );
   const replies = selected.replies;
   requireSelectedLimit(thread, replies);
-  const mentions = await readReadingPageMentions(dependencies.pool, [thread.firstPost, ...replies]);
+  const mentions = await readReadingPageMentions(dependencies.pool, [thread.firstPost, ...replies], deadline);
   const reviewContextPreparation = await prepareReadingPageReviewContext(dependencies, thread, replies, {
     actor,
     deadline,

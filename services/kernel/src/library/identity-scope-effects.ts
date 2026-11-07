@@ -1,4 +1,4 @@
-import { ProblemError } from '../http/problem.ts';
+import { ProblemError } from '../http/problem-error.ts';
 import type { Pool } from 'pg';
 import { currentCommand, currentCommandResources, noEffect, type CommandTransaction } from '../command/command.ts';
 import { partitionOf } from '../route/route.ts';

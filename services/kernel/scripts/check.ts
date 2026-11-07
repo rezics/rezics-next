@@ -50,6 +50,7 @@ import {
   reapLabeledContainers,
   retainOriginalAndCleanupFailure,
   resolvePostgresListenUrl,
+  retryDockerCreateOnce,
   runDocker,
   type PostgresListen,
 } from '../../../scripts/compiler-database.ts';
@@ -953,54 +954,57 @@ export function startPostgresContainer(
   const socketMount = socketDirectory ? postgresSocketMount(socketDirectory) : [];
   const network = socketDirectory ? [] : dockerNetworkArgs();
   const publish = socketDirectory ? [] : postgresPublishArgs(Number(pid), network);
-  try {
-    return dockerCommand([
-      'run',
-      '-d',
-      '--stop-timeout',
-      '2',
-      '--rm',
-      ...network,
-      ...cgroupArgs(),
-      '--label',
-      `${KERNEL_CHECK_PID_LABEL}=${pid}`,
-      '--label',
-      `${KERNEL_CHECK_NONCE_LABEL}=${nonce}`,
-      ...publish,
-      // Keep PostgreSQL data on disk instead of consuming memory that the check slot admission does not reserve.
-      '--mount',
-      `type=volume,destination=/var/lib/postgresql,volume-label=${KERNEL_CHECK_PID_LABEL}=${pid}`,
-      ...socketMount,
-      '-e',
-      'POSTGRES_USER=rezics',
-      '-e',
-      'POSTGRES_PASSWORD=rezics',
-      '-e',
-      'POSTGRES_DB=rezics',
-      POSTGRES_IMAGE,
-      '-c',
-      'fsync=off',
-      '-c',
-      'synchronous_commit=off',
-      '-c',
-      'full_page_writes=off',
-      '-c',
-      'shared_buffers=32MB',
-      '-c',
-      'work_mem=8MB',
-      '-c',
-      'max_wal_size=256MB',
-      // Each concurrent file opens several pools of up to ten connections; the default 100 runs out.
-      '-c',
-      `max_connections=${POSTGRES_MAX_CONNECTIONS}`,
-      '-c',
-      'log_line_prefix=%m [%p] [%e] ',
-      ...(socketDirectory ? ['-c', `unix_socket_directories=${isolatedPostgresUnixSockets}`] : []),
-    ]);
-  } catch (error) {
-    reapLabeledContainers(KERNEL_CHECK_NONCE_LABEL, nonce, dockerCommand);
-    throw error;
-  }
+  const start = (attemptNonce: string): string => {
+    try {
+      return dockerCommand([
+        'run',
+        '-d',
+        '--stop-timeout',
+        '2',
+        '--rm',
+        ...network,
+        ...cgroupArgs(),
+        '--label',
+        `${KERNEL_CHECK_PID_LABEL}=${pid}`,
+        '--label',
+        `${KERNEL_CHECK_NONCE_LABEL}=${attemptNonce}`,
+        ...publish,
+        // Keep PostgreSQL data on disk instead of consuming memory that the check slot admission does not reserve.
+        '--mount',
+        `type=volume,destination=/var/lib/postgresql,volume-label=${KERNEL_CHECK_PID_LABEL}=${pid}`,
+        ...socketMount,
+        '-e',
+        'POSTGRES_USER=rezics',
+        '-e',
+        'POSTGRES_PASSWORD=rezics',
+        '-e',
+        'POSTGRES_DB=rezics',
+        POSTGRES_IMAGE,
+        '-c',
+        'fsync=off',
+        '-c',
+        'synchronous_commit=off',
+        '-c',
+        'full_page_writes=off',
+        '-c',
+        'shared_buffers=32MB',
+        '-c',
+        'work_mem=8MB',
+        '-c',
+        'max_wal_size=256MB',
+        // Each concurrent file opens several pools of up to ten connections; the default 100 runs out.
+        '-c',
+        `max_connections=${POSTGRES_MAX_CONNECTIONS}`,
+        '-c',
+        'log_line_prefix=%m [%p] [%e] ',
+        ...(socketDirectory ? ['-c', `unix_socket_directories=${isolatedPostgresUnixSockets}`] : []),
+      ]);
+    } catch (error) {
+      reapLabeledContainers(KERNEL_CHECK_NONCE_LABEL, attemptNonce, dockerCommand);
+      throw error;
+    }
+  };
+  return retryDockerCreateOnce(nonce, start, () => newCompilerNonce(Number(pid)));
 }
 
 export function searchCheckRunArgs(image: string, nonce: string): string[] {

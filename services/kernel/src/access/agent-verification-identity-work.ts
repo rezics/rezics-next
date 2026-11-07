@@ -5,9 +5,8 @@
 import { memoizedValue } from '../memoized.ts';
 import { statementBytes } from '../database/statement-bytes.ts';
 import { COMMAND_DISPATCH_ALLOWANCE } from '../command/dispatch-lifetime.ts';
-import { IDENTITY_SOURCE_ORIGINAL_SCHEDULE } from '../semantic/identity-source-maintenance-config.ts';
-import acceptedAccountClaim from '../semantic/identity-epoch-binding-accepted-account.sql';
-import retainedReference from '../semantic/identity-source-consumer-custody-select.sql';
+import { agentIdentityMaintenance } from './adapters/bind.ts';
+import { IDENTITY_SOURCE_ORIGINAL_SCHEDULE } from '../semantic/contract/identity-source-schedule.ts';
 import {
   originalControlWork,
   originalWorkVector,
@@ -77,7 +76,7 @@ export function ACCOUNT_IDENTITY_TECHNICAL_READ_DECLARATION() {
 
 export function ACCOUNT_IDENTITY_ACCEPTED_BINDING_DECLARATION() {
   return memoizedValue(ACCOUNT_IDENTITY_ACCEPTED_BINDING_DECLARATION, () =>
-    declare(sqlWork(acceptedAccountClaim, 5, 5, 1, 4 + 36 + 64 + 8192 + 36)),
+    agentIdentityMaintenance().acceptedBindingDeclaration(),
   );
 }
 
@@ -143,7 +142,7 @@ export function ACCOUNT_IDENTITY_SETTLEMENT_SELECT_DECLARATION() {
 
 export function ACCOUNT_IDENTITY_RETAINED_REFERENCE_DECLARATION() {
   return memoizedValue(ACCOUNT_IDENTITY_RETAINED_REFERENCE_DECLARATION, () =>
-    declare(sqlWork(retainedReference, 6, 6, 1, 4 + 64 + 64 + 8 + 36 + 36 + 8 + 36 + 4 + 64)),
+    agentIdentityMaintenance().retainedReferenceDeclaration(),
   );
 }
 

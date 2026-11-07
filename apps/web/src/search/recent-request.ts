@@ -1,14 +1,11 @@
-import type { KernelClient } from '@rezics/client';
-import { NATIVE_RECENT_QUERY_TEXT_LIMIT } from './recent-history';
+import { RECENT_NATIVE_QUERY_TEXT_LIMIT, RECENT_NATIVE_REVISION_MAX } from './recent-contract';
+import type { RecentChange, RecentNativeEntry, RecentPending, RecentWrite } from './recent-contract';
 
-export type RecentEntry = Parameters<KernelClient['recentSearches']['post']>[0]['entry'];
-export type RecentChange = { kind: 'use'; entry: RecentEntry } | { kind: 'remove'; id: string } | { kind: 'clear' };
-export type RecentPending = { key: string; change: RecentChange; queuedAt: string };
-export type RecentWrite = { accountId: string; expectedRevision: number; pending: RecentPending };
+export type RecentEntry = RecentNativeEntry;
+export type { RecentChange, RecentPending, RecentWrite };
 
 const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const language = /^[A-Za-z]{2,8}(?:-[A-Za-z0-9]{1,8})*$/;
-const revisionMax = 2147483646;
 const cursorMax = 4096;
 const receiptMax = 80;
 const pendingExtras = ['localId', 'visitedAt', 'expectedRevision'] as const;
@@ -33,7 +30,7 @@ function nativeId(value: unknown): value is string {
   return typeof value === 'string' && uuid.test(value);
 }
 
-function admitScope(value: unknown): NonNullable<Extract<RecentEntry, { kind: 'query' }>['scope']> {
+function admitScope(value: unknown): NonNullable<Extract<RecentNativeEntry, { kind: 'query' }>['scope']> {
   const scope = record(value);
   if (!scope) fail();
   if (scope.kind === 'route') {
@@ -46,13 +43,13 @@ function admitScope(value: unknown): NonNullable<Extract<RecentEntry, { kind: 'q
 }
 
 /** Native Recent entry shape: supported kinds, language tags and optional scope only. */
-export function admitRecentEntry(value: unknown): RecentEntry {
+export function admitRecentEntry(value: unknown): RecentNativeEntry {
   const entry = record(value);
   if (!entry) fail();
   if (entry.kind === 'query') {
     if (
       !closed(entry, ['kind', 'text', 'languages', 'scope']) ||
-      !text(entry.text, NATIVE_RECENT_QUERY_TEXT_LIMIT) ||
+      !text(entry.text, RECENT_NATIVE_QUERY_TEXT_LIMIT) ||
       entry.text.includes('\0') ||
       !entry.text.trim()
     )
@@ -104,7 +101,7 @@ export function admitRecentWrite(input: unknown): RecentWrite {
     !nativeId(body.accountId) ||
     !Number.isInteger(body.expectedRevision) ||
     (body.expectedRevision as number) < 0 ||
-    (body.expectedRevision as number) > revisionMax
+    (body.expectedRevision as number) > RECENT_NATIVE_REVISION_MAX
   )
     fail();
   const pending = record(body.pending);

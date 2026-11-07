@@ -3,7 +3,7 @@ import { deadlineClient } from '../access/authenticate.ts';
 import { admitGroup, PlatformClosedError } from '../access/gates/admission.ts';
 import type { KernelClock } from '../clock.ts';
 import { withConnection } from '../database/pool.ts';
-import { ProblemError } from '../http/problem.ts';
+import { ProblemError } from '../http/problem-error.ts';
 import { readPartition } from '../partition/partition.ts';
 import type { Access } from '../request/access.ts';
 import { PARTITIONS } from '../route/route.ts';

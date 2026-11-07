@@ -1,42 +1,27 @@
 import { memoizedValue } from '../memoized.ts';
-import type { DocumentNode } from '@rezics/document';
-import { classifyUnavailability } from '../access/unavailable.ts';
-import { ProblemError } from '../http/problem.ts';
-import type { Actor } from '../request/access.ts';
 import { t } from 'elysia';
 import type { Static } from 'typebox';
+import type { Actor } from '../request/access.ts';
 import { routeOf } from '../route/route.ts';
 import type { MediaDependencies } from './media.ts';
-import { readDocumentMediaPresentations, type DocumentImagePresentation } from './media-presentation.ts';
-import {
-  projectReadingPageDocumentMedia,
-  type SelectedReadingPageDocument,
-} from './reading-page-document-projection.ts';
+import type { DocumentImagePresentation } from './media-presentation.ts';
 import type { PostEntry } from './reads.ts';
 import { ContentIdSchema, DocumentImagePresentationSchema } from './schemas.ts';
-
-export { projectReadingPageDocumentMedia };
-export type { SelectedReadingPageDocument };
-
+import { selectReadingPageDocumentMedia as selectDocuments } from './application/index.ts';
+import { readingPageCapabilities } from './adapters/reading-page-bind.ts';
+import { READING_PAGE_DOCUMENT_LIMIT, READING_PAGE_DOCUMENT_MEDIA_LIMIT } from './contract/index.ts';
+import type {
+  ReadingPageDocumentMedia as DocumentMedia,
+  ReadingPageDocument as DocumentProjection,
+  ProjectedReadingPageImage,
+} from './contract/index.ts';
+export { READING_PAGE_DOCUMENT_LIMIT, READING_PAGE_DOCUMENT_MEDIA_LIMIT };
+export { projectReadingPageDocumentMedia } from './application/index.ts';
+export type { SelectedReadingPageDocument, ReadingPageDocumentSelection } from './contract/index.ts';
+export type ReadingPageDocumentMedia = DocumentMedia<DocumentImagePresentation>;
+export type ReadingPageDocument = DocumentProjection<DocumentImagePresentation>;
+export type ReadingPageDocumentImage = ProjectedReadingPageImage<DocumentImagePresentation>;
 const closed = { additionalProperties: false } as const;
-export const READING_PAGE_DOCUMENT_MEDIA_LIMIT = 32;
-export const READING_PAGE_DOCUMENT_LIMIT = 21;
-
-export type ReadingPageDocumentImage =
-  | Readonly<{ id: string; state: 'available'; presentation: DocumentImagePresentation }>
-  | Readonly<{ id: string; state: 'unavailable' }>;
-export type ReadingPageDocument = Readonly<{
-  postId: string;
-  threadId: string;
-  revisionId: string;
-  sha256: string;
-  state: 'available' | 'unavailable' | 'overflow';
-  images: readonly ReadingPageDocumentImage[];
-}>;
-export type ReadingPageDocumentMedia = Readonly<{
-  state: 'available' | 'unavailable' | 'overflow';
-  documents: readonly ReadingPageDocument[];
-}>;
 
 function ReadingPageDocumentImageSchema() {
   return memoizedValue(ReadingPageDocumentImageSchema, () =>
@@ -80,96 +65,21 @@ export function ReadingPageDocumentMediaSchema() {
   );
 }
 
-export type ReadingPageDocumentSelection =
-  | Readonly<{ state: 'selected'; documents: readonly SelectedReadingPageDocument[]; mediaIds: readonly string[] }>
-  | Readonly<{ state: 'overflow'; documents: readonly SelectedReadingPageDocument[] }>;
-
-function referencedImages(document: DocumentNode, declared: ReadonlySet<string>): string[] {
-  const ids = new Set<string>();
-  const pending = [document];
-  while (pending.length && ids.size <= READING_PAGE_DOCUMENT_MEDIA_LIMIT) {
-    const node = pending.pop()!;
-    const source = node.type === 'image' ? node.attrs?.src : undefined;
-    if (typeof source === 'string' && declared.has(source) && routeOf(source) !== null) ids.add(source);
-    for (const child of node.content ?? []) pending.push(child);
-  }
-  return [...ids];
+export function selectReadingPageDocumentMedia(threadId: string, posts: readonly PostEntry[]) {
+  return selectDocuments(threadId, posts, (id) => routeOf(id) !== null);
 }
-
-/** Select only declared image IDs in the current readable documents of one native page. */
-export function selectReadingPageDocumentMedia(
-  threadId: string,
-  posts: readonly PostEntry[],
-): ReadingPageDocumentSelection {
-  if (posts.length > READING_PAGE_DOCUMENT_LIMIT) throw new RangeError('Reading page document bound exceeded');
-  const selected: SelectedReadingPageDocument[] = [];
-  const allIds = new Set<string>();
-  for (const post of posts) {
-    if (post.availability !== 'available' || post.threadId !== threadId || !('revisionId' in post)) continue;
-    const declared = new Set(post.mediaIds.filter((id) => routeOf(id) !== null));
-    const mediaIds = referencedImages(post.body.doc, declared);
-    if (!mediaIds.length) continue;
-    selected.push({
-      postId: post.id,
-      threadId: post.threadId,
-      revisionId: post.revisionId,
-      sha256: post.sha256,
-      mediaIds,
-    });
-    for (const id of mediaIds) {
-      allIds.add(id);
-      if (allIds.size > READING_PAGE_DOCUMENT_MEDIA_LIMIT) break;
-    }
-  }
-  if (allIds.size > READING_PAGE_DOCUMENT_MEDIA_LIMIT) return { state: 'overflow', documents: selected };
-  return { state: 'selected', documents: selected, mediaIds: [...allIds] };
-}
-
-function unavailableDocument(document: SelectedReadingPageDocument): ReadingPageDocument {
-  return {
-    postId: document.postId,
-    threadId: document.threadId,
-    revisionId: document.revisionId,
-    sha256: document.sha256,
-    state: 'unavailable',
-    images: [],
-  };
-}
-
-/** Native optional composition runs before ReadingPage's final source admission. */
-export async function readReadingPageDocumentMedia(
+export function readReadingPageDocumentMedia(
   dependencies: MediaDependencies & Readonly<{ routeKey: Uint8Array }>,
   actor: Actor,
   threadId: string,
   posts: readonly PostEntry[],
   deadline: number,
 ): Promise<ReadingPageDocumentMedia> {
-  const selection = selectReadingPageDocumentMedia(threadId, posts);
-  if (selection.state === 'overflow')
-    return {
-      state: 'overflow',
-      documents: selection.documents.map((document) => ({
-        ...unavailableDocument(document),
-        state: 'overflow' as const,
-      })),
-    };
-  if (!selection.documents.length) return { state: 'available', documents: [] };
-  try {
-    const presentations = (
-      await readDocumentMediaPresentations(dependencies, actor, selection.mediaIds, {
-        deadline,
-        routeKey: dependencies.routeKey,
-      })
-    ).images;
-    return projectReadingPageDocumentMedia(selection, presentations);
-  } catch (error) {
-    if (
-      classifyUnavailability(error) === undefined &&
-      !(error instanceof ProblemError && error.code === 'dependency_unavailable')
-    )
-      throw error;
-    return { state: 'unavailable', documents: selection.documents.map(unavailableDocument) };
-  }
+  return readingPageCapabilities().readDocuments(
+    dependencies,
+    actor,
+    selectReadingPageDocumentMedia(threadId, posts),
+    deadline,
+  );
 }
-
 export type ReadingPageDocumentMediaResponse = Static<ReturnType<typeof ReadingPageDocumentMediaSchema>>;

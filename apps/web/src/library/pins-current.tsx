@@ -1,7 +1,7 @@
 import { CancelledError, QueryClient, QueryClientContext, useQuery } from '@tanstack/react-query';
 import { useContext, useLayoutEffect, useRef, useSyncExternalStore } from 'react';
 import { useLibraryWorkspaceAdmission } from './library-workspace-admission';
-import { useSession } from '../session/query';
+import { useSession } from './application';
 import { getLocale } from '../paraglide/runtime.js';
 import { useHistoryAddress, useHistoryReadOrigin } from './history-current-origin';
 import {

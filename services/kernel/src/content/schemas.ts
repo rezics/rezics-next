@@ -11,7 +11,6 @@ import { DocumentSnapshotSchema, type DocumentSnapshot } from '@rezics/document'
 import { t } from 'elysia';
 import type { Static, TSchema, TProperties } from 'typebox';
 import type { ContributedPostEntry } from './contribution-present.ts';
-import { Compile } from 'typebox/compile';
 import { CommunityPresentationSchema } from './community-presentation-model.ts';
 export { CommunityPresentationSchema } from './community-presentation-model.ts';
 import { REACTION_KINDS } from './events.ts';
@@ -41,43 +40,11 @@ type ViewerReactionSlot = { readonly viewerReaction?: ViewerReactionKind | null 
 type ReactionCountMap = { readonly [kind in ViewerReactionKind]?: number };
 type ReactionCountsSlot = { readonly reactions?: ReactionCountMap };
 
-/** Validate the published TypeBox shape without Elysia removing unknown input or response fields. */
-export function strictContentSchema<S extends TSchema>(
-  schema: S,
-  check?: (value: unknown) => readonly { pointer: string; code: string }[],
-) {
-  const validator = Compile(schema);
-  return {
-    '~standard': {
-      version: 1 as const,
-      vendor: 'typebox',
-      types: undefined as { input: Static<S>; output: Static<S> } | undefined,
-      validate(value: unknown) {
-        return (check ? check(value).length === 0 : validator.Check(value))
-          ? { value: value as Static<S> }
-          : { issues: [{ message: 'Value does not match the content schema' }] };
-      },
-      jsonSchema: { input: () => schema, output: () => schema },
-    },
-  };
-}
+import { strictContentSchema } from './schema-validation.ts';
+export { strictContentSchema } from './schema-validation.ts';
 
 const closed = { additionalProperties: false } as const;
-export const SourceFenceQuerySchema = t.Object(
-  {
-    source: t.String({ minLength: 1, maxLength: 32, pattern: '^[a-z][a-z0-9_-]{0,31}$' }),
-    externalId: t.String({ minLength: 1, maxLength: 1024, pattern: '^[^\\u0000-\\u001f\\u007f-\\u009f]+$' }),
-    fieldGroup: t.Union([t.Literal('facts'), t.Literal('summary'), t.Literal('cover')]),
-  },
-  closed,
-);
-export const SourceFenceResponseSchema = t.Object(
-  {
-    fenced: t.Boolean(),
-    securityRevision: t.Union([t.String({ pattern: '^[1-9][0-9]*$' }), t.Null()]),
-  },
-  closed,
-);
+export { SourceFenceQuerySchema, SourceFenceResponseSchema } from './source-fence-schemas.ts';
 export const ContentIdSchema = t.String({
   pattern: '^[0-9a-f]{8}-[0-9a-f]{4}-[78][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$',
 });

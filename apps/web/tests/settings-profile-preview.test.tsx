@@ -6,12 +6,17 @@ import { ProfilePreview } from '../src/settings/profile-preview';
 import { ProfileEditor } from '../src/settings/profile-write';
 import { profileChanges, profileHasLocalPreview, type ProfileValues } from '../src/settings/profile-data';
 import { m } from '../src/paraglide/messages.js';
+import { createBrowserSettingsAmbient } from '../src/settings/adapters/ambient';
+import { performanceAmbientTree } from './performance-ambient';
+
+const settingsAmbient = createBrowserSettingsAmbient();
 
 const draft: ComponentProps<typeof ProfilePreview> = {
   displayName: 'Unsaved name',
   biography: 'Unsaved biography',
   avatar: null,
   localAvatarUrl: null,
+  mediaSource: (media, format, width) => `/media/${media}/${format}/${width}`,
   links: [{ label: 'Notes', url: 'https://example.test/notes?q=local#draft', valid: true }],
   hasUnsavedChanges: true,
 };
@@ -30,7 +35,9 @@ test('only approved safe supplied destinations become links, even with stale app
       `https://example.test/${'x'.repeat(2048)}`,
     ].map((url) => ({ url, valid: true })),
   ]) {
-    const html = renderToStaticMarkup(<ProfilePreview {...draft} links={[{ ...link, label: 'Rejected' }]} />);
+    const html = renderToStaticMarkup(
+      performanceAmbientTree(<ProfilePreview {...draft} links={[{ ...link, label: 'Rejected' }]} />),
+    );
     expect(html).not.toContain('<a ');
     expect(html).toContain(m.settings_profile_preview_invalid_link());
   }
@@ -125,6 +132,7 @@ test('matching current fields do not mark the local preview as saved while the o
   };
   const editor = new ProfileEditor(
     {
+      ambient: settingsAmbient,
       read: async () => initial,
       save: async () => {
         throw new Error('Response lost');
@@ -136,22 +144,27 @@ test('matching current fields do not mark the local preview as saved while the o
   await editor.submit('profile');
   editor.edit({ displayName: initial.displayName });
   const snapshot = editor.snapshot();
-  const draft = snapshot.draft;
+  const profileDraft = snapshot.draft;
   expect(snapshot.attempt).not.toBeNull();
-  expect(draft?.displayName).toBe(initial.displayName);
+  expect(profileDraft?.displayName).toBe(initial.displayName);
   const changed =
-    snapshot.known != null && draft != null && Object.keys(profileChanges(snapshot.known, draft)).length > 0;
+    snapshot.known != null &&
+    profileDraft != null &&
+    Object.keys(profileChanges(snapshot.known, profileDraft)).length > 0;
   expect(changed).toBe(false);
   expect(profileHasLocalPreview(changed, false, snapshot.attempt, snapshot.acknowledged)).toBe(true);
   const html = renderToStaticMarkup(
-    createElement(ProfilePreview, {
-      displayName: draft!.displayName,
-      biography: draft!.biography,
-      avatar: draft!.avatar,
-      localAvatarUrl: null,
-      hasUnsavedChanges: profileHasLocalPreview(changed, false, snapshot.attempt, snapshot.acknowledged),
-      links: [],
-    }),
+    performanceAmbientTree(
+      createElement(ProfilePreview, {
+        displayName: profileDraft!.displayName,
+        biography: profileDraft!.biography,
+        avatar: profileDraft!.avatar,
+        localAvatarUrl: null,
+        mediaSource: draft.mediaSource,
+        hasUnsavedChanges: profileHasLocalPreview(changed, false, snapshot.attempt, snapshot.acknowledged),
+        links: [],
+      }),
+    ),
   );
   expect(html).toContain(m.settings_profile_preview_draft());
   expect(html).not.toContain(m.settings_profile_preview_saved());
@@ -167,7 +180,9 @@ test('a clean or confirmed current profile displays the saved preview while pend
   ] as const) {
     const hasUnsavedChanges = profileHasLocalPreview(changed, localAvatar, attempt, acknowledged);
     expect(hasUnsavedChanges).toBe(local);
-    const html = renderToStaticMarkup(<ProfilePreview {...draft} hasUnsavedChanges={hasUnsavedChanges} />);
+    const html = renderToStaticMarkup(
+      performanceAmbientTree(<ProfilePreview {...draft} hasUnsavedChanges={hasUnsavedChanges} />),
+    );
     expect(html).toContain(local ? m.settings_profile_preview_draft() : m.settings_profile_preview_saved());
   }
 });

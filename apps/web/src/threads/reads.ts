@@ -6,7 +6,7 @@ import { getRequest, setResponseHeader } from '@tanstack/react-start/server';
 import { env } from 'cloudflare:workers';
 import type { VerificationConfig } from '../report/turnstile';
 import type { SessionEnv } from '../session/client';
-import type { ReadCredentialMode } from '../kernel/credential';
+import type { ReadCredentialMode } from '../reader/lifetime/contract';
 import { prepareSession, requestCsrfToken, sessionSubject, viewerCredential } from '../session/request';
 import { kernelClient } from '../kernel/client';
 import { threadTitle } from './thread-href';

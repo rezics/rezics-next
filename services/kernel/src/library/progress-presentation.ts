@@ -1,6 +1,6 @@
 import type { Release } from '@rezics/definitions';
 import type { AuthoritativeTime } from '../command/command.ts';
-import { ProblemError } from '../http/problem.ts';
+import { ProblemError } from '../http/problem-error.ts';
 import { readRelease } from '../semantic/definitions.ts';
 import type {
   ProgressInputRules,

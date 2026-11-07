@@ -12,6 +12,7 @@ import {
   markInboxViewerSeen,
   type InboxPageLoader,
 } from './inbox-query';
+import { useInboxAmbient } from './adapters/ambient-view.tsx';
 import { InboxUnreadSummary } from './unread-badge';
 import { inboxViewerCsrfToken, useInboxViewer, type InboxViewer } from './inbox-viewer';
 import { InboxEntryState, retryInboxSession } from './inbox-entry-state';
@@ -50,6 +51,7 @@ import {
   type ResolvedInboxPage,
 } from './inbox-read';
 import { InboxNoticeActorVisual, inboxNoticeActorPresentation } from './inbox-notice-actor';
+import type { InboxContentPort } from './ports/content';
 import {
   inboxAcknowledgementRecovery,
   inboxAcknowledgementRetryAllowed,
@@ -92,6 +94,7 @@ function acknowledgementFailureMessage(failure: NativeInboxFailure) {
 
 export function InboxRows({
   page,
+  content,
   onLoadMore,
   loading = false,
   onMarkSeen,
@@ -107,6 +110,7 @@ export function InboxRows({
   onOpenNotice,
 }: {
   page: Pick<ResolvedInboxPage, 'items' | 'next'>;
+  content: InboxContentPort;
   onLoadMore?: () => void;
   loading?: boolean;
   onMarkSeen?: (noticeId: string) => void;
@@ -159,14 +163,17 @@ export function InboxRows({
           const hasComposedDisclosure = !!item.actor && !!item.target && !!item.actions;
           const hiddenLegacyItem = item.unavailable && !hasComposedDisclosure;
           const href = hiddenLegacyItem ? undefined : item.href || undefined;
-          const actor = inboxNoticeActorPresentation({
-            ...(item.actor ? { actor: item.actor } : {}),
-            actorId: item.actorId,
-            ...(item.actorName !== undefined ? { actorName: item.actorName } : {}),
-            kind: item.kind,
-            reportId: item.reportId,
-            hideLegacy: hiddenLegacyItem,
-          });
+          const actor = inboxNoticeActorPresentation(
+            {
+              ...(item.actor ? { actor: item.actor } : {}),
+              actorId: item.actorId,
+              ...(item.actorName !== undefined ? { actorName: item.actorName } : {}),
+              kind: item.kind,
+              reportId: item.reportId,
+              hideLegacy: hiddenLegacyItem,
+            },
+            content.initials,
+          );
           const kind = kindLabel(item);
           const text =
             item.summary ?? (hiddenLegacyItem ? m.inbox_unavailable_item() : item.text) ?? m.inbox_unavailable_item();
@@ -318,11 +325,13 @@ export function InboxPageView({
   loadPage,
   acknowledgeNotice,
   historyKey: suppliedHistoryKey,
+  content,
 }: {
   loadPage?: InboxPageLoader;
   acknowledgeNotice?: NoticeSeenStoryTransport;
   historyKey?: string;
-} = {}) {
+  content: InboxContentPort;
+}) {
   const router = useRouter({ warn: false });
   const routedHistoryKey = useRouterState({
     select: (state) => {
@@ -366,13 +375,14 @@ export function InboxPageView({
         historyKey={historyKey}
         loadPage={loadPage}
         acknowledgeNotice={acknowledgeNotice}
+        content={content}
       />
     );
   return (
     <div className="mx-auto w-full max-w-3xl px-4 py-8 sm:px-6">
       <h1 className="font-display text-3xl font-semibold tracking-tight">{m.inbox_heading()}</h1>
       <InboxPreferencesLink />
-      <InboxEntryState state={state} sessionRead={sessionRead} />
+      <InboxEntryState state={state} sessionRead={sessionRead} SignInPrompt={content.SignInPrompt} />
     </div>
   );
 }
@@ -385,6 +395,7 @@ export function ViewerInboxPage({
   historyKey,
   loadPage,
   acknowledgeNotice,
+  content,
 }: {
   viewer: InboxViewer;
   csrfToken: string | null;
@@ -392,7 +403,9 @@ export function ViewerInboxPage({
   historyKey: string;
   loadPage?: InboxPageLoader | undefined;
   acknowledgeNotice?: NoticeSeenStoryTransport | undefined;
+  content: InboxContentPort;
 }) {
+  const ambient = useInboxAmbient();
   const router = useRouter({ warn: false });
   const pageInstance = useId();
   const queryClient = useQueryClient();
@@ -498,7 +511,7 @@ export function ViewerInboxPage({
     : 0;
   pageRetryAtRef.current = { intent: pageIntent, deadline: pageRetryAt };
   const pageWaitActive = (intent: InboxPageIntent) =>
-    pageRetryAtRef.current.intent === intent && pageRetryAtRef.current.deadline > Date.now();
+    pageRetryAtRef.current.intent === intent && pageRetryAtRef.current.deadline > ambient.now();
   const waiting = usePreferenceRetry(operationState?.failure, pageRetryAt);
   const noticeRecoveryViewCurrent = noticeRecoveryView?.attempt === noticeAttempt.current ? noticeRecoveryView : null;
   const seenRecoveryViewCurrent =
@@ -679,7 +692,7 @@ export function ViewerInboxPage({
         seenIntent.current !== intent ||
         !episodeOwnerCurrent() ||
         (!deliberateRetry && pageIntentRef.current !== dispatchIntent) ||
-        (deliberateRetry ? !inboxAcknowledgementRetryAllowed(recovery, attempt) : recovery !== null) ||
+        (deliberateRetry ? !inboxAcknowledgementRetryAllowed(recovery, attempt, ambient.now()) : recovery !== null) ||
         (deliberateRetry && (!seenRetryPolicy.current.pageReady || !seenRetryPolicy.current.allowed)) ||
         pageQueryFetching(pageIntentRef.current ?? dispatchIntent)
       )
@@ -694,7 +707,7 @@ export function ViewerInboxPage({
       marking.current = true;
       setMarkingPending(true);
       try {
-        const observation = await markInboxViewerSeen(queryClient, viewer, attempt, token);
+        const observation = await markInboxViewerSeen(queryClient, viewer, attempt, token, ambient.now);
         if (!active.current || !episodeOwnerCurrent() || seenIntent.current !== intent) return;
         finishAcknowledged(
           (current) => confirmLoadedInboxSeen(current, new Set(intent.eligibleNoticeIds)),
@@ -710,7 +723,7 @@ export function ViewerInboxPage({
       } catch (error: unknown) {
         if (active.current && episodeOwnerCurrent() && seenIntent.current === intent) {
           const failure = inboxSeenFailure(error).failure;
-          const next = inboxAcknowledgementRecovery(attempt, failure, Date.now());
+          const next = inboxAcknowledgementRecovery(attempt, failure, ambient.now());
           seenRecovery.current = next;
           setSeenRecoveryView(next);
         }
@@ -721,7 +734,7 @@ export function ViewerInboxPage({
         }
       }
     },
-    [episodeOwnerCurrent, finishAcknowledged, pageIntent, pageQueryFetching, queryClient, viewer],
+    [ambient, episodeOwnerCurrent, finishAcknowledged, pageIntent, pageQueryFetching, queryClient, viewer],
   );
 
   const sendNoticeSeenAttempt = useCallback(
@@ -734,7 +747,7 @@ export function ViewerInboxPage({
         seenIntent.current !== null ||
         !episodeOwnerCurrent() ||
         pageIntentRef.current !== dispatchIntent ||
-        (deliberateRetry ? !inboxAcknowledgementRetryAllowed(recovery, attempt) : recovery !== null) ||
+        (deliberateRetry ? !inboxAcknowledgementRetryAllowed(recovery, attempt, ambient.now()) : recovery !== null) ||
         pageQueryFetching(dispatchIntent)
       )
         return;
@@ -749,7 +762,7 @@ export function ViewerInboxPage({
       try {
         let observation: InboxObservationRecovery | null = null;
         if (acknowledgeNotice) await acknowledgeNotice(attempt, token);
-        else observation = await markInboxViewerNoticeSeen(queryClient, viewer, attempt, token);
+        else observation = await markInboxViewerNoticeSeen(queryClient, viewer, attempt, token, ambient.now);
         if (!active.current || !episodeOwnerCurrent() || noticeAttempt.current !== attempt) return;
         finishAcknowledged(
           (current) => confirmInboxNoticeSeen(current, attempt.noticeId),
@@ -765,7 +778,7 @@ export function ViewerInboxPage({
       } catch (error: unknown) {
         if (active.current && episodeOwnerCurrent() && noticeAttempt.current === attempt) {
           const failure = inboxSeenFailure(error).failure;
-          const next = inboxAcknowledgementRecovery(attempt, failure, Date.now());
+          const next = inboxAcknowledgementRecovery(attempt, failure, ambient.now());
           noticeRecovery.current = next;
           setNoticeRecoveryView(next);
         }
@@ -778,6 +791,7 @@ export function ViewerInboxPage({
     },
     [
       acknowledgeNotice,
+      ambient,
       episode,
       episodeOwnerCurrent,
       finishAcknowledged,
@@ -805,7 +819,7 @@ export function ViewerInboxPage({
     )
       return;
     if (markedThrough.current === admittedMarkSeen.through) return;
-    const attempt = Object.freeze({ through: admittedMarkSeen.through, idempotencyKey: crypto.randomUUID() });
+    const attempt = Object.freeze({ through: admittedMarkSeen.through, idempotencyKey: ambient.id() });
     const intent: InboxLoadedSeenIntent = Object.freeze({
       attempt,
       // Keep this bounded original eligible range with the key; later arrivals cannot join an exact retry.
@@ -915,7 +929,7 @@ export function ViewerInboxPage({
     const attempt = Object.freeze({
       accountId: viewer.subject,
       noticeId: item.id,
-      idempotencyKey: crypto.randomUUID(),
+      idempotencyKey: ambient.id(),
     });
     noticeAttempt.current = attempt;
     noticeRecovery.current = null;
@@ -930,7 +944,7 @@ export function ViewerInboxPage({
     const recovery = noticeRecovery.current;
     if (
       !attempt ||
-      !inboxAcknowledgementRetryAllowed(recovery, attempt) ||
+      !inboxAcknowledgementRetryAllowed(recovery, attempt, ambient.now()) ||
       noticeMarking.current ||
       pageIntentRef.current !== pageIntent ||
       pageQueryFetching(pageIntent) ||
@@ -944,7 +958,7 @@ export function ViewerInboxPage({
     const intent = seenIntent.current;
     if (
       !intent ||
-      !inboxAcknowledgementRetryAllowed(seenRecovery.current, intent.attempt) ||
+      !inboxAcknowledgementRetryAllowed(seenRecovery.current, intent.attempt, ambient.now()) ||
       marking.current ||
       pageIntentRef.current !== pageIntent ||
       pageQueryFetching(pageIntent) ||
@@ -1076,7 +1090,7 @@ export function ViewerInboxPage({
       pageQueryFetching(pageIntent) ||
       accessPending.current ||
       pageWaitActive(pageIntent) ||
-      (observationRecovery.current?.page && !inboxObservationRetryAllowed(observationRecovery.current))
+      (observationRecovery.current?.page && !inboxObservationRetryAllowed(observationRecovery.current, ambient.now()))
     )
       return;
     if (cursor !== undefined || received.direction !== null) {
@@ -1403,6 +1417,7 @@ export function ViewerInboxPage({
                   ...readable,
                   items: visibleItems,
                 }}
+                content={content}
                 onMarkSeen={markNoticeSeen}
                 onRetrySeen={retryNoticeSeen}
                 pendingNoticeId={noticePendingId}

@@ -7,10 +7,12 @@ import { chromium, type Browser } from 'playwright';
 import { Button } from '@rezics/ui/shadcn/button';
 import { m } from '../src/paraglide/messages.js';
 import { getLocale, locales, setLocale } from '../src/paraglide/runtime.js';
+import { performanceAmbientTree } from './performance-ambient';
 
 mock.module('cloudflare:workers', () => ({ env: {} }));
 
 const { InboxRows } = await import('../src/inbox/inbox-page');
+const { inboxContent } = await import('../src/inbox/adapters/presentation');
 type Item = import('../src/inbox/inbox-read').ResolvedInboxPage['items'][number];
 
 const timestamp = '2026-10-29T10:00:00.000Z';
@@ -45,7 +47,9 @@ const unavailable: Item = {
 };
 
 function markup(items: Item[]) {
-  return renderToStaticMarkup(createElement(InboxRows, { page: { items, next: null } }));
+  return renderToStaticMarkup(
+    performanceAmbientTree(createElement(InboxRows, { content: inboxContent, page: { items, next: null } })),
+  );
 }
 
 function continuationButton(tree: ReactNode) {
@@ -119,10 +123,10 @@ test('a sparse continuation preserves its callback and loading disables only the
     calls += 1;
   };
   const page = { items: [], next: 'opaque-sparse-next' };
-  const available = InboxRows({ page, onLoadMore });
-  const loading = InboxRows({ page, onLoadMore, loading: true });
-  const withoutCallback = InboxRows({ page });
-  const exhausted = InboxRows({ page: { items: [], next: null }, onLoadMore });
+  const available = InboxRows({ page, content: inboxContent, onLoadMore });
+  const loading = InboxRows({ page, content: inboxContent, onLoadMore, loading: true });
+  const withoutCallback = InboxRows({ page, content: inboxContent });
+  const exhausted = InboxRows({ page: { items: [], next: null }, content: inboxContent, onLoadMore });
   const availableButton = continuationButton(available);
   const loadingButton = continuationButton(loading);
   const availableHandler = availableButton?.props.onClick;
@@ -131,7 +135,7 @@ test('a sparse continuation preserves its callback and loading disables only the
   expect(availableHandler).toBe(onLoadMore);
   expect(availableButton?.props.disabled).toBe(false);
   expect(availableButton?.props.className).toContain('min-h-11');
-  expect(renderToStaticMarkup(available)).toContain(m.inbox_load_more());
+  expect(renderToStaticMarkup(performanceAmbientTree(available))).toContain(m.inbox_load_more());
   expect(loadingButton?.props.onClick).toBe(onLoadMore);
   expect(loadingButton?.props.disabled).toBe(true);
   expect(continuationButton(withoutCallback)).toBeUndefined();

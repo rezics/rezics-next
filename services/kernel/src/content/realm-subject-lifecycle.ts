@@ -25,7 +25,7 @@ import { createRealmSubjectScope, type RealmSubjectScopeChange } from './realm-s
 import type { Effect } from '../events/effects.ts';
 import type { CloudEvent } from '../events/log.ts';
 import { CONTENT_EVENTS } from './events.ts';
-import { zeroScopeWork } from '../search/scope-execution.ts';
+import { zeroScopeWork } from '../search/contract/index.ts';
 
 const threadCreated = 'com.rezics.content.thread.created.v1';
 const postCreated = 'com.rezics.content.post.created.v1';

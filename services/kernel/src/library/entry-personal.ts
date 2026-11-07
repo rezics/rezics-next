@@ -12,7 +12,7 @@ import {
 } from '../command/command.ts';
 import type { LabelCommandAdmission } from './label-command-admission.ts';
 import { withConnection } from '../database/pool.ts';
-import { ProblemError } from '../http/problem.ts';
+import { ProblemError } from '../http/problem-error.ts';
 import type { Access, AccountActor, Actor } from '../request/access.ts';
 import { deadlineFor, withRequestDeadline } from '../request/deadline.ts';
 import { newId, routeOf } from '../route/route.ts';

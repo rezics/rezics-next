@@ -15,6 +15,9 @@ import type { ObservedProfile, ProfileValues } from '../src/settings/profile-dat
 import { ProfileEditor } from '../src/settings/profile-write';
 import { captureProfileReturn } from '../src/settings/settings-return';
 import { editableProfile, profileValues } from './factories/profile';
+import { createBrowserSettingsAmbient } from '../src/settings/adapters/ambient';
+
+const settingsAmbient = createBrowserSettingsAmbient();
 
 const identity = { state: 'signed-in' as const, subject: 'alice', csrfToken: 'alice-token' };
 const viewer = { state: 'current' as const, accountId: 'alice' };
@@ -71,7 +74,7 @@ function setup(io: WatchManagementIO) {
   client.setQueryData(sessionQuery.queryKey, identity);
   const owner = new SettingsSessionOwner(client, identity.csrfToken, identity.subject);
   owner.mount();
-  const controller = new WatchController(io, owner);
+  const controller = new WatchController(io, owner, settingsAmbient);
   controller.mount();
   return { client, owner, controller };
 }
@@ -82,6 +85,7 @@ test('Profile save, unsaved draft, both Watch kinds, withheld target, original r
   const reads: string[] = [];
   const writes: object[] = [];
   const editor = new ProfileEditor({
+    ambient: settingsAmbient,
     read: async () => {
       reads.push(current.accountId);
       return observed(current);
@@ -249,6 +253,7 @@ test('a receipt then failed Profile readback keeps acknowledgement; sequential W
   let reads = 0;
   const editor = new ProfileEditor(
     {
+      ambient: settingsAmbient,
       save: async (attempt) => ({ ok: true, profile: attempt.after }),
       read: async () => {
         reads++;

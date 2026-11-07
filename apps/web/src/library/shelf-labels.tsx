@@ -10,9 +10,9 @@ import {
   DialogTitle,
   DialogTrigger,
 } from '@rezics/ui/shadcn/dialog';
-import { useOperation } from '../kernel/exposure';
+import { useOperation } from './application';
 import { m } from '../paraglide/messages.js';
-import { useSession } from '../session/query';
+import { useSession } from './application';
 import { readSubjectLabelPage } from './labels-actions';
 import { labelReadMessage, SubjectLabelMore, SubjectLabelReadNotice } from './subject-labels.tsx';
 import { normalizeShelfLabelPrefix } from './shelf-label-input';

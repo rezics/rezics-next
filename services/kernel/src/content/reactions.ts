@@ -1,10 +1,13 @@
 import { createHash } from 'node:crypto';
 import canonicalize from 'canonicalize';
 import type { Pool } from 'pg';
-import { commandAccessContext, requireCommandAdmission } from '../access/command-admission.ts';
-import { GrantDeniedError } from '../access/grant-commands.ts';
-import { createResourcePublicEligibility } from '../access/public-eligibility.ts';
-import { resourceAuthorization } from '../access/resource-authorization.ts';
+import {
+  commandAccessContext,
+  requireCommandAdmission,
+  createResourcePublicEligibility,
+  resourceAuthorization,
+} from './access-port.ts';
+import { GrantDeniedError } from '../access/contract/index.ts';
 import {
   authoritativeTimeValue,
   principalCommandIdentity,

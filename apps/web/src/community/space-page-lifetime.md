@@ -153,3 +153,30 @@ are pinned in `realm-participation`; no new stories.
 
 Decision: an unavailable Realm shows its own state and never substitutes Global boards or publications.
 Decision: the VN Realm catalogue-to-community walk derives Subject identities from seed results and opens a public visual-novel Realm created through the documented Space/Realm/Board/publication commands when `seed:dev` still publishes only a Global Board.
+
+## Application capability boundary
+
+Decision: the Space/Realm visit consumes explicit session, presentation, navigation, follow and bounded reading
+capabilities constructed by the existing route/session host; retain the frozen lifetime and supplying-shelf outcome
+assertions and add only a focused supplied-capability regression, without new stories.
+
+`contract/visit.ts` owns the consumer vocabulary. `session/community-application.tsx` binds the existing browser session,
+router address, locale, shell heading, media URL producer, resource-access link and authoring departure boundary.
+Library's `adapters/community-follow.tsx` mounts its existing follow owner; Search's public
+`subject-visit-navigation.ts` builds the publication handoff with its existing canonical Subject and return helpers.
+These are presentation and navigation capabilities, never permission inputs. The host starts no session store,
+renderer, native client or authority engine. Ordinary Space/Realm routes and standalone mounts use this same binding;
+the Community view takes an explicit application value and imports none of these private producer implementations.
+
+Content's `adapters/visit-reading.ts` binds existing generated Home operations or the existing BFF shelf/publication
+operations. It retains the credential captured by each sender and the native language chain. A continuation performs
+one explicit physical page read. Board and publication windows remain independent, sparse and ordered; unavailable
+Realm carriers never fall back to Global, and unpublished command preparation remains explicitly unavailable.
+
+`application/publication-completion.ts` owns the existing acknowledgement-to-refresh handoff. A saved receipt creates
+one refresh intent; only that intent's current admitted continuation and a committed render deliver completion once.
+`space-reading.ts` owns admitted return coordinates and the outer supplying-shelf handoff. Both completion predicates,
+the current page admission, matching route, eligible focus intent and connected supplying region must still agree.
+The original admission, exact Query commit, equal replacements, ABA observation, locale/source/credential retirement
+and uncertain command occurrences retain their existing owners and guards. The capability binding changes none of
+the lifetime proof limits above.

@@ -1,22 +1,14 @@
-import type { PublicationPrepare } from './realm-publication-preparation';
-import { ResourceAccessLink } from '../accounts/resource-access/link';
 import { useCallback, useEffect, useId, useMemo, useRef, useState, type ReactNode } from 'react';
-import { Link, useLocation } from '@tanstack/react-router';
+import { Link } from '@tanstack/react-router';
 import { placeholderColors, sharedRatio, type CoverSubject } from '@rezics/ui/cover';
 import { CoverCard, CoverRow } from '@rezics/ui/cover-card';
-import { coverSrc } from '../media/cover-src';
 import { m } from '../paraglide/messages.js';
-import { getLocale } from '../paraglide/runtime.js';
-import { PageHeading } from '../shell/page-heading';
-import { subjectHref } from '../subject/subject-href';
 import { RealmMembership } from './realm-membership';
 import { RealmCommunityBoards } from './realm-community/boards';
 import { RealmBansPanel } from './realm-bans-panel';
 import { RealmMembersEntry } from './members/entry';
-import type { PublishedSubject, RealmBoard, RealmHome, SpacePageData } from './space';
+import type { PublishedSubject, RealmHome, SpacePageData } from './space';
 import { SpaceSetupEntry, useSpaceSetupRead } from './space-setup-page';
-import { FollowTargetControl } from '../library/follow-target-control';
-import { useSession } from '../session/query';
 import { useShelfList } from './space-queries';
 import {
   nativeHomeBinding,
@@ -25,20 +17,11 @@ import {
   useSpacePageLifetime,
 } from './space-page-lifetime';
 import {
-  changeRealmPublication,
-  readRealmBoards,
-  readRealmPublications,
-  readRealmPublicationPreparation,
-} from './space-actions';
-import {
   PublicationControls,
   ShelfContinuation,
   useShelfContinuationFocus,
   usePublicationControls,
-  type PublicationSend,
 } from './publication-controls-view';
-import type { ShelfPage } from './space';
-import type { ReadCredentialMode } from '../kernel/credential';
 import { ContainerLifecyclePanel } from './container-lifecycle-controls';
 import type { ContainerLifecycleAdapter } from './container-lifecycle';
 import { RealmAppearancePanel } from './realm-presentation-panel';
@@ -54,21 +37,13 @@ import { RealmHomeHeader } from './realm-home-header';
 import { RealmCatalogueCurrent } from './realm-catalogue-current';
 import { Button } from '@rezics/ui/shadcn/button';
 import { CommunityManagementContext, type CommunityManagementOperation } from './community-management';
-import { AuthoringDepartureBoundary } from '../threads/authoring-departure';
-import { nativeRealmHomeShelves, type NativeRealmHomeOperations } from './realm-home-native';
 import { realmReadingReturn, realmReadingSelection, realmShelfReturn } from './realm-reading-return';
-import { withSubjectVisitReturn } from '../features/pages/subject-visit-navigation';
-import { requestLanguages } from '../kernel/languages';
-import {
-  useRealmCompletionFocus,
-  isRealmMembershipCompletion,
-  isRealmPublicationCompletion,
-  type RealmCompletion,
-  type RealmCompleted,
-  type RealmPublicationCompletion,
-  type RealmCompletionFocus,
-} from './realm-community/completion';
-import type { PublicationChange } from './publication-controls';
+import type { RealmCompleted, RealmPublicationCompletion } from './realm-community/completion';
+import type { CommunityVisitApplication, RealmShelfTransport } from './contract/visit';
+import { useRealmPublicationCompletion } from './application/publication-completion';
+import { useSpaceReadingReturn, useSupplyingShelfCompletion } from './space-reading';
+
+export type { RealmShelfTransport } from './contract/visit';
 
 export type { RealmPublicationCompletion } from './realm-community/completion';
 
@@ -83,6 +58,7 @@ function subjectTitle(subject: PublishedSubject, locale: string): string {
 }
 
 function Published({
+  application,
   realm,
   control,
   editable,
@@ -95,6 +71,7 @@ function Published({
   current,
   onCommand,
 }: {
+  application: CommunityVisitApplication;
   returnFor: (id: string) => string | undefined;
   current: () => boolean;
   realm: RealmHome;
@@ -107,7 +84,7 @@ function Published({
   focus: ReturnType<typeof useShelfContinuationFocus>;
   onCommand?: ((event: React.MouseEvent<HTMLButtonElement>) => void) | undefined;
 }) {
-  const locale = getLocale();
+  const locale = application.locale;
   const titled: { subject: PublishedSubject; cover: CoverSubject }[] = realm.published.map((subject) => ({
     subject,
     cover: { id: subject.id, title: subjectTitle(subject, locale), types: subject.types },
@@ -151,12 +128,13 @@ function Published({
               className="h-full focus-visible:outline-2 focus-visible:outline-ring"
             >
               <CoverCard
-                href={withSubjectVisitReturn(
-                  `${subjectHref({ id: subject.id, label: subjectTitle(subject, locale) }, locale).href}?realm=${encodeURIComponent(realm.id)}`,
+                href={application.publicationHref(
+                  { id: subject.id, label: cover.title },
+                  realm.id,
                   returnFor(subject.id) ?? '',
                   locale,
                 )}
-                cover={{ subject: cover, cover: subject.cover, src: coverSrc }}
+                cover={{ subject: cover, cover: subject.cover, src: application.coverSrc }}
                 title={cover.title}
                 secondary={subject.typeName}
                 menuLabel={m.realm_publication_actions({ title: cover.title })}
@@ -196,18 +174,9 @@ function Published({
   );
 }
 
-export type RealmShelfTransport = {
-  boards: (input: { cursor?: string; credentialMode: ReadCredentialMode }) => Promise<ShelfPage<RealmBoard>>;
-  publications: (input: {
-    cursor?: string;
-    credentialMode: ReadCredentialMode;
-  }) => Promise<ShelfPage<PublishedSubject>>;
-  change?: PublicationSend;
-  prepare?: PublicationPrepare;
-};
-
 /** One reusable shelf region; its stories exercise the same controls used on Space and Realm pages. */
 export function RealmShelf({
+  application,
   realm,
   transport,
   frozen = false,
@@ -217,6 +186,7 @@ export function RealmShelf({
   onCompleted,
   shelfGeneration = 0,
 }: {
+  application: CommunityVisitApplication;
   returnTo?: string;
   onReadingChange?: (href: string) => void;
   onCompleted?: RealmCompleted<RealmPublicationCompletion>;
@@ -226,9 +196,9 @@ export function RealmShelf({
   search?: EntityPickerSearch | undefined;
   shelfGeneration?: number;
 }) {
-  const { state, csrfToken, subject: reader } = useSession();
+  const { state, csrfToken } = application.session;
   const lifetime = useSpacePageLifetime();
-  const locale = getLocale();
+  const locale = application.locale;
   const selection = realmReadingSelection(returnTo);
   const returnAddress = returnTo?.split('#', 1)[0];
   const visit = `${realm.id}:${returnAddress ?? ''}:${selection.node ?? ''}:${selection.cursor ?? ''}`;
@@ -243,17 +213,7 @@ export function RealmShelf({
     };
   }, [lease]);
   const current = () => lease.active && lease.connected && (!lifetime || lifetime.current());
-  const captureFocus = useRealmCompletionFocus();
-  const commandFocus = useRef<RealmCompletionFocus | null>(null);
-  const currentControl = useRef<ReturnType<typeof usePublicationControls> | null>(null);
-  const [completed, setCompleted] = useState<{
-    input: PublicationChange;
-    head: string;
-    intent: object;
-    current: () => boolean;
-    focus: RealmCompletionFocus | null;
-  } | null>(null);
-  const delivered = useRef(new WeakSet<object>());
+  const reading = useMemo(() => application.reading(realm.id, locale), [application.reading, realm.id, locale]);
   const boards = useShelfList(
     {
       items: realm.boards,
@@ -261,9 +221,9 @@ export function RealmShelf({
       unavailable: realm.unavailableBoards ?? 0,
       credentialMode: realm.credentialMode ?? 'anonymous',
     },
-    transport?.boards ?? ((input) => readRealmBoards({ data: { realmId: realm.id, ...input } })),
+    transport?.boards ?? reading.transport.boards,
     lifetime,
-    !transport?.boards,
+    !transport?.boards && reading.requireReaderOrigin,
     shelfGeneration,
   );
   const publications = useShelfList(
@@ -273,9 +233,9 @@ export function RealmShelf({
       unavailable: realm.unavailablePublished ?? 0,
       credentialMode: realm.credentialMode ?? 'anonymous',
     },
-    transport?.publications ?? ((input) => readRealmPublications({ data: { realmId: realm.id, ...input } })),
+    transport?.publications ?? reading.transport.publications,
     lifetime,
-    !transport?.publications,
+    !transport?.publications && reading.requireReaderOrigin,
     shelfGeneration,
   );
   const boardFocus = useShelfContinuationFocus(boards, m.realm_boards_heading());
@@ -359,91 +319,18 @@ export function RealmShelf({
     selection.node === 'publications' &&
     Boolean(selection.cursor) &&
     (!publications.continuation || publications.busy);
-  const sendPublication = useCallback<PublicationSend>(
-    (input) =>
-      transport?.change
-        ? transport.change(input)
-        : csrfToken
-          ? changeRealmPublication({ data: input, headers: { 'X-CSRF-Token': csrfToken } })
-          : Promise.resolve({ kind: 'denied' }),
-    [transport?.change, csrfToken],
-  );
-  const preparePublication = useCallback<PublicationPrepare>(
-    (input) => (transport?.prepare ? transport.prepare(input) : readRealmPublicationPreparation({ data: input })),
-    [transport?.prepare],
-  );
-  const publicationSource = useMemo(() => ({ realmId: realm.id }), [realm.id]);
-  const control = usePublicationControls(
-    realm.id,
-    sendPublication,
-    (input, target, head) => {
-      publications.update((previous) => ({
-        ...previous,
-        items:
-          input.action === 'publish'
-            ? [{ ...target, publicationId: head }, ...previous.items.filter((subject) => subject.id !== target.id)]
-            : previous.items.filter((subject) => subject.id !== target.id),
-      }));
-      if (!onCompleted || !current() || !control.current()) return;
-      const intent = {};
-      const draftCurrent = control.current;
-      setCompleted({
-        input,
-        head,
-        intent,
-        focus: commandFocus.current,
-        current: () => {
-          const live = currentControl.current;
-          return (
-            current() &&
-            draftCurrent() &&
-            live?.target?.id === input.subjectId &&
-            live.action === input.action &&
-            live.outcome?.kind === 'saved' &&
-            live.outcome.head === head
-          );
-        },
-      });
-      // Use the existing shelf reader and its admission receipt, including the selected physical window.
-      if (selection.node === 'publications' && selection.cursor) void publications.restore(selection.cursor, intent);
-      else void publications.load(true, intent);
-    },
-    publications.items,
-    !frozen && state === 'signed-in' && Boolean(csrfToken),
-    reader ?? '',
-    preparePublication,
-    publicationSource,
-  );
-  currentControl.current = control;
-  useEffect(() => {
-    const receipt = publications.continuation;
-    if (
-      !completed ||
-      !completed.current() ||
-      publications.busy ||
-      publications.failure ||
-      receipt?.intent !== completed.intent ||
-      !receipt.current() ||
-      delivered.current.has(completed.intent)
-    )
-      return;
-    delivered.current.add(completed.intent);
-    const outcome = currentControl.current?.outcome;
-    const receiptCurrent = () =>
-      completed.current() && currentControl.current?.outcome === outcome && receipt.current();
-    const result: RealmPublicationCompletion = {
-      realmId: realm.id,
-      subjectId: completed.input.subjectId,
-      action: completed.input.action,
-      head: completed.head,
-      current: receiptCurrent,
-      focusEligible: () => receiptCurrent() && !!completed.focus?.eligible(),
-    };
-    const eligible = result.focusEligible();
-    const handedOff = onCompleted?.(result) === true;
-    if (eligible && !handedOff && result.current()) completed.focus?.restore(publicationFocus.boundaryRef.current);
-    else completed.focus?.cancel();
-  }, [completed, publications.continuation, publications.busy, publications.failure, onCompleted]);
+  const { control, captureCommandFocus } = useRealmPublicationCompletion({
+    realm,
+    application,
+    transport,
+    reading,
+    publications,
+    selection,
+    current,
+    frozen,
+    publicationFocus,
+    onCompleted,
+  });
   return (
     <>
       <RealmCommunityBoards
@@ -464,6 +351,7 @@ export function RealmShelf({
         }
       />
       <Published
+        application={application}
         returnFor={(id) => returnFor('publications', id)}
         current={current}
         focus={publicationFocus}
@@ -474,9 +362,7 @@ export function RealmShelf({
           unavailablePublished: publications.unavailable,
         }}
         control={control}
-        onCommand={(event) => {
-          commandFocus.current = captureFocus(event);
-        }}
+        onCommand={captureCommandFocus}
         editable={!frozen && !publicationRestoring && state === 'signed-in' && Boolean(csrfToken)}
         complete={!publicationRestoring && !publications.next && !publications.failure}
         refresh={() => publications.load(true)}
@@ -497,16 +383,16 @@ export function RealmShelf({
 
 /** A changed actor or container discards private controllers before the new viewer can render them. */
 export function SpacePage(props: {
+  application: CommunityVisitApplication;
   page: SpacePageData;
   realmManagement?: ReactNode;
   realmAppearance?: ReactNode;
   lifecycleAdapter?: ContainerLifecycleAdapter;
   realmClaimAdapter?: RealmClaimAdapter;
-  nativeOperations?: NativeRealmHomeOperations;
 }) {
-  const { state, subject, csrfToken } = useSession();
-  const location = useLocation();
-  const locale = getLocale();
+  const { application } = props;
+  const { state, subject, csrfToken } = application.session;
+  const locale = application.locale;
   const viewer = state === 'signed-in' && subject ? subject : null;
   const lifetime = useSpacePageLifetime();
   const retired = useRef(new WeakSet<SpacePageData>());
@@ -518,8 +404,8 @@ export function SpacePage(props: {
     subject,
     csrfToken,
     locale,
-    route: location.publicHref,
-    operations: props.nativeOperations,
+    route: application.href,
+    operations: application.operationsIdentity,
     binding: nativeHomeBinding(props.page),
     identity: nativeHomeSourceIdentity(props.page),
   });
@@ -531,8 +417,8 @@ export function SpacePage(props: {
       previous.subject !== subject ||
       previous.csrfToken !== csrfToken ||
       previous.locale !== locale ||
-      previous.route !== location.publicHref ||
-      previous.operations !== props.nativeOperations;
+      previous.route !== application.href ||
+      previous.operations !== application.operationsIdentity;
     const nextIdentity = nativeHomeSourceIdentity(props.page);
     source.current = {
       page: props.page,
@@ -544,8 +430,8 @@ export function SpacePage(props: {
       subject,
       csrfToken,
       locale,
-      route: location.publicHref,
-      operations: props.nativeOperations,
+      route: application.href,
+      operations: application.operationsIdentity,
       binding: nativeHomeBinding(props.page),
       identity: nextIdentity,
     };
@@ -559,8 +445,8 @@ export function SpacePage(props: {
       source.current.subject !== subject ||
       source.current.csrfToken !== csrfToken ||
       source.current.locale !== locale ||
-      source.current.route !== location.publicHref ||
-      source.current.operations !== props.nativeOperations)
+      source.current.route !== application.href ||
+      source.current.operations !== application.operationsIdentity)
   )
     retired.current.add(props.page);
   if (
@@ -587,8 +473,9 @@ export function SpacePage(props: {
   const shellRevision = native
     ? `native-home:${nativeShellLifetime}:${source.current.revision}`
     : `${lifetime?.scopeKey ?? 'standalone'}:${source.current.revision}`;
+  const Departure = application.Departure;
   return (
-    <AuthoringDepartureBoundary>
+    <Departure>
       <SpaceHome
         key={`${props.page.space.id}:${props.page.realm?.id ?? ''}:${viewer ?? state}:${shellRevision}`}
         {...props}
@@ -596,53 +483,23 @@ export function SpacePage(props: {
         signedOut={state === 'signed-out'}
         shelfGeneration={source.current.shelfGeneration}
       />
-    </AuthoringDepartureBoundary>
+    </Departure>
   );
 }
 
 function SpaceHome({
+  application,
   page,
   realmManagement,
   realmAppearance,
   lifecycleAdapter,
   realmClaimAdapter,
-  nativeOperations,
   viewer,
   signedOut,
   shelfGeneration,
 }: Parameters<typeof SpacePage>[0] & { viewer: string | null; signedOut: boolean; shelfGeneration: number }) {
-  const location = useLocation();
-  const localizedHref = /^\/(en|zh-Hant|zh-Hans|ja|ko|fr|de|es)\//.test(location.publicHref)
-    ? location.publicHref
-    : `/${getLocale()}${location.publicHref}`;
-  const initialReturn =
-    realmReadingReturn(localizedHref, getLocale()) ??
-    (page.realm ? `/${getLocale()}/realms/${page.realm.id}` : localizedHref.split(/[?#]/, 1)[0]!);
-  const [readingReturn, setReadingReturn] = useState(initialReturn);
-  const readingReturnRef = useRef(readingReturn);
-  readingReturnRef.current = readingReturn;
-  const updateReadingReturn = useCallback((href: string) => {
-    if (href === readingReturnRef.current) return;
-    const current = realmReadingSelection(readingReturnRef.current);
-    const next = realmReadingSelection(href);
-    const regionId =
-      current.node === 'boards'
-        ? 'realm-boards-heading'
-        : current.node === 'publications'
-          ? 'realm-published-heading'
-          : undefined;
-    if (
-      regionId &&
-      current.node === next.node &&
-      current.cursor === next.cursor &&
-      current.focus &&
-      current.focus !== regionId &&
-      next.focus === regionId
-    )
-      return;
-    readingReturnRef.current = href;
-    setReadingReturn(href);
-  }, []);
+  const { localizedHref, initialReturn, readingReturn, readingReturnRef, updateReadingReturn, setReadingReturn } =
+    useSpaceReadingReturn(page, application.href, application.locale);
   const pageRoot = useRef<HTMLElement | null>(null);
   const lifetime = useSpacePageLifetime();
   const catalogueRevision = useRef(0);
@@ -656,21 +513,7 @@ function SpaceHome({
   } | null>(null);
   const realmId = page.realm?.id;
   const nativeObservation = page.realm?.nativeObservation;
-  const locale = getLocale();
-  const nativeShelves = useMemo(
-    () =>
-      nativeOperations && page.realm
-        ? nativeRealmHomeShelves(nativeOperations, {
-            realmId: page.realm.id,
-            languages: requestLanguages(locale),
-          })
-        : null,
-    [nativeOperations, page.realm?.id, locale],
-  );
-  const nativeShelfTransport = useMemo<RealmShelfTransport | undefined>(
-    () => nativeShelves ?? undefined,
-    [nativeShelves],
-  );
+  const locale = application.locale;
   const pageSource = page.realm?.continuity;
   const claimRead = claim?.realmId === realmId && claim?.pageSource === pageSource ? claim?.read : null;
   const onClaimRead = useCallback(
@@ -687,7 +530,7 @@ function SpaceHome({
     (state: 'removed' | 'orphaned') => {
       catalogueRevision.current++;
       if (!realmId) return;
-      updateReadingReturn(`/${getLocale()}/realms/${realmId}`);
+      updateReadingReturn(`/${application.locale}/realms/${realmId}`);
       restrictRealm((previous) =>
         previous?.id === realmId && previous.state === state ? previous : { id: realmId, state },
       );
@@ -718,57 +561,18 @@ function SpaceHome({
     (claimRead?.kind === 'ready'
       ? claimRead.snapshot.ownershipState === 'orphaned'
       : pageSource?.ownershipState === 'orphaned');
-  const onRealmCompleted = useCallback(
-    (receipt: RealmCompletion) => {
-      const realm = page.realm;
-      const sourceHref = realmReadingReturn(readingReturnRef.current, locale);
-      const routeHref = realmReadingReturn(initialReturn, locale);
-      if (
-        (!isRealmMembershipCompletion(receipt) && !isRealmPublicationCompletion(receipt)) ||
-        !realm ||
-        !lifetime ||
-        receipt.realmId !== realm.id ||
-        !receipt.current() ||
-        !receipt.focusEligible() ||
-        !lifetime.current() ||
-        !lifetime.matchesPage(page) ||
-        realmRemoved ||
-        orphaned ||
-        frozen ||
-        !readable ||
-        !sourceHref ||
-        !routeHref ||
-        sourceHref.split(/[?#]/u, 1)[0] !== routeHref.split(/[?#]/u, 1)[0]
-      )
-        return false;
-
-      const selection = realmReadingSelection(sourceHref);
-      if (!selection.node || !pageRoot.current) return false;
-      const regionId = selection.node === 'boards' ? 'realm-boards-heading' : 'realm-published-heading';
-      const heading = document.getElementById(regionId);
-      const shelf = heading?.closest('section[aria-labelledby]');
-      if (
-        !heading?.isConnected ||
-        !shelf ||
-        shelf.getAttribute('aria-labelledby') !== regionId ||
-        !pageRoot.current.contains(shelf)
-      )
-        return false;
-
-      const selected = selection.focus ? document.getElementById(selection.focus) : null;
-      const target = selected && shelf.contains(selected) ? selected : heading;
-      if (!target.isConnected || target.closest('[hidden], [inert], [aria-hidden="true"]')) return false;
-      target.focus({ preventScroll: true });
-      return (
-        target.isConnected &&
-        document.activeElement === target &&
-        receipt.current() &&
-        lifetime.current() &&
-        lifetime.matchesPage(page)
-      );
-    },
-    [frozen, initialReturn, lifetime, locale, orphaned, page, readable, realmRemoved],
-  );
+  const onRealmCompleted = useSupplyingShelfCompletion({
+    page,
+    lifetime,
+    locale,
+    initialReturn,
+    readingReturnRef,
+    pageRoot,
+    realmRemoved,
+    orphaned,
+    frozen,
+    readable,
+  });
   const managementRestricted = realmRemoved || orphaned || !readable;
   const setupAdmitted =
     !managementRestricted && setup?.kind === 'ready' && Object.values(setup.permitted).some(Boolean);
@@ -788,6 +592,8 @@ function SpaceHome({
     (!claimRead ||
       (claimRead.kind === 'ready' && !!pageSource && sameRealmClaimSource(pageSource, claimRead.snapshot)));
   const showCommunity = presentationCurrent && page.realm && page.realm.presentation?.state !== 'hidden';
+  const { Follow: FollowTargetControl, ResourceAccess: ResourceAccessLink, Heading: PageHeading } = application;
+  const coverSrc = application.coverSrc;
   const participation = !spaceRemoved ? (
     <section aria-label={m.space_follow_label()} className="flex flex-wrap items-start gap-3">
       {signedOut ? (
@@ -883,7 +689,7 @@ function SpaceHome({
           onReadingChange={updateReadingReturn}
           onCompleted={onRealmCompleted}
           shelfGeneration={shelfGeneration}
-          {...(nativeShelfTransport ? { transport: nativeShelfTransport } : {})}
+          application={application}
         />
       ) : null}
       {page.realm && !realmRemoved && (!nativeObservation || nativeObservation.actions.claim === 'admitted') ? (

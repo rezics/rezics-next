@@ -20,6 +20,21 @@ does not import the release barrel. Source compilation admits inspected document
 and keeps compiler values off the inspection graph. Extension validation stays native.
 Decision: fewest tests pin user-visible publication behaviour and named-state stories only;
 `compile.test.ts` covers imported-document inspection off the release barrel.
+`compiler-application.test.ts` pins the compiler application with a fake host and native bundled admission.
+
+## Compiler layers
+
+Release vocabulary, digest, catalogue formats and publication helpers are the contract
+(`@rezics/definitions/contract`, browser root). Compilation, release validation and
+catalogue artifact admission are one compiler application (`src/compiler/application.ts`)
+that takes a host: Filter construction, safe-pattern evaluation, POSIX path and YAML parse.
+The native root, `/compile`, catalogue CLI and file store bind that host in
+`src/adapters/compiler-host.ts`. Nested nonempty Filter, pattern and catalogue operations
+close over the supplied application; `nativeCompiler` is a lazy singleton and does not
+replace another compiler. Publication-construction tests remain the causal coverage;
+`compiler-application.test.ts` pins nested host identity. Filter stays a compiler-owned
+capability, not a contract import. Exact release bytes, digests, pins, bounded expansion
+and safe-pattern admission are unchanged.
 
 ## Semantic language selection
 
@@ -1377,10 +1392,13 @@ compiler, with eight locale labels and inverse display data. It connects distinc
 source/canonical meanings without equivalence, merge or filter expansion;
 `schema:sameAs` external identity and exact mapping retain their own meanings.
 No measurement, cardinality or existing Book/anime/filter profile changes follow.
-`src/reviewed-vocabulary.json` is the finite authored seed input consumed by the
-explicit Importer operator tool; it contains citations and explicit metadata
-rights, not native IDs or publication authority. Released data and both web
-definition recordings are generated through the normal release/record scripts.
+`src/reviewed-vocabulary.json` is the finite authored seed input. The public
+entry `@rezics/definitions/reviewed-vocabulary` publishes that inventory as
+immutable, revision-bound data (`reviewed-vocabulary@1`): citations and
+metadata rights, not native IDs or publication authority. Importer consumes
+this entry through its vocabulary port; it does not import the JSON privately.
+Released data and both web definition recordings are generated through the
+normal release/record scripts.
 The reviewed inventory includes the VNDB development-status scheme
 (`https://vndb.org/development-status`, codes 0/1/2), the VNDB release-completeness
 scheme (`https://rezics.com/schemes/vndb/release-types`, complete/partial/trial;

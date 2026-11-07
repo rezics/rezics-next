@@ -3,7 +3,7 @@ import { randomUUID } from 'node:crypto';
 import { createApp } from '../../src/http/app.ts';
 import { createKernel, createKernelAccessResolver } from '../../src/http/kernel.ts';
 import { openApiDocument } from '../../src/http/openapi.ts';
-import { ProblemError } from '../../src/http/problem.ts';
+import { ProblemError } from '../../src/http/problem-error.ts';
 import { personalLibraryRoutes } from '../../src/library/personal-routes.ts';
 import {
   createShelfMaintenanceOps,
@@ -12,7 +12,8 @@ import {
 import { admitShelfRead } from '../../src/library/shelf-admission.ts';
 import { type ShelfEntry, type ShelfReads, type ShelfSummary } from '../../src/library/shelf-contract.ts';
 import type { definitionRoutes } from '../../src/semantic/http/definitions.ts';
-import { AuthenticationError, type Actor } from '../../src/request/access.ts';
+import { AuthenticationError } from '../../src/request/authentication-error.ts';
+import { type Actor } from '../../src/request/access.ts';
 import { newId, routeOf } from '../../src/route/route.ts';
 import { accountToken, admittedAccess } from '../support/admitted-access.ts';
 import { capture, openGrowthDatabase, type GrowthDatabase } from '../support/growth.ts';

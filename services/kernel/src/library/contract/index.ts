@@ -15,6 +15,7 @@ export {
 export type {
   CanonicalCollectionCandidate,
   CanonicalCollectionPrefix,
+  CanonicalSourceReceivingCost,
   CollectionAliasProgress,
   CollectionSource,
   CollectionSourceAfter,
@@ -25,13 +26,19 @@ export type {
   CollectionSourceDriverOrdinal,
   CollectionSourceEvidence,
   CollectionSourceObservation,
+  CollectionSourceRawKey,
   CollectionSourceStamp,
   CollectionSubjectMembership,
   ContainsCollectionSubject,
+  NativeAccountSourceIdentity,
+  NativeCollectionOrdinalPageBound,
   NativeIdentityBasis,
   NativeOrdinalFrontier,
   NativeOrdinalKey,
   NativeOrdinalRow,
+  NativeOutputActivation,
+  NativePublicOutputIdentity,
+  NativeSourceIdentity,
   PrepareCollectionSource,
   PreparedCollectionSource,
   RawOrdinalCollectionPrefix,
@@ -45,9 +52,40 @@ export type {
   OccurrenceDraft,
   OrderedOccurrence,
 } from './membership.ts';
+export { SESSION_LIMITS, emptyProgressOperationCatalog, emptySessionWork } from './progress-operations.ts';
 export type {
+  ProgressAccessSqlCatalog,
+  ProgressCommandSqlCatalog,
+  ProgressOperationAdmission,
+  ProgressOperationApplication,
+  ProgressOperationCatalog,
+  ProgressSemanticSqlCatalog,
+  ProgressSessionSqlCatalog,
+  ProgressShelfStatement,
+  ProgressSqlDescriptor,
+  SessionCommandDeclaration,
+  SessionCommandOriginal,
+  SessionOperationKind,
+  SessionReadDeclaration,
+  SessionReadInput,
+  SessionReadKind,
+  SessionSqlKind,
+  SessionWork,
+} from './progress-operations.ts';
+export type {
+  CollectionAuthorizationPreparation,
+  CollectionListFilter,
+  SpecializeCollectionListInput,
+} from './collection-policy.ts';
+export { EMPTY_COLLECTION_AUTHORIZATION_PREPARATION } from './collection-policy.ts';
+export type {
+  CollectionPublicationNativeCapability,
+  CollectionRuleAuthorityCapability,
   AuthorizationCapability,
   AuthorizationDecision,
+  CollectionSourceFactory,
+  CollectionSourceLimits,
+  CollectionSourceWorkCapability,
   ContentPublicationCapability,
   IdentityDisclosureCapability,
   IdentityNativeCapability,
@@ -58,6 +96,9 @@ export type {
   LibraryCoverCredit,
   LibraryCoverSummary,
   LibraryRelease,
+  MembersWorkDefinitionCapability,
+  NativeCollectionWorkFactory,
+  NativeCollectionWorkHandle,
   PreparedSearchScope,
   QueryText,
   SearchFilterLeafKind,
@@ -73,3 +114,90 @@ export type {
   PublicationAdmissionResult,
   SourceCaptureResult,
 } from './results.ts';
+
+export {
+  FollowCountUnavailableError,
+  FollowCountTargetAbsentError,
+  FollowCountReadRefusedError,
+  FOLLOW_COUNT_ACCOUNT_EVENTS,
+} from './follow-counts.ts';
+export type {
+  CountKey,
+  CountReplacement,
+  CountDestination,
+  FollowTargetType,
+  FollowCountTarget,
+  FollowCountPage,
+  FollowCountHealthObservation,
+  FollowCountReadPorts,
+  FollowCountReads,
+  FollowCountDeliveryPorts,
+  FollowCountPartitionPorts,
+  FollowCountRuntime,
+} from './follow-counts.ts';
+
+export type {
+  CollectionVisibility,
+  CollectionState,
+  CollectionRow,
+  Collection,
+  CollectionDraft,
+  CollectionChanges,
+  CollectionMemberRow,
+  CollectionMember,
+  CollectionMemberDraft,
+  MemberPosition,
+  MemberNeighbors,
+  MemberPage,
+  MemberReordering,
+} from './collection.ts';
+
+export * from './collection-history.ts';
+export type {
+  CollectionMetadataHistorySqlPlan,
+  CollectionMetadataHistoryCapturePlan,
+  CollectionWriteContext,
+  CollectionHistoryInitializeInput,
+  CollectionHistoryCaptureInput,
+  CollectionMutationPorts,
+  CollectionMutationApplication,
+} from './collection-mutation.ts';
+
+export type {
+  CollectionCleanupPage,
+  CollectionDeletionKey,
+  CollectionRetirementEpisode,
+  CollectionRetentionNativeCapability,
+} from './collection-mutation.ts';
+
+export const COLLECTION_PUBLICATION_COMMAND = 'library.collection.publication.begin';
+export const COLLECTION_PUBLICATION_WORKFLOW = 'library.collectionPublication';
+
+export type {
+  MembersWorkDefinition,
+  PreparationLocator,
+  PreparationWorkCapability,
+  PreparationSourcePrefix,
+  ScopeWorkCapability,
+} from './preparation-work.ts';
+
+export { OWNER_FILTER_CLOSURE_REFERENCE_LIMIT, OWNER_FILTER_CLOSURE_ORIGINAL_LIMIT } from './preparation-limits.ts';
+
+export * from './copy-values.ts';
+export * from './copy-application.ts';
+export * from './copy-operations.ts';
+export * from './presentation.ts';
+export type { BuiltinMemberCapability, BuiltinMemberOptions } from './builtin-presentation.ts';
+
+export type {
+  ContinueActor,
+  ContinueListQuery,
+  ContinuePage,
+  ContinueProgressPresentation,
+  ContinueProgressRecording,
+  ContinueReads,
+  ContinueSession,
+  ContinueSessionMeasure,
+  ContinueSubject,
+  ContinueSubjectFacts,
+} from './continue.ts';

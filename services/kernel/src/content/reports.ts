@@ -2,10 +2,14 @@ import { communityReportReadCheck, communityReportTargetFacts } from '../communi
 import { ProblemError } from '../http/problem.ts';
 import { createHmac } from 'node:crypto';
 import type { Pool } from 'pg';
-import { deadlineClient, within } from '../access/authenticate.ts';
-import { createResourceAnonymousEligibility } from '../access/eligibility.ts';
-import { commandAccessContext } from '../access/command-admission.ts';
-import { resourceAuthorization } from '../access/resource-authorization.ts';
+import {
+  deadlineClient,
+  within,
+  createResourceAnonymousEligibility,
+  commandAccessContext,
+  resourceAuthorization,
+  readAccount,
+} from './access-port.ts';
 import {
   authoritativeTimeValue,
   CommandUnavailableError,
@@ -19,7 +23,6 @@ import {
   type PrincipalCommandReceipt,
 } from '../command/command.ts';
 import { discardConnection, withConnection } from '../database/pool.ts';
-import { readAccount } from '../access/account-data.ts';
 import { anonymousCommandTarget, anonymousRequestDigest, requestDigest } from '../http/request.ts';
 import { readPartition } from '../partition/partition.ts';
 import { accessCheck, type Access, type AccessClient, type AccessCheck, type Actor } from '../request/access.ts';

@@ -1,4 +1,4 @@
-import { createResourcePublicEligibility } from '../access/public-eligibility.ts';
+import { zoneResourceAccess } from './resource-access-port.ts';
 import { readZoneHead, type ZoneHead, zoneOwnerIsActive } from './resource-store.ts';
 
 /** Separate lifecycle evidence survives all ordinary resource state changes. */
@@ -15,7 +15,7 @@ export function zoneReadable(row: ZoneHead): boolean {
 }
 /** Prepare outside checkout; current head and public floor are verified on the reader's RR client at native T. */
 export function zoneReadEligibility(resource: { route: number; id: string }) {
-  return createResourcePublicEligibility({
+  return zoneResourceAccess().createPublicEligibility({
     resource,
     action: 'zone:read',
     async prepare({ pool }) {

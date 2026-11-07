@@ -11,6 +11,7 @@ import {
   type ManagedAccountsResult,
 } from '../../settings/managed-accounts-read';
 import { managedAccountsExample, managedAccountsIO, managedViewer } from './managed-accounts.fixtures';
+import { settingsContent } from '../../settings/adapters/presentation';
 
 type Scenario =
   | 'independent'
@@ -108,6 +109,7 @@ function Example({ scenario = 'independent' }: { scenario?: Scenario }) {
         viewerId={managedViewer}
         settingsHref={`/${getLocale()}/settings?panel=compact#account`}
         io={io}
+        initials={settingsContent.initials}
       />
     </div>
   );
@@ -430,6 +432,7 @@ function LongInventoryExample({ preparing = false, empty = false, waiting = fals
         viewerId={managedViewer}
         settingsHref={`/${getLocale()}/settings?panel=compact#account`}
         io={io}
+        initials={settingsContent.initials}
       />
     </div>
   );

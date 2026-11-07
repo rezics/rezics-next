@@ -1,9 +1,9 @@
 import { useLocation, useRouter } from '@tanstack/react-router';
 import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { Link } from '@tanstack/react-router';
-import { useOperation } from '../../kernel/exposure';
+import { useOperation } from '../application';
 import { m } from '../../paraglide/messages.js';
-import type { useSession } from '../../session/query';
+import type { useSession } from '../application';
 import type { DiaryPage } from '@rezics/client';
 import type { PrivateDiaryLoad, PrivateDiaryLoadResult } from './server';
 import { cancelPrivateDiary } from './server';

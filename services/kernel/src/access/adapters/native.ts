@@ -11,6 +11,7 @@ import { withReadTransaction } from '../../semantic/read.ts';
 import { activeIdentitySourceConsumerMaintenance } from '../../semantic/identity-source-consumer-maintenance.ts';
 import { IDENTITY_HISTORY_ORIGINAL_SOURCE_DECLARATION } from '../../semantic/identity-source-consumer-custody.ts';
 import { collectionKindInputWork } from '../../library/access-capabilities.ts';
+import { createCollectionPolicyPorts } from './collection-policy.ts';
 import { collectionKindPreparationNativeWork, observeAccountErasureSearch } from '../../search/access-capabilities.ts';
 import type {
   AccessApplicationPorts,
@@ -182,6 +183,7 @@ export function createNativeAccessPorts(
         return acknowledgeErasure({ pool: asPool(pool) }, { accountId, participant: 'access', outcome: 'erased' });
       },
     },
+    collectionPolicy: createCollectionPolicyPorts(),
     clock: () => new Date(),
   };
 }

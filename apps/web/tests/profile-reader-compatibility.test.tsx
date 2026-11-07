@@ -4,6 +4,10 @@ import { act, StrictMode, createElement, type ReactNode } from 'react';
 import * as start from '../.storybook/react-start';
 import type { ProfileReadResult, ProfileSaveResult, ProfileValues } from '../src/settings/profile-data';
 import type { ProfileAttempt, ProfileEditor } from '../src/settings/profile-write';
+import { createBrowserSettingsAmbient } from '../src/settings/adapters/ambient';
+import { performanceAmbientTree } from './performance-ambient';
+
+const settingsAmbient = createBrowserSettingsAmbient();
 
 type Deferred<T> = {
   promise: Promise<T>;
@@ -178,19 +182,31 @@ test('the connected Profile and Public activity journey shares safe reads and pe
   let root: import('react-dom/client').Root | undefined;
   let client: import('@tanstack/react-query').QueryClient | undefined;
   try {
-    const [reactDom, query, routerApi, sessionApi, profileApi, activityApi, hookApi, accountApi, serverDom, messages] =
-      await Promise.all([
-        import('react-dom/client'),
-        import('@tanstack/react-query'),
-        import('@tanstack/react-router'),
-        import('../src/session/query'),
-        import('../src/settings/profile'),
-        import('../src/settings/public-views'),
-        import('../src/settings/profile-write-query'),
-        import('../src/accounts/profile-editor/editor'),
-        import('react-dom/server'),
-        import('../src/paraglide/messages.js'),
-      ]);
+    const [
+      reactDom,
+      query,
+      routerApi,
+      sessionApi,
+      profileApi,
+      settingsContent,
+      activityApi,
+      hookApi,
+      accountApi,
+      serverDom,
+      messages,
+    ] = await Promise.all([
+      import('react-dom/client'),
+      import('@tanstack/react-query'),
+      import('@tanstack/react-router'),
+      import('../src/session/query'),
+      import('../src/settings/profile'),
+      import('../src/settings/adapters/presentation'),
+      import('../src/settings/public-views'),
+      import('../src/settings/profile-write-query'),
+      import('../src/accounts/profile-editor/editor'),
+      import('react-dom/server'),
+      import('../src/paraglide/messages.js'),
+    ]);
     const { createRoot } = reactDom;
     const { QueryClient, QueryClientProvider } = query;
     const { createMemoryHistory, createRootRoute, createRoute, createRouter, Outlet, RouterProvider } = routerApi;
@@ -208,7 +224,7 @@ test('the connected Profile and Public activity journey shares safe reads and pe
     let nativeProfile = profile();
 
     function Probe() {
-      const result = useProfileEditor();
+      const result = useProfileEditor(settingsContent.mediaFailure);
       surfaceEditors.push(result.editor);
       currentEditor = result.editor;
       currentReadable = result.readable;
@@ -220,8 +236,8 @@ test('the connected Profile and Public activity journey shares safe reads and pe
       return createElement(
         'main',
         null,
-        createElement(ProfileSection),
-        createElement(PublicViewsSection),
+        createElement(ProfileSection, { content: settingsContent.settingsContent }),
+        createElement(PublicViewsSection, { mediaFailure: settingsContent.mediaFailure }),
         createElement(Probe),
         createElement(Probe),
       );
@@ -323,7 +339,16 @@ test('the connected Profile and Public activity journey shares safe reads and pe
     expect(biography?.value).toBe('Current organization biography');
     expect(biography?.disabled).toBe(true);
     expect(
-      renderToStaticMarkup(createElement(ProfileCard, { editor: readOnlyEditor, writable: false, readable: true })),
+      renderToStaticMarkup(
+        performanceAmbientTree(
+          createElement(ProfileCard, {
+            content: settingsContent.settingsContent,
+            editor: readOnlyEditor,
+            writable: false,
+            readable: true,
+          }),
+        ),
+      ),
     ).toContain(avatarId);
     expect(host.innerHTML).toContain('organization.example.test');
     expect(publicSwitch(m.settings_public_reviews()).getAttribute('aria-checked')).toBe('true');
@@ -358,7 +383,9 @@ test('the connected Profile and Public activity journey shares safe reads and pe
     try {
       Date.now = () => readRetryAt;
       remountedMarkup = renderToStaticMarkup(
-        createElement(PublicViewsCard, { editor: readOnlyEditor, writable: false, readable: true }),
+        performanceAmbientTree(
+          createElement(PublicViewsCard, { editor: readOnlyEditor, writable: false, readable: true }),
+        ),
       );
     } finally {
       Date.now = actualNow;
@@ -753,6 +780,7 @@ test('the connected Profile and Public activity journey shares safe reads and pe
     const standaloneWrites: ProfileAttempt[] = [];
     const standalone = new AccountProfileEditor(
       {
+        ambient: settingsAmbient,
         read: async () => ({ ...nativeProfile, displayName: 'Standalone Accounts edit' }),
         save: async (attempt) => {
           standaloneWrites.push(attempt);
@@ -762,11 +790,13 @@ test('the connected Profile and Public activity journey shares safe reads and pe
       nativeProfile,
     );
     const injectedMarkup = renderToStaticMarkup(
-      createElement(
-        'div',
-        null,
-        createElement(ProfileCard, { editor: standalone }),
-        createElement(PublicViewsCard, { editor: standalone }),
+      performanceAmbientTree(
+        createElement(
+          'div',
+          null,
+          createElement(ProfileCard, { content: settingsContent.settingsContent, editor: standalone }),
+          createElement(PublicViewsCard, { editor: standalone }),
+        ),
       ),
     );
     expect(injectedMarkup).toContain(`value="${nativeProfile.displayName}"`);
@@ -778,21 +808,30 @@ test('the connected Profile and Public activity journey shares safe reads and pe
       ),
     ).toBe(true);
     const hiddenMarkup = renderToStaticMarkup(
-      createElement(
-        'div',
-        null,
-        createElement(ProfileCard, { editor: standalone, writable: false }),
-        createElement(PublicViewsCard, { editor: standalone, writable: false }),
+      performanceAmbientTree(
+        createElement(
+          'div',
+          null,
+          createElement(ProfileCard, { content: settingsContent.settingsContent, editor: standalone, writable: false }),
+          createElement(PublicViewsCard, { editor: standalone, writable: false }),
+        ),
       ),
     );
     expect(hiddenMarkup).not.toContain('Current organization biography');
     expect(hiddenMarkup).not.toContain('role="switch"');
     const readableMarkup = renderToStaticMarkup(
-      createElement(
-        'div',
-        null,
-        createElement(ProfileCard, { editor: standalone, writable: false, readable: true }),
-        createElement(PublicViewsCard, { editor: standalone, writable: false, readable: true }),
+      performanceAmbientTree(
+        createElement(
+          'div',
+          null,
+          createElement(ProfileCard, {
+            content: settingsContent.settingsContent,
+            editor: standalone,
+            writable: false,
+            readable: true,
+          }),
+          createElement(PublicViewsCard, { editor: standalone, writable: false, readable: true }),
+        ),
       ),
     );
     expect(readableMarkup).toContain(nativeProfile.biography);
@@ -833,6 +872,7 @@ test('matching Profile and public-activity reads remain visibly unconfirmed in t
     const attempts: ProfileAttempt[] = [];
     const editor = new ProfileEditor(
       {
+        ambient: settingsAmbient,
         read: async () => {
           reads++;
           return current;
@@ -854,7 +894,7 @@ test('matching Profile and public-activity reads remain visibly unconfirmed in t
     const original = editor.snapshot().attempt!;
     await editor.reload();
     const state = editor.snapshot();
-    const markup = renderToStaticMarkup(createElement(ProfileFeedback, { editor, scope }));
+    const markup = renderToStaticMarkup(performanceAmbientTree(createElement(ProfileFeedback, { editor, scope })));
     expect([reads, attempts.length, state.attempt, state.phase, state.acknowledged]).toEqual([
       1,
       1,

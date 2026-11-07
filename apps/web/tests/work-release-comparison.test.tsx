@@ -10,6 +10,7 @@ mock.module('cloudflare:workers', () => ({ env: {} }));
 mock.module('@tanstack/react-start', () => start);
 mock.module('@tanstack/react-start/server', () => start);
 const { GameReader } = await import('../src/features/catalogue/game-reader/view');
+const { isolatedWorkReading } = await import('../src/features/catalogue/work-reading-port');
 const { m } = await import('../src/paraglide/messages.js');
 
 async function mounted() {
@@ -66,6 +67,7 @@ async function mounted() {
             source: fixture,
             reader: null,
             transport,
+            reading: isolatedWorkReading,
           }),
         ),
       ),

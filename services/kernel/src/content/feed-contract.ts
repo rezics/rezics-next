@@ -4,7 +4,7 @@ import { t } from 'elysia';
 import type { Static } from 'typebox';
 import { FilterError, parseDiscoveryFilter } from '@rezics/filter';
 import { ProblemError } from '../http/problem.ts';
-import { SubjectSummarySchema } from '../semantic/http/summaries.ts';
+import { SubjectSummarySchema } from '../semantic/adapters/public-summary-schema.ts';
 import type { ThreadView } from './reads.ts';
 import type { ItemView } from './model.ts';
 import type {
@@ -15,12 +15,13 @@ import type {
 } from '../search/index.ts';
 import type { CollectionResourceView } from '../library/collection-reads.ts';
 import { CollectionDiscoverySummarySchema } from '../search/index.ts';
-import { continuePageSchema } from '../library/transport-contract.ts';
+import { continuePageSchema } from '../library/adapters/continue-page.ts';
 import { REACTION_KINDS } from './events.ts';
 import type { ReactionCountFreshness, ViewerReactionKind } from './reads.ts';
 import type { ReactionTarget } from './reactions.ts';
 import { FeedParentContextSchema, FeedReviewContextSchema } from './feed-context-schema.ts';
 import type { FeedParentContext, FeedReviewContext } from './model.ts';
+import type { FeedItem, FeedPage } from './contract/index.ts';
 
 const closed = { additionalProperties: false } as const;
 const nullable = t.Union([t.String(), t.Null()]);
@@ -194,9 +195,10 @@ export type FeedConversationActivity =
       lastActivityAt: string | null;
     }>
   | Readonly<{ state: 'withheld' }>;
-export type ConversationActivityReplyCount = Readonly<
+type ConversationActivityReplyCount = Readonly<
   { kind: 'exact'; value: number } | { kind: 'lower-bound'; value: number }
 >;
+type FeedContentSummaryFields = FeedContentSummary;
 const conversationActivity = t.Unsafe<FeedConversationActivity>(
   t.Union([
     t.Object(
@@ -214,7 +216,7 @@ const conversationActivity = t.Unsafe<FeedConversationActivity>(
     t.Object({ state: t.Literal('withheld') }, closed),
   ]),
 );
-type FeedPostContentSummary = FeedContentSummary & { parentContext?: FeedParentContext };
+type FeedPostContentSummary = FeedContentSummaryFields & { parentContext?: FeedParentContext };
 function contentSummaryFields() {
   return memoizedValue(contentSummaryFields, () => ({
     author: t.Optional(FeedAuthorSchema),
@@ -229,7 +231,7 @@ function contentSummaryFields() {
 }
 function threadSummary() {
   return memoizedValue(threadSummary, () =>
-    t.Unsafe<Pick<ThreadView, 'id' | 'kind' | 'title' | 'createdAt'> & FeedContentSummary>(
+    t.Unsafe<Pick<ThreadView, 'id' | 'kind' | 'title' | 'createdAt'> & FeedContentSummaryFields>(
       t.Object(
         {
           ...contentSummaryFields(),
@@ -273,7 +275,7 @@ function discoveryReviewSummary() {
     t.Unsafe<
       PublicReviewDiscoverySummary &
         Pick<
-          FeedContentSummary,
+          FeedContentSummaryFields,
           | 'reactionTarget'
           | 'reactions'
           | 'viewerReaction'
@@ -350,109 +352,111 @@ const semanticKey = t.Object(
 );
 export function FeedItemSchema() {
   return memoizedValue(FeedItemSchema, () =>
-    t.Union([
-      t.Object(
-        {
-          ...common,
-          source: t.Literal('discovery'),
-          key: semanticKey,
-          summary: feedSubjectSummary(),
-          destination: destination('subject'),
-        },
-        closed,
-      ),
-      t.Object(
-        {
-          ...common,
-          source: t.Literal('discovery'),
-          key: key('accounts', 'account'),
-          summary: accountSummary,
-          destination: destination('account'),
-        },
-        closed,
-      ),
-      t.Object(
-        {
-          ...common,
-          source: t.Literal('discovery'),
-          key: key('commerce', 'collection'),
-          summary: discoveryCollectionSummary(),
-          destination: destination('collection'),
-        },
-        closed,
-      ),
-      t.Object(
-        {
-          ...common,
-          source: t.Literal('discovery'),
-          key: key('content', 'review'),
-          summary: discoveryReviewSummary(),
-          destination: destination('thread'),
-        },
-        closed,
-      ),
-      t.Object(
-        {
-          ...common,
-          source: t.Literal('discovery'),
-          key: key('content', 'space'),
-          summary: discoverySpaceSummary,
-          destination: spaceDestination,
-        },
-        closed,
-      ),
-      t.Object(
-        {
-          ...common,
-          source: t.Literal('continue'),
-          key: semanticKey,
-          summary: feedSubjectSummary(),
-          destination: destination('subject'),
-          continue: continuePageSchema().properties.subjects.items,
-        },
-        closed,
-      ),
-      t.Object(
-        {
-          ...common,
-          source: t.Literal('following'),
-          key: semanticKey,
-          summary: feedSubjectSummary(),
-          destination: destination('subject'),
-        },
-        closed,
-      ),
-      t.Object(
-        {
-          ...common,
-          source: t.Literal('following'),
-          key: key('content', 'thread'),
-          summary: threadSummary(),
-          destination: destination('thread'),
-        },
-        closed,
-      ),
-      t.Object(
-        {
-          ...common,
-          source: t.Literal('following'),
-          key: key('content', 'post'),
-          summary: postSummary(),
-          destination: postDestination,
-        },
-        closed,
-      ),
-      t.Object(
-        {
-          ...common,
-          source: t.Literal('following'),
-          key: key('library', 'collection'),
-          summary: collectionSummary,
-          destination: destination('collection'),
-        },
-        closed,
-      ),
-    ]),
+    t.Unsafe<FeedItem>(
+      t.Union([
+        t.Object(
+          {
+            ...common,
+            source: t.Literal('discovery'),
+            key: semanticKey,
+            summary: feedSubjectSummary(),
+            destination: destination('subject'),
+          },
+          closed,
+        ),
+        t.Object(
+          {
+            ...common,
+            source: t.Literal('discovery'),
+            key: key('accounts', 'account'),
+            summary: accountSummary,
+            destination: destination('account'),
+          },
+          closed,
+        ),
+        t.Object(
+          {
+            ...common,
+            source: t.Literal('discovery'),
+            key: key('commerce', 'collection'),
+            summary: discoveryCollectionSummary(),
+            destination: destination('collection'),
+          },
+          closed,
+        ),
+        t.Object(
+          {
+            ...common,
+            source: t.Literal('discovery'),
+            key: key('content', 'review'),
+            summary: discoveryReviewSummary(),
+            destination: destination('thread'),
+          },
+          closed,
+        ),
+        t.Object(
+          {
+            ...common,
+            source: t.Literal('discovery'),
+            key: key('content', 'space'),
+            summary: discoverySpaceSummary,
+            destination: spaceDestination,
+          },
+          closed,
+        ),
+        t.Object(
+          {
+            ...common,
+            source: t.Literal('continue'),
+            key: semanticKey,
+            summary: feedSubjectSummary(),
+            destination: destination('subject'),
+            continue: continuePageSchema().properties.subjects.items,
+          },
+          closed,
+        ),
+        t.Object(
+          {
+            ...common,
+            source: t.Literal('following'),
+            key: semanticKey,
+            summary: feedSubjectSummary(),
+            destination: destination('subject'),
+          },
+          closed,
+        ),
+        t.Object(
+          {
+            ...common,
+            source: t.Literal('following'),
+            key: key('content', 'thread'),
+            summary: threadSummary(),
+            destination: destination('thread'),
+          },
+          closed,
+        ),
+        t.Object(
+          {
+            ...common,
+            source: t.Literal('following'),
+            key: key('content', 'post'),
+            summary: postSummary(),
+            destination: postDestination,
+          },
+          closed,
+        ),
+        t.Object(
+          {
+            ...common,
+            source: t.Literal('following'),
+            key: key('library', 'collection'),
+            summary: collectionSummary,
+            destination: destination('collection'),
+          },
+          closed,
+        ),
+      ]),
+    ),
   );
 }
 export const FeedSourceStateSchema = t.Union([
@@ -463,22 +467,25 @@ export const FeedSourceStateSchema = t.Union([
 ]);
 export function FeedPageSchema() {
   return memoizedValue(FeedPageSchema, () =>
-    t.Object(
-      {
-        feedItems: t.Array(FeedItemSchema(), { maxItems: 20 }),
-        viewerPersonalActions: t.Optional(FeedViewerPersonalActionsSchema()),
-        next: nullable,
-        asOf: t.String({ format: 'date-time' }),
-        reactionsAsOf: t.Optional(t.Union([reactionFreshness, t.Null()])),
-        sources: t.Object(
-          { discovery: FeedSourceStateSchema, following: FeedSourceStateSchema, continue: FeedSourceStateSchema },
-          closed,
-        ),
-      },
-      closed,
+    t.Unsafe<FeedPage>(
+      t.Object(
+        {
+          feedItems: t.Array(FeedItemSchema(), { maxItems: 20 }),
+          viewerPersonalActions: t.Optional(FeedViewerPersonalActionsSchema()),
+          next: nullable,
+          asOf: t.String({ format: 'date-time' }),
+          reactionsAsOf: t.Optional(t.Union([reactionFreshness, t.Null()])),
+          sources: t.Object(
+            { discovery: FeedSourceStateSchema, following: FeedSourceStateSchema, continue: FeedSourceStateSchema },
+            closed,
+          ),
+        },
+        closed,
+      ),
     ),
   );
 }
-export type FeedItem = Static<ReturnType<typeof FeedItemSchema>>;
-export type FeedPage = Static<ReturnType<typeof FeedPageSchema>>;
+export type { FeedItem, FeedPage };
 export type FeedSourceState = Static<typeof FeedSourceStateSchema>;
+export type FeedItemWire = Static<ReturnType<typeof FeedItemSchema>>;
+export type FeedPageWire = Static<ReturnType<typeof FeedPageSchema>>;

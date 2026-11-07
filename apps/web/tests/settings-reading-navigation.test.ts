@@ -15,12 +15,16 @@ import {
   settingsDraftViewerIsCurrent,
   verificationNeedsNavigationDecision,
 } from '../src/settings/settings-draft-state';
+import { performanceAmbientTree } from './performance-ambient';
 import { QueryClient } from '@tanstack/react-query';
 import { sessionQuery } from '../src/session/query';
 import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { settingsPreferencePage } from '../src/kernel/fake/settings-notifications';
 import { NotificationsCard } from '../src/settings/notifications';
+import { createBrowserSettingsAmbient } from '../src/settings/adapters/ambient';
+
+const settingsAmbient = createBrowserSettingsAmbient();
 
 test('clean reading and same settings pathname query/hash changes navigate without a decision', () => {
   const fixture = readingFixture();
@@ -39,11 +43,11 @@ test('clean reading and same settings pathname query/hash changes navigate witho
 test('Leaving with a changed or unresolved reading draft offers one stay-or-leave decision, keeps the exact original attempt on stay, and never traps session/privacy teardown', async () => {
   const fixture = readingFixture('lost');
   const draft = { ...fixture.initial, spoilerLevel: 1 as const };
-  const original = readingMutation(fixture.initial, draft)!;
+  const original = readingMutation(fixture.initial, draft, settingsAmbient.id)!;
   const state = { known: fixture.initial, draft, pending: original as typeof original | null };
   const navigation = new SettingsNavigationDrafts();
   navigation.register({ kind: 'reading', needsDecision: () => readingNeedsNavigationDecision(state) });
-  expect((await sendReading(fixture.io, original, false, () => 0)).kind).toBe('uncertain');
+  expect((await sendReading(fixture.io, original, false, () => 0, settingsAmbient.timer)).kind).toBe('uncertain');
   const later = { ...draft, suitability: 'show' as const };
   state.draft = later;
   const leaving = navigation.block('/settings', '/');
@@ -54,7 +58,7 @@ test('Leaving with a changed or unresolved reading draft offers one stay-or-leav
   expect(state.draft).toBe(later);
   expect(state.pending).toBe(original);
   expect(Object.isFrozen(original)).toBe(true);
-  const recovered = await sendReading(fixture.io, state.pending!, true, () => 0);
+  const recovered = await sendReading(fixture.io, state.pending!, true, () => 0, settingsAmbient.timer);
   expect(fixture.calls).toHaveLength(2);
   expect(fixture.calls[1]).toBe(original);
   expect(fixture.calls[1]!.expectedVersion).toBe(0);
@@ -76,7 +80,7 @@ test('Leaving with a changed or unresolved reading draft offers one stay-or-leav
 
 test('an unresolved original command warns even with a matching draft; confirmed current settings release navigation', async () => {
   const fixture = readingFixture('lost');
-  const original = readingMutation(fixture.initial, { ...fixture.initial, spoilerLevel: 1 })!;
+  const original = readingMutation(fixture.initial, { ...fixture.initial, spoilerLevel: 1 }, settingsAmbient.id)!;
   const state = { known: fixture.initial, draft: fixture.initial, pending: original as typeof original | null };
   const navigation = new SettingsNavigationDrafts();
   navigation.register({ kind: 'reading', needsDecision: () => readingNeedsNavigationDecision(state) });
@@ -136,25 +140,29 @@ test('reading and actual profile/public-activity state share one decision and ow
 
 test('notice originals and later drafts require a decision until exact recovery or Use current', async () => {
   const calls: unknown[] = [];
-  const editor = new NotificationEditor(settingsPreferencePage({ reply: true, mention: true }, 0), {
-    save: async (input) => {
-      calls.push(input);
-      if (calls.length === 1) throw new Error('Lost response');
-      return {
-        ok: true,
+  const editor = new NotificationEditor(
+    settingsPreferencePage({ reply: true, mention: true }, 0),
+    {
+      save: async (input) => {
+        calls.push(input);
+        if (calls.length === 1) throw new Error('Lost response');
+        return {
+          ok: true,
+          notifications: { reply: false, mention: true },
+          version: 1,
+          page: settingsPreferencePage({ reply: false, mention: true }, 1),
+        };
+      },
+      read: async () => ({
+        signedIn: true,
+        preferences: { spoilerLevel: 0, suitability: 'blur', version: 1 },
         notifications: { reply: false, mention: true },
-        version: 1,
         page: settingsPreferencePage({ reply: false, mention: true }, 1),
-      };
+        securityHref: null,
+      }),
     },
-    read: async () => ({
-      signedIn: true,
-      preferences: { spoilerLevel: 0, suitability: 'blur', version: 1 },
-      notifications: { reply: false, mention: true },
-      page: settingsPreferencePage({ reply: false, mention: true }, 1),
-      securityHref: null,
-    }),
-  });
+    settingsAmbient,
+  );
   const navigation = new SettingsNavigationDrafts();
   navigation.register({
     kind: 'notifications',
@@ -190,10 +198,14 @@ test('Collection row decisions retain unknown originals through denied reads and
     revision: 1,
     allowedVisibilityActions: ['unlisted', 'public'],
   };
-  const editor = new CollectionPrivacyEditor(collection, {
-    save: async () => ({ ok: false, reason: 'unavailable' }),
-    read: async () => ({ ok: false, reason: 'forbidden' }),
-  });
+  const editor = new CollectionPrivacyEditor(
+    collection,
+    {
+      save: async () => ({ ok: false, reason: 'unavailable' }),
+      read: async () => ({ ok: false, reason: 'forbidden' }),
+    },
+    settingsAmbient,
+  );
   const navigation = new SettingsNavigationDrafts();
   const remove = navigation.register({
     kind: 'collection-privacy',
@@ -216,17 +228,23 @@ test('Collection row decisions retain unknown originals through denied reads and
   editor.dispose();
   expect(await teardown).toBe(false);
 
-  const saved = new CollectionPrivacyEditor(collection, {
-    save: async (input) => ({ ok: true, collection: { ...collection, visibility: input.visibility, revision: 2 } }),
-    read: async () => ({ ok: true, value: collection }),
-  });
+  const saved = new CollectionPrivacyEditor(
+    collection,
+    {
+      save: async (input) => ({ ok: true, collection: { ...collection, visibility: input.visibility, revision: 2 } }),
+      read: async () => ({ ok: true, value: collection }),
+    },
+    settingsAmbient,
+  );
   await saved.edit('public');
   expect(collectionPrivacyNeedsNavigationDecision(saved.snapshot())).toBe(false);
 
-  const pager = new CollectionPrivacyPager(async (cursor) =>
-    cursor === null
-      ? { ok: true, value: { collections: [collection], next: 'next' } }
-      : { ok: false, reason: 'forbidden' },
+  const pager = new CollectionPrivacyPager(
+    async (cursor) =>
+      cursor === null
+        ? { ok: true, value: { collections: [collection], next: 'next' } }
+        : { ok: false, reason: 'forbidden' },
+    settingsAmbient,
   );
   await pager.load();
   await pager.load();
@@ -257,27 +275,31 @@ test('verification latest matching status cannot resolve UNKNOWN; acknowledged e
   };
   const calls: VerificationInput[] = [];
   let current: AgentVerificationRequest | null = null;
-  const controller = new VerificationRecovery('alice', {
-    read: async () => ({
-      accountId: 'alice',
-      verificationRequest: current,
-      viewerActions: current
-        ? current.state === 'pending'
-          ? [{ action: 'account:update', operations: ['account.withdraw_verification'] }]
-          : [{ action: 'account:update', operations: ['account.request_verification'] }]
-        : [{ action: 'account:update', operations: ['account.request_verification'] }],
-      subjectTitle: null,
-    }),
-    request: async (_, input) => {
-      calls.push(input);
-      current = receipt;
-      if (calls.length === 1) throw new Error('Lost response');
-      return { ok: true, verificationRequest: receipt };
+  const controller = new VerificationRecovery(
+    'alice',
+    {
+      read: async () => ({
+        accountId: 'alice',
+        verificationRequest: current,
+        viewerActions: current
+          ? current.state === 'pending'
+            ? [{ action: 'account:update', operations: ['account.withdraw_verification'] }]
+            : [{ action: 'account:update', operations: ['account.request_verification'] }]
+          : [{ action: 'account:update', operations: ['account.request_verification'] }],
+        subjectTitle: null,
+      }),
+      request: async (_, input) => {
+        calls.push(input);
+        current = receipt;
+        if (calls.length === 1) throw new Error('Lost response');
+        return { ok: true, verificationRequest: receipt };
+      },
+      withdraw: async () => {
+        throw new Error('No withdrawal requested');
+      },
     },
-    withdraw: async () => {
-      throw new Error('No withdrawal requested');
-    },
-  });
+    settingsAmbient,
+  );
   const empty = { subject: null, statement: '', links: [{ label: '', url: '' }] };
   expect(verificationNeedsNavigationDecision(controller.snapshot(), empty)).toBe(false);
   await controller.reload();
@@ -373,13 +395,15 @@ test('live actor and CSRF transitions retire old registrations before late contr
 
 test('standalone notice cards keep their native form without requiring a navigation or query provider', () => {
   const html = renderToStaticMarkup(
-    createElement(NotificationsCard, {
-      initial: settingsPreferencePage({ reply: true }, 0),
-      version: 0,
-      csrfToken: null,
-      action: '/en/settings',
-      onVersionChange: () => {},
-    }),
+    performanceAmbientTree(
+      createElement(NotificationsCard, {
+        initial: settingsPreferencePage({ reply: true }, 0),
+        version: 0,
+        csrfToken: null,
+        action: '/en/settings',
+        onVersionChange: () => {},
+      }),
+    ),
   );
   expect(html).toContain('action="/en/settings"');
   expect(html).toContain('name="notificationKind" value="reply"');

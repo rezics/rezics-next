@@ -4,7 +4,7 @@ import { createHash } from 'node:crypto';
 import canonicalize from 'canonicalize';
 import type { Pool } from 'pg';
 import { Value } from 'typebox/value';
-import { GLOBAL_CONTEXT } from '../access/gates/catalogue.ts';
+import { GLOBAL_CONTEXT_RESOURCE as GLOBAL_CONTEXT } from '../semantic/contract/global-context.ts';
 import { COMMUNITY_EVENTS } from '../community/events.ts';
 import type { Effect } from '../events/effects.ts';
 import { partitionOf, routeOf } from '../route/route.ts';

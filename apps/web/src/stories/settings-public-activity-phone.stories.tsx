@@ -12,6 +12,7 @@ import { expect, fn, mocked, userEvent, waitFor, within } from 'storybook/test';
 import { createProfileStoryIO } from '../kernel/fake/settings-profile';
 import { m } from '../paraglide/messages.js';
 import { ProfileCard } from '../settings/profile';
+import { settingsContent } from '../settings/adapters/presentation';
 import { PublicViewsCard } from '../settings/public-views';
 import type { ProfileValues } from '../settings/profile-data';
 import { ProfileEditor, type ProfileAttempt } from '../settings/profile-write';
@@ -50,7 +51,7 @@ function ProfileActivity({ onConfirmed, onEditor, onPending, onSave }: RecoveryS
     <ProfileNavigation editor={editor}>
       <div className="mx-auto grid w-full max-w-sm gap-4">
         <section aria-label={m.settings_profile_heading()}>
-          <ProfileCard editor={editor} />
+          <ProfileCard editor={editor} content={settingsContent} />
         </section>
         <section aria-label={m.settings_public_activity_heading()}>
           <PublicViewsCard editor={editor} />

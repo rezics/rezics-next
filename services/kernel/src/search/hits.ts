@@ -1,6 +1,7 @@
 import type { CalendarDate, FilterRelease } from '@rezics/filter';
 import { ProblemError, type FieldErrorCode } from '../http/problem.ts';
-import { chooseLabel } from '../semantic/language.ts';
+import { chooseTexts } from './disclosure/admission.ts';
+export { chooseTexts } from './disclosure/admission.ts';
 import { codeFacet, discloseFacetValues } from './facets.ts';
 import type { IndexedSubject, SubjectSource } from './source.ts';
 import type { MatchEvidence } from './match-evidence.ts';
@@ -98,24 +99,6 @@ function cut(value: string): string {
     count++;
   }
   return value;
-}
-
-/** Texts by language, choosing one through the reader's chain when given. */
-export function chooseTexts(
-  list: IndexedSubject['labels'],
-  languages: readonly string[] | undefined,
-  original: string | undefined,
-  map: (value: string) => string = (value) => value,
-) {
-  if (languages) {
-    const chosen = chooseLabel(
-      Object.fromEntries(list.map(({ language, value }) => [language, value])),
-      languages,
-      original,
-    );
-    return chosen ? { [chosen.language]: map(chosen.value) } : {};
-  }
-  return Object.fromEntries(list.map(({ language, value }) => [language, map(value)]));
 }
 
 function originalLanguage(subject: IndexedSubject): string | undefined {

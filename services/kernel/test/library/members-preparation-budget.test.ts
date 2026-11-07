@@ -7,7 +7,7 @@ import {
   openWorkExecutionOriginal,
 } from '../../src/work/selected-runtime.ts';
 import { WORK_EXECUTION_ATTEMPT_BOUND } from '../../src/work/selected-runtime-cost.ts';
-import { ProblemError } from '../../src/http/problem.ts';
+import { ProblemError } from '../../src/http/problem-error.ts';
 import type { WorkDimensions } from '../../src/library/contract/work-dimensions.ts';
 import {
   MEMBERS_PREPARATION_CHILDREN,

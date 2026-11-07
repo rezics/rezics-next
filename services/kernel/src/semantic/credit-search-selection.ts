@@ -5,6 +5,7 @@ import type { CreditSearchQualifier } from '../search/credit-search.ts';
 import { readRelease } from './definitions.ts';
 import { withoutFencedEntries } from './fences.ts';
 import { workCreditProperties } from './list-presentation-work-context.ts';
+import { semanticCopyWorkApplication } from './copy-work-application.ts';
 import { indexedStatement } from './scope-leaf-selection.ts';
 import {
   ZERO_UUID,
@@ -102,6 +103,7 @@ export async function creditPlan(pool: Pool, work: WorkHeader): Promise<CreditPl
   const properties = workCreditProperties(
     release,
     work.type,
+    semanticCopyWorkApplication().searchEvidence,
     createReleasedRelationDirectionResolver(release, releaseDigest(release)),
   );
   if (!properties.length) return 'unsupported';

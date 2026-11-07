@@ -4,7 +4,7 @@ import { Button } from '@rezics/ui/shadcn/button';
 import { Field, FieldLabel } from '@rezics/ui/shadcn/field';
 import { NativeSelect, NativeSelectOption } from '@rezics/ui/shadcn/native-select';
 import { m } from '../../../paraglide/messages.js';
-import { subjectHref } from '../../../subject/subject-href';
+import { subjectHref } from '../../../subject/load-subject';
 import { catalogueEntries } from '../../catalogue/catalogue-entry';
 import { ViewHeading } from '../view-heading';
 import { graphPublicIntentFits, graphPublicVisitSearch, type GraphPublicVisit } from './public-visit';

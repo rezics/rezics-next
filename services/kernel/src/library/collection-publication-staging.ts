@@ -9,7 +9,7 @@ import {
   hasLiveOperationalTransaction,
   type OperationalTransaction,
 } from '../command/operational.ts';
-import { ProblemError } from '../http/problem.ts';
+import { ProblemError } from '../http/problem-error.ts';
 import { partitionOf, routeOf } from '../route/route.ts';
 import { compileCurrentOwnerFilter } from '../search/current-filter-plan.ts';
 import {

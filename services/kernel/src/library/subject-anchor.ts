@@ -1,118 +1,47 @@
 import type { Pool } from 'pg';
 import type { KernelClock } from '../clock.ts';
 import type { AuthoritativeTime } from '../command/command.ts';
-import { accessCheck, type Access, type AccessContext, type Actor } from '../request/access.ts';
+import type { Access, AccessContext, Actor } from '../request/access.ts';
 import { deadlineFor } from '../request/deadline.ts';
-import { routeOf } from '../route/route.ts';
-import { subjectReadEligibility } from '../semantic/eligibility.ts';
-import { SubjectRedirectError } from '../semantic/merges.ts';
-import { readSubjectReference } from '../semantic/references.ts';
-import type { IdentityMapping } from '../semantic/identity-epoch-contract.ts';
-import { identityEpochStore } from '../semantic/identity-adapters/index.ts';
 import { WORK_STEP_DEADLINE_MS } from './command-support.ts';
+import { requireLibraryPresentation } from './domain-binding.ts';
+export { SubjectIdentityUnavailableError, type ResolvedSubject } from './contract/index.ts';
 
-const MAX_SUBJECT_IDS = 100;
-const MAX_CONCURRENT_SUBJECT_READS = 4;
+export type SubjectAnchorDependencies = { pool: Pool; access: Access; clock?: KernelClock };
 
-export type SubjectAnchorDependencies = {
-  pool: Pool;
-  access: Access;
-  clock?: KernelClock;
-};
-
-export type ResolvedSubject = { subjectId: string; requestedSubjectId: string | null };
-
-export class SubjectIdentityUnavailableError extends Error {
-  constructor(public readonly reason: 'bootstrap' | 'missing-owner' | 'moved-owner') {
-    super(`Current subject identity is unavailable: ${reason}`);
-  }
-}
-
-/** Resolve a subject on its own anchor using the semantic subject:read policy. */
-export async function resolveSubject(
+/** Compatibility entry: the application owns redirect/identity orchestration, Semantic owns native observations. */
+export function resolveSubject(
   deps: SubjectAnchorDependencies,
   actor: Actor,
   subjectId: string,
   at?: AuthoritativeTime,
   context?: AccessContext,
-): Promise<ResolvedSubject | null> {
-  if (routeOf(subjectId) === null) return null;
-  const mapping = await identityEpochStore().readMapping(deps.pool, subjectId);
-  return resolveMappedSubject(deps, actor, subjectId, mapping, at, context);
-}
-
-async function resolveMappedSubject(
-  deps: SubjectAnchorDependencies,
-  actor: Actor,
-  subjectId: string,
-  mapping: IdentityMapping,
-  at?: AuthoritativeTime,
-  context?: AccessContext,
-): Promise<ResolvedSubject | null> {
-  async function authorizeAnchor(id: string) {
-    const route = routeOf(id);
-    if (route === null) return null;
-    const resource = { route, id, eligibility: subjectReadEligibility({ route, id }) };
-    const check = await accessCheck(
-      deps.access,
+) {
+  return requireLibraryPresentation().identity.resolve(
+    {
+      ...deps,
       actor,
-      'subject:read',
-      resource,
-      context ?? {
-        pool: deps.pool,
-        deadline: deadlineFor(WORK_STEP_DEADLINE_MS),
-      },
-    );
-    return (client: Parameters<typeof check>[0]) => check(client, at);
-  }
-  if (mapping.state === 'absent') return null;
-  if (mapping.state === 'pending') return null;
-  if (mapping.state === 'unavailable') throw new SubjectIdentityUnavailableError(mapping.reason);
-
-  const originalAuthorization = await authorizeAnchor(subjectId);
-  if (!originalAuthorization) return null;
-  const terminalAuthorization = await authorizeAnchor(mapping.terminal);
-  if (!terminalAuthorization) return null;
-
-  try {
-    const original = await readSubjectReference(deps.pool, subjectId, originalAuthorization);
-    if (!original || mapping.terminal !== subjectId) return null;
-  } catch (error) {
-    if (!(error instanceof SubjectRedirectError)) throw error;
-    if (error.from !== subjectId || error.to !== mapping.terminal) return null;
-  }
-  const terminal = await readSubjectReference(deps.pool, mapping.terminal, terminalAuthorization);
-  return terminal
-    ? {
-        subjectId: mapping.terminal,
-        requestedSubjectId: mapping.terminal === subjectId ? null : subjectId,
-      }
-    : null;
+      ...(at === undefined ? {} : { at }),
+      context: context ?? { pool: deps.pool, deadline: deadlineFor(WORK_STEP_DEADLINE_MS) },
+    },
+    subjectId,
+  );
 }
 
-/** Keep stored IDs that resolve, preserving page identity and bounds. */
-export async function readableSubjects(
+/** Preserve stored keys, input ordering, the 100-ID limit and four concurrent reads. */
+export function readableSubjects(
   deps: SubjectAnchorDependencies,
   actor: Actor,
   subjectIds: readonly string[],
   at?: AuthoritativeTime,
-): Promise<string[]> {
-  if (subjectIds.length > MAX_SUBJECT_IDS)
-    throw new RangeError(`Subject page must contain at most ${MAX_SUBJECT_IDS} IDs`);
-
-  const distinctIds = [...new Set(subjectIds)].filter((id) => routeOf(id) !== null);
-  const mappings = await identityEpochStore().readMappings(deps.pool, distinctIds);
-  const resolved: (ResolvedSubject | null)[] = new Array(distinctIds.length);
-  let nextIndex = 0;
-  const outcomes = await Promise.allSettled(
-    Array.from({ length: Math.min(MAX_CONCURRENT_SUBJECT_READS, distinctIds.length) }, async () => {
-      while (nextIndex < distinctIds.length) {
-        const index = nextIndex++;
-        resolved[index] = await resolveMappedSubject(deps, actor, distinctIds[index]!, mappings[index]!, at);
-      }
-    }),
+) {
+  return requireLibraryPresentation().identity.readable(
+    {
+      ...deps,
+      actor,
+      ...(at === undefined ? {} : { at }),
+      context: { pool: deps.pool, deadline: deadlineFor(WORK_STEP_DEADLINE_MS) },
+    },
+    subjectIds,
   );
-  const failure = outcomes.find((outcome) => outcome.status === 'rejected');
-  if (failure?.status === 'rejected') throw failure.reason;
-  return distinctIds.flatMap((id, index) => (resolved[index] ? [id] : []));
 }

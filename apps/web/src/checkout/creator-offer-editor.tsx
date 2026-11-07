@@ -1,7 +1,6 @@
 import {
   createContext,
   useContext,
-  useEffect,
   useId,
   useLayoutEffect,
   useRef,
@@ -16,22 +15,13 @@ import { Input } from '@rezics/ui/shadcn/input';
 import { Field, FieldLabel } from '@rezics/ui/shadcn/field';
 import { NativeSelect, NativeSelectOption } from '@rezics/ui/shadcn/native-select';
 import { m } from '../paraglide/messages.js';
-import { localizeHref } from '../paraglide/runtime.js';
 import { PageHeading } from '../shell/page-heading';
-import { useSession } from '../session/query';
 import {
   CreatorOfferDraftNavigation,
   CreatorOfferDraftState,
   useCreatorOfferDraftNavigation,
 } from './creator-offer-draft-navigation';
-import {
-  creatorEditionOriginReturnHref,
-  readCreatorEditionOrigin,
-  restartCreatorEditionOrigin,
-  retireCreatorEditionOrigin,
-  type CreatorEditionOriginResolution,
-} from '../content-editions/creator-edition-origin';
-import { CreatorEditionOriginPanel } from '../content-editions/creator-edition-origin-panel';
+import type { CreatorEditionReview } from './capabilities';
 import { creatorPreviewGuard, useCreatorCurrentOrigin, useCreatorIntent } from './creator-current-origin';
 import { validateCreatorPrice, type CreatorPriceIssue } from './creator-price';
 import { formatMinorAmount } from './money';
@@ -94,103 +84,44 @@ function priceIssueText(issue: CreatorPriceIssue, locale: string, rule?: Configu
   }
 }
 
-type CreatorOfferOriginContextValue = {
-  token: string;
-  resolution: CreatorEditionOriginResolution | null;
-};
-const CreatorOfferOriginContext = createContext<CreatorOfferOriginContextValue | null>(null);
+const CreatorOfferOriginContext = createContext<CreatorEditionReview | null>(null);
 
-/** Return context is read only: the offer editor still loads and authorizes its Edition natively. */
+/** Static capability binding. Neither receipts nor session authority are copied into checkout. */
 export function CreatorOfferOriginScope({
   token,
   editionId,
+  review,
   children,
 }: {
   token?: string | undefined;
   editionId?: string | undefined;
+  review?: CreatorEditionReview | undefined;
   children: ReactNode;
 }) {
-  const session = useSession();
-  const [resolution, setResolution] = useState<CreatorEditionOriginResolution | null>(null);
-  const priorCredential = useRef<string | null>(null);
-  const sawCredential = useRef(false);
-  useEffect(() => {
-    if (!sawCredential.current) {
-      if (session.csrfToken) {
-        priorCredential.current = session.csrfToken;
-        sawCredential.current = true;
-      }
-      return;
-    }
-    if (priorCredential.current !== session.csrfToken) {
-      retireCreatorEditionOrigin(token);
-      priorCredential.current = session.csrfToken;
-      setResolution({ kind: 'lost', reason: 'account' });
-    }
-  }, [session.csrfToken, token]);
-  useEffect(() => {
-    if (!token) {
-      setResolution(null);
-      return;
-    }
-    if (session.state === 'unknown') return;
-    if (!editionId) {
-      retireCreatorEditionOrigin(token);
-      setResolution({ kind: 'lost', reason: 'edition' });
-      return;
-    }
-    setResolution(readCreatorEditionOrigin(token, session.subject, editionId));
-  }, [token, editionId, session.state, session.subject]);
-  return (
-    <CreatorOfferOriginContext.Provider value={token ? { token, resolution } : null}>
+  const content = (
+    <CreatorOfferOriginContext.Provider value={token && review ? review : null}>
       {children}
     </CreatorOfferOriginContext.Provider>
+  );
+  return token && review ? (
+    <review.Origin token={token} editionId={editionId}>
+      {content}
+    </review.Origin>
+  ) : (
+    content
   );
 }
 
 function CreatorOfferOriginPanelSlot() {
   const origin = useContext(CreatorOfferOriginContext);
   const router = useRouter({ warn: false });
-  const session = useSession();
   const requestNavigation = useCreatorOfferDraftNavigation();
-  const resolution = origin?.resolution;
-  if (!origin || !resolution) return null;
-
+  if (!origin) return null;
   const navigate = (href: string) => {
     if (requestNavigation) void requestNavigation(href);
     else if (router) void router.navigate({ href });
   };
-  const currentReceipt = () => {
-    if (resolution.kind !== 'current') return null;
-    const current = readCreatorEditionOrigin(origin.token, session.subject, resolution.receipt.editionId);
-    return current.kind === 'current' ? current.receipt : null;
-  };
-  const restart = () => {
-    if (resolution.kind === 'current') {
-      const current = currentReceipt();
-      const receipt = current && restartCreatorEditionOrigin(origin.token);
-      if (receipt) {
-        navigate(creatorEditionOriginReturnHref(receipt));
-        return;
-      }
-    }
-    navigate(localizeHref('/editions'));
-  };
-  return (
-    <CreatorEditionOriginPanel
-      resolution={resolution}
-      {...(resolution.kind === 'current'
-        ? {
-            onReturn: () => {
-              const receipt = currentReceipt();
-              if (receipt) navigate(creatorEditionOriginReturnHref(receipt));
-            },
-          }
-        : {})}
-      onRestart={restart}
-      {...(resolution.kind === 'current' ? { editionId: resolution.receipt.editionId } : {})}
-    />
-  );
+  return <origin.Panel navigate={navigate} />;
 }
 
 export function CreatorOfferOriginAddressPanel() {

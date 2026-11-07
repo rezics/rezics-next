@@ -2,7 +2,7 @@ import {
   createReleasedRelationDirectionResolver,
   type Release,
   type ReleasedRelationDirectionResult,
-} from '@rezics/definitions';
+} from '@rezics/definitions/contract';
 import { facetProperties } from '@rezics/filter';
 
 export type CataloguePageDefinitions = Pick<Release, 'types' | 'properties'>;

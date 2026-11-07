@@ -1,3 +1,4 @@
+import { LibraryApplicationBoundary } from '../src/session/library-application';
 import { expect, mock, test } from 'bun:test';
 import { dirname } from 'node:path';
 import { act } from 'react';
@@ -69,11 +70,13 @@ test('failed edge reads recover through exact retry, retire confirmed keys and r
     await act(async () => {
       root.render(
         <QueryClientProvider client={client}>
-          <FollowTargetControl
-            targetId="hidden-original"
-            idempotencyKey="123e4567-e89b-42d3-a456-426614174000"
-            onRemovalUnsettledChange={(_targetId, pending) => unsettled.push(pending)}
-          />
+          <LibraryApplicationBoundary>
+            <FollowTargetControl
+              targetId="hidden-original"
+              idempotencyKey="123e4567-e89b-42d3-a456-426614174000"
+              onRemovalUnsettledChange={(_targetId, pending) => unsettled.push(pending)}
+            />
+          </LibraryApplicationBoundary>
         </QueryClientProvider>,
       );
       await tick();

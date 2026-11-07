@@ -1,5 +1,4 @@
-import { readAccountDiscoverySummaries } from '../access/account-discovery-source.ts';
-import { readViewerActions } from '../access/viewer-actions.ts';
+import { readAccountDiscoverySummaries, readViewerActions } from './access-port.ts';
 import { classifyUnavailability } from '../access/unavailable.ts';
 import { ProblemError } from '../http/problem.ts';
 import type { Actor } from '../request/access.ts';

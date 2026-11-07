@@ -21,6 +21,7 @@
     "@storybook/react@11.0.0-alpha.8": "patches/@storybook%2Freact@11.0.0-alpha.8.patch"
   },
   "devDependencies": {
+    "@go-task/cli": "3.54.0",
     "@rezics/auth": "workspace:*",
     "@rezics/bounds": "workspace:*",
     "@rezics/client": "workspace:*",

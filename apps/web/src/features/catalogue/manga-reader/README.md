@@ -41,6 +41,8 @@ Decision: the public return fragment carries one six-field occurrence locator; h
 relation editor with that locator only inside `via`, so its own fresh holder admission and unsent/uncertain commands
 remain authoritative. No editor property, slot, candidate or write operand is inferred from browsing intent.
 
+Decision: Manga occurrence evidence renders values through the catalogue-owned `WorkReadingPort`. Page composition (`work-reading-binding.tsx`) binds the live `CandidateValue` adapter and the reader-owned section class; the reader no longer imports `pages/data` or `overview.sectionClass`.
+
 `MangaReaderEntry` receives the actual ordinary Subject address and existing route session identity. ContextLink
 preserves the already validated occurrence opener, locale and Realm through the actual part and relation-editor
 routes. Deliberate return rereads the supported view/node/opaque cursor, selects only an exact re-admitted occurrence,

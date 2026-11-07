@@ -6,8 +6,8 @@
  * when the runtime directory is unset (`REMOTE_CHECK_SSH_CONTROL_DIR` overrides). OpenSSH's unix_listener adds a
  * `.XXXXXXXXXX` suffix, so a path at or over 97 bytes fails; a long override or runtime directory relocates to a
  * hashed `/tmp/rs<uid>-<digest>` that still names one socket per host. Concurrent callers reuse that master.
- * Completing a run never `-O exit`s it. A stale or hung master is recovered with `-O check` then `-O exit`, at most
- * once per host per minute across processes, and never while a run holds its lease and the master answers.
+ * Completing a run never `-O exit`s it. Only a refused or missing listener permits recovery, at most once per host per minute.
+ * Recovery holds the exclusive lease flock through retirement; acquisition holds it shared before probing.
  */
 import { createHash } from 'node:crypto';
 import { chmodSync, existsSync, lstatSync, mkdirSync, readFileSync, rmSync, unlinkSync, writeFileSync } from 'node:fs';
@@ -212,7 +212,7 @@ async function stopAndReap(child: ReturnType<typeof Bun.spawn>): Promise<void> {
   await child.exited;
 }
 
-export type MasterControlResult = { code: number; output: string };
+export type MasterControlResult = { code: number; output: string; timedOut?: boolean };
 
 /** OpenSSH warns about a stale socket and then connects directly; the warning is not the failure. */
 const MULTIPLEX_WARNING = /disabling multiplexing/;
@@ -243,7 +243,7 @@ async function removeDeadControlSocket(host: SshControlHost, directory: string):
     return false;
   }
   const result = await masterControl(host, root, 'check', CONTROL_CHECK_TIMEOUT_MS);
-  if (result.code === 0 || !/Connection refused|No such file or directory/.test(result.output)) return false;
+  if (!deadMasterEvidence(result)) return false;
   rmSync(path, { force: true });
   return true;
 }
@@ -267,7 +267,7 @@ async function masterControl(
   const code = await within(timeoutMs, child.exited);
   if (code === null) {
     await stopAndReap(child);
-    return { code: 255, output: await output };
+    return { code: 255, output: await output, timedOut: true };
   }
   return { code, output: await output };
 }
@@ -283,9 +283,17 @@ export async function hostMasterIsLive(host: SshControlHost, directory: string, 
  * OpenSSH `-O exit` is a no-op once the socket is already gone.
  */
 export async function dropStaleHostMaster(host: SshControlHost, directory: string, timeoutMs = 1_000): Promise<void> {
-  if (await hostMasterIsLive(host, directory, timeoutMs)) return;
-  await masterControl(host, directory, 'exit', timeoutMs);
-  await removeDeadControlSocket(host, directory);
+  const root = controlRoot(directory);
+  await withExclusiveLock(hostLockPath(root, host.name, 'lease'), async () => {
+    const result = await masterControl(host, root, 'check', timeoutMs);
+    if (!deadMasterEvidence(result)) return;
+    await masterControl(host, root, 'exit', timeoutMs);
+    await removeDeadControlSocket(host, root);
+  });
+}
+
+function deadMasterEvidence(result: MasterControlResult): boolean {
+  return !result.timedOut && result.code !== 0 && /Connection refused|No such file or directory/.test(result.output);
 }
 
 type FlockHold = { release: () => Promise<void> };
@@ -403,11 +411,7 @@ function readRecoveryStamp(path: string): number | undefined {
   }
 }
 
-/**
- * Recover a hung or lost host master after a placement timeout: `-O exit` once, then the next auto connection.
- * Claims at most once per host per minute across processes. Does not recover while a run holds its lease and the
- * master answers `-O check`.
- */
+/** Retire only an affirmatively dead listener while excluding every in-process and cross-process lease. */
 export async function recoverHungHostMaster(
   host: SshControlHost,
   directory: string,
@@ -415,12 +419,13 @@ export async function recoverHungHostMaster(
   timeoutMs = 1_000,
 ): Promise<boolean> {
   const root = controlRoot(directory);
-  const claimed = await withExclusiveLock(hostLockPath(root, host.name, 'recover.lock'), async () => {
+  const claimed = await withExclusiveLock(hostLockPath(root, host.name, 'lease'), async () => {
     const stampPath = hostLockPath(root, host.name, 'recovered-at');
     const last = readRecoveryStamp(stampPath);
     if (last !== undefined && now - last < MASTER_RECOVERY_INTERVAL_MS) return false;
-    const live = await hostMasterIsLive(host, root, timeoutMs);
-    if (live && hostControlLeaseIsHeld(root, host.name)) return false;
+    const result = await masterControl(host, root, 'check', timeoutMs);
+    // A slow or failing control check is uncertainty. Neither authorizes cutting a multiplexed session.
+    if (!deadMasterEvidence(result)) return false;
     await masterControl(host, root, 'exit', timeoutMs);
     await removeDeadControlSocket(host, root);
     writeFileSync(stampPath, `${now}\n`);
@@ -501,56 +506,58 @@ export async function acquireHostControl(
 ): Promise<HostControlLease> {
   const root = controlRoot(directory);
   const started = performance.now();
-  let recovered = await removeDeadControlSocket(host, root);
-  let lastDetail = 'control probe failed';
-  for (let attempt = 0; attempt < 2; attempt += 1) {
-    // Acquisition retries never stop an answering master. Placement timeout recovery separately checks run leases
-    // and rate-limits recovery; here only a socket whose listener refused is removed before the retry.
-    if (attempt === 1) recovered = (await removeDeadControlSocket(host, root)) || recovered;
-    const child = Bun.spawn(
-      sshControlArgv(host, root, undefined, `# REMOTE_CHECK_CONTROL_PROBE\nprintf '${CONTROL_OK}\\n'`),
-      { stdin: 'ignore', stdout: 'pipe', stderr: 'pipe', env: process.env },
-    );
-    const output = Promise.all([
-      new Response(child.stdout).text(),
-      child.stderr instanceof ReadableStream ? new Response(child.stderr).text() : Promise.resolve(''),
-    ]).then(([stdout, stderr]) => stdout + stderr);
-    const code = await within(timeoutMs, child.exited);
-    if (code === null) {
-      await stopAndReap(child);
-      lastDetail = probeFailureDetail(await output, null);
-      if (attempt === 1)
-        throw new Error(`remote-check: connection to ${host.name} failed during control probe: ${lastDetail}`);
-      continue;
-    }
-    const text = await output;
-    if (code === 0 && text.includes(CONTROL_OK)) {
-      const key = leaseKey(root, host.name);
-      const held = liveLeases.get(key);
-      if (held) held.count += 1;
-      else {
-        const lock = await holdFlock(hostLockPath(root, host.name, 'lease'), true, true);
-        if (!lock) throw new Error(`remote-check: SSH lease lock failed for ${host.name}`);
-        const raced = liveLeases.get(key);
-        if (raced) {
-          raced.count += 1;
+  const recovered = await withExclusiveLock(hostLockPath(root, host.name, 'lease'), () =>
+    removeDeadControlSocket(host, root),
+  );
+  const lock = await holdFlock(hostLockPath(root, host.name, 'lease'), true, true);
+  if (!lock) throw new Error(`remote-check: SSH lease lock failed for ${host.name}`);
+  let adopted = false;
+  try {
+    let lastDetail = 'control probe failed';
+    for (let attempt = 0; attempt < 2; attempt += 1) {
+      // The shared lease spans probe startup and the entire run; retirement cannot race successful admission.
+      const child = Bun.spawn(
+        sshControlArgv(host, root, undefined, `# REMOTE_CHECK_CONTROL_PROBE\nprintf '${CONTROL_OK}\\n'`),
+        { stdin: 'ignore', stdout: 'pipe', stderr: 'pipe', env: process.env },
+      );
+      const output = Promise.all([
+        new Response(child.stdout).text(),
+        child.stderr instanceof ReadableStream ? new Response(child.stderr).text() : Promise.resolve(''),
+      ]).then(([stdout, stderr]) => stdout + stderr);
+      const code = await within(timeoutMs, child.exited);
+      if (code === null) {
+        await stopAndReap(child);
+        lastDetail = probeFailureDetail(await output, null);
+        if (attempt === 1)
+          throw new Error(`remote-check: connection to ${host.name} failed during control probe: ${lastDetail}`);
+        continue;
+      }
+      const text = await output;
+      if (code === 0 && text.includes(CONTROL_OK)) {
+        const key = leaseKey(root, host.name);
+        const held = liveLeases.get(key);
+        if (held) {
+          held.count += 1;
           await lock.release();
         } else liveLeases.set(key, { count: 1, host, directory: root, unlock: () => lock.release() });
+        adopted = true;
+        reportConnectionWork(host.name, started, recovered === true);
+        return {
+          host,
+          directory: root,
+          socketPath: hostControlSocketPath(root, host.name),
+          connectionMs: performance.now() - started,
+        };
       }
-      reportConnectionWork(host.name, started, recovered);
-      return {
-        host,
-        directory: root,
-        socketPath: hostControlSocketPath(root, host.name),
-        connectionMs: performance.now() - started,
-      };
+      lastDetail = probeFailureDetail(text, code);
+      if (attempt === 1) {
+        throw new Error(`remote-check: connection to ${host.name} failed during control probe: ${lastDetail}`);
+      }
     }
-    lastDetail = probeFailureDetail(text, code);
-    if (attempt === 1) {
-      throw new Error(`remote-check: connection to ${host.name} failed during control probe: ${lastDetail}`);
-    }
+    throw new Error(`remote-check: connection to ${host.name} failed during control probe: ${lastDetail}`);
+  } finally {
+    if (!adopted) await lock.release();
   }
-  throw new Error(`remote-check: connection to ${host.name} failed during control probe: ${lastDetail}`);
 }
 
 /**

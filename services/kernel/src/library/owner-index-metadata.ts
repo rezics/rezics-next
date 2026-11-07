@@ -6,7 +6,7 @@ import { readRelease } from '../semantic/definitions.ts';
 import { builtinCollectionId } from './builtin-identity.ts';
 import { decodeLibraryProfilePin } from './profile-pin.ts';
 import { resolveLibraryProfilePin } from './profile.ts';
-import { ProblemError } from '../http/problem.ts';
+import { ProblemError } from '../http/problem-error.ts';
 
 type Client = Pick<PoolClient, 'query'>;
 export type OwnerPinMeaning = Readonly<{

@@ -1,17 +1,15 @@
-import { parseAvatarUploadAdvice } from '../media/kernel';
-import {
-  createMediaReservationIntent,
-  readSiteAvatarUploadAdvice,
-  UploadRefusal,
-  type MediaReservationIntent,
-  type UploadStage,
-  type UploadStageUpdate,
-  type UploadResponseWait,
-} from '../threads/upload';
+import { UploadRefusal } from '../threads/upload-vocabulary';
 import { preferenceRetryDeadline } from './preference-failure-retry';
 import { withProfileDeadline } from './profile-request-deadline';
 import type { ProfileValues } from './profile-data';
 import type { ProfileEditor } from './profile-write';
+import { parseAvatarUploadAdvice, type SettingsAvatarMedia } from './ports/content';
+import type {
+  MediaReservationIntent,
+  UploadResponseWait,
+  UploadStage,
+  UploadStageUpdate,
+} from '../threads/upload-vocabulary';
 import { readAvatarCropSource } from './profile-avatar-source';
 import {
   avatarCropSourceSupported,
@@ -24,32 +22,7 @@ import {
   type AvatarCropPosition,
 } from './profile-avatar-crop.ts';
 
-export type AvatarUpload = (
-  accountId: string,
-  file: File,
-  signal: AbortSignal,
-  intent?: MediaReservationIntent,
-  onStage?: UploadStageUpdate,
-  onResponseWait?: UploadResponseWait,
-) => Promise<{ src: string }>;
-export type AvatarResume = (
-  mediaId: string,
-  file: File,
-  signal: AbortSignal,
-  onStage?: UploadStageUpdate,
-  intent?: MediaReservationIntent,
-  onResponseWait?: UploadResponseWait,
-) => Promise<{ src: string }>;
-export type AvatarAdviceReadResult = {
-  ok: boolean;
-  body?: unknown;
-  retryAfter?: string;
-  responseTime: number;
-};
-export type AvatarAdviceRead = (
-  signal: AbortSignal,
-  onResponseWait?: UploadResponseWait,
-) => Promise<AvatarAdviceReadResult>;
+export type { AvatarAdviceRead, AvatarAdviceReadResult, AvatarResume, AvatarUpload } from './ports/content';
 export type AvatarAdviceState = 'loading' | 'unavailable' | 'denied' | 'allowed';
 type Failure = Pick<UploadRefusal, 'reason' | 'retryAfter'>;
 type Avatar = ProfileValues['avatar'];
@@ -112,10 +85,8 @@ export class ProfileAvatarUpload {
   private adviceEpisode = 0;
   constructor(
     private editor: ProfileEditor,
-    private upload: AvatarUpload,
+    private content: SettingsAvatarMedia,
     private urls: Pick<typeof URL, 'createObjectURL' | 'revokeObjectURL'> = URL,
-    private resume?: AvatarResume,
-    private readAdvice: AvatarAdviceRead = readSiteAvatarUploadAdvice,
   ) {
     this.waits = waitsFor(editor);
   }
@@ -129,7 +100,7 @@ export class ProfileAvatarUpload {
   private update(state: UploadState) {
     const failure = state.failure ?? this.waits.commandFailure;
     const next: UploadState =
-      Date.now() < this.waits.commandRetryAt
+      this.editor.ambient.now() < this.waits.commandRetryAt
         ? { ...state, retryAt: this.waits.commandRetryAt, ...(failure ? { failure } : {}) }
         : { ...state };
     if (this.waits.adviceRetryAt > 0) next.adviceRetryAt = this.waits.adviceRetryAt;
@@ -138,7 +109,7 @@ export class ProfileAvatarUpload {
     this.listeners.forEach((listener) => listener());
   }
   private waiting() {
-    return Date.now() < this.waits.commandRetryAt;
+    return this.editor.ambient.now() < this.waits.commandRetryAt;
   }
   connect() {
     this.connected = true;
@@ -191,7 +162,11 @@ export class ProfileAvatarUpload {
     try {
       const onResponseWait: UploadResponseWait = (_status, retryAfter, responseTime) =>
         this.retainAdviceWait(target, retryAfter, responseTime);
-      const result = await withProfileDeadline((signal) => this.readAdvice(signal, onResponseWait), request.signal);
+      const result = await withProfileDeadline(
+        (signal) => this.content.readAdvice(signal, onResponseWait),
+        request.signal,
+        this.editor.ambient.timer,
+      );
       if (!this.ownsAdvice(target, episode, request)) return;
       this.retainAdviceWait(target, result.retryAfter, result.responseTime);
       const parsed = result.ok ? parseAvatarUploadAdvice(result.body, target) : null;
@@ -199,7 +174,7 @@ export class ProfileAvatarUpload {
     } catch (error) {
       if (!this.ownsAdvice(target, episode, request)) return;
       if (error instanceof UploadRefusal)
-        this.retainAdviceWait(target, error.retryAfterHeader, error.responseTime ?? Date.now());
+        this.retainAdviceWait(target, error.retryAfterHeader, error.responseTime ?? this.editor.ambient.now());
       this.advice = 'unavailable';
     } finally {
       const current = this.connected && this.adviceEpisode === episode && this.adviceTarget === target;
@@ -233,7 +208,7 @@ export class ProfileAvatarUpload {
     this.target() === this.adviceTarget &&
     this.advice !== 'loading' &&
     (this.advice === 'unavailable' || this.advice === 'denied' || (!!this.selection && this.state.phase === 'error'));
-  canRetryAdvice = () => this.canOfferAdviceRetry() && Date.now() >= this.waits.adviceRetryAt;
+  canRetryAdvice = () => this.canOfferAdviceRetry() && this.editor.ambient.now() >= this.waits.adviceRetryAt;
   retryAdvice = () => {
     if (!this.canRetryAdvice() || !this.adviceTarget) return;
     const target = this.adviceTarget;
@@ -363,17 +338,11 @@ export class ProfileAvatarUpload {
     !!this.selection &&
     this.selection.accountId === this.adviceTarget &&
     this.advice === 'allowed' &&
-    (!this.selection.reservation || !!this.resume) &&
     !['type', 'too-large', 'rejected'].includes(this.state.failure?.reason ?? 'unavailable');
   private bindIntent(selection: Selection) {
     if (selection.intent && selection.intent.file === selection.file && selection.intent.viewer === selection.accountId)
       return selection.intent;
-    selection.intent = createMediaReservationIntent(
-      { containerId: selection.accountId },
-      selection.file,
-      'avatar',
-      selection.accountId,
-    );
+    selection.intent = this.content.createIntent(selection.accountId, selection.file);
     return selection.intent;
   }
   private async send(selection: Selection) {
@@ -387,7 +356,7 @@ export class ProfileAvatarUpload {
       return;
     }
     const reservation = selection.reservation;
-    if (reservation && !this.resume) return;
+    const resume = this.content.resume;
     if (!reservation && !this.canUpload()) return;
     if (reservation && !selection.intent) return;
     const intent = selection.intent ?? this.bindIntent(selection);
@@ -408,12 +377,15 @@ export class ProfileAvatarUpload {
     try {
       const result = reservation
         ? await withProfileDeadline(
-            (signal) => this.resume!(reservation, selection.file, signal, onStage, intent, onResponseWait),
+            (signal) => resume(reservation, selection.file, signal, onStage, intent, onResponseWait),
             request.signal,
+            this.editor.ambient.timer,
           )
         : await withProfileDeadline(
-            (signal) => this.upload(selection.accountId, selection.file, signal, intent, onStage, onResponseWait),
+            (signal) =>
+              this.content.upload(selection.accountId, selection.file, signal, intent, onStage, onResponseWait),
             request.signal,
+            this.editor.ambient.timer,
           );
       if (!this.owns(selection, request)) return;
       if (selection.reservation && result.src !== selection.reservation) throw new UploadRefusal('unavailable');
@@ -428,7 +400,10 @@ export class ProfileAvatarUpload {
           reason: error.reason,
           ...(error.retryAfter !== undefined ? { retryAfter: error.retryAfter } : {}),
         };
-        const observed = preferenceRetryDeadline(error.retryAfterHeader, error.responseTime ?? Date.now());
+        const observed = preferenceRetryDeadline(
+          error.retryAfterHeader,
+          error.responseTime ?? this.editor.ambient.now(),
+        );
         if (observed > 0) {
           this.waits.commandRetryAt = Math.max(this.waits.commandRetryAt, observed);
           this.waits.commandFailure = failure;
@@ -451,7 +426,11 @@ export class ProfileAvatarUpload {
   }
   private async prepare(selection: Selection, preparation: number, signal: AbortSignal) {
     try {
-      const source = await withProfileDeadline(() => readAvatarCropSource(selection.file), signal);
+      const source = await withProfileDeadline(
+        () => readAvatarCropSource(selection.file),
+        signal,
+        this.editor.ambient.timer,
+      );
       if (!this.ownsPreparation(selection, preparation)) return;
       if (!source) {
         this.update({ phase: 'original-only', url: selection.url, cropIssue: 'unsupported' });
@@ -498,7 +477,7 @@ export class ProfileAvatarUpload {
       return bitmap;
     });
     try {
-      return await withProfileDeadline(() => pending, signal);
+      return await withProfileDeadline(() => pending, signal, this.editor.ambient.timer);
     } catch (error) {
       retired = true;
       held.bitmap?.close();
@@ -515,7 +494,11 @@ export class ProfileAvatarUpload {
     signal: AbortSignal,
   ) {
     try {
-      const file = await withProfileDeadline(() => createCroppedAvatarFile(bitmap, sourceFile, position), signal);
+      const file = await withProfileDeadline(
+        () => createCroppedAvatarFile(bitmap, sourceFile, position),
+        signal,
+        this.editor.ambient.timer,
+      );
       if (!this.ownsPreparation(selection, preparation)) return;
       if (this.preparationRequest?.signal === signal) this.preparationRequest = null;
       const url = this.urls.createObjectURL(file);

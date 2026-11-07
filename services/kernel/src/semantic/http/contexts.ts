@@ -1,27 +1,27 @@
 import { memoizedValue } from '../../memoized.ts';
 import {
+  changeContextLifecycle,
+  contextLabels,
+  contextTarget,
+  createContext,
   createContextDirectory,
+  globalContextAnchor,
+  publicContextEligibility,
+  readContext,
+  ContextAccessDeniedError,
   ContextDirectoryEntrySchema,
   ContextDirectoryPreparingError,
-} from '../context-directory.ts';
+  ContextLifecycleConflictError,
+  ContextNotFoundError,
+} from '../context-application.ts';
 import type { KeyRing } from '../../tokens/seal.ts';
 import { withHeaders } from '@elysia/openapi';
 import { t } from 'elysia';
 import type { definitionRoutes } from './definitions.ts';
 import { AuthenticationError, type AccountActor, type Resource } from '../../request/access.ts';
 import { customMethod } from '../../http/custom-method.ts';
-import { changeContextLifecycle, ContextLifecycleConflictError } from '../context-lifecycle.ts';
-import { ContextNotFoundError } from '../context.ts';
 import { routeOf } from '../../route/route.ts';
 import { SubjectInputError } from '../item.ts';
-import {
-  contextTarget,
-  ContextAccessDeniedError,
-  contextLabels,
-  createContext,
-  publicContextEligibility,
-  readContext,
-} from '../context.ts';
 import { ProblemError, problemSchema } from '../../http/problem.ts';
 import { defineRateLimit } from '../../http/rate-limit.ts';
 import { IDEMPOTENCY_HEADER, idempotencyKeyOf, requestDigest, SESSION_HEADER } from '../../http/request.ts';
@@ -30,7 +30,6 @@ import { GrantDeniedError } from '../../access/grant-commands.ts';
 import { authoritativeTimeValue } from '../../command/command.ts';
 import { activeRelease } from '../definitions.ts';
 import type { Access } from '../../request/access.ts';
-import { globalContextAnchor } from '../context.ts';
 import readCreatedContext from './contexts-read-creation.sql';
 
 const LabelsInput = t.Object(

@@ -12,11 +12,14 @@ import {
 import { expect, userEvent, waitFor, within } from 'storybook/test';
 import { readingFixture, type ReadingScenario } from '../../kernel/fake/settings-preferences-reading';
 import { ReadingCard } from '../../settings/reading-card';
+import { SettingsShellProvider } from '../../settings';
 import { DisplayPreferences } from '../../settings/display-preferences';
+import { boundSettingsShellPort } from '../../shell/app-shell';
 import { getLocale, locales } from '../../paraglide/runtime.js';
 import { m } from '../../paraglide/messages.js';
 import { createProfileStoryIO, profileStoryValues } from '../../kernel/fake/settings-profile';
 import { ProfileCard } from '../../settings/profile';
+import { settingsContent } from '../../settings/adapters/presentation';
 import { ProfileEditor } from '../../settings/profile-write';
 import { ProfileNavigation } from '../../settings/profile-navigation';
 import { SettingsNavigationProvider } from '../../settings/reading-navigation';
@@ -159,7 +162,11 @@ export const Denied: Story = {
   },
 };
 export const ShellDisplayChoices: Story = {
-  render: () => <DisplayPreferences />,
+  render: () => (
+    <SettingsShellProvider port={boundSettingsShellPort}>
+      <DisplayPreferences />
+    </SettingsShellProvider>
+  ),
   play: async ({ canvasElement, globals }) => {
     const view = within(await within(canvasElement).findByRole('region', { name: m.shell_appearance() }));
     const menu = within(document.body);
@@ -224,7 +231,7 @@ function ReadingLeaveEditor() {
           />
         </section>
         <ProfileNavigation editor={editor}>
-          <ProfileCard editor={editor} />
+          <ProfileCard editor={editor} content={settingsContent} />
         </ProfileNavigation>
       </div>
     </SettingsNavigationProvider>

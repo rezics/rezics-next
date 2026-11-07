@@ -9,6 +9,7 @@ import { expect, userEvent, waitFor, within } from 'storybook/test';
 import { m } from '../../paraglide/messages.js';
 import { getLocale } from '../../paraglide/runtime.js';
 import { SettingsPageView, SettingsSessionRecovery, SignedOutSettings } from '../../settings/settings-page';
+import { settingsContent } from '../../settings/adapters/presentation';
 import { PageHeading } from '../../shell/page-heading';
 import { AppShell } from '../../shell/shell';
 import { PatternStory } from '../page';
@@ -54,7 +55,10 @@ function RecoveryExample({ scenario }: { scenario: Scenario }) {
       <article className="mx-auto w-full max-w-6xl space-y-8 px-4 text-foreground sm:px-6">
         <PageHeading>{m.settings_heading()}</PageHeading>
         {signedOut ? (
-          <SignedOutSettings returnTo={`/${getLocale()}/settings?from=account#display`} />
+          <SignedOutSettings
+            returnTo={`/${getLocale()}/settings?from=account#display`}
+            SignInPrompt={settingsContent.SignInPrompt}
+          />
         ) : (
           <SettingsSessionRecovery
             state="unknown"
@@ -226,6 +230,7 @@ function ActualSessionPage() {
           key={generation}
           page={page}
           csrfToken={session.csrfToken}
+          content={settingsContent}
           preferenceIO={{
             read: async () => {
               setReads((current) => current + 1);

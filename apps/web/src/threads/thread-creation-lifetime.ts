@@ -11,7 +11,7 @@ import {
   type ReactNode,
 } from 'react';
 import { getLocale } from '../paraglide/runtime.js';
-import { sessionQuery } from '../session/query';
+import { sessionQueryKey } from '../reader/lifetime/index';
 import { subjectVisitReturn } from '../features/pages/subject-visit-navigation';
 import type { AuthoringLocation } from './authoring-departure';
 
@@ -97,13 +97,13 @@ export function threadCreationSessionSource(client: QueryClient | undefined): Th
   const known = sources.get(client);
   if (known) return known;
 
-  const read = () => client.getQueryData<ThreadCreationSession>(sessionQuery.queryKey);
+  const read = () => client.getQueryData<ThreadCreationSession>(sessionQueryKey);
   const identity = () => sessionIdentity(read());
   let previous = identity();
   let revision = 0;
   const listeners = new Set<() => void>();
   client.getQueryCache().subscribe((event) => {
-    if (JSON.stringify(event.query.queryKey) !== JSON.stringify(sessionQuery.queryKey)) return;
+    if (JSON.stringify(event.query.queryKey) !== JSON.stringify(sessionQueryKey)) return;
 
     const next = identity();
     const removed = event.type === 'removed';
@@ -147,7 +147,7 @@ function writerReady(session: ThreadCreationSession | undefined): session is Thr
 export function observeThreadCreationReader(client: QueryClient | undefined): ThreadCreationReaderObservation | null {
   if (!client) return null;
   threadCreationSessionSource(client);
-  const query = client.getQueryState<ThreadCreationSession>(sessionQuery.queryKey);
+  const query = client.getQueryState<ThreadCreationSession>(sessionQueryKey);
   const session = query?.data;
   if (!query || query.status !== 'success' || !readerReady(session)) return null;
   return {
@@ -164,7 +164,7 @@ export function threadCreationReaderObservationMatches(
   actualSubject: string,
 ): boolean {
   if (!client || actualSubject !== observation.subject) return false;
-  const query = client.getQueryState<ThreadCreationSession>(sessionQuery.queryKey);
+  const query = client.getQueryState<ThreadCreationSession>(sessionQueryKey);
   const session = query?.data;
   return Boolean(
     query &&

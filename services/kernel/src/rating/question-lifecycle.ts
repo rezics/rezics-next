@@ -9,14 +9,13 @@ import { ratingCapabilities } from './adapters/ambient.ts';
 import { createHash } from 'node:crypto';
 import canonicalize from 'canonicalize';
 import type { Pool } from 'pg';
-import { resourceAuthorization } from '../access/index.ts';
-import { deadlineClient } from '../access/authenticate.ts';
-import { GrantDeniedError } from '../access/grant-commands.ts';
+import { resourceAuthorization, deadlineClient, GrantDeniedError, withReadTransaction } from './dependencies.ts';
+
 import type { KernelClock } from '../clock.ts';
-import { withReadTransaction } from '../semantic/read.ts';
+
 import realmRead from '../community/realm-read.sql';
 import { partitionReadClient } from '../database/read-snapshot.ts';
-import { ProblemError } from '../http/problem.ts';
+import { ProblemError } from '../http/problem-error.ts';
 import type { Access, Actor } from '../request/access.ts';
 import { partitionOf, routeOf } from '../route/route.ts';
 import { QuestionDefinitionInvalidError } from './question-authoring.ts';

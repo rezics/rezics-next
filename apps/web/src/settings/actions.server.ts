@@ -10,8 +10,10 @@ import {
   type NotificationPatch,
   type PreferencePage,
 } from './preferences';
+import { createServerSettingsAmbient } from './adapters/ambient';
 import { notificationOriginalAllowed } from './notification-recovery';
 import { m } from '../paraglide/messages.js';
+import { settingsMediaFailure } from './adapters/content';
 
 const escape = (value: string) =>
   value.replace(
@@ -106,6 +108,7 @@ function recoveryPage(
 
 /** Handle the settings form's native POST before progressive enhancement is available. */
 export async function submitNotificationForm(request: Request): Promise<Response> {
+  const id = createServerSettingsAmbient().id;
   const redirect = (failed: boolean) => {
     const url = new URL(request.url);
     url.search = failed ? '?notificationError=1' : '';
@@ -198,7 +201,7 @@ export async function submitNotificationForm(request: Request): Promise<Response
   const change = parseNotificationChange({
     expectedVersion: Number(expectedVersion[0]),
     notifications,
-    idempotencyKey: typeof keys[0] === 'string' ? keys[0] : crypto.randomUUID(),
+    idempotencyKey: typeof keys[0] === 'string' ? keys[0] : id(),
   });
   if (!change) return redirect(true);
   const token = form.get('csrf_token');
@@ -207,7 +210,9 @@ export async function submitNotificationForm(request: Request): Promise<Response
     const mode = recovery[0] as 'retry' | 'review' | 'confirmed';
     const confirmedVersion = mode === 'confirmed' ? Number(receipts[0]) : undefined;
     const confirmed = confirmedVersion === undefined ? {} : { confirmedVersion };
-    const page = await loadSettingsPage(kernelClient(), request, env as Partial<SessionEnv>);
+    const page = await loadSettingsPage(kernelClient(), request, env as Partial<SessionEnv>, {
+      mediaFailure: settingsMediaFailure,
+    });
     if (!page.signedIn) return recoveryPage(request, token, change, mode, { ...confirmed, status: 403 });
     if (
       !('preferences' in page) ||
@@ -221,12 +226,18 @@ export async function submitNotificationForm(request: Request): Promise<Response
     // An unresolved retry never borrows a new version or key from a current read.
     const reviewed =
       mode === 'review' && admitted
-        ? { ...change, expectedVersion: page.preferences.version, idempotencyKey: crypto.randomUUID() }
+        ? { ...change, expectedVersion: page.preferences.version, idempotencyKey: id() }
         : change;
     if (steps[0] !== 'send' || !admitted || (mode === 'review' && change.expectedVersion !== reviewed.expectedVersion))
       return recoveryPage(request, token, reviewed, mode, { current: page.page });
   }
-  const result = await changeNotifications(kernelClient(), request, env as Partial<SessionEnv>, change);
+  const result = await changeNotifications(
+    kernelClient(),
+    request,
+    env as Partial<SessionEnv>,
+    change,
+    settingsMediaFailure,
+  );
   if (!result.ok && result.reason === 'forbidden')
     return recoveryPage(request, token, change, recovery[0] === 'retry' ? 'retry' : 'review', { status: 403 });
   if (!result.ok)
@@ -241,7 +252,9 @@ export async function submitNotificationForm(request: Request): Promise<Response
         : 'review',
     );
   if (recovery[0] === 'retry') {
-    const page = await loadSettingsPage(kernelClient(), request, env as Partial<SessionEnv>);
+    const page = await loadSettingsPage(kernelClient(), request, env as Partial<SessionEnv>, {
+      mediaFailure: settingsMediaFailure,
+    });
     if (!page.signedIn || !('preferences' in page) || !page.page || page.preferences.version < result.version)
       return recoveryPage(request, token, change, 'confirmed', { confirmedVersion: result.version });
   }

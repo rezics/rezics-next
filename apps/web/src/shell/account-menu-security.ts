@@ -1,4 +1,4 @@
-import { securityHrefFromIssuer } from '../settings/account-safety-links';
+import { securityHrefFromIssuer } from '../settings/auth-management';
 
 /** One configuration read per lifecycle; a disposed menu must never receive its result. */
 export function resolveAccountSecurity(

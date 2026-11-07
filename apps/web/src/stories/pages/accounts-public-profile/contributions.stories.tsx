@@ -4,6 +4,7 @@ import preferences from '../../../kernel/recorded/settings-preferences.json';
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import { expect, fn, userEvent, within } from 'storybook/test';
 import { PublicProfilePage } from '../../../accounts/public-profile/page';
+import { storyAccountProfileBinding } from '../../public-profile-binding';
 import { isRecord } from '../../../features/pages/shared';
 import { subjectPageMessages, viewTabLabels } from '../../../features/pages/route-support';
 import { subjectTabs } from '../../../features/pages/views';
@@ -92,6 +93,7 @@ function Example({
     <PatternStory visitor="Signed Out" path={`/@${page.account!.handle}`}>
       <AppShell>
         <PublicProfilePage
+          profile={storyAccountProfileBinding}
           page={page}
           {...(readingState
             ? {

@@ -1,7 +1,7 @@
 import { types as utilTypes } from 'node:util';
 import { bundledRelease } from '@rezics/definitions/bundled';
 import { checkBatchWrite, type BatchCommand, type BatchReference, type BatchStatement } from '@rezics/definitions/bulk';
-import type { PropertyDefinition } from '@rezics/definitions';
+import type { PropertyDefinition } from '@rezics/definitions/contract';
 import { checkStatementInput } from '@rezics/definitions/validate';
 import { ConversionError, type ConversionInput, type ConvertedRecord, type ConversionDiagnostic } from './index';
 import {

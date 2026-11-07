@@ -2,7 +2,7 @@ import type { KernelClient } from '@rezics/client';
 import { checkDocument, type DocumentNode, type DocumentSnapshot } from '@rezics/document';
 import { notFound } from '@tanstack/react-router';
 import { readPageAuthors, type PageAuthor } from '../identity/read';
-import type { ReadCredentialMode } from '../kernel/credential';
+import type { ReadCredentialMode } from '../reader/lifetime/contract';
 import type { SessionEnv } from '../session/client';
 import { prepareSession, viewerCredential } from '../session/request';
 

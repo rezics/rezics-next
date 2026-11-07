@@ -7,7 +7,7 @@ import {
   type MediaImportRequest,
 } from '@rezics/definitions/media-import';
 import { createAccess, resourceAuthorization } from '../../src/access/index.ts';
-import { GrantDeniedError } from '../../src/access/grant-commands.ts';
+import { GrantDeniedError } from '../../src/access/contract/index.ts';
 import { IdempotencyConflictError, principalCommandIdentity, runCommand } from '../../src/command/command.ts';
 import {
   importMediaFromUrl,

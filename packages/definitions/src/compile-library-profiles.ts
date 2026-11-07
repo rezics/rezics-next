@@ -1,5 +1,4 @@
 import canonicalize from 'canonicalize';
-import { posix } from 'node:path';
 import {
   libraryAt as at,
   validateLibraryProfileSource,
@@ -10,7 +9,7 @@ import {
   type LibraryProfileReference,
   type LibraryProfileSource,
 } from './library-profile.ts';
-import type { CatalogueViolation } from './compile.ts';
+import type { CatalogueViolation, CompilerHost } from './compiler/contract.ts';
 
 type Node = Record<string, unknown>;
 type Location = { file: string; pointer: string };
@@ -22,7 +21,7 @@ const branch = (): Home & { children: Map<string, Home> } => ({ children: new Ma
 const locales = new Set(['en', 'de', 'es', 'fr', 'ja', 'ko', 'zh-Hans', 'zh-Hant']);
 
 /** Owns source declarations and their presentation, never induced LinkML annotations. */
-export function compileLibraryProfiles(schemas: Record<string, Node>, report: Report) {
+export function compileLibraryProfiles(schemas: Record<string, Node>, report: Report, host: CompilerHost) {
   const groups = new Map<string, Map<string, Declaration>>();
   const authored = new Map<string, Declaration>();
   const parents = new Map<string, string>();
@@ -95,7 +94,7 @@ export function compileLibraryProfiles(schemas: Record<string, Node>, report: Re
 
   for (const [file, source] of Object.entries(schemas)) {
     if (!record(source.classes)) continue;
-    const group = posix.basename(file).replace(/\.ya?ml$/u, '');
+    const group = host.posixBasename(file).replace(/\.ya?ml$/u, '');
     for (const [name, definition] of Object.entries(source.classes)) {
       if (!record(definition)) continue;
       const location = { file, pointer: at('/classes', name) };

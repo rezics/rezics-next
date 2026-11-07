@@ -7,14 +7,15 @@ import { LifecycleDeniedError } from '../access/lifecycle-20261025094010-command
 import { authoritativeTimeValue, commandTime, principalCommandIdentity } from '../command/command.ts';
 import { runOperationalTransaction, type OperationalTransaction } from '../command/operational.ts';
 import { systemClock, type KernelClock } from '../clock.ts';
-import { ProblemError } from '../http/problem.ts';
-import { accessCommandAuthorization, AuthenticationError, type Access, type Actor } from '../request/access.ts';
+import { ProblemError } from '../http/problem-error.ts';
+import type { Access, Actor } from '../request/access.ts';
+import { AuthenticationError } from '../request/authentication-error.ts';
 import { deadlineFor } from '../request/deadline.ts';
 import { derivedId, partitionOf, routeOf } from '../route/route.ts';
 import { decodeCursor, encodeCursor } from '../tokens/cursor.ts';
 import type { KeyRing } from '../tokens/seal.ts';
 import type { WorkClient } from '../work/client.ts';
-import { createLibraryCommandRunner } from './command-support.ts';
+import { libraryCommandAuthorization, createLibraryCommandRunner } from './command-support.ts';
 import { initialExportSeek, readExportSourcePage, type ExportSeek } from './library-export-source.ts';
 import {
   libraryExportManifest as manifest,
@@ -234,7 +235,7 @@ export function createLibraryExport(deps: LibraryExportDependencies) {
   ): Promise<T> {
     const account = await admit(actor);
     const route = routeOf(account.accountId)!;
-    const authorization = await accessCommandAuthorization(
+    const authorization = await libraryCommandAuthorization(
       deps.access,
       account,
       'library_entry:list',

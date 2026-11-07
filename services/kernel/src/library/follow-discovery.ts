@@ -7,7 +7,8 @@ import { classifyUnavailability, requireAccessDeadline, CommandUnavailableError 
 import { mintReadTime, releaseOperationalTime } from '../command/command.ts';
 import { withConnection, discardConnection } from '../database/pool.ts';
 import { readPartition } from '../partition/partition.ts';
-import { accessCheck, type Access, type Actor } from '../request/access.ts';
+import { accessCheck } from '../request/access-check.ts';
+import { type Access, type Actor } from '../request/access.ts';
 import { partitionOf, routeOf } from '../route/route.ts';
 import type { KernelClock } from '../clock.ts';
 

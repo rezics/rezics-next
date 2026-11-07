@@ -2,21 +2,27 @@ import type { RatingAmbient, RatingCapabilityOptions } from './contract/capabili
 import { ratingCapabilities } from './adapters/ambient.ts';
 import { createCipheriv, createDecipheriv, createHash } from 'node:crypto';
 import type { Pool, PoolClient } from 'pg';
-import { deadlineClient } from '../access/authenticate.ts';
-import { GLOBAL_CONTEXT } from '../access/gates/catalogue.ts';
-import { readRealm } from '../community/realm.ts';
-import { discardConnection, withConnection } from '../database/pool.ts';
-import { ProblemError } from '../http/problem.ts';
-import { readPartition } from '../partition/partition.ts';
-import { accessCheck, type Access, type Actor } from '../request/access.ts';
-import { partitionOf, routeOf } from '../route/route.ts';
-import { subjectReadEligibility } from '../semantic/eligibility.ts';
-import readIdentity from '../semantic/read-subject-identity.sql';
 import {
+  deadlineClient,
+  readRealm,
+  accessCheck,
+  type Access,
+  type Actor,
+  subjectReadEligibility,
   createSubjectCanonicalNames,
   type SubjectCanonicalPopulation,
   type SubjectCanonicalNameKey,
-} from '../semantic/subject-source-key-pages.ts';
+} from './dependencies.ts';
+import { GLOBAL_CONTEXT_RESOURCE as GLOBAL_CONTEXT } from '../semantic/contract/global-context.ts';
+
+import { discardConnection, withConnection } from '../database/pool.ts';
+import { ProblemError } from '../http/problem-error.ts';
+import { readPartition } from '../partition/partition.ts';
+
+import { partitionOf, routeOf } from '../route/route.ts';
+
+import readIdentity from '../semantic/read-subject-identity.sql';
+
 import { seal, unseal, type KeyRing } from '../tokens/seal.ts';
 import { STANDARD_QUESTION_ID } from './standard-question.ts';
 import readFreshness from './aggregate-read-freshness.sql';

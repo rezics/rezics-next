@@ -1,7 +1,7 @@
 import { memoizedValue } from '../memoized.ts';
 import { t } from 'elysia';
 import { AccessUnavailableError } from '../access/unavailable.ts';
-import { deadlineClient } from '../access/authenticate.ts';
+import { deadlineClient } from './access-port.ts';
 import { withConnection } from '../database/pool.ts';
 import { readPartition } from '../partition/partition.ts';
 import { selectRealmBoardPage, type ContentBoardDependencies } from './boards.ts';

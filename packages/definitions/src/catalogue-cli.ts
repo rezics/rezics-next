@@ -1,5 +1,5 @@
 import { dirname, resolve } from 'node:path';
-import { buildCatalogue, verifyCatalogue, lookupCatalogueKind } from './catalogue-artifacts.ts';
+import { nativeCompiler } from './adapters/compiler-host.ts';
 import {
   catalogueFileStore,
   publishCatalogueRoot,
@@ -94,14 +94,17 @@ async function main(argv: readonly string[]) {
         ),
       );
     const directory = catalogueLocalPath(option('--output'));
-    const pin = await buildCatalogue({ releases, declarations, compatibility }, catalogueFileStore(directory));
+    const pin = await nativeCompiler().buildCatalogue(
+      { releases, declarations, compatibility },
+      catalogueFileStore(directory),
+    );
     await publishCatalogueRoot(directory, pin);
     console.log(JSON.stringify(pin));
   } else {
     const { pin, store } = await readCatalogueRootFile(option('--root'));
-    if (operation === 'verify') console.log(JSON.stringify(await verifyCatalogue(pin, store)));
+    if (operation === 'verify') console.log(JSON.stringify(await nativeCompiler().verifyCatalogue(pin, store)));
     else {
-      const result = await lookupCatalogueKind(pin, option('--id'), store);
+      const result = await nativeCompiler().lookupCatalogueKind(pin, option('--id'), store);
       console.log(JSON.stringify(result));
       if (result.status === 'not-found') process.exitCode = 2;
     }

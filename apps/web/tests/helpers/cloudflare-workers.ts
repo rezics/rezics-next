@@ -11,3 +11,9 @@ Bun.plugin({
 });
 
 mock.module('cloudflare:workers', () => import('./cloudflare-workers-runtime.ts'));
+
+const [{ pageRenderBinding }, { installSemanticRenderPort }] = await Promise.all([
+  import('../../src/features/catalogue/page-render-binding'),
+  import('../../src/features/pages/subject-page-application'),
+]);
+installSemanticRenderPort(pageRenderBinding);

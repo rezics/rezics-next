@@ -1,4 +1,4 @@
-import { ProblemError } from '../http/problem.ts';
+import { ProblemError } from '../http/problem-error.ts';
 
 type MemberPage = {
   members: readonly unknown[];

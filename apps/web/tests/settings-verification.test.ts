@@ -4,13 +4,9 @@ import { operationGroups } from '../src/kernel/exposure';
 import type { SessionEnv } from '../src/session/client';
 import type { SessionStore } from '../src/session/store';
 import { loadSettingsPage } from '../src/settings/preferences';
-import { validateVerificationDraft, verificationCharacterCount } from '../src/settings/verification-validation';
-import {
-  readVerification,
-  requestVerification,
-  withdrawVerification,
-  type VerificationInput,
-} from '../src/settings/verification-core';
+import { validateVerificationDraft, verificationCharacterCount } from '../src/settings/core/verification';
+import { readVerification, requestVerification, withdrawVerification } from '../src/settings/adapters/verification';
+import type { VerificationInput } from '../src/settings/contract/verification';
 
 const request = {
   id: 'request-1',
@@ -379,8 +375,11 @@ import {
   canWithdrawVerification,
   verificationQueryKey,
   verificationWithdrawalObservation,
-} from '../src/settings/verification-recovery';
-import type { AgentVerificationRequest, VerificationCommandResult } from '../src/settings/verification-core';
+} from '../src/settings/application/verification';
+import type { AgentVerificationRequest, VerificationCommandResult } from '../src/settings/contract/verification';
+import { createBrowserSettingsAmbient } from '../src/settings/adapters/ambient';
+
+const settingsAmbient = createBrowserSettingsAmbient();
 
 test('a receipt waits for current readback and older requests or revisions cannot replace it', async () => {
   const pending = {
@@ -391,13 +390,17 @@ test('a receipt waits for current readback and older requests or revisions canno
   };
   const approved = { ...pending, state: 'approved' as const, updatedAt: '2026-02-02T00:00:00Z' };
   let current: AgentVerificationRequest | null = null;
-  const controller = new VerificationRecovery('alice', {
-    read: async () => snapshotOf(current, { subjectTitle: 'Agent' }),
-    request: async () => ({ ok: true, verificationRequest: pending }),
-    withdraw: async () => {
-      throw new Error('Unexpected withdrawal');
+  const controller = new VerificationRecovery(
+    'alice',
+    {
+      read: async () => snapshotOf(current, { subjectTitle: 'Agent' }),
+      request: async () => ({ ok: true, verificationRequest: pending }),
+      withdraw: async () => {
+        throw new Error('Unexpected withdrawal');
+      },
     },
-  });
+    settingsAmbient,
+  );
   await controller.reload();
   await controller.submit(input);
   const attempt = controller.snapshot().attempt;
@@ -433,21 +436,25 @@ test('An uncertain verification request or withdrawal retries the exact original
     { status: 200, data: statusOf(approving) },
   ]);
   const sent: VerificationInput[] = [];
-  const controller = new VerificationRecovery('alice', {
-    read: async (accountId) => ({
-      accountId,
-      ...(await readVerification(client as never, accountId, 'Bearer token')),
-      subjectTitle: null,
-    }),
-    request: async (accountId, original) => {
-      sent.push(original);
-      if (sent.length === 1) throw new Error('Response lost after native commit');
-      return requestVerification(client as never, accountId, 'Bearer token', original);
+  const controller = new VerificationRecovery(
+    'alice',
+    {
+      read: async (accountId) => ({
+        accountId,
+        ...(await readVerification(client as never, accountId, 'Bearer token')),
+        subjectTitle: null,
+      }),
+      request: async (accountId, original) => {
+        sent.push(original);
+        if (sent.length === 1) throw new Error('Response lost after native commit');
+        return requestVerification(client as never, accountId, 'Bearer token', original);
+      },
+      withdraw: async () => {
+        throw new Error('Conflicting withdrawal must not run');
+      },
     },
-    withdraw: async () => {
-      throw new Error('Conflicting withdrawal must not run');
-    },
-  });
+    settingsAmbient,
+  );
   await controller.reload();
   const draft = { subject: input.subject, statement: input.statement, links: input.links.map((link) => ({ ...link })) };
   await controller.submit(draft);
@@ -499,21 +506,25 @@ test('uncertain withdrawal keeps confirmation, original key and native failures 
     { status: 200, data: statusOf(withdrawn) },
   ]);
   const sent: { idempotencyKey: string }[] = [];
-  const controller = new VerificationRecovery('alice', {
-    read: async (accountId) => ({
-      accountId,
-      ...(await readVerification(client as never, accountId, 'Bearer token')),
-      subjectTitle: null,
-    }),
-    request: async () => {
-      throw new Error('Conflicting request must not run');
+  const controller = new VerificationRecovery(
+    'alice',
+    {
+      read: async (accountId) => ({
+        accountId,
+        ...(await readVerification(client as never, accountId, 'Bearer token')),
+        subjectTitle: null,
+      }),
+      request: async () => {
+        throw new Error('Conflicting request must not run');
+      },
+      withdraw: async (accountId, original) => {
+        sent.push(original);
+        if (sent.length === 1) throw new Error('Withdrawal response lost');
+        return withdrawVerification(client as never, accountId, 'Bearer token', original.idempotencyKey);
+      },
     },
-    withdraw: async (accountId, original) => {
-      sent.push(original);
-      if (sent.length === 1) throw new Error('Withdrawal response lost');
-      return withdrawVerification(client as never, accountId, 'Bearer token', original.idempotencyKey);
-    },
-  });
+    settingsAmbient,
+  );
   await controller.reload();
   await controller.withdraw(false);
   expect(sent).toHaveLength(0);
@@ -568,11 +579,11 @@ test('verification reads reject missing data and other accounts, and late comman
       }),
     withdraw: async (): Promise<VerificationCommandResult> => ({ ok: false, status: 403, message: 'Forbidden' }),
   };
-  const alice = new VerificationRecovery('alice', io);
+  const alice = new VerificationRecovery('alice', io, settingsAmbient);
   await alice.reload();
   const sending = alice.submit(input);
   alice.deactivate();
-  const bob = new VerificationRecovery('bob', io);
+  const bob = new VerificationRecovery('bob', io, settingsAmbient);
   await bob.reload();
   complete({ ok: true, verificationRequest: { ...request, links: request.links.map((link) => ({ ...link })) } });
   await sending;
@@ -589,7 +600,7 @@ import {
   VerificationReadError,
   unwrapVerificationRead,
   type VerificationReadResult,
-} from '../src/settings/verification-core';
+} from '../src/settings/contract/verification';
 
 function nativeVerificationClient(responses: Response[]) {
   const calls: Request[] = [];
@@ -675,21 +686,25 @@ test('Keep native verification recovery delays actionable without weakening nati
       Response.json(statusOf({ ...request, state: 'approving' })),
     ]);
     const sent: VerificationInput[] = [];
-    const controller = new VerificationRecovery('alice', {
-      read: async (accountId) => ({
-        accountId,
-        ...(await readVerification(client, accountId, 'Bearer token')),
-        subjectTitle: 'Avery',
-      }),
-      request: async (accountId, original) => {
-        sent.push(original);
-        if (sent.length === 1) throw new Error('Original response lost');
-        return requestVerification(client, accountId, 'Bearer token', original);
+    const controller = new VerificationRecovery(
+      'alice',
+      {
+        read: async (accountId) => ({
+          accountId,
+          ...(await readVerification(client, accountId, 'Bearer token')),
+          subjectTitle: 'Avery',
+        }),
+        request: async (accountId, original) => {
+          sent.push(original);
+          if (sent.length === 1) throw new Error('Original response lost');
+          return requestVerification(client, accountId, 'Bearer token', original);
+        },
+        withdraw: async () => {
+          throw new Error('Conflicting command must not run');
+        },
       },
-      withdraw: async () => {
-        throw new Error('Conflicting command must not run');
-      },
-    });
+      settingsAmbient,
+    );
     await controller.reload();
     const draft = {
       subject: input.subject,
@@ -773,27 +788,31 @@ test('a failed final native status read retains the withdrawal receipt and exact
     let pauseRead = false;
     let finishRead!: () => void;
     const sent: { idempotencyKey: string }[] = [];
-    const controller = new VerificationRecovery('alice', {
-      read: async (accountId) => {
-        if (pauseRead)
-          await new Promise<void>((resolve) => {
-            finishRead = resolve;
-          });
-        return {
-          accountId,
-          ...(await readVerification(client, accountId, 'Bearer token')),
-          subjectTitle: 'Avery',
-        };
+    const controller = new VerificationRecovery(
+      'alice',
+      {
+        read: async (accountId) => {
+          if (pauseRead)
+            await new Promise<void>((resolve) => {
+              finishRead = resolve;
+            });
+          return {
+            accountId,
+            ...(await readVerification(client, accountId, 'Bearer token')),
+            subjectTitle: 'Avery',
+          };
+        },
+        request: async () => {
+          throw new Error('Conflicting request must not run');
+        },
+        withdraw: async (accountId, original) => {
+          sent.push(original);
+          if (sent.length === 1) throw new Error('Original withdrawal response lost');
+          return withdrawVerification(client, accountId, 'Bearer token', original.idempotencyKey);
+        },
       },
-      request: async () => {
-        throw new Error('Conflicting request must not run');
-      },
-      withdraw: async (accountId, original) => {
-        sent.push(original);
-        if (sent.length === 1) throw new Error('Original withdrawal response lost');
-        return withdrawVerification(client, accountId, 'Bearer token', original.idempotencyKey);
-      },
-    });
+      settingsAmbient,
+    );
     await controller.reload();
     await controller.withdraw(true);
     const original = controller.snapshot().attempt;
@@ -846,23 +865,27 @@ test('ordinary read Errors and invalid native retry timing never invent a delay 
     Response.json(statusOf(null)),
   ]);
   let reads = 0;
-  const controller = new VerificationRecovery('alice', {
-    read: async (accountId) => {
-      if (++reads === 1) throw new Error('Ordinary read failure');
-      if (reads === 4) throw new Error('rezics-platform-closed');
-      return {
-        accountId,
-        ...(await readVerification(client, accountId, 'Bearer token')),
-        subjectTitle: null,
-      };
+  const controller = new VerificationRecovery(
+    'alice',
+    {
+      read: async (accountId) => {
+        if (++reads === 1) throw new Error('Ordinary read failure');
+        if (reads === 4) throw new Error('rezics-platform-closed');
+        return {
+          accountId,
+          ...(await readVerification(client, accountId, 'Bearer token')),
+          subjectTitle: null,
+        };
+      },
+      request: async () => {
+        throw new Error('Unexpected command');
+      },
+      withdraw: async () => {
+        throw new Error('Unexpected command');
+      },
     },
-    request: async () => {
-      throw new Error('Unexpected command');
-    },
-    withdraw: async () => {
-      throw new Error('Unexpected command');
-    },
-  });
+    settingsAmbient,
+  );
   await controller.reload();
   expect(controller.snapshot()).toMatchObject({ phase: 'unavailable', current: null, readRetryAt: 0 });
   expect(controller.snapshot().failure).toBeUndefined();

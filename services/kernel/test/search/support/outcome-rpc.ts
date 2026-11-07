@@ -3,6 +3,8 @@ import { fork } from 'node:child_process';
 import type { WorkerStats } from './outcome-worker.ts';
 import { systemClock, type KernelClock } from '../../../src/clock.ts';
 
+export const OUTCOME_WORKER_READY_MESSAGE = 'rezics.search.outcome-worker.ready';
+
 /** Private child custody, never fixture credentials or business authority. */
 export interface OutcomeClockState {
   lifecycle: string;
@@ -75,9 +77,16 @@ export function startOutcomeWorkerProcess(env: Record<string, string | undefined
     stdio: ['ignore', 'pipe', 'pipe', 'ipc'],
   });
   let output = '';
+  let outputRemainder = '';
   let exited = false;
   let custodyFailure: Error | undefined;
-  const append = (chunk: unknown) => (output = (output + String(chunk)).slice(-65_536));
+  const append = (chunk: unknown) => {
+    const text = String(chunk);
+    output = (output + text).slice(-65_536);
+    const lines = `${outputRemainder}${text}`.split(/\r?\n/);
+    outputRemainder = lines.pop() ?? '';
+    for (const line of lines) if (line.includes('outcome-worker phase=')) process.stderr.write(`${line}\n`);
+  };
   child.stdout!.on('data', append);
   child.stderr!.on('data', append);
   const exit = new Promise<{ code: number | null; signal: string | null }>((resolve) =>
@@ -86,6 +95,47 @@ export function startOutcomeWorkerProcess(env: Record<string, string | undefined
       resolve({ code, signal });
     }),
   );
+  let settleIpcReady!: () => void;
+  let rejectIpcReady!: (error: Error) => void;
+  let ipcReadySettled = false;
+  const ipcReady = new Promise<void>((resolve, reject) => {
+    settleIpcReady = resolve;
+    rejectIpcReady = reject;
+  });
+  const finishIpcReady = () => {
+    if (ipcReadySettled) return;
+    ipcReadySettled = true;
+    child.off('message', onIpcMessage);
+    child.off('error', failIpcReady);
+    child.off('disconnect', onIpcDisconnect);
+    settleIpcReady();
+  };
+  const failIpcReady = (error: Error) => {
+    if (ipcReadySettled) return;
+    ipcReadySettled = true;
+    child.off('message', onIpcMessage);
+    child.off('error', failIpcReady);
+    child.off('disconnect', onIpcDisconnect);
+    rejectIpcReady(error);
+  };
+  const onIpcMessage = (packet: unknown) => {
+    if (
+      typeof packet === 'object' &&
+      packet !== null &&
+      !Array.isArray(packet) &&
+      'type' in packet &&
+      packet.type === OUTCOME_WORKER_READY_MESSAGE
+    ) {
+      finishIpcReady();
+    }
+  };
+  const onIpcDisconnect = () => failIpcReady(new Error(`Worker IPC disconnected before ready: ${output}`));
+  child.on('message', onIpcMessage);
+  child.once('error', failIpcReady);
+  child.once('disconnect', onIpcDisconnect);
+  void exit.then(({ code, signal }) => {
+    failIpcReady(new Error(`Worker exited before IPC ready: ${JSON.stringify({ code, signal })}: ${output}`));
+  });
   const rpc = createOutcomeRpc(
     {
       send: (packet) =>
@@ -124,7 +174,13 @@ export function startOutcomeWorkerProcess(env: Record<string, string | undefined
     },
   );
   // The initial explicit instant is installed before startWorker can register or launch work.
-  const ready = rpc.request<WorkerStats>('init', { env, clock: initialClock });
+  // Child startup imports the production composition before installing the RPC listener.
+  // Do not start the init deadline until that listener confirms it can receive requests.
+  const ready = ipcReady.then(() => rpc.request<WorkerStats>('init', { env, clock: initialClock }));
+  let readyFailure: unknown;
+  void ready.catch((error) => {
+    readyFailure = error;
+  });
   let closing: Promise<void> | undefined;
   let crashing: Promise<{ code: number | null; signal: string | null }> | undefined;
   const assertClockCustody = () => {
@@ -172,10 +228,20 @@ export function startOutcomeWorkerProcess(env: Record<string, string | undefined
         }, 90_000);
         try {
           try {
-            await ready;
-            if (!exited) await rpc.request<WorkerStats>('close', undefined, 60_000);
+            // Close is an independent lifecycle control. Awaiting the init promise first
+            // makes a stuck startup impossible to cancel through the same child RPC.
+            if (!exited) {
+              await ipcReady;
+              if (!exited) await rpc.request<WorkerStats>('close', undefined, 60_000);
+            }
           } catch (error) {
-            failures.push(error);
+            const phases = output
+              .split(/\r?\n/)
+              .filter((line) => line.includes('outcome-worker phase='))
+              .join(' | ');
+            const init = readyFailure instanceof Error ? readyFailure.message : 'init pending';
+            const close = error instanceof Error ? error.message : String(error);
+            failures.push(new Error(`Owned worker close failed: ${close}; init=${init}; phases=${phases || 'none'}`));
           }
           if (child.connected) child.disconnect();
           const result = await exit;

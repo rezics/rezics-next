@@ -1,4 +1,4 @@
-import { expectedCandidateReader } from '../../../subject/candidate-admission';
+import { expectedCandidateReader } from '../visit-host-port';
 import { createServerFn } from '@tanstack/react-start';
 import { getRequest, setResponseHeader } from '@tanstack/react-start/server';
 import { fetchGuideRelease } from '../../catalogue/definition-guide';

@@ -1,36 +1,10 @@
-import { memoizedValue } from '../memoized.ts';
-import { t } from 'elysia';
-
-/** Retained contributions disclose a current identity, a deletion label, or no available identity. */
-export type LiveContributionAttribution = {
-  readonly id: string;
-  readonly kind: 'actor' | 'organization';
-  readonly displayName: string | null;
-};
-export type DeletedContributionAttribution = {
-  readonly displayName: 'Deleted account' | 'Deleted organization';
-};
-/** Null is unavailable/absent attribution. It never attests account deletion. */
-export type ContributionAttribution = LiveContributionAttribution | DeletedContributionAttribution | null;
-
-const closed = { additionalProperties: false } as const;
-
-export function ContributionAttributionSchema() {
-  return memoizedValue(ContributionAttributionSchema, () =>
-    t.Union([
-      t.Object(
-        {
-          id: t.String({ format: 'uuid' }),
-          kind: t.Union([t.Literal('actor'), t.Literal('organization')]),
-          displayName: t.Union([t.String(), t.Null()]),
-        },
-        closed,
-      ),
-      t.Object({ displayName: t.Union([t.Literal('Deleted account'), t.Literal('Deleted organization')]) }, closed),
-      t.Null(),
-    ]),
-  );
-}
+import type { ContributionAttribution, DeletedContributionAttribution } from './contract/index.ts';
+export { ContributionAttributionSchema } from './contract/index.ts';
+export type {
+  ContributionAttribution,
+  LiveContributionAttribution,
+  DeletedContributionAttribution,
+} from './contract/index.ts';
 
 /** Input comes from the owner's current public projection, never a guessed lifecycle state. */
 export type ContributionIdentity = {

@@ -1,7 +1,7 @@
 import { createHash } from 'node:crypto';
 import { DBOS } from '@dbos-inc/dbos-sdk';
 import type { Pool } from 'pg';
-import { acknowledgeErasure, readErasureStatus, resolveRetention } from '../access/erasure.ts';
+import { acknowledgeErasure, readErasureStatus, resolveRetention } from './access-port.ts';
 import { noEffect, runCommand } from '../command/command.ts';
 import { withConnection } from '../database/pool.ts';
 import { partitionOf, routeOf } from '../route/route.ts';

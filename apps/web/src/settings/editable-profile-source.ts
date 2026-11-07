@@ -1,7 +1,8 @@
+import { serverSettingsTimer } from './adapters/ambient';
 import { withProfileDeadline } from './profile-request-deadline';
 import type { KernelClient } from '@rezics/client';
 import * as v from 'valibot';
-import { MediaProblem } from '../media/kernel';
+import type { SettingsContentFailureReader } from './ports/content';
 import type { NativePreferenceFailure } from './preferences';
 
 type ProfileGet = ReturnType<KernelClient['accounts']>['profile']['get'];
@@ -50,9 +51,13 @@ export function nativeProfileFailure(status: number, body?: unknown, headers?: H
   };
 }
 
-export function profileReadFailure(error: unknown): EditableProfileFailure | undefined {
+export function profileReadFailure(
+  error: unknown,
+  mediaFailure: SettingsContentFailureReader,
+): EditableProfileFailure | undefined {
   if (error instanceof EditableProfileReadError) return { ...error.failure, status: error.status };
-  if (error instanceof MediaProblem) return nativeProfileFailure(error.problem.status, error.problem, error.headers);
+  const failure = mediaFailure(error);
+  if (failure) return nativeProfileFailure(failure.status, failure.problem, failure.headers);
   return undefined;
 }
 
@@ -228,6 +233,7 @@ export function createEditableProfileSource(client: KernelClient, viewerAccountI
             fetch: { cache: 'no-store', signal: bounded },
           }),
         signal,
+        serverSettingsTimer(),
       );
       if (result.error || !result.data) {
         const failure = nativeProfileFailure(result.status, result.error?.value, result.headers);

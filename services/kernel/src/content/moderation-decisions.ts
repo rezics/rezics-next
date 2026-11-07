@@ -1,8 +1,7 @@
 import type { Pool } from 'pg';
 import { t } from 'elysia';
 import { Value } from 'typebox/value';
-import { deadlineClient, within } from '../access/authenticate.ts';
-import { notificationAllowed } from '../access/preferences.ts';
+import { deadlineClient, within, notificationAllowed } from './access-port.ts';
 import { CommandUnavailableError } from '../command/command.ts';
 import { discardConnection, withConnection } from '../database/pool.ts';
 import type { Effect } from '../events/effects.ts';

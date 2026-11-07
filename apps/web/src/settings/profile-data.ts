@@ -1,7 +1,9 @@
+import { serverSettingsTimer } from './adapters/ambient';
 import { withProfileDeadline } from './profile-request-deadline';
 import type { KernelClient } from '@rezics/client';
 import { isNotFound, isRedirect } from '@tanstack/react-router';
 import type { SessionEnv } from '../session/client';
+import type { SettingsContentFailureReader } from './ports/content';
 import { settingsCommandKeyHeader } from './command-headers';
 import {
   createEditableProfileSource,
@@ -46,13 +48,16 @@ export type ProfileReadResult =
   | { ok: true; profile: ProfileValues; editing: ProfileEditing }
   | { ok: false; status: number; failure?: EditableProfileFailure };
 
-export async function profileReadResult(read: () => Promise<ObservedProfile>): Promise<ProfileReadResult> {
+export async function profileReadResult(
+  read: () => Promise<ObservedProfile>,
+  mediaFailure: SettingsContentFailureReader = () => undefined,
+): Promise<ProfileReadResult> {
   try {
     const current = await read();
     if (!current.editing) throw new Error('Profile unavailable');
     return { ok: true, profile: profileCommandValues(current), editing: current.editing };
   } catch (error) {
-    const failure = profileReadFailure(error);
+    const failure = profileReadFailure(error, mediaFailure);
     if (failure) return { ok: false, status: failure.status, ...(Object.keys(failure).length > 1 ? { failure } : {}) };
     throw error;
   }
@@ -68,8 +73,11 @@ export function profileReadObservation(result: ProfileReadResult): ObservedProfi
   return result.editing ? { ...result.profile, editing: result.editing } : result.profile;
 }
 
-export function profileReadDenied(error: unknown): boolean {
-  const failure = profileReadFailure(error);
+export function profileReadDenied(
+  error: unknown,
+  mediaFailure: SettingsContentFailureReader = () => undefined,
+): boolean {
+  const failure = profileReadFailure(error, mediaFailure);
   return !!failure && [401, 403, 404].includes(failure.status);
 }
 
@@ -224,6 +232,7 @@ export async function saveProfileRecord(
   const result = await withProfileDeadline(
     (bounded) => client.accounts({ accountId }).patch(body, { headers, fetch: { cache: 'no-store', signal: bounded } }),
     signal,
+    serverSettingsTimer(),
   );
   if (!result.error && result.data) {
     const ack = parseProfilePatchAck(result.data, accountId);
@@ -244,7 +253,9 @@ export async function saveProfileRecord(
   };
 }
 
-export async function runReadProfile(): Promise<ProfileReadResult> {
+export async function runReadProfile(
+  mediaFailure: SettingsContentFailureReader = () => undefined,
+): Promise<ProfileReadResult> {
   try {
     const { getRequest, setResponseHeader } = await import('@tanstack/react-start/server');
     setResponseHeader('cache-control', 'private, no-store');
@@ -260,11 +271,11 @@ export async function runReadProfile(): Promise<ProfileReadResult> {
         await profileReadResult(async () => {
           if (!authorization || !accountId) throw new EditableProfileReadError(401);
           return loadProfileRecord(kernelClient(), authorization, accountId);
-        }),
+        }, mediaFailure),
       );
     } catch (error) {
       profileControlFlow(error);
-      const failure = profileReadFailure(error);
+      const failure = profileReadFailure(error, mediaFailure);
       if (failure)
         return serializeProfileResult({
           ok: false as const,
@@ -278,11 +289,14 @@ export async function runReadProfile(): Promise<ProfileReadResult> {
   }
 }
 
-export async function runSaveProfile(data: {
-  before: ProfileValues;
-  after: ProfileValues;
-  idempotencyKey: string;
-}): Promise<ProfileSaveResult> {
+export async function runSaveProfile(
+  data: {
+    before: ProfileValues;
+    after: ProfileValues;
+    idempotencyKey: string;
+  },
+  mediaFailure: SettingsContentFailureReader = () => undefined,
+): Promise<ProfileSaveResult> {
   try {
     const { getRequest, setResponseHeader } = await import('@tanstack/react-start/server');
     setResponseHeader('cache-control', 'private, no-store');
@@ -308,25 +322,29 @@ export async function runSaveProfile(data: {
         });
       const client = kernelClient();
       return serializeProfileResult(
-        await withProfileDeadline(async (signal) => {
-          // Preflight and PATCH share one absolute wait. Recovery keeps the original body and key.
-          const current = await loadProfileRecord(client, authorization, accountId, undefined, signal);
-          if (!profilePatchAdmitted(profileChanges(data.before, data.after), current.editing))
-            return { ok: false as const, status: 403, message: '' };
-          return saveProfileRecord(
-            client,
-            authorization,
-            accountId,
-            profileCommandValues(data.before),
-            profileCommandValues(data.after),
-            data.idempotencyKey,
-            signal,
-          );
-        }, request.signal),
+        await withProfileDeadline(
+          async (signal) => {
+            // Preflight and PATCH share one absolute wait. Recovery keeps the original body and key.
+            const current = await loadProfileRecord(client, authorization, accountId, undefined, signal);
+            if (!profilePatchAdmitted(profileChanges(data.before, data.after), current.editing))
+              return { ok: false as const, status: 403, message: '' };
+            return saveProfileRecord(
+              client,
+              authorization,
+              accountId,
+              profileCommandValues(data.before),
+              profileCommandValues(data.after),
+              data.idempotencyKey,
+              signal,
+            );
+          },
+          request.signal,
+          serverSettingsTimer(),
+        ),
       );
     } catch (error) {
       profileControlFlow(error);
-      const failure = profileReadFailure(error);
+      const failure = profileReadFailure(error, mediaFailure);
       if (failure)
         return serializeProfileResult({
           ok: false as const,

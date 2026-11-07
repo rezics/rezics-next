@@ -8,7 +8,7 @@ import type {
 import { Value } from 'typebox/value';
 import type { Pool } from 'pg';
 import type { AccessClient } from '../request/access.ts';
-import { deadlineClient, within } from '../access/authenticate.ts';
+import { deadlineClient, within } from './access-port.ts';
 import { CommandUnavailableError, runCommand } from '../command/command.ts';
 import { discardConnection, withConnection } from '../database/pool.ts';
 import type { Effect } from '../events/effects.ts';

@@ -1,20 +1,8 @@
-import { RECENT_HISTORY_LIMIT } from './recent-history';
-import type { RecentEntry as NativeEntry, Pending } from './recent';
+import { RECENT_HISTORY_LIMIT, RECENT_NATIVE_REVISION_MAX, RECENT_QUEUE_LIMIT } from './recent-contract';
+import type { QueuedRecentCommand, RecentJournal, RecentNativeEntry } from './recent-contract';
+export type { QueuedRecentCommand, RecentJournal };
+export { freshRecentJournal } from './recent-contract';
 
-export type QueuedRecentCommand = Pending & {
-  localId?: string;
-  visitedAt?: number;
-  expectedRevision?: number;
-};
-export type RecentJournal = {
-  revision: number | null;
-  observed: Record<string, number>;
-  rows: Record<string, { id: string; visitedAt: number; entry?: NativeEntry }>;
-  pending: QueuedRecentCommand[];
-  conflict?: boolean;
-};
-
-const maxRevision = 2147483646;
 const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const localKinds = new Set(['Library', 'Collection', 'Realm', 'Zone', 'Agent']);
 const record = (value: unknown): value is Record<string, unknown> =>
@@ -63,7 +51,7 @@ function nativeScope(value: unknown): boolean {
     uuid.test(value.id)
   );
 }
-function nativeEntry(value: unknown): value is NativeEntry {
+function nativeEntry(value: unknown): value is RecentNativeEntry {
   if (!record(value)) return false;
   if (value.kind === 'query')
     return (
@@ -82,7 +70,7 @@ function nativeEntry(value: unknown): value is NativeEntry {
   return value.kind === 'scope' && keysAre(value, ['kind', 'scope']) && nativeScope(value.scope);
 }
 function revision(value: unknown): value is number {
-  return typeof value === 'number' && Number.isInteger(value) && value >= 0 && value <= maxRevision;
+  return typeof value === 'number' && Number.isInteger(value) && value >= 0 && value <= RECENT_NATIVE_REVISION_MAX;
 }
 
 /** Admits only persisted command metadata that this adapter can safely resume. */
@@ -98,7 +86,11 @@ export function admitRecentJournal(value: unknown): RecentJournal | undefined {
   const observed = value.observed,
     rows = value.rows,
     pending = value.pending;
-  if (Object.keys(observed).length > RECENT_HISTORY_LIMIT || Object.keys(rows).length > 100 || pending.length > 100)
+  if (
+    Object.keys(observed).length > RECENT_HISTORY_LIMIT ||
+    Object.keys(rows).length > RECENT_QUEUE_LIMIT ||
+    pending.length > RECENT_QUEUE_LIMIT
+  )
     return;
   for (const [id, visitedAt] of Object.entries(observed))
     if (!localId(id) || typeof visitedAt !== 'number' || !Number.isFinite(visitedAt)) return;
@@ -181,5 +173,3 @@ export function admitRecentJournal(value: unknown): RecentJournal | undefined {
 
   return value as unknown as RecentJournal;
 }
-
-export const freshRecentJournal = (): RecentJournal => ({ revision: null, observed: {}, rows: {}, pending: [] });

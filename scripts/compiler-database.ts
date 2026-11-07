@@ -1,13 +1,31 @@
 // Reylo prepares `.sql` modules against DATABASE_URL. The root typecheck and the Auth check share this
 // preparation so those modules see the kernel schema and the Auth schema.
+// Kernel and Auth helpers load at runtime through a typed dynamic import so control-plane `tsc` does not follow
+// `.sql` modules.
 import { spawn, spawnSync, type SpawnSyncOptions } from 'node:child_process';
 import { createConnection } from 'node:net';
 import { existsSync, mkdirSync, readFileSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
-import { migrate as migrateAuth } from '../services/auth/scripts/database.ts';
-import { migrate as migrateKernel, POSTGRES_IMAGE } from '../services/kernel/scripts/database.ts';
-import { withCommandPhase } from '../services/kernel/scripts/command-phases.ts';
 import type { StartedDatabase } from './typecheck.ts';
+
+/** Matches Kernel/Auth `POSTGRES_IMAGE`; kept local so this module typechecks without Kernel source. */
+const POSTGRES_IMAGE = 'postgres:19rc1@sha256:b3cb7405059fd06f9ebae4aad4780b3788dfdd2acef1ac248ad9d56ced8abb06';
+
+type KernelDatabaseHelpers = {
+  migrate: (url: string, root?: string) => void;
+};
+
+type AuthDatabaseHelpers = {
+  migrate: (url: string, migrationsDirectory?: string) => void;
+};
+
+type CommandPhaseHelpers = {
+  withCommandPhase: <T>(phase: string, work: () => Promise<T> | T, env?: NodeJS.ProcessEnv) => Promise<T>;
+};
+
+function importHelpers<T>(relativePath: string): Promise<T> {
+  return import(new URL(relativePath, import.meta.url).href) as Promise<T>;
+}
 
 const CONTAINER_IDENTITY = /^[A-Za-z0-9][A-Za-z0-9_.-]*$/;
 const NETWORK_NAME = /^[A-Za-z0-9][A-Za-z0-9_.-]*$/;
@@ -40,6 +58,8 @@ export function dockerTimeoutMs(args: readonly string[]): number {
   const verb = args[0];
   if (verb === 'run' || verb === 'create' || verb === 'start' || verb === 'stop') return DOCKER_RUN_TIMEOUT_MS;
   if (verb === 'rm' && args.includes('-f')) return DOCKER_RUN_TIMEOUT_MS;
+  // Labelled reap lists every matching id; that is owned cleanup, not a 5s inspect/exec/port probe.
+  if (verb === 'ps' && args.includes('-aq')) return DOCKER_RUN_TIMEOUT_MS;
   if (verb === 'build' || verb === 'pull') return DOCKER_BUILD_TIMEOUT_MS;
   return DOCKER_PROBE_TIMEOUT_MS;
 }
@@ -47,20 +67,18 @@ export function dockerTimeoutMs(args: readonly string[]): number {
 export type DockerSpawnSyncOptions = SpawnSyncOptions & { encoding: 'utf8'; timeout: number };
 
 /**
- * Forced `rm` is a new session so a 200ms supervisor SIGKILL of the owner group cannot abort it. A timeout kills with
- * SIGKILL: a docker CLI that ignores SIGTERM would otherwise hold the bounded wait open.
+ * Ordinary `docker rm -f` waits in this process so settlement can be proven. A timeout kills with SIGKILL: a docker CLI
+ * that ignores SIGTERM would otherwise hold the bounded wait open. Signal-path callers use `beginDetachedDockerRm`.
  */
 /** A caller's bound replaces the verb's default; cleanup of a busy container or volume passes its own. */
 export type DockerRunOptions = Pick<SpawnSyncOptions, 'cwd' | 'env'> & { timeout?: number };
 
 export function dockerSpawnSyncOptions(args: readonly string[], extra: DockerRunOptions = {}): DockerSpawnSyncOptions {
-  const forcedRm = args[0] === 'rm' && args.includes('-f');
   const { timeout = dockerTimeoutMs(args), ...rest } = extra;
   return {
     encoding: 'utf8',
     timeout,
     killSignal: 'SIGKILL',
-    ...(forcedRm ? { detached: true } : {}),
     ...rest,
   };
 }
@@ -80,14 +98,96 @@ export function retainOriginalAndCleanupFailure(original: unknown, cleanup: unkn
   });
 }
 
+/** Forced removal of one owned container and its anonymous volume. */
+export function compilerDatabaseRemoveArgs(id: string): string[] {
+  return ['rm', '-f', '-v', id];
+}
+
+/** Presence check after ordinary removal; a missing object is settlement, not a probe timeout. */
+export function compilerDatabaseInspectArgs(id: string): string[] {
+  return ['inspect', '-f', '{{.Id}}', id];
+}
+
+/** Labelled volumes for this owner pid; ordinary cleanup requires the list to be empty. */
+export function compilerDatabaseVolumeLsArgs(pid: number): string[] {
+  return ['volume', 'ls', '-q', '--filter', `label=${COMPILER_PID_LABEL}=${pid}`];
+}
+
+export function isDockerTimeout(error: unknown): boolean {
+  return (
+    (error instanceof Error && (error as NodeJS.ErrnoException).code === 'ETIMEDOUT') ||
+    (error instanceof Error && error.message.includes('ETIMEDOUT'))
+  );
+}
+
+/** A timed-out create already reaped its nonce; retry once with a fresh identity. The second failure stays with the caller. */
+export function retryDockerCreateOnce<T>(nonce: string, create: (nonce: string) => T, nextNonce: () => string): T {
+  try {
+    return create(nonce);
+  } catch (error) {
+    if (!isDockerTimeout(error)) throw error;
+    return create(nextNonce());
+  }
+}
+
 /**
  * Auth fixture pattern: issue `docker rm -f -v` in its own session and return. The host-lifetime supervisor still
  * waits up to 120s for labelled removal; SIGTERM handlers must not block in spawnSync.
  */
 export function beginDetachedDockerRm(id: string, extra: Pick<SpawnSyncOptions, 'cwd' | 'env'> = {}): void {
   if (!id || !CONTAINER_IDENTITY.test(id)) return;
-  const child = spawn('docker', ['rm', '-f', '-v', id], { detached: true, stdio: 'ignore', ...extra });
+  const child = spawn('docker', compilerDatabaseRemoveArgs(id), { detached: true, stdio: 'ignore', ...extra });
   child.unref();
+}
+
+function compilerObjectExists(args: string[], dockerCommand: DockerCommand): boolean {
+  try {
+    return dockerCommand(args).length > 0;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Ordinary cleanup waits for `docker rm -f -v` and then proves the container and labelled volume are gone.
+ * Signal-path callers use `beginDetachedDockerRm` instead: a 200ms SIGKILL must not abort that session.
+ */
+export function settleCompilerDatabaseRemoval(id: string, pid = process.pid, dockerCommand?: DockerCommand): void {
+  const run = dockerCommand ?? docker;
+  if (!id || !CONTAINER_IDENTITY.test(id)) return;
+  try {
+    run(compilerDatabaseRemoveArgs(id));
+  } catch (error) {
+    if (compilerObjectExists(compilerDatabaseInspectArgs(id), run)) throw error;
+  }
+  if (compilerObjectExists(compilerDatabaseInspectArgs(id), run)) {
+    throw new Error(`compiler-database: container ${id} remains after removal`);
+  }
+  let volumes: string;
+  try {
+    volumes = run(compilerDatabaseVolumeLsArgs(pid)).trim();
+  } catch (error) {
+    throw new Error(
+      `compiler-database: volume settlement could not be proven: ${error instanceof Error ? error.message : String(error)}`,
+    );
+  }
+  if (volumes) throw new Error(`compiler-database: volume remains after removal: ${volumes}`);
+}
+
+/** Cleanup diagnostics stay attached to the original compiler identity; a completed native status is not replaced. */
+export function keepCompilerStatusAfterCleanup(
+  status: number | undefined,
+  cleanup: unknown,
+  context: string,
+  compilerFailure?: unknown,
+): number {
+  const error = retainOriginalAndCleanupFailure(
+    compilerFailure ?? (status === undefined ? 'compiler did not complete' : `compiler status ${status}`),
+    cleanup,
+    context,
+  );
+  console.error(`${context} infrastructure failure: phase=database-cleanup: ${error.message}`);
+  return status ?? 75;
 }
 
 function spawnDockerError(args: readonly string[], error: NodeJS.ErrnoException): never {
@@ -120,7 +220,7 @@ export function reapLabeledContainers(label: string, value: string, dockerComman
       .filter(Boolean);
     for (const id of ids) {
       try {
-        dockerCommand(['rm', '-f', '-v', id]);
+        dockerCommand(compilerDatabaseRemoveArgs(id));
       } catch {
         // A concurrent cleanup may already have removed it.
       }
@@ -187,12 +287,16 @@ export function startCompilerContainer(
   dockerCommand: DockerCommand = docker,
   env: NodeJS.ProcessEnv = process.env,
 ): string {
-  try {
-    return dockerCommand(compilerDatabaseRunArgs(pid, nonce, dockerNetworkArgs(env)));
-  } catch (error) {
-    reapCompilerNonce(nonce, pid, dockerCommand);
-    throw error;
-  }
+  const network = dockerNetworkArgs(env);
+  const start = (attemptNonce: string): string => {
+    try {
+      return dockerCommand(compilerDatabaseRunArgs(pid, attemptNonce, network));
+    } catch (error) {
+      reapCompilerNonce(attemptNonce, pid, dockerCommand);
+      throw error;
+    }
+  };
+  return retryDockerCreateOnce(nonce, start, () => newCompilerNonce(pid));
 }
 
 /**
@@ -525,7 +629,7 @@ export function cleanupStaleCompilerDatabases(dockerCommand: DockerCommand = doc
       process.kill(Number(owner), 0);
     } catch {
       try {
-        dockerCommand(['rm', '-f', '-v', id!]);
+        dockerCommand(compilerDatabaseRemoveArgs(id!));
       } catch {
         // A concurrent cleanup may already have removed it.
       }
@@ -536,6 +640,11 @@ export function cleanupStaleCompilerDatabases(dockerCommand: DockerCommand = doc
 
 /** Start a throwaway database and apply the kernel migrations, then the Auth migrations. */
 export async function prepareCompilerDatabase(): Promise<StartedDatabase> {
+  const [{ migrate: migrateKernel }, { migrate: migrateAuth }, { withCommandPhase }] = await Promise.all([
+    importHelpers<KernelDatabaseHelpers>('../services/kernel/scripts/database.ts'),
+    importHelpers<AuthDatabaseHelpers>('../services/auth/scripts/database.ts'),
+    importHelpers<CommandPhaseHelpers>('../services/kernel/scripts/command-phases.ts'),
+  ]);
   process.stdout.write(`Compiler database owner ${ownerProcessIdentity()}\n`);
   if (process.env.KERNEL_CHECK_SKIP_STALE_CLEANUP !== '1' && !process.env.KERNEL_CHECK_ON_REMOTE) {
     cleanupStaleCompilerDatabases();
@@ -548,30 +657,19 @@ export async function prepareCompilerDatabase(): Promise<StartedDatabase> {
   );
   let listen: PostgresListen | undefined;
   let removed = false;
-  let cleanupFailed = false;
-  let cleanupFailure: unknown;
   const remove = (wait = true): void => {
     process.off('SIGINT', onSigint);
     process.off('SIGTERM', onSigterm);
     listen?.stop();
     listen = undefined;
     rmSync(isolatedPostgresSocketDir(), { recursive: true, force: true });
-    if (removed) {
-      if (cleanupFailed) throw cleanupFailure;
-      return;
-    }
+    if (removed) return;
     removed = true;
     if (!wait) {
       beginDetachedDockerRm(container);
       return;
     }
-    try {
-      docker(['rm', '-f', '-v', container]);
-    } catch (error) {
-      cleanupFailed = true;
-      cleanupFailure = error;
-      throw error;
-    }
+    settleCompilerDatabaseRemoval(container);
   };
   const onSigint = (): void => {
     try {

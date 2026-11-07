@@ -18,23 +18,23 @@ import presentationRuleBodies from './community-presentation-rules.sql';
 import { readCommunityPresentations } from './community-presentation.ts';
 import { AsyncLocalStorage } from 'node:async_hooks';
 import type { Pool } from 'pg';
-import { commandAccessContext } from '../access/command-admission.ts';
-import { accountStandingCheck } from '../access/index.ts';
+import {
+  commandAccessContext,
+  accountStandingCheck,
+  deadlineClient,
+  within,
+  createResourcePublicEligibility,
+} from './access-port.ts';
 import { spaceReadEligibility } from '../community/space.ts';
 import { authoritativeTimeValue } from '../command/command.ts';
 import { realmReadEligibility } from '../community/realm.ts';
-import { deadlineClient, within } from '../access/authenticate.ts';
-import { createResourcePublicEligibility } from '../access/public-eligibility.ts';
 import { createReadEligibilityWork } from './read-eligibility-access-work.ts';
 import type { AuthoritativeTime } from '../command/command.ts';
 import type { AccessContext } from '../request/access.ts';
 import type { ContentEditionSource } from './edition-model.ts';
 import { prepareEditionSubject, type EditionSourceAuthorization } from './edition-subject.ts';
-import {
-  DurableInitiatorUnavailableError,
-  type DurableOperationAnchor,
-  type InitiatorRestorer,
-} from '../access/durable-initiator.ts';
+import { DurableInitiatorUnavailableError } from '../access/contract/index.ts';
+import type { DurableOperationAnchor, InitiatorRestorer } from '../access/content-adapter.ts';
 import { AccessUnavailableError } from '../access/unavailable.ts';
 import { CommandUnavailableError } from '../command/command.ts';
 import { discardConnection, withConnection } from '../database/pool.ts';

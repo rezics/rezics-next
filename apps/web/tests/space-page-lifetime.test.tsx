@@ -259,7 +259,7 @@ const { captureSpacePageAdmission, SpacePageLifetimeHost, useSpacePageLifetime, 
   await import('../src/community/space-page-lifetime');
 const { releaseRealmMembershipLifetime } = await import('../src/community/realm-membership-lifetime');
 const { releasePublicationSessionSource } = await import('../src/community/publication-controls-view');
-const { SpacePage } = await import('../src/community/space-page');
+const { SpacePage } = await import('../src/session/community-application');
 const { m } = await import('../src/paraglide/messages.js');
 const { setLocale } = await import('../src/paraglide/runtime.js');
 const { Route: spaceRoute } = await import('../src/routes/spaces/$address');
@@ -1395,4 +1395,73 @@ test('replacement and removed carriers retire pending shelf return and detached 
   await repaint(<SpacePage page={pageFor(address)} />);
   expect(host.textContent).toContain('Original board');
   expect(host.textContent).not.toContain('Retired return');
+});
+
+test('the Community visit consumes supplied reading and navigation capabilities without constructing producer adapters', async () => {
+  const { RealmShelf: CapabilityShelf } = await import('../src/community/space-page');
+  type Application = import('../src/community/contract/visit').CommunityVisitApplication;
+  const supplied: Array<{ shelf: string; cursor?: string }> = [];
+  const handedOff: string[] = [];
+  const application: Application = {
+    session: signedOut(),
+    locale: 'en',
+    href: `/en/spaces/${address}`,
+    operationsIdentity: undefined,
+    reading: () => ({
+      requireReaderOrigin: false,
+      transport: {
+        boards: async ({ cursor }) => {
+          supplied.push({ shelf: 'boards', ...(cursor ? { cursor } : {}) });
+          return { kind: 'page', items: [], next: 'sparse-next', unavailable: 0 };
+        },
+        publications: async ({ cursor }) => {
+          supplied.push({ shelf: 'publications', ...(cursor ? { cursor } : {}) });
+          return {
+            kind: 'page',
+            items: [publication(id(91), 'First supplied work'), publication(id(90), 'Second supplied work')],
+            next: null,
+            unavailable: 0,
+          };
+        },
+        change: async () => ({ kind: 'denied' }),
+        prepare: async () => ({ kind: 'unavailable' }),
+      },
+    }),
+    publicationHref: (subject, realm, returnTo) => {
+      handedOff.push(returnTo);
+      return `/supplied/${subject.id}?realm=${realm}`;
+    },
+    coverSrc: () => '',
+    Heading: ({ children }) => <h1>{children}</h1>,
+    Follow: () => null,
+    ResourceAccess: () => null,
+    Departure: ({ children }) => children,
+  };
+  await mount(<CapabilityShelf application={application} realm={realmHome()} returnTo={`/en/spaces/${address}`} />, {
+    session: signedOut(),
+  });
+  expect(supplied).toEqual([]);
+  await act(async () => click(m.realm_boards_more()));
+  await settle();
+  expect(supplied).toEqual([{ shelf: 'boards', cursor: 'board-cursor-one' }]);
+  expect(host.textContent).toContain('Original board');
+  expect(host.querySelector('#realm-published-heading')).not.toBeNull();
+  await act(async () => click(m.realm_publications_more()));
+  await settle();
+  expect(supplied).toEqual([
+    { shelf: 'boards', cursor: 'board-cursor-one' },
+    { shelf: 'publications', cursor: 'publication-cursor-one' },
+  ]);
+  expect(calls.boards).toEqual([]);
+  expect(calls.publications).toEqual([]);
+  const works = [...host.querySelectorAll<HTMLElement>('[id^="realm-publication-"]')];
+  expect(works.map((node) => node.id)).toEqual([
+    `realm-publication-${publishedId}`,
+    `realm-publication-${id(91)}`,
+    `realm-publication-${id(90)}`,
+  ]);
+  expect(works[1]!.querySelector('a')?.getAttribute('href')).toBe(`/supplied/${id(91)}?realm=${realmId}`);
+  expect(handedOff).toContain(
+    `/en/spaces/${address}?node=publications&cursor=publication-cursor-one#realm-publication-${id(91)}`,
+  );
 });

@@ -6,7 +6,7 @@ import { Client, Pool } from 'pg';
 import { createAuthDatabase } from '../support/auth-database.ts';
 import * as accessPorts from '../../src/access/index.ts';
 import { readAccount } from '../../src/access/account-data.ts';
-import { GrantDeniedError } from '../../src/access/grant-commands.ts';
+import { GrantDeniedError } from '../../src/access/contract/index.ts';
 import type { CommandAttempt } from '../../src/command/command.ts';
 import {
   importMediaFromUrl,

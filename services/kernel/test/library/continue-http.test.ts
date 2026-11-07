@@ -8,7 +8,7 @@ import readSummaries from '../../src/semantic/summaries-read.sql';
 import { partitionOf, routeOf } from '../../src/route/route.ts';
 import { createReleasedDiscoveryFixture, discoveryKey } from '../support/released-discovery.ts';
 import { createReleasedLibraryPopulation } from './support/released-library-population.ts';
-import { continuePageSchema } from '../../src/library/transport-contract.ts';
+import { continuePageSchema } from '../../src/library/adapters/continue-page.ts';
 
 type ContinuePage = Static<ReturnType<typeof continuePageSchema>>;
 

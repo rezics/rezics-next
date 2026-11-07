@@ -4,9 +4,10 @@ import { readAccount } from '../access/account-data.ts';
 import { GrantDeniedError } from '../access/grant-commands.ts';
 import { mintReadTime, type AuthoritativeTime, type CommandOutcome } from '../command/command.ts';
 import { tupleRoute } from '../content/imported-contract.ts';
-import { ProblemError } from '../http/problem.ts';
+import { ProblemError } from '../http/problem-error.ts';
 import { readPartition } from '../partition/partition.ts';
-import { accessCheck, type AccountActor, type Actor } from '../request/access.ts';
+import { accessCheck } from '../request/access-check.ts';
+import { type AccountActor, type Actor } from '../request/access.ts';
 import { deadlineFor } from '../request/deadline.ts';
 import { partitionOf } from '../route/route.ts';
 import {

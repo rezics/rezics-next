@@ -1,13 +1,17 @@
 import { memoizedValue } from '../memoized.ts';
 import { t } from 'elysia';
 import type { Release } from '@rezics/definitions';
-import { currentCommand, type CommandTransaction } from '../command/command.ts';
-import { AccessUnavailableError, CommandUnavailableError } from '../access/unavailable.ts';
+import type { CommandTransaction } from '../command/command.ts';
+import { CommandUnavailableError } from '../access/unavailable.ts';
 import { readPartition } from '../partition/partition.ts';
 import { partitionOf, routeOf } from '../route/route.ts';
-import { importedTupleRouteOf } from './adapters/imported-route.ts';
-import { EditorialConflictError } from './candidates.ts';
-import { effectiveGlobalSlotFacts } from './slots.ts';
+import { nativeIdentityCapabilities } from './identity-adapter-bind.ts';
+import type { NativeIdentityCapabilities, NativeReviewedPersonOperations } from './identity-adapter-port.ts';
+import type {
+  ReviewedPersonEndpoint,
+  ReviewedPersonExpectation,
+  ReviewedPersonSource,
+} from './identity-adapters/identity-epoch-contract.ts';
 import readClaim from './reviewed-person-identity-read-claim.sql';
 import lockClaim from './reviewed-person-identity-lock-claims.sql';
 import lockSubject from './reviewed-person-identity-lock-subjects.sql';
@@ -15,18 +19,7 @@ import readVisible from './merges-read-visible.sql';
 import readLatestRevision from './merges-read-latest-revision.sql';
 import readRedirect from './read-redirect.sql';
 
-export type ReviewedPersonEndpoint = {
-  subject: string;
-  revision: number;
-  securityRevision: string;
-  source: 'bangumi' | 'vndb' | 'bangumi_cross_media' | 'vndb_cross_media';
-  externalId: string;
-  claimTransactionId: string;
-  property: 'wdt:P6298' | 'wdt:P3180';
-  value: string;
-};
-export type ReviewedPersonSource = Pick<ReviewedPersonEndpoint, 'source' | 'externalId'>;
-export type ReviewedPersonExpectation = { endpoints: [ReviewedPersonEndpoint, ReviewedPersonEndpoint] };
+export type { ReviewedPersonEndpoint, ReviewedPersonExpectation, ReviewedPersonSource };
 
 export const ReviewedPersonEndpointSchema = t.Object(
   {
@@ -103,8 +96,8 @@ export function ReviewedPersonGuardUnavailableError() {
 }
 export type ReviewedPersonGuardUnavailableError = InstanceType<ReturnType<typeof ReviewedPersonGuardUnavailableError>>;
 
-/** Caller has already authorized this original in its final read transaction. Never follows redirects. */
-export async function observeReviewedPersonIdentity(
+async function observeReviewedPersonIdentityWith(
+  capabilities: NativeIdentityCapabilities,
   tx: CommandTransaction,
   subject: string,
   source: ReviewedPersonSource,
@@ -119,30 +112,31 @@ export async function observeReviewedPersonIdentity(
     release.properties[identity.property]?.datatype !== 'external-id'
   )
     return null;
+  const caps = capabilities;
   const visible = await readVisible.run(tx, { route, subject_id: subject });
   if (visible?.type !== 'schema:Person') return null;
   if ((await readRedirect.run(tx, { route, subject_id: subject }))?.target) return null;
   const claim = await readClaim.run(tx, {
-    route: importedTupleRouteOf()(routeKey, source.source, source.externalId),
+    route: caps.routing.importedTupleRoute(routeKey, source.source, source.externalId),
     source: source.source,
     external_id: source.externalId,
   });
   if (claim?.subject !== subject) return null;
   const latest = await readLatestRevision.run(tx, { route, subject_id: subject });
   if (!latest) return null;
-  let selected: Awaited<ReturnType<typeof effectiveGlobalSlotFacts>>;
+  let selected: Awaited<ReturnType<typeof caps.slots.effectiveGlobalSlotFacts>>;
   try {
-    selected = await effectiveGlobalSlotFacts(tx, subject, identity.property, undefined, lockSelected);
+    selected = await caps.slots.effectiveGlobalSlotFacts(tx, subject, identity.property, undefined, lockSelected);
   } catch (error) {
-    if (lockSelected && error instanceof AccessUnavailableError)
-      throw new (ReviewedPersonGuardUnavailableError())(currentCommand(tx).partition);
+    if (lockSelected && caps.slots.isAccessUnavailable(error))
+      throw new (ReviewedPersonGuardUnavailableError())(caps.command.currentCommand(tx).partition);
     throw error;
   }
   // Hidden or missing selected rows cannot be filtered into an apparently agreeing identity.
   const basis = selected.basis as { selection: unknown[] } | unknown[] | null;
   const count = Array.isArray(basis) ? basis.length : (basis?.selection.length ?? 0);
   if (count === 0 || count > 32 || selected.facts.length !== count) {
-    if (lockSelected) throw new (ReviewedPersonGuardUnavailableError())(currentCommand(tx).partition);
+    if (lockSelected) throw new (ReviewedPersonGuardUnavailableError())(caps.command.currentCommand(tx).partition);
     return null;
   }
   let strings = 0;
@@ -169,18 +163,19 @@ export async function observeReviewedPersonIdentity(
   };
 }
 
-/** Runs only inside the authorized first-effect callback; every restarted callback reacquires exclusions. */
-export async function guardReviewedPersonIdentity(
+async function guardReviewedPersonIdentityWith(
+  capabilities: NativeIdentityCapabilities,
   tx: CommandTransaction,
   expected: ReviewedPersonExpectation,
   routeKey: Uint8Array,
   release: Release,
 ): Promise<void> {
-  const partition = currentCommand(tx).partition;
+  const caps = capabilities;
+  const partition = caps.command.currentCommand(tx).partition;
   const keys = expected.endpoints.map((endpoint) => ({
     endpoint,
     route: routeOf(endpoint.subject),
-    claimRoute: importedTupleRouteOf()(routeKey, endpoint.source, endpoint.externalId),
+    claimRoute: caps.routing.importedTupleRoute(routeKey, endpoint.source, endpoint.externalId),
   }));
   if (
     keys.some(
@@ -204,11 +199,11 @@ export async function guardReviewedPersonIdentity(
       external_id: endpoint.externalId,
     });
     if (claim?.subject !== endpoint.subject || claim.transaction !== endpoint.claimTransactionId)
-      throw new EditorialConflictError();
+      throw caps.slots.editorialConflict();
   }
   for (const { endpoint, route } of [...keys].sort((a, b) => a.endpoint.subject.localeCompare(b.endpoint.subject))) {
     const locked = await lockSubject.run(tx, { route: route!, subject_id: endpoint.subject });
-    if (!locked) throw new EditorialConflictError();
+    if (!locked) throw caps.slots.editorialConflict();
     // Installed closure incarnations require the concurrent admission owner; this native
     // first-effect path can establish only an unpending legacy self mapping.
     if (
@@ -223,7 +218,15 @@ export async function guardReviewedPersonIdentity(
       throw new (ReviewedPersonGuardUnavailableError())(partition);
   }
   for (const { endpoint } of keys) {
-    const observed = await observeReviewedPersonIdentity(tx, endpoint.subject, endpoint, routeKey, release, true);
+    const observed = await observeReviewedPersonIdentityWith(
+      capabilities,
+      tx,
+      endpoint.subject,
+      endpoint,
+      routeKey,
+      release,
+      true,
+    );
     if (
       !observed ||
       observed.revision !== endpoint.revision ||
@@ -232,6 +235,56 @@ export async function guardReviewedPersonIdentity(
       observed.property !== endpoint.property ||
       observed.value !== endpoint.value
     )
-      throw new EditorialConflictError();
+      throw caps.slots.editorialConflict();
   }
+}
+
+const reviewedPersonByCapabilities = new WeakMap<NativeIdentityCapabilities, NativeReviewedPersonOperations>();
+
+/** Reviewed Person observe/guard closed over one routing, slot and command set. */
+export function createReviewedPersonOperations(
+  capabilities: NativeIdentityCapabilities,
+): NativeReviewedPersonOperations {
+  const cached = reviewedPersonByCapabilities.get(capabilities);
+  if (cached) return cached;
+  const operations: NativeReviewedPersonOperations = Object.freeze({
+    observe: (
+      tx: CommandTransaction,
+      subject: string,
+      source: ReviewedPersonSource,
+      routeKey: Uint8Array,
+      release: Release,
+      lockSelected?: boolean,
+    ) => observeReviewedPersonIdentityWith(capabilities, tx, subject, source, routeKey, release, lockSelected),
+    guard: (tx: CommandTransaction, expected: ReviewedPersonExpectation, routeKey: Uint8Array, release: Release) =>
+      guardReviewedPersonIdentityWith(capabilities, tx, expected, routeKey, release),
+  });
+  reviewedPersonByCapabilities.set(capabilities, operations);
+  return operations;
+}
+
+function defaultReviewedPerson() {
+  return createReviewedPersonOperations(nativeIdentityCapabilities());
+}
+
+/** Caller has already authorized this original in its final read transaction. Never follows redirects. */
+export async function observeReviewedPersonIdentity(
+  tx: CommandTransaction,
+  subject: string,
+  source: ReviewedPersonSource,
+  routeKey: Uint8Array,
+  release: Release,
+  lockSelected = false,
+): Promise<ReviewedPersonEndpoint | null> {
+  return defaultReviewedPerson().observe(tx, subject, source, routeKey, release, lockSelected);
+}
+
+/** Runs only inside the authorized first-effect callback; every restarted callback reacquires exclusions. */
+export async function guardReviewedPersonIdentity(
+  tx: CommandTransaction,
+  expected: ReviewedPersonExpectation,
+  routeKey: Uint8Array,
+  release: Release,
+): Promise<void> {
+  return defaultReviewedPerson().guard(tx, expected, routeKey, release);
 }

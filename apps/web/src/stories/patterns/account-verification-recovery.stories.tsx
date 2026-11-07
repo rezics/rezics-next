@@ -9,6 +9,7 @@ import {
   type AgentVerificationRequest,
   type VerificationInput,
 } from '../../settings/verification-core';
+import { useSettingsAmbient } from '../../settings/adapters/ambient-view.tsx';
 import { VerificationRecovery } from '../../settings/verification-recovery';
 
 type Scenario =
@@ -59,6 +60,7 @@ function Example({
     queryClient.setQueryData(['exposure', 'viewer'], ['agent_verification']);
     return queryClient;
   });
+  const ambient = useSettingsAmbient();
   const [controller] = useState(() => {
     let current: AgentVerificationRequest | null = withdrawing ? pending : null;
     let original: VerificationInput | { idempotencyKey: string } | null = null;
@@ -86,37 +88,41 @@ function Example({
       current = withdraw ? { ...pending, state: 'withdrawn' } : { ...requested, state: 'approving' };
       return { ok: true as const, verificationRequest: withdraw ? current : requested };
     };
-    return new VerificationRecovery('alice', {
-      read: async (accountId) => {
-        if (scenario === 'unavailable' && original) throw new Error('Native status unavailable');
-        if (scenario === 'read-delay' && original)
-          throw new VerificationReadError({
-            status: 503,
-            message: 'Native current status temporarily unavailable',
-            code: 'overloaded',
-            retryable: true,
-            requestId: 'native-read-retry',
-            retryAfter: '3600',
-          });
-        return {
-          accountId,
-          verificationRequest: current,
-          viewerActions: current
-            ? current.state === 'pending'
-              ? [{ action: 'account:update', operations: ['account.withdraw_verification'] }]
-              : ['withdrawn', 'failed', 'rejected'].includes(current.state)
-                ? [{ action: 'account:update', operations: ['account.request_verification'] }]
-                : []
-            : [{ action: 'account:update', operations: ['account.request_verification'] }],
-          subjectTitle: 'Avery',
-        };
+    return new VerificationRecovery(
+      'alice',
+      {
+        read: async (accountId) => {
+          if (scenario === 'unavailable' && original) throw new Error('Native status unavailable');
+          if (scenario === 'read-delay' && original)
+            throw new VerificationReadError({
+              status: 503,
+              message: 'Native current status temporarily unavailable',
+              code: 'overloaded',
+              retryable: true,
+              requestId: 'native-read-retry',
+              retryAfter: '3600',
+            });
+          return {
+            accountId,
+            verificationRequest: current,
+            viewerActions: current
+              ? current.state === 'pending'
+                ? [{ action: 'account:update', operations: ['account.withdraw_verification'] }]
+                : ['withdrawn', 'failed', 'rejected'].includes(current.state)
+                  ? [{ action: 'account:update', operations: ['account.request_verification'] }]
+                  : []
+              : [{ action: 'account:update', operations: ['account.request_verification'] }],
+            subjectTitle: 'Avery',
+          };
+        },
+        request: (_, input) => {
+          onRequest?.(input);
+          return send(input, false);
+        },
+        withdraw: (_, input) => send(input, true),
       },
-      request: (_, input) => {
-        onRequest?.(input);
-        return send(input, false);
-      },
-      withdraw: (_, input) => send(input, true),
-    });
+      ambient,
+    );
   });
   useEffect(() => {
     controller.activate();

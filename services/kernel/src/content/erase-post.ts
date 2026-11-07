@@ -10,7 +10,7 @@ import { createHash } from 'node:crypto';
 import canonicalize from 'canonicalize';
 import type { Pool } from 'pg';
 import type { DurableOperationAnchor, InitiatorRestorer } from '../access/durable-initiator.ts';
-import { GrantDeniedError } from '../access/grant-commands.ts';
+import { GrantDeniedError } from '../access/contract/index.ts';
 import {
   principalCommandIdentity,
   commandTime,
@@ -23,9 +23,8 @@ import {
   type CommandOutcome,
   type CommandTransaction,
 } from '../command/command.ts';
-import { resourceAuthorizationPage } from '../access/resource-authorization.ts';
+import { resourceAuthorizationPage, deadlineClient } from './access-port.ts';
 import { accessCommandAuthorization, type Access, type AccessClient, type Actor } from '../request/access.ts';
-import { deadlineClient } from '../access/authenticate.ts';
 import { withConnection } from '../database/pool.ts';
 import { newId, partitionOf, routeOf } from '../route/route.ts';
 import readScope from './read-erasure-scope.sql';

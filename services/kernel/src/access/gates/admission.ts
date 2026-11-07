@@ -1,3 +1,5 @@
+import { PlatformClosedError } from '../contract/index.ts';
+export { PlatformClosedError } from '../contract/index.ts';
 import { readNativeAccessTime } from '../authenticate.ts';
 import { authoritativeTimeValue, releaseOperationalTime, type AuthoritativeTime } from '../../command/command.ts';
 import type { AccessWorkAccounting } from '../work.ts';
@@ -8,13 +10,6 @@ import type { Access, Actor } from '../../request/access.ts';
 import { actionLabelOfMountedRoute, type MountedRoute } from '../../http/request.ts';
 import { GLOBAL_CONTEXT, readExposure } from './catalogue.ts';
 import { parseExposure } from './declaration.ts';
-
-export class PlatformClosedError extends Error {
-  constructor() {
-    super('Platform operation is closed');
-    this.name = 'PlatformClosedError';
-  }
-}
 
 /** Group-level rule shared by route admission and in-process entries: an open
  * group admits everyone, a closed one only an account holding `gate:<group>` or

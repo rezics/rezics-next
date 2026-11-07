@@ -1,7 +1,7 @@
 import type { Pool } from 'pg';
 import { openWorkExecutionOriginal } from '../work/selected-runtime.ts';
 import { DEFAULT_REQUEST_DEADLINE_MS } from '../command/command.ts';
-import { ProblemError } from '../http/problem.ts';
+import { ProblemError } from '../http/problem-error.ts';
 import type { Actor } from '../request/access.ts';
 import { deadlineFor } from '../request/deadline.ts';
 import { routeOf } from '../route/route.ts';

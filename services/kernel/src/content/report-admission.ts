@@ -1,6 +1,6 @@
 import { contentRequestId } from './adapters/bind.ts';
 import { communityReportReadCheck, communityReportTargetFacts } from '../community/report-targets.ts';
-import { deadlineClient, within } from '../access/authenticate.ts';
+import { deadlineClient, within } from './access-port.ts';
 import { discardConnection, withConnection } from '../database/pool.ts';
 import { readPartition } from '../partition/partition.ts';
 import { partitionOf, routeOf } from '../route/route.ts';

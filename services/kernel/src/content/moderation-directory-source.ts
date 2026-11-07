@@ -1,7 +1,7 @@
 import type { Pool } from 'pg';
 import { mintReadTime, type AuthoritativeTime } from '../command/command.ts';
 import { createHash } from 'node:crypto';
-import { deadlineClient, within } from '../access/authenticate.ts';
+import { deadlineClient, within } from './access-port.ts';
 import { withConnection } from '../database/pool.ts';
 import { readPartition } from '../partition/partition.ts';
 import { accessCheck, type Actor, type AccessClient } from '../request/access.ts';

@@ -9,23 +9,34 @@ import { withHeaders } from '@elysia/openapi';
 import { t } from 'elysia';
 import { Compile } from 'typebox/compile';
 import type { Pool } from 'pg';
-import { GrantDeniedError } from '../access/grant-commands.ts';
-import { deadlineClient, within } from '../access/authenticate.ts';
+import {
+  GrantDeniedError,
+  deadlineClient,
+  within,
+  problemSchema,
+  IDEMPOTENCY_HEADER,
+  idempotencyKeyOf,
+  SESSION_HEADER,
+  AuthenticationError,
+  type Access,
+  type Actor,
+  resolveSubject,
+} from './dependencies.ts';
+
 import type { CommandAuthorization, CommandOutcome } from '../command/command.ts';
 import { discardConnection, withConnection } from '../database/pool.ts';
-import { ProblemError, problemSchema } from '../http/problem.ts';
+import { ProblemError } from '../http/problem-error.ts';
+
 import { customMethod } from '../http/custom-method.ts';
 import { defineRateLimit } from '../http/rate-limit.ts';
-import { IDEMPOTENCY_HEADER, idempotencyKeyOf, SESSION_HEADER } from '../http/request.ts';
-import { AuthenticationError, type Access, type Actor } from '../request/access.ts';
-import { resolveSubject } from '../library/subject-anchor.ts';
+
 import { partitionOf, routeOf } from '../route/route.ts';
 import { readPartition } from '../partition/partition.ts';
-import { GLOBAL_CONTEXT } from '../semantic/definitions.ts';
+import { GLOBAL_CONTEXT } from '../semantic/contract/global-context.ts';
 import type { definitionRoutes } from '../semantic/http/definitions.ts';
 import type { KernelClock } from '../clock.ts';
 import type { KeyRing } from '../tokens/seal.ts';
-import { SourceFenceQuerySchema } from '../content/schemas.ts';
+import { SourceFenceQuerySchema } from '../content/source-fence-schemas.ts';
 import { tupleRoute } from '../content/imported-contract.ts';
 import { readFences, type SourceFenceTuple } from '../content/source-fences.ts';
 import sourceStatisticList from './source-statistic-list.sql';

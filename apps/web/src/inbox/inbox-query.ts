@@ -1,6 +1,7 @@
 import { queryOptions, type QueryClient } from '@tanstack/react-query';
-import { personalRead, readQueryKey } from '../kernel/query';
-import { preferenceRetryDeadline } from '../settings/preference-failure-retry';
+import { productionInboxShellPort } from './adapters/shell';
+import { preferenceRetryDeadline } from '../settings/ports/ambient';
+import type { InboxClock } from './ports/ambient';
 import {
   DEFAULT_INBOX_SELECTION,
   InboxSeenError,
@@ -21,7 +22,7 @@ import { inboxObservationRecovery, type InboxObservationRecovery } from './inbox
 import { coalesceInboxViewerCount } from './inbox-work';
 import { forInboxViewer, inboxViewerCsrfToken, type InboxViewer } from './inbox-viewer';
 
-const inboxKey = readQueryKey(['notifications', 'inbox'], 'session');
+const inboxKey = productionInboxShellPort.readQueryKey(['notifications', 'inbox'], 'session');
 
 export function inboxViewerQueryKey(viewer: InboxViewer) {
   return [...inboxKey, viewer.subject, viewer.epoch] as const;
@@ -44,7 +45,7 @@ export function inboxPageQuery(
 ) {
   const query: InboxPageQuery = { selection, ...(cursor ? { cursor } : {}) };
   return queryOptions({
-    ...personalRead,
+    ...productionInboxShellPort.personalRead,
     // Each direction change and mounted return receives a fresh key. A prior cached payload
     // can never stand in for native admission of the same opaque address.
     queryKey: [...inboxViewerQueryKey(viewer), episode, selection, cursor ?? null, pageInstance, readId],
@@ -66,7 +67,7 @@ export function inboxPageQuery(
 }
 
 const unreadCountDefaults = {
-  ...personalRead,
+  ...productionInboxShellPort.personalRead,
   staleTime: 60_000,
   retry: false,
 } as const;
@@ -77,11 +78,11 @@ export function unreadCountRetryAt(viewer: InboxViewer): number {
   return unreadCountObservations.get(viewer)?.retryAt ?? 0;
 }
 
-export function unreadCountFetchBlocked(viewer: InboxViewer, now = Date.now()): boolean {
+export function unreadCountFetchBlocked(viewer: InboxViewer, now: number): boolean {
   return unreadCountRetryAt(viewer) > now;
 }
 
-function rememberUnreadCount(viewer: InboxViewer, result: UnreadCount, now = Date.now()) {
+function rememberUnreadCount(viewer: InboxViewer, result: UnreadCount, now: number) {
   unreadCountObservations.set(viewer, {
     retryAt:
       result.signedIn && result.state === 'unavailable' ? preferenceRetryDeadline(result.failure.retryAfter, now) : 0,
@@ -90,9 +91,13 @@ function rememberUnreadCount(viewer: InboxViewer, result: UnreadCount, now = Dat
   return result;
 }
 
-export async function fetchInboxUnreadCount(viewer: InboxViewer, signal?: AbortSignal): Promise<UnreadCount> {
+export async function fetchInboxUnreadCount(
+  viewer: InboxViewer,
+  now: InboxClock,
+  signal?: AbortSignal,
+): Promise<UnreadCount> {
   if (signal?.aborted || !viewer.isCurrent()) throw new DOMException('Inbox viewer changed', 'AbortError');
-  if (unreadCountFetchBlocked(viewer)) {
+  if (unreadCountFetchBlocked(viewer, now())) {
     const last = unreadCountObservations.get(viewer)?.last;
     if (last) return last;
     throw new DOMException('Inbox viewer unavailable', 'AbortError');
@@ -100,7 +105,7 @@ export async function fetchInboxUnreadCount(viewer: InboxViewer, signal?: AbortS
   return coalesceInboxViewerCount(viewer, () =>
     forInboxViewer(
       viewer,
-      async () => rememberUnreadCount(viewer, await readUnreadCount(signal ? { signal } : {})),
+      async () => rememberUnreadCount(viewer, await readUnreadCount(signal ? { signal } : {}), now()),
       signal,
     ),
   );
@@ -109,18 +114,18 @@ export async function fetchInboxUnreadCount(viewer: InboxViewer, signal?: AbortS
 // Retain the fixed prefix for existing cache invalidation consumers.
 export const unreadCountQuery = queryOptions({
   ...unreadCountDefaults,
-  queryKey: readQueryKey(['notifications', 'count'], 'session'),
+  queryKey: productionInboxShellPort.readQueryKey(['notifications', 'count'], 'session'),
   queryFn: () => readUnreadCount(),
 });
 
-export function unreadCountQueryFor(viewer: InboxViewer | null) {
-  const admitFetch = () => viewer !== null && viewer.isCurrent() && !unreadCountFetchBlocked(viewer);
+export function unreadCountQueryFor(viewer: InboxViewer | null, now: InboxClock) {
+  const admitFetch = () => viewer !== null && viewer.isCurrent() && !unreadCountFetchBlocked(viewer, now());
   return queryOptions({
     ...unreadCountDefaults,
     queryKey: [...unreadCountQuery.queryKey, viewer?.subject ?? null, viewer?.epoch ?? null],
     queryFn: ({ signal }) => {
       if (!viewer) throw new DOMException('Inbox viewer unavailable', 'AbortError');
-      return fetchInboxUnreadCount(viewer, signal);
+      return fetchInboxUnreadCount(viewer, now, signal);
     },
     enabled: typeof globalThis.window !== 'undefined' && viewer !== null && viewer.isCurrent(),
     gcTime: 0,
@@ -163,6 +168,7 @@ async function followInboxAcknowledgementRead(
   viewer: InboxViewer,
   csrfToken: string,
   refresh: () => Promise<unknown>,
+  now: InboxClock,
 ): Promise<InboxObservationRecovery | null> {
   try {
     await forInboxCredential(client, viewer, csrfToken, refresh);
@@ -172,7 +178,7 @@ async function followInboxAcknowledgementRead(
       throw error instanceof DOMException && error.name === 'AbortError'
         ? error
         : new DOMException('Inbox viewer changed', 'AbortError');
-    return inboxObservationRecovery(inboxReadFailure(error).failure);
+    return inboxObservationRecovery(inboxReadFailure(error).failure, {}, now());
   }
 }
 
@@ -181,24 +187,37 @@ async function acknowledgeInboxViewer(
   viewer: InboxViewer,
   csrfToken: string,
   send: () => Promise<InboxSeenResult>,
+  now: InboxClock,
 ): Promise<InboxObservationRecovery | null> {
   return forInboxCredential(client, viewer, csrfToken, async () => {
     const result = await forInboxViewer(viewer, send);
     if ('failure' in result) throw new InboxSeenError(result.failure);
     if (!result.signedIn) throw new InboxSeenError({ status: 401, code: 'unauthorized' });
     const [countObservation, pageObservation] = await Promise.all([
-      followInboxAcknowledgementRead(client, viewer, csrfToken, () =>
-        client.invalidateQueries({ queryKey: unreadCountQueryFor(viewer).queryKey, exact: true }),
+      followInboxAcknowledgementRead(
+        client,
+        viewer,
+        csrfToken,
+        () => client.invalidateQueries({ queryKey: unreadCountQueryFor(viewer, now).queryKey, exact: true }),
+        now,
       ),
-      followInboxAcknowledgementRead(client, viewer, csrfToken, () =>
-        client.invalidateQueries({ queryKey: inboxViewerQueryKey(viewer) }),
+      followInboxAcknowledgementRead(
+        client,
+        viewer,
+        csrfToken,
+        () => client.invalidateQueries({ queryKey: inboxViewerQueryKey(viewer) }),
+        now,
       ),
     ]);
     if (!countObservation && !pageObservation) return null;
-    return inboxObservationRecovery((pageObservation ?? countObservation)!.failure, {
-      page: pageObservation !== null,
-      count: countObservation !== null,
-    });
+    return inboxObservationRecovery(
+      (pageObservation ?? countObservation)!.failure,
+      {
+        page: pageObservation !== null,
+        count: countObservation !== null,
+      },
+      now(),
+    );
   });
 }
 
@@ -207,11 +226,16 @@ export async function markInboxViewerNoticeSeen(
   viewer: InboxViewer,
   attempt: InboxNoticeSeenAttempt,
   csrfToken: string,
+  now: InboxClock,
   send: NoticeSeenTransport = markInboxItemSeen,
 ): Promise<InboxObservationRecovery | null> {
   if (attempt.accountId !== viewer.subject) throw new InboxSeenError({ status: 403, code: 'forbidden' });
-  return acknowledgeInboxViewer(client, viewer, csrfToken, () =>
-    send({ data: attempt, headers: { 'X-CSRF-Token': csrfToken } }),
+  return acknowledgeInboxViewer(
+    client,
+    viewer,
+    csrfToken,
+    () => send({ data: attempt, headers: { 'X-CSRF-Token': csrfToken } }),
+    now,
   );
 }
 
@@ -220,9 +244,14 @@ export async function markInboxViewerSeen(
   viewer: InboxViewer,
   attempt: InboxSeenAttempt,
   csrfToken: string,
+  now: InboxClock,
   send: SeenTransport = markInboxSeen,
 ): Promise<InboxObservationRecovery | null> {
-  return acknowledgeInboxViewer(client, viewer, csrfToken, () =>
-    send({ data: attempt, headers: { 'X-CSRF-Token': csrfToken } }),
+  return acknowledgeInboxViewer(
+    client,
+    viewer,
+    csrfToken,
+    () => send({ data: attempt, headers: { 'X-CSRF-Token': csrfToken } }),
+    now,
   );
 }

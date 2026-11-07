@@ -3,7 +3,6 @@ import type { Release } from '@rezics/definitions';
 import type { SubjectRead } from '@rezics/client';
 import {
   admittedProperty,
-  encodedBytes,
   emptyVisit,
   historicalStatement,
   isA,
@@ -21,9 +20,9 @@ import {
   visitBound,
   type VisitWork,
 } from '../release-fidelity/model';
+import { encodedBytes } from '../release-fidelity/encoding';
 
 export {
-  encodedBytes,
   emptyVisit,
   fileProfileReleased,
   isCatalogueFileType,
@@ -36,6 +35,7 @@ export {
   visitBound,
   type VisitWork,
 } from '../release-fidelity/model';
+export { encodedBytes } from '../release-fidelity/encoding';
 
 export const fileUuid = releaseUuid;
 const termProperties = new Set(['schema:name', 'schema:description', 'schema:alternateName']);

@@ -9,8 +9,8 @@ import {
   type Actor,
   type Resource,
 } from '../request/access.ts';
-import { GrantDeniedError } from '../access/grant-commands.ts';
-import { deadlineClient } from '../access/authenticate.ts';
+import { GrantDeniedError } from '../access/contract/index.ts';
+import { deadlineClient } from './access-port.ts';
 import { realmReadEligibility } from '../community/realm.ts';
 import {
   principalCommandIdentity,

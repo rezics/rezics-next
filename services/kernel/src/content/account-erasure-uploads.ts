@@ -1,10 +1,9 @@
 import { memoizedValue } from '../memoized.ts';
 import type { Pool } from 'pg';
-import { createAccess } from '../access/index.ts';
+import { createAccess, recordLateErasureItem, resolveLateErasureItem } from './access-port.ts';
 import { withConnection } from '../database/pool.ts';
 import { runCommand, noEffect } from '../command/command.ts';
 import { DBOS } from '@dbos-inc/dbos-sdk';
-import { recordLateErasureItem, resolveLateErasureItem } from '../access/erasure.ts';
 import type { Effect } from '../events/effects.ts';
 import type { CloudEvent } from '../events/log.ts';
 import { readPartition } from '../partition/partition.ts';

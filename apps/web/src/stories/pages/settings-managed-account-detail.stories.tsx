@@ -9,6 +9,7 @@ import { expect, within, userEvent } from 'storybook/test';
 import { automation, human, organization, selectManagementStory } from '../../accounts/management/story-api';
 import { m } from '../../paraglide/messages.js';
 import { PageStory, PatternStory, pageReady } from '../page';
+import { settingsContent } from '../../settings/adapters/presentation';
 
 const meta = {
   title: 'Pages/Account/Settings managed account detail',
@@ -86,7 +87,12 @@ function RecoveringDetail() {
         </Button>
         <Button onClick={() => client.setQueryData(sessionQuery.queryKey, original)}>Restore session</Button>
       </div>
-      <ManagedAccountDetail accountId={organization.id} backHref="/settings#account" />
+      <ManagedAccountDetail
+        accountId={organization.id}
+        backHref="/settings#account"
+        initials={settingsContent.initials}
+        mediaFailure={settingsContent.mediaFailure}
+      />
     </AppShell>
   );
 }

@@ -12,3 +12,4 @@ export { createKindAudienceApplication } from './kind-audience.ts';
 export type { KindAudiencePlan } from './kind-audience.ts';
 export { createOriginalAdmission, OriginalWorkUnavailableError } from './original-admission.ts';
 export { createResourceAuthorizationApplication } from './resource-authorization.ts';
+export { createCollectionPolicyApplication } from './collection-policy.ts';

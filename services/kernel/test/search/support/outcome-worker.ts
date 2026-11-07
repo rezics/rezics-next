@@ -6,7 +6,7 @@ import { readSearchConfig } from '../../../src/search/work.ts';
 import { createRatedSubjectSource } from '../../../src/search/rated-source.ts';
 import { readMembershipRouteKey } from '../../../src/access/membership-work-config.ts';
 import { workerTestEnv } from '../../support/worker-env.ts';
-import { createOutcomeRpc, createOutcomeWorkerClock } from './outcome-rpc.ts';
+import { createOutcomeRpc, createOutcomeWorkerClock, OUTCOME_WORKER_READY_MESSAGE } from './outcome-rpc.ts';
 import { createSearchRunnerSlot } from './runner-slot.ts';
 
 /** Observations only: no credentials, source answers or inferred starter execution. */
@@ -27,6 +27,10 @@ function record(value: unknown): value is Record<string, unknown> {
 
 function noParams(params: unknown) {
   if (params !== undefined) throw new Error('This control takes no parameters');
+}
+
+function phase(name: string) {
+  process.stderr.write(`outcome-worker phase=${name}\n`);
 }
 
 function initEnv(params: unknown): Record<string, string | undefined> {
@@ -67,16 +71,32 @@ export function createOutcomeWorker(overrides: Pick<WorkerConfig, 'kernelPool' |
   function close(): Promise<WorkerStats> {
     closing = true; // Seal admission before awaiting any in-flight initialization or controls.
     return (stopping ??= (async () => {
+      // Seal and drain Search immediately. Init may still be waiting for the actual worker to
+      // finish registration; queuing this behind init prevents the owner from cancelling it.
+      const failures: unknown[] = [];
+      try {
+        await slot.stop();
+      } catch (error) {
+        failures.push(error);
+      }
       await starting?.catch(() => {});
-      if (worker) await worker.stop();
-      else await slot.stop();
+      if (worker) {
+        try {
+          await worker.stop();
+        } catch (error) {
+          failures.push(error);
+        }
+      }
       observations.stopped = true;
+      if (failures.length === 1) throw failures[0];
+      if (failures.length > 1) throw new AggregateError(failures, 'Outcome worker shutdown failed');
       return stats();
     })());
   }
 
   async function init(env: Record<string, string | undefined>): Promise<WorkerStats> {
     try {
+      phase('startWorker:start');
       worker = await startWorker(
         { ...readWorkerConfig(env), ...overrides, clock: workerClock.clock },
         (composed) => {
@@ -85,9 +105,11 @@ export function createOutcomeWorker(overrides: Pick<WorkerConfig, 'kernelPool' |
             return {
               name: module.name,
               async register(context) {
+                phase(`register:start module=${module.name}`);
                 observations.registeredModules.push(module.name);
                 observations.registrationCounts[module.name] = (observations.registrationCounts[module.name] ?? 0) + 1;
                 observations.startedServices[module.name] = 0;
+                let serviceOrdinal = 0;
                 // Only addService is decorated. Pool, queues, client, env, effects and clock retain their identities.
                 await module.register({
                   ...context,
@@ -97,9 +119,12 @@ export function createOutcomeWorker(overrides: Pick<WorkerConfig, 'kernelPool' |
                     const isRunner = (service: Awaited<ReturnType<typeof original>>) =>
                       module.name === 'search' && 'refresh' in service && typeof service.refresh === 'function';
                     const start = async () => {
+                      const ordinal = ++serviceOrdinal;
+                      phase(`service:start module=${module.name} service=${ordinal}`);
                       const service = await original();
                       observations.startedServices[module.name] = (observations.startedServices[module.name] ?? 0) + 1;
                       if (isRunner(service)) observations.searchStarterInvocations += 1;
+                      phase(`service:ready module=${module.name} service=${ordinal}`);
                       return service;
                     };
                     context.addService(async () => {
@@ -115,6 +140,7 @@ export function createOutcomeWorker(overrides: Pick<WorkerConfig, 'kernelPool' |
                     });
                   },
                 });
+                phase(`register:ready module=${module.name}`);
               },
             };
           });
@@ -131,6 +157,7 @@ export function createOutcomeWorker(overrides: Pick<WorkerConfig, 'kernelPool' |
           'Integrated default worker must start exactly one search service and real default semantic services',
         );
       }
+      phase('startWorker:ready');
       ready = true;
       return stats();
     } catch (error) {
@@ -205,7 +232,22 @@ export function createOutcomeWorker(overrides: Pick<WorkerConfig, 'kernelPool' |
   return {
     close,
     request<T = unknown>(method: string, params?: unknown): Promise<T> {
-      const pending = tail.then(() => control(method, params));
+      // Shutdown is an out-of-band control: it seals Search even if init has not settled.
+      if (method === 'close') {
+        noParams(params);
+        return close() as Promise<T>;
+      }
+      // Admit init before a concurrently delivered close can overtake its queue microtask.
+      let pending: Promise<unknown>;
+      if (method === 'init') {
+        try {
+          pending = Promise.resolve(control(method, params));
+        } catch (error) {
+          pending = Promise.reject(error);
+        }
+      } else {
+        pending = tail.then(() => control(method, params));
+      }
       tail = pending.then(
         () => {},
         () => {},
@@ -218,6 +260,7 @@ export function createOutcomeWorker(overrides: Pick<WorkerConfig, 'kernelPool' |
 // This executable owns one SDK for its entire lifetime. It never provisions Auth.
 if (import.meta.main) {
   if (!process.send) throw new Error('Outcome worker requires a private IPC channel');
+  phase('child:entry');
   const worker = createOutcomeWorker();
   // Install loss/failure handling before accepting init, including disconnect during startup.
   const lost = () => {
@@ -249,5 +292,12 @@ if (import.meta.main) {
     },
     { onRequest: (method, params) => worker.request(method, params) },
   );
+  phase('child:ipc-ready');
+  process.send!({ type: OUTCOME_WORKER_READY_MESSAGE }, (error: Error | null) => {
+    if (error) {
+      console.error('Outcome worker could not announce IPC readiness');
+      process.exitCode = 1;
+    }
+  });
   // The parent disconnects only after receiving the completed close reply; natural exit proves drain.
 }

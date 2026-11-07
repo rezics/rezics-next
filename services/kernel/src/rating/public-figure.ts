@@ -8,7 +8,7 @@ import type { Effect } from '../events/effects.ts';
 import type { CloudEvent } from '../events/log.ts';
 import { partitionOf, routeOf } from '../route/route.ts';
 import { readPartition } from '../partition/partition.ts';
-import { withReadTransaction } from '../semantic/read.ts';
+import { withReadTransaction } from './dependencies.ts';
 import { RATING_EVENTS } from './events.ts';
 import drainPublicFiguresSql from './public-figure-drain.sql';
 import readFigureInputPage from './public-figure-input-page.sql';

@@ -3,7 +3,7 @@ import { originalLanguage } from '../../../subject/language';
 import type { Subject } from '../../../subject/types';
 import { bestRank, isRecord, type Stmt } from '../shared';
 
-export const SUMMARY_PROPERTY = 'schema:abstract';
+import { SUMMARY_PROPERTY } from './contract';
 export const SUMMARY_CHOICE_METADATA_BYTE_CAP = 256 * 1024;
 export const SUMMARY_CHOICE_ENTRY_CAP = 512;
 

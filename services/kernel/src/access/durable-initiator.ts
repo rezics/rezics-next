@@ -1,3 +1,5 @@
+import { DurableInitiatorUnavailableError } from './contract/index.ts';
+export { DurableInitiatorUnavailableError } from './contract/index.ts';
 import { finishDurableRateIdentity } from './write-rate-identity.ts';
 import { accessEvidence, throwEvidenceFailure } from './evidence.ts';
 import { throwAccessUnavailable } from './unavailable.ts';
@@ -158,13 +160,6 @@ export type InitiatorRestorerConfig = Readonly<{
 export type InitiatorRestorer = Readonly<{
   restoreInitiator(operation: InitiatorRestoreInput, time: AuthoritativeTime): Promise<AccountActor>;
 }>;
-
-export class DurableInitiatorUnavailableError extends Error {
-  constructor() {
-    super('Durable initiator restoration is unavailable');
-    this.name = 'DurableInitiatorUnavailableError';
-  }
-}
 
 /** Restore inside CommandAuthorization.prepare, at the SAME live attempt T,
  * before target checkout. Every retry, step and receipt replay must invoke this

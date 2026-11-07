@@ -1,7 +1,16 @@
+import { AuthenticationError } from './authentication-error.ts';
+export { AuthenticationError } from './authentication-error.ts';
+import { accessCheck } from './access-check.ts';
+export {
+  accessCheck,
+  accessExplicitCheck,
+  prepareReadDecisions,
+  installPreparedAccessCheckWork,
+  nativePreparedAccessCheckWork,
+} from './access-check.ts';
 import type { AccessWorkAccounting, AccessWorkProducer } from '../access/work.ts';
 import type { ContentEditionBenefit, ContentEditionBuyerFactReader } from '../access/authenticated-benefit.ts';
-import { AccessUnavailableError, throwAccessUnavailable } from '../access/unavailable.ts';
-import { accessRoot } from '../access/derived-access.ts';
+import { throwAccessUnavailable } from '../access/unavailable.ts';
 import { hasOriginalAuthenticator } from '../access/authentication-work.ts';
 import type { Pool, PoolClient } from 'pg';
 import { commandAccessContext, requireCommandAdmission } from '../access/command-admission.ts';
@@ -211,31 +220,6 @@ export type AccessCheck = ((client: AccessClient, time?: AuthoritativeTime) => P
   Readonly<{
     work?: PreparedAccessCheckWork;
   }>;
-type PreparedWorkFactory = (
-  actor: Actor,
-  action: string,
-  resource: Resource,
-  evidence: unknown,
-  dispatch: (input: PreparedAccessCheckInvocation) => Promise<boolean>,
-) => PreparedAccessCheckWork | undefined;
-// The standalone native evaluator may install during cyclic module loading.
-// A hoisted, lazily initialized registry retains that installation without a TDZ
-// or a later module initializer replacing it.
-var preparedWorkFactories: WeakMap<Access, PreparedWorkFactory> | undefined;
-/** Installed only by the original native evaluator and its original wrapper. */
-export function installPreparedAccessCheckWork(access: Access, factory: PreparedWorkFactory): void {
-  (preparedWorkFactories ??= new WeakMap()).set(access, factory);
-}
-export function nativePreparedAccessCheckWork(
-  access: Access,
-  actor: Actor,
-  action: string,
-  resource: Resource,
-  evidence: unknown,
-  dispatch: (input: PreparedAccessCheckInvocation) => Promise<boolean>,
-): PreparedAccessCheckWork | undefined {
-  return preparedWorkFactories?.get(access)?.(actor, action, resource, evidence, dispatch);
-}
 export type AccessCommandAuthorization = CommandAuthorization & { readonly check: AccessCheck };
 
 export interface Access {
@@ -275,45 +259,6 @@ export interface Access {
     evidence?: unknown,
     time?: AuthoritativeTime,
   ): Promise<boolean>;
-}
-
-export async function accessCheck(
-  access: Access,
-  actor: Actor,
-  action: string,
-  resource: Resource,
-  context: AccessContext,
-): Promise<AccessCheck> {
-  const evidence = access.prepare ? await access.prepare(actor, action, resource, context) : null;
-  const check: AccessCheck = (client, time = commandTime(client)) =>
-    access.authorize(client, actor, action, resource, evidence, time);
-  const work = nativePreparedAccessCheckWork(access, actor, action, resource, evidence, ({ client, time }) =>
-    check(client, time),
-  );
-  return work ? Object.assign(check, { work }) : check;
-}
-
-/** Resolve the installed port through derived adapters; never infer explicit
- * authority from an adapter's ordinary boolean decision. */
-export async function accessExplicitCheck(
-  access: Access,
-  actor: Actor,
-  action: string,
-  resource: Resource,
-  context: AccessContext,
-): Promise<AccessExplicitCheck> {
-  const root = accessRoot(access);
-  if (!root.authorizeExplicit) return async () => ({ allowed: false, explicit: false });
-  const evidence = root.prepare ? await root.prepare(actor, action, resource, context) : null;
-  return (client, time = commandTime(client)) =>
-    root.authorizeExplicit!(client, actor, action, resource, evidence, time);
-}
-
-/** The installed root owns the sole batch read formula, including through adapters. */
-export async function prepareReadDecisions(access: Access, input: PrepareReadDecisionsInput): Promise<ReadDecisions> {
-  const root = accessRoot(access);
-  if (!root.prepareReadDecisions) throw new AccessUnavailableError('overloaded');
-  return root.prepareReadDecisions(input);
 }
 
 /** Recheck command admission and prepare fresh evidence on every live attempt
@@ -413,18 +358,6 @@ export async function accessCommandAuthorization(
       throw denied();
     },
   };
-}
-
-export class AuthenticationError extends Error {
-  readonly status: 400 | 401;
-  readonly challenge: string;
-
-  constructor(status: 400 | 401, challenge: string) {
-    super('Authentication failed');
-    this.name = 'AuthenticationError';
-    this.status = status;
-    this.challenge = challenge;
-  }
 }
 
 const invalidRequest = () => new AuthenticationError(400, 'Bearer error="invalid_request"');

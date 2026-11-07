@@ -1,6 +1,9 @@
 import { expect, mock, test } from 'bun:test';
 import { withShelfAdvice, type PreferenceChange, type ReadingPreferences } from '../src/settings/preferences';
 import { controlledDeadlines } from './fixtures/shelf-deadline';
+import { createBrowserSettingsAmbient } from '../src/settings/adapters/ambient';
+
+const settingsAmbient = createBrowserSettingsAmbient();
 
 const start = await import('../.storybook/react-start');
 mock.module('@tanstack/react-start', () => start);
@@ -45,6 +48,7 @@ test('a type command keeps its payload and key through unknown readback; clean s
         version = next;
       },
     },
+    settingsAmbient,
   );
   draft.edit({ layout: 'list' }, 'layout');
   expect(draft.needsNavigationDecision()).toBe(false);
@@ -157,6 +161,7 @@ test('a confirmed write keeps its receipt while a failed current read retries wi
           version = next;
         },
       },
+      settingsAmbient,
     );
     draft.edit({ layout: 'table' }, 'layout');
     await draft.submit();
@@ -223,6 +228,7 @@ test('a pending reset is retained for navigation and a retired owner cannot acce
       version: () => 4,
       onVersionChange() {},
     },
+    settingsAmbient,
   );
   const navigation = new SettingsNavigationDrafts();
   navigation.register({ kind: 'shelf', needsDecision: () => current && draft.needsNavigationDecision() });
@@ -260,6 +266,7 @@ test('the native merged map bound includes preserved scopes, while removing one 
       },
     },
     { canRead: () => true, canWrite: () => true, version: () => 0, onVersionChange() {} },
+    settingsAmbient,
   );
   draft.editTypeLayout('schema:Extra', 'table');
   await draft.submit();
@@ -320,6 +327,7 @@ test('a confirmed receipt plus failed GET then newer current keeps a later edit 
         version = next;
       },
     },
+    settingsAmbient,
   );
   try {
     draft.edit({ layout: 'table' }, 'layout');
@@ -425,6 +433,7 @@ test('grid-only advice rejects a new table while stored tables stay inspectable 
       },
     },
     { canRead: () => true, canWrite: () => true, version: () => 1, onVersionChange() {} },
+    settingsAmbient,
   );
   draft.editTypeLayout('schema:New', 'table');
   expect(draft.snapshot().dirty.has('layout:schema:New')).toBe(false);

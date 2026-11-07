@@ -3,7 +3,7 @@ import { afterAll, expect, test } from 'bun:test';
 import type { PoolClient } from 'pg';
 import { Value } from 'typebox/value';
 import { readAccount } from '../../src/access/account-data.ts';
-import { GrantDeniedError } from '../../src/access/grant-commands.ts';
+import { GrantDeniedError } from '../../src/access/contract/index.ts';
 import { authoritativeTimeValue, IdempotencyConflictError } from '../../src/command/command.ts';
 import { CONTENT_EVENTS } from '../../src/content/events.ts';
 import { tupleRoute, type ImportedFieldGroup } from '../../src/content/imported-contract.ts';

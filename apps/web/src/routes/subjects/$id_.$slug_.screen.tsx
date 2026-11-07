@@ -2,6 +2,7 @@ import { createFileRoute, notFound, redirect, useLocation } from '@tanstack/reac
 import { createServerFn } from '@tanstack/react-start';
 import { setResponseHeader } from '@tanstack/react-start/server';
 import { ScreenProfileSession } from '../../features/catalogue/screen-profile-session';
+import { ScreenReadingBoundary } from '../../features/pages/data';
 import { classificationHandoffSearch } from '../../features/catalogue/classification-create-return';
 import {
   screenCurrentGlobalHref,
@@ -73,21 +74,25 @@ function ScreenRoute() {
     return <ScreenCurrentVisitRecovery locale={locale} globalHref={globalHref} />;
   if (visitSearch.kind === 'current')
     return (
+      <ScreenReadingBoundary>
+        <ScreenProfileSession
+          id={id}
+          locale={locale}
+          context={visitSearch.visit.context}
+          {...(visitSearch.visit.realm ? { realm: visitSearch.visit.realm } : {})}
+          visit={visitSearch.visit}
+          entryHref={entry}
+          {...(classificationHandoff ? { classificationHandoffToken: classificationHandoff } : {})}
+        />
+      </ScreenReadingBoundary>
+    );
+  return (
+    <ScreenReadingBoundary>
       <ScreenProfileSession
         id={id}
         locale={locale}
-        context={visitSearch.visit.context}
-        {...(visitSearch.visit.realm ? { realm: visitSearch.visit.realm } : {})}
-        visit={visitSearch.visit}
-        entryHref={entry}
         {...(classificationHandoff ? { classificationHandoffToken: classificationHandoff } : {})}
       />
-    );
-  return (
-    <ScreenProfileSession
-      id={id}
-      locale={locale}
-      {...(classificationHandoff ? { classificationHandoffToken: classificationHandoff } : {})}
-    />
+    </ScreenReadingBoundary>
   );
 }

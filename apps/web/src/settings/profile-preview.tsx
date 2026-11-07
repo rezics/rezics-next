@@ -4,7 +4,6 @@ import { Button } from '@rezics/ui/shadcn/button';
 import { Avatar, AvatarFallback, AvatarImage } from '@rezics/ui/shadcn/avatar';
 import { MediaImage } from '@rezics/ui/media-image';
 import { m } from '../paraglide/messages.js';
-import { coverSrc } from '../media/cover-src';
 import type { ProfileValues } from './profile-data';
 
 type ProfilePreviewAvatar = ProfileValues['avatar'];
@@ -30,7 +29,15 @@ function safePreviewLink({ url, valid }: ProfilePreviewLink): boolean {
   }
 }
 
-function PreviewAvatar({ avatar, localUrl }: { avatar: ProfilePreviewAvatar; localUrl: string | null }) {
+function PreviewAvatar({
+  avatar,
+  localUrl,
+  mediaSource,
+}: {
+  avatar: ProfilePreviewAvatar;
+  localUrl: string | null;
+  mediaSource: (media: string, format: 'avif' | 'webp', width: number) => string;
+}) {
   if (!localUrl && avatar && 'variants' in avatar) {
     return (
       <div className="size-16 shrink-0 overflow-hidden rounded-full bg-muted">
@@ -40,7 +47,7 @@ function PreviewAvatar({ avatar, localUrl }: { avatar: ProfilePreviewAvatar; loc
           frame={1}
           sizes="64px"
           alt=""
-          src={({ media, format, width }) => coverSrc(media, format, width)}
+          src={({ media, format, width }) => mediaSource(media, format, width)}
         />
       </div>
     );
@@ -62,6 +69,7 @@ export function ProfilePreview({
   biography,
   avatar,
   localAvatarUrl,
+  mediaSource,
   links,
   hasUnsavedChanges,
 }: {
@@ -69,6 +77,7 @@ export function ProfilePreview({
   biography: string | null;
   avatar: ProfilePreviewAvatar;
   localAvatarUrl: string | null;
+  mediaSource: (media: string, format: 'avif' | 'webp', width: number) => string;
   links: ProfilePreviewLink[];
   hasUnsavedChanges: boolean;
 }) {
@@ -110,7 +119,7 @@ export function ProfilePreview({
 
           <div className="grid min-w-0 grid-cols-[auto_minmax(0,1fr)] gap-x-4 gap-y-4 sm:grid-cols-[5rem_minmax(0,1fr)] sm:gap-x-5">
             <div className="sm:row-span-2">
-              <PreviewAvatar avatar={avatar} localUrl={localAvatarUrl} />
+              <PreviewAvatar avatar={avatar} localUrl={localAvatarUrl} mediaSource={mediaSource} />
             </div>
             <div className="min-w-0 space-y-2">
               <h4 className="min-w-0 font-sans text-2xl font-semibold tracking-tight wrap-anywhere text-balance">

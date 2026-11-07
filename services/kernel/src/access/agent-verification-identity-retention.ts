@@ -4,11 +4,8 @@ import type { WorkContext } from '../work/registry.ts';
 import type { WorkClient } from '../work/client.ts';
 import type { Pool } from 'pg';
 import { deadlineFor, withRequestDeadline } from '../request/deadline.ts';
-import {
-  verifyIdentitySourceConsumerCustody,
-  type IdentitySourceConsumerCustody,
-} from '../semantic/identity-source-consumer-custody.ts';
-import { IdentityEpochStoreError } from '../semantic/identity-adapters/index.ts';
+import { type IdentitySourceConsumerCustody } from '../semantic/identity-source-consumer-custody.ts';
+import { IdentityEpochStoreError } from '../semantic/contract/index.ts';
 import {
   agentIdentityCopyRetention,
   prepareAgentIdentityCopyRetention,
@@ -29,7 +26,7 @@ import {
   type CommandTransaction,
 } from '../command/command.ts';
 import { partitionOf, routeOf } from '../route/route.ts';
-import * as nativeBinding from '../semantic/identity-adapters/identity-epoch-binding.ts';
+import { agentIdentityMaintenance } from './adapters/bind.ts';
 import type {
   IdentityAdmissionInput,
   IdentityIntent,
@@ -80,21 +77,6 @@ const digestOf = (input: IdentityAdmissionInput) =>
     .update(normalized([input.intent, input.receipt]))
     .digest('hex');
 
-/** This is a dependency boundary, not a replacement binding implementation. Once the
- * owner delivers the original export, call that export with its original opaque result.
- * Never substitute readIdentityBinding: it performs active admission after T.
- */
-type AcceptedReader = (
-  tx: CommandTransaction,
-  input: IdentityAdmissionInput & { receipt: AccountReceipt },
-) => Promise<nativeBinding.IdentityReceiptBinding | null>;
-function acceptedReader(): AcceptedReader | null {
-  const port = nativeBinding as typeof nativeBinding & {
-    readAcceptedAccountIdentityBinding?: AcceptedReader;
-  };
-  return port.readAcceptedAccountIdentityBinding ?? null;
-}
-
 function live(tx: CommandTransaction, receipt: AccountReceipt): boolean {
   if (!hasLiveCommandTransaction(tx)) return false;
   const route = routeOf(receipt.account);
@@ -124,11 +106,8 @@ function technicalIntent(value: IdentityIntent, receipt: AccountReceipt): Identi
 }
 
 async function accepted(tx: CommandTransaction, input: AccountIdentitySource['input']) {
-  const read = acceptedReader();
-  if (!read) return null;
-  const binding = await read(tx, input);
-  if (!binding) return null;
-  const data = nativeBinding.identityBindingData(binding);
+  const data = await agentIdentityMaintenance().acceptedBinding(tx, input);
+  if (!data) return null;
   return data.state === 'accepted' &&
     data.partition === currentCommand(tx).partition &&
     data.digest === digestOf(input) &&
@@ -184,7 +163,7 @@ export async function readAccountIdentityTechnicalSource(
   tx: CommandTransaction,
   receipt: AccountReceipt,
 ): Promise<AccountIdentitySource | null> {
-  if (!live(tx, receipt) || !acceptedReader()) return null;
+  if (!live(tx, receipt)) return null;
   const row = await receiver(tx, receipt);
   return row ? decodeTechnicalSource(tx, receipt, row) : null;
 }
@@ -263,7 +242,7 @@ export async function acceptTechnicalSource(
     if (wroteTechnical.has(tx)) throw accountIdentityUnavailable('technical receiver mismatch after write');
     return null;
   };
-  if (!live(tx, reference.receipt) || !acceptedReader()) return refuse();
+  if (!live(tx, reference.receipt)) return refuse();
   const prior = await receiver(tx, reference.receipt);
   if (prior) {
     const receipt = receiving(prior);
@@ -336,7 +315,7 @@ export async function verifyTechnicalSource(
   reference: IdentitySourceConsumerReference,
   native: IdentityNativeReceipt,
 ): Promise<boolean> {
-  if (!live(tx, reference.receipt) || !acceptedReader()) {
+  if (!live(tx, reference.receipt)) {
     if (wroteTechnical.has(tx)) throw accountIdentityUnavailable('technical receiver mismatch after write');
     return false;
   }
@@ -584,7 +563,7 @@ async function prepareNativeRetention(
         )
           gap = 'native-source-owner-unavailable';
         else {
-          const consumed = custody !== null && (await verifyIdentitySourceConsumerCustody(tx, reference, custody));
+          const consumed = custody !== null && (await agentIdentityMaintenance().verifyCustody(tx, reference, custody));
           await reserveIdentityHistoryWork(currentCommandResources(tx).pool, nativeWork(72, 72, 12, 20480));
           receiving = (await verifyAgentIdentityCopyRetention(tx, input.barrier, copy)) ? 'verified' : 'unavailable';
           const inventory = await verifyAgentIdentityCopyInventory(
@@ -687,8 +666,7 @@ async function consumerReference(
         noEffect(await readAccountIdentitySource(tx, receipt, undefined, true)),
       )
     ).value;
-    const { readOriginalAccountAgentIdentity } = await import('../semantic/account-agent-identity-recovery.ts');
-    const accepted = await readOriginalAccountAgentIdentity(pool, {
+    const accepted = await agentIdentityMaintenance().readOriginal(pool, {
       account: receipt.account,
       direction: receipt.kind,
       receipt: receipt.receipt,

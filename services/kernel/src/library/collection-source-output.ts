@@ -8,7 +8,7 @@ import {
   registerCommandCallback,
   type CommandTransaction,
 } from '../command/command.ts';
-import { ProblemError } from '../http/problem.ts';
+import { ProblemError } from '../http/problem-error.ts';
 import { partitionOf, routeOf } from '../route/route.ts';
 import lock from './collection-source-output-lock.sql';
 import {

@@ -1,11 +1,12 @@
 import { memoizedValue } from '../memoized.ts';
 import type { Pool } from 'pg';
 import { Compile } from 'typebox/compile';
-import { accessCheck, type Access, type AccountActor, type AccessContext } from '../request/access.ts';
+import { accessCheck } from '../request/access-check.ts';
+import { type Access, type AccountActor, type AccessContext } from '../request/access.ts';
 import type { AuthoritativeTime, CommandTransaction } from '../command/command.ts';
 import { withConnection } from '../database/pool.ts';
 import { GrantDeniedError } from '../access/grant-commands.ts';
-import { ProblemError } from '../http/problem.ts';
+import { ProblemError } from '../http/problem-error.ts';
 import { routeOf } from '../route/route.ts';
 import { bulkAdmissionSchema } from './bulk-schemas.ts';
 import { BULK_ADMISSION_BODY_BYTES, BULK_MAX_SELECTION_IDS } from './bulk-limits.ts';

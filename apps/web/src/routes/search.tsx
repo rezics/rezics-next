@@ -15,7 +15,7 @@ import {
   searchUrlIntake,
   removeSearchInput,
 } from '../search/search.tsx';
-import { searchQueryOptions } from '../search/search-queries';
+import { searchQueryOptions } from '../search/search-query-options';
 import { searchSessionOwner } from '../search/search-session-owner';
 import { searchRequiresCurrentReader, searchSessionLifetime } from '../search/scoped-search-lifetime';
 import { searchUnavailablePage } from '../search/search-recovery';

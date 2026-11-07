@@ -23,7 +23,7 @@ import {
 } from '@rezics/ui/shadcn/alert-dialog';
 import { Button } from '@rezics/ui/shadcn/button';
 import { m } from '../paraglide/messages.js';
-import { sessionQuery } from '../session/query';
+import { sessionQueryKey, type BrowserSession } from '../reader/lifetime/index';
 
 type DepartureKind = 'realm-claim' | 'realm-ban' | 'container-lifecycle';
 type Draft = {
@@ -264,7 +264,7 @@ export function AuthoringDepartureProvider({
     (listener: () => void) => client?.getQueryCache().subscribe(listener) ?? (() => {}),
     [client],
   );
-  const sessionSnapshot = useCallback(() => client?.getQueryData(sessionQuery.queryKey), [client]);
+  const sessionSnapshot = useCallback(() => client?.getQueryData<BrowserSession>(sessionQueryKey), [client]);
   const session = useSyncExternalStore(sessionSubscribe, sessionSnapshot, sessionSnapshot);
   const owner = useRef<{ subject: string | null; csrfToken: string | null } | null>(null);
   const retired = useRef(false);

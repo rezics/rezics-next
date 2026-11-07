@@ -4,17 +4,23 @@ import {
   type ReleasedRelationDirectionResolver,
 } from '@rezics/definitions';
 import type { Source } from '@rezics/definitions/bulk';
-import type { Pool } from 'pg';
 import { deadlineClient, within } from '../access/authenticate.ts';
 import { requireAccessDeadline, throwAccessUnavailable } from '../access/unavailable.ts';
 import { readFences, type SourceFence, type SourceFenceTuple } from '../content/source-fences.ts';
 import { discardConnection, withConnection } from '../database/pool.ts';
 import { ProblemError } from '../http/problem.ts';
 import { readPartition } from '../partition/partition.ts';
-import { accessCheck, type Access, type AccessClient, type Actor } from '../request/access.ts';
+import { accessCheck, type AccessClient } from '../request/access.ts';
 import { withRequestDeadline } from '../request/deadline.ts';
 import { partitionOf, routeOf } from '../route/route.ts';
-import { chooseTexts, pendingFacts, validateHitOptions, type Fact } from '../search/hits.ts';
+import type {
+  CopyWorkIndexedStatement,
+  CopyWorkListFact,
+  CopyWorkListPresentationDependencies,
+  CopyWorkListPresentationOptions,
+  CopyWorkListPresentationResult,
+  CopyWorkSearchEvidencePort,
+} from './copy-work-reader-port.ts';
 import {
   listWorkPlan,
   prepareListWorkContext,
@@ -22,8 +28,6 @@ import {
   finishListWorkContext,
   type WorkTarget,
 } from './list-presentation-work-context.ts';
-import type { WorkContext } from '../search/work-context.ts';
-import type { IndexedStatement } from '../search/source.ts';
 import { activeRelease } from './definitions.ts';
 import { subjectReadEligibility } from './eligibility.ts';
 import { fenceKey, sourceTuple } from './fences.ts';
@@ -38,7 +42,7 @@ import subjectsSQL from './list-presentation-subjects.sql';
 import relationsSQL from './list-presentation-relations.sql';
 import provenanceSQL from './list-presentation-provenance.sql';
 
-type Dependencies = { pool: Pool; access: Access; actor: Actor; routeKey: Uint8Array; deadline: number };
+type Dependencies = CopyWorkListPresentationDependencies;
 type Header = {
   id: string;
   type: string;
@@ -125,6 +129,7 @@ async function observeSubjects(
   ids: readonly string[],
   release: Release,
   facts: boolean,
+  evidence: CopyWorkSearchEvidencePort,
   labels = false,
   workContext = false,
   directionResolver?: ReleasedRelationDirectionResolver,
@@ -172,7 +177,7 @@ async function observeSubjects(
           if (header.redirect) return [];
           const type = release.types[header.type];
           if (!type) unready();
-          const plan = workContext ? listWorkPlan(release, header.type, directionResolver) : undefined;
+          const plan = workContext ? listWorkPlan(release, header.type, evidence, directionResolver) : undefined;
           return [
             ...new Set([
               ...(type.listPresentation?.keyFacts ?? []),
@@ -228,7 +233,7 @@ async function observeSubjects(
         const workCandidates = new Set<string>();
         if (workContext)
           for (const [id, observation] of visible) {
-            const plan = listWorkPlan(release, observation.header.type, directionResolver);
+            const plan = listWorkPlan(release, observation.header.type, evidence, directionResolver);
             if (!plan) continue;
             for (const group of ['creators', 'relations'] as const)
               for (const row of locators
@@ -363,7 +368,7 @@ function tupleFor(deps: Dependencies, source: Source | null): SourceFenceTuple |
 }
 
 /** Reject a lossy numeric projection before using the existing Search Fact formatter. */
-function representable(fact: FactRow, release: Release): IndexedStatement | null {
+function representable(fact: FactRow, release: Release): CopyWorkIndexedStatement | null {
   const body = fact.body as { rank?: string; value?: { type: string; content?: unknown } };
   if (!['normal', 'preferred'].includes(body.rank ?? '') || body.value?.type !== 'value') return null;
   const property = fact.property!;
@@ -401,20 +406,19 @@ function representable(fact: FactRow, release: Release): IndexedStatement | null
 }
 
 /** One current original-keyed public batch. No Source snapshot, index document or permission verdict is authority. */
-export async function readListPresentationFacts(
+export async function readNativeListPresentationFacts(
   deps: Dependencies,
   originals: readonly string[],
-  options: { languages?: readonly string[]; workContext?: boolean } = {},
-): Promise<Map<string, { id: string; facts: Record<string, Fact[]>; workContext?: WorkContext } | null>> {
+  options: CopyWorkListPresentationOptions,
+  evidence: CopyWorkSearchEvidencePort,
+): Promise<CopyWorkListPresentationResult> {
   if (!Array.isArray(originals) || originals.length > 100 || originals.some((id) => typeof id !== 'string'))
     throw new RangeError('List presentation accepts at most 100 raw original IDs');
   if (!Number.isFinite(deps.deadline) || !(deps.routeKey instanceof Uint8Array) || deps.routeKey.length !== 32)
     throw new TypeError('List presentation requires the trusted route key and finite request deadline');
-  const { languages } = validateHitOptions(options);
+  const { languages } = evidence.validateHitOptions(options);
   const input = [...new Set(originals)];
-  const result = new Map<string, { id: string; facts: Record<string, Fact[]>; workContext?: WorkContext } | null>(
-    input.map((id) => [id, null]),
-  );
+  const result: CopyWorkListPresentationResult = new Map(input.map((id) => [id, null]));
   requireAccessDeadline(deps.deadline);
   if (!input.length) return result;
   return withRequestDeadline(deps.deadline, () =>
@@ -426,7 +430,7 @@ export async function readListPresentationFacts(
           const active = await snapshot(deps, 0, (client) => activeRelease(client));
           if (!active) unready();
           const directionResolver = createReleasedRelationDirectionResolver(active.release, active.digest);
-          const sources = await observeSubjects(deps, valid, active.release, false);
+          const sources = await observeSubjects(deps, valid, active.release, false, evidence);
           const admitted = valid.filter((id) => sources.get(id) !== null);
           const mapping = await readIdentityMappings(deps.pool, admitted);
           if (mapping.some((value) => value.state === 'pending' || value.state === 'unavailable')) unready();
@@ -438,6 +442,7 @@ export async function readListPresentationFacts(
             terminals,
             active.release,
             true,
+            evidence,
             false,
             options.workContext === true,
             directionResolver,
@@ -493,6 +498,7 @@ export async function readListPresentationFacts(
                     active.release,
                     allowed,
                     withheld,
+                    evidence,
                     languages,
                     directionResolver,
                   ),
@@ -500,7 +506,7 @@ export async function readListPresentationFacts(
               return [
                 [
                   id,
-                  pendingFacts(
+                  evidence.pendingFacts(
                     { statements },
                     active.release.types[subject.header.type]!.listPresentation?.keyFacts ?? [],
                   ),
@@ -533,7 +539,7 @@ export async function readListPresentationFacts(
               ...itemMapping.flatMap((value) => (value.state === 'mapped' ? [value.terminal] : [])),
             ]),
           ];
-          const related = await observeSubjects(deps, relatedIds, active.release, false, true);
+          const related = await observeSubjects(deps, relatedIds, active.release, false, evidence, true);
           const relatedAccounts = [
             ...new Set([...related.values()].flatMap((value) => (value?.header.account ? [value.header.account] : []))),
           ].filter((id) => !accountIds.includes(id));
@@ -543,11 +549,22 @@ export async function readListPresentationFacts(
 
           // Double collection of the complete finite dependency set proves a common current cut.
           if (!equal(mapping, await readIdentityMappings(deps.pool, admitted))) unready();
-          if (!equal([...sources], [...(await observeSubjects(deps, valid, active.release, false))])) unready();
+          if (!equal([...sources], [...(await observeSubjects(deps, valid, active.release, false, evidence))]))
+            unready();
           if (
             !equal(
               [...subjects],
-              [...(await observeSubjects(deps, terminals, active.release, true, false, options.workContext === true))],
+              [
+                ...(await observeSubjects(
+                  deps,
+                  terminals,
+                  active.release,
+                  true,
+                  evidence,
+                  false,
+                  options.workContext === true,
+                )),
+              ],
             )
           )
             unready();
@@ -556,7 +573,7 @@ export async function readListPresentationFacts(
             finalItemMapping.push(...(await readIdentityMappings(deps.pool, itemIds.slice(offset, offset + 100))));
           if (
             !equal(itemMapping, finalItemMapping) ||
-            !equal([...related], [...(await observeSubjects(deps, relatedIds, active.release, false, true))])
+            !equal([...related], [...(await observeSubjects(deps, relatedIds, active.release, false, evidence, true))])
           )
             unready();
           if (
@@ -604,9 +621,9 @@ export async function readListPresentationFacts(
               subject.header.redirect
             )
               unready();
-            const facts: Record<string, Fact[]> = {};
+            const facts: Record<string, CopyWorkListFact[]> = {};
             for (const [property, values] of projected.get(identity.terminal)!) {
-              const disclosed = values.flatMap((value): Fact[] => {
+              const disclosed = values.flatMap((value): CopyWorkListFact[] => {
                 if (value.kind !== 'item') return [value];
                 const identity = itemMapping[itemIds.indexOf(value.id)];
                 const original = related.get(value.id);
@@ -628,7 +645,7 @@ export async function readListPresentationFacts(
                   {
                     kind: 'item',
                     id: identity!.state === 'mapped' ? identity!.terminal : value.id,
-                    labels: chooseTexts(
+                    labels: evidence.chooseTexts(
                       Object.entries(terminal.labels ?? {}).map(([language, value]) => ({ language, value })),
                       languages,
                       undefined,
@@ -643,6 +660,7 @@ export async function readListPresentationFacts(
               workDrafts.get(identity.terminal),
               workTargets,
               active.release,
+              evidence,
               languages,
             );
             result.set(original, { id: identity.terminal, facts, ...(workContext ? { workContext } : {}) });
@@ -657,3 +675,5 @@ export async function readListPresentationFacts(
     ),
   );
 }
+
+export { readListPresentationFacts } from './copy-work-application.ts';

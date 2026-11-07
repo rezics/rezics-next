@@ -1,3 +1,4 @@
+import { composeRatingDependencies } from './composition/rating.ts';
 import { initializeEventTypes } from './events/catalogue.ts';
 import pg from 'pg';
 import type { KernelClock } from './clock.ts';
@@ -80,6 +81,7 @@ export async function startWorker(
   modules?: readonly WorkModule[] | KernelWorkModuleDecorator,
   env: Readonly<Record<string, string | undefined>> = process.env,
 ) {
+  composeRatingDependencies();
   composeAccessApplication();
   composeWorkApplication();
   const community = composeCommunityApplication();

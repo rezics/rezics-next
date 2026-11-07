@@ -9,7 +9,12 @@ import {
 import { converter_revision as entityRevision, vndbRecordUrl } from '@rezics/conversion/cross-media-entities';
 import type { SourceVocabularyBindings, SourceVocabularyGap, SourceVocabularyRequest } from '@rezics/conversion';
 import { sourceVocabularyLimits } from '@rezics/conversion/source-vocabulary';
-import reviewedVocabulary from '../../../packages/definitions/src/reviewed-vocabulary.json';
+import {
+  reviewedConceptSeed,
+  reviewedReleaseVocabulary,
+  reviewedSchemeIndex,
+  type ReviewedVocabularyPort,
+} from './reviewed-vocabulary-port.ts';
 import {
   commandKey,
   sourceDigest,
@@ -60,19 +65,14 @@ import {
 
 type Row = Record<string, unknown>;
 type Admission = NonNullable<ImporterOptions['vocabularyAdmission']>;
-type ReviewedSeed = { key: string; schemeURI: string; literalMember: string; type: string };
-const REVIEWED_SEEDS = reviewedVocabulary as ReviewedSeed[];
-const REVIEWED_DEVELOPMENT_STATUS = new Set(
-  REVIEWED_SEEDS.filter((row) => row.schemeURI === developmentStatusSchemeUri && row.literalMember !== '').map(
-    (row) => row.literalMember,
-  ),
-);
-const REVIEWED_RELEASED_STATE = new Set(
-  REVIEWED_SEEDS.filter((row) => row.schemeURI === releasedStateSchemeUri && row.literalMember !== '').map(
-    (row) => row.literalMember,
-  ),
-);
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/u;
+
+function releaseReviewedCodes(vocabulary: ReviewedVocabularyPort) {
+  return reviewedReleaseVocabulary(vocabulary.inventory, {
+    developmentStatus: developmentStatusSchemeUri,
+    releasedState: releasedStateSchemeUri,
+  });
+}
 
 function ensure(value: unknown, message: string): asserts value {
   if (!value) throw new TypeError(message);
@@ -523,16 +523,20 @@ export async function collectSelectedVndbReleaseFacts(
   return { facts, gaps };
 }
 
-export function showcaseVndbReleaseRequirements(facts: VndbReleaseFacts): {
+export function showcaseVndbReleaseRequirements(
+  facts: VndbReleaseFacts,
+  vocabulary: ReviewedVocabularyPort,
+): {
   requirements: ShowcaseVndbReleaseRequirement[];
   gaps: CrossMediaGap[];
 } {
   const gaps: CrossMediaGap[] = [];
+  const reviewed = releaseReviewedCodes(vocabulary);
   const development = new Set<string>();
   for (const [id, work] of facts.works) {
     if (work.devstatus === undefined) continue;
     const code = String(work.devstatus);
-    if (!REVIEWED_DEVELOPMENT_STATUS.has(code)) {
+    if (!reviewed.developmentStatus.has(code)) {
       gaps.push(
         gap(
           'vn',
@@ -548,7 +552,7 @@ export function showcaseVndbReleaseRequirements(facts: VndbReleaseFacts): {
   for (const [id, fact] of facts.releases) {
     const value = decodeVndbReleased(fact.released);
     if (value !== 'TBA' && value !== 'unknown') continue;
-    if (!REVIEWED_RELEASED_STATE.has(value)) {
+    if (!reviewed.releasedState.has(value)) {
       gaps.push(
         gap(
           'releases',
@@ -634,19 +638,17 @@ function overlayBindingGroups(layers: readonly (readonly VndbReleaseBindingGroup
 export function catalogueVndbReleaseGroups(
   subjects: Readonly<Record<string, string>> | undefined,
   requirements: readonly ShowcaseVndbReleaseRequirement[],
+  vocabulary?: ReviewedVocabularyPort,
 ): VndbReleaseBindingGroup[] {
   if (!subjects) return [];
+  ensure(vocabulary, 'VNDB release groups require the bound reviewed vocabulary');
   const groups: VndbReleaseBindingGroup[] = [];
   for (const requirement of requirements) {
-    const scheme = REVIEWED_SEEDS.find(
-      (row) => row.schemeURI === requirement.uri && row.type === 'skos:ConceptScheme' && row.literalMember === '',
-    );
+    const scheme = reviewedSchemeIndex(vocabulary.inventory, requirement.uri).scheme;
     const schemeId = scheme ? subjects[scheme.key] : undefined;
     if (typeof schemeId !== 'string' || !UUID.test(schemeId)) continue;
     const concepts = requirement.codes.flatMap((code) => {
-      const seed = REVIEWED_SEEDS.find(
-        (row) => row.schemeURI === requirement.uri && row.type === 'skos:Concept' && row.literalMember === code,
-      );
+      const seed = reviewedConceptSeed(vocabulary.inventory, requirement.uri, code);
       const id = seed ? subjects[seed.key] : undefined;
       return typeof id === 'string' && UUID.test(id) ? [{ code, id }] : [];
     });
@@ -878,17 +880,18 @@ async function selectedReleasePlatforms(
 export async function prepareShowcaseVndbReleases(input: {
   tables: CrossMediaTables;
   plan: CrossMediaPlan;
+  vocabulary: ReviewedVocabularyPort;
   port?: Pick<CrossMediaPort, 'readReviewedSubject'>;
   bindings?: SourceVocabularyBindings;
   groups?: readonly VndbReleaseBindingGroup[];
   catalogueSubjects?: Readonly<Record<string, string>>;
 }): Promise<ShowcaseVndbReleasePreparation> {
   const collected = await collectSelectedVndbReleaseFacts(input.tables, input.plan);
-  const needed = showcaseVndbReleaseRequirements(collected.facts);
+  const needed = showcaseVndbReleaseRequirements(collected.facts, input.vocabulary);
   const releasePlatforms = await selectedReleasePlatforms(input.tables, input.plan, collected.facts);
   const gaps = [...collected.gaps, ...needed.gaps];
   const suppliedGroups = overlayBindingGroups([
-    catalogueVndbReleaseGroups(input.catalogueSubjects, needed.requirements),
+    catalogueVndbReleaseGroups(input.catalogueSubjects, needed.requirements, input.vocabulary),
     input.groups ?? [],
     groupsFromVndbReleaseBindings(input.bindings),
   ]);
@@ -940,6 +943,7 @@ export async function seedShowcaseVndbReleases(input: {
   tables: CrossMediaTables;
   path: string;
   port: CrossMediaPort;
+  vocabulary: ReviewedVocabularyPort;
   bindings?: SourceVocabularyBindings;
   groups?: readonly VndbReleaseBindingGroup[];
   catalogueSubjects?: Readonly<Record<string, string>>;
@@ -953,6 +957,7 @@ export async function seedShowcaseVndbReleases(input: {
   const prepared = await prepareShowcaseVndbReleases({
     tables: input.tables,
     plan,
+    vocabulary: input.vocabulary,
     port: input.port,
     ...(input.bindings === undefined ? {} : { bindings: input.bindings }),
     ...(input.groups === undefined ? {} : { groups: input.groups }),

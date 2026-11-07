@@ -3,8 +3,8 @@ import type { SubjectRead } from '@rezics/client';
 import { pickText } from '@rezics/composition';
 import { m } from '../../../paraglide/messages.js';
 import { defaultReader, type Reader } from '../../../subject/reader';
-import { languageName } from '../../../subject/language';
-import { subjectHref } from '../../../subject/subject-href';
+import { pageLanguageName } from '../locale-presentation';
+import { subjectHref } from '../../../subject/load-subject';
 import { catalogueEntries } from '../../catalogue/catalogue-entry';
 import { FactInspectionEntry } from '../../catalogue/people-facts/visit';
 import type { ProfileReading } from '../../catalogue/person-reader/reader';
@@ -323,7 +323,7 @@ export function ConceptAliases({
         <li key={JSON.stringify([alias.lang, alias.text])}>
           <span lang={alias.lang ?? undefined}>{alias.text}</span>{' '}
           <span className="text-sm text-muted-foreground">
-            {alias.lang ? (languageName(alias.lang, locale) ?? alias.lang) : null}
+            {alias.lang ? (pageLanguageName(alias.lang, locale) ?? alias.lang) : null}
           </span>
         </li>
       ))}

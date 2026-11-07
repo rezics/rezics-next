@@ -9,6 +9,7 @@ import { creditVisit, type CreditVisit } from '../src/features/catalogue/credit-
 import { creditReturn, creditWindowHref } from '../src/features/catalogue/credit-inspection/navigation';
 import { subjectVisitReturn } from '../src/features/pages/subject-visit-navigation';
 import type { OverviewValue, RowValue } from '../src/features/pages/overview';
+import { CharacterReadingBinding } from '../src/features/pages/character-reading-binding';
 
 mock.module('cloudflare:workers', () => ({ env: {} }));
 
@@ -135,7 +136,11 @@ test('current Person credit returns from work, Character and Sources with exact 
         h(
           QueryClientProvider,
           { client },
-          h(CoverList, { key, items, value, label: 'Current credits', creditVisit: selectedVisit }),
+          h(
+            CharacterReadingBinding,
+            { key },
+            h(CoverList, { items, value, label: 'Current credits', creditVisit: selectedVisit }),
+          ),
         ),
       ),
     );

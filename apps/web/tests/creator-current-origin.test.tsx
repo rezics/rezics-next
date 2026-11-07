@@ -68,6 +68,7 @@ const { createMemoryHistory, createRootRoute, createRouter, RouterContextProvide
 const { viewerExposureLifetime, viewerExposureQuery } = await import('../src/kernel/viewer-exposure');
 const { sessionQuery } = await import('../src/session/query');
 const offers = await import('../src/checkout/creator-offers');
+const readBindings = await import('../src/routes/-creator-offer-read');
 const statements = await import('../src/checkout/creator-statements');
 const sales = await import('../src/checkout/creator-sales');
 const { CreatorSalesCurrent } = await import('../src/checkout/creator-sales-current');
@@ -255,12 +256,12 @@ async function mount() {
       salesReads.push(work);
       return work.promise;
     }),
-    spyOn(offers, 'readCreatorOffersCurrent').mockImplementation(() => {
+    spyOn(readBindings.creatorOfferReaders, 'list').mockImplementation(() => {
       const work = deferred<CreatorOffersCurrentRead>();
       listReads.push(work);
       return work.promise;
     }),
-    spyOn(offers, 'readCreatorOfferEditorCurrent').mockImplementation(() => {
+    spyOn(readBindings.creatorOfferReaders, 'editor').mockImplementation(() => {
       const work = deferred<CreatorEditorCurrentRead>();
       editorReads.push(work);
       return work.promise;
@@ -293,9 +294,19 @@ async function mount() {
           {mode === 'sales' ? (
             <CreatorSalesCurrent initial={sale()} locale={locale} />
           ) : mode === 'offers' ? (
-            <CreatorOffersCurrent initial={initialOffers} locale={locale} cursor={cursor} />
+            <CreatorOffersCurrent
+              readers={readBindings.creatorOfferReaders}
+              initial={initialOffers}
+              locale={locale}
+              cursor={cursor}
+            />
           ) : mode === 'editor' ? (
-            <CreatorOfferEditorCurrent initial={initialEditor} locale={locale} contentEditionId={editionId} />
+            <CreatorOfferEditorCurrent
+              readers={readBindings.creatorOfferReaders}
+              initial={initialEditor}
+              locale={locale}
+              contentEditionId={editionId}
+            />
           ) : mode === 'statements' ? (
             <CreatorStatementsCurrent initial={statementList()} locale={locale} {...(cursor ? { cursor } : {})} />
           ) : (

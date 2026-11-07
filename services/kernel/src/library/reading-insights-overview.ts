@@ -1,7 +1,7 @@
 import type { Pool } from 'pg';
 import { createConsumptionStatisticsReads, type ConsumptionSummary } from './consumption-statistics.ts';
 import { createReportedYearSummaryReads, type ReportedYearSummary } from './reported-year-summary.ts';
-import { ProblemError } from '../http/problem.ts';
+import { ProblemError } from '../http/problem-error.ts';
 import type { Actor } from '../request/access.ts';
 import {
   createReadingInsightsAssessmentReads,

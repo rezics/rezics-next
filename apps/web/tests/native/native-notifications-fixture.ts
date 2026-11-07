@@ -127,7 +127,8 @@ async function readInbox(
   const body = await response.json();
   if (!response.ok) throw new Error(`GET ${path} returned ${response.status}: ${JSON.stringify(body)}`);
   try {
-    return await resolveInboxItems(decodeInboxPage(body, accountId));
+    const { inboxThreadHref } = await import('../../src/inbox/adapters/content');
+    return await resolveInboxItems(decodeInboxPage(body, accountId), inboxThreadHref);
   } catch (error) {
     throw new Error(
       `Native inbox decoder refused Content's closed page at ${path}: ${error instanceof Error ? error.message : String(error)}\n${JSON.stringify(body)}`,

@@ -2,8 +2,26 @@ import { expect, mock, test } from 'bun:test';
 import { createKernelClient } from '@rezics/client';
 import { getLocale } from '../src/paraglide/runtime.js';
 import { WatchController } from '../src/settings/watch-controller';
+import { createBrowserSettingsAmbient } from '../src/settings/adapters/ambient';
+
+const settingsAmbient = createBrowserSettingsAmbient();
 mock.module('cloudflare:workers', () => ({ env: {} }));
-const { decodeWatchPage, readWatchInventoryNative, removeWatchNative } = await import('../src/settings/watch-native');
+const {
+  decodeWatchPage: decodeWatchPageWithHref,
+  readWatchInventoryNative: readWatchInventoryWithHref,
+  removeWatchNative,
+} = await import('../src/settings/watch-native');
+const { settingsThreadHref } = await import('../src/settings/adapters/content');
+const decodeWatchPage = (
+  value: Parameters<typeof decodeWatchPageWithHref>[0],
+  kind: Parameters<typeof decodeWatchPageWithHref>[1],
+) => decodeWatchPageWithHref(value, kind, settingsThreadHref);
+const readWatchInventoryNative = (
+  client: Parameters<typeof readWatchInventoryWithHref>[0],
+  accountId: string,
+  input: Parameters<typeof readWatchInventoryWithHref>[2],
+  signal?: AbortSignal,
+) => readWatchInventoryWithHref(client, accountId, input, settingsThreadHref, signal);
 
 const createdAt = '2026-11-03T10:00:00.000Z';
 const threadRow = {
@@ -212,6 +230,7 @@ test('fixed 20-row watch visits release controllers and ignore unrelated invento
             },
           },
           { subject: 'alice', readCurrent: () => true, credential: () => 'csrf', subscribe: () => () => {} },
+          settingsAmbient,
         );
         activeControllers++;
         maxActiveControllers = Math.max(maxActiveControllers, activeControllers);
@@ -272,6 +291,7 @@ test('uncertain removal retries the original command and a retired owner callbac
         return () => {};
       },
     },
+    settingsAmbient,
   );
   controller.mount();
   await controller.first();
@@ -305,6 +325,7 @@ test('uncertain removal retries the original command and a retired owner callbac
         return () => {};
       },
     },
+    settingsAmbient,
   );
   current = true;
   lateController.mount();

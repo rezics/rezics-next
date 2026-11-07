@@ -81,6 +81,12 @@ capabilities it registers. The kinds are:
    construction are eager. Third-party packages are outside this repository graph. Process entry points run only
    when explicitly launched. Composition roots collect declared registrations before starting their resources.
 
+Decision: Auth retention's contract, core and application modules form an inward-only graph.
+The application owns preparation/checkpoint and maintenance admission over ports; the Auth adapter
+binds SQL, supported SDK scan and the existing native retirement capability. The cursor store has
+no orchestration import. Dispatch pricing is pure Auth-owned vocabulary; SDK retirement APIs,
+permanent fences and independent signing/request stores keep their existing owners.
+
 Decision: Kernel computed values use memoized getters that retain value identity; literal-only leaves remain eager.
 The syntax-tree architecture check enforces this at file boundaries, including within an architecture module.
 Access account-fence SQL is the `agent-verification-identity-literals.ts` public entry; Community UUID and
@@ -114,6 +120,14 @@ Identity Rating repair values stay on `identity-rating-repair-producer.ts`; Sour
 
 Decision: `config-check-runtime.ts` constructs check runners and reloads train settings from supplied dependencies; `createRuntime` keeps process, store and lifecycle ownership.
 
+Decision: Web routes compose concrete domain-owned page, navigation and reader adapters through their declared
+leaf entries. Register the defining leaf in `modules.json`; do not collect unrelated route APIs in a barrel or widen
+allowed dependencies. Existing Session observation/cache compatibility leaves remain Web adapter entries over the
+browser reader owner. Candidate context comes directly from the page visit port. Reaction command recovery vocabulary
+lives in the Threads contract; its session observer is a separate adapter shared by Home and Threads, so Home does not
+load the reaction widget to observe a session. Album identity syntax and summary property vocabulary live in domain
+contract leaves; release byte measurement is an independent leaf, keeping route intake out of editor/read models.
+
 **Enforcement.** One static architecture check (manifest validation plus a dependency-graph check) runs on every
 landing's final candidate. It needs no database and runs in seconds. Workers run the same check with `--changed`
 before handoff. Receive changes through that manifest and check using actual public edges; do not add another writer,
@@ -133,6 +147,17 @@ Applications run against Library-owned ports; `composition/library.ts` binds nat
 adapters during ordinary `createKernelRuntimeDefaults`, server and worker construction. Search filter-leaf
 classification is a composition port, so the Search preparation adapter does not value-import Search.
 
+Collection mutation contracts own metadata/history and cleanup ports. Pure core plans use measured SQL sizes;
+the application orders create, metadata/rule, publication-phase and retention effects. Native adapters preserve the
+original command transaction and existing SQL. Composition binds Access rule admission, publication begin and Source
+retirement, so episode readers and history storage do not import those native command implementations. Mechanical
+work/deadline helpers are a leaf shared with command support. Library imports error identities, response schemas,
+structured idempotency headers and evaluator-backed Access checks from their defining platform leaves; HTTP and
+request orchestration retain compatibility re-exports. Header names come directly from the operation contract.
+Export and archive merge commands use the existing Library command-authorization capability, with the native
+fallback retained for standalone consumers. This dependency-only migration preserves behaviour. The Library adapter
+declares its inward application dependency, and Access exposes its existing command-admission/error leaves for process composition.
+
 Content's `community-projection/index.ts` is a registered pure core with no dependencies. Board and Realm adapters
 supply selected native activity values and actor identity through that public entry, including its contract types;
 `realm-board-home.ts` is the registered effectful Realm Board entry. DB reads, source selection/confirmation,
@@ -151,7 +176,9 @@ does not establish native, browser or finite-execution acceptance.
 
 The Collection directory binds its qualified owner full-view result or the existing public floor; per-Collection
 management grants do not widen another account's directory. The account's public face keeps public-floor semantics
-even when its owner is viewing it.
+even when its owner is viewing it. Library owns the list-filter capability; Access adapters implement the residual
+and publish the collection-update authorization preparation bound. Shared Collection policy literals live in the
+Access and Library contract leaves so adapters do not evaluate membership-inverse or barrel re-exports at import.
 
 ## Data access
 

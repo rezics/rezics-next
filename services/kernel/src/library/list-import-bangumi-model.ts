@@ -1,4 +1,4 @@
-import { ProblemError } from '../http/problem.ts';
+import { ProblemError } from '../http/problem-error.ts';
 import type { EntryImportMetadataReview } from './list-import-entry-metadata.ts';
 
 export const BANGUMI_LIMITS = {

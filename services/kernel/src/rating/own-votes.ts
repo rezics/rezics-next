@@ -1,6 +1,6 @@
 import type { PoolClient } from 'pg';
-import { readAccount } from '../access/account-data.ts';
-import { GrantDeniedError } from '../access/grant-commands.ts';
+import { readAccount, GrantDeniedError } from './dependencies.ts';
+
 import type { Actor } from '../request/access.ts';
 import { routeOf } from '../route/route.ts';
 import { VOTE_SCOPE, VoteInvalidError } from './votes.ts';

@@ -6,7 +6,19 @@ This module provides commands, point reads and HTTP routes.
 
 ## Declaration and ambient operands
 
-Two declared values, built from one `CommunityAmbient`, are the only way composition reaches Community. `createCommunityDeclaration(ambient)` in `declaration.ts` gives the work module, the event catalogue, membership and participation (the access capability) and the declared effect list. `createCommunityHttpDeclaration(ambient)` in `http-declaration.ts` gives the routes, viewer permissions and native container actions; workers never load it. The ambient operand is `CommunityAmbient.deadlineNow`, the wall time request deadlines compare against; domain time stays a `KernelClock` passed beside it. Strings in `contract/literals.ts`; vocabulary in `community/contract`, deadline rules in `community/core`, use cases in `community/application`, and native clocks, effects and Access factories in `community/adapters`. Composition roots bind `ensureCommunityApplication` and supply `systemCommunityAmbient`; focused tests pass a fixed ambient. Realm membership and participation deadlines, publication, realm, container, board and settings reads, realm claim review, realm discovery projection and expiry, and own-Realm reads take the supplied clock from their dependencies. `deadlineFor` takes that clock as an optional argument, so a request deadline inherited inside request work is still shared.
+`createCommunityDeclaration(ambient)` exposes work, events, membership/participation and effects;
+`createCommunityHttpDeclaration(ambient)` adds routes, viewer permissions and native container actions. Workers use
+the first only. Both take `CommunityAmbient.deadlineNow`; domain time remains an explicit `KernelClock`.
+Contracts own vocabulary/literals, core owns deadline rules, application owns use cases and adapters own clocks,
+effects and Access factories. Composition binds `ensureCommunityApplication` with `systemCommunityAmbient`;
+tests may supply a fixed ambient. Membership, participation, publication, container/Realm/Board/settings reads,
+claim review, discovery projection/expiry and own-Realm reads retain supplied clocks. `deadlineFor` inherits request
+work's deadline and accepts its clock operand.
+
+`adapters/index.ts` also exports `createRealmScopeEvidence`. Its producer contract in `contract/index.ts` borrows
+the caller's released snapshot and accounted exact-point executor. The original Realm/Space binding, native read
+eligibility and current ban plans retain their keys, Source bounds and native time. Publication confers no authority;
+Realm and Zone identity are distinct. Content's installed Realm application consumes these observations.
 
 Domain clocks are required operands wherever the caller holds one: membership reads, sitemap pages, claim review and the route eligibility checks. `systemCommunityClock` in `ambient.ts` is the only production wall clock Community names. It stays the default for three callers that do not yet pass a clock: `spaceReadEligibility`, space address verification and the space discovery entry batch. Access-facing claim approval and Realm read eligibility enter through `access-capabilities.ts`, a public entry that re-exports `realm-claim-approval.ts` and `realmReadEligibility`. Content callers that hold a clock keep it required and pass `deadlineNow` beside it.
 

@@ -17,6 +17,22 @@ reads.
 
 Decision: The expanded reader stays in page flow on phones and uses a bounded side panel beside writing on desktop.
 
+## Browser reader integration
+
+Decision: Threads and moderation reporter history/status use the session-owned
+[browser reader lifetime boundary](../session/README.md#supported-reader-lifetime). Activity, erasure, pins,
+slow mode, authoring and revision return consume its cache-only observation or pure credential-mode vocabulary.
+The existing shell session hook installs the shared cache observation once; isolated mounts continue with their
+QueryClient and browser address without a Router requirement. Default navigation uses the existing optional Router;
+Performance and the train own attachment to their shared session provider once its public export is delivered. Native authorization and disclosure remain in prepared server reads.
+
+A successful session replacement, even equal data or account A/B/A, cannot restore a retired callback. Slow mode
+aborts its old caller synchronously. Locale and address retirement also reject deferred focus. Thread/native page
+identity, exposure, exact uncertain intent, credential and idempotency key remain with their existing feature owners;
+the reader boundary never reconstructs, retries or upgrades a command. Existing outcome assertions remain unchanged;
+`tests/thread-reader-boundary.test.tsx` adds cache replacement, synchronous abort, isolated host and navigation ABA
+coverage. Runtime acceptance runs after integration; workspace typing is the worker acceptance.
+
 ## Board pins
 
 The pin and unpin consumer contract, native-order presentation and pending Content binding are documented in
@@ -304,6 +320,10 @@ without changing report submission, verification, session retirement or copy rec
 
 Decision: an uncertain report keeps its original body, sender, credential and idempotency key in the `PostActions`
 owner; its recovery region offers deliberate retry or discard without echoing the private report text.
+
+Decision: public-profile contribution actions consume Threads through `threads/contract/contribution-actions.ts` and
+the bound adapters on `threads/index.ts`. ThreadWatch, ThreadReactions and PostComposer remain the one watch,
+reaction and reply engines; the profile host does not import those implementations.
 
 Decision: Work Library actions navigate to the existing Subject Library slot; post actions create no Library mutation
 or mount read. Browser share/copy results belong to the current session/source visit. The board owner consumes the

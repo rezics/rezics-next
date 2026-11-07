@@ -5,6 +5,7 @@ import { dirname, join, resolve } from 'node:path';
 import { spawn } from 'node:child_process';
 import { Readable } from 'node:stream';
 import { pipeline } from 'node:stream/promises';
+import { reclaimInactiveFileCache, releaseWalkFileCache } from '../walk-memory.ts';
 
 export const CROSS_MEDIA_DUMP_CACHE_ENV = 'REZICS_DATASETS_DUMP_CACHE';
 export const DEFAULT_CROSS_MEDIA_DUMP_CACHE = '/home/edge/projects/rezics/rezics-datasets/dumps';
@@ -210,7 +211,10 @@ export async function cacheDumpAsset(
   await mkdir(dirname(path), { recursive: true });
   if (await regularFile(path)) {
     const cachedHash = await sha256(path);
-    if (cachedHash === expectedSha256) return cachedHash;
+    if (cachedHash === expectedSha256) {
+      reclaimInactiveFileCache();
+      return cachedHash;
+    }
     await rm(path);
   }
 
@@ -383,6 +387,29 @@ async function replaceDirectory(stage: string, target: string): Promise<void> {
   await rm(previous, { recursive: true, force: true });
 }
 
+/**
+ * Restored dump tables skip archive hashing inside the 6 GiB slice when the pin marker matches, or when
+ * structure/timestamp already verify and the marker is then written from the pin digest.
+ */
+export async function reuseVerifiedDumpExtraction(
+  target: string,
+  digest: string,
+  verify: (root: string) => Promise<string | undefined>,
+): Promise<string | undefined> {
+  const cachedRoot = await verify(target);
+  if (!cachedRoot) return undefined;
+  const marker = join(target, MARKER);
+  try {
+    const marked = (await readFile(marker, 'utf8')).trim();
+    if (marked === digest) return cachedRoot;
+    if (marked) return undefined;
+  } catch (error) {
+    if (errorCode(error) !== 'ENOENT') throw error;
+  }
+  await writeFile(marker, `${digest}\n`);
+  return cachedRoot;
+}
+
 async function extractCached(
   archive: string,
   digest: string,
@@ -391,14 +418,8 @@ async function extractCached(
   validateArchive: (archivePath: string) => Promise<void>,
   extractArchive: (archivePath: string, destination: string) => Promise<void>,
 ): Promise<string> {
-  const cachedRoot = await verify(target);
-  if (cachedRoot) {
-    try {
-      if ((await readFile(join(target, MARKER), 'utf8')).trim() === digest) return cachedRoot;
-    } catch (error) {
-      if (errorCode(error) !== 'ENOENT') throw error;
-    }
-  }
+  const cachedRoot = await reuseVerifiedDumpExtraction(target, digest, verify);
+  if (cachedRoot) return cachedRoot;
 
   const stage = `${target}.partial-${process.pid}-${randomUUID()}`;
   await rm(stage, { recursive: true, force: true });
@@ -548,6 +569,20 @@ export async function fetchVndbDump(
 ): Promise<{ cacheRoot: string; vndb: string; vndbArchive: string; manifest: VndbDumpManifest }> {
   const cacheRoot = resolve(options.cacheRoot ?? crossMediaDumpCacheRoot());
   await mkdir(cacheRoot, { recursive: true });
+  if (options.pin) {
+    const file = dumpFileName(options.pin.url);
+    const reused = await reuseVerifiedDumpExtraction(
+      join(cacheRoot, 'vndb', file.replace(/\.tar\.zst$/, '')),
+      options.pin.sha256,
+      (root) => vndbDirectory(root, options.pin?.timestamp),
+    );
+    if (reused) {
+      const manifest: VndbDumpManifest = { file, url: options.pin.url, sha256: options.pin.sha256 };
+      await writeVndbManifest(vndbDumpManifestPath(cacheRoot), manifest);
+      releaseWalkFileCache(reused);
+      return { cacheRoot, vndb: reused, vndbArchive: join(cacheRoot, 'downloads', file), manifest };
+    }
+  }
   const fetched = await fetchVndbArchive(cacheRoot, options);
   const vndb = await extractCached(
     fetched.archive,
@@ -559,6 +594,7 @@ export async function fetchVndbDump(
   );
   const manifest: VndbDumpManifest = { file: fetched.file, url: fetched.url, sha256: fetched.digest };
   await writeVndbManifest(vndbDumpManifestPath(cacheRoot), manifest);
+  reclaimInactiveFileCache();
   return { cacheRoot, vndb, vndbArchive: fetched.archive, manifest };
 }
 
@@ -571,16 +607,22 @@ export async function fetchCrossMediaDumps(
   const bangumiTarget = join(cacheRoot, 'bangumi', 'dump-2026-10-20.210332Z');
   await mkdir(cacheRoot, { recursive: true });
 
-  const bangumiDigest = await cacheDumpAsset(BANGUMI_ARCHIVE_URL, bangumiArchive, BANGUMI_ARCHIVE_SHA256, options);
-  const bangumi = await extractCached(
-    bangumiArchive,
-    bangumiDigest,
-    bangumiTarget,
-    bangumiDirectory,
-    (path) => runCommand('unzip', ['-tqq', path]),
-    (path, destination) => runCommand('unzip', ['-qq', path, '-d', destination]),
-  );
+  const reusedBangumi = await reuseVerifiedDumpExtraction(bangumiTarget, BANGUMI_ARCHIVE_SHA256, bangumiDirectory);
+  const bangumiDigest = reusedBangumi
+    ? BANGUMI_ARCHIVE_SHA256
+    : await cacheDumpAsset(BANGUMI_ARCHIVE_URL, bangumiArchive, BANGUMI_ARCHIVE_SHA256, options);
+  const bangumi =
+    reusedBangumi ??
+    (await extractCached(
+      bangumiArchive,
+      bangumiDigest,
+      bangumiTarget,
+      bangumiDirectory,
+      (path) => runCommand('unzip', ['-tqq', path]),
+      (path, destination) => runCommand('unzip', ['-qq', path, '-d', destination]),
+    ));
   const vndbDump = await fetchVndbDump({ ...options, cacheRoot, pin: DEVELOPMENT_VNDB_PIN });
+  reclaimInactiveFileCache();
   return {
     cacheRoot,
     bangumi,

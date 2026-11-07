@@ -4,7 +4,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { sessionQuery } from '../session/query';
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import { expect, screen, userEvent, within } from 'storybook/test';
-import { RealmShelf, type RealmShelfTransport } from '../community/space-page';
+import { RealmShelf, type RealmShelfTransport } from '../session/community-application';
 import type { PublishedSubject, RealmBoard, RealmHome } from '../community/space';
 import boardsRecording from '../kernel/recorded/realm-boards.json';
 import publicationsRecording from '../kernel/recorded/realm-publications.json';

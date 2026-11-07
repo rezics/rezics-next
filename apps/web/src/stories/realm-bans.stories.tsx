@@ -1,5 +1,5 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
-import { SpacePage } from '../community/space-page';
+import { SpacePage } from '../session/community-application';
 import type { SpacePageData } from '../community/space';
 import { AppShell } from '../shell/shell';
 import space from '../kernel/recorded/space.json';

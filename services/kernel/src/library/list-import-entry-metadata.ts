@@ -24,7 +24,7 @@ import {
   entryPersonalAnnotationRequestInput,
   entryPersonalSourceObservationRequestInput,
 } from './entry-personal.ts';
-import { ProblemError } from '../http/problem.ts';
+import { ProblemError } from '../http/problem-error.ts';
 import type { LabelCommandAdmission } from './label-command-admission.ts';
 
 export function ENTRY_IMPORT_METADATA_LIMITS() {

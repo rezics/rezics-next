@@ -1,12 +1,11 @@
 import { withManagedReadDeadline } from './managed-read-deadline';
-import { useContext, useEffect, useId, useLayoutEffect, useSyncExternalStore, useMemo, useRef, useState } from 'react';
-import { QueryClientContext } from '@tanstack/react-query';
+import { useEffect, useId, useLayoutEffect, useSyncExternalStore, useMemo, useRef, useState } from 'react';
 import { Button, buttonVariants } from '@rezics/ui/shadcn/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@rezics/ui/shadcn/card';
 import { Separator } from '@rezics/ui/shadcn/separator';
 import { cn } from '@rezics/ui/utils';
 import { m } from '../paraglide/messages.js';
-import { SignInPrompt } from '../threads/write-prompts';
+import type { SettingsPrompt } from './ports/content';
 import { accountSafetyLinks } from './account-safety-links';
 import { AccountRenameLink } from './account-rename-link';
 import type { AccountRenameNavigation, AccountRenameResult } from './account-rename-actions';
@@ -17,8 +16,11 @@ import {
   useManagedSessionReader,
   type ManagedReaderCurrent,
 } from './managed-session-reader';
+import { useSettingsAmbient } from './adapters/ambient-view.tsx';
 import { preferenceRetryDeadline, usePreferenceRetry } from './preference-failure-retry';
-import { sessionQuery } from '../session/query';
+import { useAccounts } from './managed-account-capabilities';
+import type { AccountsCapability } from './ports/accounts';
+import type { SettingsAmbient } from './ports/ambient';
 
 export type AccountSafetyProps =
   | {
@@ -37,7 +39,7 @@ export type AccountSafetyProps =
         isCurrent?: ManagedReaderCurrent;
       };
     }
-  | { state: 'signed-out'; returnTo: string };
+  | { state: 'signed-out'; returnTo: string; SignInPrompt: SettingsPrompt };
 
 /** This mounted region never seeds capability from a historical settings response. */
 export function AccountSafetySection(props: AccountSafetyProps) {
@@ -60,6 +62,7 @@ export class AccountRenameRegion {
   private listeners = new Set<() => void>();
   constructor(
     private readonly read: (signal?: AbortSignal) => Promise<AccountRenameResult>,
+    private readonly ambient: SettingsAmbient,
     private readonly accountId?: string | null,
     private readonly current: ManagedReaderCurrent = () => true,
     private readonly refreshSession?: () => Promise<unknown>,
@@ -102,7 +105,7 @@ export class AccountRenameRegion {
     };
   };
   reload = (): Promise<void> => {
-    if (!this.live() || !this.active || this.value.loading || Date.now() < this.value.retryAt)
+    if (!this.live() || !this.active || this.value.loading || this.ambient.now() < this.value.retryAt)
       return this.pending ?? Promise.resolve();
     return this.request(true);
   };
@@ -111,20 +114,24 @@ export class AccountRenameRegion {
     if (this.pending) return this.pending;
     // Clear all old identity, links and failure metadata before awaiting a fresh read.
     this.publish({ loading: true, context: null, retryAt: 0 });
-    this.pending = withManagedReadDeadline<AccountRenameResult>(async (signal) => {
-      const ready =
-        refresh && this.refreshSession
-          ? Promise.resolve().then(() => (this.live() && this.active ? this.refreshSession!() : undefined))
-          : Promise.resolve();
-      await ready;
-      signal.throwIfAborted();
-      return this.live() && this.active ? this.read(signal) : { context: null };
-    }, this.lifetime.signal)
+    this.pending = withManagedReadDeadline<AccountRenameResult>(
+      async (signal) => {
+        const ready =
+          refresh && this.refreshSession
+            ? Promise.resolve().then(() => (this.live() && this.active ? this.refreshSession!() : undefined))
+            : Promise.resolve();
+        await ready;
+        signal.throwIfAborted();
+        return this.live() && this.active ? this.read(signal) : { context: null };
+      },
+      this.lifetime.signal,
+      this.ambient.timer,
+    )
       .catch((): AccountRenameResult => ({ context: null, failures: [{ kind: 'failed', status: null }] }))
       .then((result) => {
         if (!this.live() || !this.active) return;
         if (this.accountId && result.context && result.context.accountId !== this.accountId) result = { context: null };
-        const now = Date.now();
+        const now = this.ambient.now();
         const retryAt = Math.max(
           0,
           ...(result.failures ?? []).map((failure) => preferenceRetryDeadline(failure.retryAfter, now)),
@@ -142,7 +149,7 @@ export class AccountRenameRegion {
 export async function readCurrentAccountRename(
   csrfToken: string,
   current: ManagedReaderCurrent,
-  load = () => import('./account-rename-actions'),
+  load: AccountsCapability['loadRename'],
   signal?: AbortSignal,
 ): Promise<AccountRenameResult> {
   if (!csrfToken || !current()) return { context: null };
@@ -153,26 +160,28 @@ export async function readCurrentAccountRename(
 }
 
 function CurrentAccountSafety(props: Extract<AccountSafetyProps, { state: 'signed-in' }>) {
-  const client = useContext(QueryClientContext);
+  const accounts = useAccounts();
   const owner = useManagedSessionReader(props.accountId, props.accountId, props.csrfToken);
   const refreshSession = useMemo(
     () => async () => {
-      if (owner.isCurrent() && client) await client.fetchQuery({ ...sessionQuery, staleTime: 0 });
+      if (owner.isCurrent()) await accounts.refreshSession();
     },
-    [client, owner],
+    [accounts.refreshSession, owner],
   );
+  const ambient = useSettingsAmbient();
   const region = useMemo(
     () =>
       new AccountRenameRegion(
         (signal) =>
           props.csrfToken
-            ? readCurrentAccountRename(props.csrfToken, owner.isCurrent, undefined, signal)
+            ? readCurrentAccountRename(props.csrfToken, owner.isCurrent, accounts.loadRename, signal)
             : Promise.resolve({ context: null }),
+        ambient,
         props.accountId,
         owner.isCurrent,
         refreshSession,
       ),
-    [props.accountId, props.csrfToken, owner, refreshSession],
+    [ambient, props.accountId, props.csrfToken, owner, refreshSession, accounts.loadRename],
   );
   useManagedReaderLifetime(region.dispose, owner);
   const snapshot = useSyncExternalStore(region.subscribe, region.snapshot, region.snapshot);
@@ -212,6 +221,7 @@ function AccountSignOut({
   const reloadControl = useRef<HTMLButtonElement>(null);
   const submitControl = useRef<HTMLButtonElement>(null);
   const restoreFocus = useRef(false);
+  const ambient = useSettingsAmbient();
   const isCurrent = props.isCurrent ?? alwaysCurrent;
   const unavailable = !props.csrfToken || phase === 'csrf';
   const recover = async () => {
@@ -219,9 +229,13 @@ function AccountSignOut({
     const token = ++attempt.current;
     setRecovering(true);
     try {
-      await withManagedReadDeadline(async () => {
-        await props.onReload();
-      });
+      await withManagedReadDeadline(
+        async () => {
+          await props.onReload();
+        },
+        undefined,
+        ambient.timer,
+      );
       if (!isCurrent() || token !== attempt.current) return;
       locked.current = false;
       setPhase('idle');
@@ -311,12 +325,14 @@ function AccountSignOut({
 
 export function AccountSafetyCard(props: AccountSafetyProps) {
   const id = useId();
+  const ambient = useSettingsAmbient();
   const read = props.state === 'signed-in' ? props.renameRead : undefined;
   const failure = accountRenamePresentedFailure(read?.failures);
   const retryAt = useMemo(
     () =>
-      read?.retryAt ?? Math.max(0, ...(read?.failures ?? []).map((entry) => preferenceRetryDeadline(entry.retryAfter))),
-    [read?.retryAt, read?.failures],
+      read?.retryAt ??
+      Math.max(0, ...(read?.failures ?? []).map((entry) => preferenceRetryDeadline(entry.retryAfter, ambient.now()))),
+    [ambient, read?.retryAt, read?.failures],
   );
   const waiting = usePreferenceRetry(undefined, retryAt);
   const links = props.state === 'signed-in' ? accountSafetyLinks(props.securityHref) : null;
@@ -349,7 +365,7 @@ export function AccountSafetyCard(props: AccountSafetyProps) {
         {props.state === 'signed-out' ? (
           <div className="space-y-3">
             <p className="text-sm text-muted-foreground">{m.settings_account_sign_in_text()}</p>
-            <SignInPrompt returnTo={props.returnTo} />
+            <props.SignInPrompt returnTo={props.returnTo} />
           </div>
         ) : (
           <>

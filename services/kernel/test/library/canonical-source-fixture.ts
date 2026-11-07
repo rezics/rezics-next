@@ -18,7 +18,8 @@ import type {
   CanonicalSourceAfter,
 } from '../../src/library/canonical-source-store.ts';
 import type { ListingStamp } from '../../src/library/listing-freshness-contract.ts';
-import { accessCheck, accessCommandAuthorization, type Actor } from '../../src/request/access.ts';
+import { accessCheck } from '../../src/request/access-check.ts';
+import { accessCommandAuthorization, type Actor } from '../../src/request/access.ts';
 import { newId, partitionOf, routeOf } from '../../src/route/route.ts';
 import { bootstrapRelease, GLOBAL_CONTEXT } from '../../src/semantic/definitions.ts';
 import { subjectReadEligibility } from '../../src/semantic/eligibility.ts';

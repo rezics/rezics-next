@@ -12,6 +12,9 @@ import {
 import { MediaProblem } from '../src/media/kernel';
 import { preferenceRetryDeadline } from '../src/settings/preference-failure-retry';
 import { collectionPrivacyRead, type CollectionPrivacyRead } from '../src/settings/collection-privacy-data';
+import { createBrowserSettingsAmbient } from '../src/settings/adapters/ambient';
+
+const settingsAmbient = createBrowserSettingsAmbient();
 import {
   CollectionPrivacyEditor,
   CollectionPrivacyPager,
@@ -295,8 +298,9 @@ test('A current native read refusal removes retained private Collection row deta
         return Response.json(ownerPage([refreshed], null));
       }) as typeof fetch,
     });
-    const pager = new CollectionPrivacyPager((cursor) =>
-      collectionPrivacyRead(() => readOwnedCollections(client, request(), env, cursor)),
+    const pager = new CollectionPrivacyPager(
+      (cursor) => collectionPrivacyRead(() => readOwnedCollections(client, request(), env, cursor)),
+      settingsAmbient,
     );
     await pager.load();
     await pager.load();
@@ -358,15 +362,19 @@ test('native row read refusal withholds presentation without resolving or replac
           return response();
         }) as typeof fetch,
       });
-      const editor = new CollectionPrivacyEditor(original, {
-        save: async (attempt) => {
-          commands.push(attempt);
-          return commands.length === 1
-            ? { ok: false, reason: 'unavailable' }
-            : { ok: true, collection: { ...original, visibility: 'public', revision: 8 } };
+      const editor = new CollectionPrivacyEditor(
+        original,
+        {
+          save: async (attempt) => {
+            commands.push(attempt);
+            return commands.length === 1
+              ? { ok: false, reason: 'unavailable' }
+              : { ok: true, collection: { ...original, visibility: 'public', revision: 8 } };
+          },
+          read: (id) => collectionPrivacyRead(() => reloadOwnedCollection(client, request(), env, id)),
         },
-        read: (id) => collectionPrivacyRead(() => reloadOwnedCollection(client, request(), env, id)),
-      });
+        settingsAmbient,
+      );
       await editor.edit('public');
       const attempt = editor.snapshot().attempt!;
       await editor.edit('unlisted');
@@ -430,18 +438,25 @@ test('actor teardown rejects late pages and row reads, and a successful explicit
   const original = collection('private-row', 'Private reading plans', 'private');
   const page = Promise.withResolvers<CollectionPrivacyRead<OwnedCollectionsPage>>();
   const row = Promise.withResolvers<CollectionPrivacyRead<OwnedCollection>>();
-  const previousPager = new CollectionPrivacyPager(() => page.promise);
-  const previousEditor = new CollectionPrivacyEditor(original, {
-    save: async () => ({ ok: false, reason: 'unavailable' }),
-    read: () => row.promise,
-  });
+  const previousPager = new CollectionPrivacyPager(() => page.promise, settingsAmbient);
+  const previousEditor = new CollectionPrivacyEditor(
+    original,
+    {
+      save: async () => ({ ok: false, reason: 'unavailable' }),
+      read: () => row.promise,
+    },
+    settingsAmbient,
+  );
   const loading = previousPager.load();
   await previousEditor.edit('public');
   const reloading = previousEditor.reload();
   const before = previousEditor.snapshot();
   previousPager.dispose();
   previousEditor.dispose();
-  const nextPager = new CollectionPrivacyPager(async () => ({ ok: true, value: { collections: [], next: null } }));
+  const nextPager = new CollectionPrivacyPager(
+    async () => ({ ok: true, value: { collections: [], next: null } }),
+    settingsAmbient,
+  );
   await nextPager.load();
   page.resolve({ ok: true, value: { collections: [original], next: 'previous-viewer' } });
   row.resolve({ ok: true, value: { ...original, title: 'Late private title', revision: 9 } });
@@ -454,13 +469,17 @@ test('actor teardown rejects late pages and row reads, and a successful explicit
   const replay = Promise.withResolvers<CollectionVisibilityWrite>();
   let saves = 0;
   let readbacks = 0;
-  const departing = new CollectionPrivacyEditor(original, {
-    save: async () => (++saves === 1 ? { ok: false, reason: 'unavailable' } : replay.promise),
-    read: async () => {
-      readbacks++;
-      return { ok: true, value: original };
+  const departing = new CollectionPrivacyEditor(
+    original,
+    {
+      save: async () => (++saves === 1 ? { ok: false, reason: 'unavailable' } : replay.promise),
+      read: async () => {
+        readbacks++;
+        return { ok: true, value: original };
+      },
     },
-  });
+    settingsAmbient,
+  );
   await departing.edit('public');
   const retry = departing.retry();
   departing.dispose();
@@ -469,10 +488,14 @@ test('actor teardown rejects late pages and row reads, and a successful explicit
   expect(readbacks).toBe(0); // A late old-viewer receipt must not trigger a read under new credentials.
 
   const fresh = Promise.withResolvers<CollectionPrivacyRead<OwnedCollection>>();
-  const editor = new CollectionPrivacyEditor(original, {
-    save: async () => ({ ok: false, reason: 'conflict' }),
-    read: () => fresh.promise,
-  });
+  const editor = new CollectionPrivacyEditor(
+    original,
+    {
+      save: async () => ({ ok: false, reason: 'conflict' }),
+      read: () => fresh.promise,
+    },
+    settingsAmbient,
+  );
   await editor.edit('public');
   const refresh = editor.reload();
   await editor.edit('unlisted');
@@ -593,22 +616,30 @@ test('Respect native retry delays during Collection privacy recovery without wea
   const pageFailure = { status: 503, code: 'dependency_unavailable', retryAfter: '47' };
   const commands: VisibilityAttempt[] = [];
   let reads = 0;
-  const editor = new CollectionPrivacyEditor(first, {
-    save: async (attempt) => {
-      commands.push(attempt);
-      return commands.length === 1
-        ? { ok: false, reason: 'unavailable', failure: originalFailure }
-        : { ok: true, collection: { ...first, visibility: 'private', revision: 8 } };
+  const editor = new CollectionPrivacyEditor(
+    first,
+    {
+      save: async (attempt) => {
+        commands.push(attempt);
+        return commands.length === 1
+          ? { ok: false, reason: 'unavailable', failure: originalFailure }
+          : { ok: true, collection: { ...first, visibility: 'private', revision: 8 } };
+      },
+      read: async () =>
+        ++reads === 1
+          ? { ok: false, reason: 'unavailable', failure: readbackFailure }
+          : { ok: true, value: { ...first, visibility: 'unlisted', revision: 10 } },
     },
-    read: async () =>
-      ++reads === 1
-        ? { ok: false, reason: 'unavailable', failure: readbackFailure }
-        : { ok: true, value: { ...first, visibility: 'unlisted', revision: 10 } },
-  });
-  const other = new CollectionPrivacyEditor(second, {
-    save: async () => ({ ok: true, collection: { ...second, visibility: 'private', revision: 8 } }),
-    read: async () => ({ ok: true, value: second }),
-  });
+    settingsAmbient,
+  );
+  const other = new CollectionPrivacyEditor(
+    second,
+    {
+      save: async () => ({ ok: true, collection: { ...second, visibility: 'private', revision: 8 } }),
+      read: async () => ({ ok: true, value: second }),
+    },
+    settingsAmbient,
+  );
   const cursors: (string | null)[] = [];
   const pager = new CollectionPrivacyPager(async (cursor) => {
     cursors.push(cursor);
@@ -616,7 +647,7 @@ test('Respect native retry delays during Collection privacy recovery without wea
     return cursors.length === 2
       ? { ok: false, reason: 'unavailable', failure: pageFailure }
       : { ok: true, value: { collections: [], next: null } };
-  });
+  }, settingsAmbient);
   await pager.load();
   await editor.edit('private');
   const attempt = editor.snapshot().attempt!;
@@ -682,8 +713,9 @@ test('Recover the Collection privacy list from a rejected cursor with original r
       return Response.json(ownerPage(calls.length === 5 ? [current] : [], null));
     }) as typeof fetch,
   });
-  const pager = new CollectionPrivacyPager((next) =>
-    collectionPrivacyRead(() => readOwnedCollections(client, request(), env, next)),
+  const pager = new CollectionPrivacyPager(
+    (next) => collectionPrivacyRead(() => readOwnedCollections(client, request(), env, next)),
+    settingsAmbient,
   );
   await pager.load();
   await pager.load();

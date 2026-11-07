@@ -1,9 +1,9 @@
 import type { CollectionPrivacyEditor } from './collection-privacy-recovery';
 import type { VerificationInput } from './verification-core';
 import type { VerificationRecoveryState } from './verification-recovery';
-import type { useSession } from '../session/query';
+import type { SettingsSessionObservation } from './ports/shell';
 
-type Session = ReturnType<typeof useSession>;
+type Session = SettingsSessionObservation;
 export function settingsDraftViewerIsCurrent(
   owner: Pick<Session, 'subject' | 'csrfToken'> | null,
   current: Session | undefined,

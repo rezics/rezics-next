@@ -23,7 +23,9 @@ import type {
   ReadingPreferences,
   SpoilerLevel,
 } from './preferences';
-import { preferenceRetryDeadline, usePreferenceRetry } from './preference-failure-retry';
+import { useSettingsAmbient } from './adapters/ambient-view.tsx';
+import { usePreferenceRetry } from './preference-failure-retry';
+import { preferenceRetryDeadline, type SettingsAmbient } from './ports/ambient';
 import { readingNeedsNavigationDecision, useSettingsNavigationDraft } from './reading-navigation';
 import {
   ownerMayChangeReading,
@@ -101,6 +103,7 @@ export class ReadingDraftRecovery {
       version: () => number;
       onVersionChange: (version: number) => void;
     },
+    private ambient: SettingsAmbient,
   ) {
     const advice = readingAdviceReady(initial.advice) ? initial.advice : undefined;
     this.state = {
@@ -130,10 +133,10 @@ export class ReadingDraftRecovery {
     return readingAdviceReady(this.state.advice) && ownerMayChangeReading(this.state.advice) && this.owner.canWrite();
   }
   private readWaiting() {
-    return this.state.readRetryAt > Date.now();
+    return this.state.readRetryAt > this.ambient.now();
   }
   private commandWaiting() {
-    return this.state.commandRetryAt > Date.now();
+    return this.state.commandRetryAt > this.ambient.now();
   }
   private afterDispatch() {
     return this.state.pending !== null || this.state.confirmedReceipt !== null || this.state.phase === 'saving';
@@ -171,6 +174,7 @@ export class ReadingDraftRecovery {
       input,
       recovering,
       () => this.owner.version(),
+      this.ambient.timer,
       () => !this.readWaiting(),
     );
     if (!this.owner.canWrite()) return;
@@ -186,7 +190,10 @@ export class ReadingDraftRecovery {
         reason: result.reason,
         failure: result.failure,
         failureOrigin: 'read',
-        readRetryAt: Math.max(this.state.readRetryAt, preferenceRetryDeadline(result.failure?.retryAfter)),
+        readRetryAt: Math.max(
+          this.state.readRetryAt,
+          preferenceRetryDeadline(result.failure?.retryAfter, this.ambient.now()),
+        ),
         commandRetryAt: 0,
       });
       this.owner.onVersionChange(Math.max(this.owner.version(), result.receipt.version));
@@ -196,7 +203,7 @@ export class ReadingDraftRecovery {
       const retireAdvice = result.reason === 'forbidden' || result.reason === 'closed';
       const deniedWrite = result.kind === 'rejected' && retireAdvice;
       const readOperation = result.kind === 'uncertain' && result.operation === 'read';
-      const retryAt = preferenceRetryDeadline(result.failure?.retryAfter);
+      const retryAt = preferenceRetryDeadline(result.failure?.retryAfter, this.ambient.now());
       this.update({
         known: retireAdvice ? withoutReadingAdvice(this.state.known) : this.state.known,
         advice: retireAdvice ? undefined : this.state.advice,
@@ -245,7 +252,7 @@ export class ReadingDraftRecovery {
       });
       return;
     }
-    const input = readingMutation(this.state.known, this.state.draft);
+    const input = readingMutation(this.state.known, this.state.draft, this.ambient.id);
     if (!input) {
       this.update({ phase: 'idle' });
       return;
@@ -284,7 +291,7 @@ export class ReadingDraftRecovery {
       return;
     }
     const defaults = readingDefaults(this.state.advice);
-    const input = readingReset(this.state.known);
+    const input = readingReset(this.state.known, this.ambient.id);
     if (!input || !defaults) return;
     this.laterEdits = {};
     this.update({ draft: defaults, pending: input });
@@ -307,7 +314,11 @@ export class ReadingDraftRecovery {
       failure: undefined,
       failureOrigin: undefined,
     });
-    const result = await readReading(this.io, () => Math.max(this.state.known.version, this.owner.version()));
+    const result = await readReading(
+      this.io,
+      () => Math.max(this.state.known.version, this.owner.version()),
+      this.ambient.timer,
+    );
     if (!this.owner.canRead()) return;
     if (!result.ok) {
       const retireAdvice = result.reason === 'forbidden' || result.reason === 'closed';
@@ -318,7 +329,10 @@ export class ReadingDraftRecovery {
         reason: result.reason,
         failure: result.failure,
         failureOrigin: 'read',
-        readRetryAt: Math.max(this.state.readRetryAt, preferenceRetryDeadline(result.failure?.retryAfter)),
+        readRetryAt: Math.max(
+          this.state.readRetryAt,
+          preferenceRetryDeadline(result.failure?.retryAfter, this.ambient.now()),
+        ),
       });
       return;
     }
@@ -437,6 +451,7 @@ export function ReadingCard({
   io?: ReadingIO;
 }) {
   const ids = useId();
+  const ambient = useSettingsAmbient();
   const [hydrated, setHydrated] = useState(false);
   useLayoutEffect(() => setHydrated(true), []);
   const isCurrent = useSettingsCurrent(csrfToken, !!io);
@@ -502,17 +517,18 @@ export function ReadingCard({
           version: () => sharedVersion.current,
           onVersionChange: (next) => latest.current.onVersionChange(next),
         },
+        ambient,
       ),
   );
   const state = useSyncExternalStore(editor.subscribe, editor.snapshot, editor.snapshot);
   const adviceReady = readingAdviceReady(state.advice);
   const defaults = readingDefaults(state.advice);
-  const reset = state.knownCurrent ? readingReset(state.known) : null;
+  const reset = state.knownCurrent ? readingReset(state.known, ambient.id) : null;
   const ownerMayChange = adviceReady && ownerMayChangeReading(state.advice);
   const mayWrite = credentialed && ownerMayChange;
   const offered = adviceReady ? state.advice!.reading.supported.spoilerLevels : [];
   const offeredImages = adviceReady ? state.advice!.reading.supported.suitability : [];
-  const draftMutation = readingMutation(state.known, state.draft);
+  const draftMutation = readingMutation(state.known, state.draft, ambient.id);
   const draftAdmitted =
     !draftMutation || (adviceReady && readingChangeAdmitted(draftMutation, state.advice!.reading.supported));
   const retainedChoices = adviceReady

@@ -14,7 +14,7 @@ import { ClosedErrorPage, ClosedPage } from '../shell/closed.tsx';
 import { errorPageHead, routeFailure } from '../shell/error-state';
 import { isPlatformClosedError } from '../kernel/platform-closed.ts';
 import { anonymousReadMode, type ReadCredentialMode } from '../kernel/credential.ts';
-import { useSession } from '../session/query.ts';
+import { ReaderNavigationContext, useReaderNavigationHost, useSession } from '../session';
 import { pageHead, pageLinks, type PagePaths } from '../shell/head.ts';
 import { validatePublicOrigin } from '../shell/origin.ts';
 import '../styles.css';
@@ -23,7 +23,7 @@ import { isSignedInPath } from '../session/guard';
 import { createNavigation } from '../shell/navigation';
 import { m } from '../paraglide/messages.js';
 import { Tags, ChartNoAxesCombined, FileText } from 'lucide-react';
-import { subjectPurchaseRegions } from '../checkout/subject-purchase';
+import { subjectPurchaseRegions } from './-subject-purchase';
 import { contextsNavigation } from '../features/contexts/navigation';
 import { myLogsNavigation } from '../library/my-logs';
 import { threadsNavigation } from '../threads/navigation';
@@ -33,7 +33,19 @@ import { importReviewNavigation } from '../features/import-review/navigation';
 import { communityNavigation } from '../community/navigation';
 import { libraryNavigation } from '../library/navigation';
 import { LocaleNavigationProvider } from '../shell/locale-navigation/context';
+import { LibraryApplicationBoundary } from '../session/library-application';
+import { PageVisitBinding } from '../subject/page-visit-binding';
+import { RecentSearchBinding } from '../session/recent-search-binding';
 import { OwnVotesReturnProvider } from '../ratings/own-votes/return';
+import { pageRenderBinding } from '../features/catalogue/page-render-binding';
+import { installSemanticRenderPort } from '../features/pages/subject-page-application';
+import { InboxAmbientProvider } from '../inbox/adapters/ambient-view.tsx';
+import { SettingsAmbientProvider } from '../settings/adapters/ambient-view.tsx';
+import { createPerformanceAmbient } from '../session/performance-ambient';
+
+installSemanticRenderPort(pageRenderBinding);
+
+const performanceAmbient = createPerformanceAmbient();
 
 export const commerceNavigation = createNavigation([
   ...contextsNavigation,
@@ -140,9 +152,15 @@ export const Route = createRootRouteWithContext<{
 
 function RootRoutes() {
   return (
-    <OwnVotesReturnProvider>
-      <CurrentReadingOutlet />
-    </OwnVotesReturnProvider>
+    <LibraryApplicationBoundary>
+      <PageVisitBinding>
+        <RecentSearchBinding>
+          <OwnVotesReturnProvider>
+            <CurrentReadingOutlet />
+          </OwnVotesReturnProvider>
+        </RecentSearchBinding>
+      </PageVisitBinding>
+    </LibraryApplicationBoundary>
   );
 }
 
@@ -164,6 +182,7 @@ const clientLoadRecovery = String.raw`(() => {
 
 function Root({ children }: { children: ReactNode }) {
   const router = useRouter();
+  const readerNavigation = useReaderNavigationHost();
   useLayoutEffect(() => router.options.context.buyerHistory?.mount(router), [router]);
   const nonce = router.options.ssr?.nonce;
   const href = useRouterState({ select: (state) => state.location.publicHref });
@@ -233,11 +252,17 @@ function Root({ children }: { children: ReactNode }) {
             {m.shell_client_reload({}, options)}
           </a>
         </div>
-        <LocaleNavigationProvider>
-          <AppShell navigation={commerceNavigation} subjectPurchase={subjectPurchaseRegions}>
-            {platformClosed ? <ClosedPage /> : children}
-          </AppShell>
-        </LocaleNavigationProvider>
+        <ReaderNavigationContext value={readerNavigation}>
+          <SettingsAmbientProvider ambient={performanceAmbient.settings}>
+            <InboxAmbientProvider ambient={performanceAmbient.inbox}>
+              <LocaleNavigationProvider>
+                <AppShell navigation={commerceNavigation} subjectPurchase={subjectPurchaseRegions}>
+                  {platformClosed ? <ClosedPage /> : children}
+                </AppShell>
+              </LocaleNavigationProvider>
+            </InboxAmbientProvider>
+          </SettingsAmbientProvider>
+        </ReaderNavigationContext>
         <Scripts />
       </body>
     </html>

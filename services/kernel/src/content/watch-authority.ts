@@ -1,7 +1,6 @@
 import { createHash } from 'node:crypto';
 import type { Pool } from 'pg';
-import { resourceAuthorization } from '../access/index.ts';
-import { deadlineClient, within } from '../access/authenticate.ts';
+import { resourceAuthorization, deadlineClient, within } from './access-port.ts';
 import { principalCommandIdentity, type CommandAuthorization, type CommandTransaction } from '../command/command.ts';
 import { withConnection } from '../database/pool.ts';
 import { ProblemError } from '../http/problem.ts';

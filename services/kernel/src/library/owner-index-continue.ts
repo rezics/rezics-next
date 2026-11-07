@@ -1,6 +1,6 @@
 import type { PoolClient } from 'pg';
 import { hasLiveOperationalTransaction, type OperationalTransaction } from '../command/operational.ts';
-import { ProblemError } from '../http/problem.ts';
+import { ProblemError } from '../http/problem-error.ts';
 import { routeOf } from '../route/route.ts';
 
 type Client = Pick<PoolClient, 'query'>;

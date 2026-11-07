@@ -1,3 +1,4 @@
+import { collectionMemberReturnAddress, collectionViewerActionHref } from './collection-return';
 import { slug } from '@rezics/definitions/slug';
 import type { PagePaths } from '../shell/head';
 import { locales } from '../paraglide/runtime.js';
@@ -67,4 +68,15 @@ export function subjectViewPaths(paths: PagePaths, view: string): PagePaths {
   return Object.fromEntries(
     locales.map((locale) => [locale, subjectUrlForView({ href: paths[locale] ?? '' }, view)]),
   ) as PagePaths;
+}
+
+/** A disclosed Collection preview returns to its exact occurrence in the original Collection address. */
+export function collectionMemberSubjectHref(
+  subject: SubjectHrefInput,
+  locale: string,
+  currentHref: string,
+  memberId: string,
+): string {
+  const target = subjectHref(subject, locale).href;
+  return collectionViewerActionHref(target, collectionMemberReturnAddress(currentHref, memberId)) ?? target;
 }

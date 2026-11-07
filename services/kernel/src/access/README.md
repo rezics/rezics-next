@@ -2,12 +2,15 @@
 
 ## Policy boundary
 
-The [adopted architecture](../../../../docs/architecture.md) places the pure catalogue, closed-operand `decide`,
-bounded explanations/conformance and residual specialization behind `packages/access/src/index.ts`. Imports go
-inward through that public entry only, with no reverse or private edges. Kernel retains native facts, qualified
-completeness, opaque proofs, authoritative time, floors/fences, command admission, audit and execution. Exposure
-is a distinct consumer. The first core and Collection directory residual use are integrated; this remaining-profile migration
-adds no baseline allowance and no old/new allow-OR. Source compatibility is no native acceptance.
+[Architecture](../../../../docs/architecture.md): catalogue, closed-operand `decide`, bounded explanations,
+conformance and residuals live in `packages/access/src/index.ts`; imports point inward.
+Kernel owns facts, qualified completeness, proofs, time, floors/fences, admission, audit and execution. Exposure is independent. Core/Collection residuals are integrated; remaining profiles add no
+baseline allowance or allow-OR. Compatibility is not native acceptance.
+
+Copy: `contract/copy-account.ts`, `adapters/copy-account.ts`: account/state/share SQL, finite bounds
+and authn floor before private-state/receipt disclosure. Error, Access, Pool, actor, time/deadline identities remain.
+
+Decision: Collection directory, list, order-bounds and current reads consume Library `AuthorizationCapability.specializeCollectionList` and the Access-funded `collectionAuthorizationPreparation` bound. Access adapters keep `specializePolicy`, residual lowering, native permission SQL and the inverse membership limit; Library does not import private policy-core/filter or reconstruct permission statements. Wire shapes, independent deny operands and final authority before disclosure stay the same. Collection authorization memberships, residual operands and action names live in the Access contract literal leaf; adapters re-export them and do not evaluate membership-inverse at import. Fewest tests: owner/public/unavailable list outcomes and the funded inverse membership limit 1000.
 
 [Accounts](../../../../docs/accounts.md) owns product identity, delegation, consent and preferences;
 [Deletion](../../../../docs/deletion.md) owns erasure/restore policy;
@@ -17,48 +20,56 @@ adds no baseline allowance and no old/new allow-OR. Source compatibility is no n
 
 Decision: resource-role identifier helpers are functions so circular Access composition can resolve during module load.
 
+Decision: Zone resource command and read operations consume Access through the public producer `zone-resource-adapter.ts`. Composition binds that producer onto the Zone-owned Access port; Zone does not import command-admission, parent-creation, resource-authorization, resource-initialization, account-data or account-viewer-actions for this operation. Parent locks, History enrollment and participant cleanup stay in Zone owner commands.
+
 ## Domain composition
 
 Decision: native erasure completion acknowledges the coordinator through a required Access adapter port composed
 with the real `acknowledgeErasure` command. Normal startup and the isolated native preload use the same composition;
 local Access completion remains distinct from pending shared-history custody. Live-copy discovery binds the same
 Work execution contract as server and worker on each client it opens; there is no process-global client.
+`composeAccessApplication` also resolves Semantic `resolveIdentityAdapterRuntime`, so Agent source, technical
+receiver and reversal ports are the same constructed native capabilities used for epoch binding, publication and
+replay. IdentityEpochStoreError remains the single runtime class from Semantic `contract/identity-errors`.
 
-Decision: Content and Library present contribution owners through Access `contribution-attribution.ts` and
-`public-identity.ts`. Contribution attribution is nullable: missing, pending and unavailable identity are `null`,
-not evidence of deletion. `contributionDeleted` requires an explicit deletion label with no id; an id-free
-partial view alone never establishes deletion. The live variant retains `id`, `kind` and nullable `displayName`; only an authoritative
-deleted account produces a label-only `Deleted account` or `Deleted organization`. `readContributionAttributions` deduplicates page owners and reads at most 100 Account anchors per batch.
-Native agent attribution reads
-the exact bounded Semantic owner relation through the bound `IdentitySemanticPort` and confirms the anchored Account;
-it never manufactures a deleted state when that read is absent. Public subject overlay uses optional
-`IdentitySemanticPort.readPublicSubject`; a missing binding keeps `subject` null. `public-identity.ts` does not value-import
-`account-data.ts`, Semantic `access-capabilities.ts`, `subject.ts` or `link-keys.ts`; the removed return path is
-`index.ts → public-identity.ts → account-data.ts → semantic/access-capabilities.ts → identity-adapters/index.ts`. Consumers keep command ownership separate from
-this presentation and retain revision, SHA, licence, references and body availability under current disclosure.
-They do not import Access internals, Platform pool helpers or Semantic agent tables.
-Progress adoption classifies grant denial and Access unavailability through `resource-access-errors.ts` and `unavailable.ts`;
-those files are the owner public error identities.
+Decision: `contract/index.ts` owns contribution attribution types/schemas; native helpers remain in
+`contribution-attribution.ts`. Immutable authorship is separate from current presentation/command ownership.
+Missing/pending/unavailable attribution is null; only authoritative tombstones supply id-free deletion labels.
+Batches deduplicate at most 100 owners. Library's adapter supplies current account eligibility and initial/final
+public account/attribution observations. Agent attribution confirms the exact Semantic relation through
+`IdentitySemanticPort`; absent overlay stays null. Public identity imports neither private account data nor Semantic
+recovery/maintenance. Bodies, revisions, SHA, licence and reference disclosure retain their owners.
 
-Decision: Kernel Access is split into `contract`, `core`, `application` and adapter modules. Vocabulary and finite
-bounds live in `access/contract`. Pure authorization, original-work and Kind-audience rules live in `access/core`.
-Use cases consume Access-owned ports in `access/application`. Native adapters in `access/adapters/native.ts` implement
-those ports by calling Content, Community, Library and Search public capability facades and the focused Semantic
-entries for Account/agent mapping (`semantic/agents.ts`), original recovery, read snapshots, Source custody and
-maintenance. Public account reads import mapping from `semantic/agents.ts` so recovery and Source-maintenance
-implementations stay out of that value graph. `createKernel`/`server`/`worker` bind the ports through
-`composition/access.ts`. Contract, core and application import no downstream domain behaviour. Tests pin allow/deny,
-identity recovery with the original actor/request/deadline, and original-work admission against fake ports without
-loading native adapters; growth membership remains the native bounded-work check. Contribution attribution remains
-nullable for missing, pending and unavailable identity; only an anchored Account tombstone is deletion.
+Decision: `contract/reading.ts` owns active/deleted/unknown reading identity observations. The native reading adapter
+uses the caller's pool, route-first public projection and original optional deadline, returning explicit unavailable
+for known native failures and throwing unexpected errors. Missing rows are unknown; failures are never empty
+success or deletion. `composition/content.ts` adapts these producer contracts to Content reading applications for
+normal server/worker/preload construction. It adds no lookup, cache or authority. Media uses the same bounded
+observation to distinguish an expired producer read from complete empty evidence; HTTP mapping remains in Content's
+existing transport boundary. Existing Account, grant and contribution policies and native cost bounds remain.
 
-Public entries: `access/contract/index.ts`, `access/core/index.ts`, `access/application/index.ts`,
-`access/adapters/index.ts`, `access/contribution-attribution.ts`, `access/public-identity.ts`, plus the
-existing Access adapter facades. Ports: `AvatarMediaPort`,
-`RealmAdministrationPort`, `IdentitySemanticPort`, `IdentityRecoveryStorePort`, `IdentityRetentionPort`,
-`KindAudienceLibraryPort`, `OriginalWorkPort`, `SearchErasurePort`, `NativeErasureCoordinatorPort`,
-`ResourceAuthorizationPort`. Wiring adds no
-query, scan or extra statement; native cost stays with the existing producer declarations.
+Decision: Access contracts own vocabulary/bounds; core owns pure authorization, original-work and Kind-audience
+rules; application owns use cases over Access ports. Native adapters implement them through public producer entries.
+`composition/access.ts` binds the application and `AgentIdentityMaintenancePort` for ordinary createKernel, server,
+worker and native preload. Unbinding Access clears both; isolated overrides return a disposer.
+
+Agent verification, retained technical Source, recovery, publication and reversal consume that Access-owned native
+capability from `adapters/bind.ts`. Its Semantic producer is `semantic/adapters/agent-identity-maintenance.ts`.
+Access imports neither Semantic maintenance/terminal behavior nor private SQL. The producer owns accepted-binding
+and retained-reference SQL, published-scope reads and their exact declarations. It validates the original opaque
+accepted binding, never substitutes active admission. Terminal commands retain original fencing, bounded drain,
+release and recovery. Pool, authority, deadline, native receipt, work vector and original-home custody pass to the
+existing producers. Cross-domain declarations are requested only during the admitted operation. Source/Core/owner
+prices and technical fallback remain unchanged; pure schedule/error vocabulary lives in Semantic contract leaves.
+
+Contract, core and application load no downstream behavior. Existing application ports keep their owners;
+public identity stays nullable until the anchored Account proves deletion.
+
+Acceptance choice: retain existing verification, reversal, recovery and source-work assertions; focused capability
+tests pin exact receipt/Pool/deadline forwarding, error identity and scoped reset. Native composition supplies the
+producer declarations. Typing is the worker gate; runtime journeys remain with the integrated Goal walks.
+
+Decision: `adapters/account-statements.ts` is the Access-owned account-read and account-share SQL descriptor for Library progress planning. Account row work stays on Access's native work port; Library charges statement text and original binds. Existing account, grant and unavailability policies remain.
 
 ## Pure policy core consumer
 
@@ -111,11 +122,12 @@ checks and per-ID answers. Pure evaluation adds no query, clock read, scan, per-
 `packages/access/README.md` documents the public API and limits.
 The admitted import edges are `services/kernel/src/access/policy-core.ts -> @rezics/access` (public entry),
 `services/kernel/src/access/policy-core.ts -> ./resource-roles.ts` (existing native role association),
-`services/kernel/src/access/permission.ts -> ./policy-core.ts`, `services/kernel/src/library/collection-reads.ts ->
-../access/policy-core.ts`, `services/kernel/src/library/collection-reads.ts -> ./collection-list-policy.ts`,
-`services/kernel/src/library/collection-list-policy.ts -> @rezics/access` (public entry),
-`services/kernel/src/library/collection-list-policy.ts -> ../access/policy-filter.ts`, and
-`services/kernel/src/access/policy-filter.ts -> @rezics/access` (public types only).
+`services/kernel/src/access/permission.ts -> ./policy-core.ts`, `services/kernel/src/access/adapters/collection-policy.ts ->
+./policy-core.ts`, `services/kernel/src/library/collection-reads.ts -> ./collection-list-policy.ts`,
+`services/kernel/src/library/collection-list-policy.ts -> ../access/adapters/collection-policy.ts` (public entry),
+`services/kernel/src/library/collection-order-bounds.ts -> ../access/adapters/collection-policy.ts` (public entry),
+`services/kernel/src/access/policy-filter.ts -> @rezics/access` (public types only), and
+`services/kernel/src/access/policy-filter.ts -> ../library/contract/collection-policy.ts` (Library-owned filter).
 
 ## Collection directory residual
 

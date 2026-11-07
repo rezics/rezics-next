@@ -1,7 +1,7 @@
 import type { Pool } from 'pg';
 import { Value } from 'typebox/value';
 import { accessClock } from '../access/access-clock.ts';
-import { deadlineClient, within } from '../access/authenticate.ts';
+import { deadlineClient, within } from './access-port.ts';
 import { withConnection } from '../database/pool.ts';
 import type { Effect } from '../events/effects.ts';
 import type { CloudEvent } from '../events/log.ts';

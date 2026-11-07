@@ -1,6 +1,6 @@
 import type { Pool } from 'pg';
 import { systemClock, type KernelClock } from '../clock.ts';
-import { ProblemError } from '../http/problem.ts';
+import { ProblemError } from '../http/problem-error.ts';
 import type { Access, Actor } from '../request/access.ts';
 import { routeOf } from '../route/route.ts';
 import { libraryActorOf, type LibraryCoverSummary } from './contract/index.ts';

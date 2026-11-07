@@ -1,4 +1,4 @@
-import { durableInitiatorCommitment } from '../access/durable-initiator-capture.ts';
+import { durableInitiatorCommitment } from './access-port.ts';
 import type { DurableInitiatorReader, DurableInitiatorRecord } from '../access/durable-initiator.ts';
 import { nativeReceiptKeyCandidates } from '../command/receipt-key.ts';
 import { principalCommandIdentity } from '../command/command.ts';

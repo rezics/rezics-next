@@ -3,7 +3,7 @@ import {
   readContributionAttributions,
   type ContributionAttribution,
 } from '../access/public-identity.ts';
-import { deadlineClient } from '../access/authenticate.ts';
+import { deadlineClient } from './access-port.ts';
 import { withConnection } from '../database/pool.ts';
 import { ProblemError } from '../http/problem-error.ts';
 import type { Anchored, ReadContext } from './model.ts';

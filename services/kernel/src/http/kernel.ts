@@ -1,6 +1,26 @@
 import { initializeEventTypes } from '../events/catalogue.ts';
-import { ensureContentApplication } from '../content/adapters/index.ts';
-import { bindOrdinaryContentLifecycle, nativeContentLifecycle } from '../semantic/adapters/index.ts';
+import { composeSubjectReadingApplication } from '../composition/semantic.ts';
+import {
+  ensureContentApplication,
+  createNativeContentRealmApplication,
+  nativeRealmEvidenceHost,
+  bindContentRealmApplication,
+} from '../content/adapters/index.ts';
+import { createRealmScopeEvidence } from '../community/adapters/index.ts';
+import {
+  bindOrdinaryContentLifecycle,
+  nativeContentLifecycle,
+  nativeContextAccess,
+  createSubjectScopeEvidence,
+} from '../semantic/adapters/index.ts';
+import { bindContextAccess } from '../semantic/context-access-port.ts';
+import { createZoneResourceAccess } from '../zones/adapters/index.ts';
+import {
+  bindZoneResourceAccess,
+  bindZoneResourceApplication,
+  createZoneResourceApplication,
+} from '../zones/resource-application.ts';
+import { withRealmDisclosureWork } from '../search/adapters/index.ts';
 import { contentHttpDeclaration, mountContentHttp, type ContentHttpRoutes } from '../content/http.ts';
 import { createOperationCatalogue } from '@rezics/operations';
 import { readCommerceMoneyPolicy, type CommerceMoneyPolicy } from '../commerce/money.ts';
@@ -88,6 +108,8 @@ import { createContentShelfTitleSource, type ContentShelfTitleInputs } from '../
 import type { ShelfTypeDigest } from '../library/shelf-type-keys.ts';
 import { createShelfMaintenanceOps } from '../library/shelf-maintenance-runtime.ts';
 import { readViewerPersonalActionsPage, type ViewerPersonalActionsReader } from '../library/viewer-personal-actions.ts';
+import { createNativePagePorts } from '../presentation/adapters/semantic-page.ts';
+import { bindPageApplication, createPageApplication } from '../presentation/page-application.ts';
 import { profileRoutes } from '../presentation/http/profiles.ts';
 import type { Access, AccessConfig, AccessFactory, AccessRealmRoleReader, Actor, Resource } from '../request/access.ts';
 import { withConnection } from '../database/pool.ts';
@@ -406,12 +428,25 @@ export function createKernelAccessResolver(options: {
 /** The route key must stay the same across restarts, or retries lose their receipts. */
 export function createKernel(dependencies: KernelDependencies): Kernel {
   bindOrdinaryContentLifecycle(nativeContentLifecycle());
+  bindContextAccess(nativeContextAccess());
+  bindZoneResourceApplication(createZoneResourceApplication(bindZoneResourceAccess(createZoneResourceAccess())));
+  bindPageApplication(createPageApplication(createNativePagePorts()));
   const declared = contentHttpDeclaration();
   const contentRuntime = ensureContentApplication({
     ...(dependencies.clock ? { clock: dependencies.clock } : {}),
     ...(dependencies.content?.now ? { now: dependencies.content.now } : {}),
     ...(dependencies.content?.id ? { id: dependencies.content.id } : {}),
   });
+  bindContentRealmApplication(
+    createNativeContentRealmApplication(
+      {
+        parent: createRealmScopeEvidence(nativeRealmEvidenceHost).observe,
+        subject: createSubjectScopeEvidence(nativeRealmEvidenceHost).observe,
+        withWork: (reader, work, maximum, run) => withRealmDisclosureWork(reader, work, maximum, run),
+      },
+      contentRuntime.ambient.now,
+    ),
+  );
   initializeEventTypes();
   const operationCatalogue = createOperationCatalogue([...LIBRARY_OPERATION_DECLARATIONS, ...declared.operations]);
   const sourceClock = dependencies.clock ?? systemClock;
@@ -465,6 +500,7 @@ export function createKernel(dependencies: KernelDependencies): Kernel {
     opened ??= createWorkClient(url, dependencies.pool).then(bindKernelExecution);
     return opened;
   };
+  const subjectReading = composeSubjectReadingApplication();
   const subjects = subjectRoutes(
     createApp({
       ...dependencies,
@@ -481,6 +517,7 @@ export function createKernel(dependencies: KernelDependencies): Kernel {
         if (!viewerBindings) throw new ProblemError('dependency_unavailable');
         return viewerBindings;
       },
+      reading: subjectReading,
     },
   );
   let publication: SubjectPagePublication | undefined;

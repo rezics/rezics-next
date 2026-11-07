@@ -172,6 +172,7 @@ export async function executeCheck(
   tree: string,
   key: string,
   input?: string,
+  signal?: AbortSignal,
 ): Promise<DevVerifierEvidence> {
   const cached = reusableCheckResult(execution, commit, check, key, input);
   if (cached) return cached;
@@ -180,18 +181,27 @@ export async function executeCheck(
   let final: GateOutcome = { passed: false, output: '', timedOut: false };
   let finalLog = '';
   for (let attempt = 0; attempt < policy.verifier.checkAttempts; attempt++) {
+    if (signal?.aborted) {
+      final = { passed: false, output: 'Verifier round deadline reached.', timedOut: true };
+      break;
+    }
     finalLog = join(execution.settings.stateDirectory, `dev-verify-${randomUUID()}.log`);
     try {
       final = await run(
         withTreeBun(check.command, tree, execution.settings.mainCheckout),
         check.cwd ? join(tree, check.cwd) : tree,
         finalLog,
+        signal ? { signal } : undefined,
       );
     } catch (error) {
-      final = { passed: false, output: error instanceof Error ? error.message : String(error), timedOut: false };
+      final = {
+        passed: false,
+        output: error instanceof Error ? error.message : String(error),
+        timedOut: signal?.aborted ?? false,
+      };
     }
     attempts.push(`attempt ${attempt + 1}: ${final.output}`);
-    if (final.passed || !infraFailure(final.output, final.timedOut)) break;
+    if (final.passed || signal?.aborted || !infraFailure(final.output, final.timedOut)) break;
   }
   const fullOutput = attempts.length > 1 ? attempts.join('\n') : final.output;
   const result = createEvidence(

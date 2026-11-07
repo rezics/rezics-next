@@ -12,8 +12,9 @@ import { defineRateLimit } from '../http/rate-limit.ts';
 import { actionForRequest, IDEMPOTENCY_HEADER, idempotencyKeyOf } from '../http/request.ts';
 import type { KeyRing } from '../tokens/seal.ts';
 import type { SearchService } from '../search/service-scope.ts';
-import { collectionResourceSchema } from '../library/collection-routes.ts';
+import { createZoneCollectionAdapter } from '../library/zone-collection-adapter.ts';
 import {
+  ZoneCollectionListResponseSchema,
   ZoneCreateInputSchema,
   ZoneConfigureInputSchema,
   ZonePublishInputSchema,
@@ -37,9 +38,18 @@ import {
   ZoneSubjectListProgressSchema,
 } from './page-continuation.ts';
 import { readStaticZonePage, readZoneSubjects } from './page-runtime.ts';
-import { createZoneCommands, zoneIfMatch } from './resource-commands.ts';
-import { createZoneReads, requireZoneAccount } from './resource-reads.ts';
+import { createZoneResourceAccess } from './adapters/index.ts';
+import {
+  bindZoneResourceAccess,
+  bindZoneResourceApplication,
+  createZoneResourceApplication,
+  tryZoneResourceAccess,
+  tryZoneResourceApplication,
+  type ZoneResourceApplication,
+} from './resource-application.ts';
+import { bindZoneCollectionPort, peekZoneCollectionPort } from './collection-port.ts';
 import { readZoneCollections } from './mounted-collections.ts';
+import type { ZoneAccountActor, ZoneActor } from './resource-access-port.ts';
 
 const closed = { additionalProperties: false } as const;
 const params = t.Object({ id: t.String() }, closed);
@@ -101,6 +111,17 @@ function cache(set: { headers: Record<string, string | number | readonly string[
   set.headers['cache-control'] = 'private, no-store';
   if (revision) set.headers.etag = `"${revision}"`;
 }
+function ensureZoneCollectionPort() {
+  if (!peekZoneCollectionPort()) bindZoneCollectionPort(createZoneCollectionAdapter());
+}
+
+function ensureZoneResourceApplication(): ZoneResourceApplication {
+  const existing = tryZoneResourceApplication();
+  if (existing) return existing;
+  const access = tryZoneResourceAccess() ?? bindZoneResourceAccess(createZoneResourceAccess());
+  return bindZoneResourceApplication(createZoneResourceApplication(access));
+}
+
 /** Resource routes and the one common-page composition over native source owners. */
 export function zoneRoutes(
   app: ReturnType<typeof definitionRoutes>,
@@ -113,8 +134,13 @@ export function zoneRoutes(
     search?: SearchService;
   },
 ) {
-  const reads = () => createZoneReads({ ...dependencies, access: dependencies.access() });
-  const commands = () => createZoneCommands({ ...dependencies, access: dependencies.access() });
+  ensureZoneCollectionPort();
+  const resources: ZoneResourceApplication = ensureZoneResourceApplication();
+  const runtime = () => resources.runtime({ ...dependencies, access: dependencies.access() });
+  const reads = () => runtime().reads;
+  const commands = () => runtime().commands;
+  const requireZoneAccount: (actor: ZoneActor) => asserts actor is ZoneAccountActor = resources.requireAccount;
+  const zoneIfMatch = resources.ifMatch;
   return app
     .post(
       '/v1/zones',
@@ -196,13 +222,7 @@ export function zoneRoutes(
         ),
         response: {
           ...failures(),
-          200: t.Object(
-            {
-              collections: t.Array(collectionResourceSchema(), { maxItems: 100 }),
-              next: t.Union([t.String(), t.Null()]),
-            },
-            closed,
-          ),
+          200: ZoneCollectionListResponseSchema(),
           403: t.Union([failures()[403], problemSchema('platform_closed')]),
           503: withHeaders(failures()[503], { 'retry-after': t.String() }),
         },

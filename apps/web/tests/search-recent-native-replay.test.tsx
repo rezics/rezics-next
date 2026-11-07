@@ -256,7 +256,7 @@ test('Library activation uses the installed session reader and HTTP result path;
   const { QueryClient, QueryClientProvider, notifyManager } = await import('@tanstack/react-query');
   const { createRoot } = await import('react-dom/client');
   const { useSearchQuery } = await import('../src/search/use-search-query');
-  const { searchQueryOptions } = await import('../src/search/search-queries');
+  const { searchQueryOptions } = await import('../src/search/search-query-options');
   const { searchSessionOwner } = await import('../src/search/search-session-owner');
   const { discoveryExample } = await import('../src/kernel/fake/search-discovery');
   const { setLocale } = await import('../src/paraglide/runtime.js');

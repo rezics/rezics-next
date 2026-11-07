@@ -1,4 +1,4 @@
-import { deadlineClient } from '../access/authenticate.ts';
+import { deadlineClient } from './dependencies.ts';
 import { requireAccessDeadline } from '../access/unavailable.ts';
 import { currentCommand, currentCommandResources, type CommandTransaction } from '../command/command.ts';
 import { partitionOf, routeOf } from '../route/route.ts';

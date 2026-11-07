@@ -1,5 +1,5 @@
 import { Button } from '@rezics/ui/shadcn/button';
-import type { QueryClient } from '@tanstack/react-query';
+import type { QueryClient, QueryKey } from '@tanstack/react-query';
 import { useQueryClient } from '@tanstack/react-query';
 import { useRouter } from '@tanstack/react-router';
 import {
@@ -16,27 +16,38 @@ import {
 } from 'react';
 import type { PageRead } from '@rezics/composition';
 import { m } from '../../../paraglide/messages.js';
-import { browserObservation } from '../../../session/observation';
-import { normalizeSessionObservation, sessionQueryKey } from '../../../session/browser-state';
+import {
+  browserObservation,
+  normalizeSessionObservation,
+  ReaderNavigationContext,
+  sessionQueryKey,
+  type BrowserObservationSnapshot,
+  type OperationLease,
+} from '../../../session';
 import { ContributionActionsAddress } from './current';
-import type { BrowserObservationSnapshot } from '../../../session/observation';
-import type { OperationLease } from '../../../reader/lease';
 import type { ContributionOperation } from './current';
-import type { SubjectPageData } from '../../../features/pages/subject';
-import { isRecord } from '../../../features/pages/shared';
+import type { SubjectPageData } from '../../../features/pages/page-model';
+import {
+  unavailableContributionActions,
+  type ContributionActionCapabilities,
+  type VerificationConfig,
+} from '../../../features/pages/account-profile-port';
 import {
   contributionActionsInput,
   ContributionActionsReceiver,
-  unavailableAuthorContributionActionsWire,
-  type AuthorContributionActionsWire,
   type ContributionActionsInput,
   type ContributionActionsState,
 } from './receiver';
+import type { AuthorContributionActionsResponse, AuthorContributionActionsWire } from './wire';
 
 export type ContributionActionsPageScopeValue = {
   page: SubjectPageData;
   cursor: string | null;
   view: string;
+  /** The anonymous named-page query that supplied the original cohort. */
+  sourceQueryKey?: QueryKey | undefined;
+  /** Report verification for this page's native owners; absent keeps report controls unavailable. */
+  verification?: VerificationConfig | undefined;
 };
 
 const ContributionActionsPageScopeContext = createContext<ContributionActionsPageScopeValue | null>(null);
@@ -45,10 +56,12 @@ export function ContributionActionsPageScope({
   page,
   cursor,
   view,
+  verification,
+  sourceQueryKey,
   children,
 }: ContributionActionsPageScopeValue & { children: ReactNode }) {
   return (
-    <ContributionActionsPageScopeContext.Provider value={{ page, cursor, view }}>
+    <ContributionActionsPageScopeContext.Provider value={{ page, cursor, view, verification, sourceQueryKey }}>
       {children}
     </ContributionActionsPageScopeContext.Provider>
   );
@@ -56,17 +69,6 @@ export function ContributionActionsPageScope({
 
 export function useContributionActionsPageScope() {
   return useContext(ContributionActionsPageScopeContext);
-}
-
-export function contributionPublicationSource(page: SubjectPageData, accountId: string): object | null {
-  for (const result of Object.values(page.reads)) {
-    if (result.status !== 200 || !isRecord(result.body)) continue;
-    const accounts = result.body.accounts;
-    if (!Array.isArray(accounts)) continue;
-    const source = accounts.find((account) => isRecord(account) && account.id === accountId);
-    if (source) return source;
-  }
-  return null;
 }
 
 type RowObservation = readonly unknown[];
@@ -101,6 +103,8 @@ export type ContributionActionsEpisode = {
   page: object | null;
   read: object;
   source: object;
+  sourceQuery?: object | undefined;
+  sourceCount?: number | undefined;
   selection: unknown;
   publication: object | null;
   postsPublished: boolean;
@@ -109,7 +113,7 @@ export type ContributionActionsEpisode = {
   credential: string | null;
   navigation: object;
   mount: object | null;
-  wire: AuthorContributionActionsWire<unknown>;
+  wire: AuthorContributionActionsWire<AuthorContributionActionsResponse>;
   rows: RowObservation[];
 };
 
@@ -133,6 +137,8 @@ export function sameContributionActionsEpisode(left: ContributionActionsEpisode,
     left.page !== right.page ||
     left.read !== right.read ||
     left.source !== right.source ||
+    left.sourceQuery !== right.sourceQuery ||
+    left.sourceCount !== right.sourceCount ||
     left.selection !== right.selection ||
     left.publication !== right.publication ||
     left.wire !== right.wire ||
@@ -147,26 +153,50 @@ export function sameContributionActionsEpisode(left: ContributionActionsEpisode,
 
 export type ContributionActionsHostValue = {
   input: ContributionActionsInput | undefined;
-  state: ContributionActionsState<unknown>;
+  state: ContributionActionsState<AuthorContributionActionsResponse>;
+  /** The reader's subject, the only identity that viewer advice may name. */
+  reader: string | null;
+  /** The last advice this visit admitted, retained through refresh and cleared by retirement. */
+  advice: AuthorContributionActionsResponse | undefined;
   isCurrent: () => boolean;
   retry: () => Promise<void>;
   operation: (operation: ContributionOperation) => OperationLease<ContributionOperation> | undefined;
 };
 
 const ContributionActionsHostContext = createContext<ContributionActionsHostValue | null>(null);
+const ContributionActionsCapabilitiesContext =
+  createContext<ContributionActionCapabilities>(unavailableContributionActions);
+
+export function ContributionActionsCapabilities({
+  value,
+  children,
+}: {
+  value: ContributionActionCapabilities;
+  children: ReactNode;
+}) {
+  return (
+    <ContributionActionsCapabilitiesContext.Provider value={value}>
+      {children}
+    </ContributionActionsCapabilitiesContext.Provider>
+  );
+}
 
 export function useContributionActionsHost() {
   return useContext(ContributionActionsHostContext);
 }
 
-const unavailable: ContributionActionsState<unknown> = { state: 'unavailable' };
+export function useContributionActionCapabilities() {
+  return useContext(ContributionActionsCapabilitiesContext);
+}
+
+const unavailable: ContributionActionsState<AuthorContributionActionsResponse> = { state: 'unavailable' };
 const noSubscribe = (_notify: () => void) => () => {};
 const noSnapshot = () => unavailable;
 const useClientLayoutEffect = typeof document === 'undefined' ? useEffect : useLayoutEffect;
 
 type Visit = {
   episode: ContributionActionsEpisode | undefined;
-  receiver?: ContributionActionsReceiver<unknown>;
+  receiver?: ContributionActionsReceiver<AuthorContributionActionsResponse>;
   address?: ContributionActionsAddress;
   operations?: Partial<Record<ContributionOperation, OperationLease<ContributionOperation>>>;
 };
@@ -184,7 +214,8 @@ export function ContributionActionsHost({
   postsPublished,
   reviewsPublished,
   rows,
-  wire = unavailableAuthorContributionActionsWire,
+  wire,
+  actions: suppliedActions,
   children,
 }: {
   accountId: string;
@@ -199,11 +230,25 @@ export function ContributionActionsHost({
   postsPublished: boolean;
   reviewsPublished: boolean;
   rows: readonly Record<string, unknown>[];
-  wire?: AuthorContributionActionsWire<unknown>;
+  wire: AuthorContributionActionsWire<AuthorContributionActionsResponse>;
+  actions?: ContributionActionCapabilities;
   children: ReactNode;
 }) {
   const client = useQueryClient();
-  const router = useRouter();
+  const navigationHost = useContext(ReaderNavigationContext);
+  const router = useRouter({ warn: false });
+  const actions = suppliedActions ?? unavailableContributionActions;
+  const sourceKey = useContributionActionsPageScope()?.sourceQueryKey;
+  const sourceQuery = sourceKey ? client.getQueryCache().find({ queryKey: sourceKey, exact: true }) : undefined;
+  const sourceCount = sourceQuery?.state.dataUpdateCount;
+  const sourceCurrent = () =>
+    !sourceKey ||
+    (!!sourceQuery &&
+      client.getQueryCache().find({ queryKey: sourceKey, exact: true }) === sourceQuery &&
+      sourceQuery.state.status === 'success' &&
+      sourceQuery.state.fetchStatus === 'idle' &&
+      !sourceQuery.state.isInvalidated &&
+      sourceQuery.state.dataUpdateCount === sourceCount);
   const observation = useMemo(() => browserObservation(client), [client]);
   const reader = useSyncExternalStore(observation.subscribe, observation.getSnapshot, observation.getServerSnapshot);
   const session = normalizeSessionObservation(client.getQueryData(sessionQueryKey));
@@ -235,26 +280,28 @@ export function ContributionActionsHost({
   }, []);
 
   useClientLayoutEffect(() => {
-    const leave = router.subscribe('onBeforeNavigate', () => bumpNavigation(false));
-    const load = router.subscribe('onBeforeLoad', () => bumpNavigation(false));
-    const resolved = router.subscribe('onResolved', () => bumpNavigation(true));
     const hide = () => bumpNavigation(false);
     const show = () => bumpNavigation(true);
     const visibility = () => bumpNavigation(document.visibilityState !== 'hidden');
+    const leave = router?.subscribe('onBeforeNavigate', hide);
+    const load = router?.subscribe('onBeforeLoad', hide);
+    const resolved = router?.subscribe('onResolved', show);
+    const stop = navigationHost?.subscribe(hide);
     window.addEventListener('pagehide', hide);
     window.addEventListener('pageshow', show);
     window.addEventListener('popstate', hide);
     document.addEventListener('visibilitychange', visibility);
     return () => {
-      leave();
-      load();
-      resolved();
+      leave?.();
+      load?.();
+      resolved?.();
+      stop?.();
       window.removeEventListener('pagehide', hide);
       window.removeEventListener('pageshow', show);
       window.removeEventListener('popstate', hide);
       document.removeEventListener('visibilitychange', visibility);
     };
-  }, [bumpNavigation, router]);
+  }, [bumpNavigation, navigationHost, router]);
 
   const input = contributionActionsInput(accountId, view, cursor, selection);
   const signedIn = reader.state === 'signed-in';
@@ -267,6 +314,8 @@ export function ContributionActionsHost({
     page,
     read,
     source,
+    sourceQuery,
+    sourceCount,
     selection,
     publication,
     postsPublished,
@@ -287,13 +336,15 @@ export function ContributionActionsHost({
     if (visit) visit.episode = undefined;
     const next: Visit = { episode };
     const published = view === 'reviews' ? reviewsPublished : postsPublished;
-    const readAdmitted = !!input && published && rows.length <= 20 && signedIn && navigation.active && mount !== null;
+    const readAdmitted =
+      !!input && published && rows.length <= 20 && signedIn && navigation.active && mount !== null && sourceCurrent();
     if (readAdmitted) {
       const address = new ContributionActionsAddress(
         client,
         reader,
         () =>
           current.current === next &&
+          sourceCurrent() &&
           mounted.current === episode.mount &&
           navigationRef.current === episode.navigation &&
           navigationRef.current.active &&
@@ -313,7 +364,8 @@ export function ContributionActionsHost({
   }
 
   const receiver = visit.receiver;
-  const state = useSyncExternalStore(receiver?.subscribe ?? noSubscribe, receiver?.snapshot ?? noSnapshot, noSnapshot);
+  const snapshot = receiver?.snapshot ?? noSnapshot;
+  const state = useSyncExternalStore(receiver?.subscribe ?? noSubscribe, snapshot, snapshot);
   useEffect(() => setHydrated(true), []);
   useClientLayoutEffect(() => visit.address?.attach(), [visit]);
   useEffect(() => {
@@ -330,47 +382,60 @@ export function ContributionActionsHost({
     if (nextLease) (visit.operations ??= {})[name] = nextLease;
     return nextLease;
   };
-  const hostValue: ContributionActionsHostValue = { input, state, isCurrent, retry, operation };
+  const hostValue: ContributionActionsHostValue = {
+    input,
+    state,
+    reader: reader.state === 'signed-in' ? reader.observation.subject : null,
+    advice: receiver?.advice(),
+    isCurrent,
+    retry,
+    operation,
+  };
   const showReadStatus = hydrated && signedIn;
   const signInHref =
     hydrated && reader.state === 'signed-out'
       ? `/${encodeURIComponent(locale)}/auth/sign-in?return_to=${encodeURIComponent(window.location.pathname + window.location.search + window.location.hash)}`
       : undefined;
   return (
-    <ContributionActionsHostContext.Provider value={hostValue}>
-      <div data-slot="contribution-actions-host" data-action-state={state.state} className="contents">
-        {signInHref ? (
-          <p className="text-sm">
-            <a
-              href={signInHref}
-              className="inline-flex min-h-11 items-center text-primary underline underline-offset-4"
+    <ContributionActionsCapabilities value={actions}>
+      <ContributionActionsHostContext.Provider value={hostValue}>
+        <div data-slot="contribution-actions-host" data-action-state={state.state} className="contents">
+          {signInHref ? (
+            <p className="text-sm">
+              <a
+                href={signInHref}
+                className="inline-flex min-h-11 items-center text-primary underline underline-offset-4"
+              >
+                {m.profile_contribution_actions_sign_in()}
+              </a>
+            </p>
+          ) : null}
+          {hydrated && (reader.state === 'unknown' || (showReadStatus && state.state === 'pending')) ? (
+            <p role="status" className="text-sm text-muted-foreground">
+              {m.profile_contribution_actions_preparing()}
+            </p>
+          ) : null}
+          {showReadStatus && (state.state === 'failed' || state.state === 'unavailable') ? (
+            <p
+              role={state.state === 'failed' ? 'alert' : 'status'}
+              className="flex flex-wrap items-center gap-2 text-sm"
             >
-              {m.profile_contribution_actions_sign_in()}
-            </a>
-          </p>
-        ) : null}
-        {hydrated && (reader.state === 'unknown' || (showReadStatus && state.state === 'pending')) ? (
-          <p role="status" className="text-sm text-muted-foreground">
-            {m.profile_contribution_actions_preparing()}
-          </p>
-        ) : null}
-        {showReadStatus && (state.state === 'failed' || state.state === 'unavailable') ? (
-          <p role={state.state === 'failed' ? 'alert' : 'status'} className="flex flex-wrap items-center gap-2 text-sm">
-            <span>{m.profile_contribution_actions_unavailable()}</span>
-            {state.state === 'failed' ? (
-              <Button type="button" variant="outline" onClick={() => void retry()} disabled={!isCurrent()}>
-                {m.public_account_retry()}
-              </Button>
-            ) : null}
-          </p>
-        ) : null}
-        {showReadStatus && state.state === 'retired' ? (
-          <p role="status" className="text-sm text-muted-foreground">
-            {m.profile_contribution_actions_retired()}
-          </p>
-        ) : null}
-        {children}
-      </div>
-    </ContributionActionsHostContext.Provider>
+              <span>{m.profile_contribution_actions_unavailable()}</span>
+              {state.state === 'failed' ? (
+                <Button type="button" variant="outline" onClick={() => void retry()} disabled={!isCurrent()}>
+                  {m.public_account_retry()}
+                </Button>
+              ) : null}
+            </p>
+          ) : null}
+          {showReadStatus && state.state === 'retired' ? (
+            <p role="status" className="text-sm text-muted-foreground">
+              {m.profile_contribution_actions_retired()}
+            </p>
+          ) : null}
+          {children}
+        </div>
+      </ContributionActionsHostContext.Provider>
+    </ContributionActionsCapabilities>
   );
 }

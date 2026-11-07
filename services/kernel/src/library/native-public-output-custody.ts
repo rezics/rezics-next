@@ -10,7 +10,7 @@ import {
   type CommandTransaction,
 } from '../command/command.ts';
 import { withConnection, discardConnection } from '../database/pool.ts';
-import { ProblemError } from '../http/problem.ts';
+import { ProblemError } from '../http/problem-error.ts';
 import { partitionOf, routeOf } from '../route/route.ts';
 import type { IdentityNativeReceipt } from '../semantic/identity-epoch-contract.ts';
 import * as semanticPublicCapture from '../semantic/identity-scoped-public-source.ts';

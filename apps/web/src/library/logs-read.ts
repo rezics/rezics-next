@@ -1,7 +1,7 @@
 import { notFound } from '@tanstack/react-router';
 import { deletionEvidence, nativeRevision, type DeletionEvidence } from './copies-receipt';
 import type { KernelClient } from '@rezics/client';
-import { isPlatformClosedError } from '../kernel/platform-closed';
+import { isPlatformClosedError } from '../session/reading-policy';
 import { assertPublicCacheReadAllowed } from '../security/page-cache';
 import type { SessionEnv } from '../session/client';
 import { prepareSession, sessionSubject, viewerCredential } from '../session/request';

@@ -9,7 +9,6 @@ import { pageContext, type SubjectPageData, type SubjectPageLoad } from './subje
 import { assertSubjectPageReadActive, type SubjectPageReadLifetime } from './subject-page-read-lifetime';
 import { isRecord } from './shared';
 import {
-  COMMUNITY_CARD_BYTES,
   COMMUNITY_POSITION_LIMIT,
   COMMUNITY_PROJECTED_BYTES,
   COMMUNITY_ROW_BYTES,
@@ -40,16 +39,6 @@ export type CommunityDisplayContext = {
     | { kind: 'realm'; id: string; title: string; spaceId?: string; headRevisionId?: string };
 };
 export type CommunityReactionFreshness = { epoch: number; position: string } | null;
-export type CommunityCreateAdvice = 'allowed' | 'denied' | 'sign-in' | 'unavailable';
-export type CommunityEntryBoard = {
-  id: string;
-  availability: 'available' | 'erased';
-  visibility: 'published' | 'draft' | 'protected' | 'taken_down';
-};
-export type CommunityEntry =
-  | { state: 'not_selected' }
-  | { state: 'concealed' | 'unavailable' }
-  | { state: 'current'; board: CommunityEntryBoard; createThread: CommunityCreateAdvice };
 export type CommunityThread = Pick<NativeCommunityThread, 'id' | 'title' | 'authorId' | 'boardId' | 'createdAt'> & {
   /** Local occurrence identity preserves repeated native rows; it grants no authority. */
   rowKey?: string;
@@ -66,6 +55,16 @@ export type CommunityThread = Pick<NativeCommunityThread, 'id' | 'title' | 'auth
   nativeCard?: CommunityNativeCard;
   actions?: CommunityActionAdvice;
 };
+export type CommunityEntryAction = 'allowed' | 'denied' | 'sign-in' | 'unavailable';
+/**
+ * The native creation entry for the supplied Board, decoded from the installed `entry`.
+ * Advice only presents the composer link; the composer and thread command stay authoritative.
+ */
+export type CommunityEntry =
+  | { state: 'not_selected' }
+  | { state: 'concealed' }
+  | { state: 'unavailable' }
+  | { state: 'current'; board: { id: string; title: string | null }; action: CommunityEntryAction };
 export type CommunityRegion = (
   | { state: 'loading' | 'unavailable' | 'closed' | 'expired' }
   | {
@@ -85,6 +84,8 @@ export type SubjectCommunity = {
   reader?: string | null;
   contextId?: string | null;
   sourceKey?: string;
+  /** The mounted composition query; omitted by standalone lists and recorded presentation. */
+  queryKey?: readonly unknown[] | undefined;
 };
 
 export const COMMUNITY_PREVIEW_LIMIT = 5;
@@ -200,55 +201,6 @@ function communityContext(value: unknown, expected: CommunityRequest): Community
   };
 }
 
-const createAdvice = new Set<CommunityCreateAdvice>(['allowed', 'denied', 'sign-in', 'unavailable']);
-const boardVisibility = new Set(['published', 'draft', 'protected', 'taken_down']);
-
-/** Create-thread uses only this page's native entry; a readable thread's boardId is never a destination. */
-export function projectCommunityEntry(value: unknown, expected: CommunityRequest): CommunityEntry | undefined {
-  if (!isRecord(value) || !withinCommunityBytes(value, COMMUNITY_CARD_BYTES)) return;
-  const request = value.request;
-  if (
-    !isRecord(request) ||
-    request.subjectId !== expected.id ||
-    request.placeId !== expected.place ||
-    request.kind !== expected.threadKind
-  )
-    return;
-  if (value.state === 'not_selected') {
-    if (request.selectedBoardId !== undefined || Object.keys(value).some((key) => key !== 'state' && key !== 'request'))
-      return;
-    return { state: 'not_selected' };
-  }
-  if (
-    (value.state !== 'concealed' && value.state !== 'unavailable' && value.state !== 'current') ||
-    !nativeId(request.selectedBoardId)
-  )
-    return;
-  if (value.state === 'concealed' || value.state === 'unavailable') {
-    if (Object.keys(value).some((key) => key !== 'state' && key !== 'request')) return;
-    return { state: value.state };
-  }
-  if (
-    !isRecord(value.board) ||
-    !nativeId(value.board.id) ||
-    value.board.id !== request.selectedBoardId ||
-    (value.board.availability !== 'available' && value.board.availability !== 'erased') ||
-    !boardVisibility.has(String(value.board.visibility)) ||
-    !isRecord(value.actions) ||
-    !createAdvice.has(value.actions.createThread as CommunityCreateAdvice)
-  )
-    return;
-  return {
-    state: 'current',
-    board: {
-      id: value.board.id,
-      availability: value.board.availability as CommunityEntryBoard['availability'],
-      visibility: value.board.visibility as CommunityEntryBoard['visibility'],
-    },
-    createThread: value.actions.createThread as CommunityCreateAdvice,
-  };
-}
-
 function communityReactionFreshness(value: unknown): CommunityReactionFreshness | undefined {
   if (value === null) return null;
   if (
@@ -261,6 +213,38 @@ function communityReactionFreshness(value: unknown): CommunityReactionFreshness 
   )
     return undefined;
   return { epoch: value.epoch as number, position: value.position };
+}
+
+const entryActions = new Set<string>(['allowed', 'denied', 'sign-in', 'unavailable']);
+
+/**
+ * Decode the closed entry against the exact request it answers. A response without `entry` is the
+ * no-Board answer, which is `not_selected`; a supplied Board must receive an explicit entry.
+ */
+function communityEntry(value: unknown, expected: CommunityRequest): CommunityEntry | undefined {
+  if (value === undefined) return expected.board === undefined ? { state: 'not_selected' } : undefined;
+  if (!isRecord(value) || !isRecord(value.request)) return undefined;
+  const request = value.request;
+  if (
+    request.subjectId !== expected.id ||
+    request.placeId !== expected.place ||
+    request.kind !== expected.threadKind ||
+    request.selectedBoardId !== expected.board
+  )
+    return undefined;
+  if (value.state === 'not_selected') return expected.board === undefined ? { state: 'not_selected' } : undefined;
+  if (expected.board === undefined) return undefined;
+  if (value.state === 'concealed') return { state: 'concealed' };
+  if (value.state === 'unavailable') return { state: 'unavailable' };
+  if (value.state !== 'current') return undefined;
+  const board = value.board;
+  const actions = value.actions;
+  if (!isRecord(board) || board.id !== expected.board || !isRecord(actions)) return undefined;
+  const action = actions.createThread;
+  const title = board.title;
+  if (typeof action !== 'string' || !entryActions.has(action)) return undefined;
+  if (title !== null && (typeof title !== 'string' || title.length > COMMUNITY_TEXT_LIMIT)) return undefined;
+  return { state: 'current', board: { id: expected.board, title }, action: action as CommunityEntryAction };
 }
 
 function communityReactionCounts(value: unknown): CommunityReactionCounts | null {
@@ -357,8 +341,8 @@ function project(thread: unknown, expected: CommunityRequest, admitViewer: boole
     createdAt: thread.createdAt,
     summary: documentText(post.body).replace(/\s+/g, ' ').trim().slice(0, 280),
     licence: post.licence,
-    ...(admitViewer && nativeId(post.revisionId) ? { postRevisionId: post.revisionId } : {}),
-    ...(admitViewer && citationPresent ? { voteCitation: post.voteCitation as CommunityVoteCitation | null } : {}),
+    ...(nativeId(post.revisionId) ? { postRevisionId: post.revisionId } : {}),
+    ...(citationPresent ? { voteCitation: post.voteCitation as CommunityVoteCitation | null } : {}),
     ...(reactionsPresent ? { reactions: reactions! } : {}),
     ...(admitViewer && viewerPresent ? { viewerReaction: thread.viewerReaction as ReactionKind | null } : {}),
     ...(card ? { card } : {}),
@@ -366,6 +350,10 @@ function project(thread: unknown, expected: CommunityRequest, admitViewer: boole
     ...(actions ? { actions } : {}),
   };
   return withinCommunityBytes(projected, COMMUNITY_PROJECTED_BYTES) ? projected : null;
+}
+
+function regionAuthorIds(region: CommunityRegion): string[] {
+  return region.state === 'ready' ? region.threads.map((thread) => thread.authorId) : [];
 }
 
 /** One native page per placed region and one shared public identity batch; continuations are never drained. */
@@ -377,6 +365,7 @@ export async function readSubjectCommunity(
   cursor?: string,
   requestedReader?: string | null,
   requestedPlace = GLOBAL,
+  board?: string,
 ): Promise<SubjectCommunity> {
   const limit = paged ? COMMUNITY_PAGE_LIMIT : COMMUNITY_PREVIEW_LIMIT;
   const entries = await Promise.all(
@@ -387,12 +376,19 @@ export async function readSubjectCommunity(
         place: requestedPlace,
         threadKind: kind,
         limit,
+        ...(board === undefined ? {} : { board }),
         ...(cursor !== undefined ? { cursor } : {}),
       };
       if (cursor !== undefined && (!paged || !validCursor(cursor))) return [kind, { state: 'unavailable', request }];
       try {
         const result = await client.subjects({ id: subjectId }).threads.get({
-          query: { place: requestedPlace, kind, limit, ...(cursor !== undefined ? { cursor } : {}) },
+          query: {
+            place: requestedPlace,
+            kind,
+            limit,
+            ...(board === undefined ? {} : { board }),
+            ...(cursor !== undefined ? { cursor } : {}),
+          },
         });
         if (isPlatformClosedProblem(result.status, result.error?.value)) return [kind, { state: 'closed', request }];
         const region = composedCommunityRegion(
@@ -406,11 +402,7 @@ export async function readSubjectCommunity(
       }
     }),
   );
-  const authorIds = entries.flatMap(([, region]) =>
-    region.state === 'ready'
-      ? region.threads.filter((thread) => !thread.nativeCard).map((thread) => thread.authorId)
-      : [],
-  );
+  const authorIds = entries.flatMap(([, region]) => regionAuthorIds(region));
   return {
     regions: Object.fromEntries(entries),
     authors: await readPageAuthors(client, authorIds),
@@ -474,10 +466,8 @@ function decodeCommunityRegion(
   const reactionsAsOf = Object.hasOwn(read.body, 'reactionsAsOf')
     ? communityReactionFreshness(read.body.reactionsAsOf)
     : undefined;
-  const entry = Object.hasOwn(read.body, 'entry')
-    ? projectCommunityEntry(read.body.entry, expected)
-    : { state: 'not_selected' as const };
-  if (!context || reactionsAsOf === undefined || !entry) return { state: 'unavailable' };
+  const entry = communityEntry(read.body.entry, expected);
+  if (!context || reactionsAsOf === undefined || entry === undefined) return { state: 'unavailable' };
   try {
     const threads: CommunityThread[] = [];
     const occurrences = new Map<string, number>();
@@ -524,11 +514,7 @@ export async function withComposedCommunity(
     nodes[node] = region;
     regions[descriptor.threadKind] ??= region;
   }
-  const authorIds = Object.values(nodes).flatMap((region) =>
-    region.state === 'ready'
-      ? region.threads.filter((thread) => !thread.nativeCard).map((thread) => thread.authorId)
-      : [],
-  );
+  const authorIds = Object.values(nodes).flatMap(regionAuthorIds);
   assertSubjectPageReadActive(signal);
   const authors = await readPageAuthors(client, authorIds, signal);
   assertSubjectPageReadActive(signal);
@@ -575,6 +561,8 @@ export async function withSubjectCommunity(
     view !== undefined,
     cursor,
     loaded.page.requestedReader ?? null,
+    GLOBAL,
+    loaded.page.board,
   );
   community.contextId = loaded.page.context?.id ?? null;
   return { ...loaded, page: { ...loaded.page, community } };

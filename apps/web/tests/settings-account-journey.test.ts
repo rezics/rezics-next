@@ -1,7 +1,9 @@
+import { SignInPrompt } from '../src/threads/write-prompts';
+import { AccountsQueryProvider as QueryClientProvider } from './fixtures/accounts-composition';
 import { expect, mock, test } from 'bun:test';
 import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { QueryClient } from '@tanstack/react-query';
 import { createMemoryHistory, createRootRoute, createRouter, RouterProvider } from '@tanstack/react-router';
 import { AccountSafetyCard } from '../src/settings/account-safety';
 import { accountSafetyLinks, securityHrefFromIssuer } from '../src/settings/account-safety-links';
@@ -10,16 +12,22 @@ import { csrfTokenFromRequest, csrfTokenMatches, isAllowedSiteOrigin, newCsrfTok
 import { createKernelClient } from '@rezics/client';
 import type { SessionEnv } from '../src/session/client';
 import { loadSettingsPage } from '../src/settings/preferences';
+import { createBrowserSettingsAmbient } from '../src/settings/adapters/ambient';
+import { performanceAmbientTree } from './performance-ambient';
+
+const settingsAmbient = createBrowserSettingsAmbient();
 
 const hrefs = (html: string) => [...html.matchAll(/<a\b[^>]*href="([^"]*)"/g)].map((match) => match[1]!);
 const account = (securityHref: string | null, csrfToken: string | null = newCsrfToken()) =>
   renderToStaticMarkup(
-    createElement(AccountSafetyCard, { state: 'signed-in', securityHref, csrfToken, onReload() {} }),
+    performanceAmbientTree(
+      createElement(AccountSafetyCard, { state: 'signed-in', securityHref, csrfToken, onReload() {} }),
+    ),
   );
 
 test('Phone and desktop users can navigate directly to every available settings section with truthful loading and admission states', () => {
   const sections = settingsSections({ notifications: true, collections: true, verification: true });
-  const html = renderToStaticMarkup(createElement(SectionsNavigation, { sections }));
+  const html = renderToStaticMarkup(performanceAmbientTree(createElement(SectionsNavigation, { sections })));
   expect(hrefs(html)).toEqual([
     '#reading',
     '#watches',
@@ -40,7 +48,9 @@ test('Phone and desktop users can navigate directly to every available settings 
     verification: false,
     readingState: 'closed',
   });
-  const pending = renderToStaticMarkup(createElement(SectionsNavigation, { sections: closed, pending: true }));
+  const pending = renderToStaticMarkup(
+    performanceAmbientTree(createElement(SectionsNavigation, { sections: closed, pending: true })),
+  );
   expect(hrefs(pending)).toEqual(['#reading', '#watches', '#profile', '#public-activity', '#account']);
   expect(pending).toContain('role="status"');
   expect(closed[0]?.status).toBeTruthy();
@@ -48,9 +58,9 @@ test('Phone and desktop users can navigate directly to every available settings 
     const available = settingsSections({ notifications: false, collections: false, verification: false, readingState });
     expect(available[0]?.status).toBeTruthy();
     expect(available[0]?.status).not.toBe(closed[0]?.status);
-    expect(hrefs(renderToStaticMarkup(createElement(SectionsNavigation, { sections: available })))).toContain(
-      '#account',
-    );
+    expect(
+      hrefs(renderToStaticMarkup(performanceAmbientTree(createElement(SectionsNavigation, { sections: available })))),
+    ).toContain('#account');
   }
 });
 
@@ -126,7 +136,9 @@ test('Sign out remains a CSRF-protected POST and unavailable Auth configuration 
 
 test('signed-out entry uses the existing sign-in and return-to flow without exposing account actions', () => {
   const html = renderToStaticMarkup(
-    createElement(AccountSafetyCard, { state: 'signed-out', returnTo: '/fr/settings#account' }),
+    performanceAmbientTree(
+      createElement(AccountSafetyCard, { state: 'signed-out', SignInPrompt, returnTo: '/fr/settings#account' }),
+    ),
   );
   expect(hrefs(html)).toEqual(['/auth/sign-in?return_to=%2Ffr%2Fsettings%23account']);
   expect(html).not.toContain('<form');
@@ -136,16 +148,21 @@ test('signed-out entry uses the existing sign-in and return-to flow without expo
 test('the signed-out Settings account journey renders its real main content and sign-in continuation in the normal page composition, with no personal controls or fabricated session', async () => {
   // This reviews the fallback composition, not access to the guarded production route.
   mock.module('cloudflare:workers', () => ({ env: {} }));
-  const [{ AppShell }, { SettingsPageView }, { m }] = await Promise.all([
+  const [{ AppShell }, { SettingsPageView }, { settingsContent }, { m }] = await Promise.all([
     import('../src/shell/shell'),
     import('../src/settings/settings-page'),
+    import('../src/settings/adapters/presentation'),
     import('../src/paraglide/messages.js'),
   ]);
   const queryClient = new QueryClient();
   const root = createRootRoute({
     component: () =>
       createElement(AppShell, {
-        children: createElement(SettingsPageView, { page: { signedIn: false }, csrfToken: null }),
+        children: createElement(SettingsPageView, {
+          page: { signedIn: false },
+          csrfToken: null,
+          content: settingsContent,
+        }),
       }),
   });
   const router = createRouter({
@@ -155,7 +172,9 @@ test('the signed-out Settings account journey renders its real main content and 
   try {
     await router.load();
     const html = renderToStaticMarkup(
-      createElement(QueryClientProvider, { client: queryClient }, createElement(RouterProvider, { router })),
+      performanceAmbientTree(
+        createElement(QueryClientProvider, { client: queryClient }, createElement(RouterProvider, { router })),
+      ),
     );
     expect(html.match(/<main\b/g)).toHaveLength(1);
     const main = html.match(/<main\b[^>]*>[\s\S]*?<\/main>/)?.[0];
@@ -189,8 +208,9 @@ test('the signed-out Settings account journey renders its real main content and 
 
 test('an unknown hydration session cannot mount a prepared account preference form, even with a seeded session cache', async () => {
   mock.module('cloudflare:workers', () => ({ env: {} }));
-  const [{ SettingsPageView }, { sessionQuery }, { m }] = await Promise.all([
+  const [{ SettingsPageView }, { settingsContent }, { sessionQuery }, { m }] = await Promise.all([
     import('../src/settings/settings-page'),
+    import('../src/settings/adapters/presentation'),
     import('../src/session/query'),
     import('../src/paraglide/messages.js'),
   ]);
@@ -208,13 +228,16 @@ test('an unknown hydration session cannot mount a prepared account preference fo
           securityHref: 'https://accounts.example.test/security',
         },
         csrfToken: 'current-alice',
+        content: settingsContent,
       }),
   });
   const router = createRouter({ routeTree: root, history: createMemoryHistory({ initialEntries: ['/en/settings'] }) });
   try {
     await router.load();
     const html = renderToStaticMarkup(
-      createElement(QueryClientProvider, { client: queryClient }, createElement(RouterProvider, { router })),
+      performanceAmbientTree(
+        createElement(QueryClientProvider, { client: queryClient }, createElement(RouterProvider, { router })),
+      ),
     );
     expect(html).toContain(m.settings_heading());
     expect(html).toContain(m.settings_sections_loading());
@@ -321,9 +344,10 @@ test('account transitions fence late preference receipts, recovery reads and sav
     const old = new NotificationEditor(
       { notifications: { reply: true, mention: true }, version: 77 },
       io.notifications,
+      settingsAmbient,
     );
     const saving = old.edit('reply', false, 77);
-    const reloading = readReading(io.reading, 77);
+    const reloading = readReading(io.reading, 77, settingsAmbient.timer);
     client.setQueryData(sessionQuery.queryKey, { state: 'signed-in', subject: 'bob', csrfToken: 'bob-current' });
     mounted = false;
     receipt.resolve({ ok: true, notifications: { reply: false, mention: true }, version: 78 });
@@ -387,6 +411,7 @@ test('same-account recovery uses the current token and rejects unowned prepared 
   const editor = new NotificationEditor(
     { notifications: { reply: true, mention: true }, version: 7 },
     io.notifications,
+    settingsAmbient,
   );
   await editor.edit('reply', false, 7);
   token = 'rotated-current-token';

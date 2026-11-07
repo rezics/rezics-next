@@ -355,7 +355,7 @@ first-page restart. These observations never authorize a vote; vote admission re
 Focused outcomes live in `test/rating/realm-question-authoring.test.ts`: native manage grants, creation and exact
 replay, changed-input conflict, persisted author/provenance, point/selection refresh, binary and `0..10` scales,
 protected/ban denial, current vote admission and manage loss before replay. Physical growth is unmeasured;
-the dev verifier owns clause measurements and broader acceptance after integration.
+the sole Goal walks own native/browser/growth receiving and broader acceptance after integration.
 
 ### Realm question management page source
 
@@ -575,7 +575,7 @@ messaging.
 - **Bound:** Constant statements and rows per attempt; no vote or Subject scan. Index and receipt lookup blocks grow
   logarithmically with retained history.
 - **Growth check:** `test/rating/question-lifecycle.test.ts` checks one transition and exact replay/revocation behavior;
-  physical growth measurement belongs to the dev verifier.
+  physical growth measurement belongs to the sole Goal walks.
 
 #### Restore Cost
 
@@ -583,7 +583,7 @@ messaging.
   registered event. No figure or voter rows are rewritten.
 - **Bound:** Constant statements and rows per attempt; retained lifecycle and receipt indexes grow logarithmically.
 - **Growth check:** `test/rating/question-lifecycle.test.ts` checks the active revision and preserved meaning after
-  restoration; physical growth measurement belongs to the dev verifier.
+  restoration; physical growth measurement belongs to the sole Goal walks.
 
 #### Historical point read Cost
 
@@ -591,7 +591,7 @@ messaging.
   readability under the existing Access path.
 - **Bound:** One metadata row regardless of vote history; joined heads are unique by question.
 - **Growth check:** The focused lifecycle test compares the returned retired revision with the unchanged authored
-  definition; physical growth measurement belongs to the dev verifier.
+  definition; physical growth measurement belongs to the sole Goal walks.
 
 #### Selectable directory Cost
 
@@ -1186,75 +1186,13 @@ state and the population page omits that Realm.
 Unknown or unreadable subjects and unknown questions return `404`. A population figure is never combined with another
 population's votes.
 
+### Vote and Semantic application boundary
+
+[Vote readback](vote-readback.md) owns the required application ports, native composition, counted phases and acceptance choice.
+
 ### Internal own-vote batch
 
-`readOwnVotes(client, actor, questionId, targetIds)` enriches shelves using the caller's repeatable-read client and
-snapshot. It requires the same current native account, authentication epoch and `rating:vote` scope as the own-vote
-GET. It rejects more than 100 raw targets before deduplication and rejects unroutable question or target IDs. Empty
-input still admits the caller. The Map uses exact requested target keys and GET values `{ units, revision, at }`;
-clears and missing votes are absent, while zero remains a vote. It does not resolve redirects or select a controller,
-population or shelf membership. This internal helper adds no HTTP endpoint or scope.
-
-`readOwnCountedVotes(client, actor, questionId, targetIds)` is the bounded read for canonical pages. It seeks the
-same viewer/question through Rating's partial `(route,voter_id,question_id,counted_target)` index and returns only
-the viewer's current native counted vote for each supplied Content terminal. It accepts at most 100 IDs before
-dedupe, uses the caller's repeatable-read client, preserves zero and omits absent or cleared votes. The caller must
-resolve and revalidate Content identity and visible question meaning; this helper does not admit a result row or
-expose aggregate ratings.
-`createOwnCountedVoteReader({ pool, access }).prepare(request, deadline)` admits at most 100 requested Subject keys,
-requires the current native actor account, authentication epoch and `rating:vote` scope, checks the standard question,
-captures current Subject mappings and verifies ordinary Subject
-readability before the owner starts its checkout. A pending identity mapping returns `preparing`; an absent,
-concealed or unavailable Subject is retained as `unavailable` without exposing its terminal. The fixed measurement is
-question `00000000-0000-7000-8000-000000000001`, revision 1, units 0 through 20 in steps of 1.
-
-The caller retains one reader instance and the exact same actor and ordered requested IDs through all three phases;
-preparations are instance-local and must not be serialized or reconstructed. The caller starts its own repeatable-read
-transaction on the account's native home and passes that `PoolClient` to `read(client, request, preparation)`. The
-read phase checks the same account standing and selects `rating.vote.counted_target` rows for the admitted
-terminal IDs. It also probes the exact requested and canonical original slots for review evidence, including explicit
-missing rows. Those slots never decide which source vote wins or replace counted-target truth. After releasing the owner checkout,
-the caller invokes `finish(request, preparation, readResult, deadline)`. Finish rechecks the actual account, question,
-identity mapping, published epochs on both identity homes, Subject disclosure, original slots and selected counted rows. It returns `current` only when those observations
-match; otherwise it returns `preparing` with a same-input retry. This composition spans native snapshots and is not
-one atomic snapshot.
-
-Each current observation correlates `requestedTargetId`, the selected row's `originalTargetId`, and the native
-`countingTargetId`. A present row with `units: 0` is a real score; `state: 'clear'` preserves a counted tombstone with
-its original `revision` and separate `countedRevision`; `state: 'absent'` means no counted row exists at the current
-destination. `unavailable` remains distinct from pending identity coverage. Callers keep their existing Library gate,
-source witnesses, owner fencing and exact request on retry. The reader adds no route, derivative, writer or repair.
-
-Decision: native own-score reads prepare identity and disclosure before the caller checkout, read only counted-target
-truth plus exact original-slot witnesses in the caller snapshot, then return `preparing` with the same input when final native observations differ.
-
-The mounted factory signature is
-`createOwnCountedVoteReader(deps: OwnCountedVoteReaderDependencies): OwnCountedVoteReader`, where dependencies
-are `{ pool: Pool; access: Access }`. Its public protocol is:
-
-```ts
-prepare(request: OwnCountedVoteRequest, deadline: number): Promise<OwnCountedVotePrepareResult>;
-read(client: Pick<PoolClient, 'query'>, request: OwnCountedVoteRequest,
-     preparation: OwnCountedVotePreparation): Promise<OwnCountedVoteReadResult>;
-finish(request: OwnCountedVoteRequest, preparation: OwnCountedVotePreparation,
-       readResult: OwnCountedVoteReadResult, deadline: number): Promise<OwnCountedVoteResult>;
-```
-
-`request` is `{ actor: Actor; targetIds: readonly string[] }`; deadlines are absolute milliseconds. Duplicate keys
-keep their first occurrence, but all raw keys count toward the 100-key cap. The canonical Subject is the mapping's
-terminal and equals `countingTargetId`; `originalTargetId` identifies the selected native vote, which can differ
-from both the requested and canonical Subject. `sourceEpoch` is a decimal string. Fingerprints are SHA-256 hex
-digests of JSON observations; the request digest binds account, client, sorted scopes, authentication epoch,
-requested-by identity and ordered raw keys. Native account observations bind route, standing and transaction
-identity; instance-local witnesses also bind published epochs on the requested and canonical homes.
-
-Dependency errors propagate: callers retain their cursor and exact input, without publishing empty or refreshed
-observations. A changed `countedRevision` invalidates final confirmation even when units and original `revision`
-are unchanged. Display values are units divided by two; `null` remains clear. The review witness encoding and byte
-limit below apply to these observations, but confer no atomic conditional write admission.
-
-Decision: publish the named reader and dependency types from the generated mounted module so consumers never infer
-the protocol from private source; the account-page `createOwnVotesReader` remains a separate authority.
+See the [bounded own-vote protocol](vote-readback.md#internal-own-vote-batch).
 
 ### Conditional provider vote review
 
@@ -1679,7 +1617,7 @@ captured upper key stay on the retained obligation and converge through another 
 Decision: fewest tests for this Cost close: extend identity-repair, identity-repair-native, growth-identity-repair
 and realm-rank-repair; pin later-vote and pending-event handoff in those suites; keep injected seam `checkGrowth`
 distinct from installed native growth; no new stories. Native, browser and growth execution stay on the sole
-Performance walk; this repair lands on focused architecture checks and changed-workspace typing.
+Goal walks; implementation acceptance is changed-workspace typing.
 
 Decision: composition binds `createIdentityRatingRepairProducer` through Rating's public `bindRatingIdentityProducer`
 and Semantic's public producer/continuation contract; server, default-worker and test preload install before commands

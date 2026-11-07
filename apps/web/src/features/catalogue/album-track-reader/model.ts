@@ -1,7 +1,8 @@
 import type { KernelClient, SubjectRead } from '@rezics/client';
 import { pickText } from '@rezics/composition';
 import type { Release } from '@rezics/definitions';
-import { albumType, albumUuid } from '../album-profile';
+import { albumType } from '../album-profile';
+import { albumUuid } from '../contract/album';
 import { partLabels, partStreams, type PartRow, type PartStream } from '../work-parts';
 
 type Definitions = Pick<Release, 'types' | 'properties'>;

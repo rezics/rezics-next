@@ -11,7 +11,7 @@ import {
 } from '../../src/library/canonical-source-bounds.ts';
 import * as store from '../../src/library/canonical-source-store.ts';
 import { updateSubjectIdentity } from '../../src/semantic/subject.ts';
-import { accessCheck } from '../../src/request/access.ts';
+import { accessCheck } from '../../src/request/access-check.ts';
 import { bundledDigest, bundledRelease } from '@rezics/definitions/bundled';
 import { ensureAccountAgent, verifyAccountAgent, unverifyAccountAgent } from '../../src/semantic/account-agents.ts';
 import { accountAgentId } from '../../src/semantic/agents.ts';

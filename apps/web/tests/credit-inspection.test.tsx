@@ -6,6 +6,7 @@ import { relationFixture, relationActor, relationProperty } from '../src/kernel/
 import { creditAssertion, creditCorrection, type CreditVisit } from '../src/features/catalogue/credit-inspection/model';
 import type { DetailRead } from '../src/features/catalogue/subject-changes';
 import type { RowValue } from '../src/features/pages/overview';
+import { CharacterReadingBinding } from '../src/features/pages/character-reading-binding';
 
 const fixture = relationFixture();
 fixture.candidate.id = fixture.original.id;
@@ -123,7 +124,11 @@ test('inspect original credit, retain authorized draft and citations, retry meta
         h(
           QueryClientProvider,
           { client },
-          h(CoverList, { items, value, label: 'Voice credits', creditVisit: selectedVisit }),
+          h(
+            CharacterReadingBinding,
+            null,
+            h(CoverList, { items, value, label: 'Voice credits', creditVisit: selectedVisit }),
+          ),
         ),
       ),
     );

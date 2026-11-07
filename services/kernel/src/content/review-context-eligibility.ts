@@ -1,5 +1,5 @@
 import { parseDiscoveryFilter } from '@rezics/filter';
-import { deadlineClient } from '../access/authenticate.ts';
+import { deadlineClient } from './access-port.ts';
 import { withConnection } from '../database/pool.ts';
 import { ProblemError } from '../http/problem.ts';
 import { accessCheck } from '../request/access.ts';

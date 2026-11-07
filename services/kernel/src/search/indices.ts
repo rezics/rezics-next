@@ -84,9 +84,10 @@ export async function createSubjectIndex(
   prefix: string,
   generation: number,
   calendarFormat?: 1,
+  signal?: AbortSignal,
 ): Promise<void> {
   const calendar = calendarFormat === 1 ? calendarIndexDefinition(subjectIndexDefinition()) : subjectIndexDefinition();
-  return createIndex(search, prefix, generation, creditSearchIndexDefinition(calendar));
+  return createIndex(search, prefix, generation, creditSearchIndexDefinition(calendar), signal);
 }
 
 /** Successor mapping in the same physical family; legacy Subject generations keep their format. */
@@ -164,9 +165,10 @@ async function createIndex(
   prefix: string,
   generation: number,
   body: SubjectIndexDefinition,
+  signal?: AbortSignal,
 ): Promise<void> {
   const index = subjectIndexName(prefix, generation);
-  const before = await readSubjectGenerationInventory(search, prefix);
+  const before = await readSubjectGenerationInventory(search, prefix, undefined, signal);
   if (before.generations.includes(generation)) return;
 
   // Allocated atomically with the physical index; never recreate this alias on another incarnation.
@@ -175,10 +177,15 @@ async function createIndex(
   await observedWrite(
     async () => {
       try {
-        return await search.request('PUT', `/${index}`, {
-          ...body,
-          aliases: { [writeAlias]: { is_write_index: true } },
-        });
+        return await search.request(
+          'PUT',
+          `/${index}`,
+          {
+            ...body,
+            aliases: { [writeAlias]: { is_write_index: true } },
+          },
+          signal ? { signal } : undefined,
+        );
       } catch (error) {
         if (error instanceof OpenSearchError && error.type === 'resource_already_exists_exception') {
           alreadyAllocated = true;
@@ -188,7 +195,7 @@ async function createIndex(
       }
     },
     async () => {
-      const observed = await readSubjectGenerationInventory(search, prefix);
+      const observed = await readSubjectGenerationInventory(search, prefix, undefined, signal);
       return (
         observed.generations.includes(generation) &&
         (alreadyAllocated || observed.writerAliases.get(generation) === writeAlias)
@@ -437,6 +444,7 @@ async function readSubjectGenerationInventory(
   search: OpenSearch,
   prefix: string,
   work?: SearchRequestWork,
+  signal?: AbortSignal,
 ): Promise<SubjectGenerationInventory> {
   validatePrefix(prefix);
   const alias = subjectAlias(prefix);
@@ -446,6 +454,7 @@ async function readSubjectGenerationInventory(
     response = await search.request('GET', `/_resolve/index/${prefix}subjects*`, undefined, {
       query: { expand_wildcards: 'all' },
       ...(work ? { work } : {}),
+      ...(signal ? { signal } : {}),
     });
   } catch (error) {
     if (error instanceof OpenSearchError)
@@ -570,7 +579,8 @@ export async function subjectGenerations(
   search: OpenSearch,
   prefix: string,
   work?: SearchRequestWork,
+  signal?: AbortSignal,
 ): Promise<{ generations: number[]; active: number | null }> {
-  const { generations, active } = await readSubjectGenerationInventory(search, prefix, work);
+  const { generations, active } = await readSubjectGenerationInventory(search, prefix, work, signal);
   return { generations, active };
 }

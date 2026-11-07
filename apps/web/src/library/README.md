@@ -86,12 +86,20 @@ clear displayed choices. Fresh owners have no predecessors; source, viewer, cred
 replacement and disposal retire choices, coordinates and focus. Closing/reopening follows the existing chooser
 lifetime. Only a fresh admitted movement may focus the still-current open owner's heading.
 
+Decision: Settings reaches that owner window, privacy command/readback and Shelf type/default/column preferences only through `settings-contract` and `settings-adapter`. Visibility, occurrence, frontier and preference vocabulary stay in the contract. Ordinary `/settings` composition binds the existing transport (`adapters/library.ts`) and presentation (`adapters/library-view.tsx`) adapters; Settings paths do not privately import Library read, dynamic Collection, Shelf column, parameter, preference, type-read or window-navigation modules.
+
 ## Cost bounds
 
 Preference resolution uses one bounded native snapshot (at most 32 layout scopes, six per-state sorts and eleven
 column IDs), with no extra requests, row hydration or page-local ordering. Score defaults use the existing
 unavailable reader and recovery without score preparation or vote reads; chronological paging keeps its existing
 20-row default and 100-row maximum. Settings writes only dirty shelf fields through the existing versioned command.
+
+### Cost: Settings Collection owner window, privacy and type defaults
+
+- Touches: Settings owner inventory is one signed-in `GET /v1/collections?curatorAccountId&ownerManagement=true&limit=20` with the exact cursor. Privacy is one `PATCH /v1/collections/{id}?ownerManagement=true` of the frozen original plus one independent FULL owner GET. Type defaults are one private type-index GET at limit 20 with the exact cursor, plus the existing optional label batch for that page.
+- Bound: one 20-row owner window (first Collection ID wins); one 20-row type DTO, eight predecessor coordinates and one staged target; command and current-read each keep a ten-second deadline. Nested Collection directory, Collection update/point and type-index work stay with Library.
+- Growth check: existing Collection privacy and Shelf type-defaults suites. Native examined-row evidence stays with Library Collection directory and type-index growth; Settings reports request and retained-coordinate bounds only.
 
 # Copy reading context
 
@@ -188,6 +196,12 @@ and original screenshots remain unmeasured until admitted. Native query semantic
 
 The launcher remains page-local. A future header filter region should open this same editor with the page's supplied
 properties and applied params, without introducing another filter store or claiming unsupported backend scopes.
+
+Search integration uses consumer-owned directory and saved-rule presentation ports, bound by ordinary routes.
+The [directory contract](public-collection-discovery.md#search-integration) and
+[rule boundary](saved-query-results.md#rule-presentation-boundary) own the binding and its unchanged privacy,
+release, mutation and traversal semantics. Search owns native production and rendering; Library owns its command
+and reader lifetimes. Settings and Inbox consumers do not share these bindings.
 
 An admitted Collection filter document, or a Library type/label selection, can open `/library/rules/new` as a private
 saved dynamic Collection. A Library state ID without profile and state set stays unsaved with correction. Built-in
@@ -416,3 +430,34 @@ and incarnation used by review currentness. Existing state-review tests cover re
 Decision: Kernel typecheck keeps SearchHit.matchEvidence on the saved-catalogue page fixture, one unused savedCatalogueMembers method on SearchService test doubles, and removes the duplicate second-scope method.
 
 Decision: check b33b1673 is the landing gate; type errors it printed sit outside changed files on base, so this landing does not repair whole-workspace web typecheck:root or loop the recorded native/web failures.
+
+## Application reading boundary
+
+Library declares its session, operation-admission, workspace and current-reader capabilities in `application.tsx`.
+The ordinary route boundary binds the existing Session and reader producers through `session/library-application.tsx`;
+it owns no account store, fetch, cache or alternative admission authority. Default isolated readers bind the same
+adapter. Presentation and query contracts retain their existing owners, including Continue's exposure presentation.
+Consumer fixtures install that adapter explicitly and retain their existing outcome assertions.
+
+Each archive section keeps an independent controller. Recovery observes actual session and exposure query
+incarnations, update counts and the browser reader observation rather than serialized session values. Replacement,
+including equal-value A/B/A, retires callbacks synchronously; route and locale replacement retire the local scope.
+Completed archive custody survives route changes for the current owner and erases its copied bytes synchronously
+when the application observes another owner or sign-out. Native envelopes, original uncertain operands, independent
+frontiers, bounded selection and admitted focus restoration remain with their existing controllers.
+
+Decision: Library owns its consumer port and ordinary composition; no generic shared shell provider is required.
+Keep the delivered adapter and archive controllers, binding the installed producers through the public Session
+entries. Settings and Inbox keep their own ports. This receiving changes dependencies and typing, not session policy.
+Typing is the worker gate; focused authored regressions and native/browser acceptance run after integration.
+
+The installed capability inventory is `session/index.ts` for `sessionQuery`, `useSession`, `sessionCsrfToken` and
+`AnonymousSessionContext`; `session/reader.ts` for workspace/operation admission and address/current-response
+provenance; and the pure `session/reading-policy.ts` for public/personal read defaults, credential-mode query keys
+and platform-closed recognition. These forward existing producers without new state or authority reads. Ordinary
+Library query and closed-state bindings use those entries. The existing exposure presentation and shell heading are
+public producer entries and keep their implementations, including Continue's independent exposure presentation.
+
+The archive application-lifetime regression retains equal-value replacement, A/B/A, query recreation and synchronous
+completed-byte erasure assertions. Its mounted composition case also pins independent section retirement and
+sign-out erasure before React publishes the replacement; returning to the same account never restores retired bytes.

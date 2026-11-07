@@ -7,9 +7,11 @@ import { createAuthService } from '@rezics/auth';
 import { createKernelClient } from '@rezics/client';
 import { readAccount } from '../../src/access/account-data.ts';
 import { createAccess } from '../../src/access/index.ts';
+import { AccessUnavailableError } from '../../src/access/unavailable.ts';
 import { tupleRoute } from '../../src/content/imported-contract.ts';
 import fenceRead from '../../src/content/read-source-fences.sql';
 import permissionRead from '../../src/access/permission-check.sql';
+import timeRead from '../../src/access/permission-time.sql';
 import contextRead from '../../src/semantic/read-context.sql';
 import { createKernel } from '../../src/http/kernel.ts';
 import { isProblemSchema, openApiDocument } from '../../src/http/openapi.ts';
@@ -217,6 +219,13 @@ test('actual generated sourceFences custom check route requires protected read g
     const checks = rows.filter((row) => row.statement === permissionRead.sql);
     expect(checks.length).toBeGreaterThanOrEqual(2);
     for (const check of checks) {
+      // A root snapshot consumes the prepared native time; it must not acquire
+      // another time under the borrowed resource checkout.
+      const index = rows.indexOf(check);
+      const begin = rows.slice(0, index).findLastIndex((row) => row.statement.startsWith('BEGIN'));
+      expect(begin).toBeGreaterThanOrEqual(0);
+      expect(rows.slice(begin, index).some((row) => row.statement === timeRead.sql)).toBe(false);
+      expect(rows.slice(0, begin).some((row) => row.statement === timeRead.sql)).toBe(true);
       const parameters = Object.fromEntries(permissionRead.params.map((key, index) => [key, check.parameters[index]]));
       expect({ ...parameters, resource_ids: [permissionResourceId(check, permissionRead.params)] }).toMatchObject({
         route: 0,
@@ -229,6 +238,12 @@ test('actual generated sourceFences custom check route requires protected read g
     }
     const tupleIndex = rows.findIndex((row) => row.statement === fenceRead.sql);
     expect(tupleIndex).toBeGreaterThan(rows.findIndex((row) => row.statement === permissionRead.sql));
+    const tupleCommit = rows.findIndex((row, index) => index > tupleIndex && row.statement === 'COMMIT');
+    const finalPermission = rows.findIndex((row, index) => index > tupleCommit && row.statement === permissionRead.sql);
+    const finalBegin = rows.slice(0, finalPermission).findLastIndex((row) => row.statement.startsWith('BEGIN'));
+    expect(tupleCommit).toBeGreaterThan(tupleIndex);
+    expect(finalBegin).toBeGreaterThan(tupleCommit);
+    expect(rows.slice(tupleCommit + 1, finalBegin).some((row) => row.statement === timeRead.sql)).toBe(true);
     expect(rows.slice(0, tupleIndex).some((row) => row.statement === 'COMMIT')).toBe(true);
     const begin = rows.slice(0, tupleIndex).findLastIndex((row) => row.statement.startsWith('BEGIN'));
     expect(
@@ -324,6 +339,28 @@ test('final current authorization rejects revocation after exact tuple read', as
   } finally {
     await grant(bulkId);
   }
+});
+
+test('unavailable native time, root or tuple reads withhold facts and session evidence', async () => {
+  for (const match of [
+    { statement: timeRead.sql },
+    { statement: contextRead.sql },
+    { statement: fenceRead.sql },
+    { statement: permissionRead.sql, occurrence: 2 },
+  ]) {
+    observer.armFault({ match, boundary: 'before', error: new AccessUnavailableError('overloaded') });
+    const result = await call();
+    expect(result.response.status).toBe(503);
+    expect(result.response.headers.get('content-type')).toBe('application/problem+json');
+    expect(result.response.headers.get(SESSION_HEADER)).toBeNull();
+    expect(result.body).toMatchObject({ code: 'overloaded', status: 503, effect_status: 'not_applicable' });
+    expect(result.body.request_id).toBeString();
+    expect(result.body).not.toHaveProperty('fenced');
+    expect(result.body).not.toHaveProperty('securityRevision');
+    expect(JSON.stringify(result.body)).not.toContain('9007199254740993');
+  }
+  // A failed request cannot strand the single-client Pool or poison the next read.
+  expect((await call()).body).toEqual({ fenced: true, securityRevision: '9007199254740993' });
 });
 
 test('bounded closed tuple query and literal custom transport reject enumeration and internal aliases', async () => {

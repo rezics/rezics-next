@@ -1,5 +1,5 @@
 import { expect, test } from 'bun:test';
-import { PROBLEMS, ProblemError } from '../../src/http/problem.ts';
+import { PROBLEMS, ProblemError } from '../../src/http/problem-error.ts';
 import type { CollectionMemberRow, MemberPage } from '../../src/library/collection-model.ts';
 import type {
   NativeOrdinalFrontier,

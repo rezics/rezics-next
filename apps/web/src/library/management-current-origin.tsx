@@ -1,7 +1,7 @@
 import { useLayoutEffect, useRef, useSyncExternalStore } from 'react';
 import { useQueryClient, type QueryClient, type QueryKey } from '@tanstack/react-query';
 import type { GatedOperation } from '../kernel/exposure';
-import { sessionQuery } from '../session/query';
+import { sessionQuery } from '../session';
 import { useLibraryWorkspaceAdmission, type LibraryWorkspaceAdmission } from './library-workspace-admission';
 
 export type ManagementGuard = {

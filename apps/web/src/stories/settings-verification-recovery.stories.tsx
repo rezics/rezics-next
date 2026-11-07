@@ -12,6 +12,7 @@ import {
   type AgentVerificationRequest,
   type VerificationInput,
 } from '../settings/verification-core';
+import { useSettingsAmbient } from '../settings/adapters/ambient-view.tsx';
 import { VerificationRecovery } from '../settings/verification-recovery';
 import { PageStory, PatternStory } from './page';
 import { selectSettingsCategory } from './settings-category-navigation';
@@ -27,34 +28,39 @@ function CurrentStatusCard({
   csrfToken: string | null;
   scenario: Scenario;
 }) {
+  const ambient = useSettingsAmbient();
   const [controller] = useState(() => {
     let reads = 0;
-    return new VerificationRecovery(accountId, {
-      read: async (currentAccountId) => {
-        const attempt = ++reads;
-        // Illustrative read IO only, consumed by the actual controller and card.
-        await new Promise<void>((resolve) => setTimeout(resolve, 250));
-        if (scenario === 'failure' || (scenario === 'recovery' && attempt === 1))
-          throw new VerificationReadError({
-            status: 503,
-            code: 'dependency_unavailable',
-            message: m.settings_unavailable_text(),
-            requestId: 'illustrative-status-read',
-          });
-        return {
-          accountId: currentAccountId,
-          verificationRequest: null,
-          viewerActions: [{ action: 'account:update', operations: ['account.request_verification'] }],
-          subjectTitle: null,
-        };
+    return new VerificationRecovery(
+      accountId,
+      {
+        read: async (currentAccountId) => {
+          const attempt = ++reads;
+          // Illustrative read IO only, consumed by the actual controller and card.
+          await new Promise<void>((resolve) => setTimeout(resolve, 250));
+          if (scenario === 'failure' || (scenario === 'recovery' && attempt === 1))
+            throw new VerificationReadError({
+              status: 503,
+              code: 'dependency_unavailable',
+              message: m.settings_unavailable_text(),
+              requestId: 'illustrative-status-read',
+            });
+          return {
+            accountId: currentAccountId,
+            verificationRequest: null,
+            viewerActions: [{ action: 'account:update', operations: ['account.request_verification'] }],
+            subjectTitle: null,
+          };
+        },
+        request: async () => {
+          throw new Error('This status-read story does not send commands');
+        },
+        withdraw: async () => {
+          throw new Error('This status-read story does not send commands');
+        },
       },
-      request: async () => {
-        throw new Error('This status-read story does not send commands');
-      },
-      withdraw: async () => {
-        throw new Error('This status-read story does not send commands');
-      },
-    });
+      ambient,
+    );
   });
   useEffect(() => {
     controller.activate();

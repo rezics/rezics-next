@@ -19,12 +19,12 @@ import {
 } from '../access/public-identity.ts';
 import { readPublicViews } from '../access/index.ts';
 import publicGeneration from './collection-public-generation.sql';
-import { nativePolicyCatalogueForAccess } from '../access/policy-core.ts';
 import { createResourcePublicEligibility } from '../access/public-eligibility.ts';
 import { withConnection } from '../database/pool.ts';
-import { ProblemError } from '../http/problem.ts';
+import { ProblemError } from '../http/problem-error.ts';
 import { readPartition } from '../partition/partition.ts';
-import { accessCheck, type AccountActor, type Actor } from '../request/access.ts';
+import { accessCheck } from '../request/access-check.ts';
+import { type AccountActor, type Actor } from '../request/access.ts';
 import { deadlineFor } from '../request/deadline.ts';
 import { partitionOf, routeOf } from '../route/route.ts';
 import { decodeCursor, encodeCursor, type CursorBinding, type CursorKey } from '../tokens/cursor.ts';
@@ -963,7 +963,7 @@ export function createCollectionReads(
       const body = { collections: [], next: null };
       return presentation ? presentation.present(body) : body;
     }
-    const listFilter = specializeCollectionListPolicy(nativePolicyCatalogueForAccess(access), fullView);
+    const listFilter = specializeCollectionListPolicy(access, fullView);
     if (listFilter.status !== 'ready') throw new ProblemError('dependency_unavailable');
     const logical =
       fullView && (cursor === null || builtinCursor)

@@ -2,7 +2,7 @@ import { memoizedValue } from '../memoized.ts';
 import { createHmac } from 'node:crypto';
 import type { Pool } from 'pg';
 import { t } from 'elysia';
-import { deadlineClient, within } from '../access/authenticate.ts';
+import { deadlineClient, within } from './access-port.ts';
 import { CommandUnavailableError } from '../command/command.ts';
 import { discardConnection, withConnection } from '../database/pool.ts';
 import { ProblemError } from '../http/problem.ts';

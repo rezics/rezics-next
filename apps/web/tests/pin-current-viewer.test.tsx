@@ -1,3 +1,4 @@
+import { LibraryApplicationBoundary } from '../src/session/library-application';
 import { describe, expect, mock, spyOn, test } from 'bun:test';
 import { dirname } from 'node:path';
 import { act, StrictMode } from 'react';
@@ -155,9 +156,11 @@ async function mount(initial: Props = { collectionId: 'b', pins: loaded(), mode:
       root.render(
         <StrictMode>
           <QueryClientProvider client={current.client}>
-            <RouterContextProvider router={current.router}>
-              <Probe {...props} />
-            </RouterContextProvider>
+            <LibraryApplicationBoundary>
+              <RouterContextProvider router={current.router}>
+                <Probe {...props} />
+              </RouterContextProvider>
+            </LibraryApplicationBoundary>
           </QueryClientProvider>
         </StrictMode>,
       );

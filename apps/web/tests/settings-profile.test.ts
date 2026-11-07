@@ -10,6 +10,10 @@ import { EditableProfileReadError, officialProfileRead } from '../src/settings/e
 import { ProfileEditor, ProfileEditorSession, type ProfileAttempt } from '../src/settings/profile-write';
 import { MediaProblem } from '../src/media/kernel';
 import { m } from '../src/paraglide/messages.js';
+import { createBrowserSettingsAmbient } from '../src/settings/adapters/ambient';
+import { performanceAmbientTree } from './performance-ambient';
+
+const settingsAmbient = createBrowserSettingsAmbient();
 
 const account = {
   id: 'alice',
@@ -278,6 +282,7 @@ const recoveryProblem = {
 test('profile and activity failure controls honor native delay/date headers while draft review stays local', async () => {
   mock.module('cloudflare:workers', () => ({ env: {} }));
   const { ProfileCard } = await import('../src/settings/profile');
+  const { settingsContent } = await import('../src/settings/adapters/presentation');
   const { PublicViewsCard } = await import('../src/settings/public-views');
   for (const scope of ['profile', 'views'] as const) {
     for (const retryAfter of [
@@ -298,6 +303,7 @@ test('profile and activity failure controls honor native delay/date headers whil
       });
       const editor = new ProfileEditor(
         {
+          ambient: settingsAmbient,
           read: async () => recoveryProfile,
           save: (attempt) =>
             saveProfileRecord(
@@ -333,7 +339,14 @@ test('profile and activity failure controls honor native delay/date headers whil
       expect(editor.snapshot().attempt).toBe(attempt);
       const waiting = retryAfter === '60' || (retryAfter?.endsWith('GMT') && Date.parse(retryAfter) > Date.now());
       const html = renderToStaticMarkup(
-        createElement('div', null, createElement(ProfileCard, { editor }), createElement(PublicViewsCard, { editor })),
+        performanceAmbientTree(
+          createElement(
+            'div',
+            null,
+            createElement(ProfileCard, { content: settingsContent, editor }),
+            createElement(PublicViewsCard, { editor }),
+          ),
+        ),
       );
       const controls = [...html.matchAll(/<button\b([^>]*)>([\s\S]*?)<\/button>/g)];
       const retryLabel = scope === 'views' ? m.settings_public_activity_retry() : m.settings_profile_retry_save();
@@ -363,6 +376,7 @@ test('a thrown native save remains unknown and replays the immutable original wh
   const sent: ProfileAttempt[] = [];
   const editor = new ProfileEditor(
     {
+      ambient: settingsAmbient,
       read: async () => {
         throw new EditableProfileReadError(403);
       },

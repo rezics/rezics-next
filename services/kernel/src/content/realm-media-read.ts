@@ -1,6 +1,6 @@
 import type { Pool } from 'pg';
-import { createResourcePublicEligibility } from '../access/index.ts';
-import { GrantDeniedError } from '../access/grant-commands.ts';
+import { createResourcePublicEligibility } from './access-port.ts';
+import { GrantDeniedError } from '../access/contract/index.ts';
 import { authoritativeTimeValue, mintReadTime } from '../command/command.ts';
 import { readRealm, realmReadEligibility } from '../community/realm.ts';
 import realmHead from '../community/realm-read.sql';

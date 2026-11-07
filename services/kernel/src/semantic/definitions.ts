@@ -19,8 +19,8 @@ import read from './definitions-read.sql';
 import { readComposedRelease } from './extensions.ts';
 import { stageReleaseTypeDirectory } from './definition-type-directory.ts';
 
-export const GLOBAL_CONTEXT = '00000000-0000-8000-8000-000000000000';
-const resource = Object.freeze({ route: 0, id: GLOBAL_CONTEXT });
+import { GLOBAL_CONTEXT, GLOBAL_CONTEXT_RESOURCE as resource } from './contract/global-context.ts';
+export { GLOBAL_CONTEXT } from './contract/global-context.ts';
 const DIGEST = /^sha256:[0-9a-f]{64}$/;
 const releases = new Map<string, Release>();
 

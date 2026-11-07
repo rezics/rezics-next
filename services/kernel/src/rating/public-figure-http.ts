@@ -1,8 +1,8 @@
 import { t } from 'elysia';
 import type { Pool } from 'pg';
 import type { Static } from 'typebox';
-import { deadlineClient } from '../access/authenticate.ts';
-import { GLOBAL_CONTEXT } from '../access/gates/catalogue.ts';
+import { deadlineClient } from './dependencies.ts';
+import { GLOBAL_CONTEXT_RESOURCE as GLOBAL_CONTEXT } from '../semantic/contract/global-context.ts';
 import { discardConnection, withConnection } from '../database/pool.ts';
 import { partitionOf, routeOf } from '../route/route.ts';
 import { publicFigureState, type Queryable } from './public-figure.ts';

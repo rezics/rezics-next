@@ -7,7 +7,7 @@ import { createAccess } from '../../src/access/index.ts';
 import { bootstrapGovernance } from '../../src/access/bootstrap-governance.ts';
 import { createLifecycleInternals } from '../../src/access/lifecycle.ts';
 import { createWriteRateLimiter } from '../../src/access/write-rate.ts';
-import { GrantDeniedError } from '../../src/access/grant-commands.ts';
+import { GrantDeniedError } from '../../src/access/contract/index.ts';
 import { takedown, erasePost, eraseStandaloneMedia } from '../../src/content/moderation.ts';
 import { beginAuthorErasure } from '../../src/content/operations.ts';
 import { createPool } from '../../src/database/pool.ts';

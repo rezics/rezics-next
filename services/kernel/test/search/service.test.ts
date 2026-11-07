@@ -1,3 +1,4 @@
+import { searchOperationProblem } from '../../src/search/http/operation-problems.ts';
 import { afterAll, expect, test } from 'bun:test';
 import type { FilterRelease } from '@rezics/filter';
 import { createPool } from '../../src/database/pool.ts';
@@ -131,7 +132,7 @@ async function problem(
 ): Promise<ProblemError> {
   const error = await promise.then(
     () => undefined,
-    (caught: unknown) => caught,
+    (caught: unknown) => searchOperationProblem(caught),
   );
   expect(error).toBeInstanceOf(ProblemError);
   expect((error as ProblemError).code as string).toBe(code);

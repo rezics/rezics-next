@@ -6,23 +6,37 @@ import { createHash } from 'node:crypto';
 import { withHeaders } from '@elysia/openapi';
 import { t } from 'elysia';
 import type { Pool } from 'pg';
-import { deadlineClient } from '../access/authenticate.ts';
-import { GrantDeniedError } from '../access/grant-commands.ts';
-import { GLOBAL_CONTEXT } from '../access/gates/catalogue.ts';
+import {
+  deadlineClient,
+  GrantDeniedError,
+  readRealm,
+  problemSchema,
+  IDEMPOTENCY_HEADER,
+  idempotencyKeyOf,
+  SESSION_HEADER,
+  accessCheck,
+  AuthenticationError,
+  type Access,
+  type Actor,
+  subjectReadEligibility,
+  LibraryNotFoundError,
+} from './dependencies.ts';
+
+import { GLOBAL_CONTEXT_RESOURCE as GLOBAL_CONTEXT } from '../semantic/contract/global-context.ts';
 import type { KernelClock } from '../clock.ts';
 import { withConnection } from '../database/pool.ts';
-import { readRealm } from '../community/realm.ts';
-import { ProblemError, problemSchema } from '../http/problem.ts';
+
+import { ProblemError } from '../http/problem-error.ts';
+
 import { defineRateLimit } from '../http/rate-limit.ts';
-import { IDEMPOTENCY_HEADER, idempotencyKeyOf, SESSION_HEADER } from '../http/request.ts';
-import { accessCheck, AuthenticationError, type Access, type Actor } from '../request/access.ts';
+
 import { routeOf } from '../route/route.ts';
-import { subjectReadEligibility } from '../semantic/eligibility.ts';
+
 import subjectExists from '../semantic/subject-exists.sql';
 import type { KeyRing } from '../tokens/seal.ts';
 import { decodeCursor, encodeCursor, type CursorBinding } from '../tokens/cursor.ts';
 import type { definitionRoutes } from '../semantic/http/definitions.ts';
-import { LibraryNotFoundError } from '../library/command-support.ts';
+
 import { createRealmRatingQuestion, QuestionDefinitionInvalidError } from './question-authoring.ts';
 import { ratingQuestionView, readVisibleRatingQuestion, readSelectedQuestionDirectory } from './question-directory.ts';
 import { updateQuestionLabel, readQuestionLabel, readQuestionLabelHistory } from './question-label.ts';

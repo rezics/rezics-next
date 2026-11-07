@@ -1,4 +1,4 @@
-import { candidateSession, useCatalogueLifetime } from '../../../subject/candidate-lifetime';
+import { candidateSession, useCandidateReading } from '../../pages/candidate-reading-application';
 import { useSession } from '../../../session/query';
 import { csrfHeaders } from '../../../threads/composer';
 import { m } from '../../../paraglide/messages.js';
@@ -18,7 +18,7 @@ export const QuotationSession = candidateSession(function QuotationSessionLive({
   returnTo?: string | undefined;
   context?: string | undefined;
 }) {
-  const work = useCatalogueLifetime(JSON.stringify(['quotation-explore', context]));
+  const work = useCandidateReading({ candidate: 'quotation-explore', locale, address: [id, context] });
   const { state } = useSession();
   const expectedReader = state === 'signed-in' ? work.reader : null;
   if (state === 'unknown') return <p>{m.quotation_loading({}, { locale: locale as never })}</p>;

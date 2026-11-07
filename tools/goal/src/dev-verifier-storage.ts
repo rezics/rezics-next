@@ -9,11 +9,26 @@ import type { DevVerifierEvidence, DevVerifierFinding, DevVerifierRun } from './
 export type DevVerifierStorage = {
   db?: Database;
   devVerifierRun?: (key: string) => DevVerifierRun | undefined;
+  devVerifierLatestRound?: () => DevVerifierRun | undefined;
   saveDevVerifierRun?: (run: DevVerifierRun) => void;
   devVerifierFindings?: (limit?: number) => DevVerifierFinding[];
-  devVerifierHasKnownExisting?: (signature: string) => boolean;
   saveDevVerifierFinding?: (finding: DevVerifierFinding) => void;
 };
+
+export function latestRound(store: DevVerifierStorage): DevVerifierRun | undefined {
+  try {
+    if (store.devVerifierLatestRound) return store.devVerifierLatestRound();
+    const row = store.db
+      ?.query(
+        "SELECT body FROM dev_verifier_runs WHERE cache_key LIKE 'dev-verifier-round:%' ORDER BY rowid DESC LIMIT 1",
+      )
+      .get() as { body: string } | undefined;
+    const run = row ? (JSON.parse(row.body) as DevVerifierRun) : undefined;
+    return run?.round ? run : undefined;
+  } catch {
+    return undefined;
+  }
+}
 
 export function cachedRun(store: DevVerifierStorage, key: string): DevVerifierEvidence | undefined {
   try {
@@ -46,23 +61,6 @@ export function saveRun(store: DevVerifierStorage, run: DevVerifierRun, policy =
       .run();
   } catch {
     // A failed cache write cannot change the fresh gate result.
-  }
-}
-
-export function knownExisting(store: DevVerifierStorage, signature: string, policy = defaultPolicy.verifier): boolean {
-  try {
-    if (store.devVerifierHasKnownExisting) return store.devVerifierHasKnownExisting(signature);
-    if (store.devVerifierFindings)
-      return store
-        .devVerifierFindings(policy.findingRows)
-        .some((item) => item.signature === signature && item.status === 'existing');
-    return Boolean(
-      store.db
-        ?.query("SELECT 1 FROM dev_verifier_findings WHERE signature=? AND status='existing' LIMIT 1")
-        .get(signature),
-    );
-  } catch {
-    return false;
   }
 }
 

@@ -13,12 +13,17 @@ import {
   sendReading,
   type ReadingValues,
 } from '../src/settings/reading-preferences';
+import { performanceAmbientTree } from './performance-ambient';
 import { managedReadTimeout } from '../src/settings/managed-read-deadline';
 import type { ReadingIO } from '../src/settings/reading-preferences';
 import { DisplayPreferences } from '../src/settings/display-preferences';
+import { createSettingsShellPort, SettingsShellProvider } from '../src/settings';
 import { AppearanceControls } from '../src/shell/appearance-controls';
 import { locales, setLocale } from '../src/paraglide/runtime.js';
 import { m } from '../src/paraglide/messages.js';
+import { createBrowserSettingsAmbient } from '../src/settings/adapters/ambient';
+
+const settingsAmbient = createBrowserSettingsAmbient();
 
 mock.module('cloudflare:workers', () => ({ env: {} }));
 const { ReadingDraftRecovery } = await import('../src/settings/reading-card');
@@ -38,7 +43,7 @@ const flushPromiseJobs = async () => {
 test('a successful Reading acknowledgement always requires a current native readback', async () => {
   const fixture = readingFixture();
   let reads = 0;
-  const input = readingMutation(fixture.initial, { spoilerLevel: 1, suitability: 'blur' })!;
+  const input = readingMutation(fixture.initial, { spoilerLevel: 1, suitability: 'blur' }, settingsAmbient.id)!;
   const result = await sendReading(
     {
       ...fixture.io,
@@ -50,6 +55,7 @@ test('a successful Reading acknowledgement always requires a current native read
     input,
     false,
     latest,
+    settingsAmbient.timer,
   );
   expect(result).toMatchObject({ kind: 'confirmed', preferences: { spoilerLevel: 1, version: 1 } });
   expect(reads).toBe(1);
@@ -61,7 +67,7 @@ test('native defaults remain readable when a singleton choice does not admit res
   const known = { spoilerLevel: 1 as const, suitability: 'show' as const, version: 4, advice };
   expect(readingAdviceReady(advice)).toBe(true);
   expect(readingDefaults(advice)).toEqual({ spoilerLevel: 0, suitability: 'blur' });
-  expect(readingReset(known)).toBeNull();
+  expect(readingReset(known, settingsAmbient.id)).toBeNull();
 });
 
 const withControlledTimeout = async (run: (expire: () => void, delay: () => number | undefined) => Promise<void>) => {
@@ -109,7 +115,7 @@ test('a stalled Reading save keeps its original for deliberate retry and ignores
         return fixture.io.read();
       },
     };
-    const editor = new ReadingDraftRecovery(fixture.initial, io, owner());
+    const editor = new ReadingDraftRecovery(fixture.initial, io, owner(), settingsAmbient);
     const saving = editor.edit({ spoilerLevel: 1 });
     await saveStarted;
     expect(delay()).toBe(managedReadTimeout);
@@ -145,14 +151,16 @@ test('a stalled Reading save keeps its original for deliberate retry and ignores
 test('Reading changes preserve the exact in-flight key and payload across response loss and reload actual current preference version', async () => {
   const fixture = readingFixture('lost');
   const draft: ReadingValues = { spoilerLevel: 1, suitability: 'blur' };
-  const original = readingMutation(fixture.initial, draft)!;
+  const original = readingMutation(fixture.initial, draft, settingsAmbient.id)!;
   const originalJson = JSON.stringify(original);
   expect(Object.isFrozen(original)).toBe(true);
-  expect(await sendReading(fixture.io, original, false, latest)).toMatchObject({ kind: 'uncertain' });
+  expect(await sendReading(fixture.io, original, false, latest, settingsAmbient.timer)).toMatchObject({
+    kind: 'uncertain',
+  });
   draft.suitability = 'show';
   // An independent device changes reading and notices after the first save committed.
   fixture.concurrent({ spoilerLevel: 2 });
-  const result = await sendReading(fixture.io, original, true, latest);
+  const result = await sendReading(fixture.io, original, true, latest, settingsAmbient.timer);
   expect(result).toMatchObject({
     kind: 'confirmed',
     receipt: { spoilerLevel: 1, suitability: 'blur', version: 1 },
@@ -165,7 +173,7 @@ test('Reading changes preserve the exact in-flight key and payload across respon
   expect(draft).toEqual({ spoilerLevel: 1, suitability: 'show' });
   if (result.kind !== 'confirmed') throw new Error('Expected a confirmed readback');
   const live = readingFixture('lost');
-  const recovery = new ReadingDraftRecovery(live.initial, live.io, owner());
+  const recovery = new ReadingDraftRecovery(live.initial, live.io, owner(), settingsAmbient);
   await recovery.edit({ spoilerLevel: 1 });
   expect(recovery.snapshot().pending).toMatchObject({ spoilerLevel: 1 });
   await recovery.edit({ suitability: 'show' });
@@ -191,8 +199,11 @@ test('Reading changes preserve the exact in-flight key and payload across respon
 test('A concurrent preference update produces reviewable conflict rather than overwriting newer notification or reading values', async () => {
   const fixture = readingFixture('conflict');
   const draft: ReadingValues = { spoilerLevel: 1, suitability: 'blur' };
-  const pending = readingMutation(fixture.initial, draft)!;
-  expect(await sendReading(fixture.io, pending, false, latest)).toMatchObject({ kind: 'rejected', reason: 'conflict' });
+  const pending = readingMutation(fixture.initial, draft, settingsAmbient.id)!;
+  expect(await sendReading(fixture.io, pending, false, latest, settingsAmbient.timer)).toMatchObject({
+    kind: 'rejected',
+    reason: 'conflict',
+  });
   expect(fixture.current()).toMatchObject({
     spoilerLevel: 2,
     suitability: 'show',
@@ -200,13 +211,13 @@ test('A concurrent preference update produces reviewable conflict rather than ov
     notifications: concurrentNotifications,
   });
   expect(fixture.calls).toHaveLength(1);
-  const current = await readReading(fixture.io, 0);
+  const current = await readReading(fixture.io, 0, settingsAmbient.timer);
   expect(current.ok).toBe(true);
   expect(fixture.calls).toHaveLength(1); // Reading current values never resubmits a draft.
   expect(draft).toEqual({ spoilerLevel: 1, suitability: 'blur' });
   if (!current.ok) throw new Error('Expected current preferences');
   const live = readingFixture('conflict');
-  const recovery = new ReadingDraftRecovery(live.initial, live.io, owner());
+  const recovery = new ReadingDraftRecovery(live.initial, live.io, owner(), settingsAmbient);
   await recovery.edit({ spoilerLevel: 1 });
   await recovery.reload();
   expect(recovery.snapshot()).toMatchObject({
@@ -224,24 +235,26 @@ test('A concurrent preference update produces reviewable conflict rather than ov
 
 test('an unavailable or closed readback never turns an original retry into success or supplies defaults', async () => {
   const fixture = readingFixture('unavailable');
-  const input = readingMutation(fixture.initial, { spoilerLevel: 1, suitability: 'blur' })!;
-  expect(await sendReading(fixture.io, input, false, latest)).toMatchObject({ kind: 'uncertain' });
-  expect(await sendReading(fixture.io, input, true, latest)).toMatchObject({
+  const input = readingMutation(fixture.initial, { spoilerLevel: 1, suitability: 'blur' }, settingsAmbient.id)!;
+  expect(await sendReading(fixture.io, input, false, latest, settingsAmbient.timer)).toMatchObject({
+    kind: 'uncertain',
+  });
+  expect(await sendReading(fixture.io, input, true, latest, settingsAmbient.timer)).toMatchObject({
     kind: 'confirmed-read-failed',
     reason: 'unavailable',
     receipt: { spoilerLevel: 1, version: 1 },
   });
   expect(fixture.calls[1]).toBe(input);
-  expect(await readReading(fixture.io, 0)).toMatchObject({ ok: false, reason: 'unavailable' });
+  expect(await readReading(fixture.io, 0, settingsAmbient.timer)).toMatchObject({ ok: false, reason: 'unavailable' });
   const closed = readingFixture('closed');
-  expect(await readReading(closed.io, 0)).toMatchObject({ ok: false, reason: 'closed' });
+  expect(await readReading(closed.io, 0, settingsAmbient.timer)).toMatchObject({ ok: false, reason: 'closed' });
 });
 
 test('a shared notification version arriving during a save requires current readback before confirmation', async () => {
   const fixture = readingFixture('delayed');
-  const input = readingMutation(fixture.initial, { spoilerLevel: 1, suitability: 'blur' })!;
+  const input = readingMutation(fixture.initial, { spoilerLevel: 1, suitability: 'blur' }, settingsAmbient.id)!;
   let version = 0;
-  const result = sendReading(fixture.io, input, false, () => version);
+  const result = sendReading(fixture.io, input, false, () => version, settingsAmbient.timer);
   fixture.release();
   await Promise.resolve();
   fixture.concurrent();
@@ -251,13 +264,20 @@ test('a shared notification version arriving during a save requires current read
 });
 
 test('Settings display choices consume the actual shared AppearanceControls instead of maintaining a second locale/theme cookie implementation', () => {
-  const content = DisplayPreferences().props.children[1];
-  expect(content.props.children.type).toBe(AppearanceControls);
+  expect(createSettingsShellPort({ AppearanceControls }).AppearanceControls).toBe(AppearanceControls);
 });
 
 test('Current locale and theme settings reuse the shell preferences without inventing server storage', () => {
   setLocale('en', { reload: false });
-  const html = renderToStaticMarkup(createElement(DisplayPreferences));
+  const html = renderToStaticMarkup(
+    performanceAmbientTree(
+      createElement(
+        SettingsShellProvider,
+        { port: createSettingsShellPort({ AppearanceControls }) },
+        createElement(DisplayPreferences),
+      ),
+    ),
+  );
   const languages = [...html.matchAll(/<a[^>]*lang="([^"]+)"[^>]*href="([^"]+)"/g)].map((match) => [
     match[1],
     match[2],
@@ -276,8 +296,10 @@ test('Current locale and theme settings reuse the shell preferences without inve
 
 test('a notification update arriving during recovery GET cannot confirm an older reading snapshot', async () => {
   const fixture = readingFixture('lost');
-  const original = readingMutation(fixture.initial, { spoilerLevel: 1, suitability: 'blur' })!;
-  expect(await sendReading(fixture.io, original, false, latest)).toMatchObject({ kind: 'uncertain' });
+  const original = readingMutation(fixture.initial, { spoilerLevel: 1, suitability: 'blur' }, settingsAmbient.id)!;
+  expect(await sendReading(fixture.io, original, false, latest, settingsAmbient.timer)).toMatchObject({
+    kind: 'uncertain',
+  });
   let beginRead = () => {};
   let releaseRead = () => {};
   const reading = new Promise<void>((resolve) => {
@@ -300,13 +322,14 @@ test('a notification update arriving during recovery GET cannot confirm an older
     original,
     true,
     () => version,
+    settingsAmbient.timer,
   );
   await reading;
   fixture.concurrent();
   version = fixture.current().version;
   releaseRead();
   expect(await result).toMatchObject({ kind: 'confirmed-read-failed', reason: 'unavailable' });
-  expect(await sendReading(fixture.io, original, true, () => version)).toMatchObject({
+  expect(await sendReading(fixture.io, original, true, () => version, settingsAmbient.timer)).toMatchObject({
     kind: 'confirmed',
     preferences: { version: 2 },
     receipt: { version: 1 },
@@ -317,7 +340,7 @@ test('a notification update arriving during recovery GET cannot confirm an older
 
 test('a definite conflict resolves an original attempt whose request was lost before applying', async () => {
   const fixture = readingFixture();
-  const original = readingMutation(fixture.initial, { spoilerLevel: 1, suitability: 'blur' })!;
+  const original = readingMutation(fixture.initial, { spoilerLevel: 1, suitability: 'blur' }, settingsAmbient.id)!;
   let attempts = 0;
   const io = {
     ...fixture.io,
@@ -327,9 +350,12 @@ test('a definite conflict resolves an original attempt whose request was lost be
       return fixture.io.save(input);
     },
   };
-  expect(await sendReading(io, original, false, latest)).toMatchObject({ kind: 'uncertain' });
+  expect(await sendReading(io, original, false, latest, settingsAmbient.timer)).toMatchObject({ kind: 'uncertain' });
   fixture.concurrent({ spoilerLevel: 2 });
-  expect(await sendReading(io, original, true, latest)).toMatchObject({ kind: 'rejected', reason: 'conflict' });
+  expect(await sendReading(io, original, true, latest, settingsAmbient.timer)).toMatchObject({
+    kind: 'rejected',
+    reason: 'conflict',
+  });
   expect(fixture.current()).toMatchObject({
     spoilerLevel: 2,
     suitability: 'blur',

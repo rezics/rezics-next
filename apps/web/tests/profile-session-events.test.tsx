@@ -4,6 +4,10 @@ import { act, createElement, StrictMode, useLayoutEffect, useState } from 'react
 import * as start from '../.storybook/react-start';
 import type { ProfileReadResult, ProfileSaveResult, ProfileValues } from '../src/settings/profile-data';
 import type { ProfileAttempt, ProfileEditor } from '../src/settings/profile-write';
+import { createBrowserSettingsAmbient } from '../src/settings/adapters/ambient';
+import { performanceAmbientTree } from './performance-ambient';
+
+const settingsAmbient = createBrowserSettingsAmbient();
 
 function deferred<T>() {
   let resolve!: (value: T) => void;
@@ -127,6 +131,7 @@ test('committed equal session results revoke the connected owner synchronously w
       { sessionQuery },
       { useProfileEditor },
       { ProfileSection },
+      { settingsContent },
       { PublicViewsSection },
       { m },
     ] = await Promise.all([
@@ -136,6 +141,7 @@ test('committed equal session results revoke the connected owner synchronously w
       import('../src/session/query'),
       import('../src/settings/profile-write-query'),
       import('../src/settings/profile'),
+      import('../src/settings/adapters/presentation'),
       import('../src/settings/public-views'),
       import('../src/paraglide/messages.js'),
     ]);
@@ -172,7 +178,7 @@ test('committed equal session results revoke the connected owner synchronously w
     let beforeCommit: (() => void) | undefined;
     let probeCleanups = 0;
     function Probe({ index }: { index: number }) {
-      const result = useProfileEditor();
+      const result = useProfileEditor(settingsContent.mediaFailure);
       latest = result;
       observers.set(index, result.editor);
       if (beforeCommit) {
@@ -199,8 +205,8 @@ test('committed equal session results revoke the connected owner synchronously w
         'main',
         null,
         createElement(Probe, { index: 0 }),
-        createElement(ProfileSection),
-        createElement(PublicViewsSection),
+        createElement(ProfileSection, { content: settingsContent }),
+        createElement(PublicViewsSection, { mediaFailure: settingsContent.mediaFailure }),
         ...Array.from({ length: observerCount - 1 }, (_, index) =>
           createElement(Probe, { key: index + 1, index: index + 1 }),
         ),

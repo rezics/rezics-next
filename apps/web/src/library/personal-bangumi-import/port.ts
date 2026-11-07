@@ -1,5 +1,5 @@
 import { createContext, useContext } from 'react';
-import { sessionCsrfToken } from '../../session/query';
+import { sessionCsrfToken } from '../../session';
 import type { BangumiImportPort, BangumiTagPageResult } from './contract';
 
 export const BangumiImportPortContext = createContext<BangumiImportPort | null>(null);

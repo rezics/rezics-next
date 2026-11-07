@@ -138,6 +138,24 @@ function facts(input: {
   };
 }
 
+test('Access application specializes Collection list policy through the producer port', () => {
+  const application = createAccessApplication(
+    fakePorts({
+      collectionPolicy: {
+        catalogueFor: () => ({ mounted: true }),
+        specializeFromCatalogue(_catalogue, fullView) {
+          return fullView ? { status: 'ready', source: 'curator' } : { status: 'ready', source: 'public' };
+        },
+        authorizationPreparation() {
+          return EMPTY_ACCESS_WORK_DIMENSIONS;
+        },
+      },
+    }),
+  );
+  expect(application.specializeCollectionList({}, true)).toEqual({ status: 'ready', source: 'curator' });
+  expect(application.specializeCollectionList({}, false)).toEqual({ status: 'ready', source: 'public' });
+});
+
 test('Access application instantiates against fake ports and records allow and deny', () => {
   const application = createAccessApplication(fakePorts());
   expect(application.decideAuthorization(facts({}))).toEqual({
@@ -181,6 +199,8 @@ test('Access application qualifies avatars, admits original work and plans Kind 
   const plan = application.planKindAudience(actor, 128);
   expect(plan.shape.members).toBe(1);
   expect(plan.source).toEqual(EMPTY_ACCESS_WORK_DIMENSIONS);
+  expect(application.specializeCollectionList({}, true)).toEqual({ status: 'unavailable' });
+  expect(application.collectionAuthorizationPreparation()).toEqual(EMPTY_ACCESS_WORK_DIMENSIONS);
 });
 
 test('bindAccessApplication exposes the fake application to Access facades', () => {

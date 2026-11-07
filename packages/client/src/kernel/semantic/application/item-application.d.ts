@@ -1,4 +1,4 @@
-import type { DataType, RelationDefinition, Release } from '@rezics/definitions';
+import type { DataType, RelationDefinition, Release } from '@rezics/definitions/contract';
 import type { HashPort, RoutePort } from '../contract/domain-ports.ts';
 import type { Item, ItemFact, ItemFactRow, ItemMetadata } from '../contract/item-values.ts';
 import { storedFactsFor, SubjectInputError } from '../core/index.ts';

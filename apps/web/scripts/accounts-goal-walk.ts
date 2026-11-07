@@ -679,14 +679,7 @@ async function fillPasswordSignIn(page: import('playwright').Page, email: string
 async function startFrontend(action: 'pages' | 'web', stack: Origins) {
   const child = Bun.spawn([process.execPath, 'services/auth/scripts/dev-stack.ts', action], {
     cwd: root,
-    env: {
-      ...process.env,
-      ...(action === 'web'
-        ? {
-            NODE_OPTIONS: [process.env.NODE_OPTIONS, '--max-old-space-size=4096'].filter(Boolean).join(' '),
-          }
-        : {}),
-    },
+    env: process.env,
     stdin: 'ignore',
     stdout: 'inherit',
     stderr: 'inherit',

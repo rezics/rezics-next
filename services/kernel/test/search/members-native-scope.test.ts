@@ -12,6 +12,7 @@ import { newId, partitionOf } from '../../src/route/route.ts';
 import { bootstrapRelease, GLOBAL_CONTEXT } from '../../src/semantic/definitions.ts';
 import { scopeWorkAxes } from '../../src/search/scope-execution.ts';
 import { membersBounded } from '../../src/search/scope-members-work-cost.ts';
+import { createSearchLibraryScopePort } from '../../src/composition/search-library.ts';
 import { createSearchScopeSource, type ScopeEvaluationProgress } from '../../src/search/scope-source.ts';
 import {
   readMembersPreparationWorkDefinition,
@@ -79,6 +80,7 @@ function original() {
 
 function adapter(native: Runtime, work: MembersPreparationWorkContext, deadline: number) {
   return createSearchScopeSource({
+    library: createSearchLibraryScopePort(),
     pool: native.db.pool,
     prefix: 'members-native',
     // A genuine native-only plan must never call either public transport. These supply no evidence.
@@ -229,6 +231,7 @@ test('genuine Members native scopes evaluate owner facts and continue ID/ordinal
             pool: native.db.pool,
             access: native.kernel.testAccess,
             deadline,
+            library: createSearchLibraryScopePort(),
           });
           expect(admitted.definition).toEqual(requested);
           // The connection has already been acquired by Core. Trap ANY further checkout for the whole use.

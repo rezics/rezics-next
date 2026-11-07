@@ -1,20 +1,21 @@
-import { subjectHref } from '../../../subject/subject-href';
-import { subjectVisitReturn } from '../../pages/subject-visit-navigation';
-import { seriesUuid } from '../screen-episode-membership';
-import type { ScreenEpisodeEntry } from './read';
+import type { ScreenSubjectHref, ScreenVisitReturn } from '../screen-reading-port';
 
 export const SCREEN_EPISODE_CURSOR = 'screenCursor';
 export const SCREEN_EPISODE_SELECTION = 'screenSelection';
 export const SCREEN_EPISODE_VISIT_LIMIT = 8;
 
+const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+
 export type ScreenEpisodeOrigin = { pathname: string; searchStr: string; hash?: string };
 export type ScreenEpisodeCursorIntent = { kind: 'first' } | { kind: 'cursor'; cursor: string } | { kind: 'invalid' };
+export type ScreenEpisodeHrefEntry = { id: string; membershipId: string };
+export type ScreenEpisodeHrefs = { subjectHref: ScreenSubjectHref; visitReturn: ScreenVisitReturn };
 
 function pathIsSubjectOverview(path: string, locale: string): boolean {
   if (!path.startsWith('/') || path.startsWith('//') || path.includes('?') || path.includes('#') || path.length > 512)
     return false;
   const parts = path.split('/').filter(Boolean);
-  if (parts.length !== 4 || parts[1] !== 'subjects' || !seriesUuid.test(parts[2] ?? '') || !parts[3]) return false;
+  if (parts.length !== 4 || parts[1] !== 'subjects' || !uuid.test(parts[2] ?? '') || !parts[3]) return false;
   try {
     return decodeURIComponent(parts[0] ?? '') === locale && decodeURIComponent(parts[3] ?? '').length <= 256;
   } catch {
@@ -23,19 +24,19 @@ function pathIsSubjectOverview(path: string, locale: string): boolean {
 }
 
 export function screenEpisodeEntryElementId(membershipId: string): string | undefined {
-  return seriesUuid.test(membershipId) ? `screen-episode-entry-${membershipId}` : undefined;
+  return uuid.test(membershipId) ? `screen-episode-entry-${membershipId}` : undefined;
 }
 
 export function screenEpisodeFocusMembership(hash: string): string | undefined {
   const match = /^#screen-episode-entry-([0-9a-f-]{36})$/i.exec(hash);
-  return match && seriesUuid.test(match[1]!) ? match[1] : undefined;
+  return match && uuid.test(match[1]!) ? match[1] : undefined;
 }
 
 export function screenEpisodeSelection(searchStr: string): string | undefined {
   const values = new URLSearchParams(searchStr).getAll(SCREEN_EPISODE_SELECTION);
   if (values.length !== 1) return undefined;
   const value = values[0];
-  return value && seriesUuid.test(value) ? value : undefined;
+  return value && uuid.test(value) ? value : undefined;
 }
 
 export function screenEpisodeCursorIntent(searchStr: string): ScreenEpisodeCursorIntent {
@@ -88,10 +89,11 @@ export function screenEpisodeRestartHref(origin: ScreenEpisodeOrigin): string {
 export function screenEpisodeReturn(
   searchStr: string,
   locale: string,
+  visitReturn: ScreenVisitReturn,
 ): { href: string; membershipId: string } | undefined {
   const via = new URLSearchParams(searchStr).getAll('via');
   if (via.length !== 1) return;
-  const href = subjectVisitReturn(via[0], locale);
+  const href = visitReturn(via[0], locale);
   if (!href) return;
   const address = new URL(href, 'https://rezics.invalid');
   const membershipId = screenEpisodeSelection(address.search);
@@ -100,30 +102,31 @@ export function screenEpisodeReturn(
 }
 
 export function screenEpisodeSubjectHref(
-  entry: ScreenEpisodeEntry,
+  entry: ScreenEpisodeHrefEntry,
   label: string,
   locale: string,
   origin: ScreenEpisodeOrigin,
+  hrefs: ScreenEpisodeHrefs,
 ): string {
-  const href = subjectHref({ id: entry.id, label }, locale).href;
+  const href = hrefs.subjectHref({ id: entry.id, label }, locale).href;
   const source = new URLSearchParams(origin.searchStr);
   const realm = source.get('realm');
   const target = new URL(href, 'https://rezics.invalid');
   const search = new URLSearchParams();
-  if (realm && seriesUuid.test(realm)) search.set('realm', realm);
+  if (realm && uuid.test(realm)) search.set('realm', realm);
   if (pathIsSubjectOverview(origin.pathname, locale)) {
     // A subject return remains one hop. Carry every supported local context field and
     // the current native window, while the incoming via stays local to the current page.
     const parent = new URLSearchParams(origin.searchStr);
     parent.delete('via');
     parent.delete(SCREEN_EPISODE_SELECTION);
-    const current = subjectVisitReturn(queryAddress(origin.pathname, parent, ''), locale);
+    const current = hrefs.visitReturn(queryAddress(origin.pathname, parent, ''), locale);
     const returnUrl = current ? new URL(current, 'https://rezics.invalid') : undefined;
     if (returnUrl) {
       returnUrl.searchParams.set(SCREEN_EPISODE_SELECTION, entry.membershipId);
       const returnHash = screenEpisodeEntryElementId(entry.membershipId);
       returnUrl.hash = returnHash ? `#${returnHash}` : '#screen-episode-list';
-      const returnAddress = subjectVisitReturn(`${returnUrl.pathname}${returnUrl.search}${returnUrl.hash}`, locale);
+      const returnAddress = hrefs.visitReturn(`${returnUrl.pathname}${returnUrl.search}${returnUrl.hash}`, locale);
       if (returnAddress) search.set('via', returnAddress);
     }
   }

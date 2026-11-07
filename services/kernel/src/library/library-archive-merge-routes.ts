@@ -3,8 +3,10 @@ import { t } from 'elysia';
 import { bundledRelease } from '@rezics/definitions/bundled';
 import { bodyBytes } from '../http/body.ts';
 import { defineRateLimit } from '../http/rate-limit.ts';
-import { ProblemError, problemSchema } from '../http/problem.ts';
-import { idempotencyKeyOf, IDEMPOTENCY_HEADER } from '../http/request.ts';
+import { ProblemError } from '../http/problem-error.ts';
+import { problemSchema } from '../http/problem-schema.ts';
+import { idempotencyKeyOf } from '../http/idempotency-key.ts';
+import { IDEMPOTENCY_HEADER } from '@rezics/operations/protocol';
 import type { Access } from '../request/access.ts';
 import type { definitionRoutes } from '../semantic/http/definitions.ts';
 import {

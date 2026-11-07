@@ -13,6 +13,9 @@ import { parseProfileWrite } from '../src/settings/profile-write-input';
 import { profileNeedsNavigationDecision } from '../src/settings/profile-navigation';
 import { preferenceRetryDeadline, usePreferenceRetry } from '../src/settings/preferences';
 import { captureProfileReturn, isProfileReturnSnapshot } from '../src/settings/settings-return';
+import { createBrowserSettingsAmbient } from '../src/settings/adapters/ambient';
+
+const settingsAmbient = createBrowserSettingsAmbient();
 
 function initial(): ProfileValues {
   return profileValues(
@@ -79,6 +82,7 @@ function api(options: { handleless?: boolean; unavailable?: boolean; compactHand
     }) as typeof fetch,
   });
   const io: ProfileEditorIO = {
+    ambient: settingsAmbient,
     read: () => loadProfileRecord(client, 'Bearer self', initial().accountId),
     save: (attempt) =>
       saveProfileRecord(
@@ -135,6 +139,7 @@ test('A lost save response retries the exact original payload and key while reta
   let lose = true;
   const editor = new ProfileEditor(
     {
+      ambient: settingsAmbient,
       ...boundary.io,
       save: async (attempt) => {
         attempts.push(attempt);
@@ -177,6 +182,7 @@ test('matching current reads retain the original command until retry acknowledge
   let lose = true;
   const editor = new ProfileEditor(
     {
+      ambient: settingsAmbient,
       read: async () => {
         if (++reads === 2) throw new Error('Read unavailable after retry');
         return current;
@@ -281,7 +287,10 @@ test('An unavailable or handleless account is never shown as a fabricated empty 
 test('a successful activity write shares readback without submitting or discarding profile drafts', async () => {
   const boundary = api();
   const confirmed: ProfileValues[] = [];
-  const editor = new ProfileEditor({ ...boundary.io, confirmed: (current) => confirmed.push(current) }, initial());
+  const editor = new ProfileEditor(
+    { ambient: settingsAmbient, ...boundary.io, confirmed: (current) => confirmed.push(current) },
+    initial(),
+  );
   editor.edit({ displayName: 'Unsaved name' });
   editor.edit({ publicViews: { ...initial().publicViews, reviews: false } });
   await editor.submit('views');
@@ -298,6 +307,7 @@ test('a receipt never claims success when current readback differs or is unavail
     let writes = 0;
     const editor = new ProfileEditor(
       {
+        ambient: settingsAmbient,
         save: async (attempt) => {
           writes++;
           return { ok: true, profile: attempt.after };
@@ -333,6 +343,7 @@ test('late save, retry and reload readbacks retain a newer edit that restores th
     const attempts: ProfileAttempt[] = [];
     const editor = new ProfileEditor(
       {
+        ambient: settingsAmbient,
         read: () => readback,
         save: async (attempt) => {
           attempts.push(attempt);
@@ -358,6 +369,7 @@ test('late save, retry and reload readbacks retain a newer edit that restores th
 test('refusals preserve drafts and unresolved reloads preserve the original attempt', async () => {
   const editor = new ProfileEditor(
     {
+      ambient: settingsAmbient,
       save: async () => ({ ok: false, status: 403, message: 'Denied' }),
       read: async () => initial(),
     },
@@ -371,6 +383,7 @@ test('refusals preserve drafts and unresolved reloads preserve the original atte
   expect(editor.snapshot().draft?.biography).toBe('Keep my work');
   const lost = new ProfileEditor(
     {
+      ambient: settingsAmbient,
       save: async () => {
         throw new Error('Lost');
       },
@@ -395,6 +408,7 @@ test('Profile Retry-After deadlines stay independent and captured actions wait f
     let reads = 0;
     const editor = new ProfileEditor(
       {
+        ambient: settingsAmbient,
         save: async (attempt) => {
           attempts.push(attempt);
           return attempts.length === 1
@@ -457,6 +471,7 @@ test('pending writes prevent concurrent duplicate submission and later edits cle
   let calls = 0;
   const editor = new ProfileEditor(
     {
+      ambient: settingsAmbient,
       save: async (attempt) => {
         calls++;
         await pending;
@@ -567,6 +582,7 @@ test('a cancelled discard decision retains the actual draft and immutable origin
   let current = initial();
   const editor = new ProfileEditor(
     {
+      ambient: settingsAmbient,
       read: async () => current,
       save: async (attempt) => {
         sent.push(attempt);
@@ -607,6 +623,7 @@ test('clean and confirmed-saved profiles need no decision, but later edits and u
 
   const uncertain = new ProfileEditor(
     {
+      ambient: settingsAmbient,
       read: async () => initial(),
       save: async () => {
         throw new Error('Response lost');
@@ -624,6 +641,7 @@ test('clean and confirmed-saved profiles need no decision, but later edits and u
 test('the shared activity draft and local image selection also require a discard decision', () => {
   const editor = new ProfileEditor(
     {
+      ambient: settingsAmbient,
       read: async () => initial(),
       save: async () => {
         throw new Error('Unused');
@@ -655,6 +673,7 @@ test('the ten-second Profile deadline releases a stalled command, ignores late a
   let reads = 0;
   const editor = new ProfileEditor(
     {
+      ambient: settingsAmbient,
       read: async () => {
         reads++;
         return { ...initial(), displayName: 'Submitted' };

@@ -1,6 +1,5 @@
 export {
   dateReading,
-  encodedBytes,
   fileProfileReleased,
   isCatalogueFileType,
   isReleaseGroupType,
@@ -16,6 +15,7 @@ export {
   visitBound,
   type VisitWork,
 } from './model';
+export { encodedBytes } from './encoding';
 export { readReleaseFidelity, type ReleaseFidelityRead, type ReleaseReadQuery } from './read';
 export { ReleaseFidelitySession } from './session';
 export { ReleaseFidelityPage, type ReleaseFidelityTransport } from './view';

@@ -2,7 +2,7 @@ import type { Pool } from 'pg';
 import type { KernelClock } from '../clock.ts';
 import type { AuthoritativeTime } from '../command/command.ts';
 import type { OperationalTransaction } from '../command/operational.ts';
-import { ProblemError } from '../http/problem.ts';
+import { ProblemError } from '../http/problem-error.ts';
 import type { Access, Actor } from '../request/access.ts';
 import { routeOf } from '../route/route.ts';
 import { createIdentityScopedObservations } from '../semantic/identity-scoped-observations.ts';

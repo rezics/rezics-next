@@ -1,4 +1,4 @@
-import { RECENT_HISTORY_LIMIT } from './recent-history';
+import { RECENT_HISTORY_LIMIT } from './recent-contract';
 
 export const RECENT_HISTORY_PAGE_SIZE = 20;
 export const RECENT_HISTORY_READ_PAGE_LIMIT = Math.ceil(RECENT_HISTORY_LIMIT / RECENT_HISTORY_PAGE_SIZE);

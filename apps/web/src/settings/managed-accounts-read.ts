@@ -1,10 +1,12 @@
+import { serverSettingsTimer } from './adapters/ambient';
 import { withManagedReadDeadline } from './managed-read-deadline';
+import type { SettingsAmbient } from './ports/ambient';
 import type { ManagedReaderCurrent } from './managed-session-reader';
 import type { KernelClient } from '@rezics/client';
 import * as v from 'valibot';
-import { isPlatformClosedError } from '../kernel/platform-closed';
-import { MediaProblem } from '../media/kernel';
+import { isPlatformClosedError } from './ports/vocabulary';
 import { preferenceRetryDeadline } from './preference-failure-retry';
+import type { SettingsContentFailureReader } from './ports/content';
 
 const id = v.pipe(v.string(), v.uuid());
 const text = v.nullable(v.string());
@@ -92,9 +94,13 @@ export function managedAccountsFailure(
     ...(requestId ? { requestId } : {}),
   };
 }
-export function managedAccountsException(error: unknown): ManagedAccountsFailure {
+export function managedAccountsException(
+  error: unknown,
+  mediaFailure: SettingsContentFailureReader,
+): ManagedAccountsFailure {
   if (isPlatformClosedError(error)) return managedAccountsFailure(error.status, error.problem);
-  if (error instanceof MediaProblem) return managedAccountsFailure(error.problem.status, error.problem, error.headers);
+  const failure = mediaFailure(error);
+  if (failure) return managedAccountsFailure(failure.status, failure.problem, failure.headers);
   return managedAccountsFailure(null);
 }
 
@@ -105,6 +111,7 @@ export async function loadManagedAccounts(
   viewerId: string,
   cursors: ManagedAccountsCursors,
   signal?: AbortSignal,
+  mediaFailure: SettingsContentFailureReader = () => undefined,
 ): Promise<ManagedAccountsResult> {
   try {
     const result = await withManagedReadDeadline(
@@ -115,6 +122,7 @@ export async function loadManagedAccounts(
           fetch: { cache: 'no-store', signal },
         }),
       signal,
+      serverSettingsTimer(),
     );
     if (result.error) return managedAccountsFailure(result.status, result.error.value, result.headers);
     const parsed = v.safeParse(schema, result.data);
@@ -134,7 +142,7 @@ export async function loadManagedAccounts(
       return managedAccountsFailure(result.status, undefined, result.headers);
     return { ok: true, page };
   } catch (error) {
-    return managedAccountsException(error);
+    return managedAccountsException(error, mediaFailure);
   }
 }
 
@@ -219,9 +227,10 @@ export class ManagedAccountsInventory {
   constructor(
     private readonly viewerId: string,
     private readonly read: ManagedAccountsIO,
+    private readonly ambient: SettingsAmbient,
     private readonly current: ManagedReaderCurrent = () => true,
-    private readonly now: () => number = Date.now,
   ) {}
+  private now = () => this.ambient.now();
   snapshot = () => {
     this.live();
     return this.value;
@@ -251,12 +260,20 @@ export class ManagedAccountsInventory {
   private async request(cursors: ManagedAccountsCursors): Promise<ManagedAccountsResult> {
     try {
       if (!this.live()) return managedAccountsFailure(null);
-      const result = await withManagedReadDeadline((signal) => this.read(cursors, signal), this.lifetime.signal);
+      const result = await withManagedReadDeadline(
+        (signal) => this.read(cursors, signal),
+        this.lifetime.signal,
+        this.ambient.timer,
+      );
       if (result.ok && (result.page.account.id !== this.viewerId || result.page.account.kind !== 'actor'))
         return { ok: false, kind: 'denied', status: null, code: null };
       return result;
     } catch (error) {
-      return managedAccountsException(error);
+      // The Settings server adapter projects Content failures before this typed result port.
+      // Preserve the native platform-closed envelope here; unexpected transport faults stay unavailable.
+      return isPlatformClosedError(error)
+        ? managedAccountsFailure(error.status, error.problem)
+        : managedAccountsFailure(null);
     }
   }
   private deny(failure: ManagedAccountsFailure) {

@@ -1,7 +1,7 @@
 import { createContext, useContext, useLayoutEffect, useMemo, type ReactNode } from 'react';
-import type { createConnectionWindow } from '../../pages/subject-connections-window';
+import type { CharacterConnectionWindow } from '../character-reading-port';
 
-type Binding = { source: object; window: ReturnType<typeof createConnectionWindow> };
+type Binding = { source: object; window: CharacterConnectionWindow };
 function associationBridge() {
   let current: Binding | undefined;
   const listeners = new Set<() => void>();

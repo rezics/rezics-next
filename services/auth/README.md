@@ -2593,6 +2593,30 @@ back only the page checkpoint. Already committed exact retirements are idempoten
 on replay, using the saved cut. Only the two closed counts-only maintenance workflow
 names use direct SDK deletion. They create no personal request binding.
 
+### Application boundary
+
+Decision: retention vocabulary, admission bounds and nested dispatch prices live in the pure
+`src/contract` and `src/core` modules. `src/application` orchestrates workflow preparation,
+retirement and checkpoint recovery through ports; its cursor is the SDK producer's opaque
+continuation. `retention-store.ts` owns only SQL transactions and the singleton lock, and never
+imports orchestration. SQL request effects and SDK scanning live in `src/adapters`.
+`retention.ts` composes those effects; service assembly binds the existing `completeCopy` /
+`eraseCopy` capability once for both manual and scheduled maintenance. No second SDK writer
+or retirement implementation is introduced.
+
+Signing maintenance uses its own generation CAS and occupied-slot result through the pure
+signing port/error vocabulary; key storage, raw-key custody and the 990-second horizon remain
+in `signing.ts`. Request retirement uses the caller's existing copy transaction, exact versioned
+binding and original native terminal-consumer proof. Neither workflow age nor an SDK status
+substitutes for that proof. Workflow, signing, request and website protocol stores retain their
+independent policies.
+
+Decision: keep the existing native lifecycle, terminal, funding and permanent uncertain-COMMIT
+assertions. Focused fake-port cases in `test/retention-application.test.ts` pin saved-horizon
+replay, pending-consumer continuation, signing admission and partial request evidence without
+loading SQL/SDK effects. Worker acceptance is Auth typing only; Accounts retains native,
+retirement, retention and growth receiving after integration.
+
 ### Cost derivation
 
 - Touches: two point-locked singleton reads, the SDK open (one indexed upper-key

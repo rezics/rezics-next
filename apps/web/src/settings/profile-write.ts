@@ -10,8 +10,9 @@ import {
   type ProfileValues,
 } from './profile-data';
 import { profileReadFailure, type EditableProfileFailure, type ProfileEditing } from './editable-profile-source';
-import { isPlatformClosedError } from '../kernel/platform-closed';
-import { preferenceRetryDeadline } from './preference-failure-retry';
+import { isPlatformClosedError } from './ports/vocabulary';
+import { preferenceRetryDeadline, type SettingsAmbient } from './ports/ambient';
+import type { SettingsContentFailureReader } from './ports/content';
 
 export type ProfileScope = 'profile' | 'views';
 export type ProfileAttempt = Readonly<{
@@ -24,9 +25,11 @@ export type ProfileAttempt = Readonly<{
 export type ProfileEditorIO = {
   read: (signal?: AbortSignal) => Promise<ObservedProfile>;
   save: (attempt: ProfileAttempt, signal?: AbortSignal) => Promise<ProfileSaveResult>;
+  mediaFailure?: SettingsContentFailureReader;
   confirmed?: (profile: ProfileValues) => void;
   isCurrent?: () => boolean;
   canWrite?: () => boolean;
+  ambient: SettingsAmbient;
 };
 export type ProfileEditorState = {
   known: ProfileValues | null;
@@ -49,14 +52,18 @@ function observationEditing(current: ObservedProfile): ProfileEditing | null | u
   return 'editing' in current ? (current.editing ?? null) : undefined;
 }
 
-function failureMetadata(error: unknown): EditableProfileFailure | undefined {
+function failureMetadata(
+  error: unknown,
+  mediaFailure: SettingsContentFailureReader = () => undefined,
+): EditableProfileFailure | undefined {
   return (
-    profileReadFailure(error) ?? (isPlatformClosedError(error) ? { status: 403, code: 'platform_closed' } : undefined)
+    profileReadFailure(error, mediaFailure) ??
+    (isPlatformClosedError(error) ? { status: 403, code: 'platform_closed' } : undefined)
   );
 }
 
-function extendRetryDeadline(current: number, retryAfter: string | undefined): number {
-  return Math.max(current, preferenceRetryDeadline(retryAfter));
+function extendRetryDeadline(current: number, retryAfter: string | undefined, now: number): number {
+  return Math.max(current, preferenceRetryDeadline(retryAfter, now));
 }
 
 function frozen<T extends object>(value: T): T {
@@ -155,6 +162,9 @@ export class ProfileEditor {
   canWrite() {
     return this.current() && (this.io.canWrite?.() ?? true);
   }
+  get ambient() {
+    return this.io.ambient;
+  }
   /** Exact current control name for keyboard return; pointer return never reads it. */
   lastFocus: string | undefined = undefined;
   /** Field name captured for the next keyboard restore; pointer return leaves focus alone. */
@@ -203,6 +213,7 @@ export class ProfileEditor {
     });
     this.listeners.clear();
     this.io = {
+      ambient: this.io.ambient,
       read: async () => {
         throw new Error('Profile unavailable');
       },
@@ -227,13 +238,13 @@ export class ProfileEditor {
   }
   unavailable(error?: unknown) {
     if (!this.current()) return;
-    const denied = profileReadDenied(error);
-    const failure = failureMetadata(error);
+    const denied = profileReadDenied(error, this.io.mediaFailure);
+    const failure = failureMetadata(error, this.io.mediaFailure);
     if (denied) this.readVersion++;
     this.update({
       phase: this.state.attempt ? 'uncertain' : 'unavailable',
       readStatus: 'failed',
-      readRetryAt: extendRetryDeadline(this.state.readRetryAt, failure?.retryAfter),
+      readRetryAt: extendRetryDeadline(this.state.readRetryAt, failure?.retryAfter, this.io.ambient.now()),
       failure: failure ? { ...failure, message: '' } : undefined,
       editing: null,
       ...(denied ? { readAuthority: 'denied' as const } : {}),
@@ -277,7 +288,8 @@ export class ProfileEditor {
     this.update({ phase: this.state.attempt ? 'uncertain' : 'idle' });
   }
   async submit(scope: ProfileScope) {
-    if (!this.canWrite() || this.state.commandRetryAt > Date.now() || this.state.readAuthority !== 'allowed') return;
+    if (!this.canWrite() || this.state.commandRetryAt > this.io.ambient.now() || this.state.readAuthority !== 'allowed')
+      return;
     const { known, draft, attempt, phase } = this.state;
     if (this.pending || !known || !draft || attempt || ['saving', 'reloading', 'unavailable'].includes(phase)) return;
     const after: ProfileValues =
@@ -310,7 +322,7 @@ export class ProfileEditor {
         after: profileCommandValues(after),
         patch,
         scope,
-        idempotencyKey: crypto.randomUUID(),
+        idempotencyKey: this.io.ambient.id(),
       }),
     );
     this.laterEdits = {};
@@ -320,7 +332,7 @@ export class ProfileEditor {
   async retry() {
     if (
       !this.canWrite() ||
-      this.state.commandRetryAt > Date.now() ||
+      this.state.commandRetryAt > this.io.ambient.now() ||
       this.pending ||
       !this.state.attempt ||
       this.state.acknowledged ||
@@ -343,13 +355,17 @@ export class ProfileEditor {
     this.update({ phase: 'saving', readStatus: undefined, failure: undefined });
     let result: ProfileSaveResult;
     try {
-      result = await withProfileDeadline((signal) => this.io.save(attempt, signal), this.lifetime.signal);
+      result = await withProfileDeadline(
+        (signal) => this.io.save(attempt, signal),
+        this.lifetime.signal,
+        this.io.ambient.timer,
+      );
     } catch (error) {
       if (!this.current()) return;
-      const failure = failureMetadata(error);
+      const failure = failureMetadata(error, this.io.mediaFailure);
       this.update({
         phase: 'uncertain',
-        commandRetryAt: extendRetryDeadline(this.state.commandRetryAt, failure?.retryAfter),
+        commandRetryAt: extendRetryDeadline(this.state.commandRetryAt, failure?.retryAfter, this.io.ambient.now()),
         failure: failure ? { ...failure, message: '' } : undefined,
       });
       return;
@@ -360,7 +376,11 @@ export class ProfileEditor {
       this.update({
         phase: uncertain ? 'uncertain' : 'refused',
         attempt: uncertain ? attempt : null,
-        commandRetryAt: extendRetryDeadline(this.state.commandRetryAt, result.failure?.retryAfter),
+        commandRetryAt: extendRetryDeadline(
+          this.state.commandRetryAt,
+          result.failure?.retryAfter,
+          this.io.ambient.now(),
+        ),
         failure: { ...result.failure, status: result.status, message: result.message },
       });
       return;
@@ -377,7 +397,11 @@ export class ProfileEditor {
     // A new acknowledgement and a replay are both historical. Always read the current native profile.
     const version = this.readVersion;
     try {
-      const current = await withProfileDeadline((signal) => this.io.read(signal), this.lifetime.signal);
+      const current = await withProfileDeadline(
+        (signal) => this.io.read(signal),
+        this.lifetime.signal,
+        this.io.ambient.timer,
+      );
       if (!this.current() || version !== this.readVersion) return;
       this.finishRead(current, true);
     } catch (error) {
@@ -438,7 +462,7 @@ export class ProfileEditor {
   async reload() {
     if (
       !this.current() ||
-      this.state.readRetryAt > Date.now() ||
+      this.state.readRetryAt > this.io.ambient.now() ||
       this.pending ||
       ['saving', 'reloading'].includes(this.state.phase)
     )
@@ -448,7 +472,11 @@ export class ProfileEditor {
     this.update({ phase: 'reloading', readStatus: 'checking', failure: undefined });
     const version = this.readVersion;
     try {
-      const current = await withProfileDeadline((signal) => this.io.read(signal), this.lifetime.signal);
+      const current = await withProfileDeadline(
+        (signal) => this.io.read(signal),
+        this.lifetime.signal,
+        this.io.ambient.timer,
+      );
       if (!this.current() || version !== this.readVersion) return;
       this.finishRead(current, false);
     } catch (error) {
@@ -483,17 +511,22 @@ export class ProfileEditorSession {
   private readonly observedSubject: string | null | undefined;
   private readonly observedCsrfToken: string | null;
   private active = true;
-  constructor(session: ProfileSession, createIO: (owner: ProfileEditorSession) => ProfileEditorIO) {
+  constructor(
+    session: ProfileSession,
+    createIO: (owner: ProfileEditorSession) => Omit<ProfileEditorIO, 'ambient'>,
+    ambient: SettingsAmbient,
+  ) {
     this.observedState = session.state;
     this.observedSubject = session.subject;
     this.observedCsrfToken = session.csrfToken;
     this.reader = profileReader(session);
     this.actor = profileActor(session);
     // Keep the original CSRF identity in memory for writes; never put it in a query key.
-    this.key = ['settings', 'profile', this.reader?.subject ?? null, null, crypto.randomUUID()];
+    this.key = ['settings', 'profile', this.reader?.subject ?? null, null, ambient.id()];
     const io = createIO(this);
     this.editor = new ProfileEditor({
       ...io,
+      ambient,
       read: async (signal) => {
         if (!this.canRead()) throw new Error('Profile unavailable');
         return io.read(signal);

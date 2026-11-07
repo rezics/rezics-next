@@ -1,4 +1,4 @@
-import { ProblemError } from '../http/problem.ts';
+import { ProblemError } from '../http/problem-error.ts';
 import { parseStrictJson } from '../http/strict-json.ts';
 import { routeOf } from '../route/route.ts';
 import { sectionsForVersion, LIBRARY_EXPORT_FORMAT } from './library-export-format.ts';

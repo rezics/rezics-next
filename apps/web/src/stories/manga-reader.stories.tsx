@@ -4,6 +4,7 @@ import type { ComponentProps } from 'react';
 import { defaultReader } from '../subject/reader';
 import type { Subject } from '../subject/types';
 import { MangaReader } from '../features/catalogue/manga-reader/view';
+import { WorkReadingBinding } from '../features/pages/work-reading-binding';
 import type { ProfileRelationWindow } from '../features/pages/views';
 import type { RelationDefinition } from '../subject/relations';
 import { dateText } from '../features/pages/overview';
@@ -203,7 +204,9 @@ export const ExactVolumeWithParentEditionAndPartialDate: Story = {
   render: (args: ComponentProps<typeof MangaReader>) => (
     <div className="space-y-4">
       <p className="text-sm text-muted-foreground">Publication date: {dateText('2024-04', 'en')}</p>
-      <MangaReader {...args} />
+      <WorkReadingBinding>
+        <MangaReader {...args} />
+      </WorkReadingBinding>
     </div>
   ),
 };

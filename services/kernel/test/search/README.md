@@ -45,6 +45,11 @@ stable lifecycle slot whose stop operation always targets the currently active r
 created by resume. Adapt [worker.ts](../../src/worker.ts), [the current Search outcome driver](outcome-driver.ts),
 and [worker test environment](../support/worker-env.ts) without changing the default callers' behavior.
 
+The runner returns its owned stop handle before the initial native inventory completes. That inventory uses the
+same installed production Search and Semantic owners under a runner-scoped cancellation signal. Stop aborts native
+requests and drains admitted work; worker service startup does not certify current Search output. The default
+discovery integration test must continue through a useful current page and retained continuation.
+
 Pause drains and stops only Search through its captured starter. Resume starts only Search through that same real
 starter. DBOS, the worker, default registrations, Semantic services and relays continue running. Rebuild uses the
 real `rebuildSubjects`, the child's real source, partition counts and OpenSearch client, and the active runner's
@@ -53,11 +58,12 @@ responses. Do not add fake sources, schedule deletion, accelerated clocks, a sec
 
 ## Private IPC and cleanup
 
-Use private plain-data IPC with request IDs and explicit operation completion. Every command has a bounded deadline;
-responses carry either the actual result or an explicit serialized error. A send acknowledgment or process signal is
-not completion. Await child exit and drain both stdout and stderr for startup, operations and shutdown, retaining
-diagnostics on failure. Child exit, disconnect, send failure, startup rejection and deadline expiry reject pending
-operations; none becomes an empty successful result.
+Use private plain-data IPC with request IDs and explicit operation completion. The child announces readiness only
+after installing its RPC listener; the parent sends init and starts its operation deadline after that handshake.
+Every command has a bounded deadline; responses carry either the actual result or an explicit serialized error. A
+send acknowledgment or process signal is not completion. Await child exit and drain both stdout and stderr for
+startup, operations and shutdown, retaining diagnostics on failure. Child exit, disconnect, send failure, startup
+rejection and deadline expiry reject pending operations; none becomes an empty successful result.
 
 Cleanup attempts all owned stages and preserves the original failure. The worker must stop before its owned pools,
 indices or databases are closed or deleted, and Auth must stop before its fixture resources are removed. Forced

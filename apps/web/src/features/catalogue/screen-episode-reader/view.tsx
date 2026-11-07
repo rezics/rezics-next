@@ -3,11 +3,10 @@ import { pickText } from '@rezics/composition';
 import type { Release } from '@rezics/definitions';
 import { ContentItemHeading } from '@rezics/ui/content-item';
 import { buttonVariants } from '@rezics/ui/shadcn/button';
-import { CandidateValue } from '../../pages/data';
 import { PlainLink, type PageLink, type Snak, type Stmt, spoilerLevel } from '../../pages/shared';
-import { SpoilerGate } from '../../pages/values';
 import { ValueExplanationEntry } from '../value-explanation-entry';
 import { m } from '../../../paraglide/messages.js';
+import { useScreenReadingApplication } from '../screen-reading-application';
 import type { ScreenEpisodeEntry, ScreenEpisodeRead } from './read';
 import {
   screenEpisodeContinuationHref,
@@ -17,7 +16,7 @@ import {
   screenEpisodeSubjectHref,
   type ScreenEpisodeOrigin,
 } from './navigation';
-import type { useScreenEpisodeVisit } from './visit/owner';
+import type { ScreenEpisodeVisit } from './visit/owner';
 
 const actionClass =
   'h-auto min-h-11 min-w-11 max-w-full whitespace-normal [overflow-wrap:anywhere] px-3 py-2 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary';
@@ -39,6 +38,7 @@ function EvidencePart({
   locale: string;
   link: PageLink;
 }) {
+  const { PageValue } = useScreenReadingApplication();
   const property = release?.properties[part.property.id];
   const label = property ? pickText(property.labels, locale) : undefined;
   return (
@@ -46,7 +46,7 @@ function EvidencePart({
       <p lang={label?.lang ?? undefined} className="text-sm text-muted-foreground">
         {label?.text || m.subject_value_unlabelled({}, options(locale))}
       </p>
-      <CandidateValue snak={part} related={entry.related ?? {}} locale={locale} link={link} />
+      <PageValue snak={part} related={entry.related ?? {}} locale={locale} link={link} />
     </div>
   );
 }
@@ -128,12 +128,13 @@ export function ScreenEpisodeList({
   release?: Release;
   loading?: boolean;
   retry?: () => void;
-  visit?: ReturnType<typeof useScreenEpisodeVisit>;
+  visit?: ScreenEpisodeVisit;
   origin: ScreenEpisodeOrigin;
   readerSpoilerLevel?: number;
   visitKey?: string;
   link?: PageLink;
 }) {
+  const { SpoilerGate, subjectHref, visitReturn } = useScreenReadingApplication();
   const o = options(locale);
   const failed = read && !read.ok ? read : undefined;
   const returnedSelection = screenEpisodeSelection(origin.searchStr);
@@ -149,6 +150,7 @@ export function ScreenEpisodeList({
     new URLSearchParams(origin.searchStr).has('screenSelection')
       ? screenEpisodeRestartHref(origin)
       : undefined);
+  const hrefs = { subjectHref, visitReturn };
 
   return (
     <section
@@ -214,7 +216,7 @@ export function ScreenEpisodeList({
                 ? m.screen_episode_reader_season({}, o)
                 : m.screen_episode_reader_episode({}, o);
             const label = entry.label || entry.typeLabel.text || fallback;
-            const href = screenEpisodeSubjectHref(entry, label, locale, origin);
+            const href = screenEpisodeSubjectHref(entry, label, locale, origin, hrefs);
             const elementId = screenEpisodeEntryElementId(entry.membershipId);
             const expanded = selected === entry.membershipId;
             const content = (

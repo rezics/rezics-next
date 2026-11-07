@@ -14,15 +14,12 @@ import { globalReadEligibility } from '../../semantic/eligibility.ts';
 import type { KeyRing } from '../../tokens/seal.ts';
 import { pageRoutes } from './pages.ts';
 import {
-  activateProfile,
-  activeProfile,
   ProfileAccessDeniedError,
   ProfileInputError,
   ProfileNotFoundError,
-  publishProfile,
-  readProfile,
   StaleProfileHeadError,
 } from '../profiles.ts';
+import { presentationApplication } from '../page-application.ts';
 import { GLOBAL_CONTEXT } from '../../semantic/definitions.ts';
 import { readCurationOpening } from '../curation-advice.ts';
 
@@ -129,7 +126,7 @@ export function profileRoutes(
         const authorization = await authorizeCommand(resource(), () => new ProfileAccessDeniedError());
         try {
           const result = await admission.run('normal', job, () =>
-            publishProfile(pool, {
+            presentationApplication().publishProfile(pool, {
               actor,
               idempotencyKey: key,
               digest: requestDigest('presentation.publish', actor, { params: {}, body }),
@@ -174,7 +171,7 @@ export function profileRoutes(
         });
         const profile = await admission.run('normal', job, async () => {
           if (!(await withConnection(pool, (client) => check(client)))) throw new ProblemError('not_found');
-          return readProfile(pool, params.digest);
+          return presentationApplication().readProfile(pool, params.digest);
         });
         if (!profile) throw new ProblemError('not_found');
         set.headers.etag = `"${params.digest}"`;
@@ -205,7 +202,7 @@ export function profileRoutes(
         });
         const active = await admission.run('normal', job, async () => {
           if (!(await withConnection(pool, (client) => check(client)))) throw new ProblemError('not_found');
-          return activeProfile(pool);
+          return presentationApplication().activeProfile(pool);
         });
         if (!active) throw new ProblemError('not_found');
         return { digest: active.digest, head: active.head };
@@ -238,9 +235,9 @@ export function profileRoutes(
           if (!(await withConnection(pool, (client) => check(client)))) throw new ProblemError('not_found');
           const opening = await readCurationOpening({
             viewer: actor.kind,
-            readActive: () => activeProfile(pool),
+            readActive: () => presentationApplication().activeProfile(pool),
             readProfile: async (digest) => {
-              const profile = await readProfile(pool, digest);
+              const profile = await presentationApplication().readProfile(pool, digest);
               if (!profile) throw new ProblemError('dependency_unavailable');
               return profile as PresentationProfile;
             },
@@ -299,7 +296,7 @@ export function profileRoutes(
         const authorization = await authorizeCommand(resource(), () => new ProfileAccessDeniedError());
         try {
           const result = await admission.run('normal', job, () =>
-            activateProfile(pool, {
+            presentationApplication().activateProfile(pool, {
               actor,
               idempotencyKey: key,
               digest: requestDigest('presentation.activate', actor, { params, body }),

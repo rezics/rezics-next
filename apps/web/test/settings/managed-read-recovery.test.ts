@@ -10,6 +10,9 @@ import { ManagedAccountReader, loadManagedAccountDetail } from '../../src/settin
 import { ManagedAccountActionsRead, loadManagedAccountActions } from '../../src/settings/managed-account-actions-read';
 import { readAccountRenameContextResult } from '../../src/settings/account-rename-data';
 import { AccountRenameRegion } from '../../src/settings/account-safety';
+import { createBrowserSettingsAmbient } from '../../src/settings/adapters/ambient';
+
+const settingsAmbient = createBrowserSettingsAmbient();
 
 const viewerId = '019a0000-0000-7000-8000-000000000001';
 const target = { viewerId, accountId: viewerId };
@@ -66,22 +69,30 @@ test('caller cancellation settles non-cooperative reads, prevents pre-cancelled 
   let dispatched = 0;
   let child!: AbortSignal;
   try {
-    const pending = withManagedReadDeadline((signal) => {
-      dispatched++;
-      child = signal;
-      return never();
-    }, caller.signal);
+    const pending = withManagedReadDeadline(
+      (signal) => {
+        dispatched++;
+        child = signal;
+        return never();
+      },
+      caller.signal,
+      settingsAmbient.timer,
+    );
     caller.abort(new Error('retired session'));
     await expect(pending).rejects.toThrow('retired session');
     expect(child.aborted).toBe(true);
     await expect(
-      withManagedReadDeadline(() => {
-        dispatched++;
-        return never();
-      }, caller.signal),
+      withManagedReadDeadline(
+        () => {
+          dispatched++;
+          return never();
+        },
+        caller.signal,
+        settingsAmbient.timer,
+      ),
     ).rejects.toThrow('retired session');
     expect(dispatched).toBe(1);
-    expect(await withManagedReadDeadline(async () => 'ready')).toBe('ready');
+    expect(await withManagedReadDeadline(async () => 'ready', undefined, settingsAmbient.timer)).toBe('ready');
     expect(clear).toHaveBeenCalledTimes(3);
     expect(remove).toHaveBeenCalledTimes(2);
   } finally {
@@ -94,17 +105,23 @@ test('inventory timeout preserves its cursor, independent actions recover, and l
   await fastDeadlines(async () => {
     let late!: (result: ManagedAccountsResult) => void;
     const cursors: object[] = [];
-    const inventory = new ManagedAccountsInventory(viewerId, (cursor) => {
-      cursors.push(cursor);
-      return cursors.length === 2
-        ? new Promise((resolve) => {
-            late = resolve;
-          })
-        : Promise.resolve({ ok: true, page });
-    });
+    const inventory = new ManagedAccountsInventory(
+      viewerId,
+      (cursor) => {
+        cursors.push(cursor);
+        return cursors.length === 2
+          ? new Promise((resolve) => {
+              late = resolve;
+            })
+          : Promise.resolve({ ok: true, page });
+      },
+      settingsAmbient,
+    );
     let actionCalls = 0;
-    const actions = new ManagedAccountActionsRead(target, async () =>
-      ++actionCalls === 1 ? never() : { state: 'denied', status: 403, code: null },
+    const actions = new ManagedAccountActionsRead(
+      target,
+      async () => (++actionCalls === 1 ? never() : { state: 'denied', status: 403, code: null }),
+      settingsAmbient,
     );
     await inventory.load();
     await Promise.all([inventory.more('organizations'), actions.load()]);
@@ -131,19 +148,28 @@ test('inventory timeout preserves its cursor, independent actions recover, and l
 test('detail and rename entry unlock deliberate recovery and retirement clears observations', async () => {
   await fastDeadlines(async () => {
     let detailCalls = 0;
-    const detail = new ManagedAccountReader(viewerId, viewerId, () => {
-      detailCalls++;
-      return never();
-    });
+    const detail = new ManagedAccountReader(
+      viewerId,
+      viewerId,
+      () => {
+        detailCalls++;
+        return never();
+      },
+      settingsAmbient,
+    );
     await detail.load();
     expect(detail.snapshot()).toMatchObject({ pending: false, failure: { transient: true } });
     await detail.load();
     expect(detailCalls).toBe(2);
     let calls = 0;
-    const rename = new AccountRenameRegion(async () => {
-      calls++;
-      return calls === 1 ? never() : { context: { accountId: viewerId, handle: 'current', available: true } };
-    }, viewerId);
+    const rename = new AccountRenameRegion(
+      async () => {
+        calls++;
+        return calls === 1 ? never() : { context: { accountId: viewerId, handle: 'current', available: true } };
+      },
+      settingsAmbient,
+      viewerId,
+    );
     const unmount = rename.mount();
     await rename.reload();
     expect(rename.snapshot()).toMatchObject({ loading: false, context: null, failures: [{ status: null }] });

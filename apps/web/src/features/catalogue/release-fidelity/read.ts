@@ -4,7 +4,6 @@ import type { Release } from '@rezics/definitions';
 import { pickText } from '@rezics/composition';
 import { candidateContext, candidateFailure, type CandidateFailure } from '../../../subject/candidates';
 import {
-  encodedBytes,
   admitVisitComponent,
   emptyVisit,
   historicalStatement,
@@ -28,6 +27,7 @@ import {
   type ReleaseStream,
   type VisitWork,
 } from './model';
+import { encodedBytes } from './encoding';
 
 type Endpoint = ReturnType<KernelClient['subjects']>;
 type ForwardPage = NonNullable<Awaited<ReturnType<Endpoint['relations']['get']>>['data']>;

@@ -1,7 +1,7 @@
 import { createHash } from 'node:crypto';
 import canonicalize from 'canonicalize';
 import type { Pool } from 'pg';
-import { deadlineClient, within } from '../access/authenticate.ts';
+import { deadlineClient, within } from './access-port.ts';
 import { withConnection, discardConnection } from '../database/pool.ts';
 import { CommandUnavailableError, mintReadTime, releaseOperationalTime } from '../command/command.ts';
 import type { AuthoritativeTime } from '../command/command.ts';

@@ -5,16 +5,27 @@ import { withHeaders } from '@elysia/openapi';
 import { t } from 'elysia';
 import type { Pool } from 'pg';
 import type { KernelClock } from '../clock.ts';
-import { deadlineClient } from '../access/authenticate.ts';
-import { GrantDeniedError } from '../access/grant-commands.ts';
+import {
+  deadlineClient,
+  GrantDeniedError,
+  problemSchema,
+  IDEMPOTENCY_HEADER,
+  SESSION_HEADER,
+  idempotencyKeyOf,
+  accessCheck,
+  actorOf,
+  type Access,
+  type Actor,
+} from './dependencies.ts';
+
 import { withConnection } from '../database/pool.ts';
 import { customMethod } from '../http/custom-method.ts';
-import { ProblemError, problemSchema } from '../http/problem.ts';
+import { ProblemError } from '../http/problem-error.ts';
+
 import { defineRateLimit } from '../http/rate-limit.ts';
-import { IDEMPOTENCY_HEADER, SESSION_HEADER, idempotencyKeyOf } from '../http/request.ts';
-import { accessCheck, actorOf, type Access, type Actor } from '../request/access.ts';
+
 import type { definitionRoutes } from '../semantic/http/definitions.ts';
-import { GLOBAL_CONTEXT } from '../semantic/definitions.ts';
+import { GLOBAL_CONTEXT } from '../semantic/contract/global-context.ts';
 import { routeOf } from '../route/route.ts';
 import { createSourceClassificationProducer, SOURCE_CLASSIFICATION_WRITE_ACTION } from './source-classification.ts';
 import {

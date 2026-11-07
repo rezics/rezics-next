@@ -1,8 +1,10 @@
+import * as profilePresentation from '../../settings/ports/profile-editor-view';
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import { useState } from 'react';
 import { AccountProfileEditor } from '../../accounts/profile-editor/editor';
 import { AccountProfileView } from '../../accounts/profile-editor/page';
 import type { Failure, ProfilePage } from '../../accounts/profile-editor/data';
+import { createBrowserSettingsAmbient } from '../../settings/adapters/ambient';
 import type { ProfileValues } from '../../settings/profile-data';
 
 const profile: ProfileValues = {
@@ -19,6 +21,7 @@ function Example({ failure, confirmation = false }: { failure?: Failure; confirm
   const [editor] = useState(() => {
     const editor = new AccountProfileEditor(
       {
+        ambient: createBrowserSettingsAmbient(),
         read: async () => {
           throw new Error('No native transport in this presentation fixture');
         },
@@ -39,7 +42,12 @@ function Example({ failure, confirmation = false }: { failure?: Failure; confirm
     : { state: 'ready', viewerId: '00000000-0000-7000-8000-000000000001', profile };
   return (
     <div className="mx-auto max-w-2xl space-y-6">
-      <AccountProfileView accountId={profile.accountId} editor={editor} page={page} />
+      <AccountProfileView
+        presentation={profilePresentation}
+        accountId={profile.accountId}
+        editor={editor}
+        page={page}
+      />
     </div>
   );
 }

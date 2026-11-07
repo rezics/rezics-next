@@ -12,6 +12,7 @@ export {
   keepSearch,
   subjectHref,
   subjectUrlForView,
+  subjectViewHref,
   subjectViewPaths,
 } from './subject-href';
 

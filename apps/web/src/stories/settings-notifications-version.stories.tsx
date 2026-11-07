@@ -11,6 +11,7 @@ import type {
   ReadingPreferences,
 } from '../settings/preferences';
 import { SettingsPageView } from '../settings/settings-page';
+import { settingsContent } from '../settings/adapters/presentation';
 import { AppShell } from '../shell/shell';
 import { PatternStory } from './page';
 import { selectSettingsCategory } from './settings-category-navigation';
@@ -156,7 +157,7 @@ function NotificationVersionComposition() {
       }}
     >
       <AppShell>
-        <SettingsPageView page={page} csrfToken={null} preferenceIO={fixture.io} />
+        <SettingsPageView page={page} csrfToken={null} preferenceIO={fixture.io} content={settingsContent} />
       </AppShell>
     </div>
   );

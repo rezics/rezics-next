@@ -1,20 +1,20 @@
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
-import { useQueryClient } from '@tanstack/react-query';
-import { sessionStateSnapshot } from '../session/browser-state';
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
+import { RECENT_HISTORY_CHANGED, RECENT_QUEUE_LIMIT, RecentSyncError } from './recent-contract';
 import {
   readRecentDocument,
   rememberRecent,
   writeRecentDocument,
+  recentBucket,
   type RecentEntry,
   type RecentHistory,
   type RecentHistoryOwner,
   type RecentSyncAdapter,
 } from './recent-history';
-import { RecentSyncError, type RecentSearchSyncAdapter } from './recent-sync';
+import type { RecentSearchSyncAdapter } from './recent-sync';
 import { useRecentSearchSyncAdapter } from './recent-sync-hook';
 import { createRecentBrowserStorage, observeRecentHistoryStorageEvent } from './recent-storage';
+import { useRecentSearchOperation } from './recent-host';
 
-const changedEvent = 'rezics-search-history-changed';
 type Snapshot = {
   owner?: RecentHistoryOwner;
   bucket: string | null;
@@ -23,10 +23,11 @@ type Snapshot = {
 };
 /** The delivered local helper owns both Recent and History. Events notify sibling hooks; they hold no store. */
 export function useRecentHistory(bucket: string | null, supplied?: RecentSyncAdapter): RecentHistory {
+  const { host } = useRecentSearchOperation();
+  const session = useSyncExternalStore(host.observeSession, host.readSession, host.readSession);
   const currentBucket = useRef(bucket);
   currentBucket.current = bucket;
-  const client = useQueryClient();
-  const installedSession = sessionStateSnapshot(client);
+  const installedSession = session.incarnation;
   const installedOwner = useRef<RecentHistoryOwner | undefined>(undefined);
   const mounted = useRef(true);
   const owner = useMemo(() => {
@@ -38,13 +39,13 @@ export function useRecentHistory(bucket: string | null, supplied?: RecentSyncAda
         !mounted.current ||
         installedOwner.current !== isCurrent ||
         currentBucket.current !== bucket ||
-        sessionStateSnapshot(client) !== installedSession
+        host.readSession().incarnation !== installedSession
       )
         retired = true;
       return !retired;
     };
     return isCurrent;
-  }, [bucket, client, installedSession]);
+  }, [bucket, host, installedSession]);
   installedOwner.current = owner;
   useLayoutEffect(() => {
     mounted.current = true;
@@ -84,7 +85,7 @@ export function useRecentHistory(bucket: string | null, supplied?: RecentSyncAda
       latest.current = next;
       setSnapshot(next);
       window.dispatchEvent(
-        new CustomEvent(changedEvent, {
+        new CustomEvent(RECENT_HISTORY_CHANGED, {
           detail: { bucket, entries, dirty, owner, origin: origin.current },
         }),
       );
@@ -128,17 +129,17 @@ export function useRecentHistory(bucket: string | null, supplied?: RecentSyncAda
     const refresh = () => {
       if (owner()) setAttempt((a) => (owner() ? { owner, id: a.id + 1, reload: false } : a));
     };
-    window.addEventListener(changedEvent, changed);
-    window.addEventListener('storage', stored);
+    window.addEventListener(RECENT_HISTORY_CHANGED, changed);
+    const stopStorage = host.observeStorage(stored);
     window.addEventListener('online', refresh);
     window.addEventListener('focus', refresh);
     return () => {
-      window.removeEventListener(changedEvent, changed);
-      window.removeEventListener('storage', stored);
+      window.removeEventListener(RECENT_HISTORY_CHANGED, changed);
+      stopStorage();
       window.removeEventListener('online', refresh);
       window.removeEventListener('focus', refresh);
     };
-  }, [bucket, owner, storage]);
+  }, [bucket, host, owner, storage]);
   useEffect(() => {
     if (!owner()) return;
     if (!bucket || latest.current.bucket !== bucket || !adapter) {
@@ -183,11 +184,11 @@ export function useRecentHistory(bucket: string | null, supplied?: RecentSyncAda
     const entries = latest.current.owner === owner ? latest.current.entries : document.entries;
     if (change === 'clear') {
       document.entries = [];
-      document.clear = crypto.randomUUID();
+      document.clear = host.createId();
       document.removed = [];
     } else if (typeof change === 'string') {
       if (!entries.some((e) => e.id === change)) return;
-      if (document.removed.length >= 100) {
+      if (document.removed.length >= RECENT_QUEUE_LIMIT) {
         setOutcome((last) => ({ ...last, owner, failure: 'unavailable' }));
         return;
       }
@@ -208,11 +209,17 @@ export function useRecentHistory(bucket: string | null, supplied?: RecentSyncAda
     sync: adapter && outcome.owner === owner ? outcome.sync : 'local-only',
     ...(outcome.owner === owner && outcome.failure ? { failure: outcome.failure } : {}),
     remember: (query, scope, languages) =>
-      update((entries) => rememberRecent(entries, query, scope, Date.now(), languages)),
+      update((entries) => rememberRecent(entries, query, scope, host.now(), languages)),
     remove: (id) => update(id),
     clear: () => update('clear'),
     retry: () => {
       if (owner()) setAttempt((a) => (owner() ? { owner, id: a.id + 1, reload: true } : a));
     },
   };
+}
+
+export function useRecentSearches(): RecentHistory {
+  const { host } = useRecentSearchOperation();
+  const session = useSyncExternalStore(host.observeSession, host.readSession, host.readSession);
+  return useRecentHistory(recentBucket(session.state, session.subject));
 }

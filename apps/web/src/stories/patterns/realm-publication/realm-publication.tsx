@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { RealmShelf } from '../../../community/space-page';
+import { RealmShelf } from '../../../session/community-application';
 import { readSpacePage } from '../../../community/space-actions';
 import type { SpacePageData } from '../../../community/space';
 import { publicationSubjectSearch } from '../../../community/publication-subject-picker';

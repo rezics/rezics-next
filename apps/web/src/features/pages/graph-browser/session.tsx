@@ -1,5 +1,5 @@
 import { useMemo } from 'react';
-import { candidateSession, useCatalogueLifetime } from '../../../subject/candidate-lifetime';
+import { candidateSession, useCandidateReading } from '../candidate-reading-application';
 import { useSession } from '../../../session/query';
 import { csrfHeaders } from '../../../threads/composer';
 import { m } from '../../../paraglide/messages.js';
@@ -41,7 +41,7 @@ function GraphBrowserSessionLive({
   graphPath: string;
   onNavigate: (state: GraphBrowserRouteState) => void | Promise<unknown>;
 }) {
-  const work = useCatalogueLifetime('graph-explore');
+  const work = useCandidateReading({ candidate: 'graph-explore', locale, address: id });
   const { state, subject } = useSession();
   const expectedReader = state === 'signed-in' ? work.reader : null;
   const transport = useMemo(

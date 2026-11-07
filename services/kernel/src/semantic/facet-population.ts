@@ -112,7 +112,7 @@ function advanceHome(state: State): State {
 }
 
 /** Preparation only. No scheduler, public values, permission cache, consumer registry or ACK writer. */
-export const createFacetPopulationSource: FacetPopulationSourceFactory = (config) => {
+export const createNativeFacetPopulationSource: FacetPopulationSourceFactory = (config) => {
   if (config.routeKey.byteLength < 32 || typeof config.clock !== 'function')
     throw new TypeError('Population requires native Source configuration');
   const binding = createPublicFilterSourceBinding(config.pool, config.routeKey, config.access);
@@ -341,3 +341,5 @@ export const createFacetPopulationSource: FacetPopulationSourceFactory = (config
     },
   };
 };
+
+export { createFacetPopulationSource } from './copy-work-application.ts';

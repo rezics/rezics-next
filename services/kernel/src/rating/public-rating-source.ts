@@ -1,7 +1,7 @@
 import { memoizedValue } from '../memoized.ts';
 import type { Pool } from 'pg';
 import { defineQuery } from 'reylo';
-import { GLOBAL_CONTEXT } from '../access/gates/catalogue.ts';
+import { GLOBAL_CONTEXT_RESOURCE as GLOBAL_CONTEXT } from '../semantic/contract/global-context.ts';
 import { discardConnection, withConnection } from '../database/pool.ts';
 import { partitionOf, routeOf } from '../route/route.ts';
 import type {

@@ -11,9 +11,13 @@ import {
   withShelfAdvice,
   type NotificationPreferences,
 } from '../src/settings/preferences';
+import { performanceAmbientTree } from './performance-ambient';
 import { readingMutation, sendReading } from '../src/settings/reading-preferences';
 import { preferenceRetryDeadline } from '../src/settings/preference-failure-retry';
 import type { SessionEnv } from '../src/session/client';
+import { createBrowserSettingsAmbient } from '../src/settings/adapters/ambient';
+
+const settingsAmbient = createBrowserSettingsAmbient();
 
 mock.module('cloudflare:workers', () => ({ env: {} }));
 const { loadUnreadCount } = await import('../src/inbox/inbox-read');
@@ -103,10 +107,14 @@ function preferenceJourney() {
     }
     return Response.json(preferenceEnvelope(current.notifications, current.version));
   });
-  const editor = new NotificationEditor(initial, {
-    save: (change) => changeNotifications(client, owner.request('POST'), owner.env, change),
-    read: () => loadSettingsPage(client, owner.request(), owner.env),
-  });
+  const editor = new NotificationEditor(
+    initial,
+    {
+      save: (change) => changeNotifications(client, owner.request('POST'), owner.env, change),
+      read: () => loadSettingsPage(client, owner.request(), owner.env),
+    },
+    settingsAmbient,
+  );
   return {
     editor,
     client,
@@ -206,19 +214,30 @@ test('Closed, conflict, unknown-save and actual explicit readiness states preser
   const original = readingMutation(
     { spoilerLevel: 1, suitability: 'blur', version: 7 },
     { spoilerLevel: 2, suitability: 'blur' },
+    settingsAmbient.id,
   )!;
   const io = {
     save: (input: typeof original) => changePreferences(client, owner.request('POST'), owner.env, input),
     read: () => loadSettingsPage(client, owner.request(), owner.env),
   };
-  expect(await sendReading(io, original, false, () => 7)).toMatchObject({ kind: 'uncertain', reason: 'unavailable' });
-  expect(await sendReading(io, original, true, () => 7)).toMatchObject({ kind: 'uncertain', reason: 'unavailable' });
+  expect(await sendReading(io, original, false, () => 7, settingsAmbient.timer)).toMatchObject({
+    kind: 'uncertain',
+    reason: 'unavailable',
+  });
+  expect(await sendReading(io, original, true, () => 7, settingsAmbient.timer)).toMatchObject({
+    kind: 'uncertain',
+    reason: 'unavailable',
+  });
   expect(Object.isFrozen(original)).toBe(true);
 
-  const editor = new NotificationEditor(initial, {
-    save: (input) => changeNotifications(client, owner.request('POST'), owner.env, input),
-    read: () => loadSettingsPage(client, owner.request(), owner.env),
-  });
+  const editor = new NotificationEditor(
+    initial,
+    {
+      save: (input) => changeNotifications(client, owner.request('POST'), owner.env, input),
+      read: () => loadSettingsPage(client, owner.request(), owner.env),
+    },
+    settingsAmbient,
+  );
   await editor.edit('reply', false, 7);
   const pending = editor.snapshot().pending;
   await editor.edit('mention', false, 7);
@@ -320,10 +339,14 @@ test('closed or unavailable recovery reads consume the confirmed command and ret
           ? Response.json({ code: 'deadline_exceeded' }, { status: 503 })
           : Response.json(preferenceEnvelope({ reply: false, mention: true }, 8));
     });
-    const editor = new NotificationEditor(initial, {
-      save: (input) => changeNotifications(client, owner.request('POST'), owner.env, input),
-      read: () => loadSettingsPage(client, owner.request(), owner.env),
-    });
+    const editor = new NotificationEditor(
+      initial,
+      {
+        save: (input) => changeNotifications(client, owner.request('POST'), owner.env, input),
+        read: () => loadSettingsPage(client, owner.request(), owner.env),
+      },
+      settingsAmbient,
+    );
     await editor.edit('reply', false, 7);
     const pending = editor.snapshot().pending;
     await editor.edit('mention', false, 7);
@@ -354,28 +377,32 @@ test('automatic notification readback preserves edits made while the native GET 
   const delayed = new Promise<void>((resolve) => {
     release = resolve;
   });
-  const editor = new NotificationEditor(initial, {
-    save: async () =>
-      ++calls === 1
-        ? { ok: false, reason: 'unavailable', failure: { status: 503, code: 'deadline_exceeded' } }
-        : {
-            ok: true,
-            notifications: { reply: false, mention: true },
-            version: 8,
-            page: settingsPreferencePage({ reply: false, mention: true }, 8),
-          },
-    read: async () => {
-      began();
-      await delayed;
-      return {
-        signedIn: true,
-        preferences: { spoilerLevel: 2, suitability: 'show', version: 8 },
-        notifications: { reply: false, mention: true },
-        page: settingsPreferencePage({ reply: false, mention: true }, 8),
-        securityHref: null,
-      };
+  const editor = new NotificationEditor(
+    initial,
+    {
+      save: async () =>
+        ++calls === 1
+          ? { ok: false, reason: 'unavailable', failure: { status: 503, code: 'deadline_exceeded' } }
+          : {
+              ok: true,
+              notifications: { reply: false, mention: true },
+              version: 8,
+              page: settingsPreferencePage({ reply: false, mention: true }, 8),
+            },
+      read: async () => {
+        began();
+        await delayed;
+        return {
+          signedIn: true,
+          preferences: { spoilerLevel: 2, suitability: 'show', version: 8 },
+          notifications: { reply: false, mention: true },
+          page: settingsPreferencePage({ reply: false, mention: true }, 8),
+          securityHref: null,
+        };
+      },
     },
-  });
+    settingsAmbient,
+  );
   await editor.edit('reply', false, 7);
   const recovery = editor.retry();
   await started;
@@ -458,18 +485,22 @@ test('reset retry keeps null and its original version/key until receipt; current
 test('authorization refusal during recovery does not establish the original outcome or discard its input', async () => {
   const sent: string[] = [];
   let count = 0;
-  const editor = new NotificationEditor(initial, {
-    save: async (input) => {
-      sent.push(JSON.stringify(input));
-      count += 1;
-      return count === 1
-        ? { ok: false, reason: 'unavailable' }
-        : { ok: false, reason: 'forbidden', failure: { status: 403, code: 'forbidden' } };
+  const editor = new NotificationEditor(
+    initial,
+    {
+      save: async (input) => {
+        sent.push(JSON.stringify(input));
+        count += 1;
+        return count === 1
+          ? { ok: false, reason: 'unavailable' }
+          : { ok: false, reason: 'forbidden', failure: { status: 403, code: 'forbidden' } };
+      },
+      read: async () => {
+        throw new Error('A refused replay cannot establish current state');
+      },
     },
-    read: async () => {
-      throw new Error('A refused replay cannot establish current state');
-    },
-  });
+    settingsAmbient,
+  );
   await editor.edit('reply', false, 7);
   const pending = editor.snapshot().pending;
   await editor.edit('mention', false, 7);
@@ -497,7 +528,7 @@ test('unread failures remain unavailable rather than a zero badge, with one priv
     });
     const data = await loadUnreadCount(client, owner.request(), owner.env);
     expect(data).toMatchObject({ signedIn: true, state: 'unavailable' });
-    const markup = renderToStaticMarkup(createElement(UnreadBadgeView, { data }));
+    const markup = renderToStaticMarkup(performanceAmbientTree(createElement(UnreadBadgeView, { data })));
     expect(markup).toContain(m.inbox_unread_unavailable());
     expect(markup).toContain('role="img"');
     expect(markup).not.toContain('?');
@@ -532,43 +563,49 @@ test('unread failures remain unavailable rather than a zero badge, with one priv
   });
   expect(
     renderToStaticMarkup(
-      createElement(UnreadBadgeView, {
-        data: {
-          signedIn: true,
-          state: 'ready',
-          count: 0,
-          capped: false,
-          basis: 'current-visible-unread',
-          witness: currentDisclosure,
-        },
-      }),
+      performanceAmbientTree(
+        createElement(UnreadBadgeView, {
+          data: {
+            signedIn: true,
+            state: 'ready',
+            count: 0,
+            capped: false,
+            basis: 'current-visible-unread',
+            witness: currentDisclosure,
+          },
+        }),
+      ),
     ),
   ).toBe('');
 });
 
 test('unknown and pending unread counts use the same honest dot while ready counts retain their native value', () => {
   for (const props of [{}, { failed: true }, { data: { signedIn: false } as const, failed: true }]) {
-    const markup = renderToStaticMarkup(createElement(UnreadBadgeView, props));
+    const markup = renderToStaticMarkup(performanceAmbientTree(createElement(UnreadBadgeView, props)));
     expect(markup).toContain('role="img"');
     expect(markup).toContain(m.inbox_unread_unavailable());
     expect(markup).not.toMatch(/>[^<]+<|\?/);
   }
-  expect(renderToStaticMarkup(createElement(UnreadBadgeView, { data: { signedIn: false } }))).toBe('');
+  expect(
+    renderToStaticMarkup(performanceAmbientTree(createElement(UnreadBadgeView, { data: { signedIn: false } }))),
+  ).toBe('');
   for (const [count, capped, label] of [
     [3, false, '3'],
     [100, true, '99+'],
   ] as const) {
     const markup = renderToStaticMarkup(
-      createElement(UnreadBadgeView, {
-        data: {
-          signedIn: true,
-          state: 'ready',
-          count,
-          capped,
-          basis: 'current-visible-unread',
-          witness: currentDisclosure,
-        },
-      }),
+      performanceAmbientTree(
+        createElement(UnreadBadgeView, {
+          data: {
+            signedIn: true,
+            state: 'ready',
+            count,
+            capped,
+            basis: 'current-visible-unread',
+            witness: currentDisclosure,
+          },
+        }),
+      ),
     );
     expect(markup).toContain(m.inbox_unread_count({ count: label }));
     expect(markup).toContain(`>${label}</span>`);

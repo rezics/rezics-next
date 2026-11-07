@@ -14,8 +14,9 @@ import {
   type AuthoritativeTime,
 } from '../command/command.ts';
 import { withConnection } from '../database/pool.ts';
-import { ProblemError } from '../http/problem.ts';
-import { AuthenticationError, type Access, type AccountActor, type Actor } from '../request/access.ts';
+import { ProblemError } from '../http/problem-error.ts';
+import { AuthenticationError } from '../request/authentication-error.ts';
+import { type Access, type AccountActor, type Actor } from '../request/access.ts';
 import { deadlineFor } from '../request/deadline.ts';
 import { routeOf } from '../route/route.ts';
 import { decodeCursor, encodeCursor } from '../tokens/cursor.ts';

@@ -1,3 +1,4 @@
+import { SavedQueryConditionInput } from '../src/search/saved-query-condition-input';
 import { afterAll, describe, expect, mock, test } from 'bun:test';
 import { dirname } from 'node:path';
 import { act, StrictMode, type ReactNode } from 'react';
@@ -300,7 +301,14 @@ describe('Complete saved rule and selected Publication owner authority preserves
     const navigation: string[] = [];
     const a = rule();
     try {
-      await h.render(<CollectionRuleCurrent page={a} collectionId="alpha" navigate={(id) => navigation.push(id)} />);
+      await h.render(
+        <CollectionRuleCurrent
+          ConditionInput={SavedQueryConditionInput}
+          page={a}
+          collectionId="alpha"
+          navigate={(id) => navigation.push(id)}
+        />,
+      );
       expect(h.host.querySelector('form')).toBeNull(); // The legacy global cache grants nothing.
       await h.settleExposure('alice', {
         subject: 'foreign-viewer',
@@ -322,7 +330,9 @@ describe('Complete saved rule and selected Publication owner authority preserves
         expect(ruleReads).toHaveLength(0);
         expect(choices).toHaveLength(0);
       });
-      await h.render(<CollectionRuleCurrent page={rule('bob')} collectionId="alpha" />);
+      await h.render(
+        <CollectionRuleCurrent ConditionInput={SavedQueryConditionInput} page={rule('bob')} collectionId="alpha" />,
+      );
       await h.authorize('bob');
       await h.submit();
       expect(ruleWrites).toHaveLength(2); // B works while A's native command remains unresolved.
@@ -358,7 +368,9 @@ describe('Complete saved rule and selected Publication owner authority preserves
     const h = await mounted();
     try {
       await h.perform(() => h.client.setQueryData(sessionQuery.queryKey, { ...session(), csrfToken: null }));
-      await h.render(<CollectionRuleCurrent page={rule()} collectionId="alpha" />);
+      await h.render(
+        <CollectionRuleCurrent ConditionInput={SavedQueryConditionInput} page={rule()} collectionId="alpha" />,
+      );
       await h.authorize();
       expect(h.host.textContent).toContain('alice-private-release');
       expect(h.button(m.library_collection_save()).disabled).toBe(true);
@@ -389,7 +401,9 @@ describe('Complete saved rule and selected Publication owner authority preserves
     const page = rule('alice', null);
     page.choices.release = { state: 'ready', digest: 'active-release', profiles: [] };
     try {
-      await h.render(<CollectionRuleCurrent page={page} collectionId={null} />);
+      await h.render(
+        <CollectionRuleCurrent ConditionInput={SavedQueryConditionInput} page={page} collectionId={null} />,
+      );
       expect(h.host.querySelector('form')).toBeNull();
       await h.authorize('alice', ['collections']);
       expect(h.host.querySelector('form')).not.toBeNull();
@@ -406,7 +420,13 @@ describe('Complete saved rule and selected Publication owner authority preserves
     for (const collectionId of [null, 'alpha']) {
       const h = await mounted();
       try {
-        await h.render(<CollectionRuleCurrent page={rule('alice', collectionId)} collectionId={collectionId} />);
+        await h.render(
+          <CollectionRuleCurrent
+            ConditionInput={SavedQueryConditionInput}
+            page={rule('alice', collectionId)}
+            collectionId={collectionId}
+          />,
+        );
         await h.authorize();
         if (collectionId === null) {
           const input = h.host.querySelector<HTMLInputElement>('input[required]')!;
@@ -458,7 +478,9 @@ describe('Complete saved rule and selected Publication owner authority preserves
   test('latest label query and cursor, actual viewer/address and independent label admission fence retained choices and reloads', async () => {
     const h = await mounted();
     try {
-      await h.render(<CollectionRuleCurrent page={rule()} collectionId="alpha" />);
+      await h.render(
+        <CollectionRuleCurrent ConditionInput={SavedQueryConditionInput} page={rule()} collectionId="alpha" />,
+      );
       await h.authorize();
       const input = () => h.host.querySelector<HTMLInputElement>('input[maxlength="1000"]')!;
       await h.perform(() => handler(input(), 'onChange')({ currentTarget: { value: 'old' } }));

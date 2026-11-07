@@ -1,16 +1,12 @@
 import { publicNames } from '../document-names.ts';
-import { analyzeInstalled, CJK_ANALYZER, NAME_PREFIX_ANALYZER, type EngineToken } from '../engine-analysis.ts';
-import type { OpenSearch } from '../opensearch.ts';
 import type { IndexedSubject } from '../source.ts';
 import type { TextNode } from '../text.ts';
+import { CJK_ANALYZER, NAME_PREFIX_ANALYZER, type EngineToken } from './admission.ts';
 
-type Analyzer = typeof CJK_ANALYZER | typeof NAME_PREFIX_ANALYZER;
-
-/** Analyzer concurrency matches ENGINE_ANALYSIS_LIMITS as a module-init literal; that owner file is not a literal leaf. */
-export const CURRENT_TEXT_LIMITS = Object.freeze({
-  scanBytes: 32 * 1024,
-  concurrency: 16,
-});
+export type CurrentTextAnalyzer = typeof CJK_ANALYZER | typeof NAME_PREFIX_ANALYZER;
+export type CurrentTextAnalysis = (analyzer: CurrentTextAnalyzer, text: string) => Promise<readonly EngineToken[]>;
+type Analyzer = CurrentTextAnalyzer;
+export const CURRENT_TEXT_LIMITS = Object.freeze({ scanBytes: 32 * 1024, concurrency: 16 });
 
 function uniqueValues(subject: IndexedSubject, includeDescriptions: boolean): string[] {
   const unique = new Set<string>();
@@ -38,7 +34,7 @@ function uniqueValues(subject: IndexedSubject, includeDescriptions: boolean): st
 }
 
 /** Analyze current native text with the same analyzer installed on the queried Search generation. */
-export function createCurrentTextDisclosure(search: OpenSearch, index: string) {
+export function createCurrentTextMatcher(analyzeCurrent: CurrentTextAnalysis) {
   const cache = new Map<string, Promise<readonly EngineToken[]>>();
   const waiting: (() => void)[] = [];
   let active = 0;
@@ -51,7 +47,7 @@ export function createCurrentTextDisclosure(search: OpenSearch, index: string) {
         if (active >= CURRENT_TEXT_LIMITS.concurrency) await new Promise<void>((resolve) => waiting.push(resolve));
         else active++;
         try {
-          return await analyzeInstalled(search, index, { analyzer, text });
+          return await analyzeCurrent(analyzer, text);
         } finally {
           const next = waiting.shift();
           if (next) next();

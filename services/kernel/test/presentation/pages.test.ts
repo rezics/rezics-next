@@ -1,3 +1,4 @@
+import { testReceiptKeys } from '../support/receipt-keys.ts';
 import { afterAll, beforeAll, expect, test } from 'bun:test';
 import { randomUUID } from 'node:crypto';
 import pg from 'pg';
@@ -20,7 +21,6 @@ import { SESSION_HEADER } from '../../src/http/request.ts';
 import { decodeSession } from '../../src/tokens/session.ts';
 import { checkGrowth, openGrowthDatabase, seed, type Population } from '../support/growth.ts';
 import { newId } from '../../src/route/route.ts';
-import { testReceiptKeys } from '../support/receipt-keys.ts';
 import { itemFacts } from '../../src/semantic/item.ts';
 
 const url = process.env.DATABASE_URL;
@@ -164,7 +164,7 @@ test('a subject page resolves its type template and runs its reads in one round 
   expect(answer.body.document).toEqual(templateViews(profile.types[0]!).overview);
   expect(Object.keys(answer.body.reads).sort()).toEqual(['r0', 'r1']);
   const standalone = await call('GET', `/v1/subjects/${id}`);
-  expect(answer.body.reads.r0).toEqual({ status: 200, body: { ...standalone.body, documents: {} } });
+  expect(answer.body.reads.r0).toEqual({ status: 200, body: standalone.body });
   const links = await call('GET', `/v1/subjects/${id}/links?property=schema%3Aauthor&limit=6`);
   expect(answer.body.reads.r1.status).toBe(links.response.status);
   expect(links.response.status).toBe(200);
@@ -251,9 +251,8 @@ test('a subject without a type template falls back through its structural bases'
   expect(answer.response.status, JSON.stringify(answer.body)).toBe(200);
   expect(answer.body.template).toEqual({ scope: 'base', key: base.base });
   expect(answer.body.document).toEqual(profile.bases[0]!.document);
-  expect(answer.body.reads).toEqual({
-    r0: { status: 200, body: { ...(await call('GET', `/v1/subjects/${id}`)).body, documents: {} } },
-  });
+  const standalone = await call('GET', `/v1/subjects/${id}`);
+  expect(answer.body.reads).toEqual({ r0: { status: 200, body: standalone.body } });
 });
 
 test('a view target answers that view, falling back to the generic view, and lists the views a page defines', async () => {
@@ -310,6 +309,11 @@ test('route targets resolve route templates and malformed targets are field erro
   const subject = await read({ subject: 'not-a-uuid' });
   expect(subject.response.status).toBe(400);
   expect(subject.body.errors).toEqual([{ pointer: '/target/subject', code: 'invalid_format' }]);
+  // A supplied Board is an exact operand of a Subject target only.
+  const board = await read({ subject: randomUUID(), board: 'not-a-uuid' });
+  expect(board.body.errors).toEqual([{ pointer: '/target/board', code: 'invalid_format' }]);
+  const routeBoard = await read({ route: '/', board: randomUUID() });
+  expect(routeBoard.body.errors).toEqual([{ pointer: '/target/board', code: 'unknown_field' }]);
   for (const target of [{}, { subject: randomUUID(), route: '/' }, 'x'])
     expect((await read(target)).response.status).toBe(400);
 });

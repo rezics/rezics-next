@@ -2,7 +2,7 @@ import { afterAll, beforeAll, expect, test } from 'bun:test';
 import { createHash } from 'node:crypto';
 import type { Capture } from '../support/growth.ts';
 import canonicalize from 'canonicalize';
-import { ProblemError } from '../../src/http/problem.ts';
+import { ProblemError } from '../../src/http/problem-error.ts';
 import { LifecycleDeniedError } from '../../src/access/lifecycle-20261025094010-command.ts';
 import { runOperationalTransaction } from '../../src/command/operational.ts';
 import type { PreparingEpisode } from '../../src/library/members-preparation.ts';

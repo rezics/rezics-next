@@ -1,6 +1,6 @@
 import { createHash } from 'node:crypto';
-import { GrantDeniedError } from '../access/grant-commands.ts';
-import { resourceAuthorization } from '../access/resource-authorization.ts';
+import { GrantDeniedError } from '../access/contract/index.ts';
+import { resourceAuthorization } from './access-port.ts';
 import { principalCommandIdentity, runCommand, type CommandOutcome } from '../command/command.ts';
 import { readPartition } from '../partition/partition.ts';
 import type { Actor } from '../request/access.ts';

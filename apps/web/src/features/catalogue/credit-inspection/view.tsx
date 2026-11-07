@@ -2,10 +2,8 @@ import { useEffect, useRef, useState } from 'react';
 import { Button } from '@rezics/ui/shadcn/button';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@rezics/ui/shadcn/dialog';
 import { m } from '../../../paraglide/messages.js';
-import { CandidateValue } from '../../pages/data';
-import type { LinkProps, Snak } from '../../pages/shared';
-import { subjectViewHref } from '../../../subject/subject-href';
 import { creditDestinationHref } from './destinations';
+import { useCharacterReadingSlots, type LinkProps, type Snak } from '../character-reading-port';
 import { candidateContext } from '../../../subject/candidates';
 import { useCatalogueLifetime } from '../../../subject/candidate-lifetime';
 import type { RelationTransport } from '../../../subject/relation-candidates';
@@ -62,6 +60,8 @@ export function CreditInspection({
   isCurrent: () => boolean;
   returnFocus?: (() => HTMLElement | null) | undefined;
 }) {
+  const { navigation, presentation } = useCharacterReadingSlots();
+  const CandidateValue = presentation.CandidateValue;
   const lifetime = useCatalogueLifetime(JSON.stringify([credit, visit, locale]));
   const current = () => lifetime.active() && isCurrent();
   const [detail, setDetail] = useState<DetailRead>();
@@ -74,7 +74,7 @@ export function CreditInspection({
   const o = { locale: locale as never };
   const statement = credit.statement;
   const related = creditRelated(credit, locale);
-  const destination = (href: string) => creditDestinationHref(href, visit, credit, locale);
+  const destination = (href: string) => creditDestinationHref(href, visit, credit, locale, navigation.withVisitReturn);
   useEffect(() => {
     let cancelled = false;
     if (!signedIn || !credit.slot || visit.context !== candidateContext || !current()) return;
@@ -159,13 +159,13 @@ export function CreditInspection({
           <nav aria-label={m.credit_original({}, o)} className="flex flex-wrap gap-4">
             <DisclosedTarget
               className={wrapLink}
-              href={destination(subjectViewHref({ id: credit.holder, label: title }, locale, 'overview'))}
+              href={destination(navigation.subjectViewHref({ id: credit.holder, label: title }, locale, 'overview'))}
             >
               {title}
             </DisclosedTarget>
             <DisclosedTarget
               className={wrapLink}
-              href={destination(subjectViewHref({ id: credit.holder, label: title }, locale, 'sources'))}
+              href={destination(navigation.subjectViewHref({ id: credit.holder, label: title }, locale, 'sources'))}
             >
               {m.subject_sources({}, o)}
             </DisclosedTarget>

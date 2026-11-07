@@ -1,13 +1,13 @@
 import type { Pool } from 'pg';
 import { within } from '../access/authenticate.ts';
 import { requireAccessDeadline } from '../access/unavailable.ts';
-import { ProblemError } from '../http/problem.ts';
+import { ProblemError } from '../http/problem-error.ts';
 import type { Access, Actor } from '../request/access.ts';
 import { withRequestDeadline } from '../request/deadline.ts';
 import { routeOf } from '../route/route.ts';
 import type { Fact } from '../search/hits.ts';
 import { readIdentityMappings } from '../semantic/identity-adapters/read.ts';
-import { readListPresentationFacts } from '../semantic/list-presentation.ts';
+import { readListPresentationFacts } from '../semantic/index.ts';
 import { readSubjectSummaries, type SubjectSummary } from '../semantic/summaries.ts';
 
 export type CollectionListFactsDependencies = {

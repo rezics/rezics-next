@@ -8,7 +8,7 @@ import {
   readCollectionSourceWorkState,
   seekCollectionSourceWorkGroup,
 } from '../../src/library/collection-source-work-native.ts';
-import type { ScopeWorkContext } from '../../src/search/scope-work-context.ts';
+import type { ScopeWorkContext } from '../../src/library/adapters/index.ts';
 import { definition, membersPreparationRuntime } from './support/members-preparation-runtime.ts';
 const workDimensions = ({
   engineRequests: _engineRequests,

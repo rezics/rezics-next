@@ -3,8 +3,11 @@ import { createKernelClient } from '@rezics/client';
 import { statementFixture } from '../src/kernel/fake/catalogue-statements';
 import { candidateContext, candidateIsPublic } from '../src/subject/candidates';
 import {
+  applyEditorReload,
   correctionInspectionAvailability,
   correctionProposalAvailability,
+  matchEditorRead,
+  proposalDecision,
   readCorrectionActions,
   statementInput,
   validateStatement,
@@ -205,4 +208,20 @@ test('keeps a native draft intact for invalid, denied, stale and unavailable out
       })) as typeof fetch,
   });
   expect(await readStatementEditor(hidden, fixture.address)).toEqual({ ok: false, reason: 'unavailable' });
+});
+
+test('reload matching keeps the admitted statement and refuses a switched subject', async () => {
+  const fixture = statementFixture();
+  const read = await fixture.editor.read();
+  if (!read.ok || !read.source) throw new Error('Expected a selected public statement');
+  expect(matchEditorRead(read, read)).toEqual(read);
+  expect(matchEditorRead({ ok: false, reason: 'denied' }, read)).toEqual({ ok: false, reason: 'denied' });
+  const switched = structuredClone(read);
+  switched.public.subject.id = crypto.randomUUID();
+  expect(matchEditorRead(switched, read)).toEqual({ ok: false, reason: 'stale' });
+  const seeded = applyEditorReload(read, undefined, null);
+  expect(seeded.read).toEqual(read);
+  expect(seeded.draft).toEqual(statementInput(read.source));
+  expect(proposalDecision(statementInput(read.source), read.release, 'denied')).toEqual({ blocked: true });
+  expect(proposalDecision(statementInput(read.source), read.release, 'allowed')).toEqual({ ready: true });
 });

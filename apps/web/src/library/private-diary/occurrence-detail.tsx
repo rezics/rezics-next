@@ -20,8 +20,8 @@ import { Link, useLocation, useRouter } from '@tanstack/react-router';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useCallback, useEffect, useMemo, useRef, useState, useId, type FormEvent, type ReactNode } from 'react';
 import { m } from '../../paraglide/messages.js';
-import { useOperation } from '../../kernel/exposure';
-import { useSession } from '../../session/query';
+import { useOperation } from '../application';
+import { useSession } from '../application';
 import type { ProgressSessionView } from '../progress-reads';
 import {
   correctOccurrenceJournal,

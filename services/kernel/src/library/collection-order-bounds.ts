@@ -1,15 +1,10 @@
 import { memoizedValue } from '../memoized.ts';
 import { BOUND_AXES, declareBound, repeatBound, sumBounds, withinCeiling, type Bound } from '@rezics/bounds';
-import { MEMBERSHIP_LIMIT } from '../access/membership-inverse.ts';
-import { accessNativeDeclaration, type AccessWork } from '../access/work.ts';
-import accountRead from '../access/account-read.sql';
+import {
+  COLLECTION_AUTHORIZATION_MEMBERSHIPS,
+  collectionAuthorizationPreparationWork,
+} from '../access/adapters/collection-policy.ts';
 import accountShare from '../access/account-share.sql';
-import permissionAssignment from '../access/permission-assignment.sql';
-import permissionCandidates from '../access/permission-candidates.sql';
-import permissionCheck from '../access/permission-check.sql';
-import permissionInverse from '../access/permission-inverse.sql';
-import permissionMembership from '../access/permission-membership.sql';
-import permissionTime from '../access/permission-time.sql';
 import eventFence from '../command/fence.sql';
 import noEffectFence from '../command/no-effect-fence.sql';
 import receiptRead from '../command/read-receipt.sql';
@@ -127,10 +122,8 @@ export const COLLECTION_ORDER_COMMAND_KINDS = Object.freeze({
 });
 const NOTE_LIMIT = 1_000;
 const RECEIPT_KEY_CANDIDATES = 5;
-const ACTOR_MEMBERS = 2;
 const STRUCTURE_HISTORY_RETAINED = 1_000;
 const STRUCTURE_HISTORY_OPERATIONS = 32;
-const ACCESS_GRANT_ROLES = 1;
 /** Existing native resolveSubject ceiling; add pays it once, move does not. */
 function subjectDisclosure() {
   return memoizedValue(subjectDisclosure, () =>
@@ -615,7 +608,6 @@ function continuationRequest() {
 const jsonSize = (value: unknown) => Buffer.byteLength(JSON.stringify(value));
 const uuid = '0'.repeat(uuidBytes);
 const timestamp = '\0'.repeat(64);
-const actorAccount = { route: 65535, account_id: uuid };
 const collectionPoint = { route: 65535, collection_id: uuid };
 const memberPoint = { ...collectionPoint, member_id: uuid };
 function memberResult() {
@@ -652,133 +644,16 @@ const httpBeginBytes = jsonSize({
   fence: `${'9'.repeat(integerBytes)}:${'9'.repeat(bigintBytes)}:${'9'.repeat(integerBytes)}:${'9'.repeat(bigintBytes)}`,
 });
 
-function fromAccess(work: AccessWork, statements: number, sqlText = ''): Bound {
-  return declareBound({
-    candidateKeys: work.keys,
-    nativeRows: work.rows,
-    identityMetadataRows: 0,
-    emptySeeks: work.emptySeeks,
-    nativePoints: work.points,
-    witnessKeys: work.witnesses,
-    statements,
-    bytes: work.bytes + sql(sqlText),
-    engineRequests: 0,
-  });
-}
-
-function accessLeaf(
-  operation: Parameters<typeof accessNativeDeclaration>[0],
-  sqlText: string,
-  input: unknown,
-  shape: Parameters<typeof accessNativeDeclaration>[2],
-  statements = 1,
-): Bound {
-  return fromAccess(accessNativeDeclaration(operation, input, shape).bound, statements, sqlText);
-}
-
-const accessMembers = ACTOR_MEMBERS;
-function accessGroups() {
-  return memoizedValue(accessGroups, () => accessMembers * MEMBERSHIP_LIMIT);
-}
-function accessRoles() {
-  return memoizedValue(accessRoles, () => accessGroups() * 2);
-}
-const accessFormulaInput = {
-  route: 65535,
-  action: 'collection:update',
-  resource_ids: [uuid],
-  actor_id: uuid,
-  principal_id: uuid,
-  deadline: timestamp,
-};
 function accessPreparation() {
   return memoizedValue(accessPreparation, () =>
     sumBounds(
-      accessLeaf('time', permissionTime.sql, { at: timestamp }, {}, 1),
-      accessLeaf('account-state', accountRead.sql, actorAccount, { targets: 1 }, 1),
-      accessLeaf(
-        'inverse',
-        permissionInverse.sql,
-        { ...actorAccount, members: Array.from({ length: accessMembers }, () => actorAccount) },
-        { members: accessMembers, groups: MEMBERSHIP_LIMIT },
-        accessMembers,
-      ),
-      accessLeaf(
-        'assignment',
-        permissionAssignment.sql,
-        { route: 65535, principal_id: uuid, request_id: uuid, actor_id: uuid, at: timestamp },
-        {},
-        1,
-      ),
-      accessLeaf(
-        'membership',
-        permissionMembership.sql,
-        {
-          route: 65535,
-          organization_id: uuid,
-          member_id: uuid,
-          at: timestamp,
-          pairs: Array.from({ length: MEMBERSHIP_LIMIT }, () => ({
-            route: 65535,
-            organization_id: uuid,
-            member_id: uuid,
-          })),
-        },
-        { groups: MEMBERSHIP_LIMIT },
-        1,
-      ),
-      accessLeaf(
-        'membership',
-        permissionMembership.sql,
-        {
-          pairs: Array.from({ length: MEMBERSHIP_LIMIT }, () => ({ realmId: uuid, accountId: uuid })),
-          at: timestamp,
-        },
-        { groups: MEMBERSHIP_LIMIT },
-        1,
-      ),
-      accessLeaf(
-        'candidates',
-        permissionCandidates.sql,
-        accessFormulaInput,
-        {
-          targets: 1,
-          members: accessMembers,
-          roles: accessRoles(),
-          grantRoles: ACCESS_GRANT_ROLES,
-          explicit: true,
-          global: true,
-          assignment: true,
-        },
-        1,
-      ),
-      accessLeaf(
-        'formula',
-        permissionCheck.sql,
-        accessFormulaInput,
-        {
-          targets: 1,
-          members: accessMembers,
-          roles: accessRoles(),
-          grantRoles: ACCESS_GRANT_ROLES,
-          explicit: true,
-          global: true,
-          assignment: true,
-        },
-        1,
-      ),
+      declareBound(collectionAuthorizationPreparationWork()),
       query(collectionAuthorization.sql, bindParent, uuidBytes + 7 + 7 + 7 + 16 + 5, {
         candidateKeys: 1,
         nativeRows: 1,
         nativePoints: 1,
         emptySeeks: 1,
       }),
-      sumBounds(
-        ...['BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY', 'COMMIT', 'ROLLBACK'].map((text) =>
-          dimensions({ statements: 1, bytes: sql(text) }),
-        ),
-        dimensions({ nativePoints: 2, emptySeeks: 2 }),
-      ),
     ),
   );
 }
@@ -1354,7 +1229,7 @@ export function COLLECTION_ORDER_DECLARATION() {
         occurrenceHistoryEventsPerRewrite: 0,
         commandHistoryWrites: 0,
         receiptKeyCandidates: RECEIPT_KEY_CANDIDATES,
-        accessMemberships: MEMBERSHIP_LIMIT,
+        accessMemberships: COLLECTION_AUTHORIZATION_MEMBERSHIPS,
       }),
       terms: Object.freeze({
         barrier: barrierCeiling(),

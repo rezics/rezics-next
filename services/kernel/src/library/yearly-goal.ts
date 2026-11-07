@@ -4,8 +4,9 @@ import { deadlineClient, within } from '../access/authenticate.ts';
 import type { KernelClock } from '../clock.ts';
 import type { CommandResult } from '../command/command.ts';
 import { withConnection } from '../database/pool.ts';
-import { ProblemError } from '../http/problem.ts';
-import { AuthenticationError, type Access, type Actor } from '../request/access.ts';
+import { ProblemError } from '../http/problem-error.ts';
+import { AuthenticationError } from '../request/authentication-error.ts';
+import { type Access, type Actor } from '../request/access.ts';
 import { routeOf } from '../route/route.ts';
 import { createLibraryCommandRunner } from './command-support.ts';
 

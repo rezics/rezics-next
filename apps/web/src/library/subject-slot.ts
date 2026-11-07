@@ -1,7 +1,7 @@
 import type { LibraryRestoreReceipt, LibraryRestoreResult } from './entries-read';
 import type { KernelClient } from '@rezics/client';
 import { m } from '../paraglide/messages.js';
-import { isPlatformClosedError } from '../kernel/platform-closed';
+import { isPlatformClosedError } from '../session/reading-policy';
 import { configured, type SessionEnv } from '../session/client';
 import { cookie, SESSION_COOKIE, validId } from '../session/cookies';
 import { type LibraryEntryStateWrite } from './entries-read';

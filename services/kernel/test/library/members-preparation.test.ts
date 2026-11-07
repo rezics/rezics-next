@@ -1,4 +1,4 @@
-import { ProblemError } from '../../src/http/problem.ts';
+import { ProblemError } from '../../src/http/problem-error.ts';
 import { newId } from '../../src/route/route.ts';
 import { preparationBasis } from '../../src/library/members-preparation.ts';
 import { afterAll, beforeAll, expect, test } from 'bun:test';

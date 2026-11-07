@@ -79,12 +79,14 @@ test('installed readers alone manage Recent and History through native settlemen
   const saved = new Map(Object.keys(globals).map((key) => [key, Object.getOwnPropertyDescriptor(globalThis, key)]));
   for (const [key, value] of Object.entries(globals))
     Object.defineProperty(globalThis, key, { configurable: true, value });
-  const [{ useRecentHistory }, { RecentPanel }, { RecentHistoryView }, { m }] = await Promise.all([
-    import('../src/search/recent-history-hook'),
-    import('../src/search/recent-panel'),
-    import('../src/search/recent'),
-    import('../src/paraglide/messages.js'),
-  ]);
+  const [{ useRecentHistory }, { RecentPanel }, { RecentHistoryView }, { m }, { RecentSearchBinding }] =
+    await Promise.all([
+      import('../src/search/recent-history-hook'),
+      import('../src/search/recent-panel'),
+      import('../src/search/recent'),
+      import('../src/paraglide/messages.js'),
+      import('../src/session/recent-search-binding'),
+    ]);
   const client = new QueryClient();
   const session = (subject = account, csrfToken = 'first') =>
     client.setQueryData(['session'], {
@@ -111,8 +113,10 @@ test('installed readers alone manage Recent and History through native settlemen
       root.render(
         <StrictMode>
           <QueryClientProvider client={client}>
-            <Reader full={false} />
-            <Reader full />
+            <RecentSearchBinding>
+              <Reader full={false} />
+              <Reader full />
+            </RecentSearchBinding>
           </QueryClientProvider>
         </StrictMode>,
       ),

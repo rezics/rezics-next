@@ -4,6 +4,7 @@ import { act, createElement, StrictMode, useReducer } from 'react';
 import definitions from '../src/kernel/recorded/definitions-release.json';
 import type { PersonalLibraryEntry } from '../src/library/entries-read';
 import type { Release } from '../src/subject/definitions';
+import { performanceAmbientTree } from './performance-ambient';
 
 // Source regression inputs at HTTP, not a native positive recording or a replacement mutation adapter.
 test('the selected shelf reviews a persisted native status operation, confirms it deliberately, and recovers authoritative outcomes', async () => {

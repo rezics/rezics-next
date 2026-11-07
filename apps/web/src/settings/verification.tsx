@@ -5,45 +5,44 @@ import { Button } from '@rezics/ui/shadcn/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@rezics/ui/shadcn/card';
 import { Field, FieldDescription, FieldGroup, FieldLabel } from '@rezics/ui/shadcn/field';
 import { Textarea } from '@rezics/ui/shadcn/textarea';
-import { personalRead } from '../kernel/query';
-import { useOperation } from '../kernel/exposure';
 import { m } from '../paraglide/messages.js';
 import { getLocale } from '../paraglide/runtime.js';
-import { subjectHref } from '../subject/subject-href';
-import { useSession } from '../session/query';
+import {
+  productionSettingsShellPort,
+  useSettingsOperation,
+  useSettingsSession,
+  useSettingsShell,
+} from './adapters/shell';
 import {
   unwrapVerificationRead,
   type AgentVerificationRequest,
   type VerificationFailure,
   type VerificationInput,
-} from './verification-core';
+  type VerificationRecoveryIO,
+  type VerificationSnapshot,
+} from './contract/verification';
 import { usePreferenceRetry } from './preference-failure-retry';
 import { useSettingsNavigationDraft } from './reading-navigation';
 import { verificationNeedsNavigationDecision } from './settings-draft-state';
-import { VerificationSubjectChooser, type Search as SubjectSearch } from './verification-subject-chooser';
+import { VerificationSubjectChooser, useVerification } from './adapters/verification-view.tsx';
 import { VerificationLinks, verificationIssueMessage, type VerificationLinkRow } from './verification-links';
+import { validateVerificationDraft, verificationCharacterCount, type VerificationIssue } from './core/verification';
 import {
-  validateVerificationDraft,
-  verificationCharacterCount,
-  type VerificationIssue,
-} from './verification-validation';
-import {
-  VerificationRecovery,
   canRequestVerification,
   canRetryVerification,
   canWithdrawVerification,
   verificationQueryKey,
   verificationWithdrawalObservation,
-  type VerificationSnapshot,
-  type VerificationRecoveryIO,
-} from './verification-recovery';
+  type VerificationRecovery,
+} from './application/verification';
 import {
   readVerificationState,
   readVerificationSubjectTitle,
   requestVerificationAction,
-  searchVerificationSubjects,
   withdrawVerificationAction,
 } from './verification-actions';
+import { useSettingsAmbient } from './adapters/ambient-view.tsx';
+import type { SettingsAmbient } from './ports/ambient';
 import { withVerificationDeadline } from './verification-request-deadline';
 
 import {
@@ -54,8 +53,6 @@ import {
   useSettingsDisposal,
 } from './settings-session-owner';
 
-/** The chooser's native transport is supplied here, so chooser tests never replace the server actions module. */
-const searchSubjects: SubjectSearch = (query, signal) => searchVerificationSubjects({ data: { query }, signal });
 const verificationActionClassName =
   'h-auto min-h-11 min-w-11 w-full max-w-full py-2 whitespace-normal [overflow-wrap:anywhere] sm:w-auto';
 const verificationSummaryClassName =
@@ -107,11 +104,13 @@ function VerificationState({
   verification: AgentVerificationRequest | null;
   subjectTitle: string | null;
 }) {
+  const { subjectHref } = useSettingsShell();
   const accountId = verification?.accountId;
   const subjectId = verification?.catalogueSubjectId;
   const locale = getLocale();
   const titleKey = JSON.stringify([accountId, subjectId, locale]);
   const [hydrated, setHydrated] = useState<{ key: string; title: string | null } | null>(null);
+  const ambient = useSettingsAmbient();
   useEffect(() => {
     if (!accountId || !subjectId || suppliedTitle) return;
     const request = new AbortController();
@@ -122,13 +121,14 @@ function VerificationState({
           signal,
         }),
       request.signal,
+      ambient.timer,
     )
       .then((title) => {
         if (!request.signal.aborted) setHydrated({ key: titleKey, title });
       })
       .catch(() => {});
     return () => request.abort();
-  }, [accountId, subjectId, locale, suppliedTitle, titleKey]);
+  }, [accountId, ambient.timer, subjectId, locale, suppliedTitle, titleKey]);
   const subjectTitle = suppliedTitle ?? (hydrated?.key === titleKey ? hydrated.title : null);
   if (!verification) return null;
   if (verification.state === 'pending')
@@ -169,8 +169,8 @@ function VerificationState({
 }
 
 export function VerificationSection() {
-  const { state, csrfToken, subject } = useSession();
-  const admitted = useOperation('agent_verification.request');
+  const { state, csrfToken, subject } = useSettingsSession();
+  const admitted = useSettingsOperation('agent_verification.request');
   if (!admitted || state !== 'signed-in' || !subject) return null;
   return <ViewerVerification key={JSON.stringify([subject, csrfToken])} accountId={subject} csrfToken={csrfToken} />;
 }
@@ -179,6 +179,7 @@ export function VerificationSection() {
 export function verificationRecoveryIO(
   owner: SettingsSessionOwner,
   client: QueryClient,
+  ambient: SettingsAmbient,
   transport = {
     read: (accountId: string, signal?: AbortSignal) =>
       readVerificationState({ data: { accountId }, ...(signal ? { signal } : {}) }).then((result) =>
@@ -230,13 +231,14 @@ export function verificationRecoveryIO(
         await client.cancelQueries({ queryKey: key, exact: true });
         if (!isCurrent()) throw new Error('Settings viewer changed');
         return client.fetchQuery({
-          ...personalRead,
+          ...productionSettingsShellPort.personalRead,
           queryKey: key,
           queryFn: ({ signal }) =>
             readGuard(async () => {
               const result = await withVerificationDeadline(
                 (child) => transport.read(accountId, child),
                 AbortSignal.any([signal, scope(caller)]),
+                ambient.timer,
               );
               if (
                 result.accountId !== owner.subject ||
@@ -252,28 +254,37 @@ export function verificationRecoveryIO(
     request: (accountId, input, caller) =>
       guard((token) => {
         if (accountId !== owner.subject) throw new Error('Verification account changed');
-        return withVerificationDeadline((signal) => transport.request(accountId, input, token, signal), scope(caller));
+        return withVerificationDeadline(
+          (signal) => transport.request(accountId, input, token, signal),
+          scope(caller),
+          ambient.timer,
+        );
       }),
     withdraw: (accountId, input, caller) =>
       guard((token) => {
         if (accountId !== owner.subject) throw new Error('Verification account changed');
-        return withVerificationDeadline((signal) => transport.withdraw(accountId, input, token, signal), scope(caller));
+        return withVerificationDeadline(
+          (signal) => transport.withdraw(accountId, input, token, signal),
+          scope(caller),
+          ambient.timer,
+        );
       }),
   };
 }
 
 function ViewerVerification({ accountId, csrfToken }: { accountId: string; csrfToken: string | null }) {
   const queryClient = useQueryClient();
+  const ambient = useSettingsAmbient();
   const owner = useSettingsSessionOwner(csrfToken, accountId)!;
   const isCurrent = useSettingsLiveness(owner.readCurrent);
-  const [controller] = useState(
-    () =>
-      new VerificationRecovery(
-        accountId,
-        verificationRecoveryIO(owner, queryClient, undefined, isCurrent),
-        isCurrent,
-        () => isCurrent() && owner.isCurrent(),
-      ),
+  const verification = useVerification();
+  const [controller] = useState(() =>
+    verification.application.recover(
+      accountId,
+      verificationRecoveryIO(owner, queryClient, ambient, undefined, isCurrent),
+      isCurrent,
+      () => isCurrent() && owner.isCurrent(),
+    ),
   );
   const dispose = useCallback(() => controller.deactivate(), [controller]);
   useSettingsDisposal(dispose);
@@ -313,6 +324,7 @@ export function VerificationCard({
   // Capture the genuine label in the action handler, before a send clears current status or the draft changes.
   const [action, setAction] = useState<{ kind: 'request' | 'withdraw'; subject: string } | null>(null);
   const [acknowledged, setAcknowledged] = useState<Omit<VerificationInput, 'idempotencyKey'> | null>(null);
+  const verificationCapability = useVerification();
   const isCurrent = useSettingsReadCurrent(csrfToken, true);
   const pending = state.phase === 'sending' || state.phase === 'reading';
   const commandWaiting = usePreferenceRetry(state.failure, state.commandRetryAt);
@@ -481,13 +493,14 @@ export function VerificationCard({
             ) : null}
             <FieldGroup>
               <VerificationSubjectChooser
+                owner={verificationCapability.ownerKey(controller.accountId, csrfToken)}
                 selected={selected}
                 onSelect={(subject) => {
                   setSelected(subject);
                   setConfirmation(null);
                 }}
                 disabled={pending || !csrfToken}
-                search={searchSubjects}
+                search={verificationCapability.search}
               />
               <Field data-invalid={errors.has(`${id}-statement`)}>
                 <FieldLabel htmlFor={`${id}-statement`}>{m.settings_verification_statement()}</FieldLabel>

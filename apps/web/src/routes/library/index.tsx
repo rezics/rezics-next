@@ -17,6 +17,7 @@ import type { SessionEnv } from '../../session/client';
 import { shelfAddressIssues, shelfCursor, validateShelfSearch } from '../../library/shelf-params';
 import { LibraryPresentationBoundary } from '../../library/shelf-preferences-current';
 import { readCurrentShelfPreferences } from '../../settings/shelf-preferences-current';
+import type { ShelfPreferenceSnapshot } from '../../library/settings-adapter';
 import { m } from '../../paraglide/messages.js';
 import { getLocale } from '../../paraglide/runtime.js';
 
@@ -169,7 +170,7 @@ export const Route = createFileRoute('/library/')({
               labelResult: deps.labelResult,
             },
           }),
-          readCurrentShelfPreferences(),
+          readCurrentShelfPreferences() as Promise<ShelfPreferenceSnapshot>,
         ]);
         if ('sessionUnavailable' in page && page.sessionUnavailable) throw new SessionUnavailableError();
         return { ...page, shelfSnapshot };
@@ -181,7 +182,7 @@ export const Route = createFileRoute('/library/')({
         ...(deps.orderBy ? { orderBy: deps.orderBy } : {}),
         ...(deps.direction ? { direction: deps.direction } : {}),
       };
-      const shelfSnapshot = await readCurrentShelfPreferences();
+      const shelfSnapshot: ShelfPreferenceSnapshot = await readCurrentShelfPreferences();
       const resolved = resolveShelfPresentation(requested, shelfSnapshot.shelf ?? undefined);
       const page = await readPersonalLibraryCurrent({
         data: {

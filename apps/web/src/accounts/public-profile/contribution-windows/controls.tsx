@@ -2,16 +2,18 @@ import { Link } from '@tanstack/react-router';
 import { useLayoutEffect } from 'react';
 import type { MouseEvent as ReactMouseEvent } from 'react';
 import { m } from '../../../paraglide/messages.js';
+import type {
+  ContributionControlsInput,
+  ContributionCoordinate,
+  ContributionWindowAction,
+  ContributionWindowOwner,
+} from '../../../features/pages/account-profile-port';
 import { useContributionWindowRoute } from './route';
 import {
   beginContributionWindowMove,
   consumeContributionWindowFocus,
   contributionWindowSnapshot,
   retryContributionWindow,
-  type ContributionCoordinate,
-  type ContributionWindowAction,
-  type ContributionWindowOutcome,
-  type ContributionWindowOwner,
 } from './state';
 
 const controlClass =
@@ -66,15 +68,7 @@ export function ContributionWindowControls({
   failure,
   title,
   region,
-}: {
-  owner: ContributionWindowOwner;
-  cursor: ContributionCoordinate;
-  next: string | null;
-  outcome: ContributionWindowOutcome;
-  failure?: 'denied' | 'preparing' | 'unavailable' | 'invalid-cursor';
-  title: string;
-  region: { current: HTMLElement | null };
-}) {
+}: ContributionControlsInput) {
   const route = useContributionWindowRoute();
   const href = route ? `${route.pathname}${route.search}${route.hash}` : '';
   const destination = (target: ContributionCoordinate) =>

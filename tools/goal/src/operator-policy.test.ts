@@ -15,13 +15,13 @@ test('local integration, lane, lease and verifier overrides retain omitted defau
       integration: { affectedTransportAttempts: 1 },
       controlPlane: { devLeaseWaitMs: 31000, testTimeoutMs: 17 },
       leases: { acquisitionAttempts: 1 },
-      verifier: { concurrency: 1, existingProbes: 1, findingAssertions: 1 },
+      verifier: { concurrency: 1, roundIntervalMs: 3600000, findingAssertions: 1 },
     };
     writeFileSync(h.settings.localFile, JSON.stringify(local));
     const policy = checkSettings({ cwd: h.root, env: {} }).policy!;
     expect(policy.integration.affectedTransportAttempts).toBe(1);
     expect(policy.controlPlane.checkTimeoutMs).toBe(600000);
-    expect(policy.verifier).toMatchObject({ concurrency: 1, existingProbes: 1, findingAssertions: 1 });
+    expect(policy.verifier).toMatchObject({ concurrency: 1, roundIntervalMs: 3600000, findingAssertions: 1 });
     expect(controlPlaneChecks(policy.controlPlane).at(-1)).toEqual([
       'bun',
       'test',

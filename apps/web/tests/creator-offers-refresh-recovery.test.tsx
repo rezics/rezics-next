@@ -64,6 +64,7 @@ const { createMemoryHistory, createRootRoute, createRouter, RouterContextProvide
 const { viewerExposureLifetime, viewerExposureQuery } = await import('../src/kernel/viewer-exposure');
 const { sessionQuery } = await import('../src/session/query');
 const offers = await import('../src/checkout/creator-offers');
+const readBindings = await import('../src/routes/-creator-offer-read');
 const { CreatorOffersCurrent, CreatorOfferEditorCurrent } = await import('../src/checkout/creator-offers-current');
 const { m } = await import('../src/paraglide/messages.js');
 const { setLocale } = await import('../src/paraglide/runtime.js');
@@ -164,12 +165,12 @@ async function mount() {
     work: ReturnType<typeof deferred<CreatorOfferResult>>;
   }[] = [];
   const spies = [
-    spyOn(offers, 'readCreatorOffersCurrent').mockImplementation(() => {
+    spyOn(readBindings.creatorOfferReaders, 'list').mockImplementation(() => {
       const work = deferred<CreatorOffersCurrentRead>();
       listReads.push(work);
       return work.promise;
     }),
-    spyOn(offers, 'readCreatorOfferEditorCurrent').mockImplementation(() => {
+    spyOn(readBindings.creatorOfferReaders, 'editor').mockImplementation(() => {
       const work = deferred<CreatorEditorCurrentRead>();
       editorReads.push(work);
       return work.promise;
@@ -193,9 +194,19 @@ async function mount() {
           <QueryClientProvider client={client}>
             <RouterContextProvider router={router}>
               {mode === 'list' ? (
-                <CreatorOffersCurrent initial={list()} locale="en" cursor={cursor} />
+                <CreatorOffersCurrent
+                  readers={readBindings.creatorOfferReaders}
+                  initial={list()}
+                  locale="en"
+                  cursor={cursor}
+                />
               ) : (
-                <CreatorOfferEditorCurrent initial={editor()} locale="en" contentEditionId={cursor ?? editionId} />
+                <CreatorOfferEditorCurrent
+                  readers={readBindings.creatorOfferReaders}
+                  initial={editor()}
+                  locale="en"
+                  contentEditionId={cursor ?? editionId}
+                />
               )}
             </RouterContextProvider>
           </QueryClientProvider>

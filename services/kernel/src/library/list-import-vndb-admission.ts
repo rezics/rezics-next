@@ -1,5 +1,5 @@
 import type { CommandTransaction } from '../command/command.ts';
-import { ProblemError } from '../http/problem.ts';
+import { ProblemError } from '../http/problem-error.ts';
 import type { LibraryProfileAnchor, LibraryProfileSource } from './profile-source.ts';
 
 export type VndbEntryReview = { uploadId: string; ordinal: number; reviewId: string; source: string };

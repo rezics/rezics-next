@@ -13,6 +13,7 @@ mock.module('cloudflare:workers', () => ({ env: {} }));
 mock.module('@tanstack/react-start', () => start);
 mock.module('@tanstack/react-start/server', () => start);
 const { GameReader } = await import('../src/features/catalogue/game-reader/view');
+const { isolatedWorkReading } = await import('../src/features/catalogue/work-reading-port');
 const { m } = await import('../src/paraglide/messages.js');
 
 async function ui() {
@@ -44,7 +45,13 @@ async function ui() {
   client.setQueryData(['session'], { state: 'signed-out' });
   const render = async (props: Parameters<typeof GameReader>[0]) => {
     await act(async () => {
-      root.render(createElement(QueryClientProvider, { client }, createElement(GameReader, props)));
+      root.render(
+        createElement(
+          QueryClientProvider,
+          { client },
+          createElement(GameReader, { ...props, reading: isolatedWorkReading }),
+        ),
+      );
     });
   };
   const click = async (label: string) => {

@@ -1,7 +1,9 @@
 import { describe, expect, test } from 'bun:test';
 import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { HeaderSearch, HeaderSearchView } from '../src/search/header-search/header-search';
+import { RecentSearchBinding } from '../src/session/recent-search-binding';
 import { headerSearchAction, removesHeaderScope } from '../src/search/header-search/authority';
 import {
   initialHeaderSearchState,
@@ -361,7 +363,13 @@ test('retains named facet values and sort, while dropping the cursor on a change
 });
 
 test('the real controller server-renders one native GET query input and no extra action', () => {
-  const markup = renderToStaticMarkup(createElement(HeaderSearch, { locale: 'en', slots: { ask: null } }));
+  const markup = renderToStaticMarkup(
+    createElement(
+      QueryClientProvider,
+      { client: new QueryClient() },
+      createElement(RecentSearchBinding, null, createElement(HeaderSearch, { locale: 'en', slots: { ask: null } })),
+    ),
+  );
   expect(inputCount(markup)).toBe(1);
   expect(markup).toContain('name="q"');
   expect(markup).toContain('method="get" action="/en/search"');

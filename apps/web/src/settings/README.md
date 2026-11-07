@@ -1,6 +1,28 @@
 # Settings
 
+**Decision:** Settings consumes session observation, exposure admission, heading, appearance and subject addresses through a consumer-owned shell port. AppShell binds AppearanceControls, PageHeading, subjectHref and exposure. The adapter binds `sessionQuery` and `useSession` from the session public entry (`session/index.ts`); it does not import shell or kernel leaves. One `adapters/shell.ts` owns that binding and the React provider; a same-basename `.tsx` is not kept because both emit `shell.js`. Platform-closed, session-unavailable, personal-read and heading classifiers are Settings vocabulary. Auth management hrefs live beside trusted issuer URLs. AppearanceControls and subjectHref stay shell/subject leaves rather than new web-app public entries. The installed session query key remains `['session']`. Fewest tests: pin port identity, the public session bindings, bound appearance and the existing display HTML; wrap isolated display renders with the composed port; no extra stories.
+
+**Decision:** Settings recovery consumes explicit `SettingsAmbient` (`now`, `id`, `timer`). `Date.now`, `crypto.randomUUID` and `setTimeout` live only in the named browser/server adapters; root composition binds `createPerformanceAmbient()`. Recovery, retry admission, draft lifetimes and command creation take the capability or an observation. Constructors have no ambient fallback. Original-command identities, absolute Retry-After deadlines, current-reader retirement and deliberate retry stay unchanged. Existing focused suites pin this by passing the adapter; no extra stories. React providers live in `adapters/ambient-view.tsx` so Bun transpile does not collide with `adapters/ambient.ts`.
+
+**Cost:** One process-wide adapter. No extra native round-trips. Retry-After is still observed once as an absolute deadline; expiry enables deliberate recovery only.
+
+Eliminated ambient sites: Profile/avatar, Watches, verification, notifications, Reading/Shelf/Collection privacy, managed-account inventory/detail/actions/rename, and HTTP handlers (those bind `createServerSettingsAmbient` / `serverSettingsTimer`). Remaining adapter sites: `settings/adapters/ambient.ts` (clock, UUID, timer) and `settings/adapters/ambient-view.tsx` (route-bound provider).
+
 **Decision:** Collection privacy uses the existing private owner inventory and native `collection:update` advice; logical built-ins remain inspectable and read-only without a command revision.
+
+**Decision:** Settings consumes private Collection owner windows, privacy command/readback and Shelf type/default/column preferences through the typed Library port (`ports/library.ts`). Visibility, occurrence, frontier and preference vocabulary live in Library `settings-contract`; transport binds at `settings-adapter` and `adapters/library.ts`, presentation at `adapters/library-view.tsx`, composed from ordinary `/settings`. Exact failed cursors, independent command/read deadlines, drafts and acknowledged-original recovery stay on that port. Fewest tests: keep the existing Collection privacy and Shelf recovery suites and add one port-composition pin rather than a second suite.
+
+### Cost: private Collection owner window
+
+- Touches: one signed-in `GET /v1/collections?curatorAccountId&ownerManagement=true&limit=20` with the exact opaque cursor. Nested Library work is the owner inventory page plus native `collection:update` advice on each returned row. Dynamic titles use the existing Collection title helper; there is no member, pin or Shelf scan.
+- Bound: one 20-row window; the first occurrence of a Collection ID wins; a successful page replaces the retained rows. Retry repeats the exact failed cursor; Restart is cursor-free. One controller keeps one accepted page, one failed request and independent row command/read deadlines.
+- Growth check: focused Collection privacy suites pin retained rows, exact failed cursors and released callbacks. Native examined-row evidence stays with Library Collection directory growth; Settings does not add a Settings-owned SQL suite.
+
+### Cost: Collection privacy command and current readback
+
+- Touches: one `PATCH /v1/collections/{id}?ownerManagement=true` of the frozen original visibility, revision, credential and idempotency key, then one independent FULL owner GET for current readback. Nested Library work is the Collection update and point read.
+- Bound: one unresolved original; later drafts cannot rewrite it. Command and current-read each use the existing ten-second deadline and their own Retry-After. A validated receipt stays acknowledged through a failed current read.
+- Growth check: existing Collection privacy recovery suites. Native Collection update/point examined-row evidence stays with Library.
 
 **Decision:** Within each native page, the first row for a Collection ID wins; every successful page replaces the current 20-row window.
 
@@ -72,9 +94,7 @@ Applicant verification requests use the same ten-second account budget, includin
 
 **Decision:** Pin the combined Settings safety→subject request→revisit→withdraw→safety walk in the existing named suites. Keep current-status, recovery and safety stories. Native, browser and root acceptance stay deferred until that seeded walk passes under existing Auth-app login and admission.
 
-**Decision:** Applicant verification is proven by the existing recovery, chooser and journey checks plus one setup-envelope and receipt-without-retry assertion; named current-status and recovery stories stay, with no extra stories.
-
-**Decision:** The subject chooser receives its native search transport from the verification card, so no Settings test replaces the verification actions module; the recovery cases run the real installed action exports in the same `bun test` process as the chooser.
+**Decision:** Applicant verification is a typed application over supplied status, request, withdrawal, eligibility, title and suggestion operations. Contract/core own draft, identity, recovery and current-term selection; adapters own native faults. Recovery and subject search require SettingsAmbient (`now`, `id`, `timer`) with no constructor fallback. React mounts it via an explicit Settings-bound capability; Search retry is Settings-owned vocabulary, not a private Search import. Native transport stays in `adapters/verification.ts`; React capability binding and the subject chooser live in `adapters/verification-view.tsx` so landing transpile cannot emit both to the same `.js` path. The chooser still receives search from the card; recovery still runs real action exports. Existing suites plus one composition pin; named stories stay.
 
 ### Cost: session preparation
 
@@ -262,6 +282,12 @@ new choices; absent saved overrides remain visible and removable within the exis
 The editor keeps eight predecessor coordinates and one staged target, never historical rows, labels or counts.
 Existing Save, uncertain original custody and the single Stay/Leave owner remain unchanged.
 
+### Cost: Shelf type defaults discovery
+
+- Touches: one private Library type-index GET at limit 20 with the exact cursor, plus the existing optional label batch for that page. Settings does not read counts, historical type rows or a shared QueryClient cache.
+- Bound: one current 20-row DTO, eight predecessor coordinates, one staged target. Previous, Next, First and exact Retry are view operations; they never edit a layout, draft or original command.
+- Growth check: existing Shelf type-defaults recovery and type-window suites. Nested native type-index work stays with Library; Settings reports request and retained-coordinate bounds only.
+
 ## Account safety
 
 Managed detail captures Retry-After at response receipt in its immutable viewer/target reader. The longest observed
@@ -342,3 +368,81 @@ The Account card reads the current identity from the managed session and keeps r
 - Touches: one rename region keeps one loading snapshot, the current context or bounded failures, and one absolute Retry-After. Directory selection remains the existing 20-row feeds with eight predecessor coordinates.
 - Bound: sequential visits replace that snapshot; retired viewers drop destination hrefs and ignore late module loads. Verification status, suggestions and commands are independent endpoints and independent deadlines.
 - Growth check: focused region, link and card suites pin call counts, retained identity and released callbacks. Native SQL growth stays with Accounts and Auth.
+
+## Composed account capabilities
+
+**Decision:** Settings owns `ports/accounts.ts`: exact-account Profile destination, managed action/detail reads,
+rename navigation, current session observation and deliberate session recovery. `adapters/accounts.ts` owns the native
+management/viewer-actions requests, cookie-viewer binding and server-function envelopes. `adapters/accounts-browser.tsx`
+binds those operations and observes the installed session query through the Settings shell port. Ordinary Settings route composition supplies Accounts'
+`profile-editor/address.ts` destination. Settings and Inbox have no dependency on Accounts page or request implementations;
+web-performance no longer declares web-accounts as a dependency.
+
+`managed-account-vocabulary.ts` owns action names and availability; `managed-account-contract.ts` owns detail wire
+validation; `managed-account-projection.ts` projects native management advice through a supplied destination resolver;
+`managed-account-failure.ts` classifies failure values. Neither action nor detail reader imports the other. This removes
+both recorded value-cycle edges and splits their two-file SCC into individual files. Native management GET remains the
+only source of Auth action admission/navigation. Profile entry still requires its independent exact-resource operation
+observation; identity, role, selection and a deployed destination never manufacture authority.
+
+The session source supplies stable snapshots and removal events, without credentials. Viewer, immutable target, token
+or client replacement permanently retires the original observation before retained callbacks or late responses can
+restore action advice. Retry preserves the original request and the longest observed endpoint deadline. Expiry enables
+deliberate recovery only. Rename and Safety consume the composed lazy read and refresh capabilities; their current-viewer
+checks fence module loading, dispatch and completion. Security/deletion remain fixed trusted-issuer handoffs.
+
+The shared Profile owner contract is `ports/profile-editor.ts`; presentation is `ports/profile-editor-view.ts`. Accounts'
+delegated journey consumes that narrow command/read contract and receives the actual cards and navigation from its route.
+Confirmation, immutable command custody, original retry, private advice preflight and current readback retain their
+existing owner semantics. Profile address construction is a separate leaf and does not load an editor.
+
+**Verification choice:** Extend the existing managed-session, managed-action/detail, rename and delegated Profile suites
+with composed-capability coverage, retain their behavior assertions and existing named stories, and add no story states.
+Worker landing runs the Web workspace typecheck, including both official programs, through the check wrapper. Integration
+owns runtime, native/browser walks, architecture counters and growth evidence; none is inferred from a fixture.
+
+Design sources: this README, Inbox and account-specific Profile editor READMEs, development verification, architecture,
+and the Web and migration-under-a-ratchet sections of the adopted architecture research. The shared reference index was
+consulted; this behavior-preserving migration needs no new external product decision.
+
+## Content capability boundary
+
+Settings receives Content behavior through the typed `SettingsContentPort` in `ports/content.ts`. Ordinary `/settings`
+route composition supplies `settingsContent` from `adapters/presentation.tsx`; existing server-function entrypoints bind
+the matching native adapter from `adapters/content.ts`. Settings readers and components do not import `media/kernel`,
+`threads/upload`, `threads/initials`, `threads/write-prompts` or `threads/thread-href`.
+
+The Profile avatar controller owns crop state, local preview, selection, upload stages and retry lifecycle. Content owns
+the native Media reservation, upload, resume and advice transport behind the public `threads/profile-avatar-upload.ts`
+entry. The only shared upload contract is the pure `threads/upload-vocabulary.ts` vocabulary for reservation intent,
+stage and response-wait callbacks, and refusal reason. `media/content-failure.ts` recognizes Content's `MediaProblem`
+inside Content and projects its status, problem and headers into Settings' failure contract without exposing the Content
+error class. Unknown errors retain the consumer's existing failure behavior.
+
+Settings retains the native/application decisions for avatar crop, upload and advice; editable Profile reads, drafts and
+saves; preferences and Collection privacy; managed-account reads, actions, detail and rename; verification; and Watches.
+Accounts and Kernel retain their current reads and commands. Content supplies avatar transport and media-failure
+recognition, plus shared identity formatting, sign-in prompt presentation and canonical thread URL construction. Native
+result envelopes, owner labels, media admission and upload lifecycle retain their current meaning.
+
+| Surface                 | Settings-owned work                                                              | Nested owner work                                                                                                                            |
+| ----------------------- | -------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------- |
+| Avatar                  | Crop choice, local preview, target ownership, retry and Profile draft/save       | Content reserves, uploads, resumes and reads advice through Media; Content projects `MediaProblem` at the boundary                           |
+| Editable Profile        | Current Profile projection, section draft, admission and original write/readback | Accounts and Kernel retain Profile and viewer-action endpoints; Content composes admitted avatar summaries and recognizes its media failures |
+| Preferences and privacy | Preferences, Collection privacy, current-page recovery and writes                | Existing Accounts/Kernel native reads and commands stay in their readers; Content contributes media-failure recognition                      |
+| Managed accounts        | Directory/detail reads, action admission, rename handoff and viewer retirement   | Accounts and Auth retain management and issuer-owned safety behavior; Content supplies shared identity formatting and failure projection     |
+| Verification            | Status, suggestions, Request/Withdraw admission and recovery                     | Existing Accounts/Kernel read and command contracts stay installed; Content contributes media-failure recognition                            |
+| Watches                 | Cursor pages, removal identity/revision and current native row                   | Content formats thread destinations with `threadLocation`; board paths remain Settings-localized                                             |
+
+**Decision:** Settings and Inbox own the Content ports; route composition binds Content adapters; only pure upload
+lifecycle and identity vocabulary is shared.
+
+**Boundary result:** Against this worktree's baseline, this migration removes 17 web-performance rule-2 records: 8
+`media/kernel`, 4 `threads/upload`, 2 `threads/initials`, 2 `threads/write-prompts` and 1 `threads/thread-href`.
+The remaining web-performance baseline has 43 records. The existing web-performance-to-web-content module edge is
+unchanged (module-edge delta 0); affected SCC and reachable import-closure deltas are both 0. No module cycle or
+baseline growth was introduced. Runtime/native/browser and growth evidence remains with the post-landing verifier.
+
+The receiving contracts remain pinned by the existing Profile avatar, editable Profile, Preferences, managed-account,
+verification, Watch and Inbox focused suites. Landing checks the Web workspace's two official TypeScript programs;
+native, browser, root and growth acceptance are deferred to integration.

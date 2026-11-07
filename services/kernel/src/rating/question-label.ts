@@ -4,18 +4,24 @@ import { ratingCapabilities } from './adapters/ambient.ts';
 import { createHash } from 'node:crypto';
 import canonicalize from 'canonicalize';
 import type { Pool } from 'pg';
-import { readPublicIdentities, type PublicIdentity } from '../access/account-data.ts';
-import { deadlineClient } from '../access/authenticate.ts';
-import { GrantDeniedError } from '../access/grant-commands.ts';
+import {
+  readPublicIdentities,
+  type PublicIdentity,
+  deadlineClient,
+  GrantDeniedError,
+  resourceAuthorization,
+  withReadTransaction,
+} from './dependencies.ts';
+
 import { CommandUnavailableError } from '../access/unavailable.ts';
-import { resourceAuthorization } from '../access/index.ts';
+
 import type { KernelClock } from '../clock.ts';
 import realmRead from '../community/realm-read.sql';
 import { partitionReadClientObservation } from '../database/read-snapshot.ts';
-import { ProblemError } from '../http/problem.ts';
+import { ProblemError } from '../http/problem-error.ts';
 import type { Access, Actor } from '../request/access.ts';
 import { partitionOf, routeOf } from '../route/route.ts';
-import { withReadTransaction } from '../semantic/read.ts';
+
 import { decodeCursor, encodeCursor, type CursorBinding } from '../tokens/cursor.ts';
 import type { KeyRing } from '../tokens/seal.ts';
 import type { Partition } from '../partition/partition.ts';

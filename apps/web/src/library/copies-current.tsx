@@ -1,9 +1,9 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
 import { CancelledError, useQuery, useQueryClient } from '@tanstack/react-query';
 import { SessionRecoveryPage } from '../session';
-import { useSession } from '../session/query';
+import { useSession } from './application';
 import { useLibraryWorkspaceAdmission } from './library-workspace-admission';
-import { personalRead } from '../kernel/query';
+import { personalRead } from '../session/reading-policy';
 import { m } from '../paraglide/messages.js';
 import type { Locale } from '../paraglide/runtime.js';
 import { CopiesPage, type CopiesOrigin } from './copies-page';

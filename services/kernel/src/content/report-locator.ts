@@ -1,7 +1,7 @@
 import type { Pool } from 'pg';
 import { Value } from 'typebox/value';
 import { noEffect, runCommand } from '../command/command.ts';
-import { recordLateErasureItem, resolveLateErasureItem } from '../access/erasure.ts';
+import { recordLateErasureItem, resolveLateErasureItem } from './access-port.ts';
 import { withConnection } from '../database/pool.ts';
 import type { Effect } from '../events/effects.ts';
 import { readPartition } from '../partition/partition.ts';

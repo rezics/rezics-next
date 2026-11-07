@@ -1,8 +1,33 @@
 # Library
 
+Decision: Collection directory/list/order authorization consumes Library `AuthorizationCapability.specializeCollectionList` and Access's funded collection-update preparation bound. Access adapters own the catalogue residual, permission SQL and inverse membership limit (1000); Library directory SQL binds only the admitted curator/public parameter map. Collection mutation and Progress descriptors stay independent. Fewest tests: owner/public/unavailable list outcomes, preparation memberships, directory public-floor bytes, unchanged order/read assertions.
+
+Decision: native Collection preparation consumes Library's `PreparationWorkCapability` and `ScopeWorkCapability`.
+`adapters/preparation-work.ts` specializes them to the original native transaction, locator and ledger. Default
+`composition/library.ts` binds Search's `adapters/library-preparation.ts`: it borrows the already registered worker
+Search runtime at dispatch and preserves Search's definition meter, Source receipts, ordered prefix and reduction.
+Library retains episode admission, before/after Source/Scope/owner checks, checkpoint persistence and conditional apply.
+The exact fixed upper frontier, contiguous ACK, captured-prefix recovery, retained cursor, terminal fences, parent,
+absolute deadline, Pool and complete inclusive work vector remain the original native contracts.
+
+`members-preparation-source-declaration.ts` owns the complete Library Source composite, including the original
+Search execution ceiling and producer-owned path multiplicities from `search/contract`. Search's former declaration
+entry preserves its callable path getter over that same schedule. The single Search contract manifest entry owns both
+execution operands and preparation vocabulary; default composition retains the native follow-count runtime. Saved-probe and closure limits are declaration leaves; publication bounds load neither
+the native Source reader nor closure acquisition. Retention SQL/control execution lives in
+`collection-retention-execution.ts`; its descriptor consumes Semantic's effect-free SQL reduction declaration and
+Shelf's statement descriptor. Both native producers use those same plans. Source client deadline wrapping uses the
+already composed Access capability. No additional Source registry, work plan, publisher or cost is introduced.
+
+Decision: Members Source paths use one memoized callable declaration, and Shelf maintenance reads statement-bound values through memoized accessors during use; these preserve path and cost identity without load-time cross-module reads.
+
+Acceptance choice: extend the existing native Source outcome test through default composed admission, and add one
+missing-worker-runtime case; preserve all existing outcome assertions. Workspace typing is worker acceptance;
+native growth, public Search settlement/discovery and default-worker runtime proof remain in the owning Goal walks.
+
 Decision: `collection-native-work.ts` is the mechanical NativeCollectionWork leaf (ProblemError from `http/problem-error.ts`). Access `access-capabilities.ts` re-exports that leaf and Kind input work/types only. Kind raw resolution stays on `collection-kind-input.ts`; composition binds it into Access native ports. Canonical Source sweep/repair stays on `collection-source-work.ts`.
 
-Decision: AniList/MAL list-import vote types consume Rating `VoteObservation` from `rating/index.ts`. Progress adoption classifies Access grant denial and unavailability through `resource-access-errors.ts` and `unavailable.ts`, keeping those error identities. Follow count reads keep Access `public-identity.ts`; public identity no longer value-imports Semantic `subject.ts` or `link-keys.ts`.
+Decision: AniList/MAL list-import vote types consume Rating `VoteObservation` from `rating/index.ts`. Progress adoption classifies Access grant denial and unavailability through `resource-access-errors.ts` and `unavailable.ts`, keeping those error identities. Follow count composition supplies Access `public-identity.ts` through the account producer; public identity no longer value-imports Semantic `subject.ts` or `link-keys.ts`.
 
 Decision: ordinary filtered Collection pages consume one immutable finite page plan; Library's native admission, SQL observation, receipts and refusal remain authoritative. Canonical generation repair uses one closed 9-axis plan.
 
@@ -10,8 +35,11 @@ Decision: an activated public Collection output is retained through its original
 
 The ordinary page formula is `c = min(600, 6L + 3)`: a fixed 64-row/16-point/16-witness/3-seek/12-statement/80-KiB term plus `c` repetitions of 16 rows, 8 points, 8 witnesses and 5,120 bytes. The fixed term includes initial/final Source preparation and currentness, identity and authority checks, and transaction controls; the per-candidate term includes canonical membership and negative/order work. The existing plan caps pages at three prefix rounds, 100 groups per prefix, 100 aliases per canonical group and six Source drivers. FULL adds at most 100 repetitions of its 32-row/2-identity-row/8-point/12-statement/64-KiB facts term. `engineRequests` is zero for this SQL-only Library plan; the adapter rejects a nonzero value rather than folding it into the older eight-axis SQL observer. `owner-filter-growth.test.ts` is the named growth oracle; this declaration does not claim native acceptance.
 
-transport-contract.ts owns the public Progress and Continue response schemas. Their wire/security metadata comes
-from the declarations composed by createKernel; native commands, currentness and disclosure remain Library-owned.
+Library contract owns Continue session and page vocabulary. `adapters/continue-page.ts` owns the closed Continue
+HTTP schema and the native Continue adapter Content binds at composition. The page schema stays a TypeBox object
+so Feed can compose `.properties`; the Continue list operation pins that object to the disclosed page. Progress session schemas remain on `transport-contract.ts`. Wire/security metadata comes from the declarations composed by createKernel; native
+commands, currentness and disclosure remain Library-owned. Semantic's disclosed Subject summary is attached on
+FULL views through Semantic's public summary schema, not a copied DTO.
 [Session operation contracts](performance-contract.md) own journal receipt identity and the native derivation boundary.
 
 Private [consumption statistics](../../../../docs/library-consumption-statistics.md) are mounted
@@ -94,37 +122,45 @@ slot, parallel reader, route, writer, score cache or GET repair is introduced.
 The manifest splits Library by layer. `kernel-library-contract` owns `library/contract/**`: work dimensions, actors,
 Source, membership, ordering, capability ports and application result types. Access, Platform, Search, Semantic,
 Content and Zones import those shapes from the contract entries, not from the Source runtime. `kernel-library-core`
-owns pure route/grant, page-plan, work-ledger, Source classification, membership accounting, identity-native matching
-and publication admission. `kernel-library-application` owns Source capture, owner-query, member preparation,
-publication admission, identity-native and Entry/progress use cases; they load without Access, Search, Semantic or
-Content and run with fake capabilities. Native SQL catalogs and foreign Access/Search/Semantic/Content adapters live
+owns pure route/grant, page-plan, work-ledger, Source classification, membership accounting, identity-native matching,
+publication admission, Collection history plans, retention disposition and Progress-operation bound arithmetic. `kernel-library-application` owns Source
+capture, owner-query, member preparation, publication admission, Collection mutations, identity-native,
+Entry/progress and funded Progress-operation planning/admission; they load without Access, Search, Semantic or Content and run with fake capabilities. Native SQL catalogs and foreign Access/Search/Semantic/Content adapters live
 in `library/adapters/**` and are bound only from `composition/library.ts`. `createKernelRuntimeDefaults`, the HTTP
-server and the worker call `composeLibraryDomain`. Compatibility entries (`identity-native-bounds.ts`,
+server and the worker call `composeLibraryDomain`. The native preload also installs the same presentation slice through
+`composeLibraryPresentation` in the Library binding without a placeholder Source. Compatibility entries (`identity-native-bounds.ts`,
 `account-grant.ts`, `ordinary-read-bounds.ts`, `builtin-runtime-query.ts`, `members-preparation.ts`,
 `collection-publication-work-admission.ts`, `collection-publication-staging.ts`, `collection-presentation.ts`, `collection-source.ts`,
-`command-support.ts`, `entries.ts`, `sessions.ts`) reach the composed implementation.
+`command-support.ts`, `entries.ts`, `sessions.ts`, `session-operation-bounds.ts`) reach the composed implementation.
 
 Installed capabilities, bound by ordinary process composition: `authorization` (Access command, fence, deadline and
-lifecycle), `identityDisclosure` (Semantic original/terminal, active release and committed initiator), `searchPreparation` (Search scope,
+lifecycle), `progressCatalog` (Access account and Semantic definition/identity SQL descriptors plus shelf-maintenance statement plans), `identityDisclosure` (Semantic original/terminal, active release and committed initiator), `searchPreparation` (Search scope,
 owner-leaf and catalogue/owner filter leaves), `contentPublication` (private working versus activated public, plus Content cover readability), `identityNative` (core arithmetic over
 the adapter SQL catalog, including Search/current basis miss slots that compose selected `emptySeeks=70`;
 `identity-native-bounds.ts` is the compatibility facade) and `sourceCapture` (native Collection Source when pool and
 Access are present, including the ordinary-page factory). Compatibility Source, member, publication, presentation,
-command-support and Entry/progress entries call those composed applications. Public entries:
+command-support, session/progress and Entry/progress entries call those composed applications. Public entries:
 `kernel-library-contract` `contract/work-dimensions.ts` and `contract/index.ts`; `kernel-library-core`
 `core/index.ts`; `kernel-library-application` `application/index.ts`; adapter `adapters/index.ts` and
-`domain-binding.ts` plus the existing Library discovery and Access-capability entries.
+`domain-binding.ts`, `zone-collection-adapter.ts` plus the existing Library discovery and Access-capability entries.
+`zone-collection-adapter.ts` is the Library host for Zone membership work and mounted Collection reads; Zones own the
+port and composition binds it.
 
 `account-grant.ts` remains a leaf: `grantCapable` takes account fields structurally. Owner-query Search preparation
 uses the Library `searchPreparation` capability through existing dependency objects; `CollectionWorkLedger` replaces
 Search `ScopeWork` subclassing. The Source adapter ABI keeps Search `ScopeWorkContext` so Search receiving type pins
 stay exact; contract `CollectionSourceContext.work` stays unknown so contract/core/application load without Search.
+Native source identity, ordinal page bounds and receiving-cost shapes live on the Library contract. Composition
+constructs `createScopedSearchLibraryOperations` (limits and receiving costs included) and Search applications
+retain that instance through nested calls; `createOrderedCollectionSourceApplication` and
+`createMembersWorkDefinitionApplication` are the application facades. Fewest tests: Search's construction suite
+pins the installed binding; Library domain-composition keeps its fake-capability coverage.
 
-Decision: pin this increment's user-visible composition with the existing domain-composition suite, including presentation kind admission and withheld cover, rather than a second suite.
+[Collection mutations](collection-mutation.md) owns mutation layers, effects and focused tests.
 
 Fewest tests: one `domain-composition.test.ts` suite covering fake-capability applications plus Source, member,
-publication, presentation and Entry/progress edges (actor, deadline, private working versus activated public, repeated ordered
-occurrences, nested admission, original/terminal disclosure, active release, withheld cover and catalogue/owner filter leaves), independent contract/core/application load,
+publication, presentation, Entry/progress and funded Progress-operation edges (actor, deadline, private working versus activated public, repeated ordered
+occurrences, nested admission, original/terminal disclosure, active release, withheld cover, catalogue/owner filter leaves, exact retry operands and unknown COMMIT), independent contract/core/application load,
 identity-native declaration equality, ordinary `composeLibraryDomain` adapter install, and unbound collection-read deferral.
 Selected identity seal cases keep the selected bind vector; transform fixtures use routable job IDs. Existing native
 identity, Source/member/publication, assignment-growth and lifecycle-growth cases keep their unchanged assertions.
@@ -132,15 +168,50 @@ Label assignment and parent SQL use LATERAL LIMIT-1 primary-key points and the r
 owner-catalogue size cannot appear as Seq Scan or `personal_label` touches above 33. Set, unassign, restore and
 rename select each named operand once in the one-row request and read those columns in the mutation WHERE.
 
-Decision: Source capture, member preparation, owner-query preparation, publication, presentation and Entry/progress admission use
+Decision: Source capture, member preparation, owner-query preparation, publication, presentation, Entry/progress and funded Progress-operation planning/admission use
 one fake-capability application suite; ordinary composition binds the real Access, Semantic, Search and Content
-implementations. Search filter-leaf classification is a composition port. Publication-staging takes population from the stored Source: a catalogue Source requires catalogue leaves and stages Search's public population; an owner Source evaluates every leaf through Search's owner scope and pins the public catalogue observation when catalogue leaves are present. Content `media.ts` is a public cover-download entry. Native SQL declarations stay unchanged, so the new seam adds no query or statement. Missing identity disclosure defers to the native subject resolver. A composed collection-read
+implementations. Progress planning consumes Access account and Semantic definition/identity descriptors and shelf-maintenance's public statement plans; `session-operation-bounds.ts` is the compatibility facade for SQL runners and work consumption. No guessed allowances, refund, hidden work or reauthorization fallback. Search filter-leaf classification is a composition port. Publication-staging takes population from the stored Source: a catalogue Source requires catalogue leaves and stages Search's public population; an owner Source evaluates every leaf through Search's owner scope and pins the public catalogue observation when catalogue leaves are present. Content `media.ts` is a public cover-download entry. Native SQL declarations stay unchanged, so the new seam adds no query or statement. Missing identity disclosure defers to the native subject resolver. A composed collection-read
 without a bound Access adapter is unbound and also defers; an explicit deny still refuses. Journal date preparation stays
 before the owner transaction and does not admit a session id as a Collection.
 
 Architecture counters for this composition are recorded with the architecture check in
 [docs/architecture/README.md](../../../../docs/architecture/README.md); the Library rule 2/3, edge and cycle figures there
 are measured against integrated base `a0c2a25650`.
+
+Decision: bounded FULL presentation, subject anchoring and logical built-in member orchestration use Library-owned
+capabilities and applications. Semantic's real adapter supplies current Identity mappings, separately prepared original
+and terminal reference authorization, and the existing summary observation. Access supplies current account eligibility,
+public account projection and immutable contribution attribution. Community supplies current Space/Realm disclosure.
+`views.ts` and `transport-contract.ts` consume disclosed schemas from producer contracts; HTTP owns no application
+policy. Missing/pending identity stays absent, unavailable identity keeps its reason, and only an explicit Access
+tombstone produces an id-free deletion label. Attribution remains keyed by the immutable original account.
+
+FULL keeps ordered related-key deduplication, at most 100 subject IDs, four settled workers and one summary batch.
+Original and terminal references retain native checks. Final summary disclosure checks both mapping terminal and exact
+epoch after related reads; a same-terminal epoch change is unavailable. Follow and published-log views withhold a
+changed summary while retaining their private edge or public snapshot; ordinary FULL refuses. BASIC preserves object
+identity and performs no reads. Current account, contribution and Space/Realm observations are checked again before
+embedding; equality cannot grant authority. Follow-space projections retain Community's existing native callback.
+
+Built-in descriptors and membership remain maintained native truth. The native adapter retains the original private
+account/scopes/authentication fence, state reference and index readiness checks, one canonical Source page and opaque
+sparse continuation. Only a native empty proof admits an empty first page; no directory miss or unavailable mapping
+is an empty result. Original-input capture releases the owner home before the producer's batched mapping read.
+No mapping, index, writer, scan, browser inference or availability fallback is introduced. Collection policy/mutations,
+Progress and Performance shelf/index writers retain ownership.
+
+Presentation cost includes initial/final owner observations: two public-account points per distinct account, two
+attribution batches over the same ordered IDs (chunks of at most 100), and two native target reads/checks per distinct
+Collection or ordinary Space target. The single Semantic summary observation and its final fences, two bounded
+original/terminal resolution rounds, existing Source page, lookahead and private facts are additional. Four workers
+bound concurrent native reads, not their summed cost. Performance receives these runtime paths; its declaration walk
+is not an alternate implementation or new native proof.
+
+Acceptance choice: preserve native built-in, FULL/private attribution, redirected identity and current-authority
+assertions; use the focused capability suite for ordered batches, concurrency, exact epoch changes, final authority,
+unavailable/absent distinctions and opaque continuation. The withholding suite uses consumer capabilities instead of
+global implementation mocks. Worker acceptance is workspace typing; the Financial and Web walks retain native,
+browser, currentness and growth acceptance.
 
 ## Scope and implementation boundary
 
@@ -2595,6 +2666,18 @@ command operations, owner/foreign observations and rechecks, accepted/current re
 serialization, retries, retention and cleanup across all participating pools under the same request deadline.
 Execution belongs to the controller; no growth measurement is claimed for these primitives.
 
+### Copy application boundary
+
+`contract/copy-*` owns values/envelopes; `core/copy-*` normalizes input and composes nine-axis plans. `application/copies.ts` owns account-first
+admission, receipt-safe preparation, mutations, restore authority, sparse keysets and final fences.
+Ports retain actor, Pool/transaction, attempt, command-time witness, deadline, receipt classes/work. Access owns
+account/state/share SQL/bounds; Semantic supplies releases/list context.
+Server/worker and standalone factories share producers/runner; session work consumes its existing contract.
+
+Acceptance choice: worker typing; six `copy-application.test.ts` cases pin admission, contexts, replay, final fences,
+sparse inventory and restore authority. Copy/native/cost assertions and Financial/Web sole walks retain
+native/browser/currentness/growth integration acceptance.
+
 ### Copy create
 
 - Touches: An account admit, one subject resolve, and one `copy` insert in the owner partition. The event subject is the account id. The payload carries the copy id.
@@ -2622,27 +2705,21 @@ Execution belongs to the controller; no growth measurement is claimed for these 
 Owner detail alone additionally accepts `presentation=FULL`, independent of summary `view=FULL`.
 [Profile consumers](../../../../docs/library-profile-consumers.md#owner-copy-detail-and-current-status-advice)
 owns the exact DTO, qualified current status advice and adopted kind/status provenance split.
-`copy-presentation.ts` resolves each actual kind/status accepting release by exact digest; no current source labels enter
-historic display. `copy-store-read.sql` selects one live row and its private pins by full copy key and actual owner.
-`readPresentedCopy` has a typed default caller and a rendering callback held inside its before/final owner,
-principal/denial, partition, copy/pin and source-version checks. Snapshots are released between owner and foreign
-homes. Unknown raw and legacy-unspecified kinds stay unknown. Current release failures do not decide retirement
-or prevent independently readable subject summaries. No read writes or returns accepting metadata.
+`copy-presentation.ts` reads each accepting kind/status release by exact digest. `copy-store-read.sql` reads one live
+owner row and private pins. `readPresentedCopy` renders inside before/final owner, principal/denial, partition,
+copy/pin and source-version checks, releasing each home before visiting another. Unknown raw/legacy-unspecified
+kinds stay unknown; release failures neither prove retirement nor block independent summaries. Reads neither write
+nor return accepting metadata.
 
-The detail adds two exact owner copy reads plus fixed account/Access/partition observations, at most two deduplicated
-exact accepted release lookups, one current profile lookup and bounded current source/final probes. Work is constant in unrelated facts
-and historical releases; it never walks history or adds per-row release reads to lists. Existing default wire
-assertions remain unchanged. Focused pure presentation and additive actual native fixture cases cover accepted
-labels versus current rename/retirement, unknown versus unavailable, disclosure and final fences. Native and
-promoted-main proof remain pending; local typing is not that proof. Metadata update/delete/Undo contracts and the
-720-hour restoration window remain unchanged. Fresh creation captures `kind_profile_pin` and `status_profile_pin`
-from actual native acceptance. Explicit status updates replace only the latter; metadata-only edits preserve both,
-and the compatibility `library_profile_pin` stays original. Existing mutable pins are not creation proof: the new
-migration deliberately leaves old rows unknown, with no current-profile backfill. The native fixed-contract migration
-and pre-profile retained Undo capture only their explicit legacy destination. Restore resolves accepted status and
-kind separately, so a newer status cannot relabel the original kind. Both columns remain private whole-row data:
-`copy-retention-purge.sql` and `account-fact-purge-copy.sql` already erase them with their owning row, with no orphan
-store or additional participant. Local compiler validation is separate from all pending native and promoted-main proof.
+The constant bound includes two exact owner reads, account/Access/partition checks, at most two deduplicated accepted
+release reads, one current profile read and final source probes; no history walk or per-list-row release reads.
+Fixtures cover accepted/renamed/retired labels, unknown/unavailable, disclosure and final fences. Metadata, Undo
+and the 720-hour restore window retain their contracts.
+Creation captures separate `kind_profile_pin` and `status_profile_pin`; explicit status edits replace only the latter,
+metadata edits preserve both, and `library_profile_pin` stays original. Mutable historical pins cannot prove creation:
+old rows stay unknown without current-profile backfill. Fixed-contract migration and pre-profile retained Undo capture
+only their explicit legacy destination. Restore resolves kind/status independently. Whole-row
+`copy-retention-purge.sql` and `account-fact-purge-copy.sql` erase both pins with no orphan store or participant.
 
 ### Copy page
 
@@ -2860,6 +2937,20 @@ not raw outgoing intent or this counter. No count becomes publicly exposed by th
   neither local typing nor shared occurrence-custody delivery establishes a calibrated native pass.
 
 ### Maintain and read private follow counts
+
+Decision: Follow counts use Library contract vocabulary/errors, pure scalar/health rules, port-driven read,
+delivery and bounded partition applications, and native SQL/DBOS adapters. Default Library composition binds
+Access account/authentication/public-agent observations, Community Space existence and Semantic epoch admission.
+Producer contracts retain their owners; the application passes the original actor, native instant and deadline.
+Compatibility entries keep callers and error identities stable. Public Collection discovery imports only the
+independent aggregate and health observation adapters, never private count reads, source delivery or target work.
+The application dependency points inward; platform consumer-lag metadata is a public constant-cost observation.
+
+Fewest tests: `follow-count-application.test.ts` pins authority/health ordering, zero versus unknown, identity and
+agent-binding changes, nonpublic curator fencing, retained source delivery, bounded segments and executable default
+composition. Existing Following sparse order, opaque cursors, read-loss unfollow, native count outcomes and growth
+assertions remain unchanged. This restructuring adds no query, fallback or policy; native/browser/growth acceptance
+runs after integration under the worker typing-only protocol.
 
 The [private-count authority](../../../../docs/private-follow-counts.md) owns disclosure, canonical totals,
 readiness and terminal custody. The default Library worker installs bounded source/target bootstrap, current-source

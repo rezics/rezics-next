@@ -1,6 +1,6 @@
 import { createHash } from 'node:crypto';
 import type { Pool } from 'pg';
-import { recordLateErasureItem, resolveLateErasureItem } from '../access/erasure.ts';
+import { recordLateErasureItem, resolveLateErasureItem } from './access-port.ts';
 import { runCommand } from '../command/command.ts';
 import { withConnection } from '../database/pool.ts';
 import { readPartition } from '../partition/partition.ts';

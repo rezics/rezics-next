@@ -1,5 +1,6 @@
 import { createFileRoute } from '@tanstack/react-router';
 import { ScreenProfileSession } from '../../features/catalogue/screen-profile-session';
+import { ScreenReadingBoundary } from '../../features/pages/data';
 import { classificationHandoffSearch } from '../../features/catalogue/classification-create-return';
 import { screenSeriesId } from '../../features/catalogue/screen-episode-membership';
 import { getLocale } from '../../paraglide/runtime';
@@ -17,11 +18,13 @@ export const Route = createFileRoute('/catalogue/screen')({
 function ScreenRoute() {
   const { series, classificationHandoff } = Route.useSearch();
   return (
-    <ScreenProfileSession
-      key={`${series ?? ''}:${classificationHandoff ?? ''}`}
-      locale={getLocale()}
-      series={series}
-      {...(classificationHandoff ? { classificationHandoffToken: classificationHandoff } : {})}
-    />
+    <ScreenReadingBoundary>
+      <ScreenProfileSession
+        key={`${series ?? ''}:${classificationHandoff ?? ''}`}
+        locale={getLocale()}
+        series={series}
+        {...(classificationHandoff ? { classificationHandoffToken: classificationHandoff } : {})}
+      />
+    </ScreenReadingBoundary>
   );
 }

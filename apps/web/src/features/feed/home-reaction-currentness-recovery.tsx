@@ -4,7 +4,7 @@ import { Button } from '@rezics/ui/shadcn/button';
 import { browserObservation } from '../../session/observation';
 import { m } from '../../paraglide/messages.js';
 import type { Locale } from '../../paraglide/runtime.js';
-import type { ReactionCommandRecovery } from '../../threads/thread-reactions';
+import type { ReactionCommandRecovery } from '../../threads/contract/reaction-recovery';
 
 type Command = Parameters<ReactionCommandRecovery['start']>[0];
 type Retained = Readonly<{

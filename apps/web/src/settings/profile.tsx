@@ -4,21 +4,18 @@ import { Alert, AlertDescription, AlertTitle } from '@rezics/ui/shadcn/alert';
 import { Button } from '@rezics/ui/shadcn/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@rezics/ui/shadcn/card';
 import { Input } from '@rezics/ui/shadcn/input';
-import { MediaImage } from '@rezics/ui/media-image';
-import { coverSrc } from '../media/cover-src';
 import { Textarea } from '@rezics/ui/shadcn/textarea';
 import { m } from '../paraglide/messages.js';
-import { uploadAvatar } from '../threads/upload';
 import { profileChanges, profileHasLocalPreview, profilePatchAdmitted, profileFieldAdmitted } from './profile-data';
 import { ProfileEditor, profileFieldErrors, type ProfileScope, type ProfileEditorState } from './profile-write';
 import { useProfileEditor } from './profile-write-query';
 import { ProfileAvatar, useProfileAvatarUpload } from './profile-avatar';
 import { ProfileLinks } from './profile-links';
 import { ProfilePreview } from './profile-preview';
-import type { AvatarResume, AvatarUpload } from './profile-avatar-upload';
 import { ProfileNavigation, useProfileNavigationUpload } from './profile-navigation';
 import { usePreferenceRetry } from './preferences';
 import { useSettingsSectionFocus } from './settings-return-context';
+import type { SettingsContentPort } from './ports/content';
 
 function profileError(scope: ProfileScope, failure: ProfileEditorState['failure']) {
   const activity = scope === 'views';
@@ -168,9 +165,9 @@ export function ProfileFeedback({
   );
 }
 
-export function ProfileSection() {
+export function ProfileSection({ content }: { content: SettingsContentPort }) {
   const location = useLocation();
-  const { editor, readable, writable, isCurrent, observationKey } = useProfileEditor();
+  const { editor, readable, writable, isCurrent, observationKey } = useProfileEditor(content.mediaFailure);
   const previewActive = new URL(location.publicHref, 'https://rezics.local').hash === '#profile';
   return (
     <ProfileNavigation editor={editor} writable={writable} isCurrent={isCurrent}>
@@ -180,6 +177,7 @@ export function ProfileSection() {
         writable={writable}
         readable={readable}
         previewActive={previewActive}
+        content={content}
       />
     </ProfileNavigation>
   );
@@ -190,15 +188,13 @@ export function ProfileCard({
   writable = true,
   readable,
   previewActive = false,
-  avatarUpload,
-  avatarResume,
+  content,
 }: {
   editor: ProfileEditor;
   writable?: boolean;
   readable?: boolean;
   previewActive?: boolean;
-  avatarUpload?: AvatarUpload;
-  avatarResume?: AvatarResume;
+  content: SettingsContentPort;
 }) {
   const state = useSyncExternalStore(editor.subscribe, editor.snapshot, editor.snapshot);
   const commandWaiting = usePreferenceRetry(undefined, state.commandRetryAt);
@@ -234,7 +230,7 @@ export function ProfileCard({
   const busy = state.phase === 'saving' || state.phase === 'reloading';
   const unreadable = !canRead || state.readAuthority !== 'allowed' || state.phase === 'unavailable';
   const closed = !writable || unreadable;
-  const avatar = useProfileAvatarUpload(editor, unreadable, avatarUpload, avatarResume);
+  const avatar = useProfileAvatarUpload(editor, unreadable, content.avatar);
   useProfileNavigationUpload(avatar.controller);
   const uploading = avatar.blocked;
   const profilePatch =
@@ -389,6 +385,7 @@ export function ProfileCard({
                 avatar={profile.avatar}
                 known={state.known?.avatar ?? null}
                 upload={avatar}
+                mediaSource={content.coverSrc}
                 disabled={unreadable || busy || !!state.attempt}
                 referenceDisabled={closed || busy || !!state.attempt || !admitted('avatar')}
                 saving={state.phase === 'saving' || state.phase === 'reloading' || state.phase === 'uncertain'}
@@ -426,6 +423,7 @@ export function ProfileCard({
                 biography={profile.biography}
                 avatar={profile.avatar}
                 localAvatarUrl={avatar.state.url}
+                mediaSource={content.coverSrc}
                 hasUnsavedChanges={localPreview}
                 links={profile.links.slice(0, 5).map((link, index) => ({
                   label: link.label,

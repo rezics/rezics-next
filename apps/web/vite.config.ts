@@ -17,7 +17,7 @@ import {
   alignViteLockfileHashes,
   bindViteDepCacheAlign,
   elysiaTypeboxLiveModuleCode,
-  webViteClientOptimizeDeps,
+  webViteClientOptimizeDepsFor,
   webViteTypeboxWorkerGraph,
   webViteWarmSsrEnvName,
   webViteWorkerSsrEnvironment,
@@ -363,28 +363,30 @@ export default defineConfig((context) => {
   const persistence = createWorkerPersistence('web', context, appRoot);
   const testRuntime = process.env.REZICS_TEST_RUNTIME === '1';
   const testWorkerBindings = process.env[testWorkerBindingsEnvName] ?? '{}';
+  const walkCacheDir = process.env.REZICS_WALK_STACK_SLOT
+    ? resolve(workspaceRoot, '.temp/web-vite', process.env.REZICS_WALK_STACK_SLOT)
+    : undefined;
+  const selectedCacheDir = viteCacheDir ?? walkCacheDir;
+  const clientOptimizeDeps = webViteClientOptimizeDepsFor();
   return {
-    ...(viteCacheDir ? { cacheDir: viteCacheDir } : {}),
+    ...(selectedCacheDir ? { cacheDir: selectedCacheDir } : {}),
     server: {
       // The native stack binds 127.0.0.1 in an isolated network; publication tests prove a foreign Host never reaches page URLs.
       allowedHosts: process.env.WEB_DEV_ALLOW_ANY_HOST === '1' ? true : [],
       ...(nativeWebTls ? { https: { cert: nativeWebCertificate!, key: nativeWebKey! } } : {}),
       // Allow the resolved install roots of packages the client and Worker actually load, including shared stores.
       fs: {
-        allow: [workspaceRoot, ...dependencyRoots, ...(viteCacheDir ? [resolve(viteCacheDir)] : [])],
+        allow: [workspaceRoot, ...dependencyRoots, ...(selectedCacheDir ? [resolve(selectedCacheDir)] : [])],
       },
     },
-    ...(process.env.REZICS_WALK_STACK_SLOT
-      ? { cacheDir: resolve(workspaceRoot, '.temp/web-vite', process.env.REZICS_WALK_STACK_SLOT) }
-      : {}),
     html: { cspNonce: viteNonceMarker },
     resolve: { alias: [...workerResolveAliases] },
     // Fonts must stay on the site origin; the page policy does not allow data: fonts.
     build: { assetsInlineLimit: 0 },
     optimizeDeps: {
-      entries: [...webViteClientOptimizeDeps.entries],
-      holdUntilCrawlEnd: webViteClientOptimizeDeps.holdUntilCrawlEnd,
-      exclude: [...webViteClientOptimizeDeps.exclude],
+      entries: [...clientOptimizeDeps.entries],
+      holdUntilCrawlEnd: clientOptimizeDeps.holdUntilCrawlEnd,
+      exclude: [...clientOptimizeDeps.exclude],
     },
     ssr: {
       optimizeDeps: {

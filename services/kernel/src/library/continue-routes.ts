@@ -3,13 +3,14 @@ import type { Pool } from 'pg';
 import type { OperationCatalogue } from '@rezics/operations';
 import { admitGroup } from '../access/gates/admission.ts';
 import type { KernelClock } from '../clock.ts';
-import { ProblemError, problemSchema } from '../http/problem.ts';
+import { ProblemError } from '../http/problem-error.ts';
+import { problemSchema } from '../http/problem-schema.ts';
 import { bindOperation } from '../http/operation-adapter.ts';
-import { AuthenticationError, type Access } from '../request/access.ts';
+import { AuthenticationError } from '../request/authentication-error.ts';
+import { type Access } from '../request/access.ts';
 import type { definitionRoutes } from '../semantic/http/definitions.ts';
 import type { KeyRing } from '../tokens/seal.ts';
-import { createContinueReads } from './continue-reads.ts';
-import { continuePageSchema } from './transport-contract.ts';
+import { continuePageSchema, createContinuePageAdapter, type DisclosedContinuePage } from './adapters/continue-page.ts';
 import type { SearchService } from '../search/service-scope.ts';
 import { languageRanges } from '../semantic/language.ts';
 
@@ -29,7 +30,7 @@ export function continueRoutes(
   },
 ) {
   const { operations, ...runtimeDependencies } = deps;
-  let reads: ReturnType<typeof createContinueReads> | undefined;
+  let reads: ReturnType<typeof createContinuePageAdapter> | undefined;
   const operation = bindOperation(
     operations,
     'library_continue.list',
@@ -50,7 +51,7 @@ export function continueRoutes(
       response: {
         reference: 'library.continue.page',
         schema: {
-          200: continuePageSchema(),
+          200: t.Unsafe<DisclosedContinuePage>(continuePageSchema()),
           400: problemSchema('invalid_request', 'invalid_cursor'),
           401: problemSchema('authentication_required', 'invalid_credentials'),
           403: problemSchema('forbidden', 'platform_closed'),
@@ -100,7 +101,7 @@ export function continueRoutes(
           clientAction: 'progress_session:list',
           deadline: job.deadline,
         });
-        reads ??= createContinueReads({ ...runtimeDependencies, access: runtimeDependencies.access() });
+        reads ??= createContinuePageAdapter({ ...runtimeDependencies, access: runtimeDependencies.access() });
         return reads.list(
           actor,
           query,

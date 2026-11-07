@@ -3,7 +3,7 @@ import { createServerFn } from '@tanstack/react-start';
 import { setResponseHeader } from '@tanstack/react-start/server';
 import { AlbumProfileSession } from '../../features/catalogue/album-profile-session';
 import { AlbumCurrentVisitGate, AlbumCurrentVisitUnsupported } from '../../features/catalogue/album-current-visit';
-import { albumUuid } from '../../features/catalogue/album-profile';
+import { albumUuid } from '../../features/catalogue/contract/album';
 import { parseAlbumCurrentVisitSearch } from '../../features/catalogue/album-current-visit-model';
 import { subjectVisitReturn } from '../../features/pages/subject-visit-navigation';
 import { getLocale } from '../../paraglide/runtime';

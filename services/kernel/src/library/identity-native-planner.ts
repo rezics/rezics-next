@@ -1,4 +1,4 @@
-import { ProblemError } from '../http/problem.ts';
+import { ProblemError } from '../http/problem-error.ts';
 import { libraryIdentitySQL } from './identity-native-planner-statements.ts';
 import { createHash, randomUUID } from 'node:crypto';
 import canonicalize from 'canonicalize';

@@ -32,6 +32,10 @@ retain local amount or clear choices by measure unit.
   owns the source lifetime and bounded reading contract, replacing the audit's deferred navigation finding.
   Decision: every replacement observation retires selection; browser return uses a fresh admitted reading, never a
   stored private inspection snapshot. Source and story delivery do not claim runtime acceptance.
+- Checkout's current-visit retirement and exact Edition-origin review are explicit capabilities, supplied by the
+  existing session and Content producers. Ordinary routes bind private creator readers and review; the existing
+  purchase slot supplies the prepared session snapshot. The [reading guide](../../apps/web/src/checkout/creator-sale-reading.md#application-capability-boundary)
+  owns the boundary and unchanged money/command semantics. Worker typing and integration runtime acceptance stay separate.
 - A buyer reading a captured fixed Edition from an order or entitlement returns to that exact detail and both
   independent list positions after a same-tab visit. Decision: keep these navigation coordinates in route state,
   re-admit the private detail for the current viewer on return, and leave canonical reader addresses free of private data.
@@ -998,6 +1002,14 @@ and keyboard return focus.
 Decision: keep native list and selection calls behind the typed seam until Content publishes the generated `own_drafts.list` and `own_drafts.resume` client methods; do not turn native action paths into browser fetch URLs or mix browser-local text into server drafts. The signed-in `/drafts` route and navigation, existing-composer resume, save/publish/erase with readback, browser-local recovery choice, and connected command-state stories remain in `.temp/continuation/own-drafts-journey.md`.
 
 ### Current-context post history
+
+Decision: Threads and moderation reporter history/status consume the session-owned
+[browser reader lifetime boundary](../../apps/web/src/session/README.md#supported-reader-lifetime). The existing root
+session hook installs the shared cache observation once; isolated mounts retain cache-only observation without a
+Router requirement. Performance and the train own attachment to the shared session provider once publicly exported.
+Successful replacement and A/B/A retire old controls, slow-mode abort and deferred focus synchronously, while native
+response authority and exact uncertain intent remain with each feature. Worker acceptance is Web typing; the Goal
+walk retains runtime acceptance.
 
 The [history reader contract](../../apps/web/src/threads/post-history-lifetime.md#native-page-admission) retains
 actual-reader provenance, exact-address return and recorded citation meaning. Native page identity and bounds

@@ -9,7 +9,7 @@ import {
   type MalLabelReview,
   type MalReviewedLabel,
 } from './list-import-mal-tags.ts';
-import { ProblemError } from '../http/problem.ts';
+import { ProblemError } from '../http/problem-error.ts';
 
 /** Review uses addressed native ID/name probes. It neither creates labels nor assigns them. */
 export async function reviewMalLabels(

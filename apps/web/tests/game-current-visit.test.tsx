@@ -43,6 +43,7 @@ test('Game source admission preserves Realm, refuses contradictory intent, and n
   const { GameProfile } = await import('../src/features/catalogue/game-profile-view');
   const { GameProfileEntry } = await import('../src/features/catalogue/game-profile-entry');
   const { GameReader } = await import('../src/features/catalogue/game-reader/view');
+  const { isolatedWorkReading } = await import('../src/features/catalogue/work-reading-port');
   const { collectEditorialEntries } = await import('../src/features/catalogue/editorial-entry');
   const { gameVisitSearch, parseGameVisit } = await import('../src/features/catalogue/game-current-visit');
   const { consumeGameClassificationReturn, gameClassificationReturn } =
@@ -299,6 +300,7 @@ test('Game source admission preserves Realm, refuses contradictory intent, and n
             reader={null}
             returnSelection={returnDescriptor}
             transport={() => readPage}
+            reading={isolatedWorkReading}
           />
         </QueryClientProvider>,
       ),
@@ -346,6 +348,7 @@ test('Game source admission preserves Realm, refuses contradictory intent, and n
             reader={null}
             returnSelection={returnDescriptor}
             transport={async () => changedReady}
+            reading={isolatedWorkReading}
           />
         </QueryClientProvider>,
       ),

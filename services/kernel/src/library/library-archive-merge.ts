@@ -19,19 +19,19 @@ import {
 import { runOperationalTransaction, type OperationalTransaction } from '../command/operational.ts';
 import { withConnection } from '../database/pool.ts';
 import { systemClock, type KernelClock } from '../clock.ts';
-import { ProblemError } from '../http/problem.ts';
-import {
-  accessCommandAuthorization,
-  AuthenticationError,
-  type Access,
-  type Actor,
-  type AccountActor,
-} from '../request/access.ts';
+import { ProblemError } from '../http/problem-error.ts';
+import type { Access, Actor, AccountActor } from '../request/access.ts';
+import { AuthenticationError } from '../request/authentication-error.ts';
 import { deadlineFor } from '../request/deadline.ts';
 import { newId, partitionOf, routeOf } from '../route/route.ts';
 import type { KeyRing } from '../tokens/seal.ts';
 import type { WorkClient } from '../work/client.ts';
-import { createLibraryCommandRunner, LibraryNotFoundError, WORK_STEP_DEADLINE_MS } from './command-support.ts';
+import {
+  libraryCommandAuthorization,
+  createLibraryCommandRunner,
+  LibraryNotFoundError,
+  WORK_STEP_DEADLINE_MS,
+} from './command-support.ts';
 import {
   ArchiveValidationError,
   decodeLibraryArchive,
@@ -524,7 +524,7 @@ export function createLibraryArchiveMerge(deps: LibraryArchiveMergeDependencies)
       deadline,
       clock,
     });
-    const authorization = await accessCommandAuthorization(
+    const authorization = await libraryCommandAuthorization(
       deps.access,
       owner,
       action,

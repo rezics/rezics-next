@@ -5,8 +5,8 @@ import {
   type CommunityComments,
 } from './community-projection/index.ts';
 import { isDeepStrictEqual } from 'node:util';
-import { readPublicIdentities, type PublicIdentity } from '../access/account-data.ts';
-import { deadlineClient, within } from '../access/authenticate.ts';
+import { readPublicIdentities, deadlineClient, within } from './access-port.ts';
+import type { PublicIdentity } from '../access/content-adapter.ts';
 import { routeOf } from '../route/route.ts';
 import type { ContentCommandDependencies } from './commands.ts';
 import {

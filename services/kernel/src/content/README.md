@@ -1,14 +1,20 @@
 # Content
 
+Decision: Content consumes cyclic Access behavior through its own `ContentAccessPort`; server, worker and test composition bind the native Access producer before use. Forwarders retain the exact native generic and opaque-evidence signatures through type-only imports, resolve the current binding per call, and preserve returned values and thrown errors. Shared refusal constructors live in the Access contract with identity-preserving compatibility exports. Architecture and type checking are acceptance for this behavior-preserving migration; focused port tests run after integration.
+
 Feed's mounted list operation consumes the shared immutable declaration catalogue through the
 Kernel transport adapter. Content retains the Feed query/result schemas and current disclosure
 composition; this route adds no publisher or generated-tree writer.
 
 Content owns boards, threads, posts, immutable documents, media state and publication, and content governance operations.
 
+Decision: `nativeRealmEvidenceHost` keeps its stable host object and forwards `snapshot` at use, so Content imports do not read the native snapshot binding during module initialization.
+
 The supported `document-public.ts` entry owns `PublicDocumentView`, `publicDocument` and the strict public schema shared
 by the native Document route and Semantic's Character preview. `document-routes.ts` retains the route compatibility
 exports; GET and DELETE behavior, document authority, disclosure and erasure remain in their existing owners.
+`adapters/subject-document.ts` exposes the current native document read through the public adapter index for Semantic's
+injected Subject reading port; it retains Content's disclosure, deadline, body and source-fence behavior.
 
 ## Native moderation directory
 
@@ -546,19 +552,12 @@ The installed Community target variants use the same closed entry shape as the p
 The sole `realm-subject-source.ts` census/factory owner supplies original keys; this evaluator creates no
 population, candidate storage, bootstrap, event consumer or registration. `listSubjectThreads` is not a census.
 
-Exported types are `RealmSubjectCandidate = Readonly<{ threadId: string; openingPostId: string;
-subjectId: string }>`, `RealmSubjectDisclosureInput = Readonly<{ realmId: string;
-candidates: readonly RealmSubjectCandidate[] }>`, `RealmSubjectDisclosureDependencies = Readonly<{
-pool: Pool; access: Access }>`, and `RealmSubjectDisclosureContext = Readonly<{ actor: Actor;
-deadline: number; work: AccessWorkAccounting }>`. `RealmSubjectDisclosure` has only
-`finish(): Promise<readonly RealmSubjectEvidence[]>`. Evidence is aligned with input, without echoed keys:
-`{ state: 'positive'; freshness: RealmSubjectFreshness }` or `{ state: 'absent' | 'withheld' | 'unknown' }`.
-`RealmSubjectFreshness = Readonly<{ before: string; final: string; expiresAt: number; anchors: readonly AnchoredPosition[] }>`
-is internal native freshness, never permission or a reusable bearer proof. Signatures hash actual native
-source and parent observations. No concealed identifiers, counts, denial details or public DTOs are returned.
-The internal `reads.ts` export `prepareRealmSubjectThreadDisclosure` returns `state`, nullable `signature`,
-`anchors` and `final(): Promise<{ signature: string; anchors: readonly AnchoredPosition[] } | null>`;
-its state is `positive | absent | withheld`. It reuses native source, ancestry and board disclosure without bytes.
+`content/contract/index.ts` owns the consumer capabilities and aligned evidence shapes. The native facade keeps
+`RealmSubjectCandidate`, `RealmSubjectDisclosureInput`, Pool/Access dependencies, actual actor/deadline/work context,
+and `finish(): Promise<readonly RealmSubjectEvidence[]>`. Evidence is positive with `before`, `final`, `expiresAt`
+and lossless native anchors, or absent/withheld/unknown without echoed keys. Signatures and freshness are internal
+observations, never permissions. `reads.ts` retains `prepareRealmSubjectThreadDisclosure`: positive/absent/withheld,
+nullable signature, anchors and one final native source observation. It reads source/ancestry/Board metadata only.
 
 Decision: exact evidence pins the original Subject and requires its native reference to remain terminal;
 a redirect never substitutes a different Subject. Missing native capabilities and dependency failures produce
@@ -577,12 +576,20 @@ a missing producer refuses the attempt. The deadline is capped at the caller roo
 bans include the actual actor and authenticated delegating principal. Protected grants, account fences,
 source/parent revisions, takedown and restoration retain native read authority at both rounds.
 
-`realm-subject-search.ts` exports `createRealmSubjectSearchSource`, re-exported from the Content `index.ts` boundary.
-The service supplies the actual request `LeafOptions`; Content binds that reader's Access and actor to the exact
-disclosure evaluator and live lifecycle before Search creates its Realm scope. Prefix candidate disclosure is batched
-in groups of at most eight, with one existing Access work ledger bridged into Search's caller-owned `ScopeWork`.
-Resolve, currentness, candidate batches and terminal Subject reads stay request-bound; no native locator or copied
-authorization observation leaves Content. The default service runtime creates this composition per reader.
+Decision: install Realm community, exact disclosure and Subject search together through
+`createContentRealmApplication`; preserve settled behavior and test identity, unavailable authority and final
+currentness without claiming positive default-journey proof or adding stories.
+
+The existing facade entries delegate to this bound application. HTTP `createKernel` and `composition/content.ts`
+bind Community's current Realm/Space evidence, Semantic's independent exact terminal Subject evidence and Search's
+native work bridge through their public adapter entries. Application code consumes Content-owned ports only.
+Publication advice supplies no global ownership; Realm never becomes Zone. Current carrier disclosure and the
+original/terminal association remain native owner decisions. The original request, Pool and deadline pass unchanged;
+the facade retains the public wire shapes. Search settles into the existing caller root with the accepted bounds.
+The unchanged source/lifecycle own native sparse cursors and final currentness: no directory, scan, registry or feed
+predicate is added. Missing producers remain unavailable. `realm-application.test.ts` pins those use-case outcomes;
+`realm-composition.test.ts` pins default binding and missing authority before IO. Native journey acceptance stays
+with the Goal walk.
 
 ## Mixed Home summaries
 
@@ -590,6 +597,15 @@ Content owns mixed Home composition through the existing Home port. The [feed co
 owns selection, source limits and sparse cursors; Search owns its public discovery source/result/continuation entry,
 real adapters, query/default-worker assembly and minimal caller migration. There is no second renderer or private
 Library merge.
+Decision: mixed Home construction and read orchestration run through the Content feed application over
+consumer-owned continuation, public-summary and presentation ports. Library owns Continue page vocabulary and
+the native Continue adapter; Semantic owns disclosed Subject summary vocabulary and the native public-summary
+adapter. Server/default-worker composition binds those producers once. HTTP operation and problem mapping stay
+on `feed-routes.ts`. Missing continuation, summary or discovery authority is unavailable, not an empty page or
+an all-candidate fallback. Focused application/composition tests pin missing authority, exact kind conjunction,
+sparse Continue resume and the 20/160/6 bounds; runtime proof stays with the existing Content walk. No extra
+stories. Destination kinds stay distinct union members; public summary and Continue schemas stay TypeBox objects.
+The mounted Feed page schemas stamp the Content contract page types so GET /v1/feedItems stays a closed route.
 `feed-discovery.ts` maps Search's delivered Subject/Account and public Collection/review/Space summaries with
 exhaustive dispatch and exact route, kind and primary identity checks. It translates only the public
 `library/collection` and `community/space` keys to Content's `commerce/collection` and `content/space` feed
@@ -638,21 +654,21 @@ provide viewer action advice; mounted resource readers and the current-thread ca
 
 ## Domain composition
 
-Decision: Kernel Content is split into `contract`, `core`, `application` and adapter modules. Vocabulary, finite
-bounds and the `ContentAmbient` operand live in `content/contract`. Pure ranking, cursor, document-deadline,
-authored-field and work-source rules live in `content/core`. Use cases consume Content-owned ports in
-`content/application`. Native adapters in `content/adapters/native.ts` implement those ports, and
-`createKernel`/`server`/`worker` bind them through `composition/content.ts`. Contract, core and application import no
-downstream domain behaviour. Tests pin document deadline admission, ranking, authored-field rejection and worker
-budgets against fake ports without loading native adapters.
+Decision: contract/core/application/adapters separate Content vocabulary/bounds, pure rules, use cases and native
+effects. `ContentAmbient` supplies time, identity and fetch. Public entries are each layer's `index.ts`, adapter
+`bind.ts`/`ambient.ts` and existing facades. Server, worker and preload composition bind native ports. Platform
+`defineModule`/shared Ambient and Semantic disclosure/eligibility facades remain undelivered; `contentDeclaration()`
+stays. Contract/core/application import no downstream behaviour. Wiring adds no SQL, scan or checkout.
 
-Public entries: `content/contract/index.ts`, `content/core/index.ts`, `content/application/index.ts`,
-`content/adapters/index.ts`, `content/adapters/bind.ts`, `content/adapters/ambient.ts`, plus the existing Content
-adapter facades. Platform `defineModule` is not delivered;
-Content keeps `contentDeclaration()` on the existing composition interfaces. Missing shared operands: platform
-`defineModule` / shared Ambient contract, and Semantic public facades for `disclosure.ts` and `eligibility.ts`.
-
-Wiring adds no query, scan or extra statement; native cost stays with the existing producer declarations.
+Decision: activity, review current context, exact document-media and bounded mentions use Content applications with
+explicit optional outcomes. `composition/content.ts` installs native Content/Access reading adapters. Access owns
+active/deleted/unknown observations and native failure classification; applications import no Account data or HTTP
+errors. Compatibility facades retain closed schemas and map changed-source failures to HTTP retry. Reading/history
+variants and older consumers retain wire shapes, pool/deadline, exact revisions, references and historical citations.
+Final native authorization follows enrichment. Partial sibling presentation preserves readable documents; failed
+batches retain unavailable state and selected keys. Media observation uses the original budget, including the
+producer's expired-budget empty result. Application/composition tests pin these states; runtime/growth acceptance
+stays with sole Goal walks. No extra stories or publisher.
 
 ## Worker authorization composition
 
@@ -1863,7 +1879,7 @@ raw SQL fixture changes and gate changes without a committed original event cann
   or provider history; global exposure changes affect the complete directory.
 - Growth check: the focused lifecycle test adds more than 100 disappeared identities across native partitions and
   unrelated dependencies, checks bounded examined counts, continuation, replay and explicit removal. This is a focused
-  outcome/batch-bound check; physical block growth remains a dev-verifier measurement.
+  outcome/batch-bound check; sole Goal walks retain physical block growth measurement.
 
 #### Cost: changed-source catch-up and refresh
 
@@ -2065,6 +2081,8 @@ in this producer task. The source candidate API remains available to existing in
 
 ## Subject threads
 
+Decision: Subject page identity uses Access `public-identity` `readPublicAccountByAgent`; live identity, unknown absence and evidence-backed deletion stay distinct, and contribution attribution is not command authority.
+
 Decision: The mounted Subject page accepts an optional `board` ContentId; omission returns `not_selected`, while a supplied Board is admitted only when its exact Subject, Global/Realm place, purpose, parent read and current `thread:create` advice remain stable through final observation.
 
 ### Explicit selected Board entry
@@ -2145,8 +2163,8 @@ state. Erased or withheld sources do not gain author, media, action, comment, or
 does not trigger a refill, and unavailable activity never becomes a zero count.
 
 Decision: preserve the Subject page envelope, attach closed card disclosures to each retained thread, and expose
-only mounted selected-card action preconditions; leave creation advice absent because this endpoint has no concrete
-creation target.
+only mounted selected-card action preconditions. Creation advice is separate and requires the explicit selected
+Board entry described above.
 
 Examples include a populated entry with `card.presentation.state: 'current'`, `card.parentContext.kind: 'opening'`,
 `card.media.state: 'none'`, and `card.comments.state: 'unavailable'` when public coverage is not installed; a covered
@@ -2777,6 +2795,34 @@ rows with null read advice when current download authority is denied.
 - Growth check: `test/content/own-media-http.test.ts` covers lifecycle/select/remove, native cursor binding/expiry/epoch rejection, fabricated actor denial, expiry before collection and collection during hydration with same-frontier retry. `test/content/own-media-read-advice.test.ts` exercises the mounted route and retained-row read advice through native Realm revocation, restoration and a concurrent change between advice rounds. Controller acceptance retains independent 256/1024/4096 unrelated-object/uploader, retired-object and lifecycle-history growth with fixed selected keys, homes and admitted bytes, strict physical-prefix and residual plans, per-pool Access/container/fence/variant work, physical rows, retained/materialized/serialized bytes, actual registered processing/collection phases, and empty/denied/stale branches.
 
 ## Source fences
+
+The mounted `GET /v1/sourceFences:check` first prepares `source_fence:read` on the sole Global Context, then
+authorizes in an independent root snapshot before reading the exact tuple in its own partition snapshot. Each
+root check obtains a native read time on a released connection, passes that same live time to Access preparation
+and final evaluation, and releases it in `finally`. After tuple checkout is released, the route resolves the current
+actor and repeats root preparation and authorization with a fresh native time. It keeps the original Pool and
+deadline throughout. No Access preparation or time acquisition occurs under a root or tuple checkout.
+Missing tuples produce `fenced: false` and `securityRevision: null` only after the native exact read succeeds;
+dependency failures propagate without facts or a session header. Successful responses are private, no-store and
+record the tuple and final root anchors in the ordinary session header. Commands recheck fences independently.
+The focused HTTP assertions cover released native time acquisition alongside the existing admitted, denied,
+revoked and exact-key controls; native, browser, seed and growth acceptance run after integration.
+
+Seed diagnosis retains the installed reader and distinguishes a source-level time-contract correction from a
+runtime cause. A method, endpoint and HTTP 503 alone establish neither the RFC9457 code nor the failed phase.
+For the original Imports seed request, the retained coordination description supplies only those three fields;
+the named `inventory.json` and `seed.log` are no longer present in the existing walk's evidence directory.
+Its problem code, request/correlation identity, operation, partition and server phase were not retained in the
+available evidence. The declared operation `source_fence.read` is route metadata, not a recovered runtime trace.
+Do not attribute that original failure to missing native time or report a seed pass from typing.
+
+The existing Imports walk, through Semantic, owns recovery from its request and server diagnostics. Match a
+recovered safe trace in order against initial root preparation, independent root snapshot, exact tuple snapshot
+and final actor/root authorization; retain only problem code, request identity, operation, partition and phase.
+Content owns any resulting route correction. The same Content, Imports and Performance walks exercise the exact
+request, full seed and original fence/current Access acceptance after integration. No replacement stack is needed.
+The HTTP regression requires fresh final native time after tuple commit and checks that unavailable native time,
+root and tuple reads return a correlated 503 without facts or session evidence, then allow a subsequent read.
 
 `content.source_fences` retains one stable `(route, source, external_id, field_group)` tuple independently of
 subject identity. `takedownSourceFence` authorizes platform governance at the command's authoritative time before
@@ -4159,10 +4205,8 @@ It returns the opening plus at most 20 raw replies, excluding the opening from t
 request selects 21 rows to account for the opening's list slot; each continuation selects 20 after its original
 cursor. It never concatenates pages or accepts a client-selected post-ID batch. `target` carries the board's current
 security revision, and each available post action reference carries the exact disclosed source revision.
-The installed composer is `readContentReadingPage(dependencies, threadId, actor, deadline, cursor?)`, mounted as
-operation `thread.reading_page`.
-The Web thread-page loader consumes the generated response and maps its opening and replies into the existing thread
-and post interface. The controller retains rendered and broader native acceptance.
+The mounted `thread.reading_page` composer is `readContentReadingPage(dependencies, threadId, actor, deadline, cursor?)`;
+Web consumes its generated response. Native/rendered acceptance stays with the controller.
 
 Personal data is bounded to the current actor and this page. One deduplicated Accounts summary call admits at most 21
 author identities. Existing viewer-reaction and reaction-count readers receive at most 22 targets (thread, opening,
@@ -4238,7 +4282,7 @@ Decision: The shared batch accepts at most 20 deduplicated exact thread/post ref
 their Subject key, Home retains its own parent/review context, concealment withholds an entry, and readable changes
 fail closed for retry.
 
-Decision: the thread reading receiver and its public response alias use the emitted mounted reading-page declaration, including the existing native post locator; broader client mirrors remain until the full source publication succeeds.
+Decision: the receiver/response alias uses the emitted reading-page declaration and native post locator; broader client mirrors remain until full source publication.
 
 Decision: duplicate mention identities keep the first disclosed row; mixed document-media availability keeps available images and readable text, and only a failed presentation read marks the page unavailable.
 

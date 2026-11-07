@@ -47,8 +47,16 @@ function terminal(stage: string): stage is 'expired' | 'denied' | 'unavailable' 
 }
 
 export function PrivateArchiveCollectionRecoveryPage({ visit }: { visit?: RecoveryVisit | null }) {
-  const observed = useRecoveryVisit();
-  const current = visit === undefined ? observed : visit;
+  if (visit === undefined) return <CurrentArchiveCollectionRecoveryPage />;
+  return <ArchiveCollectionRecoveryPageForVisit current={visit} />;
+}
+
+function CurrentArchiveCollectionRecoveryPage() {
+  const current = useRecoveryVisit();
+  return <ArchiveCollectionRecoveryPageForVisit current={current} />;
+}
+
+function ArchiveCollectionRecoveryPageForVisit({ current }: { current: RecoveryVisit | null }) {
   const operation = useOperationAdmission('collection.list');
   if (!current) {
     return (

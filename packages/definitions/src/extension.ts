@@ -1,6 +1,7 @@
+import { sha256 } from '@noble/hashes/sha2.js';
+import { bytesToHex, utf8ToBytes } from '@noble/hashes/utils.js';
 import canonicalize from 'canonicalize';
-import { createHash } from 'node:crypto';
-import { releaseDigest, valueSchema, type PropertyDefinition, type Release, type TypeDefinition } from './index.ts';
+import { releaseDigest, valueSchema, type PropertyDefinition, type Release, type TypeDefinition } from './portable.ts';
 
 /**
  * A term extension adds custom relation types to one Context. It holds item properties only, refers to the Global
@@ -69,7 +70,7 @@ export function termIri(context: string, localName: string): string {
 }
 
 export function extensionDigest(extension: Extension): string {
-  return `sha256:${createHash('sha256').update(canonicalize(extension)!, 'utf8').digest('hex')}`;
+  return `sha256:${bytesToHex(sha256(utf8ToBytes(canonicalize(extension)!)))}`;
 }
 
 export function releaseHasTerm(release: Release, curie: string): boolean {

@@ -12,7 +12,7 @@ import { correctionProperty, type StatementInput } from './statement-editor';
 import type { EditorRead } from './statement-editor';
 
 export const albumType = 'schema:MusicAlbum';
-export const albumUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+import { albumUuid } from './contract/album';
 export type AlbumItem = InitialSubject & { statements: Record<string, StatementInput[]> };
 export type AlbumCommand = { item: AlbumItem; key: string };
 export type AlbumRead =

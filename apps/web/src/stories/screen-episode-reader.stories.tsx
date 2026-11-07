@@ -1,5 +1,6 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import { ScreenEpisodeList } from '../features/catalogue/screen-episode-reader/view';
+import { ScreenReadingBoundary } from '../features/pages/data';
 import type { ScreenEpisodeEntry, ScreenEpisodeRead } from '../features/catalogue/screen-episode-reader/read';
 
 const parentId = '00000000-0000-4000-8000-000000000901';
@@ -88,6 +89,13 @@ const meta = {
   title: 'Pages/Screen episode reader',
   component: ScreenEpisodeList,
   args: { locale: 'en', origin },
+  decorators: [
+    (Story) => (
+      <ScreenReadingBoundary>
+        <Story />
+      </ScreenReadingBoundary>
+    ),
+  ],
 } satisfies Meta<typeof ScreenEpisodeList>;
 
 export default meta;

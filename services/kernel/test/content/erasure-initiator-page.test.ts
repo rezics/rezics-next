@@ -1,7 +1,7 @@
 import { afterAll, beforeAll, expect, test } from 'bun:test';
 import { fromPlainText, serializeDocument } from '@rezics/document';
 import { createInitiatorRestorer } from '../../src/access/durable-initiator.ts';
-import { GrantDeniedError } from '../../src/access/grant-commands.ts';
+import { GrantDeniedError } from '../../src/access/contract/index.ts';
 import {
   erasePostLogicalAsInitiator,
   erasePostLogicalPageAsInitiator,

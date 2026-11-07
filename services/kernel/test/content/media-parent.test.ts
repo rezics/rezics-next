@@ -1,6 +1,6 @@
 import { afterAll, beforeAll, expect, test } from 'bun:test';
 import { IdempotencyConflictError } from '../../src/command/command.ts';
-import { GrantDeniedError } from '../../src/access/grant-commands.ts';
+import { GrantDeniedError } from '../../src/access/contract/index.ts';
 import type { PoolClient } from 'pg';
 import { createAccess } from '../../src/access/permission.ts';
 import { readAccount } from '../../src/access/account-data.ts';

@@ -1,4 +1,4 @@
-import { deadlineClient, within } from '../access/authenticate.ts';
+import { deadlineClient, within } from './access-port.ts';
 import type { RealmParticipationReadDecision, RealmParticipationCheck } from '../community/participation.ts';
 import { ProblemError } from '../http/problem.ts';
 import type { Actor } from '../request/access.ts';

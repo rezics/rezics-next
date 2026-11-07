@@ -1,11 +1,15 @@
 import { expect, spyOn, test } from 'bun:test';
 import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
+import { createBrowserSettingsAmbient } from '../src/settings/adapters/ambient';
+import { performanceAmbientTree } from './performance-ambient';
 
-const { VerificationSubjectSearch, VerificationSubjectChooserView } =
-  await import('../src/settings/verification-subject-chooser');
-type Subject = import('../src/settings/verification-subject-chooser').VerificationSubject;
-type SearchResult = import('../src/settings/verification-core').VerificationSearchResult<Subject[]>;
+const settingsAmbient = createBrowserSettingsAmbient();
+
+const { VerificationSubjectSearch } = await import('../src/settings/application/verification');
+const { VerificationSubjectChooserView } = await import('../src/settings/adapters/verification-view.tsx');
+type Subject = import('../src/settings/contract/verification').VerificationSubject;
+type SearchResult = import('../src/settings/contract/verification').VerificationSearchResult<Subject[]>;
 const person: Subject = { id: 'native-person-id', title: 'Avery', type: 'Person' };
 const organization: Subject = { id: 'native-organization-id', title: 'Avery Studio', type: 'Organization' };
 const success = (subjects: Subject[]): SearchResult => ({ ok: true, value: subjects });
@@ -25,6 +29,7 @@ test('a current term owns its debounced suggestions and stale completions cannot
   const requests: { query: string; signal: AbortSignal; finish: (result: SearchResult) => void }[] = [];
   const search = new VerificationSubjectSearch(
     (query, signal) => new Promise((finish) => requests.push({ query, signal, finish })),
+    settingsAmbient,
   );
   search.setEnabled(true);
   try {
@@ -71,7 +76,7 @@ test('failed search stays visibly failed until explicit retry; empty and account
     return new Promise((resolve) => {
       finish = resolve;
     });
-  });
+  }, settingsAmbient);
   search.setEnabled(true);
   try {
     search.edit('Avery');
@@ -105,19 +110,23 @@ test('failed search stays visibly failed until explicit retry; empty and account
 
 test('the chooser exposes a labelled bounded combobox and selected presentation keeps Change separate from form submission', () => {
   const html = renderToStaticMarkup(
-    createElement(VerificationSubjectChooserView, { selected: null, onSelect: () => {}, search: unusedSearch }),
+    performanceAmbientTree(
+      createElement(VerificationSubjectChooserView, { selected: null, onSelect: () => {}, search: unusedSearch }),
+    ),
   );
   expect(html).toContain('role="combobox"');
   expect(html).toContain('aria-autocomplete="list"');
   expect(html).toContain('maxLength="100"');
   expect(html).toContain('aria-describedby=');
   const selected = renderToStaticMarkup(
-    createElement(VerificationSubjectChooserView, {
-      selected: person,
-      onSelect: () => {},
-      disabled: true,
-      search: unusedSearch,
-    }),
+    performanceAmbientTree(
+      createElement(VerificationSubjectChooserView, {
+        selected: person,
+        onSelect: () => {},
+        disabled: true,
+        search: unusedSearch,
+      }),
+    ),
   );
   expect(selected).toContain('Avery');
   expect(selected).toContain('type="button"');
@@ -129,6 +138,7 @@ test('unfinished composition cancels queued and old requests; only the committed
   const requests: { query: string; signal: AbortSignal; finish: (result: SearchResult) => void }[] = [];
   const search = new VerificationSubjectSearch(
     (query, signal) => new Promise((finish) => requests.push({ query, signal, finish })),
+    settingsAmbient,
   );
   search.setEnabled(true);
   try {
@@ -174,7 +184,7 @@ test('the chooser query keeps complete astral characters within its existing inp
   const search = new VerificationSubjectSearch(async (query) => {
     queries.push(query);
     return success([]);
-  });
+  }, settingsAmbient);
   search.setEnabled(true);
   try {
     search.edit(`${'a'.repeat(98)}😀extra`);
@@ -202,7 +212,7 @@ test('stalled chooser requests fail without empty results or replay, and explici
   const search = new VerificationSubjectSearch(async (_query, current) => {
     signal = current;
     return ++calls === 1 ? new Promise<SearchResult>(() => {}) : success([person]);
-  });
+  }, settingsAmbient);
   try {
     search.setEnabled(true);
     search.edit('Avery');
@@ -244,7 +254,7 @@ test('native Retry-After blocks direct and debounced retries until deliberate re
           },
         }
       : success([person]);
-  });
+  }, settingsAmbient);
   try {
     search.setEnabled(true);
     search.edit('Avery');
@@ -271,8 +281,9 @@ test('native Retry-After blocks direct and debounced retries until deliberate re
 });
 
 test('empty suggestions stay unselectable; only a current populated result can be chosen', async () => {
-  const search = new VerificationSubjectSearch(async (query) =>
-    query === 'Unknown' ? success([]) : success([person, organization]),
+  const search = new VerificationSubjectSearch(
+    async (query) => (query === 'Unknown' ? success([]) : success([person, organization])),
+    settingsAmbient,
   );
   search.setEnabled(true);
   try {
@@ -300,7 +311,7 @@ test('retired retry callbacks cannot act in a later enabled episode', async () =
   const search = new VerificationSubjectSearch(async () => {
     calls++;
     return unavailable;
-  });
+  }, settingsAmbient);
   search.setEnabled(true);
   const retiredEpisode = search.currentEpisode();
   const capturedRetry = () => search.retry(retiredEpisode);

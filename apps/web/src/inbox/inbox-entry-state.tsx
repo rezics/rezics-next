@@ -2,14 +2,15 @@ import { useState } from 'react';
 import { useLocation } from '@tanstack/react-router';
 import { useQueryClient, type QueryClient } from '@tanstack/react-query';
 import { Button } from '@rezics/ui/shadcn/button';
-import { sessionQuery, type useSession } from '../session/query';
-import { SignInPrompt } from '../threads/write-prompts';
+import { productionInboxShellPort } from './adapters/shell';
+import type { InboxSessionObservation } from './ports/shell';
 import { m } from '../paraglide/messages.js';
 import { inboxEntryState, type InboxSessionRead } from './inbox-viewer';
+import type { InboxContentPort } from './ports/content';
 
 export function retryInboxSession(client: QueryClient) {
   // Force one existing server read even when an unavailable result is fresh forever.
-  return client.fetchQuery({ ...sessionQuery, staleTime: 0 });
+  return productionInboxShellPort.refreshSession(client);
 }
 
 function inboxReturnDestination(value: string): string {
@@ -28,9 +29,11 @@ function inboxReturnDestination(value: string): string {
 export function InboxEntryState({
   state,
   sessionRead,
+  SignInPrompt,
 }: {
-  state: ReturnType<typeof useSession>['state'];
+  state: InboxSessionObservation['state'];
   sessionRead?: InboxSessionRead | undefined;
+  SignInPrompt: InboxContentPort['SignInPrompt'];
 }) {
   const client = useQueryClient();
   const location = useLocation();

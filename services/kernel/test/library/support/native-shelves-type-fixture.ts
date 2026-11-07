@@ -1,5 +1,5 @@
 import { createAccess } from '../../../src/access/index.ts';
-import { accessCheck } from '../../../src/request/access.ts';
+import { accessCheck } from '../../../src/request/access-check.ts';
 import { deadlineFor } from '../../../src/request/deadline.ts';
 import { SHELF_TYPE_SYNC_WORKFLOW, shelfTypeSyncWorkflowId } from '../../../src/library/shelf-contract.ts';
 import { routeOf } from '../../../src/route/route.ts';

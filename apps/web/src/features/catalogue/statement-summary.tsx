@@ -1,17 +1,7 @@
 import type { ReactNode } from 'react';
-import { pickText } from '@rezics/composition';
-import type { Release } from '@rezics/definitions';
 import { m } from '../../paraglide/messages.js';
-import { PartValue, type StatementFieldsRead } from './statement-editor-view';
-import type { SnakInput, StatementInput } from './statement-editor';
-
-function partLabel(part: SnakInput, release: Pick<Release, 'properties'>, locale: string) {
-  const definition = release.properties[part.property.id];
-  return {
-    text: pickText(definition?.labels ?? {}, locale).text || part.property.id,
-    language: pickText(definition?.labels ?? {}, locale).lang,
-  };
-}
+import { PartValue, statementPartLabel } from './statement-reading';
+import type { SnakInput, StatementFieldsRead, StatementInput } from './statement-editor-contract';
 
 export function StatementSummary({
   statement,
@@ -25,7 +15,7 @@ export function StatementSummary({
   notice?: ReactNode;
 }) {
   const o = { locale: locale as never };
-  const property = partLabel(statement, read.release, locale);
+  const property = statementPartLabel(statement, read.release, locale);
   return (
     <div className="min-w-0 space-y-3 text-sm">
       <dl className="min-w-0 space-y-2">
@@ -38,8 +28,8 @@ export function StatementSummary({
             <PartValue part={statement} read={read} locale={locale} />
           </dd>
         </div>
-        {(statement.qualifiers ?? []).map((part, index) => {
-          const label = partLabel(part, read.release, locale);
+        {(statement.qualifiers ?? []).map((part: SnakInput, index: number) => {
+          const label = statementPartLabel(part, read.release, locale);
           return (
             <div key={index}>
               <dt lang={label.language ?? undefined} className="text-muted-foreground">
@@ -63,7 +53,7 @@ export function StatementSummary({
             {group.parts.length ? (
               <ul className="min-w-0 space-y-1">
                 {group.parts.map((part, partIndex) => {
-                  const label = partLabel(part, read.release, locale);
+                  const label = statementPartLabel(part, read.release, locale);
                   return (
                     <li key={partIndex} className="min-w-0">
                       <span lang={label.language ?? undefined}>{label.text}: </span>

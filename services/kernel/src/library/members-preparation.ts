@@ -47,7 +47,7 @@ import {
 import { enqueueIntent, runOperationalTransaction, type OperationalTransaction } from '../command/operational.ts';
 import { deadlineFor } from '../request/deadline.ts';
 import type { Access, Actor } from '../request/access.ts';
-import { ProblemError } from '../http/problem.ts';
+import { ProblemError } from '../http/problem-error.ts';
 import { newId, partitionOf, routeOf } from '../route/route.ts';
 import type { WorkClient } from '../work/client.ts';
 import type { WorkExecutionOriginal } from '../command/execution-contract.ts';
@@ -127,12 +127,8 @@ export function preparationDefinitionBases(
   return [...unique.values()];
 }
 
-export type PreparationLocator = Readonly<{
-  route: number;
-  ownerAccountId: string;
-  collectionId: string;
-  episodeId: string;
-}>;
+export type { PreparationLocator } from './contract/preparation-work.ts';
+import type { PreparationLocator } from './contract/preparation-work.ts';
 /** Exact retained native episode inputs. Data only; never admission or disclosure authority. */
 export type MembersPreparationWorkDefinition = Readonly<{
   definition: PreparationDefinition;

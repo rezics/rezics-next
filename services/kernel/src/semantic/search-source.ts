@@ -165,6 +165,7 @@ export function subjectSource(
 ): SubjectSource &
   SubjectSourceKeyPages & {
     canonicalNames: SubjectCanonicalNames;
+    conceptBrowse: ReturnType<typeof relationSource>['conceptBrowse'];
     readConceptStatements: ConceptStatementReader;
     readCompleteWorkLinks: NonNullable<SubjectSource['readCompleteWorkLinks']>;
   } {
@@ -342,6 +343,7 @@ export function subjectSource(
 
     matchRelationFacets: relations.match,
     prepareRelationFacets: relations.preparePage,
+    conceptBrowse: relations.conceptBrowse,
     readConceptStatements: relations.readConceptStatements,
     readCompleteWorkLinks: relations.readCompleteWorkLinks,
 

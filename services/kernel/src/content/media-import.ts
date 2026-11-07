@@ -9,9 +9,14 @@ import canonicalize from 'canonicalize';
 import { createHash } from 'node:crypto';
 import { isIP } from 'node:net';
 import type { Pool } from 'pg';
-import { initializeResourceGrants, parentCreationAuthorization, resourceAuthorization } from '../access/index.ts';
-import { deadlineClient, within } from '../access/authenticate.ts';
-import { GrantDeniedError } from '../access/grant-commands.ts';
+import {
+  initializeResourceGrants,
+  parentCreationAuthorization,
+  resourceAuthorization,
+  deadlineClient,
+  within,
+} from './access-port.ts';
+import { GrantDeniedError } from '../access/contract/index.ts';
 import {
   authoritativeTimeValue,
   mintReadTime,

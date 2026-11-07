@@ -1,11 +1,15 @@
+import { NativeAccountsProvider } from '../settings/adapters/accounts-browser';
+import { NativeVerificationProvider } from '../settings/adapters/verification-view.tsx';
+import { accountProfileHref } from '../accounts/profile-editor/address';
 import { requirePrivatePageAccess } from '../session/guard';
 import { loadPrivatePage } from '../session/private-page';
 import { pageHead } from '../shell/head';
 import { pageHeadContext } from '../shell/head-context';
-import { sessionQuery } from '../session/query';
+import { sessionQuery } from '../session';
 import { createFileRoute } from '@tanstack/react-router';
-import { readSettingsPage } from '../settings/actions';
-import { SettingsPageView } from '../settings/settings-page';
+import { BoundCollectionPrivacySection, BoundShelfPreferencesCard } from '../settings/adapters/library-view.tsx';
+import { readSettingsPage, SettingsPageView } from '../settings';
+import { settingsContent } from '../settings/adapters/presentation';
 import { m } from '../paraglide/messages.js';
 
 export const Route = createFileRoute('/settings')({
@@ -29,5 +33,18 @@ export const Route = createFileRoute('/settings')({
 function SettingsRoute() {
   const data = Route.useLoaderData();
   const { page, requestSession } = data;
-  return <SettingsPageView page={page} csrfToken={requestSession?.csrfToken ?? null} requestSession={requestSession} />;
+  return (
+    <NativeAccountsProvider profileHref={accountProfileHref}>
+      <NativeVerificationProvider>
+        <SettingsPageView
+          page={page}
+          csrfToken={requestSession?.csrfToken ?? null}
+          requestSession={requestSession}
+          ShelfCard={BoundShelfPreferencesCard}
+          PrivacySection={BoundCollectionPrivacySection}
+          content={settingsContent}
+        />
+      </NativeVerificationProvider>
+    </NativeAccountsProvider>
+  );
 }

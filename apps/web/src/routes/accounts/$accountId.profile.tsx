@@ -1,4 +1,6 @@
+import { nativeAccountProfileRuntime } from '../../accounts/profile-editor/adapters';
 import { createFileRoute } from '@tanstack/react-router';
+import * as profilePresentation from '../../settings/ports/profile-editor-view';
 import { AccountProfilePage } from '../../accounts/profile-editor/page';
 import { requireSignedIn } from '../../session/guard';
 import { pageHead } from '../../shell/head';
@@ -13,5 +15,11 @@ export const Route = createFileRoute('/accounts/$accountId/profile')({
 });
 function ProfileRoute() {
   const { accountId } = Route.useParams();
-  return <AccountProfilePage accountId={accountId} />;
+  return (
+    <AccountProfilePage
+      accountId={accountId}
+      presentation={profilePresentation}
+      runtime={nativeAccountProfileRuntime}
+    />
+  );
 }

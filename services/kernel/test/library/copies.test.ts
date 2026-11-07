@@ -7,7 +7,7 @@ import { Value } from 'typebox/value';
 import { GrantDeniedError } from '../../src/access/grant-commands.ts';
 import { IdempotencyConflictError } from '../../src/command/command.ts';
 import { EVENT_TYPES, readBatch } from '../../src/events/log.ts';
-import { ProblemError } from '../../src/http/problem.ts';
+import { ProblemError } from '../../src/http/problem-error.ts';
 import { LibraryNotFoundError } from '../../src/library/command-support.ts';
 import { CopyConflictError, CopyInvalidError, createCopyCommands } from '../../src/library/copies.ts';
 import type { Copy } from '../../src/library/entry-model.ts';

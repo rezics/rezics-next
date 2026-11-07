@@ -1,5 +1,7 @@
 # Zone membership and current disclosure
 
+Decision: Zone membership constructs its request work ledger through the Zone collection port at call time. The Library `CollectionSourceLedger` is the bound host; Zone overlay limits stay in `membership.ts`. Saved-scope Search preparation and native Collection Source calls keep their current disclosure, continuation, receipt and work-budget semantics.
+
 [Filtered lists](filtered-lists.md) is the shared authority for complete indexed observations, current disclosure,
 admitted direct/prepared plans, freshness, useful pages, canonical identity and cost. This document owns Zone
 composition obligations. [Zones](zones.md) owns resources, transport and lifecycle; Collections remain owned by

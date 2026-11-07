@@ -12,8 +12,7 @@ import { admitGroup } from '../access/gates/admission.ts';
 import { requireAccessDeadline } from '../access/unavailable.ts';
 import { ProblemError, PROBLEMS } from '../http/problem.ts';
 import { createBuiltinRuntime } from '../library/builtin-runtime.ts';
-import { activeProfile } from '../presentation/profiles.ts';
-import { semanticPageView } from '../presentation/semantic-page.ts';
+import { presentationApplication } from '../presentation/page-application.ts';
 import { PageReadBudget, preparePageRead, readPage, type PageRead } from '../presentation/reads.ts';
 import { observeComposedSlot, uniqueCanonicalRows } from '../search/index.ts';
 import type { Actor } from '../request/access.ts';
@@ -23,7 +22,7 @@ import { readSubjectSummaries, readSubjectSummaryObservation, type SubjectSummar
 import { decodeSession, type SessionComponent } from '../tokens/session.ts';
 import type { KeyRing } from '../tokens/seal.ts';
 import type { ZonePageRequest, ZonePageResponse, ZoneSubjectListItem, ZoneSubjectListResponse } from './contract.ts';
-import { createZoneReads } from './resource-reads.ts';
+import { requireZoneResourceRuntime } from './resource-application.ts';
 import {
   createZoneMembership,
   zoneDigest,
@@ -135,7 +134,7 @@ async function composeZonePage(
     throw new ProblemError('invalid_request', { errors: [{ pointer: '/target/route', code: 'invalid_format' }] });
   const { languages } = validateHitOptions({ languages: input.body.languages });
   requireAccessDeadline(input.deadline);
-  const reads = createZoneReads(dependencies);
+  const reads = requireZoneResourceRuntime(dependencies).reads;
   const selected = await reads.page(input.actor, input.id, route, input.deadline);
   let document = selected.document;
   let plan = document === null ? null : planReads(platformRegistry, document, { subject: null });
@@ -153,7 +152,7 @@ async function composeZonePage(
   // Exposure never supplies source permission or a source for an empty union.
   if (document === null && !selected.sources.scopes.length && !selected.sources.mounts.length)
     throw new ProblemError('not_found');
-  const active = await activeProfile(dependencies.pool);
+  const active = await presentationApplication().activeProfile(dependencies.pool);
   requireAccessDeadline(input.deadline);
   if (!active) return zoneUnavailable();
   const session = {
@@ -248,7 +247,12 @@ async function composeZonePage(
     if (!entity || typeof entity.id !== 'string' || typeof entity.type !== 'string') return zoneUnavailable();
     subject = entity.id;
     const release = await activeRelease(dependencies.pool);
-    const page = semanticPageView(active.profile, release?.release, entity.type, input.body.target.view ?? 'overview');
+    const page = presentationApplication().semanticPageView(
+      active.profile,
+      release?.release,
+      entity.type,
+      input.body.target.view ?? 'overview',
+    );
     if (!page) throw new ProblemError('not_found');
     document = page.resolved.document;
     views = page.views;
@@ -398,7 +402,8 @@ async function composeZonePage(
       !isDeepStrictEqual(current.document, selected.document)
     )
       return zoneUnavailable();
-    if ((await activeProfile(dependencies.pool))?.digest !== active.digest) return zoneUnavailable();
+    if ((await presentationApplication().activeProfile(dependencies.pool))?.digest !== active.digest)
+      return zoneUnavailable();
     if (direct && 'subject' in input.body.target) {
       work.select('target', 'id', 1);
       if ((await direct.contains(input.body.target.subject)).value !== true) return zoneUnavailable();
@@ -497,7 +502,7 @@ async function composeZoneSubjects(
 ): Promise<ZoneSubjectListResult> {
   const limit = input.limit ?? 20;
   requireAccessDeadline(input.deadline);
-  const reads = createZoneReads(dependencies);
+  const reads = requireZoneResourceRuntime(dependencies).reads;
   const selected = await reads.page(input.actor, input.id, null, input.deadline);
   await admitGroup({
     pool: dependencies.pool,

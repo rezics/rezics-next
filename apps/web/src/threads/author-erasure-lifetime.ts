@@ -1,8 +1,4 @@
-import { QueryClientContext, type QueryClient } from '@tanstack/react-query';
-import { sessionQuery } from '../session/query';
-import { browserObservation } from '../session/observation';
-import { useRouter } from '@tanstack/react-router';
-import { useContext, useMemo, useRef, useSyncExternalStore } from 'react';
+import { readerSessionSource, useReaderVisit } from '../reader/lifetime/index';
 import { getLocale } from '../paraglide/runtime.js';
 import type { ErasureEnqueue, ErasureIntent } from './author-erasure';
 
@@ -19,121 +15,17 @@ export type AuthorErasureSessionSource = {
   subscribe: (notify: () => void) => () => void;
 };
 
-const sources = new WeakMap<QueryClient, AuthorErasureSessionSource>();
-const emptySource: AuthorErasureSessionSource = {
-  read: () => undefined,
-  snapshot: () => 0,
-  serverSnapshot: () => 0,
-  subscribe: () => () => {},
-};
-
-/** One read-only cache observation preserves transitions which React may batch away. */
-export function authorErasureSessionSource(client: QueryClient | undefined): AuthorErasureSessionSource {
-  if (!client) return emptySource;
-  const known = sources.get(client);
-  if (known) return known;
-
-  const read = () => {
-    const state = client.getQueryState<AuthorErasureSession>(sessionQuery.queryKey);
-    return state?.status === 'success' && state.fetchStatus === 'idle' && !state.isInvalidated ? state.data : undefined;
-  };
-  let revision = 0;
-  const listeners = new Set<() => void>();
-  let stop: (() => void) | undefined;
-  const source: AuthorErasureSessionSource = {
-    read,
-    snapshot: () => revision,
-    serverSnapshot: () => 0,
-    subscribe(listener) {
-      listeners.add(listener);
-      stop ??= browserObservation(client).subscribeCache((event) => {
-        if (event.query.queryKey.length !== 1 || event.query.queryKey[0] !== sessionQuery.queryKey[0]) return;
-        if (
-          event.type !== 'removed' &&
-          !(
-            event.type === 'updated' &&
-            ['success', 'error', 'invalidate', 'fetch', 'setState'].includes(event.action.type)
-          )
-        )
-          return;
-        // Even structurally shared successful data supplies a new authenticated observation.
-        revision += 1;
-        for (const notify of listeners) notify();
-      });
-      return () => {
-        listeners.delete(listener);
-        if (!listeners.size) {
-          stop?.();
-          stop = undefined;
-        }
-      };
-    },
-  };
-  sources.set(client, source);
-  return source;
-}
+/** Session parsing and successful-incarnation observation belong to the reader producer. */
+export const authorErasureSessionSource = readerSessionSource;
 
 export type AuthorErasureBrowserVisit = {
   locale: ReturnType<typeof getLocale>;
   current: () => boolean;
 };
 
-/** Observe departure, including away/back before React gets a render. Never intercept navigation. */
+/** The application session host supplies navigation; isolated mounts keep browser observation. */
 export function useAuthorErasureBrowserVisit(scope = ''): AuthorErasureBrowserVisit {
-  const router = useRouter({ warn: false });
-  const client = useContext(QueryClientContext);
-  const visit = useMemo(() => {
-    const locale = getLocale();
-    const address = typeof window === 'undefined' ? undefined : window.location.href;
-    const route = router?.state.location.href;
-    let active = true;
-    const listeners = new Set<() => void>();
-    const retire = () => {
-      if (!active) return;
-      active = false;
-      for (const notify of listeners) notify();
-    };
-    const current = () => {
-      if (getLocale() !== locale || (address !== undefined && window.location.href !== address)) retire();
-      return active;
-    };
-    return {
-      locale,
-      current,
-      retire,
-      subscribe(notify: () => void) {
-        listeners.add(notify);
-        const changed = () => {
-          current();
-        };
-        const stopCache = client && browserObservation(client).subscribeCache(changed);
-        const stop = router?.subscribe('onBeforeNavigate', ({ toLocation }) => {
-          if (toLocation.href !== route) retire();
-        });
-        if (typeof window !== 'undefined') {
-          window.addEventListener('popstate', changed);
-          window.addEventListener('hashchange', changed);
-          window.addEventListener('pagehide', retire);
-        }
-        current();
-        return () => {
-          listeners.delete(notify);
-          stop?.();
-          stopCache?.();
-          if (typeof window !== 'undefined') {
-            window.removeEventListener('popstate', changed);
-            window.removeEventListener('hashchange', changed);
-            window.removeEventListener('pagehide', retire);
-          }
-        };
-      },
-    };
-  }, [router, client, scope]);
-  const previous = useRef(visit);
-  if (previous.current !== visit) previous.current.retire();
-  previous.current = visit;
-  useSyncExternalStore(visit.subscribe, visit.current, () => true);
-  return visit;
+  return useReaderVisit(scope, getLocale(), getLocale);
 }
 
 export function authorErasureSessionIsReady(

@@ -30,8 +30,8 @@ owners. This model neither settles uncertain commands nor changes payment or cur
 
 Decision: `BuyerHistoryVisit` carries only the two coordinate paths in the existing Router/QueryClient composition;
 current readers receive their exact ready responses and each address-bound `BuyerCurrentOrigin` still retires.
-The root's existing lifecycle mounts the carrier without another provider. It subscribes narrowly to retirement
-in the installed BrowserObservation, including equal-success and A/B/A transitions before React publication.
+The root's existing lifecycle mounts the carrier without another provider. It receives the checkout-declared current-visit capability from the session producer, which subscribes narrowly
+to the installed BrowserObservation, including equal-success and A/B/A transitions before React publication.
 Exposure replacement, locale replacement, unrelated departure and composition disposal clear both paths and focus.
 There is no second session observer, registry, global archive or storage. Private readers retain one current body.
 

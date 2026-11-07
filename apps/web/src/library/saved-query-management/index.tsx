@@ -15,7 +15,7 @@ import { getLocale } from '../../paraglide/runtime.js';
 import { useCollectionCurrentAdmission } from '../collection-current-admission';
 import { admitsCollectionOperation } from '../collection-records';
 import type { DynamicCollectionPage } from '../dynamic-collection';
-import { useSession } from '../../session/query';
+import { useSession } from '../../session';
 import { CollectionMetadataEditor } from '../collection-editor';
 import { SavedQueryManagementController, type ManagedSavedQuery } from './controller';
 import { savedQueryReturnTo } from './return-to';

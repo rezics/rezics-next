@@ -30,6 +30,7 @@ import type { ScopeRuntime } from './service-scope.ts';
 import { isAdmittedSearchPrefix } from './consumer-name.ts';
 import type { SubjectSource } from './source.ts';
 import type { CreditSearchSource } from './credit-search.ts';
+import type { FacetAccessObservationPort } from './facet-access-port.ts';
 
 export type SearchConfig = { url: string; prefix: string };
 
@@ -104,7 +105,10 @@ type SearchRuntimeDefaults = Required<
     Parameters<typeof createKernel>[0],
     'tokens' | 'receiptKeys' | 'writeRate' | 'rateAttribution' | 'clock' | 'access'
   >
->;
+> & {
+  facetAccess: FacetAccessObservationPort;
+  libraryScope: import('./library-scope-port.ts').SearchLibraryScopePort;
+};
 type SearchRuntimeDefaultsComposer = (input: { env: NodeJS.ProcessEnv; clock: KernelClock }) => SearchRuntimeDefaults;
 type CreditSearchSourceComposer = (pool: Pool, routeKey: Uint8Array) => CreditSearchSource;
 
@@ -363,6 +367,9 @@ export function createSearchWorkModule(
       );
       context.addService(async () => {
         const defaults = composeRuntimeDefaults({ env: { ...context.env }, clock: context.clock });
+        const published = collectionPublicationScopeRuntimes.get(context);
+        if (published)
+          collectionPublicationScopeRuntimes.set(context, { ...published, library: defaults.libraryScope });
         let runtime: ReturnType<typeof createDefaultPublicFilterRuntime> | undefined;
         let discoveryProducers: DiscoveryProducerEntry | undefined;
         let searchAccess: Access | undefined;
@@ -400,6 +407,7 @@ export function createSearchWorkModule(
                 search,
                 prefix: config.prefix,
                 clock: context.clock,
+                facetAccess: defaults.facetAccess,
                 ...(creditSearch === undefined ? {} : { creditSearch }),
               });
             },

@@ -1,20 +1,24 @@
 import type { RatingCapabilities } from './contract/capabilities.ts';
 import { ratingCapabilities } from './adapters/ambient.ts';
 import type { Pool } from 'pg';
-import { GrantDeniedError } from '../access/grant-commands.ts';
-import { AccessUnavailableError } from '../access/unavailable.ts';
-import { readAccount } from '../access/account-data.ts';
-import type { KernelClock } from '../clock.ts';
-import { noEffect, type CommandEvent, type CommandTransaction, commandAttemptDeadline } from '../command/command.ts';
-import { withReadTransaction } from '../semantic/read.ts';
 import {
+  GrantDeniedError,
+  readAccount,
+  withReadTransaction,
   readCurrentClassificationAssociation,
   type CurrentClassificationAssociation,
-} from '../semantic/classification-association.ts';
+  createLibraryCommandRunner,
+  requireRoute,
+} from './dependencies.ts';
+import { AccessUnavailableError } from '../access/unavailable.ts';
+
+import type { KernelClock } from '../clock.ts';
+import { noEffect, type CommandEvent, type CommandTransaction, commandAttemptDeadline } from '../command/command.ts';
+
 import type { Access, AccountActor, Actor } from '../request/access.ts';
 import { partitionOf, routeOf } from '../route/route.ts';
 import { partitionReadClientObservation } from '../database/read-snapshot.ts';
-import { createLibraryCommandRunner, requireRoute } from '../library/command-support.ts';
+
 import { CLASSIFICATION_BALLOT_CHANGED, CLASSIFICATION_BALLOT_CLEANUP } from './events.ts';
 import actorStateRead from './classification-ballot-actor-state-lock.sql';
 import actorStateObserve from './classification-ballot-actor-state-read.sql';

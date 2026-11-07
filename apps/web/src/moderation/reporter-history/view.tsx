@@ -3,7 +3,7 @@ import { useEffect, useLayoutEffect, useMemo, useRef, useState, useSyncExternalS
 import { viewerExposureLifetime, viewerExposureQuery } from '../../kernel/viewer-exposure';
 import { m } from '../../paraglide/messages.js';
 import { getLocale, localizeHref } from '../../paraglide/runtime.js';
-import { sessionQuery, useSession } from '../../session/query';
+import { useSession } from '../../session/query';
 import {
   createReporterHistoryJourney,
   type ReporterHistoryNavigation,
@@ -14,7 +14,7 @@ import {
 import type { ReporterHistoryEntry, ReporterHistoryPage as HistoryPage, ReporterHistoryQuery } from './model';
 import { reporterHistoryStatusHref } from './navigation';
 import type { ReporterHistoryFocus } from './focus';
-import { browserObservation } from '../../session/observation';
+import { browserObservation, sessionQueryKey } from '../../reader/lifetime/index';
 
 const idleSubscribe = () => () => {};
 const browserReady = () => true;
@@ -48,7 +48,7 @@ function useReporterHistoryAccess(): Access {
     ],
   );
 
-  const sessionStatus = cache.getQueryState(sessionQuery.queryKey)?.status;
+  const sessionStatus = cache.getQueryState(sessionQueryKey)?.status;
   if (session.state === 'unavailable' || sessionStatus === 'error') return { state: 'unavailable', identity };
   if (!hydrated || session.state === 'unknown') return { state: 'loading', identity };
   if (session.state !== 'signed-in') return { state: 'denied', identity };

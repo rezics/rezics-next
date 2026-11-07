@@ -22,7 +22,7 @@ import {
 import { documentActions, type IndexAction, type SubjectDocument } from '../../src/search/document.ts';
 import { writeIndexActions } from '../../src/search/write-actions.ts';
 import type { PublicFilterSource } from '../../src/semantic/public-filter-source-contract.ts';
-import type { PublicFilterSourceBinding } from '../../src/semantic/public-filter-source-binding.ts';
+import type { SearchPublicFilterSourceBinding } from '../../src/search/semantic-source-port.ts';
 import type { SubjectSourceKeyPages } from '../../src/semantic/subject-source-key-pages.ts';
 
 const databaseUrl = process.env.DATABASE_URL,
@@ -86,7 +86,7 @@ async function fixture(keyPages?: SubjectSourceKeyPages, released?: CustodyDefin
       return { status: 'unready', reason: 'owner_pending', cost: zero };
     },
   };
-  const binding: PublicFilterSourceBinding = {
+  const binding: SearchPublicFilterSourceBinding = {
     async resolve() {
       return { status: 'resolved', definition, cost: zero };
     },
@@ -111,6 +111,7 @@ async function fixture(keyPages?: SubjectSourceKeyPages, released?: CustodyDefin
     source,
     sourceKeys: keyPages ?? sourceKeys,
     binding,
+    readPublicationCompletion: async () => ({ status: 'unready', reason: 'source_missing', cost: zero }),
     clock: () => new Date(),
     meaning: definition.meaning,
     writerGuard,

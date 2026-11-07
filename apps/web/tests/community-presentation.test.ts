@@ -772,7 +772,7 @@ test('The default admitted community management journey resolves a same-site ima
   const { createMemoryHistory, createRootRoute, createRouter, RouterProvider } = await import('@tanstack/react-router');
   const { QueryClient, QueryClientProvider } = await import('@tanstack/react-query');
   const { sessionQuery, exposureQuery } = await import('../src/session/query');
-  const { SpacePage } = await import('../src/community/space-page');
+  const { SpacePage } = await import('../src/session/community-application');
   const { loadSpacePage } = await import('../src/community/space');
   const { createStoryRecordedKernelFetch } = await import('../src/kernel/fake');
   const { m } = await import('../src/paraglide/messages.js');

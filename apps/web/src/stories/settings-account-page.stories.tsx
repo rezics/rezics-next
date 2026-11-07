@@ -4,6 +4,7 @@ import { useRef, useState } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { m } from '../paraglide/messages.js';
 import { SettingsPageView } from '../settings/settings-page';
+import { settingsContent } from '../settings/adapters/presentation';
 import { AppShell } from '../shell/shell';
 import { PageStory, pageReady, PatternStory } from './page';
 import { sessionQuery } from '../session/query';
@@ -52,7 +53,7 @@ export const SignedOut: Story = {
   render: () => (
     <PatternStory visitor="Signed Out" path="/settings">
       <AppShell>
-        <SettingsPageView page={{ signedIn: false }} csrfToken={null} />
+        <SettingsPageView page={{ signedIn: false }} csrfToken={null} content={settingsContent} />
       </AppShell>
     </PatternStory>
   ),
@@ -133,7 +134,11 @@ function PreferenceTransition() {
           Unresolved viewer
         </button>
       </div>
-      <AppShell>{page ? <SettingsPageView page={page} csrfToken={null} preferenceIO={transport} /> : null}</AppShell>
+      <AppShell>
+        {page ? (
+          <SettingsPageView page={page} csrfToken={null} preferenceIO={transport} content={settingsContent} />
+        ) : null}
+      </AppShell>
     </>
   );
 }

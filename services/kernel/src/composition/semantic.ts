@@ -1,3 +1,4 @@
+import { installRatingVoteSemantic } from './rating-votes.ts';
 import type { Pool } from 'pg';
 import type { KernelClock } from '../clock.ts';
 import { readMembershipRouteKey } from '../access/membership-work-config.ts';
@@ -21,6 +22,11 @@ import {
 import { searchReceivingProductionDeclaration } from '../semantic/identity-search-receiving-statements.ts';
 import { installIdentitySourceConsumerRuntime } from './identity-source-consumer.ts';
 import { installIdentityRatingRepairProducer } from './identity-rating-repair.ts';
+import { composeSemanticContext } from './semantic-context.ts';
+import { resolveIdentityAdapterRuntime } from '../semantic/identity-adapter-runtime.ts';
+import { composeZoneResource } from './zones.ts';
+import { createSubjectReadingApplication } from '../semantic/index.ts';
+import { createNativeSubjectReadingPort } from '../semantic/adapters/index.ts';
 
 type SemanticCompositionContext = {
   readonly env: Readonly<Record<string, string | undefined>>;
@@ -69,8 +75,17 @@ export function composeSemanticIdentityParticipants(
 /** Native Content cover and tuple routing, bound even when identity participants are unavailable. */
 export function composeSemanticAdapters(): void {
   bindOrdinaryContentLifecycle(nativeContentLifecycle());
+  composeSemanticContext();
+  composeZoneResource();
   installIdentitySourceConsumerRuntime();
   installIdentityRatingRepairProducer();
+  installRatingVoteSemantic();
+  resolveIdentityAdapterRuntime();
+}
+
+/** One request-independent reading application for the ordinary Kernel. */
+export function composeSubjectReadingApplication() {
+  return createSubjectReadingApplication(createNativeSubjectReadingPort());
 }
 
 /** Ordinary process composition: identity participants plus Rating review and Content lifecycle adapters. */

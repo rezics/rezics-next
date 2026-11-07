@@ -11,8 +11,9 @@ if (import.meta.main) {
     // A parent typecheck already migrated the database named by DATABASE_URL. Share that container.
     if (process.env.DATABASE_URL) await construct();
     else await withThrowawayDatabase(() => construct());
+    process.exit(0);
   } catch (error) {
     console.error(error);
-    process.exitCode = 1;
+    process.exit(1);
   }
 }

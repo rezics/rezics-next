@@ -1,4 +1,4 @@
-import type { ShelfPreferences, ShelfPreferenceSort, ShelfPreferenceTab } from '../settings/preferences';
+import type { ShelfPreferences, ShelfPreferenceSort, ShelfPreferenceTab } from './settings-contract';
 import {
   shelfColumns,
   shelfDisplay,

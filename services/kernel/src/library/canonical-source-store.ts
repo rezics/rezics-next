@@ -189,7 +189,7 @@ import type { PoolClient, QueryResultRow } from 'pg';
 import { withConnection } from '../database/pool.ts';
 import { enqueueIntent, runOperationalTransaction, type OperationalTransaction } from '../command/operational.ts';
 import { partitionOf, routeOf } from '../route/route.ts';
-import { ProblemError } from '../http/problem.ts';
+import { ProblemError } from '../http/problem-error.ts';
 import type { WorkContext } from '../work/registry.ts';
 import { identityEpochStore } from '../semantic/identity-adapters/index.ts';
 import { createIdentityScopedObservations, identityScopeAddress } from '../semantic/identity-scoped-observations.ts';

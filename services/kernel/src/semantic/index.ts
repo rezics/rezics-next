@@ -11,7 +11,21 @@ export { readSemanticLifecycle } from './lifecycle-state.ts';
 export { admitZoneCleanup, advanceZoneCleanupGrants } from './deletion/index.ts';
 export type { ZoneCleanupAdmission, ZoneCleanupIntent } from './deletion/index.ts';
 export {
+  readCopyWorkDisclosure,
   readWorkReleaseCards,
+  createFacetPopulationSource,
+  readListPresentationFacts,
+  bindSemanticCopyWorkApplication,
+  createSemanticCopyWorkApplication,
+  semanticCopyWorkApplication,
+} from './copy-work-application.ts';
+export {
+  COPY_WORK_DISCLOSURE_LOOKAHEAD,
+  COPY_WORK_DISCLOSURE_MAX_RAW,
+  COPY_WORK_DISCLOSURE_MAX_WORKS,
+  COPY_WORK_PROPERTY,
+} from './copy-work-disclosure-contract.ts';
+export {
   workReleaseCardFieldLimit,
   workReleaseCardLimit,
   workReleaseCardProperties,
@@ -20,9 +34,20 @@ export {
   workReleaseCardReferencePartLimit,
   workReleaseCardStatementBytes,
   workReleaseCardResponseBytes,
-} from './work-release-cards.ts';
+} from './copy-work-reader-port.ts';
 export type { WorkReleaseCard, WorkReleaseCardField, WorkReleaseCards } from './work-release-cards.ts';
-export { readListPresentationFacts } from './list-presentation.ts';
+export {
+  createIdentityAdapterApplication,
+  createNativeIdentityCapabilities,
+  installIdentityAdapterRuntime,
+  identityAdapterRuntime,
+  resolveIdentityAdapterRuntime,
+} from './identity-adapter-runtime.ts';
+export type {
+  IdentityAdapterPort,
+  NativeAccountIdentity,
+  NativeIdentityCapabilities,
+} from './identity-adapter-port.ts';
 export { readIdentityRatingReview } from './identity-adapters/read.ts';
 export type {
   IdentityRatingControlLocator,
@@ -49,20 +74,22 @@ export type {
   IdentityRatingRepairVoteKey,
 } from './identity-rating-repair-producer.ts';
 export type { DefinitionImportRoutes } from './definition-import.ts';
-export {
-  readCopyWorkDisclosure,
-  COPY_WORK_DISCLOSURE_LOOKAHEAD,
-  COPY_WORK_DISCLOSURE_MAX_RAW,
-  COPY_WORK_DISCLOSURE_MAX_WORKS,
-  COPY_WORK_PROPERTY,
-} from './copy-work-disclosure.ts';
 export type {
-  CopyWorkDisclosureDependencies,
   CopyWorkDisclosureObservation,
   CopyWorkDisclosureRequest,
   CopyWorkDisclosureState,
   CopyWorkReference,
 } from './copy-work-disclosure-contract.ts';
+export type {
+  CopyWorkDisclosureDependencies,
+  CopyWorkSearchEvidencePort,
+  CopyWorkReaderPort,
+  CopyWorkListPresentationDependencies,
+  CopyWorkListPresentationOptions,
+  CopyWorkListPresentationResult,
+  CopyWorkListFact,
+  CopyWorkWorkContext,
+} from './copy-work-reader-port.ts';
 
 export { semanticRetention } from './retention.ts';
 export type { RetentionPage, RetentionInput } from './retention.ts';
@@ -79,7 +106,6 @@ export type {
   FacetPopulationSource,
   FacetPopulationSourceFactory,
 } from './facet-population-contract.ts';
-export { createFacetPopulationSource } from './facet-population.ts';
 
 export { bindIdentitySourceConsumerRuntime, identitySourceConsumerRuntime } from './identity-source-consumer-ports.ts';
 export type { IdentitySourceConsumerRuntime, IdentitySourceWorkDeclaration } from './identity-source-consumer-ports.ts';
@@ -129,6 +155,24 @@ export type {
 export { publicFilterSource, recordPrivacyReduction } from './public-filter-source.ts';
 export type { PrivacyReductionHead, PrivacyReductionObservation } from './public-filter-source-contract.ts';
 export type { RelatedSubjectSummary, SubjectSummary, SummaryReaderDependencies } from './summaries.ts';
+export {
+  characterDocumentBounds,
+  characterDocumentProperties,
+  readCharacterPublicDocuments,
+} from './character-public-reading-documents.ts';
+export type { CharacterDocumentRelease } from './character-public-reading-documents.ts';
+export { globalReadEligibility, relatedReadEligibility } from './eligibility.ts';
+export { readItemDetails, readItemTypes, readSubjectPageStates } from './public-subject-facts.ts';
+export type { ItemTypeDetails, SubjectPageState } from './public-subject-facts.ts';
+export {
+  createSubjectReadingApplication,
+  type SubjectReadingApplication,
+  type SubjectReadingPageAnswer,
+  type SubjectReadingPageRequest,
+  type SubjectReadingPageResult,
+  type SubjectReadingPorts,
+  type SubjectReadingRuntime,
+} from './subject-reading-application.ts';
 
 export type * from './identity-scope-types.ts';
 export {
@@ -144,17 +188,29 @@ export { createIdentityScopedObservations } from './identity-scoped-observations
 export { receiveIdentityScopePrearm, cancelIdentityScopePrearm } from './identity-scoped-prearm.ts';
 
 export {
+  bindContextApplication,
+  createContextApplication,
   createContextDirectory,
   ContextDirectoryEntrySchema,
   ContextDirectoryPreparingError,
-} from './context-directory.ts';
+} from './context-application.ts';
 export type {
+  ContextAccessHandle,
+  ContextActor,
+  ContextApplication,
+  ContextApplicationDependencies,
   ContextDirectory,
   ContextDirectoryEntry,
   ContextDirectoryPage,
   ContextDirectoryQuery,
   ContextDirectoryRead,
-} from './context-directory.ts';
+  ContextQueryClient,
+  ContextRecord,
+  ContextRoleEnrollmentResult,
+  ContextRoleOccurrenceInput,
+} from './context-application.ts';
+export { bindContextAccess } from './context-access-port.ts';
+export type { ContextAccessPort } from './context-access-port.ts';
 
 export {
   createPublicIdentityOutputCapture,

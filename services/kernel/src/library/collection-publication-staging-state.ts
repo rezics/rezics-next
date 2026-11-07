@@ -1,6 +1,6 @@
 /** Confidential, bounded progress only. None of these values admits a Source or certifies a query. */
 import { isDeepStrictEqual } from 'node:util';
-import { ProblemError } from '../http/problem.ts';
+import { ProblemError } from '../http/problem-error.ts';
 import type { CanonicalCollectionPrefix } from './collection-source.ts';
 import type { ScopeEvaluationProgress, SearchScopeEvaluation } from '../search/scope-source.ts';
 

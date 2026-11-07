@@ -3,26 +3,29 @@ import { createHash } from 'node:crypto';
 import { noEffect, runCommand } from '../command/command.ts';
 import { readPartition } from '../partition/partition.ts';
 import { partitionOf, routeOf } from '../route/route.ts';
-import { deadlineClient } from '../access/authenticate.ts';
-import { requireAccessDeadline } from '../access/unavailable.ts';
-import { ProblemError } from '../http/problem.ts';
 import { decodeListCursor, encodeListCursor } from '../tokens/list-cursor.ts';
-import { withReadTransaction } from './read.ts';
 import { authorizedContextMetadata } from './context-lifecycle-read.ts';
-import { refreshSemanticErasureSourceRecord } from './account-erasure.ts';
 import {
-  readSemanticSourceDisposition,
-  recordSemanticSourceDisposition,
-  type SemanticCopyRole,
-} from './erasure-producer.ts';
+  contextAccess,
+  ContextDirectoryPreparingError,
+  type ContextAccessHandle,
+  type ContextAccessPort,
+  type ContextCopyRole,
+  type ContextDirectoryEntry,
+  type ContextDirectoryPage,
+  type ContextDirectoryQuery,
+  type ContextDirectoryRead,
+} from './context-access-port.ts';
 import type { WorkContext } from '../work/registry.ts';
 import type { Effect } from '../events/effects.ts';
 import { t } from 'elysia';
 import type { Pool } from 'pg';
-import type { Access, Actor } from '../request/access.ts';
 import type { KeyRing } from '../tokens/seal.ts';
 import prefixCandidates from './context-directory-prefix.sql';
 import rawCandidates from './context-directory-raw.sql';
+
+export { ContextDirectoryPreparingError };
+export type { ContextDirectoryEntry, ContextDirectoryPage, ContextDirectoryQuery, ContextDirectoryRead };
 
 export const ContextDirectoryEntrySchema = t.Object(
   {
@@ -35,33 +38,19 @@ export const ContextDirectoryEntrySchema = t.Object(
   },
   { additionalProperties: false },
 );
-export type ContextDirectoryEntry = {
-  id: string;
-  kind: 'global' | 'community';
-  labels: Record<string, string>;
-  state: 'active' | 'deleted';
-  deletedAt: string | null;
-  purgeAfter: string | null;
-};
-export type ContextDirectoryPage = { contexts: ContextDirectoryEntry[]; next: string | null };
-export type ContextDirectoryRead = { actor: Actor; deadline: number };
-export type ContextDirectoryQuery = { query?: string; limit?: number; cursor?: string; deleted?: boolean };
 export type ContextDirectory = {
   list(input: ContextDirectoryRead & ContextDirectoryQuery): Promise<ContextDirectoryPage>;
   lifecycle(input: ContextDirectoryRead & { id: string }): Promise<ContextDirectoryEntry | null>;
 };
-export class ContextDirectoryPreparingError extends Error {
-  constructor() {
-    super('Context directory is preparing');
-  }
-}
 export function createContextDirectory(dependencies: {
   pool: Pool;
-  access: Access;
+  access: ContextAccessHandle;
   tokens: KeyRing;
   clock?: () => Date;
+  ports?: ContextAccessPort;
 }): ContextDirectory {
   const clock = dependencies.clock ?? (() => new Date());
+  const port = dependencies.ports ?? contextAccess();
   return {
     async list(input) {
       const limit = input.limit ?? 20;
@@ -75,7 +64,7 @@ export function createContextDirectory(dependencies: {
           (char) => char === '\0' || (char.codePointAt(0)! >= 0xd800 && char.codePointAt(0)! <= 0xdfff),
         )
       )
-        throw new ProblemError('invalid_request');
+        throw port.requestInvalid();
       const binding = {
         route: 'GET /v1/contexts',
         viewer: input.actor.kind === 'account' ? input.actor.accountId : null,
@@ -105,13 +94,13 @@ export function createContextDirectory(dependencies: {
         decoded &&
         (!decoded.ok || decoded.after.length !== 3 || decoded.after.some((key) => typeof key !== 'string'))
       )
-        throw new ProblemError('invalid_request');
+        throw port.requestInvalid();
       const after = decoded?.ok ? (decoded.after as string[]) : ['', '00000000-0000-0000-0000-000000000000', ''];
-      const snapshot = await withReadTransaction(dependencies.pool, async (connection) => {
-        const tx = deadlineClient(connection, input.deadline);
+      const snapshot = await port.withReadTransaction(dependencies.pool, async (connection) => {
+        const tx = port.deadlineClient(connection, input.deadline);
         const owner = await readPartition(tx, 0);
         if (!owner || owner.writeState !== 'active') throw new ContextDirectoryPreparingError();
-        if (decoded?.ok && decoded.epoch !== owner.epoch) throw new ProblemError('invalid_request');
+        if (decoded?.ok && decoded.epoch !== owner.epoch) throw port.requestInvalid();
         const pending = await tx.query(
           `(SELECT 1 FROM semantic.context_directory_home WHERE NOT complete ORDER BY route LIMIT 1)
            UNION ALL (SELECT 1 FROM semantic.context_directory_entry WHERE route=0 AND refresh_pending ORDER BY context_id LIMIT 1)
@@ -132,12 +121,16 @@ export function createContextDirectory(dependencies: {
           : await rawCandidates.run(tx, { state, after_id: after[1]! });
         return { rows, epoch: owner.epoch };
       });
-      const authorized = await authorizedContextMetadata(dependencies, {
-        ids: [...new Set(snapshot.rows.map((row) => row.id))],
-        expected: new Map(snapshot.rows.map((row) => [row.id, { version: row.version, epoch: row.source_epoch }])),
-        actor: input.actor,
-        deadline: input.deadline,
-      });
+      const authorized = await authorizedContextMetadata(
+        dependencies,
+        {
+          ids: [...new Set(snapshot.rows.map((row) => row.id))],
+          expected: new Map(snapshot.rows.map((row) => [row.id, { version: row.version, epoch: row.source_epoch }])),
+          actor: input.actor,
+          deadline: input.deadline,
+        },
+        port,
+      );
       const entries = new Map(authorized.map((entry) => [entry.id, entry]));
       const contexts: ContextDirectoryEntry[] = [];
       const emitted = new Set<string>();
@@ -183,8 +176,8 @@ export function createContextDirectory(dependencies: {
               clock(),
             )
           : null;
-      await withReadTransaction(dependencies.pool, async (connection) => {
-        const tx = deadlineClient(connection, input.deadline);
+      await port.withReadTransaction(dependencies.pool, async (connection) => {
+        const tx = port.deadlineClient(connection, input.deadline);
         const owner = await readPartition(tx, 0);
         if (!owner || owner.writeState !== 'active' || owner.epoch !== snapshot.epoch)
           throw new ContextDirectoryPreparingError();
@@ -196,12 +189,12 @@ export function createContextDirectory(dependencies: {
         if (pending.rowCount) throw new ContextDirectoryPreparingError();
       });
       if (Buffer.byteLength(JSON.stringify({ contexts, next })) > 65536) throw new ContextDirectoryPreparingError();
-      requireAccessDeadline(input.deadline);
+      port.requireDeadline(input.deadline);
       return { contexts, next };
     },
     async lifecycle(input) {
       if (routeOf(input.id) === null) return null;
-      return (await authorizedContextMetadata(dependencies, { ...input, ids: [input.id] }))[0] ?? null;
+      return (await authorizedContextMetadata(dependencies, { ...input, ids: [input.id] }, port))[0] ?? null;
     },
   };
 }
@@ -227,15 +220,21 @@ type SourceContext = {
   state: string;
   version: string;
   erasure_key: string;
-  roles: (SemanticCopyRole & { delivery_position: string })[];
+  roles: (ContextCopyRole & { delivery_position: string })[];
   disposition: 'removed' | 'retained-nonpersonal' | null;
 };
 
 /** One retained native home step. Route/key order is indexed; raw100 includes keys with no eligible payload.
  * The native Source connection closes before the receiving Source command. No account/history completion is inferred.
  */
-export async function stepContextDirectory(pool: Pool, home: number, clock?: () => Date): Promise<boolean> {
+export async function stepContextDirectory(
+  pool: Pool,
+  home: number,
+  clock?: () => Date,
+  accessPort?: ContextAccessPort,
+): Promise<boolean> {
   if (!Number.isInteger(home) || home < 0 || home > 4095) throw new RangeError('Invalid Context directory home');
+  const port = accessPort ?? contextAccess();
   const source = (
     await runCommand(pool, { partition: home, clock }, async (tx) => {
       const owner = await readPartition(tx, home);
@@ -272,7 +271,7 @@ export async function stepContextDirectory(pool: Pool, home: number, clock?: () 
         ).rows;
         if (row.roles.length > 100 || (row.kind !== 'global' && !row.roles.length))
           throw new ContextDirectoryPreparingError();
-        row.disposition = await readSemanticSourceDisposition(tx, 'context', row.erasure_key);
+        row.disposition = await port.readSourceDisposition(tx, 'context', row.erasure_key);
       }
       return noEffect({
         rows,
@@ -289,6 +288,7 @@ export async function stepContextDirectory(pool: Pool, home: number, clock?: () 
   const fenced = await fencedDirectoryAccounts(
     pool,
     source.rows.flatMap((row) => row.roles),
+    port,
   );
   for (const row of source.rows) {
     if (row.state === 'purged') continue;
@@ -298,7 +298,7 @@ export async function stepContextDirectory(pool: Pool, home: number, clock?: () 
         const role = row.roles.find((role) => fenced.has(role.account_id))!;
         // A later surviving-owner write invalidates old xmin custody. Ask the existing exact-key native
         // minimizer to refresh its real sealed role; no history completion or nonpersonal classification is inferred.
-        await refreshSemanticErasureSourceRecord(pool, role.account_id, home, {
+        await port.refreshErasureSourceRecord(pool, role.account_id, home, {
           store: 'context',
           recordKey: row.erasure_key,
           role: role.role,
@@ -359,14 +359,14 @@ export async function stepContextDirectory(pool: Pool, home: number, clock?: () 
       if (!owner || owner.writeState !== 'active' || owner.epoch !== source.epoch)
         throw new ContextDirectoryPreparingError();
       for (const row of source.rows) {
-        const disposition = await readSemanticSourceDisposition(tx, 'context', row.erasure_key);
+        const disposition = await port.readSourceDisposition(tx, 'context', row.erasure_key);
         await tx.query(
           'UPDATE semantic.context SET directory_pending=false WHERE route=$1 AND context_id=$2 AND security_revision=$3',
           [row.route, row.id, row.version],
         );
         // Updating only the technical pending flag must carry forward an already proven native minimization.
         if (disposition === 'retained-nonpersonal')
-          recordSemanticSourceDisposition(tx, 'context', row.erasure_key, disposition);
+          port.recordSourceDisposition(tx, 'context', row.erasure_key, disposition);
         // A concurrent newer Source write must remain preparing even if a different receiver already acknowledged it.
         await tx.query(
           'UPDATE semantic.context SET directory_pending=true WHERE route=$1 AND context_id=$2 AND security_revision<>$3',
@@ -400,7 +400,7 @@ export async function stepContextDirectory(pool: Pool, home: number, clock?: () 
 }
 
 /** Existing effect delivery bridges changes; retained maintenance frontiers populate old native Contexts. */
-export function contextDirectoryEffect(pool: Pool, clock?: () => Date): Effect {
+export function contextDirectoryEffect(pool: Pool, clock?: () => Date, accessPort?: ContextAccessPort): Effect {
   return {
     name: 'semantic_context_directory',
     types: [
@@ -412,18 +412,19 @@ export function contextDirectoryEffect(pool: Pool, clock?: () => Date): Effect {
       const data = event.data as { id?: string; kind?: string };
       if (typeof data?.id !== 'string' || (data.kind !== undefined && data.kind !== 'context')) return;
       const route = routeOf(data.id);
-      if (route !== null) await stepContextDirectory(pool, partitionOf(route), clock);
+      if (route !== null) await stepContextDirectory(pool, partitionOf(route), clock, accessPort);
     },
   };
 }
 
-export async function registerContextDirectoryWork(context: WorkContext) {
+export async function registerContextDirectoryWork(context: WorkContext, accessPort?: ContextAccessPort) {
+  const port = accessPort ?? contextAccess();
   const page = DBOS.registerStep(
     async () => {
       // The partial index returns the next unfinished home. It is technical native progress, never a user result.
-      const home = await nextDirectoryHome(context.pool, context.clock);
+      const home = await nextDirectoryHome(context.pool, context.clock, port);
       if (home === undefined) return true;
-      await stepContextDirectory(context.pool, home, context.clock);
+      await stepContextDirectory(context.pool, home, context.clock, port);
       return false;
     },
     { name: 'semantic.contextDirectory.page', retriesAllowed: true, maxAttempts: 3 },
@@ -456,7 +457,11 @@ function directoryKey(value: string): string {
   return result;
 }
 
-async function fencedDirectoryAccounts(pool: Pool, roles: readonly SemanticCopyRole[]): Promise<Set<string>> {
+async function fencedDirectoryAccounts(
+  pool: Pool,
+  roles: readonly ContextCopyRole[],
+  port: ContextAccessPort,
+): Promise<Set<string>> {
   const groups = new Map<number, string[]>();
   for (const id of new Set(roles.map((role) => role.account_id))) {
     const home = partitionOf(routeOf(id)!);
@@ -464,7 +469,7 @@ async function fencedDirectoryAccounts(pool: Pool, roles: readonly SemanticCopyR
   }
   const fenced = new Set<string>();
   for (const [home, ids] of groups) {
-    const found = await withReadTransaction(pool, async (tx) => {
+    const found = await port.withReadTransaction(pool, async (tx) => {
       const owner = await readPartition(tx, home);
       if (!owner || owner.writeState !== 'active') throw new ContextDirectoryPreparingError();
       return (
@@ -482,12 +487,18 @@ async function fencedDirectoryAccounts(pool: Pool, roles: readonly SemanticCopyR
   return fenced;
 }
 
-export async function populateContextDirectory(pool: Pool, clock?: () => Date, steps = 100) {
+export async function populateContextDirectory(
+  pool: Pool,
+  clock?: () => Date,
+  steps = 100,
+  accessPort?: ContextAccessPort,
+) {
+  const port = accessPort ?? contextAccess();
   for (let step = 0; step < steps; step++) {
-    const home = await nextDirectoryHome(pool, clock);
+    const home = await nextDirectoryHome(pool, clock, port);
     if (home === undefined) return;
     try {
-      await stepContextDirectory(pool, home, clock);
+      await stepContextDirectory(pool, home, clock, port);
     } catch (error) {
       if (error instanceof ContextDirectoryPreparingError) return;
       throw error;
@@ -495,7 +506,11 @@ export async function populateContextDirectory(pool: Pool, clock?: () => Date, s
   }
 }
 
-async function nextDirectoryHome(pool: Pool, clock?: () => Date): Promise<number | undefined> {
+async function nextDirectoryHome(
+  pool: Pool,
+  clock: (() => Date) | undefined,
+  port: ContextAccessPort,
+): Promise<number | undefined> {
   const repair = (
     await pool.query<{ id: string }>(
       'SELECT context_id::text AS id FROM semantic.context_directory_entry WHERE route=0 AND refresh_pending ORDER BY context_id LIMIT 1',
@@ -512,13 +527,13 @@ async function nextDirectoryHome(pool: Pool, clock?: () => Date): Promise<number
         )
       ).rows[0];
       if (!native) throw new ContextDirectoryPreparingError();
-      const disposition = await readSemanticSourceDisposition(tx, 'context', native.erasure_key);
+      const disposition = await port.readSourceDisposition(tx, 'context', native.erasure_key);
       await tx.query('UPDATE semantic.context SET directory_pending=true WHERE route=$1 AND context_id=$2', [
         route,
         repair.id,
       ]);
       if (disposition === 'retained-nonpersonal')
-        recordSemanticSourceDisposition(tx, 'context', native.erasure_key, disposition);
+        port.recordSourceDisposition(tx, 'context', native.erasure_key, disposition);
       return { value: null, events: [{ type: CONTEXT_DIRECTORY_CHANGED, data: {} }] };
     });
     return home;

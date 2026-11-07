@@ -1,6 +1,6 @@
 import type { Pool } from 'pg';
 import { withConnection } from '../database/pool.ts';
-import { deadlineClient, within } from '../access/authenticate.ts';
+import { deadlineClient, within } from './access-port.ts';
 import type { Effect } from '../events/effects.ts';
 import { routeOf } from '../route/route.ts';
 

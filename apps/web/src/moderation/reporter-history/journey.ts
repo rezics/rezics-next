@@ -1,5 +1,5 @@
 import type { QueryClient } from '@tanstack/react-query';
-import { browserObservation, type BrowserReader } from '../../session/observation';
+import { browserObservation, type BrowserReader } from '../../reader/lifetime/index';
 import {
   createPrivateReaderLifetime,
   preparePrivateReaderRead,

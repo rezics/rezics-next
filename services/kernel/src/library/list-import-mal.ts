@@ -9,8 +9,9 @@ import { mintReadTime, noEffect, type CommandTransaction, type CommandOutcome } 
 import type { KernelClock } from '../clock.ts';
 import { tupleRoute } from '../content/imported-contract.ts';
 import { withConnection } from '../database/pool.ts';
-import { ProblemError } from '../http/problem.ts';
-import { accessCheck, type Access, type Actor, type AccountActor } from '../request/access.ts';
+import { ProblemError } from '../http/problem-error.ts';
+import { accessCheck } from '../request/access-check.ts';
+import { type Access, type Actor, type AccountActor } from '../request/access.ts';
 import { routeOf } from '../route/route.ts';
 import type { KeyRing } from '../tokens/seal.ts';
 import type { SessionComponent } from '../tokens/session.ts';

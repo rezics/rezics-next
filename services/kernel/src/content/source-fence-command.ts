@@ -1,7 +1,7 @@
 import { createHash } from 'node:crypto';
 import type { Pool } from 'pg';
-import { GrantDeniedError } from '../access/grant-commands.ts';
-import { resourceAuthorization } from '../access/resource-authorization.ts';
+import { GrantDeniedError } from '../access/contract/index.ts';
+import { resourceAuthorization } from './access-port.ts';
 import {
   authoritativeTimeValue,
   currentCommand,

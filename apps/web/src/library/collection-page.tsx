@@ -68,7 +68,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useEffect, useLayoutEffect, useRef, useState, type FormEvent, type MouseEvent } from 'react';
 import { m } from '../paraglide/messages.js';
 import { getLocale } from '../paraglide/runtime.js';
-import { useSession } from '../session/query';
+import { useSession } from '../session';
 import {
   useCollectionCurrentAdmission,
   type CollectionAdmission,

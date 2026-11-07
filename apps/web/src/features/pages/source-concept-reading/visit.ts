@@ -1,6 +1,5 @@
 import { useEffect, useLayoutEffect, useRef, useState } from 'react';
-import { candidateFailure, type CandidateFailure } from '../../../subject/candidates';
-import type { useCatalogueLifetime } from '../../../subject/candidate-lifetime';
+import { candidateFailure, type CandidateFailure, type CandidateVisit } from '../candidate-reading-application';
 import { firstChangePage, type ChangePageHistory } from '../../catalogue/subject-changes-navigation';
 import {
   conceptPageCap,
@@ -55,7 +54,7 @@ type VisitState = Position &
     notice?: 'currentness' | 'row-missing';
     noticeSection?: ConceptFocus['section'];
   };
-type Admission = ReturnType<typeof useCatalogueLifetime>;
+type Admission = CandidateVisit;
 
 function firstMembershipPages(): MembershipPosition {
   return {

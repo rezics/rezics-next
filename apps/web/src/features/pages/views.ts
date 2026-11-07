@@ -454,7 +454,8 @@ export function subjectTabs(page: {
     sums.set(view, sum);
   }
   return VIEWS.flatMap((view): ViewTab[] => {
-    if (!defined.has(view) || !viewIsPublic(profile, view)) return [];
+    // Account publicViews hide account activity. Subject reviews and discussion follow the open composition read.
+    if (!defined.has(view) || (page.account !== undefined && !viewIsPublic(profile, view))) return [];
     if (OPEN_READ_VIEWS.has(view)) {
       if (!openReads.has(view)) return [];
       const sum = sums.get(view);

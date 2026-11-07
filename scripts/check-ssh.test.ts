@@ -185,7 +185,8 @@ const state = process.env.SSH_STATE!;
 const log = process.env.SSH_LOG!;
 await Bun.write(log, (await Bun.file(log).exists() ? await Bun.file(log).text() : '') + args.join(' ') + '\\n');
 if (args.includes('-O') && args.includes('check')) {
-  process.exit(await Bun.file(state).text() === 'stale' ? 255 : 0);
+  if (await Bun.file(state).text() === 'stale') { console.error('Connection refused'); process.exit(255); }
+  process.exit(0);
 }
 if (args.includes('-O') && args.includes('exit')) {
   await Bun.write(state, 'cleared');
@@ -391,7 +392,7 @@ exit 2
   }
 });
 
-test('a hung master with no live lease is recovered with -O exit at most once per minute', async () => {
+test('an affirmatively dead master with no lease is recovered with -O exit at most once per minute', async () => {
   const directory = fixture();
   const bin = writeFakeSsh(
     directory,
@@ -399,7 +400,7 @@ test('a hung master with no live lease is recovered with -O exit at most once pe
 const args = process.argv.slice(2);
 const log = process.env.SSH_LOG!;
 await Bun.write(log, (await Bun.file(log).exists() ? await Bun.file(log).text() : '') + args.join(' ') + '\\n');
-if (args.includes('-O') && args.includes('check')) process.exit(0);
+if (args.includes('-O') && args.includes('check')) { console.error('Connection refused'); process.exit(255); }
 if (args.includes('-O') && args.includes('exit')) process.exit(0);
 if (args.some((argument) => argument.includes('REMOTE_CHECK_CONTROL_PROBE'))) {
   process.stdout.write('REMOTE_CHECK_CONTROL_OK\\n');
@@ -438,7 +439,7 @@ test('concurrent recoveries of one host take -O exit once per minute', async () 
 const args = process.argv.slice(2);
 const log = process.env.SSH_LOG!;
 await Bun.write(log, (await Bun.file(log).exists() ? await Bun.file(log).text() : '') + args.join(' ') + '\\n');
-if (args.includes('-O')) process.exit(args.includes('check') ? 255 : 0);
+if (args.includes('-O')) { if (args.includes('check')) console.error('Connection refused'); process.exit(args.includes('check') ? 255 : 0); }
 process.exit(2);
 `,
   );
@@ -492,19 +493,19 @@ process.exit(2);
     fixtures.push(lease.directory);
     expect(hostControlLeaseIsHeld(lease.directory, 'a')).toBe(true);
     expect(await recoverHungHostMaster(host('a'), lease.directory, Date.now())).toBe(false);
-    expect(readFileSync(log, 'utf8')).toContain('-O check');
+    expect(readFileSync(log, 'utf8')).toContain('REMOTE_CHECK_CONTROL_PROBE');
     expect(readFileSync(log, 'utf8')).not.toMatch(/-O exit/);
     await releaseHostControl(lease);
     expect(hostControlLeaseIsHeld(lease.directory, 'a')).toBe(false);
-    expect(await recoverHungHostMaster(host('a'), lease.directory, Date.now())).toBe(true);
-    expect(readFileSync(log, 'utf8')).toContain('-O exit');
+    expect(await recoverHungHostMaster(host('a'), lease.directory, Date.now())).toBe(false);
+    expect(readFileSync(log, 'utf8')).not.toContain('-O exit');
   } finally {
     delete process.env.SSH_LOG;
     process.env.PATH = previousPath;
   }
 });
 
-test('a dead master is recovered even while a run holds its lease', async () => {
+test('a dead master cannot be retired until its active run lease is released', async () => {
   const directory = fixture();
   const state = join(directory, 'state');
   writeFileSync(state, 'live');
@@ -516,7 +517,8 @@ const state = process.env.SSH_STATE!;
 const log = process.env.SSH_LOG!;
 await Bun.write(log, (await Bun.file(log).exists() ? await Bun.file(log).text() : '') + args.join(' ') + '\\n');
 if (args.includes('-O') && args.includes('check')) {
-  process.exit((await Bun.file(state).text()) === 'live' ? 0 : 255);
+  if ((await Bun.file(state).text()) !== 'live') { console.error('Connection refused'); process.exit(255); }
+  process.exit(0);
 }
 if (args.includes('-O') && args.includes('exit')) process.exit(0);
 if (args.some((argument) => argument.includes('REMOTE_CHECK_CONTROL_PROBE'))) {
@@ -537,9 +539,11 @@ process.exit(2);
     const lease = await acquireHostControl(host('a'), control);
     fixtures.push(lease.directory);
     writeFileSync(state, 'dead');
+    expect(await recoverHungHostMaster(host('a'), lease.directory, Date.now())).toBe(false);
+    expect(readFileSync(log, 'utf8')).not.toContain('-O exit');
+    await releaseHostControl(lease);
     expect(await recoverHungHostMaster(host('a'), lease.directory, Date.now())).toBe(true);
     expect(readFileSync(log, 'utf8')).toContain('-O exit');
-    await releaseHostControl(lease);
   } finally {
     delete process.env.SSH_STATE;
     delete process.env.SSH_LOG;
@@ -573,4 +577,99 @@ test('five minutes of consecutive probe timeouts report one environment event na
       started + 6 * 60_000 + PLACEMENT_PROBE_TIMEOUT_EVENT_MS,
     ),
   ).toBe(placementProbeTimeoutEvent('b', 'connection timed out'));
+});
+
+test('a delayed answering master remains uncertain after its check deadline, with and without an active lease', async () => {
+  const directory = fixture();
+  const log = join(directory, 'ssh.log');
+  const bin = writeFakeSsh(
+    directory,
+    `#!/usr/bin/env bun
+import { appendFileSync } from 'node:fs';
+const args = process.argv.slice(2);
+appendFileSync(process.env.SSH_LOG!, args.join(' ') + '\\n');
+if (args.includes('-O') && args.includes('check')) { await Bun.sleep(200); process.exit(0); }
+if (args.includes('-O')) process.exit(0);
+console.log('REMOTE_CHECK_CONTROL_OK');
+`,
+  );
+  const previous = { ...process.env };
+  process.env.PATH = `${bin}:${process.env.PATH}`;
+  process.env.SSH_LOG = log;
+  try {
+    const lease = await acquireHostControl(host('a'), join(directory, 'control'));
+    fixtures.push(lease.directory);
+    expect(await recoverHungHostMaster(host('a'), lease.directory, Date.now(), 20)).toBe(false);
+    await releaseHostControl(lease);
+    expect(await recoverHungHostMaster(host('a'), lease.directory, Date.now(), 20)).toBe(false);
+    expect(readFileSync(log, 'utf8')).not.toContain('-O exit');
+  } finally {
+    process.env = previous;
+  }
+});
+
+test('cross-process acquisition waits until the exclusive recovery check and retirement have settled', async () => {
+  const directory = fixture();
+  const checking = join(directory, 'checking');
+  const gate = join(directory, 'gate');
+  const acquired = join(directory, 'acquired');
+  const control = join(directory, 'control');
+  fixtures.push(sshControlDirectory(directory, { REMOTE_CHECK_SSH_CONTROL_DIR: control }));
+  const bin = writeFakeSsh(
+    directory,
+    `#!/usr/bin/env bun
+import { existsSync, writeFileSync } from 'node:fs';
+const args = process.argv.slice(2);
+if (args.includes('-O') && args.includes('check')) {
+  writeFileSync(${JSON.stringify(checking)}, 'checking');
+  while (!existsSync(${JSON.stringify(gate)})) await Bun.sleep(5);
+  console.error('Connection refused'); process.exit(255);
+}
+if (args.includes('-O')) process.exit(0);
+console.log('REMOTE_CHECK_CONTROL_OK');
+`,
+  );
+  const previous = { ...process.env };
+  process.env.PATH = `${bin}:${process.env.PATH}`;
+  let child: ReturnType<typeof Bun.spawn> | undefined;
+  let recovery: Promise<boolean> | undefined;
+  try {
+    recovery = recoverHungHostMaster(host('a'), control, Date.now(), 2_000);
+    for (let count = 0; count < 200 && !existsSync(checking); count++) await Bun.sleep(5);
+    expect(existsSync(checking)).toBe(true);
+    child = Bun.spawn(
+      [
+        process.execPath,
+        '--eval',
+        `
+      import { acquireHostControl, releaseHostControl } from ${JSON.stringify(resolve(repository, 'scripts/check-ssh.ts'))};
+      import { writeFileSync } from 'node:fs';
+      const lease = await acquireHostControl(${JSON.stringify(host('a'))}, ${JSON.stringify(control)});
+      process.on('SIGTERM', async () => { await releaseHostControl(lease); process.exit(0); });
+      writeFileSync(${JSON.stringify(acquired)}, 'acquired');
+      await new Promise(() => setInterval(() => {}, 1000));
+    `,
+      ],
+      { stdin: 'ignore', stdout: 'ignore', stderr: 'pipe', env: process.env },
+    );
+    await Bun.sleep(100);
+    expect(existsSync(acquired)).toBe(false);
+    writeFileSync(gate, 'continue');
+    expect(await recovery).toBe(true);
+    for (let count = 0; count < 200 && !existsSync(acquired); count++) await Bun.sleep(5);
+    if (child.exitCode !== null) throw new Error(await new Response(child.stderr).text());
+    expect(existsSync(acquired)).toBe(true);
+    expect(hostControlLeaseIsHeld(control, 'a')).toBe(true);
+    child.kill('SIGTERM');
+    expect(await child.exited).toBe(0);
+    expect(hostControlLeaseIsHeld(control, 'a')).toBe(false);
+  } finally {
+    writeFileSync(gate, 'continue');
+    await recovery;
+    if (child && child.exitCode === null) {
+      child.kill();
+      await child.exited;
+    }
+    process.env = previous;
+  }
 });

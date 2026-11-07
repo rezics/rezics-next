@@ -59,6 +59,20 @@ export function communityBoardHref(locale: string, boardId: string, returnTo?: s
   return returnTo ? `${href}?${new URLSearchParams({ returnTo })}` : href;
 }
 
+/** The composer opens with the exact Subject preset and the regional return; the Board stays its path operand. */
+export function communityEntryHref(input: {
+  locale: string;
+  boardId: string;
+  subjectId: string;
+  subjectLabel: string | null;
+  returnTo?: string;
+}): string {
+  const query = new URLSearchParams({ subject: input.subjectId });
+  if (input.subjectLabel) query.set('subjectTitle', input.subjectLabel);
+  if (input.returnTo) query.set('returnTo', input.returnTo);
+  return `/${encodeURIComponent(input.locale)}/boards/${encodeURIComponent(input.boardId)}/new?${query}`;
+}
+
 /** Every link preserves the regional request's original opaque frontier and surrounding route context. */
 export function communityRegionLinks(input: { href: string; paged: boolean; node?: string; region: CommunityRegion }) {
   const [address, hash] = input.href.split('#');

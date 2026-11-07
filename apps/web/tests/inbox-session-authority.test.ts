@@ -10,7 +10,11 @@ import type {
   ResolvedInboxPage,
   UnreadCount,
 } from '../src/inbox/inbox-read';
+import { performanceAmbientTree } from './performance-ambient';
 import { readyInboxPage } from '../src/inbox/inbox-read';
+import { createBrowserInboxAmbient } from '../src/inbox/adapters/ambient';
+
+const inboxAmbient = createBrowserInboxAmbient();
 
 // UNRUN: production callers, real QueryClient/session observers and shared UI, with held IO only.
 // Native admission, browser journeys and original acceptance are deferred by the launch contract.
@@ -91,6 +95,7 @@ let seenSend: (input: { data: InboxSeenAttempt; headers?: HeadersInit }) => Prom
 spyOn(reads, 'readUnreadCount').mockImplementation(() => countRead());
 spyOn(reads, 'markInboxSeen').mockImplementation((input) => seenSend(input));
 const { InboxPageView } = await import('../src/inbox/inbox-page');
+const { inboxContent } = await import('../src/inbox/adapters/presentation');
 const { UnreadBadge } = await import('../src/inbox/unread-badge');
 const { currentInboxViewer, inboxViewerStore, forInboxViewer } = await import('../src/inbox/inbox-viewer');
 const { inboxPageQuery, inboxViewerQueryKey, unreadCountQuery, unreadCountQueryFor, markInboxViewerSeen } =
@@ -223,7 +228,7 @@ async function screen(strict = false) {
           createElement(
             Fragment,
             null,
-            page ? createElement(InboxPageView, { loadPage }) : null,
+            page ? createElement(InboxPageView, { loadPage, content: inboxContent }) : null,
             badge ? createElement('aside', { 'data-badge': true }, createElement(UnreadBadge)) : null,
           ),
         ),
@@ -377,7 +382,7 @@ test('Inbox session failure retires retained private rows badges and exact marke
       expect(host.querySelector('[data-badge]')?.textContent).toBe('7');
       const alice = currentInboxViewer(client)!;
       const oldPageKey = inboxPageQuery(alice).queryKey;
-      const oldCountKey = unreadCountQueryFor(alice).queryKey;
+      const oldCountKey = unreadCountQueryFor(alice, inboxAmbient.now).queryKey;
       const mark = view.retain(m.inbox_triage_mark());
       const more = view.retain(m.inbox_load_more());
       await view.click(m.inbox_triage_mark());
@@ -436,7 +441,7 @@ test('Inbox session failure retires retained private rows badges and exact marke
         .getQueryCache()
         .findAll({ queryKey: inboxViewerQueryKey(recovered) })
         .find(({ queryKey }) => queryKey.at(-2) === 'all' && queryKey.at(-1) === null)!.queryKey;
-      const newCountKey = unreadCountQueryFor(recovered).queryKey;
+      const newCountKey = unreadCountQueryFor(recovered, inboxAmbient.now).queryKey;
       const freshReads = pageCalls.length;
       await act(async () => {
         if (outcome === 'confirmed') {
@@ -932,17 +937,24 @@ test('a live imperative viewer observes losses without UI subscribers and shared
       expect(await lateFailure).toBe('AbortError');
       let sends = 0;
       await expect(
-        markInboxViewerSeen(client, owner, { through: 'old', idempotencyKey: 'old-key' }, 'token', async () => {
-          sends++;
-          return { signedIn: true };
-        }),
+        markInboxViewerSeen(
+          client,
+          owner,
+          { through: 'old', idempotencyKey: 'old-key' },
+          'token',
+          inboxAmbient.now,
+          async () => {
+            sends++;
+            return { signedIn: true };
+          },
+        ),
       ).rejects.toThrow('Inbox viewer changed');
       expect(sends).toBe(0);
       expect(inboxPageQuery(owner).enabled).toBe(false);
-      expect(unreadCountQueryFor(owner).enabled).toBe(false);
+      expect(unreadCountQueryFor(owner, inboxAmbient.now).enabled).toBe(false);
       expect(inboxViewerQueryKey(fresh)).not.toEqual(inboxViewerQueryKey(owner));
       // Existing invalidation consumers still own the unchanged prefix.
-      const countKey = unreadCountQueryFor(fresh).queryKey;
+      const countKey = unreadCountQueryFor(fresh, inboxAmbient.now).queryKey;
       client.setQueryData(countKey, count(2));
       await client.invalidateQueries({ queryKey: unreadCountQuery.queryKey });
       expect(client.getQueryState(countKey)?.isInvalidated).toBe(true);

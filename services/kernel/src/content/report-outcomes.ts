@@ -2,9 +2,7 @@ import { jsonParameter } from '../database/json.ts';
 import { communityReportReadCheck, communityReportTargetFacts } from '../community/report-targets.ts';
 import type { Pool } from 'pg';
 import { Value } from 'typebox/value';
-import { deadlineClient } from '../access/authenticate.ts';
-import { notificationAllowed } from '../access/preferences.ts';
-import { resourceAuthorization } from '../access/resource-authorization.ts';
+import { deadlineClient, notificationAllowed, resourceAuthorization } from './access-port.ts';
 import {
   authoritativeTimeValue,
   CommandUnavailableError,

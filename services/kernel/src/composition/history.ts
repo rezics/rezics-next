@@ -109,6 +109,20 @@ import {
 } from '../history/adapters/index.ts';
 import { installHistoryComposition } from '../history/application/index.ts';
 import { type HistoryComposition } from '../history/contract/index.ts';
+import { bindNativeRecordSourceSetProducer } from '../history/adapters/index.ts';
+import {
+  appendSemanticRecordSourceSet,
+  beginSemanticRecordSourceSet,
+  collectSemanticCandidateSource,
+  collectSemanticRecordFacts,
+  currentSemanticRecordSourceSet,
+  pageSemanticRecordSourceSets,
+  readSemanticRecordSourceSet,
+  recordSemanticDocumentSource,
+  sealSemanticRecordSourceSet,
+  semanticRecordSourceSetLocator,
+  verifySemanticRecordSourceSet,
+} from '../semantic/record-source-set.ts';
 import { installIdentitySourceConsumerRuntime } from './identity-source-consumer.ts';
 
 /** The composed implementation, bound by name. Every member has exactly one native adapter. */
@@ -222,6 +236,19 @@ export function nativeHistoryComposition(): HistoryComposition {
 
 /** Process composition installs the native History before requests are served or Work runs. */
 export function installNativeHistory(): void {
+  bindNativeRecordSourceSetProducer({
+    appendSemanticRecordSourceSet,
+    beginSemanticRecordSourceSet,
+    collectSemanticCandidateSource,
+    collectSemanticRecordFacts,
+    currentSemanticRecordSourceSet,
+    pageSemanticRecordSourceSets,
+    readSemanticRecordSourceSet,
+    recordSemanticDocumentSource,
+    sealSemanticRecordSourceSet,
+    semanticRecordSourceSetLocator,
+    verifySemanticRecordSourceSet,
+  });
   installHistoryComposition(nativeHistoryComposition());
   installIdentitySourceConsumerRuntime();
 }

@@ -196,6 +196,15 @@ function processGroupIsAbsent(group: number): boolean {
     throw new Error(`process group visibility unknown for group ${group}`, { cause: error });
   }
 }
+/** True only when the kernel reports no such group; any other answer leaves the full identity checks to decide. */
+function groupKnownAbsent(group: number): boolean {
+  if (!Number.isSafeInteger(group) || group <= 1) return false;
+  try {
+    return processGroupIsAbsent(group);
+  } catch {
+    return false;
+  }
+}
 function emptyGroupUnconfirmedMessage(group: number): string {
   return `process group visibility unknown for group ${group}: no live members visible`;
 }
@@ -222,6 +231,7 @@ function incarnationHasZombies(identity: ProcessIdentity, procRoot = '/proc'): b
   return false;
 }
 /** Verify custody before either signalling a group or declaring it terminal. */
+export const REUSED_PID_REFUSAL = 'process identity changed; refusing to signal reused PID';
 export function checkedProcessGroup(identity: ProcessIdentity): ProcessIdentity[] {
   if (identity.group !== identity.pid || identity.group === inspectProcessIdentity(process.pid)?.group)
     throw new Error('worker must own a detached process group');
@@ -232,7 +242,7 @@ export function checkedProcessGroup(identity: ProcessIdentity): ProcessIdentity[
   if (current && !matches(current, identity)) {
     const reused = current.start !== identity.start || current.boot !== identity.boot;
     if (reused && !members.length && processGroupIsAbsent(identity.group)) return [];
-    throw new Error('process identity changed; refusing to signal reused PID');
+    throw new Error(REUSED_PID_REFUSAL);
   }
   if (members.some((member) => member.boot !== identity.boot || BigInt(member.start) < BigInt(identity.start)))
     throw new Error('process group identity changed');
@@ -437,6 +447,9 @@ export async function terminateProcessGroup(
   policy = defaultPolicy.process,
 ): Promise<void> {
   if (!identity) return;
+  // Signal zero answers for an absent group, zombies included, without scanning /proc. Maintenance reaps every recorded
+  // attempt whose worktree is gone, and one /proc scan per attempt outgrew its 45-second budget on 2026-11-07.
+  if (groupKnownAbsent(identity.group)) return;
   const members = await checkedProcessGroupAfterZombies(identity, graceMs, policy);
   if (!members.length) return;
   for (const member of members) {

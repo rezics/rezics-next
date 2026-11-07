@@ -1,10 +1,12 @@
 import { hashKey, QueryObserver, useQueryClient, type QueryClient } from '@tanstack/react-query';
 import { useCallback, useLayoutEffect, useMemo, useRef, useSyncExternalStore } from 'react';
-import { personalRead } from '../kernel/query';
-import { sessionQuery, useSession } from '../session/query';
+import { productionSettingsShellPort, useSettingsSession } from './adapters/shell';
 import { readProfile, saveProfile } from './actions';
 import { profileCommandValues, profileReadObservation } from './profile-data';
+import { useSettingsAmbient } from './adapters/ambient-view.tsx';
+import type { SettingsAmbient } from './ports/ambient';
 import { ProfileEditorSession } from './profile-write';
+import type { SettingsContentFailureReader } from './ports/content';
 
 type EditorEntry = {
   owner: ProfileEditorSession;
@@ -18,6 +20,7 @@ type EditorEntry = {
   observationCurrent: () => boolean;
   release?: () => void;
   readError?: { value: unknown };
+  mediaFailure: SettingsContentFailureReader;
 };
 const editors = new WeakMap<QueryClient, EditorEntry>();
 
@@ -41,9 +44,9 @@ function retire(client: QueryClient, entry: EditorEntry) {
   entry.listeners.forEach((listener) => listener());
 }
 
-function createEntry(client: QueryClient) {
-  const sessionRecord = client.getQueryCache().get(hashKey(sessionQuery.queryKey));
-  const sessionState = client.getQueryState(sessionQuery.queryKey);
+function createEntry(client: QueryClient, ambient: SettingsAmbient, mediaFailure: SettingsContentFailureReader) {
+  const sessionRecord = productionSettingsShellPort.sessionCacheRecord(client, hashKey);
+  const sessionState = productionSettingsShellPort.sessionQueryState(client);
   // These detect a committed success in the render-to-attachment gap, including structural sharing.
   const successes = sessionState?.dataUpdateCount;
   const observed =
@@ -54,8 +57,8 @@ function createEntry(client: QueryClient) {
   const observationCurrent = () => {
     const attached = entry;
     if (!attached || attached.retired) return false;
-    const query = client.getQueryCache().get(hashKey(sessionQuery.queryKey));
-    const state = client.getQueryState(sessionQuery.queryKey);
+    const query = productionSettingsShellPort.sessionCacheRecord(client, hashKey);
+    const state = productionSettingsShellPort.sessionQueryState(client);
     return (
       editors.get(client) === attached &&
       query === sessionRecord &&
@@ -67,53 +70,58 @@ function createEntry(client: QueryClient) {
   };
   // The constructor may mark an unreadable observation unavailable before it is attached.
   const current = () => !entry || (entry.users > 0 && owner.isCurrent() && observationCurrent());
-  const owner = new ProfileEditorSession(observed, (owner) => {
-    const read = async () => {
-      if (!current()) throw new Error('Profile unavailable');
-      const profile = profileReadObservation(await readProfile());
-      if (!current()) throw new Error('Profile unavailable');
-      if (profile.accountId !== owner.reader?.subject) throw new Error('Profile account changed');
-      return profile;
-    };
-    return {
-      isCurrent: current,
-      read: async () => {
-        await client.cancelQueries({ queryKey: owner.key, exact: true });
-        return read();
-      },
-      save: async (attempt) => {
-        await client.cancelQueries({ queryKey: owner.key, exact: true });
-        if (!current() || !owner.canWrite()) throw new Error('Profile unavailable');
-        const commandProfile = (value: typeof attempt.before) => ({
-          accountId: value.accountId,
-          kind: value.kind,
-          displayName: value.displayName,
-          biography: value.biography,
-          avatar: value.avatar,
-          links: value.links,
-          publicViews: value.publicViews,
-          ...(value.kind === 'organization' && value.speakersListed !== undefined
-            ? { speakersListed: value.speakersListed }
-            : {}),
-        });
-        return saveProfile({
-          data: {
-            before: commandProfile(attempt.before),
-            after: commandProfile(attempt.after),
-            idempotencyKey: attempt.idempotencyKey,
-          },
-          headers: { 'X-CSRF-Token': owner.actor?.incarnation ?? '' },
-        });
-      },
-      canWrite: () => current() && owner.canWrite(),
-      confirmed: (profile) => {
-        if (!current()) return;
-        const values = profileCommandValues(profile);
-        const editing = owner.editor.snapshot().editing;
-        client.setQueryData(owner.key, editing ? { ...values, editing } : values);
-      },
-    };
-  });
+  const owner = new ProfileEditorSession(
+    observed,
+    (owner) => {
+      const read = async () => {
+        if (!current()) throw new Error('Profile unavailable');
+        const profile = profileReadObservation(await readProfile());
+        if (!current()) throw new Error('Profile unavailable');
+        if (profile.accountId !== owner.reader?.subject) throw new Error('Profile account changed');
+        return profile;
+      };
+      return {
+        isCurrent: current,
+        mediaFailure,
+        read: async () => {
+          await client.cancelQueries({ queryKey: owner.key, exact: true });
+          return read();
+        },
+        save: async (attempt) => {
+          await client.cancelQueries({ queryKey: owner.key, exact: true });
+          if (!current() || !owner.canWrite()) throw new Error('Profile unavailable');
+          const commandProfile = (value: typeof attempt.before) => ({
+            accountId: value.accountId,
+            kind: value.kind,
+            displayName: value.displayName,
+            biography: value.biography,
+            avatar: value.avatar,
+            links: value.links,
+            publicViews: value.publicViews,
+            ...(value.kind === 'organization' && value.speakersListed !== undefined
+              ? { speakersListed: value.speakersListed }
+              : {}),
+          });
+          return saveProfile({
+            data: {
+              before: commandProfile(attempt.before),
+              after: commandProfile(attempt.after),
+              idempotencyKey: attempt.idempotencyKey,
+            },
+            headers: { 'X-CSRF-Token': owner.actor?.incarnation ?? '' },
+          });
+        },
+        canWrite: () => current() && owner.canWrite(),
+        confirmed: (profile) => {
+          if (!current()) return;
+          const values = profileCommandValues(profile);
+          const editing = owner.editor.snapshot().editing;
+          client.setQueryData(owner.key, editing ? { ...values, editing } : values);
+        },
+      };
+    },
+    ambient,
+  );
   const listeners = new Set<() => void>();
   const attached: EditorEntry = {
     owner,
@@ -130,33 +138,38 @@ function createEntry(client: QueryClient) {
     snapshot: () => attached.retired,
     current,
     observationCurrent,
+    mediaFailure,
   };
   entry = attached;
   editors.set(client, attached);
   return attached;
 }
 
-export function useProfileEditor() {
-  useSession();
+export function useProfileEditor(mediaFailure: SettingsContentFailureReader) {
+  useSettingsSession();
+  const ambient = useSettingsAmbient();
   const client = useQueryClient();
   const previous = useRef<{ client: QueryClient; entry: EditorEntry } | null>(null);
   // Provider replacement revokes rendered callbacks during render, before layout cleanup or an await resumes.
   if (previous.current && previous.current.client !== client) retire(previous.current.client, previous.current.entry);
   let cached = editors.get(client);
-  const state = client.getQueryState(sessionQuery.queryKey);
+  const state = productionSettingsShellPort.sessionQueryState(client);
   const observed =
     state?.status === 'success' && state.data
       ? state.data
       : { state: state?.status === 'error' ? 'unavailable' : 'unknown', csrfToken: null };
   if (
     cached &&
-    ((cached.attached && cached.users === 0) || !cached.observationCurrent() || !cached.owner.matches(observed))
+    ((cached.attached && cached.users === 0) ||
+      !cached.observationCurrent() ||
+      !cached.owner.matches(observed) ||
+      cached.mediaFailure !== mediaFailure)
   ) {
     retire(client, cached);
     cached = undefined;
   }
   // Keep the attachment check with its original entry rather than creating another session authority.
-  const entry = cached ?? createEntry(client);
+  const entry = cached ?? createEntry(client, ambient, mediaFailure);
   previous.current = { client, entry };
   const { owner } = entry;
   useSyncExternalStore(entry.subscribe, entry.snapshot, entry.snapshot);
@@ -166,7 +179,7 @@ export function useProfileEditor() {
     if (!entry.observationCurrent()) retire(client, entry);
     if (!entry.retired && !entry.release) {
       const profileHash = hashKey(owner.key);
-      const sessionHash = hashKey(sessionQuery.queryKey);
+      const sessionHash = productionSettingsShellPort.sessionQueryHash(hashKey);
       const unsubscribe = client.getQueryCache().subscribe((event) => {
         if (entry.retired) return;
         if (event.query.queryHash === profileHash) {
@@ -202,7 +215,7 @@ export function useProfileEditor() {
   const observer = useMemo(
     () =>
       new QueryObserver(client, {
-        ...personalRead,
+        ...productionSettingsShellPort.personalRead,
         queryKey: owner.key,
         queryFn: async () => {
           if (!entry.current()) throw new Error('Profile unavailable');
@@ -211,7 +224,7 @@ export function useProfileEditor() {
           if (profile.accountId !== owner.reader?.subject) throw new Error('Profile account changed');
           return profile;
         },
-        enabled: personalRead.enabled && readable,
+        enabled: productionSettingsShellPort.personalRead.enabled && readable,
         retry: false,
         refetchOnMount: false,
         refetchOnWindowFocus: false,
