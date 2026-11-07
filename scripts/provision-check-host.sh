@@ -183,6 +183,74 @@ echo "removed legacy Bun runtime transpiler caches (if present): ${legacy_transp
 
 mkdir -p /srv/rezics-check/slots /srv/rezics-check/runs /srv/rezics-check/bun-cache /srv/rezics-check/browsers /srv/rezics-check/datasets
 
+# Walk admission is one host-wide FIFO. The sticky namespace admits each supported caller identity; its persistent
+# mutex, sequence and slot locks stay at the same paths/inodes, while removable tickets live in a shared child so
+# another identity can collect a dead owner's ticket.
+walk_stack_directory=/tmp/rezics-walk-stacks
+walk_stack_tickets=$walk_stack_directory/tickets
+walk_stack_mutex=$walk_stack_directory/queue.lock
+if [ -L "$walk_stack_directory" ]; then
+  echo "provision: refusing symlinked walk stack directory: $walk_stack_directory" >&2
+  exit 1
+fi
+mkdir -p "$walk_stack_directory"
+chmod 1777 "$walk_stack_directory"
+if [ -L "$walk_stack_tickets" ]; then
+  echo "provision: refusing symlinked walk stack ticket directory: $walk_stack_tickets" >&2
+  exit 1
+fi
+mkdir -p "$walk_stack_tickets"
+chmod 0777 "$walk_stack_tickets"
+if [ -L "$walk_stack_mutex" ]; then
+  echo "provision: refusing symlinked walk stack mutex: $walk_stack_mutex" >&2
+  exit 1
+fi
+touch "$walk_stack_mutex"
+[ -f "$walk_stack_mutex" ] || { echo "provision: walk stack mutex is not a regular file: $walk_stack_mutex" >&2; exit 1; }
+chmod 0666 "$walk_stack_mutex"
+flock -x "$walk_stack_mutex" bash -s -- "$walk_stack_directory" "$walk_stack_tickets" <<'WALK_STACK'
+set -euo pipefail
+directory=$1
+tickets=$2
+for record in "$directory"/sequence "$directory"/sequence.next "$directory"/slot-*.lock "$directory"/wake; do
+  [ ! -L "$record" ] || { echo "provision: refusing symlinked walk stack record: $record" >&2; exit 1; }
+  [ -e "$record" ] || continue
+  [ -f "$record" ] || { echo "provision: walk stack record is not a regular file: $record" >&2; exit 1; }
+  chmod 0666 "$record"
+done
+for ticket in "$directory"/ticket-[0-9]*; do
+  [ ! -L "$ticket" ] || { echo "provision: refusing symlinked walk stack ticket: $ticket" >&2; exit 1; }
+  [ -e "$ticket" ] || continue
+  [[ ${ticket##*/} =~ ^ticket-[0-9]+$ ]] || continue
+  if ! flock -n -E 75 "$ticket" true; then
+    echo "provision: legacy walk ticket is live; retry after its waiters drain: $ticket" >&2
+    exit 1
+  fi
+done
+for ticket in "$directory"/ticket-[0-9]*; do
+  [ ! -L "$ticket" ] || { echo "provision: refusing symlinked walk stack ticket: $ticket" >&2; exit 1; }
+  [ -e "$ticket" ] || continue
+  [[ ${ticket##*/} =~ ^ticket-[0-9]+$ ]] || continue
+  destination=$tickets/${ticket##*/}
+  if [ -e "$destination" ]; then
+    [ ! -L "$destination" ] || { echo "provision: refusing symlinked migrated walk stack ticket: $destination" >&2; exit 1; }
+    [ "$ticket" -ef "$destination" ] || { echo "provision: walk stack ticket collision: $destination" >&2; exit 1; }
+    rm -- "$ticket"
+  else
+    mv -- "$ticket" "$destination"
+  fi
+  chmod 0666 "$destination"
+done
+for ticket in "$tickets"/ticket-[0-9]*; do
+  [ ! -L "$ticket" ] || { echo "provision: refusing symlinked walk stack ticket: $ticket" >&2; exit 1; }
+  [ -e "$ticket" ] || continue
+  [[ ${ticket##*/} =~ ^ticket-[0-9]+$ ]] || continue
+  [ -f "$ticket" ] || { echo "provision: walk stack ticket is not a regular file: $ticket" >&2; exit 1; }
+  chmod 0666 "$ticket"
+done
+WALK_STACK
+echo "provision: walk stack directory mode $(stat -c '%a' "$walk_stack_directory"), tickets mode $(stat -c '%a' "$walk_stack_tickets"), shared records mode 666"
+
 browsers=/srv/rezics-check/browsers
 if [ ! -e "$browsers/.chromium-$playwright_version" ]; then
   if [ "$package_manager" = fedora ]; then

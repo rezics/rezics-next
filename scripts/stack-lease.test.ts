@@ -1,5 +1,6 @@
 import { afterEach, expect, test } from 'bun:test';
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync } from 'node:fs';
+import { spawnSync } from 'node:child_process';
+import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, statSync } from 'node:fs';
 import { cpus, totalmem } from 'node:os';
 import { join, resolve } from 'node:path';
 import { acquireStackSlot, stackCapacity } from './stack-lease.ts';
@@ -15,6 +16,10 @@ type Run = {
 };
 const runs: Run[] = [];
 const slots: Awaited<ReturnType<typeof acquireStackSlot>>[] = [];
+const crossIdentityAvailable =
+  process.getuid?.() === 0 &&
+  spawnSync('runuser', ['-u', 'nobody', '--', 'test', '-r', lease]).status === 0 &&
+  spawnSync('runuser', ['-u', 'nobody', '--', 'test', '-x', process.execPath]).status === 0;
 
 function environment(capacity = 1): Record<string, string> {
   mkdirSync(join(repository, '.temp'), { recursive: true });
@@ -37,16 +42,27 @@ function environment(capacity = 1): Record<string, string> {
   return env as Record<string, string>;
 }
 
-function start(env: Record<string, string>, label: string, command?: string[], script = lease): Run {
-  const child = Bun.spawn(
-    [
-      process.execPath,
-      script,
-      ...(script === lease ? [label, '--'] : []),
-      ...(command ?? [process.execPath, '-e', 'console.log(process.env.REZICS_STACK_SLOT); await Bun.stdin.text();']),
-    ],
-    { cwd: repository, env, stdin: 'pipe', stdout: 'pipe', stderr: 'pipe' },
-  );
+function start(
+  env: Record<string, string>,
+  label: string,
+  command?: string[],
+  script = lease,
+  identity?: string,
+  cwd = repository,
+): Run {
+  const argv = [
+    process.execPath,
+    script,
+    ...(script === lease ? [label, '--'] : []),
+    ...(command ?? [process.execPath, '-e', 'console.log(process.env.REZICS_STACK_SLOT); await Bun.stdin.text();']),
+  ];
+  const child = Bun.spawn(identity ? ['runuser', '-u', identity, '--', ...argv] : argv, {
+    cwd,
+    env,
+    stdin: 'pipe',
+    stdout: 'pipe',
+    stderr: 'pipe',
+  });
   const output = { stdout: '', stderr: '' };
   const drain = async (stream: ReadableStream<Uint8Array>, key: 'stdout' | 'stderr') => {
     for await (const chunk of stream) output[key] += new TextDecoder().decode(chunk);
@@ -70,10 +86,25 @@ async function stop(run: ReturnType<typeof start>, code = 0) {
   expect(actual, run.output.stderr).toBe(code);
 }
 
-async function take(env: Record<string, string>) {
-  const slot = await acquireStackSlot('test', env);
+async function take(env: Record<string, string>, ticketDirectory?: string) {
+  const slot = await acquireStackSlot('test', env, 1, undefined, 60_000, undefined, undefined, ticketDirectory);
   slots.push(slot);
   return slot;
+}
+
+function startSharedLease(
+  env: Record<string, string>,
+  label: string,
+  ticketDirectory: string,
+  identity: string | undefined,
+  cwd: string,
+): Run {
+  const program = `import { acquireStackSlot } from ${JSON.stringify(lease)};
+const slot = await acquireStackSlot(${JSON.stringify(label)}, process.env, 1, undefined, 60_000, undefined, undefined, ${JSON.stringify(ticketDirectory)});
+console.log(slot.env.REZICS_STACK_SLOT);
+await Bun.stdin.text();
+await slot.release();`;
+  return start(env, label, [program], '-e', identity, cwd);
 }
 
 function held(env: Record<string, string>, index = 1) {
@@ -150,6 +181,56 @@ test('waiters take slots in arrival order', async () => {
     await stop(run);
   }
 }, 20_000);
+
+if (crossIdentityAvailable) {
+  test('different host identities and worktrees share repeatable FIFO tickets and slot inodes', async () => {
+    const env = environment();
+    const directory = env.REZICS_STACK_LEASE_DIR!;
+    chmodSync(directory, 0o1777);
+    const worktreeA = join(directory, 'worktree-a');
+    const worktreeB = join(directory, 'worktree-b');
+    mkdirSync(worktreeA, { mode: 0o755 });
+    mkdirSync(worktreeB, { mode: 0o755 });
+
+    for (const [label, identity, cwd] of [
+      ['root-first', 'root', worktreeA],
+      ['nobody-second', 'nobody', worktreeB],
+      ['root-third', 'root', worktreeB],
+      ['nobody-fourth', 'nobody', worktreeA],
+    ] as const) {
+      const run = startSharedLease(env, label, join(directory, 'tickets'), identity, cwd);
+      await stop(run);
+      expect(run.output.stdout).toBe('1/1\n');
+    }
+
+    const tickets = join(directory, 'tickets');
+    expect(statSync(directory).mode & 0o7777).toBe(0o1777);
+    expect(statSync(tickets).mode & 0o777).toBe(0o777);
+    for (const name of ['queue.lock', 'sequence', 'slot-1.lock'])
+      expect(statSync(join(directory, name)).mode & 0o777).toBe(0o666);
+    expect(BigInt(readFileSync(join(directory, 'sequence'), 'utf8'))).toBe(4n);
+    const ticketDirectory = join(directory, 'tickets');
+    const holder = await take(env, ticketDirectory);
+    const first = startSharedLease(env, 'nobody-first', ticketDirectory, 'nobody', worktreeA);
+    await waitFor(() => first.output.stderr.includes('waiting (1/1 held, 0 ahead)'));
+    const deadRoot = startSharedLease(env, 'root-dead', ticketDirectory, 'root', worktreeB);
+    await waitFor(() => deadRoot.output.stderr.includes('waiting (1/1 held, 1 ahead)'));
+    const last = startSharedLease(env, 'nobody-last', ticketDirectory, 'nobody', worktreeB);
+    await waitFor(() => last.output.stderr.includes('waiting (1/1 held, 2 ahead)'));
+    deadRoot.child.kill('SIGKILL');
+    await Promise.all([deadRoot.child.exited, deadRoot.done]);
+    await holder.release();
+
+    await waitFor(() => first.output.stdout.includes('1/1'));
+    expect(last.output.stdout).toBe('');
+    expect(readdirSync(tickets).filter((name) => /^ticket-\d+$/.test(name))).toHaveLength(1);
+    await stop(first);
+    await waitFor(() => last.output.stdout.includes('1/1'));
+    await stop(last);
+  }, 30_000);
+} else {
+  test.skip('different host identities and worktrees share repeatable FIFO tickets and slot inodes', () => {});
+}
 
 test('a holder killed with SIGKILL frees its slot without cleanup', async () => {
   const env = environment();

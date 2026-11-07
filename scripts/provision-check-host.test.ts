@@ -1,6 +1,6 @@
 import { afterAll, beforeAll, expect, test } from 'bun:test';
 import { spawnSync } from 'node:child_process';
-import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 
 const repository = resolve(import.meta.dir, '..');
@@ -14,14 +14,20 @@ type ScenarioOptions = {
   osRelease?: string;
   existingSshdConfig?: string;
   playwrightVersion?: string;
+  legacyWalkState?: boolean;
 };
 
 let root: string;
 let counter = 0;
+const canRecoverAsNobody =
+  process.getuid?.() === 0 &&
+  spawnSync('runuser', ['-u', 'nobody', '--', 'test', '-r', join(repository, 'scripts/stack-lease.ts')]).status === 0 &&
+  spawnSync('runuser', ['-u', 'nobody', '--', 'test', '-x', process.execPath]).status === 0;
 
 beforeAll(() => {
   mkdirSync(join(repository, '.temp'), { recursive: true });
   root = mkdtempSync(join(repository, '.temp/provision-check-host-test-'));
+  chmodSync(root, 0o755);
 });
 
 afterAll(() => rmSync(root, { recursive: true, force: true }));
@@ -37,8 +43,10 @@ function scenario(options: ScenarioOptions = {}) {
   const osRelease = join(directory, 'os-release');
   const identity = join(directory, 'identity');
   const scenarioScript = join(directory, 'provision-check-host.sh');
+  const walkDirectory = join(directory, 'tmp/rezics-walk-stacks');
   mkdirSync(bin, { recursive: true });
   mkdirSync(temporaryDirectory, { recursive: true });
+  chmodSync(directory, 0o755);
   mkdirSync(join(directory, 'etc/systemd/system'), { recursive: true });
   mkdirSync(sshdConfigDirectory, { recursive: true });
   writeFileSync(identity, 'fake identity');
@@ -49,6 +57,21 @@ function scenario(options: ScenarioOptions = {}) {
     const quotedVersion = `'${options.playwrightVersion.replaceAll("'", "'\\''")}'`;
     writeFileSync(scenarioScript, source.replace('playwright_version=1.64.1', `playwright_version=${quotedVersion}`));
   }
+  if (options.legacyWalkState) {
+    mkdirSync(walkDirectory, { recursive: true, mode: 0o755 });
+    chmodSync(walkDirectory, 0o755);
+    for (const [name, contents] of Object.entries({
+      'queue.lock': '',
+      sequence: '41',
+      'sequence.next': '42',
+      'slot-1.lock': '',
+      'ticket-40': '',
+    })) {
+      const file = join(walkDirectory, name);
+      writeFileSync(file, contents);
+      chmodSync(file, 0o644);
+    }
+  }
 
   const fakeSsh = `#!${bunExecutable}
 import { spawnSync } from 'node:child_process';
@@ -56,6 +79,7 @@ import { writeFileSync } from 'node:fs';
 const original = await Bun.stdin.text();
 writeFileSync(process.env.PROVISION_RECEIVED!, original);
 const replacements: Array<[string, string]> = [
+  ['/tmp/rezics-walk-stacks', process.env.PROVISION_DIRECTORY + '/tmp/rezics-walk-stacks'],
   ['/etc/os-release', process.env.PROVISION_OS_RELEASE!],
   ['/srv/rezics-check', process.env.PROVISION_DIRECTORY + '/srv/rezics-check'],
   ['/etc/systemd/system', process.env.PROVISION_DIRECTORY + '/etc/systemd/system'],
@@ -148,7 +172,27 @@ if (command === 'node') process.exit(0);
       },
     );
 
-  return { directory, events, received, run, sshdConfig };
+  return { directory, events, received, run, sshdConfig, walkDirectory };
+}
+
+function recoverAsNobody(directory: string) {
+  const args = [
+    '-u',
+    'nobody',
+    '--',
+    process.execPath,
+    join(repository, 'scripts/stack-lease.ts'),
+    'provision-recovery',
+    '--',
+    process.execPath,
+    '-e',
+    'console.log("non-root acquired");',
+  ];
+  return spawnSync('runuser', args, {
+    cwd: repository,
+    env: { ...process.env, REZICS_STACK_LEASE_DIR: directory, REZICS_STACK_SLOTS: '1' },
+    encoding: 'utf8',
+  });
 }
 
 test('a Fedora host installs missing packages with dnf', () => {
@@ -169,6 +213,33 @@ test('a Fedora host installs missing packages with dnf', () => {
   ]);
   expect(events.some((event) => event.command === 'apt-get')).toBe(false);
 });
+
+if (canRecoverAsNobody) {
+  test('provision repairs root-created walk admission state and admits a non-root caller', () => {
+    const fixture = scenario({ address: 'root@127.0.0.1', legacyWalkState: true });
+    const oldQueueInode = statSync(join(fixture.walkDirectory, 'queue.lock')).ino;
+    const oldSlotInode = statSync(join(fixture.walkDirectory, 'slot-1.lock')).ino;
+    const oldTicketInode = statSync(join(fixture.walkDirectory, 'ticket-40')).ino;
+
+    const provision = fixture.run();
+
+    expect(provision.status, provision.stderr).toBe(0);
+    expect(statSync(fixture.walkDirectory).mode & 0o7777).toBe(0o1777);
+    expect(statSync(join(fixture.walkDirectory, 'tickets')).mode & 0o777).toBe(0o777);
+    for (const name of ['queue.lock', 'sequence', 'sequence.next', 'slot-1.lock'])
+      expect(statSync(join(fixture.walkDirectory, name)).mode & 0o777).toBe(0o666);
+    expect(statSync(join(fixture.walkDirectory, 'queue.lock')).ino).toBe(oldQueueInode);
+    expect(statSync(join(fixture.walkDirectory, 'slot-1.lock')).ino).toBe(oldSlotInode);
+    expect(statSync(join(fixture.walkDirectory, 'tickets/ticket-40')).ino).toBe(oldTicketInode);
+    expect(readFileSync(join(fixture.walkDirectory, 'sequence'), 'utf8')).toBe('41');
+
+    const recovery = recoverAsNobody(fixture.walkDirectory);
+    expect(recovery.status, recovery.stderr).toBe(0);
+    expect(recovery.stdout).toBe('non-root acquired\n');
+  });
+} else {
+  test.skip('provision repairs root-created walk admission state and admits a non-root caller', () => {});
+}
 
 test('a Debian host still installs missing packages with apt', () => {
   const fixture = scenario({ osRelease: 'ID=debian\nID_LIKE="debian"\n' });
