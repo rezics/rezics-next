@@ -65,9 +65,7 @@ export type PageDataOptions = {
   inbox: Pick<ManagerInbox, 'deliver'>;
   routeDefect: (repair: PageDataRepair) => Promise<PageDataRepairRoute>;
   now?: () => Date;
-  runStack?: (
-    head: string,
-  ) => Promise<{
+  runStack?: (head: string) => Promise<{
     output: string;
     exitCode: number;
     registry?: ReadonlyMap<string, SectionConfig>;

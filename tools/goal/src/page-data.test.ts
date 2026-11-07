@@ -179,12 +179,7 @@ test('a readiness failure reaches the supermanager with its last probe and the s
       inbox: { deliver: (notice) => notices.push(notice) },
       now: () => now,
       runStack: async () => {
-        throw new PageDataStackError(
-          'boot',
-          'stack did not become ready',
-          readinessFailure,
-          output,
-        );
+        throw new PageDataStackError('boot', 'stack did not become ready', readinessFailure, output);
       },
       routeDefect: async () => 'dispatched',
     });
@@ -213,7 +208,8 @@ test('a page-data check failure saves the stack and check output and names the l
   try {
     const notices: { managerId: string; kind: string; summary: string }[] = [];
     const stackOutput = 'stack stays up while the account redrive retries\n';
-    const checkOutput = 'background retry failed but the stack survived\nerror: page-data check exited on a failed request\n';
+    const checkOutput =
+      'background retry failed but the stack survived\nerror: page-data check exited on a failed request\n';
     const result = await runPageDataCycle({
       settings: h.settings,
       db: h.db,
