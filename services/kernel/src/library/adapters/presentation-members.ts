@@ -12,7 +12,7 @@ import { createCollectionReads } from '../collection-reads.ts';
 import collectionRead from '../collection-reads-collection.sql';
 import memberPage from '../collection-reads-members.sql';
 import { isOrdinalKey } from '../ordinal.ts';
-import { WORK_STEP_DEADLINE_MS } from '../command-support.ts';
+import { WORK_STEP_DEADLINE_MS } from '../work-step-deadline.ts';
 import type { LibraryPresentationDependencies, NativeLibraryPresentationPorts } from './presentation.ts';
 
 /** FULL members use the same cursor and anchored checks, retaining the readability result's label. */

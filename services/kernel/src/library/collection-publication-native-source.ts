@@ -7,7 +7,7 @@ import { createIdentityScopedObservations, identityScopeAddress } from '../seman
 import type { IdentityNativeReceipt } from '../semantic/identity-epoch-contract.ts';
 import type { IdentityScopeObservation } from '../semantic/identity-scope-types.ts';
 import type { CanonicalBasis } from './canonical-source-store.ts';
-import { nativeSourceFence } from './canonical-source-store.ts';
+import { nativeSourceFence } from './native-source-fence.ts';
 import type { CollectionPublicationEpisode } from './collection-publication-episode-contract.ts';
 import type { SavedCollectionRule } from './collection-rules.ts';
 import type { CollectionSourceObservation } from './collection-source.ts';

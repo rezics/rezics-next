@@ -1,10 +1,10 @@
 import { DBOS } from '@dbos-inc/dbos-sdk';
 import {
   advanceCollectionPublicationEpisodePhase,
-  COLLECTION_PUBLICATION_WORKFLOW,
   readCollectionPublicationEpisode,
   readCollectionPublicationEpisodeVersion,
 } from './collection-publication-episodes.ts';
+import { COLLECTION_PUBLICATION_WORKFLOW } from './contract/index.ts';
 import { enqueueIntent, runOperationalTransaction } from '../command/operational.ts';
 import { ProblemError } from '../http/problem-error.ts';
 import { readMembershipWorkConfig } from '../access/membership-work-config.ts';
@@ -20,7 +20,7 @@ import {
   admitCollectionPublicationSourcePreparation,
   type CollectionPublicationLocator,
 } from './collection-publication-work-admission.ts';
-import { workStepDeadline } from './command-support.ts';
+import { workStepDeadline } from './collection-command-work.ts';
 import { collectionPublicationScopeRuntime } from '../search/work.ts';
 import type { WorkContext } from '../work/registry.ts';
 

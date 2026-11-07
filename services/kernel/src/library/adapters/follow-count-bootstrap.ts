@@ -1,10 +1,5 @@
-import {
-  bootstrapFollowCountOwner,
-  countTransaction,
-  lockCountOwner,
-  ZERO_COUNT_KEY,
-  type CountRuntime,
-} from './follow-count-source.ts';
+import { bootstrapFollowCountOwner, lockCountOwner, type CountRuntime } from './follow-count-source.ts';
+import { countTransaction, ZERO_COUNT_KEY } from './follow-count-runtime.ts';
 
 /** Each physical owner is discovered in finite immutable account-key coverage.
  * Account creation after hook installation initializes its source counter natively. */

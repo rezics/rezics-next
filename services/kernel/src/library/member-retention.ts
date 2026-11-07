@@ -11,7 +11,7 @@ import {
   type CommandOutcome,
 } from '../command/command.ts';
 import { partitionOf } from '../route/route.ts';
-import { workStepDeadline } from './command-support.ts';
+import { workStepDeadline } from './collection-command-work.ts';
 import duePage from './member-retention-due-page.sql';
 import purge from './member-retention-purge.sql';
 

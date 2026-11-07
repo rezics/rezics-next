@@ -1,7 +1,7 @@
 import type { PoolClient } from 'pg';
 import { routeOf } from '../route/route.ts';
 import type { ShelfDateReader, ShelfEntry, ShelfSeek } from './shelf-contract.ts';
-import { isShelfEntryState, MAX_SHELF_PAGE_SIZE } from './shelf-contract.ts';
+import { isShelfEntryState, MAX_SHELF_PAGE_SIZE } from './contract/index.ts';
 import { shelfTitlePolicy, titleLanguages } from './shelf-title-source.ts';
 import { SHELF_TITLE_KEY_POLICY } from './shelf-title-key.ts';
 import { ShelfReadUnavailableError } from './shelf-reader-unavailable.ts';

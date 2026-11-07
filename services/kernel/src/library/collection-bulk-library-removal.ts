@@ -5,7 +5,7 @@ import { shareAccount } from '../access/account-share.ts';
 import { deadlineClient, within } from '../access/authenticate.ts';
 import { DurableInitiatorUnavailableError, type DurableInitiatorRecord } from '../access/durable-initiator.ts';
 import { LifecycleDeniedError } from '../access/lifecycle-20261025094010-command.ts';
-import { GrantDeniedError } from '../access/grant-commands.ts';
+import { GrantDeniedError } from '../access/resource-access-errors.ts';
 import { PlatformClosedError } from '../access/gates/admission.ts';
 import { resourceAuthorization, type AuthorizationAnchor } from '../access/resource-authorization.ts';
 import { classifyUnavailability } from '../access/unavailable.ts';
@@ -23,8 +23,8 @@ import { nativeReceiptKeyCandidates } from '../command/receipt-key.ts';
 import { withConnection } from '../database/pool.ts';
 import { partitionOf, routeOf } from '../route/route.ts';
 import { deadlineFor } from '../request/deadline.ts';
+import { BULK_COMMAND_DEADLINE_MS } from './contract/index.ts';
 import {
-  BULK_COMMAND_DEADLINE_MS,
   type AttemptResult,
   type BulkDependencies,
   type SubjectTarget,

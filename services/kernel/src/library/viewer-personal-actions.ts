@@ -7,13 +7,15 @@ import {
   type ViewerActionResource,
   type ViewerActionResources,
 } from '../access/viewer-actions.ts';
-import { GrantDeniedError } from '../access/grant-commands.ts';
+import { GrantDeniedError } from '../access/resource-access-errors.ts';
 import { STANDARD_QUESTION_ID } from '../rating/votes.ts';
 import { routeOf } from '../route/route.ts';
 import {
   MAX_VIEWER_FACTS_INPUT_BYTES,
   MAX_VIEWER_FACTS_RESPONSE_BYTES,
   MAX_VIEWER_FACTS_ROWS,
+} from './viewer-facts-schema.ts';
+import {
   prepareViewerFacts,
   readViewerFacts,
   viewerFactsCurrent,

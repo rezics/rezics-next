@@ -9,8 +9,8 @@ import { ProblemError } from '../http/problem-error.ts';
 import { AuthenticationError } from '../request/authentication-error.ts';
 import { type Access, type Actor } from '../request/access.ts';
 import { deadlineFor } from '../request/deadline.ts';
-import { newId } from '../route/route.ts';
-import { routeOf } from '../route/route.ts';
+import { newId, routeOf } from '../route/route.ts';
+
 import { decodeCursor, encodeCursor, type CursorKey } from '../tokens/cursor.ts';
 import type { KeyRing } from '../tokens/seal.ts';
 import { activeRelease } from '../semantic/definitions.ts';
@@ -25,7 +25,8 @@ import {
 } from './library-archive.ts';
 import type { LibraryArchiveManifest } from './library-export-format.ts';
 import { createPins } from './pins.ts';
-import { resolveSubject, SubjectIdentityUnavailableError } from './subject-anchor.ts';
+import { resolveSubject } from './subject-anchor.ts';
+import { SubjectIdentityUnavailableError } from './contract/index.ts';
 import { isOrdinalKey } from './ordinal.ts';
 
 const UUID = /^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$/;

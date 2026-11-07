@@ -1,10 +1,7 @@
 import { memoizedValue } from '../memoized.ts';
 import { BOUND_AXES, declareBound, repeatBound, sumBounds, withinCeiling, type Bound } from '@rezics/bounds';
 import type { WorkDimensions } from './contract/work-dimensions.ts';
-import {
-  nativeIdentityPartitionQuery,
-  nativeIdentitySourceBasisFootprint,
-} from './identity-native-planner-selected-pricing.ts';
+import { nativeIdentityPartitionQuery, nativeIdentitySourceBasisFootprint } from './identity-native-bounds.ts';
 import accountQuery from './native-source-custody-account.sql';
 import advanceQuery from './native-source-custody-advance.sql';
 import ensureQuery from './native-source-custody-ensure.sql';

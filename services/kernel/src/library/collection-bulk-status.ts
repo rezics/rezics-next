@@ -2,7 +2,7 @@ import type { CommandAuthorization, CommandEvent } from '../command/command.ts';
 import { authoritativeTimeValue, noEffect, principalCommandIdentity, runCommand } from '../command/command.ts';
 import { shareAccount } from '../access/account-share.ts';
 import { PlatformClosedError } from '../access/gates/admission.ts';
-import { GrantDeniedError } from '../access/grant-commands.ts';
+import { GrantDeniedError } from '../access/resource-access-errors.ts';
 import { DurableInitiatorUnavailableError } from '../access/durable-initiator.ts';
 import { accessCommandAuthorization } from '../request/access.ts';
 import { partitionOf } from '../route/route.ts';

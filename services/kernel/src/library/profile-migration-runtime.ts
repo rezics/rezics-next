@@ -1,4 +1,4 @@
-import { fenceShelfTechnicalWrite } from './shelf-maintenance-runtime.ts';
+import { fenceShelfTechnicalWrite } from './shelf-maintenance-owner.ts';
 import { DBOS } from '@dbos-inc/dbos-sdk';
 import type { Pool } from 'pg';
 import { readAccount } from '../access/account-data.ts';
@@ -11,7 +11,7 @@ import { readRelease } from '../semantic/definitions.ts';
 import type { WorkClient } from '../work/client.ts';
 import type { WorkContext } from '../work/registry.ts';
 import { COMMAND_STEP_RETRIES } from '../work/retries.ts';
-import { workStepDeadline } from './command-support.ts';
+import { workStepDeadline } from './collection-command-work.ts';
 import { pinLegacyFactsPage, type LibraryProfileMigrationSource } from './profile-migration-page.ts';
 import ensureHead from './profile-migration-lock.sql';
 import lockCheckpoint from './profile-migration-checkpoint.sql';

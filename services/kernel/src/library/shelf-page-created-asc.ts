@@ -1,5 +1,6 @@
 import { routeOf } from '../route/route.ts';
-import { isShelfEntryState, MAX_SHELF_PAGE_SIZE, type ShelfDateReader } from './shelf-contract.ts';
+import { isShelfEntryState, MAX_SHELF_PAGE_SIZE } from './contract/index.ts';
+import { type ShelfDateReader } from './shelf-contract.ts';
 import unfiltered from './shelf-page-created-asc.sql';
 import stateOnly from './shelf-page-created-asc-state.sql';
 import typeOnly from './shelf-page-created-asc-type.sql';

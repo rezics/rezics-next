@@ -36,7 +36,7 @@ import type {
   IdentityReceivingDisposition,
   IdentityReceivingSelection,
 } from '../semantic/identity-receiving-effects-types.ts';
-import { instrumentNativeCollectionWork, NativeCollectionWork } from './collection-source-work.ts';
+import { instrumentNativeCollectionWork, NativeCollectionWork } from './collection-native-work.ts';
 import {
   createNativeLibrarySourceCustodyWithWork,
   readNativeIdentitySourceBasis,

@@ -3,7 +3,7 @@ import { readAccount } from '../access/account-data.ts';
 import { deadlineClient } from '../access/authenticate.ts';
 import { commandAccessContext, requireCommandAdmission } from '../access/command-admission.ts';
 import { admitGroup } from '../access/gates/admission.ts';
-import { GrantDeniedError } from '../access/grant-commands.ts';
+import { GrantDeniedError } from '../access/resource-access-errors.ts';
 import { throwAccessUnavailable } from '../access/unavailable.ts';
 import type { KernelClock } from '../clock.ts';
 import {
@@ -22,7 +22,8 @@ import { routeOf } from '../route/route.ts';
 import { decodeCursor, encodeCursor } from '../tokens/cursor.ts';
 import type { KeyRing } from '../tokens/seal.ts';
 import { createCollectionReads } from './collection-reads.ts';
-import { createLibraryCommandRunner, WORK_STEP_DEADLINE_MS } from './command-support.ts';
+import { createLibraryCommandRunner } from './command-support.ts';
+import { WORK_STEP_DEADLINE_MS } from './work-step-deadline.ts';
 import { readPins, writePins } from './pin-store.ts';
 import {
   pinCollectionHeaderBound,

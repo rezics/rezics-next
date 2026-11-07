@@ -1,6 +1,6 @@
 import type { Pool, PoolClient } from 'pg';
 import { readAccount } from '../access/account-data.ts';
-import { GrantDeniedError } from '../access/grant-commands.ts';
+import { GrantDeniedError } from '../access/resource-access-errors.ts';
 import {
   authoritativeTimeValue,
   commandAttemptDeadline,
@@ -16,12 +16,9 @@ import { newId, partitionOf, routeOf } from '../route/route.ts';
 import { decodeCursor, encodeCursor, type CursorBinding } from '../tokens/cursor.ts';
 import type { KeyRing } from '../tokens/seal.ts';
 import { admitEntryAttempt } from './entry-lifecycle.ts';
-import {
-  createLibraryCommandRunner,
-  LibraryNotFoundError,
-  sameAccountRoute,
-  WORK_STEP_DEADLINE_MS,
-} from './command-support.ts';
+import { createLibraryCommandRunner } from './command-support.ts';
+import { LibraryNotFoundError, sameAccountRoute } from './collection-command-work.ts';
+import { WORK_STEP_DEADLINE_MS } from './work-step-deadline.ts';
 import {
   assertLoanCopyOperand,
   createLoanRecord,

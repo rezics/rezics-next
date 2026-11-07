@@ -4,7 +4,7 @@ import { readAccount } from '../access/account-data.ts';
 import { shareAccount } from '../access/account-share.ts';
 import { deadlineClient } from '../access/authenticate.ts';
 import { admitGroup } from '../access/gates/admission.ts';
-import { GrantDeniedError } from '../access/grant-commands.ts';
+import { GrantDeniedError } from '../access/resource-access-errors.ts';
 import { LifecycleDeniedError } from '../access/lifecycle-20261025094010-command.ts';
 import { systemClock, type KernelClock } from '../clock.ts';
 import {
@@ -18,22 +18,18 @@ import { withConnection } from '../database/pool.ts';
 import { ProblemError } from '../http/problem-error.ts';
 import type { Access, AccountActor, Actor } from '../request/access.ts';
 import { deadlineFor, withRequestDeadline } from '../request/deadline.ts';
-import { partitionOf, routeOf } from '../route/route.ts';
+import { routeOf } from '../route/route.ts';
 import type { KeyRing } from '../tokens/seal.ts';
-import {
-  createLibraryCommandRunner,
-  LibraryNotFoundError,
-  sameAccountRoute,
-  WORK_STEP_DEADLINE_MS,
-} from './command-support.ts';
-import { LibraryConflictError } from './entries.ts';
+import { createLibraryCommandRunner } from './command-support.ts';
+import { LibraryNotFoundError, sameAccountRoute, workStepDeadline } from './collection-command-work.ts';
+import { WORK_STEP_DEADLINE_MS } from './work-step-deadline.ts';
+import { LibraryConflictError } from './entry-errors.ts';
 import { readStoredLabelAssignment, type PrivateLabelAssignment } from './label-assignment-lifecycle-store.ts';
 import reservations from './label-assignment-reservations.sql';
 import parents from './label-consolidation-parents.sql';
 import { createLabelAssignmentCommands } from './label-assignment-commands.ts';
 import { readPersonalLabel } from './label-store.ts';
 import { resolveSubject } from './subject-anchor.ts';
-import { workStepDeadline } from './command-support.ts';
 
 export const LABEL_CONSOLIDATION_LIMITS = Object.freeze({
   selection: 16,

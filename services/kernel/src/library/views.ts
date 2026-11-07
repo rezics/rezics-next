@@ -8,7 +8,7 @@ import { SubjectSummarySchema, type SubjectSummary } from '../semantic/contract/
 import type { LibraryEmbedding, LibraryTargetSummary, FollowingSpaceProjection } from './contract/index.ts';
 import type { LibraryPresentationDependencies } from './adapters/presentation.ts';
 import { requireLibraryPresentation } from './domain-binding.ts';
-import { WORK_STEP_DEADLINE_MS } from './command-support.ts';
+import { WORK_STEP_DEADLINE_MS } from './work-step-deadline.ts';
 
 export const viewQuery = { view: t.Optional(t.Union([t.Literal('BASIC'), t.Literal('FULL')])) };
 const nullableText = t.Union([t.String(), t.Null()]);

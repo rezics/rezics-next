@@ -5,7 +5,7 @@ import type { Pool, PoolClient } from 'pg';
 import { deadlineClient } from '../access/authenticate.ts';
 import { commandAccessContext } from '../access/command-admission.ts';
 import { shareAccount } from '../access/account-share.ts';
-import { GrantDeniedError } from '../access/grant-commands.ts';
+import { GrantDeniedError } from '../access/resource-access-errors.ts';
 import { LifecycleDeniedError } from '../access/lifecycle-20261025094010-command.ts';
 import { resourceAuthorization } from '../access/resource-authorization.ts';
 import type { KernelClock } from '../clock.ts';
@@ -24,7 +24,7 @@ import { deadlineFor } from '../request/deadline.ts';
 import { partitionOf, routeOf } from '../route/route.ts';
 import { createIdentityScopedObservations } from '../semantic/identity-scoped-observations.ts';
 import type { KeyRing } from '../tokens/seal.ts';
-import { WORK_STEP_DEADLINE_MS } from './command-support.ts';
+import { WORK_STEP_DEADLINE_MS } from './work-step-deadline.ts';
 import {
   authorizeCollectionRule,
   prepareCollectionRuleAuthority,
@@ -40,7 +40,7 @@ import {
   beginCollectionSourceOutput,
   completeCollectionSourceOutput,
 } from './collection-source-output.ts';
-import { NativeCollectionWork, withNativeCollectionWorkAllowance } from './collection-source-work.ts';
+import { NativeCollectionWork, withNativeCollectionWorkAllowance } from './collection-native-work.ts';
 import {
   COLLECTION_SELECTED_PUBLICATION_DISCLOSURE_COST,
   collectionSelectedPublicationOutputReservation,
@@ -62,8 +62,9 @@ import {
   readOwnerFilterCandidateClosure,
   type OwnerFilterReadBinding,
 } from './owner-filter-plan.ts';
-import { resolveSubject, SubjectIdentityUnavailableError } from './subject-anchor.ts';
-import { OWNER_FILTER_CLOSURE_ORIGINAL_LIMIT } from './owner-filter-native-closure.ts';
+
+import { resolveSubject } from './subject-anchor.ts';
+import { SubjectIdentityUnavailableError, OWNER_FILTER_CLOSURE_ORIGINAL_LIMIT } from './contract/index.ts';
 
 type Dependencies = { pool: Pool; access: Access; tokens: KeyRing; clock?: KernelClock };
 export type CollectionPublicationInput = Readonly<{ revision: number; subjectIds: readonly string[] }>;

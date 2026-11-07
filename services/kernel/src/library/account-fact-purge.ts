@@ -10,7 +10,7 @@ import {
   type CommandOutcome,
 } from '../command/command.ts';
 import { partitionOf } from '../route/route.ts';
-import { requireRoute, workStepDeadline } from './command-support.ts';
+import { requireRoute, workStepDeadline } from './collection-command-work.ts';
 import purgeCopy from './account-fact-purge-copy.sql';
 import purgeEntry from './account-fact-purge-entry.sql';
 import purgeFollow from './account-fact-purge-follow.sql';

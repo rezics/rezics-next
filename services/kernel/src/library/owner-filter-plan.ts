@@ -38,7 +38,7 @@ import {
   type PreparedCollectionSource,
 } from './collection-source.ts';
 import { type WorkDimensions } from './contract/work-dimensions.ts';
-import { NativeCollectionWork } from './collection-source-work.ts';
+import { NativeCollectionWork } from './collection-native-work.ts';
 import {
   admitCollectionMemberQuery,
   evaluateOwnerFilterLeaves,
@@ -46,13 +46,13 @@ import {
   matchOwnerFilterState,
   matchOwnerFilterSupport,
   ownerFilterStateWinner,
-  readNativeCollectionMemberAdmission,
   type CollectionMemberAdmission,
   type CollectionMemberQuery,
   type OwnerFilterEntryFact,
   type OwnerFilterFactLocator,
   type OwnerFilterNativeFact,
 } from './owner-filter.ts';
+import { readNativeCollectionMemberAdmission } from './owner-filter-admission.ts';
 import { ordinaryCollectionPagePlan, type OrdinaryCollectionPagePlan } from './ordinary-read-bounds.ts';
 
 type Dependencies = {

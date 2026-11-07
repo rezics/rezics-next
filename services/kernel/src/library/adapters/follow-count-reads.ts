@@ -14,9 +14,11 @@ import {
   type CountDestination,
   type FollowCountReads,
   type FollowCountTarget,
+  SubjectIdentityUnavailableError,
 } from '../contract/index.ts';
 import { readCollection } from '../collection-store.ts';
-import { resolveSubject, SubjectIdentityUnavailableError } from '../subject-anchor.ts';
+import { resolveSubject } from '../subject-anchor.ts';
+
 import { countRoute } from './follow-count-runtime.ts';
 import { requireFollowCountHealth } from './follow-count-observation.ts';
 

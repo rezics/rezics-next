@@ -3,7 +3,7 @@ import { enqueueIntent, runOperationalTransaction, type OperationalTransaction }
 import { withConnection } from '../database/pool.ts';
 import { partitionOf, routeOf } from '../route/route.ts';
 import type { WorkContext } from '../work/registry.ts';
-import { workStepDeadline } from './command-support.ts';
+import { workStepDeadline } from './collection-command-work.ts';
 import {
   COLLECTION_KIND_RAW_LIMIT,
   collectionKindSourceBindings,

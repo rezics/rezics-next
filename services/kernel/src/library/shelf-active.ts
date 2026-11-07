@@ -1,4 +1,5 @@
-import { MAX_SHELF_PAGE_SIZE, type ShelfActiveReader, type ShelfSession } from './shelf-contract.ts';
+import { MAX_SHELF_PAGE_SIZE } from './contract/index.ts';
+import { type ShelfActiveReader, type ShelfSession } from './shelf-contract.ts';
 import activeSessions from './shelf-active.sql';
 import { executeLabelSql, labelActiveSessionsPlan } from './label-operation-bounds.ts';
 
