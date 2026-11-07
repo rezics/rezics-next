@@ -1,10 +1,25 @@
-import { ensureContentApplication, startContentApplication, tryContentApplication } from '../content/adapters/index.ts';
+import {
+  ensureContentApplication,
+  startContentApplication as startNativeContentApplication,
+  tryContentApplication,
+  bindReadingPageCapabilities,
+  createNativeReadingPageCapabilities,
+} from '../content/adapters/index.ts';
+import { createNativeAccessReadingPorts } from '../access/adapters/index.ts';
 import type { ContentAmbient, ContentApplication } from '../content/contract/index.ts';
 
-export { startContentApplication };
+/** The ordinary server, worker and native preload install real Access reading operands. */
+export function composeContentReading(): void {
+  bindReadingPageCapabilities(createNativeReadingPageCapabilities(createNativeAccessReadingPorts()));
+}
 
-/** Ordinary createKernel/server/worker composition binds the native Content adapters. */
+export function startContentApplication(ambient?: Partial<ContentAmbient>) {
+  composeContentReading();
+  return startNativeContentApplication(ambient);
+}
+
 export function composeContentApplication(ambient?: Partial<ContentAmbient>): ContentApplication {
+  composeContentReading();
   return ensureContentApplication(ambient ?? {});
 }
 

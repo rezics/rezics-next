@@ -1,2 +1,3 @@
 export { accessApplication, bindAccessApplication, tryAccessApplication, unbindAccessApplication } from './bind.ts';
 export { createNativeAccessPorts, type NativeAccessLibraryBindings } from './native.ts';
+export { createNativeAccessReadingPorts } from './reading.ts';

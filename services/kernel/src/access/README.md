@@ -24,21 +24,21 @@ with the real `acknowledgeErasure` command. Normal startup and the isolated nati
 local Access completion remains distinct from pending shared-history custody. Live-copy discovery binds the same
 Work execution contract as server and worker on each client it opens; there is no process-global client.
 
-Decision: Content and Library present contribution owners through Access `contribution-attribution.ts` and
-`public-identity.ts`. Contribution attribution is nullable: missing, pending and unavailable identity are `null`,
-not evidence of deletion. `contributionDeleted` requires an explicit deletion label with no id; an id-free
-partial view alone never establishes deletion. The live variant retains `id`, `kind` and nullable `displayName`; only an authoritative
-deleted account produces a label-only `Deleted account` or `Deleted organization`. `readContributionAttributions` deduplicates page owners and reads at most 100 Account anchors per batch.
-Native agent attribution reads
-the exact bounded Semantic owner relation through the bound `IdentitySemanticPort` and confirms the anchored Account;
-it never manufactures a deleted state when that read is absent. Public subject overlay uses optional
-`IdentitySemanticPort.readPublicSubject`; a missing binding keeps `subject` null. `public-identity.ts` does not value-import
-`account-data.ts`, Semantic `access-capabilities.ts`, `subject.ts` or `link-keys.ts`; the removed return path is
-`index.ts → public-identity.ts → account-data.ts → semantic/access-capabilities.ts → identity-adapters/index.ts`. Consumers keep command ownership separate from
-this presentation and retain revision, SHA, licence, references and body availability under current disclosure.
-They do not import Access internals, Platform pool helpers or Semantic agent tables.
-Progress adoption classifies grant denial and Access unavailability through `resource-access-errors.ts` and `unavailable.ts`;
-those files are the owner public error identities.
+Decision: Content and Library consume `contribution-attribution.ts` and `public-identity.ts`; immutable authorship
+stays separate from current presentation and command ownership. Missing, pending and unavailable attribution is
+null. Only an authoritative tombstone produces an id-free Deleted account/organization label; partial identity
+cannot establish deletion. Batches deduplicate at most 100 owners. Agent attribution confirms the exact Semantic
+relation and anchored Account through `IdentitySemanticPort`; absent subject overlay stays null. Public identity
+imports neither private account-data nor Semantic recovery/Source maintenance. Revision, SHA, licence, references
+and readable bodies retain native disclosure. Progress uses the public resource-access and unavailable errors.
+
+Decision: `contract/reading.ts` owns active/deleted/unknown reading identity observations. The native reading adapter
+uses the caller's pool, route-first public projection and original optional deadline, returning explicit unavailable
+for known native failures and throwing unexpected errors. Missing rows are unknown; failures are never empty
+success or deletion. `composition/content.ts` adapts these producer contracts to Content reading applications for
+normal server/worker/preload construction. It adds no lookup, cache or authority. Media uses the same bounded
+observation to distinguish an expired producer read from complete empty evidence; HTTP mapping remains in Content's
+existing transport boundary. Existing Account, grant and contribution policies and native cost bounds remain.
 
 Decision: Kernel Access is split into `contract`, `core`, `application` and adapter modules. Vocabulary and finite
 bounds live in `access/contract`. Pure authorization, original-work and Kind-audience rules live in `access/core`.

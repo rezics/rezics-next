@@ -80,3 +80,4 @@ export type {
   RetainIdentityInput,
   SearchErasurePort,
 } from './ports.ts';
+export type { AccessReadingIdentity, AccessReadingObservation, AccessReadingPorts } from './reading.ts';
