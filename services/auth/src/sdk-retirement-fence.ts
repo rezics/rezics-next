@@ -166,7 +166,10 @@ export async function reserveAuthSdkRetirement(dispatch: string, invocation: Aut
 }
 
 export function createAuthSdkRetirementInvocation(now = Date.now(), signal?: AbortSignal): AuthRetentionInvocation {
-  return createAuthRetentionInvocation({ deadline: now + AUTH_SDK_RETIREMENT.deadlineMs, signal });
+  return createAuthRetentionInvocation({
+    deadline: now + AUTH_SDK_RETIREMENT.deadlineMs,
+    ...(signal ? { signal } : {}),
+  });
 }
 
 export async function fundAuthSdkRetirementEnvelope(
