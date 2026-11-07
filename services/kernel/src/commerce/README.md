@@ -1043,6 +1043,10 @@ Decision: fresh native `POST /v1/offers` sends only `contentEditionId` and ordin
 `targetSubjectId` is the historical-replay body and is rejected on the same object. Native genuine-order
 acceptance reads `expectedOfferRevision` from public `GET /v1/offers/:offerId`; seller create responses stay
 revisionless. The native suite is that one journey plus unused-actor operator history.
+Decision: creator-sale event receipt/work is admitted only after exact buyer and creator role inventory is committed;
+missing source identity advances its checkpoint without an unindexed locator for bounded order/source recovery.
+Space metadata uses the native discovery snapshot position as its monotonic index revision; the UUID head revision
+remains source identity.
 
 The [financial lifecycle and cost review](../../../../docs/research/commerce-cost-lifecycle-quality.md)
 retains its recorded source bindings and unavailable measurements. Local emptiness cannot prove absence of

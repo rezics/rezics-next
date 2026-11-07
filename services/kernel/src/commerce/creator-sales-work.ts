@@ -186,6 +186,59 @@ export async function admitCreatorSale(client: Client, event: CloudEvent): Promi
   // buyer-home checkpoint and blocks later tombstones and expiry restart catch-up.
   // The creator-sales sweep retries the order; this envelope must still advance.
   if (nativeOrder.state !== 'active' || nativeOrder.authn_fenced) return;
+
+  const prior = (
+    await client.query<{
+      event_id: string;
+      epoch: string;
+      route: number;
+      order_id: string | null;
+      source_revision: number | null;
+      state: string;
+    }>(
+      `SELECT event_id,epoch::text,route,order_id,source_revision,state FROM commerce.creator_sale_receipt
+       WHERE partition_no=$1 AND position=$2 AND event_seq=$3`,
+      [partition, position, row.event_seq],
+    )
+  ).rows[0];
+  if (prior) {
+    if (
+      prior.event_id === row.id &&
+      prior.epoch === String(epoch) &&
+      prior.route === route &&
+      prior.order_id === order.orderId &&
+      prior.source_revision === order.revision &&
+      prior.state !== 'minimized'
+    )
+      return;
+    if (prior.state === 'minimized' && prior.event_id === row.id && prior.epoch === String(epoch) && prior.route === route)
+      return;
+    throw new Error('Creator sale event receipt provenance conflict');
+  }
+
+  let roles: Awaited<ReturnType<typeof creatorSaleEventRoles>>;
+  try {
+    roles = await creatorSaleEventRoles(
+      client,
+      { route, orderId: order.orderId, partition, position, eventSeq: row.event_seq },
+      [
+        { accountId: nativeOrder.buyer_account_id, roles: 1024 },
+        { accountId: nativeOrder.creator_account_id, roles: 2048 },
+      ],
+    );
+  } catch (error) {
+    // A durable Commerce locator is admitted only after exact buyer and creator
+    // role evidence is available. The bounded source backfill can retry an event
+    // later; a missing identity never leaves an unindexed receipt behind.
+    if (error instanceof LiveCopyPendingError) return;
+    throw error;
+  }
+  await enrollCommerceCopyIntents(
+    client,
+    { route, orderId: order.orderId, partition, position, eventSeq: row.event_seq },
+    roles,
+  );
+
   const receipt = await client.query(
     `INSERT INTO commerce.creator_sale_receipt(partition_no,position,event_seq,epoch,event_id,route,order_id,source_revision)
      VALUES($1,$2,$3,$4,$5,$6,$7,$8) ON CONFLICT DO NOTHING RETURNING event_id`,
@@ -217,33 +270,12 @@ export async function admitCreatorSale(client: Client, event: CloudEvent): Promi
       throw new Error('Creator sale event receipt provenance conflict');
     return;
   }
-  try {
-    const roles = await creatorSaleEventRoles(
-      client,
-      { route, orderId: order.orderId, partition, position, eventSeq: row.event_seq },
-      [
-        { accountId: nativeOrder.buyer_account_id, roles: 1024 },
-        { accountId: nativeOrder.creator_account_id, roles: 2048 },
-      ],
-    );
-    await enrollCommerceCopyIntents(
-      client,
-      { route, orderId: order.orderId, partition, position, eventSeq: row.event_seq },
-      roles,
-    );
-    await client.query(
-      `INSERT INTO commerce.creator_sale_work(route,order_id) VALUES($1,$2)
+  await client.query(
+    `INSERT INTO commerce.creator_sale_work(route,order_id) VALUES($1,$2)
        ON CONFLICT(route,order_id) DO UPDATE SET generation=commerce.creator_sale_work.generation+1,
          state='pending',gap=NULL,next_run=now()`,
-      [route, order.orderId],
-    );
-  } catch (error) {
-    // Checkout record/refresh/apply are unconverted: they have a receipt and an
-    // order.updated envelope, but no shared-history locator inventory. Pending
-    // identity is not an effects-checkpoint failure. Holding that checkpoint
-    // would block later tombstones on the same buyer home.
-    if (!(error instanceof LiveCopyPendingError)) throw error;
-  }
+    [route, order.orderId],
+  );
 }
 
 /** Fresh exact native financial truth. The buyer snapshot is released before any creator write. */
