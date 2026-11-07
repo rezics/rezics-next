@@ -56,7 +56,10 @@ export function requireStatus(answer: KernelAnswer, expected: number, label: str
 }
 
 export function requireId(value: unknown, label: string): string {
-  if (typeof value !== 'string' || !/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value))
+  if (
+    typeof value !== 'string' ||
+    !/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value)
+  )
     throw new Error(`${label} is not a native identity`);
   return value;
 }
