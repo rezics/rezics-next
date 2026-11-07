@@ -169,11 +169,12 @@ test('released definitions expose bundled Book fields, targets and eight locale 
     }
   ).types;
   const book = types['schema:Book'];
-  if (!book) throw new Error('schema:Book missing from bundled release');
-  expect(book.properties).toContain('schema:author');
-  expect(book.facets.length).toBeGreaterThan(0);
+  if (book === undefined) throw new Error('schema:Book missing from bundled release');
+  const released = book;
+  expect(released.properties).toContain('schema:author');
+  expect(released.facets.length).toBeGreaterThan(0);
   for (const locale of ['en', 'zh-Hant', 'zh-Hans', 'ja', 'ko', 'de', 'fr', 'es']) {
-    expect(book.labels[locale]?.length).toBeGreaterThan(0);
+    expect(released.labels[locale]?.length).toBeGreaterThan(0);
   }
   const directory = await call('GET', '/v1/definitionTypes', { query: { typeId: 'schema:Book', locale: 'en' } });
   expect([200, 404].includes(directory.status)).toBe(true);

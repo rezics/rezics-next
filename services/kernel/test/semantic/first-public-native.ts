@@ -47,7 +47,7 @@ export function staticPage(text: string): CompositionDocument {
 export function staticZone(label: string, home: string, about: string): ZoneStarter {
   const configuration = structuredClone(bookStarter) as ZoneStarter;
   configuration.scope = [];
-  configuration.labels = { ...configuration.labels, en: label };
+  configuration.labels = { ...configuration.labels, en: label, 'zh-Hant': label, ja: label };
   configuration.pages = [
     { route: '', document: staticPage(home) },
     { route: 'about', document: staticPage(about) },
