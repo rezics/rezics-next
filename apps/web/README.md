@@ -30,6 +30,8 @@ check admission, including callers of `dev` with `REZICS_TEST_RUNTIME=1`; the `-
 From `apps/web`, use `bun run storybook` for interface development and `bun run check` to generate, type-check, test,
 and build through the supported check route.
 
+Decision: Library Loans are public at `library/loans-current.tsx`, `library/loans-query.ts` and `library/loans-actions.ts`. The `/library/loans` route imports those entries with Web `session/guard.ts`, `shell/head.ts` and `shell/head-context.ts`. Loans consume Web `kernel/exposure.ts`, `kernel/query.ts`, `kernel/platform-closed.ts`, `session/query.ts`, `shell/page-heading.tsx` and Search `features/pages/shared.tsx`.
+
 ## Workspace typing
 
 Decision: `bun run typecheck` compiles both `tsconfig.json` (product with Worker globals) and

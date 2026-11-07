@@ -233,7 +233,9 @@
         "services/kernel/src/access/account-public-read.sql",
         "services/kernel/src/access/account-command-state.sql",
         "services/kernel/src/access/work.ts",
-        "services/kernel/src/access/durable-initiator-capture.ts"
+        "services/kernel/src/access/durable-initiator-capture.ts",
+        "services/kernel/src/access/unavailable.ts",
+        "services/kernel/src/access/resource-access-errors.ts"
       ],
       "allowedDependencies": [
         "access-policy",
@@ -473,7 +475,8 @@
         "services/kernel/src/rating/index.ts",
         "services/kernel/src/rating/module.ts",
         "services/kernel/src/rating/events.ts",
-        "services/kernel/src/rating/own-votes-review.ts"
+        "services/kernel/src/rating/own-votes-review.ts",
+        "services/kernel/src/rating/vote-observation.ts"
       ],
       "allowedDependencies": [
         "kernel-access",
@@ -645,6 +648,7 @@
         "services/kernel/src/semantic/work-module.ts",
         "services/kernel/src/semantic/access-capabilities.ts",
         "services/kernel/src/semantic/agents.ts",
+        "services/kernel/src/semantic/public-subject-facts.ts",
         "services/kernel/src/semantic/adapters/native-domain.ts",
         "services/kernel/src/semantic/adapters/index.ts",
         "services/kernel/src/semantic/credit-search.ts",
@@ -960,7 +964,13 @@
       "owner": "commerce",
       "paths": ["apps/web/src/library/**"],
       "excludes": ["apps/web/src/library/public-collection-discovery/**"],
-      "publicEntries": ["apps/web/src/library/follow-control.tsx", "apps/web/src/library/score-write.ts"],
+      "publicEntries": [
+        "apps/web/src/library/follow-control.tsx",
+        "apps/web/src/library/score-write.ts",
+        "apps/web/src/library/loans-current.tsx",
+        "apps/web/src/library/loans-query.ts",
+        "apps/web/src/library/loans-actions.ts"
+      ],
       "allowedDependencies": [
         "client",
         "composition",
@@ -1052,7 +1062,8 @@
         "apps/web/src/search/language-preferences.tsx",
         "apps/web/src/search/condition-weight.tsx",
         "apps/web/src/features/pages/agent-reader-read/index.ts",
-        "apps/web/src/features/pages/showcase-work/index.ts"
+        "apps/web/src/features/pages/showcase-work/index.ts",
+        "apps/web/src/features/pages/shared.tsx"
       ],
       "allowedDependencies": [
         "client",
@@ -1252,7 +1263,15 @@
         "apps/web/src/paraglide/messages.js",
         "apps/web/src/paraglide/messages.d.ts",
         "apps/web/src/paraglide/runtime.js",
-        "apps/web/src/paraglide/runtime.d.ts"
+        "apps/web/src/paraglide/runtime.d.ts",
+        "apps/web/src/kernel/exposure.ts",
+        "apps/web/src/kernel/query.ts",
+        "apps/web/src/kernel/platform-closed.ts",
+        "apps/web/src/session/query.ts",
+        "apps/web/src/session/guard.ts",
+        "apps/web/src/shell/page-heading.tsx",
+        "apps/web/src/shell/head.ts",
+        "apps/web/src/shell/head-context.ts"
       ],
       "allowedDependencies": [
         "client",

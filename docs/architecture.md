@@ -101,6 +101,10 @@ values, because that edge closed a maintenance cycle.
 Access public account identity and native Access ports import Semantic mapping from `semantic/agents.ts`. Original
 recovery, read snapshots, Source custody and maintenance stay on those public entries; Semantic `access-capabilities.ts`
 re-exports only mapping, so Access reads do not close a value-import cycle through recovery or Source maintenance.
+Public identity subject overlay uses optional `IdentitySemanticPort.readPublicSubject`; native Access implements it from
+`semantic/public-subject-facts.ts`. A missing binding keeps that overlay null rather than granting a subject or inventing
+a history declaration. `public-identity.ts` does not value-import Semantic `subject.ts` or `link-keys.ts`. Grant denial
+and unavailability errors are the Access public entries `resource-access-errors.ts` and `unavailable.ts`.
 Identity Rating repair values stay on `identity-rating-repair-producer.ts`; Source custody imports Library
 `collection-native-work.ts`; composition binds Kind raw input so Access `access-capabilities.ts` is not a Kind/Source hub.
 
