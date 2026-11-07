@@ -120,6 +120,23 @@ for (const [index, host] of ['127.0.0.1', 'localhost', '[::1]'].entries()) {
         clientId: 'web',
         authnEpoch: 1,
       });
+      const native = Bun.serve({
+        hostname: host === '[::1]' ? '::1' : '127.0.0.1',
+        port: 0,
+        fetch: () => service!.handler(new Request(`${issuer}/.well-known/jwks.json`)),
+      });
+      try {
+        const nativeAccess = createAccess({
+          actions: new Map(),
+          auth: {
+            ...service.verifier,
+            jwksUrl: `http://${host}:${native.port}/.well-known/jwks.json`,
+          },
+        });
+        expect(await nativeAccess.authenticate(token, context())).toMatchObject({ accountId: person });
+      } finally {
+        await native.stop(true);
+      }
       const credential = await generateKeyPair('ES256');
       await authPool.query('INSERT INTO auth_public_key (account_id,kid,public_jwk) VALUES ($1,$2,$3)', [
         person,
@@ -213,7 +230,6 @@ for (const [index, host] of ['127.0.0.1', 'localhost', '[::1]'].entries()) {
         await deny({ issuer: origin, jwksUrl: `${origin}/.well-known/jwks.json` });
       }
       for (const jwksUrl of [
-        `http://127.0.0.1:${port + 1}/jwks`,
         `https://${host}:${port}/jwks`,
         'http://localhost.example/jwks',
         `${issuer}/jwks?query=1`,

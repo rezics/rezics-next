@@ -237,8 +237,9 @@ Issuers require HTTPS except for canonical HTTP origins on exactly `127.0.0.1`,
 `localhost` or `[::1]`, including the configured port. Issuers have no userinfo,
 path, trailing slash, query or fragment. Numeric aliases, suffix tricks, other
 private/LAN addresses and `0.0.0.0` are rejected. HTTP public JWKS is permitted
-only for an approved HTTP issuer on the exact same origin and port, with no
-userinfo, query or fragment. Token issuer identity includes the port; request
+only for an approved HTTP issuer, on that issuer origin or another approved
+loopback origin (native Auth on local and walk stacks), with no userinfo, query
+or fragment. Token issuer identity includes the port; request
 Host headers do not configure it. The API audience remains HTTPS, including for
 local issuers: `https://api.rezics.com` in production without a trailing slash,
 and `https://api.rezics.test` in tests. Verification still uses standard JOSE,

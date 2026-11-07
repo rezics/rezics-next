@@ -49,6 +49,30 @@ export type AuthenticationConfig = {
   fetch?: FetchImplementation;
 };
 
+const LOCAL_HTTP_HOSTS = new Set(['127.0.0.1', 'localhost', '[::1]']);
+
+/** Canonical loopback HTTP issuers used by local and walk stacks. */
+export function isApprovedLocalHttpOrigin(url: URL): boolean {
+  return url.protocol === 'http:' && LOCAL_HTTP_HOSTS.has(url.hostname);
+}
+
+/**
+ * Public JWKS shares the issuer origin, or another approved loopback origin when the issuer is local HTTP.
+ * Walk stacks fetch issuer JWKS from native Auth on a second loopback port.
+ */
+export function publicJwksMatchesIssuer(issuer: URL, jwks: URL, jwksHref: string): boolean {
+  if (
+    jwks.protocol !== issuer.protocol ||
+    jwks.href !== jwksHref ||
+    jwks.username !== '' ||
+    jwks.password !== '' ||
+    /[?#]/.test(jwksHref)
+  )
+    return false;
+  if (jwks.origin === issuer.origin) return true;
+  return isApprovedLocalHttpOrigin(issuer) && isApprovedLocalHttpOrigin(jwks);
+}
+
 type Identity = IdentityExpiry & {
   account: Account;
   pool: AccessContext['pool'];
@@ -189,20 +213,14 @@ function settings(config?: AuthenticationConfig): AuthenticationConfig {
   const issuer = new URL(value.issuer);
   const audience = new URL(value.audience);
   const jwks = new URL(value.jwksUrl);
-  const localHttp = issuer.protocol === 'http:' && ['127.0.0.1', 'localhost', '[::1]'].includes(issuer.hostname);
   if (
-    (issuer.protocol !== 'https:' && !localHttp) ||
+    (issuer.protocol !== 'https:' && !isApprovedLocalHttpOrigin(issuer)) ||
     issuer.origin !== value.issuer ||
     audience.protocol !== 'https:' ||
     audience.username ||
     audience.password ||
     audience.hash ||
-    jwks.protocol !== issuer.protocol ||
-    jwks.origin !== issuer.origin ||
-    jwks.href !== value.jwksUrl ||
-    jwks.username ||
-    jwks.password ||
-    /[?#]/.test(value.jwksUrl)
+    !publicJwksMatchesIssuer(issuer, jwks, value.jwksUrl)
   )
     throw invalid();
   return { ...value };
