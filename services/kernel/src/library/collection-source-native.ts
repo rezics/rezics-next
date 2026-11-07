@@ -227,8 +227,11 @@ const copySQL = pointSQL('copy', 'copy_id'),
 const normal = (sql: string) =>
   sql
     .replace(/--[^\n]*/g, '')
+    // SQL-module execution appends this provenance marker; it is not part of the SQL contract.
+    .replace(/\/\*file='[^']*'\*\//g, '')
     .replace(/\s+/g, ' ')
-    .trim();
+    .trim()
+    .replace(/\s*;$/, '');
 export { COLLECTION_SOURCE_NATIVE_SAVED_PROBE_COST } from './collection-source-probe-bounds.ts';
 
 function costs() {
@@ -351,10 +354,11 @@ export function nativeCollectionFootprint(
   work?: NativeCollectionWork,
 ): WorkDimensions | undefined {
   if (work) revalidateBoundLibraryIdentityWork(work);
-  // The existing shared native capture sends these two session SETs. They access no relation, but still cost
-  // statements/bytes here; the capture deliberately omits its own setup from its measured statement list.
+  // Transaction controls and the two shared native capture SETs access no relation, but their literal statements
+  // and bytes remain charged. Access group admission uses BEGIN READ ONLY inside this captured operation.
   const control = [
     'BEGIN',
+    'BEGIN READ ONLY',
     'BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY',
     'COMMIT',
     'ROLLBACK',
