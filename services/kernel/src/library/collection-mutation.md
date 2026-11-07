@@ -20,5 +20,6 @@ terminal obligation and Source/destination custody. It never infers Library auth
 
 Fewest tests: `collection-mutation-application.test.ts` pins original transaction custody, immutable journal operands,
 CAS/no-op behavior, rule and publication sequencing, and ordered retained cleanup. The composition case pins native
-binding and override identity. Existing native outcome assertions remain unchanged. Workspace typing and this
-focused suite run in the worker; broader runtime acceptance runs after integration.
+binding and override identity. Existing native outcome assertions remain unchanged. Workspace typing runs in the
+worker. The focused suite is the landing test command; the worker wrapper defers test execution to the dev verifier.
+Broader runtime acceptance runs after integration.
