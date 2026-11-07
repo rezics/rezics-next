@@ -10,6 +10,7 @@ import {
   runFocusedCommand,
 } from './focused.ts';
 import { processIdentity } from '../tests/support/server-custody.ts';
+import { resolveWebTestSelection } from './selection.ts';
 
 const leftoverRoot = mkdtempSync(join(tmpdir(), 'rezics-web-check-leftover-'));
 
@@ -92,6 +93,7 @@ function fakeWebApp() {
       scripts: { 'generate:routes': 'true' },
     })}\n`,
   );
+  writeFileSync(join(appDirectory, 'bunfig.toml'), '[test]\npathIgnorePatterns = ["**/*.host.test.ts"]\n');
   return { root, appDirectory };
 }
 
@@ -108,6 +110,18 @@ test(${JSON.stringify(name)}, () => {
   );
 }
 
+function writeNestedMarkerTest(appDirectory: string, file: string, marker: string, name: string) {
+  const path = join(appDirectory, file);
+  mkdirSync(join(path, '..'), { recursive: true });
+  writeFileSync(
+    path,
+    `import { appendFileSync } from 'node:fs';
+import { test } from 'bun:test';
+test(${JSON.stringify(name)}, () => appendFileSync(${JSON.stringify(marker)}, ${JSON.stringify(`${name}:`)} + process.pid + '\\n'));
+`,
+  );
+}
+
 test('repo-relative, app-relative and absolute selectors map onto the child working directory', () => {
   const { root, appDirectory } = fakeWebApp();
   try {
@@ -117,11 +131,121 @@ test('repo-relative, app-relative and absolute selectors map onto the child work
     expect(focusedChildTestFile(absolute, appDirectory, root)).toBe('tests/selected.test.ts');
     expect(
       focusedChildTestCommand(
-        ['bun', 'test', '--timeout', '10000', 'apps/web/one.test.ts', 'two.test.ts', absolute],
+        [
+          'bun',
+          'test',
+          '--timeout',
+          '10000',
+          '--preload',
+          'apps/web/tests/native/option-value.test.ts',
+          'apps/web/one.test.ts',
+          'two.test.ts',
+          absolute,
+        ],
         appDirectory,
         root,
       ),
-    ).toEqual(['bun', 'test', '--timeout', '10000', 'one.test.ts', 'two.test.ts', 'tests/selected.test.ts']);
+    ).toEqual([
+      'bun',
+      'test',
+      '--timeout',
+      '10000',
+      '--preload',
+      'apps/web/tests/native/option-value.test.ts',
+      'one.test.ts',
+      'two.test.ts',
+      'tests/selected.test.ts',
+    ]);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('quoted globs, named absolute files and siblings execute from the Web cwd one file per runtime', async () => {
+  const { root, appDirectory } = fakeWebApp();
+  const marker = join(root, 'host-and-ui-runs.txt');
+  mkdirSync(join(appDirectory, 'tests', 'native'), { recursive: true });
+  mkdirSync(join(appDirectory, 'tests', 'ui'), { recursive: true });
+  writeNestedMarkerTest(appDirectory, 'tests/native/alpha.host.test.ts', marker, 'alpha-host');
+  writeNestedMarkerTest(appDirectory, 'tests/native/glob-one.host.test.ts', marker, 'glob-one');
+  writeNestedMarkerTest(appDirectory, 'tests/native/glob-two.host.test.ts', marker, 'glob-two');
+  writeNestedMarkerTest(appDirectory, 'tests/native/alpha-sibling.host.test.ts', marker, 'alpha-sibling');
+  writeNestedMarkerTest(appDirectory, 'tests/ui/shell.test.ts', marker, 'ui-shell');
+  const absolute = join(appDirectory, 'tests/native/alpha.host.test.ts');
+  const command = [
+    'bun',
+    'test',
+    '--timeout',
+    '15000',
+    'apps/web/tests/native/alpha.host.test.ts',
+    absolute,
+    'tests/native/glob-*.host.test.ts',
+    'tests/ui/shell.test.ts',
+  ];
+  try {
+    const selection = resolveWebTestSelection(command, {
+      rootDirectory: root,
+      appDirectory,
+      invocationDirectory: root,
+      source: 'repository entrypoint',
+    });
+    expect(selection.selectedFiles).toEqual([
+      'tests/native/alpha.host.test.ts',
+      'tests/native/glob-one.host.test.ts',
+      'tests/native/glob-two.host.test.ts',
+      'tests/ui/shell.test.ts',
+    ]);
+    expect(selection.normalizedArgv.slice(2, 4)).toEqual(['--timeout', '15000']);
+    expect(selection.selectors.map(({ source }) => source)).toEqual([
+      'repository-relative',
+      'absolute',
+      'web-relative-glob',
+      'web-relative',
+    ]);
+
+    const status = await runFocusedCommand(command, {
+      appDirectory,
+      invocationDirectory: root,
+      place: async (run, env) => {
+        expect(run.cwd).toBe(appDirectory);
+        expect(env.REZICS_WEB_TEST_SELECTION_CONTEXT).toBeDefined();
+        return null;
+      },
+    });
+    expect(status).toBe(0);
+    const entries = readFileSync(marker, 'utf8').trim().split('\n');
+    expect(entries.map((entry) => entry.split(':')[0])).toEqual(['alpha-host', 'glob-one', 'glob-two', 'ui-shell']);
+    expect(new Set(entries.map((entry) => entry.split(':')[1])).size).toBe(entries.length);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('Web-relative selectors from the owning cwd resolve once and path-shaped option values stay operands', () => {
+  const { root, appDirectory } = fakeWebApp();
+  writeMarkerTest(appDirectory, 'selected', join(root, 'unused-marker'));
+  try {
+    const command = [
+      'bun',
+      'test',
+      '--preload',
+      'apps/web/tests/native/option-value.test.ts',
+      'tests/selected.test.ts',
+    ];
+    const selection = resolveWebTestSelection(command, {
+      rootDirectory: root,
+      appDirectory,
+      invocationDirectory: appDirectory,
+      source: 'Web entrypoint',
+    });
+    expect(selection.normalizedArgv).toEqual([
+      'bun',
+      'test',
+      '--preload',
+      'apps/web/tests/native/option-value.test.ts',
+      'selected.test.ts',
+    ]);
+    expect(selection.selectedFiles).toEqual(['selected.test.ts']);
   } finally {
     rmSync(root, { recursive: true, force: true });
   }

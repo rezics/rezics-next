@@ -179,6 +179,15 @@ denial of a file outside those roots; host TMPDIR is not an external fixture. An
 `bun test tests/*.host.test.ts` through this runner uses the same `--path-ignore-patterns=node_modules/**` override as
 `bun run test:host`, so bunfig's host-file exclusion does not hide a named file.
 
+Decision: Web test selectors resolve once to Web-relative files, retain original argv, invocation cwd and source through
+check-host routing, and execute from `apps/web`; absolute globs preserve their workspace-relative directories and
+explicit native files use Bun's ignore override. Auth binding stays in its Auth-owned database lane with the original
+Bun options and operands carried to its per-file test command. From the repository root, select native files with
+`bun apps/web/scripts/check.ts --host 'tests/native/*.host.test.ts'`; from `apps/web`, use
+`bun scripts/check.ts --host 'tests/native/*.host.test.ts'`. A regular selected check may mix UI and native files; each
+file stays in its existing lane. Repository-relative `apps/web/...`, Web-relative `tests/...`, absolute in-workspace
+files and quoted globs are supported. Option values that resemble test paths remain option values.
+
 Decision: explicit test files run one per fresh runtime, because Bun module mocks otherwise survive across file
 boundaries. A command that needs the shared dev server is wrapped per runtime by `scripts/with-dev-server.ts`, which
 reuses the warmed dependency cache; `--private-network` applies inside that wrapper, not outside it. Each focused
