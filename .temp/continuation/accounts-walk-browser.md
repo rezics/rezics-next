@@ -18,7 +18,6 @@ stay running through Home and the public person page at 1280 and 390. Keep one
 Chromium process. Do not open a second walk. Upgrade only with a matched
 failure, version and upstream fix, coordinated Web/Semantic lockfile.
 
-
 ## Integrated ordinary round
 
 Goal: accounts. Manager: content. Tested source `0eb618cfd609c2abb281bbd3ced29e73e685fd71` includes Auth40c038, native fixtures65d590 and allocator6948a892. Ordinary `REZICS_WALK_DEFER_FRONTENDS=0 bun apps/web/scripts/accounts-goal-walk.ts --launch` ran on the worker host, without a remote check ID; observation began2026-11-07T11:53:10.775Z, launcher completed2026-11-07T12:12:11Z with exit0 after supported teardown. Exit0 is process completion, not nineteen-outcome acceptance. Admission succeeded in1320ms on allocated slot1; database, migrations, native Auth, real Kernel worker/relay and API driver were reached. Auth pages became ready. Evidence: `.temp/accounts/journeys.json`, `.temp/accounts/launcher.log`, `.temp/walk/e249c4cc-302e-4529-8b4a-d7453450a8fa/stack.log`. Full per-row UTC/persona/revision/elapsed values are retained in the table and JSON. No screenshots.
@@ -38,7 +37,6 @@ Stack: useRecentSearchOperation at apps/web/src/search/recent-host.tsx:45, useRe
 Existing Search/Web composition ownership through Content receives the complete repair: install the actual Recent Search host around the mounted shell through the existing production adapter and current viewer observation. Preserve per-reader authority, synchronous credential/exposure retirement, uncertainty, bounded native lifetime and original receiving/growth assertions. Establish root HTTP readiness, then complete original authenticated Home/security, public identity and Settings desktop1280/phone390 control and hydration inspection on this same walk. Do not replace Search authority with a stub, infer a pass from typing, weaken the strict consumer or create a second walk. Auth catalogue/lifetime, J03/J04/J10 and public Subject/Realm repairs retain their separate existing owners. Final browser frontier and teardown are appended after this bounded round settles.
 
 Final frontier: Web was not ready after ten minutes; pages=[] and Chromium never launched. Supported teardown settled2026-11-07T13:45:54Z with launcher exit0, not a product pass. First safe Search-render log inspection was2026-11-07T13:40:47Z; error-origin UTC is unretained. Current artifacts are archived under .temp/accounts/rounds/70f7c7e9c7fc6ff08025044be46763221763f9d3/. Authoritative next hourly due2026-11-07T14:20:56Z, same handle/controller refresh; inner14:44:06Z was provisional. No additional walk is scheduled here.
-
 
 ## Paid composition received; runtime verification remains open
 

@@ -78,7 +78,6 @@ First safe receiving check1f167175-fa37-4ecd-bc36-4e374f1784ed, submitted2026-11
 
 The six-file startup/runner selection started shared Vite before each file and reached no assertions: each readiness deadline expired around150000ms without a Vite ready line, after message generation completed. That trace does not establish a Library rendering failure. Decision: list the exact fixture-owning unit files in commandNeedsSharedDevServer, retaining shared startup for page/unknown/mixed selections. One regression covers the concrete failing selection, app/root/absolute paths and a mixed page selection; all original assertions stay. The new source is committed before another ordinary stack starts. No timeout increase, screenshot or extra stack handle.
 
-
 This is receiving work on the sole existing walk. All nineteen original personas and native/API, current-authority, replay, lifecycle, independent publication and growth outcomes remain. No duplicate implementation writer or stack is requested. The four archived briefs below are folded into this continuation in full; their claim metadata is historical and does not dispatch new claims.
 
 ## Latest check and startup receive
@@ -160,8 +159,6 @@ The first fix removed competing root reapers but retained observeLeaderExit's /p
 ## Integrated receiving round
 
 The attempt-six base now includes Auth40c038b064c2c2f3ce230a5fc51f284aeda8ac58, Content/native fixtures65d59008b401edcc06ff12cfd56231d82cebe4b9 and Performance allocator6948a89278c0383165a7ed4ca69f1c99506c74a2 (ancestry verified). The allocator writes and fsyncs its shared sequence descriptor in place; the former rename failure does not describe this source. Auth admits the actual database before native imports and carries selected ports; its original three-file/thirty-case acceptance is retained. Receive current authentication mapping and dedicated-pool receipt keys without substituting authority. The paid custody fixes remain; add one assertion that exit7 remains7 after settled close. This is the smallest check of the explicit through-close requirement, and all prior assertions remain. Required source documents were read before this choice, including native-auth-custody-receiving-20261107.md; retain the full union below. Prior check834fda99-a135-4977-93d3-64c214cd6614 has no delivered result or retained log here, so no pass is presumed. The same ordinary launcher and original Auth native/browser selection now receive these actual integrated repairs.
-
-
 
 ## Integrated ordinary round
 
@@ -334,7 +331,7 @@ References preserve receiving obligations; their presence is not an assertion th
 
 ### accounts-folded-5abe964f-20261107.md
 
-````text
+```text
 ---
 goal: accounts
 manager: content
@@ -374,11 +371,11 @@ Check 651e5fb7-a2fd-426a-b5c8-5823d02fb1ae on 44bfe326d70276817610abecef50ad743d
 ## Final combined selection before the refreshed admission census
 
 Check eafe7372-33cf-4f9d-b2ea-45fb6f24e07b on 6ed10adbb2194d9e3bec24f2e396bd25688061a7: Web9pass; Auth28pass/2fail. Full log `.temp/check-logs/eafe7372-33cf-4f9d-b2ea-45fb6f24e07b.log` read without transfer progress. Fresh-checkout test timed out after300023.37ms; this run prints no finer startup phase. Mounted composition fails at the same SQL import without DATABASE_URL after694.79ms. Existing Accounts urgent producer remains sole repair owner. No assertions or timeouts changed in the walk.
-````
+```
 
 ### accounts-folded-05c5a74e-20261107.md
 
-````text
+```text
 ---
 goal: accounts
 manager: content
@@ -412,11 +409,11 @@ Complete result: construct each actual native command pool with its dedicated tr
 Check f1ce8db7-9eab-430c-aa8b-d14220559fcd on5293fb56a6cedca420bc2793f668de0266577ef0 repeats the original result: compiler/formatting passed, Members composition and discovery work passed, discovery source2pass/2fail. First throw remains KERNEL_RECEIPT_KEYS is required at native claim consumption (10.07ms); rollback injection count remains0 instead of1 (5.68ms). Full log `.temp/check-logs/f1ce8db7-9eab-430c-aa8b-d14220559fcd.log` read. Auth28pass/2fail (fresh timeout300000.23ms; mounted import724.64ms); Web9pass. Auth reached start and worker invocation but no useful ready trace before timeout.
 
 Authenticated manager content routes the actual fixture construction to existing7bcb8b99; only reconcile an exposed producer defect with discovery8476 after the original rollback/backoff assertion executes. Existing Auth9146835f owns supplied-database admission, supported allocated ports and first-safe-readiness trace. Preserve exact original selectors; do not create duplicate repair writers.
-````
+```
 
 ### accounts-folded-ce58cfc5-20261107.md
 
-````text
+```text
 ---
 goal: accounts
 manager: content
@@ -464,11 +461,11 @@ The native-fixture/Auth admission owner update reports supported provisioning su
 `EPERM: operation not permitted, rename '/tmp/rezics-walk-stacks/sequence.next' -> '/tmp/rezics-walk-stacks/sequence'`
 
 The first operation is renameSync at scripts/stack-lease.ts, following writeFileSync. Last elapsed 433ms; all19 FAIL/not reached; tied slowest J01. Next hourly due2026-11-07T11:39:27Z. Exact current stack is in `.temp/accounts/launcher.log`; full revision/UTC/persona absence remain in the committed table. This supersedes EACCES as the current observation, while retaining earlier evidence. No container, native persona or browser was started. Performance's existing cross-identity sequence publication/provisioning repair must cover supported atomic replacement as well as file creation; determine custody and rename permissions through that owner. No product-side chmod, deletion, second queue or alternate admission is authorized.
-````
+```
 
 ### accounts-folded-80316be2-20261107.md
 
-````text
+```text
 ---
 goal: accounts
 manager: content
@@ -498,4 +495,4 @@ Other undelivered receiving: existing fixture7bcb8b99 owns native discovery actu
 Final focused checks run after the last table edit through worker-check f1ce8db7-9eab-430c-aa8b-d14220559fcd: Web9pass; Kernel compiler/formatting and Members/discovery-work pass, native discovery-source2pass/2fail; Auth28pass/2fail. All original assertions remain. Source/typing, native/browser evidence and promotion remain separate. No native journey or desktop/phone qualification has been claimed. No attempt-owned stack resources were created by the rejected local launches.
 
 After the deliveries, refresh the controller-bound dev revision on the same walk, retain all original receiving scope and run `bun apps/web/scripts/accounts-goal-walk.ts --launch` without the deferred-worker flag. Keep actual native Auth/Access, real default worker/relay, original Pool/current authority, strict money grants, independent publication, immutable replay and lifecycle checks. Seed through supported interfaces; inspect desktop1280 and phone390 controls. Record first reached operation and causal producer ownership per row. Preserve current source changes and all19 assertions, continue independent paths after genuine precondition failures, update the committed census and report passing/19, slowest failure, exact next hourly due and original-owner repair briefs.
-````
+```
