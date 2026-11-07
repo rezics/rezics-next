@@ -41,6 +41,7 @@ import {
   createSubjectSourceKeyPages,
   publicFilterSource,
   readNativePublicFilterPublicationCompletion,
+  readPublicFilterSourceDefinition,
 } from '../semantic/index.ts';
 import { readSubjectErasureSourceProof, verifySubjectErasureSourceProof } from '../semantic/account-erasure-source.ts';
 import { activeRelease, readRelease } from '../semantic/definitions.ts';
@@ -53,7 +54,6 @@ import {
   joinNativePublicFilterRepair,
   readNativePublicFilterAccountRepair,
   readNativePublicFilterRepairStart,
-  readPublicFilterSourceDefinition,
 } from '../semantic/public-filter-source-binding.ts';
 import { publicFilterSourceOrigin } from '../semantic/public-filter-source.ts';
 import { currentReadSnapshot, withReadTransaction } from '../semantic/read.ts';

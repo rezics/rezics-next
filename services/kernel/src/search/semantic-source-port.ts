@@ -9,6 +9,7 @@ type SemanticSourceApi = Pick<
   | 'createSubjectSourceKeyPages'
   | 'publicFilterSource'
   | 'readNativePublicFilterPublicationCompletion'
+  | 'readPublicFilterSourceDefinition'
 >;
 type SemanticIdentityReadApi = Pick<typeof import('../semantic/identity-adapters/read.ts'), 'readIdentityMappings'>;
 type SemanticSearchSourceApi = Pick<
@@ -23,7 +24,6 @@ type SemanticPublicFilterBindingApi = Pick<
   | 'joinNativePublicFilterRepair'
   | 'readNativePublicFilterAccountRepair'
   | 'readNativePublicFilterRepairStart'
-  | 'readPublicFilterSourceDefinition'
 >;
 type SemanticPublicFilterOriginApi = Pick<
   typeof import('../semantic/public-filter-source.ts'),
