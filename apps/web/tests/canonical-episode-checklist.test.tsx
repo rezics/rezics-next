@@ -307,21 +307,36 @@ test('installed adapter inspects in supplied order, records with encoded key, an
         },
       };
     },
-    async (body, options) => {
-      seen.push({ url: 'record', headers: new Headers(options.headers) });
-      expect(body).toEqual({ revision: 3, add: [episode3] });
-      return { status: 200, data: { revision: 4 } };
-    },
+    async () => ({ status: 503 }),
   );
+  let sentHeaders: Headers | undefined;
+  let sentBody: unknown;
+  const authenticatedClient = createKernelClient('https://kernel.example.test', {
+    headers: { authorization: 'Bearer progress-owner' },
+    fetch: (async (input, init) => {
+      const request = new Request(input, init);
+      sentHeaders = request.headers;
+      sentBody = await request.json();
+      return Response.json({ revision: 4 });
+    }) as typeof fetch,
+  });
   const inspected = await inspectEpisodes(client, sessionId, 'Bearer progress-owner', { ids: [episode1, episode2] });
   expect(inspected.ok).toBe(true);
-  const recorded = await recordEpisodes(client, sessionId, 'Bearer progress-owner', 'k', 3, {
+  if (!inspected.ok) throw new Error('expected admitted inspection');
+  expect(inspected.view.episodes).toEqual([
+    completion(episode1, true, 'member', '1'),
+    completion(null, null, 'unavailable', null),
+  ]);
+  expect(seen[0]?.url).toBe(`ids:${episode1},${episode2}`);
+  const recorded = await recordEpisodes(authenticatedClient, sessionId, 'k', 3, {
     kind: 'patch',
     add: [episode3],
     remove: [],
   });
   expect(recorded).toEqual({ ok: true, revision: 4 });
-  expect(seen[1]?.headers.get('idempotency-key')).toBe(JSON.stringify('k'));
+  expect(sentHeaders?.get('authorization')).toBe('Bearer progress-owner');
+  expect(sentHeaders?.get('idempotency-key')).toBe(JSON.stringify('k'));
+  expect(sentBody).toEqual({ revision: 3, add: [episode3] });
   expect(mapEpisodeStatus(400, { code: 'invalid_cursor' })).toBe('invalid_cursor');
   expect(mapEpisodeStatus(409, { code: 'stale_cursor' })).toBe('stale_cursor');
   expect(mapEpisodeStatus(409, { code: 'conflict' })).toBe('conflict');
@@ -329,6 +344,67 @@ test('installed adapter inspects in supplied order, records with encoded key, an
   expect(mapEpisodeStatus(422, { code: 'unsupported_library_profile' })).toBe('unsupported_library_profile');
   expect(mapEpisodeStatus(404, {})).toBe('not_found');
   expect(mapEpisodeStatus(503, { code: 'semantic_not_ready' })).toBe('unavailable');
+});
+
+test('malformed successful episode responses are unavailable as a whole', async () => {
+  const cases = [
+    {
+      query: { ids: [episode1] },
+      body: {
+        revision: 3,
+        episodes: [{ ...completion(episode1, null, 'member'), ordinal: null }],
+        next: null,
+      },
+    },
+    {
+      query: { ids: [episode1, episode2] },
+      body: {
+        revision: 3,
+        episodes: [completion(episode1, true, 'member'), completion(episode1, false, 'member')],
+        next: null,
+      },
+    },
+    {
+      query: { limit: 20 },
+      body: {
+        revision: 3,
+        episodes: Array.from({ length: 21 }, (_, index) => completion(ep(index + 100), true, 'detached')),
+        next: null,
+      },
+    },
+    {
+      query: { ids: [episode1] },
+      body: { revision: 3.5, episodes: [completion(episode1, true, 'member')], next: null },
+    },
+    { query: { limit: 20 }, body: { revision: 3, episodes: [], next: 7 } },
+    { query: { limit: 20 }, body: { revision: 3, episodes: [], next: 'x'.repeat(4097) } },
+  ];
+
+  for (const { query, body } of cases) {
+    const client = adapterClient(
+      async () => ({ status: 200, data: body }),
+      async () => ({ status: 503 }),
+    );
+    expect(await inspectEpisodes(client, sessionId, 'Bearer progress-owner', query)).toMatchObject({
+      ok: false,
+      kind: 'unavailable',
+      seam: 'KernelClient.progressSessions({ sessionId }).episodes.get',
+    });
+  }
+
+  const malformedRecord = adapterClient(
+    async () => ({ status: 503 }),
+    async () => ({ status: 200, data: { revision: 3.5 } }),
+  );
+  expect(
+    await recordEpisodes(malformedRecord, sessionId, 'k', 3, {
+      kind: 'clear',
+    }),
+  ).toEqual({
+    ok: false,
+    kind: 'unavailable',
+    seam: 'KernelClient.progressSessions({ sessionId }).$recordEpisodes.post',
+  });
 });
 
 test('shared revision conflict, exact-key ambiguity and authorized retirement replay stay distinct', async () => {

@@ -65,8 +65,6 @@ export {
   type EpisodeSender,
 } from './commands';
 export {
-  episodeChecklistMethods,
-  episodeCommandsAvailable,
   inspectEpisodes,
   mapEpisodeStatus,
   recordBody,

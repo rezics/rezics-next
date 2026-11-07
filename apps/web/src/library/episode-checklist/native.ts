@@ -1,83 +1,36 @@
 import type { KernelClient } from '@rezics/client';
-import { isPlatformClosedError } from '../../session/reading-policy';
 import {
+  CANONICAL_ID,
   EPISODE_INSPECT_CAP,
   EPISODE_READ_SEAM,
   EPISODE_RECORD_SEAM,
+  canonicalIds,
   quotedIdempotencyKey,
   type ChecklistFailureKind,
   type ChecklistIntent,
+  type EpisodeCompletion,
   type EpisodeProgressView,
 } from './contract';
 
-type NativeResult = {
-  data?: unknown;
-  error?: { value?: unknown; status?: number };
-  status?: number;
-};
+const MAX_REVISION = 2_147_483_646;
+const MAX_CURSOR_LENGTH = 4096;
 
-type EpisodeGet = (options: {
-  query: { ids?: string; cursor?: string; limit?: string | number };
-  headers: { authorization: string };
-  fetch?: RequestInit;
-}) => Promise<NativeResult>;
-
-type EpisodePost = (
-  body: { revision: number; add?: string[]; remove?: string[]; clear?: true },
-  options: { headers: { authorization: string; 'idempotency-key': string } },
-) => Promise<NativeResult>;
-
-type EpisodeResource = {
-  episodes?: { get?: EpisodeGet };
-  $recordEpisodes?: { post?: EpisodePost };
-};
-
-function isFunction(value: unknown): value is (...args: never[]) => unknown {
-  return typeof value === 'function';
-}
-
-function record(value: unknown): value is Record<string, unknown> {
+function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
 
+function hasExactKeys(value: unknown, keys: readonly string[]): value is Record<string, unknown> {
+  if (!isRecord(value)) return false;
+  const actual = Object.keys(value);
+  return actual.length === keys.length && keys.every((key) => Object.prototype.hasOwnProperty.call(value, key));
+}
+
+function validRevision(value: unknown): value is number {
+  return Number.isSafeInteger(value) && typeof value === 'number' && value >= 1 && value <= MAX_REVISION;
+}
+
 function problemCode(body: unknown): string {
-  return record(body) && typeof body.code === 'string' ? body.code : '';
-}
-
-export function episodeChecklistMethods(client: KernelClient): {
-  read: boolean;
-  record: boolean;
-  seam: string;
-} {
-  let read = false;
-  let record = false;
-  try {
-    const resource = client.progressSessions({
-      sessionId: '00000000-0000-7000-8000-000000000000',
-    }) as EpisodeResource;
-    read = isFunction(resource.episodes?.get);
-    record = isFunction(resource.$recordEpisodes?.post);
-  } catch {
-    read = false;
-    record = false;
-  }
-  const seam = !read ? EPISODE_READ_SEAM : EPISODE_RECORD_SEAM;
-  return { read, record, seam: read && record ? EPISODE_RECORD_SEAM : seam };
-}
-
-export function episodeCommandsAvailable(client: KernelClient): boolean {
-  const methods = episodeChecklistMethods(client);
-  return methods.read && methods.record;
-}
-
-function episodeResource(client: KernelClient, sessionId: string): EpisodeResource | undefined {
-  try {
-    const resource = client.progressSessions({ sessionId }) as EpisodeResource;
-    if (!isFunction(resource.episodes?.get) || !isFunction(resource.$recordEpisodes?.post)) return undefined;
-    return resource;
-  } catch {
-    return undefined;
-  }
+  return isRecord(body) && typeof body.code === 'string' ? body.code : '';
 }
 
 export function mapEpisodeStatus(status: number, body: unknown): ChecklistFailureKind {
@@ -95,30 +48,67 @@ export function mapEpisodeStatus(status: number, body: unknown): ChecklistFailur
 }
 
 function callBody(error: unknown): unknown {
-  if (record(error) && 'value' in error) return error.value;
+  if (isRecord(error) && 'value' in error) return error.value;
   return error;
 }
 
-function asView(value: unknown): EpisodeProgressView | undefined {
-  if (!record(value) || typeof value.revision !== 'number' || !Array.isArray(value.episodes)) return undefined;
-  const episodes = value.episodes.flatMap((row) => {
-    if (!record(row)) return [];
-    const membership = row.membership;
-    if (membership !== 'member' && membership !== 'detached' && membership !== 'unavailable') return [];
-    const shown: EpisodeProgressView['episodes'][number] = {
-      episodeSubjectId: typeof row.episodeSubjectId === 'string' ? row.episodeSubjectId : null,
-      completed: typeof row.completed === 'boolean' ? row.completed : null,
-      membership,
-      ordinal: typeof row.ordinal === 'string' ? row.ordinal : null,
-    };
-    return [shown];
-  });
-  return {
-    revision: value.revision,
-    episodes,
-    next: typeof value.next === 'string' ? value.next : null,
-    ...(typeof value.completeness === 'number' ? { completeness: value.completeness } : {}),
-  };
+type EpisodeViewExpectation = { kind: 'inspect'; ids: readonly string[] } | { kind: 'retained'; limit: number };
+
+function admitCompletion(value: unknown): EpisodeCompletion | undefined {
+  if (!hasExactKeys(value, ['episodeSubjectId', 'completed', 'membership', 'ordinal'])) return undefined;
+  const { episodeSubjectId, completed, membership, ordinal } = value;
+  if (membership === 'unavailable') {
+    if (episodeSubjectId !== null || completed !== null || ordinal !== null) return undefined;
+    return { episodeSubjectId: null, completed: null, membership, ordinal: null };
+  }
+  if (membership !== 'member' && membership !== 'detached') return undefined;
+  if (
+    typeof episodeSubjectId !== 'string' ||
+    !CANONICAL_ID.test(episodeSubjectId) ||
+    typeof completed !== 'boolean' ||
+    (typeof ordinal !== 'string' && ordinal !== null)
+  ) {
+    return undefined;
+  }
+  return { episodeSubjectId, completed, membership, ordinal };
+}
+
+/** Admit one complete native response before any caller projects rows or treats `next` as terminal. */
+function admitEpisodeProgressView(
+  value: unknown,
+  expectation: EpisodeViewExpectation,
+): EpisodeProgressView | undefined {
+  if (!hasExactKeys(value, ['revision', 'episodes', 'next'])) return undefined;
+  if (!validRevision(value.revision) || !Array.isArray(value.episodes) || value.episodes.length > EPISODE_INSPECT_CAP) {
+    return undefined;
+  }
+  if (
+    value.next !== null &&
+    (typeof value.next !== 'string' || value.next.length === 0 || value.next.length > MAX_CURSOR_LENGTH)
+  ) {
+    return undefined;
+  }
+
+  if (expectation.kind === 'inspect') {
+    if (value.episodes.length !== expectation.ids.length || value.next !== null) return undefined;
+  } else if (value.episodes.length > expectation.limit) {
+    return undefined;
+  }
+
+  const episodes: EpisodeCompletion[] = [];
+  const seen = new Set<string>();
+  for (const [index, input] of value.episodes.entries()) {
+    const episode = admitCompletion(input);
+    if (!episode) return undefined;
+    if (episode.episodeSubjectId !== null) {
+      if (seen.has(episode.episodeSubjectId)) return undefined;
+      seen.add(episode.episodeSubjectId);
+      if (expectation.kind === 'inspect' && episode.episodeSubjectId !== expectation.ids[index]) return undefined;
+    }
+    episodes.push(episode);
+  }
+
+  return { revision: value.revision, episodes, next: value.next };
 }
 
 export type EpisodeInspectQuery = { ids: readonly string[] } | { cursor?: string; limit?: number };
@@ -133,28 +123,39 @@ export async function inspectEpisodes(
   authorization: string,
   query: EpisodeInspectQuery,
 ): Promise<EpisodeInspectResult> {
-  const resource = episodeResource(client, sessionId);
-  const get = resource?.episodes?.get;
-  if (!get) return { ok: false, kind: 'unavailable', seam: EPISODE_READ_SEAM };
-  const params =
-    'ids' in query
-      ? { ids: query.ids.slice(0, EPISODE_INSPECT_CAP).join(',') }
-      : {
-          limit: query.limit ?? EPISODE_INSPECT_CAP,
-          ...(query.cursor ? { cursor: query.cursor } : {}),
-        };
+  let params: { ids: string } | { cursor?: string; limit: number };
+  let expectation: EpisodeViewExpectation;
+  if ('ids' in query) {
+    const ids = canonicalIds(query.ids);
+    if (!ids || ids.length === 0) return { ok: false, kind: 'invalid_request' };
+    params = { ids: ids.join(',') };
+    expectation = { kind: 'inspect', ids };
+  } else {
+    const limit = query.limit ?? EPISODE_INSPECT_CAP;
+    if (!Number.isInteger(limit) || limit < 1 || limit > EPISODE_INSPECT_CAP) {
+      return { ok: false, kind: 'invalid_request' };
+    }
+    params = {
+      limit,
+      ...(query.cursor === undefined ? {} : { cursor: query.cursor }),
+    };
+    expectation = { kind: 'retained', limit };
+  }
+
   try {
-    const result = await get({
+    const result = await client.progressSessions({ sessionId }).episodes.get({
       query: params,
       headers: { authorization },
       fetch: { cache: 'no-store', redirect: 'manual' },
     });
     const status = result.status ?? 0;
-    const view = asView(result.data);
-    if (status === 200 && view) return { ok: true, view };
+    if (status === 200) {
+      const view = admitEpisodeProgressView(result.data, expectation);
+      if (view) return { ok: true, view };
+      return { ok: false, kind: 'unavailable', seam: EPISODE_READ_SEAM };
+    }
     return { ok: false, kind: mapEpisodeStatus(status, callBody(result.error)) };
-  } catch (error) {
-    if (isPlatformClosedError(error)) return { ok: false, kind: 'unavailable', seam: EPISODE_READ_SEAM };
+  } catch {
     return { ok: false, kind: 'unavailable', seam: EPISODE_READ_SEAM };
   }
 }
@@ -175,28 +176,30 @@ export function recordBody(
   };
 }
 
+function admitRecordRevision(value: unknown): number | undefined {
+  if (!hasExactKeys(value, ['revision']) || !validRevision(value.revision)) return undefined;
+  return value.revision;
+}
+
 export async function recordEpisodes(
   client: KernelClient,
   sessionId: string,
-  authorization: string,
   key: string,
   revision: number,
   intent: ChecklistIntent,
 ): Promise<EpisodeRecordResult> {
-  const resource = episodeResource(client, sessionId);
-  const post = resource?.$recordEpisodes?.post;
-  if (!post) return { ok: false, kind: 'unavailable', seam: EPISODE_RECORD_SEAM };
   try {
-    const result = await post(recordBody(revision, intent), {
-      headers: { authorization, 'idempotency-key': quotedIdempotencyKey(key) },
+    const result = await client.progressSessions({ sessionId }).$recordEpisodes.post(recordBody(revision, intent), {
+      headers: { 'idempotency-key': quotedIdempotencyKey(key) },
     });
     const status = result.status ?? 0;
-    if (status === 200 && record(result.data) && typeof result.data.revision === 'number') {
-      return { ok: true, revision: result.data.revision };
+    if (status === 200) {
+      const responseRevision = admitRecordRevision(result.data);
+      if (responseRevision !== undefined) return { ok: true, revision: responseRevision };
+      return { ok: false, kind: 'unavailable', seam: EPISODE_RECORD_SEAM };
     }
     return { ok: false, kind: mapEpisodeStatus(status, callBody(result.error)) };
-  } catch (error) {
-    if (isPlatformClosedError(error)) return { ok: false, kind: 'unavailable', seam: EPISODE_RECORD_SEAM };
+  } catch {
     return { ok: false, kind: 'unavailable', seam: EPISODE_RECORD_SEAM };
   }
 }

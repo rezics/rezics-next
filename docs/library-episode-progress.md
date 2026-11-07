@@ -111,6 +111,12 @@ does not admit canonical Episode Subjects, membership is unavailable rather than
 byte cap remains unavailable in [subject pages](subject-pages.md); membership is therefore bounded by the installed
 20-row work-parts page (`MEMBERSHIP_PAGE_CAP`) and encoded current-page bytes, not an invented producer byte cap.
 
+Decision: call the installed progress client methods directly and admit each HTTP 200 body as one closed native
+response before projection: revision is bounded, rows preserve exact supplied order and admitted redactions keep
+their positions, each page stays within 20, and a retained cursor stays opaque and replayable within the 4096-character
+native query bound; malformed responses are unavailable. Stories for retained detached completion, sparse
+continuation and exact uncertain replay are illustrative until recorded.
+
 Obtain catalogue membership/order from that one Semantic page, pass at most 20 exact Episode IDs to
 `progressSessions({sessionId}).episodes.get({query:{ids}})`, and record with
 `.$recordEpisodes.post` using `Idempotency-Key: JSON.stringify(key)`. Preserve unmarked holes and separate special

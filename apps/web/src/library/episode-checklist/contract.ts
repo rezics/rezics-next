@@ -24,7 +24,6 @@ export type EpisodeProgressView = {
   revision: number;
   episodes: EpisodeCompletion[];
   next: string | null;
-  completeness?: number;
 };
 
 export type ChecklistRow = EpisodeCompletion & {
