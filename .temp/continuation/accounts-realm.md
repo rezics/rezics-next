@@ -15,3 +15,12 @@ This deferred walk serves Kernel HTTP from the Auth host and omits the Kernel
 worker. Make that accepted member add visible on `members/me` so join, leave,
 ban-before-cleanup and authorized readmission complete on that host before the
 request deadline. Do not invent a second membership protocol.
+
+
+## Integrated ordinary round
+
+Goal: accounts. Manager: content. Tested source `0eb618cfd609c2abb281bbd3ced29e73e685fd71` includes Auth40c038, native fixtures65d590 and allocator6948a892. Ordinary `REZICS_WALK_DEFER_FRONTENDS=0 bun apps/web/scripts/accounts-goal-walk.ts --launch` ran on the worker host, without a remote check ID; observation began2026-11-07T11:53:10.775Z, launcher completed2026-11-07T12:12:11Z with exit0 after supported teardown. Exit0 is process completion, not nineteen-outcome acceptance. Admission succeeded in1320ms on allocated slot1; database, migrations, native Auth, real Kernel worker/relay and API driver were reached. Auth pages became ready. Evidence: `.temp/accounts/journeys.json`, `.temp/accounts/launcher.log`, `.temp/walk/e249c4cc-302e-4529-8b4a-d7453450a8fa/stack.log`. Full per-row UTC/persona/revision/elapsed values are retained in the table and JSON. No screenshots.
+
+Native/API census:12/19 PASS (J01,J02,J05,J06,J07,J08,J09,J11,J12,J17,J18,J19),7 FAIL. These are API-stage assertions, not complete native/browser/growth or promotion acceptance. Slowest FAIL J13,32319ms, public target omitted subject.id. Authoritative launcher next hourly due2026-11-07T12:50:52Z is based on round start; the inner driver printed provisional13:09:49Z before launcher teardown, which is not a second schedule. No watcher or second walk was created.
+
+Authority89 retains the complete membership outcome. J15 owner member add was accepted, but protected GET /v1/realms/{id}/members/me stayed404 not_found for30446ms (request_id01a1b5dc-bb42-757f-b716-48c734fd3664). J16 was not reached. This ordinary stack includes the real Kernel worker/relay, so the older deferred-stack explanation no longer applies. Make accepted membership visible under actual current authority, then complete leave/next-read refusal, ban/revoke before cleanup, denied banned self-join, unban and authorized readmission on the same original personas.
