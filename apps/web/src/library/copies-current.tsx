@@ -1,11 +1,11 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
 import { CancelledError, useQuery, useQueryClient } from '@tanstack/react-query';
+import { SessionRecoveryPage } from '../session';
 import { useSession } from '../session/query';
-import { sessionRecoverySignInHref } from '../session/unavailable';
-import { DependencyUnavailablePage } from '../shell/dependency-recovery/page';
 import { useLibraryWorkspaceAdmission } from './library-workspace-admission';
 import { personalRead } from '../kernel/query';
 import { m } from '../paraglide/messages.js';
+import type { Locale } from '../paraglide/runtime.js';
 import { CopiesPage, type CopiesOrigin } from './copies-page';
 import { CopiesAddressRecovery } from './copies-address-recovery';
 import type { CopiesQuery } from './copies-query';
@@ -51,7 +51,7 @@ export function CopiesCurrent({
 }: {
   initial: CopiesCurrentRead;
   search: CopiesQuery;
-  locale: string;
+  locale: Locale;
   failure?: string | undefined;
 }) {
   const hydrated = useSyncExternalStore(
@@ -79,7 +79,7 @@ export function CopiesCurrent({
   else if (scope.hydrated !== hydrated) setScope({ ...scope, hydrated });
   if (allowed) shown.current = origin.id;
   if (hydrated && (session.state === 'unknown' || session.state === 'unavailable'))
-    return <DependencyUnavailablePage signInHref={sessionRecoverySignInHref(`/${locale}/library/copies`)} />;
+    return <SessionRecoveryPage pathname={`/${locale}/library/copies`} locale={locale} />;
   if (!subject || (!allowed && shown.current !== origin.id))
     return (
       <p role="status">
