@@ -18,9 +18,11 @@ import { readMembershipWorkConfig } from '../../src/access/membership-work-confi
 import { createWorkClient } from '../../src/work/client.ts';
 import { WORK_QUEUES } from '../../src/work/queues.ts';
 import { newId, routeOf } from '../../src/route/route.ts';
+import { configureTestReceiptKeys } from '../support/receipt-keys.ts';
 
 const pool = createPool(process.env.DATABASE_URL!);
 pool.options.max = 1;
+configureTestReceiptKeys(pool);
 const client = await createWorkClient(process.env.DATABASE_URL!);
 const signing = await generateKeyPair('ES256', { extractable: true });
 const jwk = { ...(await exportJWK(signing.publicKey)), kid: 'membership-component', alg: 'ES256' };
@@ -141,7 +143,19 @@ async function registered() {
   }) as never);
   try {
     await createAccountsWorkModule().register(context);
-    expect(step.mock.calls.filter((call) => call[1]?.name?.startsWith('accounts.membership.'))).toHaveLength(4);
+    expect(
+      step.mock.calls
+        .map((call) => call[1]?.name)
+        .filter((name) => name?.startsWith('accounts.membership.'))
+        .sort(),
+    ).toEqual([
+      'accounts.membership.cancel',
+      'accounts.membership.finalize',
+      'accounts.membership.publish',
+      'accounts.membership.release',
+      'accounts.membership.reserve',
+      'accounts.membership.terminalize',
+    ]);
     expect(DBOS.isInitialized()).toBe(false);
   } finally {
     step.mockRestore();

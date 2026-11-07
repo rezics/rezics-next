@@ -158,6 +158,26 @@ describe('native genuine-order retention', () => {
       );
     }
   }
+  async function finishWorkflow(id: string, result: () => Promise<unknown>) {
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const timeout = new Promise<never>((_resolve, reject) => {
+      timer = setTimeout(
+        () =>
+          reject(
+            new Error(
+              `Commerce workflow ${id} did not finish within ${WORKFLOW_WAIT_MS}ms; ` +
+                JSON.stringify({ output: worker?.output.slice(-2000) ?? '', errors: worker?.errors.slice(-2000) ?? '' }),
+            ),
+          ),
+        WORKFLOW_WAIT_MS,
+      );
+    });
+    try {
+      await Promise.race([result(), timeout]);
+    } finally {
+      if (timer !== undefined) clearTimeout(timer);
+    }
+  }
   async function erase(persona: { accountId: string; bearer: string }) {
     const barrier = await deletePersona({ version: 1, pool, auth: accountDeletionRuntime(native).auth }, persona);
     await awaitTombstone(persona.accountId);
@@ -171,7 +191,7 @@ describe('native genuine-order retention', () => {
       (row) => row.workflow !== null,
       WORKFLOW_WAIT_MS,
     );
-    await client.retrieveWorkflow(id).getResult();
+    await finishWorkflow(id, () => client.retrieveWorkflow(id).getResult());
     return { ...barrier, workflow: seen.workflow };
   }
   async function event(type: string, sessionId: string) {
@@ -190,7 +210,7 @@ describe('native genuine-order retention', () => {
     return `stripe:${eventId}`;
   }
   async function finish(id: string) {
-    await client.retrieveWorkflow(id).getResult();
+    await finishWorkflow(id, () => client.retrieveWorkflow(id).getResult());
   }
   async function entitlementRows(accountId: string) {
     return (
@@ -642,7 +662,7 @@ describe('native genuine-order retention', () => {
       },
       unused.accountId,
     );
-    await replay.getResult();
+    await finishWorkflow(commerceErasureWorkflowId(unused.accountId), () => replay.getResult());
     expect(await commerceOutcome(unused.accountId)).toEqual({ outcome: 'pending', retained: [] });
   }, 540_000);
 });
