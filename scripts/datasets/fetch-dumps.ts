@@ -5,6 +5,11 @@ import { dirname, join, resolve } from 'node:path';
 import { spawn } from 'node:child_process';
 import { Readable } from 'node:stream';
 import { pipeline } from 'node:stream/promises';
+import {
+  importNetworkCode,
+  importOperationError,
+  type ImportOperation,
+} from '../../services/importer/src/import-fetch.ts';
 import { reclaimInactiveFileCache, releaseWalkFileCache } from '../walk-memory.ts';
 
 export const CROSS_MEDIA_DUMP_CACHE_ENV = 'REZICS_DATASETS_DUMP_CACHE';
@@ -201,6 +206,134 @@ async function sha256(path: string): Promise<string> {
   return hash.digest('hex');
 }
 
+async function requestDumpResponse(
+  url: string,
+  options: FetchOptions,
+  operation: ImportOperation = 'dump-download',
+): Promise<Response> {
+  const fetcher = options.fetchImpl ?? globalThis.fetch;
+  try {
+    return await fetcher(url, { redirect: 'follow' });
+  } catch (cause) {
+    const networkCode = importNetworkCode(cause);
+    throw importOperationError({
+      operation,
+      phase: 'network',
+      source: url,
+      message: operation === 'dump-index' ? 'VNDB dump index request failed' : 'Dump download request failed',
+      ...(networkCode === undefined ? {} : { networkCode }),
+      cause,
+    });
+  }
+}
+
+async function discardResponseBody(response: Response): Promise<void> {
+  try {
+    await response.body?.cancel();
+  } catch {
+    /* A failed response body is discarded before reporting its status. */
+  }
+}
+
+async function requireDumpBody(url: string, response: Response, operation: ImportOperation): Promise<void> {
+  if (response.ok && response.body) return;
+  await discardResponseBody(response);
+  const failedStatus = !response.ok;
+  throw importOperationError({
+    operation,
+    phase: failedStatus ? 'http' : 'response',
+    source: url,
+    status: response.status,
+    ...(failedStatus ? {} : { code: 'missing-response-body' }),
+    message: failedStatus
+      ? `${operation === 'dump-index' ? 'VNDB dump index' : 'Dump download'} failed with HTTP ${response.status}`
+      : `${operation === 'dump-index' ? 'VNDB dump index' : 'Dump download'} response has no body`,
+  });
+}
+
+function requireHttpsResponse(url: string, response: Response, operation: ImportOperation): void {
+  let finalUrl: URL;
+  try {
+    finalUrl = new URL(response.url || url);
+  } catch (cause) {
+    throw importOperationError({
+      operation,
+      phase: 'response',
+      source: url,
+      status: response.status,
+      code: 'invalid-response-url',
+      message: 'Dump response URL is invalid',
+      cause,
+    });
+  }
+  if (finalUrl.protocol !== 'https:')
+    throw importOperationError({
+      operation,
+      phase: 'response',
+      source: url,
+      status: response.status,
+      code: 'redirect-away-from-https',
+      message:
+        operation === 'dump-index'
+          ? 'VNDB dump index redirected away from HTTPS'
+          : 'Dump download redirected away from HTTPS',
+    });
+}
+
+/** Write a successful response, preserving stream and integrity failures as private causes. */
+async function writeDumpBody(url: string, path: string, response: Response, expectedSha256?: string): Promise<string> {
+  await requireDumpBody(url, response, 'dump-download');
+  requireHttpsResponse(url, response, 'dump-download');
+  await mkdir(dirname(path), { recursive: true });
+  const partial = `${path}.${process.pid}.${randomUUID()}.part`;
+  try {
+    try {
+      await pipeline(
+        Readable.fromWeb(response.body as unknown as Parameters<typeof Readable.fromWeb>[0]),
+        createWriteStream(partial, { flags: 'wx' }),
+      );
+    } catch (cause) {
+      throw importOperationError({
+        operation: 'dump-download',
+        phase: 'response',
+        source: url,
+        status: response.status,
+        code: 'stream-failed',
+        message: 'Dump response stream failed',
+        cause,
+      });
+    }
+    let downloadedHash: string;
+    try {
+      downloadedHash = await sha256(partial);
+    } catch (cause) {
+      throw importOperationError({
+        operation: 'dump-download',
+        phase: 'integrity',
+        source: url,
+        status: response.status,
+        code: 'digest-read-failed',
+        message: 'Dump integrity check failed',
+        cause,
+      });
+    }
+    if (expectedSha256 !== undefined && downloadedHash !== expectedSha256)
+      throw importOperationError({
+        operation: 'dump-download',
+        phase: 'integrity',
+        source: url,
+        status: response.status,
+        code: 'sha256-mismatch',
+        message: 'Dump SHA-256 mismatch',
+      });
+    await rename(partial, path);
+    return downloadedHash;
+  } catch (error) {
+    await rm(partial, { force: true });
+    throw error;
+  }
+}
+
 /** Download one pinned asset to a temporary file, verify it, then atomically cache it. */
 export async function cacheDumpAsset(
   url: string,
@@ -218,48 +351,14 @@ export async function cacheDumpAsset(
     await rm(path);
   }
 
-  const fetcher = options.fetchImpl ?? globalThis.fetch;
-  const partial = `${path}.${process.pid}.${randomUUID()}.part`;
-  try {
-    const response = await fetcher(url, { redirect: 'follow' });
-    ensure(response.ok && response.body, `Dump download failed with HTTP ${response.status}: ${url}`);
-    const finalUrl = new URL(response.url || url);
-    ensure(finalUrl.protocol === 'https:', 'Dump download redirected away from HTTPS');
-    await pipeline(
-      Readable.fromWeb(response.body as unknown as Parameters<typeof Readable.fromWeb>[0]),
-      createWriteStream(partial, { flags: 'wx' }),
-    );
-    const downloadedHash = await sha256(partial);
-    ensure(downloadedHash === expectedSha256, `Dump SHA-256 mismatch: ${url}`);
-    await rename(partial, path);
-    return downloadedHash;
-  } catch (error) {
-    await rm(partial, { force: true });
-    throw error;
-  }
+  const response = await requestDumpResponse(url, options);
+  return writeDumpBody(url, path, response, expectedSha256);
 }
 
 async function cacheUnpinnedAsset(url: string, path: string, options: FetchOptions = {}): Promise<string> {
   if (await regularFile(path)) return sha256(path);
-  await mkdir(dirname(path), { recursive: true });
-  const fetcher = options.fetchImpl ?? globalThis.fetch;
-  const partial = `${path}.${process.pid}.${randomUUID()}.part`;
-  try {
-    const response = await fetcher(url, { redirect: 'follow' });
-    ensure(response.ok && response.body, `Dump download failed with HTTP ${response.status}: ${url}`);
-    const finalUrl = new URL(response.url || url);
-    ensure(finalUrl.protocol === 'https:', 'Dump download redirected away from HTTPS');
-    await pipeline(
-      Readable.fromWeb(response.body as unknown as Parameters<typeof Readable.fromWeb>[0]),
-      createWriteStream(partial, { flags: 'wx' }),
-    );
-    const downloadedHash = await sha256(partial);
-    await rename(partial, path);
-    return downloadedHash;
-  } catch (error) {
-    await rm(partial, { force: true });
-    throw error;
-  }
+  const response = await requestDumpResponse(url, options);
+  return writeDumpBody(url, path, response);
 }
 
 const runCommand: CommandRunner = (command, args) =>
@@ -488,26 +587,6 @@ async function writeVndbManifest(path: string, manifest: VndbDumpManifest): Prom
   }
 }
 
-async function writeDumpBody(url: string, path: string, response: Response): Promise<string> {
-  ensure(response.ok && response.body, `Dump download failed with HTTP ${response.status}: ${url}`);
-  const finalUrl = new URL(response.url || url);
-  ensure(finalUrl.protocol === 'https:', 'Dump download redirected away from HTTPS');
-  await mkdir(dirname(path), { recursive: true });
-  const partial = `${path}.${process.pid}.${randomUUID()}.part`;
-  try {
-    await pipeline(
-      Readable.fromWeb(response.body as unknown as Parameters<typeof Readable.fromWeb>[0]),
-      createWriteStream(partial, { flags: 'wx' }),
-    );
-    const downloadedHash = await sha256(partial);
-    await rename(partial, path);
-    return downloadedHash;
-  } catch (error) {
-    await rm(partial, { force: true });
-    throw error;
-  }
-}
-
 async function cachedArchiveDigest(path: string): Promise<string | undefined> {
   if (!(await regularFile(path))) return undefined;
   return sha256(path);
@@ -538,25 +617,53 @@ async function fetchVndbArchive(
   const pinnedDigest = await cachedArchiveDigest(pinnedPath);
   if (pinnedDigest) return { archive: pinnedPath, digest: pinnedDigest, file: pinnedFile, url: VNDB_ARCHIVE_URL };
 
-  const fetcher = options.fetchImpl ?? globalThis.fetch;
-  const pinnedResponse = await fetcher(VNDB_ARCHIVE_URL, { redirect: 'follow' });
+  const pinnedResponse = await requestDumpResponse(VNDB_ARCHIVE_URL, options);
   if (pinnedResponse.ok) {
     const digest = await writeDumpBody(VNDB_ARCHIVE_URL, pinnedPath, pinnedResponse);
     return { archive: pinnedPath, digest, file: pinnedFile, url: VNDB_ARCHIVE_URL };
   }
   const pinnedStatus = pinnedResponse.status;
-  try {
-    await pinnedResponse.body?.cancel();
-  } catch {
-    /* 404/410 body is discarded before the index fetch */
-  }
-  ensure(gone(pinnedStatus), `Dump download failed with HTTP ${pinnedStatus}: ${VNDB_ARCHIVE_URL}`);
+  await discardResponseBody(pinnedResponse);
+  if (!gone(pinnedStatus))
+    throw importOperationError({
+      operation: 'dump-download',
+      phase: 'http',
+      source: VNDB_ARCHIVE_URL,
+      status: pinnedStatus,
+      message: `Dump download failed with HTTP ${pinnedStatus}`,
+    });
 
-  const indexResponse = await fetcher(VNDB_DUMP_INDEX_URL, { redirect: 'follow' });
-  ensure(Boolean(indexResponse.ok), `VNDB dump index failed with HTTP ${indexResponse.status}: ${VNDB_DUMP_INDEX_URL}`);
-  const indexUrl = new URL(indexResponse.url || VNDB_DUMP_INDEX_URL);
-  ensure(indexUrl.protocol === 'https:', 'VNDB dump index redirected away from HTTPS');
-  const resolved = parseVndbDumpIndex(await indexResponse.text(), VNDB_DUMP_INDEX_URL);
+  const indexResponse = await requestDumpResponse(VNDB_DUMP_INDEX_URL, options, 'dump-index');
+  await requireDumpBody(VNDB_DUMP_INDEX_URL, indexResponse, 'dump-index');
+  requireHttpsResponse(VNDB_DUMP_INDEX_URL, indexResponse, 'dump-index');
+  let indexHtml: string;
+  try {
+    indexHtml = await indexResponse.text();
+  } catch (cause) {
+    throw importOperationError({
+      operation: 'dump-index',
+      phase: 'response',
+      source: VNDB_DUMP_INDEX_URL,
+      status: indexResponse.status,
+      code: 'stream-failed',
+      message: 'VNDB dump index response failed',
+      cause,
+    });
+  }
+  let resolved: { file: string; url: string };
+  try {
+    resolved = parseVndbDumpIndex(indexHtml, VNDB_DUMP_INDEX_URL);
+  } catch (cause) {
+    throw importOperationError({
+      operation: 'dump-index',
+      phase: 'response',
+      source: VNDB_DUMP_INDEX_URL,
+      status: indexResponse.status,
+      code: 'invalid-index',
+      message: 'VNDB dump index does not list a current database dump',
+      cause,
+    });
+  }
   const archive = join(downloads, resolved.file);
   const existing = await cachedArchiveDigest(archive);
   const digest = existing ?? (await cacheUnpinnedAsset(resolved.url, archive, options));

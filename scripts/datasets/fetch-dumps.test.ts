@@ -2,7 +2,9 @@ import { createHash } from 'node:crypto';
 import { mkdtemp, mkdir, readFile, rm, writeFile } from 'node:fs/promises';
 import { join, resolve } from 'node:path';
 import { expect, test } from 'bun:test';
+import { importRequestFailure } from '../../services/importer/src/import-fetch.ts';
 import {
+  cacheDumpAsset,
   fetchVndbDump,
   DEVELOPMENT_VNDB_PIN,
   parseVndbDumpIndex,
@@ -116,6 +118,35 @@ test('VNDB dump cache requires admitted character-name, external-link, and relea
   });
 });
 
+test('dump download failures retain structured local fields and keep the upstream cause private', async () => {
+  const { cacheRoot, dispose } = await tempCache();
+  try {
+    const url = 'https://operator:secret@dl.vndb.org/dump/vndb-db.tar.zst?token=private#fragment';
+    const cause = Object.assign(new Error('Bearer abc123 raw imported record body'), { code: 'ECONNRESET' });
+    const fetchImpl = Object.assign(
+      async () => {
+        throw cause;
+      },
+      { preconnect() {} },
+    );
+    const failure = await cacheDumpAsset(url, join(cacheRoot, 'downloads', 'vndb-db.tar.zst'), '0'.repeat(64), {
+      fetchImpl,
+    }).catch((error: unknown) => error);
+    expect(failure).toBeInstanceOf(Error);
+    expect((failure as Error).cause).toBe(cause);
+    expect(importRequestFailure(failure)).toMatchObject({
+      operation: 'dump-download',
+      phase: 'network',
+      method: 'GET',
+      origin: 'https://dl.vndb.org',
+      path: '/dump/vndb-db.tar.zst',
+      networkCode: 'ECONNRESET',
+    });
+  } finally {
+    await dispose();
+  }
+});
+
 for (const pinned of [false, true]) {
   test(
     pinned
@@ -188,17 +219,33 @@ for (const pinned of [false, true]) {
           await expect(
             fetchVndbDump({ cacheRoot, fetchImpl, pin: { ...pin, timestamp: '2026-11-03 08:00:24+00' } }),
           ).rejects.toThrow('Verified dump is missing required files');
-          await expect(
-            fetchVndbDump({ cacheRoot, fetchImpl, pin: { ...pin, sha256: '0'.repeat(64) } }),
-          ).rejects.toThrow('Dump SHA-256 mismatch');
+          const mismatch = await fetchVndbDump({
+            cacheRoot,
+            fetchImpl,
+            pin: { ...pin, sha256: '0'.repeat(64) },
+          }).catch((error: unknown) => error);
+          expect(mismatch).toBeInstanceOf(Error);
+          expect((mismatch as Error).message).toContain('Dump SHA-256 mismatch');
+          expect(importRequestFailure(mismatch)).toMatchObject({
+            operation: 'dump-download',
+            phase: 'integrity',
+            code: 'sha256-mismatch',
+          });
           available = false;
           await rm(join(cacheRoot, 'vndb', expectedFile.replace(/\.tar\.zst$/, '')), {
             recursive: true,
             force: true,
           });
-          await expect(fetchVndbDump({ cacheRoot, fetchImpl, pin })).rejects.toThrow(
-            'Dump download failed with HTTP 404',
-          );
+          const unavailable = await fetchVndbDump({ cacheRoot, fetchImpl, pin }).catch((error: unknown) => error);
+          expect(unavailable).toBeInstanceOf(Error);
+          expect((unavailable as Error).message).toContain('Dump download failed with HTTP 404');
+          expect(importRequestFailure(unavailable)).toMatchObject({
+            operation: 'dump-download',
+            phase: 'http',
+            status: 404,
+            origin: 'https://dl.vndb.org',
+            path: '/dump/vndb-db-2026-11-04.tar.zst',
+          });
           expect(seen).toEqual([VNDB_ARCHIVE_URL, VNDB_ARCHIVE_URL, VNDB_ARCHIVE_URL]);
           expect(JSON.parse(await readFile(vndbDumpManifestPath(cacheRoot), 'utf8'))).toEqual(result.manifest);
         }

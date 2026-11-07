@@ -492,13 +492,14 @@ test('token acquisition reports its own safe Auth failure beside the Import oper
   expect(formatSeedError(failure)).toContain('correlation=auth-req-7');
 });
 
-test('local TypeError diagnostics keep a bounded message and drop query tokens', () => {
+test('ordinary errors never supply seed diagnostic text, even when it resembles a local failure', () => {
+  const untrusted = new TypeError('Bearer abc123 raw imported record body');
+  untrusted.name = 'ImportedRecord';
+  expect(formatSeedError(untrusted)).toBe('Cross-media seed failed');
   expect(
     formatSeedError(new TypeError('Dump download failed with HTTP 403: https://dl.vndb.org/dump/vndb-db.zst')),
-  ).toBe(
-    'Cross-media seed failed (TypeError): Dump download failed with HTTP 403: https://dl.vndb.org/dump/vndb-db.zst',
-  );
-  expect(formatSeedError(new TypeError('secret token=abc?x=1'))).toBe('Cross-media seed failed (TypeError)');
+  ).toBe('Cross-media seed failed');
+  expect(formatSeedError(new Error('secret token=abc?x=1'))).toBe('Cross-media seed failed');
 });
 
 test('review transport retains coherent query, nullable evidence, exact admission and immutable request bytes', async () => {

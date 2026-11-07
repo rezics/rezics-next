@@ -16,12 +16,14 @@ export type ImportRetryState = Readonly<{
 const retryStates = new WeakMap<Response, ImportRetryState>();
 export const importRetryState = (response: Response): ImportRetryState | undefined => retryStates.get(response);
 
-export type ImportFailurePhase = 'network' | 'token' | 'deadline' | 'http' | 'response';
+export type ImportFailurePhase = 'network' | 'token' | 'deadline' | 'http' | 'response' | 'integrity';
+export type ImportOperation = 'dump-download' | 'dump-index';
 export type ImportRequestDiagnostics = Readonly<{
   method: string;
   origin: string;
   path: string;
   phase: ImportFailurePhase;
+  operation?: ImportOperation;
   status?: number;
   code?: string;
   networkCode?: string;
@@ -76,6 +78,41 @@ function requestDiagnostics(request: Request, phase: ImportFailurePhase, error: 
 function rememberRequestFailure(error: unknown, diagnostics: ImportRequestDiagnostics): void {
   if ((typeof error === 'object' && error !== null) || typeof error === 'function')
     requestFailures.set(error as object, diagnostics);
+}
+
+/** Construct an operator-safe error for a source operation while retaining its private cause. */
+export function importOperationError(input: {
+  operation: ImportOperation;
+  phase: ImportFailurePhase;
+  source: string;
+  message: string;
+  status?: number;
+  code?: string;
+  networkCode?: string;
+  cause?: unknown;
+}): Error {
+  let origin = '';
+  let path = '';
+  try {
+    const source = new URL(input.source);
+    origin = source.origin.slice(0, 256);
+    path = source.pathname.slice(0, 512);
+  } catch {
+    /* Invalid source locations remain unknown in operator diagnostics. */
+  }
+  const error = new Error(input.message, { cause: input.cause });
+  error.name = 'ImportOperationError';
+  rememberRequestFailure(error, {
+    operation: input.operation,
+    method: 'GET',
+    origin,
+    path,
+    phase: input.phase,
+    ...(input.status === undefined ? {} : { status: input.status }),
+    ...(input.code === undefined ? {} : { code: input.code }),
+    ...(input.networkCode === undefined ? {} : { networkCode: input.networkCode }),
+  });
+  return error;
 }
 
 export type ImportHttpOptions = {
