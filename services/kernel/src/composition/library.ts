@@ -205,6 +205,8 @@ export type LibraryComposeOptions = Readonly<{
   ordinaryPage?: boolean;
   sourceCapture?: LibraryCapabilities['sourceCapture'];
   capabilities?: Partial<LibraryCapabilities>;
+  scopeWork?: import('../library/adapters/index.ts').NativeScopeWork;
+  preparationWork?: import('../library/adapters/index.ts').NativePreparationWorkFactory;
 }>;
 
 function stubSource(): PreparedCollectionSource {
@@ -333,11 +335,12 @@ export function composeLibraryDomain(options: LibraryComposeOptions = {}): Libra
       options.capabilities?.accountAdmission ?? sumAdmission([admissionTerm('composition', { statements: 1 })]),
     ...extras,
   };
+  const previous = peekLibraryDomain();
   return bindLibraryDomain({
     ...createLibraryApplications(capabilities),
     followCounts: nativeFollowCountRuntime(),
-    preparationWork: createLibraryPreparationWork,
-    scopeWork: nativeLibraryScopeWork,
+    preparationWork: options.preparationWork ?? previous?.preparationWork ?? createLibraryPreparationWork,
+    scopeWork: options.scopeWork ?? previous?.scopeWork ?? nativeLibraryScopeWork,
   });
 }
 

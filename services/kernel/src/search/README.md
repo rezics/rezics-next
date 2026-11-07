@@ -620,7 +620,7 @@ their independent work axes. The returned receipt settles the actual supplied ro
 availability and Library's missing admitted preparation fields/ports remain explicit integration dependencies.
 
 `scope-application.ts` owns native source ordering orchestration. `service-scope-order.ts:createSearchScopeOrder({pool,
-options: LeafOptions, clock})` binds that application to the installed port. `SearchScopeOrder` is
+options: LeafOptions, clock, library})` binds that application to the supplied Library capability. `SearchScopeOrder` is
 `{kind:'id', source?: NativeSourceIdentity} | {kind:'ordinal', source: NativeSourceIdentity}`. These are native
 locators; they confer no authority. `prepare(order, allowance)`
 returns `{collection, work}` with the complete `CollectionSourceObservation` and native prepared Source.
@@ -633,6 +633,17 @@ Kernel composition binds Library's complete native Source, fixed bounds and limi
 Members definition reader. Search retains current work admission, observation revalidation, disclosure and receipt
 settlement.
 The adapter adds no public Search sort and manufactures no Search Hits from Collection rows.
+
+Decision: each scoped Search application closes over a complete supplied Library capability constructed at the
+installed root. `search/adapters/library-scope.ts` builds native operations; `composition/search-library.ts`
+wraps ordered-source and members-definition application facades and `createKernelRuntimeDefaults` installs that
+instance. The port is consumer operation vocabulary (`open`, `readWorkState`, `readWorkGroup`, `createWork`,
+`readWorkDefinition`, constructed `limits`) over Library contract types, not `typeof` private functions.
+Membership preparation, ordered continuation and current-work orchestration go through that instance. There is
+no process singleton and no module-load read of Library implementations. Application refusals are
+`SearchOperationError`; HTTP mapping stays on the installed Search problem mapper. Semantic Source contracts
+stay with the existing Collection Source owner. Fewest tests: one construction suite pins instance capability,
+ordinal limits and native unsupported refusal.
 
 `createSearchScopeForService(service, options)` remains the sole resolved-service boundary with the original two
 arguments. `prepare(filter, {releaseDigest?, order?, allowance?, type?})`, `prefix` and `evaluate` retain their

@@ -12,8 +12,18 @@ import { meterMembersDefinition, withMembersWorkBudget } from '../scope-members-
 
 import { readScopeWorkDefinition } from '../scope-work-context.ts';
 import type { NativeScopeWork } from '../../library/adapters/index.ts';
+import type { SearchLibraryScopePort } from '../library-scope-port.ts';
 
-export const nativeLibraryScopeWork: NativeScopeWork = { readDefinition: readScopeWorkDefinition };
+export function createNativeLibraryScopeWork(library: SearchLibraryScopePort): NativeScopeWork {
+  return {
+    readDefinition: (work, options) => readScopeWorkDefinition(work, { ...options, library }),
+  };
+}
+
+/** Compatibility binding used when composition has already constructed a Library capability. */
+export const nativeLibraryScopeWork: NativeScopeWork = {
+  readDefinition: (work, options) => readScopeWorkDefinition(work, options),
+};
 
 type OrderedSource = ReturnType<typeof createSearchScopeSource>;
 
@@ -27,6 +37,7 @@ export const createLibraryPreparationWork: NativePreparationWorkFactory = (conte
     const work = input.budget;
     const source = createSearchScopeSource({
       ...runtime,
+      ...(runtime.library ? { library: runtime.library } : {}),
       evidence: {
         work: input.work,
         access: input.access,

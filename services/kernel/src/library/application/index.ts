@@ -10,8 +10,8 @@ import { createEntryProgressApplication } from './entry-progress.ts';
 import { createProgressOperationApplication } from './progress-operations.ts';
 
 export { createOwnerQueryApplication } from './owner-query.ts';
-export { createSourceCaptureApplication } from './source-capture.ts';
-export { createMemberPreparationApplication } from './member-preparation.ts';
+export { createSourceCaptureApplication, createOrderedCollectionSourceApplication } from './source-capture.ts';
+export { createMemberPreparationApplication, createMembersWorkDefinitionApplication } from './member-preparation.ts';
 export { createPublicationAdmissionApplication } from './publication.ts';
 export { createIdentityNativeApplication } from './identity-native.ts';
 export { createEntryProgressApplication } from './entry-progress.ts';

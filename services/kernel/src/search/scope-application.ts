@@ -1,72 +1,94 @@
 /** Search application boundary for Library-backed native scoped membership and ordering. */
 import { isDeepStrictEqual } from 'node:util';
 import type { Pool } from 'pg';
-import { ProblemError } from '../http/problem.ts';
 import type { KernelClock } from '../clock.ts';
 import type { WorkAllowance, WorkReceipt } from '../library/contract/work-dimensions.ts';
 import type {
   CollectionAliasProgress,
   CollectionSourceContext,
   CollectionSourceObservation,
-} from '../library/collection-source.ts';
-import type { NativeOrdinalKey } from '../library/collection-source-order.ts';
-import type { LeafOptions } from '../semantic/scope-leaf-evidence.ts';
-import type { IdentityScopeObservation } from '../semantic/identity-scope-types.ts';
-import type { readScopeWorkDefinition } from './scope-work-context.ts';
-import type { SearchLibraryScopePort, SearchScopeCollection, SearchScopeOrder } from './library-scope-port.ts';
+} from '../library/contract/source.ts';
+import type { NativeOrdinalKey } from '../library/contract/ordering.ts';
+import type { Access } from '../request/access.ts';
+import type { LibraryActor } from '../library/contract/actors.ts';
+import type { ScopeWorkContext } from '../library/adapters/index.ts';
+import { SearchOperationError } from './operation-outcomes.ts';
+import type {
+  SearchLibraryScopePort,
+  SearchScopeCollection,
+  SearchScopeOrder,
+  SearchScopeWorkDefinition,
+} from './library-scope-port.ts';
 
-let installedLibraryScope: SearchLibraryScopePort;
+export type SearchScopeReader = Readonly<{
+  access: Access;
+  deadline: number;
+  actor?: LibraryActor;
+  nativeT?: unknown;
+  work?: ScopeWorkContext;
+}>;
 
-/** Installed once by Kernel composition, before Library or Search exposes scoped work. */
-export function bindSearchLibraryScopePort(port: SearchLibraryScopePort): void {
-  installedLibraryScope = port;
+function unready(): never {
+  throw new SearchOperationError('semantic_not_ready');
 }
 
-/** The port is supplied by composition; use before constructing any scoped Search operation. */
-export function searchLibraryScopePort(): SearchLibraryScopePort {
-  return installedLibraryScope!;
+function unsupported(): never {
+  throw new SearchOperationError('unsupported_query');
 }
 
-type ScopeWorkDefinition = Awaited<ReturnType<typeof readScopeWorkDefinition>>;
+function unavailable(): never {
+  throw new SearchOperationError('dependency_unavailable');
+}
+
+type ScopeCurrentWork = Readonly<{
+  sourceIdentity: SearchScopeWorkDefinition['sourceIdentity'];
+  observation: SearchScopeWorkDefinition['observation'];
+  definition?: Readonly<{ sort?: SearchScopeWorkDefinition['definition']['sort'] }>;
+}>;
 
 /** Application orchestration around the complete native Collection source capability. */
 export function createSearchScopeOrderApplication(
   config: Readonly<{
     pool: Pool;
-    options: LeafOptions;
+    options: SearchScopeReader;
     clock: KernelClock;
     library: SearchLibraryScopePort;
-    readWorkDefinition: typeof readScopeWorkDefinition;
+    readWorkDefinition: (
+      work: ScopeWorkContext,
+      options: Readonly<{ pool: Pool; access: Access; deadline: number; library: SearchLibraryScopePort }>,
+    ) => Promise<ScopeCurrentWork>;
     selectedOrdinalPage: () => Readonly<{ limit: number }>;
   }>,
 ) {
   const { pool, options, clock, library, readWorkDefinition, selectedOrdinalPage } = config;
-  const native = library.source.create({ pool, access: options.access, clock });
+  const native = library.source.open({ pool, access: options.access, clock });
 
   function context(): CollectionSourceContext {
     if (options.work) return { work: options.work, deadline: options.deadline };
-    if (!options.nativeT) throw new ProblemError('semantic_not_ready');
+    if (!options.nativeT) unready();
+    if (!options.actor) unready();
     return { actor: options.actor, at: options.nativeT, deadline: options.deadline };
   }
 
   async function currentWork(
     order: SearchScopeOrder,
     observation?: CollectionSourceObservation,
-    expected?: ScopeWorkDefinition,
+    expected?: ScopeCurrentWork,
   ) {
     if (!options.work) return;
     const current = await readWorkDefinition(options.work, {
       pool,
       access: options.access,
       deadline: options.deadline,
+      library,
     });
     if (
-      order.kind !== ('definition' in current ? current.definition.sort : 'id') ||
+      order.kind !== (current.definition?.sort ?? 'id') ||
       !isDeepStrictEqual(order.source, current.sourceIdentity) ||
       (observation !== undefined && !isDeepStrictEqual(observation, current.observation)) ||
       (expected !== undefined && !isDeepStrictEqual(expected, structuredClone(current)))
     )
-      throw new ProblemError('semantic_not_ready');
+      unready();
     return structuredClone(current);
   }
 
@@ -76,8 +98,7 @@ export function createSearchScopeOrderApplication(
       allowance: WorkAllowance,
     ): Promise<Readonly<{ collection: SearchScopeCollection; work: WorkReceipt }>> {
       const identity = order.source;
-      if (!identity || (order.kind === 'ordinal' && identity.scope !== 'curated'))
-        throw new ProblemError('unsupported_query');
+      if (!identity || (order.kind === 'ordinal' && identity.scope !== 'curated')) unsupported();
       if (
         options.work &&
         ((options.work.kind === 'members-preparation' ? identity.scope !== 'curated' : identity.scope === 'curated') ||
@@ -86,7 +107,7 @@ export function createSearchScopeOrderApplication(
           identity.route !== options.work.locator.route ||
           (identity.scope !== 'public_output' && identity.accountId !== options.work.locator.ownerAccountId))
       )
-        throw new ProblemError('semantic_not_ready');
+        unready();
       const admitted = await currentWork(order);
       const result = await native.prepare({ ...context(), collectionId: identity.collectionId, allowance });
       if (
@@ -94,7 +115,7 @@ export function createSearchScopeOrderApplication(
         result.source.observation.incarnation !== identity.incarnation ||
         result.source.observation.route !== identity.route
       )
-        throw new ProblemError('semantic_not_ready');
+        unready();
       await currentWork(order, result.source.observation, admitted);
       return {
         collection: { order, source: result.source, observation: result.source.observation },
@@ -110,8 +131,10 @@ export function createSearchScopeOrderApplication(
       if (collection.order.kind !== 'ordinal') throw new TypeError('Ordinal source required');
       if (!Number.isSafeInteger(limit) || limit < 1 || limit > 100) throw new RangeError('Invalid ordinal limit');
       const statement =
-        options.work?.kind === 'members-preparation' ? selectedOrdinalPage() : library.source.ordinalPageBound(limit);
-      if (limit !== statement.limit) throw new ProblemError('dependency_unavailable');
+        options.work?.kind === 'members-preparation'
+          ? selectedOrdinalPage()
+          : library.source.limits.ordinalPageBound(limit);
+      if (limit !== statement.limit) unavailable();
       const admitted = await currentWork(collection.order, collection.observation);
       const page = await native.readRawOrdinalPrefix({
         ...context(),
@@ -120,7 +143,7 @@ export function createSearchScopeOrderApplication(
         limit: statement.limit,
         allowance,
       });
-      if (!isDeepStrictEqual(page.observation, collection.observation)) throw new ProblemError('semantic_not_ready');
+      if (!isDeepStrictEqual(page.observation, collection.observation)) unready();
       await currentWork(collection.order, page.observation, admitted);
       return page;
     },
@@ -140,7 +163,7 @@ export function createSearchScopeOrderApplication(
         allowance,
         ...(candidateLimit === undefined ? {} : { candidateLimit }),
       });
-      if (!isDeepStrictEqual(page.observation, collection.observation)) throw new ProblemError('semantic_not_ready');
+      if (!isDeepStrictEqual(page.observation, collection.observation)) unready();
       await currentWork(collection.order, page.observation, admitted);
       return page;
     },
@@ -158,7 +181,7 @@ export function createSearchScopeOrderApplication(
         allowance,
         ...(progress ? { progress } : {}),
       });
-      if (!isDeepStrictEqual(result.observation, collection.observation)) throw new ProblemError('semantic_not_ready');
+      if (!isDeepStrictEqual(result.observation, collection.observation)) unready();
       await currentWork(collection.order, result.observation, admitted);
       return result;
     },
@@ -166,7 +189,7 @@ export function createSearchScopeOrderApplication(
 }
 
 /** Full scoped observation comparison; a committed revision alone is not a Source identity. */
-export function sameScopeObservation(a: IdentityScopeObservation, b: IdentityScopeObservation): boolean {
+export function sameScopeObservation(a: unknown, b: unknown): boolean {
   return isDeepStrictEqual(a, b);
 }
 

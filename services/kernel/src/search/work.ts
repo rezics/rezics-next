@@ -107,6 +107,7 @@ type SearchRuntimeDefaults = Required<
   >
 > & {
   facetAccess: FacetAccessObservationPort;
+  libraryScope: import('./library-scope-port.ts').SearchLibraryScopePort;
 };
 type SearchRuntimeDefaultsComposer = (input: { env: NodeJS.ProcessEnv; clock: KernelClock }) => SearchRuntimeDefaults;
 type CreditSearchSourceComposer = (pool: Pool, routeKey: Uint8Array) => CreditSearchSource;
@@ -366,6 +367,9 @@ export function createSearchWorkModule(
       );
       context.addService(async () => {
         const defaults = composeRuntimeDefaults({ env: { ...context.env }, clock: context.clock });
+        const published = collectionPublicationScopeRuntimes.get(context);
+        if (published)
+          collectionPublicationScopeRuntimes.set(context, { ...published, library: defaults.libraryScope });
         let runtime: ReturnType<typeof createDefaultPublicFilterRuntime> | undefined;
         let discoveryProducers: DiscoveryProducerEntry | undefined;
         let searchAccess: Access | undefined;

@@ -11,13 +11,12 @@ import { createHash } from 'node:crypto';
 import canonicalize from 'canonicalize';
 import { isDeepStrictEqual } from 'node:util';
 import { systemClock, type KernelClock } from '../clock.ts';
-import type { CollectionSourceObservation } from '../library/collection-source.ts';
 import type { WorkAllowance, WorkReceipt } from '../library/contract/work-dimensions.ts';
-import type { NativeSourceIdentity } from '../library/native-source-custody.ts';
+import type { CollectionSourceObservation, NativeSourceIdentity } from '../library/contract/index.ts';
 import { admitCollectionMemberQuery } from '../library/owner-filter.ts';
 import { bindOwnerFilterRead } from '../library/owner-filter-plan.ts';
 import { withOwnerFilterNativeRead } from '../library/owner-filter-native-binding.ts';
-import type { NativeOrdinalKey } from '../library/collection-source-order.ts';
+import type { NativeOrdinalKey } from '../library/contract/index.ts';
 import { readIdentityMappings } from '../semantic/identity-adapters/index.ts';
 import { readRelease } from '../semantic/definitions.ts';
 import { createIdentityScopedObservations } from '../semantic/identity-scoped-observations.ts';
@@ -25,12 +24,12 @@ import { createPublicFilterSourceBinding } from '../semantic/public-filter-sourc
 import { publicFilterSource } from '../semantic/public-filter-source.ts';
 import {
   createSearchScopeOrder,
-  SEARCH_SCOPE_ORDINAL_OPERATION,
   sameScopeObservation,
   type SearchScopeOrder,
   type SearchScopeCollection,
   type SearchScopeOrdinalPrefix,
 } from './service-scope-order.ts';
+import { MEMBERS_PREPARATION_SOURCE_PATHS } from './scope-members-source-declaration.ts';
 import type { IdentityScopeObservation } from '../semantic/identity-scope-types.ts';
 import {
   createScopePreparationStore,
@@ -46,7 +45,7 @@ import { ScopeWork, scopeAllowance, zeroScopeWork, evaluateScopeSubjects } from 
 import { compileCurrentOwnerFilter, type CurrentOwnerFilterPlan } from './current-filter-plan.ts';
 import { discoveryIndexUuid, subjectGenerations, subjectIndexName } from './indices.ts';
 import { searchSubjectHits } from './query.ts';
-import { ProblemError } from '../http/problem.ts';
+import { SearchOperationError } from './operation-outcomes.ts';
 import type { LeafOptions, LeafProgress, LeafWork } from '../semantic/scope-leaf-evidence.ts';
 import { packScopeLeafProgress, type ScopeLeafPosition } from './scope-progress.ts';
 import { compileFilter } from './filter.ts';
@@ -76,7 +75,7 @@ import {
   type MembersWorkInput,
 } from './scope-members-work.ts';
 import { membersSource } from './scope-members-work-cost.ts';
-import { searchLibraryScopePort } from './scope-application.ts';
+import type { SearchLibraryScopePort } from './library-scope-port.ts';
 import {
   compareScopeOrderedTuple,
   addScopePublicCost,
@@ -183,9 +182,7 @@ export type SearchScopeEvaluation = {
 };
 
 function unavailable(): never {
-  throw new ProblemError('semantic_not_ready', {
-    headers: { 'retry-after': '1' },
-  });
+  throw new SearchOperationError('semantic_not_ready');
 }
 
 function bounded(value: number, maximum: number, minimum = 0): void {
@@ -243,6 +240,7 @@ export function createSearchScopeSource({
   realmSubjects,
   realmSubjectCapabilities,
   clock = systemClock,
+  library,
 }: {
   pool: Pool;
   client: OpenSearch;
@@ -254,6 +252,7 @@ export function createSearchScopeSource({
   realmSubjects?: RealmSubjectSource;
   realmSubjectCapabilities?: RealmSubjectCapabilities;
   clock?: KernelClock;
+  library?: SearchLibraryScopePort;
 }) {
   const states = new WeakMap<PreparedSearchScope, ScopeState>();
   const receipts = new WeakMap<object, WorkReceipt>();
@@ -263,9 +262,7 @@ export function createSearchScopeSource({
   }
   const observations = createIdentityScopedObservations(pool);
   const store = createScopePreparationStore(pool, prefix);
-  const order = evidence
-    ? createSearchScopeOrder({ pool, options: evidence, clock, library: searchLibraryScopePort() })
-    : null;
+  const order = evidence && library ? createSearchScopeOrder({ pool, options: evidence, clock, library }) : null;
   function state(prepared: PreparedSearchScope): ScopeState {
     const value = states.get(prepared);
     if (!value || prepared.basis !== value.basis) unavailable();
@@ -313,7 +310,7 @@ export function createSearchScopeSource({
     const options = context();
     async function currentNativeWork() {
       if (!options.work) return;
-      const native = await readScopeWorkDefinition(options.work, { ...options, pool });
+      const native = await readScopeWorkDefinition(options.work, { ...options, pool, ...(library ? { library } : {}) });
       if (!value.workDefinition || !isDeepStrictEqual(structuredClone(native), value.workDefinition)) unavailable();
     }
     await currentNativeWork();
@@ -387,7 +384,8 @@ export function createSearchScopeSource({
     )
       unavailable();
     if (!reader.nativeT) unavailable();
-    const nativeWork = searchLibraryScopePort().members.createNativeCollectionWork(work.remaining(), reader.deadline);
+    if (!library) unavailable();
+    const nativeWork = library.members.createWork(work.remaining(), reader.deadline);
     const bound = await (async () => {
       try {
         const captured = value.ordered?.state;
@@ -479,6 +477,7 @@ export function createSearchScopeSource({
     ...(evidence ? { reader: evidence } : {}),
     ...(realmSubjects ? { source: realmSubjects } : {}),
     ...(realmSubjectCapabilities ? { capabilities: realmSubjectCapabilities } : {}),
+    ...(library ? { library } : {}),
     release: realmRelease ?? ((digest) => readSearchScopeRelease(pool, digest)),
   });
   function realmSearchBasis(
@@ -528,7 +527,7 @@ export function createSearchScopeSource({
     const target = async () => {
       work.consume({ ...zeroScopeWork(), statements: 1, nativePoints: 1 });
       if ((await discoveryIndexUuid(client, index, engineWork(work))) !== request.indexUuid)
-        throw new ProblemError('search_restart_required');
+        throw new SearchOperationError('search_restart_required');
     };
     const readHits = async (ids: readonly string[], withText: boolean): Promise<readonly SearchHit[]> => {
       if (!ids.length) return [];
@@ -571,11 +570,12 @@ export function createSearchScopeSource({
         if (values.length !== batch.length) unavailable();
         for (const [position, value] of values.entries()) {
           if (value.state === 'absent') {
-            if (requireSelf) throw new ProblemError('search_restart_required');
+            if (requireSelf) throw new SearchOperationError('search_restart_required');
             continue;
           }
           if (value.state !== 'mapped') unavailable();
-          if (requireSelf && value.terminal !== batch[position]) throw new ProblemError('search_restart_required');
+          if (requireSelf && value.terminal !== batch[position])
+            throw new SearchOperationError('search_restart_required');
           terminals.push(value.terminal);
         }
       }
@@ -584,9 +584,9 @@ export function createSearchScopeSource({
     const currentHits = async (ids: readonly string[]): Promise<readonly SearchHit[]> => {
       const base = await readHits(ids, false);
       if (base.length !== ids.length || ids.some((id) => !base.some((hit) => hit.id === id)))
-        throw new ProblemError('search_restart_required');
+        throw new SearchOperationError('search_restart_required');
       const selected = request.textQuery ? await readHits(ids, true) : base;
-      if (selected.length !== ids.length) throw new ProblemError('search_restart_required');
+      if (selected.length !== ids.length) throw new SearchOperationError('search_restart_required');
       const baseById = new Map(base.map((hit) => [hit.id, hit]));
       for (const hit of selected) {
         const prior = baseById.get(hit.id);
@@ -597,7 +597,7 @@ export function createSearchScopeSource({
           prior.securityRevision !== hit.securityRevision ||
           !isDeepStrictEqual(prior.sort, hit.sort)
         )
-          throw new ProblemError('search_restart_required');
+          throw new SearchOperationError('search_restart_required');
       }
       return selected;
     };
@@ -606,7 +606,7 @@ export function createSearchScopeSource({
       if (ids.length) {
         const terminals = await mapSubjects(ids, true);
         if (terminals.length !== ids.length || terminals.some((id, index) => id !== ids[index]))
-          throw new ProblemError('search_restart_required');
+          throw new SearchOperationError('search_restart_required');
       }
       const current = await currentHits(ids);
       const currentById = new Map(current.map((hit) => [hit.id, hit]));
@@ -619,7 +619,7 @@ export function createSearchScopeSource({
           actual.securityRevision !== hit.securityRevision ||
           !isDeepStrictEqual(actual.sort, hit.sort)
         )
-          throw new ProblemError('search_restart_required');
+          throw new SearchOperationError('search_restart_required');
       }
       work.consume({
         ...zeroScopeWork(),
@@ -630,7 +630,7 @@ export function createSearchScopeSource({
         bytes: current.length * 8192,
       });
       const checked = await checkHits(_source, current, new Map());
-      if (checked.passed.length !== current.length) throw new ProblemError('search_restart_required');
+      if (checked.passed.length !== current.length) throw new SearchOperationError('search_restart_required');
       const byId = new Map(checked.passed.map(({ subject }) => [subject.id, subject]));
       const values: (boolean | 'not_proven')[] = [];
       for (let offset = 0; offset < ids.length; offset += 100) {
@@ -645,10 +645,10 @@ export function createSearchScopeSource({
         work.native(result.work);
         if (result.basis !== prepared.basis || result.values.length !== 0) unavailable();
       }
-      if (values.some((value) => value !== true)) throw new ProblemError('search_restart_required');
+      if (values.some((value) => value !== true)) throw new SearchOperationError('search_restart_required');
       return ids.map((id) => {
         const subject = byId.get(id);
-        if (!subject) throw new ProblemError('search_restart_required');
+        if (!subject) throw new SearchOperationError('search_restart_required');
         return subject;
       });
     };
@@ -779,16 +779,18 @@ export function createSearchScopeSource({
         context();
         // Native work definitions currently retain only structural input order. A Core
         // locator cannot authorize caller-chosen output fields absent from that definition.
-        if (evidence?.work) throw new ProblemError('dependency_unavailable');
+        if (evidence?.work) throw new SearchOperationError('dependency_unavailable');
       }
       if (evidence?.work?.kind === 'members-preparation' || evidence?.work?.kind === 'collection-publication') {
         context();
         const work = new ScopeWork(options?.allowance ?? scopeAllowance(256, 'scope.prepare'));
+        if (!library) unavailable();
         const input: MembersWorkInput = {
           pool,
           access: evidence.access,
           deadline: evidence.deadline,
           work: evidence.work,
+          library,
         };
         try {
           const snapshot = await runMembersWork(input, work, (native) => readMembersSnapshot(input, native));
@@ -814,7 +816,7 @@ export function createSearchScopeSource({
             (!plan.leaves.length && input.work.kind === 'members-preparation') ||
             plan.leaves.some((leaf) => leaf.kind !== 'owner')
           )
-            throw new ProblemError('dependency_unavailable');
+            throw new SearchOperationError('dependency_unavailable');
           const preparedOrder = await runMembersWork(input, work, (budget) =>
             membersSource(budget, 4, (allowance) => order!.prepare(nativeOrder, allowance)),
           );
@@ -917,12 +919,12 @@ export function createSearchScopeSource({
         if (!body) unavailable();
         admitted = admitFilter(parsed, body, options?.order?.source ? { owner: true } : undefined);
         if (!positiveFilter(admitted))
-          throw new ProblemError('unsupported_query', {
+          throw new SearchOperationError('unsupported_query', {
             errors: [{ pointer: '/filter', code: 'unsupported' }],
           });
       } catch (error) {
         if (error instanceof FilterError)
-          throw new ProblemError(error.problem, {
+          throw new SearchOperationError(error.problem, {
             errors: error.errors.map(({ pointer, code }) => ({
               pointer: `/filter${pointer}`,
               code,
@@ -1092,7 +1094,11 @@ export function createSearchScopeSource({
           filter: admitted,
         });
         if (workDefinition && reader.work) {
-          const current = await readScopeWorkDefinition(reader.work, { ...reader, pool });
+          const current = await readScopeWorkDefinition(reader.work, {
+            ...reader,
+            pool,
+            ...(library ? { library } : {}),
+          });
           if (!isDeepStrictEqual(structuredClone(current), workDefinition)) unavailable();
         }
         work.consume({ ...zeroScopeWork(), statements: 1, nativeRows: 1, bytes: 262144 });
@@ -1284,6 +1290,7 @@ export function createSearchScopeSource({
           const hits = checked?.hits ?? [];
           const evaluated = await evaluateScopeSubjects({
             pool,
+            ...(library ? { library } : {}),
             options: reader,
             owner: await ownerContext(value, work),
             plan: value.plan,
@@ -1527,6 +1534,7 @@ export function createSearchScopeSource({
           : await store.readLeafProgress(value.basis.query);
       const { resume: nextResume, ...checked } = await evaluateScopeSubjects({
         pool,
+        ...(library ? { library } : {}),
         options: context(),
         owner: await ownerContext(value, work),
         ...(value.members ? { members: value.members } : {}),
@@ -1625,7 +1633,7 @@ export function createSearchScopeSource({
       if (value.members) {
         const members = value.members;
         // One fixed raw window, including deletions/rejections. Unknown work stops before that raw slot.
-        const limit = SEARCH_SCOPE_ORDINAL_OPERATION().rawLimit;
+        const limit = MEMBERS_PREPARATION_SOURCE_PATHS().ordinal.rawOrdinalRowsMaximum;
         const raw = await runMembersWork(members.input, work, (budget) =>
           membersSource(budget, 4, (allowance) =>
             order!.rawOrdinal(value.collection!, request.after, limit, allowance),
@@ -1661,6 +1669,7 @@ export function createSearchScopeSource({
           const remaining = work.remaining().remaining;
           const checked = await evaluateScopeSubjects({
             pool,
+            ...(library ? { library } : {}),
             options: context(),
             plan: value.plan,
             members,
@@ -1706,7 +1715,7 @@ export function createSearchScopeSource({
       if (!retained.complete) {
         // Each retry advances a retained, finite native frontier. No request scans the
         // collection to completion, and raw exhaustion alone never publishes a page.
-        const limit = SEARCH_SCOPE_ORDINAL_OPERATION().rawLimit;
+        const limit = MEMBERS_PREPARATION_SOURCE_PATHS().ordinal.rawOrdinalRowsMaximum;
         const raw = await order!.rawOrdinal(value.collection, retained.frontier, limit, work.remaining());
         work.native(raw.work);
         const rows: { subject: string; after: NativeOrdinalKey }[] = [];
@@ -1763,6 +1772,7 @@ export function createSearchScopeSource({
           const resume = await store.readLeafProgress(value.basis.query);
           const checked = await evaluateScopeSubjects({
             pool,
+            ...(library ? { library } : {}),
             options: context(),
             owner: await ownerContext(value, work),
             plan: value.plan,
@@ -1871,6 +1881,7 @@ export function createSearchScopeSource({
       const resume = await store.readLeafProgress(value.basis.query);
       const checked = await evaluateScopeSubjects({
         pool,
+        ...(library ? { library } : {}),
         options: context(),
         owner: await ownerContext(value, work),
         plan: value.plan,

@@ -22,8 +22,8 @@ import type { AccessFactory } from '../request/access.ts';
 import type { WriteRateStageOptions } from '../access/write-rate-stage.ts';
 import type { CreditSearchSource } from '../search/credit-search.ts';
 import { createCreditSearchSource } from '../semantic/credit-search.ts';
-import { bindSearchLibraryScopePort } from '../search/scope-application.ts';
-import { createSearchLibraryScopePort } from './search-library.ts';
+import { createNativeLibraryScopeWork, createSearchLibraryScopePort } from './search-library.ts';
+import type { SearchLibraryScopePort } from '../search/index.ts';
 import { composeSearchAccess } from './search-access.ts';
 import type { FacetAccessObservationPort } from '../search/facet-access-port.ts';
 
@@ -41,6 +41,8 @@ export type KernelRuntimeDefaults = {
   auth?: AuthenticationConfig;
   /** Search-owned Access observation used by live scoped facet execution. */
   facetAccess: FacetAccessObservationPort;
+  /** Constructed Library capability retained by each scoped Search application. */
+  libraryScope: SearchLibraryScopePort;
 };
 
 export type KernelRuntimeOverrides = {
@@ -89,7 +91,7 @@ const systemDeadlineNow = (): number => Date.now();
 
 /** Shared runtime defaults for the HTTP server and Search work factory. */
 export function createKernelRuntimeDefaults(overrides: KernelRuntimeOverrides = {}): KernelRuntimeDefaults {
-  bindSearchLibraryScopePort(createSearchLibraryScopePort());
+  const libraryScope = createSearchLibraryScopePort();
   composeAccessApplication();
   composeWorkApplication();
   composeContentApplication();
@@ -97,7 +99,7 @@ export function createKernelRuntimeDefaults(overrides: KernelRuntimeOverrides = 
   installNativeHistory();
   composeSemanticAdapters();
   composeSearchSemanticSource();
-  composeLibraryDomain();
+  composeLibraryDomain({ scopeWork: createNativeLibraryScopeWork(libraryScope) });
   composeZones();
   installSemanticCopyWork();
   const env = overrides.env ?? process.env;
@@ -126,6 +128,7 @@ export function createKernelRuntimeDefaults(overrides: KernelRuntimeOverrides = 
     deadlineNow: overrides.deadlineNow ?? systemDeadlineNow,
     access,
     facetAccess: composeSearchAccess(),
+    libraryScope,
     ...(auth === undefined ? {} : { auth }),
   };
 }

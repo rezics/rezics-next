@@ -500,6 +500,7 @@ export function createSearchService({
     analyze: (index, analyzer, text) => analyzeInstalled(client, index, { analyzer, text }),
   }),
   facetAccess,
+  library,
   // Definition releases store value.pattern on the property schema. Keep that object so pattern compilation stays cached.
   release: releaseOverride,
 }: {
@@ -527,6 +528,8 @@ export function createSearchService({
   suggestionWorkContext?: SuggestionWorkContextReader;
   /** Composition-bound Access observation for scoped Collection/Realm facet execution. */
   facetAccess?: FacetAccessObservationPort;
+  /** Constructed Library capability retained by this service's scoped applications. */
+  library?: import('./library-scope-port.ts').SearchLibraryScopePort;
 }) {
   const scopedFacets = createScopedFacetApplication({
     ...(facetAccess === undefined ? {} : { access: facetAccess }),
@@ -2208,6 +2211,7 @@ export function createSearchService({
     ...(realmSubjects ? { realmSubjects } : {}),
     ...(realmSubjectsForReader ? { realmSubjectsForReader } : {}),
     ...(realmSubjectCapabilities ? { realmSubjectCapabilities } : {}),
+    ...(library ? { library } : {}),
   });
   return service;
 }
