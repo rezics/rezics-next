@@ -68,6 +68,7 @@ import {
   createNativePublicOutputAdapter,
   observeNativePublicCollectionOutput,
   createNativeLibraryPresentation,
+  createMembersPreparationAdapter,
   createSearchPreparationAdapter,
   type SearchPreparationAdapterPorts,
 } from '../library/adapters/index.ts';
@@ -416,9 +417,11 @@ export function composeLibraryDomain(options: LibraryComposeOptions = {}): Retur
     }),
   );
   const previous = peekLibraryDomain();
+  const applications = createLibraryApplications(capabilities);
   return bindLibraryDomain({
-    ...createLibraryApplications(capabilities),
+    ...applications,
     nativePublicOutput,
+    membersPreparation: createMembersPreparationAdapter(applications),
     copyContext: nativeCopyListContext(),
     copyPorts: requireLibraryCopyBinding().ports,
     presentation: nativeLibraryPresentation(),

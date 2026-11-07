@@ -27,6 +27,8 @@ already composed Access capability. No additional Source registry, work plan, pu
 
 Decision: Members Source paths use one memoized callable declaration, and Shelf maintenance reads statement-bound values through memoized accessors during use; these preserve path and cost identity without load-time cross-module reads.
 
+Decision: Library installs one Members preparation application with explicit owner-filter native and durable reservation capabilities; ordinary planning, prepared reads, worker execution and scoped Source getters use that instance, while compatibility calls delegate to it.
+
 Acceptance choice: extend the existing native Source outcome test through default composed admission, and add one
 missing-worker-runtime case; preserve all existing outcome assertions. Workspace typing is worker acceptance;
 native growth, public Search settlement/discovery and default-worker runtime proof remain in the owning Goal walks.

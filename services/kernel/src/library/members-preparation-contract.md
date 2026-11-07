@@ -55,7 +55,11 @@ and [actual verifier](../access/authenticate.ts).
 
 ## Local API and authority
 
-`createMembersPreparation({pool, workClient, access, clock?})` accepts the real shared Pool, WorkClient and Access,
+The compatibility `createMembersPreparation({pool, workClient, access, clock?})` call delegates to the instance
+installed by Library composition. That application constructs reservation, ordinary planning, prepared reads and
+completion with its supplied native Source/owner-filter implementation and reservation capability; the native
+constructor also receives current Library authorization and identity capabilities explicitly. The call accepts the
+real shared Pool, WorkClient and Access,
 and optionally the trusted KernelClock. It returns:
 
 - `reserve(verifiedActor, collectionId, definitions, {deadline?}?)`: deduplicated preparing episode metadata and

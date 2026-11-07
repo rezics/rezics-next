@@ -3,7 +3,7 @@ import type { IdentityScopeObservation } from '../semantic/identity-scope-types.
 import { decodeListCursor, encodeListCursor, type ListCursorBinding } from '../tokens/list-cursor.ts';
 import type { KeyRing } from '../tokens/seal.ts';
 import ownerFence from './owner-filter-native-binding-fence.sql';
-import { peekLibraryDomain } from './domain-binding.ts';
+import { requireLibraryMembersPreparation } from './domain-binding.ts';
 import readHeader from './members-preparation-read.sql';
 import readResults from './members-preparation-results.sql';
 import step from './members-preparation-step.sql';
@@ -11,22 +11,8 @@ import nativeSource from './members-preparation-source.sql';
 import original from './members-preparation-original.sql';
 import completionResult from './members-preparation-completion.sql';
 import { admitSavedCollectionMemberQuery, type CollectionMemberAdmission } from './owner-filter.ts';
-import {
-  bindOwnerFilterRead,
-  readOwnerFilterCandidateClosure,
-  readOwnerFilterCandidate,
-  type OwnerFilterReadBinding,
-} from './owner-filter-plan.ts';
-
-import {
-  nativeOwnerFilterBinding,
-  releaseNativeOwnerFilterRead,
-  revalidateOwnerFilterDisclosure,
-  withNativeOwnerFilterSource,
-  sameOwnerFilterSource,
-} from './owner-filter-native-binding.ts';
+import type { OwnerFilterCandidateClosure, OwnerFilterReadBinding, OwnerFilterNativeOperations } from './owner-filter-plan.ts';
 import { NativeCollectionWork } from './collection-native-work.ts';
-import { retainNativeOwnerFilterPopulation } from './owner-filter-native-closure.ts';
 import { createCollectionSource, type PreparedCollectionSource } from './collection-source.ts';
 import canonicalize from 'canonicalize';
 import { createHash } from 'node:crypto';
@@ -66,12 +52,7 @@ import {
   reserveOperationalWorkTransfer,
 } from '../history/application/index.ts';
 import type { OperationalWorkRegistration, OperationalWorkTransfer } from '../history/contract/index.ts';
-
-function libraryCapabilities() {
-  const domain = peekLibraryDomain();
-  if (!domain) throw new ProblemError('dependency_unavailable');
-  return domain;
-}
+import type { LibraryDomain } from './contract/index.ts';
 
 const LIVE_LIMIT = 32;
 const IDLE_MS = 24 * 60 * 60 * 1000;
@@ -134,8 +115,8 @@ export function preparationDefinitionBases(
   return [...unique.values()];
 }
 
-export type { PreparationLocator } from './contract/preparation-work.ts';
-import type { PreparationLocator } from './contract/preparation-work.ts';
+export type { PreparationLocator } from './contract/index.ts';
+import type { PreparationLocator } from './contract/index.ts';
 /** Exact retained native episode inputs. Data only; never admission or disclosure authority. */
 export type MembersPreparationWorkDefinition = Readonly<{
   definition: PreparationDefinition;
@@ -196,6 +177,11 @@ export interface MembersPreparation {
     tx: OperationalTransaction,
     locator: PreparationLocator,
   ): Promise<MembersPreparationWorkDefinition | null>;
+  readPreparedMembers(
+    dependencies: PreparedMembersReadDependencies,
+    input: PreparedMembersReadInput,
+    options?: { limit?: number; cursor?: string | null },
+  ): Promise<PreparedMembersRead>;
 }
 
 type Basis = Readonly<{
@@ -397,14 +383,17 @@ async function retireHeaders(
 }
 
 /** Native private episode admission. Work starts only after Core and Access have admitted the current owner. */
-export function createMembersPreparation(config: {
+export function createMembersPreparationNative(config: {
   pool: Pool;
   workClient: WorkClient;
   access: Access;
+  capabilities: Pick<LibraryDomain, 'authorization' | 'identityDisclosure' | 'searchPreparation' | 'memberPreparation'>;
+  ownerFilter: OwnerFilterNativeOperations;
   clock?: KernelClock;
 }): MembersPreparation {
   const clock = config.clock ?? systemClock;
   const service: MembersPreparation = {
+    readPreparedMembers: createMembersPreparationReader(config.capabilities, config.ownerFilter),
     async reserve(actor, collectionId, definitions, options = {}) {
       const route = routeOf(collectionId);
       if (
@@ -445,7 +434,7 @@ export function createMembersPreparation(config: {
           history: openWorkExecutionOriginal(config.pool, deadline, config.workClient),
         };
       }
-      const authorization = (await libraryCapabilities().authorization.commandAuthorization(
+      const authorization = (await config.capabilities.authorization.commandAuthorization(
         config.access,
         actor,
         'collection:read',
@@ -493,7 +482,7 @@ export function createMembersPreparation(config: {
           const releases = new Map<string, FilterRelease>();
           for (const basis of byBasis.values()) {
             if (releases.has(basis.releaseDigest)) continue;
-            const actual = await libraryCapabilities().identityDisclosure.readRelease(tx, basis.releaseDigest);
+            const actual = await config.capabilities.identityDisclosure.readRelease(tx, basis.releaseDigest);
             if (!actual || canonicalize(actual) !== canonicalize(basis.release)) throw unsupported();
             releases.set(basis.releaseDigest, basis.release);
           }
@@ -681,7 +670,7 @@ export function createMembersPreparation(config: {
       const identity = principalCommandIdentity(actor);
       if (identity.principal.kind !== 'account') return false;
       const deadline = options.deadline ?? deadlineFor(DEFAULT_REQUEST_DEADLINE_MS);
-      const authorization = (await libraryCapabilities().authorization.commandAuthorization(
+      const authorization = (await config.capabilities.authorization.commandAuthorization(
         config.access,
         actor,
         'collection:read',
@@ -830,7 +819,7 @@ export function createMembersPreparation(config: {
         locator.collectionId,
         retained,
         async (digest) =>
-          (await libraryCapabilities().identityDisclosure.readRelease(tx, digest)) as FilterRelease | null,
+          (await config.capabilities.identityDisclosure.readRelease(tx, digest)) as FilterRelease | null,
       );
     },
 
@@ -864,7 +853,7 @@ export function createMembersPreparation(config: {
         locator.collectionId,
         retained,
         async (digest) =>
-          (await libraryCapabilities().identityDisclosure.readRelease(tx, digest)) as FilterRelease | null,
+          (await config.capabilities.identityDisclosure.readRelease(tx, digest)) as FilterRelease | null,
       );
       const current = await readPreparationSource(tx, locator);
       const identity = current?.scope.key.source.kind === 'library' ? current.scope.key.source.identity : null;
@@ -898,6 +887,16 @@ export function createMembersPreparation(config: {
     },
   };
   return service;
+}
+
+/** Compatibility constructor; Library composition supplies the installed native capabilities. */
+export function createMembersPreparation(config: {
+  pool: Pool;
+  workClient: WorkClient;
+  access: Access;
+  clock?: KernelClock;
+}): MembersPreparation {
+  return requireLibraryMembersPreparation().createPreparation(config);
 }
 
 /** Canonical definition identity only; never current Source authority. */
@@ -1032,16 +1031,17 @@ function preparationSourceIdentity(
   return isDeepStrictEqual(row.identity, identity) ? identity : null;
 }
 
-export async function readPreparationOwnerFence(
+export async function readPreparationOwnerFenceNative(
   tx: OperationalTransaction,
   locator: PreparationLocator,
   definition: PreparationDefinition,
+  capabilities: Pick<LibraryDomain, 'searchPreparation' | 'memberPreparation'>,
 ): Promise<string | null> {
-  if (!libraryCapabilities().searchPreparation.ownerFilterHasOwnerLeaf(definition.filter)) return null;
+  if (!capabilities.searchPreparation.ownerFilterHasOwnerLeaf(definition.filter)) return null;
   const row = await ownerFence.run(tx, { route: locator.route, account_id: locator.ownerAccountId });
   if (!row) throw new ProblemError('dependency_unavailable');
   const resources = currentOperationalResources(tx);
-  await libraryCapabilities().memberPreparation.prepare({
+  await capabilities.memberPreparation.prepare({
     actor: {
       kind: 'account',
       accountId: locator.ownerAccountId,
@@ -1059,8 +1059,17 @@ export async function readPreparationOwnerFence(
   return row.generation;
 }
 
+/** Compatibility read; native access and Access preparation come from the installed Library runtime. */
+export function readPreparationOwnerFence(
+  tx: OperationalTransaction,
+  locator: PreparationLocator,
+  definition: PreparationDefinition,
+): Promise<string | null> {
+  return requireLibraryMembersPreparation().readOwnerFence(tx, locator, definition);
+}
+
 /** Native source/currentness inside a genuine selected apply, never the expired request handoff. */
-export async function checkMembersPreparationCompletion(
+export async function checkMembersPreparationCompletionNative(
   tx: OperationalTransaction,
   locator: PreparationLocator,
 ): Promise<Readonly<{ status: 'obsolete' }> | Readonly<{ status: 'current' }> | Readonly<{ status: 'unavailable' }>> {
@@ -1090,9 +1099,27 @@ export async function checkMembersPreparationCompletion(
   return { status: 'current' };
 }
 
+export async function checkMembersPreparationCompletion(
+  tx: OperationalTransaction,
+  locator: PreparationLocator,
+): ReturnType<typeof checkMembersPreparationCompletionNative> {
+  const runtime = requireLibraryMembersPreparation();
+  return runtime.checkCompletion(tx, locator);
+}
+
 export type PreparationStepState = NonNullable<Awaited<ReturnType<typeof readPreparationStep>>>;
 
-type ReaderDependencies = { pool: Pool; access: Access; tokens: KeyRing; clock?: KernelClock; routeKey?: Uint8Array };
+export type PreparedMembersReadDependencies = {
+  pool: Pool;
+  access: Access;
+  tokens: KeyRing;
+  clock?: KernelClock;
+  routeKey?: Uint8Array;
+};
+type ReaderDependencies = PreparedMembersReadDependencies & {
+  capabilities: Pick<LibraryDomain, 'authorization' | 'identityDisclosure'>;
+  ownerFilter: OwnerFilterNativeOperations;
+};
 type ReadBinding = Readonly<{
   at: AuthoritativeTime;
   source: CollectionSourceObservation;
@@ -1103,7 +1130,7 @@ type ReadBinding = Readonly<{
   prepared: PreparedCollectionSource;
   work: NativeCollectionWork;
 }>;
-type ReadInput = Readonly<{
+export type PreparedMembersReadInput = Readonly<{
   actor: Actor;
   collectionId: string;
   definition: PreparationDefinition;
@@ -1115,10 +1142,10 @@ type ReadInput = Readonly<{
  */
 async function bindPreparationRead(
   deps: ReaderDependencies,
-  input: ReadInput,
+  input: PreparedMembersReadInput,
 ): Promise<Readonly<{ status: 'unavailable' }> | Readonly<{ status: 'bound'; binding: ReadBinding }>> {
-  const release = await libraryCapabilities().authorization.within(input.deadline, () =>
-    libraryCapabilities().identityDisclosure.readRelease(deps.pool, input.definition.release.digest, {
+  const release = await deps.capabilities.authorization.within(input.deadline, () =>
+    deps.capabilities.identityDisclosure.readRelease(deps.pool, input.definition.release.digest, {
       composed: false,
     }),
   );
@@ -1135,18 +1162,31 @@ async function bindPreparationRead(
     input.deadline,
   );
   if (admission.releaseDigest !== input.definition.release.digest) return { status: 'unavailable' };
-  const bound = await bindOwnerFilterRead(deps, input.actor, input.collectionId, admission, input.deadline);
+  const ownerDependencies = {
+    pool: deps.pool,
+    access: deps.access,
+    ...(deps.routeKey ? { routeKey: deps.routeKey } : {}),
+    ...(deps.clock ? { clock: deps.clock } : {}),
+  };
+  const bound = await deps.ownerFilter.bind(
+    ownerDependencies,
+    input.actor,
+    input.collectionId,
+    admission,
+    input.deadline,
+  );
   if (bound.status !== 'bound') return bound;
   const native = bound.binding;
   try {
-    const saved = nativeOwnerFilterBinding(native);
+    const saved = deps.ownerFilter.binding(native);
     if (!saved) throw new ProblemError('dependency_unavailable');
     const work = new NativeCollectionWork(native.input.allowance, input.deadline);
-    const prepared = await withNativeOwnerFilterSource(native, work, () =>
+    const prepared = await deps.ownerFilter.withSource(native, work, () =>
       work.compose((allowance) => createCollectionSource(deps).prepare({ ...native.input, allowance })),
     );
-    if (!sameOwnerFilterSource(saved.observation, prepared.source.observation)) throw new ProblemError('stale_cursor');
-    await withNativeOwnerFilterSource(native, work, () => retainNativeOwnerFilterPopulation(native, work));
+    if (!deps.ownerFilter.sameSource(saved.observation, prepared.source.observation))
+      throw new ProblemError('stale_cursor');
+    await deps.ownerFilter.withSource(native, work, () => deps.ownerFilter.retainPopulation(native, work));
     return {
       status: 'bound',
       binding: {
@@ -1161,28 +1201,29 @@ async function bindPreparationRead(
       },
     };
   } catch (error) {
-    releaseNativeOwnerFilterRead(native);
+    deps.ownerFilter.release(native);
     throw error;
   }
 }
 async function revalidatePreparationRead(
   deps: ReaderDependencies,
-  input: ReadInput,
+  input: PreparedMembersReadInput,
   binding: ReadBinding,
   subjects: readonly string[],
 ): Promise<Readonly<{ status: 'unavailable' }> | Readonly<{ status: 'current'; subjects: readonly string[] }>> {
   const { native, prepared, work, admission } = binding;
-  return withNativeOwnerFilterSource(native, work, async () => {
+  return deps.ownerFilter.withSource(native, work, async () => {
     const source = createCollectionSource(deps);
     const disclosed: string[] = [];
     for (const subjectId of subjects) {
       const membership = await work.compose((allowance) =>
         source.containsSubject({ ...native.input, source: prepared, subjectId, allowance }),
       );
-      if (!sameOwnerFilterSource(binding.source, membership.observation)) throw new ProblemError('stale_cursor');
+      if (!deps.ownerFilter.sameSource(binding.source, membership.observation))
+        throw new ProblemError('stale_cursor');
       if (membership.result === 'not_proven') return { status: 'unavailable' };
       if (!membership.result) continue;
-      const closure = await readOwnerFilterCandidateClosure(native, prepared, subjectId, work, true);
+      const closure = await deps.ownerFilter.readClosure(native, prepared, subjectId, work, true);
       if (closure.status !== 'complete') return { status: 'unavailable' };
       const control = work.reserve({
         candidateKeys: 0,
@@ -1198,8 +1239,8 @@ async function revalidatePreparationRead(
       let match;
       try {
         match = await withReadTransaction(deps.pool, (client) =>
-          readOwnerFilterCandidate(
-            libraryCapabilities().authorization.deadlineClient(client, input.deadline),
+          deps.ownerFilter.evaluate(
+            deps.capabilities.authorization.deadlineClient(client, input.deadline),
             admission,
             closure.closure,
             work,
@@ -1212,8 +1253,9 @@ async function revalidatePreparationRead(
       if (match) disclosed.push(subjectId);
     }
     const final = await work.compose((allowance) => source.prepare({ ...native.input, allowance }));
-    if (!sameOwnerFilterSource(binding.source, final.source.observation)) throw new ProblemError('stale_cursor');
-    await revalidateOwnerFilterDisclosure(native, work);
+    if (!deps.ownerFilter.sameSource(binding.source, final.source.observation))
+      throw new ProblemError('stale_cursor');
+    await deps.ownerFilter.revalidateDisclosure(native, work);
     return { status: 'current', subjects: disclosed };
   });
 }
@@ -1248,9 +1290,9 @@ export type PreparedMembersRead =
 /** Pure retained-result read. Its caller may choose ONE successful-read touch after the whole composed read.
  * Candidate rows supply order only. The native reader revalidates every authority before any complete page.
  */
-export async function readPreparedMembers(
+async function readPreparedMembersNative(
   deps: ReaderDependencies,
-  input: ReadInput,
+  input: PreparedMembersReadInput,
   options: { limit?: number; cursor?: string | null } = {},
 ): Promise<PreparedMembersRead> {
   const key = keyFor(input.actor, input.collectionId);
@@ -1311,7 +1353,7 @@ export async function readPreparedMembers(
     const observation = preparationObservation(source, scope, current.binding.ownerFence);
     const observationDigest = createHash('sha256').update(observation).digest('hex');
     const read = await withReadTransaction(deps.pool, async (client) => {
-      const query = libraryCapabilities().authorization.deadlineClient(client, input.deadline);
+      const query = deps.capabilities.authorization.deadlineClient(client, input.deadline);
       const [header] = await readHeader.run(query, { ...key, digest, at: authoritativeTimeValue(time) });
       if (!header) return null;
       if (header.basis !== basis) throw unsupported();
@@ -1392,9 +1434,33 @@ export async function readPreparedMembers(
       subjects,
       next,
       revalidate,
-      release: () => releaseNativeOwnerFilterRead(current.binding.native),
+      release: () => deps.ownerFilter.release(current.binding.native),
     };
   } finally {
-    if (!retainedBinding) releaseNativeOwnerFilterRead(current.binding.native);
+    if (!retainedBinding) deps.ownerFilter.release(current.binding.native);
   }
+}
+
+export type PreparedMembersReadOperation = (
+  dependencies: PreparedMembersReadDependencies,
+  input: PreparedMembersReadInput,
+  options?: { limit?: number; cursor?: string | null },
+) => Promise<PreparedMembersRead>;
+
+export function createMembersPreparationReader(
+  capabilities: Pick<LibraryDomain, 'authorization' | 'identityDisclosure'>,
+  ownerFilter: OwnerFilterNativeOperations,
+): PreparedMembersReadOperation {
+  return (dependencies, input, options = {}) =>
+    readPreparedMembersNative({ ...dependencies, capabilities, ownerFilter }, input, options);
+}
+
+/** Compatibility call used by existing readers; composition owns the installed implementation. */
+export function readPreparedMembers(
+  dependencies: PreparedMembersReadDependencies,
+  input: PreparedMembersReadInput,
+  options: { limit?: number; cursor?: string | null } = {},
+): Promise<PreparedMembersRead> {
+  const runtime = requireLibraryMembersPreparation();
+  return runtime.readPreparedMembers(dependencies, input, options);
 }
