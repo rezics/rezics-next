@@ -6,6 +6,7 @@ import { createKernel } from '../../src/http/kernel.ts';
 import { partitionOf, routeOf } from '../../src/route/route.ts';
 import { bootstrapRelease, GLOBAL_CONTEXT } from '../../src/semantic/definitions.ts';
 import { createSemanticWorkModule } from '../../src/semantic/work-module.ts';
+import { createWorkerAuthorization } from '../../src/work/authorization.ts';
 import { composeSemanticIdentityParticipants } from '../../src/composition/semantic.ts';
 import { KERNEL_WORK_MODULES } from '../support/default-work-modules.ts';
 import { testReceiptKeys } from '../support/receipt-keys.ts';
@@ -152,22 +153,30 @@ function runtime(fail = false) {
   const read = (async () => {
     for await (const chunk of child.stdout) output += new TextDecoder().decode(chunk);
   })();
-  const errors = new Response(child.stderr).text();
+  let errors = '';
+  const readErrors = (async () => {
+    for await (const chunk of child.stderr) errors += new TextDecoder().decode(chunk);
+  })();
   return {
     application,
     child,
     output: () => output,
     async until(marker: string) {
-      await until(async () => {
-        if (output.includes(marker)) return true;
-        if (child.exitCode !== null) throw new Error(`${output}\n${await errors}`);
-        return false;
-      });
+      try {
+        await until(async () => {
+          if (output.includes(marker)) return true;
+          if (child.exitCode !== null) throw new Error(`Semantic child exited before ${marker}`);
+          return false;
+        });
+      } catch (error) {
+        throw new Error(`${error instanceof Error ? error.message : error}\n${output}\n${errors}`);
+      }
     },
     async finish() {
       const status = await child.exited;
       await read;
-      expect(status, `${output}\n${await errors}`).toBe(0);
+      await readErrors;
+      expect(status, `${output}\n${errors}`).toBe(0);
     },
   };
 }
@@ -373,15 +382,18 @@ test('default Semantic composition registers its real locator and bounded local 
   const { createWorkClient } = await import('../../src/work/client.ts');
   const { WORK_QUEUES } = await import('../../src/work/queues.ts');
   const client = await createWorkClient(databaseUrl!, pool);
+  const env = { ...process.env, ...workerTestEnv() };
+  const clock = () => new Date();
   try {
+    const authorization = createWorkerAuthorization({ pool, client, env, clock, receiptKeys: testReceiptKeys() });
     await createSemanticWorkModule(composeSemanticIdentityParticipants).register({
       pool,
-      env: { ...process.env, ...workerTestEnv() },
-      clock: () => new Date(),
+      env,
+      clock,
       queues: WORK_QUEUES,
       client,
       getAuthorization() {
-        throw new Error('Semantic fixture does not consume worker authorization');
+        return authorization;
       },
       addEffects(registered) {
         effects.push(...registered);
