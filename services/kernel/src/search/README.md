@@ -27,6 +27,9 @@ Decision: native identity receiving refuses a missing or incomplete Source direc
 a complete unchanged retained definition must reach the native reader. Immutable projection meaning alone cannot
 substitute for the Source binding, capture and dependency keys. Plan preparation resolves that definition through the
 installed public-filter binding and refuses an unpublished mapping instead of treating it as a self binding.
+Decision: identity receiving binds the published Source through Semantic public `createPublicFilterSourceBinding` and
+`publicFilterSource`. The architecture checker owns that import edge; existing native receiving cases keep
+original/terminal, release, custody, OLD/NEW, applied/release and replay.
 
 Decision: public Search-scope capture compiles through `compilePublicFilterConsumerCapture` before Source binding,
 admitting with the binder's `{ inverse: true }` options and resolving the original accepted meaning. Compiled capture

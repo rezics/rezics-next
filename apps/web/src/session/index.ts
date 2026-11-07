@@ -14,3 +14,4 @@ export {
   type ReadLease,
   type OperationLease,
 } from '../reader/lease';
+export { SessionRecoveryPage } from './recovery';

@@ -5,7 +5,6 @@ import { CONSENT_ERASURE_BATCH } from './consent-erasure.ts';
 import { metadataConfigurationStores } from './metadata-scrub.ts';
 import {
   readWorkflowRetentionConfig,
-  runWorkflowRetentionSweep,
   WORKFLOW_RETENTION_WORKFLOW,
   WORKFLOW_RETENTION_SCHEDULE,
   WORKFLOW_RETENTION_SCHEDULE_EXPRESSION,
@@ -75,9 +74,7 @@ export function registerAuthMaintenance(
     { name: 'auth.maintenance.tick' },
   );
 
-  const retainWorkflows = step('retainWorkflows', () =>
-    runWorkflowRetentionSweep(retention.retentionDays, DBOS, new Date(), auth.internal?.retireWorkflowCopy),
-  );
+  const retainWorkflows = step('retainWorkflows', () => auth.internal.retainWorkflowHistory(retention.retentionDays));
   const retentionTick = DBOS.registerWorkflow(
     async (_scheduledAt: Date, _context: unknown): Promise<void> => {
       await retainWorkflows();

@@ -53,6 +53,12 @@ Public catalogue inspect reads the prepared cache through `cachedBrowserSession`
 those React/Query adapters for observation-only consumers. `reader/` contains its existing implementations;
 these are Web runtime adapters, not Library infrastructure. Lease descriptors in `reader/lease.ts` have no
 runtime imports. Authentication and request preparation retain their server-only entries.
+`SessionRecoveryPage` is the public indeterminate-session recovery prompt: callers pass the visit pathname and locale;
+the session owner derives the safe sign-in href and the shell still renders the unavailable page. The leaf does not
+read the router.
+
+Decision: Copies supplies its locale Copies pathname to `SessionRecoveryPage` from this public entry rather than
+importing private session or shell recovery files.
 
 Subject personal preferences and ratings subscribe to the shared observation only while mounted. Their local
 registry owns response epochs and rating write arbitration, and releases its listener and retained scopes when

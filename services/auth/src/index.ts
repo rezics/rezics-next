@@ -122,6 +122,46 @@ export type { InternalConsentAccessConfiguration } from './internal-consent.ts';
 export type { AccountOperationAccess } from './account-operations-transport.ts';
 export { SigningRotationPending } from './signing.ts';
 export { createAccountWorkflows } from './workflows.ts';
+export {
+  AUTH_SDK_RETIREMENT,
+  AUTH_SDK_RETIREMENT_DISPATCH,
+  WorkflowRetirementBudgetError,
+  authSdkFundedReadiness,
+  authSdkRetirementReadiness,
+  bindAuthSdkMaintenance,
+  closeAuthSdkWriters,
+  createAuthSdkRetirementInvocation,
+  deleteAuthSdkPayload,
+  fundAuthSdkRetirementEnvelope,
+  nativeFence,
+  nativeRetirementWork,
+  readAuthSdkFence,
+  reserveAuthSdkRetirement,
+  sameNativeFence,
+  unbindAuthSdkMaintenance,
+  type AuthSdkFailedWork,
+  type AuthSdkRetirementDispatch,
+  type WorkflowRetirementFailedWork,
+  type WorkflowRetirementInvocation,
+  type WorkflowRetirementWork,
+  type WorkflowWriterFence,
+  type WorkflowWriterState,
+} from './sdk-retirement-fence.ts';
+export { AUTH_WORKFLOW_RETENTION_COST } from './retention-cost.ts';
+export {
+  AUTH_WORKFLOW_APPLICATION,
+  DEFAULT_WORKFLOW_RETENTION_DAYS,
+  installWorkflowRequestRetention,
+  readWorkflowRetentionConfig,
+  runWorkflowRetentionBatch,
+  runWorkflowRetentionPage,
+  runWorkflowRetentionSweep,
+  WORKFLOW_RETENTION_BATCH_SIZE,
+  WORKFLOW_RETENTION_MAX_BATCHES,
+  WORKFLOW_RETENTION_SCHEDULE,
+  WORKFLOW_RETENTION_WORKFLOW,
+  type WorkflowRetentionPage,
+} from './retention.ts';
 export type { TurnstileConfiguration } from './turnstile.ts';
 export type {
   AccountWorkflowOptions,
@@ -268,6 +308,8 @@ export interface AuthService {
   security: SecurityInventory;
   verifier: VerifierConfiguration;
   internal: {
+    /** One SDK scan page; durable createdBefore and continuation stay native. */
+    retainWorkflowHistory(retentionDays: number): Promise<number>;
     receivingClosure?: import('@rezics/auth-contract').AuthReceivingClosureProducer;
     /** Native Auth-owned participant used before Collection Kind evidence work. */
     kindConsentParticipant: KindConsentParticipant;
