@@ -58,12 +58,13 @@ function followSubject(target: RawFollow['target']): LibrarySubject | null {
       ...('cover' in target ? { cover: target.cover } : {}),
     });
   }
-  if (!('kind' in target)) return null;
+  const identity = target as unknown as { id: string; kind?: string; displayName?: string | null };
+  if (typeof identity.kind !== 'string') return null;
   return {
-    id: target.id,
-    type: target.kind,
-    types: [target.kind],
-    label: libraryLabel(target.displayName, target.id),
+    id: identity.id,
+    type: identity.kind,
+    types: [identity.kind],
+    label: libraryLabel(identity.displayName, identity.id),
     cover: null,
   };
 }

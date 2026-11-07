@@ -125,7 +125,8 @@ export const InlineRevision: Story = {
       ...post,
       revisionId: '0192f3a0-6c1e-7b2a-9d4e-000000000083',
       body: fromPlainText(m.thread_media_state_unavailable(), 'blocks'),
-    } as CurrentPost;
+      attribution: null,
+    } as unknown as CurrentPost;
     return (
       <PatternStory visitor="Signed In">
         <main className={shell}>
