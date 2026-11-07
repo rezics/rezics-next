@@ -11,6 +11,11 @@ growth-work-client, selected-runtime-native, sdk-transaction-fence, sdk-retireme
 fixtures remain the causal native set. Search keeps both `search_account_erasure` and `search_erasure` tombstone
 effects.
 
+Decision: ordinary composition supplies the native worker authorization factory before registering product work.
+The first Accounts registration must not synchronously load the Kernel module graph from inside a lazy
+`getAuthorization()` call. The installed worker lifecycle and default discovery journeys cover that startup path;
+authorization still uses the worker's original pool, client, clock, environment and receipt keys.
+
 Public entries: `work/contract/index.ts`, `work/contract/bounds.ts`, `work/contract/vocabulary.ts`,
 `work/contract/cost.ts`, `work/core/index.ts`, `work/application/index.ts`, `work/adapters/index.ts`,
 and the stable facades `client.ts`, `registry.ts`, `retries.ts`, `queues.ts`, `selected-runtime.ts`,

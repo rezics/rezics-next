@@ -87,7 +87,9 @@ const RETAINED_TABLES = [
 ] as const;
 
 /** Native SDK, SQL, clock, authorization, receipt and selected-admission ports. */
-export function createNativeWorkPorts(): WorkApplicationPorts {
+export function createNativeWorkPorts(
+  authorizationFactory?: typeof import('../authorization.ts').createWorkerAuthorization,
+): WorkApplicationPorts {
   let history: HistoryAssociationPort | undefined;
   return {
     sdkEnqueue: {
@@ -277,7 +279,9 @@ export function createNativeWorkPorts(): WorkApplicationPorts {
     route: { routeOf, partitionOf },
     authorization: {
       create(deps) {
-        const { createWorkerAuthorization } = load<typeof import('../authorization.ts')>('../authorization.ts');
+        const createWorkerAuthorization =
+          authorizationFactory ??
+          load<typeof import('../authorization.ts')>('../authorization.ts').createWorkerAuthorization;
         return createWorkerAuthorization({
           pool: asPool(deps.pool),
           client: deps.client as never,

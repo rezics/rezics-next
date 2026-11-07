@@ -30,6 +30,8 @@ request deadline, transaction, reached-child work and publication writer ownersh
 The installed WorkModule journey streams actual authorization, registration, SDK launch and service phases before
 startup cleanup. A failure retains the first producer error alongside its last phase; readiness, native convergence
 and shutdown still require the original assertions and deadlines.
+Ordinary Work composition supplies its authorization factory before registration so the first Accounts producer
+does not load the Kernel graph synchronously from inside the registration callback.
 
 Decision: `composeSemanticIdentityParticipants` supplies the Source reader factory while constructing the fixed
 worker participant because Semantic registration precedes Search service startup. It passes the real typed
