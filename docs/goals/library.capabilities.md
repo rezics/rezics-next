@@ -51,11 +51,11 @@ owned routes and current page-story source exports. Product behavior remains in 
 [Library Goal](library.md). This file records evidence status; it does not replace frozen outcomes or establish
 completion.
 
-
 The current first-public journey list and measured dev walk results are maintained once in the
 [parent Commerce finishing register](commerce.capabilities.md#first-public-journeys-on-dev). Its Library paths
 cover the first-public Library, Collections, progress, Copies and Follow rows in [scope](../scope.md);
 the detailed capability scenarios below continue to own their full acceptance.
+Decision: the seeded Commerce/Library walk is the first-public acceptance; no extra Library outcome suites.
 
 ## Source binding and evidence status
 
