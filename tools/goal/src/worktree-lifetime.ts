@@ -1,5 +1,6 @@
 import { createHash } from 'node:crypto';
 import { appendFileSync, existsSync, lstatSync, readFileSync, readdirSync } from 'node:fs';
+import { lstat as lstatAsync, readdir as readdirAsync } from 'node:fs/promises';
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 
@@ -8,8 +9,8 @@ import { isAbsolute, join, relative, resolve, sep } from 'node:path';
 import type { WorkerStore } from './store.ts';
 import type { Settings, Task, TaskState, WorktreeCleanupDisposition } from './types.ts';
 import { acquireDirectoryLease, LeaseHeldError, type DirectoryLease } from './lease.ts';
-import { hasLiveProcessUnder } from './process.ts';
-import { makeOwnedTreeWritable, removeOwnedTree } from './task-workspace.ts';
+import { hasLiveProcessUnderAsync } from './process.ts';
+import { makeOwnedTreeWritableAsync, removeOwnedTreeAsync } from './task-workspace.ts';
 
 export const IO_PRESSURE_LIMIT = 20;
 export const IO_PRESSURE_WAIT_ATTEMPTS = 30;
@@ -18,7 +19,7 @@ export type LifetimeRuntime = {
   sleep: (ms: number) => Promise<void>;
   command: (command: string, args: string[], cwd: string) => void | Promise<void>;
   /** Override leftover-directory removal after Git unregister; tests inject foreign-owner EACCES here. */
-  removeTree?: (path: string) => number;
+  removeTree?: (path: string) => number | Promise<number>;
 };
 
 export type WorktreeCleanupHooks = {
@@ -75,6 +76,7 @@ const runtime: LifetimeRuntime = {
 
 const finished = new Set(['integrated', 'merged', 'cancelled']);
 const protectedStates = new Set(['running', 'landing', 'ready', 'held', 'stopped']);
+const WORKTREE_SCAN_YIELD_ENTRIES = 128;
 
 type CleanupReporter = (task: Task, disposition: WorktreeCleanupDisposition) => void;
 type Owner = { uid: number; gid: number } | null;
@@ -260,6 +262,45 @@ function listWorktreeDirectories(settings: Settings): string[] {
   return worktreeRoots(settings).flatMap(childDirectories);
 }
 
+async function childDirectoriesAsync(root: string): Promise<string[]> {
+  let entries;
+  try {
+    entries = await readdirAsync(root, { withFileTypes: true });
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === 'ENOENT') return [];
+    throw error;
+  }
+  const dirs: string[] = [];
+  for (let index = 0; index < entries.length; index++) {
+    if (index > 0 && index % WORKTREE_SCAN_YIELD_ENTRIES === 0)
+      await new Promise<void>((resolveYield) => setImmediate(resolveYield));
+    const entry = entries[index]!;
+    if (entry.name === 'modules') {
+      dirs.push(...(await childDirectoriesAsync(join(root, entry.name))));
+      continue;
+    }
+    if (entry.isSymbolicLink() || !entry.isDirectory()) continue;
+    dirs.push(join(root, entry.name));
+  }
+  return dirs;
+}
+
+async function listWorktreeDirectoriesAsync(settings: Settings): Promise<string[]> {
+  const dirs: string[] = [];
+  for (const root of worktreeRoots(settings)) dirs.push(...(await childDirectoriesAsync(root)));
+  return dirs;
+}
+
+async function hasGitEntryAsync(directory: string): Promise<boolean> {
+  try {
+    await lstatAsync(join(directory, '.git'));
+    return true;
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === 'ENOENT') return false;
+    throw error;
+  }
+}
+
 function strayReclaimPath(stateDirectory: string): string {
   return join(stateDirectory, STRAY_RECLAIM_LOG);
 }
@@ -299,8 +340,8 @@ function taskByWorktree(store: WorkerStore): Map<string, Task> {
   return index;
 }
 
-function deleteTree(path: string, io: LifetimeRuntime): number {
-  return io.removeTree ? io.removeTree(path) : removeOwnedTree(path);
+async function deleteTree(path: string, io: LifetimeRuntime): Promise<number> {
+  return io.removeTree ? await io.removeTree(path) : await removeOwnedTreeAsync(path);
 }
 
 function recordPermissionFailure(
@@ -432,7 +473,7 @@ export async function removeFinishedWorktree(
         let reclaimed = 0;
         try {
           // Remote-check caches and similar owned 0555 trees must be writable before Git unregisters the worktree.
-          reclaimed = makeOwnedTreeWritable(afterPressure.worktree);
+          reclaimed = await makeOwnedTreeWritableAsync(afterPressure.worktree);
           await io.command(
             'ionice',
             ['-c', '3', 'nice', '-n', '19', 'git', 'worktree', 'remove', '--force', afterPressure.worktree],
@@ -440,7 +481,7 @@ export async function removeFinishedWorktree(
           );
           removed = statIfPresent(afterPressure.worktree) === undefined;
           if (!removed) {
-            reclaimed = deleteTree(afterPressure.worktree, io);
+            reclaimed = await deleteTree(afterPressure.worktree, io);
             removed = statIfPresent(afterPressure.worktree) === undefined;
             if (!removed) throw new Error(`git worktree remove left the task path in place: ${afterPressure.worktree}`);
           }
@@ -456,7 +497,7 @@ export async function removeFinishedWorktree(
               continue;
             }
             try {
-              reclaimed = deleteTree(afterPressure.worktree, io);
+              reclaimed = await deleteTree(afterPressure.worktree, io);
               removed = statIfPresent(afterPressure.worktree) === undefined;
               if (!removed) throw new Error(`worktree path remains after writable cleanup: ${afterPressure.worktree}`);
             } catch (cleanupError) {
@@ -525,19 +566,33 @@ async function sweepStrayWorktrees(
 ): Promise<string | null> {
   const index = taskByWorktree(store);
   let removedId: string | null = null;
-  for (const directory of listWorktreeDirectories(settings)) {
-    if (hasGitEntry(directory)) continue;
+  for (const directory of await listWorktreeDirectoriesAsync(settings)) {
+    if (await hasGitEntryAsync(directory)) continue;
     const task = index.get(resolve(directory));
     if (task && KEEP_STATES.has(task.state)) continue;
     if (task && !SWEEP_STATES.has(task.state)) continue;
-    const live = hasLiveProcessUnder(directory);
+    const live = await hasLiveProcessUnderAsync(directory);
     if (live !== false) {
       if (live === true) hooks.strayKept?.(directory, task);
       continue;
     }
     if (!(await waitForIdleIo(io, pressureWaits))) return removedId;
+    // Pressure waits yield the host loop; recheck process custody immediately before removal.
+    const currentTask = task ? store.task(task.id) : undefined;
+    if (
+      task &&
+      (!currentTask ||
+        !SWEEP_STATES.has(currentTask.state) ||
+        resolve(currentTask.worktree) !== resolve(directory))
+    )
+      continue;
+    const stillLive = await hasLiveProcessUnderAsync(directory);
+    if (stillLive !== false) {
+      if (stillLive === true) hooks.strayKept?.(directory, task);
+      continue;
+    }
     try {
-      const bytes = deleteTree(directory, io);
+      const bytes = await deleteTree(directory, io);
       recordStrayReclaim(settings.stateDirectory, {
         at: Date.now(),
         path: directory,
