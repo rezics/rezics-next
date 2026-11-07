@@ -552,7 +552,8 @@
         "services/kernel/src/library/identity-scope-effects.ts",
         "services/kernel/src/library/collection-source-work.ts",
         "services/kernel/src/library/collection-native-work.ts",
-        "services/kernel/src/library/collection-kind-input.ts"
+        "services/kernel/src/library/collection-kind-input.ts",
+        "services/kernel/src/library/zone-collection-adapter.ts"
       ],
       "allowedDependencies": [
         "access-policy",
@@ -724,7 +725,8 @@
         "services/kernel/src/zones/resource-store.ts",
         "services/kernel/src/zones/resource-head.ts",
         "services/kernel/src/zones/cleanup-intent.ts",
-        "services/kernel/src/zones/account-erasure-zone.ts"
+        "services/kernel/src/zones/account-erasure-zone.ts",
+        "services/kernel/src/zones/collection-port.ts"
       ],
       "allowedDependencies": [
         "composition",
@@ -885,7 +887,8 @@
         "kernel-work-core",
         "kernel-library-application",
         "kernel-library-contract",
-        "kernel-library-core"
+        "kernel-library-core",
+        "kernel-zones"
       ],
       "capabilities": []
     },

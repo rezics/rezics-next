@@ -113,7 +113,9 @@ Access are present, including the ordinary-page factory). Compatibility Source, 
 command-support and Entry/progress entries call those composed applications. Public entries:
 `kernel-library-contract` `contract/work-dimensions.ts` and `contract/index.ts`; `kernel-library-core`
 `core/index.ts`; `kernel-library-application` `application/index.ts`; adapter `adapters/index.ts` and
-`domain-binding.ts` plus the existing Library discovery and Access-capability entries.
+`domain-binding.ts`, `zone-collection-adapter.ts` plus the existing Library discovery and Access-capability entries.
+`zone-collection-adapter.ts` is the Library host for Zone membership work and mounted Collection reads; Zones own the
+port and composition binds it.
 
 `account-grant.ts` remains a leaf: `grantCapable` takes account fields structurally. Owner-query Search preparation
 uses the Library `searchPreparation` capability through existing dependency objects; `CollectionWorkLedger` replaces

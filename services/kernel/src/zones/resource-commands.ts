@@ -21,8 +21,8 @@ import { ACCOUNT_ROLE_BITS } from '../history/contract/index.ts';
 import { bindCommandHistoryEvidence } from '../history/command-evidence.ts';
 import { ProblemError } from '../http/problem.ts';
 import { requestDigest } from '../http/request.ts';
-import { createCollectionReads } from '../library/collection-reads.ts';
 import type { Access, AccountActor, Actor } from '../request/access.ts';
+import { zoneCollectionReads } from './collection-port.ts';
 import { newId, partitionOf, routeOf } from '../route/route.ts';
 import { globalContextAnchor } from '../semantic/context.ts';
 import { activeRelease, GLOBAL_CONTEXT } from '../semantic/definitions.ts';
@@ -82,7 +82,7 @@ type Prepared = {
 };
 export function createZoneCommands(dependencies: { pool: Pool; access: Access; tokens: KeyRing; clock: () => Date }) {
   const { pool, access, tokens, clock } = dependencies;
-  const collections = createCollectionReads({ pool, access, tokens });
+  const collections = zoneCollectionReads({ pool, access, tokens });
 
   async function validate(
     actor: AccountActor,

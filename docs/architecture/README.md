@@ -1,5 +1,7 @@
 # Architecture check
 
+Decision: Zone membership and mounted Collection pages invert Library route/read and load-time `CollectionSourceLedger` evaluation through a Zone-owned collection port. The Library adapter is a public entry bound by the composition root (`composition/zones.ts`) and `zoneRoutes`; composition may depend on `kernel-zones` for that install. Zone HTTP no longer value-imports `collection-routes.ts` or `collection-reads.ts`.
+
 Decision: Keep the current workspace and capability boundaries, assign each module to its documented Goal owner, and snapshot existing imports as explicit dependencies while grandfathering their violations for gradual removal.
 
 Decision: Library work-dimension vocabulary is the contract module `kernel-library-contract` with public entries under `services/kernel/src/library/contract/`. Access, Platform, Search, Semantic, Content and Zones import those shapes from it, never from the Source runtime. `kernel-library-core` and `kernel-library-application` own the pure rules and use cases; native SQL and foreign Access/Search/Semantic/Content adapters bind at `composition/library.ts`.
