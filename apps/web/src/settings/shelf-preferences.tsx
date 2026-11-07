@@ -7,14 +7,15 @@ import { Checkbox } from '@rezics/ui/shadcn/checkbox';
 import { Field, FieldLabel } from '@rezics/ui/shadcn/field';
 import { m } from '../paraglide/messages.js';
 import { getLocale } from '../paraglide/runtime.js';
-import { shelfColumnLabel } from '../library/shelf-columns';
-import { shelfColumnIds, type PersonalShelfColumnId } from '../library/shelf-params';
 import {
   libraryOrderFromShelf,
+  shelfColumnIds,
+  shelfColumnLabel,
   shelfOrderFromLibrary,
   unsupportedShelfColumns,
   unsupportedShelfSorts,
-} from '../library/shelf-preferences';
+  type PersonalShelfColumnId,
+} from './adapters/library.ts';
 import type { ReadingIO } from './reading-preferences';
 import {
   ownerMayChangeShelf,
@@ -33,7 +34,7 @@ import {
 } from './preferences';
 import { useSettingsCurrent, useSettingsReadCurrent, useSettingsSessionOwner } from './settings-session-owner';
 import { ShelfTypeDefaults } from './shelf-type-defaults/editor';
-import type { ShelfTypesCurrentRead } from '../library/shelf-types-read';
+import type { ShelfTypesCurrentRead } from './ports/library';
 import { useSettingsNavigationDraft } from './reading-navigation';
 import { preferenceRetryDeadline, usePreferenceRetry } from './preference-failure-retry';
 import { withManagedReadDeadline } from './managed-read-deadline';

@@ -8,18 +8,9 @@ import type { SessionEnv } from '../session/client';
 import { prepareSession, sessionSubject, viewerCredential } from '../session/request';
 import { typeNames } from '../subject/definitions';
 import { libraryShelfType } from './shelf-params';
+import { SHELF_TYPES_LIMIT, type ShelfTypesCurrentRead, type ShelfTypesView } from './settings-contract';
 
-export const SHELF_TYPES_LIMIT = 20;
-export type ShelfTypesView =
-  | { state: 'loaded'; types: { type: string; label?: string }[]; next: string | null }
-  | { state: 'signed-out' | 'denied' | 'closed' | 'preparing' | 'unavailable' };
-
-export type ShelfTypesCurrentRead = {
-  sessionSubject: string | null;
-  authorizationAgrees: boolean;
-  requested: { cursor: string | null; limit: typeof SHELF_TYPES_LIMIT; locale: string };
-  page: ShelfTypesView;
-};
+export { SHELF_TYPES_LIMIT, type ShelfTypesCurrentRead, type ShelfTypesView };
 
 function validateTypesRead(input: unknown): { cursor?: string } {
   if (!input || typeof input !== 'object' || Array.isArray(input)) throw new Error('Invalid Type page');

@@ -6,6 +6,7 @@ import { pageHead } from '../shell/head';
 import { pageHeadContext } from '../shell/head-context';
 import { sessionQuery } from '../session/query';
 import { createFileRoute } from '@tanstack/react-router';
+import { BoundCollectionPrivacySection, BoundShelfPreferencesCard } from '../settings/adapters/library-view.tsx';
 import { readSettingsPage } from '../settings/actions';
 import { SettingsPageView } from '../settings/settings-page';
 import { m } from '../paraglide/messages.js';
@@ -33,7 +34,13 @@ function SettingsRoute() {
   const { page, requestSession } = data;
   return (
     <NativeAccountsProvider profileHref={accountProfileHref}>
-      <SettingsPageView page={page} csrfToken={requestSession?.csrfToken ?? null} requestSession={requestSession} />
+      <SettingsPageView
+        page={page}
+        csrfToken={requestSession?.csrfToken ?? null}
+        requestSession={requestSession}
+        ShelfCard={BoundShelfPreferencesCard}
+        PrivacySection={BoundCollectionPrivacySection}
+      />
     </NativeAccountsProvider>
   );
 }

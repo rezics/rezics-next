@@ -1072,7 +1072,9 @@
         "apps/web/src/library/score-write.ts",
         "apps/web/src/library/loans-current.tsx",
         "apps/web/src/library/loans-query.ts",
-        "apps/web/src/library/loans-actions.ts"
+        "apps/web/src/library/loans-actions.ts",
+        "apps/web/src/library/settings-contract.ts",
+        "apps/web/src/library/settings-adapter.ts"
       ],
       "allowedDependencies": [
         "client",
@@ -1233,7 +1235,14 @@
         "apps/web/src/settings/ports/profile-editor.ts",
         "apps/web/src/settings/ports/profile-editor-view.ts",
         "apps/web/src/settings/adapters/accounts-browser.tsx",
-        "apps/web/src/settings/managed-account-capabilities.tsx"
+        "apps/web/src/settings/managed-account-capabilities.tsx",
+        "apps/web/src/settings/ports/library.ts",
+        "apps/web/src/settings/adapters/library.ts",
+        "apps/web/src/settings/adapters/library-view.tsx",
+        "apps/web/src/settings/shelf-preferences-current.tsx",
+        "apps/web/src/inbox/ports/library.ts",
+        "apps/web/src/inbox/adapters/library.ts",
+        "apps/web/src/inbox/adapters/library-view.tsx"
       ],
       "allowedDependencies": ["client", "ui", "web-app", "web-content", "web-library", "web-search"],
       "capabilities": ["account-settings"]

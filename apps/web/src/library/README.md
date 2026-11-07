@@ -86,12 +86,20 @@ clear displayed choices. Fresh owners have no predecessors; source, viewer, cred
 replacement and disposal retire choices, coordinates and focus. Closing/reopening follows the existing chooser
 lifetime. Only a fresh admitted movement may focus the still-current open owner's heading.
 
+Decision: Settings reaches that owner window, privacy command/readback and Shelf type/default/column preferences only through `settings-contract` and `settings-adapter`. Visibility, occurrence, frontier and preference vocabulary stay in the contract. Ordinary `/settings` composition binds the existing transport (`adapters/library.ts`) and presentation (`adapters/library-view.tsx`) adapters; Settings paths do not privately import Library read, dynamic Collection, Shelf column, parameter, preference, type-read or window-navigation modules.
+
 ## Cost bounds
 
 Preference resolution uses one bounded native snapshot (at most 32 layout scopes, six per-state sorts and eleven
 column IDs), with no extra requests, row hydration or page-local ordering. Score defaults use the existing
 unavailable reader and recovery without score preparation or vote reads; chronological paging keeps its existing
 20-row default and 100-row maximum. Settings writes only dirty shelf fields through the existing versioned command.
+
+### Cost: Settings Collection owner window, privacy and type defaults
+
+- Touches: Settings owner inventory is one signed-in `GET /v1/collections?curatorAccountId&ownerManagement=true&limit=20` with the exact cursor. Privacy is one `PATCH /v1/collections/{id}?ownerManagement=true` of the frozen original plus one independent FULL owner GET. Type defaults are one private type-index GET at limit 20 with the exact cursor, plus the existing optional label batch for that page.
+- Bound: one 20-row owner window (first Collection ID wins); one 20-row type DTO, eight predecessor coordinates and one staged target; command and current-read each keep a ten-second deadline. Nested Collection directory, Collection update/point and type-index work stay with Library.
+- Growth check: existing Collection privacy and Shelf type-defaults suites. Native examined-row evidence stays with Library Collection directory and type-index growth; Settings reports request and retained-coordinate bounds only.
 
 # Copy reading context
 

@@ -5,13 +5,9 @@ import { kernelClient } from '../kernel/client';
 import type { SessionEnv } from '../session/client';
 import { requestCsrfToken } from '../session/request';
 import { loadSettingsPage, type ShelfPreferences } from './preferences';
+import type { ShelfPreferenceSnapshot } from './ports/library';
 
-export type ShelfPreferenceSnapshot = {
-  generation: string;
-  accountId: string | null;
-  csrfToken: string | null;
-  shelf: ShelfPreferences | null;
-};
+export type { ShelfPreferenceSnapshot };
 
 type ShelfViewer = {
   state: string;

@@ -29,7 +29,7 @@ import { m } from '../paraglide/messages.js';
 import { getLocale } from '../paraglide/runtime.js';
 import { useOperation } from '../kernel/exposure';
 import { useSession } from '../session/query';
-import type { CollectionVisibility } from '../library/reads';
+import type { CollectionVisibility } from './ports/library';
 import { readOwnedCollection, readOwnedCollectionsPage, saveCollectionVisibility } from './actions';
 import type { OwnedCollection } from './preferences';
 import { usePreferenceRetry } from './preference-failure-retry';

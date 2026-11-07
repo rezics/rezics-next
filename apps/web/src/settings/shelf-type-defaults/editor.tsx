@@ -2,17 +2,17 @@ import { useLayoutEffect, useRef, useState } from 'react';
 import { Button, buttonVariants } from '@rezics/ui/shadcn/button';
 import { m } from '../../paraglide/messages.js';
 import { getLocale } from '../../paraglide/runtime.js';
-import { libraryShelfType, shelfHref, type ShelfLayout } from '../../library/shelf-params';
 import {
-  readShelfTypesCurrent,
+  createSettingsShelfTypeFrontier,
+  libraryShelfType,
+  readSettingsShelfTypes,
   SHELF_TYPES_LIMIT,
+  shelfHref,
+  type ShelfLayout,
   type ShelfTypesCurrentRead,
   type ShelfTypesView,
-} from '../../library/shelf-types-read';
-import { ShelfTypeWindowNavigation } from '../../library/shelf-type-window-navigation';
+} from '../adapters/library.ts';
 import type { ShelfAdvice, ShelfPreferences } from '../preferences';
-
-const nativeRead = (cursor?: string) => readShelfTypesCurrent({ data: cursor ? { cursor } : {} });
 
 /** The existing current() authority owns retirement; source/locale replacement gets a fresh local path. */
 export function ShelfTypeDefaults(props: Parameters<typeof OwnerShelfTypeDefaults>[0]) {
@@ -63,7 +63,7 @@ function OwnerShelfTypeDefaults({
   onChange,
   maxLayouts = 32,
   scopeMaxLength = 256,
-  readTypes = nativeRead,
+  readTypes = readSettingsShelfTypes,
 }: {
   layouts: NonNullable<ShelfPreferences['layouts']>;
   supportedLayouts: ShelfAdvice['supported']['layouts'];
@@ -82,7 +82,7 @@ function OwnerShelfTypeDefaults({
   const [selected, setSelected] = useState('');
   const [page, setPage] = useState<ShelfTypesView>();
   const [busy, setBusy] = useState(false);
-  const navigation = useRef(new ShelfTypeWindowNavigation());
+  const navigation = useRef(createSettingsShelfTypeFrontier());
   const heading = useRef<HTMLHeadingElement>(null);
   const focus = useRef(false);
   const inFlight = useRef(false);
