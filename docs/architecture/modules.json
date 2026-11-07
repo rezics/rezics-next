@@ -363,6 +363,7 @@
         "document",
         "filter",
         "kernel-access",
+        "kernel-access-contract",
         "kernel-commerce",
         "kernel-community",
         "kernel-content-application",
