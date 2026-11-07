@@ -9,6 +9,7 @@ import { composeAccessApplication } from './access.ts';
 import { composeCommunityApplication } from './community.ts';
 import { composeContentApplication } from './content.ts';
 import { composeWorkApplication } from './work.ts';
+import { installSemanticCopyWork } from './semantic-copy-work.ts';
 import { installNativeHistory } from './history.ts';
 import { installIdentitySourceConsumerRuntime } from './identity-source-consumer.ts';
 import { installIdentityRatingRepairProducer } from './identity-rating-repair.ts';
@@ -90,6 +91,7 @@ export function createKernelRuntimeDefaults(overrides: KernelRuntimeOverrides = 
   installRatingVoteSemantic();
   bindOrdinaryContentLifecycle(nativeContentLifecycle());
   composeLibraryDomain();
+  installSemanticCopyWork();
   const env = overrides.env ?? process.env;
   const tokens = overrides.tokens ?? readTokenKeys(env);
   const receiptKeys = readReceiptKeyRing(env, overrides.receiptKeys);

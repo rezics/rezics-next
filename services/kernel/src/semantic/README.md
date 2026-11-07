@@ -1068,6 +1068,10 @@ active-plus-retired resource bounds. These are not delivered tests or runtime cl
 
 ## Copy and release work disclosure
 
+Decision: Copy-work, release-card, list-presentation and facet reads enter through one Semantic reading application installed by runtime composition. Search validation and projection are supplied through a typed evidence port; current relations, release resolution and work accounting remain native reader producers.
+
+The pure copy-work request and result vocabulary lives in `copy-work-disclosure-contract.ts`; native dependencies and the Search evidence contract live in `copy-work-reader-port.ts`. `copy-work-application.ts` owns the reading operation and exposes compatibility facades for the existing read entry points. `composition/semantic-copy-work.ts` binds the Semantic native readers and Search evidence adapter, and `runtime-defaults.ts` installs that binding before serving requests. Native current relation, release, list, facet and work accounting implementations remain their owning producers. Direct tests of those public readers install the same application as the process runtime.
+
 `readCopyWorkDisclosure(deps, {identities, languages?})` is the native batch for
 Commerce and the ordinary Subject page. It is exported with
 `CopyWorkDisclosureRequest`, `CopyWorkDisclosureObservation`,

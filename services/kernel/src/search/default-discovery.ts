@@ -12,7 +12,7 @@ import { publicFilterSource } from '../semantic/public-filter-source.ts';
 import { createWorkClient } from '../work/client.ts';
 import { deadlineClient } from '../access/authenticate.ts';
 import { discardConnection, withConnection } from '../database/pool.ts';
-import { readListPresentationFacts } from '../semantic/list-presentation.ts';
+import { readListPresentationFacts } from '../semantic/index.ts';
 import {
   prepareViewerFacts,
   readViewerFacts,

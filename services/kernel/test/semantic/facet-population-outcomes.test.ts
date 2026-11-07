@@ -1,5 +1,6 @@
 import { expect, test } from 'bun:test';
 import { randomUUID } from 'node:crypto';
+import { installSemanticCopyWork } from '../../src/composition/semantic-copy-work.ts';
 import { createFacetPopulationSource } from '../../src/semantic/facet-population.ts';
 import { createPublicFilterSourceBinding } from '../../src/semantic/public-filter-source-binding.ts';
 import { anchorRoute, partitionOf, routeOf } from '../../src/route/route.ts';
@@ -25,6 +26,7 @@ function keyAt(f: Awaited<ReturnType<typeof fixture>>, accept: (route: number) =
 
 // Native owner configuration, capture and Source factories only. Provisional producer adapters must fail this case.
 test('registered finite native population enumerates every anchored subject across its creation change bridge without truncating Source values or faking completeness', async () => {
+  installSemanticCopyWork();
   const { publicFilterSource } = await nativeProducer();
   const f = await fixture();
   let consumer: Awaited<ReturnType<typeof consumerFixture>> | undefined;
@@ -110,6 +112,7 @@ test('registered finite native population enumerates every anchored subject acro
 });
 
 test('native rejected and empty homes advance while an unavailable owner never falsely completes', async () => {
+  installSemanticCopyWork();
   const { publicFilterSource } = await nativeProducer();
   const f = await fixture();
   let consumer: Awaited<ReturnType<typeof consumerFixture>> | undefined;
