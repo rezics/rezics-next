@@ -132,8 +132,43 @@ The existing default-worker product repair retains its owner; this configuration
 Teardown initially reported `spawnSync docker ETIMEDOUT` removing this attempt's search container. The containers
 were subsequently absent; the two surviving attempt-owned volumes were explicitly removed. No unrelated stack was
 stopped or pruned. The manager owns the next hourly pass through normal controller scheduling; this attempt adds
-no watcher. Product tests, root typecheck, native persona/seed and browser checks did not run after the setup failure.
+no watcher. Native persona/seed, mounted browser checks and root typecheck did not run after the setup failure.
 Documentation formatting is the focused delivery check; it supplies no native/browser PASS.
+
+### Additional owner-requested acceptance
+
+The later owner decision assigned `test/search/second-scope-generations.test.ts`,
+`test/search/review-population-readiness.test.ts`, `test/search/review-discovery-receiving.test.ts` and retained
+`test/search/default-discovery.test.ts` to this same admitted walk through the owning Kernel runner/preloads.
+That walk had already ended at the recorded identity-startup failure. All four are **not executed**, with that
+same prerequisite as their first failure; no second stack was opened to substitute for the requested environment.
+Search retains retirement/reallocation convergence; Content retains eligible Threads Home/Space recovery.
+Their original assertions stay required. The [startup repair](#native-startup-repair) precedes their next scheduled
+walk, which must record the actual tested dev revision and commands rather than inherit a pass from another owner.
+
+Separate controller-requested landing checks tested source `1e69e64edc7774488df1d88f0fa2b124a7df9776`, whose
+product and test code matches the recorded dev revision. These results do not supply mounted-journey evidence:
+
+| Command (from worktree root, through `bun scripts/worker-check.ts --`)                             | Actual result                                                                                                                                                                                 |
+| -------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `bun run --cwd services/kernel check test/search/routes.test.ts test/search/service-scope.test.ts` | First run exited 1 before assertions: `error: spawnSync docker ETIMEDOUT` starting PostgreSQL. Requested retry exited 1 after assertions: routes 14 pass/0 fail; service-scope 3 pass/1 fail. |
+| `bun test tools/goal/src/briefs.test.ts`                                                           | First run exited 1: 11 pass/2 timeouts, `error: git rev-parse: git exited null`. Requested retry exited 0.                                                                                    |
+
+The native scope failure is “native readiness reuses the real client prefix source pool and authenticated context”:
+`ProblemError: Semantic Layer Not Ready` (`semantic_not_ready`) at `scope-source.ts`'s
+`resolvePublicFilterCapture`, before the fixture's expected ready page. The native Source binding returned a
+non-resolved outcome; the wrapper did not emit its underlying reason. This is an observed current-dev readiness
+failure in inherited code, not evidence that the documentation change broke Search or that a specific owner
+refused a request. The test's real constructor, prefix, source, actor and result assertions remain unchanged.
+
+**Ready fixture/consumer repair, existing Members binding owner:** retain the real constructor and expose the
+native binding's typed refusal reason in the existing test's failure diagnostic. Repair the fixture's native
+release/capture/source preparation against that actual reason, then prove the current reader can prepare, prefix
+and evaluate the expected Book. If the owner runtime is incomplete, deliver its documented native binding rather
+than substituting SQL state, a permissive Source, a manual service registration or a changed ready assertion.
+Rerun this existing case through the owning Kernel runner after the typing-only repair; retain the 14 route
+assertions and the six-path setup failure separately. No claim of a missing definition, missing source or successful
+preparation follows from the currently opaque refusal. The manager receives this native failure through the ledger.
 
 ## Evidence rules and common boundaries
 
