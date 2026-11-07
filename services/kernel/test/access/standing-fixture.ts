@@ -62,6 +62,7 @@ export async function standingFixture(extraActions: readonly string[] = [], comm
       'report:create',
       'moderation:takedown',
       'fixture:own',
+      'unmounted:action',
       ...extraActions,
     ]),
   ];
@@ -118,7 +119,7 @@ export async function standingFixture(extraActions: readonly string[] = [], comm
     'post:create': ['content.post'],
   };
   const mountedActions = actionCatalogue(testKernel({ pool }));
-  const fixtureActions = new Map<string, { anonymous: boolean; 'x-resource-types'?: readonly string[] }>();
+  const fixtureActions = new Map(mountedActions);
   for (const action of actions) {
     const mounted = mountedActions.get(action);
     fixtureActions.set(action, {
@@ -147,7 +148,8 @@ export async function standingFixture(extraActions: readonly string[] = [], comm
         'fixture.owned': { owner: 'fixture.owner', standing: [] },
         'semantic.communal': { standing: [] },
         'fixture.unmounted': { owner: 'fixture.unmounted', standing: [] },
-        'fixture.missing': { owner: 'missing.role', standing: [] },
+        'fixture.missing': { standing: [] },
+        'unknown.type': { standing: [] },
       },
     },
     auth: {

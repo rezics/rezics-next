@@ -181,6 +181,12 @@ export async function listSubjectThreads(
   const now = dependencies.cursorNow();
   if (!Number.isSafeInteger(now)) throw new TypeError('Invalid content cursor');
   const scope = binding(subjectId, input, context.actor);
+  // A cursor is bound to subject, place, kind and viewer. Reject a mismatched
+  // token before disclosure so it cannot be reported as a missing subject.
+  if (input.cursor !== undefined) {
+    const decoded = decodeCursor(dependencies.tokens, scope, input.cursor, now);
+    if (!decoded.ok) throw new TypeError('Invalid content cursor');
+  }
   const pageContext = await prepareSubjectThreadContext(dependencies, subjectId, input.place, input.kind, context);
   const entryPage = await prepareSubjectThreadEntry(dependencies, pageContext.initial, input.boardId, context);
   const candidates = await pageCandidates(dependencies, subjectId, input, context, limit * SCAN_FACTOR, scope, now);

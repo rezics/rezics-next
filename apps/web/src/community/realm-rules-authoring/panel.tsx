@@ -512,6 +512,7 @@ export function RealmRulesAuthoringPanel({
                   revisionId: input.revisionId,
                   body: input.body,
                   idempotencyKey: input.idempotencyKey,
+                  licence: current.licence,
                   ...(input.mediaIds.length ? { mediaIds: input.mediaIds } : {}),
                 },
                 headers: { 'X-CSRF-Token': lifetime.csrfToken },

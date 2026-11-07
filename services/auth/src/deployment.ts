@@ -2,20 +2,13 @@ import { securityScopeLimit } from '@rezics/auth-contract';
 import { createAuthHost, type AuthHostOptions } from './host.ts';
 import type { AuthServiceOptions, WebsiteClientRegistration } from './index.ts';
 import { issuerOrigin } from './issuer.ts';
+import { websiteDeploymentScopes } from './website-scopes.ts';
 import type { WorkflowContext } from './workflows.ts';
+
+export { websiteDeploymentScopes };
 
 /** A deployment uses the mounted catalogue, including anonymous/private branches. */
 type SiteActions = NonNullable<AuthServiceOptions['siteActions']>;
-
-export function websiteDeploymentScopes(actions: Iterable<string>): string[] {
-  return [
-    'openid',
-    'offline_access',
-    ...[...new Set([...actions, 'organization:create', 'account:manage', 'account:delete'])]
-      .filter((name) => name !== 'openid' && name !== 'offline_access')
-      .sort(),
-  ];
-}
 
 export type AuthWebsiteDeployment = {
   /** Canonical origins serving the installed Web callback and sign-out return. */
