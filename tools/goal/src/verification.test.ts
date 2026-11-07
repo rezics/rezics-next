@@ -965,6 +965,7 @@ test('stopped same-generation and never-started held proof conversion persists a
     expect(() => h.tasks.queueRetry(legacy.id, { brief: submitted.path, expectedAttempt: 27 }, h.actor)).toThrow(
       'stale',
     );
+    expect(h.store.newestPendingBriefProposal(legacy.id)).toBeUndefined();
     expect(h.store.task(legacy.id).brief.kind).toBe('claim');
     expect(h.store.task(legacy.id).proofAuthorization).toBeUndefined();
     h.tasks.queueRetry(legacy.id, { brief: submitted.path, expectedAttempt: 28 }, h.actor);

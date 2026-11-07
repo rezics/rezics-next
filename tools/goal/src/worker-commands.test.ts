@@ -84,6 +84,7 @@ test('diagnostics are read-only, tolerate unknown dependencies and use controlle
       reads.retryIntent++;
       return { status: 'pending' };
     },
+    events: () => [],
     attempts: () => [],
     records: () => [],
     runningAttemptsByPool: () => ({}),

@@ -2486,15 +2486,6 @@ export class MergeTrain {
               const context = makeRebaseConflictContext(previous, request.workerCommit ?? tip, conflicts);
               if (context) result.rebaseConflict = context;
             }
-            if (error instanceof WorkerConflictError && previous !== base) {
-              appendFileSync(
-                logPath,
-                `Deferred until a later batch round; conflict with an earlier member: ${error.path}\n`,
-              );
-              deferred.add(entry.id);
-              resetTo(trainTree, previous);
-              continue;
-            }
             if (error instanceof WorkerConflictError) {
               if (o.trainResolver) {
                 result.firstFailure = firstFailure(error.message, this.options.policy?.merge);
@@ -2507,7 +2498,8 @@ export class MergeTrain {
                   resolution,
                 };
               }
-              if (error.detail) refuseRebaseConflict(result, error.path, error.message, logPath);
+              if (error.detail || previous !== base)
+                refuseRebaseConflict(result, error.path, error.message, logPath);
               else acceptAlreadyPresent(result, previous, [error.path], logPath);
               result.conflictResolution = {
                 method: 'worker',
