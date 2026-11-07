@@ -32,7 +32,7 @@ import {
   type AccountActor,
   type Actor,
   type ActionCatalogue,
-} from '../request/access.ts';
+} from './check.ts';
 import { derivedId, partitionOf, routeOf } from '../route/route.ts';
 import { readAccount, type Account } from './account-data.ts';
 import { actingCommandAccount, commandAccessContext } from './command-admission.ts';

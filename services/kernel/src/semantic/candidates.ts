@@ -25,7 +25,7 @@ import type { KeyRing } from '../tokens/seal.ts';
 import { redirectOf } from './subject-redirect.ts';
 import { SubjectRedirectError } from './contract/subject-errors.ts';
 import { initializeRevisionAuthorship, revisionResource, StaleRevisionAuthorshipError } from './authorship.ts';
-import { creationDeclares } from '../access/index.ts';
+import { creationDeclares } from '../access/parent-creation.ts';
 import { activeRelease, readRelease } from './definition-release-read.ts';
 import { GLOBAL_SUBJECT_CONTEXT as GLOBAL_CONTEXT } from './contract/subject-values.ts';
 import { baseOf, layeredRelease } from './definition-release-read.ts';

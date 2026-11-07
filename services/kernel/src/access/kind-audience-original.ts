@@ -19,7 +19,7 @@ import { currentCommandWorkAssociation } from '../command/work-context.ts';
 import { authoritativeTimeValue, commandTime, type AuthoritativeTime } from '../command/command.ts';
 import { currentOperationalResources, hasOperationalAdmission } from '../command/operational.ts';
 import { tryAccessApplication } from './adapters/bind.ts';
-import { deadlineClient } from './authenticate.ts';
+import { deadlineClient } from './deadline.ts';
 import { withConnection, discardConnection } from '../database/pool.ts';
 import { requireAccessDeadline } from './unavailable.ts';
 import { AccessWorkUnavailableError, EMPTY_ACCESS_WORK, type AccessWork, type AccessWorkAccounting } from './work.ts';

@@ -5,7 +5,7 @@ import { withReadTransaction } from '../semantic/read.ts';
 import { requireAccessDeadline } from '../access/unavailable.ts';
 import { routeOf } from '../route/route.ts';
 import type { SearchIdentityMapping } from './semantic-source-port.ts';
-import { searchSourcePublicationApplication } from './source-publication-application.ts';
+import { searchSourcePublicationApplication } from './source-publication-binding.ts';
 
 type AccountContextDependencies = Readonly<{ pool: Pool; deadline: number }>;
 

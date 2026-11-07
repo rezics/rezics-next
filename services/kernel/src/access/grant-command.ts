@@ -9,12 +9,12 @@ import {
   type CommandAuthorization,
   type CommandTransaction,
 } from '../command/command.ts';
-import { type Access, type AccessContext, type AccessCheck, type Actor, type Resource } from '../request/access.ts';
+import { type Access, type AccessContext, type AccessCheck, type Actor, type Resource } from './check.ts';
 import { partitionOf, routeOf } from '../route/route.ts';
 import { PLATFORM_RESOURCE } from './bootstrap-governance.ts';
 import { commandAccessContext, requireCommandAdmission } from './command-admission.ts';
 import { prepareGovernanceCheck } from './governance-reach.ts';
-import { deadlineClient } from './authenticate.ts';
+import { deadlineClient } from './deadline.ts';
 import { withConnection } from '../database/pool.ts';
 import { readPartition } from '../partition/partition.ts';
 import accountRead from './account-read.sql';

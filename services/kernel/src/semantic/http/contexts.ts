@@ -25,7 +25,7 @@ import { SubjectInputError } from '../item.ts';
 import { ProblemError, problemSchema } from '../../http/problem.ts';
 import { defineRateLimit } from '../../http/rate-limit.ts';
 import { IDEMPOTENCY_HEADER, idempotencyKeyOf, requestDigest, SESSION_HEADER } from '../../http/request.ts';
-import { parentCreationAuthorization } from '../../access/index.ts';
+import { parentCreationAuthorization } from '../../access/parent-creation.ts';
 import { GrantDeniedError } from '../../access/grant-commands.ts';
 import { authoritativeTimeValue } from '../../command/command.ts';
 import { activeRelease } from '../definition-release-read.ts';

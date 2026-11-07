@@ -3,7 +3,7 @@ import { isIP } from 'node:net';
 import type { WriteRateContext, WriteRateLimiter } from './write-rate.ts';
 import { bindAnonymousRateIdentity } from './write-rate-identity.ts';
 import { rateLimitUnits, type RateLimitDeclaration } from '../http/rate-limit.ts';
-import { ProblemError } from '../http/problem.ts';
+import { ProblemError } from '../http/problem-error.ts';
 import { actionLabelOfMountedRoute, mountedRouteCatalogue, type MountedRoute } from '../http/request.ts';
 
 export type WriteRateStageOptions = {

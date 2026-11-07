@@ -1,3 +1,5 @@
+import { installSearchSourcePublicationApplication } from './source-publication-binding.ts';
+export { searchSourcePublicationApplication } from './source-publication-binding.ts';
 import type { Pool } from 'pg';
 import { createSearchGenerationPublication, type SearchGenerationPublication } from './generation-publication.ts';
 import { createSearchWriterGuard } from './writer-guard.ts';
@@ -60,14 +62,7 @@ export function createSearchSourcePublicationApplication(
   });
 }
 
-let installed: SearchSourcePublicationApplication | undefined;
-
 /** Composition installs the current Semantic producer explicitly; module evaluation installs nothing. */
 export function bindSearchSemanticSourcePort(port: SearchSemanticSourcePort): void {
-  installed = createSearchSourcePublicationApplication(port);
-}
-
-export function searchSourcePublicationApplication(): SearchSourcePublicationApplication {
-  if (!installed) throw new TypeError('Search Semantic source port is not installed');
-  return installed;
+  installSearchSourcePublicationApplication(createSearchSourcePublicationApplication(port));
 }

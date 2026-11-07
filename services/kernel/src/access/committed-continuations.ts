@@ -17,7 +17,7 @@ import type { KeyRing } from '../tokens/seal.ts';
 import { seal, unseal } from '../tokens/seal.ts';
 import { PLATFORM_RESOURCE } from './bootstrap-governance.ts';
 import globalRead from './bootstrap-governance-read.sql';
-import { GrantDeniedError } from './grant-commands.ts';
+import { GrantDeniedError } from './resource-access-errors.ts';
 import { LifecycleDeniedError, lifecycleExecutor, type LifecycleReceipt } from './lifecycle-20261025094010-command.ts';
 import { resourceAuthorization } from './resource-authorization.ts';
 import completeContinuation from './committed-continuation-complete.sql';

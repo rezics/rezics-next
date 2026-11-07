@@ -6,7 +6,7 @@ import { throwAccessUnavailable } from './unavailable.ts';
 import type { Pool } from 'pg';
 import { commandAccessContext } from './command-admission.ts';
 import { discardDurableIdentity, restoreOperationIdentity } from './durable-identity.ts';
-import { deadlineClient, within } from './authenticate.ts';
+import { deadlineClient, within } from './deadline.ts';
 import { withConnection } from '../database/pool.ts';
 import { partitionOf } from '../route/route.ts';
 import { permissionEvidenceDeadline } from './permission.ts';

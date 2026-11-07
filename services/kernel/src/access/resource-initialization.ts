@@ -1,6 +1,6 @@
 import { authoritativeTimeValue, currentCommand, type CommandTransaction } from '../command/command.ts';
 import type { Resource } from '../request/access.ts';
-import { GrantDeniedError } from './grant-commands.ts';
+import { GrantDeniedError } from './resource-access-errors.ts';
 import { creationCapability } from './parent-creation.ts';
 import { resourceRoleCatalogue } from './resource-roles.ts';
 import { ACTIVE_ACCOUNTS, grantSubject } from './grant-subject.ts';

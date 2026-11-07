@@ -119,6 +119,11 @@ slot, parallel reader, route, writer, score cache or GET repair is introduced.
 
 ## Module layers and measured boundary
 
+Collection rule authority consumes only `CollectionRuleAuthorityCapability.readAccount`. Composition supplies the
+Access-owned `createNativeCollectionRuleAccountAuthority` capability, preserving the original client and account key,
+current state/fence and bigint authentication floor. The producer charges the existing command Access ledger;
+Library keeps its authority predicates and imports no Account SQL. Existing rule/preparation assertions remain unchanged.
+
 The manifest splits Library by layer. `kernel-library-contract` owns `library/contract/**`: work dimensions, actors,
 Source, membership, ordering, capability ports and application result types. Access, Platform, Search, Semantic,
 Content and Zones import those shapes from the contract entries, not from the Source runtime. `kernel-library-core`

@@ -81,6 +81,12 @@ capabilities it registers. The kinds are:
    construction are eager. Third-party packages are outside this repository graph. Process entry points run only
    when explicitly launched. Composition roots collect declared registrations before starting their resources.
 
+Decision: Access consumers import request checks and app-local read/gate bindings from their defining leaves.
+Authentication errors belong to the Access contract; factory, deadline, delegation-read and credential-floor bindings
+have defining leaves. Search account-context reads use the publication binding without importing its constructor.
+Compatibility barrels preserve export identity. This import-only migration keeps behavior assertions unchanged and
+uses workspace typing as worker acceptance.
+
 Decision: Auth retention's contract, core and application modules form an inward-only graph.
 The application owns preparation/checkpoint and maintenance admission over ports; the Auth adapter
 binds SQL, supported SDK scan and the existing native retirement capability. The cursor store has

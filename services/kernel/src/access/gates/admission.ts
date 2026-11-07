@@ -1,11 +1,11 @@
 import { PlatformClosedError } from '../contract/index.ts';
 export { PlatformClosedError } from '../contract/index.ts';
-import { readNativeAccessTime } from '../authenticate.ts';
+import { readNativeAccessTime } from '../native-time.ts';
 import { authoritativeTimeValue, releaseOperationalTime, type AuthoritativeTime } from '../../command/command.ts';
 import type { AccessWorkAccounting } from '../work.ts';
 import type { Pool } from 'pg';
 import { decideExposure, exposureAuthorityActions } from '@rezics/access';
-import { authorizePlatformGate } from '../index.ts';
+import { authorizePlatformGate } from '../read-bindings.ts';
 import type { Access, Actor } from '../../request/access.ts';
 import { actionLabelOfMountedRoute, type MountedRoute } from '../../http/request.ts';
 import { GLOBAL_CONTEXT, readExposure } from './catalogue.ts';

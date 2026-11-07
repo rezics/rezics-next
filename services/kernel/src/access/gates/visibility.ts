@@ -1,6 +1,6 @@
 import { requireAccessDeadline } from '../unavailable.ts';
 import type { Pool } from 'pg';
-import { deadlineClient, within } from '../authenticate.ts';
+import { deadlineClient, within } from '../deadline.ts';
 import {
   compileExposureCatalogue,
   decideExposure,
@@ -8,7 +8,7 @@ import {
   type ExposureCatalogue,
   type ExposureOperation,
 } from '@rezics/access';
-import { authorizePlatformGate } from '../index.ts';
+import { authorizePlatformGate } from '../read-bindings.ts';
 import { withConnection } from '../../database/pool.ts';
 import { actionLabelOfMountedRoute, type MountedRoute } from '../../http/request.ts';
 import type { Access, Actor } from '../../request/access.ts';

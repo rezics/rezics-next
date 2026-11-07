@@ -25,7 +25,7 @@ import { wakeIdentityEpochAdmissionWaiters } from './identity-epoch-admission.ts
 import { registerIdentityEpochCoordinator, resumeIdentityEpochJob } from './identity-epoch-coordinator.ts';
 import { continueIdentityRatingRepair } from './identity-rating-repair-producer.ts';
 import { runCommand } from '../command/command.ts';
-import { createAccess } from '../access/index.ts';
+import { createAccess } from '../access/factory.ts';
 import { readMembershipWorkConfig } from '../access/membership-work-config.ts';
 import roles from '../access/resource-roles.json';
 import { createSubjectPagePublication } from './subject-page-publication.ts';

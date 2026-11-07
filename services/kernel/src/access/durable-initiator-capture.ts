@@ -5,7 +5,7 @@ import { authoritativeTimeValue } from '../command/command.ts';
 import type { AccessContext, Actor } from '../request/access.ts';
 import { routeOf } from '../route/route.ts';
 import { accessCommandAttempt, admittedCommandAccount } from './command-admission.ts';
-import { deadlineClient, within } from './authenticate.ts';
+import { deadlineClient, within } from './deadline.ts';
 import type { DurableInitiatorRecord } from './durable-initiator.ts';
 import delegationRead from './durable-initiator-capture-delegation.sql';
 

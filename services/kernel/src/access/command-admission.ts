@@ -3,15 +3,9 @@ import { requireAccessDeadline, throwAccessUnavailable } from './unavailable.ts'
 import { authoritativeTimeValue, type CommandAttempt } from '../command/command.ts';
 import { systemClock, type KernelClock } from '../clock.ts';
 import { identityExpired, type IdentityExpiry } from './identity-expiry.ts';
-import {
-  AuthenticationError,
-  type Access,
-  type AccessContext,
-  type AccountActor,
-  type Actor,
-} from '../request/access.ts';
+import { AuthenticationError, type Access, type AccessContext, type AccountActor, type Actor } from './check.ts';
 import { readAccount, type Account } from './account-data.ts';
-import { deadlineClient, within } from './authenticate.ts';
+import { deadlineClient, within } from './deadline.ts';
 import { accessRoot } from './derived-access.ts';
 
 /** A marker is held only in this registry and always carries a live executor time.
