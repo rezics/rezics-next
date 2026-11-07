@@ -1,7 +1,7 @@
 # Walk Web resolves Worker bindings for desktop and phone Home
 
 goal: accounts
-manager: accounts
+manager: content
 
 Walk revision `0c4c52c14eb51ff21d901d69060b1fc08d83a341` at 2026-11-07T08:27Z.
 Auth pages became ready. Web `dev` on walk port 20050 printed ready, then Vite
@@ -26,3 +26,15 @@ Goal: accounts. Manager: content. Tested source `0eb618cfd609c2abb281bbd3ced29e7
 Native/API census:12/19 PASS (J01,J02,J05,J06,J07,J08,J09,J11,J12,J17,J18,J19),7 FAIL. These are API-stage assertions, not complete native/browser/growth or promotion acceptance. Slowest FAIL J13,32319ms, public target omitted subject.id. Authoritative launcher next hourly due2026-11-07T12:50:52Z is based on round start; the inner driver printed provisional13:09:49Z before launcher teardown, which is not a second schedule. No watcher or second walk was created.
 
 Repair owner: existing Web/Library application composition through Content; existing Semantic startup25545be8 coordinates startup receiving. Auth pages became ready. Web message readiness completed and Vite bundled, but root readiness never reached<500; first retained render cause is Library requires application reading capabilities at apps/web/src/library/application.tsx:40 via useHistoryCurrentOrigin and FollowedCommunities at shell/side-nav.tsx:87. Web ten-minute readiness timed out. Chromium was not launched; pages=[]; desktop1280/phone390 controls were not inspected. Restore installed real reading capabilities around the mounted shell, then complete original Home/security/public identity/Settings controls and hydration in this same walk without screenshots. Retain original native/API, current authority, replay and growth acceptance. The old cloudflare:workers error is not the current measured cause; no speculative dependency upgrade.
+
+## Received Library root; next actual shell composition frontier
+
+Actual ordinary source70f7c7e9c7fc6ff08025044be46763221763f9d3 includes named Library88e80 through f81392a78f. Native/API observation began2026-11-07T13:27:02.282Z; all nineteen rows are retained,12/19 API-stage passes. Launcher and journey JSON are the current safe artifacts, with the preceding round archived under .temp/accounts/rounds/0eb618cfd609c2abb281bbd3ced29e73e685fd71/. No remote check ID exists for this ordinary supported walk. Auth pages became ready and Web message preparation completed35768ms. Web reached SSR, whose first current render failure is:
+
+`Error in renderToReadableStream: Error: Recent Search requires a mounted host`
+
+Stack: useRecentSearchOperation at apps/web/src/search/recent-host.tsx:45, useRecentHistory at search/recent-history-hook.ts:26, ShellSearch at search/header-search/shell-search.tsx:25. The prior Library provider error has not recurred in the current trace; this does not establish complete Library native/browser recovery. First per-error UTC is unretained; the driver native observation UTC and eventual launcher finish are retained separately. No screenshot.
+
+Existing Search/Web composition ownership through Content receives the complete repair: install the actual Recent Search host around the mounted shell through the existing production adapter and current viewer observation. Preserve per-reader authority, synchronous credential/exposure retirement, uncertainty, bounded native lifetime and original receiving/growth assertions. Establish root HTTP readiness, then complete original authenticated Home/security, public identity and Settings desktop1280/phone390 control and hydration inspection on this same walk. Do not replace Search authority with a stub, infer a pass from typing, weaken the strict consumer or create a second walk. Auth catalogue/lifetime, J03/J04/J10 and public Subject/Realm repairs retain their separate existing owners. Final browser frontier and teardown are appended after this bounded round settles.
+
+Final frontier: Web was not ready after ten minutes; pages=[] and Chromium never launched. Supported teardown settled2026-11-07T13:45:54Z with launcher exit0, not a product pass. First safe Search-render log inspection was2026-11-07T13:40:47Z; error-origin UTC is unretained. Current artifacts are archived under .temp/accounts/rounds/70f7c7e9c7fc6ff08025044be46763221763f9d3/. Authoritative next hourly due2026-11-07T14:20:56Z, same handle/controller refresh; inner14:44:06Z was provisional. No additional walk is scheduled here.

@@ -19,3 +19,12 @@ Goal: accounts. Manager: content. Tested source `0eb618cfd609c2abb281bbd3ced29e7
 Native/API census:12/19 PASS (J01,J02,J05,J06,J07,J08,J09,J11,J12,J17,J18,J19),7 FAIL. These are API-stage assertions, not complete native/browser/growth or promotion acceptance. Slowest FAIL J13,32319ms, public target omitted subject.id. Authoritative launcher next hourly due2026-11-07T12:50:52Z is based on round start; the inner driver printed provisional13:09:49Z before launcher teardown, which is not a second schedule. No watcher or second walk was created.
 
 Current J06-J09 and J18 API assertions passed: organization create/member management, new owner management, new handle/old-handle retirement, automated operator opening with outsider403, personal erasure/sign-in refusal and independent public attribution. J09 elapsed1993ms; J18 elapsed4421ms. No new SDK e18 repair was exposed. Native command/replay/growth, complete downstream erasure and browser/promotion obligations remain distinct and are not passed by these HTTP observations.
+
+## Retained API receiving on the Library candidate
+
+Actual source `70f7c7e9c7fc6ff08025044be46763221763f9d3`, native observation began `2026-11-07T13:27:02.282Z`. Ordinary supported same-handle walk, actual Auth/Access and native Kernel worker/relay; no worker-check ID. Evidence `.temp/accounts/journeys.json` and `.temp/accounts/launcher.log`. This API-stage result does not establish complete native/browser/growth or promotion acceptance. Original requirements above remain.
+
+- J18: PASS, 2026-11-07T13:29:10.973Z, 9159ms; erased de0d5f6c-4185-8b9a-ad70-e969cb3dbaf1; attribution HTTP 200. Persona: j1870e3627df1 (de0d5f6c-4185-8b9a-ad70-e969cb3dbaf1), account de0d5f6c-4185-8b9a-ad70-e969cb3dbaf1.
+- J19: PASS, 2026-11-07T13:29:11.329Z, 354ms; open access HTTP 200; closed HTTP 403. Persona: account b1c6dc15-12e5-81f6-a8b0-b98997b37f40.
+
+Keep the exact first failing operation and unreached downstream assertions from the prior causal brief. Receive the existing producer repair through controller integration on this handle; no substitute authority or reduced acceptance. Browser startup and final resource settlement are recorded separately after this round ends.
