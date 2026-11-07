@@ -954,9 +954,11 @@ Validation failure restores the previous drop-in and does not reload sshd.
 ### Adding, resizing and removing a host
 
 Start with a small slice and slot count. Allow at least two effective slots for ordinary runs and three for gates.
-The controller machine reaches the check hosts through its local proxy (`~/.ssh/config`: `ProxyCommand` with
-`ncat --proxy 127.0.0.1:7897 --proxy-type socks5`, falling back to a direct connection). The direct route lost 20-40%
-of packets at about 290 ms on 2026-11-06. Control probes wait 90 s by default: ConnectTimeout covers TCP only, and a cold master on a loaded host has taken 57 s.
+The controller machine reaches the check hosts directly, with no `ProxyCommand` in `~/.ssh/config`. Pick the route by
+measurement: a direct route lost 20-40% of packets on 2026-11-06, while on 2026-11-07 the local proxy cut every
+long session after a few minutes. Never chain routes inside one `ProxyCommand` (`proxy || direct`): when the first
+route drops mid-session the second connects into the same stream and ssh fails with "Bad packet length 1397966893"
+(`SSH-`). Control probes wait 90 s by default: ConnectTimeout covers TCP only, and a cold master on a loaded host has taken 57 s.
 Install the `rezics-docker-prune.timer` system unit on every host. Every 15 minutes it runs
 `docker container prune -f --filter until=1h`. Check code from older worktrees starts throwaway databases without
 `--rm`, and on 2026-11-06 about 475 stopped containers on host b slowed `docker run` past its 120 s startup limit.
