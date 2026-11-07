@@ -148,9 +148,10 @@ exceed 4096.
 the call, and passes `finish` a detached `{ from, to }` copy; row-value snapshots remain owned by
 `growth-seed-batches.ts`.
 
-Every capture drains registered query and connection setup work, including tasks added while earlier work settles,
-before restoring attribution on success or failure. If cleanup also fails, the initiating error remains the aggregate's
-cause and cleanup failures remain available in its errors.
+Every capture drains registered query, connection setup and nested capture work, including tasks added while earlier
+work settles, before restoring attribution on success or failure. If cleanup also fails, `growthFailureEvidence(thrown)`
+keeps the exact initiating thrown value as primary and exposes bounded drain and cleanup causes without replacing or
+wrapping it.
 
 CTE buffer costs match producers and scans within nested native plan scopes. When a unique relationship cannot be
 established, producer blocks stay in the total and the unmatched relationship appears in `Cost.limitations`.
@@ -506,10 +507,30 @@ release that reservation and the plan-walk occupancy of the folded tree. Raw cap
 visited plan nodes. Unmeasured warmup and prepare captures record only top-level plans for write discovery; nested
 trigger and SPI notices are not charged.
 
+Decision: failed captures expose a bounded incomplete diagnostic that references the already charged native
+occurrences, raw plan documents and ownership arrays, or folded occurrence costs and notices. Keep the original
+thrown value as the failure and retain drain, cleanup, verification and export failures as subordinate causes.
+Summary choice: use one bounded-safe cause descriptor for capture charging, omission details and profile output; hostile
+name, message or SQLSTATE accessors become explicit description omissions and never replace the primary failure or its
+retained native evidence.
+`checkGrowth` adds check, source revision, phase, scale and repetition at the layer that knows them, then appends a
+diagnostic JSONL record through `GROWTH_PROFILE`. The profile reader retains these records as diagnostics and never
+admits them as measured points. Reuse retained capture data instead of cloning it; count diagnostic context against
+the shared capture capacity and let the profile writer's existing line, depth and value limits bound serialization.
+
+Ordinary capture work reserves up to 16 entries and 0.1% of the byte limit (capped at 72 KiB) for failure context;
+focused byte limits reserve at least 128 bytes when the limit permits. A measured run retains completed captures and failed nested captures
+as sidecars under the same 20,000-entry and 32 MiB aggregate, with at most 128 captures and 512 entries / 32 KiB held
+for the final check-level context. If either limit is reached, later diagnostics carry an explicit native-capture
+omission. The
+profile diagnostic projection retains at most 200,000 text/key bytes, 8,192 values, 64 array items or object keys per
+container, depth 32 and 2,048 characters per string before the JSONL writer's 2 MiB line cap.
+
 Each capture has hard caps of 20,000 evidence entries and 32 MiB of charged bytes shared by foreground and background
 evidence. Entries count retained statement text, retained statement error messages, currently reserved native notice
 envelopes and, for raw captures, plan nodes visited by the bounded plan walker. Statement and error strings use their
 UTF-8 byte size; native plan notices are charged at eight times their UTF-8 size to account for parsed-object
 expansion. A native notice is limited to 1 MiB, and its byte charge is reserved before JSON parsing. A focused capture
 may tighten these caps but cannot raise them. Exhaustion fails the capture after its operation and tracked queries
-drain, so no partial capture or cost is returned.
+drain. The failure includes retained work and an explicit omission count/reason for evidence that could not be kept;
+it never presents incomplete folded costs as a complete measurement.

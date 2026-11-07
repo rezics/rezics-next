@@ -24,6 +24,12 @@ import {
   withGrowthCheck,
   type GrowthDatabase,
 } from './growth-capture.ts';
+import {
+  addGrowthFailureCause,
+  addGrowthFailureOmission,
+  enrichGrowthFailureEvidence,
+  growthFailureProfileRecord,
+} from './growth-failure-evidence.ts';
 import { captureFoldedWarmup, captureWithFoldedCost } from './growth-composed-capture.ts';
 import {
   catalogStatementBound,
@@ -100,6 +106,8 @@ export { statementAttributions, statementOccurrences } from './growth-report.ts'
 export * from './growth-seed.ts';
 export * from './growth-uncertainty.ts';
 export * from './growth-profile-output.ts';
+export { growthFailureEvidence } from './growth-failure-evidence.ts';
+export type { GrowthFailureCause, GrowthFailureDiagnostic } from './growth-failure-evidence.ts';
 
 export function measure<T>(db: GrowthDatabase, operation: () => Promise<T>): Promise<{ value: T; cost: Cost }> {
   return capture(db, operation).then(({ value, capture: raw }) => ({ value, cost: costOf(raw) }));
@@ -1044,6 +1052,86 @@ async function assertRunTransactionsClosed(run: Awaited<ReturnType<typeof captur
     await assertMeasuredTransactionsSettled(target, backends);
 }
 
+type GrowthCheckFailureContext = {
+  file: string;
+  check: string;
+  source?: string;
+  phase: string;
+  scale?: number;
+  repetition?: number;
+  captureMode?: 'raw' | 'cost-folded';
+  native?: unknown;
+};
+
+function addAttachedFailureCauses(value: unknown): void {
+  if ((typeof value !== 'object' || value === null) && typeof value !== 'function') return;
+  try {
+    const holder = value as { readonly cause?: unknown; readonly cleanupErrors?: unknown };
+    if (holder.cause !== undefined && !Object.is(holder.cause, value))
+      addGrowthFailureCause(value, 'wrapped-cause', holder.cause);
+    if (Array.isArray(holder.cleanupErrors)) {
+      for (const cleanup of holder.cleanupErrors.slice(0, 16)) addGrowthFailureCause(value, 'cleanup', cleanup);
+      if (holder.cleanupErrors.length > 16)
+        addGrowthFailureOmission(value, 'cleanupCauses', holder.cleanupErrors.length - 16);
+    }
+  } catch {
+    // A custom thrown value may expose hostile accessors; the exact primary remains the diagnostic owner.
+  }
+}
+
+function captureRunFailureEvidence(
+  run: Awaited<ReturnType<typeof captureMeasuredRun>>,
+  captureResult: Capture | CostFoldedCapture,
+): Readonly<Record<string, unknown>> {
+  const writes: RelationIdentity[] = [];
+  const transactions: Array<Readonly<{ database: string; backend: number; token: number }>> = [];
+  let omittedWrites = 0;
+  let omittedTransactions = 0;
+  let stoppedWrites = false;
+  for (const relations of run.writes.values()) {
+    for (const identity of relations.values()) {
+      if (writes.length < 128) writes.push(identity);
+      else {
+        omittedWrites++;
+        stoppedWrites = true;
+        break;
+      }
+    }
+    if (stoppedWrites) break;
+  }
+  let stoppedTransactions = false;
+  for (const [database, backends] of run.transactions) {
+    for (const [backend, token] of backends) {
+      if (transactions.length < 128) {
+        transactions.push({ database: new URL(database.url).pathname.slice(1), backend, token });
+      } else {
+        omittedTransactions++;
+        stoppedTransactions = true;
+        break;
+      }
+    }
+    if (stoppedTransactions) break;
+  }
+  const backends: number[] = [];
+  for (const backend of run.backends) {
+    if (backends.length === 128) break;
+    backends.push(backend);
+  }
+  return {
+    capture: captureResult,
+    nativeCaptures: run.nativeCaptures,
+    writes,
+    transactions,
+    backends,
+    omissions: {
+      writes: stoppedWrites ? 'additional run writes omitted after 128' : omittedWrites,
+      transactions: stoppedTransactions ? 'additional open transactions omitted after 128' : omittedTransactions,
+      nativeCaptures: run.omittedNativeCaptures,
+      ...(run.backends.size <= backends.length ? {} : { backends: 'additional run backends omitted after 128' }),
+    },
+  };
+}
+
 export function checkGrowth(
   db: GrowthDatabase,
   check: GrowthCheck & { readonly captureMode: 'cost-folded' },
@@ -1057,21 +1145,52 @@ export async function checkGrowth(
   db: GrowthDatabase,
   check: GrowthCheck,
 ): Promise<GrowthReport | RawGrowthReport | CostFoldedGrowthReport> {
-  if (check.captureMode !== undefined && check.captureMode !== 'raw' && check.captureMode !== 'cost-folded')
-    throw new TypeError(`${check.name}: captureMode must be 'raw' or 'cost-folded'`);
-  if (check.captureMode === 'cost-folded' && check.aggregateCaptures !== undefined)
-    throw new TypeError(`${check.name}: aggregateCaptures is unavailable with cost-folded capture`);
-  const admitted = admitGrowthCheck(check);
-  check = { ...check, ...admitted };
-  return withGrowthCheck(db, () => runGrowthCheck(db, check, admitted));
+  const checkFile = relative(process.cwd(), Bun.main);
+  const source = growthMeasurementSource();
+  const failureContext: GrowthCheckFailureContext = {
+    file: checkFile || '<unknown growth check file>',
+    check: check.name || '<unnamed growth check>',
+    ...(source === undefined ? {} : { source }),
+    phase: 'check-setup',
+    captureMode: check.captureMode === 'cost-folded' ? 'cost-folded' : 'raw',
+  };
+  try {
+    if (check.captureMode !== undefined && check.captureMode !== 'raw' && check.captureMode !== 'cost-folded')
+      throw new TypeError(`${check.name}: captureMode must be 'raw' or 'cost-folded'`);
+    if (check.captureMode === 'cost-folded' && check.aggregateCaptures !== undefined)
+      throw new TypeError(`${check.name}: aggregateCaptures is unavailable with cost-folded capture`);
+    const admitted = admitGrowthCheck(check);
+    check = { ...check, ...admitted };
+    failureContext.captureMode = check.captureMode ?? 'raw';
+    return await withGrowthCheck(db, () => runGrowthCheck(db, check, admitted, failureContext));
+  } catch (error) {
+    let diagnostic = enrichGrowthFailureEvidence(error, failureContext);
+    addAttachedFailureCauses(error);
+    diagnostic = enrichGrowthFailureEvidence(error, failureContext);
+    const destination = process.env.GROWTH_PROFILE;
+    if (destination && failureContext.phase !== 'profile-export') {
+      try {
+        appendGrowthProfile({
+          destination,
+          mode: 'required',
+          record: growthFailureProfileRecord(diagnostic),
+        });
+      } catch (exportError) {
+        addGrowthFailureCause(error, 'profile-export', exportError);
+      }
+    }
+    throw error;
+  }
 }
 
 async function runGrowthCheck(
   db: GrowthDatabase,
   check: GrowthCheck,
   admitted: AdmittedGrowthCheck,
+  failureContext: GrowthCheckFailureContext,
 ): Promise<GrowthReport> {
   const growthRule = process.env.GROWTH_RULE;
+  failureContext.phase = 'profile-configuration';
   const profileMode = growthProfileExportMode(process.env.GROWTH_PROFILE_REQUIRED);
   const listed = GROWTH_BASELINE.some(({ name }) => name === check.name);
   const { scales, repetitions, warmups, rule } = admitted;
@@ -1082,9 +1201,16 @@ async function runGrowthCheck(
   const samples: Array<GrowthReport['samples'][number]> = [];
   let laterSettleTimeout = false;
   for (const scale of scales) {
+    failureContext.scale = scale;
+    failureContext.repetition = repetition;
+    failureContext.phase = 'grow';
+    failureContext.native = undefined;
     const settleFailures: string[] = [];
     const recordedSettle = async (target: GrowthDatabase, options: Parameters<typeof settle>[1]): Promise<number> => {
       const started = performance.now();
+      failureContext.phase = 'settle';
+      failureContext.scale = scale;
+      failureContext.repetition = repetition;
       try {
         return await settle(target, laterSettleTimeout ? { ...options, timeoutMs: 900 } : options);
       } catch (error) {
@@ -1095,6 +1221,7 @@ async function runGrowthCheck(
       }
     };
     const growStart = performance.now();
+    failureContext.phase = 'grow';
     const grown = await trackGrow(db, () => check.grow(db, scale, previous));
     const vacuumStart = performance.now();
     const vacuumMs = await recordedSettle(db, { analyze: true });
@@ -1120,6 +1247,9 @@ async function runGrowthCheck(
       }
     };
     const settlePending = async () => {
+      failureContext.phase = 'settle';
+      failureContext.scale = scale;
+      failureContext.repetition = repetition;
       for (const target of pendingWrites.keys()) {
         const workflowStatus = await target.admin.query<{ exists: boolean }>(
           `SELECT to_regclass('"dbos".workflow_status') IS NOT NULL AS exists`,
@@ -1147,18 +1277,26 @@ async function runGrowthCheck(
       pendingBackends = operationBackends();
     };
     for (let warmup = 0; warmup < warmups; warmup++) {
-      const warmupRun = await captureMeasuredRun(async () =>
-        check.captureMode === 'cost-folded'
-          ? captureFoldedWarmup(db, async () => {
-              if (check.warmup) await check.warmup(db, scale, repetition);
-              else await check.operation(db, scale, repetition);
-            })
-          : captureWarmup(db, async () => {
-              if (check.warmup) await check.warmup(db, scale, repetition);
-              else await check.operation(db, scale, repetition);
-            }),
-      );
+      failureContext.phase = 'warmup';
+      failureContext.scale = scale;
+      failureContext.repetition = repetition;
+      failureContext.native = undefined;
+      const warmupRun = await captureMeasuredRun(async () => {
+        const result =
+          check.captureMode === 'cost-folded'
+            ? await captureFoldedWarmup(db, async () => {
+                if (check.warmup) await check.warmup(db, scale, repetition);
+                else await check.operation(db, scale, repetition);
+              })
+            : await captureWarmup(db, async () => {
+                if (check.warmup) await check.warmup(db, scale, repetition);
+                else await check.operation(db, scale, repetition);
+              });
+        return result;
+      });
+      failureContext.native = captureRunFailureEvidence(warmupRun, warmupRun.value.capture);
       absorbUnmeasured(warmupRun);
+      failureContext.phase = 'transaction-closure';
       await assertRunTransactionsClosed(warmupRun);
       repetition++;
     }
@@ -1177,24 +1315,36 @@ async function runGrowthCheck(
         await settlePending();
         if (check.prepare) {
           const prepare = check.prepare;
-          absorbUnmeasured(
-            await captureMeasuredRun(async () =>
-              check.captureMode === 'cost-folded'
-                ? captureFoldedWarmup(db, () => prepare(db, scale, repetition))
-                : captureWarmup(db, () => prepare(db, scale, repetition)),
-            ),
+          failureContext.phase = 'prepare';
+          failureContext.scale = scale;
+          failureContext.repetition = repetition;
+          failureContext.native = undefined;
+          const preparedRun = await captureMeasuredRun(async () =>
+            check.captureMode === 'cost-folded'
+              ? captureFoldedWarmup(db, () => prepare(db, scale, repetition))
+              : captureWarmup(db, () => prepare(db, scale, repetition)),
           );
+          failureContext.native = captureRunFailureEvidence(preparedRun, preparedRun.value.capture);
+          absorbUnmeasured(preparedRun);
           await settlePending();
         }
+        failureContext.phase = 'operation';
+        failureContext.scale = scale;
+        failureContext.repetition = repetition;
+        failureContext.native = undefined;
         const captured = await captureMeasuredRun(async () =>
           check.captureMode === 'cost-folded'
             ? captureWithFoldedCost(db, () => check.operation(db, scale, repetition), { includeBackends: true })
             : capture(db, () => check.operation(db, scale, repetition), { includeBackends: true }),
         );
+        failureContext.native = captureRunFailureEvidence(captured, captured.value.capture);
         for (const target of captured.databases) measuredDatabases.add(target);
+        failureContext.phase = 'transaction-closure';
         await assertRunTransactionsClosed(captured);
         const measured = captured.value;
+        failureContext.phase = 'verification';
         await check.verify?.(db, scale, repetition, measured.value);
+        failureContext.phase = 'report';
         pendingBackends = operationBackends(captured.backends, captured.transactions);
         const writes = captured.writes;
         let measuredCapture: Capture | CostFoldedCapture = measured.capture;
@@ -1363,7 +1513,12 @@ async function runGrowthCheck(
         samples.map(({ scale, counted }) => ({ scale, counted: counted ?? {} })),
       )
     : [];
+  failureContext.phase = 'profile-export';
+  failureContext.scale = scales[scales.length - 1]!;
+  failureContext.repetition = repetition;
+  failureContext.native = { report, lastRun: failureContext.native };
   appendProfile(report, check, profileMode, growthRunEligibility(check, samples));
+  failureContext.phase = 'report';
   if (
     listed &&
     growthRule !== 'series' &&

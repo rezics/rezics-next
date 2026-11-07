@@ -5,6 +5,9 @@ import pg, { type Pool, type PoolClient, type QueryResult, type QueryResultRow }
 import { createPool, withConnection } from '../../src/database/pool.ts';
 import { configureTestReceiptKeys } from './receipt-keys.ts';
 import {
+  MAX_GROWTH_CAPTURE_BYTES,
+  MAX_GROWTH_CAPTURE_ENTRIES,
+  MAX_GROWTH_NATIVE_NOTICE_BYTES,
   GrowthCaptureBudget,
   parseNativePlanNotice,
   type GrowthCaptureBudgetLimits,
@@ -15,6 +18,13 @@ import { walkPlanTree } from './growth-plan-walk.ts';
 import type { Capture } from './growth-cost.ts';
 import { GrowthCostFolder, type CostFoldedCapture, type FoldedStatementInput } from './growth-cost-fold.ts';
 import { drainCaptureWork } from './growth-capture-drain.ts';
+import {
+  GROWTH_FAILURE_CAUSE_LIMIT,
+  describeGrowthFailure,
+  growthFailureContextBytes,
+  growthFailureEvidence,
+  recordGrowthFailureEvidence,
+} from './growth-failure-evidence.ts';
 import { collectModifyTargets } from './growth-plan-walk.ts';
 import { classifyGrowthSql } from './growth-sql-kind.ts';
 import {
@@ -92,6 +102,18 @@ export function createGrowthDatabaseLifecycle() {
 
 export type SeedingCount = { statements: number; rowsWritten: number };
 
+type CaptureTaskTracker = {
+  pending: number;
+  errors: unknown[];
+  omittedErrors: number;
+  idle: Promise<void> | undefined;
+  resolveIdle: (() => void) | undefined;
+};
+
+function captureTaskTracker(): CaptureTaskTracker {
+  return { pending: 0, errors: [], omittedErrors: 0, idle: undefined, resolveIdle: undefined };
+}
+
 type ActiveCapture = {
   readonly id: number;
   readonly budget: GrowthCaptureBudget;
@@ -112,14 +134,28 @@ type ActiveCapture = {
   backgroundPlanStatements: (number | undefined)[];
   backgroundPlanBackends: (number | undefined)[];
   readonly transactions: Map<GrowthDatabase, Map<number, number>>;
+  readonly transactionHistory: Array<
+    Readonly<{ database: string; backend: number; token: number; state: 'open' | 'closed' }>
+  >;
   pending: Set<Promise<void>>;
   error?: Error;
+  readonly writeTargets: Map<string, RelationIdentity>;
+  omittedStatements: number;
+  omittedStatementErrors: number;
+  omittedPlans: number;
+  omittedWriteTargets: number;
+  omittedTransactions: number;
+  missingPlanCount?: number;
+  missingPlanOccurrences?: Array<Readonly<{ side: GrowthCaptureEvidenceSide; index: number; text: string }>>;
+  omittedMissingPlanDetails: number;
+  readonly nestedCaptureWork: CaptureTaskTracker;
 };
 type StatementRecord = {
   text: string;
   readonly background: boolean;
   readonly backend: number | undefined;
   readonly index: number;
+  readonly database: string;
   requestBytes: number;
   responseBytes: number;
   errorCode: string | null;
@@ -155,7 +191,8 @@ type CaptureState = {
   growthCheckActive: boolean;
   seeding: SeedingCount | undefined;
   seedingPending: Set<Promise<void>>;
-  setupError?: Error;
+  setupError: unknown;
+  setupFailed: boolean;
   setupTasks: Set<Promise<void>>;
   relatedDatabases: Map<string, GrowthDatabase>;
   activeTransactions: Map<number, number>;
@@ -183,10 +220,21 @@ export async function withGrowthCheck<T>(database: GrowthDatabase, operation: ()
 
 type BackendSet = Set<number> & { readonly transactions: Map<GrowthDatabase, Map<number, number>> };
 type WriteTargets = Map<string, RelationIdentity>;
+type RunNativeCapture = Readonly<Record<string, unknown>>;
 type RunCapture = Map<GrowthDatabase, WriteTargets> & {
   readonly databases: Set<GrowthDatabase>;
   readonly backends: BackendSet;
+  readonly nativeCaptures: RunNativeCapture[];
+  nativeCaptureEntries: number;
+  nativeCaptureBytes: number;
+  omittedNativeCaptures: number;
+  failureContextAccounted: boolean;
+  readonly captureWork: CaptureTaskTracker;
 };
+const MAX_GROWTH_RUN_NATIVE_CAPTURES = 128;
+const RUN_NATIVE_CAPTURE_DESCRIPTOR_BYTES = 4 * 1024;
+const RUN_FAILURE_CONTEXT_ENTRIES = 512;
+const RUN_FAILURE_CONTEXT_BYTES = 32 * 1024;
 const measuredRun = new AsyncLocalStorage<RunCapture>();
 // pg can submit the next queued query before the previous query's promise settles.
 const clientWireQueue = new WeakMap<PoolClient, WireStatementQueue>();
@@ -201,6 +249,50 @@ const nativePlanCommands = new Set(['SELECT', 'INSERT', 'UPDATE', 'DELETE', 'MER
 
 function isAttribution(value: Attribution | pg.Pool | undefined): value is Attribution {
   return typeof value === 'object' && value !== null && 'capture' in value && 'background' in value;
+}
+
+function addCaptureTask(tracker: CaptureTaskTracker, task: Promise<unknown>): void {
+  if (tracker.pending === 0) {
+    tracker.idle = new Promise<void>((resolve) => {
+      tracker.resolveIdle = resolve;
+    });
+  }
+  tracker.pending++;
+  void task
+    .then(
+      () => undefined,
+      (error: unknown) => {
+        if (tracker.errors.length < GROWTH_FAILURE_CAUSE_LIMIT) tracker.errors.push(error);
+        else tracker.omittedErrors++;
+      },
+    )
+    .then(() => {
+      tracker.pending--;
+      if (tracker.pending === 0) {
+        const resolve = tracker.resolveIdle;
+        tracker.idle = undefined;
+        tracker.resolveIdle = undefined;
+        resolve?.();
+      }
+    });
+}
+
+async function drainCaptureTasks(
+  tracker: CaptureTaskTracker,
+): Promise<{ errors: readonly unknown[]; omittedErrors: number }> {
+  while (tracker.pending > 0) await tracker.idle;
+  const errors = tracker.errors.splice(0);
+  const omittedErrors = tracker.omittedErrors;
+  tracker.omittedErrors = 0;
+  return { errors, omittedErrors };
+}
+
+function trackCaptureTask<T>(task: Promise<T>): Promise<T> {
+  const parent = growing.getStore();
+  if (isAttribution(parent)) addCaptureTask(parent.capture.nestedCaptureWork, task);
+  const run = measuredRun.getStore();
+  if (run) addCaptureTask(run.captureWork, task);
+  return task;
 }
 
 function currentAttribution(state: CaptureState): Attribution | undefined {
@@ -340,12 +432,26 @@ const setupStatements = [
 ];
 
 function asError(error: unknown): Error {
-  return error instanceof Error ? error : new Error(String(error));
+  try {
+    if (error instanceof Error) {
+      const summary = describeGrowthFailure(error, 'capture-context');
+      return new Error(summary.message, { cause: error });
+    }
+  } catch {
+    // A hostile proxy can make even `instanceof` throw. The shared descriptor below is safe.
+  }
+  return new Error(describeGrowthFailure(error, 'capture-context').message, { cause: error });
+}
+
+function recordSetupFailure(state: CaptureState, error: unknown): void {
+  if (state.setupFailed) return;
+  state.setupFailed = true;
+  state.setupError = error;
 }
 
 function captureFailureContext(error: unknown, detail: string): Error {
-  const cause = asError(error);
-  return new Error(`${cause.message}; ${detail}`, { cause });
+  const summary = describeGrowthFailure(error, 'capture-context');
+  return new Error(`${summary.message || 'Capture instrumentation failed'}; ${detail}`, { cause: error });
 }
 
 function occurrenceFailureContext(
@@ -362,15 +468,41 @@ function occurrenceFailureContext(
   return `${side} statement occurrence ${index ?? 'unowned'} ${statement}${notice}`;
 }
 
-function retainCapturePlanWrites(capture: ActiveCapture, plan: unknown, database: string, location: string): void {
+function retainCapturePlanWrites(
+  capture: ActiveCapture,
+  plan: unknown,
+  database: string,
+  location: string,
+  side: GrowthCaptureEvidenceSide,
+): void {
+  const physical = database || databaseName(capture.database);
+  const discovered = new Map<string, RelationIdentity>();
+  collectModifyTargets(plan, discovered, location);
+  for (const identity of discovered.values()) {
+    const withDatabase = { ...identity, database: physical };
+    const key = JSON.stringify([physical, identity.schema, identity.name]);
+    if (!capture.writeTargets.has(key)) {
+      if (capture.writeTargets.size >= 128) capture.omittedWriteTargets++;
+      else {
+        try {
+          const bytes = Buffer.byteLength(JSON.stringify(withDatabase), 'utf8');
+          capture.budget.retainFoldedSummary(side, 'diagnostic write target', 1, bytes);
+          capture.writeTargets.set(key, withDatabase);
+        } catch (error) {
+          capture.omittedWriteTargets++;
+          capture.error ??= captureFailureContext(
+            error,
+            `${physical}.${identity.schema}.${identity.name} write target`,
+          );
+        }
+      }
+    }
+  }
   const run = capture.run;
   if (!run) return;
-  const physical = database || databaseName(capture.database);
   const target = databaseForName(capture.database, physical);
   run.databases.add(target);
   const relations = run.get(target) ?? new Map<string, RelationIdentity>();
-  const discovered = new Map<string, RelationIdentity>();
-  collectModifyTargets(plan, discovered, location);
   for (const identity of discovered.values()) addRelationIdentity(relations, { ...identity, database: physical });
   if (relations.size > 0) run.set(target, relations);
 }
@@ -580,7 +712,7 @@ function instrumentBytes(client: PoolClient, state: CaptureState): void {
       transaction.active = true;
       if (backend !== undefined) {
         state.activeTransactions.set(backend, transaction.token);
-        if (attribution && !attribution.background) {
+        if (attribution) {
           const database = databaseForName(
             attribution.capture.database,
             connectedDatabase(client) ?? databaseName(attribution.capture.database),
@@ -590,11 +722,36 @@ function instrumentBytes(client: PoolClient, state: CaptureState): void {
             captureTransactions = new Map();
             attribution.capture.transactions.set(database, captureTransactions);
           }
-          captureTransactions.set(backend, transaction.token);
-          let runTransactions = attribution.capture.run?.backends.transactions.get(database);
-          if (attribution.capture.run && !runTransactions) {
-            runTransactions = new Map();
-            attribution.capture.run.backends.transactions.set(database, runTransactions);
+          if (captureTransactions.get(backend) !== transaction.token) {
+            try {
+              const physical = databaseName(database);
+              attribution.capture.budget.retainFoldedSummary(
+                attribution.background ? 'background' : 'foreground',
+                'transaction state',
+                1,
+                Buffer.byteLength(physical, 'utf8') + 24,
+              );
+              captureTransactions.set(backend, transaction.token);
+              if (attribution.capture.transactionHistory.length < 128)
+                attribution.capture.transactionHistory.push({
+                  database: physical,
+                  backend,
+                  token: transaction.token,
+                  state: 'open',
+                });
+              else attribution.capture.omittedTransactions++;
+            } catch (error) {
+              attribution.capture.omittedTransactions++;
+              attribution.capture.error ??= captureFailureContext(error, `backend ${backend} transaction state`);
+            }
+          }
+          let runTransactions: Map<number, number> | undefined;
+          if (!attribution.background) {
+            runTransactions = attribution.capture.run?.backends.transactions.get(database);
+            if (attribution.capture.run && !runTransactions) {
+              runTransactions = new Map();
+              attribution.capture.run.backends.transactions.set(database, runTransactions);
+            }
           }
           runTransactions?.set(backend, transaction.token);
         }
@@ -612,8 +769,15 @@ function instrumentBytes(client: PoolClient, state: CaptureState): void {
           );
           const captureTransactions = attribution.capture.transactions.get(database);
           if (captureTransactions?.get(backend) === completedToken) captureTransactions.delete(backend);
-          const runTransactions = attribution.capture.run?.backends.transactions.get(database);
-          if (runTransactions?.get(backend) === completedToken) runTransactions.delete(backend);
+          const history = attribution.capture.transactionHistory.find(
+            (entry) =>
+              entry.database === databaseName(database) && entry.backend === backend && entry.token === completedToken,
+          );
+          if (history) (history as { state: 'open' | 'closed' }).state = 'closed';
+          if (!attribution.background) {
+            const runTransactions = attribution.capture.run?.backends.transactions.get(database);
+            if (runTransactions?.get(backend) === completedToken) runTransactions.delete(backend);
+          }
         }
       }
     }
@@ -703,7 +867,7 @@ function intercept(client: PoolClient, state: CaptureState, explain: boolean): (
       () => {},
       (error: unknown) => {
         explaining = undefined;
-        if ((error as { code?: unknown } | null)?.code !== IN_FAILED_TRANSACTION) state.setupError ??= asError(error);
+        if ((error as { code?: unknown } | null)?.code !== IN_FAILED_TRANSACTION) recordSetupFailure(state, error);
       },
     );
     state.setupTasks.add(task);
@@ -720,36 +884,38 @@ function intercept(client: PoolClient, state: CaptureState, explain: boolean): (
     let attribution = suppressAttribution ? undefined : currentAttribution(state);
     if (!suppressAttribution && !attribution && state.active) attribution = { capture: state.active, background: true };
     let record: StatementRecord | undefined;
-    if (
-      explain &&
-      !suppressAttribution &&
-      (text !== undefined || name !== undefined) &&
-      attribution &&
-      !attribution.capture.error
-    ) {
+    if (explain && !suppressAttribution && (text !== undefined || name !== undefined) && attribution) {
       const capture = attribution.capture;
       const side = attribution.background ? 'background' : 'foreground';
       const occurrenceIndex = attribution.background
         ? capture.backgroundStatementCount
         : capture.foregroundStatementCount;
-      try {
-        capture.budget.retainStatementText(side, Buffer.byteLength(text ?? '', 'utf8'));
-        const index = attribution.background ? capture.backgroundStatementCount++ : capture.foregroundStatementCount++;
-        record = {
-          text: text ?? '',
-          background: attribution.background,
-          backend: capture.includeBackends ? backendPid(client) : undefined,
-          index,
-          requestBytes: 0,
-          responseBytes: 0,
-          errorCode: null,
-          errorMessage: null,
-          requiresNativePlan: false,
-        };
-        capture.statementRecords.push(record);
-        capture.costFolder?.registerStatement(side, index);
-      } catch (error) {
-        capture.error ??= captureFailureContext(error, occurrenceFailureContext(side, occurrenceIndex, text ?? ''));
+      if (capture.error) capture.omittedStatements++;
+      else {
+        try {
+          capture.budget.retainStatementText(side, Buffer.byteLength(text ?? '', 'utf8'));
+          const index = attribution.background
+            ? capture.backgroundStatementCount++
+            : capture.foregroundStatementCount++;
+          const database = connectedDatabase(client) ?? databaseName(capture.database);
+          record = {
+            text: text ?? '',
+            background: attribution.background,
+            backend: backendPid(client),
+            index,
+            database,
+            requestBytes: 0,
+            responseBytes: 0,
+            errorCode: null,
+            errorMessage: null,
+            requiresNativePlan: false,
+          };
+          capture.statementRecords.push(record);
+          capture.costFolder?.registerStatement(side, index);
+        } catch (error) {
+          capture.omittedStatements++;
+          capture.error ??= captureFailureContext(error, occurrenceFailureContext(side, occurrenceIndex, text ?? ''));
+        }
       }
     }
     if (state.seeding && !suppressAttribution) state.seeding.statements++;
@@ -794,6 +960,7 @@ function intercept(client: PoolClient, state: CaptureState, explain: boolean): (
               attribution.capture.costFolder?.retainStatementError(record.background ? 'background' : 'foreground');
               record.errorMessage = errorMessage;
             } catch (budgetError) {
+              attribution.capture.omittedStatementErrors++;
               attribution.capture.error ??= captureFailureContext(
                 budgetError,
                 occurrenceFailureContext(record.background ? 'background' : 'foreground', record.index, record.text),
@@ -907,7 +1074,11 @@ function instrument(client: PoolClient, state: CaptureState): void {
     if (pendingPortal) clientPendingPortalPlan.delete(client);
     const wireStatement = pendingPortal ?? clientExecutingStatement.get(client);
     const attribution = wireStatement?.attribution;
-    if (!attribution || attribution.capture.error) return;
+    if (!attribution) return;
+    if (attribution.capture.error) {
+      attribution.capture.omittedPlans++;
+      return;
+    }
     // PostgreSQL supplies an error context for nested SPI/trigger plans. Data-modifying SELECT CTEs finish
     // their top-level executor before CommandComplete, so they must not leave a pending cleanup owner.
     if (!notice.where && wireStatement) wireStatement.topLevelPlanSeen = true;
@@ -935,7 +1106,7 @@ function instrument(client: PoolClient, state: CaptureState): void {
         const planIndex = capture.costFolder.addNotice(plan, {
           side,
           owner,
-          backend: capture.includeBackends ? backendPid(client) : undefined,
+          backend: backendPid(client),
           database,
         });
         retainCapturePlanWrites(
@@ -943,6 +1114,7 @@ function instrument(client: PoolClient, state: CaptureState): void {
           plan,
           database,
           `${side === 'background' ? 'backgroundPlans' : 'plans'}[${planIndex}]`,
+          side,
         );
       } else {
         (attribution.background ? capture.backgroundPlans : capture.plans).push(plan);
@@ -950,10 +1122,17 @@ function instrument(client: PoolClient, state: CaptureState): void {
           connectedDatabase(client) ?? '',
         );
         (attribution.background ? capture.backgroundPlanStatements : capture.planStatements).push(owner);
-        if (capture.includeBackends)
-          (attribution.background ? capture.backgroundPlanBackends : capture.planBackends).push(backendPid(client));
+        (attribution.background ? capture.backgroundPlanBackends : capture.planBackends).push(backendPid(client));
+        retainCapturePlanWrites(
+          capture,
+          plan,
+          connectedDatabase(client) ?? '',
+          `${side === 'background' ? 'backgroundPlans' : 'plans'}[${(attribution.background ? capture.backgroundPlans : capture.plans).length - 1}]`,
+          side,
+        );
       }
     } catch (error) {
+      capture.omittedPlans++;
       capture.error ??= captureFailureContext(
         error,
         occurrenceFailureContext(side, owner, wireStatement?.record?.text, noticeBytes),
@@ -970,14 +1149,14 @@ function instrument(client: PoolClient, state: CaptureState): void {
   const setupQueries = setupStatements.map((statement) => queryWithoutAttribution(statement));
   const setupTask = Promise.allSettled(setupQueries).then((results) => {
     const failed = results.find((result) => result.status === 'rejected');
-    if (failed?.status === 'rejected') state.setupError ??= asError(failed.reason);
+    if (failed?.status === 'rejected') recordSetupFailure(state, failed.reason);
   });
   state.setupTasks.add(setupTask);
   const removeSetupTask = () => {
     state.setupTasks.delete(setupTask);
   };
   void setupTask.then(removeSetupTask, (error: unknown) => {
-    state.setupError ??= asError(error);
+    recordSetupFailure(state, error);
     removeSetupTask();
   });
 }
@@ -1025,6 +1204,8 @@ export async function openGrowthDatabase(url = process.env.DATABASE_URL): Promis
       growthCheckActive: false,
       seeding: undefined,
       seedingPending: new Set(),
+      setupError: undefined,
+      setupFailed: false,
       setupTasks: new Set(),
       relatedDatabases: new Map(),
       activeTransactions: new Map(),
@@ -1066,7 +1247,7 @@ export async function capture<T>(
   operation: () => Promise<T>,
   options: GrowthCaptureOptions = {},
 ): Promise<{ value: T; capture: Capture }> {
-  return captureInternal(database, operation, options, false, 'raw');
+  return trackCaptureTask(captureInternal(database, operation, options, false, 'raw'));
 }
 
 export type GrowthCaptureOptions = {
@@ -1082,7 +1263,287 @@ export function captureCostFoldedInternal<T>(
   options: GrowthCaptureOptions = {},
   explicitWarmup = false,
 ): Promise<{ value: T; capture: CostFoldedCapture }> {
-  return captureInternal(database, operation, options, explicitWarmup, 'cost-folded');
+  return trackCaptureTask(captureInternal(database, operation, options, explicitWarmup, 'cost-folded'));
+}
+
+function foldedInputFor(active: ActiveCapture, elapsedMs: number) {
+  return {
+    elapsedMs,
+    statements: active.statementRecords.filter(({ background }) => !background) as FoldedStatementInput[],
+    backgroundStatements: active.statementRecords.filter(({ background }) => background) as FoldedStatementInput[],
+    includeBackends: active.includeBackends,
+  };
+}
+
+function captureRunSummary(run: RunCapture | undefined): Readonly<Record<string, unknown>> | undefined {
+  if (!run) return undefined;
+  const writes: RelationIdentity[] = [];
+  let omittedWrites = false;
+  for (const relations of run.values()) {
+    for (const identity of relations.values()) {
+      if (writes.length === 128) {
+        omittedWrites = true;
+        break;
+      }
+      writes.push(identity);
+    }
+    if (omittedWrites) break;
+  }
+  const transactions: Array<Readonly<{ database: string; backend: number; token: number }>> = [];
+  let omittedTransactions = false;
+  for (const [database, backends] of run.backends.transactions) {
+    for (const [backend, token] of backends) {
+      if (transactions.length === 128) {
+        omittedTransactions = true;
+        break;
+      }
+      transactions.push({ database: databaseName(database), backend, token });
+    }
+    if (omittedTransactions) break;
+  }
+  const backends: number[] = [];
+  for (const backend of run.backends) {
+    if (backends.length === 128) break;
+    backends.push(backend);
+  }
+  return {
+    nativeCaptures: run.nativeCaptures.slice(),
+    writes,
+    transactions,
+    backends,
+    omissions: {
+      writes: omittedWrites ? 'additional run writes omitted after 128' : 0,
+      transactions: omittedTransactions ? 'additional open transactions omitted after 128' : 0,
+      nativeCaptures: run.omittedNativeCaptures,
+      ...(run.backends.size <= backends.length ? {} : { backends: 'additional run backends omitted after 128' }),
+    },
+  };
+}
+
+function accountRunFailureContext(run: RunCapture): void {
+  if (run.failureContextAccounted) return;
+  run.nativeCaptureEntries += RUN_FAILURE_CONTEXT_ENTRIES;
+  run.nativeCaptureBytes += RUN_FAILURE_CONTEXT_BYTES;
+  run.failureContextAccounted = true;
+}
+
+function captureBudgetLimits(
+  options: GrowthCaptureOptions,
+  run: RunCapture | undefined,
+): Partial<GrowthCaptureBudgetLimits> {
+  if (!run) return options.telemetryLimits ?? {};
+  const requested = options.telemetryLimits ?? {};
+  if (
+    (requested.entries !== undefined &&
+      (!Number.isSafeInteger(requested.entries) ||
+        requested.entries < 0 ||
+        requested.entries > MAX_GROWTH_CAPTURE_ENTRIES)) ||
+    (requested.bytes !== undefined &&
+      (!Number.isSafeInteger(requested.bytes) || requested.bytes < 0 || requested.bytes > MAX_GROWTH_CAPTURE_BYTES)) ||
+    (requested.nativeNoticeBytes !== undefined &&
+      (!Number.isSafeInteger(requested.nativeNoticeBytes) ||
+        requested.nativeNoticeBytes < 0 ||
+        requested.nativeNoticeBytes > MAX_GROWTH_NATIVE_NOTICE_BYTES))
+  )
+    return requested;
+  const entries = Math.max(
+    0,
+    MAX_GROWTH_CAPTURE_ENTRIES -
+      MAX_GROWTH_RUN_NATIVE_CAPTURES -
+      RUN_FAILURE_CONTEXT_ENTRIES -
+      run.nativeCaptureEntries,
+  );
+  const bytes = Math.max(
+    0,
+    MAX_GROWTH_CAPTURE_BYTES -
+      MAX_GROWTH_RUN_NATIVE_CAPTURES * RUN_NATIVE_CAPTURE_DESCRIPTOR_BYTES -
+      RUN_FAILURE_CONTEXT_BYTES -
+      run.nativeCaptureBytes,
+  );
+  return {
+    entries: Math.min(requested.entries ?? MAX_GROWTH_CAPTURE_ENTRIES, entries),
+    bytes: Math.min(requested.bytes ?? MAX_GROWTH_CAPTURE_BYTES, bytes),
+    nativeNoticeBytes: requested.nativeNoticeBytes ?? MAX_GROWTH_NATIVE_NOTICE_BYTES,
+  };
+}
+
+function collectMissingPlans(active: ActiveCapture): number {
+  if (active.missingPlanCount !== undefined) return active.missingPlanCount;
+  const missing: Array<Readonly<{ side: GrowthCaptureEvidenceSide; index: number; text: string }>> = [];
+  let count = 0;
+  let omittedDetails = 0;
+  for (const record of active.statementRecords) {
+    if (!record.requiresNativePlan || record.errorCode !== null) continue;
+    const side = record.background ? 'background' : 'foreground';
+    const hasPlan = active.costFolder
+      ? active.costFolder.hasNativePlan(side, record.index)
+      : (record.background ? active.backgroundPlanStatements : active.planStatements).includes(record.index);
+    if (hasPlan) continue;
+    count++;
+    if (missing.length >= 32) {
+      omittedDetails++;
+      continue;
+    }
+    const text = record.text.slice(0, 180);
+    try {
+      active.budget.retainFoldedSummary(side, 'missing native plan detail', 0, Buffer.byteLength(text, 'utf8') + 32);
+      missing.push({ side, index: record.index, text });
+    } catch {
+      omittedDetails++;
+    }
+  }
+  active.missingPlanCount = count;
+  active.missingPlanOccurrences = missing;
+  active.omittedMissingPlanDetails = omittedDetails;
+  return count;
+}
+
+function makeCaptureFailureDiagnostic(
+  active: ActiveCapture,
+  elapsedMs: number,
+  primary: unknown,
+  secondary: readonly Readonly<{ phase: string; value: unknown }>[],
+  omittedDrainErrors: number,
+): Readonly<{ native: unknown; omissions: Readonly<Record<string, number | string>> }> {
+  collectMissingPlans(active);
+  let foldedCapture: CostFoldedCapture | undefined;
+  let foldedCostOmission: string | undefined;
+  if (active.costFolder) {
+    try {
+      foldedCapture = active.costFolder.finish(foldedInputFor(active, elapsedMs));
+    } catch (error) {
+      foldedCostOmission =
+        describeGrowthFailure(error, 'folded-cost').message.slice(0, 512) ||
+        'folded cost result exceeded capture capacity';
+    }
+  }
+  const transactions: Array<Readonly<{ database: string; backend: number; token: number }>> = [];
+  let omittedTransactions = active.omittedTransactions;
+  for (const [database, entries] of active.transactions) {
+    for (const [backend, token] of entries) {
+      if (transactions.length >= 128) {
+        omittedTransactions++;
+        continue;
+      }
+      transactions.push({ database: databaseName(database), backend, token });
+    }
+  }
+  const omissions = {
+    statements: active.omittedStatements,
+    statementErrors: active.omittedStatementErrors,
+    plans: active.omittedPlans,
+    writeTargets: active.omittedWriteTargets,
+    transactions: omittedTransactions,
+    missingPlans: active.missingPlanCount ?? 0,
+    missingPlanDetails: active.missingPlanOccurrences?.length ?? 0,
+    missingPlanDetailsOmitted: active.omittedMissingPlanDetails,
+    pendingCauses: omittedDrainErrors,
+    ...(foldedCostOmission === undefined ? {} : { foldedCost: foldedCostOmission }),
+  };
+  const causes = [primary, ...secondary.map(({ value }) => value)];
+  const runEvidence = captureRunSummary(active.run);
+  const contextBytes =
+    768 +
+    (runEvidence === undefined
+      ? 0
+      : 512 +
+        active.run!.nativeCaptures.length * 8 +
+        (runEvidence.writes as readonly unknown[]).length * 24 +
+        (runEvidence.transactions as readonly unknown[]).length * 32 +
+        (runEvidence.backends as readonly unknown[]).length * 8) +
+    causes.reduce<number>((total, cause) => {
+      const text = describeGrowthFailure(cause, 'capture-context').message;
+      return total + growthFailureContextBytes(text.slice(0, 1_024));
+    }, 0);
+  try {
+    active.budget.retainFailureContext(contextBytes);
+  } catch {
+    Object.assign(omissions, { failureContext: 'capture capacity had no diagnostic context space' });
+  }
+  const native = {
+    mode: active.costFolder ? 'cost-folded' : 'raw',
+    statements: active.statementRecords,
+    foregroundPlans: active.plans,
+    foregroundPlanStatements: active.planStatements,
+    foregroundPlanBackends: active.planBackends,
+    foregroundPlanDatabases: active.planDatabases,
+    backgroundPlans: active.backgroundPlans,
+    backgroundPlanStatements: active.backgroundPlanStatements,
+    backgroundPlanBackends: active.backgroundPlanBackends,
+    backgroundPlanDatabases: active.backgroundPlanDatabases,
+    writes: [...active.writeTargets.values()],
+    transactions,
+    transactionStates: active.transactionHistory,
+    ...(active.missingPlanOccurrences === undefined ? {} : { missingPlanOccurrences: active.missingPlanOccurrences }),
+    ...(foldedCapture === undefined ? {} : { foldedCapture }),
+    ...(runEvidence === undefined ? {} : { run: runEvidence }),
+    ...(active.costFolder === undefined
+      ? { costAvailability: 'native plan documents retained' }
+      : { costAvailability: foldedCapture ? 'partial folded costs available' : 'folded cost output omitted' }),
+  };
+  return { native, omissions };
+}
+
+/** Retains a bounded view of every completed capture for failures raised after capture returns. */
+function retainRunNativeCapture(active: ActiveCapture, capture: Capture | CostFoldedCapture): void {
+  const run = active.run;
+  if (!run) return;
+  const entryCost = Math.max(1, active.budget.entriesUsed);
+  const byteCost = Math.max(256, active.budget.chargedBytes);
+  const withinRunBudget =
+    run.nativeCaptures.length < MAX_GROWTH_RUN_NATIVE_CAPTURES &&
+    run.nativeCaptureEntries + entryCost + 1 <=
+      MAX_GROWTH_CAPTURE_ENTRIES - MAX_GROWTH_RUN_NATIVE_CAPTURES - RUN_FAILURE_CONTEXT_ENTRIES &&
+    run.nativeCaptureBytes + byteCost + RUN_NATIVE_CAPTURE_DESCRIPTOR_BYTES <=
+      MAX_GROWTH_CAPTURE_BYTES -
+        MAX_GROWTH_RUN_NATIVE_CAPTURES * RUN_NATIVE_CAPTURE_DESCRIPTOR_BYTES -
+        RUN_FAILURE_CONTEXT_BYTES;
+  if (withinRunBudget) {
+    try {
+      // Account the run envelope from headroom reserved by the same per-capture budget.
+      active.budget.retainFailureContext(RUN_NATIVE_CAPTURE_DESCRIPTOR_BYTES);
+      run.nativeCaptures.push({
+        status: 'complete',
+        mode: active.costFolder ? 'cost-folded' : 'raw',
+        database: databaseName(active.database),
+        statements: active.statementRecords,
+        foregroundPlans: active.plans,
+        foregroundPlanStatements: active.planStatements,
+        foregroundPlanBackends: active.planBackends,
+        foregroundPlanDatabases: active.planDatabases,
+        backgroundPlans: active.backgroundPlans,
+        backgroundPlanStatements: active.backgroundPlanStatements,
+        backgroundPlanBackends: active.backgroundPlanBackends,
+        backgroundPlanDatabases: active.backgroundPlanDatabases,
+        writes: [...active.writeTargets.values()],
+        transactionStates: active.transactionHistory,
+        capture,
+        omissions: {
+          statements: active.omittedStatements,
+          statementErrors: active.omittedStatementErrors,
+          plans: active.omittedPlans,
+          writeTargets: active.omittedWriteTargets,
+          transactions: active.omittedTransactions,
+        },
+      });
+      run.nativeCaptureEntries += entryCost + 1;
+      run.nativeCaptureBytes += byteCost + RUN_NATIVE_CAPTURE_DESCRIPTOR_BYTES;
+      return;
+    } catch {
+      // A capture that consumed all available failure headroom still returns successfully; the run records why
+      // the later-stage diagnostic cannot include its full native evidence.
+    }
+  }
+  run.omittedNativeCaptures++;
+  if (run.nativeCaptures.length < MAX_GROWTH_RUN_NATIVE_CAPTURES)
+    run.nativeCaptures.push({
+      status: 'omitted',
+      mode: active.costFolder ? 'cost-folded' : 'raw',
+      database: databaseName(active.database),
+      statementCount: active.statementRecords.length,
+      planCount: active.plans.length + active.backgroundPlans.length,
+      reason: 'shared run capture evidence capacity was exhausted',
+    });
 }
 
 function captureInternal<T>(
@@ -1114,18 +1575,54 @@ async function captureInternal<T>(
   const ownsParent = parentActive !== undefined && currentAttribution(state)?.capture === parentActive;
   if (parentActive && !(parentActive.mode === 'warmup' && ownsParent))
     throw new Error('A growth capture is already active for this database');
-  if (state.setupError) throw state.setupError;
-
   const mode = explicitWarmup || (parentActive?.mode === 'warmup' && ownsParent) ? 'warmup' : 'measured';
+  if (state.setupFailed) {
+    recordGrowthFailureEvidence(state.setupError, {
+      phase: 'capture-setup',
+      native: { mode: retentionMode, database: databaseName(database), costAvailability: 'capture did not start' },
+    });
+    throw state.setupError;
+  }
   const id = nextCaptureId++;
-  const budget = new GrowthCaptureBudget(id, options.telemetryLimits);
+  const run = measuredRun.getStore();
+  let budget: GrowthCaptureBudget;
+  try {
+    budget = new GrowthCaptureBudget(id, captureBudgetLimits(options, run));
+  } catch (error) {
+    recordGrowthFailureEvidence(error, {
+      phase: 'capture-setup',
+      native: {
+        mode: retentionMode,
+        database: databaseName(database),
+        costAvailability: 'capture budget was not created',
+      },
+    });
+    throw error;
+  }
+  let costFolder: GrowthCostFolder | undefined;
+  if (retentionMode === 'cost-folded') {
+    try {
+      costFolder = new GrowthCostFolder(budget);
+    } catch (error) {
+      recordGrowthFailureEvidence(error, {
+        phase: 'capture-setup',
+        native: {
+          mode: retentionMode,
+          database: databaseName(database),
+          costAvailability: 'folded capture setup failed',
+        },
+        omissions: { captureBudget: 1 },
+      });
+      throw error;
+    }
+  }
   const active: ActiveCapture = {
     id,
     budget,
-    costFolder: retentionMode === 'cost-folded' ? new GrowthCostFolder(budget) : undefined,
+    costFolder,
     mode,
     database,
-    run: measuredRun.getStore(),
+    run,
     statementRecords: [],
     foregroundStatementCount: 0,
     backgroundStatementCount: 0,
@@ -1139,7 +1636,16 @@ async function captureInternal<T>(
     backgroundPlanStatements: [],
     backgroundPlanBackends: [],
     transactions: new Map(),
+    transactionHistory: [],
     pending: new Set(),
+    writeTargets: new Map(),
+    omittedStatements: 0,
+    omittedStatementErrors: 0,
+    omittedPlans: 0,
+    omittedWriteTargets: 0,
+    omittedTransactions: 0,
+    omittedMissingPlanDetails: 0,
+    nestedCaptureWork: captureTaskTracker(),
   };
   state.active = active;
   liveCaptures.add(active);
@@ -1160,56 +1666,82 @@ async function captureInternal<T>(
       operationFailed = true;
     }
     // Wait through failures too: queued queries and setup work must settle before attribution is restored.
-    const cleanupErrors = await drainCaptureWork(active.pending, state.setupTasks);
-    const elapsedMs = performance.now() - operationStartedAt;
-    const failures: unknown[] = [];
-    const addFailure = (error: unknown): void => {
-      if (!failures.includes(error)) failures.push(error);
-    };
-    if (operationFailed) addFailure(operationError);
-    if (state.setupError) addFailure(state.setupError);
-    if (active.error) addFailure(active.error);
-    for (const error of cleanupErrors) addFailure(error);
-    if (failures.length === 1) throw failures[0];
-    if (failures.length > 1)
-      throw new AggregateError(failures, 'Growth capture failed while pending work was settling', {
-        cause: failures[0],
-      });
-    for (const record of active.statementRecords) {
-      if (!record.requiresNativePlan || record.errorCode !== null) continue;
-      const side = record.background ? 'background' : 'foreground';
-      const hasPlan = active.costFolder
-        ? active.costFolder.hasNativePlan(side, record.index)
-        : (record.background ? active.backgroundPlanStatements : active.planStatements).includes(record.index);
-      if (!hasPlan)
-        throw new Error(
-          `Successful ${record.background ? 'background ' : ''}${record.text.split(/\s+/, 1)[0]} occurrence ${record.index} has no native plan: ${record.text.slice(0, 600)}; preceding occurrences: ${JSON.stringify(
-            active.statementRecords
-              .filter((statement) => statement.background === record.background && statement.index <= record.index)
-              .slice(-8)
-              .map((statement) => ({ index: statement.index, text: statement.text.slice(0, 180) })),
-          )}`,
-        );
+    let drained = { errors: [] as readonly unknown[], omittedErrors: 0 };
+    let drainFailure: unknown;
+    try {
+      drained = await drainCaptureWork(active.pending, state.setupTasks);
+    } catch (error) {
+      drainFailure = error;
     }
-    const run = measuredRun.getStore();
-    if (run && !active.costFolder) {
-      for (const [plans, databaseNames, collection] of [
-        [active.plans, active.planDatabases, 'plans'],
-        [active.backgroundPlans, active.backgroundPlanDatabases, 'backgroundPlans'],
-      ] as const) {
-        for (let index = 0; index < plans.length; index++) {
-          const physical = databaseNames[index] || databaseName(database);
-          const target = databaseForName(database, physical);
-          const relations = run.get(target) ?? new Map<string, RelationIdentity>();
-          run.databases.add(target);
-          const discovered = new Map<string, RelationIdentity>();
-          collectModifyTargets(plans[index], discovered, `${collection}[${index}]`);
-          for (const identity of discovered.values())
-            addRelationIdentity(relations, { ...identity, database: physical });
-          if (relations.size > 0) run.set(target, relations);
-        }
+    let nestedDrained = { errors: [] as readonly unknown[], omittedErrors: 0 };
+    let nestedDrainFailure: unknown;
+    try {
+      nestedDrained = await drainCaptureTasks(active.nestedCaptureWork);
+    } catch (error) {
+      nestedDrainFailure = error;
+    }
+    const elapsedMs = performance.now() - operationStartedAt;
+    const failures: Readonly<{ phase: string; value: unknown }>[] = [];
+    const addFailure = (phase: string, error: unknown): void => {
+      if (!failures.some(({ value }) => Object.is(value, error))) failures.push({ phase, value: error });
+    };
+    if (operationFailed) addFailure('operation', operationError);
+    if (state.setupFailed) addFailure('capture-setup', state.setupError);
+    if (active.error) {
+      const cause = (active.error as Error & { readonly cause?: unknown }).cause;
+      if (cause === undefined) addFailure('capture-retention', active.error);
+      else {
+        addFailure('capture-retention', cause);
+        addFailure('capture-context', active.error);
       }
     }
+    for (const error of drained.errors) addFailure('pending-drain', error);
+    if (drainFailure !== undefined) addFailure('pending-drain', drainFailure);
+    for (const error of nestedDrained.errors) addFailure('nested-capture', error);
+    if (nestedDrainFailure !== undefined) addFailure('nested-capture-drain', nestedDrainFailure);
+    if (failures.length > 0) {
+      const [first, ...allSecondary] = failures;
+      const secondary = allSecondary.slice(0, GROWTH_FAILURE_CAUSE_LIMIT);
+      const omittedCauses = Math.max(0, allSecondary.length - secondary.length);
+      const { native, omissions } = makeCaptureFailureDiagnostic(
+        active,
+        elapsedMs,
+        first!.value,
+        secondary,
+        drained.omittedErrors + nestedDrained.omittedErrors + omittedCauses,
+      );
+      recordGrowthFailureEvidence(first!.value, {
+        phase: first!.phase,
+        secondary,
+        native,
+        omissions,
+      });
+      throw first!.value;
+    }
+    if (collectMissingPlans(active) > 0) {
+      const record = active.statementRecords.find(
+        (statement) =>
+          statement.requiresNativePlan &&
+          statement.errorCode === null &&
+          !(active.costFolder
+            ? active.costFolder.hasNativePlan(statement.background ? 'background' : 'foreground', statement.index)
+            : (statement.background ? active.backgroundPlanStatements : active.planStatements).includes(
+                statement.index,
+              )),
+      )!;
+      const error = new Error(
+        `Successful ${record.background ? 'background ' : ''}${record.text.split(/\s+/, 1)[0]} occurrence ${record.index} has no native plan: ${record.text.slice(0, 600)}; preceding occurrences: ${JSON.stringify(
+          active.statementRecords
+            .filter((statement) => statement.background === record.background && statement.index <= record.index)
+            .slice(-8)
+            .map((statement) => ({ index: statement.index, text: statement.text.slice(0, 180) })),
+        )}`,
+      );
+      const { native, omissions } = makeCaptureFailureDiagnostic(active, elapsedMs, error, [], 0);
+      recordGrowthFailureEvidence(error, { phase: 'capture-validation', native, omissions });
+      throw error;
+    }
+    const run = measuredRun.getStore();
     const foreground = active.statementRecords.filter(({ background }) => !background);
     const background = active.statementRecords.filter(({ background }) => background);
     if (run)
@@ -1223,61 +1755,54 @@ async function captureInternal<T>(
         run.backends.transactions.set(target, runTransactions);
       }
     if (active.costFolder) {
-      const foldedInput = {
-        elapsedMs,
-        statements: foreground.map<FoldedStatementInput>((record) => ({
-          text: record.text,
-          index: record.index,
-          backend: record.backend,
-          requestBytes: record.requestBytes,
-          responseBytes: record.responseBytes,
-          errorCode: record.errorCode,
-          errorMessage: record.errorMessage,
-        })),
-        backgroundStatements: background.map<FoldedStatementInput>((record) => ({
-          text: record.text,
-          index: record.index,
-          backend: record.backend,
-          requestBytes: record.requestBytes,
-          responseBytes: record.responseBytes,
-          errorCode: record.errorCode,
-          errorMessage: record.errorMessage,
-        })),
-        includeBackends: active.includeBackends,
-      };
-      return { value, capture: active.costFolder.finish(foldedInput) };
+      const capture = active.costFolder.finish(foldedInputFor(active, elapsedMs));
+      retainRunNativeCapture(active, capture);
+      active.budget.releaseFailureContextReserve();
+      return { value, capture };
     }
+    const capture: Capture = {
+      statements: foreground.map(({ text }) => text),
+      elapsedMs,
+      requestBytes: foreground.map(({ requestBytes }) => requestBytes),
+      responseBytes: foreground.map(({ responseBytes }) => responseBytes),
+      plans: active.plans,
+      planStatements: active.planStatements,
+      statementErrors: foreground.map(({ errorCode }) => errorCode),
+      statementErrorMessages: foreground.map(({ errorMessage }) => errorMessage),
+      planDatabases: active.planDatabases,
+      ...(active.includeBackends
+        ? { statementBackends: foreground.map(({ backend }) => backend), planBackends: active.planBackends }
+        : {}),
+      backgroundStatements: background.map(({ text }) => text),
+      backgroundRequestBytes: background.map(({ requestBytes }) => requestBytes),
+      backgroundResponseBytes: background.map(({ responseBytes }) => responseBytes),
+      backgroundPlans: active.backgroundPlans,
+      backgroundPlanDatabases: active.backgroundPlanDatabases,
+      backgroundPlanStatements: active.backgroundPlanStatements,
+      backgroundStatementErrors: background.map(({ errorCode }) => errorCode),
+      backgroundStatementErrorMessages: background.map(({ errorMessage }) => errorMessage),
+      ...(active.includeBackends
+        ? {
+            backgroundStatementBackends: background.map(({ backend }) => backend),
+            backgroundPlanBackends: active.backgroundPlanBackends,
+          }
+        : {}),
+    };
+    retainRunNativeCapture(active, capture);
+    active.budget.releaseFailureContextReserve();
     return {
       value,
-      capture: {
-        statements: foreground.map(({ text }) => text),
-        elapsedMs,
-        requestBytes: foreground.map(({ requestBytes }) => requestBytes),
-        responseBytes: foreground.map(({ responseBytes }) => responseBytes),
-        plans: active.plans,
-        planStatements: active.planStatements,
-        statementErrors: foreground.map(({ errorCode }) => errorCode),
-        statementErrorMessages: foreground.map(({ errorMessage }) => errorMessage),
-        planDatabases: active.planDatabases,
-        ...(active.includeBackends
-          ? { statementBackends: foreground.map(({ backend }) => backend), planBackends: active.planBackends }
-          : {}),
-        backgroundStatements: background.map(({ text }) => text),
-        backgroundRequestBytes: background.map(({ requestBytes }) => requestBytes),
-        backgroundResponseBytes: background.map(({ responseBytes }) => responseBytes),
-        backgroundPlans: active.backgroundPlans,
-        backgroundPlanDatabases: active.backgroundPlanDatabases,
-        backgroundPlanStatements: active.backgroundPlanStatements,
-        backgroundStatementErrors: background.map(({ errorCode }) => errorCode),
-        backgroundStatementErrorMessages: background.map(({ errorMessage }) => errorMessage),
-        ...(active.includeBackends
-          ? {
-              backgroundStatementBackends: background.map(({ backend }) => backend),
-              backgroundPlanBackends: active.backgroundPlanBackends,
-            }
-          : {}),
-      },
+      capture,
     };
+  } catch (error) {
+    let diagnostic = growthFailureEvidence(error);
+    if (!diagnostic) {
+      const elapsedMs = 0;
+      const { native, omissions } = makeCaptureFailureDiagnostic(active, elapsedMs, error, [], 0);
+      diagnostic = recordGrowthFailureEvidence(error, { phase: 'capture-finalization', native, omissions });
+    }
+    retainRunFailedCapture(active, diagnostic.phase, diagnostic.native, diagnostic.omissions);
+    throw error;
   } finally {
     state.active = parentActive;
     liveCaptures.delete(active);
@@ -1285,9 +1810,49 @@ async function captureInternal<T>(
   }
 }
 
+/** Keeps failed nested capture evidence available to the enclosing operation under the run cap. */
+function retainRunFailedCapture(
+  active: ActiveCapture,
+  phase: string,
+  native: unknown,
+  omissions: Readonly<Record<string, number | string>> | undefined,
+): void {
+  const run = active.run;
+  if (!run) return;
+  const entryCost = Math.max(1, active.budget.entriesUsed);
+  const byteCost = Math.max(256, active.budget.chargedBytes);
+  const withinRunBudget =
+    run.nativeCaptures.length < MAX_GROWTH_RUN_NATIVE_CAPTURES &&
+    run.nativeCaptureEntries + entryCost + 1 <=
+      MAX_GROWTH_CAPTURE_ENTRIES - MAX_GROWTH_RUN_NATIVE_CAPTURES - RUN_FAILURE_CONTEXT_ENTRIES &&
+    run.nativeCaptureBytes + byteCost + RUN_NATIVE_CAPTURE_DESCRIPTOR_BYTES <=
+      MAX_GROWTH_CAPTURE_BYTES -
+        MAX_GROWTH_RUN_NATIVE_CAPTURES * RUN_NATIVE_CAPTURE_DESCRIPTOR_BYTES -
+        RUN_FAILURE_CONTEXT_BYTES;
+  if (!withinRunBudget) {
+    run.omittedNativeCaptures++;
+    return;
+  }
+  try {
+    active.budget.retainFailureContext(RUN_NATIVE_CAPTURE_DESCRIPTOR_BYTES);
+    run.nativeCaptures.push({
+      status: 'failed',
+      phase,
+      mode: active.costFolder ? 'cost-folded' : 'raw',
+      database: databaseName(active.database),
+      native,
+      omissions: omissions ?? {},
+    });
+    run.nativeCaptureEntries += entryCost + 1;
+    run.nativeCaptureBytes += byteCost + RUN_NATIVE_CAPTURE_DESCRIPTOR_BYTES;
+  } catch {
+    run.omittedNativeCaptures++;
+  }
+}
+
 /** Runs an explicitly owned unmeasured capture; nested captures inherit that custody. Used for warm-up and prepare. */
 export function captureWarmup<T>(database: GrowthDatabase, operation: () => Promise<T>) {
-  return captureInternal(database, operation, { includeBackends: true }, true, 'raw');
+  return trackCaptureTask(captureInternal(database, operation, { includeBackends: true }, true, 'raw'));
 }
 
 function databaseName(database: GrowthDatabase): string {
@@ -1329,19 +1894,76 @@ export function captureMeasuredRun<T>(operation: () => Promise<T>): Promise<{
   databases: ReadonlySet<GrowthDatabase>;
   backends: ReadonlySet<number>;
   transactions: ReadonlyMap<GrowthDatabase, ReadonlyMap<number, number>>;
+  nativeCaptures: readonly RunNativeCapture[];
+  omittedNativeCaptures: number;
 }> {
   const writes = new Map() as RunCapture;
   Object.defineProperty(writes, 'databases', { value: new Set<GrowthDatabase>() });
   const backends = new Set<number>() as BackendSet;
   Object.defineProperty(backends, 'transactions', { value: new Map<GrowthDatabase, Map<number, number>>() });
   Object.defineProperty(writes, 'backends', { value: backends });
-  return measuredRun.run(writes, async () => ({
-    value: await operation(),
-    writes,
-    databases: writes.databases,
-    backends: writes.backends,
-    transactions: writes.backends.transactions,
-  }));
+  Object.defineProperties(writes, {
+    nativeCaptures: { value: [] as RunNativeCapture[] },
+    nativeCaptureEntries: { value: 0, writable: true },
+    nativeCaptureBytes: { value: 0, writable: true },
+    omittedNativeCaptures: { value: 0, writable: true },
+    failureContextAccounted: { value: false, writable: true },
+    captureWork: { value: captureTaskTracker() },
+  });
+  return measuredRun.run(writes, async () => {
+    let value!: T;
+    let operationError: unknown;
+    let operationFailed = false;
+    try {
+      value = await operation();
+    } catch (error) {
+      operationError = error;
+      operationFailed = true;
+    }
+    let drained = { errors: [] as readonly unknown[], omittedErrors: 0 };
+    let drainFailure: unknown;
+    try {
+      drained = await drainCaptureTasks(writes.captureWork);
+    } catch (error) {
+      drainFailure = error;
+    }
+    accountRunFailureContext(writes);
+    const failures: Array<Readonly<{ phase: string; value: unknown }>> = [];
+    const addFailure = (phase: string, error: unknown): void => {
+      if (!failures.some(({ value }) => Object.is(value, error))) failures.push({ phase, value: error });
+    };
+    if (operationFailed) addFailure(growthFailureEvidence(operationError)?.phase ?? 'measured-run', operationError);
+    for (const error of drained.errors) addFailure('pending-capture', error);
+    if (drainFailure !== undefined) addFailure('pending-capture-drain', drainFailure);
+    if (failures.length > 0) {
+      const [first, ...allSecondary] = failures;
+      const secondary = allSecondary.slice(0, GROWTH_FAILURE_CAUSE_LIMIT);
+      const previous = growthFailureEvidence(first!.value);
+      recordGrowthFailureEvidence(first!.value, {
+        phase: first!.phase,
+        secondary,
+        native: {
+          mode: 'measured-run',
+          ...(previous?.native === undefined ? {} : { failedCapture: previous.native }),
+          ...captureRunSummary(writes),
+        },
+        omissions: {
+          pendingCaptures: drained.omittedErrors + Math.max(0, allSecondary.length - secondary.length),
+          nativeCaptures: writes.omittedNativeCaptures,
+        },
+      });
+      throw first!.value;
+    }
+    return {
+      value,
+      writes,
+      databases: writes.databases,
+      backends: writes.backends,
+      transactions: writes.backends.transactions,
+      nativeCaptures: writes.nativeCaptures,
+      omittedNativeCaptures: writes.omittedNativeCaptures,
+    };
+  });
 }
 
 type GrowthSettleErrorOptions = ErrorOptions & {
@@ -1793,20 +2415,41 @@ export async function trackGrow<T>(
       growError = error;
       growFailed = true;
     }
-    const cleanupErrors = await drainCaptureWork(state.seedingPending, state.setupTasks);
-    const failures: unknown[] = [];
-    const addFailure = (error: unknown): void => {
-      if (!failures.includes(error)) failures.push(error);
+    let drained = { errors: [] as readonly unknown[], omittedErrors: 0 };
+    let drainFailure: unknown;
+    try {
+      drained = await drainCaptureWork(state.seedingPending, state.setupTasks);
+    } catch (error) {
+      drainFailure = error;
+    }
+    const failures: Array<Readonly<{ phase: string; value: unknown }>> = [];
+    const addFailure = (phase: string, error: unknown): void => {
+      if (!failures.some(({ value }) => Object.is(value, error))) failures.push({ phase, value: error });
     };
-    if (growFailed) addFailure(growError);
-    if (state.setupError) addFailure(state.setupError);
-    for (const error of cleanupErrors) addFailure(error);
+    if (growFailed) addFailure('grow', growError);
+    if (state.setupFailed) addFailure('growth-setup', state.setupError);
+    for (const error of drained.errors) addFailure('pending-drain', error);
+    if (drainFailure !== undefined) addFailure('pending-drain', drainFailure);
     const counted = { statements: seeding.statements, rowsWritten: seeding.rowsWritten };
-    if (failures.length === 1) throw failures[0];
-    if (failures.length > 1)
-      throw new AggregateError(failures, 'Growth seeding failed while pending work was settling', {
-        cause: failures[0],
+    if (failures.length > 0) {
+      const [first, ...secondary] = failures;
+      recordGrowthFailureEvidence(first!.value, {
+        phase: first!.phase,
+        secondary: secondary.slice(0, GROWTH_FAILURE_CAUSE_LIMIT),
+        native: {
+          mode: 'growth-seeding',
+          database: databaseName(database),
+          observed: counted,
+          costAvailability: 'grow-phase accounting retains statement and written-row counts without native plans',
+        },
+        omissions: {
+          pendingCauses: drained.omittedErrors + Math.max(0, secondary.length - GROWTH_FAILURE_CAUSE_LIMIT),
+          seedingStatements: seeding.statements,
+          rowsWritten: seeding.rowsWritten,
+        },
       });
+      throw first!.value;
+    }
     return { value, seeding: counted };
   } finally {
     state.seeding = undefined;

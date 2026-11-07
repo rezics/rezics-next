@@ -5,12 +5,14 @@ import { join } from 'node:path';
 import { withConnection } from '../../src/database/pool.ts';
 import {
   checkGrowth,
+  growthFailureEvidence,
   openGrowthDatabase,
   seed,
   type GrowthCheck,
   type GrowthDatabase,
   type Population,
 } from './growth.ts';
+import { readGrowthProfiles } from './growth-profile-read.ts';
 
 const databaseUrl = process.env.DATABASE_URL;
 if (!databaseUrl) throw new Error('DATABASE_URL must name the migrated test database');
@@ -103,6 +105,9 @@ test("checkGrowth reports each scale's seeding cost and appends it to the growth
   );
 
   // One bulk batch is BEGIN, INSERT and COMMIT through admin; each written ordinal is one INSERT through the pool.
+  expect(report.verdicts.rows.outcome).toBe('compatible');
+  expect(report.verdicts.blocks.outcome).toBe('compatible');
+  expect(report.verdicts.statements.outcome).toBe('compatible');
   const expected = [1, 7, 56].map((added) => ({
     statements: 3 + added * writesPerScale,
     rowsWritten: added * (bulkPerScale + writesPerScale),
@@ -160,6 +165,170 @@ test('a profile that cannot be written warns once and never fails a check', asyn
     expect(warn).toHaveBeenCalledTimes(1);
   } finally {
     warn.mockRestore();
+  }
+}, 60_000);
+
+test('a failed check exports incomplete native evidence and keeps export failure secondary', async () => {
+  const database = db!;
+  const primary = new Error('verification failed after native capture');
+  const destination = join(directory, 'failed.jsonl');
+  let thrown: unknown;
+  try {
+    await withProfile(destination, () =>
+      checkGrowth(database, {
+        name: 'failed profile diagnostic',
+        bounds,
+        repetitions: 1,
+        grow: async () => {},
+        warmup: async () => {},
+        operation,
+        verify: async () => {
+          throw primary;
+        },
+      }),
+    );
+  } catch (error) {
+    thrown = error;
+  }
+
+  expect(thrown).toBe(primary);
+  const evidence = growthFailureEvidence(thrown);
+  expect(evidence).toMatchObject({
+    kind: 'growth-failure-diagnostic',
+    status: 'incomplete',
+    phase: 'verification',
+    check: 'failed profile diagnostic',
+    primary: { value: primary },
+  });
+  expect((evidence?.native as { nativeCaptures: readonly unknown[] }).nativeCaptures.length).toBeGreaterThan(0);
+
+  const lines = (await readFile(destination, 'utf8')).split('\n').filter(Boolean);
+  expect(lines).toHaveLength(1);
+  expect(JSON.parse(lines[0]!)).toMatchObject({
+    kind: 'growth-failure-diagnostic',
+    status: 'incomplete',
+    phase: 'verification',
+    check: 'failed profile diagnostic',
+  });
+  const read = readGrowthProfiles([{ name: 'failed-check-run', text: lines[0]! }]);
+  expect(read.entries).toEqual([]);
+  expect(read.series.rows).toEqual([]);
+  expect(read.diagnostics).toMatchObject([{ run: 'failed-check-run', phase: 'verification', scale: 1, repetition: 1 }]);
+
+  const exportPrimary = new Error('verification failed before profile could be written');
+  const missingDestination = join(directory, 'missing', 'failed.jsonl');
+  thrown = undefined;
+  try {
+    await withProfile(missingDestination, () =>
+      checkGrowth(database, {
+        name: 'failed profile export',
+        bounds,
+        repetitions: 1,
+        grow: async () => {},
+        warmup: async () => {},
+        operation,
+        verify: async () => {
+          throw exportPrimary;
+        },
+      }),
+    );
+  } catch (error) {
+    thrown = error;
+  }
+
+  expect(thrown).toBe(exportPrimary);
+  const failedExportEvidence = growthFailureEvidence(thrown);
+  expect(failedExportEvidence?.secondary).toContainEqual(
+    expect.objectContaining({
+      phase: 'profile-export',
+      value: expect.objectContaining({ name: 'GrowthProfileExportError' }),
+    }),
+  );
+}, 60_000);
+
+test('hostile error accessors keep the original raw and folded failure in profile diagnostics', async () => {
+  const database = db!;
+  const query = 'SELECT 719 AS hostile_error_summary';
+
+  for (const captureMode of ['raw', 'cost-folded'] as const) {
+    const destination = join(directory, `hostile-${captureMode}.jsonl`);
+    const primary = new Error('summary is unavailable');
+    const accessorFailure = new Error('hostile summary accessor');
+    Object.defineProperties(primary, {
+      name: {
+        configurable: true,
+        get: () => {
+          throw accessorFailure;
+        },
+      },
+      message: {
+        configurable: true,
+        get: () => {
+          throw accessorFailure;
+        },
+      },
+      code: {
+        configurable: true,
+        get: () => {
+          throw accessorFailure;
+        },
+      },
+      sqlState: {
+        configurable: true,
+        get: () => {
+          throw accessorFailure;
+        },
+      },
+    });
+
+    let thrown: unknown;
+    try {
+      await withProfile(destination, () =>
+        checkGrowth(database, {
+          name: `hostile error summary ${captureMode}`,
+          scales: [1, 8, 64],
+          repetitions: 1,
+          bounds,
+          captureMode,
+          grow: async () => {},
+          warmup: async () => {},
+          operation: async (growthDb) => {
+            await withConnection(growthDb.pool, (client) => client.query(query));
+            throw primary;
+          },
+        }),
+      );
+    } catch (error) {
+      thrown = error;
+    }
+
+    expect(thrown).toBe(primary);
+    const diagnostic = growthFailureEvidence(thrown);
+    expect(diagnostic).toMatchObject({
+      kind: 'growth-failure-diagnostic',
+      status: 'incomplete',
+      phase: 'operation',
+      scale: 1,
+      captureMode,
+      primary: {
+        value: primary,
+        omittedDescriptionFields: ['name', 'message', 'sqlstate'],
+      },
+    });
+    const lines = (await readFile(destination, 'utf8')).split('\n').filter(Boolean);
+    expect(lines).toHaveLength(1);
+    const record = JSON.parse(lines[0]!) as Record<string, unknown>;
+    expect(record).toMatchObject({
+      kind: 'growth-failure-diagnostic',
+      status: 'incomplete',
+      phase: 'operation',
+      captureMode,
+      cause: { omittedDescriptionFields: ['name', 'message', 'sqlstate'] },
+    });
+    expect(JSON.stringify(record)).toContain(query);
+    const imported = readGrowthProfiles([{ name: `hostile-${captureMode}`, text: lines[0]! }]);
+    expect(imported.entries).toEqual([]);
+    expect(imported.diagnostics).toMatchObject([{ phase: 'operation', scale: 1, captureMode }]);
   }
 }, 60_000);
 

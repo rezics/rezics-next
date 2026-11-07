@@ -29,7 +29,26 @@ test('drains failed work and tasks registered while draining', async () => {
   expect(complete).toBe(false);
 
   rejectLate(setupFailure);
-  expect(await drained).toEqual([queryFailure, setupFailure]);
+  expect(await drained).toEqual({ errors: [queryFailure, setupFailure], omittedErrors: 0 });
   expect(pendingQueries.size).toBe(0);
   expect(setupTasks.size).toBe(0);
+});
+
+test('settles every pending task while retaining only bounded secondary failures', async () => {
+  let settled = 0;
+  const pending = new Set<Promise<void>>(
+    Array.from({ length: 21 }, (_, index) =>
+      Promise.reject(new Error(`pending ${index}`)).finally(() => {
+        settled++;
+      }),
+    ),
+  );
+  const drained = await drainCaptureWork(pending);
+
+  expect(settled).toBe(21);
+  expect(drained.errors).toHaveLength(16);
+  expect(drained.omittedErrors).toBe(5);
+  expect(pending.size).toBe(0);
+  expect(drained.errors[0]).toMatchObject({ message: 'pending 0' });
+  expect(drained.errors.at(-1)).toMatchObject({ message: 'pending 15' });
 });

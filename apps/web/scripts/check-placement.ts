@@ -2,7 +2,8 @@ import { spawn, spawnSync } from 'node:child_process';
 import { existsSync, lstatSync, readFileSync, realpathSync } from 'node:fs';
 import { constants } from 'node:os';
 import { dirname, isAbsolute, join, relative, resolve, sep } from 'node:path';
-import { hostsLocation, mainCheckout, onCheckHost, type StackRun } from '../../../scripts/stack-run.ts';
+import { hostsLocation, mainCheckout, type StackRun } from '../../../scripts/stack-run.ts';
+import { hasWebCheckCustody, requireWebCheckCustody } from './web-check-custody.ts';
 import {
   createWebCheckPrivateFiles,
   disposeWebCheckEnvironmentInput,
@@ -39,26 +40,7 @@ export function workspacePath(workspace: string, path: string): string {
   return inside.split(sep).join('/');
 }
 
-/** Actual run location, never a remote/slot/memory environment marker. */
-export function hasWebCheckCustody(workspace = root, cwd = workspace): boolean {
-  const physicalRoot = realpathSync(workspace);
-  const physicalCwd = realpathSync(cwd);
-  const inside = relative(physicalRoot, physicalCwd);
-  return (
-    onCheckHost(physicalRoot) &&
-    onCheckHost(physicalCwd) &&
-    inside !== '..' &&
-    !inside.startsWith(`..${sep}`) &&
-    !isAbsolute(inside)
-  );
-}
-
-export function requireWebCheckCustody(workspace = root, cwd = workspace): void {
-  if (!hasWebCheckCustody(workspace, cwd))
-    throw new Error(
-      'Web check unavailable: this callable browser/check worker requires an actual remote run directory; use its routed script entrypoint.',
-    );
-}
+export { hasWebCheckCustody, requireWebCheckCustody };
 
 // Transport controls belong to the driver, not the native command's semantic overlay. Every inherited
 // KERNEL_CHECK_ name is omitted, including KERNEL_CHECK_AFFECTED.

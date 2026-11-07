@@ -12,7 +12,14 @@ import {
 } from './growth-capture.ts';
 import { quotedRelationIdentity } from './growth-relation-identity.ts';
 import type { Capture } from './growth-cost.ts';
-import { captureWithFoldedCost, checkGrowth, costOf, statementAttributions, statementOccurrences } from './growth.ts';
+import {
+  captureWithFoldedCost,
+  checkGrowth,
+  costOf,
+  growthFailureEvidence,
+  statementAttributions,
+  statementOccurrences,
+} from './growth.ts';
 
 const databaseUrl = process.env.DATABASE_URL;
 if (!databaseUrl) throw new Error('DATABASE_URL must name the migrated test database');
@@ -110,6 +117,218 @@ afterAll(async () => {
   if (!db || dbClosed) return;
   await db.admin.query('DROP SCHEMA IF EXISTS growth_capture_test CASCADE');
   await db.close();
+});
+
+test('raw and folded captures keep native statement, SQLSTATE and plan ownership after operation throws', async () => {
+  const database = db!;
+  const primary = 'operation sentinel';
+  const failedSql = 'SELECT * FROM growth_capture_test.missing_for_failure_evidence';
+  const succeededSql = 'SELECT 712 AS evidence';
+  const databaseName = new URL(database.url).pathname.slice(1);
+
+  for (const mode of ['raw', 'cost-folded'] as const) {
+    let thrown: unknown;
+    try {
+      const operation = () =>
+        withConnection(database.pool, async (client) => {
+          try {
+            await client.query(failedSql);
+          } catch (error) {
+            expect(error).toMatchObject({ code: '42P01' });
+          }
+          await client.query(succeededSql);
+          throw primary;
+        });
+      if (mode === 'raw') await capture(database, operation, { includeBackends: true });
+      else await captureWithFoldedCost(database, operation, { includeBackends: true });
+    } catch (error) {
+      thrown = error;
+    }
+
+    expect(thrown).toBe(primary);
+    const evidence = growthFailureEvidence(thrown);
+    expect(evidence).toMatchObject({ kind: 'growth-failure-diagnostic', status: 'incomplete', phase: 'operation' });
+    expect(evidence?.primary.value).toBe(primary);
+    const native = evidence?.native as {
+      mode: string;
+      statements: readonly {
+        text: string;
+        index: number;
+        background: boolean;
+        backend: number | undefined;
+        database: string;
+        errorCode: string | null;
+      }[];
+      foregroundPlanStatements: readonly (number | undefined)[];
+      foregroundPlanBackends: readonly (number | undefined)[];
+      foregroundPlanDatabases: readonly string[];
+      foldedCapture?: {
+        planNotices: readonly { owner: number | undefined; backend: number | undefined; database: string }[];
+      };
+    };
+    expect(native.mode).toBe(mode);
+    expect(native.statements[0]).toMatchObject({
+      text: failedSql,
+      index: 0,
+      background: false,
+      database: databaseName,
+      errorCode: '42P01',
+    });
+    expect(native.statements[1]).toMatchObject({
+      text: succeededSql,
+      index: 1,
+      background: false,
+      database: databaseName,
+      errorCode: null,
+    });
+    expect(native.statements[0]!.backend).toEqual(expect.any(Number));
+    if (mode === 'raw') {
+      expect(native.foregroundPlanStatements).toContain(1);
+      expect(native.foregroundPlanBackends[0]).toEqual(expect.any(Number));
+      expect(native.foregroundPlanDatabases).toContain(databaseName);
+    } else {
+      expect(native.foldedCapture?.planNotices).toContainEqual(
+        expect.objectContaining({ owner: 1, database: databaseName, backend: expect.any(Number) }),
+      );
+    }
+  }
+});
+
+test('a primary failure waits for an independent failed background query and keeps its SQLSTATE', async () => {
+  const database = db!;
+  const primary = new Error('foreground operation failed');
+  const backgroundSql = 'SELECT * FROM growth_capture_test.pending_background_missing';
+  const backgroundPool = database.openPool({ max: 1 });
+  let startBackground!: () => void;
+  const backgroundStart = new Promise<void>((resolve) => (startBackground = resolve));
+  const backgroundWork = (async () => {
+    await backgroundStart;
+    try {
+      await backgroundPool.query(backgroundSql);
+    } catch (error) {
+      return error;
+    }
+    return undefined;
+  })();
+  let thrown: unknown;
+  try {
+    await capture(database, async () => {
+      startBackground();
+      await withConnection(database.pool, (client) => client.query('SELECT 717 AS foreground_pending'));
+      throw primary;
+    });
+  } catch (error) {
+    thrown = error;
+  }
+
+  const backgroundFailure = await backgroundWork;
+  expect(thrown).toBe(primary);
+  expect(backgroundFailure).toMatchObject({ code: '42P01' });
+  const evidence = growthFailureEvidence(thrown);
+  const native = evidence?.native as {
+    statements: readonly { text: string; background: boolean; database: string; errorCode: string | null }[];
+  };
+  expect(native.statements).toContainEqual(
+    expect.objectContaining({
+      text: backgroundSql,
+      background: true,
+      database: new URL(database.url).pathname.slice(1),
+      errorCode: '42P01',
+    }),
+  );
+});
+
+test('capture retention cleanup remains secondary to the initiating operation failure', async () => {
+  const database = db!;
+  const primary = new Error('operation failed after a capacity cleanup error');
+  let thrown: unknown;
+  try {
+    await capture(
+      database,
+      async () => {
+        await withConnection(database.pool, (client) => client.query('SELECT 718 AS capacity_cleanup'));
+        throw primary;
+      },
+      { telemetryLimits: { entries: 1 } },
+    );
+  } catch (error) {
+    thrown = error;
+  }
+
+  expect(thrown).toBe(primary);
+  const evidence = growthFailureEvidence(thrown);
+  expect(evidence?.primary.value).toBe(primary);
+  expect(evidence?.secondary).toContainEqual(
+    expect.objectContaining({ phase: 'capture-retention', name: 'GrowthCaptureBudgetExceededError' }),
+  );
+  expect(evidence?.omissions?.statements).toBeGreaterThan(0);
+});
+
+test('checkGrowth preserves phase and scale for warmup and preparation failures', async () => {
+  const database = db!;
+  const bounds = { rows: 'constant', blocks: 'constant', statements: 'constant' } as const;
+  const cases = [
+    {
+      name: 'warmup evidence failure',
+      phase: 'warmup',
+      repetition: 0,
+      hook: 'warmup' as const,
+      query: 'SELECT 713 AS warmup_evidence',
+    },
+    {
+      name: 'prepare evidence failure',
+      phase: 'prepare',
+      repetition: 1,
+      hook: 'prepare' as const,
+      query: 'SELECT 714 AS prepare_evidence',
+    },
+  ];
+
+  for (const entry of cases) {
+    const primary = new Error(`${entry.phase} sentinel`);
+    const failAfterRead = async () => {
+      await withConnection(database.pool, (client) => client.query(entry.query));
+      throw primary;
+    };
+    let thrown: unknown;
+    try {
+      await checkGrowth(database, {
+        name: entry.name,
+        scales: [1, 8, 64],
+        repetitions: 1,
+        warmups: 1,
+        bounds,
+        grow: async () => {},
+        operation: async () => withConnection(database.pool, (client) => client.query('SELECT 715 AS operation')),
+        ...(entry.hook === 'warmup' ? { warmup: failAfterRead } : { prepare: failAfterRead }),
+      });
+    } catch (error) {
+      thrown = error;
+    }
+
+    expect(thrown).toBe(primary);
+    const evidence = growthFailureEvidence(thrown);
+    expect(evidence).toMatchObject({
+      status: 'incomplete',
+      phase: entry.phase,
+      file: expect.stringContaining('growth-capture.test.ts'),
+      check: entry.name,
+      scale: 1,
+      repetition: entry.repetition,
+      captureMode: 'raw',
+      primary: { value: primary },
+    });
+    const native = evidence?.native as {
+      statements: readonly { text: string; index: number; database: string; backend?: number }[];
+      foregroundPlans: readonly unknown[];
+      foregroundPlanStatements: readonly (number | undefined)[];
+    };
+    expect(native.statements).toContainEqual(
+      expect.objectContaining({ text: entry.query, index: 0, database: new URL(database.url).pathname.slice(1) }),
+    );
+    expect(native.foregroundPlans.length).toBeGreaterThan(0);
+    expect(native.foregroundPlanStatements).toContain(0);
+  }
 });
 
 test('captures each application statement and its executed plan from the production pool', async () => {
@@ -443,6 +662,9 @@ test('checkGrowth uses the folded capture path for reports and scalar verdicts',
   const report = await checkGrowth(database, check);
 
   expect(report.samples).toHaveLength(3);
+  expect(report.verdicts.rows.outcome).toBe('compatible');
+  expect(report.verdicts.blocks.outcome).toBe('compatible');
+  expect(report.verdicts.statements.outcome).toBe('compatible');
   expect(report.samples[0]!.repetitions[0]).toMatchObject({ statements: 1 });
   expect(report.samples[0]!.occurrenceRepetitions[0]!.statements[0]).toMatchObject({
     statement: 'SELECT 1 AS value',
@@ -794,6 +1016,163 @@ test('separate databases keep foreground, background, error, backend, plan and b
     expect(statementOccurrences(other.capture).statements).toMatchObject([
       { index: 0, backend: other.capture.statementBackends![0], error: null, plans: [0] },
     ]);
+  } finally {
+    await secondary?.close();
+    await database.admin.query(`DROP DATABASE "${secondaryName}"`);
+  }
+});
+
+test('checkGrowth retains native transaction state when closure validation fails after capture', async () => {
+  const database = db!;
+  const heldPool = database.openPool({ max: 1 });
+  let thrown: unknown;
+  try {
+    await checkGrowth(database, {
+      name: 'open transaction evidence',
+      scales: [1, 8, 64],
+      repetitions: 1,
+      warmups: 1,
+      bounds: { rows: 'constant', blocks: 'constant', statements: 'constant' },
+      grow: async () => {},
+      warmup: async () => {},
+      operation: async () =>
+        withConnection(heldPool, async (client) => {
+          await client.query('BEGIN');
+          await client.query('SELECT 716 AS open_transaction_evidence');
+        }),
+    });
+  } catch (error) {
+    thrown = error;
+  }
+
+  try {
+    expect(thrown).toMatchObject({
+      name: 'GrowthSettleInfrastructureError',
+      kind: 'measured-transaction',
+      message: expect.stringContaining('keeps a transaction open'),
+    });
+    const evidence = growthFailureEvidence(thrown);
+    expect(evidence).toMatchObject({
+      status: 'incomplete',
+      phase: 'transaction-closure',
+      check: 'open transaction evidence',
+      scale: 1,
+      repetition: 1,
+    });
+    const native = evidence?.native as {
+      nativeCaptures: readonly {
+        statements?: readonly { text: string }[];
+        transactionStates?: readonly { state: string; backend: number; database: string }[];
+      }[];
+    };
+    const captureEvidence = native.nativeCaptures.find((item) =>
+      item.statements?.some(({ text }) => text === 'SELECT 716 AS open_transaction_evidence'),
+    )!;
+    expect(captureEvidence.transactionStates).toContainEqual(
+      expect.objectContaining({
+        state: 'open',
+        database: new URL(database.url).pathname.slice(1),
+        backend: expect.any(Number),
+      }),
+    );
+  } finally {
+    await withConnection(heldPool, (client) => client.query('ROLLBACK'));
+  }
+});
+
+test('checkGrowth keeps completed foreground, background and nested-database evidence when verification fails', async () => {
+  const database = db!;
+  const secondaryName = `growth_failure_${Bun.randomUUIDv7().replaceAll('-', '')}`;
+  await database.admin.query(`CREATE DATABASE "${secondaryName}"`);
+  let secondary: GrowthDatabase | undefined;
+  let backgroundPool: ReturnType<GrowthDatabase['openPool']> | undefined;
+  try {
+    const secondaryUrl = new URL(database.url);
+    secondaryUrl.pathname = `/${secondaryName}`;
+    secondary = await openGrowthDatabase(secondaryUrl.toString());
+    await secondary.admin.query('CREATE TABLE public.growth_failure_writes (id integer PRIMARY KEY)');
+
+    const primaryName = new URL(database.url).pathname.slice(1);
+    const primarySql = `SELECT current_database() AS database, 'foreground'::text AS marker`;
+    const backgroundSql = `SELECT current_database() AS database, 'background'::text AS marker`;
+    const secondarySql = 'INSERT INTO public.growth_failure_writes (id) VALUES (1)';
+    backgroundPool = database.openPool({ max: 1 });
+    let startBackground!: () => void;
+    const backgroundStart = new Promise<void>((resolve) => (startBackground = resolve));
+    const backgroundWork = (async () => {
+      await backgroundStart;
+      return backgroundPool!.query(backgroundSql);
+    })();
+    const primary = new Error('verification sentinel');
+    let thrown: unknown;
+    try {
+      await checkGrowth(database, {
+        name: 'failed verification evidence',
+        scales: [1, 8, 64],
+        repetitions: 1,
+        warmups: 1,
+        bounds: { rows: 'constant', blocks: 'constant', statements: 'constant' },
+        grow: async () => {},
+        warmup: async () => {},
+        operation: async () => {
+          startBackground();
+          await withConnection(database.pool, async (client) => {
+            await client.query('BEGIN');
+            await client.query(primarySql);
+            await client.query('COMMIT');
+          });
+          const nested = await capture(secondary!, () =>
+            withConnection(secondary!.pool, (client) => client.query(secondarySql)),
+          );
+          await backgroundWork;
+          return nested.value.rowCount;
+        },
+        verify: async () => {
+          throw primary;
+        },
+      });
+    } catch (error) {
+      thrown = error;
+    }
+
+    expect(thrown).toBe(primary);
+    const evidence = growthFailureEvidence(thrown);
+    expect(evidence).toMatchObject({
+      status: 'incomplete',
+      phase: 'verification',
+      check: 'failed verification evidence',
+      scale: 1,
+      repetition: 1,
+      primary: { value: primary },
+    });
+    const native = evidence?.native as {
+      nativeCaptures: readonly {
+        status: string;
+        database?: string;
+        statements?: readonly { text: string; background: boolean; database: string }[];
+        writes?: readonly { database?: string; name: string }[];
+        transactionStates?: readonly { database: string; state: string }[];
+      }[];
+    };
+    const primaryCapture = native.nativeCaptures.find(
+      (item) => item.database === primaryName && item.statements?.some(({ text }) => text === primarySql),
+    )!;
+    expect(primaryCapture.statements).toContainEqual(
+      expect.objectContaining({ text: primarySql, background: false, database: primaryName }),
+    );
+    expect(primaryCapture.statements).toContainEqual(
+      expect.objectContaining({ text: backgroundSql, background: true, database: primaryName }),
+    );
+    expect(primaryCapture.transactionStates).toContainEqual(
+      expect.objectContaining({ database: primaryName, state: 'closed' }),
+    );
+    const nestedCapture = native.nativeCaptures.find((item) => item.database === secondaryName)!;
+    expect(nestedCapture.statements).toContainEqual(
+      expect.objectContaining({ text: secondarySql, background: false, database: secondaryName }),
+    );
+    expect(nestedCapture.writes).toContainEqual(
+      expect.objectContaining({ database: secondaryName, name: 'growth_failure_writes' }),
+    );
   } finally {
     await secondary?.close();
     await database.admin.query(`DROP DATABASE "${secondaryName}"`);

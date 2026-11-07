@@ -3,6 +3,7 @@ import { createHash, randomUUID } from 'node:crypto';
 import { resourceAuthorization } from '../../../src/access/resource-authorization.ts';
 import { principalCommandIdentity, runCommand, type CommandTransaction } from '../../../src/command/command.ts';
 import { withConnection } from '../../../src/database/pool.ts';
+import { composeLibraryDomain } from '../../../src/composition/library.ts';
 import { partitionOf, routeOf } from '../../../src/route/route.ts';
 import type { WorkAllowance } from '../../../src/library/contract/work-dimensions.ts';
 import { createProfileEntryFixture } from './profile-entry-fixture.ts';
@@ -25,9 +26,14 @@ export const sourceAllowance = (keys = 100): WorkAllowance => ({
 export async function sourceRuntimeFixture() {
   const native = await createProfileEntryFixture();
   try {
+    composeLibraryDomain({ pool: native.pool, access: native.access });
     expect((await native.send('steward', 'POST', '/v1/platform/exposure/collections:open')).status).toBe(200);
+    expect((await native.send('steward', 'POST', '/v1/platform/exposure/reading_progress:open')).status).toBe(200);
     const owner = await native.identity([
       'subject:read',
+      'library_entry:read',
+      'progress_session:read',
+      'copy:read',
       'collection:create',
       'collection:read',
       'collection:update',
@@ -36,10 +42,16 @@ export async function sourceRuntimeFixture() {
     async function collection(visibility: 'private' | 'public' | 'unlisted' = 'public') {
       const response = await native.send(owner.bearer, 'POST', '/v1/collections', {
         title: 'Explicit source runtime',
-        visibility,
+        visibility: 'private',
+        membershipKind: 'dynamic',
+        rule: { filter: { owner: { presence: true } }, sort: 'id' },
       });
       expect(response.status).toBe(201);
       const id = (await response.json()).collection.id as string;
+      if (visibility !== 'private') {
+        const exposed = await native.send(owner.bearer, 'PATCH', '/v1/collections/' + id, { revision: 1, visibility });
+        expect(exposed.status).toBe(200);
+      }
       return { route: routeOf(id)!, collectionId: id };
     }
     async function command<T>(
