@@ -76,6 +76,29 @@ The landing command `bun test scripts/docs-check.test.ts services/auth/test/dev-
 The exact issuer-origin, native-port refusal, isolated-stack and native-JWKS-transport assertions passed. The SQL
 failure is a configured-stack dependency, not a changed JWKS assertion. No unrelated stack is started to hide it.
 
+The installed Members application/runtime is received through the named dev revision
+`863e5266e3ec973617a5c97e7f0d202817b36ff6`, including implementation
+`7b57f6bfe8f418d322db9a700861dec97a912982`. Its original intent and 64/512/4096 growth assertions remain required;
+source integration does not pass them. The merge also supplies its existing Library public-output dependencies.
+
+The native command
+`bun scripts/worker-check.ts -- bun run --cwd services/kernel check test/semantic/batch-write-diagnostics.test.ts test/semantic/bulk-no-effect.test.ts test/search/review-population-readiness.test.ts test/search/second-scope-generations.test.ts test/search/review-discovery-receiving.test.ts test/search/default-discovery.test.ts`
+ran on host b at walk revision `b97e6a3082f2dedfc188a913848b797513bac51c`, before the Members integration.
+It returned exit 1 after 1029.508 seconds. Batch-write diagnostics passed all 3 tests; review-population readiness
+passed all 3 tests. Collection coverage still failed with
+`DiscoveryProducerCoverageError: Discovery generation is not ready: native producer coverage is incomplete (missing kinds: collection)`
+(10 pass / 1 fail). Review receiving still failed with
+`RangeError: concurrency must be a positive integer below the pool size` (0 pass / 1 fail).
+Default-worker startup now exposes
+`TypeError: createIdentitySourceSupportReader is not a function. (In 'createIdentitySourceSupportReader(config)', 'createIdentitySourceSupportReader' is undefined)`
+at `search/identity-receiving-native.ts:136` during Semantic registration. Both complete discovery cases timed out;
+the runner reproduced the failure alone. Source/coverage and readiness retain their existing causes and unchanged
+assertions; these results were returned to Semantic with owned evidence
+`.temp/goal/checks/worker-check-28c4b0af-09aa-4ba9-8ede-3ba3bdd88c98-2026-11-07T09-58-00.894Z-9da9df64.log`.
+The proposal no-effect fixture stopped at `error: KERNEL_RECEIPT_KEYS is required` before its assertions. It now
+supplies the existing dedicated `testReceiptKeys()` capability, as the ordinary bulk fixture does; no assertion is
+removed or weakened. Native check time is not a six-path journey duration.
+
 ### Last observed dev census
 
 Observed walk revision: `93eb7908d8e983998d4b280ea275b131aaa444a1` (origin/dev `b94d47ff56` including startup

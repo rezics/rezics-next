@@ -29,6 +29,7 @@ import {
   sourceTuple,
 } from '../../src/semantic/fences.ts';
 import { createRealAccess } from './real-access.ts';
+import { testReceiptKeys } from '../support/receipt-keys.ts';
 
 const databaseUrl = process.env.DATABASE_URL;
 if (!databaseUrl) throw new Error('DATABASE_URL must name the migrated test database');
@@ -46,6 +47,7 @@ const kernel = createKernel({
   },
   routeKey,
   tokens: { current: 1, keys: new Map([[1, new Uint8Array(32).fill(3)]]) },
+  receiptKeys: testReceiptKeys(),
   writeRate: real.writeRate,
 });
 const global = { route: 0, id: GLOBAL_CONTEXT };
