@@ -524,6 +524,12 @@ test('walk stacks fetch the public issuer JWKS URL from native Auth only', async
     hostname: '127.0.0.1',
     fetch: () => Response.json({ keys: [{ kty: 'EC', kid: 'walk-native' }] }),
   });
+  const jwksGet = {
+    headers: new Headers(),
+    method: 'GET' as const,
+    redirect: 'manual' as const,
+    signal: new AbortController().signal,
+  };
   try {
     const config = readMembershipWorkConfig({
       ...env,
@@ -532,9 +538,9 @@ test('walk stacks fetch the public issuer JWKS URL from native Auth only', async
     });
     expect(config.auth.jwksUrl).toBe(env.AUTH_JWKS_URL);
     expect(config.auth.fetch).toBeTypeOf('function');
-    const admitted = await config.auth.fetch!(env.AUTH_JWKS_URL, {});
+    const admitted = await config.auth.fetch!(env.AUTH_JWKS_URL, jwksGet);
     expect(await admitted.json()).toEqual({ keys: [{ kty: 'EC', kid: 'walk-native' }] });
-    await expect(config.auth.fetch!('https://example.test/.well-known/jwks.json', {})).rejects.toThrow(
+    await expect(config.auth.fetch!('https://example.test/.well-known/jwks.json', jwksGet)).rejects.toThrow(
       'Local JWKS transport serves only the configured issuer JWKS URL',
     );
     expect(readMembershipWorkConfig(env).auth.fetch).toBeUndefined();
