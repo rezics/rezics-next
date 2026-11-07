@@ -87,6 +87,9 @@ accepted operation and independently confirm the original and revision remain un
 redirect completion belongs to the Identity worker receiving suites outside the first-public denominator.
 Proposal retry and sealed-journal recovery retain original assertions and dedicated receipt keys; only
 the seeded native proposal, separate adoption and current fact readback establish convergence.
+Receipt fixture queries resolve the configured keyed receipt identity for both finalization and replay. Installed
+Library public-output custody is received through its application export and composed Semantic observations; its
+owning native suites must establish publication, transfer, cancellation, rollback and ordinary-scope behavior.
 
 ## Evidence stages
 

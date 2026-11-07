@@ -13,6 +13,7 @@ import {
   type CommandAuthorization,
 } from '../../src/command/command.ts';
 import { createPool } from '../../src/database/pool.ts';
+import { nativeReceiptKeyCandidates } from '../../src/command/receipt-key.ts';
 import { createKernel } from '../../src/http/kernel.ts';
 import { requestDigest } from '../../src/http/request.ts';
 import type { Access } from '../../src/request/access.ts';
@@ -168,8 +169,13 @@ async function receipt(partition: number, command: BatchCommand) {
   return (
     await admin.query(
       `SELECT epoch, position, transaction_id, response, request_digest FROM core.receipt
-     WHERE partition_no=$1 AND principal_kind='account' AND principal_id=$2 AND command_kind=$3 AND idempotency_key=$4`,
-      [partition, accounts.importer, `subject.batch_${command.op}`, command.key],
+     WHERE partition_no=$1 AND principal_kind='account' AND principal_id=$2 AND command_kind=$3 AND idempotency_key=ANY($4::text[])`,
+      [
+        partition,
+        accounts.importer,
+        `subject.batch_${command.op}`,
+        nativeReceiptKeyCandidates(pool, `subject.batch_${command.op}`, accounts.importer, command.key),
+      ],
     )
   ).rows;
 }
@@ -214,8 +220,13 @@ async function invocation(command: BatchCommand, fault?: Error) {
         (
           await tx.query(
             `SELECT 1 FROM core.receipt WHERE partition_no=$1 AND principal_kind='account'
-         AND principal_id=$2 AND command_kind=$3 AND idempotency_key=$4`,
-            [partition, actor.accountId, `subject.batch_${command.op}`, command.key],
+         AND principal_id=$2 AND command_kind=$3 AND idempotency_key=ANY($4::text[])`,
+            [
+              partition,
+              actor.accountId,
+              `subject.batch_${command.op}`,
+              nativeReceiptKeyCandidates(pool, `subject.batch_${command.op}`, actor.accountId, command.key),
+            ],
           )
         ).rows,
       ).toEqual([]);
