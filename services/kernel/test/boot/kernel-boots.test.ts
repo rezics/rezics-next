@@ -210,7 +210,21 @@ async function boot(env: NodeJS.ProcessEnv) {
   await startKernelWorker(databaseUrl);
 }
 
+async function withBootReceiptKeys(run: () => Promise<void>): Promise<void> {
+  const variable = 'KERNEL_RECEIPT_KEYS';
+  const previous = process.env[variable];
+  process.env[variable] = testReceiptKeysEnv()[variable];
+  try {
+    await run();
+  } finally {
+    if (previous === undefined) delete process.env[variable];
+    else process.env[variable] = previous;
+  }
+}
+
 test('Kernel API, worker, native Auth host and persona/seed entries start against a throwaway database', async () => {
-  if (process.env.DATABASE_URL) await boot(process.env);
-  else await withThrowawayDatabase(boot);
+  await withBootReceiptKeys(async () => {
+    if (process.env.DATABASE_URL) await boot(process.env);
+    else await withThrowawayDatabase(boot);
+  });
 });
