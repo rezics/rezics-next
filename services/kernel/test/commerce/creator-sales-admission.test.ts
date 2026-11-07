@@ -1,6 +1,8 @@
 import { afterAll, beforeAll, expect, test } from 'bun:test';
 import { createWriteRateLimiter } from '../../src/access/write-rate.ts';
+import { bindExecutionContract } from '../../src/command/execution-contract.ts';
 import { EFFECTS_CONSUMER, relayEffects } from '../../src/events/effects.ts';
+import { historyExecutionPort } from '../../src/history/application/index.ts';
 import { authoritativeTimeValue, runCommand } from '../../src/command/command.ts';
 import { backfillCreatorSales, runCreatorSaleWorkPage } from '../../src/commerce/creator-sales-work.ts';
 import { advanceCommerceErasure } from '../../src/commerce/erasure-participant.ts';
@@ -11,6 +13,7 @@ import { encodeLocator } from '../../src/history/contract/locator.ts';
 import { newId, partitionOf, routeOf } from '../../src/route/route.ts';
 import { createWorkClient } from '../../src/work/client.ts';
 import { composeWork, type WorkContext } from '../../src/work/registry.ts';
+import { workExecutionPort } from '../../src/work/selected-runtime.ts';
 import { commerceWorkModule } from '../../src/commerce/work-module.ts';
 import { nativeFixture } from '../access/native-account-bindings-fixture.ts';
 import { deletePersona } from '../support/account-deletion.ts';
@@ -22,6 +25,7 @@ let db: Awaited<ReturnType<typeof openGrowthDatabase>>;
 let auth: Awaited<ReturnType<typeof nativeFixture>>;
 let people: Awaited<ReturnType<typeof createPersonas>>;
 let worker: Awaited<ReturnType<typeof composeWork>>;
+let workerStopped = false;
 let client: Awaited<ReturnType<typeof createWorkClient>>;
 let context: WorkContext;
 
@@ -257,7 +261,11 @@ beforeAll(async () => {
     writeRate: createWriteRateLimiter({ secret: 'creator-sale-admission-native-fixture-secret' }),
   });
   people = await createPersonas(app, { version: 1, pool: db.pool, auth });
+  // Auth and Commerce share DBOS's process-global runtime. Keep Auth stopped while
+  // the Commerce worker owns it; restart Auth only for the terminal deletion below.
+  await auth.stop();
   client = await createWorkClient(db.url, db.pool);
+  bindExecutionContract(client, workExecutionPort(), historyExecutionPort);
   worker = await composeWork(
     [
       {
@@ -273,7 +281,7 @@ beforeAll(async () => {
 }, 120_000);
 
 afterAll(async () => {
-  await worker?.shutdown();
+  if (!workerStopped) await worker?.shutdown();
   await client?.close();
   await auth?.close();
   await db?.close();
@@ -467,7 +475,11 @@ test('exact event recovery survives a covered frontier, replay and terminal buye
   await removeOriginalRoleEvidence(terminal.event);
   await admit(terminal.event);
   expect((await readReceipt(terminal.event)).rows).toEqual([]);
+  await worker.shutdown();
+  workerStopped = true;
+  await auth.restart();
   await deletePersona({ pool: db.pool, auth }, people.staff);
+  await auth.stop();
   await db.pool.query('UPDATE commerce.creator_sale_admission_recovery SET retry_at=now() WHERE event_id=$1', [
     terminal.event.id,
   ]);
