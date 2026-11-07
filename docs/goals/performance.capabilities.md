@@ -37,8 +37,11 @@ browser and growth evidence is the sole Goal walk
 `bun services/auth/scripts/dev-stack.ts walk -- bun apps/web/scripts/first-public-journeys-walk.ts`.
 The walk records actual integrated-dev results in this file; typing, local units and source integration alone cannot
 pass a row. Content ce33 integrated `ea7dc5fe59`: signed-in paths resume on a stack that contains it. Issuer, JWKS
-and launcher failures are recorded causes; this walk does not repair startup. The walk writes the table below from
-secret-free evidence. Fewest tests: `apps/web/tests/first-public-journeys-walk.test.ts` plus the walk itself.
+and launcher failures are recorded causes; this walk does not repair startup. A missing or failed cross-media seed
+does not fail-rest the 17 paths: mixed anonymous P02/P17 and other seed-free surfaces still run on the admitted
+stack, and each signed-in row records its own first unreached cause. Semantic owns importer
+`Import transport request failed`. The walk writes the table below from secret-free evidence. Fewest tests:
+`apps/web/tests/first-public-journeys-walk.test.ts` plus the walk itself.
 
 <!-- first-public-journeys:begin -->
 

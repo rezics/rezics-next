@@ -16,6 +16,7 @@ export type JourneyTableExtras = {
   stack?: { web: string; issuer: string; native: string; kernel: string };
   kernel?: { ok: boolean; detail: string };
   signIn?: { ok: boolean; detail: string };
+  seedCause?: string;
 };
 
 function formatElapsed(ms: number): string {
@@ -48,6 +49,9 @@ export function capabilitiesTableMarkdown(
       : 'The walk stack did not publish loopback origins.',
     extras.kernel ? `Kernel/JWKS probe: ${extras.kernel.detail}.` : '',
     extras.signIn ? `Sign-in probe: ${extras.signIn.detail}.` : '',
+    extras.seedCause
+      ? `Cross-media seed: ${escapeTableCell(extras.seedCause)}. Mixed anonymous paths still ran; Semantic owns importer transport.`
+      : '',
     'Secret-free evidence is `.temp/goal/performance/evidence.json` in this attempt. Phone and desktop viewports ran for each reached path.',
     '',
     `Hourly: **${passing}/17**.` +

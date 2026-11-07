@@ -54,3 +54,21 @@ test('the walk table writer names every path once with the observed result', () 
   expect(markdown).toContain('WORKFLOW_RETIREMENT_DISPATCH missing');
   for (const path of FIRST_PUBLIC_JOURNEY_PATHS) expect(markdown).toContain(`| ${path.id} |`);
 });
+
+test('the walk continues mixed anonymous paths when seed writes no result.json', () => {
+  const source = readFileSync(resolve(import.meta.dir, '../scripts/first-public-journeys-walk.ts'), 'utf8');
+  const seed = source.indexOf("child(['bun', 'scripts/datasets/cross-media-seed.ts'");
+  const frontends = source.indexOf('frontends = await startSeededFrontends()');
+  expect(seed).toBeGreaterThan(0);
+  expect(frontends).toBeGreaterThan(seed);
+  expect(source.slice(seed, frontends)).not.toMatch(/failRest\(/);
+  expect(source.slice(seed, frontends)).toContain("handle: 'developer'");
+  const markdown = capabilitiesTableMarkdown(
+    'abc123def0',
+    'fd920c9cdb',
+    [{ id: 'P02', status: 'FAIL-unreached', persona: 'anonymous', elapsedMs: 1200, firstWrong: 'save unreached' }],
+    { seedCause: 'seed exited 1: Import transport request failed' },
+  );
+  expect(markdown).toContain('Import transport request failed');
+  expect(markdown).toContain('Mixed anonymous paths still ran');
+});

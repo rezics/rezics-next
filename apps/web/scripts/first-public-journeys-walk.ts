@@ -1,8 +1,9 @@
 /**
  * Current-dev first-public journey walk for Performance. Runs inside `dev-stack.ts walk`.
- * Anonymous portions of mixed paths use real seeded pages and kernel readback. Content ce33
- * integrated `ea7dc5fe59`: signed-in paths resume on a stack that contains it. Issuer, JWKS and
- * launcher failures are recorded causes; this walk does not repair startup. Evidence stays under
+ * Anonymous portions of mixed paths use real pages and kernel readback even when the importer
+ * seed writes no `result.json`. Content ce33 integrated `ea7dc5fe59`: signed-in paths resume on a
+ * stack that contains it. Issuer, JWKS, launcher and importer-seed failures are recorded causes;
+ * this walk does not repair startup or seed transport. Evidence stays under
  * `.temp/goal/performance/` and never records secrets. The walk writes the 17-row table in
  * `docs/goals/performance.capabilities.md`.
  */
@@ -268,7 +269,13 @@ async function gitRevision(args: string[]): Promise<string> {
 async function writeCapabilitiesTable(
   source: string,
   results: PathResult[],
-  extras: { stack?: Stack; seed?: Seed; kernel?: { ok: boolean; detail: string }; signIn?: { ok: boolean; detail: string } } = {},
+  extras: {
+    stack?: Stack;
+    seed?: Seed;
+    kernel?: { ok: boolean; detail: string };
+    signIn?: { ok: boolean; detail: string };
+    seedCause?: string;
+  } = {},
 ): Promise<void> {
   const base = (await gitRevision(['merge-base', 'HEAD', 'dev']).catch(() => '')) || source;
   const text = await readFile(capabilitiesPath, 'utf8');
@@ -679,31 +686,34 @@ export async function run(): Promise<PathResult[]> {
   }
   const seedEnv = { ...process.env, ...(await parseEnv(join(root, '.temp/local-stack/seed.env'))) };
   const seedCode = await child(['bun', 'scripts/datasets/cross-media-seed.ts', '--dev'], 'seed', seedEnv);
-  let seed: Seed;
+  let seed: Seed = { handle: 'developer' };
+  let seedCause: string | undefined;
   try {
     seed = await readSeed();
   } catch (error) {
-    const seedLog = (await readFile(join(evidenceDir, 'seed.log'), 'utf8').catch(() => '')).trim().split('\n')[0];
-    const missing = error instanceof Error ? error.message : String(error);
-    failRest(seedLog ? `seed exited ${seedCode}: ${seedLog}` : `seed exited ${seedCode}: ${missing}`);
-    await writeEvidence(source, results, stackIfAdmitted());
-    hourly(results);
-    return results;
+    const seedLog = (await readFile(join(evidenceDir, 'seed.log'), 'utf8').catch(() => '')).trim();
+    const first = seedLog.split('\n').find((line) => line.trim()) ?? (error instanceof Error ? error.message : String(error));
+    seedCause = `seed exited ${seedCode}: ${first}`;
+    await writeFile(
+      join(evidenceDir, 'seed-failure.json'),
+      `${JSON.stringify({ seedCode, first, log: seedLog.slice(0, 4000) }, null, 2)}\n`,
+    );
   }
 
   const stack = stackOrigins();
-  const frontends = await startSeededFrontends();
+  let frontends: { stop(): Promise<void> } | undefined;
   let browser: Browser | undefined;
   let signIn: { ok: boolean; detail: string } | undefined;
   let kernelReady: { ok: boolean; detail: string } | undefined;
   try {
+    frontends = await startSeededFrontends();
     const admitted = await probeSignIn(stack);
     const kernel = await probeKernel(stack);
     signIn = admitted;
     kernelReady = kernel;
     await writeFile(
       join(evidenceDir, 'sign-in-probe.json'),
-      `${JSON.stringify({ stack, signIn: admitted, kernel, seed: publicFields(seed) }, null, 2)}\n`,
+      `${JSON.stringify({ stack, signIn: admitted, kernel, seed: publicFields(seed), seedCause }, null, 2)}\n`,
     );
     browser = await chromium.launch({ headless: true, env: { ...process.env, TMPDIR: '/tmp/rw' } });
     const desktopContext: BrowserContext = await browser.newContext({ locale: 'en-US', viewport: desktop });
@@ -777,9 +787,9 @@ export async function run(): Promise<PathResult[]> {
     failRest(error instanceof Error ? error.message : String(error));
   } finally {
     await browser?.close();
-    await frontends.stop();
+    await frontends?.stop();
   }
-  await writeEvidence(source, results, stack, seed, { kernel: kernelReady, signIn });
+  await writeEvidence(source, results, stack, seed, { kernel: kernelReady, signIn, seedCause });
   hourly(results);
   return results;
 }
@@ -789,7 +799,11 @@ async function writeEvidence(
   results: PathResult[],
   stack?: Stack,
   seed?: Seed,
-  extras: { kernel?: { ok: boolean; detail: string }; signIn?: { ok: boolean; detail: string } } = {},
+  extras: {
+    kernel?: { ok: boolean; detail: string };
+    signIn?: { ok: boolean; detail: string };
+    seedCause?: string;
+  } = {},
 ): Promise<void> {
   const passing = results.filter((row) => row.status === 'PASS').length;
   const failing = results.filter((row) => row.status !== 'PASS');
@@ -808,6 +822,7 @@ async function writeEvidence(
         seed: publicFields(seed),
         kernel: extras.kernel,
         signIn: extras.signIn,
+        seedCause: extras.seedCause,
         results,
       },
       null,
