@@ -36,11 +36,11 @@ function subjects(
 
 test('rated sources use each explicitly supplied native application instance', () => {
   const producers = composeSearchNativePorts();
-  const observed: { pool: Pool; routeKey: Uint8Array }[] = [];
+  const observed: { pool: Pool; routeKey: Uint8Array | undefined }[] = [];
   const supplied = (): SearchNativePorts =>
     Object.freeze({
       ...producers,
-      subjectSource(pool: Pool, routeKey: Uint8Array) {
+      subjectSource(pool: Pool, routeKey?: Uint8Array) {
         observed.push({ pool, routeKey });
         return producers.subjectSource(pool, routeKey);
       },
