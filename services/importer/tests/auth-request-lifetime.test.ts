@@ -89,9 +89,12 @@ test('account-key sign-in posts native Auth and keeps issuer Origin plus asserti
   const f = await credentials();
   const native = 'http://127.0.0.1:20062';
   const issuer = 'http://127.0.0.1:20061';
-  expect(accountKeyIssuerOrigin(native, { REZICS_LOCAL_STACK_NATIVE_ORIGIN: native, REZICS_LOCAL_STACK_ISSUER_ORIGIN: issuer })).toBe(
-    issuer,
-  );
+  expect(
+    accountKeyIssuerOrigin(native, {
+      REZICS_LOCAL_STACK_NATIVE_ORIGIN: native,
+      REZICS_LOCAL_STACK_ISSUER_ORIGIN: issuer,
+    }),
+  ).toBe(issuer);
   expect(accountKeyIssuerOrigin('https://auth.rezics.test')).toBe('https://auth.rezics.test');
   const seen: { url: string; origin: string; aud?: string }[] = [];
   try {

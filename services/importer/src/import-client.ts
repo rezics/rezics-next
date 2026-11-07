@@ -354,8 +354,7 @@ function httpFailure(reply: ClientResponse, last?: { method: string; path: strin
     typeof nested === 'object' && nested !== null && !types.isProxy(nested) ? nested : (outer as object | undefined);
   // Eden represents a rejected fetch as a 503 error envelope with the thrown value.
   // Recover our request-local error before interpreting public HTTP problem fields.
-  if (!reply.response && value instanceof ImportTransportError)
-    return attachRequest(value, last?.method, last?.path);
+  if (!reply.response && value instanceof ImportTransportError) return attachRequest(value, last?.method, last?.path);
   const field = (name: string): unknown =>
     value && !types.isProxy(value) ? Object.getOwnPropertyDescriptor(value, name)?.value : undefined;
   const type = field('type');
@@ -529,11 +528,8 @@ export function createImportTransport(options: ImportTransportOptions) {
       ...(options.onSession === undefined ? {} : { onSession: options.onSession }),
     });
   const fetchOptions = (signal?: AbortSignal) => (signal === undefined ? {} : { fetch: { signal } });
-  const exchange = (
-    call: () => Promise<ClientResponse>,
-    expected: number | readonly number[],
-    signal?: AbortSignal,
-  ) => response(call, expected, signal, () => lastRequest);
+  const exchange = (call: () => Promise<ClientResponse>, expected: number | readonly number[], signal?: AbortSignal) =>
+    response(call, expected, signal, () => lastRequest);
 
   async function sendBatch(body: BatchWriteRequest, signal?: AbortSignal): Promise<BatchWriteResult> {
     const results: BatchWriteResult['results'] = [];

@@ -176,4 +176,3 @@ test('reviewed bootstrap refusal names its seed and sends no proposal', async ()
     await rm(directory, { recursive: true, force: true });
   }
 });
-

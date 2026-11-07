@@ -18,7 +18,11 @@ import {
   seedShowcasePersonalList,
   type ShowcasePersonalListUpload,
 } from '../../services/importer/src/showcase-personal-list.ts';
-import { ReviewedCatalogueCommandError, formatReviewedCatalogueCommandError, seedReviewedCatalogue } from '../../services/importer/src/reviewed-catalogue.ts';
+import {
+  ReviewedCatalogueCommandError,
+  formatReviewedCatalogueCommandError,
+  seedReviewedCatalogue,
+} from '../../services/importer/src/reviewed-catalogue.ts';
 import {
   installReviewedCatalogueComposition,
   releasedReviewedVocabulary,
@@ -346,7 +350,9 @@ export async function runDevelopmentSeed(
 
 /** Seed CLI prints bounded operation metadata; remote bodies and credentials stay off the walk log. */
 export function seedFailureDetail(error: unknown): string {
-  return error instanceof ReviewedCatalogueCommandError ? formatReviewedCatalogueCommandError(error) : formatSeedError(error);
+  return error instanceof ReviewedCatalogueCommandError
+    ? formatReviewedCatalogueCommandError(error)
+    : formatSeedError(error);
 }
 
 if (import.meta.main) {
@@ -363,7 +369,9 @@ if (import.meta.main) {
     const remaining =
       reviewed || journal || transport ? mergeRemainingRequest(reviewed ?? journal, transport) : undefined;
     if (remaining) await writeSeedRemainingRequest(directory, remaining);
-    process.stderr.write(`${seedFailureDetail(error)}${remaining ? ` remaining{${formatSeedFailure(undefined, remaining)}}` : ''}\n`);
+    process.stderr.write(
+      `${seedFailureDetail(error)}${remaining ? ` remaining{${formatSeedFailure(undefined, remaining)}}` : ''}\n`,
+    );
     process.exitCode = 1;
   }
 }
