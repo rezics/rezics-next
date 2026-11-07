@@ -7,6 +7,8 @@ progress. Search contract owns path multiplicities; Library declares the complet
 composition binds both capabilities before registration; absent Search runtime remains unavailable. Search retains
 Source settlement, public discovery and its existing native/growth outcomes.
 
+Decision: Search's native scope bindings and Library work-definition read defer imported values behind memoized factories and typed forwarding functions. Outcome subclasses keep their bases in the same module; `discovery-errors.ts` remains a compatibility re-export.
+
 [Rejected text query repair](text-query-repair.md) owns bounded parser diagnostics and deliberate in-place correction.
 
 Search owns the subject search projection, indexing consumers, disclosure checks, query API, freshness and index
@@ -2200,6 +2202,10 @@ and after the native final and cleanup, so a late callback cannot restore public
 The existing public `search(principal, request, context)` composes open/search/finish/finally-close.
 Factory shutdown drains those public calls and closes outstanding retained operations before its
 runtime and work client.
+
+Decision: default Search returns its real runner before initial Subject inventory completes; the owned refresh and
+relays carry a cancellable native-request lifetime, and stop aborts and drains that work. Worker service startup is
+not Search readiness: the installed default producers and current native catalogue output remain the read gate.
 
 Cost: retaining the operation adds no capture or root, and at most one owner snapshot per Subject
 home or per 100-key Account chunk. The checker reuses these snapshots instead of repeating those

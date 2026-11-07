@@ -16,7 +16,6 @@ import guard from './record-source-set-guard.sql';
 import candidate from './record-source-set-candidate.sql';
 import term from './record-source-set-term.sql';
 import { declareCommandRecordSourceSet } from '../history/application/index.ts';
-import { bindNativeRecordSourceSetProducer } from '../history/adapters/record-source-set-native.ts';
 import { type RecordHistorySourceReference, recordHistorySourceKey } from '../history/contract/index.ts';
 
 declare const semanticSourceSet: unique symbol;
@@ -463,17 +462,3 @@ export async function collectSemanticCandidateSource(
     },
   ]);
 }
-
-bindNativeRecordSourceSetProducer({
-  appendSemanticRecordSourceSet,
-  beginSemanticRecordSourceSet,
-  collectSemanticCandidateSource,
-  collectSemanticRecordFacts,
-  currentSemanticRecordSourceSet,
-  pageSemanticRecordSourceSets,
-  readSemanticRecordSourceSet,
-  recordSemanticDocumentSource,
-  sealSemanticRecordSourceSet,
-  semanticRecordSourceSetLocator,
-  verifySemanticRecordSourceSet,
-});

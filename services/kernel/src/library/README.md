@@ -17,6 +17,8 @@ the native Source reader nor closure acquisition. Retention SQL/control executio
 Shelf's statement descriptor. Both native producers use those same plans. Source client deadline wrapping uses the
 already composed Access capability. No additional Source registry, work plan, publisher or cost is introduced.
 
+Decision: Members Source paths use one memoized callable declaration, and Shelf maintenance reads statement-bound values through memoized accessors during use; these preserve path and cost identity without load-time cross-module reads.
+
 Acceptance choice: extend the existing native Source outcome test through default composed admission, and add one
 missing-worker-runtime case; preserve all existing outcome assertions. Workspace typing is worker acceptance;
 native growth, public Search settlement/discovery and default-worker runtime proof remain in the owning Goal walks.

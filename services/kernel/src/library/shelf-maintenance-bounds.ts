@@ -98,7 +98,18 @@ export {
   shelfMaintenanceWorkDimensions,
   type ShelfMaintenanceStatementPlan,
 } from './shelf-maintenance-statement-bounds.ts';
-const { P, U, I, D, T, json, size, row, normalize } = shelfMaintenanceBoundValues;
+function boundValues() {
+  return memoizedValue(boundValues, () => shelfMaintenanceBoundValues);
+}
+const P = () => boundValues().P;
+const U = () => boundValues().U;
+const I = () => boundValues().I;
+const D = () => boundValues().D;
+const T = () => boundValues().T;
+const json = (value: unknown) => boundValues().json(value);
+const size = (value: unknown) => boundValues().size(value);
+const row = (value: unknown) => boundValues().row(value);
+const normalize = (sql: string) => boundValues().normalize(sql);
 
 export function consumeShelfMaintenance<T>(operation: string, total: Bound, dispatch: () => Promise<T>): Promise<T> {
   const native = currentCommandWorkAssociation();
@@ -242,10 +253,10 @@ export function shelfMaintenanceCommandPlan(
   const candidates = receipt && principal ? receiptKeyCandidates(ring!, receipt.kind, principal, receipt.key) : [];
   const storageKey = candidates.find((key) => key.startsWith(`rk1.${ring?.current}.`));
   const response = {
-    binding: { route: 65535, accountId: U, runId: U, epoch: D, sequence: D, segment: I },
+    binding: { route: 65535, accountId: U(), runId: U(), epoch: D(), sequence: D(), segment: I() },
     phase: 'retire-reservations',
-    next: { route: 65535, accountId: U, runId: U, epoch: D, sequence: D, segment: I },
-    transactionId: U,
+    next: { route: 65535, accountId: U(), runId: U(), epoch: D(), sequence: D(), segment: I() },
+    transactionId: U(),
     receiptKey: receipt?.key ?? '',
     terminal: false,
     sharedEvidence: 'separate-contract',
@@ -262,7 +273,7 @@ export function shelfMaintenanceCommandPlan(
   // Receipt-bearing rebuild commands may emit the single maintenance event. Recovery ACK is
   // always no-effect. A matching request may also be no-effect; reserve the larger fresh branch.
   const events = receipt
-    ? [{ id: U, type: 'com.rezics.library.shelf-maintenance.advanced.v1', subject: U, data: { accountId: U } }]
+    ? [{ id: U(), type: 'com.rezics.library.shelf-maintenance.advanced.v1', subject: U(), data: { accountId: U() } }]
     : [];
   const basis = 'basis' in options ? options.basis : null;
   const prepared = !!options.authorization?.prepare;
@@ -294,12 +305,12 @@ export function shelfMaintenanceCommandPlan(
     ? [
         options.partition,
         events,
-        U,
+        U(),
         basis ? { principal, clientId: basis.clientId, requestedBy: basis.requestedBy } : null,
         serializedReceipt,
       ]
     : [];
-  const noEffectBinds = [options.partition, U, serializedReceipt];
+  const noEffectBinds = [options.partition, U(), serializedReceipt];
   // PK heap/index mutation: partition UPDATE 4 rows/3 points; outbox/receipt INSERT 4/3,
   // basis INSERT 6/5 (two unique indexes). Each inserted child adds its partition FK point
   // and one native statement. Shelf event/kind predicates exclude the other partial indexes;
@@ -316,15 +327,15 @@ export function shelfMaintenanceCommandPlan(
       size(receiptBinds) +
       size(fenceBinds) +
       size(noEffectBinds) +
-      size([T]) +
-      row({ epoch: I, position: D }) +
-      row({ at: T }) +
+      size([T()]) +
+      row({ epoch: I(), position: D() }) +
+      row({ at: T() }) +
       (receipt
         ? row({
             requestDigest: Buffer.alloc(32),
-            epoch: I,
-            position: D,
-            transactionId: U,
+            epoch: I(),
+            position: D(),
+            transactionId: U(),
             response,
             payloadState: 'minimized',
           }) +
@@ -375,16 +386,18 @@ export const shelfMaintenanceSourceExecution: PreparationSourceExecution = Objec
         bytes:
           statementBytes(sourceSize) +
           size(sourceSize.params.map((key) => args[key as keyof typeof args])) +
-          row({ partition_bytes: I, type_bytes: I }),
+          row({ partition_bytes: I(), type_bytes: I() }),
       }),
       () => sourceSize.run(client, args),
     );
     const statements = [partitionRead, identityRead, ...(full ? [typesRead] : [])];
     const projectionBytes =
-      row({ partitionNo: 4095, node: '', writeState: 'active', movedTo: '', epoch: I, position: D }) +
+      row({ partitionNo: 4095, node: '', writeState: 'active', movedTo: '', epoch: I(), position: D() }) +
       6 * (sizes.partition_bytes ?? 0) +
-      row({ revision: I, transactionId: U, redirect: U }) +
-      (full ? row({ id: U, type: '', agent_account_id: U, agent_verified: false }) + 6 * (sizes.type_bytes ?? 0) : 0);
+      row({ revision: I(), transactionId: U(), redirect: U() }) +
+      (full
+        ? row({ id: U(), type: '', agent_account_id: U(), agent_verified: false }) + 6 * (sizes.type_bytes ?? 0)
+        : 0);
     // Identity: exact subject, latest create/identity revision, latest redirect; full projection adds
     // one subject and its unique agent link. Every absent lateral/left join still pays its EOF point.
     const total = shelfCost({
@@ -432,7 +445,7 @@ export function SHELF_MAINTENANCE_OPERATIONS() {
         conflictReconciliations: 1,
       }),
       recovery: Object.freeze({
-        limit: P,
+        limit: P(),
         query: shelfMaintenanceStatementPlan,
         enqueue: shelfMaintenanceEnqueuePlan,
         command: shelfMaintenanceCommandPlan,

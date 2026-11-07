@@ -69,6 +69,7 @@ export {
   resolveAgentIdentitySDKWork,
 } from './agent-identity-work.ts';
 export { guardHistoryAccounts } from './gates.ts';
+export { bindNativeRecordSourceSetProducer } from './record-source-set-native.ts';
 export {
   bindIdentityOriginalEffect,
   isIdentityOriginalEffect,

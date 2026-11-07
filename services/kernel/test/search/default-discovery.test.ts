@@ -1,5 +1,6 @@
 import { expect, test } from 'bun:test';
 import { randomUUID } from 'node:crypto';
+import type { Pool } from 'pg';
 import pg from 'pg';
 import { partitionOf, routeOf, newId } from '../../src/route/route.ts';
 import { publicFilterCoverageKey } from '../../src/semantic/public-filter-coverage-pending.ts';
@@ -7,7 +8,9 @@ import { readConfig, startServer } from '../../src/server.ts';
 import { createSemanticDriver } from '../semantic/outcome-driver.ts';
 import { workerTestEnv } from '../support/worker-env.ts';
 import { startOutcomeWorkerProcess } from './support/outcome-rpc.ts';
-import { createOpenSearch } from '../../src/search/opensearch.ts';
+import { createOpenSearch, type OpenSearch, type SearchRequestOptions } from '../../src/search/opensearch.ts';
+import { startSearchIndexing } from '../../src/search/runner.ts';
+import type { SubjectSource } from '../../src/search/source.ts';
 import { allocateDiscovery, discoveryConsumer, discoveryGenerations } from '../../src/search/generations.ts';
 import { nativeDiscoveryRegistry } from '../../src/search/account-discovery.ts';
 import { createRatedSubjectSource } from '../../src/search/rated-source.ts';
@@ -23,6 +26,51 @@ async function eventually<T>(read: () => Promise<T | undefined>): Promise<T> {
     await Bun.sleep(100);
   }
 }
+
+test('default Search returns its owner before initial inventory settles and cancels that request on stop', async () => {
+  let reached!: (signal: AbortSignal) => void;
+  const requestStarted = new Promise<AbortSignal>((resolve) => (reached = resolve));
+  let aborted = false;
+  const search: OpenSearch = {
+    request<_T>(
+      _method: 'GET' | 'PUT' | 'POST' | 'DELETE' | 'HEAD',
+      _path: string,
+      _body?: unknown,
+      options?: SearchRequestOptions,
+    ): Promise<{ status: number; body: _T }> {
+      const signal = options?.signal;
+      if (!signal) return Promise.reject(new Error('Startup inventory has no runner lifetime'));
+      reached(signal);
+      return new Promise<{ status: number; body: _T }>((_resolve, reject) => {
+        const cancel = () => {
+          aborted = true;
+          reject(new Error('Startup inventory was cancelled'));
+        };
+        if (signal.aborted) cancel();
+        else signal.addEventListener('abort', cancel, { once: true });
+      });
+    },
+    bulk<_T>(): Promise<_T> {
+      throw new Error('Startup inventory must not bulk');
+    },
+  };
+  const runner = await startSearchIndexing({
+    pool: {} as unknown as Pool,
+    search,
+    source: {} as unknown as SubjectSource,
+    listing: {
+      async read() {
+        return new Map();
+      },
+    },
+    prefix: 'startup-',
+  });
+  const signal = await requestStarted;
+  expect(signal.aborted).toBe(false);
+  await runner.stop();
+  expect(signal.aborted).toBe(true);
+  expect(aborted).toBe(true);
+}, 10_000);
 
 test('ordinary configured server returns current mixed discovery through its default owner producers and retained continuation', async () => {
   const endpoint = process.env.OPENSEARCH_URL;

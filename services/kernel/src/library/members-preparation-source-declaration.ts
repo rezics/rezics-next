@@ -15,12 +15,18 @@ export type MembersPreparationSourceCost = Bound;
 
 const asBound = (work: Readonly<WorkDimensions>): Bound => declareBound({ ...work, engineRequests: 0 });
 
-const MEMBERS_PREPARATION_SOURCE_PATHS = membersPreparationSourcePaths(COLLECTION_SOURCE_WORK_GROUP_LIMIT);
-export { MEMBERS_PREPARATION_SOURCE_PATHS };
-const sourceStatesPerInvocation = Math.max(
-  MEMBERS_PREPARATION_SOURCE_PATHS.id.membersSnapshots,
-  MEMBERS_PREPARATION_SOURCE_PATHS.ordinal.membersSnapshots,
-);
+export function MEMBERS_PREPARATION_SOURCE_PATHS() {
+  return memoizedValue(MEMBERS_PREPARATION_SOURCE_PATHS, () =>
+    membersPreparationSourcePaths(COLLECTION_SOURCE_WORK_GROUP_LIMIT),
+  );
+}
+
+function sourceStatesPerInvocation(): number {
+  return Math.max(
+    MEMBERS_PREPARATION_SOURCE_PATHS().id.membersSnapshots,
+    MEMBERS_PREPARATION_SOURCE_PATHS().ordinal.membersSnapshots,
+  );
+}
 
 /**
  * The admitted Source cap composes three independently declared pieces: Library's fixed metadata prefix,
@@ -36,7 +42,7 @@ function searchBody() {
 }
 function collectionState() {
   return memoizedValue(collectionState, () =>
-    repeatBound(CANONICAL_SOURCE_RECEIVING_COST().state, sourceStatesPerInvocation),
+    repeatBound(CANONICAL_SOURCE_RECEIVING_COST().state, sourceStatesPerInvocation()),
   );
 }
 function collectionPrefix() {
@@ -44,9 +50,9 @@ function collectionPrefix() {
     repeatBound(
       sumBounds(
         CANONICAL_SOURCE_RECEIVING_COST().seek,
-        CANONICAL_SOURCE_RECEIVING_COST().group(MEMBERS_PREPARATION_SOURCE_PATHS.id.sourceGroupRowsPerQueryMaximum),
+        CANONICAL_SOURCE_RECEIVING_COST().group(MEMBERS_PREPARATION_SOURCE_PATHS().id.sourceGroupRowsPerQueryMaximum),
       ),
-      MEMBERS_PREPARATION_SOURCE_PATHS.id.candidatePrefixMaximum,
+      MEMBERS_PREPARATION_SOURCE_PATHS().id.candidatePrefixMaximum,
     ),
   );
 }
@@ -79,7 +85,7 @@ export function MEMBERS_PREPARATION_SOURCE_DECLARATION() {
       axes: MEMBERS_PREPARATION_SOURCE_AXES(),
       cost: MEMBERS_PREPARATION_SOURCE_COST(),
       terms: MEMBERS_PREPARATION_SOURCE_TERMS(),
-      paths: MEMBERS_PREPARATION_SOURCE_PATHS,
+      paths: MEMBERS_PREPARATION_SOURCE_PATHS(),
     }),
   );
 }

@@ -5,7 +5,13 @@ export type SearchQuery = Record<string, string | number | boolean>;
 
 /** Internal physical byte reservation and absolute caller deadline. The meter returns no verdict. */
 export type SearchRequestWork = Readonly<{ bytes: number; deadline: number; settle(bytes: number): void }>;
-export type SearchRequestOptions = { query?: SearchQuery; timeoutMs?: number; work?: SearchRequestWork };
+export type SearchRequestOptions = {
+  query?: SearchQuery;
+  timeoutMs?: number;
+  work?: SearchRequestWork;
+  /** Internal owner cancellation; callers still await the request's terminal result. */
+  signal?: AbortSignal;
+};
 
 export type OpenSearch = {
   request<T = unknown>(
@@ -14,9 +20,15 @@ export type OpenSearch = {
     body?: unknown,
     options?: SearchRequestOptions,
   ): Promise<{ status: number; body: T }>;
-  bulk<T = unknown>(lines: readonly unknown[], options?: { query?: SearchQuery; timeoutMs?: number }): Promise<T>;
+  bulk<T = unknown>(
+    lines: readonly unknown[],
+    options?: { query?: SearchQuery; timeoutMs?: number; signal?: AbortSignal },
+  ): Promise<T>;
   /** Exact native bigint NDJSON; optional only for historical Subject-only test transports. */
-  bulkRaw?<T = unknown>(body: string, options?: { query?: SearchQuery; timeoutMs?: number }): Promise<T>;
+  bulkRaw?<T = unknown>(
+    body: string,
+    options?: { query?: SearchQuery; timeoutMs?: number; signal?: AbortSignal },
+  ): Promise<T>;
 };
 
 export class OpenSearchError extends Error {
@@ -130,6 +142,9 @@ export function createOpenSearch(
     const headers = new Headers({ accept: 'application/json' });
     if (contentType) headers.set('content-type', contentType);
     const controller = new AbortController();
+    const abort = () => controller.abort(requestOptions.signal?.reason);
+    if (requestOptions.signal?.aborted) abort();
+    else requestOptions.signal?.addEventListener('abort', abort, { once: true });
     const timeout = setTimeout(
       () => controller.abort(new DOMException('OpenSearch request timed out', 'TimeoutError')),
       timeoutMs,
@@ -150,6 +165,7 @@ export function createOpenSearch(
       throw new SearchUnavailableError(unavailableMessage(error));
     } finally {
       clearTimeout(timeout);
+      requestOptions.signal?.removeEventListener('abort', abort);
     }
 
     if (response.status === 502 || response.status === 503 || response.status === 504) {
@@ -174,7 +190,10 @@ export function createOpenSearch(
   }
 
   return {
-    bulkRaw<T = unknown>(body: string, requestOptions?: { query?: SearchQuery; timeoutMs?: number }) {
+    bulkRaw<T = unknown>(
+      body: string,
+      requestOptions?: { query?: SearchQuery; timeoutMs?: number; signal?: AbortSignal },
+    ) {
       return send<T>('POST', '/_bulk', body, 'application/x-ndjson', requestOptions).then((result) => result.body);
     },
     request<T = unknown>(
@@ -190,7 +209,7 @@ export function createOpenSearch(
 
     bulk<T = unknown>(
       lines: readonly unknown[],
-      requestOptions?: { query?: SearchQuery; timeoutMs?: number },
+      requestOptions?: { query?: SearchQuery; timeoutMs?: number; signal?: AbortSignal },
     ): Promise<T> {
       const serialized = lines.map((line) => {
         const value = JSON.stringify(line);

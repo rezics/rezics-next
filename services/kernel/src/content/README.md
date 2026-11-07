@@ -6,6 +6,8 @@ composition; this route adds no publisher or generated-tree writer.
 
 Content owns boards, threads, posts, immutable documents, media state and publication, and content governance operations.
 
+Decision: `nativeRealmEvidenceHost` keeps its stable host object and forwards `snapshot` at use, so Content imports do not read the native snapshot binding during module initialization.
+
 The supported `document-public.ts` entry owns `PublicDocumentView`, `publicDocument` and the strict public schema shared
 by the native Document route and Semantic's Character preview. `document-routes.ts` retains the route compatibility
 exports; GET and DELETE behavior, document authority, disclosure and erasure remain in their existing owners.
