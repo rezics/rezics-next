@@ -798,7 +798,7 @@ async function serveHost() {
   if (kernel) console.log(`Kernel: ${origins.kernel}`);
 }
 
-function webLaunchEnvironment(env: NodeJS.ProcessEnv): NodeJS.ProcessEnv {
+export function webLaunchEnvironment(env: NodeJS.ProcessEnv): NodeJS.ProcessEnv {
   const child: NodeJS.ProcessEnv = {
     ...env,
     CLOUDFLARE_VITE_FORCE_LOCAL: 'true',

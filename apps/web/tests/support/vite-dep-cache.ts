@@ -215,7 +215,7 @@ export const webViteClientOptimizeDeps = {
 
 /**
  * Walk stacks compile the visited page on demand. Crawling every catalogue route with holdUntilCrawlEnd
- * exhausted Node's 2 GiB heap after `/en` SSR on ad0f0d79 attempt 3.
+ * exhausted Node's 2 GiB heap after `/en` SSR.
  */
 export const webViteWalkClientOptimizeDeps = {
   holdUntilCrawlEnd: false,

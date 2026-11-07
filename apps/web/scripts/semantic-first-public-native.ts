@@ -17,6 +17,81 @@ export type KernelCall = (method: string, path: string, options?: KernelOptions)
 export const CITATION = 'https://example.test/first-public-evidence';
 export const MINUTE = 'http://www.wikidata.org/entity/Q7727';
 
+export type WalkStackOrigins = {
+  web: string;
+  issuer: string;
+  native: string;
+  kernel: string;
+};
+
+export function walkReadinessUrls(stack: Pick<WalkStackOrigins, 'native' | 'kernel'>) {
+  return {
+    jwks: `${stack.native}/.well-known/jwks.json`,
+    definitions: `${stack.kernel}/v1/definitions`,
+    active: `${stack.kernel}/v1/definitions/active`,
+  };
+}
+
+export function websiteCredentialUrls(issuer: string) {
+  const origin = issuer.replace(/\/$/, '');
+  return { signin: `${origin}/signin`, token: `${origin}/token` };
+}
+
+export function websiteCredentialHeaders(issuer: string, cookie?: string): Record<string, string> {
+  return {
+    origin: issuer,
+    'content-type': 'application/json',
+    ...(cookie === undefined || cookie.length === 0 ? {} : { cookie }),
+  };
+}
+
+export function walkSeedProcessEnv(
+  stack: Pick<WalkStackOrigins, 'issuer' | 'native' | 'kernel'>,
+  persona: Record<string, string> = {},
+  env: NodeJS.ProcessEnv = process.env,
+): NodeJS.ProcessEnv {
+  return {
+    ...env,
+    ...persona,
+    AUTH_ORIGIN: stack.native,
+    REZICS_LOCAL_STACK_ISSUER_ORIGIN: stack.issuer,
+    KERNEL_ORIGIN: stack.kernel,
+  };
+}
+
+/** Ordinary website sign-in: POST the issuer Origin, the same form Home and VN-realm walks use. */
+export async function websiteAccessToken(
+  issuer: string,
+  input: { email: string; password: string; clientId: string; scope?: string },
+  fetchImpl: typeof fetch = fetch,
+): Promise<string> {
+  const urls = websiteCredentialUrls(issuer);
+  const signin = await fetchImpl(urls.signin, {
+    method: 'POST',
+    headers: websiteCredentialHeaders(issuer),
+    body: JSON.stringify({
+      email: input.email,
+      password: input.password,
+      client_id: input.clientId,
+      ...(input.scope === undefined ? {} : { scope: input.scope }),
+    }),
+  });
+  if (!signin.ok) throw new Error(`website sign-in for ${input.email} failed: HTTP ${signin.status}`);
+  const cookie = signin.headers
+    .getSetCookie()
+    .map((entry) => entry.split(';')[0])
+    .join('; ');
+  const issued = await fetchImpl(urls.token, {
+    method: 'POST',
+    headers: websiteCredentialHeaders(issuer, cookie),
+    body: '{}',
+  });
+  if (!issued.ok) throw new Error(`token for ${input.email} failed: HTTP ${issued.status}`);
+  const token = (await issued.json()) as { access_token?: string };
+  if (!token.access_token) throw new Error(`token for ${input.email} omitted access_token`);
+  return token.access_token;
+}
+
 export function cited(property: string, content: unknown) {
   return {
     property: { id: property },

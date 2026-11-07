@@ -327,7 +327,8 @@ Decision: website sign-in and `/token` POST the issuer Origin with that Origin h
 VN-realm walks. Seed and account-key calls use native Auth as transport and keep CSRF Origin plus assertion audience
 on the issuer; `REZICS_LOCAL_STACK_ISSUER_ORIGIN` supplies that issuer when `AUTH_ORIGIN` is the native port. Walk
 Vite does not `holdUntilCrawlEnd` across every client route: that crawl exhausted Node's 2 GiB heap after `/en` SSR
-on the Semantic walk (ad0f0d79 attempt 3). Worker SSR keeps `noDiscovery`. A heap-size raise is not the repair.
+on the Semantic walk. Worker SSR keeps `noDiscovery`. A heap-size raise is not the repair. Own-drafts CurrentPost
+fixtures follow the Content post contract; they are not a Vite startup seam.
 
 Decision: keep one causal binding regression and the existing launcher assertions. Kernel setup persists the selected
 loopback Auth issuer, audience, JWKS URL, Kernel host and API port in `services/kernel/.env`; start applies the same

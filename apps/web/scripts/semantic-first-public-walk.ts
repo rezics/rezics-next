@@ -43,15 +43,19 @@ import {
   searchType,
   subjectHref,
   takedownZone,
+  walkReadinessUrls,
+  walkSeedProcessEnv,
+  websiteAccessToken,
   type Json,
   type KernelCall,
+  type WalkStackOrigins,
 } from './semantic-first-public-native.ts';
 
 const root = resolve(import.meta.dir, '../../..');
 const evidenceDir = join(root, '.temp/semantic-first-public-walk');
 const token = randomUUID().slice(0, 8);
 
-type Stack = { web: string; issuer: string; native: string; kernel: string };
+type Stack = WalkStackOrigins;
 type Result = {
   id: FirstPublicJourneyId;
   name: string;
@@ -173,36 +177,14 @@ function fetchCall(stack: Stack): KernelCall {
   };
 }
 
-/** Ordinary website sign-in: POST the issuer Origin, the same form Home and VN-realm walks use. */
 async function accessToken(stack: Stack, email: string, password: string): Promise<string> {
   const bindings = await parseEnv(join(root, 'apps/web/.dev.vars'));
-  const signin = await fetch(`${stack.issuer}/signin`, {
-    method: 'POST',
-    headers: { origin: stack.issuer, 'content-type': 'application/json' },
-    body: JSON.stringify({
-      email,
-      password,
-      client_id: bindings.WEBSITE_CLIENT_ID ?? 'rezics-website',
-      scope: bindings.WEBSITE_SCOPES,
-    }),
+  return websiteAccessToken(stack.issuer, {
+    email,
+    password,
+    clientId: bindings.WEBSITE_CLIENT_ID ?? 'rezics-website',
+    ...(bindings.WEBSITE_SCOPES === undefined ? {} : { scope: bindings.WEBSITE_SCOPES }),
   });
-  if (!signin.ok) throw new Error(`website sign-in for ${email} failed: HTTP ${signin.status}`);
-  const issued = await fetch(`${stack.issuer}/token`, {
-    method: 'POST',
-    headers: {
-      origin: stack.issuer,
-      'content-type': 'application/json',
-      cookie: signin.headers
-        .getSetCookie()
-        .map((cookie) => cookie.split(';')[0])
-        .join('; '),
-    },
-    body: '{}',
-  });
-  if (!issued.ok) throw new Error(`token for ${email} failed: HTTP ${issued.status}`);
-  const token = (await issued.json()) as { access_token?: string };
-  if (!token.access_token) throw new Error(`token for ${email} omitted access_token`);
-  return token.access_token;
 }
 
 async function hydrated(page: Page): Promise<void> {
@@ -403,10 +385,11 @@ async function main() {
   const stack = stackOrigins();
   await mkdir(evidenceDir, { recursive: true, mode: 0o700 });
   const revision = (await Bun.$`git -C ${root} rev-parse HEAD`.text()).trim();
+  const readinessUrls = walkReadinessUrls(stack);
   const readiness = {
-    jwks: await typedProbe(`${stack.native}/.well-known/jwks.json`, 'identity'),
-    definitions: await typedProbe(`${stack.kernel}/v1/definitions`, 'kernel'),
-    active: await typedProbe(`${stack.kernel}/v1/definitions/active`, 'kernel'),
+    jwks: await typedProbe(readinessUrls.jwks, 'identity'),
+    definitions: await typedProbe(readinessUrls.definitions, 'kernel'),
+    active: await typedProbe(readinessUrls.active, 'kernel'),
   };
   await writeFile(join(evidenceDir, 'readiness.json'), `${JSON.stringify({ stack, readiness }, null, 2)}\n`, {
     mode: 0o600,
@@ -430,13 +413,10 @@ async function main() {
   let seedCode = 0;
   let seedCause: string | undefined;
   if (!kernelCause && !personaCause) {
-    const seedEnv = {
-      ...process.env,
-      ...(await parseEnv(join(root, '.temp/local-stack/seed.env')).catch(() => ({}))),
-      // Native transport; account-key Origin and audience stay on REZICS_LOCAL_STACK_ISSUER_ORIGIN.
-      AUTH_ORIGIN: stack.native,
-      KERNEL_ORIGIN: stack.kernel,
-    };
+    const seedEnv = walkSeedProcessEnv(
+      stack,
+      await parseEnv(join(root, '.temp/local-stack/seed.env')).catch(() => ({})),
+    );
     seedCode = await child(['bun', 'scripts/datasets/cross-media-seed.ts', '--dev'], 'seed', seedEnv, {
       allowFailure: true,
     });
@@ -1022,15 +1002,17 @@ async function main() {
   if (failing.length) process.exitCode = 1;
 }
 
-try {
-  await main();
-} catch (error) {
-  await mkdir(evidenceDir, { recursive: true, mode: 0o700 });
-  await writeFile(
-    join(evidenceDir, 'setup-failure.json'),
-    `${JSON.stringify({ utc: new Date().toISOString(), error: error instanceof Error ? error.message : String(error) }, null, 2)}\n`,
-    { mode: 0o600 },
-  );
-  console.error(error instanceof Error ? error.message : error);
-  process.exit(1);
+if (import.meta.main) {
+  try {
+    await main();
+  } catch (error) {
+    await mkdir(evidenceDir, { recursive: true, mode: 0o700 });
+    await writeFile(
+      join(evidenceDir, 'setup-failure.json'),
+      `${JSON.stringify({ utc: new Date().toISOString(), error: error instanceof Error ? error.message : String(error) }, null, 2)}\n`,
+      { mode: 0o600 },
+    );
+    console.error(error instanceof Error ? error.message : error);
+    process.exit(1);
+  }
 }
