@@ -33,11 +33,13 @@ import retireFence from './native-source-custody-retire-fence.sql';
 import terminalScope from './erasure-scope.sql';
 import retentionPartition from './collection-retention-partition.sql';
 import {
-  executeCollectionRetentionControl,
-  executeCollectionRetentionQuery,
   withCollectionRetentionDeclaration,
   withCollectionRetentionEngineRequest,
 } from './collection-retention-bounds.ts';
+import {
+  executeCollectionRetentionControl,
+  executeCollectionRetentionQuery,
+} from './collection-retention-execution.ts';
 
 export const COLLECTION_RETENTION_WORKFLOW = 'library.collectionRetention';
 export const COLLECTION_RETENTION_SCHEDULE = 'library.collectionRetention.every-10-minutes';

@@ -25,3 +25,24 @@ export { readBuiltinPublicationRule } from '../builtin-materialization.ts';
 export { retireNativeCollectionCapturePage } from '../native-source-custody.ts';
 export { purgeSavedCollectionPage } from '../saved-collection-retention.ts';
 export { admitCollectionPublicationStep } from '../collection-publication-work-admission.ts';
+
+export type { PreparationSourcePrefix } from '../contract/index.ts';
+export type {
+  NativePreparationWorkFactory,
+  NativePreparationWork,
+  NativePreparationPrefixRequest,
+  NativeScopeWork,
+  NativeScopeWorkDefinition,
+  MembersPreparationWorkContext,
+  CollectionKindPreparationWorkContext,
+  CollectionPublicationWorkContext,
+  ScopeWorkContext,
+} from './preparation-work.ts';
+export {
+  MEMBERS_PREPARATION_SOURCE_AXES,
+  MEMBERS_PREPARATION_SOURCE_PATHS,
+  MEMBERS_PREPARATION_SOURCE_TERMS,
+  MEMBERS_PREPARATION_SOURCE_COST,
+  MEMBERS_PREPARATION_SOURCE_DECLARATION,
+  type MembersPreparationSourceCost,
+} from '../members-preparation-source-declaration.ts';

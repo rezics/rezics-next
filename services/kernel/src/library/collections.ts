@@ -52,7 +52,8 @@ import {
 import { CollectionOrderRepairRequired, planCollectionPlacement } from './collection-order-placement.ts';
 import { assertCollectionOrderWritable, beginCollectionOrderRepair } from './collection-order.ts';
 import { withCollectionOrderDeclaration } from './collection-order-bounds.ts';
-import { withCollectionRetentionDeclaration, executeCollectionRetentionQuery } from './collection-retention-bounds.ts';
+import { withCollectionRetentionDeclaration } from './collection-retention-bounds.ts';
+import { executeCollectionRetentionQuery } from './collection-retention-execution.ts';
 import { consumeShelfMaintenance, shelfMaintenanceCommandPlan } from './shelf-maintenance-bounds.ts';
 import { collectionMutationApplication } from './collection-mutation.ts';
 import {

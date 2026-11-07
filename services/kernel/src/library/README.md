@@ -1,5 +1,26 @@
 # Library
 
+Decision: native Collection preparation consumes Library's `PreparationWorkCapability` and `ScopeWorkCapability`.
+`adapters/preparation-work.ts` specializes them to the original native transaction, locator and ledger. Default
+`composition/library.ts` binds Search's `adapters/library-preparation.ts`: it borrows the already registered worker
+Search runtime at dispatch and preserves Search's definition meter, Source receipts, ordered prefix and reduction.
+Library retains episode admission, before/after Source/Scope/owner checks, checkpoint persistence and conditional apply.
+The exact fixed upper frontier, contiguous ACK, captured-prefix recovery, retained cursor, terminal fences, parent,
+absolute deadline, Pool and complete inclusive work vector remain the original native contracts.
+
+`members-preparation-source-declaration.ts` owns the complete Library Source composite, including the original
+Search execution ceiling and producer-owned path multiplicities from `search/contract`. Search's former declaration
+entry preserves its callable path getter over that same schedule. The single Search contract manifest entry owns both
+execution operands and preparation vocabulary; default composition retains the native follow-count runtime. Saved-probe and closure limits are declaration leaves; publication bounds load neither
+the native Source reader nor closure acquisition. Retention SQL/control execution lives in
+`collection-retention-execution.ts`; its descriptor consumes Semantic's effect-free SQL reduction declaration and
+Shelf's statement descriptor. Both native producers use those same plans. Source client deadline wrapping uses the
+already composed Access capability. No additional Source registry, work plan, publisher or cost is introduced.
+
+Acceptance choice: extend the existing native Source outcome test through default composed admission, and add one
+missing-worker-runtime case; preserve all existing outcome assertions. Workspace typing is worker acceptance;
+native growth, public Search settlement/discovery and default-worker runtime proof remain in the owning Goal walks.
+
 Decision: `collection-native-work.ts` is the mechanical NativeCollectionWork leaf (ProblemError from `http/problem-error.ts`). Access `access-capabilities.ts` re-exports that leaf and Kind input work/types only. Kind raw resolution stays on `collection-kind-input.ts`; composition binds it into Access native ports. Canonical Source sweep/repair stays on `collection-source-work.ts`.
 
 Decision: AniList/MAL list-import vote types consume Rating `VoteObservation` from `rating/index.ts`. Progress adoption classifies Access grant denial and unavailability through `resource-access-errors.ts` and `unavailable.ts`, keeping those error identities. Follow count composition supplies Access `public-identity.ts` through the account producer; public identity no longer value-imports Semantic `subject.ts` or `link-keys.ts`.

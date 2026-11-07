@@ -33,19 +33,19 @@ import {
   type CollectionPublicationWorkDefinition,
 } from '../library/collection-publication-work-admission.ts';
 
-/** SERVER ONLY. A native lookup, never an Actor, permission, DTO or persisted cursor value. */
-export type MembersPreparationWorkContext = Readonly<{
-  kind: 'members-preparation';
-  tx: OperationalTransaction;
-  locator: PreparationLocator;
-}>;
+import type {
+  MembersPreparationWorkContext,
+  CollectionKindPreparationWorkContext,
+  CollectionPublicationWorkContext,
+  ScopeWorkContext,
+} from '../library/adapters/index.ts';
+export type {
+  MembersPreparationWorkContext,
+  CollectionKindPreparationWorkContext,
+  CollectionPublicationWorkContext,
+  ScopeWorkContext,
+} from '../library/adapters/index.ts';
 
-/** SERVER ONLY. A distinct native Kind episode, never a curated Members locator. */
-export type CollectionKindPreparationWorkContext = Readonly<{
-  kind: 'collection-kind-preparation';
-  tx: OperationalTransaction;
-  locator: CollectionKindPreparationLocator;
-}>;
 const kindContexts = new WeakMap<
   object,
   Readonly<{
@@ -90,17 +90,6 @@ export function collectionKindPreparationNativeWork(
     ? kindContexts.get(context)!.work
     : undefined;
 }
-
-/** SERVER ONLY. Whole-query publication B consumes its own Collection's private working input. */
-export type CollectionPublicationWorkContext = Readonly<{
-  kind: 'collection-publication';
-  tx: OperationalTransaction;
-  locator: CollectionPublicationLocator;
-}>;
-export type ScopeWorkContext =
-  | MembersPreparationWorkContext
-  | CollectionKindPreparationWorkContext
-  | CollectionPublicationWorkContext;
 
 type WorkOptions = Readonly<{ pool: Pool; access: Access; deadline: number }>;
 

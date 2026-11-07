@@ -1,4 +1,5 @@
 import { nativeFollowCountRuntime } from './library-follow-counts.ts';
+import { createLibraryPreparationWork, nativeLibraryScopeWork } from '../search/adapters/index.ts';
 /** Library process composition. Binds native SQL and foreign Access/Search/Semantic/Content adapters. */
 
 import { commandAccessContext } from '../access/command-admission.ts';
@@ -330,7 +331,12 @@ export function composeLibraryDomain(options: LibraryComposeOptions = {}): Libra
       options.capabilities?.accountAdmission ?? sumAdmission([admissionTerm('composition', { statements: 1 })]),
     ...extras,
   };
-  return bindLibraryDomain({ ...createLibraryApplications(capabilities), followCounts: nativeFollowCountRuntime() });
+  return bindLibraryDomain({
+    ...createLibraryApplications(capabilities),
+    followCounts: nativeFollowCountRuntime(),
+    preparationWork: createLibraryPreparationWork,
+    scopeWork: nativeLibraryScopeWork,
+  });
 }
 
 export { peekLibraryDomain, bindLibraryDomain, requireLibraryDomain, unbindLibraryDomain };

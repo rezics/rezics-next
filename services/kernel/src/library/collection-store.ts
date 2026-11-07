@@ -30,7 +30,7 @@ import memberRestore from './collection-store-collection-member-restore.sql';
 import memberRetentionRead from './collection-store-collection-member-retention-read.sql';
 import membersList from './collection-store-collection-members-list.sql';
 import membersRespace from './collection-store-collection-members-respace.sql';
-import { executeCollectionRetentionQuery } from './collection-retention-bounds.ts';
+import { executeCollectionRetentionQuery } from './collection-retention-execution.ts';
 
 type Client = Pick<PoolClient, 'query'>;
 type WriteContext = { transactionId: string; time: string };

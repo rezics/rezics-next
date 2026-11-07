@@ -1,5 +1,11 @@
 # Semantic
 
+Decision: public-filter Collection reduction exposes the native statement declaration through
+`adapters/collection-reduction.ts`, using `contract` statement names. That descriptor has no command work-association
+implementation. Native reduction executes the identical SQL and serialized-bind plan from that adapter; Library
+retention can compose the original complete cost without loading reduction execution. Existing publication,
+currentness and terminal fencing remain authoritative.
+
 This module owns subject facts and their item projections, partition paging, and immutable definition releases with editorial activation history.
 
 ## Semantic label policy

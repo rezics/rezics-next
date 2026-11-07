@@ -1,5 +1,12 @@
 # Search
 
+Decision: `adapters/library-preparation.ts` implements Library's native preparation and scope-work capabilities.
+It uses the worker's existing Search runtime, original same-client work definition admission and definition/body
+meters. The ordered Source prepare/prefix/evaluate algorithm retains its exact cursor and partial-evaluation
+progress. Search contract owns path multiplicities; Library declares the complete Source composite. Ordinary default
+composition binds both capabilities before registration; absent Search runtime remains unavailable. Search retains
+Source settlement, public discovery and its existing native/growth outcomes.
+
 [Rejected text query repair](text-query-repair.md) owns bounded parser diagnostics and deliberate in-place correction.
 
 Search owns the subject search projection, indexing consumers, disclosure checks, query API, freshness and index

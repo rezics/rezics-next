@@ -133,3 +133,7 @@ export type {
 
 export const COLLECTION_PUBLICATION_COMMAND = 'library.collection.publication.begin';
 export const COLLECTION_PUBLICATION_WORKFLOW = 'library.collectionPublication';
+
+export type { PreparationWorkCapability, PreparationSourcePrefix, ScopeWorkCapability } from './preparation-work.ts';
+
+export { OWNER_FILTER_CLOSURE_REFERENCE_LIMIT, OWNER_FILTER_CLOSURE_ORIGINAL_LIMIT } from './preparation-limits.ts';

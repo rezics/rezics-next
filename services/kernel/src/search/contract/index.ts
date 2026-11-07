@@ -35,3 +35,6 @@ export function zeroScopeWork(): ScopeExecutionDimensions {
     bytes: 0,
   };
 }
+
+/** Search producer vocabulary; no native implementations. */
+export { membersPreparationSourcePaths } from './members-preparation.ts';

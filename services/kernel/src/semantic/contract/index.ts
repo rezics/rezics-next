@@ -73,3 +73,4 @@ export type * from './rating-values.ts';
 export { IdentityEpochStoreError } from './identity-errors.ts';
 export { IDENTITY_SOURCE_ORIGINAL_SCHEDULE } from './identity-source-schedule.ts';
 export type { ScopeEvidenceObservation, ScopeEvidenceHost, ScopeEvidenceReader } from './scope-evidence.ts';
+export type { CollectionReductionStatement, CollectionReductionDeclaration } from './collection-reduction.ts';

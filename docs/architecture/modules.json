@@ -561,7 +561,8 @@
         "services/kernel/src/library/collection-native-work.ts",
         "services/kernel/src/library/collection-kind-input.ts",
         "services/kernel/src/library/subject-anchor.ts",
-        "services/kernel/src/library/zone-collection-adapter.ts"
+        "services/kernel/src/library/zone-collection-adapter.ts",
+        "services/kernel/src/library/members-preparation-source-declaration.ts"
       ],
       "allowedDependencies": [
         "access-policy",
@@ -585,7 +586,7 @@
         "operations",
         "progress",
         "kernel-library-core",
-        "kernel-library-application"
+        "kernel-search-contract"
       ],
       "capabilities": ["library"],
       "postgresPaths": ["services/kernel/src/library/**"]
@@ -675,6 +676,7 @@
         "services/kernel/src/semantic/public-subject-facts.ts",
         "services/kernel/src/semantic/adapters/native-domain.ts",
         "services/kernel/src/semantic/adapters/agent-identity-maintenance.ts",
+        "services/kernel/src/semantic/adapters/collection-reduction.ts",
         "services/kernel/src/semantic/adapters/index.ts",
         "services/kernel/src/semantic/credit-search.ts",
         "services/kernel/src/semantic/deletion/index.ts",
@@ -1822,7 +1824,7 @@
       "paths": ["services/kernel/src/search/contract/**"],
       "publicEntries": ["services/kernel/src/search/contract/index.ts"],
       "allowedDependencies": [],
-      "capabilities": ["search-execution-values"]
+      "capabilities": ["search-execution-values", "search-preparation-vocabulary"]
     }
   ]
 }
