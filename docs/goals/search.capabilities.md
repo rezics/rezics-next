@@ -163,6 +163,16 @@ names and missing route-key configuration in direct registration. Its child now 
 module list, and direct registration uses the existing worker environment; lifecycle and registration assertions
 are retained. Evidence: `.temp/goal/checks/worker-check-22d6f13b-4b7c-4793-b98f-0eb8ff02e05b-2026-11-07T10-55-21.456Z-31d2dbd7.log`.
 
+Receiving at `90be1ee714927d0681386e12fb12ea13355762c1` passed compiler and quality checks and the same seven native
+files; the command failed in 304.105 seconds on host a. The dynamic creation 403 is resolved. Both output suites now
+reach native `Conflict` at `collection-source-output.ts:119` from allocation at line 167; the unheld-output case still
+reaches the projection-plan failure and the following transfer case SQLSTATE 25006. The separate output-custody
+repair owns these observations. Work-module startup did not converge and reproduced alone; direct registration
+also reached its fixture's throwing authorization callback. That callback now returns the real mounted worker
+authorization, and child stderr is retained during readiness waits so a timeout cannot conceal its first diagnostic.
+No timeout or lifecycle assertion is relaxed. Evidence:
+`.temp/goal/checks/worker-check-191c3565-91de-46dd-beb0-8961a4fdd8aa-2026-11-07T11-05-47.789Z-cb565bff.log`.
+
 ### Last observed dev census
 
 Observed walk revision: `93eb7908d8e983998d4b280ea275b131aaa444a1` (origin/dev `b94d47ff56` including startup
