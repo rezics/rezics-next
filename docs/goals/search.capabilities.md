@@ -33,46 +33,48 @@ explicit. Documentation formatting is the focused delivery check; it supplies no
 
 ### Current dev census
 
-Observed walk revision: `dbd1b77a48b95c4242982795db368cb5b838a108` (issuer-origin JWKS on product
-`4904c8e26e1994442c45dce707a642dda0125168`). This row set replaces the 03:57–04:23 UTC census. Worker identity
+Observed walk revision: `5705ac4e00e51dc30d2495d19d19a2fc1573436e` (issuer-origin JWKS on product
+`4904c8e26e1994442c45dce707a642dda0125168`). This row set replaces the 04:51–05:27 UTC census. Worker identity
 started. Partial native public reads do not pass an unexecuted whole journey.
 
 One admitted slot, with PostgreSQL and OpenSearch, ran
 `bun services/auth/scripts/dev-stack.ts walk -- bun apps/web/scripts/search-first-public-walk.ts`.
-The child ran native `persona` (110.342 s), then `bun scripts/datasets/cross-media-seed.ts --dev`, which exited 1,
+The child ran native `persona` (84.85 s), then `bun scripts/datasets/cross-media-seed.ts --dev`, which exited 1,
 then `startSeededFrontends`. No second concurrent Search walk ran.
 
-Launcher wall **2182.444 seconds** from **2026-11-07 04:51:05.306 UTC** through **05:27:27.750 UTC**. Slot **1/6**
-after 458.269 s. Child observations begin **05:09:26.410 UTC**. Persona **anonymous** for every row: a developer
+Launcher wall **2305.194 seconds** from **2026-11-07 06:25:13.581 UTC** through **07:03:38.775 UTC**. Slot **6/6**
+after 33 ms. Child observations begin **06:37:59.387 UTC**. Persona **anonymous** for every row: a developer
 account was created; issuer Vite listened, then both frontends stopped after the Web module failure, so no bearer
 was issued. Phone 390, desktop 1280 and `en`/`zh-Hant`/`ja` were attempted only where a page URL was opened.
+Authenticated Search and publication stay blocked on issuer pages after that Web failure, not on JWKS identity.
 
 | Journey               | User-visible path and passing result                                                                                                                                                                                         | Exposure                                                                            | Dev walk result                                                                                 | Evidence / first failure                                                                                                                                                          |
 | --------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Mixed Search          | Open Search, submit text, open a permitted result and return to the executed query; continued pages remain useful and current after a visibility change.                                                                     | Existing Search grant                                                               | FAIL — native search; 181.284 s; rev `dbd1b77a48b95c4242982795db368cb5b838a108`                  | Anonymous `POST /v1/subjects:search` text `Steins;Gate` stayed **503 `index_not_ready`**. Result open, return and visibility change not executed. [Repair](#seed-import-repair).  |
-| Refine and continue   | Submit supported Type/filter operands, inspect current facet choices, continue and restart in the same executed query; changed reader or resource scope retires old values and cursors.                                      | Existing Search grant; advanced second-scope operands remain outside this inventory | FAIL — native search; 180.747 s; rev `dbd1b77a48b95c4242982795db368cb5b838a108`                  | Typed search `The` / `schema:Book` stayed **503 `index_not_ready`**. Facets, continuation and reader retirement not executed. [Repair](#seed-import-repair).                      |
-| Multilingual names    | Type an original-language name or current alias, select a suggestion, open the matching Subject and change locale without losing the query or authored language order.                                                       | Existing Search grant                                                               | FAIL — native suggest; 0.807 s; rev `dbd1b77a48b95c4242982795db368cb5b838a108`                   | `GET /v1/subjects:suggest?q=シュタインズ・ゲート` **503 `index_not_ready`**. Suggestion, Subject and locale return not executed. [Repair](#seed-import-repair).                     |
-| Search recovery       | Correct an invalid authored operand or deliberately retry a preparing/unavailable request after its deadline; generation loss restarts that executed request and renders useful output.                                      | Existing Search grant                                                               | FAIL — corrected search; 180.726 s; rev `dbd1b77a48b95c4242982795db368cb5b838a108`               | Invalid `"unclosed` returned **422 `unsupported_query`**. Corrected `Steins;Gate` stayed **503 `index_not_ready`**. Search page `ERR_CONNECTION_REFUSED`. [Repair](#seed-import-repair). |
-| Configured reading    | Open a configured Subject or static Zone page and read its declared lists in document order; unavailable slots leave supported siblings usable, and a current continuation/retry reaches the right list.                     | Public configured reader where the owning scope admits it                           | FAIL — mounted page; 0.543 s; rev `dbd1b77a48b95c4242982795db368cb5b838a108`                     | Native `GET /v1/presentation/active` **200** digest `sha256:192d23c559f0befa1f7e4ecbe1dadd0a6eb766c2c668ce7652c2e07cd8492002`. Home `http://127.0.0.1:20010/en/` `ERR_CONNECTION_REFUSED`. [Repair](#frontend-after-seed-repair). |
-| Published composition | Publish an admitted shared profile or curated Collection presentation, open the selected public version while the editor has a later draft, and deliberately recover a refused/lost response to the actual published result. | Existing publication authority and public selected-version reading                  | FAIL — editor bearer; 0.405 s; rev `dbd1b77a48b95c4242982795db368cb5b838a108`                    | Public A GET **200**, lost digest **404**, recover **200**; anonymous publish **401 `authentication_required`**. Bearer not issued; page refused. [Repair](#frontend-after-seed-repair). |
+| Mixed Search          | Open Search, submit text, open a permitted result and return to the executed query; continued pages remain useful and current after a visibility change.                                                                     | Existing Search grant                                                               | FAIL — native search; 181.152 s; rev `5705ac4e00e51dc30d2495d19d19a2fc1573436e`                  | Anonymous `POST /v1/subjects:search` text `Steins;Gate` stayed **503 `index_not_ready`**. Result open, return and visibility change not executed. [Repair](#seed-import-repair).  |
+| Refine and continue   | Submit supported Type/filter operands, inspect current facet choices, continue and restart in the same executed query; changed reader or resource scope retires old values and cursors.                                      | Existing Search grant; advanced second-scope operands remain outside this inventory | FAIL — native search; 181.030 s; rev `5705ac4e00e51dc30d2495d19d19a2fc1573436e`                  | Typed search `The` / `schema:Book` stayed **503 `index_not_ready`**. Facets, continuation and reader retirement not executed. [Repair](#seed-import-repair).                      |
+| Multilingual names    | Type an original-language name or current alias, select a suggestion, open the matching Subject and change locale without losing the query or authored language order.                                                       | Existing Search grant                                                               | FAIL — native suggest; 1.110 s; rev `5705ac4e00e51dc30d2495d19d19a2fc1573436e`                    | `GET /v1/subjects:suggest?q=シュタインズ・ゲート` **503 `index_not_ready`**. Suggestion, Subject and locale return not executed. [Repair](#seed-import-repair).                     |
+| Search recovery       | Correct an invalid authored operand or deliberately retry a preparing/unavailable request after its deadline; generation loss restarts that executed request and renders useful output.                                      | Existing Search grant                                                               | FAIL — corrected search; 187.444 s; rev `5705ac4e00e51dc30d2495d19d19a2fc1573436e`               | Invalid `"unclosed` returned **422 `unsupported_query`**. Corrected `Steins;Gate` stayed **503 `index_not_ready`**. Search page `ERR_CONNECTION_REFUSED`. [Repair](#seed-import-repair). |
+| Configured reading    | Open a configured Subject or static Zone page and read its declared lists in document order; unavailable slots leave supported siblings usable, and a current continuation/retry reaches the right list.                     | Public configured reader where the owning scope admits it                           | FAIL — mounted page; 1.472 s; rev `5705ac4e00e51dc30d2495d19d19a2fc1573436e`                     | Native `GET /v1/presentation/active` **200** digest `sha256:192d23c559f0befa1f7e4ecbe1dadd0a6eb766c2c668ce7652c2e07cd8492002`. Home `http://127.0.0.1:20060/en/` `ERR_CONNECTION_REFUSED`. [Repair](#frontend-after-seed-repair). |
+| Published composition | Publish an admitted shared profile or curated Collection presentation, open the selected public version while the editor has a later draft, and deliberately recover a refused/lost response to the actual published result. | Existing publication authority and public selected-version reading                  | FAIL — editor bearer; 0.519 s; rev `5705ac4e00e51dc30d2495d19d19a2fc1573436e`                    | Public A GET **200**, lost digest **404**, recover **200**; anonymous publish **401 `authentication_required`**. Bearer not issued; page refused. [Repair](#frontend-after-seed-repair). |
 
 ### Native observation and operands
 
 Secret-free evidence is `.temp/search-walk/evidence.json` plus the walk stack log: slot, public origins, JWKS
 identity, HTTP statuses and codes. No bearer, password, key, cookie or private seed environment is recorded.
 
-- Launcher operands: slot 1; Web `http://127.0.0.1:20010`, issuer `http://127.0.0.1:20011`, native Auth
-  `http://127.0.0.1:20012`, Kernel `http://127.0.0.1:20013`.
-- `AUTH_ISSUER` `http://127.0.0.1:20011`; `AUTH_JWKS_URL` `http://127.0.0.1:20011/.well-known/jwks.json`. Worker
-  printed `Worker ready`. Native transport served JWKS on `:20012`.
+- Launcher operands: slot 6; Web `http://127.0.0.1:20060`, issuer `http://127.0.0.1:20061`, native Auth
+  `http://127.0.0.1:20062`, Kernel `http://127.0.0.1:20063`.
+- `AUTH_ISSUER` `http://127.0.0.1:20061`; `AUTH_JWKS_URL` `http://127.0.0.1:20061/.well-known/jwks.json`. Worker
+  printed `Worker ready`. Native transport served JWKS on `:20062`. Kernel `/v1/definitions` became ready. Anonymous
+  JWKS/kernel startup is not a remaining issuer-origin gate.
 - Persona step created `developer@rezics.test`. Seed step printed **`Import transport request failed`** and exited 1
   (unphased `ImportTransportError`: the Kernel fetch threw, with no HTTP status). Showcase collections: 0.
-- Frontends ran after that failed seed. Issuer Vite became ready on `:20011` in 36081 ms. Web `:20010` then failed:
+- Frontends ran after that failed seed. Issuer Vite became ready on `:20061` in 19292 ms. Web `:20060` then failed:
   `no match for module: typebox/type` / `No such module ".../elysia/dist/type/typebox/type"`, `script "dev"` exit 1.
-- Developer bearer: issuer `:20011/signin` **ECONNREFUSED** after both frontend children were stopped.
+- Developer bearer: issuer `:20061/signin` **ECONNREFUSED** after both frontend children were stopped.
 - Actual native Search: mixed/typed/suggest **503 `index_not_ready`** with `retry-after: 1` through the 180 s
-  wait. Invalid operand **422 `unsupported_query`**. Public presentation active/profile read **200**; publish without
-  a bearer **401**.
+  wait. Invalid operand **422 `unsupported_query`**. Stale cursor **400 `invalid_request`**. Public presentation
+  active/profile read **200**; publish without a bearer **401**.
 - Mounted pages: desktop 1280 `en` navigations returned `ERR_CONNECTION_REFUSED`. Phone 390 and `zh-Hant`/`ja` pages
   were not reached after that.
 
@@ -91,7 +93,7 @@ admitted stack. Do not invent source records. Do not treat a thrown fetch as a f
 ### Frontend after seed repair
 
 **Cause and owner:** this walk started `startSeededFrontends` after the failed seed. Issuer Vite listened on
-`:20011`. Web SSR then failed: `AssertionError: Unexpected error: no match for module: typebox/type`, then
+`:20061`. Web SSR then failed: `AssertionError: Unexpected error: no match for module: typebox/type`, then
 `Error: No such module ".../elysia/dist/type/typebox/type"`, `script "dev" exited with code 1`. Both frontend
 children were stopped, so issuer sign-in and mounted pages were **ECONNREFUSED**. Content/Web owns that Vite
 Cloudflare/miniflare Elysia module map.
@@ -101,8 +103,8 @@ admitted stack. Sign-in still uses the real issuer pages and a real password fro
 
 ### Scope of this census and handoff
 
-The result is **0/6 passing**. Mixed Search is the slowest failing journey at **181.284 s**; its first failing
-product step is native search **503 `index_not_ready`**. The shared setup cause is [Seed import repair](#seed-import-repair);
+The result is **0/6 passing**. Search recovery is the slowest failing journey at **187.444 s**; its first failing
+product step is corrected search **503 `index_not_ready`**. The shared setup cause is [Seed import repair](#seed-import-repair);
 page and bearer gaps join [Frontend after seed repair](#frontend-after-seed-repair). Partial public presentation
 reads do not pass Configured reading or Published composition. Authenticated Search and publication stay blocked on
 issuer pages after the Web module failure; issuer-origin JWKS already started. Seed diagnostics stay with the queued
@@ -150,7 +152,7 @@ Walk worker printed `Discovery requires an active definition release` at `accoun
 then `SearchUnavailableError: Public preparation release is unavailable`, then later `Worker ready`. Capture child
 stdout in the 90 s init window. Keep the existing assertions. This is not a new Imports outcome.
 
-Web Character local-selection and with-dev-server cells were retried 2026-11-07 05:57 UTC: focused Web again
+Web Character local-selection and with-dev-server cells were retried 2026-11-07 07:04 UTC: focused Web again
 returned `Web check unavailable: the selected Performance snapshot is not integrated into canonical
 dev`. Commerce 401f58 assertions remain required. Loans query/read stay Commerce-owned.
 
