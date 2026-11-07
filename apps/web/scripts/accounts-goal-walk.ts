@@ -365,6 +365,21 @@ function requireStatus(result: { status: number; value: Json }, label: string, e
   return result.value;
 }
 
+async function untilStatus(
+  read: () => Promise<{ status: number; value: Json }>,
+  label: string,
+  expected: number,
+): Promise<Json> {
+  const deadline = Date.now() + 30_000;
+  let last = { status: 0, value: {} as Json };
+  while (Date.now() < deadline) {
+    last = await read();
+    if (last.status === expected) return last.value;
+    await Bun.sleep(250);
+  }
+  throw new Error(`${label} returned HTTP ${last.status}: ${summarize(last.value)}`);
+}
+
 function isInvalidCredentials(result: { status: number; value: Json }): boolean {
   return result.status === 401 && result.value.code === 'invalid_credentials';
 }
@@ -597,17 +612,17 @@ async function operate(
   const body = {
     operationKey,
     operation,
-    ...(operation.kind === 'organization' ? {} : { accountId: session.accountId }),
+    ...(operation.kind === 'organization' || operation.kind === 'delete' ? {} : { accountId: session.accountId }),
     ...rest,
   };
-  const approval = await auth(stack, '/account-operations/approve', session, body);
+  const approval = await auth(stack, '/account-operations/approve', session, body, 30_000);
   if (approval.status !== 200) return approval;
   if (operation.kind === 'transfer-acceptance' || operation.kind === 'opening') return approval;
   return auth(stack, '/account-operations/execute', session, {
     ...body,
     reference: approval.value.reference,
     ...(typeof confirmation === 'string' ? { confirmation } : {}),
-  });
+  }, 30_000);
 }
 
 async function credentialEffect(
@@ -1321,11 +1336,17 @@ if (import.meta.main) {
     if (realm.status !== 201) throw new Error(`realm create HTTP ${realm.status}: ${summarize(realm.value)}`);
     realmId = asId((realm.value.realm as Json | undefined)?.realmId ?? realm.value.realmId, 'realm');
     const memberToken = await websiteToken(stack, member, bindings, keys.website);
-    const joined = await kernel(stack, 'POST', `/v1/realms/${realmId}/membership`, { bearer: memberToken.bearer, body: {} });
+    const joined = await kernel(stack, 'POST', `/v1/realms/${realmId}/members`, {
+      bearer: ownerToken.bearer,
+      body: { accountId: member.accountId },
+    });
     if (![200, 201, 202].includes(joined.status))
       throw new Error(`join HTTP ${joined.status}: ${summarize(joined.value)}`);
-    const allowed = await kernel(stack, 'GET', `/v1/realms/${realmId}/members/me`, { bearer: memberToken.bearer });
-    requireStatus(allowed, 'protected member read', 200);
+    const allowed = await untilStatus(
+      () => kernel(stack, 'GET', `/v1/realms/${realmId}/members/me`, { bearer: memberToken.bearer }),
+      'protected member read',
+      200,
+    );
     const left = await kernel(stack, 'DELETE', `/v1/realms/${realmId}/membership`, { bearer: memberToken.bearer });
     if (![200, 202, 204].includes(left.status)) throw new Error(`leave HTTP ${left.status}: ${summarize(left.value)}`);
     const after = await kernel(stack, 'GET', `/v1/realms/${realmId}/members/me`, { bearer: memberToken.bearer });
@@ -1338,9 +1359,17 @@ if (import.meta.main) {
     if (!realmId) throw new Error('realm create did not yield an identity');
     const banned = dest ?? (await signup(stack, 'j16'));
     const memberToken = await websiteToken(stack, banned, bindings, keys.website);
-    const joined = await kernel(stack, 'POST', `/v1/realms/${realmId}/membership`, { bearer: memberToken.bearer, body: {} });
+    const joined = await kernel(stack, 'POST', `/v1/realms/${realmId}/members`, {
+      bearer: website.bearer,
+      body: { accountId: banned.accountId },
+    });
     if (![200, 201, 202].includes(joined.status))
       throw new Error(`rejoin HTTP ${joined.status}: ${summarize(joined.value)}`);
+    await untilStatus(
+      () => kernel(stack, 'GET', `/v1/realms/${realmId}/members/me`, { bearer: memberToken.bearer }),
+      'rejoined member read',
+      200,
+    );
     const ban = await kernel(stack, 'PUT', `/v1/realms/${realmId}/bans/${banned.accountId}`, {
       bearer: website.bearer,
       body: { reason: 'Goal walk ban' },
@@ -1364,8 +1393,11 @@ if (import.meta.main) {
     });
     if (![200, 201, 202].includes(readmit.status))
       throw new Error(`authorized readmission HTTP ${readmit.status}: ${summarize(readmit.value)}`);
-    const restored = await kernel(stack, 'GET', `/v1/realms/${realmId}/members/me`, { bearer: memberToken.bearer });
-    requireStatus(restored, 'readmitted member read', 200);
+    await untilStatus(
+      () => kernel(stack, 'GET', `/v1/realms/${realmId}/members/me`, { bearer: memberToken.bearer }),
+      'readmitted member read',
+      200,
+    );
     return `ban HTTP ${ban.status}; readmission HTTP ${readmit.status}`;
   });
 

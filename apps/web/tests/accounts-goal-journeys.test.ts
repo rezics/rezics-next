@@ -76,6 +76,8 @@ test('the table-shape check does not boot Storybook, and follow writes the publi
   expect(source).toContain("visibility: 'protected'");
   expect(source).toContain("join(root, '.temp/local-stack/recovery'");
   expect(source).toContain('delete rest.confirmation');
+  expect(source).toContain("operation.kind === 'organization' || operation.kind === 'delete'");
+  expect(source).toContain("`/v1/realms/${realmId}/members`");
   expect(source).toContain('outsider opened the software session');
   expect(source).toContain('/operator-sessions/open');
   const rows = parseJourneyTable(readFileSync(capabilities, 'utf8'));
