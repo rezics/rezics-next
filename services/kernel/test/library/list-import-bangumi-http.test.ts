@@ -258,7 +258,7 @@ test.serial(
        (SELECT jsonb_agg(CASE WHEN m->>'token'=$5
          THEN m #- '{confirmation,outcome}' #- '{confirmation,annotationStatus}' ELSE m END)
         FROM jsonb_array_elements(r.review->'metadata') m),true)
-     WHERE r.route=$1 AND r.account_id=$2 AND r.upload_id=$3 AND r.ordinal=0`,
+     WHERE r.route=$1 AND r.account_id=$2 AND r.upload_id=$3 AND r.ordinal=$4::integer`,
       [routeOf(f.owner.actor.accountId), f.owner.actor.accountId, uploadId, 0, metadata.reviewToken],
     );
     const expires = await f.pool.query<{ route: number; expiresAt: string }>(
@@ -326,7 +326,7 @@ test.serial(
        (SELECT jsonb_agg(CASE WHEN m->>'token'=$5
          THEN jsonb_set(m,'{confirmation,annotationStarted}','true'::jsonb) ELSE m END)
         FROM jsonb_array_elements(r.review->'metadata') m),true)
-     WHERE r.route=$1 AND r.account_id=$2 AND r.upload_id=$3 AND r.ordinal=0`,
+     WHERE r.route=$1 AND r.account_id=$2 AND r.upload_id=$3 AND r.ordinal=$4::integer`,
       [routeOf(f.owner.actor.accountId), f.owner.actor.accountId, unresolvedId, 0, unresolved.reviewToken],
     );
     await f.pool.query(
@@ -918,6 +918,7 @@ test.serial(
         upload([{ ...record(900008), subject_type: 4, rate: 8 }]).upload,
         randomUUID(),
       );
+      await score.recapture();
       const reviewed = await interrupted.review(
         score.owner.actor,
         uploadId,
@@ -926,10 +927,13 @@ test.serial(
         { action: 'set', units: 0 },
         randomUUID(),
       );
+      expect(reviewed.review!.score!.native.admission).toEqual({
+        status: 'reviewed',
+        reason: 'native_review_observed',
+      });
       const selected = [
         { ...choice(0, reviewed.review!, 'omit'), score: { action: 'set' as const, units: 0, consent: true as const } },
       ];
-      await score.recapture();
       await expect(
         interrupted.apply(score.owner.actor, uploadId, selected, new AbortController().signal, Date.now() + 120000),
       ).rejects.toThrow('Lost Bangumi score acknowledgement');

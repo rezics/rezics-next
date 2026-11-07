@@ -3796,6 +3796,12 @@ interrupted dispatch, corrected target/independent consent and source spelling. 
 whole retained-document decoding, each repeated source observation/dispatch, SQL work and cleanup. Frozen, independent
 all-pool 64/512/4096, V4 composition and terminal acceptance remain integration work.
 
+Decision: after Bangumi evidence expiry, metadata recovery replays only the exact started annotation or provenance
+receipt, and score recovery reconciles only the retained Rating receipt before an independent current Rating read.
+Neither path admits a new effect after source scrub; a not-started metadata intent remains unattempted. Native fixtures
+bind their addressed ordinal as SQL `integer`, reuse Access command receipts for unchanged grant intents, and establish
+a current Rating review before injecting lost score delivery.
+
 ## Semantic observation capability
 
 Decision: Library consumes one supplied `LibrarySemanticObservationCapability` for canonical identity, Follow
