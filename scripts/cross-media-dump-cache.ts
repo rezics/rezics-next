@@ -29,6 +29,7 @@ const DUMP_CACHE_SCRIPTS = new Set([
   'vn-realm-seeded-walk.ts',
   'managed-accounts-seeded-walk.ts',
   'thread-board-reading.walk.ts',
+  'commerce-library-journeys.walk.ts',
   'cross-media-seed.ts',
   'fetch-dumps.ts',
 ]);

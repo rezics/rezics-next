@@ -355,8 +355,11 @@ controller-owned stack, browser and persona handles, then record the source revi
 actual native identities. Missing credentials, private exports or required seeded roles are setup inputs for the
 controller. Keep actual doctor volumes and live process and browser sessions. Use `127.0.0.1` throughout.
 
-Inside `<command>`, provision with `bun services/auth/scripts/dev-stack.ts persona` and seed with
-`bun scripts/datasets/cross-media-seed.ts --dev` after loading the private `seed.env` that persona wrote. Do not run
+Inside `<command>`, wait until identity-epoch topology remaining is zero, provision with
+`bun services/auth/scripts/dev-stack.ts persona` and seed with
+`bun scripts/datasets/cross-media-seed.ts --dev` after loading the private `seed.env` that persona wrote. Seed
+import writes racing unfinished 4096-home bootstrap answered `503 semantic_not_ready` on
+`POST /v1/subjects:batchWrite`. Do not run
 `task seed:dev` or `task dev:persona` inside a walk: those depend on `dev:infra` and would start the default-port
 stack beside the admitted slot. Ordinary member personas use actual signup; privileged roles come from native
 admission. Browser launch sets `TMPDIR` to a short root such as `/tmp/rw` when the inherited root is missing, so

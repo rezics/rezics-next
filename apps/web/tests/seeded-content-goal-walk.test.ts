@@ -55,6 +55,8 @@ test('the Content Goal walk names every first-scope row and summarises passing, 
   expect(source).toContain('retireStaleSeedJournals');
   expect(source).toContain('startSeededFrontends');
   expect(source).toContain('waitUntilWalkReady');
+  expect(source).toContain('waitUntilIdentityBootstrapRemainingZero');
+  expect(source).toContain('identityEpochBootstrapRemaining');
   expect(source).toContain('published-post');
   expect(source).toContain('moderation-decisions');
   expect(source).toContain('notifications:markSeen');

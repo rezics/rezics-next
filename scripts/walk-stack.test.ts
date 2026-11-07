@@ -20,6 +20,7 @@ import {
   seedJournalsNameDifferentDatabase,
   stackStartPlan,
   waitUntilWalkReady,
+  waitUntilIdentityBootstrapRemainingZero,
   walkCgroupPath,
   walkDockerOutput,
   walkIssuerForward,
@@ -324,6 +325,29 @@ test('untilReady retains observed probe, fetch and child-exit causes instead of 
   }).catch((error: Error) => error);
   expect(fetches[0]).toEqual([`stack: fetch ${url} HTTP 503`]);
   expect(JSON.stringify(fetches)).not.toContain('ECONNREFUSED');
+});
+
+test('identity remaining wait returns once topology remaining is zero', async () => {
+  const seen: number[] = [];
+  await waitUntilIdentityBootstrapRemainingZero(
+    async () => {
+      seen.push(seen.length === 0 ? 12 : 0);
+      return seen.at(-1)!;
+    },
+    { sleep: async () => {}, ms: 5_000 },
+  );
+  expect(seen).toEqual([12, 0]);
+});
+
+test('identity remaining wait names the last remaining count', async () => {
+  let now = 0;
+  await expect(
+    waitUntilIdentityBootstrapRemainingZero(async () => 17, {
+      now: () => (now += 600),
+      sleep: async () => {},
+      ms: 1_000,
+    }),
+  ).rejects.toThrow('identity epoch bootstrap not caught up: remaining 17');
 });
 
 test('seeded Web is ready only on useful /en HTML, not a Vite missing-module overlay', async () => {
