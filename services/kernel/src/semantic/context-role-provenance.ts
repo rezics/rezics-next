@@ -1,6 +1,6 @@
 import { currentCommand, type CommandTransaction } from '../command/command.ts';
 import { partitionOf, routeOf } from '../route/route.ts';
-import { contextAccess, type ContextRoleOccurrenceInput } from './context-access-port.ts';
+import { contextAccess, type ContextAccessPort, type ContextRoleOccurrenceInput } from './context-access-port.ts';
 import enroll from './context-role-provenance.sql';
 
 export type ContextRoleEnrollmentResult =
@@ -15,6 +15,7 @@ export type ContextRoleEnrollmentResult =
 export async function enrollContextRoleProvenance(
   tx: CommandTransaction,
   input: Readonly<{ route: number; occurrence: ContextRoleOccurrenceInput }>,
+  accessPort?: ContextAccessPort,
 ): Promise<ContextRoleEnrollmentResult> {
   const command = currentCommand(tx);
   const occurrence = input.occurrence;
@@ -26,7 +27,7 @@ export async function enrollContextRoleProvenance(
     return { state: 'pending' };
   if (!/^[1-9][0-9]{0,18}$/.test(occurrence.occurrence) || BigInt(occurrence.occurrence) > 9223372036854775807n)
     throw new TypeError('Invalid native Context role occurrence');
-  const port = contextAccess();
+  const port = accessPort ?? contextAccess();
   await tx.query('SAVEPOINT semantic_context_role_enrollment');
   await port.recordSourceCommit(tx, command.transactionId);
   const result = await enroll.run(tx, {

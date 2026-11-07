@@ -136,7 +136,7 @@ export type ContextAccessPort = Readonly<{
 
 let bound: ContextAccessPort | undefined;
 
-/** Composition installs the native Access adapter. Directory and lifecycle never import that adapter. */
+/** Process binding for standalone compatibility calls; application instances receive their port directly. */
 export function bindContextAccess(port: ContextAccessPort): ContextAccessPort {
   bound = port;
   return port;

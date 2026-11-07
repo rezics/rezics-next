@@ -1,14 +1,14 @@
-import { bindContextAccess } from '../semantic/context-access-port.ts';
-import { bindContextApplication, createContextApplication } from '../semantic/context-application.ts';
+import { bindContextAccess, bindContextApplication, createContextApplication } from '../semantic/index.ts';
 import { nativeContextAccess } from '../semantic/adapters/index.ts';
-import type { ContextApplication } from '../semantic/context-application.ts';
+import type { ContextApplication } from '../semantic/index.ts';
 
 let composed: ContextApplication | undefined;
 
-/** Ordinary createKernel/server/worker composition binds native Access to Context directory, lifecycle and provenance. */
+/** Ordinary composition installs the native adapter for direct calls and closes the same port over its application. */
 export function composeSemanticContext(): ContextApplication {
   if (composed) return composed;
-  const access = bindContextAccess(nativeContextAccess());
+  const access = nativeContextAccess();
+  bindContextAccess(access);
   composed = bindContextApplication(createContextApplication(access));
   return composed;
 }

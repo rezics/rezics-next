@@ -6,6 +6,7 @@ import { ContextNotFoundError } from './context.ts';
 import {
   CONTEXT_GLOBAL_ID,
   contextAccess,
+  type ContextAccessPort,
   type ContextAccessHandle,
   type ContextAccountActor,
 } from './context-access-port.ts';
@@ -34,11 +35,12 @@ export async function changeContextLifecycle(
     deadline: number;
     clock: () => Date;
   },
+  accessPort?: ContextAccessPort,
 ) {
   const { context, actor, state } = options;
   const route = routeOf(context);
   if (route === null) throw new ContextNotFoundError();
-  const port = contextAccess();
+  const port = accessPort ?? contextAccess();
   const resource = { route, id: context };
   const action = state === 'deleted' ? 'context:delete' : 'context:restore';
   const authorization = port.resourceAuthorization({

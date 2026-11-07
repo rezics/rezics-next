@@ -15,6 +15,7 @@ import type { ResourceEligibility } from '../access/index.ts';
 import {
   CONTEXT_GLOBAL_ID,
   contextAccess,
+  type ContextAccessPort,
   type ContextAccountActor,
   type ContextParentAnchor,
   type ContextQueryClient,
@@ -94,6 +95,7 @@ export async function createContext(
     deadline?: number;
     clock?: () => Date;
   },
+  accessPort?: ContextAccessPort,
 ) {
   const { route, id } = options.target;
   if (routeOf(id) !== route) throw new RangeError('Context target id must carry its route');
@@ -143,7 +145,7 @@ export async function createContext(
         birth: true,
       });
       if (options.authorization)
-        await contextAccess().initializeResourceGrants(tx, {
+        await (accessPort ?? contextAccess()).initializeResourceGrants(tx, {
           resource: options.target,
           type: 'semantic.context',
           creator: options.actor.accountId,
@@ -175,10 +177,11 @@ export async function readContext(
   pool: Pool,
   id: string,
   authorize: (client: ContextQueryClient) => Promise<boolean>,
+  accessPort?: ContextAccessPort,
 ): Promise<{ context: ContextRecord; component: { partition: number; epoch: number; position: bigint } } | null> {
   const route = routeOf(id);
   if (route === null) return null;
-  const port = contextAccess();
+  const port = accessPort ?? contextAccess();
   const partitionNo = partitionOf(route);
   return port.withReadTransaction(pool, async (client) => {
     const partition = await readPartition(client, partitionNo);
@@ -208,8 +211,8 @@ export async function readContext(
   });
 }
 
-export async function contextSnapshot(pool: Pool, id: string): Promise<ContextRecord | null> {
-  return (await readContext(pool, id, async () => true))?.context ?? null;
+export async function contextSnapshot(pool: Pool, id: string, accessPort?: ContextAccessPort): Promise<ContextRecord | null> {
+  return (await readContext(pool, id, async () => true, accessPort))?.context ?? null;
 }
 
 export function contextLabels(id: string, input: unknown): Record<string, string> {
@@ -224,8 +227,11 @@ export function contextLabels(id: string, input: unknown): Record<string, string
   return labels;
 }
 
-export function publicContextEligibility(resource: ContextResource): ResourceEligibility {
-  const port = contextAccess();
+export function publicContextEligibility(
+  resource: ContextResource,
+  accessPort?: ContextAccessPort,
+): ResourceEligibility {
+  const port = accessPort ?? contextAccess();
   return port.createPublicEligibility({
     resource,
     action: 'context:read',
