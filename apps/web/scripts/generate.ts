@@ -40,7 +40,9 @@ if (process.env[workerEnvironment] === '1') {
       return [signal, forward] as const;
     });
     const pid = child.pid;
-    process.stderr.write(`[paraglide] stage=compiler attempt=${attempt}/${maximumAttempts} pid=${pid ?? 'unknown'} started\n`);
+    process.stderr.write(
+      `[paraglide] stage=compiler attempt=${attempt}/${maximumAttempts} pid=${pid ?? 'unknown'} started\n`,
+    );
 
     const captureTail = async (stream: Readable): Promise<string> => {
       let output = '';

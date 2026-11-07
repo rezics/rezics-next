@@ -80,11 +80,7 @@ export type FocusedRunnerOptions = {
   place?: (run: { root: string; cwd: string; command: string[] }, env: NodeJS.ProcessEnv) => Promise<number | null>;
 };
 
-async function prepareFocusedRun(
-  appDirectory: string,
-  env: NodeJS.ProcessEnv,
-  signal?: AbortSignal,
-): Promise<number> {
+async function prepareFocusedRun(appDirectory: string, env: NodeJS.ProcessEnv, signal?: AbortSignal): Promise<number> {
   const messages = await ensureMessagesReady(appDirectory, env, signal === undefined ? {} : { signal });
   if (messages !== 0) return messages;
   const generated = Bun.spawn(['bun', 'run', 'generate:routes'], {

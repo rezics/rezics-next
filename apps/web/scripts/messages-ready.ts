@@ -99,7 +99,8 @@ function outputState(appDirectory: string): MessageOutputState {
   const signature: string[] = [];
   for (const relative of required) {
     const path = join(outputDirectory, relative);
-    const stat = relative === 'messages.js' ? barrelStat : relative === 'runtime.js' ? runtimeStat : statOrMissing(path);
+    const stat =
+      relative === 'messages.js' ? barrelStat : relative === 'runtime.js' ? runtimeStat : statOrMissing(path);
     if (!stat?.isFile()) {
       missing.push(relative);
       signature.push(`${relative}:missing`);
@@ -263,7 +264,8 @@ async function runGenerator(
 }
 
 function stateSummary(state: MessageOutputState): string {
-  const missing = state.missing.length === 0 ? '' : ` missing=${state.missing.length}(${state.missing.slice(0, 4).join(',')})`;
+  const missing =
+    state.missing.length === 0 ? '' : ` missing=${state.missing.length}(${state.missing.slice(0, 4).join(',')})`;
   const stale = state.stale.length === 0 ? '' : ` stale=${state.stale.length}(${state.stale.slice(0, 4).join(',')})`;
   return `${missing}${stale}` || 'current';
 }
