@@ -43,6 +43,8 @@ import { createDiscoveryProducerEntry } from './composition/discovery.ts';
 import { composeLibraryDomain } from './composition/library.ts';
 import { MAX_HTTP_BODY_LIMIT } from './http/body.ts';
 import { installNativeHistory } from './composition/history.ts';
+import type { SearchNativePorts } from './search/composition.ts';
+import type { KernelRuntimeDefaults } from './composition/runtime-defaults.ts';
 
 export { createKernelCreditSearchSource, createKernelRuntimeDefaults };
 export type { KernelRuntimeDefaults, KernelRuntimeOverrides } from './composition/runtime-defaults.ts';
@@ -57,6 +59,7 @@ export type ServerConfig = {
   port: number;
   routeKey: Uint8Array;
   tokens: KeyRing;
+  searchNativePorts?: SearchNativePorts;
   receiptKeys?: KeyRing;
   commerce: CommerceConfig | null;
   content: ContentRuntime;
@@ -122,19 +125,13 @@ async function fillPool(pool: Pool): Promise<void> {
 export function startServer(config: ServerConfig): Promise<RunningServer> & RunningServer {
   composeRatingDependencies();
   installNativeHistory();
-  const defaults = createKernelRuntimeDefaults({
-    tokens: config.tokens,
-    ...(config.receiptKeys === undefined ? {} : { receiptKeys: config.receiptKeys }),
-    ...(config.writeRate === undefined ? {} : { writeRate: config.writeRate }),
-    ...(config.rateAttribution === undefined ? {} : { rateAttribution: config.rateAttribution }),
-    ...(config.auth === undefined ? {} : { auth: config.auth }),
-  });
+  let defaults: KernelRuntimeDefaults;
   const pool = createPool(config.databaseUrl, {
     connectionTimeoutMillis: config.poolAcquireTimeoutMillis,
     min: KERNEL_POOL_MAX,
     ...(config.poolIdleTimeoutMillis === undefined ? {} : { idleTimeoutMillis: config.poolIdleTimeoutMillis }),
   });
-  if (defaults.receiptKeys) configureReceiptKeys(pool, defaults.receiptKeys);
+  if (config.receiptKeys) configureReceiptKeys(pool, config.receiptKeys);
   const peers = new WeakMap<Request, string>();
   const searchConfig = config.search;
   const commerce = config.commerce;
@@ -164,7 +161,18 @@ export function startServer(config: ServerConfig): Promise<RunningServer> & Runn
   const activeRequests = new Set<Promise<void>>();
   const boot = (async () => {
     await fillPool(pool);
-    const domain = composeSemanticDomain({ env: process.env });
+    const searchNativePorts =
+      config.searchNativePorts ??
+      (await import('./composition/search-native.ts')).composeSearchNativePorts();
+    defaults = createKernelRuntimeDefaults({
+      searchNativePorts,
+      tokens: config.tokens,
+      ...(config.receiptKeys === undefined ? {} : { receiptKeys: config.receiptKeys }),
+      ...(config.writeRate === undefined ? {} : { writeRate: config.writeRate }),
+      ...(config.rateAttribution === undefined ? {} : { rateAttribution: config.rateAttribution }),
+      ...(config.auth === undefined ? {} : { auth: config.auth }),
+    });
+    const domain = composeSemanticDomain({ env: process.env }, searchNativePorts);
     if (domain) bindDefaultSemanticDomain(domain);
     await setupSemantic(pool, bundledRelease);
     await setupContent(pool);
@@ -176,7 +184,9 @@ export function startServer(config: ServerConfig): Promise<RunningServer> & Runn
     await client;
     const creditSearch = searchConfig === undefined ? undefined : createKernelCreditSearchSource(pool, config.routeKey);
     const rated =
-      searchConfig === undefined ? undefined : createRatedSubjectSource(pool, config.routeKey, creditSearch);
+      searchConfig === undefined
+        ? undefined
+        : createRatedSubjectSource(pool, config.routeKey, creditSearch, searchNativePorts);
     const search =
       openSearch === undefined || searchConfig === undefined || rated === undefined
         ? undefined

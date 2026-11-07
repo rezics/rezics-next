@@ -23,6 +23,16 @@ import { workflowRetentionWorkModule } from '../work/retention.ts';
 import { importsWorkModule } from '../imports/erasure.ts';
 import { composeContentApplication } from './content.ts';
 import { installIdentityRatingRepairProducer } from './identity-rating-repair.ts';
+import type { SearchNativePorts } from '../search/composition.ts';
+
+type SearchNativePortsComposer = () => SearchNativePorts | Promise<SearchNativePorts>;
+
+/** Load SQL-backed producers only when registration has the prepared worker pool. */
+function createSearchNativePortsComposer(): SearchNativePortsComposer {
+  let ports: Promise<SearchNativePorts> | undefined;
+  return () =>
+    (ports ??= import('./search-native.ts').then(({ composeSearchNativePorts }) => composeSearchNativePorts()));
+}
 
 /** Accounts registration installs the Realm adapter before any Realm workflow runs.
  * Its Access is the production composition, so a step authorizes only the initiator
@@ -81,12 +91,19 @@ export function createKernelWorkModules(
   ambient?: ContentWorkAmbient,
   composeCreditSearch?: Parameters<typeof createSearchWorkModule>[2],
   communityAmbient: CommunityAmbient = systemCommunityAmbient,
+  suppliedSearchNativePorts?: SearchNativePortsComposer,
 ): readonly WorkModule[] {
   composeRatingDependencies();
   installIdentityRatingRepairProducer();
   installRatingVoteSemantic();
-  const searchWorkModule = createSearchWorkModule(composeDiscovery, composeRuntimeDefaults, composeCreditSearch);
-  const semanticWorkModule = createSemanticWorkModule(composeSemantic);
+  const composeNativePorts = suppliedSearchNativePorts ?? createSearchNativePortsComposer();
+  const searchWorkModule = createSearchWorkModule(
+    composeDiscovery,
+    composeRuntimeDefaults,
+    composeCreditSearch,
+    composeNativePorts,
+  );
+  const semanticWorkModule = createSemanticWorkModule(composeSemantic, composeNativePorts);
   const contentWorkModule = contentDeclaration().work(contentWorkAmbient(ambient));
   const community = createCommunityDeclaration(communityAmbient);
   return [

@@ -30,6 +30,8 @@ import { registerSearchErasure, markSearchPersonalErasure, stepSearchErasure } f
 import type { SubjectSource } from './source.ts';
 import type { CreditSearchSource } from './credit-search.ts';
 import type { FacetAccessObservationPort } from './facet-access-port.ts';
+import { bindSearchNativeCapabilities } from './composition.ts';
+import type { SearchNativePorts } from './native-ports.ts';
 
 /** DBOS recovers workflows during launch, before addService offers the live preparation. */
 export function createSearchServiceGate<T>(unavailable: () => Error) {
@@ -87,17 +89,25 @@ type SearchRuntimeDefaults = Required<
   facetAccess: FacetAccessObservationPort;
   libraryScope: import('./library-scope-port.ts').SearchLibraryScopePort;
 };
-type SearchRuntimeDefaultsComposer = (input: { env: NodeJS.ProcessEnv; clock: KernelClock }) => SearchRuntimeDefaults;
+type SearchRuntimeDefaultsComposer = (input: {
+  env: NodeJS.ProcessEnv;
+  clock: KernelClock;
+  searchNativePorts: SearchNativePorts;
+}) => SearchRuntimeDefaults;
 type CreditSearchSourceComposer = (pool: Pool, routeKey: Uint8Array) => CreditSearchSource;
+type SearchNativePortsComposer = () => SearchNativePorts | Promise<SearchNativePorts>;
 
 export function createSearchWorkModule(
   composeDiscovery: SearchDiscoveryComposer,
   composeRuntimeDefaults: SearchRuntimeDefaultsComposer,
-  composeCreditSearch?: CreditSearchSourceComposer,
+  composeCreditSearch: CreditSearchSourceComposer | undefined,
+  composeNativePorts: SearchNativePortsComposer,
 ): WorkModule {
   return {
     name: 'search',
     async register(context) {
+      const nativePorts = await composeNativePorts();
+      bindSearchNativeCapabilities(nativePorts);
       const trends = trendingSearchStore(context.pool, context.clock);
       type Withdrawal = { kind: 'account' | 'source'; identity: string; sequence: number };
       const withdraw = DBOS.registerStep(
@@ -287,12 +297,12 @@ export function createSearchWorkModule(
         };
       });
       const config = readSearchConfig(context.env);
-      const bindErasureAccess = registerSearchErasure(context, config, composeCreditSearch);
+      const bindErasureAccess = registerSearchErasure(context, config, composeCreditSearch, nativePorts);
       if (!config) return;
       const routeKey = readMembershipRouteKey(context.env);
       const creditSearch = composeCreditSearch?.(context.pool, routeKey);
       const search = createOpenSearch(config.url);
-      const source = createRatedSubjectSource(context.pool, routeKey, creditSearch).source;
+      const source = createRatedSubjectSource(context.pool, routeKey, creditSearch, nativePorts).source;
       collectionPublicationScopeRuntimes.set(context, {
         pool: context.pool,
         client: search,
@@ -344,7 +354,11 @@ export function createSearchWorkModule(
         { name: PUBLIC_PREPARATION_WORKFLOW },
       );
       context.addService(async () => {
-        const defaults = composeRuntimeDefaults({ env: { ...context.env }, clock: context.clock });
+        const defaults = composeRuntimeDefaults({
+          env: { ...context.env },
+          clock: context.clock,
+          searchNativePorts: nativePorts,
+        });
         const published = collectionPublicationScopeRuntimes.get(context);
         if (published)
           collectionPublicationScopeRuntimes.set(context, { ...published, library: defaults.libraryScope });

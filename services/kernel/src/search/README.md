@@ -20,6 +20,11 @@ Source admission, identity observations, typed outcomes, replay and settlement k
 Native-port wiring acceptance compares every installed capability with its direct binding and the publication
 application; behavior assertions stay unchanged. Native, browser and broader acceptance run after integration.
 
+Decision: the process root owns one lazy, memoized `SearchNativePorts` supplier per default worker module list.
+Semantic and Search registration share that typed instance after the worker pool is ready; Search passes it into
+erasure, rated Source and runtime construction. HTTP defaults and preloads install through the same complete binding
+seam, while supplied application instances retain their producer object.
+
 [Rejected text query repair](text-query-repair.md) owns bounded parser diagnostics and deliberate in-place correction.
 
 Search owns the subject search projection, indexing consumers, disclosure checks, query API, freshness and index

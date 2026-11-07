@@ -7,6 +7,7 @@ import { readConfig, startServer } from '../../src/server.ts';
 import { createSearchWorkModule } from '../../src/search/work.ts';
 import { createDiscoveryProducerEntry } from '../../src/composition/discovery.ts';
 import { createKernelRuntimeDefaults } from '../../src/composition/runtime-defaults.ts';
+import { composeSearchNativePorts } from '../../src/composition/search-native.ts';
 import type { Source } from '@rezics/definitions/bulk';
 import { GLOBAL_CONTEXT } from '../../src/semantic/definitions.ts';
 import { createWriteRateLimiter } from '../../src/access/write-rate.ts';
@@ -17,7 +18,12 @@ import type { WorkContext } from '../../src/work/registry.ts';
 import { createImportIdentityDriver } from '../imports/identity-driver.ts';
 import { identitySupport } from '../imports/identity-fixture.ts';
 
-const searchWorkModule = createSearchWorkModule(createDiscoveryProducerEntry, createKernelRuntimeDefaults);
+const searchWorkModule = createSearchWorkModule(
+  createDiscoveryProducerEntry,
+  createKernelRuntimeDefaults,
+  undefined,
+  composeSearchNativePorts,
+);
 
 const databaseUrl = process.env.DATABASE_URL;
 const searchUrl = process.env.OPENSEARCH_URL;
