@@ -321,6 +321,10 @@ without changing report submission, verification, session retirement or copy rec
 Decision: an uncertain report keeps its original body, sender, credential and idempotency key in the `PostActions`
 owner; its recovery region offers deliberate retry or discard without echoing the private report text.
 
+Decision: public-profile contribution actions consume Threads through `threads/contract/contribution-actions.ts` and
+the bound adapters on `threads/index.ts`. ThreadWatch, ThreadReactions and PostComposer remain the one watch,
+reaction and reply engines; the profile host does not import those implementations.
+
 Decision: Work Library actions navigate to the existing Subject Library slot; post actions create no Library mutation
 or mount read. Browser share/copy results belong to the current session/source visit. The board owner consumes the
 exported port as described in [feed actions](../features/feed/README.md#card-actions), retaining pins and slow mode.

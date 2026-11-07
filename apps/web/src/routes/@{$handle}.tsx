@@ -10,6 +10,7 @@ import { agentPageQuery } from '../features/pages/agent-queries';
 import { useProfileReading } from '../accounts/public-profile/reader-presentation/adapter';
 import { SubjectLink, subjectPageMessages, viewTabLabels } from '../features/pages/route-support';
 import { PublicProfilePage } from '../accounts/public-profile/page';
+import { publicAccountProfileBinding } from './accounts/-public-profile-binding';
 import { m } from '../paraglide/messages.js';
 import { getLocale } from '../paraglide/runtime.js';
 import { validatePublicOrigin } from '../shell/origin';
@@ -88,6 +89,7 @@ function AgentRoute() {
     return <PublicAccountState page state={data.state} retry={() => void router.invalidate()} />;
   return (
     <PublicProfilePage
+      profile={publicAccountProfileBinding}
       page={data.page}
       verification={data.verification}
       locale={locale}

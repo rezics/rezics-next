@@ -14,6 +14,7 @@ import { useProfileReading } from '../accounts/public-profile/reader-presentatio
 import { SubjectLink, subjectPageMessages, viewTabLabels } from '../features/pages/route-support';
 import { AccountCollectionWindowsScope, useAccountCollectionWindows } from '../accounts/public-profile/page-binding';
 import { PublicProfilePage } from '../accounts/public-profile/page';
+import { publicAccountProfileBinding } from './accounts/-public-profile-binding';
 import { m } from '../paraglide/messages.js';
 import { getLocale } from '../paraglide/runtime.js';
 import { validatePublicOrigin } from '../shell/origin';
@@ -200,6 +201,7 @@ function NamedAccountViewRoute({
     <AccountCollectionWindowsScope value={windows}>
       <PublicProfilePage
         key={cursor ?? 'first'}
+        profile={publicAccountProfileBinding}
         page={data.page}
         sourceQueryKey={query.queryKey}
         verification={data.verification}

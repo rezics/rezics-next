@@ -2,6 +2,7 @@ import { useState } from 'react';
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import { expect, userEvent, within } from 'storybook/test';
 import { PublicProfilePage } from '../accounts/public-profile/page';
+import { storyAccountProfileBinding } from './public-profile-binding';
 import { profilePage } from './pages/accounts-public-profile/fixtures';
 import { preparedProfileContributions } from '../kernel/fake/profile-contribution-reading';
 import { isRecord } from '../features/pages/shared';
@@ -57,6 +58,7 @@ function Reading({
         </button>
         <PublicProfilePage
           key={generation}
+          profile={storyAccountProfileBinding}
           page={page}
           locale={getLocale()}
           messages={subjectPageMessages()}

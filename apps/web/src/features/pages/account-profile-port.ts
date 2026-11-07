@@ -1,6 +1,23 @@
 import type { ComponentType, ReactNode } from 'react';
 import type { PageRead } from '@rezics/composition';
 import type { SubjectPageData } from './page-model';
+import type {
+  ContributionReactionMount,
+  ContributionReplyMount,
+  ContributionWatchMount,
+} from '../../threads/contract/contribution-actions';
+import type { ContributionReportMount } from '../../report/contract/contribution-actions';
+
+export type {
+  ContributionReactionKind,
+  ContributionReactionMount,
+  ContributionReactionTransport,
+  ContributionReplyCommand,
+  ContributionReplyMount,
+  ContributionWatchMount,
+  ContributionWatchNative,
+} from '../../threads/contract/contribution-actions';
+export type { ContributionReportMount, VerificationConfig } from '../../report/contract/contribution-actions';
 
 /** Public-profile capabilities needed by page assembly; no Accounts implementation is loaded here. */
 export type ContributionWindowView = 'posts' | 'reviews' | 'discussion';
@@ -63,6 +80,24 @@ export type CollectionWindowReading = {
   denied: boolean;
 };
 
+/** Threads watch/reaction/reply and Report engines the public profile host can mount. */
+export type ContributionActionCapabilities = {
+  Watch: ComponentType<ContributionWatchMount>;
+  Reaction: ComponentType<ContributionReactionMount>;
+  Reply: ComponentType<ContributionReplyMount>;
+  Report: ComponentType<ContributionReportMount>;
+};
+
+const UnavailableAction = () => null;
+
+/** Ordinary Subject composition has no private action cohort. */
+export const unavailableContributionActions: ContributionActionCapabilities = {
+  Watch: UnavailableAction,
+  Reaction: UnavailableAction,
+  Reply: UnavailableAction,
+  Report: UnavailableAction,
+};
+
 export type AccountProfilePort = {
   useCollectionWindow: () => boolean;
   useContributionPage: () => ContributionPageSelection | null;
@@ -71,6 +106,8 @@ export type AccountProfilePort = {
   CollectionControls: ComponentType<CollectionControlsInput>;
   ContributionControls: ComponentType<ContributionControlsInput>;
   ContributionList: ComponentType<ContributionListInput>;
+  /** Bound watch, reaction, reply and report engines; lifetime stays on the session facade. */
+  contributionActions: ContributionActionCapabilities;
 };
 
 /** Admission of the native continuation at the page-response boundary. */
