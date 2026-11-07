@@ -81,6 +81,12 @@ capabilities it registers. The kinds are:
    construction are eager. Third-party packages are outside this repository graph. Process entry points run only
    when explicitly launched. Composition roots collect declared registrations before starting their resources.
 
+Decision: Auth retention's contract, core and application modules form an inward-only graph.
+The application owns preparation/checkpoint and maintenance admission over ports; the Auth adapter
+binds SQL, supported SDK scan and the existing native retirement capability. The cursor store has
+no orchestration import. Dispatch pricing is pure Auth-owned vocabulary; SDK retirement APIs,
+permanent fences and independent signing/request stores keep their existing owners.
+
 Decision: Kernel computed values use memoized getters that retain value identity; literal-only leaves remain eager.
 The syntax-tree architecture check enforces this at file boundaries, including within an architecture module.
 Access account-fence SQL is the `agent-verification-identity-literals.ts` public entry; Community UUID and
