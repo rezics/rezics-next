@@ -1545,6 +1545,9 @@ for run in ${ROOT}/runs/*; do
     if [ "$age" -gt 600 ]; then
       run_id=\${run##*/}
       run_slice=rezics-check-$(printf '%s' "$run_id" | tr '-' '_').slice
+      if [ -e "$run/command-started" ] && python3 -c ${quote(supervisorActiveProgram)} "$run"; then
+        continue
+      fi
       run_directory=$run
       ${cleanupCommands(false)}
       echo "remote-check: stopped stale run $run_id (alive file age $age s)" >&2
@@ -1660,7 +1663,11 @@ if [ -n "$run_id" ]; then
 fi
 cleanup_orphan() {
   if [ -n "$run_id" ] && [ -n "$run_directory" ] && [ ! -e "$run_directory/exit-status" ]; then
-    ${cleanupCommands()}
+    if [ -e "$run_directory/command-started" ]; then
+      echo "remote-check: preserving started run $run_id for stale-run cleanup" >&2
+    else
+      ${cleanupCommands()}
+    fi
   fi
   for slot in $reserved_slots; do rm -f -- "${ROOT}/slots/$slot.memory"; done
 }
@@ -1709,6 +1716,17 @@ while current(pid,started):
 function stopSupervisor(directory: string): string {
   return `python3 -c ${quote(supervisorStopProgram)} ${directory}`;
 }
+
+const supervisorActiveProgram = String.raw`import json,sys
+from pathlib import Path
+try:
+    record=json.loads((Path(sys.argv[1])/'.remote-check-supervisor').read_text())
+    pid=int(record['pid']); started=str(record['started'])
+    fields=Path('/proc/'+str(pid)+'/stat').read_text().rsplit(')',1)[1].split()
+except (OSError,ValueError,KeyError,IndexError,TypeError):
+    sys.exit(1)
+sys.exit(0 if fields[19]==started and fields[0] not in ['Z','X'] else 1)
+`;
 
 /** Shared exact-path and owner validation used at both source and prepared-input lifecycle boundaries. */
 const producerControlValidationPython = String.raw`import math,re
@@ -4150,9 +4168,86 @@ function localRsyncSupportsZstd(): boolean {
 /** Reads the command's recorded exit status when ssh itself reports 255. */
 function statusScript(directory: string): string {
   return `# REMOTE_CHECK_STATUS
+if [ -d ${quote(directory)} ]; then touch ${quote(`${directory}/.alive`)} || exit 75; fi
 if [ -e ${quote(`${directory}/exit-status`)} ]; then cat -- ${quote(`${directory}/exit-status`)}
 elif [ -e ${quote(`${directory}/command-started`)} ]; then printf 'STARTED\\n'
 else printf 'NOT_STARTED\\n'; fi`;
+}
+
+type RemoteCommandStatus = { kind: 'not-started' } | { kind: 'started' } | { kind: 'completed'; code: number };
+
+function parseRemoteCommandStatus(
+  host: Host,
+  status: { code: number; output: string; stdout: string },
+): RemoteCommandStatus {
+  const recorded = status.stdout.trim();
+  const parsed = /^(?:0|[1-9]\d{0,2})$/.test(recorded) ? Number(recorded) : Number.NaN;
+  const invalid =
+    status.code !== 0 ||
+    (!Number.isInteger(parsed) && recorded !== 'NOT_STARTED' && recorded !== 'STARTED') ||
+    parsed > 255;
+  if (invalid)
+    throw new RemoteTransportError(host.name, 'remote command', status.code || REMOTE_TRANSPORT_FAILURE, false);
+  if (recorded === 'NOT_STARTED') return { kind: 'not-started' };
+  if (recorded === 'STARTED') return { kind: 'started' };
+  return { kind: 'completed', code: parsed };
+}
+
+/** Reconnects with bounded status probes and waits for this run's host-owned terminal result. */
+async function waitForRemoteCommandStatus(
+  host: Host,
+  connectionId: string,
+  directory: string,
+  deadlineAt: number,
+  options: RemoteCheck,
+  signal: AbortSignal,
+): Promise<RemoteCommandStatus | { kind: 'unreachable' }> {
+  let reconnectStartedAt = performance.now();
+  let reconnectPending = true;
+  let consecutiveDrops = 0;
+  const pollMs = Math.max(1, Math.min(options.pollMs ?? 1_000, 1_000));
+  const retryBaseMs = options.retryBackoffMs ?? 1_000;
+  const probe = async (timeoutMs: number): Promise<RemoteCommandStatus | null> => {
+    let response: { code: number; output: string; stdout: string };
+    try {
+      response = await boundedSsh(host, connectionId, statusScript(directory), 'remote command status', timeoutMs);
+    } catch (error) {
+      if (!(error instanceof RemoteTransportError)) throw error;
+      if (!reconnectPending) reconnectStartedAt = performance.now();
+      reconnectPending = true;
+      consecutiveDrops += 1;
+      return null;
+    }
+    if (response.code !== 0) {
+      if (!reconnectPending) reconnectStartedAt = performance.now();
+      reconnectPending = true;
+      consecutiveDrops += 1;
+      return null;
+    }
+    if (reconnectPending) {
+      const elapsed = ((performance.now() - reconnectStartedAt) / 1_000).toFixed(3);
+      console.error(`remote-check: reconnected to ${host.name} in ${elapsed} s`);
+      reconnectPending = false;
+    }
+    consecutiveDrops = 0;
+    return parseRemoteCommandStatus(host, response);
+  };
+
+  while (Date.now() < deadlineAt) {
+    assertExecutionAllowed(options, signal);
+    const remainingMs = deadlineAt - Date.now();
+    const status = await probe(Math.max(1, Math.min(5_000, remainingMs)));
+    if (status && status.kind !== 'started') return status;
+    const delay = status
+      ? pollMs
+      : Math.min(30_000, retryBaseMs * 2 ** Math.min(consecutiveDrops - 1, 5));
+    await sleep(Math.max(1, Math.min(delay, deadlineAt - Date.now())), signal);
+  }
+
+  // The remote lifetime supervisor publishes the deadline result itself. Give it one final short probe after its
+  // deadline; only a reachable host that still reports STARTED is stopped by the controller's existing rescue path.
+  assertExecutionAllowed(options, signal);
+  return (await probe(1_000)) ?? { kind: 'unreachable' };
 }
 
 /** Tracked and untracked files that exist, without Git's own data, installed packages and local scratch space. */
@@ -5596,23 +5691,23 @@ async function boundedSsh(
   script: string,
   step: string,
   timeoutMs: number,
-): Promise<{ code: number; output: string }> {
+): Promise<{ code: number; output: string; stdout: string }> {
   const child = Bun.spawn([sshExecutable(), ...sshOptions(host, connectionId), host.address, script], {
     stdin: 'ignore',
     stdout: 'pipe',
     stderr: 'pipe',
   });
-  const output = Promise.all([
+  const streams = Promise.all([
     new Response(child.stdout).text(),
     child.stderr instanceof ReadableStream ? new Response(child.stderr).text() : Promise.resolve(''),
-  ]).then(([stdout, stderr]) => stdout + stderr);
+  ]).then(([stdout, stderr]) => ({ output: stdout + stderr, stdout }));
   const code = await within(timeoutMs, child.exited);
   if (code === null) {
     await stopAndReap(child);
-    await output;
+    await streams;
     throw new RemoteTransportError(host.name, step, REMOTE_TRANSPORT_FAILURE);
   }
-  return { code, output: await output };
+  return { code, ...(await streams) };
 }
 
 async function closeControlMaster(host: Host, _connectionId?: string): Promise<void> {
@@ -6863,6 +6958,7 @@ async function runLeased(
   const { host, id, directory, connectionId } = prepared;
   let leaseReleased = false;
   let commandTerminal = false;
+  let preserveRemoteRun = false;
   let run: ReturnType<typeof Bun.spawn> | undefined;
   let transportChildReaped = true;
   let native: RemotePhysicalRunReceipt | null = null;
@@ -6934,6 +7030,7 @@ async function runLeased(
     run = options.spawnWithCustody ? await options.spawnWithCustody({ host: host.name, run: id }, launch) : launch();
     transportChildReaped = false;
     const maxMs = effectiveRunLifetimeMs(options.estimateMs, options.maxMs);
+    const deadlineAt = Date.now() + maxMs + 1_000;
     const heartbeatMs = options.livenessIntervalMs ?? DEFAULT_LIVENESS_INTERVAL_MS;
     let heartbeatStopped = false;
     const heartbeat = setInterval(() => {
@@ -6949,7 +7046,7 @@ async function runLeased(
     let deadlineTimer: ReturnType<typeof setTimeout> | undefined;
     const deadlineResult = new Promise<null>((resolve) => {
       // The host owns the deadline and receipt. This later controller guard only recovers a broken host monitor.
-      deadlineTimer = setTimeout(() => resolve(null), maxMs + 1_000);
+      deadlineTimer = setTimeout(() => resolve(null), Math.max(1, deadlineAt - Date.now()));
     });
     try {
       const completed = await Promise.race([commandResult.then((value) => value), deadlineResult]);
@@ -6978,22 +7075,18 @@ async function runLeased(
     }
     assertExecutionAllowed(options, signal);
     if (code === 255) {
-      const status = await boundedSsh(host, connectionId, statusScript(directory), 'remote command status', 15_000);
+      const status = await waitForRemoteCommandStatus(host, connectionId, directory, deadlineAt, options, signal);
       assertExecutionAllowed(options, signal);
-      const recorded = status.output.trim();
-      const parsed = /^(?:0|[1-9]\d{0,2})$/.test(recorded) ? Number(recorded) : Number.NaN;
-      if (
-        status.code !== 0 ||
-        (!Number.isInteger(parsed) && recorded !== 'NOT_STARTED' && recorded !== 'STARTED') ||
-        parsed > 255
-      ) {
-        throw new RemoteTransportError(host.name, 'remote command', status.code || REMOTE_TRANSPORT_FAILURE, false);
+      if (status.kind === 'unreachable') {
+        preserveRemoteRun = true;
+        throw new RemoteTransportError(host.name, 'remote command', REMOTE_TRANSPORT_FAILURE, false);
       }
-      if (recorded === 'NOT_STARTED') {
+      if (status.kind === 'not-started') {
         commandTerminal = true;
         throw new RemoteTransportError(host.name, 'remote command startup', 255, true);
       }
-      if (recorded === 'STARTED') {
+      if (status.kind === 'started') {
+        console.error(`remote-check: deadline reached after ${maxMs} ms`);
         const stopped = await boundedSsh(host, connectionId, stopRunScript(id), 'remote command stop', 15_000);
         if (stopped.code !== 0 || !stopped.output.includes('STOPPED'))
           throw new RemoteTransportError(
@@ -7002,11 +7095,13 @@ async function runLeased(
             stopped.code || REMOTE_TRANSPORT_FAILURE,
             false,
           );
+        await run.exited;
         commandTerminal = true;
-        throw new RemoteTransportError(host.name, 'remote command', 255, false);
+        code = REMOTE_DEADLINE_EXIT;
+      } else {
+        code = status.code;
+        commandTerminal = true;
       }
-      code = parsed;
-      commandTerminal = true;
     }
     try {
       await releaseLease();
@@ -7104,7 +7199,15 @@ async function runLeased(
       );
     } finally {
       try {
-        cleanup = await cleanupPreparedRun(prepared);
+        if (preserveRemoteRun) {
+          cleanup = {
+            ...cleanup,
+            status: 'unknown',
+            failures: ['started remote run retained for stale-run cleanup after transport loss'],
+          };
+        } else {
+          cleanup = await cleanupPreparedRun(prepared);
+        }
       } catch (error) {
         const reason = error instanceof Error ? error.message.slice(0, 512) : 'remote cleanup could not be verified';
         cleanupFailures.push(reason);
@@ -7541,10 +7644,14 @@ function parse(argv: string[]): RemoteCheck {
   }
   if (!existsSync(workspace)) throw new Error(`Workspace does not exist: ${workspace}`);
   const pollMs = process.env.REMOTE_CHECK_POLL_MS === undefined ? undefined : Number(process.env.REMOTE_CHECK_POLL_MS);
+  if (pollMs !== undefined && (!Number.isSafeInteger(pollMs) || pollMs < 1))
+    throw new Error('REMOTE_CHECK_POLL_MS must be a positive integer');
   const retryBackoffMs =
     process.env.REMOTE_CHECK_RETRY_BACKOFF_MS === undefined
       ? undefined
       : Number(process.env.REMOTE_CHECK_RETRY_BACKOFF_MS);
+  if (retryBackoffMs !== undefined && (!Number.isSafeInteger(retryBackoffMs) || retryBackoffMs < 1))
+    throw new Error('REMOTE_CHECK_RETRY_BACKOFF_MS must be a positive integer');
   const waitRepeatMs =
     process.env.REMOTE_CHECK_WAIT_REPEAT_MS === undefined ? undefined : Number(process.env.REMOTE_CHECK_WAIT_REPEAT_MS);
   if (waitRepeatMs !== undefined && (!Number.isSafeInteger(waitRepeatMs) || waitRepeatMs < 1))
