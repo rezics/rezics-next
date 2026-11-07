@@ -1296,7 +1296,13 @@
       ],
       "publicEntries": [
         "apps/web/src/features/catalogue/definition-publication/actions.ts",
-        "apps/web/src/features/catalogue/definition-publication/workspace.tsx"
+        "apps/web/src/features/catalogue/definition-publication/workspace.tsx",
+        "apps/web/src/features/catalogue/work-reading-port.tsx",
+        "apps/web/src/features/catalogue/game-reader/entry.tsx",
+        "apps/web/src/features/catalogue/game-reader/model.ts",
+        "apps/web/src/features/catalogue/manga-reader/entry.tsx",
+        "apps/web/src/features/catalogue/manga-reader/model.ts",
+        "apps/web/src/features/catalogue/manga-reader/navigation.ts"
       ],
       "allowedDependencies": [
         "client",

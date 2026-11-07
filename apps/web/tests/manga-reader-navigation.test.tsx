@@ -78,6 +78,7 @@ const occurrence = {
 
 mock.module('cloudflare:workers', () => ({ env: {} }));
 const { MangaReaderEntry } = await import('../src/features/catalogue/manga-reader/entry');
+const { isolatedWorkReading } = await import('../src/features/catalogue/work-reading-port');
 
 test('an occurrence opener remains a finite single-hop intent through actual part and holder destinations', () => {
   const address = mangaReaderAddress({
@@ -201,6 +202,7 @@ test('the mounted Entry re-admits an exact return and recovery never revives a r
     ],
     reader: defaultReader,
     currentHref: origin,
+    reading: isolatedWorkReading,
   };
   try {
     await act(async () => root.render(createElement(MangaReaderEntry, props)));

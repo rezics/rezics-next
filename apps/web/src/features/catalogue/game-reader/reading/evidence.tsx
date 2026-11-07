@@ -1,8 +1,8 @@
 import type { SubjectRead } from '@rezics/client';
 import { pickText } from '@rezics/composition';
 import { m } from '../../../../paraglide/messages.js';
-import { CandidateValue } from '../../../pages/data';
 import { historicalStatement } from '../../release-fidelity/model';
+import { useWorkReading, type WorkReadingLink } from '../../work-reading-port';
 import { gameDatePresentation } from '../date';
 import type { GameReaderReady, GameStatement } from '../model';
 import { action } from './controls';
@@ -12,13 +12,16 @@ type FactProps = {
   page: GameReaderReady;
   related: SubjectRead['related'];
   locale: string;
-  link: typeof import('../../../pages/shared').PlainLink;
+  link: WorkReadingLink;
 };
+
 export function GameFact(props: FactProps & { date: boolean }) {
   const { statement, page, related, locale, link: Link } = props;
+  const reading = useWorkReading();
   const o = { locale: locale as never };
   const date = props.date ? gameDatePresentation(statement, page.digest, locale) : undefined;
   const content = statement.value.type === 'value' ? statement.value.content : undefined;
+  const value = () => reading.renderValue({ snak: statement, related, locale, link: Link });
   return (
     <div className="space-y-2">
       {date ? (
@@ -30,7 +33,7 @@ export function GameFact(props: FactProps & { date: boolean }) {
         !pickText(related[content]?.labels ?? {}, locale).text ? (
         <p>{m.work_parts_unresolved({}, o)}</p>
       ) : (
-        <CandidateValue snak={statement} related={related} locale={locale} link={Link} />
+        value()
       )}
       <GameEvidence {...props} />
     </div>
@@ -38,7 +41,10 @@ export function GameFact(props: FactProps & { date: boolean }) {
 }
 
 export function GameEvidence({ statement, page, related, locale, link: Link }: FactProps) {
+  const reading = useWorkReading();
   const o = { locale: locale as never };
+  const value = (snak: GameStatement | GameStatement['qualifiers'][number]) =>
+    reading.renderValue({ snak, related, locale, link: Link });
   return (
     <div className="space-y-2">
       {statement.qualifiers.length ? (
@@ -48,9 +54,7 @@ export function GameEvidence({ statement, page, related, locale, link: Link }: F
               <dt className="font-medium" lang={page.labels[part.property.id]?.lang ?? undefined}>
                 {page.labels[part.property.id]?.text || part.property.id}
               </dt>
-              <dd>
-                <CandidateValue snak={part} related={related} locale={locale} link={Link} />
-              </dd>
+              <dd>{value(part)}</dd>
             </div>
           ))}
         </dl>
@@ -65,9 +69,7 @@ export function GameEvidence({ statement, page, related, locale, link: Link }: F
             {reference.parts.map((part, n) => (
               <div key={n}>
                 <dt className="font-medium">{page.labels[part.property.id]?.text || part.property.id}</dt>
-                <dd>
-                  <CandidateValue snak={part} related={related} locale={locale} link={Link} />
-                </dd>
+                <dd>{value(part)}</dd>
               </div>
             ))}
           </dl>

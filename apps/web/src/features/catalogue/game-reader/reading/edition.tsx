@@ -2,7 +2,8 @@ import { useId, useLayoutEffect, useRef } from 'react';
 import { buttonVariants } from '@rezics/ui/shadcn/button';
 import { m } from '../../../../paraglide/messages.js';
 import type { GameReaderReady } from '../model';
-import { subjectHref, subjectUrlForView } from '../../../../subject/subject-href';
+import { subjectHref, subjectUrlForView } from '../../../../subject/load-subject';
+import type { WorkReadingLink } from '../../work-reading-port';
 import { action } from './controls';
 import { GameEvidence } from './evidence';
 
@@ -26,7 +27,7 @@ export function EditionInspection({
   page: GameReaderReady;
   locale: string;
   current: () => boolean;
-  link: typeof import('../../../pages/shared').PlainLink;
+  link: WorkReadingLink;
   close: () => void;
 }) {
   const id = useId();

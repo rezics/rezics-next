@@ -1,8 +1,8 @@
-import type { Snak, PageLink } from '../../pages/shared';
+import type { Snak } from '../../pages/shared';
 import { pageText, linkClass, linkColor } from '../../pages/shared';
-import { CandidateValue } from '../../pages/data';
 import { m } from '../../../paraglide/messages.js';
 import type { RelationDefinition } from '../../../subject/relations';
+import { useWorkReading, type WorkReadingLink } from '../work-reading-port';
 import { mangaRelatedLabels, type MangaReaderRow } from './model';
 import { mangaCorrectionAddress } from './navigation';
 
@@ -22,9 +22,10 @@ export function MangaOccurrenceEvidence({
   locale: string;
   definitions: Record<string, RelationDefinition>;
   propertyLabels?: MangaPropertyLabels | undefined;
-  link: PageLink;
-  correctionLink: PageLink;
+  link: WorkReadingLink;
+  correctionLink: WorkReadingLink;
 }) {
+  const reading = useWorkReading();
   const o = { locale: locale as never };
   const assertion = row.assertion;
   const holder = row.holder;
@@ -42,7 +43,7 @@ export function MangaOccurrenceEvidence({
       lang: label.lang,
     };
   };
-  const value = (part: Snak) => <CandidateValue snak={part} related={related} locale={locale} link={Link} />;
+  const value = (part: Snak) => reading.renderValue({ snak: part, related, locale, link: Link });
   const directed =
     row.direction === 'forward'
       ? definitions[row.property]?.forwardLabel || definitions[row.property]?.label
