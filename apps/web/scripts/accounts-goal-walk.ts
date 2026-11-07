@@ -102,6 +102,17 @@ export type JourneyRow = {
   owner: string;
 };
 
+/** Website-bearer Kernel mutations. Auth-only journeys and anonymous public reads continue after a bearer 401. */
+export const KERNEL_BEARER_JOURNEYS = [
+  'J05',
+  'J10',
+  'J11',
+  'J15',
+  'J16',
+  'J17',
+  'J19',
+] as const satisfies readonly JourneyId[];
+
 const root = resolve(import.meta.dir, '../../..');
 const evidenceDir = join(root, '.temp/accounts');
 const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
@@ -308,6 +319,10 @@ function requireStatus(result: { status: number; value: Json }, label: string, e
   if (!allowed.includes(result.status))
     throw new Error(`${label} returned HTTP ${result.status}: ${summarize(result.value)}`);
   return result.value;
+}
+
+function isInvalidCredentials(result: { status: number; value: Json }): boolean {
+  return result.status === 401 && result.value.code === 'invalid_credentials';
 }
 
 function asId(value: unknown, label: string): string {
@@ -552,8 +567,25 @@ async function startFrontend(action: 'pages' | 'web', stack: Origins) {
     stderr: 'inherit',
   });
   const url = action === 'pages' ? `${stack.issuer}/` : `${stack.web}/`;
+  const label = action === 'pages' ? 'Auth pages' : 'Web';
+  const deadline = Date.now() + 600_000;
   try {
-    await untilAnswers(url, action === 'pages' ? 'Auth pages' : 'Web');
+    while (Date.now() < deadline) {
+      if (child.exitCode !== null)
+        throw new Error(`${label} exited ${child.exitCode} before becoming ready`);
+      const ok = await fetch(url, { signal: AbortSignal.timeout(2_000) }).then(
+        (response) => response.status < 500,
+        () => false,
+      );
+      if (ok) break;
+      await Bun.sleep(500);
+    }
+    if (child.exitCode !== null) throw new Error(`${label} exited ${child.exitCode} before becoming ready`);
+    const ok = await fetch(url, { signal: AbortSignal.timeout(2_000) }).then(
+      (response) => response.status < 500,
+      () => false,
+    );
+    if (!ok) throw new Error(`${label} was not ready after ten minutes`);
   } catch (error) {
     child.kill('SIGTERM');
     await child.exited;
@@ -702,12 +734,20 @@ if (import.meta.main) {
     };
   }
 
+  let kernelBearerCause = '';
+  function rememberKernelBearerFailure(result: { status: number; value: Json }, label: string) {
+    if (!isInvalidCredentials(result) || kernelBearerCause) return;
+    kernelBearerCause = `${label} returned HTTP ${result.status}: ${summarize(result.value)}`;
+    failDependents([...KERNEL_BEARER_JOURNEYS], kernelBearerCause, label);
+  }
+
   const openedOrg = await kernel(stack, 'POST', '/v1/platform/exposure/organizations:open', {
     bearer: website.bearer,
     body: {},
   });
   if (![200, 409].includes(openedOrg.status))
     evidence.native.push({ organizationsOpen: openedOrg.status, body: publicFields(openedOrg.value) });
+  rememberKernelBearerFailure(openedOrg, 'POST /v1/platform/exposure/organizations:open');
 
   let walker: Person | undefined;
   let outsider: Person | undefined;
@@ -729,6 +769,7 @@ if (import.meta.main) {
       bearer: token.bearer,
       query: { ids: token.session.accountId },
     });
+    rememberKernelBearerFailure(me, 'authenticated account');
     requireStatus(me, 'authenticated account', 200);
     walker.accountId = token.session.accountId;
     evidence.native.push({ j01: walker.accountId, callback: token.codePath });
@@ -1022,30 +1063,42 @@ if (import.meta.main) {
   });
 
   await runJourney('J12', 'GET /v1/accounts?handle= person/organization/agent', async () => {
-    const person = walker ?? (await signup(stack, 'j12'));
+    const person = walker ?? { handle: developer.handle, email: developer.email, accountId: developer.accountId };
     const personRow = accountRow(
       requireStatus(await kernel(stack, 'GET', '/v1/accounts', { query: { handle: person.handle } }), 'public person', 200),
     );
     if (!personRow || personRow.kind === 'organization') throw new Error('person page missing or mistyped');
     if ('email' in personRow || 'credentials' in personRow) throw new Error('person page disclosed private fields');
-    if (!organizationId) throw new Error('organization identity was not created');
-    const orgRow = accountRow(
-      requireStatus(await kernel(stack, 'GET', '/v1/accounts', { query: { handle: orgHandle } }), 'public organization', 200),
-    );
-    if (orgRow?.kind !== 'organization' || orgRow.id !== organizationId)
-      throw new Error('organization page identity mismatch');
-    if (orgRow && ('email' in orgRow || 'credentials' in orgRow))
-      throw new Error('organization page disclosed private fields');
-    if (!humanSoftwareId) throw new Error('software identity was not created');
-    const agent = requireStatus(
-      await kernel(stack, 'GET', '/v1/accounts', { query: { ids: humanSoftwareId } }),
-      'public agent',
-      200,
-    );
-    const agentRow = accountRow(agent);
-    if (!agentRow || agentRow.id !== humanSoftwareId) throw new Error('agent page identity mismatch');
-    if (agentRow && ('email' in agentRow || 'credentials' in agentRow))
-      throw new Error('agent page disclosed private fields');
+    evidence.native.push({ publicPerson: person.handle, id: personRow.id });
+    const missing: string[] = [];
+    if (!organizationId) missing.push('organization (J06)');
+    else {
+      const orgRow = accountRow(
+        requireStatus(
+          await kernel(stack, 'GET', '/v1/accounts', { query: { handle: orgHandle } }),
+          'public organization',
+          200,
+        ),
+      );
+      if (orgRow?.kind !== 'organization' || orgRow.id !== organizationId)
+        throw new Error('organization page identity mismatch');
+      if (orgRow && ('email' in orgRow || 'credentials' in orgRow))
+        throw new Error('organization page disclosed private fields');
+    }
+    if (!humanSoftwareId) missing.push('software (J09)');
+    else {
+      const agent = requireStatus(
+        await kernel(stack, 'GET', '/v1/accounts', { query: { ids: humanSoftwareId } }),
+        'public agent',
+        200,
+      );
+      const agentRow = accountRow(agent);
+      if (!agentRow || agentRow.id !== humanSoftwareId) throw new Error('agent page identity mismatch');
+      if (agentRow && ('email' in agentRow || 'credentials' in agentRow))
+        throw new Error('agent page disclosed private fields');
+    }
+    if (missing.length)
+      throw new Error(`person public HTTP 200 without private fields; not reached: ${missing.join(', ')}`);
     return 'person, organization and agent omit private fields';
   });
 
@@ -1086,12 +1139,20 @@ if (import.meta.main) {
   });
 
   await runJourney('J14', 'GET /v1/followCounts/outgoing → stranger GET /v1/followCounts/{type}/{id}', async () => {
+    const anonymous = await kernel(stack, 'GET', '/v1/followCounts/outgoing');
+    if (anonymous.status === 200 && typeof anonymous.value.followingCount === 'number')
+      throw new Error('anonymous reader received a private outgoing count');
+    if (kernelBearerCause)
+      throw new Error(
+        `anonymous outgoing HTTP ${anonymous.status}; not reached: own count (${kernelBearerCause})`,
+      );
     const follower = walker ?? (await signup(stack, 'j14a'));
     const target = outsider ?? (await signup(stack, 'j14b'));
     const token = await websiteToken(stack, follower, bindings, keys.website);
     const stranger = await websiteToken(stack, target, bindings, keys.website);
     await kernel(stack, 'PUT', `/v1/follows/${target.accountId}`, { bearer: token.bearer, body: {} });
     const own = await kernel(stack, 'GET', '/v1/followCounts/outgoing', { bearer: token.bearer });
+    rememberKernelBearerFailure(own, 'own outgoing count');
     requireStatus(own, 'own outgoing count', 200);
     if (typeof own.value.followingCount !== 'number') throw new Error('outgoing omitted followingCount');
     const concealed = await kernel(stack, 'GET', `/v1/followCounts/subject/${target.accountId}`, {
@@ -1099,10 +1160,7 @@ if (import.meta.main) {
     });
     if (concealed.status === 200 && typeof concealed.value.followerCount === 'number')
       throw new Error('unrelated reader received the private follower aggregate');
-    const anonymous = await kernel(stack, 'GET', '/v1/followCounts/outgoing');
-    if (anonymous.status === 200 && typeof anonymous.value.followingCount === 'number')
-      throw new Error('anonymous reader received a private outgoing count');
-    return `own followingCount ${String(own.value.followingCount)}; stranger HTTP ${concealed.status}`;
+    return `own followingCount ${String(own.value.followingCount)}; stranger HTTP ${concealed.status}; anonymous HTTP ${anonymous.status}`;
   });
 
   await runJourney('J15', 'POST /v1/spaces → POST /v1/realms → POST /v1/realms/{id}/membership → DELETE', async () => {
@@ -1337,13 +1395,23 @@ if (import.meta.main) {
       }
     }
 
-    if (rows.get('J12')?.result === 'PASS' && person.handle) {
+    if (person.handle) {
+      await page.setViewportSize({ width: 1280, height: 1000 });
       const publicPage = await settle(page, `${stack.web}/en/@${person.handle}`);
       evidence.pages.push({
         journey: 'J12',
         path: `/@${person.handle}`,
         status: publicPage?.status() ?? 0,
+        width: 1280,
         title: await page.locator('h1').first().textContent().catch(() => null),
+      });
+      await page.setViewportSize({ width: 390, height: 844 });
+      const phonePublic = await settle(page, `${stack.web}/en/@${person.handle}`);
+      evidence.pages.push({
+        journey: 'J12',
+        path: `/@${person.handle}`,
+        status: phonePublic?.status() ?? 0,
+        width: 390,
       });
       const html = await page.content();
       if (/@example\.test|credentials/i.test(html))
