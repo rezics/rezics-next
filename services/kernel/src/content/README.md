@@ -638,21 +638,21 @@ provide viewer action advice; mounted resource readers and the current-thread ca
 
 ## Domain composition
 
-Decision: Kernel Content is split into `contract`, `core`, `application` and adapter modules. Vocabulary, finite
-bounds and the `ContentAmbient` operand live in `content/contract`. Pure ranking, cursor, document-deadline,
-authored-field and work-source rules live in `content/core`. Use cases consume Content-owned ports in
-`content/application`. Native adapters in `content/adapters/native.ts` implement those ports, and
-`createKernel`/`server`/`worker` bind them through `composition/content.ts`. Contract, core and application import no
-downstream domain behaviour. Tests pin document deadline admission, ranking, authored-field rejection and worker
-budgets against fake ports without loading native adapters.
+Decision: contract/core/application/adapters separate Content vocabulary/bounds, pure rules, use cases and native
+effects. `ContentAmbient` supplies time, identity and fetch. Public entries are each layer's `index.ts`, adapter
+`bind.ts`/`ambient.ts` and existing facades. Server, worker and preload composition bind native ports. Platform
+`defineModule`/shared Ambient and Semantic disclosure/eligibility facades remain undelivered; `contentDeclaration()`
+stays. Contract/core/application import no downstream behaviour. Wiring adds no SQL, scan or checkout.
 
-Public entries: `content/contract/index.ts`, `content/core/index.ts`, `content/application/index.ts`,
-`content/adapters/index.ts`, `content/adapters/bind.ts`, `content/adapters/ambient.ts`, plus the existing Content
-adapter facades. Platform `defineModule` is not delivered;
-Content keeps `contentDeclaration()` on the existing composition interfaces. Missing shared operands: platform
-`defineModule` / shared Ambient contract, and Semantic public facades for `disclosure.ts` and `eligibility.ts`.
-
-Wiring adds no query, scan or extra statement; native cost stays with the existing producer declarations.
+Decision: activity, review current context, exact document-media and bounded mentions use Content applications with
+explicit optional outcomes. `composition/content.ts` installs native Content/Access reading adapters. Access owns
+active/deleted/unknown observations and native failure classification; applications import no Account data or HTTP
+errors. Compatibility facades retain closed schemas and map changed-source failures to HTTP retry. Reading/history
+variants and older consumers retain wire shapes, pool/deadline, exact revisions, references and historical citations.
+Final native authorization follows enrichment. Partial sibling presentation preserves readable documents; failed
+batches retain unavailable state and selected keys. Media observation uses the original budget, including the
+producer's expired-budget empty result. Application/composition tests pin these states; runtime/growth acceptance
+stays with sole Goal walks. No extra stories or publisher.
 
 ## Worker authorization composition
 
@@ -1863,7 +1863,7 @@ raw SQL fixture changes and gate changes without a committed original event cann
   or provider history; global exposure changes affect the complete directory.
 - Growth check: the focused lifecycle test adds more than 100 disappeared identities across native partitions and
   unrelated dependencies, checks bounded examined counts, continuation, replay and explicit removal. This is a focused
-  outcome/batch-bound check; physical block growth remains a dev-verifier measurement.
+  outcome/batch-bound check; sole Goal walks retain physical block growth measurement.
 
 #### Cost: changed-source catch-up and refresh
 
@@ -4161,10 +4161,8 @@ It returns the opening plus at most 20 raw replies, excluding the opening from t
 request selects 21 rows to account for the opening's list slot; each continuation selects 20 after its original
 cursor. It never concatenates pages or accepts a client-selected post-ID batch. `target` carries the board's current
 security revision, and each available post action reference carries the exact disclosed source revision.
-The installed composer is `readContentReadingPage(dependencies, threadId, actor, deadline, cursor?)`, mounted as
-operation `thread.reading_page`.
-The Web thread-page loader consumes the generated response and maps its opening and replies into the existing thread
-and post interface. The controller retains rendered and broader native acceptance.
+The mounted `thread.reading_page` composer is `readContentReadingPage(dependencies, threadId, actor, deadline, cursor?)`;
+Web consumes its generated response. Native/rendered acceptance stays with the controller.
 
 Personal data is bounded to the current actor and this page. One deduplicated Accounts summary call admits at most 21
 author identities. Existing viewer-reaction and reaction-count readers receive at most 22 targets (thread, opening,
@@ -4240,7 +4238,7 @@ Decision: The shared batch accepts at most 20 deduplicated exact thread/post ref
 their Subject key, Home retains its own parent/review context, concealment withholds an entry, and readable changes
 fail closed for retry.
 
-Decision: the thread reading receiver and its public response alias use the emitted mounted reading-page declaration, including the existing native post locator; broader client mirrors remain until the full source publication succeeds.
+Decision: the receiver/response alias uses the emitted reading-page declaration and native post locator; broader client mirrors remain until full source publication.
 
 Decision: duplicate mention identities keep the first disclosed row; mixed document-media availability keeps available images and readable text, and only a failed presentation read marks the page unavailable.
 

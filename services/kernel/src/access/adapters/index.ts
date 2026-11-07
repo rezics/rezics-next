@@ -6,3 +6,4 @@ export { classifyUnavailability } from '../unavailable.ts';
 
 export { agentIdentityMaintenance, bindAgentIdentityMaintenance } from './bind.ts';
 export type { AgentIdentityMaintenancePort } from './identity-maintenance.ts';
+export { createNativeAccessReadingPorts } from './reading.ts';
