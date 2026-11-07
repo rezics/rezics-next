@@ -1,5 +1,5 @@
 import { releaseVisitReturn, zoneVisitReturn } from '../catalogue/release-fidelity/navigation';
-import { creditReturn } from '../catalogue/credit-inspection/navigation';
+import { creditReturn } from '../catalogue/character-reading-application';
 import { realmReadingReturn } from '../../community/realm-reading-return';
 import {
   workFranchiseReturn,

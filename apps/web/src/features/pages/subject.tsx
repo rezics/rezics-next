@@ -56,7 +56,7 @@ import { publicationOverlayKind, publicPublicationStatements, type PublicationDe
 import { PeopleProfileEntry } from '../catalogue/people-profile-entry';
 import { PersonOverview } from '../catalogue/person-reader/reader';
 import { CharacterOverview } from './showcase-people/character';
-import { CharacterAssociationBridge } from '../catalogue/character-public-reading/bridge';
+import { CharacterAssociationBridge } from '../catalogue/character-reading-application';
 import { OrganizationOverview } from '../catalogue/organization-reader/overview';
 import { ProducerHistoryEntry } from '../catalogue/producer-history/entry';
 import { AlbumProfileEntry } from '../catalogue/album-profile-entry';

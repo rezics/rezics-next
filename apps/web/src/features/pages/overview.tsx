@@ -37,7 +37,7 @@ import type { Related, Subject, Summary as SubjectCover } from '../../subject/ty
 import { subjectViewHref } from '../../subject/subject-href';
 import type { AccountProfile } from './account-read';
 import { CoverList } from './cover-list';
-import { creditAssertion, creditVisit, type CreditAssertion } from '../catalogue/credit-inspection/model';
+import { creditAssertion, creditVisit, type CreditAssertion } from '../catalogue/character-reading-application';
 import { listView, readerViewLabel } from './views';
 import { RelationStream } from './relation-stream';
 import { qualifiedNotes, type QualifiedNote } from './qualified-relations';

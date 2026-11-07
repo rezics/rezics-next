@@ -1,30 +1,31 @@
 import { m } from '../../../paraglide/messages.js';
-import { CoverList } from '../../pages/cover-list';
-import { CandidateValue } from '../../pages/data';
-import { SpoilerGate } from '../../pages/values';
-import type { OverviewValue } from '../../pages/overview';
-import type { ConnectionSection } from '../../pages/subject-connections';
-import type { ConnectionReturnWindow } from '../../pages/subject-visit-navigation';
-import { connectionReturnHref, withSubjectVisitReturn } from '../../pages/subject-visit-navigation';
 import { valueExplanationHref } from '../value-explanation';
-import { isRecord, type Snak } from '../../pages/shared';
-import { relationTargetHref } from '../../pages/edition-work';
-import { characterWorkRows, type CharacterWorkKind, type CharacterWorkRow } from './model';
+import {
+  characterWorkRows,
+  isRecord,
+  useCharacterReadingSlots,
+  type CharacterConnectionSection,
+  type CharacterPage,
+  type CharacterReturnWindow,
+  type CharacterWorkKind,
+  type CharacterWorkRow,
+  type Snak,
+} from '../character-reading-port';
 
 const action =
   'inline-flex min-h-11 min-w-11 max-w-full items-center py-2 text-primary underline underline-offset-4 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring';
 
-/** Adapter over the selected section owned by SubjectConnections, including its existing More/Retry controls. */
+/** Adapter over the selected section owned by the installed association window, including its existing More/Retry controls. */
 export function CharacterWorkRows({
   current,
   value,
   kind,
   returnWindow,
 }: {
-  current: ConnectionSection;
-  value: OverviewValue;
+  current: CharacterConnectionSection;
+  value: CharacterPage;
   kind: CharacterWorkKind;
-  returnWindow?: ConnectionReturnWindow | undefined;
+  returnWindow?: CharacterReturnWindow | undefined;
 }) {
   const rows = characterWorkRows(current, value.subject!, value.locale, value.reader.spoilerLevel);
   const o = { locale: value.locale as never };
@@ -59,13 +60,14 @@ function CharacterWorkAppearance({
   returnWindow,
 }: {
   row: CharacterWorkRow;
-  current: ConnectionSection;
-  value: OverviewValue;
+  current: CharacterConnectionSection;
+  value: CharacterPage;
   kind: CharacterWorkKind;
-  returnWindow?: ConnectionReturnWindow | undefined;
+  returnWindow?: CharacterReturnWindow | undefined;
 }) {
+  const { navigation, presentation } = useCharacterReadingSlots();
   const o = { locale: value.locale as never };
-  const returnHref = connectionReturnHref(
+  const returnHref = navigation.connectionReturnHref(
     value.subject!,
     value.subjectLabel ?? value.unlabelled,
     value.locale,
@@ -85,17 +87,20 @@ function CharacterWorkAppearance({
   );
   const Link = value.link;
   const WorkLink: typeof Link = (props) => (
-    <Link {...props} href={withSubjectVisitReturn(props.href, returnHref, value.locale)} />
+    <Link {...props} href={navigation.withVisitReturn(props.href, returnHref, value.locale)} />
   );
   const title = row.item.label.text || value.unlabelled;
   const sources = new URL(
-    relationTargetHref({ id: row.holder, label: title }, value.locale, value.context),
+    navigation.workHref({ id: row.holder, label: title }, value.locale, value.context),
     'https://rezics.invalid',
   );
   sources.pathname += '/sources';
   const notes = row.item.qualified ?? [];
   const role = notes.some((note) => note.property === 'wdt:P3831');
   const performer = row.performer;
+  const CoverList = presentation.CoverList;
+  const CandidateValue = presentation.CandidateValue;
+  const SpoilerGate = presentation.SpoilerGate;
   const content = (
     <article
       className="min-w-0 space-y-3 rounded-lg border border-border p-3 [overflow-wrap:anywhere]"
