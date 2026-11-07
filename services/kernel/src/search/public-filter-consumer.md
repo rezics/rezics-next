@@ -2,7 +2,10 @@
 
 `createPublicFilterConsumerOperations` composes the injected Source and its binding with the existing
 `createPublicFilterCustody` registry. It does not construct a Source or close supplied resources. Construction
-is independent of native provider readiness. The Source producer's typed unavailable adapter remains unavailable.
+is independent of native provider readiness. The public Source and binding factories are Semantic application
+facades; normal process composition installs the native Semantic producer with Search planning/custody and Access
+repair/authorization ports. An injected typed unavailable Source producer remains unavailable. Search retains its
+generation-publication writer.
 
 Capture admits the complete expanded shared grammar, rejects owner predicates and unexpanded saved references,
 and compares optional compiled DSL before native I/O. Native resolution fixes the Source configuration, release,

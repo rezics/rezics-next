@@ -3,14 +3,14 @@ import { releaseDigest, type Release } from '@rezics/definitions';
 import { facetProperties } from '@rezics/filter';
 import type { Source } from '@rezics/definitions/bulk';
 import type { Pool, PoolClient } from 'pg';
-import { accessCheck, type AccessCheck } from '../request/access.ts';
+import type { AccessCheck } from '../access/index.ts';
 import { mintReadTime, type AuthoritativeTime } from '../command/command.ts';
 import { discardConnection, withConnection } from '../database/pool.ts';
-import { requireAccessDeadline, AccessUnavailableError } from '../access/unavailable.ts';
+import { requireAccessDeadline } from '../access/unavailable.ts';
 import { subjectReadEligibility } from './eligibility.ts';
 import { partitionOf, routeOf } from '../route/route.ts';
 import { readPartition } from '../partition/partition.ts';
-import { readFences, type SourceFenceTuple } from '../content/source-fences.ts';
+import { readFences, type SourceFenceTuple } from '../content/index.ts';
 import { sourceTuple } from './fences.ts';
 import { GLOBAL_CONTEXT } from './definitions.ts';
 import { factDataTypes, resolveItem, type FactRow, type Statement } from './item.ts';
@@ -27,6 +27,7 @@ import type {
   PublicFilterProjectionRequest,
   PublicFilterSourceFactory,
 } from './public-filter-source-contract.ts';
+import type { PublicFilterAccessBindingPort } from './source-binding-port.ts';
 import readReleases from './search-source-releases.sql';
 import readSubjects from './search-source-subjects.sql';
 import readPrivacyHead from './public-filter-projection-head-read.sql';
@@ -528,6 +529,7 @@ type IdentityRead = {
 /** Each identity home is checked independently; the public decision uses one native T for the whole page. */
 async function readPublicIdentities(
   config: Configuration,
+  accessPort: PublicFilterAccessBindingPort,
   ids: readonly string[],
   time: AuthoritativeTime,
   deadline: number,
@@ -553,12 +555,12 @@ async function readPublicIdentities(
     }
     pending = [];
     for (const [partition, group] of groups) {
-      requireAccessDeadline(deadline);
+      accessPort.requireDeadline(deadline);
       const checks = new Map<string, AccessCheck>();
       for (const item of group) {
         checks.set(
           item.id,
-          await accessCheck(
+          await accessPort.checkSubjectRead(
             config.access,
             { kind: 'anonymous' },
             'subject:read',
@@ -796,6 +798,7 @@ function makeDependencies(
 export async function readPublicFilterProjectionPage(
   config: Configuration,
   request: PublicFilterProjectionRequest,
+  accessPort: PublicFilterAccessBindingPort,
 ): Promise<PublicFilterProjectionPage> {
   const cost: MutableCost = { ...emptyCost() };
   const routed = routePartition(request.subject);
@@ -1058,7 +1061,7 @@ export async function readPublicFilterProjectionPage(
     }
     if (metadataMissing) return unready('metadata_missing', cost);
 
-    const identities = await readPublicIdentities(config, [...targetIds], snapshot.time, deadline, cost);
+    const identities = await readPublicIdentities(config, accessPort, [...targetIds], snapshot.time, deadline, cost);
     if (!identities.complete) return unready('dependency_pending', cost);
     const observedSourceHead = identities.heads.get(partition);
     if (
@@ -1302,7 +1305,7 @@ export async function readPublicFilterProjectionPage(
       cost,
     };
   } catch (error) {
-    if (error instanceof AccessUnavailableError)
+    if (accessPort.isUnavailable(error))
       return Date.now() >= deadline ? unavailable('deadline', cost) : unready('dependency_pending', cost);
     throw error;
   }
@@ -1316,6 +1319,7 @@ export async function readOriginalPublicFilterProjectionPage(
   config: Configuration,
   request: PublicFilterProjectionRequest,
   identity: PublicFilterProjectionReplayIdentity,
+  accessPort: PublicFilterAccessBindingPort,
 ): Promise<PublicFilterProjectionPage> {
   const routed = routePartition(request.subject);
   if (
@@ -1383,7 +1387,7 @@ export async function readOriginalPublicFilterProjectionPage(
   const retained = await lookup();
   if (retained) return addCost(retained, { inputKeys: 1 });
 
-  const produced = await readPublicFilterProjectionPage(config, request);
+  const produced = await readPublicFilterProjectionPage(config, request, accessPort);
   if (produced.status !== 'progress' && produced.status !== 'complete') return addCost(produced, { inputKeys: 1 });
   const page = addCost(produced, { inputKeys: 1, frontierWrites: 1 });
   const pageData = encodeReplayValue(page);

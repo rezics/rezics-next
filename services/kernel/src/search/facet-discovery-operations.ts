@@ -1,10 +1,10 @@
 import type { Access } from '../request/access.ts';
 import type { KernelClock } from '../clock.ts';
 import type { Pool } from 'pg';
-import type { PublicFilterCost, PublicFilterSource } from '../semantic/public-filter-source-contract.ts';
+import type { PublicFilterCost, PublicFilterSource } from '../semantic/index.ts';
 import { createFacetPopulationSource } from '../semantic/index.ts';
-import type { PublicFilterSourceBinding } from '../semantic/public-filter-source-binding.ts';
-import type { PrivacyReductionStart } from '../semantic/public-filter-source-contract.ts';
+import type { PublicFilterSourceBinding } from '../semantic/index.ts';
+import type { PrivacyReductionStart } from '../semantic/index.ts';
 import { subjectPartition, type SubjectSource } from './source.ts';
 import { validateRequestSourceSnapshot } from './request-source-snapshot.ts';
 import { compileFilter } from './filter.ts';

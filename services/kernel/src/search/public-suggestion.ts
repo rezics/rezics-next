@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import { isDeepStrictEqual } from 'node:util';
-import type { PublicFilterNativeSource } from '../semantic/public-filter-source-binding.ts';
-import type { PublicFilterCost, PublicFilterSource } from '../semantic/public-filter-source-contract.ts';
+import type { PublicFilterNativeSource } from '../semantic/index.ts';
+import type { PublicFilterCost, PublicFilterSource } from '../semantic/index.ts';
 import { createPublicFilterConsumerOperations } from './public-filter-consumer.ts';
 import { createPublicFilterCustody } from './public-filter-custody.ts';
 import type {

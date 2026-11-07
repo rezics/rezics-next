@@ -3,7 +3,7 @@ import { createHash } from 'node:crypto';
 import type { FilterDocument, FilterRelease } from '@rezics/filter';
 import { ProblemError } from '../http/problem-error.ts';
 import type { KeyRing } from '../tokens/seal.ts';
-import type { PublicFilterCost } from '../semantic/public-filter-source-contract.ts';
+import type { PublicFilterCost } from '../semantic/index.ts';
 import type { PublicFilterConsumerContext } from './public-filter-consumer-contract.ts';
 import type { FacetScopeCursorBinding } from './facet-discovery-contract.ts';
 import { bindSearchIdentityCursorRequest } from './canonical-keyset-admit.ts';

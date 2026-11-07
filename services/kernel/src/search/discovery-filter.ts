@@ -22,7 +22,7 @@ import { compileFilter } from './filter.ts';
 import type {
   PublicFilterDependencyKey,
   PublicFilterProjectionMeaning,
-} from '../semantic/public-filter-source-contract.ts';
+} from '../semantic/index.ts';
 
 type Query = Record<string, unknown>;
 const none: Query = { match_none: {} };

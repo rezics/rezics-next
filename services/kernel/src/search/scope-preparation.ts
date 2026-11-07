@@ -3,7 +3,7 @@ import type { OpenSearch } from './opensearch.ts';
 import { createOrderedScopePreparation } from './scope-preparation-ordered.ts';
 import { createFacetPopulationSource } from '../semantic/index.ts';
 import { ProblemError } from '../http/problem.ts';
-import type { PublicFilterSourceFactory } from '../semantic/public-filter-source-contract.ts';
+import type { PublicFilterSourceFactory } from '../semantic/index.ts';
 import { createPublicIdentitySourceCapture } from '../semantic/identity-scoped-public-source.ts';
 import { createIdentityScopedObservations } from '../semantic/identity-scoped-observations.ts';
 import { createNativeLibrarySourceCustody } from '../library/native-source-custody.ts';

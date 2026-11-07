@@ -9,7 +9,7 @@ import { SearchOperationError } from './operation-outcomes.ts';
 import type { WorkAllowance, WorkDimensions, WorkReceipt } from '../library/contract/work-dimensions.ts';
 import { readScopeLeafEvidence, type LeafOptions, type LeafWork } from '../semantic/scope-leaf-evidence.ts';
 import type { IdentityScopeWork } from '../semantic/identity-scope-types.ts';
-import type { PublicFilterCost } from '../semantic/public-filter-source-contract.ts';
+import type { PublicFilterCost } from '../semantic/index.ts';
 import { currentOwnerClauseKey, type CurrentOwnerFilterPlan } from './current-filter-plan.ts';
 import { holdsCurrentStatements, holdsCurrentType } from './current-leaf.ts';
 import type { FactClause } from './disclosure/check.ts';

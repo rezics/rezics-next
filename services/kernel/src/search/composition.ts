@@ -2,6 +2,7 @@ import { chooseTexts, pendingFacts, validateHitOptions } from './hits.ts';
 import type { IndexedSubject } from './source.ts';
 import { WORK_CONTEXT_LIMITS, workContextBytes, workContextKind } from './work-context.ts';
 import type { CopyWorkSearchEvidencePort } from '../semantic/index.ts';
+export { createSearchSourceBindingAdapter } from './source-binding-adapter.ts';
 
 /** Search's consumer-facing evidence adapter for Semantic reading applications. */
 export function createSemanticCopyWorkEvidencePort(): CopyWorkSearchEvidencePort {

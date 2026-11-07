@@ -15,7 +15,7 @@ import { createPublicFilterCustody } from './public-filter-custody.ts';
 import { createRatedSubjectSource } from './rated-source.ts';
 import { subjectListingSource } from '../library/listing-counts.ts';
 import { subjectConsumer } from './runner.ts';
-import type { PublicFilterConsumer } from '../semantic/public-filter-source-contract.ts';
+import type { PublicFilterConsumer } from '../semantic/index.ts';
 import { ProblemError } from '../http/problem.ts';
 import { createPublicSuggestionOperations, type PublicSuggestionOperations } from './public-suggestion.ts';
 import { createPublicFilterConsumerOperations } from './public-filter-consumer.ts';

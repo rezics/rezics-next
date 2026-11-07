@@ -2,16 +2,15 @@ import type { Source } from '@rezics/definitions/bulk';
 import type { KindCataloguePin, Release } from '@rezics/definitions';
 import type { Pool } from 'pg';
 import type { AuthoritativeTime, CommandTransaction } from '../command/command.ts';
-import type { SourceFenceTuple } from '../content/source-fences.ts';
+import type { SourceFenceTuple } from '../content/index.ts';
 import type { Partition } from '../partition/partition.ts';
-import type { Access, AccessContext } from '../request/access.ts';
+import type { Access, AccessContext } from '../access/index.ts';
 import type { KernelClock } from '../clock.ts';
 import type { FilterStatement } from '@rezics/filter';
-import type { SearchPlan } from '../search/query.ts';
-import type { IndexedStatement } from '../search/source.ts';
+import type { IndexedStatement, SearchPlan } from '../search/index.ts';
 import type { Statement } from './item.ts';
-import type { PublicFilterQueriedObservation } from '../search/public-filter-consumer-contract.ts';
-export type { PublicFilterQueriedObservation } from '../search/public-filter-consumer-contract.ts';
+import type { PublicFilterQueriedObservation } from './source-binding-port.ts';
+export type { PublicFilterQueriedObservation } from './source-binding-port.ts';
 
 /** Shared native source contract. Its implementation remains local to Semantic and grants no permission. */
 export type PublicFilterCost = Readonly<{

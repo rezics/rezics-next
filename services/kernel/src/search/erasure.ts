@@ -13,7 +13,7 @@ import {
   verifySubjectErasureSourceProof,
 } from '../semantic/account-erasure-source.ts';
 import type { SubjectErasureSourceRecord, SubjectErasureSource } from '../semantic/account-erasure-source-contract.ts';
-import type { PublicFilterConsumer, PublicFilterCost } from '../semantic/public-filter-source-contract.ts';
+import type { PublicFilterConsumer, PublicFilterCost } from '../semantic/index.ts';
 import type { NativeStepWork } from '../semantic/identity-epoch-contract.ts';
 import type { WorkContext } from '../work/registry.ts';
 import { createOpenSearch, OpenSearchError, type OpenSearch } from './opensearch.ts';
@@ -24,7 +24,7 @@ import { validateRefreshResponse } from './write-actions.ts';
 import { eraseDiscoveryAccount, nativeDiscoveryRegistry } from './account-discovery.ts';
 import { createRatedSubjectSource } from './rated-source.ts';
 import type { DiscoveryRegistry } from './discovery.ts';
-import type { PublicFilterSourceFactory } from '../semantic/public-filter-source-contract.ts';
+import type { PublicFilterSourceFactory } from '../semantic/index.ts';
 import { createSearchWriterGuard } from './writer-guard.ts';
 import { subjectConsumer } from './runner.ts';
 import { subjectListingSource } from '../library/listing-counts.ts';

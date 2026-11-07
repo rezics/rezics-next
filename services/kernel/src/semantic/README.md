@@ -20,6 +20,13 @@ adapter capability. Nested reads use the same application instance and retain th
 deadline, bounds, disclosure and redirect behavior. `subject.ts`, `summaries.ts` and `viewer-actions.ts` remain
 compatibility facades for installed callers.
 
+Decision: Semantic composition installs one constructed public-filter Source binding application for Source creation,
+binding, bootstrap and retained repair. Semantic keeps native SQL and custody execution; Search supplies capture
+planning, consumer/generation custody, state encoding and repair allowance through `search/composition.ts`; Access
+supplies Account repair/enrollment, authorization and deadline classification through the composition port. The
+runtime defaults compose this application before Search runtime factories are used. Existing pool, route key, Access,
+request deadline, transaction, reached-child work and publication writer ownership flow through unchanged.
+
 This module owns subject facts and their item projections, partition paging, and immutable definition releases with editorial activation history.
 
 `contract/released-definitions.ts` and `adapters/released-definitions.ts` expose the existing digest-validated producer;

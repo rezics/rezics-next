@@ -5,7 +5,7 @@ import {
 } from '../access/account-discovery-source.ts';
 import { readSubjectErasureSourceProof, verifySubjectErasureSourceProof } from '../semantic/account-erasure-source.ts';
 import { drainGenerationPublicationProofCopy, hasRetainedWriterPublicationCopies } from './public-filter-custody.ts';
-import type { PublicFilterConsumer } from '../semantic/public-filter-source-contract.ts';
+import type { PublicFilterConsumer } from '../semantic/index.ts';
 import type {
   PublicFilterConsumerContext,
   PublicFilterConsumerUnavailable,
