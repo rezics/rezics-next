@@ -4669,10 +4669,10 @@ acceptance after integration; workspace typing does not establish those outcomes
 
 ### Accepted identity technical receiver
 
-The original `agent-verification-identity.ts` exports
+`agent-verification-identity-literals.ts` holds fence SQL. `agent-verification-identity.ts` exports
 `acceptAccountIdentityTechnicalSource(tx: CommandTransaction, reference: IdentitySourceConsumerReference): Promise<IdentityNativeReceipt | null>`
 and `verifyAccountIdentityTechnicalSource(tx: CommandTransaction, reference: IdentitySourceConsumerReference, receiving: IdentityNativeReceipt): Promise<boolean>`.
-Both types are the original Semantic exports, without a receiver brand or new source identifier.
+Both types are the original Semantic exports.
 The receiver belongs to the same live original source-home command. Its receipt is the actual
 Access receiving commit's partition, epoch, position and transaction, distinct from the original
 source component. Executor finalization supplies provenance; replay resolves the same durable

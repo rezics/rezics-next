@@ -38,11 +38,8 @@ import {
 } from './agent-verification-identity-recovery.ts';
 import { declareAgentIdentitySource, recordAgentIdentityWorkSource } from '../history/application/index.ts';
 import { type AgentIdentitySourceKey } from '../history/contract/index.ts';
-import {
-  ACCOUNT_IDENTITY_FENCE_SQL,
-  ACCOUNT_IDENTITY_SOURCE_DECLARATION,
-  accountIdentityNativeStep,
-} from './agent-verification-identity-work.ts';
+import { ACCOUNT_IDENTITY_FENCE_SQL } from './agent-verification-identity-literals.ts';
+import { ACCOUNT_IDENTITY_SOURCE_DECLARATION, accountIdentityNativeStep } from './agent-verification-identity-work.ts';
 export {
   ACCOUNT_IDENTITY_ACCEPTED_BINDING_DECLARATION,
   ACCOUNT_IDENTITY_FENCE_DECLARATION,
@@ -89,7 +86,6 @@ const nativeSources = new WeakMap<
   AccountIdentitySource,
   { time: string; key: string; deadline: number; undoOnly: boolean }
 >();
-const ACCOUNT_FENCE_SQL = ACCOUNT_IDENTITY_FENCE_SQL;
 const json = (value: unknown): string =>
   JSON.stringify(value, (_key, entry: unknown) => (typeof entry === 'bigint' ? entry.toString() : entry));
 const normalized = (value: unknown) => canonicalize(JSON.parse(json(value)))!;
@@ -357,7 +353,7 @@ export async function readAccountIdentitySource(
   await reserveAccountIdentitySourceWork(tx);
   const time = authoritativeTimeValue(command.time);
   const account = await tx.query<{ kind: 'actor' | 'organization'; state: string; authn_fenced: boolean }>(
-    ACCOUNT_FENCE_SQL,
+    ACCOUNT_IDENTITY_FENCE_SQL,
     [route, receipt.account],
   );
   const current = account.rows[0];

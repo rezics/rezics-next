@@ -220,6 +220,7 @@
         "services/kernel/src/access/public-identity.ts",
         "services/kernel/src/access/adapters/index.ts",
         "services/kernel/src/access/agent-verification-identity.ts",
+        "services/kernel/src/access/agent-verification-identity-literals.ts",
         "services/kernel/src/access/agent-verification.ts",
         "services/kernel/src/access/events.ts",
         "services/kernel/src/access/identity-original-admission.ts",
@@ -442,7 +443,10 @@
       "kind": "contract",
       "owner": "content",
       "paths": ["services/kernel/src/community/contract/**"],
-      "publicEntries": ["services/kernel/src/community/contract/index.ts"],
+      "publicEntries": [
+        "services/kernel/src/community/contract/index.ts",
+        "services/kernel/src/community/contract/literals.ts"
+      ],
       "allowedDependencies": [],
       "capabilities": ["community-vocabulary"]
     },
@@ -473,7 +477,8 @@
         "services/kernel/src/rating/index.ts",
         "services/kernel/src/rating/module.ts",
         "services/kernel/src/rating/events.ts",
-        "services/kernel/src/rating/own-votes-review.ts"
+        "services/kernel/src/rating/own-votes-review.ts",
+        "services/kernel/src/rating/identity-work-frame-limits.ts"
       ],
       "allowedDependencies": [
         "kernel-access",
