@@ -7,6 +7,7 @@ import {
   parseJourneyTable,
   renderJourneyTable,
   renderWalkCensus,
+  replaceWalkCensus,
 } from '../scripts/accounts-goal-walk.ts';
 import { commandNeedsSharedDevServer } from '../scripts/with-dev-server.ts';
 
@@ -71,8 +72,11 @@ test('the table-shape check does not boot Storybook, and follow writes the publi
   expect(source).toContain("followTargetId = agentSubjectId(publicTarget, 'follow target')");
   expect(source).toContain("kernel(stack, 'PUT', `/v1/follows/${followTargetId}`, { bearer: token.bearer })");
   expect(source).not.toMatch(/follows\/\$\{followTargetId\}.*body:/);
+  expect(source).toContain("`${stack.native}/revoke`");
+  expect(source).toContain('outsider opened the software session');
+  expect(source).toContain('/operator-sessions/open');
   const rows = parseJourneyTable(readFileSync(capabilities, 'utf8'));
-  expect(renderWalkCensus(rows, rows[0]!.revision, rows[0]!.observedAt, '2026-11-07T03:42:43Z', true)).toMatch(
-    /^Round .+ Causal repairs: `\.temp\/continuation\/auth-website-kernel-bearer\.md`/,
-  );
+  const census = renderWalkCensus(rows, rows[0]!.revision, rows[0]!.observedAt, '2026-11-07T03:42:43Z', true);
+  expect(census).toMatch(/^Round .+ Causal repairs: `\.temp\/continuation\/auth-website-kernel-bearer\.md`/);
+  expect(replaceWalkCensus(readFileSync(capabilities, 'utf8'), census)).toContain(census);
 });

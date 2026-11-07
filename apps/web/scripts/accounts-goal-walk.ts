@@ -179,10 +179,9 @@ export function renderJourneyTable(rows: JourneyRow[]): string {
   return [...header, ...body].join('\n');
 }
 
-const CENSUS_PATTERN =
-  /Round \d{4}-\d{2}-\d{2}T.*?Causal repairs: `\.temp\/continuation\/auth-website-kernel-bearer\.md`, `auth-recovery-and-credentials\.md`, `accounts-operations-e18\.md`, `accounts-follow\.md`, `accounts-walk-browser\.md`\./;
 const CENSUS_REPAIRS =
   '`.temp/continuation/auth-website-kernel-bearer.md`, `auth-recovery-and-credentials.md`, `accounts-operations-e18.md`, `accounts-follow.md`, `accounts-walk-browser.md`';
+const CENSUS_MARKER = ' The table-shape check does not start Storybook.';
 
 export function renderWalkCensus(
   rows: JourneyRow[],
@@ -198,6 +197,14 @@ export function renderWalkCensus(
   const slowestText = slowest ? `${slowest.id} ${slowest.elapsed} ${cell(slowest.cause).slice(0, 120)}` : 'none';
   const observed = observedAt.replace(/\.\d+Z$/, 'Z');
   return `Round ${observed} on \`${sourceRevision}\` with \`REZICS_WALK_DEFER_FRONTENDS=${deferFrontends ? '1' : '0'}\`: ${passing.length}/19 PASS (${passList}). Slowest FAIL ${slowestText}. Next hourly due ${nextHourly}. Causal repairs: ${CENSUS_REPAIRS}.`;
+}
+
+export function replaceWalkCensus(markdown: string, sentence: string): string {
+  const heading = markdown.indexOf(JOURNEY_HEADING);
+  const roundAt = markdown.indexOf('Round ', heading < 0 ? 0 : heading);
+  const markerAt = markdown.indexOf(CENSUS_MARKER, roundAt);
+  if (roundAt < 0 || markerAt < 0) throw new Error('Walk census sentence is missing');
+  return `${markdown.slice(0, roundAt)}${sentence}${markdown.slice(markerAt)}`;
 }
 
 export async function writeJourneyTable(
@@ -221,12 +228,15 @@ export async function writeJourneyTable(
   }
   end = start + consumed;
   if (markdown.slice(end - 1, end) === '\n') end -= 1;
-  let output = `${markdown.slice(0, start)}${renderJourneyTable(rows)}${markdown.slice(end)}`;
+  const tableOutput = `${markdown.slice(0, start)}${renderJourneyTable(rows)}${markdown.slice(end)}`;
+  let output = tableOutput;
   if (census) {
-    const sentence = renderWalkCensus(rows, census.revision, census.observedAt, census.nextHourly);
-    const next = output.replace(CENSUS_PATTERN, sentence);
-    if (next === output) throw new Error('Walk census sentence is missing');
-    output = next;
+    try {
+      output = replaceWalkCensus(tableOutput, renderWalkCensus(rows, census.revision, census.observedAt, census.nextHourly));
+    } catch (error) {
+      console.error(`accounts-goal-walk: ${error instanceof Error ? error.message : String(error)}`);
+      output = tableOutput;
+    }
   }
   await writeFile(markdownPath, output);
 }
@@ -479,7 +489,7 @@ async function websiteToken(
   bindings: Record<string, string>,
   websiteKey: JWK,
   secret = password,
-): Promise<{ session: Session; bearer: string; codePath: string }> {
+): Promise<{ session: Session; bearer: string; refresh: string; codePath: string }> {
   const session = await signIn(stack, person, 'login', [], secret);
   const verifier = randomBytes(48).toString('base64url');
   const state = randomBytes(24).toString('base64url');
@@ -530,7 +540,12 @@ async function websiteToken(
   const issued = (await token.json()) as Json;
   if (token.status !== 200 || typeof issued.access_token !== 'string')
     throw new Error(`website token returned HTTP ${token.status}: ${summarize(issued)}`);
-  return { session, bearer: issued.access_token, codePath: redirected.pathname };
+  return {
+    session,
+    bearer: issued.access_token,
+    refresh: typeof issued.refresh_token === 'string' ? issued.refresh_token : '',
+    codePath: redirected.pathname,
+  };
 }
 
 async function operate(
@@ -753,7 +768,7 @@ if (import.meta.main) {
   const developer: Person = { handle: 'developer', email: 'developer@rezics.test', accountId: '' };
   const developerPassword = keys.password;
   const bindings = await parseEnv(join(root, 'apps/web/.dev.vars'));
-  let website: { session: Session; bearer: string; codePath: string } | undefined;
+  let website: { session: Session; bearer: string; refresh: string; codePath: string } | undefined;
   try {
     website = await websiteToken(stack, developer, bindings, keys.website, developerPassword);
     developer.accountId = website.session.accountId;
@@ -1059,29 +1074,57 @@ if (import.meta.main) {
     requireStatus(opened, 'operator opening', 200);
     if (opened.value.account_id !== humanSoftwareId) throw new Error('operator opening returned a foreign actor');
     outsider = outsider ?? (await signup(stack, 'out'));
-    const outsiderOpening = await operate(
-      stack,
-      await signIn(stack, outsider, AUTH_MANAGEMENT_CLIENT_ID, AUTH_MANAGEMENT_SCOPES.opening),
-      { kind: 'opening', operatorAccountId: outsider.accountId, subjectAccountId: humanSoftwareId },
-    );
-    if (outsiderOpening.status === 200) throw new Error('outsider opened the software session');
-    return `software ${humanSoftwareId}`;
+    const outsiderSession = await signIn(stack, outsider, AUTH_MANAGEMENT_CLIENT_ID, AUTH_MANAGEMENT_SCOPES.opening);
+    const outsiderKey = crypto.randomUUID();
+    const outsiderOperation = {
+      kind: 'opening',
+      operatorAccountId: outsider.accountId,
+      subjectAccountId: humanSoftwareId,
+    };
+    const outsiderApproval = await auth(stack, '/account-operations/approve', outsiderSession, {
+      operationKey: outsiderKey,
+      operation: outsiderOperation,
+      accountId: outsiderSession.accountId,
+    });
+    if (outsiderApproval.status === 200) {
+      const outsiderOpened = await auth(stack, '/operator-sessions/open', outsiderSession, {
+        operationKey: outsiderKey,
+        operation: outsiderOperation,
+        accountId: outsiderSession.accountId,
+        reference: outsiderApproval.value.reference,
+      });
+      if (outsiderOpened.status === 200) throw new Error('outsider opened the software session');
+      return `software ${humanSoftwareId}; outsider open HTTP ${outsiderOpened.status}`;
+    }
+    return `software ${humanSoftwareId}; outsider approve HTTP ${outsiderApproval.status}`;
   });
 
-  await runJourney('J10', 'GET /authorize grant → POST /consent revoke → GET /v1/accounts/{id}/profile', async () => {
+  await runJourney('J10', 'GET /authorize grant → POST /revoke → GET /v1/accounts/{id}/profile', async () => {
     const person = walker ?? (await signup(stack, 'j10'));
     const granted = await websiteToken(stack, person, bindings, keys.website);
     const before = await kernel(stack, 'GET', `/v1/accounts/${granted.session.accountId}/profile`, {
       bearer: granted.bearer,
     });
     requireStatus(before, 'consented profile', 200);
-    const reduced = await auth(stack, '/consent', granted.session, { client_id: WEBSITE_CLIENT_ID, scope: ['openid'] });
-    if (![200, 204].includes(reduced.status))
-      throw new Error(`consent reduce HTTP ${reduced.status}: ${summarize(reduced.value)}`);
+    if (!granted.refresh) throw new Error('website token omitted refresh_token');
+    const revoked = await fetch(`${stack.native}/revoke`, {
+      method: 'POST',
+      headers: { origin: stack.issuer, 'content-type': 'application/x-www-form-urlencoded' },
+      body: new URLSearchParams({
+        client_id: WEBSITE_CLIENT_ID,
+        client_assertion_type: 'urn:ietf:params:oauth:client-assertion-type:jwt-bearer',
+        client_assertion: await websiteAssertion(stack, keys.website),
+        resource: bindings.API_RESOURCE ?? WEBSITE_AUDIENCE,
+        token: granted.refresh,
+      }),
+      signal: AbortSignal.timeout(30_000),
+    });
+    if (revoked.status !== 200)
+      throw new Error(`website revoke returned HTTP ${revoked.status}: ${(await revoked.text()).slice(0, 240)}`);
     const after = await kernel(stack, 'GET', `/v1/accounts/${granted.session.accountId}/profile`, {
       bearer: granted.bearer,
     });
-    if (after.status === 200) throw new Error('reduced consent still read the editable profile');
+    if (after.status === 200) throw new Error('revoked website family still read the editable profile');
     return `profile after revoke HTTP ${after.status}`;
   });
 
