@@ -10,7 +10,7 @@ import {
   parseConceptVisitDescriptor,
 } from '../../features/pages/source-concept-reading/navigation';
 import { m } from '../../paraglide/messages.js';
-import type { ConceptWorksRoutePatch } from '../../features/catalogue/concept-works/view';
+import type { ConceptWorksRoutePatch } from '../../features/catalogue/concept-works/contract';
 import { conceptWorksRouteFor, patchConceptWorksSearch } from '../../features/pages/source-concept-reading/works-route';
 
 export const Route = createFileRoute('/subjects/$id_/$slug/concepts')({

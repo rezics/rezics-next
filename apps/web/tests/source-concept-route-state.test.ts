@@ -41,6 +41,11 @@ test('the mounted route resumes descendants and clears filters without resurrect
   const initial = validate({ conceptVisit: encodeConceptVisitDescriptor(visit) });
   const selected = conceptWorksRouteFor(initial, visit);
   expect(selected).toMatchObject(visit.works);
+  const outer = '/en/subjects/00000000-0000-4000-8000-000000000004/work';
+  const partial = patchConceptWorksSearch({ ...initial, returnTo: outer }, { sort: 'rating' }, visit);
+  expect(conceptWorksRouteFor(validate(partial), undefined)).toMatchObject({ ...visit.works, sort: 'rating' });
+  expect(partial.returnTo).toBe(outer);
+  expect(validate(partial).returnTo).toBe(outer);
   const changed = patchConceptWorksSearch(
     initial,
     {

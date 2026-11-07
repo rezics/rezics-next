@@ -305,7 +305,11 @@ test('mounted groups preserve originals, gated evidence, human labels and exact 
               locale: 'en',
               returnTo: `/en/subjects/${id(1)}/source`,
               currentHref: `/en/subjects/${id(1)}/source/relations?${new URLSearchParams({
-                realm: id(5), node: 'selected', streamProperty: property, streamDirection: 'inverse',
+                realm: id(5),
+                node: 'selected',
+                streamProperty: property,
+                streamDirection: 'inverse',
+                via: `/en/subjects/${id(3)}/origin`,
                 ...(page.continuation ? { cursor: page.continuation.cursor } : {}),
               })}`,
               onContinue: (next) => continued.push(next),
@@ -327,17 +331,27 @@ test('mounted groups preserve originals, gated evidence, human labels and exact 
     const failed = structuredClone(native);
     failed.continuation = { node: 'selected', cursor: 'original+cursor' };
     const failedPlan = planReads(platformRegistry, nativeDocument, {
-      subject: subject.id, context: value.context, continuation: failed.continuation,
+      subject: subject.id,
+      context: value.context,
+      continuation: failed.continuation,
     });
-    failed.reads[failedPlan.nodes.selected!] = { status: 503, body: {} };
-    await drawNative(failed);
-    expect(host.querySelectorAll('[data-work-stream]')).toHaveLength(1);
-    const retry = [...host.querySelectorAll<HTMLAnchorElement>('a')].find((el) => el.textContent === 'Retry')!;
-    const retryUrl = new URL(retry.href);
-    expect(Object.fromEntries(retryUrl.searchParams)).toEqual({
-      realm: id(5), node: 'selected', streamProperty: property, streamDirection: 'inverse', cursor: 'original+cursor',
-    });
-    expect(workFranchiseReturn(retryUrl.hash)).toMatchObject({ node: 'selected', stream: `in:${property}` });
+    for (const status of [503, 204]) {
+      const unavailable = structuredClone(failed);
+      unavailable.reads[failedPlan.nodes.selected!] = { status, body: {} };
+      await drawNative(unavailable);
+      expect(host.querySelectorAll('[data-work-stream]')).toHaveLength(1);
+      const retry = [...host.querySelectorAll<HTMLAnchorElement>('a')].find((el) => el.textContent === 'Retry')!;
+      const retryUrl = new URL(retry.href);
+      expect(Object.fromEntries(retryUrl.searchParams)).toEqual({
+        realm: id(5),
+        node: 'selected',
+        streamProperty: property,
+        streamDirection: 'inverse',
+        cursor: 'original+cursor',
+        via: `/en/subjects/${id(3)}/origin`,
+      });
+      expect(workFranchiseReturn(retryUrl.hash)).toMatchObject({ node: 'selected', stream: `in:${property}` });
+    }
     await drawNative(equal);
     expect(host.querySelector<HTMLDetailsElement>('[data-work-statement] details')!.open).toBe(false);
     await drawNative(equal, { ...value, cacheReader: 'replacement' });

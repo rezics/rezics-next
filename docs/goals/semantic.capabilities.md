@@ -254,6 +254,8 @@ Scenarios and binding: Existing relation/reference suites; TO-FREEZE subject-tra
 
 Decision: a failed selected Work relation group retries the same node, property, direction and native cursor through
 its current page address, restoring that group's heading without switching to the overview.
+Concept filter edits and selected Work retries retain the complete current catalogue selection and outer return;
+focused regression assertions cover these repairs, while broad native/browser acceptance follows integration.
 
 Stages: Declared: yes. Partial bound/exposed: relation and reference APIs; composed traversal open. API-passed: unrecorded; promoted: no.
 

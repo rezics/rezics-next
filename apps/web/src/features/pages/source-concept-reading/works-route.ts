@@ -1,4 +1,4 @@
-import type { ConceptWorksRoutePatch, ConceptWorksRouteState } from '../../catalogue/concept-works/view';
+import type { ConceptWorksRoutePatch, ConceptWorksRouteState } from '../../catalogue/concept-works/contract';
 import { conceptVisitPosition, encodeConceptHierarchyAddress, type ConceptVisitDescriptor } from './navigation';
 
 /** URL selections override the saved visit; an absent selection resumes the original operand. */
