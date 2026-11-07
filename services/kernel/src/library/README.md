@@ -122,16 +122,16 @@ occurrences, nested admission, original/terminal disclosure, active release, wit
 identity-native declaration equality, ordinary `composeLibraryDomain` adapter install, and unbound collection-read deferral.
 Selected identity seal cases keep the selected bind vector; transform fixtures use routable job IDs. Existing native
 identity, Source/member/publication, assignment-growth and lifecycle-growth cases keep their unchanged assertions.
-Label catalogue, assignment, parent and point SQL use typed input CTEs and LATERAL LIMIT-1 primary-key points
-(and the reserved-source 32-row seek) so generic prepared plans cannot Seq Scan an owner catalogue. Those
-`ORDER BY` lists name the index columns in index order; ordering only the trailing key Seq Scanned
-`personal_label` once per parent observation. Point reads
-seek the primary key then filter `include_deleted` on that row, and project `createdAt` as insert RETURNING does so
-Reylo still decodes timestamptz text. A unique LATERAL LIMIT-1 point is one row; UNION ALL pages are arrays, so the
-store takes that row or the first array element. They do not UNION ALL `include_deleted`. Prefix `ORDER BY` names
-`personal_label_live_name` `(route, account_id, normalized_name)`. Folded FULL
-warmup sees 34 `personal_label` parent observations and zero sequential scans. Set, unassign, restore and
-rename select each named operand once in the one-row request and read those columns in the mutation WHERE.
+Label catalogue, assignment and parent SQL use typed input CTEs and LATERAL primary-key or reserved-source
+points so generic prepared plans cannot Seq Scan an owner catalogue. Those `ORDER BY` lists name the index
+columns in index order. Point reads bind the unique primary key as Entry does, then filter `include_deleted` on
+that row; LATERAL `ORDER BY` PK `LIMIT 1` Seq Scanned `personal_label` once per parent under generic prepared
+plans. They project `createdAt` as insert RETURNING does so Reylo still decodes timestamptz text. A unique point
+may be one row or a one-element array; UNION ALL pages are arrays, so the store takes that row or the first
+array element. They do not UNION ALL `include_deleted`. Prefix `ORDER BY` names `personal_label_live_name`
+`(route, account_id, normalized_name)`. Folded FULL warmup sees 34 `personal_label` parent observations and
+zero sequential scans. Set, unassign, restore and rename select each named operand once in the one-row request
+and read those columns in the mutation WHERE.
 
 Decision: Source capture, member preparation, owner-query preparation, publication, presentation and Entry/progress admission use
 one fake-capability application suite; ordinary composition binds the real Access, Semantic, Search and Content

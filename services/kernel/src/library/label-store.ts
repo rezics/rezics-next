@@ -85,7 +85,7 @@ function asRecord(
 type ReadResult = Awaited<ReturnType<typeof readLabel.run>>;
 type ReadRow = NonNullable<ReadResult extends readonly (infer Row)[] ? Row : ReadResult>;
 
-/** Reylo's unique LATERAL LIMIT-1 point is a row; UNION ALL and RETURNING are arrays. */
+/** A unique point may be one row or a one-element array; UNION ALL and RETURNING are arrays. */
 function firstRow(result: ReadResult): ReadRow | undefined {
   if (result == null) return;
   return (Array.isArray(result) ? result[0] : result) as ReadRow;
