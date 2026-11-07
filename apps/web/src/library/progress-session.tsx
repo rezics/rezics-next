@@ -4,7 +4,7 @@ import { ProgressDecimalInput, ProgressInputError } from './progress-decimal-inp
 import { ProgressAddressCorrection } from './progress-address-correction';
 import * as exposure from '../kernel/exposure';
 import { useQuery } from '@tanstack/react-query';
-import { personalRead } from '../kernel/query';
+import { personalRead } from '../session/reading-policy';
 import { useReadingAuthority } from './reading-detail-current-origin';
 import type { GatedOperation } from '../kernel/exposure';
 import type { ProgressDetail, ProgressDetailAddress } from './progress-detail-server';
@@ -56,7 +56,7 @@ import { ProgressCorrectionReview } from './progress-actions';
 import { progressIndexSelectionLocationState, type ProgressReturnContext } from './progress-start-draft-navigation';
 import { subjectProgressEntryLocationState, subjectSlotReturnTo } from './subject-slot-return-context';
 import { PrivateOccurrenceControls } from './private-diary/occurrence-detail';
-import { isPlatformClosedError } from '../kernel/platform-closed';
+import { isPlatformClosedError } from '../session/reading-policy';
 import {
   IndependentMeasuresReadout,
   IndependentMeasuresVisit,

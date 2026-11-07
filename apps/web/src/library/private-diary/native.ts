@@ -1,6 +1,6 @@
 import type { DiaryAddress } from './address';
 import type { DiaryOccurrence, DiaryPage, KernelClient } from '@rezics/client';
-import { isPlatformClosedProblem } from '../../kernel/platform-closed';
+import { isPlatformClosedProblem } from '../../session/reading-policy';
 
 export const PRIVATE_DIARY_PAGE_LIMIT = 25;
 export const PRIVATE_DIARY_PAGE_BYTES = 65_536;

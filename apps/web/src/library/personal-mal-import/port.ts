@@ -1,5 +1,5 @@
 import { createContext, useContext } from 'react';
-import { sessionCsrfToken } from '../../session/query';
+import { sessionCsrfToken } from '../../session';
 import type { MalImportPort, MalPreviewResult } from './contract';
 
 export const MalImportPortContext = createContext<MalImportPort | null>(null);

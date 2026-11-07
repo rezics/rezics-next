@@ -1,7 +1,7 @@
 import { QueryClientContext, type QueryClient } from '@tanstack/react-query';
 import { useContext, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { operationIsAdmitted, type GatedOperation } from '../kernel/exposure';
-import { sessionQuery, type useSession } from '../session/query';
+import { sessionQuery, type useSession } from '../session';
 import { viewerExposureLifetime, viewerExposureQuery } from '../kernel/viewer-exposure';
 import { useLibraryWorkspaceAdmission } from './library-workspace-admission';
 import type { ProgressIndex } from './progress-reads';

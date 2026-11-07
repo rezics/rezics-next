@@ -48,8 +48,13 @@ Decision: outage recovery retains only a bounded, query-free local return path i
 ## Public module entry
 
 `session/index.ts` is the public browser adapter entry for observation and read/operation/address leases.
+It also exports the installed `sessionQuery`, `useSession`, `sessionCsrfToken` and `AnonymousSessionContext` for
+consumer-owned application composition. These are the original producer bindings, not another session policy.
+`session/reading-policy.ts` is a pure entry for the existing public/personal query defaults, credential-mode keys and
+platform-closed error/problem recognition. It loads no React observer, query cache or session fetch. Native and
+browser readers share the original error class, including its serialized route-boundary recognition.
 Public catalogue inspect reads the prepared cache through `cachedBrowserSession` and does not start a session fetch.
-`session/reader.ts` exposes workspace admission and current-response/address composition without eagerly loading
+`session/reader.ts` exposes operation/workspace admission and current-response/address composition without eagerly loading
 those React/Query adapters for observation-only consumers. `reader/` contains its existing implementations;
 these are Web runtime adapters, not Library infrastructure. Credential-mode vocabulary lives in the pure `reader/lifetime/contract.ts` entry. Authentication and request preparation retain their server-only entries.
 `SessionRecoveryPage` is the public indeterminate-session recovery prompt: callers pass the visit pathname and locale;

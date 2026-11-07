@@ -446,12 +446,18 @@ Completed archive custody survives route changes for the current owner and erase
 when the application observes another owner or sign-out. Native envelopes, original uncertain operands, independent
 frontiers, bounded selection and admitted focus restoration remain with their existing controllers.
 
-Decision: bind Library consumer capabilities to the existing producers now; receive Performance's shared shell/session
-provider through the same capability surface when that producer is delivered. This adapter adds no competing provider.
+Decision: Library owns its consumer port and ordinary composition; no generic shared shell provider is required.
+Keep the delivered adapter and archive controllers, binding the installed producers through the public Session
+entries. Settings and Inbox keep their own ports. This receiving changes dependencies and typing, not session policy.
 Typing is the worker gate; focused authored regressions and native/browser acceptance run after integration.
 
-Decision: retain the delivered adapter and archive application-lifetime assertions until Performance supplies an
-explicit shared-provider commit and capability inventory; receive that commit through the train resolver, compare
-the inventory with `LibraryApplication`, then replace the binding and complete query/closed-state receiving together.
-No replacement provider or Settings/Inbox changes belong to this receiving step. The existing archive regression
-already pins equal-value replacement, A/B/A, query recreation and synchronous completed-byte erasure.
+The installed capability inventory is `session/index.ts` for `sessionQuery`, `useSession`, `sessionCsrfToken` and
+`AnonymousSessionContext`; `session/reader.ts` for workspace/operation admission and address/current-response
+provenance; and the pure `session/reading-policy.ts` for public/personal read defaults, credential-mode query keys
+and platform-closed recognition. These forward existing producers without new state or authority reads. Ordinary
+Library query and closed-state bindings use those entries. The existing exposure presentation and shell heading are
+public producer entries and keep their implementations, including Continue's independent exposure presentation.
+
+The archive application-lifetime regression retains equal-value replacement, A/B/A, query recreation and synchronous
+completed-byte erasure assertions. Its mounted composition case also pins independent section retirement and
+sign-out erasure before React publishes the replacement; returning to the same account never restores retired bytes.

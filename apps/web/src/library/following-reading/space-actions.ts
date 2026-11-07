@@ -21,7 +21,7 @@ export const readFollowingSpace = createServerFn({ method: 'GET' })
     const unavailable: SpaceRead = { ...data, result: { state: 'unavailable' } };
     if ((requestLocale(request) ?? 'en') !== data.locale) return unavailable;
     return readSelectedSpace(kernelClient(), request, env as Partial<SessionEnv>, data, async (authorization) => {
-      const { readAdmitted } = await import('../../kernel/exposure');
+      const { readAdmitted } = await import('../../session/reader');
       return operationIsAdmitted('follow.list', await readAdmitted(authorization));
     });
   });

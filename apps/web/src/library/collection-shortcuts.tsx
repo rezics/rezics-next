@@ -2,7 +2,7 @@ import { useQuery } from '@tanstack/react-query';
 import { createServerFn } from '@tanstack/react-start';
 import { getRequest, setResponseHeader } from '@tanstack/react-start/server';
 import { env } from 'cloudflare:workers';
-import { personalRead, readQueryKey } from '../kernel/query';
+import { personalRead, readQueryKey } from '../session/reading-policy';
 import { kernelClient } from '../kernel/client';
 import { m } from '../paraglide/messages.js';
 import type { SessionEnv } from '../session/client';

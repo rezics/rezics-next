@@ -1,11 +1,11 @@
 import { queryOptions, useQuery } from '@tanstack/react-query';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { m } from '../../paraglide/messages.js';
-import { personalRead } from '../../kernel/query';
+import { personalRead } from '../../session/reading-policy';
 import { Exposure, useOperation, type GatedOperation } from '../../kernel/exposure';
 import { useLibraryWorkspaceAdmission } from '../library-workspace-admission';
 import { csrfHeaders } from '../../threads/composer';
-import type { useSession } from '../../session/query';
+import type { useSession } from '../../session';
 import type { Release } from '../../subject/definitions';
 import type { CopyItem, CopyRemoved } from '../copies-read';
 import { isMangaLibrarySubject } from './capabilities';

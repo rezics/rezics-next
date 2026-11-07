@@ -24,7 +24,7 @@ import { m } from '../paraglide/messages.js';
 import { PageHeading } from '../shell/page-heading';
 import type { MineFollowingPage } from './mine-following';
 import { FollowTargetControl } from './follow-target-control';
-import { personalRead } from '../kernel/query';
+import { personalRead } from '../session/reading-policy';
 import {
   assertHistoryCurrent,
   useHistoryAddress,

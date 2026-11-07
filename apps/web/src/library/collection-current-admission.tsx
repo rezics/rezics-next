@@ -9,7 +9,7 @@ import {
   type ViewerObservation,
 } from '../kernel/viewer-exposure';
 import { getLocale } from '../paraglide/runtime.js';
-import { sessionQuery, useSession } from '../session/query';
+import { sessionQuery, useSession } from '../session';
 
 export type CollectionOperation =
   | Extract<GatedOperation, `collection.${string}` | `collection_member.${string}`>

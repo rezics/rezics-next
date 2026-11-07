@@ -1,6 +1,6 @@
 import type { KernelClient } from '@rezics/client';
 import * as v from 'valibot';
-import { isPlatformClosedError } from '../kernel/platform-closed';
+import { isPlatformClosedError } from '../session/reading-policy';
 import { continueAddress } from './continue-address';
 import {
   CONTINUE_LIMIT,

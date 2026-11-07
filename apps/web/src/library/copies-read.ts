@@ -24,7 +24,7 @@ import {
   type NativeCopy,
   type NativeCopyListQuery,
 } from './copies-server';
-import { isPlatformClosedError, isPlatformClosedProblem, PlatformClosedError } from '../kernel/platform-closed';
+import { isPlatformClosedError, isPlatformClosedProblem, PlatformClosedError } from '../session/reading-policy';
 import type { SessionEnv } from '../session/client';
 import { prepareSession, viewerCredential } from '../session/request';
 import { copiesSubjectId } from './copies-query';

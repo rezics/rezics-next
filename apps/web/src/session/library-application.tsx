@@ -1,15 +1,20 @@
 import type { QueryClient } from '@tanstack/react-query';
 import { browserObservation } from './observation';
 import { viewerExposureLifetime, viewerExposureQuery } from '../kernel/viewer-exposure';
-import { sessionQuery, exposureQuery } from './query';
+import { exposureQuery } from './query';
+import { sessionQuery, useSession } from './index';
 import type { RecoveryObserver, RecoveryObservation } from '../library/application';
 import { LibraryPrivateLifetime } from '../library/private-lifetime';
 import type { ReactNode } from 'react';
 import { LibraryApplicationContext, type LibraryApplication } from '../library/application';
-import { useSession } from './query';
-import { useOperation, useOperationAdmission } from '../kernel/exposure';
-import { useWorkspaceAdmission } from '../reader/workspace-admission';
-import { useReaderCurrentOrigin, useReaderAddress, useReaderResponseOrigin } from '../reader/current-origin';
+import {
+  useOperation,
+  useOperationAdmission,
+  useWorkspaceAdmission,
+  useReaderCurrentOrigin,
+  useReaderAddress,
+  useReaderResponseOrigin,
+} from './reader';
 
 /** Bind the existing producers. This adapter owns no session, query cache or admission state. */
 export const libraryApplication: LibraryApplication = {

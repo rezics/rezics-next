@@ -16,7 +16,7 @@ import { m } from '../paraglide/messages.js';
 import { SubjectLabelNotice } from './subject-labels.tsx';
 import { subjectHref } from '../subject/subject-href';
 import { subjectProgressEntryLocationState, subjectSlotReturnTo } from './subject-slot-return-context';
-import { useSession } from '../session/query';
+import { useSession } from '../session';
 import type { SubjectReference } from './subject-ref';
 import {
   mutateSubjectLabelAction,

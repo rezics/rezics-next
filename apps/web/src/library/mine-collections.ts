@@ -5,7 +5,7 @@ import type { SessionEnv } from '../session/client';
 import { prepareSession, sessionSubject, viewerCredential } from '../session/request';
 import { LIBRARY_PAGE_LIMIT, libraryLabel, libraryListQuery, readLibraryResult, StaleCursorError } from './reads';
 import type { LibraryAccount, CollectionVisibility, LibrarySubject } from './reads';
-import { isPlatformClosedError } from '../kernel/platform-closed';
+import { isPlatformClosedError } from '../session/reading-policy';
 import { COLLECTION_PREVIEW_PAGE_LIMIT, type CollectionPreview } from './collection-preview';
 
 type CollectionRead = NonNullable<Awaited<ReturnType<KernelClient['collections']['get']>>['data']>;

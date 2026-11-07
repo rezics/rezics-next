@@ -4,7 +4,7 @@ import type { ProgressChoices, ProgressInputRules as ProfileProgressInputRules }
 import type { ProgressLabelInput } from './progress-label';
 import type { KernelClient } from '@rezics/client';
 import { isNotFound } from '@tanstack/react-router';
-import { isPlatformClosedError, isPlatformClosedProblem } from '../kernel/platform-closed';
+import { isPlatformClosedError, isPlatformClosedProblem } from '../session/reading-policy';
 import type { SessionEnv } from '../session/client';
 import { prepareSession, viewerCredential } from '../session/request';
 import {

@@ -6,6 +6,8 @@ export {
   type BrowserCacheEvent,
 } from './observation';
 export { cachedBrowserSession, sessionQueryKey, type BrowserSession } from './browser-state';
+// These are the installed query producers, shared by consumer-owned application ports.
+export { sessionQuery, useSession, sessionCsrfToken, AnonymousSessionContext } from './query';
 export {
   addressLease,
   readLease,

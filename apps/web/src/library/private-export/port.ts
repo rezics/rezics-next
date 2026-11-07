@@ -1,5 +1,5 @@
 import { createContext, useContext } from 'react';
-import { sessionCsrfToken } from '../../session/query';
+import { sessionCsrfToken } from '../../session';
 import type { ExportPort } from './contract';
 
 export const LibraryExportPortContext = createContext<ExportPort | null>(null);

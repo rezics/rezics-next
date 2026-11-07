@@ -1,5 +1,5 @@
 import { queryOptions } from '@tanstack/react-query';
-import { publicRead } from '../../kernel/query';
+import { publicRead } from '../../session/reading-policy';
 import type { PublicCollectionDiscoveryReader } from './request';
 import type { PublicCollectionDirectoryAddress } from '../../search/contracts/collection-directory';
 

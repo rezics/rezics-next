@@ -7,4 +7,5 @@ export {
   type ReaderOrigin,
 } from '../reader/current-origin';
 
-export type { GatedOperation, OperationAdmission } from '../kernel/exposure';
+/** Ordinary readers consume the installed admission hooks, without another provider. */
+export { useOperation, useOperationAdmission, type GatedOperation, type OperationAdmission } from '../kernel/exposure';

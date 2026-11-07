@@ -1,5 +1,5 @@
 import type { KernelClient } from '@rezics/client';
-import { isPlatformClosedError, isPlatformClosedProblem } from '../../kernel/platform-closed';
+import { isPlatformClosedError, isPlatformClosedProblem } from '../../session/reading-policy';
 import type { SessionEnv } from '../../session/client';
 import { prepareSession, viewerCredential, sessionSubject } from '../../session/request';
 import type { Release } from '../../subject/definitions';
