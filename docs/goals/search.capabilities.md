@@ -68,6 +68,25 @@ typing. Original six-path, native/default-worker, mounted browser, Character loc
 acceptance run on integrated dev; they remain unaccepted here. No further broad prelanding selection or second stack
 is launched. Unchanged passing compilation and independently passing test files remain valid.
 
+The supported-host delivery `0949130e09dc1be6351d33b1f8f2f9e03fd69b1a` and the complete Imports range
+`3df1971c0b..7ba752519e` are now received. Host callers supply current native ports, receipt keys and WorkContext;
+Imports consumes served publication heads, ranks and tombstones and composes Library. The overlapping bulk
+no-effect fixture uses its explicit test keyring for both receipt lookup and the before-finalization absence
+assertion. All original behavior assertions remain. These source repairs do not promote the native failures below
+to passes. Home already loads the active release before page reading; its missing anonymous/member
+TypeList-versus-standalone assertions belong to original integrated-dev receiving, not another prelanding selection.
+
+The changed-workspace typing command at `0ef8ecb3f3160b77d71e7728b5f4a2f491ca7909` returned exit 1.
+Auth service, Auth pages and Importer each returned exit 0. Web's product program passed; its scripts program
+reported a missing await for asynchronous message preparation and optional evidence fields supplied as undefined.
+The isolated runner now awaits preparation and the walk omits absent optional fields, preserving serialized
+evidence. No guard or new behavior selection is added. The complete owned log is
+`.temp/goal/checks/worker-check-a51d2b6b-d016-41c7-a48b-a35b6edf2ac4-2026-11-07T16-20-35.425Z-7bfb4207.log`.
+Relevant typing is repeated for Web, Kernel, Auth service and Importer after this receiving; unchanged Auth pages
+reuse their passing result. Besides the expected walk and manifest paths, this receiving changes Web's isolated
+runner and the delivered Search composition, native fixtures, Imports source/tests and stack/check placement
+bindings. No second stack is started and no browser or native acceptance pass is inferred from typing.
+
 The retained seventeen-file Kernel command at `cea61c8e7dbf418048ea308a87b37031cb7d08ad` returned exit 1 on host b
 in 1722.930 seconds. Compilation passed in 21.101 seconds and eight files passed, including native boot, original
 receiving-store custody, bulk no-effect and Members composition. Nine files failed. These are native receiving

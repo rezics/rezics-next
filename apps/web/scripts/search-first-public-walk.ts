@@ -169,18 +169,19 @@ function recordNative(
 ): NativeCall {
   const subjects = Array.isArray(result.value.subjects) ? (result.value.subjects as Json[]) : undefined;
   const first = subjects?.[0] as { id?: unknown } | undefined;
+  const code = problemCode(result.value);
   return {
     method,
     path,
     status: result.status,
     correlation: result.headers.get('x-request-id') ?? result.headers.get('x-correlation-id'),
-    code: problemCode(result.value),
+    ...(code === undefined ? {} : { code }),
     retryAfter: result.headers.get('retry-after'),
     keys: Object.keys(result.value).slice(0, 16),
-    hitCount: subjects?.length,
+    ...(subjects === undefined ? {} : { hitCount: subjects.length }),
     next: typeof result.value.next === 'string',
-    subjectId: typeof first?.id === 'string' && uuid.test(first.id) ? first.id : undefined,
-    digest: typeof result.value.digest === 'string' ? result.value.digest : undefined,
+    ...(typeof first?.id === 'string' && uuid.test(first.id) ? { subjectId: first.id } : {}),
+    ...(typeof result.value.digest === 'string' ? { digest: result.value.digest } : {}),
   };
 }
 
@@ -193,7 +194,10 @@ async function untilSearchUseful(
   const deadline = Date.now() + timeoutMs;
   let last: { status: number; headers: Headers; value: Json; raw: string } | undefined;
   while (Date.now() < deadline) {
-    last = await kernel(stack, 'POST', '/v1/subjects:search', { body, bearer });
+    last = await kernel(stack, 'POST', '/v1/subjects:search', {
+      body,
+      ...(bearer === undefined ? {} : { bearer }),
+    });
     if (last.status === 200 && Array.isArray(last.value.subjects)) return last;
     if (last.status !== 503 && last.status !== 409) return last;
     const retryAfter = Number(last.headers.get('retry-after') ?? '2');
@@ -244,7 +248,7 @@ async function openPage(
       url: page.url(),
       viewport,
       locale,
-      status,
+      ...(status === undefined ? {} : { status }),
       title: await page.title().catch(() => null),
       hydrated: ready,
       resultLinks,
@@ -256,7 +260,7 @@ async function openPage(
       url,
       viewport,
       locale,
-      status,
+      ...(status === undefined ? {} : { status }),
       error: error instanceof Error ? error.message.slice(0, 400) : String(error).slice(0, 400),
     };
   }
@@ -279,7 +283,7 @@ async function readShowcase(): Promise<Showcase> {
   const collections = (showcase?.collections ?? [])
     .filter((row) => row.status === 'current' && typeof row.public?.id === 'string' && uuid.test(row.public.id))
     .map((row) => ({ id: row.public!.id as string }));
-  return { workId, collections };
+  return { ...(workId === undefined ? {} : { workId }), collections };
 }
 
 async function accessToken(stack: Stack, email: string, password: string): Promise<string> {
@@ -633,7 +637,11 @@ try {
             url: opened.page.url(),
             viewport: desktop,
             locale: 'en',
-            visible: constraints > 0 ? 'facet-choices' : opened.visible,
+            ...(constraints > 0
+              ? { visible: 'facet-choices' }
+              : opened.visible === undefined
+                ? {}
+                : { visible: opened.visible }),
           });
         } finally {
           await context.close();
