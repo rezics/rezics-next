@@ -322,7 +322,10 @@ Decision: admitted stacks fetch issuer JWKS from native Auth, start Kernel witho
 until seeding finishes; Web installs the declared Reylo mapper so local and remote typing share one identity. Cleanup
 keeps the original failure and the exact cleanup diagnostic. Mapper-enabled workspace typechecks run one at a time
 inside an admitted 6GiB slice. Admitted runs reclaim inactive file pages in the run slice after install and before each
-mapper compiler. Original native acceptance remains open.
+mapper compiler. Original native acceptance remains open. Membership admission and bearer verification refuse
+`AUTH_JWKS_URL` on native Auth's port. The same producer is `developmentKernelBindings`,
+`readMembershipWorkConfig`/`localJwksTransport`, Kernel HTTP `createKernelRuntimeDefaults`, assembled Access in
+`assemble()`, and the default Worker.
 
 ## Seeded journey walks
 

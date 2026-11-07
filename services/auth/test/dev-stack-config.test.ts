@@ -87,6 +87,15 @@ test('every walk-stack process names AUTH_JWKS_URL on the issuer origin that sig
   expect(config.auth.issuer).toBe(walk.AUTH_ISSUER);
   expect(config.auth.jwksUrl).toBe(walk.AUTH_JWKS_URL);
   expect(config.auth.fetch).toBeTypeOf('function');
+  expect(() =>
+    readMembershipWorkConfig({
+      ...keys,
+      AUTH_ISSUER: walk.AUTH_ISSUER,
+      AUTH_AUDIENCE: walk.AUTH_AUDIENCE,
+      AUTH_JWKS_URL: 'http://127.0.0.1:20012/.well-known/jwks.json',
+      REZICS_LOCAL_STACK_NATIVE_ORIGIN: walk.REZICS_LOCAL_STACK_NATIVE_ORIGIN,
+    }),
+  ).toThrow('AUTH_JWKS_URL');
 });
 
 test('isolated stacks keep issuer, JWKS and audience consistent with each other', () => {
