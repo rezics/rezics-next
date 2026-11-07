@@ -2049,8 +2049,9 @@ long tools and old-turn completions never establish idleness. Unsupported provid
 The two-second token-free loop sends a fixed short mailbox notification only when actionable personally unread mail
 is at least 60 seconds old and the session has been explicitly idle for ten seconds. All event bodies remain in the
 native inbox. Worker info and successful manager renewal notices stay quiet. There are no periodic model turns.
-The atomic `--cursor <file>` and transport journal retain one outstanding notification per unread period across
-retries and restarts; new mail coalesces until consumed. Waking never consumes messages. Global read, acknowledgement
+The atomic `--cursor <file>` and transport journal retain one outstanding notification until personal read progress across
+retries and restarts. Consuming its triggering event rearms notification for remaining unread pages once explicitly
+idle; new mail without owner consumption coalesces. Waking never consumes messages. Global read, acknowledgement
 and host notification flags are independent of the resident owner's durable personal read cursor.
 When no personal cursor exists, `--start-after <id>` explicitly selects the genuinely consumed backlog boundary.
 Bootstrap the same boundary with the authenticated owner's first `inbox read <manager> --cursor <id>`; subsequent

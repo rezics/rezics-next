@@ -154,7 +154,7 @@ export class ResidentWakeBridge {
     const last = actionable.at(-1);
     if (
       this.outstanding &&
-      (this.outstanding.threadId !== resident.threadId || after >= this.outstanding.through || !first)
+      (this.outstanding.threadId !== resident.threadId || after >= this.outstanding.first || !first)
     ) {
       this.outstanding = undefined;
       this.checkpoint();

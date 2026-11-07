@@ -88,17 +88,36 @@ test('foreign reads and acknowledgements preserve full owner mail; one wake coal
     // Cursor arguments after bootstrap cannot skip the owner's remaining page.
     const next = f.inbox.readResidentPage('supermanager', 'fixture-thread', { limit: 1, cursor: 999 });
     expect(next.entries[0]!.id).toBe(2);
-    expect(f.bridge().flush()).toBe(0);
+    expect(f.bridge().flush()).toBe(1);
     f.inbox.readResidentPage('supermanager', 'fixture-thread');
     expect(f.bridge().flush()).toBe(0);
     f.inbox.deliver({ managerId: 'supermanager', kind: 'blocker', summary: 'Next unread period' });
     f.age();
     expect(f.bridge().flush()).toBe(1);
-    expect(f.prompts).toHaveLength(2);
+    expect(f.prompts).toHaveLength(3);
     expect(f.db.query('SELECT provider, session_id FROM manager_inbox_resident_cursor').get()).toEqual({
       provider: 'codex',
       session_id: 'fixture-thread',
     });
+  } finally {
+    f.close();
+  }
+});
+
+test('owner page progress rearms one idle notification for the remaining unread page across restart', () => {
+  const f = fixture();
+  try {
+    for (const summary of ['First page', 'Second page'])
+      f.inbox.deliver({ managerId: 'supermanager', kind: 'question', summary });
+    f.age();
+    expect(f.bridge().flush()).toBe(2);
+    expect(f.prompts).toHaveLength(1);
+    expect(f.inbox.readResidentPage('supermanager', 'fixture-thread', { limit: 1 }).entries[0]!.id).toBe(1);
+    expect(f.bridge().flush()).toBe(1);
+    expect(f.prompts).toHaveLength(2);
+    expect(f.prompts[1]).toContain('[resident inbox 2]');
+    expect(f.bridge().flush()).toBe(0);
+    expect(f.prompts).toHaveLength(2);
   } finally {
     f.close();
   }

@@ -55,7 +55,8 @@ The token-free watcher leaves every message intact in the native manager inbox. 
 notification when actionable personally unread mail is at least 60 seconds old and the registered session has been
 explicitly idle for ten seconds. Busy turns, long tools and transcript silence never establish idleness. Codex
 activity comes from its identity-verified transcript's turn lifecycle; an unsupported activity source stays unknown.
-New mail coalesces while the resident is busy or a notification is outstanding. Reading, acknowledging or inspecting
+New mail coalesces while the resident is busy or a notification is outstanding. Consuming its triggering event
+rearms notification for remaining unread pages once the session is explicitly idle. Reading, acknowledging or inspecting
 another manager's mail does not consume the resident's personal inbox.
 
 The authenticated resident reads full event bodies with `inbox read <manager>`, oldest unread page first. Only returned
