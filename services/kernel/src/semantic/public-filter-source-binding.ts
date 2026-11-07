@@ -48,7 +48,7 @@ import repairKeys from './public-filter-source-binding-repair-keys.sql';
 import repairAdvance from './public-filter-source-binding-repair-advance.sql';
 import repairVersion from './public-filter-source-binding-repair-version.sql';
 import repairCurrent from './public-filter-source-binding-repair-current.sql';
-import type { Pool } from 'pg';
+import type { Pool, QueryConfig } from 'pg';
 import type { Access } from '../access/index.ts';
 import type { AccountDiscoveryRepairObservation } from '../access/account-discovery-source.ts';
 import type {
@@ -808,21 +808,23 @@ function measuredPool(pool: Pool, cost: BindingCost): Pool {
       get(object, key) {
         const value: unknown = Reflect.get(object, key, object);
         if (key === 'query' && typeof value === 'function')
-          return async (text: string, values?: unknown[]) => {
+          return async (statement: string | QueryConfig, values?: unknown[]) => {
+            const text = typeof statement === 'string' ? statement : statement.text;
+            const parameters = typeof statement === 'string' ? values : statement.values;
             // Authored native point queries declare their complete keyed relation
             // footprint. Reserve it before submission, including misses, CAS loss
             // and thrown attempts. A joined result is not another native row.
             const native = /^\s*\/\* semantic\.native-keyed:(\d+):(\d+) \*\//.exec(text);
             const writes = native !== null && /^\s*(?:\/\*[\s\S]*?\*\/\s*)*(?:INSERT|UPDATE|DELETE)\b/.test(text);
             cost.statements++;
-            cost.inputKeys += native ? Number(native[2]) : (values?.length ?? 0);
-            cost.bytes += Buffer.byteLength(text) + Buffer.byteLength(encode(values));
+            cost.inputKeys += native ? Number(native[2]) : (parameters?.length ?? 0);
+            cost.bytes += Buffer.byteLength(text) + Buffer.byteLength(encode(parameters));
             if (native) {
               cost.rows += Number(native[1]);
               cost.dependencyPoints += Number(native[1]);
               if (writes) cost.resultWrites++;
             }
-            const result = await value.call(object, text, values);
+            const result = await value.call(object, statement, values);
             if (!native) {
               cost.rows += result.rowCount ?? 0;
               cost.dependencyPoints += result.rowCount ?? 0;

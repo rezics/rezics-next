@@ -8,6 +8,8 @@ so callers can spread `.properties` and `.anyOf`.
 The inward-layer import check permits the declared Definitions contract entry and TypeBox in contract schemas.
 Native public-output journeys bind the independently read published release body to its digest and retain Source
 refusal reasons in setup failures; compiler intermediates do not substitute for the published JSON body.
+Source query metering accepts both SQL strings and PostgreSQL query configurations, charges their actual operands,
+and forwards the original configuration so Reylo's result decoders and array-row metadata reads remain intact.
 
 Public-filter Collection reduction exposes `adapters/collection-reduction.ts` contract statement declarations
 without command-work implementation. Native reduction executes that exact SQL/bind plan; Library composes complete
