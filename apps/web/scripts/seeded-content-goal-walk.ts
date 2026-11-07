@@ -7,7 +7,7 @@
 import { createRequire } from 'node:module';
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { join, resolve } from 'node:path';
-import { fromPlainText } from '@rezics/document';
+import { fromPlainText, normalizeDocument } from '@rezics/document';
 import { waitUntilWalkReady } from '../../../scripts/walk-stack.ts';
 import {
   kernelEnvironment,
@@ -84,10 +84,12 @@ type WalkContext = {
   outsider: Persona;
   banned: Persona;
   suspended: Persona;
+  reviewer: Persona;
   showcase: Showcase;
   community: CreatedCommunity;
   protectedBoardId: string;
 };
+type InboxItem = Json & { id?: unknown; kind?: unknown; unread?: unknown; decisionId?: unknown; reportId?: unknown };
 
 export function walkWorkingDirectory(): string {
   return webRoot;
@@ -176,7 +178,13 @@ async function kernel(
   stack: Stack,
   method: string,
   path: string,
-  options: { bearer?: string; body?: unknown; query?: Record<string, string>; ifMatch?: string } = {},
+  options: {
+    bearer?: string;
+    body?: unknown;
+    query?: Record<string, string>;
+    ifMatch?: string;
+    idempotencyKey?: string;
+  } = {},
 ): Promise<{ status: number; value: Json }> {
   const url = new URL(path, stack.kernel);
   for (const [name, value] of Object.entries(options.query ?? {})) url.searchParams.set(name, value);
@@ -185,7 +193,9 @@ async function kernel(
     signal: AbortSignal.timeout(60_000),
     headers: {
       ...(options.body === undefined ? {} : { 'content-type': 'application/json' }),
-      ...(method === 'GET' || method === 'HEAD' ? {} : { 'idempotency-key': JSON.stringify(crypto.randomUUID()) }),
+      ...(method === 'GET' || method === 'HEAD'
+        ? {}
+        : { 'idempotency-key': JSON.stringify(options.idempotencyKey ?? crypto.randomUUID()) }),
       ...(options.ifMatch ? { 'if-match': JSON.stringify(options.ifMatch) } : {}),
       ...(options.bearer ? { authorization: `Bearer ${options.bearer}` } : {}),
       'accept-language': 'en',
@@ -448,19 +458,179 @@ async function createProtectedBoard(stack: Stack, developer: Persona): Promise<s
   return asId(board.id, 'protected board');
 }
 
-async function grantBoardRead(stack: Stack, developer: Persona, boardId: string, accountId: string) {
-  const granted = await kernel(stack, 'POST', '/v1/grants', {
-    bearer: developer.bearer,
-    body: {
-      resource: { route: routeOf(boardId), id: boardId },
-      subject: { kind: 'account', id: accountId },
-      actions: ['board:read'],
-      valid: '(,)',
+export function grantReceiptKey(resource: { route: number; id: string }, accountId: string, action: string): string {
+  return `accounts.grant:${resource.route}:${resource.id}:${accountId}:${action}`;
+}
+
+export function mentionBody(text: string, accountIds: readonly string[]) {
+  const plain = fromPlainText(text, 'text');
+  const paragraphs = plain.doc.content ?? [];
+  const first = paragraphs[0];
+  if (!first) throw new Error('plain text document omitted its paragraph');
+  return normalizeDocument({
+    ...plain,
+    doc: {
+      ...plain.doc,
+      content: [
+        {
+          ...first,
+          content: [
+            ...(first.content ?? []),
+            ...accountIds.map((accountId) => ({
+              type: 'mention' as const,
+              attrs: { accountId: accountId.toLowerCase() },
+            })),
+          ],
+        },
+        ...paragraphs.slice(1),
+      ],
     },
   });
-  if (granted.status !== 200 && granted.status !== 201)
-    throw new Error(`board:read grant returned HTTP ${granted.status}: ${JSON.stringify(publicFields(granted.value))}`);
-  return granted.value;
+}
+
+async function grantActions(
+  stack: Stack,
+  grantor: Persona,
+  resourceId: string,
+  accountId: string,
+  actions: readonly string[],
+) {
+  const resource = { route: routeOf(resourceId), id: resourceId };
+  for (const action of actions) {
+    const granted = await kernel(stack, 'POST', '/v1/grants', {
+      bearer: grantor.bearer,
+      body: {
+        resource,
+        subject: { kind: 'account', id: accountId },
+        actions: [action],
+        valid: '(,)',
+      },
+      idempotencyKey: grantReceiptKey(resource, accountId, action),
+    });
+    if (granted.status !== 200 && granted.status !== 201 && granted.status !== 409)
+      throw new Error(
+        `ordinary grant ${action} on ${resourceId} returned HTTP ${granted.status}: ${JSON.stringify(publicFields(granted.value)).slice(0, 400)}`,
+      );
+  }
+}
+
+async function grantBoardRead(stack: Stack, developer: Persona, boardId: string, accountId: string) {
+  await grantActions(stack, developer, boardId, accountId, ['board:read']);
+}
+
+function inboxItems(page: Json): InboxItem[] {
+  return Array.isArray(page.items) ? (page.items as InboxItem[]) : [];
+}
+
+async function readInbox(
+  stack: Stack,
+  person: Persona,
+  query: Record<string, string> = { limit: '20', selection: 'all' },
+): Promise<{ status: number; value: Json; items: InboxItem[] }> {
+  if (!person.accountId) throw new Error(`${person.label} account is required for inbox`);
+  const page = await kernel(stack, 'GET', `/v1/accounts/${person.accountId}/notifications`, {
+    bearer: person.bearer,
+    query,
+  });
+  if (page.status === 404 || page.status === 501)
+    throw new Error(
+      `notices remain unbound: GET /v1/accounts/{id}/notifications returned HTTP ${page.status}; correct result is a 200 inbox page of eligible reply, mention and moderation notices`,
+    );
+  return { ...page, items: inboxItems(page.value) };
+}
+
+export async function waitForNotices(
+  read: () => Promise<{ status: number; items: InboxItem[] }>,
+  match: (item: InboxItem) => boolean,
+  label: string,
+  timeoutMs = 90_000,
+): Promise<InboxItem[]> {
+  const deadline = Date.now() + timeoutMs;
+  let last: InboxItem[] = [];
+  let lastStatus = 0;
+  while (Date.now() < deadline) {
+    const page = await read();
+    lastStatus = page.status;
+    last = page.items;
+    const found = last.filter(match);
+    if (page.status === 200 && found.length > 0) return found;
+    await Bun.sleep(1_000);
+  }
+  throw new Error(
+    `${label} did not appear after default-worker wait (last HTTP ${lastStatus}, ${last.length} items): correct result is a delivered notice from the published-post effect`,
+  );
+}
+
+async function waitForPersonNotices(
+  stack: Stack,
+  person: Persona,
+  match: (item: InboxItem) => boolean,
+  label: string,
+  timeoutMs = 90_000,
+): Promise<InboxItem[]> {
+  return waitForNotices(() => readInbox(stack, person), match, label, timeoutMs);
+}
+
+async function assertNoMatchingNotice(
+  stack: Stack,
+  person: Persona,
+  match: (item: InboxItem) => boolean,
+  label: string,
+  holdMs = 12_000,
+): Promise<number> {
+  const deadline = Date.now() + holdMs;
+  let lastCount = 0;
+  while (Date.now() < deadline) {
+    const page = await readInbox(stack, person);
+    requireStatus(page, `${person.label} inbox during ${label}`);
+    lastCount = page.items.filter(match).length;
+    if (lastCount > 0)
+      throw new Error(`${label} delivered ${lastCount} notice(s); correct result is none after send-time denial`);
+    await Bun.sleep(1_000);
+  }
+  return lastCount;
+}
+
+async function unreadSummary(stack: Stack, person: Persona) {
+  if (!person.accountId) throw new Error(`${person.label} account is required for unread`);
+  return kernel(stack, 'GET', `/v1/accounts/${person.accountId}/notifications/count`, { bearer: person.bearer });
+}
+
+async function markInboxSeen(stack: Stack, person: Persona, through: string) {
+  if (!person.accountId) throw new Error(`${person.label} account is required for markSeen`);
+  return kernel(stack, 'POST', `/v1/accounts/${person.accountId}/notifications:markSeen`, {
+    bearer: person.bearer,
+    body: { through },
+  });
+}
+
+async function readPreferences(stack: Stack, person: Persona) {
+  if (!person.accountId) throw new Error(`${person.label} account is required for preferences`);
+  return requireStatus(
+    await kernel(stack, 'GET', `/v1/accounts/${person.accountId}/preferences`, { bearer: person.bearer }),
+    `${person.label} preferences`,
+  );
+}
+
+async function setMentionPreference(stack: Stack, person: Persona, enabled: boolean) {
+  const current = await readPreferences(stack, person);
+  const version = typeof current.version === 'number' ? current.version : 0;
+  return requireStatus(
+    await kernel(stack, 'PATCH', `/v1/accounts/${person.accountId}/preferences`, {
+      bearer: person.bearer,
+      body: { expectedVersion: version, notifications: { mention: enabled } },
+    }),
+    `${person.label} mention preference`,
+  );
+}
+
+function noticeDecisionId(item: InboxItem): string | null {
+  if (typeof item.decisionId === 'string' && uuid.test(item.decisionId)) return item.decisionId;
+  const open = item.actions as Json | undefined;
+  const target = open?.open as Json | undefined;
+  if (target && target.kind === 'moderation_decision' && typeof target.decisionId === 'string')
+    return asId(target.decisionId, 'decision');
+  return null;
 }
 
 async function timedRow(row: FirstScopeRow, run: () => Promise<Json>): Promise<RowResult> {
@@ -568,6 +738,50 @@ async function walkThreadsAndBoards(context: WalkContext): Promise<Json> {
     }),
     'thread reaction',
   );
+  const disposable = requireStatus(
+    await kernel(stack, 'POST', `/v1/threads/${threadId}/posts`, {
+      bearer: author.bearer,
+      body: { body: fromPlainText('Author point that will be erased.'), licence: 'MIT' },
+    }),
+    'erasable post',
+    201,
+  ).post as Json;
+  const erased = requireStatus(
+    await kernel(stack, 'POST', `/v1/posts/${asId(disposable.id, 'erasable post')}:erase`, {
+      bearer: author.bearer,
+      body: { reason: 'Content walk synchronous point erasure' },
+    }),
+    'point erasure',
+  );
+  const erasedRead = await kernel(stack, 'GET', `/v1/posts/${asId(disposable.id, 'erasable post')}`);
+  if (erasedRead.status === 200 && documentText((erasedRead.value.post as Json | undefined)?.body) === 'Author point that will be erased.')
+    throw new Error('erased post still disclosed its original body');
+  const erasureThread = requireStatus(
+    await kernel(stack, 'POST', '/v1/threads', {
+      bearer: author.bearer,
+      body: {
+        boardId: community.boardId,
+        title: 'Bounded author erasure walk',
+        kind: 'discussion',
+        body: fromPlainText('This thread exists so author erasure can make bounded progress.'),
+        licence: 'CC-BY-4.0',
+        subjectIds: [showcase.workId],
+        visibility: 'published',
+      },
+    }),
+    'erasure thread',
+    201,
+  ).thread as Json;
+  const erasureThreadId = asId(erasureThread.id ?? erasureThread.threadId, 'erasure thread');
+  if (!author.accountId) throw new Error('author account is required for bounded erasure');
+  const authorErasure = requireStatus(
+    await kernel(stack, 'POST', `/v1/threads/${erasureThreadId}:erase`, {
+      bearer: author.bearer,
+      body: { authorId: author.accountId },
+    }),
+    'bounded author erasure',
+    [202, 200],
+  );
   return {
     threadId,
     openingId,
@@ -581,6 +795,9 @@ async function walkThreadsAndBoards(context: WalkContext): Promise<Json> {
     sorts,
     watching: watchState.watching,
     reaction: reaction.kind,
+    pointErasure: publicFields(erased) as Json,
+    erasedPost: erasedRead.status,
+    authorErasure: publicFields(authorErasure) as Json,
   };
 }
 
@@ -601,6 +818,22 @@ async function walkRealmsAndSpaces(context: WalkContext): Promise<Json> {
   const participation = await kernel(stack, 'GET', `/v1/realms/${community.realmId}/participation`, {
     bearer: member.bearer,
   });
+  const slowMode = requireStatus(
+    await kernel(stack, 'PUT', `/v1/boards/${community.boardId}/slowMode`, {
+      bearer: developer.bearer,
+      body: { intervalSeconds: 5 },
+    }),
+    'slow mode',
+  );
+  const slowRead = requireStatus(
+    await kernel(stack, 'GET', `/v1/boards/${community.boardId}/slowMode`, { bearer: member.bearer }),
+    'slow mode read',
+  );
+  if (slowRead.intervalSeconds !== 5) throw new Error(`slow mode interval ${String(slowRead.intervalSeconds)}`);
+  await kernel(stack, 'PUT', `/v1/boards/${community.boardId}/slowMode`, {
+    bearer: developer.bearer,
+    body: { intervalSeconds: 0 },
+  });
   return {
     membership,
     homeStatus: 200,
@@ -608,6 +841,7 @@ async function walkRealmsAndSpaces(context: WalkContext): Promise<Json> {
     discovery: discovery.status,
     participation: participation.status,
     developer: developer.label,
+    slowMode: publicFields(slowMode) as Json,
   };
 }
 
@@ -734,30 +968,154 @@ async function walkMedia(context: WalkContext): Promise<Json> {
   );
   const media = reserved.media as Json | undefined;
   if (!media || media.state !== 'reserved') throw new Error(`reservation state ${String(media?.state)}`);
+  const mediaId = asId(media.id, 'media');
   const read = requireStatus(
-    await kernel(stack, 'GET', `/v1/media/${asId(media.id, 'media')}`, { bearer: author.bearer }),
+    await kernel(stack, 'GET', `/v1/media/${mediaId}`, { bearer: author.bearer }),
     'reserved media read',
   );
-  return { id: media.id, state: media.state, read: (read.media as Json | undefined)?.state ?? read.state };
+  const own = await kernel(stack, 'GET', '/v1/media', { bearer: author.bearer, query: { limit: '20' } });
+  const completed = await kernel(stack, 'POST', `/v1/media/${mediaId}:complete`, {
+    bearer: author.bearer,
+    body: {
+      containerId: media.containerId ?? community.threadId,
+      reservationRequestId: media.reservationRequestId ?? media.key,
+      byteCount: 128,
+      sha256: 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
+    },
+  });
+  const download = await kernel(stack, 'GET', `/v1/media/${mediaId}:authorizeDownload`, {
+    bearer: author.bearer,
+    query: { variant: 'original' },
+  });
+  if (completed.status !== 200 && completed.status !== 409)
+    throw new Error(
+      `media completion returned HTTP ${completed.status}; correct result is uploaded then available after derivatives`,
+    );
+  return {
+    id: media.id,
+    state: media.state,
+    read: (read.media as Json | undefined)?.state ?? read.state,
+    own: own.status,
+    completed: completed.status,
+    completedState: (completed.value.media as Json | undefined)?.state ?? null,
+    download: download.status,
+  };
 }
 
 async function walkReports(context: WalkContext): Promise<Json> {
-  const { stack, member, community } = context;
+  const { stack, author, member, reviewer, developer, community, showcase } = context;
+  if (!author.accountId || !reviewer.accountId) throw new Error('author and reviewer accounts are required for appeals');
   const created = requireStatus(
+    await kernel(stack, 'POST', '/v1/threads', {
+      bearer: author.bearer,
+      body: {
+        boardId: community.boardId,
+        title: 'Independent appeal walk thread',
+        kind: 'discussion',
+        body: fromPlainText('This post is taken down so an independent reviewer can reverse it.'),
+        licence: 'CC-BY-4.0',
+        subjectIds: [showcase.workId],
+        visibility: 'published',
+      },
+    }),
+    'appeal thread',
+    201,
+  ).thread as Json;
+  const threadId = asId(created.id ?? created.threadId, 'appeal thread');
+  const postId = asId(created.firstPost ? (created.firstPost as Json).id : created.postId, 'appeal post');
+  for (const resourceId of [community.realmId, community.boardId, threadId, postId]) {
+    await grantActions(stack, developer, resourceId, reviewer.accountId, [
+      'moderation:takedown',
+      'moderation:read_reports',
+    ]);
+  }
+  const report = requireStatus(
     await kernel(stack, 'POST', '/v1/reports', {
       bearer: member.bearer,
-      body: { target: { kind: 'thread', id: community.threadId }, reason: 'spam' },
+      body: { target: { kind: 'post', id: postId }, reason: 'spam' },
     }),
     'create report',
     201,
   );
-  const reportId = asId(created.reportId, 'report');
+  const reportId = asId(report.reportId, 'report');
   const own = requireStatus(
     await kernel(stack, 'GET', '/v1/reports/me', { bearer: member.bearer, query: { reportId } }),
     'own report',
   );
   const exact = await kernel(stack, 'GET', `/v1/reports/${reportId}`, { bearer: member.bearer });
-  const directory = await kernel(stack, 'GET', '/v1/me/moderation-directory', { bearer: context.developer.bearer });
+  const directory = await kernel(stack, 'GET', '/v1/me/moderation-directory', { bearer: developer.bearer });
+  const takenDown = requireStatus(
+    await kernel(stack, 'POST', `/v1/posts/${postId}:takeDown`, {
+      bearer: developer.bearer,
+      body: { reason: 'Content walk takedown for independent appeal' },
+    }),
+    'post takedown',
+  );
+  const hidden = await kernel(stack, 'GET', `/v1/posts/${postId}`, { bearer: member.bearer });
+  if (hidden.status === 200) throw new Error('taken-down post remained readable; correct result is 404');
+  const decisionNotice = (
+    await waitForPersonNotices(
+      stack,
+      author,
+      (item) => item.kind === 'moderation_decision' && noticeDecisionId(item) !== null,
+      'takedown decision notice',
+    )
+  )[0]!;
+  const decisionId = asId(noticeDecisionId(decisionNotice), 'decision');
+  const decision = requireStatus(
+    await kernel(stack, 'GET', `/v1/moderation-decisions/${decisionId}`, { bearer: author.bearer }),
+    'author decision',
+  );
+  if (JSON.stringify(decision).includes(developer.accountId ?? 'no-developer'))
+    throw new Error('decision disclosed the decider identity');
+  const appeal = requireStatus(
+    await kernel(stack, 'POST', `/v1/moderation-decisions/${decisionId}:appeal`, {
+      bearer: author.bearer,
+      body: { statement: 'Please reverse this Content walk takedown.' },
+    }),
+    'author appeal',
+    201,
+  );
+  const appealId = asId(appeal.id ?? appeal.appealId, 'appeal');
+  const deciderResolve = await kernel(stack, 'POST', `/v1/moderation-appeals/${appealId}:resolve`, {
+    bearer: developer.bearer,
+    body: { outcome: 'reverse', statement: 'Original decider must not resolve' },
+  });
+  if (deciderResolve.status !== 403)
+    throw new Error(`original decider resolved the appeal with HTTP ${deciderResolve.status}; correct result is 403`);
+  const pending = requireStatus(
+    await kernel(stack, 'GET', `/v1/threads/${threadId}/appeals`, { bearer: reviewer.bearer, query: { limit: '20' } }),
+    'independent appeal queue',
+  );
+  const pendingItems = Array.isArray(pending.items) ? (pending.items as Json[]) : [];
+  if (!pendingItems.some((item) => item.id === appealId))
+    throw new Error('independent reviewer queue omitted the pending appeal');
+  const resolution = requireStatus(
+    await kernel(stack, 'POST', `/v1/moderation-appeals/${appealId}:resolve`, {
+      bearer: reviewer.bearer,
+      body: { outcome: 'reverse', statement: 'Independent review reverses the walk takedown.' },
+    }),
+    'independent reverse',
+  );
+  await waitForPersonNotices(
+    stack,
+    author,
+    (item) => item.kind === 'moderation_decision' && noticeDecisionId(item) === decisionId && item.id !== decisionNotice.id,
+    'appeal resolution notice',
+  );
+  const restored = requireStatus(await kernel(stack, 'GET', `/v1/posts/${postId}`, { bearer: member.bearer }), 'restored post');
+  const reporterInbox = await readInbox(stack, member);
+  requireStatus(reporterInbox, 'reporter inbox');
+  const reporterNotices = reporterInbox.items.filter((item) => item.reportId === reportId || item.kind === 'moderation_decision');
+  const replayed = await readInbox(stack, author);
+  requireStatus(replayed, 'author inbox after appeal replay');
+  const decisionNotices = replayed.items.filter((item) => noticeDecisionId(item) === decisionId);
+  if (decisionNotices.length < 2)
+    throw new Error(`appeal resolution did not add a second decision notice; saw ${decisionNotices.length}`);
+  await Bun.sleep(3_000);
+  const afterReplay = await readInbox(stack, author);
+  if (afterReplay.items.filter((item) => noticeDecisionId(item) === decisionId).length !== decisionNotices.length)
+    throw new Error('replay added a duplicate moderation notice');
   return {
     reportId,
     own: publicFields(own) as Json,
@@ -769,30 +1127,115 @@ async function walkReports(context: WalkContext): Promise<Json> {
         : typeof directory.value.code === 'string'
           ? directory.value.code
           : directory.status,
+    takedown: publicFields(takenDown) as Json,
+    hidden: hidden.status,
+    decisionId,
+    appealId,
+    deciderResolve: deciderResolve.status,
+    pending: pendingItems.length,
+    resolution: publicFields(resolution) as Json,
+    restored: (restored.post as Json | undefined)?.id ?? postId,
+    reporterNotices: reporterNotices.length,
   };
 }
 
 async function walkNotices(context: WalkContext): Promise<Json> {
-  const { stack, author, member, community } = context;
-  if (!author.accountId) throw new Error('author account is required for notices');
-  await kernel(stack, 'POST', `/v1/threads/${community.threadId}/posts`, {
+  // Published-post effects (`post.published`) are the notice authority; the default worker delivers them.
+  const { stack, author, member, outsider, community } = context;
+  if (!author.accountId || !outsider.accountId) throw new Error('author and outsider accounts are required for notices');
+  const reply = requireStatus(
+    await kernel(stack, 'POST', `/v1/threads/${community.threadId}/posts`, {
+      bearer: member.bearer,
+      body: { body: fromPlainText('Reply for published-post notice delivery to the author.'), licence: 'MIT' },
+    }),
+    'notice reply',
+    201,
+  ).post as Json;
+  const replyId = asId(reply.id, 'notice reply');
+  const replies = await waitForPersonNotices(
+    stack,
+    author,
+    (item) => item.kind === 'reply' && ((item.postId === replyId) || ((item.target as Json | undefined)?.postId === replyId)),
+    'author reply notice',
+  );
+  const actorNotice = await readInbox(stack, member);
+  requireStatus(actorNotice, 'actor inbox');
+  if (actorNotice.items.some((item) => item.postId === replyId || (item.target as Json | undefined)?.postId === replyId))
+    throw new Error('the acting member received their own reply notice');
+  const mention = requireStatus(
+    await kernel(stack, 'POST', `/v1/threads/${community.threadId}/posts`, {
+      bearer: member.bearer,
+      body: {
+        body: mentionBody('Mention delivery for the Content walk.', [outsider.accountId, author.accountId]),
+        licence: 'MIT',
+      },
+    }),
+    'mention post',
+    201,
+  ).post as Json;
+  const mentionId = asId(mention.id, 'mention post');
+  const mentions = await waitForPersonNotices(
+    stack,
+    outsider,
+    (item) => item.kind === 'mention' && ((item.postId === mentionId) || ((item.target as Json | undefined)?.postId === mentionId)),
+    'outsider mention notice',
+  );
+  await setMentionPreference(stack, outsider, false);
+  const suppressed = requireStatus(
+    await kernel(stack, 'POST', `/v1/threads/${community.threadId}/posts`, {
+      bearer: member.bearer,
+      body: { body: mentionBody('Mention while the preference is off.', [outsider.accountId]), licence: 'MIT' },
+    }),
+    'suppressed mention',
+    201,
+  ).post as Json;
+  const suppressedId = asId(suppressed.id, 'suppressed mention');
+  await assertNoMatchingNotice(
+    stack,
+    outsider,
+    (item) => (item.postId === suppressedId) || ((item.target as Json | undefined)?.postId === suppressedId),
+    'preference-off mention',
+  );
+  await setMentionPreference(stack, outsider, true);
+  await assertNoMatchingNotice(
+    stack,
+    outsider,
+    (item) => (item.postId === suppressedId) || ((item.target as Json | undefined)?.postId === suppressedId),
+    'replay after mention preference restored',
+    8_000,
+  );
+  const unread = requireStatus(await unreadSummary(stack, author), 'author unread');
+  const firstPage = await readInbox(stack, author, { limit: '1', selection: 'all' });
+  requireStatus(firstPage, 'author inbox page');
+  if (firstPage.items.length !== 1) throw new Error('inbox page did not honour limit=1');
+  const through = asId(firstPage.items[0]?.id, 'seen notice');
+  requireStatus(await markInboxSeen(stack, author, through), 'mark seen', [200, 204]);
+  const afterSeen = await readInbox(stack, author);
+  requireStatus(afterSeen, 'author inbox after seen');
+  const replayed = await readInbox(stack, author);
+  const replyIds = new Set(
+    afterSeen.items
+      .filter((item) => item.kind === 'reply' && ((item.postId === replyId) || ((item.target as Json | undefined)?.postId === replyId)))
+      .map((item) => item.id),
+  );
+  if (replyIds.size !== 1) throw new Error(`reply notice duplicated under replay: ${replyIds.size}`);
+  if (replayed.items.filter((item) => replyIds.has(item.id)).length !== 1)
+    throw new Error('default-worker replay added a second reply notice');
+  const otherInbox = await kernel(stack, 'GET', `/v1/accounts/${author.accountId}/notifications`, {
     bearer: member.bearer,
-    body: { body: fromPlainText(`Reply for notice delivery to the author.`), licence: 'MIT' },
   });
-  const inbox = await kernel(stack, 'GET', `/v1/accounts/${author.accountId}/notifications`, {
-    bearer: author.bearer,
-    query: { limit: '20', selection: 'all' },
-  });
-  if (inbox.status === 404 || inbox.status === 501) {
-    throw new Error(
-      `notices remain unbound: GET /v1/accounts/{id}/notifications returned HTTP ${inbox.status}; correct result is a 200 inbox page of eligible reply notices`,
-    );
-  }
-  requireStatus(inbox, 'author inbox');
+  if (otherInbox.status !== 404) throw new Error(`foreign inbox HTTP ${otherInbox.status}; correct result is 404`);
   return {
-    status: inbox.status,
-    items: Array.isArray(inbox.value.items) ? (inbox.value.items as unknown[]).length : 0,
-    next: inbox.value.next ?? null,
+    replyId,
+    mentionId,
+    suppressedId,
+    replies: replies.length,
+    mentions: mentions.length,
+    unread: publicFields(unread) as Json,
+    pageNext: firstPage.value.next ?? null,
+    seen: through,
+    afterSeen: afterSeen.items.filter((item) => item.id === through && item.unread === true).length,
+    foreignInbox: otherInbox.status,
   };
 }
 
@@ -956,6 +1399,32 @@ async function walkBrowser(context: WalkContext, rows: RowResult[]): Promise<Jso
       slowMode: await signed.locator('[data-slot="slow-mode"]').count(),
     });
     await member.close();
+
+    const authorSession = await browser.newContext({ locale: 'en-US' });
+    const inboxPage = await authorSession.newPage();
+    inboxPage.setDefaultTimeout(90_000);
+    await inboxPage.goto(`${context.stack.web}/en/auth/sign-in?return_to=${encodeURIComponent('/en/inbox')}`, {
+      waitUntil: 'domcontentloaded',
+      timeout: 180_000,
+    });
+    for (let attempt = 0; attempt < 4 && new URL(inboxPage.url()).origin === context.stack.issuer; attempt++) {
+      const email = inboxPage.locator('input[type="email"]');
+      if ((await email.count()) > 0) {
+        await email.fill(context.author.email);
+        await inboxPage.locator('input[type="password"]').fill(context.author.password);
+      }
+      await inboxPage.locator('form button[type="submit"]').first().click();
+      await inboxPage.waitForLoadState('domcontentloaded');
+    }
+    await inboxPage.waitForURL((url) => url.origin === context.stack.web, { timeout: 180_000 });
+    await inboxPage.locator('main').waitFor({ state: 'visible', timeout: 60_000 });
+    pages.push({
+      persona: 'author',
+      path: new URL(inboxPage.url()).pathname,
+      heading: await inboxPage.locator('h1').first().textContent(),
+      notices: await inboxPage.locator('main li, main article, [data-slot="inbox-item"]').count(),
+    });
+    await authorSession.close();
   } finally {
     await browser.close();
   }
@@ -1042,8 +1511,9 @@ async function main(): Promise<void> {
   const outsider = await registerPersona(stack, 'outsider', bindings);
   const banned = await registerPersona(stack, 'banned', bindings);
   const suspended = await registerPersona(stack, 'suspended', bindings);
+  const reviewer = await registerPersona(stack, 'reviewer', bindings);
   const community = await provisionCommunity(stack, developer, showcase.workId);
-  for (const person of [author, member]) {
+  for (const person of [author, member, reviewer]) {
     const joined = await kernel(stack, 'POST', `/v1/realms/${community.realmId}/membership`, { bearer: person.bearer });
     if (joined.status !== 202 && joined.status !== 200 && joined.status !== 409)
       throw new Error(`${person.label} join returned HTTP ${joined.status}`);
@@ -1058,6 +1528,7 @@ async function main(): Promise<void> {
     outsider,
     banned,
     suspended,
+    reviewer,
     showcase,
     community,
     protectedBoardId,
@@ -1084,7 +1555,16 @@ async function main(): Promise<void> {
       seedExit: seedCode,
       installedRoot: process.env.REZICS_INSTALLED_ROOT ?? null,
       stack,
-      personas: ['anonymous', 'author', 'member', 'moderator', 'banned', 'suspended', 'protected-non-member'],
+      personas: [
+        'anonymous',
+        'author',
+        'member',
+        'moderator',
+        'reviewer',
+        'banned',
+        'suspended',
+        'protected-non-member',
+      ],
       showcase: publicFields(showcase),
       community: publicFields(community),
       rows: rows.map((row) => ({ ...row, observed: publicFields(row.observed) })),
