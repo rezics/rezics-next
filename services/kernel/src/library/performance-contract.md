@@ -46,9 +46,10 @@ request deadline and one Semantic `prepareReadDecisions` page, not per-subject A
 A concealed or moved Source on FULL by-label withholds (`subject: null`) through `withholdChangedSource`;
 it does not 503 the assignment page or shrink the raw cursor.
 The folded FULL warmup still sees 34 `personal_label` parent
-observations and zero sequential scans. Point reads split `include_deleted` with UNION ALL the same way prefix
-splits `upper_bound`, so a generic prepared plan cannot hide the primary key behind `OR deleted_at IS NULL`.
-The outer SELECT names `createdAt` the same way insert RETURNING does, so Reylo still decodes timestamptz text.
+observations and zero sequential scans. Point reads seek the primary key, then filter `include_deleted` on that
+row, so a generic prepared plan cannot hide the unique index behind `OR deleted_at IS NULL`. They project
+`createdAt` as insert RETURNING does. They do not UNION ALL `include_deleted`; that made Reylo treat `createdAt`
+as binary timestamptz and `asRecord` saw Invalid Date. Prefix still UNION ALLs `upper_bound`.
 Point, catalogue and assignment pages bind typed input CTEs the same way prefix already does.
 Existing Label command, HTTP and growth suites pin this; no extra tests or stories.
 

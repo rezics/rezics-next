@@ -124,8 +124,8 @@ Selected identity seal cases keep the selected bind vector; transform fixtures u
 identity, Source/member/publication, assignment-growth and lifecycle-growth cases keep their unchanged assertions.
 Label catalogue, assignment, parent and point SQL use typed input CTEs and LATERAL LIMIT-1 primary-key points
 (and the reserved-source 32-row seek) so generic prepared plans cannot Seq Scan an owner catalogue. Point reads
-split `include_deleted` with UNION ALL the same way prefix splits `upper_bound`, and the outer SELECT names
-`createdAt` as insert RETURNING does so Reylo still decodes timestamptz text. Folded FULL
+seek the primary key then filter `include_deleted` on that row, and project `createdAt` as insert RETURNING does
+so Reylo still decodes timestamptz text; they do not UNION ALL `include_deleted`. Folded FULL
 warmup sees 34 `personal_label` parent observations and zero sequential scans. Set, unassign, restore and
 rename select each named operand once in the one-row request and read those columns in the mutation WHERE.
 
