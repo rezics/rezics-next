@@ -29,7 +29,7 @@ import {
   createVerifierChecks,
   filesInCommits,
   matches,
-  placeInWorkspace,
+  placeBootSmokeCheck,
   projectVerifierLandings,
   taskCommits,
   trackedFilesAt,
@@ -102,7 +102,9 @@ function bootSmokeChecks(settings: Settings, commit: string): Check[] {
   const tracked = trackedFilesAt(settings.mainCheckout, commit);
   return (settings.bootSmoke?.tests ?? [])
     .filter((test) => tracked.has(test))
-    .map((test) => placeInWorkspace({ command: ['bun', 'test', test], closure: ['**'] }, tracked));
+    .flatMap((test) =>
+      placeBootSmokeCheck({ command: ['bun', 'test', test], closure: ['**'] }, tracked, settings.mainCheckout),
+    );
 }
 
 function isAncestor(cwd: string, base: string, target: string): boolean {
@@ -134,14 +136,17 @@ function testFilesFor(check: CheckRun['check'], evidence: DevVerifierEvidence): 
     const relative = path.replace(/^\.\//, '');
     return check.cwd && !relative.startsWith(check.cwd + '/') ? check.cwd + '/' + relative : relative;
   };
+  const hostSelection = check.command.indexOf('--host');
+  const selectedFile = hostSelection >= 0 ? check.command[hostSelection + 1] : check.command.at(-1);
+  const selectedFiles = selectedFile && TEST_FILE.test(selectedFile) ? [normalize(selectedFile)] : [];
+  if (selectedFiles.length === 1) return selectedFiles;
   const found = new Set<string>();
   const output = evidence.output.replaceAll('\\', '/');
   const expression =
     /(?:^|[\s([{"'])((?:[A-Za-z0-9_.@-]+\/)*[A-Za-z0-9_.@-]+\.(?:test|spec)\.[cm]?[jt]sx?)(?::\d+(?::\d+)?)?/g;
   for (const match of output.matchAll(expression)) found.add(match[1]!);
   if (found.size) return [...found].map(normalize);
-  const sourceFiles = check.command.filter((argument) => TEST_FILE.test(argument));
-  if (sourceFiles.length) return [...new Set(sourceFiles.map(normalize))];
+  if (selectedFiles.length) return selectedFiles;
   const source = check.closure.find((path) => !path.includes('*') && TEST_FILE.test(path));
   if (source) return [normalize(source)];
   return [check.command.join(' ')];

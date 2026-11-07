@@ -62,6 +62,7 @@ const serverIndependentTests = [
   'scripts/storybook-dev.test.ts',
   'tests/accounts-goal-journeys.test.ts',
   'tests/first-public-journeys-walk.test.ts',
+  'tests/check-lanes.test.ts',
   'tests/focused-runner.test.ts',
   // This journey owns a server with private issuer/client bindings.
   'tests/post-editing.test.ts',
