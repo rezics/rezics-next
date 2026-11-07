@@ -1,7 +1,6 @@
 import { initializeEventTypes } from '../events/catalogue.ts';
 import { ensureContentApplication } from '../content/adapters/index.ts';
 import { bindOrdinaryContentLifecycle, nativeContentLifecycle } from '../semantic/adapters/index.ts';
-import { installIdentityRatingRepairProducer } from '../composition/identity-rating-repair.ts';
 import { contentHttpDeclaration, mountContentHttp, type ContentHttpRoutes } from '../content/http.ts';
 import { createOperationCatalogue } from '@rezics/operations';
 import { readCommerceMoneyPolicy, type CommerceMoneyPolicy } from '../commerce/money.ts';
@@ -95,7 +94,7 @@ import { searchRoutes } from '../search/http/routes.ts';
 import type { SearchService as SearchRuntime } from '../search/service-scope.ts';
 import { configureDefinitionCatalogue, createNativeDefinitionCatalogue } from '../semantic/definition-catalogue.ts';
 import { definitionRoutes } from '../semantic/http/definitions.ts';
-import type { DefinitionImportRoutes } from '../semantic/definition-import.ts';
+import type { DefinitionImportRoutes } from '../semantic/index.ts';
 import { contextRoutes } from '../semantic/http/contexts.ts';
 import { bulkRoutes } from '../semantic/http/bulk.ts';
 import { sourceRecordRoutes } from '../semantic/http/source-records.ts';
@@ -393,7 +392,6 @@ export function createKernelAccessResolver(options: {
 
 /** The route key must stay the same across restarts, or retries lose their receipts. */
 export function createKernel(dependencies: KernelDependencies): Kernel {
-  installIdentityRatingRepairProducer();
   bindOrdinaryContentLifecycle(nativeContentLifecycle());
   const declared = contentHttpDeclaration();
   const contentRuntime = ensureContentApplication({

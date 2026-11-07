@@ -2,8 +2,17 @@ import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { candidateFailure, type CandidateFailure } from '../../../subject/candidates';
 import type { useCatalogueLifetime } from '../../../subject/candidate-lifetime';
 import { firstChangePage, type ChangePageHistory } from '../../catalogue/subject-changes-navigation';
-import { CONCEPT_PAGE_CAP } from '../graph-browser';
-import { conceptSourceFits, validConceptCursor, type ConceptRead } from '../../catalogue/source-concept-explorer';
+import {
+  conceptPageCap,
+  conceptSourceFits,
+  membershipPageCap,
+  membershipProperties,
+  validConceptCursor,
+  validMembershipCursor,
+  type ConceptMembershipCursors,
+  type ConceptRead,
+  type MembershipProperty,
+} from '../../catalogue/source-concept-explorer';
 import {
   conceptHierarchyAddressFor,
   conceptVisitHistoryLimit,
@@ -14,29 +23,49 @@ import {
 } from './navigation';
 
 export type ConceptPage = Extract<ConceptRead, { ok: true }>;
-export type ConceptInput = { cursor?: string | undefined; session?: string | undefined };
+export type ConceptInput = {
+  cursor?: string | undefined;
+  membership?: ConceptMembershipCursors | undefined;
+  session?: string | undefined;
+};
 export type ConceptTransport = { read: (input: ConceptInput) => Promise<ConceptRead> };
 type Position = { history: ChangePageHistory; index: number };
+type MembershipPosition = {
+  membershipHistory: Record<MembershipProperty, ChangePageHistory>;
+  membershipIndex: Record<MembershipProperty, number>;
+};
 type Destination = {
   input: ConceptInput;
-  mode: 'next' | 'previous' | 'refresh' | 'restore' | 'restart';
+  mode: 'next' | 'previous' | 'refresh' | 'restore' | 'restart' | 'membership-next' | 'membership-previous';
   index?: number;
+  property?: MembershipProperty;
   address?: ConceptHierarchyAddress;
 };
 export type FailedPage = Destination & { state: 'preparing' | 'unavailable' };
-type VisitState = Position & {
-  read?: ConceptPage;
-  retained?: ConceptPage;
-  error?: CandidateFailure;
-  failed?: FailedPage;
-  loading: boolean;
-  busy: boolean;
-  completed: number;
-  focus?: ConceptFocus;
-  notice?: 'currentness' | 'row-missing';
-  noticeSection?: ConceptFocus['section'];
-};
+type VisitState = Position &
+  MembershipPosition & {
+    read?: ConceptPage;
+    retained?: ConceptPage;
+    error?: CandidateFailure;
+    failed?: FailedPage;
+    loading: boolean;
+    busy: boolean;
+    completed: number;
+    focus?: ConceptFocus;
+    notice?: 'currentness' | 'row-missing';
+    noticeSection?: ConceptFocus['section'];
+  };
 type Admission = ReturnType<typeof useCatalogueLifetime>;
+
+function firstMembershipPages(): MembershipPosition {
+  return {
+    membershipHistory: {
+      'schema:genre': firstChangePage(),
+      'schema:keywords': firstChangePage(),
+    },
+    membershipIndex: { 'schema:genre': 0, 'schema:keywords': 0 },
+  };
+}
 
 function appendConceptPage(history: ChangePageHistory, cursor: string): ChangePageHistory {
   if (!cursor || new TextEncoder().encode(cursor).byteLength > 4096 || history.addresses.at(-1) === cursor)
@@ -45,6 +74,38 @@ function appendConceptPage(history: ChangePageHistory, cursor: string): ChangePa
   const truncated = history.truncated || addresses.length > conceptVisitHistoryLimit;
   if (addresses.length > conceptVisitHistoryLimit) addresses.shift();
   return { addresses, truncated };
+}
+
+function membershipCursorsOf(state: MembershipPosition): ConceptMembershipCursors {
+  const cursors: ConceptMembershipCursors = {};
+  for (const property of membershipProperties) {
+    const cursor = state.membershipHistory[property].addresses[state.membershipIndex[property]];
+    if (cursor) cursors[property] = cursor;
+  }
+  return cursors;
+}
+
+function visitInput(state: VisitState, patch: ConceptInput): ConceptInput {
+  const membership = { ...membershipCursorsOf(state), ...patch.membership };
+  const defined = Object.fromEntries(
+    Object.entries(membership).filter((entry) => typeof entry[1] === 'string'),
+  ) as ConceptMembershipCursors;
+  const input: ConceptInput = { ...patch };
+  if (!input.cursor) delete input.cursor;
+  if (!input.session) delete input.session;
+  if (Object.keys(defined).length) input.membership = defined;
+  else delete input.membership;
+  return input;
+}
+
+function membershipOversized(page: ConceptPage) {
+  return membershipProperties.some((property) => page.membership.streams[property].rows.length > membershipPageCap);
+}
+
+function requestedMembershipMatches(page: ConceptPage, requested: ConceptMembershipCursors | undefined) {
+  return membershipProperties.every(
+    (property) => page.membership.streams[property].cursor === (requested?.[property] || undefined),
+  );
 }
 
 /** Retained rows belong to exactly this native revision and session receipt. */
@@ -82,6 +143,8 @@ function position(state: VisitState, page: ConceptPage, destination: Destination
     };
   }
   if (!samePageSource(state.read, page)) return { history: { addresses: [cursor], truncated: false }, index: 0 };
+  if (destination.mode === 'membership-next' || destination.mode === 'membership-previous')
+    return { history: state.history, index: state.index };
   if (destination.mode === 'previous' && destination.index !== undefined)
     return { history: state.history, index: destination.index };
   if (destination.mode === 'next' && cursor) {
@@ -100,6 +163,37 @@ function position(state: VisitState, page: ConceptPage, destination: Destination
   return { history: state.history, index: state.index };
 }
 
+function membershipPosition(state: VisitState, page: ConceptPage, destination: Destination): MembershipPosition {
+  if (destination.mode === 'restart' || !samePageSource(state.read, page)) return firstMembershipPages();
+  if (destination.mode !== 'membership-next' && destination.mode !== 'membership-previous') {
+    return { membershipHistory: state.membershipHistory, membershipIndex: state.membershipIndex };
+  }
+  const property = destination.property;
+  if (!property) return { membershipHistory: state.membershipHistory, membershipIndex: state.membershipIndex };
+  const cursor = destination.input.membership?.[property];
+  if (destination.mode === 'membership-previous' && destination.index !== undefined) {
+    return {
+      membershipHistory: state.membershipHistory,
+      membershipIndex: { ...state.membershipIndex, [property]: destination.index },
+    };
+  }
+  if (destination.mode === 'membership-next' && cursor) {
+    const current = state.membershipHistory[property];
+    const existing = current.addresses[state.membershipIndex[property] + 1] === cursor;
+    const history = existing
+      ? current
+      : appendConceptPage(
+          { ...current, addresses: current.addresses.slice(0, state.membershipIndex[property] + 1) },
+          cursor,
+        );
+    return {
+      membershipHistory: { ...state.membershipHistory, [property]: history },
+      membershipIndex: { ...state.membershipIndex, [property]: history.addresses.indexOf(cursor) },
+    };
+  }
+  return { membershipHistory: state.membershipHistory, membershipIndex: state.membershipIndex };
+}
+
 function publish(
   state: VisitState,
   result: ConceptRead,
@@ -112,20 +206,20 @@ function publish(
     result.ok &&
     (result.public.subject.id !== id ||
       result.requestedRole !== role ||
-      result.narrower.cursor !== destination.input.cursor)
+      result.narrower.cursor !== destination.input.cursor ||
+      !requestedMembershipMatches(result, destination.input.membership))
   )
     result = candidateFailure(400);
   if (
     result.ok &&
-    (!conceptSourceFits(result.public) ||
-      result.narrower.rows.length > CONCEPT_PAGE_CAP ||
-      result.membership.rows.length > CONCEPT_PAGE_CAP * 2)
+    (!conceptSourceFits(result.public) || result.narrower.rows.length > conceptPageCap || membershipOversized(result))
   )
     result = { ok: false, reason: 'unavailable', oversized: true };
   const done = { loading: false, busy: false, completed: state.completed + 1 };
   if (!result.ok)
     return {
       ...done,
+      ...firstMembershipPages(),
       history: firstChangePage(),
       index: 0,
       error: result,
@@ -134,6 +228,7 @@ function publish(
   if (destination.mode === 'restore' && !samePageSource(state.read, result))
     return {
       ...done,
+      ...firstMembershipPages(),
       read: result,
       history: firstChangePage(),
       index: 0,
@@ -149,6 +244,9 @@ function publish(
       ...(retained ? { retained } : {}),
       history: retained ? state.history : { addresses: [destination.input.cursor], truncated: false },
       index: retained ? state.index : 0,
+      ...(retained
+        ? { membershipHistory: state.membershipHistory, membershipIndex: state.membershipIndex }
+        : firstMembershipPages()),
       failed: { ...destination, state: result.narrower.state },
     };
   }
@@ -156,6 +254,7 @@ function publish(
     ...done,
     read: result,
     ...position(state, result, destination),
+    ...membershipPosition(state, result, destination),
     ...(destination.mode === 'restore' && destination.address?.focus ? { focus: destination.address.focus } : {}),
     ...(destination.mode === 'refresh' && state.notice ? { notice: state.notice } : {}),
     ...(destination.mode === 'refresh' && state.noticeSection ? { noticeSection: state.noticeSection } : {}),
@@ -190,6 +289,7 @@ export function useConceptVisit({
   const seed: VisitState = {
     history: firstChangePage(),
     index: 0,
+    ...firstMembershipPages(),
     loading: initial === undefined,
     busy: false,
     completed: 0,
@@ -237,7 +337,17 @@ export function useConceptVisit({
 
   async function run(destination: Destination, explicit: boolean, expected?: VisitState) {
     if (expected && stateRef.current !== expected) return;
-    if (busy.current || !mounted.current || !admission.active() || !validConceptCursor(destination.input.cursor))
+    if (
+      busy.current ||
+      !mounted.current ||
+      !admission.active() ||
+      !validConceptCursor(destination.input.cursor) ||
+      membershipProperties.some(
+        (property) =>
+          destination.input.membership?.[property] !== undefined &&
+          !validMembershipCursor(destination.input.membership[property]),
+      )
+    )
       return;
     busy.current = true;
     const request = ++sequence.current;
@@ -346,7 +456,7 @@ export function useConceptVisit({
     if (cursor && state.read.narrower.cursor !== cursor) {
       void run(
         {
-          input: { cursor, session: state.read.session },
+          input: visitInput(state, { cursor, session: state.read.session }),
           mode: 'restore',
           address: wanted,
         },
@@ -377,7 +487,10 @@ export function useConceptVisit({
       state.index > 0 &&
       run(
         {
-          input: { cursor: state.history.addresses[state.index - 1], session: state.read?.session },
+          input: visitInput(state, {
+            cursor: state.history.addresses[state.index - 1],
+            session: state.read?.session,
+          }),
           mode: 'previous',
           index: state.index - 1,
         },
@@ -389,12 +502,50 @@ export function useConceptVisit({
       !state.failed &&
       run(
         {
-          input: { cursor: hierarchy.next, session: state.read?.session },
+          input: visitInput(state, { cursor: hierarchy.next, session: state.read?.session }),
           mode: 'next',
         },
         true,
         state,
       ),
+    membershipPrevious: (property: MembershipProperty) =>
+      state.membershipIndex[property] > 0 &&
+      run(
+        {
+          input: visitInput(state, {
+            cursor: state.read?.narrower.cursor,
+            membership: {
+              [property]: state.membershipHistory[property].addresses[state.membershipIndex[property] - 1],
+            },
+            session: state.read?.session,
+          }),
+          mode: 'membership-previous',
+          property,
+          index: state.membershipIndex[property] - 1,
+        },
+        true,
+        state,
+      ),
+    membershipNext: (property: MembershipProperty) => {
+      const next = state.read?.membership.streams[property].next;
+      return (
+        next &&
+        run(
+          {
+            input: visitInput(state, {
+              cursor: state.read?.narrower.cursor,
+              membership: { [property]: next },
+              session: state.read?.session,
+            }),
+            mode: 'membership-next',
+            property,
+          },
+          true,
+          state,
+        )
+      );
+    },
+    membershipIndexFor: (property: MembershipProperty) => state.membershipIndex[property],
     retry: () => state.failed && run(state.failed, true, state),
     restart: () => run({ input: {}, mode: 'restart' }, true, state),
     reportFocusMissing: () => {
@@ -417,7 +568,10 @@ export function useConceptVisit({
         ? run(state.failed, true, state)
         : run(
             {
-              input: { cursor: state.read?.narrower.cursor, session: state.read?.session },
+              input: visitInput(state, {
+                cursor: state.read?.narrower.cursor,
+                session: state.read?.session,
+              }),
               mode: 'refresh',
             },
             true,

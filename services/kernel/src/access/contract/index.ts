@@ -54,6 +54,7 @@ export { RealmClaimDeniedError } from './realm-claim.ts';
 export type {
   AccessApplication,
   AccessApplicationPorts,
+  AccessAccountAgentLink,
   AccountIdentityOriginal,
   AdmitOriginalWorkInput,
   ApproveRealmClaimApplicationInput,

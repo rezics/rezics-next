@@ -18,7 +18,7 @@ import {
   NativeCollectionWork,
   bindNativeCollectionWorkLifetime,
   withNativeCollectionWorkAllowance,
-} from '../library/access-capabilities.ts';
+} from '../library/collection-native-work.ts';
 import {
   currentIdentityOriginalTransfer,
   identityOriginalRemainder,

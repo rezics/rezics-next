@@ -1,7 +1,7 @@
 import { afterAll, beforeAll, expect, test } from 'bun:test';
 import { decodeJwt } from 'jose';
 import { createPool } from '../../src/database/pool.ts';
-import { readPublicAccount } from '../../src/access/account-data.ts';
+import { readPublicAccount } from '../../src/access/public-identity.ts';
 import { createWorkflowApprovals } from '../../src/access/workflow-approvals.ts';
 import { createRegistrationProofBindings } from '../../src/access/registration-proof.ts';
 import { routeOf } from '../../src/route/route.ts';

@@ -10,7 +10,7 @@ import {
 } from '../../src/access/auth-bindings.ts';
 import { createLifecycleInternals } from '../../src/access/lifecycle.ts';
 import { createRegistrationProofBindings } from '../../src/access/registration-proof.ts';
-import { readPublicAccount } from '../../src/access/account-data.ts';
+import { readPublicAccount } from '../../src/access/public-identity.ts';
 import { newId, routeOf } from '../../src/route/route.ts';
 import { seal, unseal } from '../../src/tokens/seal.ts';
 import { dropTestDatabase } from '../support/drop-test-database.ts';

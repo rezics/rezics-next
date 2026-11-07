@@ -2,11 +2,17 @@ import type { SubjectRead } from '@rezics/client';
 import type { Release } from '@rezics/definitions';
 import { facetProperties, readNativeSpoilerLevel, type FilterQualifier } from '@rezics/filter';
 import type { Related, Subject } from '../../../subject/types';
-import { typeExtends } from '../graph-browser';
 import { bestRank, isRecord, pageText, spoilerLevel, type Stmt } from '../shared';
 
 type Statement = SubjectRead['subject']['statements'][string][number];
 export type TagDefinitions = Pick<Release, 'types' | 'properties'>;
+
+function typeExtends(release: TagDefinitions, type: string, target: string, seen = new Set<string>()): boolean {
+  if (type === target) return true;
+  if (seen.has(type)) return false;
+  seen.add(type);
+  return (release.types[type]?.bases ?? []).some((base) => typeExtends(release, base, target, seen));
+}
 export const workTagPreviewLimit = 24;
 const weightProperty = 'rezics:sourceTagWeight';
 const metricProperty = 'rezics:sourceTagWeightMetric';

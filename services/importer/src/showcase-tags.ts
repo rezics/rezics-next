@@ -46,7 +46,7 @@ import {
   showcaseTagParentSourceFence,
   withholdShowcaseTagAssociations,
 } from './showcase-cross-provider-tags.ts';
-import type { ShowcaseJournal } from './showcase-publication.ts';
+import { adoptResumeKeys, showcaseAdoptInvocationBound, type ShowcaseJournal } from './showcase-publication.ts';
 import {
   acquireShowcaseVndbTagRatings,
   showcaseVndbTagRatingLimits,
@@ -1426,10 +1426,74 @@ function reviewedTagActionKey(kind: 'accept' | 'adopt', identity: string, digest
   return `${kind}:${showcaseDigest({ identity, digest })}`;
 }
 
-const reviewedTagAdoptGenerations = 32;
-
 function reviewedTagAdoptActionKey(subjectId: string, property: string, intent: string, generation: number): string {
   return reviewedTagActionKey('adopt', `${subjectId}:${property}`, showcaseDigest({ intent, generation }));
+}
+
+type ReviewedTagAdoptChoice =
+  | { kind: 'resume'; action: string; body: NonNullable<ReturnType<typeof sealedReviewedTagAdoptBody>> }
+  | { kind: 'acknowledged' }
+  | { kind: 'fresh'; action: string; body: NonNullable<ReturnType<typeof sealedReviewedTagAdoptBody>> }
+  | { kind: 'bound' }
+  | { kind: 'refused' };
+
+function reviewedTagAdoptIdentity(subjectId: string, property: string, intent: string): string {
+  return `${subjectId}:${property}:${intent}`;
+}
+
+function chooseReviewedTagAdoptAction(
+  journal: ShowcaseJournal,
+  subjectId: string,
+  property: string,
+  intent: string,
+  planned: NonNullable<ReturnType<typeof sealedReviewedTagAdoptBody>>,
+  current: { selection: readonly { candidate: string; rank: string }[] } | null,
+): ReviewedTagAdoptChoice {
+  const keys = adoptResumeKeys(journal, subjectId, property, intent, planned);
+  for (const action of keys) {
+    const prior = journal.action(action);
+    if (prior?.state !== 'prepared') continue;
+    const sealed = sealedReviewedTagAdoptBody(JSON.parse(prior.body_json));
+    if (!sealed) throw new TypeError('Prepared reviewed-tag adopt body is invalid');
+    return { kind: 'resume', action, body: sealed };
+  }
+  for (const action of keys) {
+    const prior = journal.action(action);
+    if (prior?.state === 'refused' && reviewedTagPermanentRefusal(prior.error_code)) return { kind: 'refused' };
+    if (prior?.state !== 'acknowledged') continue;
+    const sealed = sealedReviewedTagAdoptBody(JSON.parse(prior.body_json));
+    if (
+      sealed &&
+      sameReviewedTagSelection(sealed.selection, planned.selection) &&
+      current &&
+      sameReviewedTagSelection(current.selection, planned.selection)
+    )
+      return { kind: 'acknowledged' };
+  }
+  for (let generation = 0; generation < showcaseAdoptInvocationBound; generation += 1) {
+    const action = reviewedTagAdoptActionKey(subjectId, property, intent, generation);
+    const prior = journal.action(action);
+    if (!prior) return { kind: 'fresh', action, body: planned };
+    if (prior.state === 'refused' && reviewedTagStaleHead(prior.error_code))
+      return { kind: 'fresh', action, body: planned };
+  }
+  const identity = reviewedTagAdoptIdentity(subjectId, property, intent);
+  let generation = Math.max(showcaseAdoptInvocationBound, journal.adoptGeneration(identity));
+  for (let step = 0; step < showcaseAdoptInvocationBound; step += 1) {
+    const action = reviewedTagAdoptActionKey(subjectId, property, intent, generation);
+    const prior = journal.action(action);
+    if (prior?.state === 'prepared') {
+      const sealed = sealedReviewedTagAdoptBody(JSON.parse(prior.body_json));
+      if (!sealed) throw new TypeError('Prepared reviewed-tag adopt body is invalid');
+      return { kind: 'resume', action, body: sealed };
+    }
+    if (!prior || (prior.state === 'refused' && reviewedTagStaleHead(prior.error_code))) {
+      journal.advanceAdoptGeneration(identity, generation + 1);
+      return { kind: 'fresh', action, body: planned };
+    }
+    generation += 1;
+  }
+  return { kind: 'bound' };
 }
 
 function sealedReviewedTagAdoptBody(value: unknown): {
@@ -1681,57 +1745,31 @@ export async function adoptAcceptedReviewedTagSelection(
   input: { keepExternalIds?: ReadonlySet<string>; intent: string } = { intent: 'current' },
 ): Promise<{ adoption: ReviewedTagAdoption | null; retiredCandidateIds: readonly string[]; complete: boolean }> {
   let staleOnce = false;
-  for (;;) {
+  const identity = reviewedTagAdoptIdentity(subjectId, property, input.intent);
+  for (let step = 0; step < showcaseAdoptInvocationBound; step += 1) {
     const loaded = await loadReviewedTagCandidatePages(review, subjectId, property);
     if (!loaded.complete) return { adoption: loaded.adoption, retiredCandidateIds: [], complete: false };
     const planned = adoptSelectionBody(loaded, property, input.keepExternalIds);
     if (!planned.body.selection.length && !planned.opened.adoption && !planned.retired.length)
       return { adoption: planned.opened.adoption, retiredCandidateIds: [], complete: true };
 
-    let action = '';
-    let body: typeof planned.body = planned.body;
-    let resumeOriginal = false;
-    let found = false;
-    for (let generation = 0; generation < reviewedTagAdoptGenerations; generation += 1) {
-      action = reviewedTagAdoptActionKey(subjectId, property, input.intent, generation);
-      const prior = journal.action(action);
-      if (prior?.state === 'prepared') {
-        const sealed = sealedReviewedTagAdoptBody(JSON.parse(prior.body_json));
-        if (!sealed) throw new TypeError('Prepared reviewed-tag adopt body is invalid');
-        body = sealed;
-        resumeOriginal = true;
-        found = true;
-        break;
-      }
-      if (prior?.state === 'refused' && reviewedTagPermanentRefusal(prior.error_code))
-        return { adoption: planned.opened.adoption, retiredCandidateIds: planned.retired, complete: true };
-      if (prior?.state === 'refused' && reviewedTagStaleHead(prior.error_code)) {
-        body = planned.body;
-        found = true;
-        break;
-      }
-      if (prior?.state === 'acknowledged') {
-        const sealed = sealedReviewedTagAdoptBody(JSON.parse(prior.body_json));
-        if (sealed && sameReviewedTagSelection(sealed.selection, planned.body.selection))
-          return { adoption: planned.opened.adoption, retiredCandidateIds: planned.retired, complete: true };
-        continue;
-      }
-      body = planned.body;
-      found = true;
-      break;
-    }
-    if (!found) throw new TypeError('Reviewed-tag adopt generation bound exceeded');
-
+    const choice = chooseReviewedTagAdoptAction(
+      journal,
+      subjectId,
+      property,
+      input.intent,
+      planned.body,
+      planned.opened.adoption,
+    );
+    if (choice.kind === 'refused' || choice.kind === 'acknowledged')
+      return { adoption: planned.opened.adoption, retiredCandidateIds: planned.retired, complete: true };
+    if (choice.kind === 'bound') throw new TypeError('Reviewed-tag adopt generation bound exceeded');
+    const { action, body } = choice;
     const alreadyCurrent =
       planned.opened.adoption && sameReviewedTagSelection(planned.opened.adoption.selection, planned.body.selection);
-    const prior = journal.action(action);
-    if (
-      !resumeOriginal &&
-      alreadyCurrent &&
-      prior?.state !== 'prepared' &&
-      !(prior?.state === 'refused' && reviewedTagStaleHead(prior.error_code))
-    )
+    if (choice.kind === 'fresh' && alreadyCurrent)
       return { adoption: planned.opened.adoption, retiredCandidateIds: planned.retired, complete: true };
+    journal.recordPendingAdopt(identity, action);
     const receipt = await sendReviewedTagAction(journal, action, body, (sealedBody, sealedKey) =>
       review.adoptReviewedCandidates(
         subjectId,
@@ -1765,6 +1803,7 @@ export async function adoptAcceptedReviewedTagSelection(
     if (!sameReviewedTagSelection(body.selection, planned.body.selection)) continue;
     return { adoption, retiredCandidateIds: planned.retired, complete: true };
   }
+  throw new TypeError('Reviewed-tag adopt generation bound exceeded');
 }
 
 /** Journaled accept/adopt for one subject property, preserving editorial ranks and applying managed retirement. */

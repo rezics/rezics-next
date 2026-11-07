@@ -39,13 +39,6 @@ export type {
   IdentityRatingCommitParticipant,
   IdentityRatingCommitPreparation,
 } from './identity-rating-commit-participant.ts';
-export {
-  continueIdentityRatingRepair,
-  createIdentityRatingRepairProducer,
-  identityRatingRepairMappingDigest,
-  IDENTITY_RATING_REPAIR_CONTINUATION,
-  IDENTITY_RATING_REPAIR_MAX_CONTINUATION,
-} from './identity-rating-repair-producer.ts';
 export type {
   IdentityRatingRepairAuthority,
   IdentityRatingRepairDrain,
@@ -55,6 +48,7 @@ export type {
   IdentityRatingRepairVote,
   IdentityRatingRepairVoteKey,
 } from './identity-rating-repair-producer.ts';
+export type { DefinitionImportRoutes } from './definition-import.ts';
 export {
   readCopyWorkDisclosure,
   COPY_WORK_DISCLOSURE_LOOKAHEAD,

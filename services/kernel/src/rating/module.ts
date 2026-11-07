@@ -30,7 +30,17 @@ import { createRealmRankSource, createRealmRankOrderSource } from './realm-rank.
 import { RATING_EVENTS } from './events.ts';
 
 export { createNativeRatingCapabilities } from './adapters/native.ts';
-export { createInstalledIdentityRepairCommands, createNativeIdentityRepairHost } from './adapters/identity-repair.ts';
+export {
+  createInstalledIdentityRepairCommands,
+  createNativeIdentityRepairHost,
+  type NativeIdentityRepairHost,
+} from './adapters/index.ts';
+export {
+  IDENTITY_REPAIR_GROWTH_ANCHORS,
+  IDENTITY_REPAIR_OPERATIONS,
+  identityRepairWork,
+} from './identity-repair-bounds.ts';
+export type { IdentityRepairOperation, IdentityRepairWork } from './identity-repair-bounds.ts';
 export { createIdentityRepairRead } from './identity-repair-read.ts';
 export {
   admitIdentityRepairGeneration,
@@ -38,7 +48,14 @@ export {
   runIdentityRepairGeneration,
 } from './identity-repair-run.ts';
 export type { RatingCapabilities, RatingAmbient } from './contract/capabilities.ts';
-export { bindRatingIdentityProducer, ratingIdentityProducer } from './segment-identity-guard.ts';
+export {
+  bindRatingIdentityProducer,
+  ratingIdentityProducer,
+  UNAVAILABLE_IDENTITY_REPAIR_REASON,
+  IDENTITY_REPAIR_HANDOFF_PENDING_REASON,
+  IDENTITY_REPAIR_LATER_VOTE_REASON,
+  IDENTITY_REPAIR_CROSS_HOME_REASON,
+} from './segment-identity-guard.ts';
 
 export type RatingHttpApp = ReturnType<typeof ratingRoutes> & ReturnType<typeof sourceStatisticRoutes>;
 

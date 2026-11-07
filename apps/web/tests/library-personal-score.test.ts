@@ -6,8 +6,8 @@ import {
   personalScoreDiscoveryWrite,
   personalScoreWriteCommand,
   personalScoreWriteNotice,
-  scoreOrderReadState,
-} from '../src/library/personal-score';
+} from '../src/library/score-write';
+import { scoreOrderReadState } from '../src/library/personal-score';
 import { likedMemberScore } from '../src/library/liked';
 import type { CollectionViewerFacts } from '../src/library/reads';
 

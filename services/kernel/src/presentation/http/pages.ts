@@ -25,7 +25,7 @@ import {
 } from '@rezics/composition';
 import { t } from 'elysia';
 import type { Pool } from 'pg';
-import { readPublicAccountByAgent } from '../../access/account-data.ts';
+import { readPublicAccountByAgent } from '../../access/public-identity.ts';
 import { PageResponseSchema, extendPageResponseSchema } from './page-contract.ts';
 import { deadlineClient } from '../../access/authenticate.ts';
 import { AccessUnavailableError } from '../../access/unavailable.ts';

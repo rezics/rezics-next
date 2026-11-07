@@ -1,12 +1,10 @@
-import type { AvatarSummary } from './contract/index.ts';
-export type { AvatarSummary };
-import type { PublicViews } from './public-views.ts';
 import type { Pool, PoolClient } from 'pg';
 import type { KeyRing } from '../tokens/seal.ts';
 import accountRead from './account-read.sql.d.ts';
 import organizationRoleRead from './account-organization-role.sql.d.ts';
-import { type ContributionAttribution } from './contribution-attribution.ts';
 import { type AccessWorkAccounting } from './work.ts';
+import type { AccountLink, AccountPublicViews, AvatarSummary, DeletedPublicIdentity, PublicAccount, PublicAccountProfile, PublicHandleIdentity, PublicIdentity, PublicIdentityFields, PublicSubject } from './public-identity.ts';
+export type { AccountLink, AccountPublicViews, AvatarSummary, DeletedPublicIdentity, PublicAccount, PublicAccountProfile, PublicHandleIdentity, PublicIdentity, PublicIdentityFields, PublicSubject, };
 type Queryable = Pick<Pool | PoolClient, 'query'>;
 type AccountRow = NonNullable<Awaited<ReturnType<typeof accountRead.run>>>;
 /** Private authoritative row, including lifecycle's fenced flag; never a public profile. */
@@ -24,88 +22,16 @@ export type AccountCommandState = Readonly<{
 export type OrganizationRole = NonNullable<Awaited<ReturnType<typeof organizationRoleRead.run>>>['role'];
 /** Minimal native Account projection for command and private-read authorization. */
 export declare function readAccountCommandState(client: Queryable, route: number, accountId: string, work?: AccessWorkAccounting): Promise<AccountCommandState | null>;
-export type PublicAccount = {
-    accountId: string;
-    kind: string;
-    handle: string | null;
-    displayName: string | null;
-    avatarUrl: string | null;
-    biography: string | null;
-    state: string;
-    operatorAccountId: string | null;
-} | {
-    accountId: string;
-    kind: string;
-    state: 'deleted';
-};
-export type DeletedPublicIdentity = {
-    id: string;
-    kind: 'actor' | 'organization';
-    state: 'deleted';
-};
-export type PublicIdentity = PublicIdentityFields | DeletedPublicIdentity;
-export type PublicIdentityFields = {
-    id: string;
-    kind: 'actor' | 'organization';
-    handle: string | null;
-    displayName: string | null;
-    state: 'active';
-    automated: boolean;
-    operatorId: string | null;
-};
 /** One current public identity plus the native facts needed to reobserve its avatar disclosure. */
 export type PublicIdentityObservation = DeletedPublicIdentity | (PublicIdentityFields & {
     avatarMediaId: string | null;
     nativeState: 'active' | 'suspended';
     authnFenced: boolean;
 });
-export type AccountLink = {
-    label: string;
-    url: string;
-};
-export type AccountPublicViews = PublicViews & {
-    realms: boolean;
-};
-export type PublicAccountProfile = PublicIdentityFields & {
-    movedTo?: string;
-    bio: string | null;
-    links: AccountLink[];
-    avatar: AvatarSummary | null;
-    publicViews: AccountPublicViews;
-    speakersListed?: boolean;
-    subject: PublicSubject | null;
-    verified: boolean;
-};
-export type PublicSubject = {
-    id: string;
-    label: string;
-    type: string;
-};
-export type PublicHandleIdentity = PublicIdentityFields & {
-    movedTo?: string;
-    subject: PublicSubject | null;
-    verified: boolean;
-};
-/** Resolve an active claim or live former-handle forward, then read the account on its own anchor. */
-export declare function readPublicAccountByHandle(client: Pool, handle: string, at?: Date): Promise<(PublicIdentity | PublicHandleIdentity | PublicAccountProfile)[]>;
-/** Resolve a stored catalogue pointer or native graph link, then confirm current account authority. */
-export declare function readPublicAccountByAgent(client: Pool, subjectId: string): Promise<(PublicIdentity | PublicHandleIdentity | PublicAccountProfile)[]>;
-/** Bounded current attribution for a retained-contribution page, including unavailable owners.
- * Deduplicate seeks without changing identity: no label/handle search or graph redirect is involved.
- * Each native batch contains at most 100 Account anchors; errors retain the owner's normal failure semantics.
- */
-export declare function readContributionAttributions(client: Queryable, accountIds: readonly string[]): Promise<Map<string, ContributionAttribution>>;
-/** Resolve retained attribution through the exact bounded native owner relation.
- * Public profile absence is not deletion; only the anchored account tombstone is.
- * This does not compose avatar, biography, graph labels or account-page disclosure.
- */
-export declare function agentContributionAttribution(client: Queryable, subjectId: string): Promise<ContributionAttribution>;
 /** Internal Access/kernel point read: state, authentication floor and fence share one anchored row.
  * Trusted Auth composition must return unavailable for a fenced account before establishing a session.
  */
 export declare function readAccount(client: Queryable, route: number, accountId: string, work?: AccessWorkAccounting): Promise<Account | null>;
-/** Public allowlist; pending rows are hidden and deleted rows disclose only an identity tombstone. */
-export declare function readPublicAccount(client: Queryable, route: number, accountId: string): Promise<PublicAccount | null>;
 /** Public, bounded batch projection; callers pass request-ordered route and account ID arrays. */
 export declare function readPublicIdentities(client: Queryable, routes: readonly number[], accountIds: readonly string[]): Promise<PublicIdentity[]>;
 /**

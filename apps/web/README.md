@@ -608,6 +608,8 @@ alone; imported figures retain their source's scale.
 Decision: subject rating controls retain the exact question, credential evidence, units and request key after an
 uncertain response. Readers can deliberately replay that request or discard it and reload the current answer;
 source, route and reader replacement retire those controls through the existing personal lease.
+Decision: Subject and Discovery Score writes import the declared Library `score-write.ts` entry; result classification
+and original-key retry stay one implementation.
 
 Acknowledged votes from a current Subject reader invalidate personal Library, My ratings and Collection queries,
 as well as the Subject's asynchronously published figure. Pending, uncertain, rejected and retired-reader results

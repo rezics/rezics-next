@@ -28,8 +28,10 @@ not evidence of deletion. `contributionDeleted` requires an explicit deletion la
 partial view alone never establishes deletion. The live variant retains `id`, `kind` and nullable `displayName`; only an authoritative
 deleted account produces a label-only `Deleted account` or `Deleted organization`. `readContributionAttributions` deduplicates page owners and reads at most 100 Account anchors per batch.
 Native agent attribution reads
-the exact bounded Semantic owner relation through its public Access capability and confirms the anchored Account;
-it never manufactures a deleted state when that read is absent. Consumers keep command ownership separate from
+the exact bounded Semantic owner relation through the bound `IdentitySemanticPort` and confirms the anchored Account;
+it never manufactures a deleted state when that read is absent. `public-identity.ts` does not value-import
+`account-data.ts` or Semantic `access-capabilities.ts`; the removed return path is
+`index.ts → public-identity.ts → account-data.ts → semantic/access-capabilities.ts → identity-adapters/index.ts`. Consumers keep command ownership separate from
 this presentation and retain revision, SHA, licence, references and body availability under current disclosure.
 They do not import Access internals, Platform pool helpers or Semantic agent tables.
 
