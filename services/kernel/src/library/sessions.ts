@@ -1,4 +1,5 @@
 import { applyJournalPatch, sameJournalValues, recordedProgressValues } from '@rezics/progress';
+import type { Release } from '@rezics/definitions';
 import type { Pool } from 'pg';
 import { readAccount, deadlineClient, within } from './access-port.ts';
 import { GrantDeniedError } from '../access/contract/errors.ts';
@@ -69,6 +70,7 @@ import { currentCommandWorkAssociation } from '../command/work-context.ts';
 import { clearProgressValues, isProgressClear } from './progress-commands.ts';
 import { enterShelfWrite } from './shelf-counter-owner.ts';
 import { parseProgressSessionJournalPatch } from './progress-journal.ts';
+import { requireLibraryDomain } from './domain-binding.ts';
 
 type Dependencies = { pool: Pool; access: Access; tokens: KeyRing; clock?: KernelClock };
 type Page = { limit?: number; cursor?: string; origin?: string; language?: string };
@@ -386,7 +388,10 @@ export function createSessionCommands(config: Dependencies) {
             const release = await consumeSessionWork(
               'original-release',
               sessionReleaseWork(fact.pin.releaseDigest),
-              () => readRelease(pool, fact.pin!.releaseDigest, { composed: false }),
+              () =>
+                requireLibraryDomain().identityDisclosure.readRelease(pool, fact.pin!.releaseDigest, {
+                  composed: false,
+                }) as Promise<Release | null>,
             );
             const original = release && resolveLibraryProfilePin({ digest: fact.pin.releaseDigest, release }, fact.pin);
             if (!original) throw new ProblemError('unsupported_library_profile');

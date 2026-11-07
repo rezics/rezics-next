@@ -3,8 +3,11 @@
 Decision: a successful revisioned write to a historical NULL-incarnation entry stamps and returns its new
 incarnation before storing the receipt; the exact caller body remains the digest. A fresh entry may add one
 type-preparation create receipt and one no-effect revalidation receipt; only creation and entry emit events.
-Session writes resolve accepted releases by their stored digest through Semantic's native Definitions reader and
-validate against both original and current profiles.
+Session writes resolve accepted releases by their stored digest through Library's composed identity-disclosure
+capability and validate against both original and current profiles.
+
+Decision: retain the original 64/512/4096 native growth axes while seeding one retained entry per fresh account and
+one live same-owner entry per unique subject; refresh shared fixture actors every 16 units and omit redundant refills.
 
 Decision: Library consumes native Access behaviour through `access-port.ts`; the existing domain binding holds that
 consumer-owned port and `composition/library.ts` installs Access's native adapter. Shared refusal constructors,
@@ -2431,7 +2434,12 @@ reauthorize native actor retirement and target readability. Other consumers must
   their existing state CAS. In-progress writes retain their existing follow upsert/event envelope.
 - Growth check: `test/library/entry-incarnation-precondition-growth.test.ts` measures complete success, missing/wrong
   guard rejection, replacement ABA and exact historical replay at 64/512/4096 unrelated live/retained/receipt histories,
-  including native physical/control work. `entries.test.ts` keeps the existing statement-count regression.
+  including native physical/control work. It uses cost-folded plan evidence to stay inside the fixed 32 MiB capture
+  budget without changing measured rows, blocks, statements or backends. `entries.test.ts` keeps the existing
+  statement-count regression. Each scale unit adds one retained entry from a fresh native account on a shared
+  subject and one live entry for the same owner on a unique subject; this preserves the growing account, archive,
+  live-entry and receipt populations. Shared native actors refresh every sixteen units to keep the long fixture
+  inside Access's admitted identity freshness window, without redundant delete/refill rounds.
 
 ### Retained entry clear
 
@@ -2645,8 +2653,9 @@ terms and controller-owned growth acceptance that remains unmeasured.
 The owner detail additionally accepts `presentation=FULL`, independently of summary `view=FULL`. The
 [profile consumer contract](../../../../docs/library-profile-consumers.md#owner-session-display-and-current-recording)
 owns the exact display/advisory DTO and preservation rules. `progress-presentation.ts` uses the stored pin's exact
-immutable release for historic English labels/count forms and the existing current source/profile and native
-validators for recording hints. It never relabels from the active head, exposes pins, or changes old values.
+immutable release, resolved by digest through Library's composed identity-disclosure capability, for historic
+English labels/count forms and the existing current source/profile and native validators for recording hints. It
+never relabels from the active head, exposes pins, or changes old values.
 Missing original release means unavailable; unknown old pair means raw unknown; only actual readable current
 profile/pair absence or incompatible meaning proves unsupported. Source uncertainty remains unavailable.
 

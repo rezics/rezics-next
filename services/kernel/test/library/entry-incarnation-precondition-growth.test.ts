@@ -1,8 +1,10 @@
 import { afterAll, beforeAll, expect, test } from 'bun:test';
 import { createHash } from 'node:crypto';
 import canonicalize from 'canonicalize';
+import pg from 'pg';
 import { GrantDeniedError } from '../../src/access/contract/errors.ts';
 import { principalCommandIdentity } from '../../src/command/command.ts';
+import { nativeReceiptKeyCandidates } from '../../src/command/receipt-key.ts';
 import { createLibraryCommandRunner } from '../../src/library/command-support.ts';
 import { admitEntryAttempt } from '../../src/library/entry-lifecycle.ts';
 import * as store from '../../src/library/entry-store.ts';
@@ -83,7 +85,8 @@ async function oldReceipts(f: NativeProfileFixture) {
     ['library.entry.put', key, { subjectId, requestedSubjectId: null, ...input }],
     ['library.entry.delete', deleteKey, { subjectId, revision: updated.value.entry.revision }],
   ] as const) {
-    const receipt = receipts.find((x) => x.row.command_kind === kind && x.row.idempotency_key === requestKey)!.row;
+    const candidates = new Set(nativeReceiptKeyCandidates(f.pool, kind, f.owner.actor.accountId, requestKey));
+    const receipt = receipts.find((x) => x.row.command_kind === kind && candidates.has(x.row.idempotency_key))!.row;
     const digest = createHash('sha256')
       .update(canonicalize([principalCommandIdentity(f.owner.actor), kind, body])!)
       .digest('hex');
@@ -424,10 +427,23 @@ test('concurrent exact legacy stamping and a guardless state mutation serialize 
 }, 120000);
 
 test('fresh guard work remains bounded across 64 512 and 4096 unrelated live retained and receipt histories including physical native controls', async () => {
-  const db = await openGrowthDatabase();
+  const template = await openGrowthDatabase();
+  let growth: Awaited<ReturnType<typeof openGrowthDatabase>> | undefined;
   let native: NativeProfileFixture | undefined;
+  const cloneName = `entry_incarnation_growth_${Bun.randomUUIDv7().replaceAll('-', '').slice(0, 16)}`;
+  let cloneCreated = false;
   try {
-    native = await createProfileEntryFixture({ pool: db.pool, singleConnection: true, projectLinks: false });
+    const cloneUrl = new URL(template.url);
+    cloneUrl.pathname = `/${cloneName}`;
+    await template.admin.query(`CREATE DATABASE "${cloneName}" TEMPLATE rezics`);
+    cloneCreated = true;
+    growth = await openGrowthDatabase(cloneUrl.toString());
+    const pool = growth.pool;
+    native = await createProfileEntryFixture({
+      pool,
+      databaseUrl: cloneUrl.toString(),
+      projectLinks: false,
+    });
     const f = native;
     const target = await f.createSubject('game');
     let current = (await f.commands.putEntry(f.owner.actor, target, { state: 'planned' }, entryKey())).value.entry;
@@ -478,33 +494,34 @@ test('fresh guard work remains bounded across 64 512 and 4096 unrelated live ret
         await f.commands.deleteEntry(f.owner.actor, old.subjectId, old.updated.value.entry.revision, old.deleteKey),
       ).toEqual({ ...old.deleted, replayed: true });
     };
-    const report = await checkGrowth(db, {
+    const report = await checkGrowth(growth, {
       name: 'fresh native incarnation admission success rejection replay and ABA',
       scales: [64, 512, 4096],
       bounds: { rows: 'constant', statements: 'constant', blocks: 'logarithmic' },
+      captureMode: 'cost-folded',
       includeBackends: true,
       async grow(_db, scale, previous) {
         // One ordinary subject supports many unrelated private owner slots.
         const subjectId = await f.createSubject('game');
         for (let n = previous; n < scale; n++) {
-          for (const who of [f.owner, f.steward, f.other]) {
-            who.bearer = await accountToken(who.actor);
-            who.actor = await f.access.authenticate(who.bearer, { pool: db.pool, deadline: deadlineFor(30000) });
+          if ((n - previous) % 16 === 0) {
+            // Keep the long-running fixture actors inside Access's native identity freshness window.
+            for (const who of [f.owner, f.steward, f.other]) {
+              who.bearer = await accountToken(who.actor);
+              who.actor = await f.access.authenticate(who.bearer, { pool: f.pool, deadline: deadlineFor(30000) });
+            }
           }
-          // Native identities, Access and receipt/outbox producers all grow together.
+          // Keep one retained native entry per fresh actor and one live owner slot per scale unit.
+          // Replacing each actor's row adds no coverage beyond its delete receipt and archive.
           const who = await f.identity(scopes);
           const first = (await f.commands.putEntry(who.actor, subjectId, { state: 'planned' }, entryKey())).value.entry;
           await f.commands.deleteEntry(who.actor, subjectId, first.revision, entryKey(), first.incarnationId!);
-          await f.commands.putEntry(who.actor, subjectId, { state: 'planned' }, entryKey());
           const ownSubject = await f.createSubject('game');
-          const own = (await f.commands.putEntry(f.owner.actor, ownSubject, { state: 'planned' }, entryKey())).value
-            .entry;
-          await f.commands.deleteEntry(f.owner.actor, ownSubject, own.revision, entryKey(), own.incarnationId!);
           await f.commands.putEntry(f.owner.actor, ownSubject, { state: 'planned' }, entryKey());
         }
         for (const who of [f.owner, f.steward, f.other]) {
           who.bearer = await accountToken(who.actor);
-          who.actor = await f.access.authenticate(who.bearer, { pool: db.pool, deadline: deadlineFor(30000) });
+          who.actor = await f.access.authenticate(who.bearer, { pool: f.pool, deadline: deadlineFor(30000) });
         }
       },
       operation,
@@ -520,7 +537,7 @@ test('fresh guard work remains bounded across 64 512 and 4096 unrelated live ret
         expect(sample.cost.relations[relation]?.sequentialScans ?? 0).toBe(0);
     }
     const rejected = await capture(
-      db,
+      growth,
       async () => {
         await expect(
           f.commands.deleteEntry(f.owner.actor, target, current.revision, entryKey()),
@@ -535,6 +552,15 @@ test('fresh guard work remains bounded across 64 512 and 4096 unrelated live ret
     ).toBe(false);
   } finally {
     await native?.close();
-    await db.close();
+    await growth?.close();
+    await template.close();
+    if (cloneCreated) {
+      const cleanup = new pg.Pool({ connectionString: template.url, max: 1 });
+      try {
+        await cleanup.query(`DROP DATABASE IF EXISTS "${cloneName}" WITH (FORCE)`);
+      } finally {
+        await cleanup.end();
+      }
+    }
   }
 }, 3600000);

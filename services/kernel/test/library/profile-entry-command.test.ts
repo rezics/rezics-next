@@ -2,10 +2,7 @@ import { afterAll, beforeAll, beforeEach, expect, test } from 'bun:test';
 import { GrantDeniedError } from '../../src/access/contract/errors.ts';
 import { IdempotencyConflictError } from '../../src/command/command.ts';
 import { nativeReceiptKeyCandidates } from '../../src/command/receipt-key.ts';
-import {
-  libraryCommandReceiptDigestForActor,
-  LibraryNotFoundError,
-} from '../../src/library/command-support.ts';
+import { libraryCommandReceiptDigestForActor, LibraryNotFoundError } from '../../src/library/command-support.ts';
 import type { AccountActor } from '../../src/request/access.ts';
 import { accountToken, authenticateAccount } from '../support/admitted-access.ts';
 import { deadlineFor } from '../../src/request/deadline.ts';
@@ -283,15 +280,7 @@ test('the literal in_progress state follows once and preserves an explicit unfol
     expect(follows).toHaveLength(1);
     expect(follows[0]!.row.state).toBe(explicitUnfollow ? 'unfollowed' : 'following');
     expect(follows[0]!.row.reason).toBe(explicitUnfollow ? 'explicit' : 'library');
-    freshEntryEffects(
-      before,
-      after,
-      native.owner.actor,
-      subjectId,
-      key,
-      entryTypes.recipe,
-      !explicitUnfollow,
-    );
+    freshEntryEffects(before, after, native.owner.actor, subjectId, key, entryTypes.recipe, !explicitUnfollow);
     if (explicitUnfollow) expect(after.follows).toEqual(before.follows);
     expect(after.entries.length - before.entries.length).toBe(1);
     expect(follows[0]!.row.target_id).toBe(subjectId);

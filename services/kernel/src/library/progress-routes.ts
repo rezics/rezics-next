@@ -321,13 +321,13 @@ function recordBody() {
 }
 const transitionBody = t.Object({ revision }, closed);
 
-function detail(operationId: string, action: string, anonymous = false) {
+function detail(operationId: string, action: string, anonymous = false, ownAccount = true) {
   return {
     operationId,
     'x-exposure': 'gate:reading_progress',
     'x-action': action,
     security: anonymous ? [...bearer, {}] : bearer,
-    ...(['progress_session:list', 'progress_session:read'].includes(action)
+    ...(['progress_session:list', 'progress_session:read'].includes(action) && ownAccount
       ? { 'x-authority-anchor': 'own-account', 'x-authority-resource-types': Object.keys(bundledRelease.types) }
       : {}),
     ...(/:(?:create|update|delete)$/.test(action) ? { 'x-rate-limit': writeRate() } : {}),
@@ -386,6 +386,15 @@ function changeView(change: { sessionId: string; changeNo: number; intent: unkno
 function requireAccount(actor: Actor) {
   if (actor.kind !== 'account') throw new AuthenticationError(401, 'Bearer');
   return actor;
+}
+
+function requireProgressScope(actor: Actor, action: 'progress_session:read') {
+  const account = requireAccount(actor);
+  if (!account.scopes.includes(action))
+    throw new ProblemError('forbidden', {
+      headers: { 'WWW-Authenticate': `Bearer error="insufficient_scope", scope="${action}"` },
+    });
+  return account;
 }
 
 function mapError(error: unknown, denied: 'forbidden' | 'not_found' = 'forbidden'): never {
@@ -836,15 +845,17 @@ export function progressRoutes(app: ReturnType<typeof definitionRoutes>, depende
           200: t.Object({ progressSession: embedded(sessionSchema(), presentationFields()) }, closed),
           400: invalid(),
           401: unauthorized(),
+          403: forbidden(),
           404: notFound(),
           409: conflict(),
           503: unavailable(),
         },
-        detail: detail('progress_session.read', 'progress_session:read'),
+        detail: detail('progress_session.read', 'progress_session:read', false, false),
       },
       async ({ params, query, actor, admission, job, set }) =>
         admission.run('normal', job, () =>
           mapped(async () => {
+            requireProgressScope(actor, 'progress_session:read');
             set.headers['cache-control'] = 'private, no-store';
             if (query.presentation === 'FULL') {
               return sessionCommands().readPresentedSession(
