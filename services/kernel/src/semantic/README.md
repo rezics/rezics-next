@@ -1198,6 +1198,12 @@ Credits keep their main role property and credited subject together with that st
 
 ## Native Context discovery
 
+Directory paging, lifecycle reads and historical-party enrollment use the Semantic-owned Access port in
+`context-access-port.ts`, installed by `composeSemanticContext` at the Kernel composition root (and by `createKernel`).
+`createContextApplication` is the concrete application for those operations. Context reads do not import Access,
+request admission or erasure implementations; composition binds those adapters. Qualified list work-context helpers
+stay local: they have no Access operations and are not on this port.
+
 `createContextDirectory({pool,access,tokens,clock?})` exports `list` and `lifecycle`, together with
 `ContextDirectoryEntrySchema` and the corresponding exact types from `semantic/index.ts`.
 `GET /v1/contexts` takes an optional case-insensitive NFC label/technical-ID prefix `query`, `limit` from 1 to 100
@@ -1384,7 +1390,8 @@ Its fresh-state/locator acceptance runs independently of missing lifecycle HTTP 
 ### Native Context historical-party enrollment
 
 `enrollContextRoleProvenance(tx,{route,occurrence})` in `context-role-provenance.ts` is the Source sink for
-the exact readonly Access `ContextRoleProvenance`. Its SQL ABI is
+the exact readonly Access occurrence. Access calls it through Semantic `access-capabilities.ts`. Source commit
+goes through the bound Access port, not an erasure-producer import. Its SQL ABI is
 `semantic.enroll_context_role_provenance(integer,bigint,uuid,uuid,uuid,text,text,text,uuid,uuid)`, with arguments
 `route, occurrence, resourceId, originalCreator, accountId, grantRole, valid, side, grantTransaction,
 sourceTransaction`, returning `(state text, context_key bigint)`. Both bigint identities stay canonical decimal
@@ -1412,6 +1419,7 @@ Focused acceptance is `test/semantic/context-role-provenance.test.ts`; native ex
 
 ### Community Context lifecycle
 
+Lifecycle commands go through `createContextApplication` and the Semantic-owned Access port bound at composition.
 `DELETE /v1/contexts/:id` and `POST /v1/contexts/:id:restore` use the native command executor, request digest,
 receipt and Session component. DELETE accepts no body or a closed empty object; restore requires a closed empty
 object. Neither route has an If-Match contract. Successful responses contain only

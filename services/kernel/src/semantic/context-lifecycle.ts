@@ -1,13 +1,14 @@
 import { enrollResourceRecordSources } from './record-purge-custody.ts';
 import type { Pool } from 'pg';
-import { ProblemError } from '../http/problem.ts';
-import { resourceAuthorization } from '../access/index.ts';
-import { GrantDeniedError } from '../access/grant-commands.ts';
 import { authoritativeTimeValue, noEffect, runCommand } from '../command/command.ts';
-import type { Access, AccountActor } from '../request/access.ts';
 import { partitionOf, routeOf } from '../route/route.ts';
 import { ContextNotFoundError } from './context.ts';
-import { GLOBAL_CONTEXT } from './definitions.ts';
+import {
+  CONTEXT_GLOBAL_ID,
+  contextAccess,
+  type ContextAccessHandle,
+  type ContextAccountActor,
+} from './context-access-port.ts';
 import { RECORD_DELETED, RECORD_RESTORED } from './events.ts';
 import { readSemanticLifecycle } from './lifecycle-state.ts';
 import readContext from './lifecycle-read-context.sql';
@@ -26,8 +27,8 @@ export async function changeContextLifecycle(
   options: {
     context: string;
     state: 'active' | 'deleted';
-    actor: AccountActor;
-    access: Access;
+    actor: ContextAccountActor;
+    access: ContextAccessHandle;
     idempotencyKey: string;
     digest: Uint8Array;
     deadline: number;
@@ -37,9 +38,10 @@ export async function changeContextLifecycle(
   const { context, actor, state } = options;
   const route = routeOf(context);
   if (route === null) throw new ContextNotFoundError();
+  const port = contextAccess();
   const resource = { route, id: context };
   const action = state === 'deleted' ? 'context:delete' : 'context:restore';
-  const authorization = resourceAuthorization({
+  const authorization = port.resourceAuthorization({
     access: options.access,
     actor,
     action,
@@ -51,9 +53,9 @@ export async function changeContextLifecycle(
           accountId: actor.accountId,
           nativeT: time,
         });
-        if (!evidence) throw new ProblemError('not_found');
+        if (!evidence) throw port.notFound();
         // Direct current owner evidence is an additional prerequisite, never an Access allow decision.
-        return context !== GLOBAL_CONTEXT && evidence.owner?.kind === 'owner_grant';
+        return context !== CONTEXT_GLOBAL_ID && evidence.owner?.kind === 'owner_grant';
       },
     },
     context: { pool, deadline: options.deadline, partition: partitionOf(route) },
@@ -71,7 +73,7 @@ export async function changeContextLifecycle(
     async (tx, { time, transactionId }) => {
       const row = await readContext.run(tx, { route, context_id: context });
       if (!row) throw new ContextNotFoundError();
-      if (row.kind !== 'community') throw new GrantDeniedError();
+      if (row.kind !== 'community') throw port.lifecycleDenied();
       const value = { id: context, state };
       await enrollResourceRecordSources(tx, [{ kind: 'context', contextId: context }], {
         kind: action,
