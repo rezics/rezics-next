@@ -1,12 +1,16 @@
 import { expect, test } from 'bun:test';
 import { createHash } from 'node:crypto';
-import { existsSync, readFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { spawn, execFileSync } from 'node:child_process';
 import { join } from 'node:path';
 import { migrate, openDb } from './db.ts';
 import {
+  captureHourlyEfficiencyObservation,
   completedUtcHour,
   efficiencyReportMigrations,
+  measureProductLineObservation,
   parseUtcHour,
+  readFrozenHourlyEfficiencyReport,
   renderHourlyEfficiencyReport,
   sendHourlyEfficiencyReport,
 } from './efficiency-report.ts';
@@ -37,6 +41,55 @@ function task(db: ReturnType<typeof openDb>, id: string, state: string, goal: st
     attempt,
     JSON.stringify({ id, currentAttempt: attempt, state, brief: { goal, paths: ['services/sample/src/index.ts'] } }),
   );
+}
+
+function measuredLines(productLines: number, sourceRevision: string) {
+  return {
+    productLines,
+    attribution: 'measured' as const,
+    sourceRevision,
+    backfillProductLines: null,
+    backfillAttribution: 'unknown' as const,
+    backfillFromRevision: null,
+    filterVersion: 'rezics-product-code-v1',
+  };
+}
+
+function git(repository: string, args: string[], env?: Record<string, string>): string {
+  return execFileSync('git', ['-C', repository, ...args], {
+    encoding: 'utf8',
+    env: { ...process.env, ...env },
+  });
+}
+
+function runCaptureChild(databasePath: string, productLines: number, sourceRevision: string): Promise<string> {
+  const dbModule = new URL('./db.ts', import.meta.url).href;
+  const reportModule = new URL('./efficiency-report.ts', import.meta.url).href;
+  const code = `
+    const { openDb } = await import(${JSON.stringify(dbModule)});
+    const { captureHourlyEfficiencyObservation } = await import(${JSON.stringify(reportModule)});
+    const db = openDb(${JSON.stringify(databasePath)});
+    const result = captureHourlyEfficiencyObservation(db, {
+      bucket: '2026-10-31T01:00:00.000Z',
+      now: new Date('2026-10-31T02:15:00.000Z'),
+      productLineMeasurement: {
+        productLines: ${productLines}, attribution: 'measured',
+        sourceRevision: ${JSON.stringify(sourceRevision)}, backfillProductLines: null,
+        backfillAttribution: 'unknown', backfillFromRevision: null, filterVersion: 'rezics-product-code-v1'
+      }
+    });
+    console.log(JSON.stringify({ disposition: result.disposition, reportRef: result.snapshot.reportRef, report: result.snapshot.report }));
+    db.close();
+  `;
+  return new Promise((resolve, reject) => {
+    const child = spawn(process.execPath, ['-e', code], { stdio: ['ignore', 'pipe', 'pipe'] });
+    let stdout = '';
+    let stderr = '';
+    child.stdout?.setEncoding('utf8').on('data', (chunk) => (stdout += chunk));
+    child.stderr?.setEncoding('utf8').on('data', (chunk) => (stderr += chunk));
+    child.once('error', reject);
+    child.once('close', (code) => (code === 0 ? resolve(stdout.trim()) : reject(new Error(stderr || `child exited ${code}`))));
+  });
 }
 
 test('hourly report uses timestamped outcomes and leaves missing lifecycle evidence unknown', async () => {
@@ -403,9 +456,9 @@ test('hourly rendering and notifier output use caller limits, including tiny UTF
   const h = fixture();
   try {
     const policy = readControlPolicy({ hourlyReport: { reportBytes: 200, notifierOutputBytes: 4 } });
-    for (const reportBytes of [1, 3, 200]) {
+    for (const [index, reportBytes] of [1, 3, 200].entries()) {
       const report = await renderHourlyEfficiencyReport(h.db, {
-        bucket: '2026-10-31T01:00:00.000Z',
+        bucket: `2026-10-31T0${index + 1}:00:00.000Z`,
         policy: { ...policy, hourlyReport: { ...policy.hourlyReport, reportBytes } },
       });
       expect(Buffer.byteLength(report)).toBeLessThanOrEqual(reportBytes);
@@ -413,7 +466,7 @@ test('hourly rendering and notifier output use caller limits, including tiny UTF
     }
     const sent = await sendHourlyEfficiencyReport(
       h.db,
-      '2026-10-31T01:00:00.000Z',
+      '2026-10-31T04:00:00.000Z',
       'bounded',
       [process.execPath, '-e', 'console.log("too much output")'],
       2000,
@@ -422,9 +475,224 @@ test('hourly rendering and notifier output use caller limits, including tiny UTF
     );
     expect(sent.disposition).toBe('unknown');
     expect(sent.detail).toContain('output limit exceeded');
-    const ordinary = await renderHourlyEfficiencyReport(h.db, { bucket: '2026-10-31T01:00:00.000Z' });
+    const ordinary = await renderHourlyEfficiencyReport(h.db, { bucket: '2026-10-31T05:00:00.000Z' });
     expect(Buffer.byteLength(ordinary)).toBeGreaterThan(200);
   } finally {
     h.close();
+  }
+});
+
+test('late commits and integrations remain backfill after the first measured bucket capture', async () => {
+  const h = fixture();
+  const repository = join(h.directory.path, 'dev');
+  const bucket = '2026-10-31T01:00:00.000Z';
+  const capturedAt = new Date('2026-10-31T02:15:00.000Z');
+  try {
+    mkdirSync(repository);
+    git(repository, ['init', '-q']);
+    git(repository, ['config', 'user.name', 'Goal report test']);
+    git(repository, ['config', 'user.email', 'goal-report@example.invalid']);
+    mkdirSync(join(repository, 'services/demo/src'), { recursive: true });
+    writeFileSync(join(repository, 'services/demo/src/index.ts'), 'export const first = 1;\nexport const second = 2;\n');
+    git(repository, ['add', '.']);
+    git(repository, ['commit', '-q', '-m', 'initial product source'], {
+      GIT_AUTHOR_DATE: '2026-10-31T01:10:00Z',
+      GIT_COMMITTER_DATE: '2026-10-31T01:10:00Z',
+    });
+    git(repository, ['branch', '-M', 'dev']);
+
+    const firstMeasurement = measureProductLineObservation(repository, bucket, capturedAt);
+    expect(firstMeasurement.productLines).toBe(2);
+    const first = captureHourlyEfficiencyObservation(h.db, {
+      bucket,
+      now: capturedAt,
+      productLineMeasurement: firstMeasurement,
+    });
+    expect(first.snapshot.report).toContain(`Product lines added in UTC bucket: 2 (attribution measured; dev@${firstMeasurement.sourceRevision}`);
+
+    writeFileSync(join(repository, 'services/demo/src/late.ts'), 'export const late = true;\n');
+    git(repository, ['add', '.']);
+    git(repository, ['commit', '-q', '-m', 'late integration source'], {
+      GIT_AUTHOR_DATE: '2026-10-31T01:40:00Z',
+      GIT_COMMITTER_DATE: '2026-10-31T01:40:00Z',
+    });
+    const lateMeasurement = measureProductLineObservation(repository, bucket, capturedAt);
+    expect(lateMeasurement.productLines).toBe(3);
+    expect(lateMeasurement.sourceRevision).not.toBe(firstMeasurement.sourceRevision);
+
+    task(h.db, 'late-integration', 'integrated', 'web');
+    recordFlow(h.db, {
+      taskId: 'late-integration',
+      attempt: 1,
+      stage: 'integration',
+      action: 'integrated',
+      at: '2026-10-31T02:10:00.000Z',
+      detail: JSON.stringify({ integrationTarget: 'integration' }),
+    });
+    const retry = captureHourlyEfficiencyObservation(h.db, {
+      bucket,
+      now: capturedAt,
+      productLineMeasurement: lateMeasurement,
+    });
+    expect(retry.disposition).toBe('conflicting');
+    expect(retry.attribution).toBe('conflicting');
+    expect(retry.snapshot.reportRef).toBe(first.snapshot.reportRef);
+    expect(retry.snapshot.report).toBe(first.snapshot.report);
+    expect(retry.snapshot.observation.productLines).toBe(2);
+    expect(retry.snapshot.conflict).toMatchObject({
+      reportRef: first.snapshot.reportRef,
+      productLines: 3,
+      attribution: 'measured',
+      sourceRevision: lateMeasurement.sourceRevision,
+    });
+
+    const nextBucket = '2026-10-31T02:00:00.000Z';
+    const nextMeasurement = measureProductLineObservation(
+      repository,
+      nextBucket,
+      new Date('2026-10-31T03:15:00.000Z'),
+      firstMeasurement.sourceRevision,
+    );
+    expect(nextMeasurement.productLines).toBe(0);
+    expect(nextMeasurement.backfillProductLines).toBe(1);
+    expect(nextMeasurement.backfillFromRevision).toBe(firstMeasurement.sourceRevision);
+    const backfill = captureHourlyEfficiencyObservation(h.db, {
+      bucket: nextBucket,
+      now: new Date('2026-10-31T03:15:00.000Z'),
+      productLineMeasurement: nextMeasurement,
+    });
+    expect(backfill.snapshot.report).toContain('Landing identities: late-integration#1 at 2026-10-31T02:10:00.000Z (dev).');
+    expect(backfill.snapshot.report).toContain('Late integration backfill in this bucket: 1 additions newly visible since');
+    expect(backfill.snapshot.report).toContain('Late integrations remain visible in their integration bucket');
+    expect(backfill.snapshot.observation.backfillProductLines).toBe(1);
+    expect(backfill.snapshot.rolling).toEqual({ productLines: 2, attribution: 'measured' });
+  } finally {
+    h.close();
+  }
+});
+
+test('two-hour product totals sum independent frozen observations', () => {
+  const h = fixture();
+  try {
+    const first = captureHourlyEfficiencyObservation(h.db, {
+      bucket: '2026-10-31T00:00:00.000Z',
+      now: new Date('2026-10-31T01:15:00.000Z'),
+      productLineMeasurement: measuredLines(2979, 'a'.repeat(40)),
+    });
+    const second = captureHourlyEfficiencyObservation(h.db, {
+      bucket: '2026-10-31T01:00:00.000Z',
+      now: new Date('2026-10-31T02:15:00.000Z'),
+      productLineMeasurement: measuredLines(4266, 'b'.repeat(40)),
+    });
+    expect(first.snapshot.rolling).toEqual({ productLines: null, attribution: 'unknown' });
+    expect(second.snapshot.rolling).toEqual({ productLines: 7245, attribution: 'measured' });
+    expect(second.snapshot.report).toContain('Product lines across this and the previous completed UTC hour: 7245 across two frozen observations.');
+    expect(second.snapshot.report).not.toContain('10232');
+    const stored = h.db
+      .query('SELECT hour_bucket, product_lines, source_revision, source_window_start, source_window_end, filter_version, report_ref FROM efficiency_report_deliveries ORDER BY hour_bucket')
+      .all() as {
+      hour_bucket: string;
+      product_lines: number;
+      source_revision: string;
+      source_window_start: string;
+      source_window_end: string;
+      filter_version: string;
+      report_ref: string;
+    }[];
+    expect(stored.map((row) => [row.hour_bucket, row.product_lines])).toEqual([
+      ['2026-10-31T00:00:00.000Z', 2979],
+      ['2026-10-31T01:00:00.000Z', 4266],
+    ]);
+    expect(stored[1]).toMatchObject({
+      source_revision: 'b'.repeat(40),
+      source_window_start: '2026-10-31T01:00:00.000Z',
+      source_window_end: '2026-10-31T02:00:00.000Z',
+      filter_version: 'rezics-product-code-v1',
+      report_ref: second.snapshot.reportRef,
+    });
+  } finally {
+    h.close();
+  }
+});
+
+test('missing historical product evidence remains unknown after a measured retry', () => {
+  const h = fixture();
+  try {
+    const bucket = '2026-10-31T01:00:00.000Z';
+    const unknown = captureHourlyEfficiencyObservation(h.db, {
+      bucket,
+      now: new Date('2026-10-31T02:15:00.000Z'),
+    });
+    expect(unknown.snapshot.observation).toMatchObject({ productLines: null, attribution: 'unknown' });
+    expect(unknown.snapshot.rolling).toMatchObject({ productLines: null, attribution: 'unknown' });
+    expect(unknown.snapshot.report).toContain('Product lines added in UTC bucket: unknown (attribution unknown; source revision unavailable');
+
+    const retry = captureHourlyEfficiencyObservation(h.db, {
+      bucket,
+      now: new Date('2026-10-31T02:20:00.000Z'),
+      productLineMeasurement: measuredLines(10_232, 'c'.repeat(40)),
+    });
+    expect(retry.disposition).toBe('conflicting');
+    expect(retry.attribution).toBe('conflicting');
+    expect(retry.snapshot.reportRef).toBe(unknown.snapshot.reportRef);
+    expect(retry.snapshot.observation).toMatchObject({ productLines: null, attribution: 'unknown' });
+    expect(retry.snapshot.report).toBe(unknown.snapshot.report);
+    expect(retry.snapshot.conflict).toMatchObject({
+      productLines: 10_232,
+      attribution: 'measured',
+      sourceRevision: 'c'.repeat(40),
+      reportRef: unknown.snapshot.reportRef,
+    });
+  } finally {
+    h.close();
+  }
+});
+
+test('concurrent first capture, restart and delivery replay share the original report bytes', async () => {
+  const h = fixture();
+  const databasePath = join(h.directory.path, 'goal.sqlite');
+  const reportFile = join(h.directory.path, 'delivered.txt');
+  type ChildCapture = { disposition: string; reportRef: string; report: string };
+  h.db.close();
+  try {
+    const [one, two] = await Promise.all([
+      runCaptureChild(databasePath, 2979, 'a'.repeat(40)).then((value) => JSON.parse(value) as ChildCapture),
+      runCaptureChild(databasePath, 4266, 'b'.repeat(40)).then((value) => JSON.parse(value) as ChildCapture),
+    ]);
+    expect([one.disposition, two.disposition].sort()).toEqual(['captured', 'conflicting']);
+    expect(one.report).toBe(two.report);
+    expect(one.reportRef).toBe(two.reportRef);
+
+    const reopened = openDb(databasePath);
+    try {
+      const replay = await renderHourlyEfficiencyReport(reopened, { bucket: '2026-10-31T01:00:00.000Z' });
+      const frozen = readFrozenHourlyEfficiencyReport(reopened, '2026-10-31T01:00:00.000Z')!;
+      expect(replay).toBe(one.report);
+      expect(frozen.reportRef).toBe(one.reportRef);
+      expect(frozen.conflict).toMatchObject({ reportRef: one.reportRef });
+
+      const send = `require('node:fs').writeFileSync(${JSON.stringify(reportFile)}, process.argv[process.argv.length - 1]);`;
+      const firstDelivery = await sendHourlyEfficiencyReport(
+        reopened,
+        frozen.bucket,
+        'different retry bytes',
+        [process.execPath, '-e', send],
+        2000,
+      );
+      const duplicate = await sendHourlyEfficiencyReport(
+        reopened,
+        frozen.bucket,
+        'replacement must not be sent',
+        [process.execPath, '-e', 'process.exit(9)'],
+        2000,
+      );
+      expect(firstDelivery).toMatchObject({ disposition: 'sent', reportRef: one.reportRef });
+      expect(duplicate).toMatchObject({ disposition: 'already-sent', reportRef: one.reportRef });
+      expect(readFileSync(reportFile, 'utf8')).toBe(one.report);
+    } finally {
+      reopened.close();
+    }
+  } finally {
+    h.directory.close();
   }
 });

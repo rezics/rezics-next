@@ -252,7 +252,7 @@ test('the first round runs boot smoke then the full suite, batches current-head 
   ).toHaveLength(1);
   expect(
     [...ctx.findings.values()].filter(
-      (finding) => finding.test.endsWith('a.test.ts') || finding.test.endsWith('b.test.ts'),
+      (finding) => finding.test?.endsWith('a.test.ts') || finding.test?.endsWith('b.test.ts'),
     ),
   ).toHaveLength(2);
   expect(repairs).toHaveLength(1);
@@ -262,7 +262,7 @@ test('the first round runs boot smoke then the full suite, batches current-head 
     'services/kernel/test/b.test.ts',
   ]);
   expect(repairs[0]!.failures.flatMap((failure) => failure.assertions)).toContain('AssertionError: expected one');
-  expect(repairs[0]!.failures.find((failure) => failure.test.endsWith('a.test.ts'))!.assertions).toContain(
+  expect(repairs[0]!.failures.find((failure) => failure.test?.endsWith('a.test.ts'))!.assertions).toContain(
     'AssertionError: expected an additional value',
   );
   expect(ctx.runs.size).toBeGreaterThan(4);

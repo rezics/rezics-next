@@ -2,7 +2,14 @@ import { createHash } from 'node:crypto';
 import { hostname } from 'node:os';
 import { join } from 'node:path';
 import { readFileSync } from 'node:fs';
-import type { DevVerifierEvidence, DevVerifierFinding, DevVerifierResult, Settings } from './types.ts';
+import type {
+  DevVerifierCause,
+  DevVerifierDiagnostic,
+  DevVerifierEvidence,
+  DevVerifierFinding,
+  DevVerifierResult,
+  Settings,
+} from './types.ts';
 import { defaultPolicy } from './policy.ts';
 import { gateEnvironment, gateRunner, git } from './merge.ts';
 import { classifyRun } from './dev-verifier-classification.ts';
@@ -104,14 +111,26 @@ export function makeFinding(
   check: IndexedCheck,
   base: string,
   target: string,
-  test: string,
+  test: string | undefined,
   assertion: string,
   status: DevVerifierFinding['status'],
   evidence: DevVerifierEvidence | null,
   reason: string,
   result: DevVerifierResult,
+  cause?: DevVerifierCause,
+  diagnostic?: DevVerifierDiagnostic,
+  diagnosticIdentity?: string,
 ): DevVerifierFinding {
-  const identity = hash({ test });
+  const identity = hash(
+    test
+      ? { test }
+      : {
+          cause: cause ?? 'unknown',
+          diagnostic: diagnosticIdentity ?? diagnostic,
+          command: check.command,
+          assertion,
+        },
+  );
   return {
     rangeKey: hash({ identity, target }),
     identity,
@@ -127,7 +146,9 @@ export function makeFinding(
       ...(check.cwd ? { cwd: check.cwd } : {}),
     },
     assertion,
-    test,
+    ...(test ? { test } : {}),
+    ...(cause ? { cause } : {}),
+    ...(diagnostic ? { diagnostic } : {}),
     baseline: null,
     head: evidence,
     reason,

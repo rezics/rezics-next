@@ -1152,7 +1152,53 @@ records. Missing source history is `unknown`; an empty counter is not inferred f
 are task outcomes, not changed-line volume. Worker diff churn is labeled separately and is not presented as delivered
 product work.
 
-Decision: Current waiting-state ages use one report-local task/attempt cohort projection with indexed latest-transition lookups by sequence; the report stays uncached and lifecycle ownership stays unchanged.
+Decision: one `efficiency_report_deliveries` row is the immutable observation and report for a UTC bucket. The first
+capture stores report bytes/hash, product-line additions, pinned `dev` revision, half-open commit-date window, filter
+version, a separate revision-delta backfill count, attribution, rolling total and private-duty alerts atomically. A retry returns those bytes; a different metric
+or source revision reports `conflicting` and records the first competing attribution against the original report ref
+without rewriting the observation. Product-line totals use only stored measured
+observations, so a two-hour total is unknown when either bucket is missing or unknown. Newly visible older commits are
+reported as backfill from the prior captured source revision and excluded from measured throughput. Late integration events appear
+in their integration bucket and never revise measured throughput. Reads use the bucket primary key and at
+most the preceding bucket. The original 2,979 and 4,266 values and 7,245 observed sum are retained here as unassigned
+history: no permitted original delivery source provided exact UTC labels or provenance, so no bucket is fabricated
+and 10,232 is not used.
+
+The private duty keeps its existing hourly sleep boundary, inbox alarm, and Telegram sender. After the source is
+promoted, the controller replaces the existing `.temp/goal/watch/hourly-report.sh` bridge in place at its ordinary
+post-send boundary. Remove its `lines()` helper and the `n=$(lines ...)` / `n2=$(lines ...)` calls. Keep its current
+`run`, `stop`, `ready`, allowance, and non-product alarm collection, then replace message construction and the direct
+Telegram send with this native call. Remove the old two-hour `$n2 < 20000` alarm; the native capture adds it only when
+both stored observations are measured:
+
+```bash
+duty_context=$(jq -cn \
+  --arg label "$label" \
+  --argjson runningTasks "$run" \
+  --argjson stoppedTasks "$stop" \
+  --arg readyBriefs "$ready" \
+  --arg allowance "codex $a%, codex-1 $b% $burn" \
+  --arg alarms "$alarms" \
+  '{label:$label,runningTasks:$runningTasks,stoppedTasks:$stoppedTasks,readyBriefs:$readyBriefs,allowance:$allowance,alarms:($alarms|split("\\n")|map(select(length>0)|sub("^• ";"")))}')
+duty=$(printf '%s\n' "$duty_context" | bun tools/goal/scripts/efficiency-report.ts \
+  --send --scheduled --private-duty --json --bucket "$h1")
+msg=$(jq -r '.report' <<<"$duty")
+delivery=$(jq -r '.delivery.disposition' <<<"$duty")
+printf 'hourly report delivery: %s\n' "$delivery" >> "$(dirname "$0")/hourly-report.log"
+if [ "$(jq '.alerts | length' <<<"$duty")" -gt 0 ]; then
+  if ! bun tools/goal/scripts/supermanager-watch.ts --db "$PWD/.temp/goal/goal.sqlite" \
+    --emit --source hourly-report --summary "$msg" >> "$(dirname "$0")/hourly-report.log" 2>&1; then
+    bun .temp/goal/telegram.ts text "Monitoring failure: the hourly alert could not reach the supermanager inbox; inspect event delivery." 2>&1 | tail -1 >> "$(dirname "$0")/hourly-report.log"
+  fi
+fi
+```
+
+The native call sends the frozen report through the same `.temp/goal/telegram.ts text` path and returns its delivery
+state and report reference. Keep the inbox fallback above, remove the bridge's final direct `telegram.ts text "$msg"`
+send to avoid a second sender, and restart the one existing bridge process after its current boundary send. Do not add
+a second timer or watcher. Delivery remains first-write and at-most-once across that restart.
+
+Decision: Current waiting-state ages use one report-local task/attempt cohort projection with indexed latest-transition lookups by sequence; first capture freezes those values with the bucket and replay does not recompute them.
 
 Decision: Guard-ending buckets use each worker record's own `endedAt` through a bounded index, independently of attempt timestamps, while retaining historical classifications and exact report text.
 
@@ -3060,6 +3106,25 @@ does not rerun them at the previous head or bisect integrated prefixes. Each fai
 and head with its assertions. Failures are batched into one urgent repair per owning Goal. Infrastructure and unknown
 results remain visible but never hold progress, and every completed round advances dev-verified to its captured
 head. Findings and round summaries use the bounded dev_verifier_findings and dev_verifier_runs stores.
+
+### Verifier diagnostics and owner routing
+
+Verifier evidence keeps executable argv and cwd as command metadata. Only named test operands from argv, test-runner
+output or a single-file check closure become test findings; environment assignments and command text never become a
+test filename. TypeScript paths and line locations are parsed before normalization, using the active compiler
+workspace from command output and the check's real workspace cwd.
+
+Compiler, product runtime, transport and resource cleanup causes remain separate findings over the original command
+evidence. Rsync byte totals are transport telemetry; Expected/Received assertion lines remain product evidence. Cleanup
+or transport diagnostics do not replace a compiler result, and a current-head finding retains the original captured
+revision, argv, cwd and raw output.
+
+Automatic compiler routing requires a concrete repository source operand that is unchanged between the captured
+revision and current dev and matches an active owner's declared paths. The check task id can only break a tie between
+active owners that already match that source; closure overlap and recency do not establish ownership. Changed source,
+unresolved locations, missing active owners and unresolved ties stay visible as triage findings with their command and
+raw evidence. Concrete compiler failures go to their active owner's manager. Named test assertions retain automatic
+urgent repair routing, including the established Goal owner for an integrated test source when no active owner matches.
 
 Decision: dev-verifier-storage.ts owns bounded check evidence, one summary record per round and findings; the verifier advances the round head regardless of pass, failure or unknown results.
 

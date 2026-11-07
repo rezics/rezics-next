@@ -298,6 +298,21 @@ export type PriorityGrant = {
 };
 export type IntegrationPlan = { taskId: string; attempt: number; base: string; commit: string; commits: string[] };
 export type DevVerifierResult = 'pass' | 'fail' | 'infrastructure';
+export type DevVerifierCause = 'compiler' | 'product-runtime' | 'transport' | 'cleanup';
+export type DevVerifierCommand = { argv: string[]; cwd?: string };
+export type DevVerifierDiagnosticLocation = {
+  file: string;
+  line?: number;
+  column?: number;
+  workspace?: string;
+  resolved: boolean;
+};
+export type DevVerifierDiagnostic = {
+  cause: DevVerifierCause;
+  message: string;
+  code?: string;
+  location?: DevVerifierDiagnosticLocation;
+};
 export type DevVerifierEvidence = {
   commit: string;
   command: string[];
@@ -339,6 +354,8 @@ export type DevVerifierFinding = {
   check: { command: string[]; closure: string[]; taskId?: string; cwd?: string };
   assertion: string;
   test?: string;
+  cause?: DevVerifierCause;
+  diagnostic?: DevVerifierDiagnostic;
   baseline: DevVerifierEvidence | null;
   head: DevVerifierEvidence | null;
   reason: string;
