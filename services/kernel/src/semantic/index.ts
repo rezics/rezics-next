@@ -149,6 +149,15 @@ export type {
 export { publicFilterSource, recordPrivacyReduction } from './public-filter-source.ts';
 export type { PrivacyReductionHead, PrivacyReductionObservation } from './public-filter-source-contract.ts';
 export type { RelatedSubjectSummary, SubjectSummary, SummaryReaderDependencies } from './summaries.ts';
+export {
+  createSubjectReadingApplication,
+  type SubjectReadingApplication,
+  type SubjectReadingPageAnswer,
+  type SubjectReadingPageRequest,
+  type SubjectReadingPageResult,
+  type SubjectReadingPorts,
+  type SubjectReadingRuntime,
+} from './subject-reading-application.ts';
 
 export type * from './identity-scope-types.ts';
 export {

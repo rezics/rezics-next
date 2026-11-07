@@ -2,7 +2,7 @@ import provenance from './scope-leaf-selection-provenance.sql';
 import type { Source } from '@rezics/definitions/bulk';
 import type { Pool, PoolClient } from 'pg';
 import type { CommandTransaction } from '../command/command.ts';
-import type { ContentImportedFieldGroup } from './contract/domain-ports.ts';
+import type { ContentImportedFieldGroup, ContentQueryClient } from './contract/domain-ports.ts';
 import { importedTupleRouteOf } from './adapters/imported-route.ts';
 import { readFences, type SourceFence, type SourceFenceTuple } from '../content/source-fences.ts';
 import { discardConnection, withConnection } from '../database/pool.ts';
@@ -43,6 +43,14 @@ export type SourceFencePlan = {
 
 export function fenceKey(tuple: Pick<SourceFenceTuple, 'route' | 'source' | 'external_id' | 'field_group'>): string {
   return JSON.stringify([tuple.route, tuple.source, tuple.external_id, tuple.field_group]);
+}
+
+/** Subject summary cover custody uses the exact same Content fence reader as other Semantic consumers. */
+export function readCurrentSourceFences(
+  client: ContentQueryClient,
+  tuples: readonly SourceFenceTuple[],
+): Promise<readonly SourceFence[]> {
+  return readFences(client as unknown as Pick<PoolClient, 'query'>, tuples);
 }
 
 export function sourceTuple(routeKey: Uint8Array, source: Source): SourceFenceTuple {

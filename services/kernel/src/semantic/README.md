@@ -6,6 +6,14 @@ implementation. Native reduction executes the identical SQL and serialized-bind 
 retention can compose the original complete cost without loading reduction execution. Existing publication,
 currentness and terminal fencing remain authoritative.
 
+Decision: Native Subject detail, related summaries, current documents and covers, and correction advice execute through
+one injected `SubjectReadingApplication`; HTTP keeps parsing, cache/ETag headers and one-hop redirect mapping, while
+native adapters supply current Content and release/context reads. Request-local detail and summary Access preparation is
+passed as a `SubjectReadingAuthorizationPort`; selected synopsis and Character document reads use Content's public
+adapter capability. Nested reads use the same application instance and retain their existing Access, evidence,
+deadline, bounds, disclosure and redirect behavior. `subject.ts`, `summaries.ts` and `viewer-actions.ts` remain
+compatibility facades for installed callers.
+
 This module owns subject facts and their item projections, partition paging, and immutable definition releases with editorial activation history.
 
 ## Semantic label policy

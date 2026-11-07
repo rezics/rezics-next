@@ -24,6 +24,8 @@ import { installIdentitySourceConsumerRuntime } from './identity-source-consumer
 import { installIdentityRatingRepairProducer } from './identity-rating-repair.ts';
 import { composeSemanticContext } from './semantic-context.ts';
 import { installIdentityAdapterRuntime } from '../semantic/identity-adapter-runtime.ts';
+import { createSubjectReadingApplication } from '../semantic/index.ts';
+import { createNativeSubjectReadingPort } from '../semantic/adapters/index.ts';
 
 type SemanticCompositionContext = {
   readonly env: Readonly<Record<string, string | undefined>>;
@@ -77,6 +79,11 @@ export function composeSemanticAdapters(): void {
   installIdentityRatingRepairProducer();
   installRatingVoteSemantic();
   installIdentityAdapterRuntime();
+}
+
+/** One request-independent reading application for the ordinary Kernel. */
+export function composeSubjectReadingApplication() {
+  return createSubjectReadingApplication(createNativeSubjectReadingPort());
 }
 
 /** Ordinary process composition: identity participants plus Rating review and Content lifecycle adapters. */

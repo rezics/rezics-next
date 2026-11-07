@@ -9,6 +9,8 @@ Content owns boards, threads, posts, immutable documents, media state and public
 The supported `document-public.ts` entry owns `PublicDocumentView`, `publicDocument` and the strict public schema shared
 by the native Document route and Semantic's Character preview. `document-routes.ts` retains the route compatibility
 exports; GET and DELETE behavior, document authority, disclosure and erasure remain in their existing owners.
+`adapters/subject-document.ts` exposes the current native document read through the public adapter index for Semantic's
+injected Subject reading port; it retains Content's disclosure, deadline, body and source-fence behavior.
 
 ## Native moderation directory
 
