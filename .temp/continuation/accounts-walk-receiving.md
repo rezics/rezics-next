@@ -6,6 +6,20 @@ kind: claim
 
 # Retained Accounts walk receiving
 
+## Latest receiving and check scope correction
+
+Received Library producer88e80e5817d89f02353b0389b29e08fdd60b90cf as f81392a78f7c57eb3926df7c49f048e2d74f56ef. The actual root boundary now includes shell consumers and routes through the existing Library adapter. This is source receiving; the ordinary nineteen-path walk must establish any runtime recovery. Keep every prior accepted reference and folded requirement below, additionally accepting:
+
+- .temp/goal/content/library-shell-integrated-receiving-20261107.md
+- .temp/goal/content/accounts-auth-fixture-deadline-repair-20261107.md
+- .temp/goal/backlog/accounts/20261107-auth-fixture-catalogue-lifetime-recovery.md
+- .temp/owner-decisions/61022.md
+
+First safe receiving check1f167175-fa37-4ecd-bc36-4e374f1784ed, submitted2026-11-07T12:39:27.740Z, tested2296cc7e0daa31d0ee67847060b53f32197b6eaa on host b; exit1. Full retained log: .temp/check-logs/1f167175-fa37-4ecd-bc36-4e374f1784ed.log. Individual test observation UTC is unretained. Journey6/6, custody14/14 and wrapper4/4 passed; Web workspace typing71.47s/batch77.49s passed. Auth27pass/3fail/1error: first fresh catalogue setup300027.62ms after native-imports ready, mounted composition300013.90ms, local content reset5007.15ms. Compiler-database docker removal returned status null with no stderr; no final fixture resource settlement is claimed. Existing Auth catalogue/lifetime owner receives the exact current frontier in accounts-auth-fixture-startup.md.
+
+The six-file startup/runner selection started shared Vite before each file and reached no assertions: each readiness deadline expired around150000ms without a Vite ready line, after message generation completed. That trace does not establish a Library rendering failure. Decision: list the exact fixture-owning unit files in commandNeedsSharedDevServer, retaining shared startup for page/unknown/mixed selections. One regression covers the concrete failing selection, app/root/absolute paths and a mixed page selection; all original assertions stay. The new source is committed before another ordinary stack starts. No timeout increase, screenshot or extra stack handle.
+
+
 This is receiving work on the sole existing walk. All nineteen original personas and native/API, current-authority, replay, lifecycle, independent publication and growth outcomes remain. No duplicate implementation writer or stack is requested. The four archived briefs below are folded into this continuation in full; their claim metadata is historical and does not dispatch new claims.
 
 ## Latest check and startup receive
