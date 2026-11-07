@@ -399,38 +399,66 @@ type ContinuationView = {
   expiresAt: string;
   allowlist: ContinuationEntry[];
 };
+type AccountOperationKey = { operationKey?: string };
 export type AccountOperation =
-  | { kind: 'rename'; accountId: string; handle: string; expectedHandle: string | null; authorization: string }
-  | { kind: 'organization'; handle: string; authorization: string }
-  | { kind: 'revoke'; accountId: string }
-  | {
+  | ({
+      kind: 'rename';
+      accountId: string;
+      handle: string;
+      expectedHandle: string | null;
+      authorization: string;
+    } & AccountOperationKey)
+  | ({ kind: 'organization'; handle: string; authorization: string } & AccountOperationKey)
+  | ({ kind: 'revoke'; accountId: string; authorization?: string } & AccountOperationKey)
+  | ({
       kind: 'membership';
       organizationId: string;
       memberAccountId: string;
       role: 'owner' | 'member' | null;
       reservationId?: string;
       authorization: string;
-    }
-  | {
+    } & AccountOperationKey)
+  | ({
       kind: 'automated';
       registrationId: string;
       operatorAccountId: string;
       authorization: string;
       handle?: string;
-      operationKey?: string;
-    }
-  | {
+    } & AccountOperationKey)
+  | ({
       kind: 'transfer';
       previous: WorkflowResponsibility;
       expectedVersion: string;
       operatorAccountId: string;
       authorization: string;
-    }
-  | { kind: 'delete'; accountId: string; responsibility?: WorkflowResponsibility; authorization: string }
-  | { kind: 'fence-operator'; accountId: string; authorization: string }
-  | { kind: 'consent'; accountId: string; clientId: string; scopes: string[]; authorization: string }
-  | { kind: 'client-reduction'; clientId: string; scopes: string[]; firstParty: boolean; authorization: string }
-  | { kind: 'opening'; operatorAccountId: string; subjectAccountId: string; authorization: string };
+    } & AccountOperationKey)
+  | ({
+      kind: 'delete';
+      accountId: string;
+      responsibility?: WorkflowResponsibility;
+      authorization: string;
+    } & AccountOperationKey)
+  | ({ kind: 'fence-operator'; accountId: string; authorization: string } & AccountOperationKey)
+  | ({
+      kind: 'consent';
+      accountId: string;
+      clientId: string;
+      scopes: string[];
+      authorization: string;
+    } & AccountOperationKey)
+  | ({
+      kind: 'client-reduction';
+      clientId: string;
+      scopes: string[];
+      firstParty: boolean;
+      authorization: string;
+    } & AccountOperationKey)
+  | ({
+      kind: 'opening';
+      operatorAccountId: string;
+      subjectAccountId: string;
+      authorization: string;
+    } & AccountOperationKey);
 
 export interface AccountWorkflowPorts<Context = WorkflowContext> {
   registrationTarget(key: string): string;

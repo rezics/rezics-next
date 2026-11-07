@@ -1,6 +1,6 @@
 import { expect, test } from 'bun:test';
 import { DBOS } from '@dbos-inc/dbos-sdk';
-import { issuer, nativeFixture, password, scopes } from './support/erasure-native.ts';
+import { attachOperatingOpening, issuer, nativeFixture, password, scopes } from './support/erasure-native.ts';
 import { AUTH_SYSTEM_SCHEMA } from '../src/maintenance.ts';
 import { Pool } from 'pg';
 import { testDatabase } from '../scripts/database.ts';
@@ -151,11 +151,13 @@ test('existing deletion caller drains real Auth stores before user deletion; def
     const actingSession = (
       await f.pool.query<{ id: string }>('SELECT id FROM session WHERE "userId"=$1', [survivor.accountId])
     ).rows[0]!.id;
-    await f.pool.query(
-      `INSERT INTO auth_session_opening (session_id,subject_account_id,acting_human_id,operator_account_id,receipt_id)
-      VALUES ($1,$2,$3,$3,'operating-human')`,
-      [actingSession, survivor.accountId, owner],
-    );
+    await attachOperatingOpening(f.pool, {
+      sessionId: actingSession,
+      subjectAccountId: survivor.accountId,
+      actingHumanId: owner,
+      operatorAccountId: owner,
+      receiptId: 'operating-human',
+    });
     const staged = await f.host.service.internal.stageCredentialEffect({
       key: 'stalled-password',
       subjectAccountId: owner,
@@ -533,7 +535,7 @@ test('an absent native user with operating evidence retains original applicabili
     expect(before.after_key).toBe('');
     await pool.end();
     pool = new Pool({ connectionString: fixture.url });
-    for (let page = 0; page < 100; page++) {
+    for (let page = 0; page < 400; page++) {
       const result = await nativeErasurePage(pool, id);
       if (result.state === 'consent') break;
       expect(result.state).toBe('more');
