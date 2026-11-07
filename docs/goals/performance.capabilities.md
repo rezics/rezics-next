@@ -32,6 +32,17 @@ nothing; it becomes frozen with its executable acceptance. Existing frozen tests
 every applicable cell and exact scenario execution, zero skips/todos, real native Access, production HTTP/default
 workers where relevant, and recorded revision evidence.
 
+Decision: pin the 17 first-public journey path IDs in one focused walk-source test; add no extra stories. Native,
+browser and growth evidence is the sole Goal walk
+`bun services/auth/scripts/dev-stack.ts walk -- bun apps/web/scripts/first-public-journeys-walk.ts`.
+The walk records actual integrated-dev results in this file; candidate branch results cannot pass a row. Public and
+anonymous portions run now; signed-in paths stay FAIL-unreached while Content ce33 owns issuer/JWKS. Fewest tests:
+`apps/web/tests/first-public-journeys-walk.test.ts` plus the walk itself.
+
+## Current-dev first-public journeys
+
+The initial pass/fail table is written by the walk above and replaces this heading's body on each hourly run.
+
 ## composed-discovery-cost
 
 **User job:** Anonymous and Alice find light novels tagged harem with more than 1,000,000 words, and vegetarian
