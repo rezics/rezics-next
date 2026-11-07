@@ -73,9 +73,22 @@ export type AccountIdentityOriginal = Readonly<{
   redirected?: string;
 }>;
 
+export type AccessAccountAgentLink = Readonly<{
+  account: string;
+  route: number;
+  subject: string;
+  agent_id: string;
+  verified: boolean;
+  receipt_id: string | null;
+}>;
+
 /** Native composition binds mapping from semantic/agents.ts, original recovery, read snapshots, Source custody and maintenance from those public entries. */
 export type IdentitySemanticPort = {
   accountAgentId(accountId: string): string;
+  accountAgentsForSubjects(
+    client: AccessQueryClient,
+    subjects: readonly string[],
+  ): Promise<ReadonlyMap<string, AccessAccountAgentLink>>;
   readOriginalAccountAgentIdentity(
     pool: AccessPool,
     input: Readonly<{ account: string; direction: AccessIdentityReceipt['kind']; receipt: string }>,

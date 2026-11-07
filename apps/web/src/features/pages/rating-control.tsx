@@ -11,7 +11,7 @@ import {
   personalScoreWriteNotice,
   type PersonalScoreWriteCommand,
   type PersonalScoreWriteResult,
-} from '../../library/personal-score';
+} from '../../library/score-write';
 import { subjectOwnRatingQuery, subjectRatingQuery } from './subject-queries';
 import { displayRating, type RatingQuestion, type SubjectOwnRating } from './subject-ratings';
 import type { SubjectPersonalLease } from './subject-personal-reader';

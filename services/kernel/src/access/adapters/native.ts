@@ -1,7 +1,7 @@
 import type { Pool } from 'pg';
 import { checkAvatarMedia, readAvatarSummaries } from '../../content/access-capabilities.ts';
 import { applyRealmClaimApproval, lockRealmClaimApprovalSource } from '../../community/index.ts';
-import { accountAgentId } from '../../semantic/agents.ts';
+import { accountAgentId, accountAgentsForSubjects } from '../../semantic/agents.ts';
 import {
   readOriginalAccountAgentIdentity,
   verifyOriginalAccountAgentIdentity,
@@ -52,6 +52,9 @@ export function createNativeAccessPorts(
 ): AccessApplicationPorts {
   const identity: IdentitySemanticPort = {
     accountAgentId: (accountId) => accountAgentId(accountId),
+    accountAgentsForSubjects(client, subjects) {
+      return accountAgentsForSubjects(asClient(client) as Parameters<typeof accountAgentsForSubjects>[0], subjects);
+    },
     async readOriginalAccountAgentIdentity(pool, input) {
       return readOriginalAccountAgentIdentity(asPool(pool), input);
     },

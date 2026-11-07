@@ -54,6 +54,9 @@ function fakePorts(overrides: Partial<AccessApplicationPorts> = {}): AccessAppli
     },
     identity: {
       accountAgentId: (accountId) => `agent:${accountId}`,
+      async accountAgentsForSubjects() {
+        return new Map();
+      },
       async readOriginalAccountAgentIdentity() {
         return null;
       },

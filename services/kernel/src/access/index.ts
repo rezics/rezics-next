@@ -39,7 +39,6 @@ export {
   type DeletedContributionAttribution,
   type LiveContributionAttribution,
 } from './contribution-attribution.ts';
-export { readContributionAttributions } from './public-identity.ts';
 export { applyAccountAgentEffect, createAccountAgentEffect } from './account-agent-effect.ts';
 import { identityExpired, type IdentityExpiry } from './identity-expiry.ts';
 import { throwEvidenceFailure } from './evidence.ts';
