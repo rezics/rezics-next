@@ -20,6 +20,8 @@ the original bootstrap; their full-domain timeout covers those native steps. Une
 The shelf deletion race fixture takes internal action metadata from Access's public catalogue; its account deletion
 authority and native race assertions are unchanged. Every command pool receives the trusted receipt-key configuration
 before constructing its command entry points.
+The bulk no-effect fixture queries the encoded receipt key for the same account principal, command kind and
+idempotency key submitted to the command. Its original no-effect and authorized replay assertions remain unchanged.
 Source-funded Core commands open one serializable transaction inside Core's cleanup scope. Binding the live query
 surface requires no preceding transaction; a second BEGIN would conflict with the native ledger's retained COMMIT
 and ROLLBACK funding. The existing public-output capture and deferred-COMMIT rollback assertions retain this contract.
