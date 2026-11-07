@@ -9,6 +9,8 @@ completeness, opaque proofs, authoritative time, floors/fences, command admissio
 is a distinct consumer. The first core and Collection directory residual use are integrated; this remaining-profile migration
 adds no baseline allowance and no old/new allow-OR. Source compatibility is no native acceptance.
 
+Decision: Collection directory, list, order-bounds and current reads consume Library `AuthorizationCapability.specializeCollectionList` and the Access-funded `collectionAuthorizationPreparation` bound. Access adapters keep `specializePolicy`, residual lowering, native permission SQL and the inverse membership limit; Library does not import private policy-core/filter or reconstruct permission statements. Wire shapes, independent deny operands and final authority before disclosure stay the same.
+
 [Accounts](../../../../docs/accounts.md) owns product identity, delegation, consent and preferences;
 [Deletion](../../../../docs/deletion.md) owns erasure/restore policy;
 [Auth](../../../auth/README.md#ordinary-native-host-assembly) owns trusted composition.
@@ -119,11 +121,12 @@ checks and per-ID answers. Pure evaluation adds no query, clock read, scan, per-
 `packages/access/README.md` documents the public API and limits.
 The admitted import edges are `services/kernel/src/access/policy-core.ts -> @rezics/access` (public entry),
 `services/kernel/src/access/policy-core.ts -> ./resource-roles.ts` (existing native role association),
-`services/kernel/src/access/permission.ts -> ./policy-core.ts`, `services/kernel/src/library/collection-reads.ts ->
-../access/policy-core.ts`, `services/kernel/src/library/collection-reads.ts -> ./collection-list-policy.ts`,
-`services/kernel/src/library/collection-list-policy.ts -> @rezics/access` (public entry),
-`services/kernel/src/library/collection-list-policy.ts -> ../access/policy-filter.ts`, and
-`services/kernel/src/access/policy-filter.ts -> @rezics/access` (public types only).
+`services/kernel/src/access/permission.ts -> ./policy-core.ts`, `services/kernel/src/access/adapters/collection-policy.ts ->
+./policy-core.ts`, `services/kernel/src/library/collection-reads.ts -> ./collection-list-policy.ts`,
+`services/kernel/src/library/collection-list-policy.ts -> ../access/adapters/collection-policy.ts` (public entry),
+`services/kernel/src/library/collection-order-bounds.ts -> ../access/adapters/collection-policy.ts` (public entry),
+`services/kernel/src/access/policy-filter.ts -> @rezics/access` (public types only), and
+`services/kernel/src/access/policy-filter.ts -> ../library/contract/collection-policy.ts` (Library-owned filter).
 
 ## Collection directory residual
 

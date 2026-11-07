@@ -5,6 +5,11 @@ import type { CanonicalCollectionCandidate, CollectionSourceObservation, Prepare
 import type { NestedAdmissionAccount } from './membership.ts';
 import type { WorkAllowance, WorkDimensions, WorkReceipt } from './work-dimensions.ts';
 import type { ProgressOperationCatalog } from './progress-operations.ts';
+import type {
+  CollectionAuthorizationPreparation,
+  CollectionListFilter,
+  SpecializeCollectionListInput,
+} from './collection-policy.ts';
 
 export type IdentityWorkHandle = Readonly<{
   resultByteBound(key: string): number | undefined;
@@ -55,6 +60,8 @@ export interface AuthorizationCapability {
   commandAuthorization(...args: readonly unknown[]): Promise<unknown>;
   deadlineClient<T extends object>(client: T, deadline: number): T;
   within<T>(deadline: number, work: () => Promise<T>): Promise<T>;
+  specializeCollectionList(input: SpecializeCollectionListInput): CollectionListFilter;
+  collectionAuthorizationPreparation(): CollectionAuthorizationPreparation;
 }
 
 /** Original and terminal identity/disclosure. Semantic implements this at composition. */

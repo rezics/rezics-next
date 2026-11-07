@@ -7,7 +7,10 @@ import {
 } from '../../src/composition/library.ts';
 import { createLibraryApplications } from '../../src/library/application/index.ts';
 import type { LibraryCapabilities } from '../../src/library/contract/capabilities.ts';
-import { emptyProgressOperationCatalog } from '../../src/library/contract/index.ts';
+import {
+  emptyProgressOperationCatalog,
+  EMPTY_COLLECTION_AUTHORIZATION_PREPARATION,
+} from '../../src/library/contract/index.ts';
 import type { LibraryActor } from '../../src/library/contract/actors.ts';
 import { preparedSource, type CollectionSourceObservation } from '../../src/library/contract/source.ts';
 import {
@@ -93,6 +96,12 @@ function fakeCapabilities(
       },
       deadlineClient: (client) => client,
       within: (_deadline, work) => work(),
+      specializeCollectionList() {
+        return { status: 'unavailable' as const };
+      },
+      collectionAuthorizationPreparation() {
+        return EMPTY_COLLECTION_AUTHORIZATION_PREPARATION;
+      },
     },
     identityDisclosure: {
       async readRelease() {

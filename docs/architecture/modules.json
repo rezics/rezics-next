@@ -231,6 +231,7 @@
         "services/kernel/src/access/public-identity.ts",
         "services/kernel/src/access/adapters/index.ts",
         "services/kernel/src/access/adapters/account-statements.ts",
+        "services/kernel/src/access/adapters/collection-policy.ts",
         "services/kernel/src/access/agent-verification-identity.ts",
         "services/kernel/src/access/agent-verification-identity-literals.ts",
         "services/kernel/src/access/agent-verification.ts",

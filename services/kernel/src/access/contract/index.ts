@@ -87,3 +87,20 @@ export type {
   AccessAccountStatementDeclaration,
   AccessAccountStatementDescriptor,
 } from './account-statements.ts';
+export {
+  COLLECTION_AUTHORIZATION_ACTOR_MEMBERS,
+  COLLECTION_AUTHORIZATION_GRANT_ROLES,
+  COLLECTION_PUBLIC_FLOOR_OPERAND,
+  COLLECTION_READ_ACTION,
+  COLLECTION_RESOURCE_TYPE,
+  COLLECTION_UPDATE_ACTION,
+} from './collection-policy.ts';
+export type {
+  CollectionListPolicyFacts,
+  CollectionListPolicyMode,
+  CollectionListPolicyOutcome,
+  CollectionListPolicyRequest,
+  CollectionListPolicySubjectFacts,
+  CollectionListResourceOperand,
+  CollectionPolicyPort,
+} from './collection-policy.ts';
