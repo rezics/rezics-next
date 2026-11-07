@@ -24,6 +24,9 @@ Journey navigation waits for DOMContentLoaded and hydration, not network idle. P
 confirms from a capture-phase host-input flag as well as published snapshot and host text, so
 Escape can confirm before Tiptap paints. Revision and erase Idempotency-Key values stay RFC 8941
 quoted strings; focused post-editing cases parse that header.
+The existing editing journey captures bounded client errors and failed request paths before hydration, includes the
+owned server's diagnostics on failure, and closes a context when opening fails before its caller can own it. This
+preserves the original hydration and editing assertions while preventing timed-out opens from accumulating browsers.
 
 ## New-thread destination and community rules
 

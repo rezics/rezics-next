@@ -598,9 +598,37 @@ async function open(
     },
   ]);
   const page = await context.newPage();
-  await page.goto(`${origin}${path}`, { waitUntil: 'domcontentloaded', timeout: 120_000 });
-  await hydrated(page);
-  return { page, access: accessTokens.at(-1) };
+  const failures: string[] = [];
+  const recordFailure = (message: string) => {
+    // Preserve the first client failure even if the host subsequently reaches its memory limit.
+    if (failures.length === 20) return;
+    const bounded = message.slice(0, 2_000);
+    failures.push(bounded);
+    console.error(`[post-editing browser] ${bounded}`);
+  };
+  page.on('pageerror', (error) => recordFailure(error.stack ?? error.message));
+  page.on('console', (message) => {
+    if (message.type() === 'error') recordFailure(message.text());
+  });
+  page.on('requestfailed', (request) => {
+    const address = new URL(request.url());
+    recordFailure(`${request.method()} ${address.origin}${address.pathname}: ${request.failure()?.errorText}`);
+  });
+  try {
+    await page.goto(`${origin}${path}`, { waitUntil: 'domcontentloaded', timeout: 120_000 });
+    await hydrated(page);
+    return { page, access: accessTokens.at(-1) };
+  } catch (error) {
+    try {
+      throw new Error(
+        `Post-editing page did not hydrate.\nClient failures:\n${failures.join('\n')}\nServer:\n${server?.diagnostics()}`,
+        { cause: error },
+      );
+    } finally {
+      // The caller only receives a context after hydration, so it cannot clean up this failed open.
+      await context.close();
+    }
+  }
 }
 async function hydrated(page: Page) {
   await page.locator('html[data-hydrated]').waitFor({ state: 'attached', timeout: 120_000 });
