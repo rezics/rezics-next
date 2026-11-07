@@ -121,6 +121,29 @@ test('candidate listing keeps the kernel status when the Treaty reply has no Res
   }
 });
 
+test('fence retries HTTP 503 then returns current evidence', async () => {
+  let requests = 0;
+  const transport = createImportTransport({
+    origin: 'https://api.importer.test',
+    tokenProvider: async () => 'test-token',
+    sleep: async () => {},
+    fetch: (async () => {
+      requests++;
+      if (requests === 1)
+        return Response.json(
+          { type: 'https://rezics.com/problems/overloaded', title: 'Overloaded', status: 503, retryable: true },
+          { status: 503 },
+        );
+      return Response.json({ fenced: false, securityRevision: null });
+    }) as typeof fetch,
+  });
+  await expect(transport.fence({ source: 'bangumi', externalId: '1', fieldGroup: 'facts' })).resolves.toEqual({
+    fenced: false,
+    securityRevision: null,
+  });
+  expect(requests).toBe(2);
+});
+
 test('a thrown fetch keeps the remaining request method and path', async () => {
   const transport = createImportTransport({
     origin: 'https://api.importer.test',

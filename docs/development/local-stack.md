@@ -307,7 +307,8 @@ cannot replace a seeded product walk. Walk `start` waits for the walk signal rat
 
 Decision: an admitted stack gates on native JWKS and Kernel only. Its Auth pages and Web start after the journey's seed,
 through `startSeededFrontends`, and are killed on exit; the Home and VN-realm walks use it, and a stack's Vite never
-compiles while the seed runs.
+compiles while the seed runs. Seed and account-key calls use native Auth as transport and keep CSRF Origin plus assertion
+audience on the issuer; `REZICS_LOCAL_STACK_ISSUER_ORIGIN` supplies that issuer when `AUTH_ORIGIN` is the native port.
 
 Decision: generate Paraglide modules before Vite starts, wait for useful `/en` HTML, and report the observed probe,
 fetch or child-exit cause. Only an actual ECONNREFUSED is hydration startup; a closed-listener probe does not invent

@@ -139,6 +139,21 @@ function stackOrigins() {
   };
 }
 
+/** Account-key calls use native Auth as transport and keep CSRF Origin plus audience on the issuer. */
+export function walkSeedChildEnv(
+  stack: { native: string; issuer: string; kernel: string },
+  persona: Record<string, string> = {},
+  env: NodeJS.ProcessEnv = process.env,
+): NodeJS.ProcessEnv {
+  return {
+    ...env,
+    ...persona,
+    AUTH_ORIGIN: stack.native,
+    REZICS_LOCAL_STACK_ISSUER_ORIGIN: stack.issuer,
+    KERNEL_ORIGIN: stack.kernel,
+  };
+}
+
 function isRecord(value: unknown): value is Record<string, unknown> {
   return value !== null && typeof value === 'object' && !Array.isArray(value);
 }
@@ -410,7 +425,9 @@ type SeedEnv = {
   accountKeyPath: string;
   client: string;
   auth: string;
+  issuer: string;
   kernel: string;
+  file: Record<string, string>;
 };
 
 async function loadPersona(): Promise<SeedEnv> {
@@ -421,8 +438,10 @@ async function loadPersona(): Promise<SeedEnv> {
     account: seedEnv.REZICS_DEV_PERSONA_ACCOUNT!,
     accountKeyPath: seedEnv.REZICS_DEV_PERSONA_ACCOUNT_KEY!,
     client: seedEnv.REZICS_DEV_PERSONA_CLIENT!,
-    auth: origins.issuer,
+    auth: origins.native,
+    issuer: origins.issuer,
     kernel: origins.kernel,
+    file: seedEnv,
   };
 }
 
@@ -432,6 +451,7 @@ async function grantOwner(persona: SeedEnv) {
     account: persona.account,
     client: persona.client,
     authOrigin: persona.auth,
+    issuerOrigin: persona.issuer,
     scopes: [...IMPORTER_SCOPES, 'subject:read', 'context:accept', 'context:adopt', 'access:grant'],
   });
   await grantOrdinaryOwnerActions({
@@ -585,6 +605,7 @@ async function runOperator(id: 'I01' | 'I02' | 'I03' | 'I04', persona: SeedEnv):
       account: persona.account,
       client: persona.client,
       authOrigin: persona.auth,
+      issuerOrigin: persona.issuer,
       scopes: [...spec.scopes, 'context:accept', 'context:adopt'],
     }),
     onDeniedResponse: async ({ method, path, response }) => {
@@ -836,8 +857,6 @@ export async function runImportsPublicJourney(): Promise<WalkInventory> {
   await retireWalkJournals();
   await mkdir(evidenceRoot, { recursive: true, mode: 0o700 });
   const origins = stackOrigins();
-  const pages = await startWalkStackActions(['pages'], [`${origins.issuer}/.well-known/openid-configuration`]);
-  try {
   const rows: WalkRowResult[] = [];
   let persona: SeedEnv | undefined;
   let sharedStartup: string | null = null;
@@ -871,12 +890,11 @@ export async function runImportsPublicJourney(): Promise<WalkInventory> {
   let report: CrossMediaSeedReport | undefined;
   if (!seedCause) {
     try {
-      await command('seed', [
-        'bun',
-        '--env-file=.temp/local-stack/seed.env',
-        'scripts/datasets/cross-media-seed.ts',
-        '--dev',
-      ]);
+      await command(
+        'seed',
+        ['bun', 'scripts/datasets/cross-media-seed.ts', '--dev'],
+        walkSeedChildEnv(origins, persona?.file ?? {}),
+      );
       const loaded = await loadSeedReport();
       report = loaded.report;
       publication = loaded.publication;
@@ -973,22 +991,30 @@ export async function runImportsPublicJourney(): Promise<WalkInventory> {
       }),
     );
 
-    const browser = await walkRow('I05', async () => {
-      await runBangumiJourney({ skipPersona: true, skipSeed: true, startFrontends: 'web' });
-      return { browser: 'passing' };
-    });
-    for (const id of ['I05', 'I11', 'I12'] as const) {
-      const index = rows.findIndex((row) => row.id === id);
-      if (index < 0) continue;
-      const current = rows[index]!;
-      rows[index] = {
-        ...current,
-        elapsedMs: current.elapsedMs + browser.elapsedMs,
-        evidence: { ...current.evidence, browser: browser.result },
-        ...(browser.result === 'failing' && current.result === 'passing'
-          ? { result: 'failing' as const, cause: browser.cause }
-          : {}),
-      };
+    const frontends = await startWalkStackActions(
+      ['pages', 'web'],
+      [`${origins.issuer}/.well-known/openid-configuration`, origins.web],
+    );
+    try {
+      const browser = await walkRow('I05', async () => {
+        await runBangumiJourney({ skipPersona: true, skipSeed: true, startFrontends: false });
+        return { browser: 'passing' };
+      });
+      for (const id of ['I05', 'I11', 'I12'] as const) {
+        const index = rows.findIndex((row) => row.id === id);
+        if (index < 0) continue;
+        const current = rows[index]!;
+        rows[index] = {
+          ...current,
+          elapsedMs: current.elapsedMs + browser.elapsedMs,
+          evidence: { ...current.evidence, browser: browser.result },
+          ...(browser.result === 'failing' && current.result === 'passing'
+            ? { result: 'failing' as const, cause: browser.cause }
+            : {}),
+        };
+      }
+    } finally {
+      await frontends.stop();
     }
   }
 
@@ -1016,9 +1042,6 @@ export async function runImportsPublicJourney(): Promise<WalkInventory> {
   await writeWalkInventoryArtifacts(inventory);
   console.log(walkInventorySummary(inventory));
   return inventory;
-  } finally {
-    await pages.stop();
-  }
 }
 
 if (import.meta.main) {

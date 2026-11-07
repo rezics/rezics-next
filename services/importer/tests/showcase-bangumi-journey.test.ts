@@ -32,6 +32,7 @@ import {
   walkInventorySummary,
   walkRepairBrief,
   walkRepairSkipReason,
+  walkSeedChildEnv,
   type WalkInventory,
   type WalkRowResult,
 } from '../src/imports-public-journey.ts';
@@ -320,6 +321,25 @@ test('the walk inventory replaces each pending capabilities row and names the sl
       cause: 'same-handle continuation lost the independent property',
     }),
   ).toContain('same-handle continuation');
+});
+
+test('walk seed env uses native Auth transport and keeps the issuer for CSRF audience', async () => {
+  const stack = {
+    web: 'http://127.0.0.1:20060',
+    issuer: 'http://127.0.0.1:20061',
+    native: 'http://127.0.0.1:20062',
+    kernel: 'http://127.0.0.1:20063',
+  };
+  const env = walkSeedChildEnv(stack, { REZICS_DEV_PERSONA_ACCOUNT: 'persona' }, { PATH: '/bin' });
+  expect(env.AUTH_ORIGIN).toBe(stack.native);
+  expect(env.REZICS_LOCAL_STACK_ISSUER_ORIGIN).toBe(stack.issuer);
+  expect(env.KERNEL_ORIGIN).toBe(stack.kernel);
+  expect(env.REZICS_DEV_PERSONA_ACCOUNT).toBe('persona');
+  const source = await readFile(join(import.meta.dir, '../src/imports-public-journey.ts'), 'utf8');
+  const seedAt = source.indexOf('scripts/datasets/cross-media-seed.ts');
+  const pagesAt = source.indexOf("startWalkStackActions(\n      ['pages', 'web']");
+  expect(seedAt).toBeGreaterThan(0);
+  expect(pagesAt).toBeGreaterThan(seedAt);
 });
 
 test('ordinary CLI admits loopback HTTP Auth with the kernel test origin', async () => {

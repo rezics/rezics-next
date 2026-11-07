@@ -409,7 +409,7 @@ export function createImportTransport(options: ImportTransportOptions) {
   const pollAttempts = setting(options.pollAttempts, 5, 5, 1);
   const pollDelayMs = setting(options.pollDelayMs, 1000, 1000);
   ensure((pollAttempts - 1) * pollDelayMs <= 4000);
-  setting(options.maxAttempts, 3, 5, 1);
+  const maxAttempts = setting(options.maxAttempts, 3, 5, 1);
   const deadlineMs = setting(options.deadlineMs, MAX_IMPORT_DEADLINE_MS, MAX_IMPORT_DEADLINE_MS, 1);
   const maxWaitMs = setting(options.maxWaitMs, MAX_IMPORT_WAIT_MS, MAX_IMPORT_WAIT_MS);
   const maxTotalWaitMs = setting(options.maxTotalWaitMs, MAX_IMPORT_TOTAL_WAIT_MS, MAX_IMPORT_TOTAL_WAIT_MS);
@@ -706,22 +706,41 @@ export function createImportTransport(options: ImportTransportOptions) {
         tuple.externalId.length <= 255 &&
         FIELD_GROUPS.includes(tuple.fieldGroup),
     );
-    const reply = await exchange(
-      () => client.sourceFences.$check.get({ query: tuple, ...fetchOptions(signal) }),
-      200,
-      signal,
-    );
-    const value = reply.body as { fenced?: unknown; securityRevision?: unknown } | null;
-    ensure(
-      value !== null &&
-        typeof value === 'object' &&
-        Object.keys(value).length === 2 &&
-        typeof value.fenced === 'boolean' &&
-        (value.fenced
-          ? typeof value.securityRevision === 'string' && value.securityRevision.length > 0
-          : value.securityRevision === null),
-    );
-    return value as { fenced: boolean; securityRevision: string | null };
+    const deadline = now() + deadlineMs;
+    let scheduledWait = 0;
+    for (let attempt = 0; ; attempt++) {
+      try {
+        const reply = await exchange(
+          () => client.sourceFences.$check.get({ query: tuple, ...fetchOptions(signal) }),
+          200,
+          signal,
+        );
+        const value = reply.body as { fenced?: unknown; securityRevision?: unknown } | null;
+        ensure(
+          value !== null &&
+            typeof value === 'object' &&
+            Object.keys(value).length === 2 &&
+            typeof value.fenced === 'boolean' &&
+            (value.fenced
+              ? typeof value.securityRevision === 'string' && value.securityRevision.length > 0
+              : value.securityRevision === null),
+        );
+        return value as { fenced: boolean; securityRevision: string | null };
+      } catch (error) {
+        const delay = 100 * 2 ** attempt;
+        if (
+          !(error instanceof ImportTransportError) ||
+          (error.status !== 503 && error.status !== 429) ||
+          attempt + 1 >= maxAttempts ||
+          delay > maxWaitMs ||
+          delay > maxTotalWaitMs - scheduledWait ||
+          now() + delay >= deadline
+        )
+          throw error;
+        scheduledWait += delay;
+        await wait(delay, signal, options.sleep);
+      }
+    }
   }
   async function postMedia(body: MediaImportRequest, key: string, signal?: AbortSignal) {
     const header = idempotencyKey(key);
