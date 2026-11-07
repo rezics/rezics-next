@@ -1346,9 +1346,7 @@ async function walk(command: string[]): Promise<number> {
           await slot.release();
           slot = undefined;
           if (blocked.size < walkStackLimit(process.env)) {
-            console.error(
-              `walk: slot ${occupiedSlot} published port is already allocated; admitting another`,
-            );
+            console.error(`walk: slot ${occupiedSlot} published port is already allocated; admitting another`);
             continue;
           }
         }

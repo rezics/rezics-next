@@ -416,7 +416,9 @@ test('token acquisition reports its own safe Auth failure beside the Import oper
 });
 
 test('local TypeError diagnostics keep a bounded message and drop query tokens', () => {
-  expect(formatSeedError(new TypeError('Dump download failed with HTTP 403: https://dl.vndb.org/dump/vndb-db.zst'))).toBe(
+  expect(
+    formatSeedError(new TypeError('Dump download failed with HTTP 403: https://dl.vndb.org/dump/vndb-db.zst')),
+  ).toBe(
     'Cross-media seed failed (TypeError): Dump download failed with HTTP 403: https://dl.vndb.org/dump/vndb-db.zst',
   );
   expect(formatSeedError(new TypeError('secret token=abc?x=1'))).toBe('Cross-media seed failed (TypeError)');
