@@ -9,25 +9,23 @@ import {
   realmHomeResponse,
 } from './realm-home.ts';
 import {
-  RealmHomeBoardPageSchema,
-  RealmHomeBoardQuerySchema,
   realmHomeBoardResponse,
   ContentNotFoundError,
   exactRealmPresentationImage,
   approveRealmClaim,
   normalizeHandle,
   deadlineClient,
-  problemSchema,
   ResourceAccessWriteDeniedError,
-  IDEMPOTENCY_HEADER,
   idempotencyKeyOf,
-  SESSION_HEADER,
   accessCheck,
   AuthenticationError,
   MediaUnavailableError,
-  SitemapQuerySchema,
   readCommunityPresentations,
 } from './domain-ports.ts';
+import { RealmHomeBoardPageSchema, RealmHomeBoardQuerySchema } from '../content/realm-board-home.ts';
+import { SitemapQuerySchema } from '../content/schemas.ts';
+import { problemSchema } from '../http/problem-schema.ts';
+import { IDEMPOTENCY_HEADER, SESSION_HEADER } from '../http/request.ts';
 import { banReviewPageSchema, banReviewPageQuerySchema } from './ban-review-page-schemas.ts';
 import { listRealmDiscovery } from './discovery.ts';
 import { requestRealmClaim } from './realm-continuity.ts';

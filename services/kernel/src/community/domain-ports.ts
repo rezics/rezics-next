@@ -63,21 +63,15 @@ export type CommunityDomainPorts = Readonly<{
   readBoardPageActionEvidence: typeof import('../content/reads.ts').readBoardPageActionEvidence;
   readExactPublishedRules: typeof import('../content/reads.ts').readExactPublishedRules;
   createRealmHomeBoardObservationReader: typeof import('../content/realm-board-home.ts').createRealmHomeBoardObservationReader;
-  RealmHomeBoardPageSchema: typeof import('../content/realm-board-home.ts').RealmHomeBoardPageSchema;
   realmHomeBoardResponse: typeof import('../content/realm-board-home.ts').realmHomeBoardResponse;
-  RealmHomeBoardQuerySchema: typeof import('../content/realm-board-home.ts').RealmHomeBoardQuerySchema;
   exactRealmPresentationImage: typeof import('../content/realm-media.ts').exactRealmPresentationImage;
   readRealmPresentationImages: typeof import('../content/realm-media.ts').readRealmPresentationImages;
   claimRealmPresentationMedia: typeof import('../content/realm-media.ts').claimRealmPresentationMedia;
   RealmMediaImageSchema: typeof import('../content/realm-media.ts').RealmPresentationImageSchema;
-  SitemapQuerySchema: typeof import('../content/schemas.ts').SitemapQuerySchema;
   ContentIdSchema: typeof import('../content/schemas.ts').ContentIdSchema;
   ContentRealmImageSchema: typeof import('../content/schemas.ts').RealmPresentationImageSchema;
   sitemapPageSchema: typeof import('../content/schemas.ts').sitemapPageSchema;
-  problemSchema: typeof import('../http/problem.ts').problemSchema;
-  IDEMPOTENCY_HEADER: typeof import('../http/request.ts').IDEMPOTENCY_HEADER;
   idempotencyKeyOf: typeof import('../http/request.ts').idempotencyKeyOf;
-  SESSION_HEADER: typeof import('../http/request.ts').SESSION_HEADER;
   createFollowCommands: typeof import('../library/follows.ts').createFollowCommands;
   accessCheck: typeof import('../request/access.ts').accessCheck;
   accessCommandAuthorization: typeof import('../request/access.ts').accessCommandAuthorization;
@@ -153,21 +147,15 @@ export let readExactPublishedRulesForAuthoring: CommunityDomainPorts['readExactP
 export let readBoardPageActionEvidence: CommunityDomainPorts['readBoardPageActionEvidence'];
 export let readExactPublishedRules: CommunityDomainPorts['readExactPublishedRules'];
 export let createRealmHomeBoardObservationReader: CommunityDomainPorts['createRealmHomeBoardObservationReader'];
-export let RealmHomeBoardPageSchema: CommunityDomainPorts['RealmHomeBoardPageSchema'];
 export let realmHomeBoardResponse: CommunityDomainPorts['realmHomeBoardResponse'];
-export let RealmHomeBoardQuerySchema: CommunityDomainPorts['RealmHomeBoardQuerySchema'];
 export let exactRealmPresentationImage: CommunityDomainPorts['exactRealmPresentationImage'];
 export let readRealmPresentationImages: CommunityDomainPorts['readRealmPresentationImages'];
 export let claimRealmPresentationMedia: CommunityDomainPorts['claimRealmPresentationMedia'];
 export let RealmMediaImageSchema: CommunityDomainPorts['RealmMediaImageSchema'];
-export let SitemapQuerySchema: CommunityDomainPorts['SitemapQuerySchema'];
 export let ContentIdSchema: CommunityDomainPorts['ContentIdSchema'];
 export let ContentRealmImageSchema: CommunityDomainPorts['ContentRealmImageSchema'];
 export let sitemapPageSchema: CommunityDomainPorts['sitemapPageSchema'];
-export let problemSchema: CommunityDomainPorts['problemSchema'];
-export let IDEMPOTENCY_HEADER: CommunityDomainPorts['IDEMPOTENCY_HEADER'];
 export let idempotencyKeyOf: CommunityDomainPorts['idempotencyKeyOf'];
-export let SESSION_HEADER: CommunityDomainPorts['SESSION_HEADER'];
 export let createFollowCommands: CommunityDomainPorts['createFollowCommands'];
 export let accessCheck: CommunityDomainPorts['accessCheck'];
 export let accessCommandAuthorization: CommunityDomainPorts['accessCommandAuthorization'];
@@ -245,21 +233,15 @@ export function bindCommunityDomainPorts(ports: CommunityDomainPorts): void {
     readBoardPageActionEvidence,
     readExactPublishedRules,
     createRealmHomeBoardObservationReader,
-    RealmHomeBoardPageSchema,
     realmHomeBoardResponse,
-    RealmHomeBoardQuerySchema,
     exactRealmPresentationImage,
     readRealmPresentationImages,
     claimRealmPresentationMedia,
     RealmMediaImageSchema,
-    SitemapQuerySchema,
     ContentIdSchema,
     ContentRealmImageSchema,
     sitemapPageSchema,
-    problemSchema,
-    IDEMPOTENCY_HEADER,
     idempotencyKeyOf,
-    SESSION_HEADER,
     createFollowCommands,
     accessCheck,
     accessCommandAuthorization,

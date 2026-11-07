@@ -6,7 +6,6 @@ import {
   deadlineClient,
   accessCheck,
   createRealmHomeBoardObservationReader,
-  RealmHomeBoardPageSchema,
   realmHomeBoardResponse,
 } from './domain-ports.ts';
 import { AccessUnavailableError, requireAccessDeadline } from '../access/unavailable.ts';
@@ -20,7 +19,7 @@ import {
   communityPresentationResponse,
   type CommunityPresentation,
 } from '../content/community-presentation-model.ts';
-import type { RealmHomeBoardPage } from '../content/realm-board-home.ts';
+import { RealmHomeBoardPageSchema, type RealmHomeBoardPage } from '../content/realm-board-home.ts';
 import { readContainerBinding, revalidateContainerBinding } from './container-lifecycle.ts';
 import { readRealm } from './realm-read.ts';
 import { type RealmDependencies, type RealmView } from './realm.ts';

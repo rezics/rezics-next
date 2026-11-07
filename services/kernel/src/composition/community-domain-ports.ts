@@ -34,7 +34,6 @@ import * as nativeCommerceCatalogue from '../commerce/catalogue.ts';
 import * as nativeContentCommunityPresentationRules from '../content/community-presentation-rules.ts';
 import * as nativeContentReads from '../content/reads.ts';
 import * as nativeAccessLifecycle from '../access/lifecycle.ts';
-import * as nativeHttpProblem from '../http/problem.ts';
 import * as nativeHttpRequest from '../http/request.ts';
 import * as nativeContentMedia from '../content/media.ts';
 import * as nativeContentSchemas from '../content/schemas.ts';
@@ -110,9 +109,7 @@ export function composeCommunityDomainPorts(): void {
     PLATFORM_RESOURCE: nativeAccessBootstrapGovernance.PLATFORM_RESOURCE,
     authorizeResource: nativeAccessResourceAuthorization.resourceAuthorization,
     createRealmHomeBoardObservationReader: nativeContentRealmBoardHome.createRealmHomeBoardObservationReader,
-    RealmHomeBoardPageSchema: nativeContentRealmBoardHome.RealmHomeBoardPageSchema,
     realmHomeBoardResponse: nativeContentRealmBoardHome.realmHomeBoardResponse,
-    RealmHomeBoardQuerySchema: nativeContentRealmBoardHome.RealmHomeBoardQuerySchema,
     platformRootAnchor: nativeCommerceCatalogue.platformRootAnchor,
     prepareRealmRulesSelection: nativeContentCommunityPresentationRules.prepareRealmRulesSelection,
     rulesKey: nativeContentCommunityPresentationRules.rulesKey,
@@ -121,12 +118,8 @@ export function composeCommunityDomainPorts(): void {
     readBoardPageActionEvidence: nativeContentReads.readBoardPageActionEvidence,
     readExactPublishedRules: nativeContentReads.readExactPublishedRules,
     normalizeHandle: nativeAccessLifecycle.normalizeHandle,
-    problemSchema: nativeHttpProblem.problemSchema,
-    IDEMPOTENCY_HEADER: nativeHttpRequest.IDEMPOTENCY_HEADER,
     idempotencyKeyOf: nativeHttpRequest.idempotencyKeyOf,
-    SESSION_HEADER: nativeHttpRequest.SESSION_HEADER,
     MediaUnavailableError: nativeContentMedia.MediaUnavailableError,
-    SitemapQuerySchema: nativeContentSchemas.SitemapQuerySchema,
     ContentIdSchema: nativeContentSchemas.ContentIdSchema,
     ContentRealmImageSchema: nativeContentSchemas.RealmPresentationImageSchema,
     sitemapPageSchema: nativeContentSchemas.sitemapPageSchema,
