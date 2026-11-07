@@ -1744,8 +1744,8 @@ export function readWorkerCheckHistory(id, physical, cwd) { return read(cwd, 'hi
     git(directory.path, ['reset', '--hard', commit]);
     git(directory.path, ['branch', 'fixture-integration', commit]);
     const source = { root: directory.path, integrationRoot: directory.path, integrationBranch: 'fixture-integration' };
-    expect(validateHistoricalProofReaderSource(source)).toBe(commit);
-    expect(() => validateHistoricalProofReaderSource({ ...source, root: `${directory.path}/.` })).toThrow(
+    expect(await validateHistoricalProofReaderSource(source)).toBe(commit);
+    await expect(validateHistoricalProofReaderSource({ ...source, root: `${directory.path}/.` })).rejects.toThrow(
       'canonical Git',
     );
     git(directory.path, ['update-ref', 'refs/heads/fixture-integration', PROOF_PRODUCER_COMMIT]);

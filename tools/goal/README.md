@@ -987,6 +987,8 @@ filesystem component sizes and systemd microsecond conversions are fixed represe
 | `policy.service.logLines`                       | `50`       | Systemd service diagnostics and readiness: log lines.                                                                          |
 | `policy.service.socketTimeoutMs`                | `1000`     | Systemd service diagnostics and readiness: socket timeout ms.                                                                  |
 | `policy.service.diagnosticCharacters`           | `4096`     | Systemd service diagnostics and readiness: diagnostic characters.                                                              |
+| `policy.service.stallMs`                        | `10000`    | Event-loop stall the host logs, with the named operation that caused it (ms).                                                  |
+| `policy.service.stallLogEveryMs`                | `60000`    | Minimum interval between host event-loop stall logs (ms).                                                                      |
 | `policy.worker.blockerFingerprintCharacters`    | `300`      | Normalized tool-blocker fingerprint: blocker fingerprint characters.                                                           |
 | `policy.backlog.expiredTaskExamples`            | `5`        | Expired task notification examples: expired task examples.                                                                     |
 
@@ -2955,12 +2957,18 @@ readiness and starts its heartbeats right after binding its socket, before manag
 event loop every half watchdog interval. A crash, kill or stopped event loop therefore causes systemd to restart it, and
 no scheduler pass can delay a heartbeat. `KillMode=process` limits host termination to the main PID; worker scopes in
 `rezics-workers.slice` beneath `rezics.slice` and the merge train survive.
+Decision: keep the 60-second watchdog. Once the host loop no longer blocks, that interval is stricter than a
+five-minute return and is the adopted unit contract.
 Decision: scheduled host steps do not run git, Docker, worktree walks or full task loads on the event loop. Each runs as
 a background command or yields between bounded batches; a removal fallback on the rare not-a-working-tree path and the
 256 KiB measurement read remain synchronous: the reaper runs Docker asynchronously and reads running attempts
 from the current-attempt index; attempt-resource sweeps project only terminal task ids and worktrees from that index
 and run Docker asynchronously; the daily audit reads unsettled tasks and removal reads finished tasks through the
 state index; the worktree and CPU samples yield between entries; removal commands run asynchronously.
+Decision: manager recovery, retry intents, landing recovery and verifier starts use no synchronous child process on the
+host loop. Git, tmux and worker launch run through `runHostProcess`; start, retry, released and first-start work run in
+`_host-start` children. The host logs an event-loop stall over ten seconds with the operation that caused it, at most
+once a minute.
 Decision: `manager-host.ts` owns the socket server, registry, shutdown and scheduling; `integration-cli.ts` keeps outbound RPC and CLI dispatch and re-exports `integration-runtime.ts` types.
 An ordinary CLI can ask systemd to start an absent host; it cannot spawn a detached fallback. The verifier runs independently in `rezics-goal-verifier.service`.
 

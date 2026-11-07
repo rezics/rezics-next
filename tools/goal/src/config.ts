@@ -3,7 +3,7 @@ import { existsSync, mkdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import defaults from '../defaults.json';
 import { defaultPolicy } from './policy.ts';
-import { commitPublishedOn, dispatchArchitectureRepairs } from './architecture-repair.ts';
+import { dispatchArchitectureRepairs, openArchitectureCandidates, publishedOnRef } from './architecture-repair.ts';
 import type { Settings } from './types.ts';
 import { configurationProblem, reportedConfigurationProblem } from './local-settings.ts';
 import {
@@ -58,6 +58,7 @@ export { LANDING_CHECK_ENVIRONMENT } from './config-check-runtime.ts';
 import { captureLoadedCodeVersion, codeVersion } from './runtime-version.ts';
 import { completionChecker } from './completion.ts';
 import { TermspacesWindows } from './windows.ts';
+import { offloadHostTask, runHostOperation } from './service.ts';
 import type { IntegrationRuntime } from './integration-cli.ts';
 import type { ManagerServices, ManagerSpec } from './managers.ts';
 import {
@@ -90,6 +91,8 @@ export type Runtime = IntegrationRuntime & {
 };
 export type RuntimeOptions = {
   trainMode?: 'detached' | 'inline';
+  /** True in `_manager-host`: worker starts run in children so the host event loop stays free. */
+  hostLoop?: boolean;
   settings?: Settings;
   db?: Database;
   tasks?: WorkerTasks;
@@ -184,6 +187,13 @@ export function createRuntime(options: RuntimeOptions = {}): Runtime {
     undefined,
     undefined,
     () => !codeRetirement.retiring,
+    options.hostLoop
+      ? (taskId, kind) =>
+          offloadHostTask(taskId, kind, {
+            cli: join(settings.mainCheckout, 'tools/goal/src/cli.ts'),
+            cwd: settings.mainCheckout,
+          })
+      : undefined,
   );
   const repairRouting = createRuntimeRepairRouting({ tasks, store, job, inbox, settings });
   const handOff = () =>
@@ -495,20 +505,27 @@ export function createRuntime(options: RuntimeOptions = {}): Runtime {
       );
     },
     dispatchArchitectureRepairs() {
-      dispatchArchitectureRepairs({
-        db,
-        // The host tick runs every minute: read only unsettled tasks, as the daily audit does.
-        unsettled: store.tasksInStates(['ready', 'held', 'running', 'landing', 'verified']),
-        published: commitPublishedOn(settings.mainCheckout, `refs/heads/${settings.integrationBranch}`),
-        dispatch: (briefFile) => tasks.dispatch(briefFile, null, true, 'verifier'),
-        notify: (managerId, taskId, summary) => inbox.deliver({ managerId, taskId, kind: 'instruction', summary }),
-        reportFailure: (summary) =>
-          inbox.deliver({ managerId: settings.integration.supermanager, kind: 'environment', summary }),
-        stateDirectory: settings.stateDirectory,
-      });
+      void runHostOperation('architecture repairs', async () => {
+        const published = await publishedOnRef(
+          settings.mainCheckout,
+          `refs/heads/${settings.integrationBranch}`,
+          openArchitectureCandidates(db),
+        );
+        dispatchArchitectureRepairs({
+          db,
+          // The host tick runs every minute: read only unsettled tasks, as the daily audit does.
+          unsettled: store.tasksInStates(['ready', 'held', 'running', 'landing', 'verified']),
+          published,
+          dispatch: (briefFile) => tasks.dispatch(briefFile, null, true, 'verifier'),
+          notify: (managerId, taskId, summary) => inbox.deliver({ managerId, taskId, kind: 'instruction', summary }),
+          reportFailure: (summary) =>
+            inbox.deliver({ managerId: settings.integration.supermanager, kind: 'environment', summary }),
+          stateDirectory: settings.stateDirectory,
+        });
+      }).catch((error) => console.error(error));
     },
     recoverOrphans: async (options?: { adoptRunning?: boolean }) => {
-      await job.recoverOrphans(options);
+      await runHostOperation('orphan recovery', () => job.recoverOrphans(options));
       await afterSettle();
     },
     async drain() {

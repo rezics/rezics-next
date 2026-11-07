@@ -3,6 +3,8 @@ import { spawnSync } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
+import { defaultPolicy } from './policy.ts';
+import { runHostProcess } from './process.ts';
 import type { Task } from './types.ts';
 
 /** Task states after which a repair no longer blocks its Goal. */
@@ -61,6 +63,36 @@ export function commitPublishedOn(cwd: string, ref: string): (commit: string) =>
     }
     return published;
   };
+}
+
+/** Open architecture-repair candidates, so the host can resolve ancestry off its event loop. */
+export function openArchitectureCandidates(db: Database): string[] {
+  ensureArchitectureRepairs(db);
+  return (
+    db.query('SELECT DISTINCT candidate FROM architecture_violations WHERE resolved_at IS NULL').all() as {
+      candidate: string;
+    }[]
+  ).map((row) => row.candidate);
+}
+
+/** Async ancestry check for the manager host: git merge-base must not use spawnSync on that loop. */
+export async function publishedOnRef(
+  cwd: string,
+  ref: string,
+  commits: readonly string[],
+  policy = defaultPolicy.merge,
+): Promise<(commit: string) => boolean> {
+  const published = new Set<string>();
+  await Promise.all(
+    [...new Set(commits)].map(async (commit) => {
+      const result = await runHostProcess('git', ['merge-base', '--is-ancestor', commit, ref], {
+        cwd,
+        timeoutMs: policy.commandTimeoutMs,
+      });
+      if (result.code === 0) published.add(commit);
+    }),
+  );
+  return (commit) => published.has(commit);
 }
 
 /** Whether any recorded boundary violation is still open, so the next check must audit the complete graph. */

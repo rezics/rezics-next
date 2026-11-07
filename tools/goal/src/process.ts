@@ -530,3 +530,81 @@ export async function stopProcessesUnder(
   await Promise.all(remaining.map((member) => waitForProcess(member, undefined, undefined, policy)));
   return found.length;
 }
+
+/** Kind of worker launch the manager host offloads onto a child so its own event loop stays free. */
+export type HostStartKind = 'start' | 'retry' | 'released' | 'first';
+export const HOST_START_KINDS = ['start', 'retry', 'released', 'first'] as const;
+export type HostProcessResult = {
+  code: number | null;
+  signal: NodeJS.Signals | null;
+  stdout: string;
+  stderr: string;
+  stdoutBuffer: Buffer;
+};
+export type HostProcessOptions = {
+  cwd?: string;
+  env?: NodeJS.ProcessEnv;
+  timeoutMs?: number;
+  maxBuffer?: number;
+};
+
+/**
+ * Run a child without blocking the caller's event loop. The manager host uses this for git, tmux, systemd-notify and
+ * the start/retry children: a spawnSync sleep of the same length would miss the watchdog ping.
+ */
+export function runHostProcess(
+  command: string,
+  args: readonly string[] = [],
+  options: HostProcessOptions = {},
+): Promise<HostProcessResult> {
+  return new Promise((resolve, reject) => {
+    const child = spawn(command, [...args], {
+      cwd: options.cwd,
+      env: options.env,
+      stdio: ['ignore', 'pipe', 'pipe'],
+    });
+    const chunks: Buffer[] = [];
+    const errors: Buffer[] = [];
+    const max = options.maxBuffer ?? 8 * 1024 * 1024;
+    let stdoutBytes = 0;
+    let stderrBytes = 0;
+    child.stdout?.on('data', (chunk: Buffer) => {
+      if (stdoutBytes >= max) return;
+      const slice = chunk.byteLength + stdoutBytes > max ? chunk.subarray(0, max - stdoutBytes) : chunk;
+      chunks.push(slice);
+      stdoutBytes += slice.byteLength;
+    });
+    child.stderr?.on('data', (chunk: Buffer) => {
+      if (stderrBytes >= max) return;
+      const slice = chunk.byteLength + stderrBytes > max ? chunk.subarray(0, max - stderrBytes) : chunk;
+      errors.push(slice);
+      stderrBytes += slice.byteLength;
+    });
+    let settled = false;
+    const timer =
+      options.timeoutMs !== undefined
+        ? setTimeout(() => {
+            child.kill('SIGTERM');
+          }, options.timeoutMs)
+        : undefined;
+    const finish = (error?: Error, result?: HostProcessResult) => {
+      if (settled) return;
+      settled = true;
+      if (timer) clearTimeout(timer);
+      if (error) reject(error);
+      else resolve(result!);
+    };
+    child.once('error', (error) => finish(error));
+    child.once('close', (code, signal) => {
+      const stdoutBuffer = Buffer.concat(chunks);
+      const stderrBuffer = Buffer.concat(errors);
+      finish(undefined, {
+        code,
+        signal,
+        stdout: stdoutBuffer.toString('utf8'),
+        stderr: stderrBuffer.toString('utf8'),
+        stdoutBuffer,
+      });
+    });
+  });
+}
