@@ -6,6 +6,20 @@ kind: claim
 
 # Retained Accounts walk receiving
 
+## Final changed-workspace typing and custody disposition
+
+Check f5d5d36d-1918-4eb8-a66c-74835e8ff7ff tested source b03080178076580b26d594e2878528956276f566; submission UTC2026-11-07T13:59:35.061Z, host b, exit0. Exact command: `bun scripts/worker-check.ts -- bun run --cwd apps/web typecheck`. Web workspace102.27s, batch111.42s; full safe log .temp/check-logs/f5d5d36d-1918-4eb8-a66c-74835e8ff7ff.log. This is the final check after the last source edit. Only evidence documentation changes follow it. No additional fixture/native/browser/growth pass is inferred.
+
+Authenticated custody-1420 decision is satisfied by the retained paid implementation in both admitted custody files: runOwnedCommand observes Bun child.exited and returns its nonzero status or interrupted143 after bounded close; ownBunProcess derives completion only from that actual promise. Both adopted-child reapers exclude the spawned leader; tracked descendants additionally retain PID/start-time and actual-parent identity. Custody never guesses leader status from a zombie, reaps the Bun leader or suppresses an ECHILD rejection. The concrete earlier ECHILD defect was competing leader reaping. Existing exit7 remains7 after settled close, and original cancellation143/group-absence assertions remain. Latest executed custody14/14 and wrapper4/4 are on pre-receive21217b source in b45c3404; all those custody files are unchanged by the subsequently typed producer receives. This source review adds no new runtime observation or test.
+
+The named88e80 Library producer was already received through f81392a78f;64fd's paid Recent Search composition is retained in the now typed source. No further code edit is needed for the repeated custody request. Original producer and dev verification obligations remain with the same owners. Under the final-typing decision the following landing selections are transferred to dev verification rather than rerun unchanged here:
+
+- `bun run --cwd services/kernel check test/boot/kernel-boots.test.ts`
+- `bun apps/web/scripts/focused.ts --private-network -- bun test scripts/check-placement.test.ts scripts/focused.test.ts scripts/messages-ready.test.ts scripts/storybook-dev.test.ts tests/accounts-goal-journeys.test.ts tests/network-isolation.test.ts tests/root-application-shell.test.tsx tests/server-custody.test.ts tests/web-host-placement.test.ts tests/with-dev-server.test.ts`
+- `bun test scripts/test-lanes.test.ts services/auth/scripts/dev-stack.test.ts services/auth/test/dev-stack-config.test.ts services/auth/test/dev-stack.test.ts`
+
+Retain prior additional placement-custody/focused-runner assertions too. Original nineteen outcomes, Auth30, first native lifetime cleanup, browser and growth remain required on the integrated candidate. Latest actual round remains12/19 API-stage only, slowest failure J13 32579ms, pages=[]; last authoritative next hourly due2026-11-07T14:20:56Z is an elapsed handoff frontier, not a new watcher or worker launch. No stack/process/container was started by this final reconciliation.
+
 ## Final receiving and worker scope
 
 Decision: preserve all original nineteen outcomes and paid custody/driver work; receive named producer source, record every prior check failure with its existing causal owner, and finish with changed-workspace Web typing only. Original ten-file focused fixtures, Auth thirty cases, native/API/browser/growth and promoted-commit closure remain dev verification on this retained handle. This follows the authenticated final-typing decision; earlier broader worker-proof instructions below are historical. No new test is added for a producer receive, no assertion is dropped, and no money path changes.
