@@ -46,7 +46,37 @@ Orientation before this reporting change: [scope](../scope.md), this manifest,
 [Presentation](../../services/kernel/src/presentation/README.md) and
 [Composition](../../packages/composition/README.md).
 
-### Current dev census
+### Receiving status
+
+The creator/provisioning owner has not delivered the repair commit and integrated dev revision required for another
+ordinary admission. The previous census below remains the last observed six-path result; there is no new product
+journey measurement. The malformed Auth label is corrected to
+`ea7dc5fe59d4f5723b3ab59cd6d08aba98687eb1`; startup remains
+`d87dc7a9045e7fe65110db6bedfa4decb4b2ce5d`. Both are ancestors of this walk. Neither proves host recovery.
+
+The authorized proposal-retry range `6ccd350eae..849c1bee2ca6de9f17be5a8f346bbb47e3b85695` is integrated into this
+walk branch. Its four source commits retain command deadlines, actor/receipt identity, sealed importer journals and
+safe diagnostics. Native proposal, separate authorized adoption and independent current-fact readback remain
+required through the cross-media seed. Content's source-fence repair remains independent. The Importer receiving
+command `bun test services/importer/tests/reviewed-catalogue-preflight.test.ts services/importer/tests/reviewed-catalogue-proposal-diagnostics.test.ts`
+passed all 11 tests; fixture replay does not establish native convergence or growth.
+
+The focused command
+`bun scripts/worker-check.ts -- bun apps/web/scripts/focused.ts --private-network -- bun test tests/search-first-public-walk-report.test.ts tests/character-local-selection.test.tsx tests/with-dev-server.test.ts`
+failed on host b before the selected tests. Each file's shared server failed `/en` readiness without a Vite ready
+line at approximately 150 seconds; the complete command took 497.418 seconds. Exact first diagnostic:
+`dev server ready failed for /en; elapsed 150000.257595 ms; last error: Error: phase timed out; last error: Error: Vite ready line has not been printed`.
+Owned evidence is `.temp/goal/checks/worker-check-d515db4b-47a0-4458-82fe-3c5c22149460-2026-11-07T09-44-25.762Z-3b064030.log`.
+Performance receives this separable shared-startup failure. None of these timings is product journey time, and none
+of the three test files has a pass from this command.
+
+The landing command `bun test scripts/docs-check.test.ts services/auth/test/dev-stack-config.test.ts` returned
+42 pass and 1 fail. The existing mounted scope-composition case could not load a SQL statement because
+`services/kernel/src/content/community-presentation-rules.sql: Cannot connect to the database at 127.0.0.1:20064/rezics (DATABASE_URL in .env): error connecting to server: Connection refused (os error 111); .reylo has no analysis of this statement, so run reylo generate where the database can be reached.`
+The exact issuer-origin, native-port refusal, isolated-stack and native-JWKS-transport assertions passed. The SQL
+failure is a configured-stack dependency, not a changed JWKS assertion. No unrelated stack is started to hide it.
+
+### Last observed dev census
 
 Observed walk revision: `93eb7908d8e983998d4b280ea275b131aaa444a1` (origin/dev `b94d47ff56` including startup
 `d87dc7a9045e7fe65110db6bedfa4decb4b2ce5d`, Identity `e815ae17`, Imports `a67c30ad`/`681d1fa8`, Performance shell
@@ -97,8 +127,8 @@ Cloudflare beta.v.12 / React 6.2.1 candidates do not establish this permission f
 
 ### Scope of this census and handoff
 
-The result is **0/6 passing**. Slowest failing path is Mixed Search setup at **0.887 s**; first failing step is walk
-slot admission `EACCES` (setup, not a journey). Every row joins [Walk-stack directory repair](#walk-stack-directory-repair). Authenticated
+The last observed result is **0/6 passing**. No failing product journey has a measured duration. The longest setup
+attempt took **0.887 s**; its first failing step was walk slot admission `EACCES` before any journey began. Every row joins [Walk-stack directory repair](#walk-stack-directory-repair). Authenticated
 Search and publication stay blocked on that directory. Identity `e815ae17`, Imports `a67c30ad`/`681d1fa8`, Performance
 shell `95e3fac9` and startup `d87dc7a9` are ancestors of this product and were not exercised through journeys. Identity
 isolation stays a separate successor. Original disclosure, identity/default-worker and mounted return proofs stay.
