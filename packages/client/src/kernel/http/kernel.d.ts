@@ -44,7 +44,7 @@ import { recentSearchRoutes } from '../search/recent-searches.ts';
 import { searchRoutes } from '../search/http/routes.ts';
 import type { SearchService as SearchRuntime } from '../search/service-scope.ts';
 import { definitionRoutes } from '../semantic/http/definitions.ts';
-import type { DefinitionImportRoutes } from '../semantic/definition-import.ts';
+import type { DefinitionImportRoutes } from '../semantic/index.ts';
 import { contextRoutes } from '../semantic/http/contexts.ts';
 import { bulkRoutes } from '../semantic/http/bulk.ts';
 import { sourceRecordRoutes } from '../semantic/http/source-records.ts';

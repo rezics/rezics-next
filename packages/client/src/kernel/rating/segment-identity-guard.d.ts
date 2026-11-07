@@ -30,6 +30,11 @@ export type RatingIdentityProducer = Readonly<{
         transactionId: string;
     }>): Promise<boolean>;
 }>;
+export declare const UNAVAILABLE_IDENTITY_REPAIR_REASON = "semantic-exact-currentness-and-held-repair-obligation-unavailable";
+export declare const IDENTITY_REPAIR_HANDOFF_PENDING_REASON = "semantic-repair-obligation-handoff-pending";
+export declare const IDENTITY_REPAIR_LATER_VOTE_REASON = "identity-repair-later-vote";
+export declare const IDENTITY_REPAIR_LATER_CHANGE_REASON = "identity-repair-later-change";
+export declare const IDENTITY_REPAIR_CROSS_HOME_REASON = "semantic-cross-home-repair-preparing";
 export declare const unavailableRatingIdentityProducer: RatingIdentityProducer;
 /** Composition installs the Semantic producer. Rating never constructs that factory. */
 export declare function bindRatingIdentityProducer(producer: RatingIdentityProducer): void;
