@@ -49,14 +49,16 @@ Decision: Root, Kernel and Auth classify placed host statuses 75, 124, 130 and 1
 retaining the raw host status and `phase=placement` in diagnostics. Other placed statuses and ordinary compiler
 statuses remain native. Exceptions at placement, database setup and executable launch are infrastructure failures,
 not compiler diagnostics. Direct wrappers report `placement`, `database-setup`, `compiler` or `database-cleanup`;
-Kernel output publication has its own phase. Kernel construct and the Kernel, Auth and Web typecheck CLIs call
-`process.exit` with the completed status, matching root typecheck, so leftover mapper work cannot replace it after
-return. Ordinary cleanup still runs after compiler failure, verifies container
+Kernel output publication has its own phase. Kernel construct and the Kernel, Auth and Web typecheck CLIs publish
+the terminal compiler status with `process.exit` after owned cleanup settles, matching root typecheck. Late mapper
+activity cannot reprice that completed result. Ordinary cleanup still runs after compiler failure, verifies container
 and volume settlement, and reports that error beside the original compiler identity without replacing a completed
 native status. Invalid external configuration continues to fail validation before any placement or database starts.
 
 The existing direct-wrapper acceptance in `scripts/typecheck-placement.test.ts` pins these cases with inert
-placement, database and compiler boundaries. Its old Auth executable-launch assertion expected a rejected promise;
+placement, database and compiler boundaries. Its admitted and Auth diagnostic subprocesses schedule leftover mapper
+work after cleanup returns and still observe native 23, including Auth throwaway settlement; a source match on
+`process.exit` does not prove that failure. Its old Auth executable-launch assertion expected a rejected promise;
 it now expects status 75 while retaining the original cleanup assertion. Placement-path units inject a refusing
 recognizer so they still relocate when the suite itself runs inside a check-host checkout. Composition fixtures that
 call `runOnCheckHost` also inject that recognizer and a fake remote so nested-candidate refusal does not fire against
@@ -71,7 +73,8 @@ placed 124/130/143 as infrastructure 75 with raw status and placement phase, hea
 and `--acceptance` keeping live root plus Auth native/browser suites. Both Web programs stay mandatory. Pin on the
 existing suites plus `scripts/check-startup.test.ts`. Fewest tests: those existing placement, compiler-database,
 check-startup and Auth config assertions already pin native 23, placed 75/124/130/143, Auth Task/DATABASE_URL,
-ordinary cleanup settlement and detached signal cleanup; add no extra suite. Typecheck repair updates Follow,
+ordinary cleanup settlement, detached signal cleanup and late mapper activity after a completed native status;
+add no extra suite. A source-regex `process.exit` assertion cannot prove that failure. Typecheck repair updates Follow,
 contribution-story, public-scope walk and Auth retirement fixtures to current contracts; those assertions stay. Ordinary compiler-database cleanup
 waits for `docker rm -f -v` then inspects the container and labelled volume gone; that error stays beside native
 0/23 and does not become 75. Root's shared-database cleanup uses the same keep-status rule, and its SIGINT/SIGTERM handlers pass `wait=false` into that removal. spawnSync removal waits
