@@ -1,6 +1,9 @@
 import { expect, test } from 'bun:test';
 import { createProgressOperationApplication } from '../../src/library/application/index.ts';
-import { emptyProgressOperationCatalog } from '../../src/library/contract/index.ts';
+import {
+  EMPTY_COLLECTION_AUTHORIZATION_PREPARATION,
+  emptyProgressOperationCatalog,
+} from '../../src/library/contract/index.ts';
 import type { LibraryActor } from '../../src/library/contract/actors.ts';
 import { createProgressOperationCatalog } from '../../src/library/adapters/progress-statements.ts';
 import { sessionCommandPlan, sessionSourceWork } from '../../src/library/session-operation-bounds.ts';
@@ -33,6 +36,12 @@ test('progress admission withholds identity disclosure after a closed deadline a
       },
       deadlineClient: (client) => client,
       within: (_deadline, work) => work(),
+      specializeCollectionList() {
+        return { status: 'unavailable' as const };
+      },
+      collectionAuthorizationPreparation() {
+        return EMPTY_COLLECTION_AUTHORIZATION_PREPARATION;
+      },
     },
     identityDisclosure: {
       async readRelease() {
