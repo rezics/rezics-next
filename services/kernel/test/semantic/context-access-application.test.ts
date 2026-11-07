@@ -29,12 +29,12 @@ function makePort(name: string, calls: string[], options: PortOptions = {}): Con
     },
     withReadTransaction: async (_pool, read) => {
       calls.push(`${name}:withReadTransaction`);
-      const client: ContextQueryClient = {
+      const client = {
         query: async (sql: string, values?: unknown[]) => {
           calls.push(`${name}:query`);
           return options.query?.(sql, values) ?? { rows: [], rowCount: 0 };
         },
-      };
+      } as unknown as ContextQueryClient;
       return read(client);
     },
     prepareReadDecisions: async () => {
