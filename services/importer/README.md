@@ -84,7 +84,7 @@ Definitions owns the released reviewed inventory as public data (`@rezics/defini
 
 Decision: `createReviewedCatalogueApplication({ vocabulary })` is the application boundary; the operator CLI constructs it directly with the released vocabulary and its supplied transport, while the compatibility facade delegates seed, binding lookup and current-read operations.
 
-Decision: a refused native batch command keeps its sealed journal bytes and idempotency key and does not ACK. Recovery for retryable contention is Kernel Core retry of that same propose until the original request deadline, actor and capabilities; an added importer retry count is not that recovery. The operator envelope reports HTTP status, public problem code, correlation, seed key, operation, partition and transaction phase, never problem JSON, titles, details or bodies.
+Decision: a refused native batch command keeps its sealed journal bytes and idempotency key and does not ACK. Recovery for retryable contention is Kernel Core retry of that same propose until the original request deadline, actor and capabilities; an added importer retry count is not that recovery. Importer `http.ts` projects the safe RFC9457 status, public problem code, correlation, operation, partition and transaction phase into its operator envelope, with the seed key; it never prints problem JSON, titles, details or bodies.
 
 Decision: fewest tests pin public-vocabulary preflight, VNDB development-status group membership from the bound inventory, composition install of vocabulary without a ledger, proposal RFC9457 envelopes without problem JSON, sealed-journal resume after retryable 503, and the operator CLI diagnostic line; native/browser/growth stay integration.
 

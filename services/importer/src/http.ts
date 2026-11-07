@@ -1,9 +1,8 @@
 import type { BatchWriteResult } from '@rezics/definitions/bulk';
 import { formatImportTransportError, ImportTransportError } from './import-client.ts';
 import type { ImportRequestDiagnostics } from './import-fetch.ts';
-import type { ReviewedCatalogueCommandKind } from './reviewed-catalogue-contract.ts';
 
-export type { ReviewedCatalogueCommandKind };
+export type ReviewedCatalogueCommandKind = 'bootstrap' | 'proposal';
 
 const PROBLEM_CODE = /^[a-z0-9_-]{1,80}$/;
 const PROBLEM_TYPE = /^https:\/\/rezics\.com\/problems\/[a-z0-9_-]{1,80}$/;
