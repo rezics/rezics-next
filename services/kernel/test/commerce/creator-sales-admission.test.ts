@@ -28,7 +28,9 @@ test('missing delegated source roles do not leave an unindexed Commerce receipt'
           ],
         };
       if (sql.includes('FROM commerce.purchase_order'))
-        return { rows: [{ buyer_account_id: buyer, creator_account_id: creator, state: 'active', authn_fenced: false }] };
+        return {
+          rows: [{ buyer_account_id: buyer, creator_account_id: creator, state: 'active', authn_fenced: false }],
+        };
       if (sql.includes('FROM commerce.creator_sale_receipt')) return { rows: [] };
       if (sql.includes('FROM editorial.write_basis'))
         return { rows: [{ principal_kind: 'account', principal_id: buyer, delegated: true }] };
@@ -37,12 +39,15 @@ test('missing delegated source roles do not leave an unindexed Commerce receipt'
     },
   };
 
-  await admitCreatorSale(client as never, {
-    id: eventId,
-    source: `urn:rezics:log:${partition}.1`,
-    sequence: '0000000000000000042',
-    type: 'com.rezics.commerce.order.updated.v1',
-  } as never);
+  await admitCreatorSale(
+    client as never,
+    {
+      id: eventId,
+      source: `urn:rezics:log:${partition}.1`,
+      sequence: '0000000000000000042',
+      type: 'com.rezics.commerce.order.updated.v1',
+    } as never,
+  );
 
   expect(statements.some((sql) => sql.includes('INSERT INTO access.live_copy_business_inventory'))).toBe(false);
   expect(statements.some((sql) => sql.includes('INSERT INTO commerce.creator_sale_receipt'))).toBe(false);

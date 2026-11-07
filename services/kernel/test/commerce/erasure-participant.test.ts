@@ -166,7 +166,10 @@ describe('native genuine-order retention', () => {
           reject(
             new Error(
               `Commerce workflow ${id} did not finish within ${WORKFLOW_WAIT_MS}ms; ` +
-                JSON.stringify({ output: worker?.output.slice(-2000) ?? '', errors: worker?.errors.slice(-2000) ?? '' }),
+                JSON.stringify({
+                  output: worker?.output.slice(-2000) ?? '',
+                  errors: worker?.errors.slice(-2000) ?? '',
+                }),
             ),
           ),
         WORKFLOW_WAIT_MS,
@@ -653,7 +656,7 @@ describe('native genuine-order retention', () => {
     ).toEqual([]);
     expect(await advanceCommerceErasure(pool, buyer.accountId)).toBe('pending');
     expect((await commerceOutcome(buyer.accountId))?.retained[0]?.resolvedAt).toBe(resolvedAt);
-    const replay = await client.enqueue(
+    await client.enqueue(
       {
         workflowName: 'commerce.eraseAccount',
         queueName: 'workflows',
@@ -662,7 +665,7 @@ describe('native genuine-order retention', () => {
       },
       unused.accountId,
     );
-    await finishWorkflow(commerceErasureWorkflowId(unused.accountId), () => replay.getResult());
+    expect((await client.getWorkflow(commerceErasureWorkflowId(unused.accountId)))?.status).toBe('SUCCESS');
     expect(await commerceOutcome(unused.accountId)).toEqual({ outcome: 'pending', retained: [] });
   }, 540_000);
 });
