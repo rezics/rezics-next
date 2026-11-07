@@ -1,3 +1,4 @@
+import { composeCommunityDomainPorts } from './community-domain-ports.ts';
 import { composeLibraryPresentation } from './library.ts';
 import { installNativeHistory } from './history.ts';
 import { composeContentReading } from './content.ts';
@@ -11,6 +12,7 @@ import { composePresentationApplication } from './presentation.ts';
  * adapters as server and worker; History composition installs its Semantic producer before use.
  */
 export function installNativeHistoryPreload(): void {
+  composeCommunityDomainPorts();
   composeAccessApplication();
   composeContentReading();
   installNativeHistory();

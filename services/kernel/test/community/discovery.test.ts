@@ -2,12 +2,12 @@ import { expect, test } from 'bun:test';
 import { Compile } from 'typebox/compile';
 import {
   decodeDiscoveryCursor,
-  discoveryDescription,
   discoveryLimit,
   discoveryWindow,
   encodeDiscoveryCursor,
   type DiscoveryCursorContext,
 } from '../../src/community/discovery.ts';
+import { discoveryDescription } from '../../src/community/contract/index.ts';
 import { discoveryQuerySchema, discoveryResponseSchema } from '../../src/community/schemas.ts';
 import { ProblemError } from '../../src/http/problem.ts';
 import { newId } from '../../src/route/route.ts';

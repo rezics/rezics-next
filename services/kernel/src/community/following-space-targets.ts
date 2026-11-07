@@ -1,13 +1,8 @@
 import type { Pool } from 'pg';
 import { currentCommandWorkAssociation } from '../command/work-context.ts';
 import type { Access, Actor } from '../request/access.ts';
-import { deadlineClient } from '../access/authenticate.ts';
-import {
-  readViewerActions,
-  type ViewerActionBindings,
-  type ViewerActionResource,
-  type ViewerActionResources,
-} from '../access/viewer-actions.ts';
+import { deadlineClient, readViewerActions } from './domain-ports.ts';
+import type { ViewerActionBindings, ViewerActionResource, ViewerActionResources } from '../access/viewer-actions.ts';
 import { withConnection } from '../database/pool.ts';
 import type {
   FollowingSpaceActions,
@@ -15,8 +10,8 @@ import type {
   FollowingSpaceProjection,
 } from '../library/following-space-contract.ts';
 import { routeOf } from '../route/route.ts';
-import { spaceViewerActionResource } from './space.ts';
-import { realmViewerActionResource } from './realm.ts';
+import { spaceViewerActionResource } from './space-read.ts';
+import { realmViewerActionResource } from './realm-read.ts';
 import { readActiveSpaceAddressClaims } from './space-address.ts';
 import followingTargets from './following-space-targets-page.sql';
 

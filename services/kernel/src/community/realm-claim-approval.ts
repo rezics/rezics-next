@@ -1,4 +1,4 @@
-import { REALM_OWNER_ROLE } from '../access/realm-ownership.ts';
+import { REALM_OWNER_ROLE } from './domain-ports.ts';
 import { resourceRoleHeld } from '../access/resource-role-held.ts';
 import {
   authoritativeTimeValue,
@@ -6,7 +6,7 @@ import {
   type CommandTransaction,
   type CurrentCommand,
 } from '../command/command.ts';
-import { ProblemError } from '../http/problem.ts';
+import { ProblemError } from '../http/problem-error.ts';
 import { partitionOf, routeOf } from '../route/route.ts';
 import lockRealm from './realm-claim-approval-realm-lock.sql';
 import lockRequest from './realm-claim-approval-lock.sql';

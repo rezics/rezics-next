@@ -1,6 +1,6 @@
-import { readCommunityPresentations } from '../content/community-presentation.ts';
+import { readCommunityPresentations } from './domain-ports.ts';
 import { communityPresentationResponse } from '../content/community-presentation-model.ts';
-import { ProblemError } from '../http/problem.ts';
+import { ProblemError } from '../http/problem-error.ts';
 import type { AccountActor } from '../request/access.ts';
 import { partitionOf, routeOf } from '../route/route.ts';
 import type { OwnRealmMembership, OwnRealmsDependencies } from './own-realms-shape.ts';

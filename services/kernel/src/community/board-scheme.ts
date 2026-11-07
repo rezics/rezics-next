@@ -1,27 +1,31 @@
 import { createHash } from 'node:crypto';
 import canonicalize from 'canonicalize';
-import { resourceAuthorization } from '../access/index.ts';
-import { deadlineClient, within } from '../access/authenticate.ts';
-import { accessCommandAttempt } from '../access/command-admission.ts';
+import {
+  resourceAuthorization,
+  deadlineClient,
+  within,
+  accessCommandAttempt,
+  permissionEvidenceDeadline,
+  subjectReadEligibility,
+  SubjectRedirectError,
+  withReadTransaction,
+  readItemTypes,
+} from './domain-ports.ts';
 import { deriveAccess } from '../access/derived-access.ts';
-import { GrantDeniedError } from '../access/grant-commands.ts';
-import { permissionEvidenceDeadline } from '../access/permission.ts';
+import { GrantDeniedError } from '../access/resource-access-errors.ts';
 import {
   authoritativeTimeValue,
   principalCommandIdentity,
   runCommand,
   type AuthoritativeTime,
 } from '../command/command.ts';
-import { ProblemError } from '../http/problem.ts';
+import { ProblemError } from '../http/problem-error.ts';
 import type { Actor } from '../request/access.ts';
 import { newId, partitionOf, routeOf } from '../route/route.ts';
-import { subjectReadEligibility } from '../semantic/eligibility.ts';
 import { readItemIdentityVersion } from '../semantic/item-identity.ts';
-import { SubjectRedirectError } from '../semantic/merges.ts';
-import { withReadTransaction } from '../semantic/read.ts';
-import { readItemTypes } from '../semantic/subject.ts';
-import { RealmConflictError, RealmInputError, type Realm, type RealmDependencies, type RealmContext } from './realm.ts';
-import { realmGovernanceAuthorization } from './realm-continuity.ts';
+import { RealmConflictError, type Realm, type RealmDependencies, type RealmContext } from './realm.ts';
+import { RealmInputError } from './contract/index.ts';
+import { realmGovernanceAuthorization } from './realm-governance.ts';
 import { realmPresentation } from './presentation.ts';
 import read from './board-scheme-read.sql';
 import append from './board-scheme-revision.sql';

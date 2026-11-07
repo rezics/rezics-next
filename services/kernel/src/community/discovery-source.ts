@@ -1,13 +1,21 @@
 import type { Pool } from 'pg';
-import { deadlineClient, within } from '../access/authenticate.ts';
+import {
+  deadlineClient,
+  within,
+  accessCheck,
+  readDiscoveryOperation,
+  readDiscoveryOutcome,
+  readDiscoverySource,
+  prepareDiscoverySourceApply,
+} from './domain-ports.ts';
 import { authoritativeTimeValue, type AuthoritativeTime } from '../command/command.ts';
 import { CommandUnavailableError } from '../access/unavailable.ts';
 import { discardConnection, withConnection } from '../database/pool.ts';
 import { readPartition } from '../partition/partition.ts';
-import { accessCheck, type Access, type AccessClient } from '../request/access.ts';
+import type { Access, AccessClient } from '../request/access.ts';
 import { partitionOf, routeOf } from '../route/route.ts';
-import { realmReadEligibility } from './realm.ts';
-import { spaceReadEligibility } from './space.ts';
+import { realmReadEligibility } from './realm-read.ts';
+import { spaceReadEligibility } from './space-read.ts';
 import read from './discovery-source-read.sql';
 
 /** Original qualification evidence only. This is not a current disclosure/fence decision. */
@@ -77,12 +85,8 @@ import {
   runCommand,
   type CommandTransaction,
 } from '../command/command.ts';
-import {
-  readDiscoveryOperation,
-  readDiscoveryOutcome,
-  type DiscoveryOperationReference,
-} from '../content/discovery-mutation.ts';
-import { readDiscoverySource, prepareDiscoverySourceApply, type DiscoverySourceFact } from '../content/discovery.ts';
+import type { DiscoveryOperationReference } from '../content/discovery-mutation.ts';
+import type { DiscoverySourceFact } from '../content/discovery.ts';
 import type { DiscoveryDelta } from '../content/discovery-events.ts';
 import epoch from './discovery-source-epoch.sql';
 import gate from './discovery-source-gate.sql';

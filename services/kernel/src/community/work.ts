@@ -23,12 +23,11 @@ import { communityDeclaredEffects } from './adapters/effects.ts';
 import { createHash } from 'node:crypto';
 import { DBOS } from '@dbos-inc/dbos-sdk';
 import type { MembershipWorkInput, MembershipWorkResult } from '@rezics/auth-contract';
-import { enqueueMembership } from '../access/membership-work.ts';
-import { AuthenticationError, type Access } from '../request/access.ts';
+import { enqueueMembership, AuthenticationError, createFollowCommands } from './domain-ports.ts';
+import type { Access } from '../request/access.ts';
 import { COMMAND_STEP_RETRIES } from '../work/retries.ts';
 import type { Effect } from '../events/effects.ts';
 import type { WorkContext, WorkModule } from '../work/registry.ts';
-import { createFollowCommands } from '../library/follows.ts';
 import { REALM_JOIN_WORKFLOW, REALM_LEAVE_WORKFLOW, type RealmMembershipWorkInput } from './join.ts';
 
 /** Accounts accepts `^[A-Za-z0-9][A-Za-z0-9:_/-]{0,199}$`; hash the parent and step into a valid child id. */

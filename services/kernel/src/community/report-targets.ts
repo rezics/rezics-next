@@ -1,8 +1,9 @@
 import type { Pool } from 'pg';
-import { accessCheck, type Access, type AccessClient, type Actor } from '../request/access.ts';
+import { accessCheck } from './domain-ports.ts';
+import type { Access, AccessClient, Actor } from '../request/access.ts';
 import { routeOf } from '../route/route.ts';
-import { realmReadEligibility } from './realm.ts';
-import { spaceReadEligibility } from './space.ts';
+import { realmReadEligibility } from './realm-read.ts';
+import { spaceReadEligibility } from './space-read.ts';
 import realm from './report-target-realm.sql';
 import space from './report-target-space.sql';
 

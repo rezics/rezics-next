@@ -1,9 +1,10 @@
+import { COMMUNITY_PLATFORM_BASIS } from './contract/index.ts';
+export { COMMUNITY_PLATFORM_BASIS } from './contract/index.ts';
 import type { Pool } from 'pg';
 import { DBOS } from '@dbos-inc/dbos-sdk';
 import { Value } from 'typebox/value';
-import type { CommandBasis } from '../command/command.ts';
 import { noEffect, runCommand } from '../command/command.ts';
-import { recordLateErasureItem, resolveLateErasureItem, readErasureStatus } from '../access/erasure.ts';
+import { recordLateErasureItem, resolveLateErasureItem, readErasureStatus } from './domain-ports.ts';
 import { withConnection } from '../database/pool.ts';
 import type { Effect } from '../events/effects.ts';
 import { readPartition } from '../partition/partition.ts';
@@ -14,11 +15,6 @@ import upsert from './party-locator-upsert.sql';
 import { lockErasureFence } from './erasure-fence.ts';
 import { eraseAccountCommunityRecordItem } from './account-erasure-records.ts';
 
-export const COMMUNITY_PLATFORM_BASIS: CommandBasis = {
-  actorAccountId: '00000000-0000-8000-8000-000000000001',
-  clientId: 'internal-community-erasure',
-  requestedBy: null,
-};
 export const PARTY_LOCATOR_TYPES = [
   'com.rezics.community.space.removed.v1',
   'com.rezics.community.realm.removed.v1',

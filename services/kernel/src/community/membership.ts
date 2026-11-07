@@ -2,30 +2,33 @@ import { nativeReceiptKeyCandidates } from '../command/receipt-key.ts';
 import { createHash } from 'node:crypto';
 import canonicalize from 'canonicalize';
 import type { Pool } from 'pg';
-import { deadlineClient } from '../access/authenticate.ts';
-import type { MembershipWorkInput } from '@rezics/auth-contract';
 import {
+  deadlineClient,
   first,
   isRealmTransitionOpen,
   transitionParameters,
-  type RealmMembershipTransition,
-  type RealmMembershipProof,
-} from '../access/realm-membership-transition.ts';
+  readAccount,
+  assertRealmOwnerMayLeave,
+  lockRealmOwnership,
+  REALM_OWNER_ROLE,
+  durableInitiatorCommitment,
+  DurableInitiatorUnavailableError,
+  accessCheck,
+  accessCommandAuthorization,
+} from './domain-ports.ts';
+import type { MembershipWorkInput } from '@rezics/auth-contract';
+import type { RealmMembershipTransition, RealmMembershipProof } from '../access/realm-membership-transition.ts';
 import proofRead from './membership-proof-read.sql';
 import proofWrite from './membership-proof-write.sql';
 import legacySource from './membership-legacy-source.sql';
 import proofExists from './membership-proof-exists.sql';
-import { readAccount } from '../access/account-data.ts';
-import { GrantDeniedError } from '../access/grant-commands.ts';
-import { assertRealmOwnerMayLeave, lockRealmOwnership, REALM_OWNER_ROLE } from '../access/realm-ownership.ts';
+import { GrantDeniedError } from '../access/resource-access-errors.ts';
 import { resourceRoleHeld } from '../access/resource-role-held.ts';
-import { durableInitiatorCommitment } from '../access/durable-initiator-capture.ts';
-import {
-  DurableInitiatorUnavailableError,
-  type DurableInitiatorReader,
-  type DurableInitiatorRecord,
-  type DurableOperationAnchor,
-  type InitiatorRestorer,
+import type {
+  DurableInitiatorReader,
+  DurableInitiatorRecord,
+  DurableOperationAnchor,
+  InitiatorRestorer,
 } from '../access/durable-initiator.ts';
 import type { LifecycleRequest } from '../access/lifecycle.ts';
 import type { MembershipBootstrapStep, MembershipReservation } from '../access/membership-inverse.ts';
@@ -51,13 +54,7 @@ import {
   type PrincipalCommandIdentity,
 } from '../command/command.ts';
 import { withConnection } from '../database/pool.ts';
-import {
-  accessCheck,
-  accessCommandAuthorization,
-  type AccessCommandAuthorization,
-  type Access,
-  type AccessClient,
-} from '../request/access.ts';
+import type { AccessCommandAuthorization, Access, AccessClient } from '../request/access.ts';
 import { partitionOf, routeOf } from '../route/route.ts';
 import { deadlineFor } from '../request/deadline.ts';
 import { unseal, type KeyRing } from '../tokens/seal.ts';

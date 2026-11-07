@@ -1,11 +1,18 @@
 import { createHash } from 'node:crypto';
 import canonicalize from 'canonicalize';
 import type { Pool } from 'pg';
-import { commandAccessContext } from '../access/command-admission.ts';
-import { captureDurableInitiator, durableInitiatorCommitment } from '../access/durable-initiator-capture.ts';
+import {
+  commandAccessContext,
+  captureDurableInitiator,
+  durableInitiatorCommitment,
+  assertRealmOwnerMayLeave,
+  lockRealmOwnership,
+  REALM_OWNER_ROLE,
+  accessCommandAuthorization,
+  enqueueMembership,
+} from './domain-ports.ts';
 import type { DurableInitiatorRecord, DurableOperationAnchor } from '../access/durable-initiator.ts';
-import { GrantDeniedError } from '../access/grant-commands.ts';
-import { assertRealmOwnerMayLeave, lockRealmOwnership, REALM_OWNER_ROLE } from '../access/realm-ownership.ts';
+import { GrantDeniedError } from '../access/resource-access-errors.ts';
 import { resourceRoleHeld } from '../access/resource-role-held.ts';
 import { AccessUnavailableError } from '../access/unavailable.ts';
 import {
@@ -14,10 +21,9 @@ import {
   runCommand,
   type CommandAuthorization,
 } from '../command/command.ts';
-import { accessCommandAuthorization, type Access, type AccountActor } from '../request/access.ts';
+import type { Access, AccountActor } from '../request/access.ts';
 import { newId, partitionOf, routeOf } from '../route/route.ts';
 import { seal, type KeyRing } from '../tokens/seal.ts';
-import { enqueueMembership } from '../access/membership-work.ts';
 import type { WorkClient } from '../work/client.ts';
 import {
   MEMBERSHIP_OPERATION_COMMANDS,

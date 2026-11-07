@@ -1,13 +1,17 @@
 import { createHash } from 'node:crypto';
 import canonicalize from 'canonicalize';
 import { Type } from 'typebox';
-import { resourceAuthorization } from '../access/index.ts';
-import { accessCommandAttempt } from '../access/command-admission.ts';
-import { deadlineClient, within } from '../access/authenticate.ts';
+import {
+  resourceAuthorization,
+  accessCommandAttempt,
+  deadlineClient,
+  within,
+  permissionEvidenceDeadline,
+  accessCheck,
+} from './domain-ports.ts';
 import { accessRoot, deriveAccess } from '../access/derived-access.ts';
-import { GrantDeniedError } from '../access/grant-commands.ts';
+import { GrantDeniedError } from '../access/resource-access-errors.ts';
 import { resourceRoleHeld } from '../access/resource-role-held.ts';
-import { permissionEvidenceDeadline } from '../access/permission.ts';
 import {
   authoritativeTimeValue,
   principalCommandIdentity,
@@ -16,8 +20,8 @@ import {
   type AuthoritativeTime,
 } from '../command/command.ts';
 import { withConnection } from '../database/pool.ts';
-import { ProblemError } from '../http/problem.ts';
-import { accessCheck, type Access, type AccessClient, type AccessContext, type Actor } from '../request/access.ts';
+import { ProblemError } from '../http/problem-error.ts';
+import type { Access, AccessClient, AccessContext, Actor } from '../request/access.ts';
 import { partitionOf, routeOf } from '../route/route.ts';
 import {
   ContextNotFoundError,

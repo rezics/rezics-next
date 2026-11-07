@@ -1,8 +1,7 @@
 import type { Pool } from 'pg';
-import { deadlineClient } from '../access/authenticate.ts';
+import { deadlineClient, MembershipInverseIncompleteError, requireMembershipInverseReady } from './domain-ports.ts';
 import { LifecycleDeniedError } from '../access/lifecycle-20261025094010-command.ts';
-import { MembershipInverseIncompleteError, requireMembershipInverseReady } from '../access/membership-inverse.ts';
-import { ProblemError } from '../http/problem.ts';
+import { ProblemError } from '../http/problem-error.ts';
 import { discardConnection, withConnection } from '../database/pool.ts';
 import { readPartition } from '../partition/partition.ts';
 import type { AccountActor, AccessClient } from '../request/access.ts';

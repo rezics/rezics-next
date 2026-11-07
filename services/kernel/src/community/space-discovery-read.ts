@@ -1,16 +1,16 @@
 import type { PoolClient } from 'pg';
-import { deadlineClient, within } from '../access/authenticate.ts';
+import { deadlineClient, within, prepareReadDecisions } from './domain-ports.ts';
 import { CommandUnavailableError } from '../access/unavailable.ts';
 import { authoritativeTimeValue, mintReadTime } from '../command/command.ts';
 import { withConnection } from '../database/pool.ts';
 import { readPartition, type Partition } from '../partition/partition.ts';
-import { prepareReadDecisions, type ReadDecisions } from '../request/access.ts';
+import type { ReadDecisions } from '../request/access.ts';
 import realmRows from '../content/community-presentation-realms.sql';
-import { discoveryDescription } from './discovery.ts';
+import { discoveryDescription } from './contract/index.ts';
 import { readRealmDiscoveryGate } from './discovery-source.ts';
 import { realmPresentation } from './presentation.ts';
-import { realmViewerActionResource } from './realm.ts';
-import { readSpace, spaceViewerActionResource } from './space.ts';
+import { realmViewerActionResource } from './realm-read.ts';
+import { readSpace, spaceViewerActionResource } from './space-read.ts';
 import slotRead from './realm-space.sql';
 import type { IndexedSpace, SpaceDiscoveryDependencies, SpaceDiscoveryKey } from './space-discovery.ts';
 

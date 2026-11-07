@@ -1,11 +1,11 @@
 import type { Pool, PoolClient } from 'pg';
-import { readErasureStatus } from '../access/erasure.ts';
+import { readErasureStatus } from './domain-ports.ts';
 import { authoritativeTimeValue, mintReadTime, noEffect, runCommand } from '../command/command.ts';
 import { withConnection } from '../database/pool.ts';
 import { readPartition } from '../partition/partition.ts';
 import { partitionOf, routeOf } from '../route/route.ts';
 import { TERMINAL_WORKFLOW_STATUSES } from '../work/retention.ts';
-import { COMMUNITY_PLATFORM_BASIS } from './party-locator.ts';
+import { COMMUNITY_PLATFORM_BASIS } from './contract/index.ts';
 import page from './account-erasure-records-page.sql';
 import purgePage from './account-erasure-records-purge-page.sql';
 import nextDue from './account-erasure-records-next-due.sql';

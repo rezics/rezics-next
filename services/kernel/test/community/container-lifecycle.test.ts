@@ -5,7 +5,7 @@ import { accessCheck } from '../../src/request/access.ts';
 import { ProblemError } from '../../src/http/problem.ts';
 import { routeOf } from '../../src/route/route.ts';
 import { bootstrapRelease } from '../../src/semantic/definitions.ts';
-import { realmReadEligibility } from '../../src/community/realm.ts';
+import { realmReadEligibility } from '../../src/community/realm-read.ts';
 import {
   readContainerBinding,
   revalidateContainerBinding,

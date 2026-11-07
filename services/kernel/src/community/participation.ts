@@ -1,15 +1,20 @@
 import type { Pool } from 'pg';
-import { createResourcePublicEligibility } from '../access/index.ts';
-import { grantGroupRole } from '../access/resource-group-grant.ts';
-import { requireResourceCommand, ResourceAccessWriteDeniedError } from '../access/resource-denials.ts';
-import { deadlineClient, within } from '../access/authenticate.ts';
+import {
+  createResourcePublicEligibility,
+  grantGroupRole,
+  requireResourceCommand,
+  ResourceAccessWriteDeniedError,
+  deadlineClient,
+  within,
+  accessCheck,
+} from './domain-ports.ts';
 import { commandTime, mintReadTime, type AuthoritativeTime, type CommandTransaction } from '../command/command.ts';
-import { accessCheck, type Access, type AccessClient, type Actor, type Resource } from '../request/access.ts';
+import type { Access, AccessClient, Actor, Resource } from '../request/access.ts';
 import { deadlineFor } from '../request/deadline.ts';
-import { ProblemError } from '../http/problem.ts';
+import { ProblemError } from '../http/problem-error.ts';
 import { routeOf } from '../route/route.ts';
 import read from './realm-read.sql';
-import { realmReadEligibility } from './realm.ts';
+import { realmReadEligibility } from './realm-read.ts';
 import { participationEligibilityAccessWork } from './eligibility-access-work.ts';
 
 export type RealmParticipationReadDecision = { readable?: boolean };
