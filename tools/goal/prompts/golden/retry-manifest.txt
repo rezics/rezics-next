@@ -39,7 +39,7 @@ Write missing acceptance tests the contract names or implies. Update and list te
 
 Record this choice in one summary line and the owner doc, send `bun tools/goal/src/cli.ts inbox send web info "<decision>"`, and continue.
 
-On dev, committed work blocked only by shared check infrastructure is success; name each skipped check and exact error. Dev is verified after merge.
+On dev, for a completed and committed product after the wrapper's own rerun, source success is allowed only when every remaining check failure is explicitly shared transport or infrastructure. Name each failed check and its exact error, and each skipped or unreached check as unverified; never label any of them passed. Do not retry source solely for infrastructure. Type, test and product failures remain non-success; the dev verifier completes deferred checks after merge.
 
 Large surveys are `spec-conflict` blockers starting "Research needed:". Research owner documents, primary sources and the main checkout's .reference/INDEX.md; list contract-named sources read before design.
 
