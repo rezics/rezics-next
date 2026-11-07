@@ -2797,6 +2797,22 @@ record the tuple and final root anchors in the ordinary session header. Commands
 The focused HTTP assertions cover released native time acquisition alongside the existing admitted, denied,
 revoked and exact-key controls; native, browser, seed and growth acceptance run after integration.
 
+Seed diagnosis retains the installed reader and distinguishes a source-level time-contract correction from a
+runtime cause. A method, endpoint and HTTP 503 alone establish neither the RFC9457 code nor the failed phase.
+For the original Imports seed request, the retained coordination description supplies only those three fields;
+the named `inventory.json` and `seed.log` are no longer present in the existing walk's evidence directory.
+Its problem code, request/correlation identity, operation, partition and server phase were not retained in the
+available evidence. The declared operation `source_fence.read` is route metadata, not a recovered runtime trace.
+Do not attribute that original failure to missing native time or report a seed pass from typing.
+
+The existing Imports walk, through Semantic, owns recovery from its request and server diagnostics. Match a
+recovered safe trace in order against initial root preparation, independent root snapshot, exact tuple snapshot
+and final actor/root authorization; retain only problem code, request identity, operation, partition and phase.
+Content owns any resulting route correction. The same Content, Imports and Performance walks exercise the exact
+request, full seed and original fence/current Access acceptance after integration. No replacement stack is needed.
+The HTTP regression requires fresh final native time after tuple commit and checks that unavailable native time,
+root and tuple reads return a correlated 503 without facts or session evidence, then allow a subsequent read.
+
 `content.source_fences` retains one stable `(route, source, external_id, field_group)` tuple independently of
 subject identity. `takedownSourceFence` authorizes platform governance at the command's authoritative time before
 writing only the tuple's partition. The first takedown stores that command time in `taken_down_at` and a new
