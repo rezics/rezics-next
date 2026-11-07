@@ -53,8 +53,15 @@ export function walkViteChildEnvironment(
   return child;
 }
 
+const testFileArgument = /\.test\.[cm]?[jt]sx?$/u;
+const skipSharedServer =
+  /(?:^|\/)(?:accounts-goal-journeys|with-dev-server|server-custody)\.test\.[cm]?[jt]sx?$/u;
+
+/** Accounts table rows and shared-server/custody helper unit tests do not mount pages. */
 export function commandNeedsSharedDevServer(command: string[]): boolean {
-  return command[0] === 'bun' && command[1] === 'test';
+  if (command[0] !== 'bun' || command[1] !== 'test') return false;
+  const files = command.filter((argument) => testFileArgument.test(argument));
+  return files.length === 0 || files.some((file) => !skipSharedServer.test(file.replaceAll('\\', '/')));
 }
 
 export function privateNetworkCommand(command: string[]): string[] {
