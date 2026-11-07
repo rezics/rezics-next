@@ -123,6 +123,7 @@ function requestedHref(url: string | URL): string {
 /**
  * Local stacks keep AUTH_JWKS_URL on the issuer origin. Native Auth is only the
  * loopback transport for that exact public document; other URLs are not forwarded.
+ * A different loopback port is not an allowed JWKS identity.
  */
 export function localJwksTransport(env: Environment, auth: AuthenticationConfig): AuthenticationConfig {
   const native = env.REZICS_LOCAL_STACK_NATIVE_ORIGIN;

@@ -236,6 +236,7 @@ for (const [index, host] of ['127.0.0.1', 'localhost', '[::1]'].entries()) {
       }
       for (const jwksUrl of [
         `http://127.0.0.1:${port + 1}/jwks`,
+        `http://${host === '[::1]' ? '[::1]' : host}:${port + 1}/.well-known/jwks.json`,
         `https://${host}:${port}/jwks`,
         'http://localhost.example/jwks',
         `${issuer}/jwks?query=1`,
