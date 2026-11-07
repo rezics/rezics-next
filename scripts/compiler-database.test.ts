@@ -11,13 +11,18 @@ import {
   DOCKER_PROBE_TIMEOUT_MS,
   DOCKER_RUN_TIMEOUT_MS,
   cleanupStaleCompilerDatabases,
+  assertCompilerDatabaseReady,
   compilerDatabaseInspectArgs,
   compilerDatabaseListenUrl,
   compilerDatabaseRemoveArgs,
   compilerDatabaseRunArgs,
+  compilerDatabaseVolumeCreateArgs,
   compilerDatabaseVolumeLsArgs,
+  compilerDatabaseVolumeRemoveArgs,
   keepCompilerStatusAfterCleanup,
   settleCompilerDatabaseRemoval,
+  settleDockerAttempt,
+  settleDockerContainerRemoval,
   dockerNetworkArgs,
   dockerProcessText,
   dockerSpawnSyncOptions,
@@ -29,6 +34,7 @@ import {
   postgresReadyProbe,
   reapCompilerNonce,
   reapLabeledContainers,
+  reportDockerSettlement,
   retainOriginalAndCleanupFailure,
   sharesIsolatedStackNetwork,
   startCompilerContainer,
@@ -50,6 +56,8 @@ test('docker run, create and forced rm use Auth run timeout; probes stay short',
   expect(dockerTimeoutMs(['create', '--name', 'x', 'postgres'])).toBe(DOCKER_RUN_TIMEOUT_MS);
   expect(dockerTimeoutMs(['rm', '-f', '-v', 'x'])).toBe(DOCKER_RUN_TIMEOUT_MS);
   expect(dockerTimeoutMs(['rm', '-f', 'x'])).toBe(DOCKER_RUN_TIMEOUT_MS);
+  expect(dockerTimeoutMs(['volume', 'create', '--label', 'owner=1', 'data'])).toBe(DOCKER_RUN_TIMEOUT_MS);
+  expect(dockerTimeoutMs(['volume', 'rm', '-f', 'data'])).toBe(DOCKER_RUN_TIMEOUT_MS);
   expect(dockerTimeoutMs(['build', '--tag', 'x', '.'])).toBe(DOCKER_BUILD_TIMEOUT_MS);
   expect(dockerTimeoutMs(['exec', 'x', 'pg_isready'])).toBe(DOCKER_PROBE_TIMEOUT_MS);
   expect(dockerTimeoutMs(['ps', '-aq', '--filter', 'label=rezics.compiler.nonce=x'])).toBe(DOCKER_RUN_TIMEOUT_MS);
@@ -65,7 +73,7 @@ test('docker run, create and forced rm use Auth run timeout; probes stay short',
   expect(probe.detached).toBeUndefined();
 });
 
-test('the one-run compiler database uses --rm and a labelled volume, not a 1 GiB tmpfs', () => {
+test('the one-run compiler database mounts an exactly labelled volume, not a 1 GiB tmpfs', () => {
   const args = compilerDatabaseRunArgs(9, 'nonce-9', []);
   expect(args[0]).toBe('run');
   expect(args).toContain('--rm');
@@ -73,52 +81,128 @@ test('the one-run compiler database uses --rm and a labelled volume, not a 1 GiB
   expect(args).toContain(`${COMPILER_PID_LABEL}=9`);
   expect(args).toContain(`${COMPILER_NONCE_LABEL}=nonce-9`);
   expect(args).toContain('--mount');
-  expect(args).toContain(`type=volume,destination=/var/lib/postgresql,volume-label=${COMPILER_PID_LABEL}=9`);
+  expect(args).toContain('type=volume,source=rezics-compiler-pg-9-nonce-9,destination=/var/lib/postgresql');
   expect(args).not.toContain('--tmpfs');
   expect(args).toContain('-p');
   expect(args).toContain('shared_buffers=32MB');
   expect(args).toContain('max_connections=40');
   expect(args).toContain('huge_pages=off');
+  expect(compilerDatabaseVolumeCreateArgs(9, 'nonce-9', 'host-run')).toEqual([
+    'volume',
+    'create',
+    '--label',
+    `${COMPILER_PID_LABEL}=9`,
+    '--label',
+    `${COMPILER_NONCE_LABEL}=nonce-9`,
+    '--label',
+    'rezics.check.run=host-run',
+    'rezics-compiler-pg-9-nonce-9',
+  ]);
 });
 
 test('a failed docker run reaps the nonce before the error escapes', () => {
   const calls: string[][] = [];
+  let owned = true;
   const docker = (args: string[]): string => {
     calls.push(args);
+    if (args[0] === 'volume' && args[1] === 'create') return args.at(-1)!;
     if (args[0] === 'run') throw new Error('docker run failed with status 125: daemon error');
-    return args[0] === 'ps' ? 'created-unstarted' : '';
+    if (args[0] === 'ps') return owned ? 'created-unstarted' : '';
+    if (args[0] === 'rm') owned = false;
+    return '';
   };
   expect(() => startCompilerContainer(9, 'nonce-fail', docker, {})).toThrow(/status 125/);
-  expect(calls[0]![0]).toBe('run');
-  expect(calls[1]).toEqual(['ps', '-aq', '--filter', `label=${COMPILER_NONCE_LABEL}=nonce-fail`]);
-  expect(calls[2]).toEqual(compilerDatabaseRemoveArgs('created-unstarted'));
-  expect(calls).toHaveLength(3);
-  reapCompilerNonce('already-gone', 9, () => {
-    throw new Error('daemon timeout');
-  });
+  expect(calls[0]).toEqual(compilerDatabaseVolumeCreateArgs(9, 'nonce-fail'));
+  expect(calls[1]![0]).toBe('run');
+  expect(calls[2]).toEqual(['ps', '-aq', '--filter', `label=${COMPILER_NONCE_LABEL}=nonce-fail`]);
+  expect(calls[3]).toEqual(compilerDatabaseRemoveArgs('created-unstarted'));
+  expect(calls[4]).toEqual(['ps', '-aq', '--filter', `label=${COMPILER_NONCE_LABEL}=nonce-fail`]);
+  expect(() =>
+    reapCompilerNonce('already-gone', 9, () => {
+      throw new Error('daemon timeout');
+    }),
+  ).toThrow(/unsettled after 3 attempts.*daemon timeout/);
 });
 
 test('a docker run spawn timeout reaps the nonce, retries once, then keeps the second failure', () => {
   const calls: string[][] = [];
+  const present = new Set<string>();
   const docker = (args: string[]): string => {
     calls.push(args);
+    if (args[0] === 'volume' && args[1] === 'create') return args.at(-1)!;
     if (args[0] === 'run') {
+      const nonce = args
+        .find((arg) => arg.startsWith(`${COMPILER_NONCE_LABEL}=`))
+        ?.slice(`${COMPILER_NONCE_LABEL}=`.length);
+      if (nonce) present.add(nonce);
       throw Object.assign(new Error('spawnSync docker ETIMEDOUT'), { code: 'ETIMEDOUT' });
     }
-    return args[0] === 'ps' ? 'created-unstarted' : '';
+    if (args[0] === 'ps') {
+      const nonce = args.at(-1)?.slice(`label=${COMPILER_NONCE_LABEL}=`.length);
+      return nonce && present.has(nonce) ? `half-${nonce}` : '';
+    }
+    if (args[0] === 'rm') {
+      for (const nonce of present) if (args.at(-1) === `half-${nonce}`) present.delete(nonce);
+    }
+    return '';
   };
   expect(() => startCompilerContainer(9, 'nonce-fail', docker, {})).toThrow(/ETIMEDOUT/);
   const runs = calls.filter((args) => args[0] === 'run');
   expect(runs).toHaveLength(2);
-  expect(calls[1]).toEqual(['ps', '-aq', '--filter', `label=${COMPILER_NONCE_LABEL}=nonce-fail`]);
-  expect(calls[2]).toEqual(compilerDatabaseRemoveArgs('created-unstarted'));
+  expect(calls[0]).toEqual(compilerDatabaseVolumeCreateArgs(9, 'nonce-fail'));
+  expect(calls[2]).toEqual(['ps', '-aq', '--filter', `label=${COMPILER_NONCE_LABEL}=nonce-fail`]);
+  expect(calls[3]).toEqual(compilerDatabaseRemoveArgs('half-nonce-fail'));
   const retryNonce = runs[1]!
     .find((arg, index) => runs[1]![index - 1] === '--label' && arg.startsWith(`${COMPILER_NONCE_LABEL}=`))
     ?.slice(`${COMPILER_NONCE_LABEL}=`.length);
   expect(retryNonce).toBeDefined();
   expect(retryNonce).not.toBe('nonce-fail');
-  expect(calls[4]).toEqual(['ps', '-aq', '--filter', `label=${COMPILER_NONCE_LABEL}=${retryNonce}`]);
-  expect(calls[5]).toEqual(compilerDatabaseRemoveArgs('created-unstarted'));
+  expect(calls).toContainEqual(['ps', '-aq', '--filter', `label=${COMPILER_NONCE_LABEL}=${retryNonce}`]);
+  expect(calls).toContainEqual(compilerDatabaseRemoveArgs(`half-${retryNonce}`));
+});
+
+test('compiler cleanup retains both retry nonces and removes a late resource from the first create', () => {
+  const first = 'nonce-first';
+  const attempted: string[] = [];
+  const calls: string[][] = [];
+  const listings = new Map<string, number>();
+  const existing = new Set<string>();
+  let retryNonce = '';
+  const docker = (args: string[]): string => {
+    calls.push(args);
+    if (args[0] === 'volume' && args[1] === 'create') return args.at(-1)!;
+    if (args[0] === 'run') {
+      const nonce = args
+        .find((arg) => arg.startsWith(`${COMPILER_NONCE_LABEL}=`))!
+        .slice(`${COMPILER_NONCE_LABEL}=`.length);
+      if (nonce === first) throw Object.assign(new Error('spawnSync docker ETIMEDOUT'), { code: 'ETIMEDOUT' });
+      retryNonce = nonce;
+      existing.add('container-retry');
+      return 'container-retry';
+    }
+    if (args[0] === 'ps') {
+      const nonce = args.at(-1)!.slice(`label=${COMPILER_NONCE_LABEL}=`.length);
+      const index = (listings.get(nonce) ?? 0) + 1;
+      listings.set(nonce, index);
+      if (nonce === first && index === 1) return '';
+      return nonce === first && existing.has('late-first')
+        ? 'late-first'
+        : nonce === retryNonce && existing.has('container-retry')
+          ? 'container-retry'
+          : '';
+    }
+    if (args[0] === 'rm') existing.delete(args.at(-1)!);
+    return '';
+  };
+
+  const container = startCompilerContainer(9, first, docker, {}, attempted);
+  expect(container).toBe('container-retry');
+  expect(attempted).toEqual([first, retryNonce]);
+  existing.add('late-first');
+  settleCompilerDatabaseRemoval(container, 9, docker, attempted);
+  expect(existing.size).toBe(0);
+  expect(calls).toContainEqual(compilerDatabaseRemoveArgs('late-first'));
+  expect(calls).toContainEqual(compilerDatabaseRemoveArgs('container-retry'));
 });
 
 test('ordinary compiler cleanup waits for container and volume settlement', () => {
@@ -136,14 +220,96 @@ test('ordinary compiler cleanup waits for container and volume settlement', () =
 });
 
 test('ordinary compiler cleanup reports a remaining volume without inventing container identity', () => {
+  let volumeExists = true;
   const docker = (args: string[]): string => {
     if (args[0] === 'inspect') throw new Error('Error: No such object: owned');
-    if (args[0] === 'volume') return 'vol-still-here';
+    if (args[0] === 'volume' && args[1] === 'ls') return volumeExists ? 'vol-still-here' : '';
+    if (args[0] === 'volume' && args[1] === 'rm') return '';
     return '';
   };
-  expect(() => settleCompilerDatabaseRemoval('owned', 9, docker)).toThrow(
-    /volume remains after removal: vol-still-here/,
+  expect(() => settleCompilerDatabaseRemoval('owned', 9, docker)).toThrow(/volumes remain: vol-still-here/);
+  expect(compilerDatabaseVolumeRemoveArgs('vol-still-here')).toEqual(['volume', 'rm', '-f', 'vol-still-here']);
+});
+
+test('timeout requests reconcile through exact container and volume evidence', () => {
+  const calls: string[][] = [];
+  let listed = true;
+  const settled = settleDockerAttempt(
+    COMPILER_NONCE_LABEL,
+    'nonce-timeout',
+    [
+      { name: COMPILER_PID_LABEL, value: '9' },
+      { name: COMPILER_NONCE_LABEL, value: 'nonce-timeout' },
+    ],
+    (args) => {
+      calls.push(args);
+      if (args[0] === 'ps') {
+        if (args.at(-1) === `label=${COMPILER_NONCE_LABEL}=nonce-timeout`) return listed ? 'container-1' : '';
+        listed = false;
+        return '';
+      }
+      if (args[0] === 'rm') throw new Error('docker rm ETIMEDOUT');
+      return '';
+    },
   );
+  expect(settled).toMatchObject({ status: 'settled', attempts: 1, containers: [], volumes: [] });
+  expect(settled.status === 'settled' && settled.requestFailures[0]).toContain('docker rm ETIMEDOUT');
+  const evidence: string[] = [];
+  reportDockerSettlement(settled, 'compiler create nonce nonce-timeout', (message) => evidence.push(message));
+  expect(evidence.join('')).toContain('docker rm ETIMEDOUT');
+  expect(calls.filter((args) => args[0] === 'rm')).toHaveLength(1);
+  expect(calls.at(-1)).toEqual([
+    'volume',
+    'ls',
+    '-q',
+    '--filter',
+    `label=${COMPILER_PID_LABEL}=9`,
+    '--filter',
+    `label=${COMPILER_NONCE_LABEL}=nonce-timeout`,
+  ]);
+});
+
+test('remaining resources recover in the same bounded settlement and unavailable Docker stays explicit', () => {
+  let visible = true;
+  let removals = 0;
+  const recovered = settleDockerAttempt(COMPILER_NONCE_LABEL, 'nonce-retry', [], (args) => {
+    if (args[0] === 'ps') return visible ? 'container-2' : '';
+    if (args[0] === 'rm') {
+      removals += 1;
+      if (removals === 1) throw new Error('still present after first removal');
+      visible = false;
+    }
+    return '';
+  });
+  expect(recovered).toMatchObject({ status: 'settled', attempts: 2 });
+  expect(removals).toBe(2);
+
+  const unavailable = settleDockerAttempt(COMPILER_NONCE_LABEL, 'nonce-offline', [], () => {
+    throw new Error('docker inspect: daemon unavailable');
+  });
+  expect(unavailable.status).toBe('unsettled');
+  if (unavailable.status === 'unsettled') expect(unavailable.error.message).toContain('daemon unavailable');
+});
+
+test('known-container timeout accepts only affirmative absence, retaining unavailable inspection', () => {
+  for (const message of [
+    'docker inspect gone failed with status 1: Error: No such object: gone',
+    'docker inspect gone failed with status 1: error: no such object: gone',
+    'Error response from daemon: No such container: gone',
+  ]) {
+    const absent = settleDockerContainerRemoval('gone', (args) => {
+      if (args[0] === 'rm') throw new Error('docker rm ETIMEDOUT');
+      throw new Error(message);
+    });
+    expect(absent).toMatchObject({ status: 'settled', attempts: 1 });
+  }
+
+  const unknown = settleDockerContainerRemoval('owned', (args) => {
+    if (args[0] === 'rm') throw new Error('docker rm ETIMEDOUT');
+    throw new Error('docker inspect owned failed with status 1: daemon unavailable');
+  });
+  expect(unknown.status).toBe('unsettled');
+  if (unknown.status === 'unsettled') expect(unknown.error.message).toContain('daemon unavailable');
 });
 
 test('a completed native compiler status survives a later cleanup error', () => {
@@ -245,11 +411,56 @@ test('readiness waits for pg_isready in the container and a protocol reply, not 
   }
 });
 
+test('readiness failures retain the first exact container error and redact database credentials', async () => {
+  let message = '';
+  try {
+    await assertCompilerDatabaseReady(
+      'pg-container-exact',
+      'postgres://rezics:private-password@127.0.0.1:0/rezics',
+      () => {
+        throw new Error('Error: No such container: pg-container-exact');
+      },
+      20,
+    );
+  } catch (error) {
+    message = error instanceof Error ? error.message : String(error);
+  }
+  expect(message).toContain('container pg-container-exact');
+  expect(message).toContain('first in-container probe=Error: No such container: pg-container-exact');
+  expect(message).toContain('endpoint probe=compiler-database: PostgreSQL was not ready at 127.0.0.1:0/rezics');
+  expect(message).not.toContain('private-password');
+
+  let ticks = 0;
+  let startupFailure = '';
+  try {
+    await waitForPostgresContainer(
+      'pg-startup-failed',
+      () => {
+        throw new Error('container removal already in progress');
+      },
+      1,
+      () => (ticks++ < 2 ? 0 : 2),
+    );
+  } catch (error) {
+    startupFailure = error instanceof Error ? error.message : String(error);
+  }
+  expect(startupFailure).toContain('container pg-startup-failed');
+  expect(startupFailure).toContain('first probe=container removal already in progress');
+});
+
 test('stale compiler databases whose owner pid is gone are removed with their volumes', () => {
   const calls: string[][] = [];
+  let containerVisible = true;
+  let volumeVisible = true;
   const docker = (args: string[]): string => {
     calls.push(args);
-    return args[0] === 'ps' ? 'dead-compiler 2147483647' : '';
+    if (args[0] === 'ps' && args.includes('--format')) return '2147483647';
+    if (args[0] === 'volume' && args[1] === 'ls' && args.includes('--format')) return '2147483647';
+    if (args[0] === 'ps' && args.includes('-aq')) return containerVisible ? 'dead-compiler' : '';
+    if (args[0] === 'rm') containerVisible = false;
+    if (args[0] === 'volume' && args[1] === 'ls') return volumeVisible ? 'dead-volume' : '';
+    if (args[0] === 'volume' && args[1] === 'rm') volumeVisible = false;
+    return '';
   };
   cleanupStaleCompilerDatabases(docker);
   expect(calls[0]).toEqual([
@@ -258,9 +469,18 @@ test('stale compiler databases whose owner pid is gone are removed with their vo
     '--filter',
     'label=rezics.compiler.pid',
     '--format',
-    '{{.ID}} {{.Label "rezics.compiler.pid"}}',
+    '{{.Label "rezics.compiler.pid"}}',
   ]);
-  expect(calls[1]).toEqual(compilerDatabaseRemoveArgs('dead-compiler'));
+  expect(calls[1]).toEqual([
+    'volume',
+    'ls',
+    '--filter',
+    'label=rezics.compiler.pid',
+    '--format',
+    '{{.Label "rezics.compiler.pid"}}',
+  ]);
+  expect(calls).toContainEqual(compilerDatabaseRemoveArgs('dead-compiler'));
+  expect(calls).toContainEqual(compilerDatabaseVolumeRemoveArgs('dead-volume'));
 });
 
 async function unixEcho(directory: string): Promise<{ path: string; close: () => Promise<void> }> {

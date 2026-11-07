@@ -246,6 +246,60 @@ await Bun.write('database-url', url);
   }
 });
 
+test('a lost owned database keeps the first compiler result and stops later mapper consumers', async () => {
+  const { root, remove } = fixture();
+  try {
+    const mapped = '{ "contentMappers": [{ "package": "reylo", "extensions": [".sql"] }] }\n';
+    writeWorkspace(root, 'services/kernel', '@fixture/kernel', 'bun fail.ts', {
+      'tsconfig.json': mapped,
+      'fail.ts':
+        "console.error('src/active.sql(1,1): error reylo5: CONNECTION_CLOSED at 127.0.0.1:39201/rezics'); process.exit(1);\n",
+    });
+    writeWorkspace(root, 'services/auth', '@fixture/auth', 'bun later.ts', {
+      'tsconfig.json': mapped,
+      'later.ts': 'await Bun.write("ran-after-database-loss", "unexpected")\n',
+    });
+    const output = collector();
+    let readinessChecks = 0;
+    let removals = 0;
+
+    const code = await typecheck({
+      root,
+      env: { PATH: process.env.PATH ?? '' },
+      recognize: () => ({
+        outcome: 'admitted',
+        runId: 'fixture',
+        scope: 'fixture.scope',
+        supervisor: { pid: 1, started: '1', group: 1 },
+      }),
+      place: async () => {
+        throw new Error('nested host admission');
+      },
+      stdout: output.stdout,
+      startDatabase: async () => ({
+        url: 'postgres://typecheck/owned',
+        container: 'compiler-container-exact',
+        assertReady() {
+          readinessChecks += 1;
+          if (readinessChecks === 2) throw new Error('first failure=ECONNREFUSED');
+        },
+        remove() {
+          removals += 1;
+        },
+      }),
+    });
+
+    expect(code).toBe(1);
+    expect(readinessChecks).toBe(2);
+    expect(removals).toBe(1);
+    expect(existsSync(join(root, 'services/auth/ran-after-database-loss'))).toBe(false);
+    expect(output.text()).toContain('CONNECTION_CLOSED at 127.0.0.1:39201/rezics');
+    expect(output.text()).toContain('compiler-container-exact');
+  } finally {
+    remove();
+  }
+});
+
 test('the prepared compiler database holds a kernel table and the Auth relations for credential-effects-stage, rate-limit, session-limits and verification-maintenance', async () => {
   const database = await prepareCompilerDatabase();
   try {

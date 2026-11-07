@@ -533,13 +533,30 @@ test('admitted auth uses and closes its throwaway database', async () => {
         events.push('database');
         return {
           url: 'postgres://local.test/auth',
+          container: 'auth-compiler-container',
+          assertReady: () => {
+            events.push('ready');
+          },
           remove: () => {
             events.push('close');
           },
         };
       },
+      prepareSqlAnalysis: async (env) => {
+        expect(env.KERNEL_DATABASE_CONTAINER).toBe('auth-compiler-container');
+        events.push('sql-analysis');
+        return {
+          available: true,
+          environment: { ...env, REYLO_CONFIG: '/private/auth/.reylo.yaml' },
+          analyzedFiles: 4,
+          totalFiles: 2_033,
+          writtenEntries: 4,
+          dispose: () => events.push('dispose-analysis'),
+        };
+      },
       typecheck: async (env) => {
-        expect(env.DATABASE_URL).toBe('postgres://local.test/auth');
+        expect(env.DATABASE_URL).toBeUndefined();
+        expect(env.REYLO_CONFIG).toBe('/private/auth/.reylo.yaml');
         expect(env.PATH).toBe(process.env.PATH);
         events.push('tsc');
         return 0;
@@ -548,7 +565,7 @@ test('admitted auth uses and closes its throwaway database', async () => {
   );
 
   expect(status).toBe(0);
-  expect(events).toEqual(['database', 'tsc', 'close']);
+  expect(events).toEqual(['database', 'ready', 'sql-analysis', 'tsc', 'dispose-analysis', 'close']);
 });
 
 test('admitted auth preserves its explicit database without nested placement or provisioning', async () => {

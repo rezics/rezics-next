@@ -1,6 +1,16 @@
 import { afterEach, expect, test } from 'bun:test';
 import { spawnSync } from 'node:child_process';
-import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, statSync } from 'node:fs';
+import {
+  chmodSync,
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  readdirSync,
+  rmSync,
+  statSync,
+  writeFileSync,
+} from 'node:fs';
 import { cpus, totalmem } from 'node:os';
 import { join, resolve } from 'node:path';
 import { acquireStackSlot, stackCapacity } from './stack-lease.ts';
@@ -401,10 +411,39 @@ test('without GOAL_CHECK_WAIT_FILE no wait is recorded', async () => {
   expect(existsSync(waitFile)).toBe(false);
 });
 
-test('web and auth isolated runs hold one slot for the whole command', async () => {
+test('Web and Auth isolated command callbacks hold one slot for a real child lifetime', async () => {
   const env = environment();
+  writeFileSync(
+    env.KERNEL_CHECK_REMOTE,
+    JSON.stringify({
+      hosts: [
+        {
+          name: 'a',
+          performance: true,
+          address: 'ops@a.test',
+          identity: '/keys/a',
+          memoryMaxGiB: 16,
+          cpuQuotaPercent: 800,
+          slots: 2,
+        },
+      ],
+    }),
+  );
+  const source = (app: string) => `import { stackRun } from ${JSON.stringify(join(repository, 'scripts/stack-run.ts'))};
+const code = await stackRun(
+  { label: ${JSON.stringify(app + ' isolated')}, root: ${JSON.stringify(repository)}, cwd: ${JSON.stringify(repository)}, command: ['true'] },
+  async (leaseEnvironment) => {
+    const child = Bun.spawn([process.execPath, '-e', 'console.log(process.env.REZICS_STACK_SLOT); await Bun.stdin.text()'], {
+      env: { ...process.env, ...leaseEnvironment }, stdin: 'inherit', stdout: 'inherit', stderr: 'inherit',
+    });
+    return await child.exited;
+  },
+  process.env,
+  async () => null as unknown as number,
+);
+process.exitCode = code;`;
   for (const app of ['web', 'auth']) {
-    const run = start(env, app, undefined, join(repository, `apps/${app}/scripts/isolated.ts`));
+    const run = start(env, app, [source(app)], '-e');
     await waitFor(() => run.output.stdout.includes('1/1'));
     expect(held(env)).toBe(true);
     const waiter = start(env, 'outside', ['true']);

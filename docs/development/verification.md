@@ -132,12 +132,25 @@ under `$XDG_RUNTIME_DIR/rezics-ssh` (relocated under `/tmp` when OpenSSH's unix_
 placement-probe timeout recovers only an affirmatively dead ControlMaster, at most once per host per minute, under the
 same exclusive lease lock that acquisition holds shared; a delayed control check remains uncertainty. Five minutes of
 probe-timeout skips report one environment event and do not retire a live master.
-Throwaway Kernel/compiler PostgreSQL uses `--rm` plus labelled owner-pid cleanup so a killed owner or failed startup
-leaves no owned container. `docker run` and `rm -f` use Auth's 120-second spawn timeout, including host-lifetime Python
-cleanup; inspect/exec/ps/port probes use 5 seconds. Ordinary compiler-database cleanup verifies container and volume settlement and keeps native compiler status; signal-path removal is detached so a 200ms SIGKILL cannot abort it. A failed create reaps its nonce. Data stays on a labelled volume, not a 1 GiB tmpfs. Isolated-stack databases attach with `container:<id>`, never `ns:/proc/...`, and publish
+Throwaway Kernel/compiler PostgreSQL uses `--rm` plus exact owner and create-nonce labels. A timed-out removal is a
+request, not observed absence: ordinary cleanup retries a bounded number of times and verifies the container and its
+nonce-labelled volume are absent. A failed Docker listing or inspect stays an unsettled cleanup result with its actual
+error; it never certifies absence. Native command status and diagnostics remain separate from cleanup failures, and
+terminal result publication follows observed cleanup. `docker run`, `volume create` and `rm -f` use Auth's 120-second spawn timeout,
+including host-lifetime Python cleanup; inspect/exec/ps/port probes use 5 seconds. Signal-path removal is detached so
+a 200ms SIGKILL cannot abort it. Failed creates reconcile each nonce before retrying with a new one. Data stays on a
+labelled volume, not a 1 GiB tmpfs. Compiler/Kernel create named volumes with the physical check-run label so host
+lifetime cleanup can recover a volume after its container disappears. It reconciles containers and volumes independently
+in three attempts; a successful fresh listing is the only absence proof, while Docker command failures retain stderr and
+keep settlement unknown. Unsettled host cleanup records `.owned-resources-incomplete.json`, retains the root exit and
+does not publish terminal `exit-status`. A later listing that proves removal still retains the earlier request error as
+cleanup evidence. Isolated-stack databases attach with `container:<id>`, never `ns:/proc/...`, and publish
 PostgreSQL through an independent TCP-to-Unix child rather than a same-process proxy, and wait for in-container
 `pg_isready` plus a protocol reply before migrations. Empty-directory source and result manifests share the
 `directory\0` digest.
+Owned compiler databases are rechecked inside their exact container and at the host-facing endpoint before each mapper
+workspace. The first post-failure readiness error includes the container identity, later mapper consumers stop when it
+fails, and the compiler result remains primary.
 Diagnostic reruns remain visible. A load-sensitive diagnostic rerun may address an actual load signal in a mixed
 failure; cleanup failures are not eligible. Do not scale security TTLs, explicit deadlines or work budgets to hide
 failures. A proposed test deadline multiplier is not evidence of deployment. Distinguish a reproducible
@@ -239,6 +252,12 @@ remote-check transport hash or whether the supermanager's reclaim stopgap remain
 facts and a comparable b-host receipt with command/source identity, concurrency, readable slice anon/file/inactive_file
 and IO pressure, nested phase durations and compiler outcome. The one-run Kernel compiler database uses a labelled
 volume in the run slice, matching kernel check storage.
+
+Auth SQL preparation and Auth tsc have separate command phases. The prepared cache covers Auth SQL and the shared
+Kernel SQL source set imported by Auth, keyed by the migrated schema, compiler/mapper toolchain, SQL contents and
+database configuration. A compatible Kernel snapshot seeds Auth's private cache; schema or source changes regenerate
+the affected analysis. The database remains owned until tsc exits, and explicit owner Reylo configurations retain
+their existing behavior.
 
 For the host-a transfer question, use genuine required-check receipts from the deployed class, bound to the deployed
 `remote-check` hash, cp-sync point and periodic check-reclaim stopgap state. Compare the same command class, host, source
