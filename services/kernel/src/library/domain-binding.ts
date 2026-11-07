@@ -6,6 +6,9 @@ import type { NativeCopyConfig, NativeCopyTypes } from './adapters/copies.ts';
 import type { NativeLibraryPresentation } from './adapters/presentation.ts';
 import type { LibraryDomain } from './contract/index.ts';
 import type { NativePreparationWorkFactory, NativeScopeWork } from './adapters/preparation-work.ts';
+import type { AuthoritativeTime, CommandTransaction } from '../command/command.ts';
+import type { Pool } from 'pg';
+import type { NativePublicOutputApplication } from './contract/native-public-output.ts';
 
 export type NativeLibraryDomain = LibraryDomain &
   Readonly<{
@@ -14,6 +17,7 @@ export type NativeLibraryDomain = LibraryDomain &
     copyContext?: NativeCopyListContext;
     copyPorts?: (config: NativeCopyConfig) => CopyApplicationPorts<NativeCopyTypes>;
     presentation?: NativeLibraryPresentation;
+    nativePublicOutput?: NativePublicOutputApplication<CommandTransaction, Pool, AuthoritativeTime>;
   }>;
 
 let binding: { domain?: NativeLibraryDomain; presentation?: NativeLibraryPresentation; access?: LibraryAccessPorts } =

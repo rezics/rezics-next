@@ -30,6 +30,8 @@ import { composeSemanticContext } from './semantic-context.ts';
 import { resolveIdentityAdapterRuntime } from '../semantic/identity-adapter-runtime.ts';
 import { composeZoneResource } from './zones.ts';
 import { createSubjectReadingApplication, type SubjectReadingApplication } from '../semantic/index.ts';
+import { createPublicIdentityOutputCapture } from '../semantic/identity-public-output-capture.ts';
+import { requireLibraryDomain } from '../library/domain-binding.ts';
 import { createNativeSubjectReadingPort, installNativeSubjectReadingApplication } from '../semantic/adapters/index.ts';
 import {
   bindSourceBindingApplication,
@@ -127,6 +129,13 @@ export function composeSubjectReadingApplication(): SubjectReadingApplication {
   return installNativeSubjectReadingApplication(() =>
     createSubjectReadingApplication(createNativeSubjectReadingPort()),
   );
+}
+
+/** Construct the Semantic producer with the installed Library native output/custody pair. */
+export function composePublicIdentityOutputCapture(
+  config: Parameters<typeof createPublicIdentityOutputCapture>[0],
+) {
+  return createPublicIdentityOutputCapture(config, requireLibraryDomain().nativePublicOutput!);
 }
 
 /** Ordinary process composition: identity participants plus Rating review and Content lifecycle adapters. */

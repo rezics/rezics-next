@@ -41,6 +41,7 @@ import { createSearchScopeForService, type SearchService } from '../search/servi
 import { routeOf } from '../route/route.ts';
 import {
   createIdentityNativeApplication,
+  createNativePublicOutputApplication,
   createLibraryApplications,
   createCollectionMutationApplication,
 } from '../library/application/index.ts';
@@ -61,10 +62,13 @@ import {
   createIdentityNativeCatalog,
   createProgressOperationCatalog,
   createNativeSourceCaptureAdapter,
+  createNativePublicOutputAdapter,
+  observeNativePublicCollectionOutput,
   createNativeLibraryPresentation,
   createSearchPreparationAdapter,
   type SearchPreparationAdapterPorts,
 } from '../library/adapters/index.ts';
+import { resolvePublicIdentityOutputCaptureDisposition } from '../semantic/identity-public-output-capture.ts';
 import { createLibraryCollectionPolicyMethods } from '../access/adapters/collection-policy.ts';
 import {
   bindLibraryDomain,
@@ -376,9 +380,16 @@ export function composeLibraryDomain(options: LibraryComposeOptions = {}): Retur
       options.capabilities?.accountAdmission ?? sumAdmission([admissionTerm('composition', { statements: 1 })]),
     ...extras,
   };
+  const nativePublicOutput = createNativePublicOutputApplication(
+    createNativePublicOutputAdapter({
+      observe: observeNativePublicCollectionOutput,
+      lockDisposition: resolvePublicIdentityOutputCaptureDisposition,
+    }),
+  );
   const previous = peekLibraryDomain();
   return bindLibraryDomain({
     ...createLibraryApplications(capabilities),
+    nativePublicOutput,
     copyContext: nativeCopyListContext(),
     copyPorts: (config) =>
       createNativeCopyPorts(config, {

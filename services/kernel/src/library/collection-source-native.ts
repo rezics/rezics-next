@@ -50,14 +50,39 @@ import assignment from '../access/permission-assignment.sql';
 import membership from '../access/permission-membership.sql';
 import opening from '../access/gates/opening-read.sql';
 
-export {
-  readNativePublicCollectionOutput,
-  lockNativePublicCollectionOutput,
-  bindAndHoldNativePublicCollectionOutput,
-  revalidateNativePublicCollectionOutputHold,
-  transferNativePublicCollectionOutputHold,
-  releaseNativePublicCollectionOutputHold,
-} from './native-public-output-custody.ts';
+type NativePublicOutputOperations = NonNullable<ReturnType<typeof requireLibraryDomain>['nativePublicOutput']>;
+
+/** Compatibility facade over the fully composed native public-output application. */
+export function readNativePublicCollectionOutput(
+  ...args: Parameters<NativePublicOutputOperations['readNativePublicCollectionOutput']>
+) {
+  return requireLibraryDomain().nativePublicOutput!.readNativePublicCollectionOutput(...args);
+}
+export function lockNativePublicCollectionOutput(
+  ...args: Parameters<NativePublicOutputOperations['lockNativePublicCollectionOutput']>
+) {
+  return requireLibraryDomain().nativePublicOutput!.lockNativePublicCollectionOutput(...args);
+}
+export function bindAndHoldNativePublicCollectionOutput(
+  ...args: Parameters<NativePublicOutputOperations['bindAndHoldNativePublicCollectionOutput']>
+) {
+  return requireLibraryDomain().nativePublicOutput!.bindAndHoldNativePublicCollectionOutput(...args);
+}
+export function revalidateNativePublicCollectionOutputHold(
+  ...args: Parameters<NativePublicOutputOperations['revalidateNativePublicCollectionOutputHold']>
+) {
+  return requireLibraryDomain().nativePublicOutput!.revalidateNativePublicCollectionOutputHold(...args);
+}
+export function transferNativePublicCollectionOutputHold(
+  ...args: Parameters<NativePublicOutputOperations['transferNativePublicCollectionOutputHold']>
+) {
+  return requireLibraryDomain().nativePublicOutput!.transferNativePublicCollectionOutputHold(...args);
+}
+export function releaseNativePublicCollectionOutputHold(
+  ...args: Parameters<NativePublicOutputOperations['releaseNativePublicCollectionOutputHold']>
+) {
+  return requireLibraryDomain().nativePublicOutput!.releaseNativePublicCollectionOutputHold(...args);
+}
 
 /** Structural alias of the existing raw owner key; no canonical-order or Access claim. */
 export type CanonicalRangeKey = CanonicalRawKey;

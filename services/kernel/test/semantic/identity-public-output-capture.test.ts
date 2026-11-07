@@ -18,7 +18,7 @@ import { NativeCollectionWork } from '../../src/library/collection-source-work.t
 import { outputCaptureFootprint } from '../../src/semantic/identity-public-output-work.ts';
 import stageSQL from '../../src/semantic/identity-public-output-stage.sql';
 import transitionInsertSQL from '../../src/semantic/identity-public-output-transition.sql';
-import { createPublicIdentityOutputCapture } from '../../src/semantic/identity-public-output-capture.ts';
+import { composePublicIdentityOutputCapture } from '../../src/composition/semantic.ts';
 import {
   createPublicIdentitySourceCapture,
   lockPublicIdentityOutputCaptureDisposition,
@@ -110,7 +110,7 @@ async function setup(ids: readonly string[], visibility: 'public' | 'private' = 
     await stepIdentityEpochBootstrapWork(f.pool);
   }
   const request = { captureId: randomUUID(), definition: resolved.definition, publication };
-  const producer = createPublicIdentityOutputCapture(c);
+  const producer = composePublicIdentityOutputCapture(c);
   const accepted = await producer.accept(request, work());
   expect(accepted.status).toBe('accepted');
   if (accepted.status !== 'accepted') throw new Error('Real native public output binding did not commit');
@@ -192,7 +192,7 @@ test('public COMPLETE output capture binds genuine native publication and curren
     expect(r.body.rows.length).toBeLessThanOrEqual(100);
     expect(r.body.receipts).toHaveLength(r.body.cuts.length);
   }
-  const reopened = createPublicIdentityOutputCapture(config());
+  const reopened = composePublicIdentityOutputCapture(config());
   expect((await reopened.accept(structuredClone(s.request), work())).status).toBe('accepted');
   expect((await reopened.revalidate(JSON.parse(JSON.stringify(s.capture)), work())).status).toBe('ready');
   // Generic factory and opaque receipt remain a different authority.
@@ -371,7 +371,7 @@ test('a failed atomic staged successor transition rolls native and Semantic rows
   });
   const applied = await s.producer.apply(s.capture, work());
   expect(applied.status).toBe('applied');
-  const replay = await createPublicIdentityOutputCapture(config()).apply(s.capture, work());
+  const replay = await composePublicIdentityOutputCapture(config()).apply(s.capture, work());
   expect(replay.status).toBe('applied');
   if (applied.status === 'applied' && replay.status === 'applied')
     expect(replay.disposition).toEqual(applied.disposition);
@@ -706,7 +706,7 @@ test('production application persists its immutable selected successor before na
   expect(evidence.successor_hold_id).not.toBe(b.holdId);
   expect(evidence.consumed_by).toBe(evidence.transaction_id);
   expect(evidence.successor_consumed).toBeNull();
-  const replay = await createPublicIdentityOutputCapture(config()).apply(s.capture, work());
+  const replay = await composePublicIdentityOutputCapture(config()).apply(s.capture, work());
   expect(replay.status).toBe('applied');
   if (applied.status === 'applied' && replay.status === 'applied')
     expect(replay.disposition).toEqual(applied.disposition);
@@ -741,7 +741,7 @@ test('zero-output cancellation uses a genuine next epoch fence and committed rel
   let cancelled = await s.producer.cancel(s.capture, work());
   for (let i = 0; i < 4 && cancelled.status === 'pending'; i++) cancelled = await s.producer.cancel(s.capture, work());
   expect(cancelled.status).toBe('cancelled');
-  const replay = await createPublicIdentityOutputCapture(config()).cancel(s.capture, work());
+  const replay = await composePublicIdentityOutputCapture(config()).cancel(s.capture, work());
   expect(replay.status).toBe('cancelled');
   if (cancelled.status === 'cancelled' && replay.status === 'cancelled')
     expect(replay.disposition).toEqual(cancelled.disposition);

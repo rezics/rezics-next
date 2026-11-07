@@ -296,9 +296,12 @@ Current implementation evidence is narrower than the capability:
   at the current Collection source fence; it never reads live private facts. Missing/pending output and headerless
   references remain unavailable. These helpers do not implement the shared members service or the adopted complete
   indexed filter/identity plan.
-- `native-public-output-custody.ts` is the original-command consumer of that activated public output. Observation,
-  lock, bind-and-hold, retained revalidation, successor transfer and exact release share one descriptor with the
-  SQL adapter. Current, retained, transferred, released and unavailable outcomes use the existing contract types.
+- `native-public-output-custody.ts` is the original-command consumer of that activated public output. Composition
+  supplies the Library metadata observer and Semantic persisted-disposition lock, builds the SQL custody operation,
+  and installs it as the Library application. Observation, lock, bind-and-hold, retained revalidation, successor
+  transfer and exact release share one descriptor with the SQL adapter; Semantic capture receives that application
+  directly. The `collection-source-native.ts` functions remain compatibility facades over the installed application.
+  Current, retained, transferred, released and unavailable outcomes use the existing contract types.
   Revalidation cannot create a missing hold. Partition node projection requires a same-snapshot size admission.
   Identity-plan, selected-publication, whole-query and account `active_explicit_output` capture keep their own
   scopes. Disposition ports that are not installed stay unavailable. Retirement hooks remain additive: exact owner
