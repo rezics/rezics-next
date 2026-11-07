@@ -12,7 +12,16 @@
  * A host runs the same command in a copy of the workspace, with the caller's environment left behind. Stderr says
  * where the run went, and when it is waiting.
  */
-import { accessSync, constants, existsSync, readFileSync, writeFileSync } from 'node:fs';
+import {
+  accessSync,
+  chmodSync,
+  constants,
+  existsSync,
+  lstatSync,
+  mkdirSync,
+  readFileSync,
+  writeFileSync,
+} from 'node:fs';
 import { dirname, isAbsolute, join, relative, resolve, sep } from 'node:path';
 import {
   Aborted,
@@ -145,6 +154,24 @@ export function walkStackRequired(env: Environment): boolean {
 
 /** Host-wide walk admission, including concurrent remote-check checkouts. `TMPDIR` does not override it. */
 export const WALK_STACK_DIRECTORY = '/tmp/rezics-walk-stacks';
+
+/** Create or repair the shared host namespace before a walk starts its FIFO lease. */
+export function ensureWalkStackDirectory(directory = WALK_STACK_DIRECTORY): void {
+  mkdirSync(dirname(directory), { recursive: true });
+  const previousUmask = process.umask(0);
+  try {
+    try {
+      mkdirSync(directory, { mode: 0o1777 });
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code !== 'EEXIST') throw error;
+    }
+  } finally {
+    process.umask(previousUmask);
+  }
+  const metadata = lstatSync(directory);
+  if (!metadata.isDirectory()) throw new Error(`walk-stack directory must be a real directory: ${directory}`);
+  if ((metadata.mode & 0o7777) !== 0o1777) chmodSync(directory, 0o1777);
+}
 
 /** The host-wide admission directory: every worktree and check-host run on this host shares one queue. */
 export function walkStackDirectory(_root: string, env: Environment): string {
