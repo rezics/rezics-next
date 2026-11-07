@@ -4,7 +4,7 @@ import { useRouter } from '@tanstack/react-router';
 import type { ReaderNavigation } from './contract';
 import { browserObservation } from './observation';
 
-/** The application session provider supplies navigation, never a second session value. */
+/** Optional host navigation capability; session identity stays in the existing QueryClient. */
 export const ReaderNavigationContext = createContext<ReaderNavigation | undefined>(undefined);
 const emptySubscribe = () => () => {};
 const browserAddress = () => (typeof window === 'undefined' ? '' : window.location.href);

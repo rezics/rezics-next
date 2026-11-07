@@ -15,7 +15,6 @@ import { errorPageHead, routeFailure } from '../shell/error-state';
 import { isPlatformClosedError } from '../kernel/platform-closed.ts';
 import { anonymousReadMode, type ReadCredentialMode } from '../kernel/credential.ts';
 import { useSession } from '../session/query.ts';
-import { SessionProvider } from '../session';
 import { pageHead, pageLinks, type PagePaths } from '../shell/head.ts';
 import { validatePublicOrigin } from '../shell/origin.ts';
 import '../styles.css';
@@ -237,13 +236,11 @@ function Root({ children }: { children: ReactNode }) {
             {m.shell_client_reload({}, options)}
           </a>
         </div>
-        <SessionProvider>
-          <LocaleNavigationProvider>
-            <AppShell navigation={commerceNavigation} subjectPurchase={subjectPurchaseRegions}>
-              {platformClosed ? <ClosedPage /> : children}
-            </AppShell>
-          </LocaleNavigationProvider>
-        </SessionProvider>
+        <LocaleNavigationProvider>
+          <AppShell navigation={commerceNavigation} subjectPurchase={subjectPurchaseRegions}>
+            {platformClosed ? <ClosedPage /> : children}
+          </AppShell>
+        </LocaleNavigationProvider>
         <Scripts />
       </body>
     </html>

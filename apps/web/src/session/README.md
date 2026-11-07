@@ -87,10 +87,11 @@ cases bind the personal driver now.
 Decision: Threads and moderation reporter history/status consume the session-owned
 [`reader/lifetime/index.ts`](../reader/lifetime/index.ts) browser capability. Its implementation owns the existing
 session cache observation, credential lookup, leases, cache-only session source, activity retirement and optional
-address/locale visits. `SessionProvider`, exported by `session/index.ts`, installs host navigation once in the actual
-root shell; isolated QueryClient mounts need no Router or additional provider. Prepared mounts with an existing Router retain
-their optional navigation observation. Performance's session integration
-shares this provider. It contains navigation only: no copied session value, new cache, fetch or authentication.
+address/locale visits. The existing root session hook and QueryClient install its shared cache observation once.
+Default navigation adapts the existing application Router; isolated mounts need neither a Router nor another provider.
+A host may supply the narrow navigation capability. Performance owns attachment to its shared session provider when
+that public export is delivered; train reconciliation owns the overlapping host. No session value, cache, fetch or
+authentication is added.
 The old observation, browser-state, lease and credential files remain compatibility entries for other owners.
 
 The leaf adapter has no Web application or feature dependency. Cache-only Threads consumers no longer load the

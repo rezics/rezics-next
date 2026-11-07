@@ -10,7 +10,6 @@ import {
   useReaderVisit,
 } from '../src/reader/lifetime/index';
 import type { ReaderNavigation } from '../src/reader/lifetime/contract';
-import { SessionProvider } from '../src/session/provider';
 import { useSlowModeVisit, type SlowModeVisit } from '../src/threads/slow-mode/caller';
 
 const { Window } = await import(
@@ -57,7 +56,7 @@ test('the session capability sees equal replacement and account ABA synchronousl
   client.clear();
 });
 
-test('an isolated session host needs no Router and aborts the old slow-mode caller in the replacement stack', async () => {
+test('an isolated QueryClient mount needs no Router and aborts the old slow-mode caller in the replacement stack', async () => {
   const client = new QueryClient();
   client.setQueryData(['session'], { state: 'signed-in', subject: 'alice', csrfToken: 'original' });
   const host = document.createElement('div');
@@ -71,9 +70,7 @@ test('an isolated session host needs no Router and aborts the old slow-mode call
     await act(async () =>
       root.render(
         <QueryClientProvider client={client}>
-          <SessionProvider>
-            <Control />
-          </SessionProvider>
+          <Control />
         </QueryClientProvider>,
       ),
     );

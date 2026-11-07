@@ -22,8 +22,9 @@ Decision: The expanded reader stays in page flow on phones and uses a bounded si
 Decision: Threads and moderation reporter history/status use the session-owned
 [browser reader lifetime boundary](../session/README.md#supported-reader-lifetime). Activity, erasure, pins,
 slow mode, authoring and revision return consume its cache-only observation or pure credential-mode vocabulary.
-The actual shell installs the shared `SessionProvider` once; isolated mounts continue with their QueryClient and
-browser address without a Router requirement. Native authorization and disclosure remain in prepared server reads.
+The existing shell session hook installs the shared cache observation once; isolated mounts continue with their
+QueryClient and browser address without a Router requirement. Default navigation uses the existing optional Router;
+Performance and the train own attachment to their shared session provider once its public export is delivered. Native authorization and disclosure remain in prepared server reads.
 
 A successful session replacement, even equal data or account A/B/A, cannot restore a retired callback. Slow mode
 aborts its old caller synchronously. Locale and address retirement also reject deferred focus. Thread/native page
