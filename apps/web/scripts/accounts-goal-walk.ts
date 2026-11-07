@@ -386,6 +386,40 @@ function agentSubjectId(row: Json | undefined, label: string): string {
   return id;
 }
 
+async function waitForPublicAgentSubject(stack: Origins, handle: string, label: string): Promise<string> {
+  const deadline = Date.now() + 30_000;
+  while (Date.now() < deadline) {
+    const publicTarget = accountRow(
+      requireStatus(
+        await kernel(stack, 'GET', '/v1/accounts', { query: { handle } }),
+        label,
+        200,
+      ),
+    );
+    try {
+      return agentSubjectId(publicTarget, label);
+    } catch {
+      await Bun.sleep(250);
+    }
+  }
+  throw new Error(`${label} omitted a public agent subject`);
+}
+
+async function deliveredRecoveryToken(email: string): Promise<string> {
+  const path = join(root, '.temp/local-stack/recovery', `${email}.json`);
+  const deadline = Date.now() + 15_000;
+  while (Date.now() < deadline) {
+    try {
+      const delivered = JSON.parse(await readFile(path, 'utf8')) as Json;
+      if (typeof delivered.token === 'string' && delivered.token) return delivered.token;
+    } catch {
+      // HTTP recovery never returns the proof; local assemble writes it privately.
+    }
+    await Bun.sleep(100);
+  }
+  throw new Error('recovery start acknowledged with no token; local walk stack has no supported recovery delivery');
+}
+
 async function kernel(
   stack: Origins,
   method: string,
@@ -557,11 +591,14 @@ async function operate(
   extra: Json = {},
 ): Promise<{ status: number; value: Json }> {
   const operationKey = crypto.randomUUID();
+  const confirmation = extra.confirmation;
+  const rest = { ...extra };
+  delete rest.confirmation;
   const body = {
     operationKey,
     operation,
     ...(operation.kind === 'organization' ? {} : { accountId: session.accountId }),
-    ...extra,
+    ...rest,
   };
   const approval = await auth(stack, '/account-operations/approve', session, body);
   if (approval.status !== 200) return approval;
@@ -569,9 +606,7 @@ async function operate(
   return auth(stack, '/account-operations/execute', session, {
     ...body,
     reference: approval.value.reference,
-    ...(operation.kind === 'delete' && typeof extra.confirmation === 'string'
-      ? { confirmation: extra.confirmation }
-      : {}),
+    ...(typeof confirmation === 'string' ? { confirmation } : {}),
   });
 }
 
@@ -617,7 +652,14 @@ async function fillPasswordSignIn(page: import('playwright').Page, email: string
 async function startFrontend(action: 'pages' | 'web', stack: Origins) {
   const child = Bun.spawn([process.execPath, 'services/auth/scripts/dev-stack.ts', action], {
     cwd: root,
-    env: process.env,
+    env: {
+      ...process.env,
+      ...(action === 'web'
+        ? {
+            NODE_OPTIONS: [process.env.NODE_OPTIONS, '--max-old-space-size=4096'].filter(Boolean).join(' '),
+          }
+        : {}),
+    },
     stdin: 'ignore',
     stdout: 'inherit',
     stderr: 'inherit',
@@ -875,14 +917,7 @@ if (import.meta.main) {
     const oldSession = await signIn(stack, person, 'login', []);
     const started = await auth(stack, '/recovery/start', undefined, { email: person.email }, 15_000);
     requireStatus(started, 'recovery start', 200);
-    const token =
-      typeof started.value.token === 'string'
-        ? started.value.token
-        : typeof started.value.delivery === 'string'
-          ? started.value.delivery
-          : '';
-    if (!token)
-      throw new Error('recovery start acknowledged with no token; local walk stack has no supported recovery delivery');
+    const token = await deliveredRecoveryToken(person.email);
     const completed = await auth(
       stack,
       '/recovery/complete',
@@ -1109,7 +1144,7 @@ if (import.meta.main) {
     });
     requireStatus(before, 'consented profile', 200);
     if (!granted.refresh) throw new Error('website token omitted refresh_token');
-    const revoked = await fetch(`${stack.issuer}/revoke`, {
+    const revoked = await fetch(`${stack.native}/revoke`, {
       method: 'POST',
       headers: { origin: stack.issuer, 'content-type': 'application/x-www-form-urlencoded' },
       body: new URLSearchParams({
@@ -1118,6 +1153,7 @@ if (import.meta.main) {
         client_assertion: await websiteAssertion(stack, keys.website),
         resource: bindings.API_RESOURCE ?? WEBSITE_AUDIENCE,
         token: granted.refresh,
+        token_type_hint: 'refresh_token',
       }),
       signal: AbortSignal.timeout(30_000),
     });
@@ -1205,14 +1241,7 @@ if (import.meta.main) {
     const follower = walker ?? (await signup(stack, 'j13a'));
     followTarget = await signup(stack, 'j13b');
     const token = await websiteToken(stack, follower, bindings, keys.website);
-    const publicTarget = accountRow(
-      requireStatus(
-        await kernel(stack, 'GET', '/v1/accounts', { query: { handle: followTarget.handle } }),
-        'public follow target',
-        200,
-      ),
-    );
-    followTargetId = agentSubjectId(publicTarget, 'follow target');
+    followTargetId = await waitForPublicAgentSubject(stack, followTarget.handle, 'follow target');
     const followed = await kernel(stack, 'PUT', `/v1/follows/${followTargetId}`, { bearer: token.bearer });
     if (followed.status !== 200)
       throw new Error(`follow HTTP ${followed.status}: ${summarize(followed.value)}`);
@@ -1256,14 +1285,7 @@ if (import.meta.main) {
     const target = outsider ?? (await signup(stack, 'j14b'));
     const token = await websiteToken(stack, follower, bindings, keys.website);
     const stranger = await websiteToken(stack, target, bindings, keys.website);
-    const publicTarget = accountRow(
-      requireStatus(
-        await kernel(stack, 'GET', '/v1/accounts', { query: { handle: target.handle } }),
-        'public count target',
-        200,
-      ),
-    );
-    const subjectId = agentSubjectId(publicTarget, 'count target');
+    const subjectId = await waitForPublicAgentSubject(stack, target.handle, 'count target');
     await kernel(stack, 'PUT', `/v1/follows/${subjectId}`, { bearer: token.bearer });
     const own = await kernel(stack, 'GET', '/v1/followCounts/outgoing', { bearer: token.bearer });
     await rememberKernelBearerFailure(own, 'own outgoing count');
@@ -1292,7 +1314,7 @@ if (import.meta.main) {
         spaceId,
         title: 'Accounts walk Realm',
         summary: 'Goal walk protected reads',
-        visibility: 'unlisted',
+        visibility: 'protected',
         contextId: GLOBAL_CONTEXT,
       },
     });

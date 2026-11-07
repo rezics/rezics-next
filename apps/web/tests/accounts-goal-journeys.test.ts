@@ -69,10 +69,13 @@ test('the table-shape check does not boot Storybook, and follow writes the publi
   expect(commandNeedsSharedDevServer(['bun', 'test', 'tests/session.test.ts'])).toBe(true);
   const source = readFileSync(walk, 'utf8');
   expect(source).toContain("const session = await signIn(stack, person, 'login', []);");
-  expect(source).toContain("followTargetId = agentSubjectId(publicTarget, 'follow target')");
+  expect(source).toContain("followTargetId = await waitForPublicAgentSubject(stack, followTarget.handle, 'follow target')");
   expect(source).toContain("kernel(stack, 'PUT', `/v1/follows/${followTargetId}`, { bearer: token.bearer })");
   expect(source).not.toMatch(/follows\/\$\{followTargetId\}.*body:/);
-  expect(source).toContain("`${stack.issuer}/revoke`");
+  expect(source).toContain("`${stack.native}/revoke`");
+  expect(source).toContain("visibility: 'protected'");
+  expect(source).toContain("join(root, '.temp/local-stack/recovery'");
+  expect(source).toContain('delete rest.confirmation');
   expect(source).toContain('outsider opened the software session');
   expect(source).toContain('/operator-sessions/open');
   const rows = parseJourneyTable(readFileSync(capabilities, 'utf8'));
