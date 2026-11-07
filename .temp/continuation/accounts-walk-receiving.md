@@ -74,7 +74,13 @@ Check 6f14a816-e641-40d9-adf1-bcfe1913ea8b at e645c82f34c1845f50828baf1691dd85be
 
 The first fix removed competing root reapers but retained observeLeaderExit's /proc early-completion fallback. A zombie leader can therefore make custody return before Bun consumes its wait status. Remove that fallback: custody now awaits the actual Bun child.exited completion, while recorded adopted descendant reaping stays independent. Preserve all original group absence, descendants, output, PID identity and error assertions; no catch/guess, grace extension or test relaxation. The final changed-workspace typing and controller-named three-file focused selection run after this follow-up. All producer integration continuations and the historical nineteen-row census remain unchanged.
 
+## Integrated receiving round
+
+The attempt-six base now includes Auth40c038b064c2c2f3ce230a5fc51f284aeda8ac58, Content/native fixtures65d59008b401edcc06ff12cfd56231d82cebe4b9 and Performance allocator6948a89278c0383165a7ed4ca69f1c99506c74a2 (ancestry verified). The allocator writes and fsyncs its shared sequence descriptor in place; the former rename failure does not describe this source. Auth admits the actual database before native imports and carries selected ports; its original three-file/thirty-case acceptance is retained. Receive current authentication mapping and dedicated-pool receipt keys without substituting authority. The paid custody fixes remain; add one assertion that exit7 remains7 after settled close. This is the smallest check of the explicit through-close requirement, and all prior assertions remain. Required source documents were read before this choice, including native-auth-custody-receiving-20261107.md; retain the full union below. Prior check834fda99-a135-4977-93d3-64c214cd6614 has no delivered result or retained log here, so no pass is presumed. The same ordinary launcher and original Auth native/browser selection now receive these actual integrated repairs.
+
 ## Accepted reference union
+
+- .temp/goal/content/native-auth-custody-receiving-20261107.md
 
 References preserve receiving obligations; their presence is not an assertion that every linked producer has executed. Contract-named owner sources and the four folded packets were read before this scope correction.
 
