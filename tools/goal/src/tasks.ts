@@ -78,6 +78,7 @@ import {
   requireUrgentDispatch,
   setUrgentGrant,
   authenticatedManager,
+  backlogManagerActor,
   applyPriorityTransition,
   criticalPriority,
   grantCriticalPriority,
@@ -1287,6 +1288,18 @@ export class WorkerTasks {
     authorization?: ProofAuthorization,
   ): boolean {
     if (!authorization) {
+      if (
+        actor &&
+        actor.id === this.settings.integration.operationsManager &&
+        !previousCritical &&
+        !criticalPriority(task.brief, task.taskClass) &&
+        task.brief.kind !== 'verification'
+      ) {
+        const live = backlogManagerActor(this.store.db, actor.id);
+        if (!live || live.id !== actor.id || live.sessionId !== actor.sessionId)
+          throw new Error('priority changes require an authenticated manager session');
+        return false; // Normal-to-normal operations repair changes neither priority history nor grants.
+      }
       return applyRetryPriorityTransition(
         this.store.db,
         task,

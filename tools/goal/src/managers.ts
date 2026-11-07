@@ -1117,6 +1117,12 @@ export class ManagerSessions {
   private reassignGoalTasks(goal: string, from: string, to: string): void {
     if (!this.db.query("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'worker_tasks'").get()) return;
     this.db
+      .query(`INSERT INTO worker_events(task_id,attempt,kind,at,body)
+        SELECT id,current_attempt,'owner-contract-decisions-superseded',?,? FROM worker_tasks AS task
+        WHERE json_extract(body, '$.brief.goal')=? AND json_extract(body, '$.brief.manager')=?
+        AND EXISTS (SELECT 1 FROM worker_events WHERE task_id=task.id AND kind='owner-contract-decision-accepted')`)
+      .run(new Date().toISOString(), JSON.stringify({ previousManager: from, manager: to }), goal, from);
+    this.db
       .query(
         `UPDATE worker_tasks SET body = json_set(body, '$.brief.manager', ?)
          WHERE json_extract(body, '$.brief.goal') = ? AND json_extract(body, '$.brief.manager') = ?`,

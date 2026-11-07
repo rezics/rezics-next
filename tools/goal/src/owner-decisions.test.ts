@@ -225,3 +225,41 @@ test('a reference escaping through a parent symlink stays named and pending', ()
     directory.close();
   }
 });
+
+test('an omitted reference stays pending across attempts while delivered context and foreign events do not repeat', () => {
+  const directory = temporaryDirectory();
+  try {
+    const path = `docs/${'a'.repeat(80)}/${'b'.repeat(80)}/${'c'.repeat(80)}/contract.md`;
+    mkdirSync(join(directory.path, path, '..'), { recursive: true });
+    writeFileSync(join(directory.path, path), 'Canonical caller contract.');
+    const body = {
+      ...decision('partial', 'Apply the caller rule.', '2026-11-03T09:00:00.000Z'),
+      documentRefs: [{ path }],
+    };
+    const accepted = event(1, body, body.createdAt);
+    const first = prepareOwnerDecisionPrompt(
+      { ownerDecisionEvents: () => [accepted] },
+      task(directory.path),
+      { taskId: 'task-a', attempt: 2 },
+      'x'.repeat(Math.min(MAX_WORKER_PROMPT_CHARACTERS, defaultPolicy.brief.bytes) - 400),
+    );
+    expect(first.delivery?.documentRefs).toEqual([]);
+    const delivered = event(2, first.delivery, body.createdAt, 'owner-contract-decision-delivery');
+    const foreign = {
+      ...event(3, { ...body, summary: 'Use a foreign task rule.' }, body.createdAt),
+      task_id: 'other-task',
+    };
+    const current = { ...task(directory.path), currentAttempt: 3 };
+    const next = prepareOwnerDecisionPrompt(
+      { ownerDecisionEvents: () => [accepted, delivered, foreign] },
+      current,
+      { taskId: current.id, attempt: 3 },
+      'Continue.',
+    );
+    expect(next.prompt).not.toContain('Decision: Apply');
+    expect(next.prompt).not.toContain('foreign task rule');
+    expect(next.delivery).toMatchObject({ originatingAttempt: 2, documentRefs: [{ path, status: 'delivered' }] });
+  } finally {
+    directory.close();
+  }
+});

@@ -2,6 +2,8 @@ import { nativeCheckId, proofFingerprint, ProofCapacityQueuedError } from './ver
 import type { Database } from 'bun:sqlite';
 import { defaultPolicy } from './policy.ts';
 import { isDeepStrictEqual } from 'node:util';
+import { briefProposalHash, sameBriefProposalText } from './durable-follow-up.ts';
+import type { OwnerDecisionDelivery } from './owner-decisions.ts';
 import { CheckResults, checkResultsMigration } from './check-results.ts';
 import { groupMembers, runPidFilePresence, sameProcess } from './process.ts';
 import { makeRecord, readMeasurement } from './records.ts';
@@ -1677,6 +1679,29 @@ export class WorkerStore implements AttemptFence {
     if (task.brief.kind === 'verification' && ['landing', 'integrated', 'merged'].includes(task.state))
       throw new Error('proof tasks cannot land or publish source integration');
     if (['integrated', 'merged', 'cancelled', 'stopped'].includes(task.state)) closePendingFlow(this.db, task);
+    const previous = this.task(task.id);
+    if (
+      !sameBriefProposalText(previous.brief.markdown, task.brief.markdown) ||
+      previous.brief.manager !== task.brief.manager
+    ) {
+      // Canonical replacement supersedes existing intent atomically, including if an older brief is later restored.
+      this.db
+        .query(`INSERT INTO worker_events(task_id,attempt,kind,at,body)
+        SELECT ?,?,'owner-contract-decisions-superseded',?,?
+        WHERE EXISTS (SELECT 1 FROM worker_events WHERE task_id=? AND kind='owner-contract-decision-accepted')`)
+        .run(
+          task.id,
+          task.currentAttempt,
+          new Date().toISOString(),
+          JSON.stringify({
+            previousContractSha256: briefProposalHash(previous.brief.markdown),
+            contractSha256: briefProposalHash(task.brief.markdown),
+            previousManager: previous.brief.manager,
+            manager: task.brief.manager,
+          }),
+          task.id,
+        );
+    }
     this.db
       .query('UPDATE worker_tasks SET current_attempt=?, body=? WHERE id=?')
       .run(task.currentAttempt, JSON.stringify(task), task.id);
@@ -2039,16 +2064,50 @@ export class WorkerStore implements AttemptFence {
     });
   }
   ownerDecisionEvents(ref: AttemptRef): WorkerEvent[] {
-    return this.db
+    const events = this.db
       .query(
         `SELECT sequence, task_id, attempt, kind, at, body FROM worker_events
-         WHERE task_id=? AND attempt=? AND kind IN ('owner-contract-decision-accepted', 'owner-contract-decision-delivery')
+         WHERE task_id=? AND attempt<=? AND kind IN ('owner-contract-decision-accepted', 'owner-contract-decision-delivery', 'owner-contract-decisions-superseded')
          ORDER BY sequence`,
       )
       .all(ref.taskId, ref.attempt) as WorkerEvent[];
+    // Older accepted events have no contract hash. Retained retry metadata still proves a later canonical rewrite.
+    const legacy = events.filter((event) => {
+      if (event.kind !== 'owner-contract-decision-accepted') return false;
+      try {
+        return !JSON.parse(event.body)?.contractSha256;
+      } catch {
+        return false;
+      }
+    });
+    if (!legacy.length) return events;
+    const changed = this.db
+      .query(`SELECT max(attempt) AS attempt FROM worker_attempts
+      WHERE task_id=? AND attempt<=? AND json_extract(body, '$.newBriefHash') IS NOT NULL`)
+      .get(ref.taskId, ref.attempt) as { attempt: number | null };
+    const pending = this.task(ref.taskId).pendingBriefChange;
+    const superseded = legacy.filter((event) => pending || event.attempt < (changed.attempt ?? 0));
+    if (superseded.length)
+      events.push({
+        task_id: ref.taskId,
+        attempt: ref.attempt,
+        kind: 'owner-contract-decisions-superseded',
+        at: '',
+        sequence: Math.max(...superseded.map((event) => event.sequence)),
+        body: '{}',
+      });
+    return events;
   }
-  recordOwnerDecisionDelivery(ref: AttemptRef, receipt: unknown): void {
-    this.event(ref, 'owner-contract-decision-delivery', receipt);
+  recordOwnerDecisionDelivery(ref: AttemptRef, receipt: OwnerDecisionDelivery): void {
+    const launched = this.db
+      .query(`SELECT max(sequence) AS sequence FROM worker_events
+      WHERE task_id=? AND attempt=? AND kind='worker-run-started'`)
+      .get(ref.taskId, ref.attempt) as { sequence: number | null };
+    this.event(ref, 'owner-contract-decision-delivery', {
+      ...receipt,
+      receivingAttempt: ref.attempt,
+      ...(launched.sequence !== null ? { launchSequence: launched.sequence } : {}),
+    });
   }
   events(taskId?: string, attempt?: number): WorkerEvent[] {
     return (

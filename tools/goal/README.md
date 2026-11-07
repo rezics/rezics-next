@@ -2189,20 +2189,31 @@ top-level fields are accepted. The command authenticates the persisted manager s
 transaction as persistence. Authentication, task identity and decision time come from the controller, never the body.
 Decision: accepted decisions use a reserved controller event; old unverified events remain pending until the owner resubmits through this command.
 
-The controller reads `owner-contract-decision-accepted` events for the task's current attempt when it builds a normal worker
-prompt. It carries the newest authenticated decision from the task's manager and its repository-relative document
-references into that same worker session. A successful launch records `owner-contract-decision-delivery`; a referenced
-document unavailable in the worker worktree remains pending and is named in the prompt. Replayed decision identities
-and decisions from earlier attempts cannot supersede a later current-attempt decision. Recording a decision does not
-start or replace an attempt; delivery waits for the next normal prompt boundary.
-The event command does not sweep or resume workers. Acceptance and delivery events cannot be submitted directly.
+The controller reads task-level `owner-contract-decision-accepted` events through the receiving attempt when it builds
+a normal worker prompt. Pending authenticated owner intent survives ordinary retry, same-session resume and controller
+restart. The decision keeps its original identity, acceptance sequence, originating attempt, manager and sender session;
+renewing that manager's provider session does not erase accepted intent. Only decisions from the task's current manager
+can be projected. Goal reassignment supersedes prior owner intent inside its existing transfer transaction, including
+when the former owner later receives the Goal again. Recording a decision does not start or replace an attempt; delivery waits for a normal prompt boundary.
+
+New acceptances bind the canonical brief hash. A canonical replacement journals `owner-contract-decisions-superseded`
+with the old and new contract hashes in the same task transaction; restoring old brief bytes or replaying the old decision
+identity cannot resurrect superseded intent. An owner sends a new decision identity for a new instruction. Existing
+unbound accepted events remain eligible across unchanged retries; retained pending brief changes and later attempts'
+brief-change hashes establish supersession for those older events.
+
+Prompt preparation, spawn and successful delivery acknowledgement share the existing write fence. A successful launch
+records `owner-contract-decision-delivery` against the actual receiving attempt and `worker-run-started` sequence, with
+the original acceptance identity and provenance. Failed launch or a crash before acknowledgement leaves intent pending.
+Delivery accumulates across generations: an already delivered summary or available reference does not repeat, while
+missing, unreadable or omitted references stay pending. Document availability is refreshed in the receiving worktree.
+The event command does not sweep or resume workers. Acceptance, delivery and supersession events are controller-owned.
+
 The decision shares the existing 20,000-character total prompt limit and process input byte limit with the ordinary
 prompt. References that do not fit remain pending. A summary that does not fit is replaced by a pointer to a worktree file
-holding the whole decision; the pointer is appended even past the limits, so no decision refuses a launch. Only a
-successful launch records delivery against the accepted event sequence.
-Projection decision: each prompt parses decisions and deliveries in one event traversal, keeps the earliest sequence
-per decision identity, selects by controller timestamp then event sequence, and reads each referenced path once.
-No projection cache is persisted, and the delivery protocol is unchanged.
+holding the whole decision; the pointer is appended even past the limits, so no decision refuses a launch. Projection
+parses decisions and deliveries in one traversal, keeps the earliest sequence per decision identity, selects by controller
+timestamp then event sequence, and reads each referenced path once. No projection cache or watcher is added.
 
 #### Native Storybook publication
 
@@ -2620,6 +2631,11 @@ Decision: Goal ownership is the managed session `goals` list; assign is the tran
 `brief.manager` without restarting workers. Status still projects one task cohort and one incident-history read.
 
 `retry <task> [--brief <file>]` retries a task, optionally replacing its brief after checking that its Goal and manager stay the same. Comparison canonicalizes LF endings and ignores trailing EOF whitespace. An unchanged contract is reported and not restarted; a changed brief records both SHA-256 hashes on the new attempt. A stopped task still restarts with plain `retry <task>`.
+An authenticated configured operations manager may submit a rewritten ordinary retry that retains normal priority,
+including control-plane work targeting main.
+This normal-to-normal case rechecks its live persisted provider session and leaves priority grants and history unchanged, matching
+active amendment authority. Critical restatements, escalation and demotion retain the existing owner and grant rules.
+
 Decision: `retry --brief` records the replacement as a pending proposal before the lease. An automatic retry consumes the newest pending proposal with the same Goal, manager and contract checks, records both hashes, and removes the set. A proposal for an earlier attempt still applies unless the current attempt already started on a newer brief.
 
 For an attempt that has started, `stop` and `cancel` persist the requested disposition before signaling its recorded process groups. A waiting attempt has no worker process; they terminate recorded check runners (`runnerPid`, usual process identity), mark those checks abandoned, and settle even if runners are gone. An unknown waiting request settles on the next call and the sweep. `status` shows `terminationRequest` as requested, unknown or complete; waiting uses identity `waiting`, else missing stays unknown. Host recovery settles unknown identity after recorded run PIDs are gone and no live process remains under the worktree, then records that result. A stop abandons a queued retry; a later retry queues a new one.

@@ -491,7 +491,13 @@ export async function runWorkerCommand(
       const { taskId, attempt, kind, body } = parsedArguments;
       if (kind === 'owner-contract-decision') submitOwnerDecision(store, { taskId, attempt }, body, env);
       else {
-        if (kind === 'owner-contract-decision-accepted' || kind === 'owner-contract-decision-delivery')
+        if (
+          [
+            'owner-contract-decision-accepted',
+            'owner-contract-decision-delivery',
+            'owner-contract-decisions-superseded',
+          ].includes(kind)
+        )
           throw new Error('owner decision acceptance and delivery events are controller-owned');
         store.event({ taskId, attempt }, kind, body);
       }

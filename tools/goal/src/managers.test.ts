@@ -9,6 +9,9 @@ import { ManagerSessions, resolveGoalManager, type ManagerSpec } from './manager
 import { defaultPolicy, type ControlPolicy } from './policy.ts';
 import type { ProcessIdentity } from './process.ts';
 import { temporaryDirectory } from './test-support.ts';
+import { prepareOwnerDecisionPrompt } from './owner-decisions.ts';
+import type { WorkerEvent } from './store.ts';
+import type { Task } from './types.ts';
 
 async function setup(
   policy?: ControlPolicy,
@@ -1069,7 +1072,8 @@ test('manager assign moves a Goal onto another running manager without restartin
     s.db.exec(
       `CREATE TABLE worker_tasks (id TEXT PRIMARY KEY, sequence INTEGER NOT NULL UNIQUE, current_attempt INTEGER NOT NULL, body TEXT NOT NULL);
        CREATE TABLE worker_attempts (task_id TEXT NOT NULL, attempt INTEGER NOT NULL, body TEXT NOT NULL, PRIMARY KEY(task_id, attempt));
-       CREATE TABLE landing_queue (id INTEGER PRIMARY KEY AUTOINCREMENT, task TEXT NOT NULL, attempt INTEGER NOT NULL, request TEXT NOT NULL, outcome TEXT, delivered INTEGER NOT NULL DEFAULT 0, candidate TEXT);`,
+       CREATE TABLE landing_queue (id INTEGER PRIMARY KEY AUTOINCREMENT, task TEXT NOT NULL, attempt INTEGER NOT NULL, request TEXT NOT NULL, outcome TEXT, delivered INTEGER NOT NULL DEFAULT 0, candidate TEXT);
+       CREATE TABLE worker_events (sequence INTEGER PRIMARY KEY AUTOINCREMENT, task_id TEXT NOT NULL, attempt INTEGER NOT NULL, kind TEXT NOT NULL, at TEXT NOT NULL, body TEXT NOT NULL);`,
     );
     const handle = { pid: 4242, start: '100', boot: 'boot', group: 4242 };
     s.db.query('INSERT INTO worker_tasks(id, sequence, current_attempt, body) VALUES (?, ?, ?, ?)').run(
@@ -1104,6 +1108,21 @@ test('manager assign moves a Goal onto another running manager without restartin
       goalId: 'refactor',
       summary: 'Repair the refactor journey',
     });
+    s.db.query('INSERT INTO worker_events(task_id,attempt,kind,at,body) VALUES (?,?,?,?,?)').run(
+      'running-task',
+      1,
+      'owner-contract-decision-accepted',
+      new Date().toISOString(),
+      JSON.stringify({
+        taskId: 'running-task',
+        attempt: 1,
+        decisionId: 'original-owner-rule',
+        summary: 'Use the original owner rule.',
+        managerId: source.id,
+        senderSessionId: source.threadId,
+        documentRefs: [],
+      }),
+    );
     const moved = await s.managers.assign('refactor', dest.id);
     await s.managers.flush();
     expect(moved).toEqual({ goal: 'refactor', from: source.id, to: dest.id, goals: ['commerce', 'refactor'] });
@@ -1127,6 +1146,22 @@ test('manager assign moves a Goal onto another running manager without restartin
     );
     expect(task).toMatchObject({ state: 'running', brief: { goal: 'refactor', manager: dest.id } });
     expect(attempt.process).toEqual(handle);
+    const decisions = s.db.query('SELECT * FROM worker_events ORDER BY sequence').all() as WorkerEvent[];
+    expect(decisions.map((event) => event.kind)).toEqual([
+      'owner-contract-decision-accepted',
+      'owner-contract-decisions-superseded',
+    ]);
+    expect(JSON.parse(decisions[1]!.body)).toEqual({ previousManager: source.id, manager: dest.id });
+    // Restoring the former owner cannot revive intent invalidated by the real assignment.
+    const restored = { ...task, brief: { ...task.brief, manager: source.id } } as Task;
+    expect(
+      prepareOwnerDecisionPrompt(
+        { ownerDecisionEvents: () => decisions },
+        restored,
+        { taskId: restored.id, attempt: 1 },
+        'Continue.',
+      ).delivery,
+    ).toBeUndefined();
     expect(resolveGoalManager(s.db, 'refactor', 'refactor')).toBe(dest.id);
     expect(
       JSON.parse(
