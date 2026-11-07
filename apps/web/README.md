@@ -35,6 +35,10 @@ through its crawl. This is an installed dependency risk and proposed repair, not
 earlier optimizer log belongs to its own attempt. The producer correction below removes that startup crawl; the new
 trace identifies the first unfinished Vite hook or listener phase on the retained native receiving run.
 
+Decision: keep the integrated native fixture's existing 270-second budget. Evaluate Web only after the real Worker
+reports ready, then require the installed Vite child to listen and return useful `/en` HTML after both fresh and reused
+message preparation. Cancellation must settle the attempt-owned child tree.
+
 The public shell needs no invented credentials or copied test keys. Configure real services and registered website
 credentials only for the journeys that need them, as described below. Auth and Kernel availability remain separate
 prerequisites; a ready shell does not establish sign-in, native authorization or checkout. This command does not
