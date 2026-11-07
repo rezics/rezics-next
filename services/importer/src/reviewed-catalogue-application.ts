@@ -23,13 +23,15 @@ import {
   sameReviewedCatalogueJson,
   type ReviewedBangumiBindingEvidence,
   type ReviewedBangumiBindingStatus,
+  type ReviewedBangumiTagBinding,
+  type ReviewedBangumiTagCurrentRead,
   type ReviewedCatalogueLedger,
   type ReviewedCataloguePort,
   type ReviewedCatalogueReceipt,
   type ReviewedCatalogueResult,
   type ReviewedCatalogueSeed,
   type ReviewedCatalogueSeedInput,
-} from './reviewed-catalogue.ts';
+} from './reviewed-catalogue-contract.ts';
 import type { ReviewedVocabularyPort } from './reviewed-vocabulary-port.ts';
 
 type CurrentReviewedCandidate = Extract<ReviewedCandidatePage['candidates'][number], { statement: unknown }>;
@@ -46,6 +48,11 @@ export type ReviewedCatalogueApplication = Readonly<{
     port: ReviewedCataloguePort,
     signal?: AbortSignal,
   ): Promise<{ sourceConcept: string; canonicalConcept: string } | null>;
+  resolveCurrentReviewedBangumiTagSubjects(
+    port: Pick<ReviewedCataloguePort, 'readReviewedSubject'>,
+    binding: ReviewedBangumiTagBinding,
+    signal?: AbortSignal,
+  ): Promise<ReviewedBangumiTagCurrentRead>;
   lookup(
     bindings: Pick<RecordBindings, 'claim' | 'candidates'>,
     port: ReviewedCataloguePort,
@@ -73,6 +80,27 @@ async function openFence(
 function openLedger(path: string | Database): ReviewedCatalogueLedger {
   const session = new ImportSession(path);
   return { session, store: new RunStore<BatchStatement[]>(session.store.database) };
+}
+
+async function readCurrentReviewedBangumiTagSubjects(
+  port: Pick<ReviewedCataloguePort, 'readReviewedSubject'>,
+  binding: ReviewedBangumiTagBinding,
+  signal?: AbortSignal,
+): Promise<ReviewedBangumiTagCurrentRead> {
+  const read = async (requestedId: string) => {
+    try {
+      const subject = await port.readReviewedSubject(requestedId, signal);
+      const currentId = (subject.subject as { id?: unknown }).id;
+      return {
+        requestedId,
+        currentId: typeof currentId === 'string' ? currentId : requestedId,
+        available: true,
+      };
+    } catch {
+      return { requestedId, currentId: requestedId, available: false };
+    }
+  };
+  return { source: await read(binding.sourceConcept), canonical: await read(binding.canonicalConcept) };
 }
 
 async function select(
@@ -457,6 +485,9 @@ export function createReviewedCatalogueApplication(input: {
     },
     readBinding(bindings, port, signal) {
       return readBinding(vocabulary, bindings, port, signal);
+    },
+    resolveCurrentReviewedBangumiTagSubjects(port, binding, signal) {
+      return readCurrentReviewedBangumiTagSubjects(port, binding, signal);
     },
     lookup(bindings, port, options = {}) {
       return {

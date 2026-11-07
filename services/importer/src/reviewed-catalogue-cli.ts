@@ -1,6 +1,7 @@
 import { createAccountTokenProvider, IMPORTER_SCOPES } from './credentials.ts';
 import { createImportTransport } from './import-client.ts';
-import { installReviewedCatalogueComposition, releasedReviewedVocabulary } from './showcase-cross-media.ts';
+import { createReviewedCatalogueApplication } from './reviewed-catalogue-application.ts';
+import { releasedReviewedVocabulary } from './reviewed-vocabulary-port.ts';
 
 /** Deliberate operator entry point; ordinary provider CLI never invokes this writer. */
 export async function runReviewedCatalogueSeedCli(argv: readonly string[]): Promise<void> {
@@ -30,11 +31,8 @@ export async function runReviewedCatalogueSeedCli(argv: readonly string[]): Prom
     scopes: [...IMPORTER_SCOPES, 'subject:read', 'context:accept', 'context:adopt'],
   });
   const port = createImportTransport({ origin: api, tokenProvider });
-  const result = await installReviewedCatalogueComposition({
-    path: values.get('--state')!,
-    transport: port,
-    vocabulary: releasedReviewedVocabulary(),
-  }).seed();
+  const application = createReviewedCatalogueApplication({ vocabulary: releasedReviewedVocabulary() });
+  const result = await application.seed({ path: values.get('--state')!, port });
   process.stdout.write(`${JSON.stringify(result)}\n`);
 }
 
