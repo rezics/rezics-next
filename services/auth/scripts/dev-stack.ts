@@ -167,33 +167,37 @@ export function developmentMediaBindings(
 /** Build the same mounted Kernel declarations used by the host; no request-time discovery. */
 export async function developmentWebsiteConfiguration(env?: Record<string, string>) {
   const environment = env ?? (await kernelEnvironment());
-  const [{ createKernel }, { readConfig }, { actionCatalogue }, { accessActionCatalogue }] =
-    await withDevelopmentDatabase(environment, () =>
+  const [{ createKernelActionCatalogue }, { readConfig }, { accessActionCatalogue }] = await withDevelopmentDatabase(
+    environment,
+    () =>
       Promise.all([
         import('../../kernel/src/http/kernel.ts'),
         import('../../kernel/src/server.ts'),
-        import('../../kernel/src/http/request.ts'),
         import('../../kernel/src/access/index.ts'),
       ]),
-    );
-  const config = readConfig(environment);
+  );
+  const config = await phase('catalogue-configuration', () => readConfig(environment));
   const pool = new Pool({ connectionString: config.databaseUrl });
   try {
-    const catalogue = actionCatalogue(
-      createKernel({
+    // Setup and page bindings need every mounted declaration, not an HTTP host's compiled handlers.
+    // Use the same native mount and checks as createKernel; neither cache nor substitute authority is involved.
+    const catalogue = await phase('catalogue-native-mount', () =>
+      createKernelActionCatalogue({
         pool,
         tokens: config.tokens,
         routeKey: config.routeKey,
         ...(config.receiptKeys ? { receiptKeys: config.receiptKeys } : {}),
       }),
     );
-    const siteActions = accessActionCatalogue(catalogue);
-    return {
-      ...developmentWebsiteScopeConfiguration(mountedWebsiteConfiguration(catalogue)),
-      AUTH_SECURITY_SCOPE_CONFIGURATION: authSecurityScopeConfiguration(siteActions.keys()),
-    };
+    return await phase('catalogue-website-scopes', () => {
+      const siteActions = accessActionCatalogue(catalogue);
+      return {
+        ...developmentWebsiteScopeConfiguration(mountedWebsiteConfiguration(catalogue)),
+        AUTH_SECURITY_SCOPE_CONFIGURATION: authSecurityScopeConfiguration(siteActions.keys()),
+      };
+    });
   } finally {
-    await pool.end();
+    await phase('catalogue-pool-settlement', () => pool.end());
   }
 }
 
@@ -438,8 +442,8 @@ async function withDevelopmentDatabase<T>(environment: Record<string, string>, l
   const previous = process.env.DATABASE_URL;
   process.env.DATABASE_URL = databaseUrl;
   try {
-    await phase('native-registration', import('reylo/register'));
-    return await phase('native-imports', load());
+    await phase('native-registration', () => import('reylo/register'));
+    return await phase('native-imports', load);
   } finally {
     if (previous === undefined) delete process.env.DATABASE_URL;
     else process.env.DATABASE_URL = previous;
@@ -495,7 +499,7 @@ async function setup() {
       await privateFile(resolve(state, 'importer.jwk'), JSON.stringify(keys.importer));
     })(),
   );
-  const website = await phase('setup-catalogue', developmentWebsiteConfiguration(env));
+  const website = await phase('setup-catalogue', () => developmentWebsiteConfiguration(env));
   await phase(
     'setup-web-bindings',
     privateFile(
@@ -1036,15 +1040,24 @@ async function start() {
 }
 
 /** Names the startup phase that failed, so the stack output says which dependency was missing. */
-async function phase<T>(name: string, work: Promise<T>): Promise<T> {
+async function phase<T>(name: string, work: Promise<T> | (() => T | Promise<T>)): Promise<T> {
   // Fixed operation names only: never print environment values, credentials or request data.
-  console.error(`stack: ${name} starting`);
+  const started = performance.now();
+  console.error(`stack: ${name} starting utc=${new Date().toISOString()}`);
   try {
-    const value = await work;
-    console.error(`stack: ${name} ready`);
+    const value = await (typeof work === 'function' ? work() : work);
+    console.error(
+      `stack: ${name} ready utc=${new Date().toISOString()} elapsedMs=${Math.round(performance.now() - started)}`,
+    );
     return value;
   } catch (error) {
-    throw new Error(`walk: the ${name} phase did not start: ${error instanceof Error ? error.message : String(error)}`);
+    console.error(
+      `stack: ${name} failed utc=${new Date().toISOString()} elapsedMs=${Math.round(performance.now() - started)}`,
+    );
+    throw new Error(
+      `walk: the ${name} phase did not start: ${error instanceof Error ? error.message : String(error)}`,
+      { cause: error },
+    );
   }
 }
 

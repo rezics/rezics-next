@@ -1,4 +1,7 @@
 import { expect, test } from 'bun:test';
+import { existsSync } from 'node:fs';
+import { StackFixtureLifetime } from '../scripts/dev-stack-lifetime.ts';
+import { processIdentity } from '../../../scripts/check-custody.ts';
 // The full scope composition imports Kernel SQL, so run its existing assertions in the native database lane.
 import '../scripts/dev-stack.test.ts';
 import { mkdir, mkdtemp, readFile, readdir, rm, stat, utimes, writeFile } from 'node:fs/promises';
@@ -549,4 +552,66 @@ test('installed host receives management operations and independent reads from i
   expect(assembly).toContain('referenceKeys: config.tokens');
   expect(assembly).toContain('await host.stop()');
   expect(assembly).toContain('await kernelPool.end()');
+});
+
+for (const mode of ['cancel', 'failure'] as const) {
+  test(`fixture ${mode} settles setup descendants before its resources can be removed`, async () => {
+    await mkdir(resolve(root, '.temp'), { recursive: true });
+    const directory = await mkdtemp(resolve(root, '.temp/stack-lifetime-'));
+    const marker = resolve(directory, 'descendant.json');
+    const lifetime = new StackFixtureLifetime(20_000);
+    const reason = new Error('cancelled setup witness');
+    const grandchild = `
+      import { writeFileSync } from 'node:fs';
+      process.on('SIGTERM', () => {});
+      writeFileSync(${JSON.stringify(marker)}, JSON.stringify({pid: process.pid}));
+      setInterval(() => {}, 1000);
+    `;
+    const parent = `
+      import { existsSync } from 'node:fs';
+      Bun.spawn([process.execPath, '--eval', ${JSON.stringify(grandchild)}], {
+        stdout: 'inherit', stderr: 'inherit', detached: ${mode === 'cancel'},
+      });
+      while (!existsSync(${JSON.stringify(marker)})) await Bun.sleep(10);
+      ${mode === 'failure' ? 'process.exit(42);' : "process.on('SIGTERM', () => process.exit(0)); setInterval(() => {}, 1000);"}
+    `;
+    try {
+      const command = lifetime.command('setup-witness', [process.execPath, '--eval', parent], {
+        cwd: root,
+        env: process.env,
+      });
+      // Attach before waiting for the child marker, so an early command failure is always observed.
+      const outcome = command.catch((error: unknown) => error);
+      while (!existsSync(marker)) {
+        lifetime.signal.throwIfAborted();
+        await Bun.sleep(10);
+      }
+      const { pid } = JSON.parse(await readFile(marker, 'utf8')) as { pid: number };
+      if (mode === 'cancel') lifetime.cancel(reason);
+      const error = await outcome;
+      if (mode === 'cancel') expect(error).toBe(reason);
+      else expect((error as Error).message).toContain('setup-witness exited (42)');
+      await lifetime.close();
+      expect(processIdentity(pid)).toBeNull();
+      // A descendant holding the parent's stdout cannot outlive command completion or recreate resources.
+      expect(await readFile(marker, 'utf8')).toBe(JSON.stringify({ pid }));
+    } finally {
+      lifetime.cancel(reason);
+      await lifetime.close();
+      await rm(directory, { recursive: true, force: true });
+    }
+  });
+}
+
+test('fixture deadline terminates and awaits a pending setup command', async () => {
+  const lifetime = new StackFixtureLifetime(100);
+  try {
+    const pending = lifetime.command('setup-deadline', [process.execPath, '--eval', 'setInterval(() => {}, 1000)'], {
+      cwd: root,
+      env: process.env,
+    });
+    await expect(pending).rejects.toThrow('Local stack fixture work deadline exceeded');
+  } finally {
+    await lifetime.close();
+  }
 });

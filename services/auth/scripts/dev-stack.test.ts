@@ -9,6 +9,7 @@ import {
   origins,
   root,
 } from './dev-stack.ts';
+import { StackFixtureLifetime } from './dev-stack-lifetime.ts';
 import { websiteRequestedScopes } from '../../../apps/web/src/session/website-scopes.ts';
 
 test('local setup and launch carry the complete real mounted host scope composition', async () => {
@@ -25,41 +26,54 @@ test('local setup and launch carry the complete real mounted host scope composit
       );
       // A cold process must register Reylo itself and use the supplied database,
       // even when its ambient URL points at an unavailable, unrelated database.
-      const child = Bun.spawn(
-        [
-          process.execPath,
-          '--eval',
-          `
+      const lifetime = new StackFixtureLifetime(270_000);
+      try {
+        const child = lifetime.start(
+          'supplied-catalogue',
+          [
+            process.execPath,
+            '--eval',
+            `
           import assert from 'node:assert/strict';
           const original = process.env.DATABASE_URL;
+          const { Elysia } = await import(Bun.resolveSync('elysia', process.cwd() + '/services/kernel'));
+          const compile = Elysia.prototype.compile;
+          let compiled = 0;
+          Elysia.prototype.compile = function(...args) { compiled++; return compile.apply(this, args); };
           const { developmentWebsiteConfiguration } = await import('./services/auth/scripts/dev-stack.ts');
           const website = await developmentWebsiteConfiguration(JSON.parse(process.env.SUPPLIED_KERNEL_ENV));
           assert.equal(process.env.DATABASE_URL, original);
+          const repeated = await developmentWebsiteConfiguration(JSON.parse(process.env.SUPPLIED_KERNEL_ENV));
+          assert.deepEqual(repeated, website);
+          assert.equal(process.env.DATABASE_URL, original);
+          assert.equal(compiled, 0, 'catalogue composition must not compile HTTP handlers');
           console.log(JSON.stringify(website));
         `,
-        ],
-        {
-          cwd: root,
-          env: {
-            ...process.env,
-            DATABASE_URL: 'postgres://127.0.0.1:1/foreign',
-            REYLO_CONFIG: undefined,
-            SUPPLIED_KERNEL_ENV: JSON.stringify(env),
+          ],
+          {
+            cwd: root,
+            env: {
+              ...process.env,
+              DATABASE_URL: 'postgres://127.0.0.1:1/foreign',
+              REYLO_CONFIG: undefined,
+              SUPPLIED_KERNEL_ENV: JSON.stringify(env),
+            },
           },
-          stdout: 'pipe',
-          stderr: 'pipe',
-        },
-      );
-      const [stdout, stderr, code] = await Promise.all([
-        new Response(child.stdout).text(),
-        new Response(child.stderr).text(),
-        child.exited,
-      ]);
-      if (code !== 0) throw new Error(stderr);
-      expect(stderr).toContain('stack: native-registration starting');
-      expect(stderr).toContain('stack: native-imports ready');
-      expect(stderr).not.toContain(env.DATABASE_URL!);
-      return JSON.parse(stdout) as Awaited<ReturnType<typeof developmentWebsiteConfiguration>>;
+        );
+        const code = await child.child.exited;
+        await lifetime.stop(child);
+        const { stdout, stderr } = await child.output;
+        lifetime.signal.throwIfAborted();
+        if (code !== 0) throw new Error(stderr);
+        expect(stderr).toContain('stack: native-registration starting');
+        expect(stderr).toContain('stack: native-imports ready');
+        expect(stderr).not.toContain(env.DATABASE_URL!);
+        expect(stderr).toMatch(/catalogue-native-mount ready utc=\S+ elapsedMs=\d+/);
+        expect(stderr).toMatch(/catalogue-pool-settlement ready utc=\S+ elapsedMs=\d+/);
+        return JSON.parse(stdout) as Awaited<ReturnType<typeof developmentWebsiteConfiguration>>;
+      } finally {
+        await lifetime.close();
+      }
     },
     { analysis: false },
   );
