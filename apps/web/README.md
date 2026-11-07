@@ -152,7 +152,9 @@ PID, attempt, exit status and elapsed time. The generation parent stays lightwei
 the Paraglide compiler, and captured output keeps a bounded tail while preserving the original compiler failure.
 Decision: message preparation owns the full `bun run generate` process group; cancellation forwards its signal,
 escalates to SIGKILL after one second, and waits up to five seconds for the group to settle before releasing the shared
-lock. Keep the existing readiness budget and original `/en` browser assertions.
+lock. Readiness keeps the existing budget, waits for useful `/en` HTML, and reports the actual probe, fetch, or child
+exit cause. Only ECONNREFUSED maps to hydration startup; a closed-listener probe does not invent that code. Original
+browser assertions remain.
 Decision: `storybook-dev --app` logs its entry stage before loading physical check-host custody; finite Vite admission
 uses the lightweight `web-check-custody.ts` helper, and operator policy loads only when `--operator` is present. The
 receiving source revision `e5fd604190034f643a182acd908768d7fa64f831` predates integration `016cc7320e6e0b7ab0690e6f1e7fa3bbb1e12f05`

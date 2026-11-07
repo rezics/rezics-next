@@ -1,0 +1,70 @@
+{
+  code: "dbos_diagnostic",
+  operation: "workflow_runtime",
+  severity: "debug",
+}
+(node:4091453) DeprecationWarning: Calling client.query() when the client is already executing a query is deprecated and will be removed in pg@9.0. Use async/await or an external async flow control mechanism instead.
+(Use `bun --trace-warnings ...` to show where the warning was created)
+{
+  code: "dbos_diagnostic",
+  operation: "workflow_runtime",
+  severity: "info",
+}
+{
+  code: "dbos_diagnostic",
+  operation: "workflow_runtime",
+  severity: "info",
+}
+{
+  code: "dbos_diagnostic",
+  operation: "workflow_runtime",
+  severity: "info",
+}
+{
+  code: "dbos_diagnostic",
+  operation: "workflow_runtime",
+  severity: "info",
+}
+{
+  code: "dbos_diagnostic",
+  operation: "workflow_runtime",
+  severity: "debug",
+}
+{
+  code: "dbos_diagnostic",
+  operation: "workflow_runtime",
+  severity: "info",
+}
+{
+  code: "dbos_diagnostic",
+  operation: "workflow_runtime",
+  severity: "info",
+}
+{
+  code: "dbos_diagnostic",
+  operation: "workflow_runtime",
+  severity: "info",
+}
+{
+  code: "dbos_diagnostic",
+  operation: "workflow_runtime",
+  severity: "info",
+}
+{
+  code: "dbos_diagnostic",
+  operation: "workflow_runtime",
+  severity: "info",
+}
+Local persona: developer@rezics.test
+Password: [redacted]
+Account: 99e7b230-90dd-83ae-b5dc-932fcb45ae35
+{
+  code: "dbos_diagnostic",
+  operation: "workflow_runtime",
+  severity: "debug",
+}
+{
+  code: "dbos_diagnostic",
+  operation: "workflow_runtime",
+  severity: "debug",
+}

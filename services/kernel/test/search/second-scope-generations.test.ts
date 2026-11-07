@@ -321,7 +321,7 @@ test('a later metadata reconciliation step resumes the committed raw frontier be
     uuid: 'physical',
     incarnation: 'allocation',
     state: 'reconciling',
-    kinds: ['account'],
+    kinds: ['account', 'collection'],
     capability: { physicalTarget: 'searchdiscovery-g1', uuid: 'physical', incarnation: 'allocation', witnesses: {} },
   };
   let frontier: unknown[] | undefined;
@@ -382,6 +382,7 @@ test('a later metadata reconciliation step resumes the committed raw frontier be
     position: async () => 7n,
   };
   const account = { owner: 'accounts', kind: 'account' };
+  const collection = { owner: 'commerce', kind: 'collection' };
   const search = {
     async request(_method: string, path: string) {
       expect(path).toBe('/searchdiscovery-g1/_settings');
@@ -393,7 +394,10 @@ test('a later metadata reconciliation step resumes the committed raw frontier be
     search,
     prefix: target.prefix,
     listing: {} as never,
-    registry: { entries: [account], get: () => account } as unknown as DiscoveryRegistry,
+    registry: {
+      entries: [account, collection],
+      get: (kind: string) => (kind === 'collection' ? collection : account),
+    } as unknown as DiscoveryRegistry,
     metadataProducers: { collection: producer },
   };
   await advanceDiscovery(options);
