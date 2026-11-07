@@ -20,7 +20,7 @@ import { issuePointers, type RawIssue } from '@rezics/definitions/validate';
 export { issuePointers } from '@rezics/definitions/validate';
 import { NotFound, ParseError, ValidationError } from 'elysia';
 import { CommandResultErasedError, IdempotencyConflictError, TooManyEventsError } from '../command/command.ts';
-import { AuthenticationError } from '../request/access.ts';
+import { AuthenticationError } from '../request/authentication-error.ts';
 import { RealmLastOwnerError } from '../access/resource-access-errors.ts';
 
 import { extensionMembers, fieldErrorCodes } from './problem-schema.ts';

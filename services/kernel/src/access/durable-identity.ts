@@ -13,7 +13,7 @@ import { partitionOf, routeOf } from '../route/route.ts';
 import { withConnection } from '../database/pool.ts';
 import delegationRead from './durable-initiator-delegation.sql';
 import receiptRead from '../command/read-receipt.sql';
-import { deadlineClient, within } from './authenticate.ts';
+import { deadlineClient, within } from './deadline.ts';
 import { readAccount, type Account } from './account-data.ts';
 import type { DurableInitiatorRecord, InitiatorRestoreInput, InitiatorRestorerConfig } from './durable-initiator.ts';
 import { accessRoot } from './derived-access.ts';

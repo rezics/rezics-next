@@ -1,6 +1,6 @@
 import { AsyncLocalStorage } from 'node:async_hooks';
 import type { Pool, PoolClient } from 'pg';
-import { deadlineClient } from '../access/authenticate.ts';
+import { deadlineClient } from '../access/deadline.ts';
 import { CommandUnavailableError, requireAccessDeadline, throwAccessUnavailable } from '../access/unavailable.ts';
 import { DEFAULT_REQUEST_DEADLINE_MS } from '../command/command.ts';
 import { discardConnection, withConnection } from '../database/pool.ts';

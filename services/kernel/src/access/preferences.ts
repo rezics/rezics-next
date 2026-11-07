@@ -1,7 +1,7 @@
 import { memoizedValue } from '../memoized.ts';
 import type { Pool, PoolClient } from 'pg';
 import { runCommand } from '../command/command.ts';
-import { ProblemError } from '../http/problem.ts';
+import { ProblemError } from '../http/problem-error.ts';
 import { requestDigest } from '../http/request.ts';
 import type { Access, AccessContext, Actor } from '../request/access.ts';
 import { partitionOf, routeOf } from '../route/route.ts';

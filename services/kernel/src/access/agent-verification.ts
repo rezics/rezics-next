@@ -15,7 +15,7 @@ import { createHash } from 'node:crypto';
 import type { Pool, PoolClient } from 'pg';
 import type { CommandOutcome } from '../command/command.ts';
 import { runCommand, noEffect } from '../command/command.ts';
-import { ProblemError } from '../http/problem.ts';
+import { ProblemError } from '../http/problem-error.ts';
 import { requestDigest } from '../http/request.ts';
 import { newId, partitionOf, routeOf } from '../route/route.ts';
 import type { KeyRing } from '../tokens/seal.ts';
@@ -28,11 +28,11 @@ import {
   type Actor,
   type ReadDecisions,
   type Resource,
-} from '../request/access.ts';
+} from './check.ts';
 import { resourceAuthorization } from './resource-authorization.ts';
 import { PLATFORM_RESOURCE } from './bootstrap-governance.ts';
-import { viewerActionReadTime } from './index.ts';
-import { deadlineClient, within } from './authenticate.ts';
+import { viewerActionReadTime } from './read-bindings.ts';
+import { deadlineClient, within } from './deadline.ts';
 import { AccessUnavailableError, classifyUnavailability, requireAccessDeadline } from './unavailable.ts';
 import { discardConnection, withConnection } from '../database/pool.ts';
 import globalRead from './bootstrap-governance-read.sql';

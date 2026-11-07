@@ -1,6 +1,5 @@
 import canonicalize from 'canonicalize';
 import { createHash } from 'node:crypto';
-import { ProblemError } from './problem.ts';
 import { ANONYMOUS_PRINCIPAL_ID, normalizeCommandKey, type CommandPrincipal } from '../command/command.ts';
 import type { ActionCatalogue, Actor } from '../request/access.ts';
 import { anchorRoute, derivedId } from '../route/route.ts';

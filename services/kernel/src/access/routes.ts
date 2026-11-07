@@ -32,7 +32,7 @@ import { customMethod } from '../http/custom-method.ts';
 import { ProblemError, problemSchema } from '../http/problem.ts';
 import { defineRateLimit } from '../http/rate-limit.ts';
 import { IDEMPOTENCY_HEADER, idempotencyKeyOf, SESSION_HEADER } from '../http/request.ts';
-import { accessCheck, AuthenticationError, type Access, type AccessRealmRoleReader } from '../request/access.ts';
+import { accessCheck, AuthenticationError, type Access, type AccessRealmRoleReader } from './check.ts';
 import { HANDLE_LOOKUP_PATTERN } from './handle-policy.ts';
 import {
   PROFILE_LINK_LABEL_MAX_LENGTH,

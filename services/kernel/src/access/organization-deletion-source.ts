@@ -14,7 +14,7 @@ import { withReadTransaction } from '../semantic/read.ts';
 import { accessClock } from './access-clock.ts';
 import { readAccount, readOrganizationRole } from './account-data.ts';
 import { readManagedAuthActions } from './account-management-auth-actions.ts';
-import { deadlineClient, within } from './authenticate.ts';
+import { deadlineClient, within } from './deadline.ts';
 import { AuthBindingDeniedError } from './auth-bindings.ts';
 import { CommandUnavailableError, requireAccessDeadline } from './unavailable.ts';
 

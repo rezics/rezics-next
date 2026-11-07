@@ -4,7 +4,7 @@ import { currentCommand, type CommandAuthorization, type CommandTransaction } fr
 import { appendAuthoredField } from '../content/authored-fields.ts';
 import type { Resource } from '../request/access.ts';
 import { revisionResource } from './authorship.ts';
-import { creationDeclares } from '../access/index.ts';
+import { creationDeclares } from '../access/parent-creation.ts';
 
 /** Compatibility wrapper retaining the actual prepared Global Context authority. */
 export function authoredAuthorization(authorization: CommandAuthorization, subject: Resource): CommandAuthorization {

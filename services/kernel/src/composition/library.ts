@@ -1,4 +1,4 @@
-import { createNativeCopyAccountAdmission } from '../access/adapters/index.ts';
+import { createNativeCopyAccountAdmission } from '../access/adapters/copy-account.ts';
 import { nativeReleasedDefinitions, nativeCopyListContext } from '../semantic/adapters/index.ts';
 import {
   createLibrarySubjectIdentityAdapter,
@@ -9,8 +9,8 @@ import {
   createLibraryAccountEligibilityAdapter,
   observeLibraryPublicAccount,
   observeLibraryAttributions,
-  createResourcePublicEligibility,
-} from '../access/adapters/index.ts';
+} from '../access/adapters/library-presentation.ts';
+import { createResourcePublicEligibility } from '../access/public-eligibility.ts';
 import { observeLibrarySpaceSummary } from '../community/adapters/index.ts';
 import { nativeFollowCountRuntime } from './library-follow-counts.ts';
 import { createLibraryPreparationWork, nativeLibraryScopeWork } from '../search/adapters/index.ts';
@@ -18,7 +18,7 @@ import { createLibraryPreparationWork, nativeLibraryScopeWork } from '../search/
 
 import { commandAccessContext } from '../access/command-admission.ts';
 import { GrantDeniedError } from '../access/resource-access-errors.ts';
-import accountCommandState from '../access/account-command-state.sql';
+import { createNativeCollectionRuleAccountAuthority } from '../access/adapters/collection-rule-authority.ts';
 import type { AuthoritativeTime } from '../command/command.ts';
 import { accessCheck, accessCommandAuthorization, type Access, type Actor } from '../request/access.ts';
 import type { Pool } from 'pg';
@@ -345,13 +345,7 @@ export function composeLibraryDomain(options: LibraryComposeOptions = {}): Retur
       },
     },
     collectionRuleAuthority: options.capabilities?.collectionRuleAuthority ?? {
-      async readAccount(client, route, accountId) {
-        const row = await accountCommandState.run(client as Parameters<typeof accountCommandState.run>[0], {
-          route,
-          account_id: accountId,
-        });
-        return row ? { ...row, minimumAuthnEpoch: BigInt(row.minimumAuthnEpoch) } : null;
-      },
+      ...createNativeCollectionRuleAccountAuthority(),
       async admitGroup(input) {
         await admitGroup({
           pool: input.pool as Pool,

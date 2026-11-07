@@ -38,7 +38,8 @@ import { createSubject, SubjectAccessDeniedError, subjectTarget } from '../subje
 import { DATA_TYPES, type DataType, type Release } from '@rezics/definitions';
 import { GrantDeniedError } from '../../access/grant-commands.ts';
 import { resourceAuthorization, type AuthorizationAnchor } from '../../access/resource-authorization.ts';
-import { createResourceCreationManifest, parentCreationAuthorization } from '../../access/index.ts';
+import { createResourceCreationManifest } from '../../access/creation-manifest.ts';
+import { parentCreationAuthorization } from '../../access/parent-creation.ts';
 import { activeRelease, readRelease } from '../definition-release-read.ts';
 import { GLOBAL_SUBJECT_CONTEXT as GLOBAL_CONTEXT } from '../contract/subject-values.ts';
 import { StaleEditorialHeadError } from '../contract/definition-values.ts';
@@ -86,7 +87,7 @@ import { PublicDocumentViewSchema } from '../../content/document-public.ts';
 import { withReadTransaction } from '../read.ts';
 import { readPartition } from '../../partition/partition.ts';
 import { readContributionLifecycle } from '../contribution-lifecycle-read.ts';
-import { compileViewerActionBindings } from '../../access/index.ts';
+import { compileViewerActionBindings } from '../../access/viewer-actions.ts';
 import readContributionLifecycleLocator from '../contribution-lifecycle-read-locator.sql';
 import {
   contributionAuthorResource,

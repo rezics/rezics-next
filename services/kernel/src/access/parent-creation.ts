@@ -8,10 +8,10 @@ import {
   type CommandAuthorization,
   type CommandTransaction,
 } from '../command/command.ts';
-import { type Access, type AccessClient, type AccessContext, type Actor, type Resource } from '../request/access.ts';
+import { type Access, type AccessClient, type AccessContext, type Actor, type Resource } from './check.ts';
 import { partitionOf } from '../route/route.ts';
 import { validResource } from './grant-command.ts';
-import { GrantDeniedError } from './grant-commands.ts';
+import { GrantDeniedError } from './resource-access-errors.ts';
 import { deriveAccess } from './derived-access.ts';
 import { permissionEvidenceDeadline } from './permission.ts';
 import { resourceAuthorization, resourceAuthorizationPage } from './resource-authorization.ts';
