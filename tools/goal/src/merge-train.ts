@@ -3357,7 +3357,10 @@ export class MergeTrain {
       run: (runner) => async (argv, cwd, log) => {
         checkpoint();
         const result = await runner(argv, cwd, log, { signal: controller.signal });
-        if (!result.passed) failure ??= { ...result, failedCommand: [...argv] };
+        // A product request aborts a still-running proof. The runner's resulting nonzero exit is
+        // cancellation evidence, not a native assertion; retain failures only if they completed
+        // before the controller yielded custody.
+        if (!result.passed && !controller.signal.aborted) failure ??= { ...result, failedCommand: [...argv] };
         checkpoint();
         return result;
       },
@@ -5040,7 +5043,8 @@ export class MergeTrain {
         }
         result.passed = true;
         result.stage = 'merge';
-        result.mergedCommit = candidate;
+        // Surface the durable release identity recorded for this publication.
+        result.mergedCommit = preparedControlPlaneRelease?.record.mainCommit ?? candidate;
         this.notifyOwnersOfOutsideChanges(
           request,
           [
@@ -7289,11 +7293,13 @@ export class MergeTrain {
             );
             const declared = preparedMembers.flatMap((member) => member.request.declaredPaths);
             const approved = new Set(
-              preparedMembers.flatMap(
-                (member) =>
-                  journal.scopeApprovals![member.request.taskId]?.additionalPaths.map((addition) => addition.path) ??
-                  [],
-              ),
+              node.indices.flatMap((index) => {
+                const member = manifest.members[index]!;
+                const approval = controlPlaneScopeApproval(member, scopeRuntime) ?? null;
+                if (!isDeepStrictEqual(journal.scopeApprovals![member.taskId], approval))
+                  throw new Error(`Batch member native scope approval changed for ${member.taskId}`);
+                return approval?.additionalPaths.map((addition) => addition.path) ?? [];
+              }),
             );
             const outside = changed.filter(
               (path) => !approved.has(path) && outsideScope([path], declared).length > 0,

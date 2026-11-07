@@ -74,6 +74,20 @@ function deferred() {
   return { promise, resolve };
 }
 
+async function releaseEvidence(command: readonly string[], cwd: string) {
+  const candidate = git(cwd, 'rev-parse', 'HEAD');
+  const devScriptTree = git(cwd, 'rev-parse', 'refs/heads/dev');
+  const expected = command[command.indexOf('--expected-dev-script-tree') + 1];
+  return {
+    passed: expected === devScriptTree,
+    output:
+      `start: passed\nwake: passed\nsuccess: passed\n` +
+      `release evidence: candidate=${candidate} dev-script-tree=${devScriptTree} ` +
+      `scenarios=worker-wake:passed,retry:passed lifecycle-regressions=release:passed\n`,
+    timedOut: false,
+  };
+}
+
 test('a control-plane landing for main runs under its own lease while a queued dev landing completes', async () => {
   const s = setup();
   const mainEntered = deferred();
@@ -88,6 +102,7 @@ test('a control-plane landing for main runs under its own lease while a queued d
     running = new MergeTrain({
       ...s.options,
       formatCommand: ['true'],
+      runLaunchSmoke: releaseEvidence,
       sink: {
         onGateOutcome(outcome) {
           s.outcomes.push(outcome);
@@ -134,20 +149,24 @@ test('a control-plane landing for main runs under its own lease while a queued d
 
 test('two control-plane landings targeting main are serialized within the main lane', async () => {
   const s = setup();
-  let active = 0;
   let peak = 0;
+  const activeTasks = new Map<string, number>();
   const order: string[] = [];
   try {
     s.enqueue('main-one', 'tools/goal/src/main-one-result', 'control-plane', 'main');
     s.enqueue('main-two', 'tools/goal/src/main-two-result', 'control-plane', 'main');
     await new MergeTrain({
       ...s.options,
+      runLaunchSmoke: releaseEvidence,
       runGate: async (_command, cwd) => {
-        active++;
-        peak = Math.max(peak, active);
-        order.push(existsSync(join(cwd, 'tools/goal/src/main-two-result')) ? 'main-two' : 'main-one');
+        const task = existsSync(join(cwd, 'tools/goal/src/main-two-result')) ? 'main-two' : 'main-one';
+        activeTasks.set(task, (activeTasks.get(task) ?? 0) + 1);
+        if (!order.includes(task)) order.push(task);
+        peak = Math.max(peak, activeTasks.size);
         await Bun.sleep(20);
-        active--;
+        const remaining = activeTasks.get(task)! - 1;
+        if (remaining) activeTasks.set(task, remaining);
+        else activeTasks.delete(task);
         return { passed: true, output: '', timedOut: false };
       },
     }).run();
