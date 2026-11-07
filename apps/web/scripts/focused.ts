@@ -74,14 +74,18 @@ export type FocusedRunnerOptions = {
   appDirectory?: string;
   env?: NodeJS.ProcessEnv;
   privateNetwork?: boolean;
-  prepare?: (appDirectory: string, env: NodeJS.ProcessEnv) => number | Promise<number>;
+  prepare?: (appDirectory: string, env: NodeJS.ProcessEnv, signal?: AbortSignal) => number | Promise<number>;
   onStart?: (runtime: { pid?: number; stateDirectory: string }) => void;
   onOutput?: (stream: 'stdout' | 'stderr', chunk: Uint8Array) => void;
   place?: (run: { root: string; cwd: string; command: string[] }, env: NodeJS.ProcessEnv) => Promise<number | null>;
 };
 
-async function prepareFocusedRun(appDirectory: string, env: NodeJS.ProcessEnv): Promise<number> {
-  const messages = ensureMessagesReady(appDirectory, env);
+async function prepareFocusedRun(
+  appDirectory: string,
+  env: NodeJS.ProcessEnv,
+  signal?: AbortSignal,
+): Promise<number> {
+  const messages = await ensureMessagesReady(appDirectory, env, { signal });
   if (messages !== 0) return messages;
   const generated = Bun.spawn(['bun', 'run', 'generate:routes'], {
     cwd: appDirectory,
@@ -90,7 +94,14 @@ async function prepareFocusedRun(appDirectory: string, env: NodeJS.ProcessEnv): 
     stdout: 'inherit',
     stderr: 'inherit',
   });
-  return generated.exited;
+  const abort = () => generated.kill('SIGTERM');
+  signal?.addEventListener('abort', abort, { once: true });
+  if (signal?.aborted) abort();
+  try {
+    return await generated.exited;
+  } finally {
+    signal?.removeEventListener('abort', abort);
+  }
 }
 
 function processGroupAlive(pid: number): boolean {
@@ -205,12 +216,14 @@ export async function runFocusedCommand(command: string[], options: FocusedRunne
   let child: Bun.Subprocess<'inherit', 'pipe', 'pipe'> | undefined;
   let runtimeStopped = false;
   let receivedSignal: NodeJS.Signals | undefined;
+  const preparationAbort = new AbortController();
   let forceTimer: ReturnType<typeof setTimeout> | undefined;
   let outputError: unknown;
   const forwarders: Array<readonly [NodeJS.Signals, () => void]> = [];
 
   const forward = (signal: NodeJS.Signals) => {
     receivedSignal ??= signal;
+    preparationAbort.abort(signal);
     const pid = child?.pid;
     if (pid) signalProcessGroup(pid, signal);
     if (pid) {
@@ -226,7 +239,13 @@ export async function runFocusedCommand(command: string[], options: FocusedRunne
 
   try {
     const prepare = options.prepare ?? prepareFocusedRun;
-    const prepared = await prepare(appDirectory, childEnvironment);
+    let prepared: number;
+    try {
+      prepared = await prepare(appDirectory, childEnvironment, preparationAbort.signal);
+    } catch (error) {
+      if (receivedSignal) return 128 + signals.find(([signal]) => signal === receivedSignal)![1];
+      throw error;
+    }
     if (receivedSignal) return 128 + signals.find(([signal]) => signal === receivedSignal)![1];
     if (prepared !== 0) return prepared;
 
@@ -292,7 +311,7 @@ if (import.meta.main) {
     const { command, privateNetwork } = parseArguments(process.argv.slice(2));
     process.exitCode = await runFocusedCommand(command, { privateNetwork });
   } catch (error) {
-    console.error(error instanceof Error ? error.message : error);
+    console.error(error instanceof Error ? (error.stack ?? error.message) : error);
     process.exitCode = 1;
   }
 }

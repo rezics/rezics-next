@@ -86,7 +86,7 @@ async function main(): Promise<void> {
     },
     async (slotEnvironment) => {
       if (appCommand[0] === 'bun' && appCommand[1] === 'test') {
-        const messageCode = ensureMessagesReady(app);
+        const messageCode = await ensureMessagesReady(app, slotEnvironment);
         if (messageCode !== 0) return messageCode;
       }
       const linux = process.platform === 'linux';

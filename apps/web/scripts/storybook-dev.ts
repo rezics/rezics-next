@@ -123,7 +123,15 @@ if (import.meta.main) {
   try {
     const plan = storybookLaunchPlan(process.argv.slice(2));
     if (plan.kind === 'vite') requireWebCheckCustody(repoRoot, webRoot);
-    const generated = webServeNeedsGeneratedMessages(plan.kind) ? ensureMessagesReady(webRoot) : 0;
+    let generated = 0;
+    if (webServeNeedsGeneratedMessages(plan.kind)) {
+      const startedAt = performance.now();
+      process.stderr.write('[web-startup] stage=messages-preparation start\n');
+      generated = await ensureMessagesReady(webRoot);
+      process.stderr.write(
+        `[web-startup] stage=messages-preparation exit=${generated} elapsed-ms=${Math.round(performance.now() - startedAt)}\n`,
+      );
+    }
     if (generated !== 0) {
       console.error(`Paraglide generation exited ${generated} before Vite started`);
       process.exitCode = generated;
@@ -131,7 +139,7 @@ if (import.meta.main) {
       await runChild(plan.command, plan.args, plan.cwd);
     }
   } catch (error) {
-    console.error(error instanceof Error ? error.message : error);
+    console.error(error instanceof Error ? (error.stack ?? error.message) : error);
     process.exitCode = 75;
   }
 }

@@ -1,11 +1,37 @@
 import { expect, test } from 'bun:test';
+import { existsSync, mkdtempSync, readFileSync, rmSync, watch } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { basename, dirname, join } from 'node:path';
 import {
   privateNetworkCommand,
+  runOwnedCommand,
   sharedViteChildEnvironment,
   walkViteChildEnvironment,
   webTestPrivateNetworkEnvName,
 } from '../scripts/with-dev-server.ts';
 import { readExampleWorkerVars } from '../scripts/dev-vars.ts';
+import { processIdentity } from './support/server-custody.ts';
+
+async function waitForFile(path: string): Promise<void> {
+  if (existsSync(path)) return;
+  await new Promise<void>((resolve, reject) => {
+    const watcher = watch(dirname(path), (_event, filename) => {
+      if (filename?.toString() !== basename(path) || !existsSync(path)) return;
+      clearTimeout(timer);
+      watcher.close();
+      resolve();
+    });
+    const timer = setTimeout(() => {
+      watcher.close();
+      reject(new Error(`Timed out waiting for child process marker ${path}`));
+    }, 10_000);
+    if (existsSync(path)) {
+      clearTimeout(timer);
+      watcher.close();
+      resolve();
+    }
+  });
+}
 
 test('the shared Vite child fills example Worker bindings without replacing a caller value', () => {
   const example = readExampleWorkerVars();
@@ -62,3 +88,39 @@ test('private-network wrapping keeps the original command after the namespace se
   ]);
   expect(webTestPrivateNetworkEnvName).toBe('WEB_TEST_PRIVATE_NETWORK');
 });
+
+test('cancellation settles the wrapper child and its compiler-like descendant', async () => {
+  if (process.platform !== 'linux') return;
+  const directory = mkdtempSync(join(tmpdir(), 'web-dev-server-cancel-'));
+  const pidFile = join(directory, 'descendant.pid');
+  const abort = new AbortController();
+  const script = `
+    import { spawn } from 'node:child_process';
+    import { writeFileSync } from 'node:fs';
+    const descendant = spawn(process.execPath, ['-e', 'setInterval(() => {}, 1000)'], { stdio: 'ignore' });
+    writeFileSync(${JSON.stringify(pidFile)}, String(descendant.pid));
+    setInterval(() => {}, 1000);
+  `;
+  let running: Promise<number> | undefined;
+  try {
+    running = runOwnedCommand([process.execPath, '-e', script], {
+      cwd: join(import.meta.dir, '..'),
+      env: process.env,
+      signal: abort.signal,
+      label: 'test wrapper child tree',
+    });
+    await waitForFile(pidFile);
+    const descendant = Number(readFileSync(pidFile, 'utf8'));
+    abort.abort('SIGTERM');
+    expect(await running).toBe(143);
+    const identity = processIdentity(descendant);
+    expect(identity === undefined || identity.state === 'Z').toBe(true);
+  } finally {
+    abort.abort('SIGTERM');
+    try {
+      await running;
+    } finally {
+      rmSync(directory, { recursive: true, force: true });
+    }
+  }
+}, 15_000);

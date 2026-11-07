@@ -58,10 +58,17 @@ test('Vite app and finite test serving generate Paraglide messages before the ch
   expect(webServeNeedsGeneratedMessages('vite')).toBe(true);
   expect(webServeNeedsGeneratedMessages('storybook')).toBe(false);
   const source = readFileSync(resolve(import.meta.dir, 'storybook-dev.ts'), 'utf8');
+  const viteConfig = readFileSync(resolve(import.meta.dir, '../vite.config.ts'), 'utf8');
   expect(source.indexOf('ensureMessagesReady(webRoot)')).toBeGreaterThan(
     source.indexOf('webServeNeedsGeneratedMessages(plan.kind)'),
   );
   expect(source.indexOf('await runChild(plan.command, plan.args, plan.cwd)')).toBeGreaterThan(
     source.indexOf('ensureMessagesReady(webRoot)'),
   );
+  expect(source).toContain('generated = await ensureMessagesReady(webRoot)');
+  expect(source.indexOf('stage=messages-preparation start')).toBeLessThan(
+    source.indexOf('generated = await ensureMessagesReady(webRoot)'),
+  );
+  expect(viteConfig).toContain('ensureMessagesReady(appRoot)');
+  expect(viteConfig).not.toContain('withParaglideGenerateLock');
 });

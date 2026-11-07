@@ -322,9 +322,13 @@ Each walk registers frontend and browser cleanup immediately after acquisition. 
 on provisioning, seed, locale, persona and browser failures. Independent cleanup failures retain the original cause
 and do not prevent other resources from settling.
 
-Decision: generate Paraglide modules before Vite starts, wait for useful `/en` HTML, and report the observed probe,
-fetch or child-exit cause. Only an actual ECONNREFUSED is hydration startup; a closed-listener probe does not invent
-that code. A barrel without `messages/access_account.js` is not current. Original native walks remain open.
+Decision: focused preparation, `storybook-dev --app` and Vite's serve hook use the same app-local Paraglide lock and
+recheck catalogue freshness after acquiring it. Startup completes every generated catalogue leaf, including
+`messages/access_account.js`, before routes or Vite import them; a completed compile is reused. The preparation and
+compiler report their stage and child evidence. Dev-server readiness still waits for useful `/en` HTML and reports
+the observed probe, fetch or child-exit cause. Only an actual ECONNREFUSED is hydration startup; a closed-listener
+probe does not invent that code. The generator parent stays lightweight and only its isolated worker imports the
+Paraglide compiler. Original native walks remain open.
 
 Decision: website sign-in and `/token` POST the issuer Origin with that Origin header, the same form as Home and
 VN-realm walks. Seed and account-key calls use native Auth as transport and keep CSRF Origin plus assertion audience

@@ -9,6 +9,7 @@ import { prepareViteDepCache } from '../tests/support/vite-dep-cache-build.ts';
 import { materializeViteDepCache } from '../tests/support/vite-dep-cache.ts';
 import { testWorkerBindingsEnvName } from '../src/test-runtime-binding-config.ts';
 import { readExampleWorkerVars } from './dev-vars.ts';
+import { ownBunProcess } from '../tests/support/server-custody.ts';
 
 const app = resolve(import.meta.dir, '..');
 const workspace = resolve(app, '../..');
@@ -163,12 +164,57 @@ function parseArguments(args: string[]): string[] {
   return command;
 }
 
+function interruptedStatus(signal: AbortSignal): number {
+  const interrupted = signal.reason;
+  if (interrupted === 'SIGINT') return 130;
+  if (interrupted === 'SIGHUP') return 129;
+  return 143;
+}
+
+/** Run one wrapper child in its own process group and settle its recorded descendants on exit or cancellation. */
+export async function runOwnedCommand(
+  command: string[],
+  options: { cwd: string; env: NodeJS.ProcessEnv; signal?: AbortSignal; label: string },
+): Promise<number> {
+  if (options.signal?.aborted) return interruptedStatus(options.signal);
+  const child = Bun.spawn(command, {
+    cwd: options.cwd,
+    env: options.env,
+    detached: true,
+    stdin: 'inherit',
+    stdout: 'inherit',
+    stderr: 'inherit',
+  });
+  const custody = ownBunProcess(child, { label: options.label, termGraceMs: 2_000, settleTimeoutMs: 5_000 });
+  let cleanup: Promise<void> | undefined;
+  let cleanupError: unknown;
+  const stop = () =>
+    (cleanup ??= custody.close().catch((error) => {
+      cleanupError = error;
+      throw error;
+    }));
+  const onAbort = () => {
+    void stop().catch(() => {});
+  };
+  options.signal?.addEventListener('abort', onAbort, { once: true });
+  if (options.signal?.aborted) onAbort();
+  try {
+    const status = await child.exited;
+    await stop();
+    if (cleanupError) throw cleanupError;
+    return options.signal?.aborted ? interruptedStatus(options.signal) : status;
+  } finally {
+    options.signal?.removeEventListener('abort', onAbort);
+    await stop();
+  }
+}
+
 async function main(command: string[]): Promise<void> {
   const abort = new AbortController();
   let server: SharedDevServerRun | undefined;
   const forwarders: Array<readonly [NodeJS.Signals, () => void]> = [];
   for (const signal of signals) {
-    const listener = () => abort.abort();
+    const listener = () => abort.abort(signal);
     process.on(signal, listener);
     forwarders.push([signal, listener]);
   }
@@ -183,23 +229,15 @@ async function main(command: string[]): Promise<void> {
         childEnvironment[webTestDepCacheReadyEnvName] = '1';
         childEnvironment.WEB_TEST_DEV_SERVER_CACHE = cache.reused ? 'reuse' : 'build';
         childEnvironment.WEB_TEST_DEV_SERVER_LOCK = cache.lockHash;
-        const child = Bun.spawn(privateNetworkCommand([process.execPath, import.meta.path, '--', ...command]), {
-          cwd: app,
-          env: childEnvironment,
-          stdin: 'inherit',
-          stdout: 'inherit',
-          stderr: 'inherit',
-        });
-        const stopChild = () => {
-          try {
-            child.kill('SIGTERM');
-          } catch {
-            // The namespace child may have already exited.
-          }
-        };
-        abort.signal.addEventListener('abort', stopChild, { once: true });
-        process.exitCode = abort.signal.aborted ? 143 : await child.exited;
-        abort.signal.removeEventListener('abort', stopChild);
+        process.exitCode = await runOwnedCommand(
+          privateNetworkCommand([process.execPath, import.meta.path, '--', ...command]),
+          {
+            cwd: app,
+            env: childEnvironment,
+            signal: abort.signal,
+            label: 'private-network Web test command',
+          },
+        );
         return;
       }
       const descriptorPath = join(childEnvironment.WEB_TEST_STATE_DIR || app, 'dev-server.json');
@@ -216,17 +254,14 @@ async function main(command: string[]): Promise<void> {
         `[web-dev-server] origin=${server.origin} pid=${server.pid} lock=${server.lockHash} cache=${server.reused ? 'reuse' : 'build'} first-en-ms=${Math.round(server.firstEnMs)} ${server.cacheDirectory}\n`,
       );
     }
-    const child = Bun.spawn(command, {
+    process.exitCode = await runOwnedCommand(command, {
       cwd: app,
       env: childEnvironment,
-      stdin: 'inherit',
-      stdout: 'inherit',
-      stderr: 'inherit',
+      signal: abort.signal,
+      label: 'Web test command',
     });
-    const status = await child.exited;
-    process.exitCode = abort.signal.aborted ? 143 : status;
   } catch (error) {
-    console.error(error instanceof Error ? error.message : error);
+    console.error(error instanceof Error ? (error.stack ?? error.message) : error);
     process.exitCode = 1;
   } finally {
     for (const [signal, listener] of forwarders) process.off(signal, listener);
