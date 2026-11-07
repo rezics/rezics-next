@@ -196,7 +196,9 @@ export function clientDeclarations(
       if (specifier.startsWith('./kernel/')) {
         const path = declarationPath(resolve(sourceRoot, 'index.d.ts'), specifier.slice('./kernel/'.length));
         if (!existsSync(path))
-          throw new Error(`Client public entry imports ${specifier}, but ${relative(sourceRoot, path)} was not emitted.`);
+          throw new Error(
+            `Client public entry imports ${specifier}, but ${relative(sourceRoot, path)} was not emitted.`,
+          );
         pending.push(relative(sourceRoot, path).split(sep).join('/'));
       }
     }
