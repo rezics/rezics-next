@@ -1,7 +1,7 @@
 import { memoizedValue } from '../memoized.ts';
 import { isDeepStrictEqual } from 'node:util';
 import type { OperationalTransaction } from '../command/operational.ts';
-import { ProblemError } from '../http/problem.ts';
+import { ProblemError } from '../http/problem-error.ts';
 import {
   currentOperationalResources,
   hasLiveOperationalTransaction,

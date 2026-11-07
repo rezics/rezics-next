@@ -28,7 +28,7 @@ import { LIBRARY_IDENTITY_NATIVE_OPERATION_DECLARATIONS } from '../../src/librar
 import { LIBRARY_IDENTITY_SELECTED_STATEMENTS } from '../../src/library/identity-native-planner-projection.ts';
 import { preparePresentationSelection } from '../../src/library/collection-presentation.ts';
 import { libraryActorOf } from '../../src/library/contract/index.ts';
-import { admitComposedEntryProgress } from '../../src/library/command-support.ts';
+import { admitComposedEntryProgress, libraryCommandAuthorization } from '../../src/library/command-support.ts';
 
 const accountId = '00000000-0000-7000-8000-000000000001';
 const collectionId = '00000000-0000-7000-8000-000000000002';
@@ -688,6 +688,46 @@ test('ordinary composeLibraryDomain installs native identity, authorization and 
     unbindLibraryDomain();
     expect(peekLibraryDomain()).toBeUndefined();
   } finally {
+    if (previous) bindLibraryDomain(previous);
+  }
+});
+
+test('Library command authorization preserves native fallback and forwards composed command arguments', async () => {
+  const previous = peekLibraryDomain();
+  unbindLibraryDomain();
+  const access = {
+    async authenticate(): Promise<never> {
+      throw new Error('Authentication is not part of command preparation');
+    },
+    async authorize() {
+      return true;
+    },
+  };
+  const args: Parameters<typeof libraryCommandAuthorization> = [
+    access,
+    actor,
+    'library_entry:update',
+    { route: 1, id: accountId },
+    { pool: {} as never, deadline: Date.now() + 1_000 },
+    () => new Error('denied'),
+  ];
+  try {
+    const native = await libraryCommandAuthorization(...args);
+    expect(native.action).toBe(args[2]);
+    expect(native.resource).toEqual(args[3]);
+    expect(native.denied).toBe(args[5]);
+    const capabilities = fakeCapabilities();
+    const calls: (readonly unknown[])[] = [];
+    capabilities.authorization.commandAuthorization = async (...forwarded) => {
+      calls.push(forwarded);
+      return native;
+    };
+    bindLibraryDomain(createLibraryApplications(capabilities));
+    expect(await libraryCommandAuthorization(...args)).toBe(native);
+    expect(calls).toHaveLength(1);
+    for (const [index, value] of args.entries()) expect(calls[0]![index]).toBe(value);
+  } finally {
+    unbindLibraryDomain();
     if (previous) bindLibraryDomain(previous);
   }
 });

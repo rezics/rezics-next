@@ -11,7 +11,7 @@ import {
 } from '../command/command.ts';
 import { currentOperationalResources, hasLiveOperationalTransaction } from '../command/operational.ts';
 import { withConnection, discardConnection } from '../database/pool.ts';
-import { ProblemError } from '../http/problem.ts';
+import { ProblemError } from '../http/problem-error.ts';
 import { routeOf, partitionOf } from '../route/route.ts';
 import { NativeCollectionWork, instrumentNativeCollectionWork } from './collection-source-work.ts';
 import {

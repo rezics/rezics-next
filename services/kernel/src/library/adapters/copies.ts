@@ -9,7 +9,7 @@ import {
 import type { KernelClock } from '../../clock.ts';
 import { withConnection } from '../../database/pool.ts';
 import { receiptKeysFor } from '../../command/receipt-key.ts';
-import { ProblemError } from '../../http/problem.ts';
+import { ProblemError } from '../../http/problem-error.ts';
 import { readPartition } from '../../partition/partition.ts';
 import type { Access, AccountActor } from '../../request/access.ts';
 import { withRequestDeadline } from '../../request/deadline.ts';

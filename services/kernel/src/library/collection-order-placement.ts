@@ -1,5 +1,5 @@
 import type { PoolClient } from 'pg';
-import { ProblemError } from '../http/problem.ts';
+import { ProblemError } from '../http/problem-error.ts';
 import type { MemberPosition, MemberReordering } from './collection-model.ts';
 import { memberNeighbors } from './collection-store.ts';
 import { localOrderKeys, ORDER_BATCH_SIZE, ORDER_WINDOW_SIZE } from './ordinal.ts';

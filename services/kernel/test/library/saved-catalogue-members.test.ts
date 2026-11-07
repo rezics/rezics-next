@@ -1,6 +1,6 @@
 import { expect, test } from 'bun:test';
 import { bundledRelease } from '@rezics/definitions/bundled';
-import { ProblemError } from '../../src/http/problem.ts';
+import { ProblemError } from '../../src/http/problem-error.ts';
 import type { AccountActor } from '../../src/request/access.ts';
 import { readSavedCatalogueMembers } from '../../src/search/service-saved-collection.ts';
 import type { SearchService } from '../../src/search/service-scope.ts';

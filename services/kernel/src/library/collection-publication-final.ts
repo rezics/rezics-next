@@ -18,7 +18,7 @@ import {
   type CommandAuthorization,
   type CommandOutcome,
 } from '../command/command.ts';
-import { ProblemError } from '../http/problem.ts';
+import { ProblemError } from '../http/problem-error.ts';
 import { NativeCollectionWork } from './collection-source-work.ts';
 import { scopeAllowance, zeroScopeWork } from '../search/scope-execution.ts';
 import { deadlineFor } from '../request/deadline.ts';
@@ -42,7 +42,8 @@ import type { CollectionPublicationLocator } from './collection-publication-work
 import type { WorkDimensions } from './contract/work-dimensions.ts';
 import { deadlineClient } from '../access/authenticate.ts';
 import { commandAccessContext } from '../access/command-admission.ts';
-import { accessCheck, type AccessCheck } from '../request/access.ts';
+import { accessCheck } from '../request/access-check.ts';
+import { type AccessCheck } from '../request/access.ts';
 import { readBuiltinPublicationRule } from './builtin-materialization.ts';
 import { authorizeCollectionRule, collectionRuleActions, readSavedCollectionRule } from './collection-rules.ts';
 import { admitSavedCollectionMemberQuery, collectionMemberPrivateReads } from './owner-filter.ts';

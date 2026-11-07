@@ -332,7 +332,7 @@ test('a continuation carries the epoch of its own partition across different epo
 });
 
 test('Collection sitemap admission discovery and disclosure preserve unavailable outcomes', async () => {
-  const { ProblemError } = await import('../../src/http/problem.ts');
+  const { ProblemError } = await import('../../src/http/problem-error.ts');
   const { AccessUnavailableError } = await import('../../src/access/unavailable.ts');
   await insert([{ route: 0, n: 1 }]);
   // Fail only database transport at each stage; the kernel and its shared Access still perform the read.

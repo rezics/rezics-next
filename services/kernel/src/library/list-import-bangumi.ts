@@ -8,7 +8,7 @@ import { GrantDeniedError } from '../access/grant-commands.ts';
 import { mintReadTime, type CommandTransaction } from '../command/command.ts';
 import type { KernelClock } from '../clock.ts';
 import { tupleRoute } from '../content/imported-contract.ts';
-import { ProblemError } from '../http/problem.ts';
+import { ProblemError } from '../http/problem-error.ts';
 import {
   RatingQuestionNotFoundError,
   RatingQuestionRetiredError,
@@ -25,7 +25,8 @@ import type {
   createVoteCommands,
 } from '../rating/votes.ts';
 import type { VoteObservation } from '../rating/vote-observation.ts';
-import { accessCheck, type Access, type Actor, type AccountActor } from '../request/access.ts';
+import { accessCheck } from '../request/access-check.ts';
+import { type Access, type Actor, type AccountActor } from '../request/access.ts';
 import { deadlineFor } from '../request/deadline.ts';
 import { newId, routeOf } from '../route/route.ts';
 import readClaim from '../semantic/bulk-read-claim.sql';

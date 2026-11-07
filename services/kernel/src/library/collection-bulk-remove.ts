@@ -16,7 +16,7 @@ import {
   type CommandTransaction,
 } from '../command/command.ts';
 import { nativeReceiptKeyCandidates } from '../command/receipt-key.ts';
-import { ProblemError } from '../http/problem.ts';
+import { ProblemError } from '../http/problem-error.ts';
 import { newId, partitionOf, routeOf } from '../route/route.ts';
 import type {
   BulkDependencies,

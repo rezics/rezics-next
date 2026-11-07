@@ -9,7 +9,7 @@ import type { ContributionAttribution } from '../../access/contract/index.ts';
 import type { SubjectSummary, IdentityMapping } from '../../semantic/contract/index.ts';
 import type { createResourcePublicEligibility } from '../../access/adapters/index.ts';
 import { currentCommandWorkAssociation } from '../../command/work-context.ts';
-import { ProblemError } from '../../http/problem.ts';
+import { ProblemError } from '../../http/problem-error.ts';
 import {
   createBuiltinOwnerAdmission,
   createLibraryPresentationApplication,

@@ -14,7 +14,7 @@ import {
 } from '../command/command.ts';
 import { runOperationalTransaction, type OperationalTransaction } from '../command/operational.ts';
 import { systemClock, type KernelClock } from '../clock.ts';
-import { ProblemError } from '../http/problem.ts';
+import { ProblemError } from '../http/problem-error.ts';
 import { accessCommandAuthorization, type Access, type Actor } from '../request/access.ts';
 import { deadlineFor } from '../request/deadline.ts';
 import { newId, partitionOf, routeOf } from '../route/route.ts';

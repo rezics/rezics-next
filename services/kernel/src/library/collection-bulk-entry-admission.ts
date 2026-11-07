@@ -1,6 +1,6 @@
 import { memoizedValue } from '../memoized.ts';
 import { Compile } from 'typebox/compile';
-import { ProblemError } from '../http/problem.ts';
+import { ProblemError } from '../http/problem-error.ts';
 import type { CommandTransaction, AuthoritativeTime } from '../command/command.ts';
 import type { AccessContext, AccountActor } from '../request/access.ts';
 import { routeOf } from '../route/route.ts';

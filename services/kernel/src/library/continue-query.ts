@@ -3,7 +3,7 @@ import { resolveSubject } from './subject-anchor.ts';
 import type { AccountActor } from '../request/access.ts';
 import type { KeyRing } from '../tokens/seal.ts';
 import { decodeListCursor, encodeListCursor } from '../tokens/list-cursor.ts';
-import { ProblemError } from '../http/problem.ts';
+import { ProblemError } from '../http/problem-error.ts';
 import { systemClock } from '../clock.ts';
 import { routeOf } from '../route/route.ts';
 import { readIdentityMappings } from '../semantic/identity-adapters/read.ts';

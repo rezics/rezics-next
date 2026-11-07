@@ -4,7 +4,7 @@ import type { Pool, PoolClient } from 'pg';
 import { GrantDeniedError } from '../access/grant-commands.ts';
 import { mintReadTime, releaseOperationalTime, type CommandTransaction } from '../command/command.ts';
 import type { KernelClock } from '../clock.ts';
-import { ProblemError } from '../http/problem.ts';
+import { ProblemError } from '../http/problem-error.ts';
 import type { AccountActor, Actor, Access } from '../request/access.ts';
 import { deadlineFor } from '../request/deadline.ts';
 import type { KeyRing } from '../tokens/seal.ts';

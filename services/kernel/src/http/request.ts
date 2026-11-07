@@ -1,6 +1,5 @@
 import canonicalize from 'canonicalize';
 import { createHash } from 'node:crypto';
-import { parseItem } from 'structured-headers';
 import { ProblemError } from './problem.ts';
 import { ANONYMOUS_PRINCIPAL_ID, normalizeCommandKey, type CommandPrincipal } from '../command/command.ts';
 import type { ActionCatalogue, Actor } from '../request/access.ts';
@@ -8,26 +7,7 @@ import { anchorRoute, derivedId } from '../route/route.ts';
 import { kernelWriteRateFor } from './write-rate-routes.ts';
 export { SESSION_HEADER, IDEMPOTENCY_HEADER } from './headers.ts';
 
-export function idempotencyKeyOf(header: string | null | undefined, principal?: CommandPrincipal): string {
-  if (typeof header !== 'string')
-    throw new ProblemError('invalid_request', { detail: 'Idempotency-Key must be a structured field string.' });
-
-  let value: unknown;
-  try {
-    [value] = parseItem(header);
-  } catch {
-    throw new ProblemError('invalid_request', { detail: 'Idempotency-Key must be a structured field string.' });
-  }
-  if (typeof value !== 'string' || value.length < 1 || value.length > 255)
-    throw new ProblemError('invalid_request', { detail: 'Idempotency-Key must be a string of 1 to 255 characters.' });
-  try {
-    return principal ? normalizeCommandKey(principal, value) : value;
-  } catch {
-    throw new ProblemError('invalid_request', {
-      detail: 'Anonymous commands require a client-generated UUIDv4 Idempotency-Key.',
-    });
-  }
-}
+export { idempotencyKeyOf } from './idempotency-key.ts';
 
 export function requestDigest(operation: string, actor: Actor, body: unknown): Uint8Array {
   const canonical = canonicalize({

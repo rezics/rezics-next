@@ -1,6 +1,6 @@
 import type { PoolClient } from 'pg';
 import { noEffect, type CommandEvent } from '../command/command.ts';
-import { ProblemError } from '../http/problem.ts';
+import { ProblemError } from '../http/problem-error.ts';
 import { newId } from '../route/route.ts';
 import { orderRepairRange } from './ordinal.ts';
 import { COLLECTION_ORDER_SQL, withCollectionOrderDeclaration } from './collection-order-bounds.ts';

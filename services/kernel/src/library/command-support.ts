@@ -60,7 +60,7 @@ function composedAuthorization() {
   return peekLibraryDomain()?.authorization;
 }
 
-function commandAuthorization(
+export function libraryCommandAuthorization(
   ...args: Parameters<typeof accessCommandAuthorization>
 ): ReturnType<typeof accessCommandAuthorization> {
   const composed = composedAuthorization()?.commandAuthorization;
@@ -259,7 +259,7 @@ export function createLibraryCommandRunner(config: {
     // Capture original command identity before any permission preparation awaits.
     const commandInput = followPlan?.original.input ?? plan?.original.input ?? request.input;
     const native = config.access
-      ? await commandAuthorization(
+      ? await libraryCommandAuthorization(
           config.access,
           owner,
           request.action,

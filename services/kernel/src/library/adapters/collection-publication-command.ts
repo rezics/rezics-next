@@ -20,13 +20,8 @@ import {
   type CommandTransaction,
 } from '../../command/command.ts';
 import { ProblemError } from '../../http/problem-error.ts';
-import {
-  accessCheck,
-  type Access,
-  type AccessContext,
-  type AccessClient,
-  type AccountActor,
-} from '../../request/access.ts';
+import { accessCheck } from '../../request/access-check.ts';
+import { type Access, type AccessContext, type AccessClient, type AccountActor } from '../../request/access.ts';
 import { deadlineFor } from '../../request/deadline.ts';
 import { newId, partitionOf, routeOf } from '../../route/route.ts';
 import { stageHistoryWork } from '../../work/history-enqueue.ts';

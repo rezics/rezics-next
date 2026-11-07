@@ -22,8 +22,9 @@ import {
 import { nativeReceiptKeyCandidates } from '../command/receipt-key.ts';
 import type { KernelClock } from '../clock.ts';
 import { withConnection } from '../database/pool.ts';
-import { ProblemError } from '../http/problem.ts';
-import { accessCheck, type Access, type AccountActor, type Actor } from '../request/access.ts';
+import { ProblemError } from '../http/problem-error.ts';
+import { accessCheck } from '../request/access-check.ts';
+import { type Access, type AccountActor, type Actor } from '../request/access.ts';
 import { deadlineFor } from '../request/deadline.ts';
 import { newId, partitionOf, routeOf } from '../route/route.ts';
 import { decodeCursor, encodeCursor } from '../tokens/cursor.ts';

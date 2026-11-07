@@ -6,7 +6,7 @@ import {
   readCollectionPublicationEpisodeVersion,
 } from './collection-publication-episodes.ts';
 import { enqueueIntent, runOperationalTransaction } from '../command/operational.ts';
-import { ProblemError } from '../http/problem.ts';
+import { ProblemError } from '../http/problem-error.ts';
 import { readMembershipWorkConfig } from '../access/membership-work-config.ts';
 import { routeOf, partitionOf } from '../route/route.ts';
 import { advanceCollectionSourceWork } from './collection-source-work.ts';

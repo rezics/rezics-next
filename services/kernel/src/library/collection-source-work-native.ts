@@ -7,7 +7,7 @@ import { type Bound } from '@rezics/bounds';
 import { currentOperationalResources, hasLiveOperationalTransaction } from '../command/operational.ts';
 const deadlineClient = <T extends object>(client: T, deadline: number): T =>
   requireLibraryDomain().authorization.deadlineClient(client, deadline);
-import { ProblemError } from '../http/problem.ts';
+import { ProblemError } from '../http/problem-error.ts';
 import { routeOf } from '../route/route.ts';
 import { requireLibraryDomain } from './domain-binding.ts';
 import type { ScopeWorkContext, NativeScopeWorkDefinition } from './adapters/preparation-work.ts';

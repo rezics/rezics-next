@@ -3,7 +3,7 @@ import { randomUUID } from 'node:crypto';
 import { compileCatalogue } from '@rezics/definitions/compile';
 import { fixture } from '../../../../packages/definitions/test/support/library-profiles.ts';
 import { IdempotencyConflictError } from '../../src/command/command.ts';
-import { ProblemError } from '../../src/http/problem.ts';
+import { ProblemError } from '../../src/http/problem-error.ts';
 import { createCopyCommands } from '../../src/library/copies.ts';
 import { createProfileEntryFixture, type NativeProfileFixture } from './support/profile-entry-fixture.ts';
 

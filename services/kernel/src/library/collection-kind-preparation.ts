@@ -11,7 +11,7 @@ import {
   runOperationalTransaction,
 } from '../command/operational.ts';
 import { withConnection } from '../database/pool.ts';
-import { ProblemError } from '../http/problem.ts';
+import { ProblemError } from '../http/problem-error.ts';
 import type { Actor } from '../request/access.ts';
 import { partitionOf, routeOf } from '../route/route.ts';
 import type { IdentityScopeObservation } from '../semantic/identity-scope-types.ts';

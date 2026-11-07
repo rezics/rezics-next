@@ -2,7 +2,7 @@ import { randomUUID } from 'node:crypto';
 import type { Pool, PoolClient } from 'pg';
 import type { KernelClock } from '../clock.ts';
 import { GrantDeniedError } from '../access/grant-commands.ts';
-import { ProblemError } from '../http/problem.ts';
+import { ProblemError } from '../http/problem-error.ts';
 import type { Access, Actor, AccountActor } from '../request/access.ts';
 import { deadlineFor } from '../request/deadline.ts';
 import type { KeyRing } from '../tokens/seal.ts';

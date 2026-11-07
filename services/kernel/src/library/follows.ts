@@ -14,7 +14,8 @@ import {
 import type { KernelClock } from '../clock.ts';
 import { readSpace, spaceReadEligibility } from '../community/space.ts';
 import { withConnection } from '../database/pool.ts';
-import { accessCheck, type Access, type AccountActor, type Actor } from '../request/access.ts';
+import { accessCheck } from '../request/access-check.ts';
+import { type Access, type AccountActor, type Actor } from '../request/access.ts';
 import { withRequestDeadline } from '../request/deadline.ts';
 import { routeOf } from '../route/route.ts';
 import { readCollection } from './collection-store.ts';

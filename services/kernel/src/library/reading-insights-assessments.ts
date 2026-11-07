@@ -2,8 +2,9 @@ import type { Pool } from 'pg';
 import { readAccount } from '../access/account-data.ts';
 import { deadlineClient, within } from '../access/authenticate.ts';
 import { withConnection } from '../database/pool.ts';
-import { ProblemError } from '../http/problem.ts';
-import { AuthenticationError, type Actor } from '../request/access.ts';
+import { ProblemError } from '../http/problem-error.ts';
+import { AuthenticationError } from '../request/authentication-error.ts';
+import { type Actor } from '../request/access.ts';
 import { routeOf } from '../route/route.ts';
 
 export const READING_INSIGHTS_ASSESSMENT_REVISION_LIMIT = 16;

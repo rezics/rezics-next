@@ -22,8 +22,9 @@ import {
   type AuthoritativeTime,
 } from '../command/command.ts';
 import { discardConnection, withConnection } from '../database/pool.ts';
-import { ProblemError } from '../http/problem.ts';
-import { accessCheck, type Access, type Actor } from '../request/access.ts';
+import { ProblemError } from '../http/problem-error.ts';
+import { accessCheck } from '../request/access-check.ts';
+import { type Access, type Actor } from '../request/access.ts';
 import { partitionOf, routeOf } from '../route/route.ts';
 import type { CanonicalRawKey } from './canonical-source-store.ts';
 import { nativeSourceFence } from './canonical-source-store.ts';

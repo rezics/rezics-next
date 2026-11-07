@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import type { CommandOutcome } from '../command/command.ts';
 import type { Actor } from '../request/access.ts';
-import { ProblemError } from '../http/problem.ts';
+import { ProblemError } from '../http/problem-error.ts';
 import type { LabelCommandAdmission } from './label-command-admission.ts';
 import type { createEntryPersonalCommands } from './entry-personal.ts';
 import type { PersonalEntry } from './entry-personal-model.ts';

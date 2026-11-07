@@ -1,6 +1,6 @@
 import type { PoolClient } from 'pg';
 import { newId } from '../route/route.ts';
-import { ProblemError } from '../http/problem.ts';
+import { ProblemError } from '../http/problem-error.ts';
 import { DIARY_LIFETIME_MS } from './diary-model.ts';
 import type { DiaryFilter, DiaryOccurrence } from './diary-model.ts';
 

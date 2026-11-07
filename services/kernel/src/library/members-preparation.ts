@@ -47,7 +47,7 @@ import {
 import { enqueueIntent, runOperationalTransaction, type OperationalTransaction } from '../command/operational.ts';
 import { deadlineFor } from '../request/deadline.ts';
 import type { Access, Actor } from '../request/access.ts';
-import { ProblemError } from '../http/problem.ts';
+import { ProblemError } from '../http/problem-error.ts';
 import { newId, partitionOf, routeOf } from '../route/route.ts';
 import type { WorkClient } from '../work/client.ts';
 import type { WorkExecutionOriginal } from '../command/execution-contract.ts';
