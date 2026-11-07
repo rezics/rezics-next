@@ -15,9 +15,30 @@ import {
   webViteWorkerSsrOptimizeDeps,
   webViteWorkerSsrResolve,
 } from './support/vite-dep-cache.ts';
+import { elysiaWorkerdTypebox, transformElysiaTypeboxLoader } from '../vite-elysia-typebox.ts';
 
 const appRoot = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const workspaceRoot = resolve(appRoot, '../..');
+
+function installedElysiaTypeFile(name: string): string {
+  const require = createRequire(join(workspaceRoot, 'packages/client/package.json'));
+  return realpathSync(join(dirname(require.resolve('elysia/package.json')), 'dist', 'type', name));
+}
+
+test('Worker Vite rewrites Elysia TypeBox loaders to static imports', () => {
+  const typeFile = installedElysiaTypeFile('typebox-type.mjs');
+  const valueFile = installedElysiaTypeFile('typebox-value-require.mjs');
+  const type = transformElysiaTypeboxLoader(readFileSync(typeFile, 'utf8'), typeFile);
+  const value = transformElysiaTypeboxLoader(readFileSync(valueFile, 'utf8'), valueFile);
+  if (!type || !value) throw new Error('Elysia TypeBox loaders were not rewritten');
+  expect(type).toContain('import * as typeboxType from "typebox/type"');
+  expect(type).toContain('type: typeboxType');
+  expect(type).not.toContain('req("typebox/type")');
+  expect(value).toContain('import * as typeboxValueOps from "./typebox-value-ops.mjs"');
+  expect(value).toContain('fromOps(typeboxValueOps)');
+  expect(value).not.toContain('require("./typebox-value-ops.mjs")');
+  expect(elysiaWorkerdTypebox().name).toBe('elysia-workerd-typebox');
+});
 
 function isWithin(parent: string, child: string): boolean {
   const path = relative(parent, child);
@@ -71,6 +92,15 @@ test('WEB_VITE_CACHE_DIR selects the host-local optimizeDeps cache and allows re
     );
     expect(denied).toBeTruthy();
     expect(denied && 'enforce' in denied ? denied.enforce : undefined).toBe('pre');
+    const typebox = plugins.find(
+      (plugin) =>
+        plugin !== null &&
+        typeof plugin === 'object' &&
+        'name' in plugin &&
+        plugin.name === 'elysia-workerd-typebox',
+    );
+    expect(typebox).toBeTruthy();
+    expect(typebox && 'enforce' in typebox ? typebox.enforce : undefined).toBe('pre');
     mkdirSync(join(cacheDir, 'deps_ssr'), { recursive: true });
     const metadataPath = join(cacheDir, 'deps_ssr', '_metadata.json');
     writeFileSync(

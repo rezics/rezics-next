@@ -22,6 +22,7 @@ import {
   webViteWorkerSsrEnvironment,
   webViteWorkerSsrOptimizeDeps,
 } from './tests/support/vite-dep-cache.ts';
+import { elysiaWorkerdTypebox } from './vite-elysia-typebox.ts';
 
 const configuredInspectorPort = process.env.WORKER_INSPECTOR_PORT;
 const nativeWebHost = process.env.NATIVE_WEB_TEST_HOST;
@@ -309,6 +310,7 @@ export default defineConfig((context) => {
       tanstackStart(),
       react(),
       tailwindcss(),
+      elysiaWorkerdTypebox(),
       ...cloudflare({
         viteEnvironment: { name: 'ssr' },
         inspectorPort,
