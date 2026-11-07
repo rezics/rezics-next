@@ -233,7 +233,7 @@ test('the installed application preserves owner context and order through nested
     deadline: 123,
     access: {} as import('../../src/request/access.ts').Access,
   };
-  const ids = ['018f0000-0000-7000-8000-00a000000002', '018f0000-0000-7000-8000-00a000000001'];
+  const ids = ['018f0000-0000-7000-8000-00a000000002', '018f0000-0000-7000-8000-00a000000001'] as const;
   const authorId = '018f0000-0000-7000-8000-00a000000003';
   const subjectId = '018f0000-0000-7000-8000-00a000000004';
   const candidates = ids.map((id) => ({

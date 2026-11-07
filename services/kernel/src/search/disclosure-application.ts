@@ -23,7 +23,7 @@ import type {
 import type { PublicFilterCoveragePage } from './public-filter-coverage-page.ts';
 import { SearchOperationError, SearchUnavailableError } from './operation-outcomes.ts';
 import { discoveryCandidateScanBound } from './service-request.ts';
-import { conceptSelections, type EngineToken } from './disclosure/admission.ts';
+import { conceptSelections, conceptSelectionIdentity, type EngineToken } from './disclosure/admission.ts';
 import { checkHits } from './disclosure/check.ts';
 import { createCurrentTextMatcher, type CurrentTextAnalyzer as Analyzer } from './disclosure/current-text.ts';
 import {
@@ -217,7 +217,7 @@ export async function prepareConceptDisclosure(
     const retained = await store.read(state);
     if (retained.status === 'retired') throw new SearchOperationError('search_restart_required');
     if (retained.status === 'building') throw new SearchOperationError('index_not_ready');
-    cuts.set(identity(selected), { source: browse, store, state });
+    cuts.set(conceptSelectionIdentity(selected), { source: browse, store, state });
   }
 
   const reader: ConceptStatementReader = async (partition, request, after, limit) => {
@@ -227,7 +227,7 @@ export async function prepareConceptDisclosure(
   return {
     reader,
     resolveCut(request: ConceptStatementRequest) {
-      const key = identity(request.selection);
+      const key = conceptSelectionIdentity(request.selection);
       return cuts.get(key) ?? null;
     },
   };

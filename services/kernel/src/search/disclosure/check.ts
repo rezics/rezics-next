@@ -8,7 +8,11 @@ import {
 } from '@rezics/filter';
 import type { Release } from '@rezics/definitions';
 import { anyCurrentMatch, compileCurrentFilter, currentClauseKey } from '../current-filter-plan.ts';
-import { matchNativeConceptFilter, type ConceptFilterExecution } from '../concept-browse-statements.ts';
+import {
+  CONCEPT_STATEMENT_PREFIX_LIMITS,
+  matchNativeConceptFilter,
+  type ConceptFilterExecution,
+} from '../concept-browse-statements.ts';
 import { holdsCurrentStatements, holdsCurrentType } from '../current-leaf.ts';
 import { RequestSourceLifetime } from '../request-source-lifetime.ts';
 import { REQUEST_SOURCE_KEYS, validateRequestSourceSnapshot } from '../request-source-snapshot.ts';

@@ -48,7 +48,7 @@ export function chooseTexts(
 
 type SelectedConcept = Readonly<{ property: string; concept: string; scheme: string }>;
 
-function identity(selection: SelectedConcept): string {
+export function conceptSelectionIdentity(selection: SelectedConcept): string {
   return JSON.stringify([selection.property, selection.concept, selection.scheme]);
 }
 
@@ -65,7 +65,7 @@ export function conceptSelections(filter: DiscoveryFilterDocument): SelectedConc
         concept: node.statement.in[0]!,
         scheme: node.statement.concept.scheme,
       };
-      result.set(identity(selection), selection);
+      result.set(conceptSelectionIdentity(selection), selection);
     }
   }
   return [...result.values()];
