@@ -261,7 +261,8 @@ export async function startDevServer(options: DevServerOptions): Promise<DevServ
   const captured = () => {
     const pid = child?.pid;
     const members = pid === undefined ? [] : liveProcessGroupMemberIds(pid);
-    const exit = child === undefined ? undefined : (child.exitCode ?? (pid === undefined ? undefined : directChildExitCode(pid)));
+    const exit =
+      child === undefined ? undefined : (child.exitCode ?? (pid === undefined ? undefined : directChildExitCode(pid)));
     const capturedOutput = custody?.diagnostics() || output;
     return [
       `$ ${command.join(' ')}`,

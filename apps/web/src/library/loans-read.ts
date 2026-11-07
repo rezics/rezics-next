@@ -91,8 +91,12 @@ function parseCreate(input: unknown): (LoanWrite & { idempotencyKey: string }) |
       ? null
       : calendarDay(input.dueOn)
     : undefined;
-  const idempotencyKey = typeof input.idempotencyKey === 'string' && uuid.test(input.idempotencyKey) ? input.idempotencyKey : undefined;
-  const name = isRecord(input.counterparty) && input.counterparty.kind === 'name' ? counterpartyName(input.counterparty.name) : undefined;
+  const idempotencyKey =
+    typeof input.idempotencyKey === 'string' && uuid.test(input.idempotencyKey) ? input.idempotencyKey : undefined;
+  const name =
+    isRecord(input.counterparty) && input.counterparty.kind === 'name'
+      ? counterpartyName(input.counterparty.name)
+      : undefined;
   if (!copyId || copyRevision === undefined || !direction || !startedOn || !idempotencyKey || !name) return undefined;
   if (Object.hasOwn(input, 'dueOn') && dueOn === undefined) return undefined;
   return {
@@ -116,7 +120,8 @@ function parseRevisioned(
       ? input.revision
       : undefined;
   const day = calendarDay(input.dueOn ?? input.returnedOn);
-  const idempotencyKey = typeof input.idempotencyKey === 'string' && uuid.test(input.idempotencyKey) ? input.idempotencyKey : undefined;
+  const idempotencyKey =
+    typeof input.idempotencyKey === 'string' && uuid.test(input.idempotencyKey) ? input.idempotencyKey : undefined;
   if (!loanId || revision === undefined || !day || !idempotencyKey) return undefined;
   return { loanId, revision, day, idempotencyKey };
 }
@@ -130,8 +135,7 @@ export async function loadLoansPage(
   const refused = await prepareSession(request, sessionEnv);
   const authorization = refused ? null : viewerCredential(request);
   const provenance = { filter: input.filter, requestedCursor: input.cursor ?? null };
-  if (!authorization)
-    return { signedIn: false, ...provenance, boundary: null, items: [], next: null };
+  if (!authorization) return { signedIn: false, ...provenance, boundary: null, items: [], next: null };
   try {
     const limit = input.limit ?? (input.filter === 'history' ? 50 : 20);
     const result = await client['copy-loans'].get({
@@ -213,7 +217,10 @@ export async function returnLoan(
   sessionEnv: Partial<SessionEnv>,
   input: unknown,
 ): Promise<LoanWriteResult> {
-  const draft = parseRevisioned({ ...(isRecord(input) ? input : {}), returnedOn: isRecord(input) ? input.returnedOn : undefined });
+  const draft = parseRevisioned({
+    ...(isRecord(input) ? input : {}),
+    returnedOn: isRecord(input) ? input.returnedOn : undefined,
+  });
   if (!draft) return { ok: false, reason: 'invalid' };
   try {
     const authorization = await bearer(request, sessionEnv);

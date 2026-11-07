@@ -188,7 +188,9 @@ test('Character local choices preserve exact recovery on Stay and fence abandone
     await act(async () => user.type(citation, 'https://example.test/credit'));
     await click(m.relation_propose());
     const confirmation = within(
-      await waitFor(() => canvas.getByRole('group', { name: m.candidate_confirm_title({ action: m.relation_propose() }) })),
+      await waitFor(() =>
+        canvas.getByRole('group', { name: m.candidate_confirm_title({ action: m.relation_propose() }) }),
+      ),
     );
     await click(m.relation_propose(), confirmation);
     await waitFor(() => expect(proposals).toHaveLength(1));

@@ -224,7 +224,9 @@ export function hashViteDepCacheIdentity(input: {
   optimizer?: unknown;
 }): string {
   const lock = typeof input.lockBytes === 'string' ? input.lockBytes : Buffer.from(input.lockBytes).toString('utf8');
-  return hashLockfile(`${lock}\0${input.patchBytes ?? ''}\0${JSON.stringify(input.optimizer ?? webViteOptimizerIdentity)}`);
+  return hashLockfile(
+    `${lock}\0${input.patchBytes ?? ''}\0${JSON.stringify(input.optimizer ?? webViteOptimizerIdentity)}`,
+  );
 }
 
 /** Same 8-character lockfile hash Vite uses, including bun `patches/` mtime. */

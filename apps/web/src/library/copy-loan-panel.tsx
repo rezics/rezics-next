@@ -96,7 +96,21 @@ export function CopyLoanPanel({
         setFailure(failureText(result.reason));
         return;
       }
-      setItem(result.loan.returnedOn ? null : { loan: result.loan, copy: item?.copy ?? { state: 'available', id: copy.id, revision: copy.revision, kind: copy.kind, status: copy.status, context: { state: 'unavailable' } } });
+      setItem(
+        result.loan.returnedOn
+          ? null
+          : {
+              loan: result.loan,
+              copy: item?.copy ?? {
+                state: 'available',
+                id: copy.id,
+                revision: copy.revision,
+                kind: copy.kind,
+                status: copy.status,
+                context: { state: 'unavailable' },
+              },
+            },
+      );
       if (result.boundary.today) setToday(result.boundary.today);
     } catch {
       if (current(operation)) setFailure(m.library_loans_failure());
@@ -185,7 +199,12 @@ export function CopyLoanPanel({
                   onChange={(value) => current() && setExtendDue(value)}
                 />
               </div>
-              <button type="button" className={button} disabled={busy || !current('copy.update')} onClick={() => void extend()}>
+              <button
+                type="button"
+                className={button}
+                disabled={busy || !current('copy.update')}
+                onClick={() => void extend()}
+              >
                 {m.library_loans_extend()}
               </button>
             </div>
@@ -204,7 +223,12 @@ export function CopyLoanPanel({
                   onChange={(value) => current() && setReturnedOn(value)}
                 />
               </div>
-              <button type="button" className={button} disabled={busy || !current('copy.update')} onClick={() => void complete()}>
+              <button
+                type="button"
+                className={button}
+                disabled={busy || !current('copy.update')}
+                onClick={() => void complete()}
+              >
                 {m.library_loans_return()}
               </button>
             </div>
@@ -254,7 +278,12 @@ export function CopyLoanPanel({
               onChange={(value) => current() && setDueOn(value)}
             />
           </div>
-          <button type="button" className={button} disabled={busy || !current('copy.create')} onClick={() => void create()}>
+          <button
+            type="button"
+            className={button}
+            disabled={busy || !current('copy.create')}
+            onClick={() => void create()}
+          >
             {m.library_loans_submit()}
           </button>
         </div>

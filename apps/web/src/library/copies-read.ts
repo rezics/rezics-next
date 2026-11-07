@@ -215,7 +215,10 @@ function revisionOf(value: unknown): number | undefined {
   return value;
 }
 
-function conditionOf(record: Record<string, unknown>, field: keyof CopyConditionPatch): CopyConditionValue | null | false | undefined {
+function conditionOf(
+  record: Record<string, unknown>,
+  field: keyof CopyConditionPatch,
+): CopyConditionValue | null | false | undefined {
   if (!Object.hasOwn(record, field)) return undefined;
   const value = record[field];
   if (value === null) return null;

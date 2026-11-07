@@ -63,27 +63,18 @@ test('test Worker bindings are startup-only and production has no fixture header
     const plugins = (testRuntime.plugins ?? []).flatMap((plugin) => (Array.isArray(plugin) ? plugin : [plugin]));
     const bindingsPlugin = plugins.find(
       (plugin) =>
-        plugin !== null &&
-        typeof plugin === 'object' &&
-        'name' in plugin &&
-        plugin.name === 'rezics-test-env-bindings',
+        plugin !== null && typeof plugin === 'object' && 'name' in plugin && plugin.name === 'rezics-test-env-bindings',
     );
-    const transformHook =
-      bindingsPlugin && 'transform' in bindingsPlugin ? bindingsPlugin.transform : undefined;
+    const transformHook = bindingsPlugin && 'transform' in bindingsPlugin ? bindingsPlugin.transform : undefined;
     const transform =
-      typeof transformHook === 'function' ? transformHook : transformHook && 'handler' in transformHook
-        ? transformHook.handler
-        : undefined;
+      typeof transformHook === 'function'
+        ? transformHook
+        : transformHook && 'handler' in transformHook
+          ? transformHook.handler
+          : undefined;
     expect(typeof transform).toBe('function');
-    const transformed = transform?.call(
-      undefined,
-      bindingsSource,
-      join(appRoot, 'src/test-runtime-bindings.ts'),
-    );
-    expect(transformed).toHaveProperty(
-      'code',
-      expect.stringContaining('= {"KERNEL_ORIGIN":"https://test.example"};'),
-    );
+    const transformed = transform?.call(undefined, bindingsSource, join(appRoot, 'src/test-runtime-bindings.ts'));
+    expect(transformed).toHaveProperty('code', expect.stringContaining('= {"KERNEL_ORIGIN":"https://test.example"};'));
   } finally {
     if (previous === undefined) delete process.env.REZICS_TEST_RUNTIME;
     else process.env.REZICS_TEST_RUNTIME = previous;
@@ -151,10 +142,7 @@ test('WEB_VITE_CACHE_DIR selects the host-local optimizeDeps cache and allows re
     expect(denied && 'enforce' in denied ? denied.enforce : undefined).toBe('pre');
     const align = plugins.find(
       (plugin) =>
-        plugin !== null &&
-        typeof plugin === 'object' &&
-        'name' in plugin &&
-        plugin.name === 'web-vite-dep-cache-align',
+        plugin !== null && typeof plugin === 'object' && 'name' in plugin && plugin.name === 'web-vite-dep-cache-align',
     );
     expect(align).toBeTruthy();
     expect(align && 'enforce' in align ? align.enforce : undefined).toBe('pre');
@@ -334,8 +322,9 @@ test('Vite serves resolved workspace dependencies while keeping files outside it
 test('the Worker selector dependency resolves to ESM while the client keeps the package implementation', async () => {
   const config = await resolveWebViteConfig({ command: 'serve', mode: 'test' }, appRoot);
   const plugins = (config.plugins ?? []).flatMap((plugin) => (Array.isArray(plugin) ? plugin : [plugin]));
-  const selector = plugins.find((plugin) =>
-    plugin !== null && typeof plugin === 'object' && 'name' in plugin && plugin.name === 'web-worker-selector-esm',
+  const selector = plugins.find(
+    (plugin) =>
+      plugin !== null && typeof plugin === 'object' && 'name' in plugin && plugin.name === 'web-worker-selector-esm',
   ) as
     | {
         applyToEnvironment?: (environment: { name: string }) => boolean;
@@ -347,9 +336,7 @@ test('the Worker selector dependency resolves to ESM while the client keeps the 
   expect(selector).toBeDefined();
   expect(selector?.applyToEnvironment?.({ name: 'ssr' })).toBe(true);
   expect(selector?.applyToEnvironment?.({ name: 'client' })).toBe(false);
-  expect(resolveId?.(workerSelectorImport)).toBe(
-    join(appRoot, 'src/kernel/use-sync-external-store-with-selector.ts'),
-  );
+  expect(resolveId?.(workerSelectorImport)).toBe(join(appRoot, 'src/kernel/use-sync-external-store-with-selector.ts'));
 });
 
 test('SSR optimizeDeps keeps explicit Worker include, noDiscovery, calendar excludes and ESM polyfill alias', async () => {
@@ -462,9 +449,9 @@ test('Workers resolve both share-card public Wasm exports through the installed 
 
 test('serve skips Paraglide generate under test runtime unless a compiler module is supplied', () => {
   expect(shouldGenerateLocalization({ REZICS_TEST_RUNTIME: '1' })).toBe(false);
-  expect(shouldGenerateLocalization({ REZICS_TEST_RUNTIME: '1', REZICS_PARAGLIDE_COMPILER_MODULE: '/tmp/compiler.mjs' })).toBe(
-    true,
-  );
+  expect(
+    shouldGenerateLocalization({ REZICS_TEST_RUNTIME: '1', REZICS_PARAGLIDE_COMPILER_MODULE: '/tmp/compiler.mjs' }),
+  ).toBe(true);
   expect(shouldGenerateLocalization({})).toBe(true);
 });
 

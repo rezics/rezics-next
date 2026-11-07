@@ -273,9 +273,7 @@ export type {
 type CopyLoansRoute = GeneratedKernelClient['copy-loans'];
 export type LoanPage = NonNullable<Awaited<ReturnType<CopyLoansRoute['get']>>['data']>;
 export type Loan = LoanPage['items'][number]['loan'];
-export type LoanFilter = NonNullable<
-  NonNullable<NonNullable<Parameters<CopyLoansRoute['get']>[0]>['query']>['filter']
->;
+export type LoanFilter = NonNullable<NonNullable<NonNullable<Parameters<CopyLoansRoute['get']>[0]>['query']>['filter']>;
 export type LoanWrite = Parameters<CopyLoansRoute['post']>[0];
 export type LoanMutation = NonNullable<Awaited<ReturnType<CopyLoansRoute['post']>>['data']>;
 export type PostHistoryPage = NativePostHistoryPage;

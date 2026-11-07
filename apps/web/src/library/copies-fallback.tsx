@@ -68,7 +68,11 @@ export function CopiesFallback({ page, csrfToken }: { page: CopiesPageData; csrf
                     <>
                       <Field className="min-w-0">
                         <FieldLabel htmlFor={`${kindId}-media`}>{m.library_copy_condition_media()}</FieldLabel>
-                        <NativeSelect id={`${kindId}-media`} name="mediaCondition" className="w-full [&_select]:min-h-11">
+                        <NativeSelect
+                          id={`${kindId}-media`}
+                          name="mediaCondition"
+                          className="w-full [&_select]:min-h-11"
+                        >
                           <NativeSelectOption value="">{m.library_copy_condition_omit()}</NativeSelectOption>
                           {copyConditionChoices().map((choice) => (
                             <NativeSelectOption key={choice.id} value={choice.id}>

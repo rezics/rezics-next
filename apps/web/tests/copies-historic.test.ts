@@ -103,7 +103,7 @@ const presentation = {
     statuses: [{ id: 'loan', label: 'Currently on loan', labelLanguage: 'en' }],
   },
 } satisfies NativeCopyPresentation;
-const copy =(extra: Partial<CopyItem> = {}): CopyItem => ({
+const copy = (extra: Partial<CopyItem> = {}): CopyItem => ({
   ...native,
   subject: null,
   idempotencyKey: key,
@@ -149,9 +149,7 @@ const pageMarkup = (page: Parameters<typeof CopiesPage>[0]['page']) => {
     ]),
     history: createMemoryHistory({ initialEntries: ['/library/copies'] }),
   });
-  return renderToStaticMarkup(
-    createElement(RouterContextProvider, { router }, createElement(CopiesPage, { page })),
-  );
+  return renderToStaticMarkup(createElement(RouterContextProvider, { router }, createElement(CopiesPage, { page })));
 };
 
 test('copy editor dates are locale calendar controls rather than native date inputs', async () => {

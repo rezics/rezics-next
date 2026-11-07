@@ -45,8 +45,7 @@ function addMonths(date: Date, delta: number): Date {
 
 function weekStart(locale: string): number {
   try {
-    const first = (new Intl.Locale(locale) as Intl.Locale & { weekInfo?: { firstDay?: number } }).weekInfo
-      ?.firstDay;
+    const first = (new Intl.Locale(locale) as Intl.Locale & { weekInfo?: { firstDay?: number } }).weekInfo?.firstDay;
     if (first === 7) return 0;
     if (typeof first === 'number' && first >= 1 && first <= 6) return first;
   } catch {
