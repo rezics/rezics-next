@@ -17,11 +17,7 @@ import { resourceAuthorization } from '../../access/resource-authorization.ts';
 import { contentLifecycleOf } from '../adapters/ports.ts';
 import { discardConnection, withConnection } from '../../database/pool.ts';
 import { customMethod } from '../../http/custom-method.ts';
-import {
-  ProblemError,
-  problemSchema,
-  type FieldError,
-} from '../../http/problem.ts';
+import { ProblemError, problemSchema, type FieldError } from '../../http/problem.ts';
 import { defineRateLimit } from '../../http/rate-limit.ts';
 import { SESSION_HEADER } from '../../http/request.ts';
 import { readPartition } from '../../partition/partition.ts';
