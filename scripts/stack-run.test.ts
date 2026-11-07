@@ -507,7 +507,10 @@ async function stack(
   const child = Bun.spawn(
     ['bun', stackRun, ...options, 'the run', directory, join(directory, 'src'), '--', ...command],
     {
-      cwd: repository,
+      // The suite itself may run on a check host. Use the synthetic caller
+      // checkout so placement tests exercise worker admission instead of the
+      // physical remote-run short circuit.
+      cwd: directory,
       env: environment,
       stdin: 'ignore',
       stdout: 'pipe',
@@ -531,7 +534,7 @@ async function stackWithFixtureDeadline(
   const child = Bun.spawn(
     ['bun', stackRun, ...options, 'the run', directory, join(directory, 'src'), '--', ...command],
     {
-      cwd: repository,
+      cwd: directory,
       env: fixture.env,
       stdin: 'ignore',
       stdout: 'pipe',
@@ -578,7 +581,7 @@ try {
 process.stdout.write(JSON.stringify({ outcome, settlement }) + '\\n');
 `;
   const child = Bun.spawn([process.execPath, '--eval', source], {
-    cwd: repository,
+    cwd: directory,
     env: { ...environment, TEST_WORKSPACE: directory },
     stdin: 'ignore',
     stdout: 'pipe',

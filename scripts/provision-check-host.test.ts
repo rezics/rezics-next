@@ -1,6 +1,7 @@
 import { afterAll, beforeAll, expect, test } from 'bun:test';
 import { spawnSync } from 'node:child_process';
 import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 
 const repository = resolve(import.meta.dir, '..');
@@ -25,8 +26,8 @@ const canRecoverAsNobody =
   spawnSync('runuser', ['-u', 'nobody', '--', 'test', '-x', process.execPath]).status === 0;
 
 beforeAll(() => {
-  mkdirSync(join(repository, '.temp'), { recursive: true });
-  root = mkdtempSync(join(repository, '.temp/provision-check-host-test-'));
+  // Keep the fake remote root outside the active check-host run directory.
+  root = mkdtempSync(join(tmpdir(), 'provision-check-host-test-'));
   chmodSync(root, 0o755);
 });
 

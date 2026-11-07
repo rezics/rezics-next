@@ -1,6 +1,7 @@
 import { afterAll, expect, test } from 'bun:test';
 import { spawnSync } from 'node:child_process';
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
 import { dirname, join, relative, resolve } from 'node:path';
 import { createHash } from 'node:crypto';
 import type { Browser } from 'playwright';
@@ -296,8 +297,7 @@ function statusFor(
 }
 
 function fixture() {
-  mkdirSync(join(root, '.temp'), { recursive: true });
-  const fixtureRoot = mkdtempSync(join(root, '.temp', 'web-placement-fixture-'));
+  const fixtureRoot = mkdtempSync(join(tmpdir(), 'web-placement-fixture-'));
   fixtureRoots.push(fixtureRoot);
   const workspace = join(fixtureRoot, 'candidate');
   const privateRoot = join(fixtureRoot, 'private');
@@ -437,8 +437,7 @@ function commit(directory: string, message: string): string {
 }
 
 function createDriverGitFixture() {
-  mkdirSync(join(root, '.temp'), { recursive: true });
-  const temporaryRoot = mkdtempSync(join(root, '.temp', 'web-driver-git-'));
+  const temporaryRoot = mkdtempSync(join(tmpdir(), 'web-driver-git-'));
   const repository = join(temporaryRoot, 'repository');
   const candidateRoot = join(temporaryRoot, 'candidate');
   const integratedRoot = join(temporaryRoot, 'integrated-driver');

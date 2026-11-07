@@ -2,6 +2,7 @@ import { afterAll, expect, test } from 'bun:test';
 import { randomUUID } from 'node:crypto';
 import { EventEmitter } from 'node:events';
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { PassThrough } from 'node:stream';
 import type { spawn } from 'node:child_process';
@@ -26,9 +27,9 @@ test('explicit host-local and host-absolute environment overrides are refused', 
 });
 
 function fixture(): string {
-  const parent = join(repository, '.temp');
-  mkdirSync(parent, { recursive: true });
-  const root = mkdtempSync(join(parent, `placement-${randomUUID()}-`));
+  // Remote acceptance runs from /srv/rezics-check/runs/<id>. Keep an off-host
+  // fixture outside that physical run or onCheckHost(root) tests the runner.
+  const root = mkdtempSync(join(tmpdir(), `placement-${randomUUID()}-`));
   temporary.push(root);
   mkdirSync(join(root, '.git'));
   writeFileSync(
@@ -191,9 +192,7 @@ test('caller markers cannot convert heavy placement to local, and only performan
 });
 
 test('worker --local with unflagged host c fails closed and transport failure never replays locally', async () => {
-  const parent = join(repository, '.temp');
-  mkdirSync(parent, { recursive: true });
-  const root = mkdtempSync(join(parent, `worker-placement-${randomUUID()}-`));
+  const root = mkdtempSync(join(tmpdir(), `worker-placement-${randomUUID()}-`));
   temporary.push(root);
   const gitInit = Bun.spawnSync(['git', 'init', '--quiet', root], { stdin: 'ignore', stdout: 'pipe', stderr: 'pipe' });
   expect(gitInit.exitCode).toBe(0);
