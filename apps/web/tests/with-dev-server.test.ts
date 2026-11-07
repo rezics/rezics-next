@@ -34,6 +34,7 @@ test('the first-public journey source pin does not start a shared Vite server', 
     commandNeedsSharedDevServer(['bun', 'test', '--max-concurrency=1', 'tests/first-public-journeys-walk.test.ts']),
   ).toBe(false);
   expect(commandNeedsSharedDevServer(['bun', 'test', 'apps/web/tests/first-public-journeys-walk.test.ts'])).toBe(false);
+  expect(commandNeedsSharedDevServer(['bun', 'test', 'tests/with-dev-server.test.ts'])).toBe(false);
   expect(commandNeedsSharedDevServer(['bun', 'test', 'tests/search.test.ts'])).toBe(true);
   expect(
     commandNeedsSharedDevServer([
@@ -42,6 +43,9 @@ test('the first-public journey source pin does not start a shared Vite server', 
       'tests/first-public-journeys-walk.test.ts',
       'tests/with-dev-server.test.ts',
     ]),
+  ).toBe(false);
+  expect(
+    commandNeedsSharedDevServer(['bun', 'test', 'tests/first-public-journeys-walk.test.ts', 'tests/search.test.ts']),
   ).toBe(true);
   expect(commandNeedsSharedDevServer(['bun', 'test'])).toBe(true);
 });

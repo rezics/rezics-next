@@ -20,5 +20,6 @@ CROSS JOIN LATERAL (
     AND session.state = 'active'
   ORDER BY session.route, session.account_id, session.subject_id, session.last_changed_at DESC,
            session.session_id
+  OFFSET 0
   LIMIT 1
 ) AS active;
