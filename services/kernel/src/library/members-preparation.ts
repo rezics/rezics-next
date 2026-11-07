@@ -11,7 +11,11 @@ import nativeSource from './members-preparation-source.sql';
 import original from './members-preparation-original.sql';
 import completionResult from './members-preparation-completion.sql';
 import { admitSavedCollectionMemberQuery, type CollectionMemberAdmission } from './owner-filter.ts';
-import type { OwnerFilterCandidateClosure, OwnerFilterReadBinding, OwnerFilterNativeOperations } from './owner-filter-plan.ts';
+import type {
+  OwnerFilterCandidateClosure,
+  OwnerFilterReadBinding,
+  OwnerFilterNativeOperations,
+} from './owner-filter-plan.ts';
 import { NativeCollectionWork } from './collection-native-work.ts';
 import { createCollectionSource, type PreparedCollectionSource } from './collection-source.ts';
 import canonicalize from 'canonicalize';
@@ -1219,8 +1223,7 @@ async function revalidatePreparationRead(
       const membership = await work.compose((allowance) =>
         source.containsSubject({ ...native.input, source: prepared, subjectId, allowance }),
       );
-      if (!deps.ownerFilter.sameSource(binding.source, membership.observation))
-        throw new ProblemError('stale_cursor');
+      if (!deps.ownerFilter.sameSource(binding.source, membership.observation)) throw new ProblemError('stale_cursor');
       if (membership.result === 'not_proven') return { status: 'unavailable' };
       if (!membership.result) continue;
       const closure = await deps.ownerFilter.readClosure(native, prepared, subjectId, work, true);
@@ -1253,8 +1256,7 @@ async function revalidatePreparationRead(
       if (match) disclosed.push(subjectId);
     }
     const final = await work.compose((allowance) => source.prepare({ ...native.input, allowance }));
-    if (!deps.ownerFilter.sameSource(binding.source, final.source.observation))
-      throw new ProblemError('stale_cursor');
+    if (!deps.ownerFilter.sameSource(binding.source, final.source.observation)) throw new ProblemError('stale_cursor');
     await deps.ownerFilter.revalidateDisclosure(native, work);
     return { status: 'current', subjects: disclosed };
   });

@@ -115,7 +115,6 @@ export function createMembersPreparationAdapter(capabilities: Capabilities): Lib
     readPreparedMembers: (dependencies: PreparedMembersReadDependencies, input, options) =>
       reader(dependencies, input, options),
     checkCompletion: checkMembersPreparationCompletionNative,
-    readOwnerFence: (tx, locator, definition) =>
-      readPreparationOwnerFenceNative(tx, locator, definition, capabilities),
+    readOwnerFence: (tx, locator, definition) => readPreparationOwnerFenceNative(tx, locator, definition, capabilities),
   });
 }
