@@ -1,6 +1,6 @@
 import canonicalize from 'canonicalize';
 import { createHash } from 'node:crypto';
-import { ProblemError } from '../http/problem.ts';
+import { ProblemError } from '../http/problem-error.ts';
 import type { KeyRing } from '../tokens/seal.ts';
 import type { FacetScopeCursorBinding } from './facet-discovery-contract.ts';
 import type { FacetDiscovery200Response } from './facet-discovery-contract.ts';
@@ -8,6 +8,8 @@ import type { FacetDiscoveryInput } from './facet-discovery-runtime.ts';
 import type { FacetDiscoveryProvider } from './facet-discovery-native.ts';
 import { authenticateFacetCursors, readFacetDiscovery, validateFacetCursorRelease } from './facet-discovery-runtime.ts';
 import { admitFacets, validateScopedFacetRequest, type ScopedFacetRequest } from './facets.ts';
+import type { FacetAccessObservationPort } from './facet-access-port.ts';
+import { createScopedFacetApplication } from './scoped-facet-application.ts';
 import { scopedFacetIdentityKey, type ScopedFacetAdmission as SearchScopeAdmission } from './scoped-facet-source.ts';
 
 /**
@@ -22,6 +24,22 @@ export type ScopedFacetAdmissionResult = Readonly<
 >;
 
 export type ScopedFacetSearchAdmission = (request: ScopedFacetRequest) => Promise<ScopedFacetAdmissionResult>;
+
+/** Current-reader admission constructed from the same Access observation port as live scoped execution. */
+export function createScopedFacetAdmission(access?: FacetAccessObservationPort) {
+  const application = createScopedFacetApplication({ ...(access === undefined ? {} : { access }) });
+  return {
+    application,
+    admit: (rawRequest: unknown, admitSearch: ScopedFacetSearchAdmission) =>
+      admitScopedFacetRequest(rawRequest, admitSearch),
+    read: (
+      ring: KeyRing,
+      provider: FacetDiscoveryProvider,
+      request: unknown,
+      admitSearch: ScopedFacetSearchAdmission,
+    ) => readScopedFacetDiscovery(ring, provider, request, admitSearch),
+  };
+}
 
 function invalidConditions(): never {
   throw new ProblemError('invalid_request', {

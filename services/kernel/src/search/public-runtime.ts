@@ -45,7 +45,8 @@ import type { OpenSearch } from './opensearch.ts';
 import type { CreditSearchSource } from './credit-search.ts';
 import type { FacetDiscoveryProvider } from './facet-discovery-native.ts';
 import { createFacetNativeOperations } from './facet-discovery-operations.ts';
-import { createScopedFacetSource } from './scoped-facet-source.ts';
+import type { FacetAccessObservationPort } from './facet-access-port.ts';
+import { createScopedFacetApplication } from './scoped-facet-application.ts';
 import { createQueryPrivacyConsumer, type QueryPrivacyConsumer } from './query-privacy-consumer.ts';
 
 export type DefaultPublicFilterRuntimeConfig = Readonly<{
@@ -56,6 +57,8 @@ export type DefaultPublicFilterRuntimeConfig = Readonly<{
   prefix: string;
   clock: KernelClock;
   creditSearch?: CreditSearchSource;
+  /** Composition-bound Access observation; omitted fixtures keep throwing through. */
+  facetAccess?: FacetAccessObservationPort;
 }>;
 export type BoundPublicRequest = Readonly<{
   operations: PublicFilterConsumerOperations;
@@ -110,6 +113,9 @@ function checkDeadline(context: PublicFilterConsumerContext): void {
 
 /** Trusted default composition. Neither Source nor Actor nor physical identity is injectable. */
 export function createDefaultPublicFilterRuntime(config: DefaultPublicFilterRuntimeConfig): DefaultPublicFilterRuntime {
+  const scopedFacets = createScopedFacetApplication({
+    ...(config.facetAccess === undefined ? {} : { access: config.facetAccess }),
+  }).source;
   async function requestMeaning(acceptedRelease?: string) {
     if (acceptedRelease === undefined) return activeRelease(config.pool);
     const release = await readRelease(config.pool, acceptedRelease);
@@ -485,7 +491,7 @@ export function createDefaultPublicFilterRuntime(config: DefaultPublicFilterRunt
             source,
             binding,
             subjects: nativeSource,
-            scopedFacets: createScopedFacetSource(),
+            scopedFacets,
             query: async (queried, context) =>
               (await subjectOperations(physicalTarget, current, context)).query(queried, context),
             capture: async (plan, snapshot, context) => {

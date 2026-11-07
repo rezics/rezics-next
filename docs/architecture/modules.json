@@ -615,6 +615,7 @@
         "services/kernel/src/search/identity-epoch-participant.ts",
         "services/kernel/src/search/opensearch.ts",
         "services/kernel/src/search/access-capabilities.ts",
+        "services/kernel/src/search/facet-access-port.ts",
         "services/kernel/src/search/credit-search.ts",
         "services/kernel/src/search/account-erasure-source.ts",
         "services/kernel/src/search/service-scope.ts",

@@ -134,6 +134,12 @@ population factory is `createFacetPopulationSource(config: Parameters<PublicFilt
 `readFacetPopulationPage({population,frontier,inputLimit,capture})` and types in `facet-population-contract.ts`.
 Missing generation or meaning still returns `503 index_not_ready`.
 
+Decision: Scoped facet preparation, execution and current-reader admission are constructed from Search's Access
+observation port (`facet-access-port.ts`). `createScopedFacetApplication` owns Collection and Realm adapters plus
+admission; composition `search-access.ts` maps `AccessUnavailableError` and public `ProblemError` codes onto the
+existing native closed statuses (`unready`, `changed`, `unavailable`). Default public runtime and `createSearchService`
+bind that adapter. `scoped-facet-source.ts` no longer imports Access or HTTP problem types.
+
 ## Trending searches
 
 The selected read is `GET /v1/trendingSearches`, with a language and a limit from 1 through 10, returning only

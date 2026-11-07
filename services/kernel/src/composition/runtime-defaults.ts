@@ -21,6 +21,8 @@ import type { AccessFactory } from '../request/access.ts';
 import type { WriteRateStageOptions } from '../access/write-rate-stage.ts';
 import type { CreditSearchSource } from '../search/credit-search.ts';
 import { createCreditSearchSource } from '../semantic/credit-search.ts';
+import { composeSearchAccess } from './search-access.ts';
+import type { FacetAccessObservationPort } from '../search/facet-access-port.ts';
 
 export type KernelRuntimeDefaults = {
   tokens: KeyRing;
@@ -32,6 +34,8 @@ export type KernelRuntimeDefaults = {
   deadlineNow: () => number;
   access: AccessFactory;
   auth?: AuthenticationConfig;
+  /** Search-owned Access observation used by live scoped facet execution. */
+  facetAccess: FacetAccessObservationPort;
 };
 
 export type KernelRuntimeOverrides = {
@@ -114,6 +118,7 @@ export function createKernelRuntimeDefaults(overrides: KernelRuntimeOverrides = 
     clock: overrides.clock ?? systemClock,
     deadlineNow: overrides.deadlineNow ?? systemDeadlineNow,
     access,
+    facetAccess: composeSearchAccess(),
     ...(auth === undefined ? {} : { auth }),
   };
 }
