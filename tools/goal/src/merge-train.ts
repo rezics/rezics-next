@@ -7274,13 +7274,13 @@ export class MergeTrain {
             const frozen = node.indices.flatMap((index) =>
               frozenFilesForTask(o.stateDirectory, manifest.members[index]!.taskId),
             );
-            const changed = changedPathsBetween(
+            const preFormatChanged = changedPathsBetween(
               tree,
               snapshot.mainHead,
               this.git(tree, 'rev-parse', 'HEAD'),
               this.options.policy?.merge,
             );
-            this.formatControlPlaneCandidate(tree, changed, node.logPath);
+            this.formatControlPlaneCandidate(tree, preFormatChanged, node.logPath);
             const changed = changedPathsBetween(
               tree,
               snapshot.mainHead,
