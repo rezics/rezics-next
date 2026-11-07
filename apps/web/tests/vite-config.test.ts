@@ -146,17 +146,17 @@ test('test Worker bindings are startup-only and production has no fixture header
 });
 
 test('the real Settings browser graph transforms without loading the Worker fixture module', async () => {
-  const runtime = await createSettingsViteRuntime(
-    { KERNEL_ORIGIN: 'https://settings-browser.test' },
-    [],
-    { omitCloudflarePlugins: true },
-  );
+  const runtime = await createSettingsViteRuntime({ KERNEL_ORIGIN: 'https://settings-browser.test' }, [], {
+    browserGraphOnly: true,
+  });
   try {
     const graph = await settingsClientModuleGraph(runtime, '/src/routes/settings.tsx');
+    const accountsBrowser = await runtime.clientModule('/src/settings/adapters/accounts-browser.tsx');
     expect(graph.get('/src/routes/settings.tsx')?.status).toBe(200);
     expect([...graph.values()].every((module) => module.status === 200)).toBe(true);
     expect(graph.has('/src/settings/profile-model.ts')).toBe(true);
-    expect(graph.has('/src/settings/adapters/accounts-browser.tsx')).toBe(true);
+    expect(accountsBrowser.status).toBe(200);
+    expect(accountsBrowser.code).toContain('NativeAccountsProvider');
     expect(graph.has('/src/test-runtime-bindings.ts')).toBe(false);
   } finally {
     await runtime.close();
