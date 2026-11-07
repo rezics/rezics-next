@@ -212,8 +212,13 @@ test('root specs are checked against the root package.json', () => {
   }
 });
 
-test('the repository passes except for the imports listed in this brief', () => {
-  // Only imports outside the known list fail.
-  const known = new Set<string>();
-  expect(checkWorkspaceImports(repositoryRoot).filter((line) => !known.has(line))).toEqual([]);
-});
+test(
+  'the repository passes except for the imports listed in this brief',
+  () => {
+    // Only imports outside the known list fail.
+    const known = new Set<string>();
+    expect(checkWorkspaceImports(repositoryRoot).filter((line) => !known.has(line))).toEqual([]);
+  },
+  // This assertion parses every workspace, including generated declarations, rather than a small fixture.
+  60_000,
+);

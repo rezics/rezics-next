@@ -1,5 +1,4 @@
 import { expect, mock, test } from 'bun:test';
-import { dirname } from 'node:path';
 import { act, StrictMode } from 'react';
 import * as start from '../.storybook/react-start';
 mock.module('cloudflare:workers', () => ({ env: {} }));
@@ -7,7 +6,9 @@ mock.module('@tanstack/react-start', () => start);
 mock.module('@tanstack/react-start/server', () => start);
 const requests: { data: { id: string; viewer: string; cursor?: string }; resolve: (value: unknown) => void }[] = [];
 const commands: unknown[] = [];
+const originalRecoveryServer = { ...(await import('../src/library/bulk-operation-recovery-server')) };
 mock.module('../src/library/bulk-operation-recovery-server', () => ({
+  ...originalRecoveryServer,
   readBulkOperation: (input: { data: { id: string; viewer: string; cursor?: string } }) =>
     new Promise((resolve) => requests.push({ ...input, resolve })),
   cancelBulkOperation: (input: unknown) => {
@@ -17,9 +18,7 @@ mock.module('../src/library/bulk-operation-recovery-server', () => ({
 }));
 
 test('mounted reader retires private results across exposure, address, viewer and locale changes', async () => {
-  const { Window } = await import(
-    Bun.resolveSync('happy-dom', dirname(Bun.resolveSync('@puckeditor/core', import.meta.dir)))
-  );
+  const { Window } = await import('happy-dom');
   const window = new Window({ url: 'https://site.test/en/library/operations/12345678-1234-4234-8234-123456789abc' });
   const globals = {
     window,
@@ -135,6 +134,7 @@ test('mounted reader retires private results across exposure, address, viewer an
     });
     await act(async () => requests.at(-1)!.resolve(ready));
     await act(async () => {
+      window.happyDOM.setURL('https://site.test/fr/library/operations/' + id);
       setLocale('fr', { reload: false });
       render();
     });
@@ -149,6 +149,7 @@ test('mounted reader retires private results across exposure, address, viewer an
       if (descriptor) Object.defineProperty(globalThis, key, descriptor);
       else Reflect.deleteProperty(globalThis, key);
     }
+    mock.module('../src/library/bulk-operation-recovery-server', () => originalRecoveryServer);
     mock.restore();
   }
 });

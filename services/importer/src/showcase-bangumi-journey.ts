@@ -9,7 +9,7 @@ import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { resolve } from 'node:path';
-import { createRequire } from 'node:module';
+import { chromium } from 'playwright';
 import { bangumiRecordUrl } from '@rezics/conversion/cross-media-entities';
 import type { CrossMediaSeedReport } from './cross-media-seed.ts';
 import type { ShowcasePublicationResult } from './showcase-publication.ts';
@@ -583,10 +583,6 @@ export async function runBangumiJourney() {
   );
 
   phase = 'anonymous-browser';
-  const require = createRequire(resolve(root, 'apps/web/package.json'));
-  const { chromium } = require('playwright') as {
-    chromium: { launch(options: { headless: boolean }): Promise<any> };
-  };
   const browser = await chromium.launch({ headless: true });
   try {
     const visits: {

@@ -11,6 +11,13 @@ imports, re-exports, literal dynamic imports, import types, import-equals and li
 Titles, comments, strings, regular expressions and JSX text are not imports; executable expressions inside JSX and
 template substitutions are visited. A parse failure names its source file and throws rather than certifying an
 incomplete scan. Existing builtin, relative path, alias and manifest dependency rules remain unchanged.
+`bun scripts/workspace-imports.ts` checks each consuming workspace's own manifest, including tests and declaration
+files. The root-owned `oxc-parser` reads TypeScript and TSX syntax: imports, re-exports, literal dynamic imports,
+CommonJS requires and TypeScript import types/requires count; JSX text, comments, regexes and string examples do not.
+Executable template substitutions still count. A syntax error names the file rather than silently skipping its imports.
+The fixture suite is `scripts/workspace-imports.test.ts`.
+Its repository-wide assertion has a 60-second deadline because it parses every workspace and generated declaration;
+the small syntax and dependency fixtures retain the default test deadline.
 
 ## Page data check
 

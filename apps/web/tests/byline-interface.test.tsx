@@ -1,5 +1,4 @@
 import { describe, expect, test } from 'bun:test';
-import { dirname } from 'node:path';
 import type { ComponentProps } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import type { PageAuthor } from '../src/identity/read';
@@ -7,9 +6,7 @@ import { m } from '../src/paraglide/messages.js';
 import { getLocale, setLocale } from '../src/paraglide/runtime.js';
 import { Byline, fullDateTime, timeText } from '../src/threads/byline';
 
-const { Window } = await import(
-  Bun.resolveSync('happy-dom', dirname(Bun.resolveSync('@puckeditor/core', import.meta.dir)))
-);
+const { Window } = await import('happy-dom');
 const createdAt = '2026-11-02T11:00:00.000Z';
 const revisedAt = '2026-11-02T11:30:00.000Z';
 const now = '2026-11-02T12:00:00.000Z';

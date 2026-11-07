@@ -1,5 +1,4 @@
 import { expect, mock, test } from 'bun:test';
-import { dirname } from 'node:path';
 import { act } from 'react';
 import { bundledRelease, bundledDigest } from '@rezics/definitions/bundled';
 import { dateReading, releaseGroups, releaseStreams } from '../src/features/catalogue/release-fidelity/model';
@@ -120,9 +119,7 @@ test('the released release visit offers exact forward supersession and its inver
 });
 
 test('mounted release visit labels an invalid date with evidence and keeps chronology separate', async () => {
-  const { Window } = await import(
-    Bun.resolveSync('happy-dom', dirname(Bun.resolveSync('@puckeditor/core', import.meta.dir)))
-  );
+  const { Window } = await import('happy-dom');
   const window = new Window({ url: 'https://site.test/en/subjects/release/release' });
   const globals = {
     window,
