@@ -1,9 +1,12 @@
 import { existsSync } from 'node:fs';
-import { dirname, join, parse } from 'node:path';
+import { dirname, join, parse, posix } from 'node:path';
 
 const SOURCE_EXTENSION = /\.(?:[cm]?[jt]sx?)$/i;
 const TEST_EXTENSION = /\.(?:test|spec)\.[cm]?[jt]sx?$/i;
+const GRAPH_EXTENSION = /\.(?:[cm]?[jt]sx?|json)$/i;
 const WORKSPACE = /^(apps|services|packages)\/[^/]+\//;
+const STATIC_IMPORT = /\b(?:import|export)\s+(?:type\s+)?(?:[\w$*{},\s]+?\s+from\s*)?['"]([^'"]+)['"]/g;
+const DYNAMIC_IMPORT = /\b(?:import|require)\s*\(\s*['"]([^'"]+)['"]/g;
 
 function siblingNames(stem: string): string[] {
   return ['test', 'spec'].flatMap((kind) =>
@@ -42,6 +45,94 @@ export function siblingTestFiles(changedPaths: readonly string[], candidate: str
     }
   }
   return [...tests].sort();
+}
+
+function importSpecifiers(source: string): string[] {
+  const specifiers = new Set<string>();
+  for (const match of source.matchAll(STATIC_IMPORT)) specifiers.add(match[1]!);
+  for (const match of source.matchAll(DYNAMIC_IMPORT)) specifiers.add(match[1]!);
+  return [...specifiers];
+}
+
+function moduleCandidates(importer: string, specifier: string): string[] {
+  if (!specifier.startsWith('.')) return [];
+  const base = posix.normalize(posix.join(posix.dirname(importer), specifier));
+  const extension = posix.extname(base).toLowerCase();
+  let sourceVariant: string | undefined;
+  if (extension === '.js') sourceVariant = `${base.slice(0, -3)}.ts`;
+  else if (extension === '.mjs') sourceVariant = `${base.slice(0, -4)}.mts`;
+  else if (extension === '.cjs') sourceVariant = `${base.slice(0, -4)}.cts`;
+  const candidates = extension
+    ? [
+        base,
+        ...(sourceVariant ? [sourceVariant] : []),
+        ...(extension === '.js' ? [`${base.slice(0, -3)}.d.ts`] : []),
+        ...(extension === '.mjs' ? [`${base.slice(0, -4)}.d.mts`] : []),
+        ...(extension === '.cjs' ? [`${base.slice(0, -4)}.d.cts`] : []),
+      ]
+    : [
+        base,
+        ...['.ts', '.tsx', '.mts', '.cts', '.d.ts', '.d.mts', '.d.cts', '.js', '.jsx', '.mjs', '.cjs', '.json'].map(
+          (suffix) => `${base}${suffix}`,
+        ),
+        ...['.ts', '.tsx', '.mts', '.cts', '.d.ts', '.d.mts', '.d.cts', '.js', '.jsx', '.mjs', '.cjs', '.json'].map(
+          (suffix) => `${base}/index${suffix}`,
+        ),
+      ];
+  return [...new Set(candidates)];
+}
+
+/** Map each changed owner to its candidate test consumers, following source imports transitively. */
+export function affectedTestFilesBySource(
+  changedPaths: readonly string[],
+  candidateFiles: readonly string[],
+  readFile: (path: string) => string | undefined,
+): Map<string, string[]> {
+  const tracked = new Set(candidateFiles);
+  const reverseImports = new Map<string, Set<string>>();
+  for (const importer of candidateFiles) {
+    if (!GRAPH_EXTENSION.test(importer)) continue;
+    const contents = readFile(importer);
+    if (contents === undefined) continue;
+    for (const specifier of importSpecifiers(contents)) {
+      const possible = moduleCandidates(importer, specifier);
+      const targets = possible.filter((target) => tracked.has(target));
+      // Retaining unresolved relative targets also reaches tests of a deleted source that still imports its old path.
+      for (const target of targets.length ? targets : possible) {
+        const importers = reverseImports.get(target) ?? new Set<string>();
+        importers.add(importer);
+        reverseImports.set(target, importers);
+      }
+    }
+  }
+
+  const bySource = new Map<string, string[]>();
+  for (const source of [...new Set(changedPaths)].sort()) {
+    const affected = new Set(siblingTestFiles([source], tracked));
+    if (TEST_EXTENSION.test(source) && tracked.has(source)) affected.add(source);
+    const visited = new Set([source]);
+    const pending = [source];
+    for (let index = 0; index < pending.length; index++) {
+      const dependency = pending[index]!;
+      for (const importer of reverseImports.get(dependency) ?? []) {
+        if (visited.has(importer)) continue;
+        visited.add(importer);
+        if (TEST_EXTENSION.test(importer) && tracked.has(importer)) affected.add(importer);
+        pending.push(importer);
+      }
+    }
+    bySource.set(source, [...affected].sort());
+  }
+  return bySource;
+}
+
+/** Return the sorted union of test consumers for changed candidate owners. */
+export function affectedTestFiles(
+  changedPaths: readonly string[],
+  candidateFiles: readonly string[],
+  readFile: (path: string) => string | undefined,
+): string[] {
+  return [...new Set([...affectedTestFilesBySource(changedPaths, candidateFiles, readFile).values()].flat())].sort();
 }
 
 export function siblingTestCommand(

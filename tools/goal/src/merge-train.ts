@@ -133,6 +133,7 @@ import {
   parseControlPlaneBatchManifest,
   parseControlPlaneBatchRefContinuation,
 } from './control-plane-batch.ts';
+import { planControlPlaneChecks, type ControlPlaneCheckPlan } from './control-plane-check-plan.ts';
 import { openTrainWorkspace, type TrainWorkspace, type TrainWorkspaceProfile } from './train-workspace.ts';
 
 export { captureTrainWorktreeRemoval } from './train-workspace.ts';
@@ -601,15 +602,22 @@ function localBranchSettings(mainCheckout: string): { stabilizeBranch?: string; 
 const CONTROL_PLANE_PATH = 'tools/goal/';
 // A train worktree lies outside the main checkout with nothing installed: the first control-plane landing on main
 // failed its typecheck with exit 127. The root tests' preloads need the root packages, tsc needs tools/goal's own.
-export function controlPlaneChecks(policy = defaultPolicy.controlPlane): readonly (readonly string[])[] {
-  return [
+export function controlPlaneChecks(
+  policy = defaultPolicy.controlPlane,
+  plan?: ControlPlaneCheckPlan,
+): readonly (readonly string[])[] {
+  const checks: string[][] = [
     ['bun', 'install', '--frozen-lockfile'],
     ['bun', 'install', '--frozen-lockfile', '--cwd', 'tools/goal'],
     ['bun', 'run', '--cwd', 'tools/goal', 'typecheck'],
-    // Under check-host load (60-75 on 2026-10-29) git-heavy tests took over bun's 5 s default and refused unrelated
-    // landings; 30 s per test keeps a real hang visible.
-    ['bun', 'test', '--timeout', String(policy.testTimeoutMs), 'tools/goal/src'],
   ];
+  if (!plan || plan.scope === 'all') {
+    // Preserve the public synthetic default; live releases pass their captured candidate plan below.
+    checks.push(['bun', 'test', '--timeout', String(policy.testTimeoutMs), 'tools/goal/src']);
+  } else if (plan.scope === 'affected' && plan.tests.length) {
+    checks.push(['bun', 'test', '--timeout', String(policy.testTimeoutMs), ...plan.tests]);
+  }
+  return checks;
 }
 /** Defaults for synthetic callers; the production train creates commands from its startup policy. */
 export const CONTROL_PLANE_CHECKS = controlPlaneChecks();
@@ -7596,11 +7604,21 @@ export class MergeTrain {
       record?.(candidate, result);
       return { ...result, ...(moved() ? { moved: true } : {}) };
     };
+    const capturePlan = (): ControlPlaneCheckPlan => {
+      const plan = planControlPlaneChecks(tree, snapshot.mainHead, candidate);
+      appendFileSync(
+        logPath,
+        `\nControl-plane check plan base=${plan.base} candidate=${plan.candidate} scope=${plan.scope}; ` +
+          `${plan.tests.length} Goal test file(s)\n` +
+          plan.reasons.map((reason) => `Check plan reason: ${reason}\n`).join(''),
+      );
+      return plan;
+    };
     appendFileSync(logPath, `\nControl-plane checks on ${candidate}, main ${snapshot.mainHead}\n`);
     const installs = await runIntegrationChecks(checks.slice(0, 2), tree, logPath, run);
     integrity(tree, candidate, 'control-plane dependency installs');
     if (!installs.passed) return finish(installs);
-    // Operator-bounded file probes inherited from the failed parent's actual full-suite output.
+    // Operator-bounded file probes inherited from the failed parent's actual selected-test output.
     // A green or inconclusive probe always falls through to every mandatory full-head check.
     for (const command of negativeProbes.slice(0, (o.policy ?? defaultPolicy).controlPlane.negativeProbeCommands)) {
       const files = command.slice(4);
@@ -7622,22 +7640,45 @@ export class MergeTrain {
       integrity(tree, candidate, 'negative-only bisection probe');
       if (!probe.passed && !probe.timedOut) return finish({ ...probe, negativeOnly: true });
     }
+    let plan = capturePlan();
     let validation: Awaited<ReturnType<typeof runIntegrationChecks>>;
     if (repairTyping) {
-      let typing = await runIntegrationChecks(checks.slice(2, 3), tree, logPath, run);
+      let typing = await runIntegrationChecks([checks[2]!], tree, logPath, run);
       integrity(tree, candidate, 'control-plane typecheck');
       if (installs.passed && !typing.passed && !typing.timedOut && !moved()) {
         const repaired = await repairTyping(typing.output);
         if (repaired) {
           candidate = repaired;
-          typing = await runIntegrationChecks(checks.slice(2, 3), tree, logPath, run);
+          typing = await runIntegrationChecks([checks[2]!], tree, logPath, run);
           integrity(tree, candidate, 'control-plane repaired typecheck');
+          plan = capturePlan();
         }
       }
-      validation =
-        typing.passed && installs.passed ? await runIntegrationChecks(checks.slice(3), tree, logPath, run) : typing;
-    } else validation = await runIntegrationChecks(checks.slice(2), tree, logPath, run);
-    integrity(tree, candidate, 'control-plane typecheck and test suite');
+      if (typing.passed && installs.passed) {
+        const selectedTests = await runIntegrationChecks(
+          controlPlaneChecks(o.policy?.controlPlane, plan).slice(3),
+          tree,
+          logPath,
+          run,
+        );
+        validation = {
+          passed: typing.passed && selectedTests.passed,
+          output: typing.output + selectedTests.output,
+          timedOut: typing.timedOut || selectedTests.timedOut,
+          ...((typing.failedCommand ?? selectedTests.failedCommand)
+            ? { failedCommand: typing.failedCommand ?? selectedTests.failedCommand }
+            : {}),
+        };
+      } else validation = typing;
+    } else {
+      validation = await runIntegrationChecks(
+        [checks[2]!, ...controlPlaneChecks(o.policy?.controlPlane, plan).slice(3)],
+        tree,
+        logPath,
+        run,
+      );
+    }
+    integrity(tree, candidate, 'control-plane typecheck and impact-selected tests');
     const checked = {
       passed: installs.passed && validation.passed,
       output: installs.output + validation.output,

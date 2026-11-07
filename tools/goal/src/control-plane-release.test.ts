@@ -374,7 +374,49 @@ test('a checked candidate publishes main, stabilize and dev together with exact 
     expect(record?.lifecycleEvidence).toContain(`candidate=${main} dev-script-tree=${base}`);
     expect(record?.lifecycleEvidence).toContain('scenarios=worker-wake:passed,retry:passed');
     expect(record?.compatibilityCommand).toContain('tools/goal/scripts/check-compatibility.ts');
+    expect(readFileSync(h.outcomes[0]!.logPath, 'utf8')).toContain(
+      `Control-plane check plan base=${base} candidate=${main}`,
+    );
     expect(git(h.root, 'status', '--porcelain', '--untracked-files=no')).toBe('');
+  } finally {
+    h.dispose();
+  }
+});
+
+test('an ordinary release runs only tests reached from its changed source owner', async () => {
+  const h = integrationHarness();
+  try {
+    const base = addBranchCommit(h, 'main', {
+      'tools/goal/src/hourly-ledger.ts': 'export const readLedger = () => 1;\n',
+      'tools/goal/src/hourly-report.ts':
+        "import { readLedger } from './hourly-ledger.ts';\nexport const report = () => readLedger();\n",
+      'tools/goal/src/hourly-report.test.ts': "import { report } from './hourly-report.ts';\nvoid report;\n",
+      'tools/goal/src/provider.ts': 'export const provider = () => true;\n',
+      'tools/goal/src/provider-fixture.test.ts': "import { provider } from './provider.ts';\nvoid provider;\n",
+    });
+    h.ensureDev();
+    const task = dispatchControlPlane(h, 'tools/goal/src/hourly-ledger.ts');
+    await h.start(task);
+    const commands: string[][] = [];
+    await train(h, async (command) => {
+      commands.push([...command]);
+      return { passed: true, output: '', timedOut: false };
+    });
+
+    const candidate = h.head('main');
+    expect(commands).toContainEqual([
+      'bun',
+      'test',
+      '--timeout',
+      '30000',
+      'tools/goal/src/hourly-report.test.ts',
+    ]);
+    expect(commands).not.toContainEqual(['bun', 'test', '--timeout', '30000', 'tools/goal/src']);
+    expect(commands.flat()).not.toContain('tools/goal/src/provider-fixture.test.ts');
+    expect(readFileSync(h.outcomes[0]!.logPath, 'utf8')).toContain(
+      `Control-plane check plan base=${base} candidate=${candidate} scope=affected; 1 Goal test file(s)`,
+    );
+    expect(h.outcomes[0]?.passed).toBe(true);
   } finally {
     h.dispose();
   }
@@ -752,6 +794,9 @@ test('One accepted control-plane main cohort validates its combined final head o
     await h.job.drain();
     expect(publications).toBe(1);
     expect(heads).toEqual([h.head('main')]);
+    expect(readFileSync(h.outcomes[0]!.logPath, 'utf8')).toContain(
+      `Control-plane check plan base=${main} candidate=${heads[0]}`,
+    );
     expect(commands.filter((command) => command[1] === 'run' && command.includes('typecheck'))).toHaveLength(1);
     expect(commands.filter((command) => command[1] === 'tools/goal/scripts/check-compatibility.ts')).toHaveLength(1);
     expect(
@@ -1499,6 +1544,7 @@ test('A main cohort uses the delivered bounded train resolver for real code conf
   const h = integrationHarness();
   try {
     const { tasks, manifest } = await semanticSources(h);
+    const capturedMain = h.head('main');
     const priorManifest = { ...manifest, members: [manifest.members[1]!] };
     const prior = preparationJournal(h, priorManifest);
     const priorBytes = readFileSync(prior.path, 'utf8');
@@ -1516,6 +1562,7 @@ test('A main cohort uses the delivered bounded train resolver for real code conf
       suites = 0,
       compatibility = 0,
       typing = 0;
+    let resolvedCandidate = '';
     const adapter = {
       ...agentAdapter('codex'),
       start(options: Parameters<ReturnType<typeof agentAdapter>['start']>[0]): [string, string[]] {
@@ -1548,6 +1595,7 @@ test('A main cohort uses the delivered bounded train resolver for real code conf
           semanticTrain(h, async (command, cwd) => {
             if (isFullControlPlaneSuite(command)) {
               suites++;
+              resolvedCandidate = git(cwd, 'rev-parse', 'HEAD');
               expect(readFileSync(join(cwd, semanticFile), 'utf8')).toBe(combinedSemantic);
               expect(existsSync(join(cwd, adapterSource.brief.paths[0]!))).toBe(true);
             }
@@ -1561,6 +1609,10 @@ test('A main cohort uses the delivered bounded train resolver for real code conf
     );
     await h.job.drain();
     expect([calls, suites, typing, compatibility]).toEqual([1, 1, 1, 1]);
+    expect(resolvedCandidate).toBe(h.head('main'));
+    expect(readFileSync(h.outcomes[0]!.logPath, 'utf8')).toContain(
+      `Control-plane check plan base=${capturedMain} candidate=${resolvedCandidate}`,
+    );
     expect(result.members.every((member) => member.disposition === 'released')).toBe(true);
     expect(h.outcomes).toHaveLength(3);
     expect(readFileSync(prior.path, 'utf8')).toBe(priorBytes);
@@ -1682,10 +1734,11 @@ test('the real resolver receipt refuses index tampering and leaves an explicit s
   }
 }, 30_000);
 
-test('only actual typing diagnostics permit one bounded compiler repair before the one final-head suite', async () => {
+test('a compiler repair is re-planned against its exact final head', async () => {
   const h = integrationHarness();
   try {
     const { manifest } = await semanticSources(h);
+    const capturedMain = h.head('main');
     let calls = 0,
       typing = 0,
       suites = 0;
@@ -1724,7 +1777,11 @@ test('only actual typing diagnostics permit one bounded compiler repair before t
         }).releaseControlPlaneBatch(manifest),
     );
     expect([calls, typing, suites]).toEqual([2, 2, 1]);
-    expect(result.members.every((member) => member.mergedCommit === h.head('main'))).toBe(true);
+    const repairedCandidate = h.head('main');
+    expect(result.members.every((member) => member.mergedCommit === repairedCandidate)).toBe(true);
+    expect(readFileSync(h.outcomes[0]!.logPath, 'utf8')).toContain(
+      `Control-plane check plan base=${capturedMain} candidate=${repairedCandidate}`,
+    );
     expect(
       h.store.events(manifest.members[1]!.taskId, 1).filter((event) => event.kind === 'train-resolver-started'),
     ).toHaveLength(2);

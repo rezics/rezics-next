@@ -1,7 +1,7 @@
 import { expect, test } from 'bun:test';
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
-import { siblingTestFiles, workerTestCommands } from './affected-tests.ts';
+import { affectedTestFiles, siblingTestFiles, workerTestCommands } from './affected-tests.ts';
 import { checkSettings, loadSettings } from './config.ts';
 import defaults from '../defaults.json';
 import { failingTestFiles } from './merge-train.ts';
@@ -64,6 +64,28 @@ test('existing supported sibling tests are discovered once and routed through th
   } finally {
     directory.close();
   }
+});
+
+test('changed sources select transitive candidate test consumers without unrelated provider fixtures', () => {
+  const files = new Map([
+    ['tools/goal/src/ledger.ts', 'export const readLedger = () => 1;'],
+    [
+      'tools/goal/src/hourly-report.ts',
+      "import { readLedger } from './ledger.ts';\nexport const report = () => readLedger();",
+    ],
+    [
+      'tools/goal/src/hourly-report.test.ts',
+      "import { report } from './hourly-report.ts';\nvoid report;",
+    ],
+    ['tools/goal/src/provider.ts', 'export const provider = () => 1;'],
+    ['tools/goal/src/provider-fixture.test.ts', "import { provider } from './provider.ts';\nvoid provider;"],
+    ['tools/goal/src/workspace-fixture.test.ts', "import { makeWorkspace } from './workspace.ts';\nvoid makeWorkspace;"],
+    ['tools/goal/src/workspace.ts', 'export const makeWorkspace = () => ({});'],
+  ]);
+
+  expect(
+    affectedTestFiles(['tools/goal/src/ledger.ts'], [...files.keys()], (path) => files.get(path)),
+  ).toEqual(['tools/goal/src/hourly-report.test.ts']);
 });
 
 type Harness = ReturnType<typeof integrationHarness>;
