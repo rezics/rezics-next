@@ -9,17 +9,24 @@ import { randomUUID } from 'node:crypto';
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { join, resolve } from 'node:path';
 import { chromium, type Browser, type BrowserContext, type Page } from 'playwright';
-import { startSeededFrontends } from '../../../auth/scripts/dev-stack.ts';
-import { FIRST_PUBLIC_JOURNEYS, type FirstPublicJourneyId } from './first-public-inventory.ts';
+import { startSeededFrontends } from '../../../services/auth/scripts/dev-stack.ts';
+import {
+  FIRST_PUBLIC_JOURNEYS,
+  type FirstPublicJourneyId,
+} from '../../../services/kernel/test/semantic/first-public-inventory.ts';
 import {
   acceptCandidate,
   adoptCandidate,
   cited,
+  citedDocument,
+  citedQuantity,
   createContext,
   createStaticZone,
   createSubject,
   deleteCandidate,
   deleteZone,
+  discloseStatement,
+  MINUTE,
   patchTerms,
   propose,
   publishZone,
@@ -29,15 +36,16 @@ import {
   requireStatus,
   restoreCandidate,
   restoreZone,
+  retractStatement,
   saveZoneConfiguration,
   searchType,
   subjectHref,
   takedownZone,
   type Json,
   type KernelCall,
-} from './first-public-native.ts';
+} from '../../../services/kernel/test/semantic/first-public-native.ts';
 
-const root = resolve(import.meta.dir, '../../../..');
+const root = resolve(import.meta.dir, '../../..');
 const evidenceDir = join(root, '.temp/semantic-first-public-walk');
 const token = randomUUID().slice(0, 8);
 
@@ -107,11 +115,12 @@ function fetchCall(stack: Stack): KernelCall {
       ...(options.body === undefined ? {} : { body: JSON.stringify(options.body) }),
     });
     const text = await response.text();
+    const etag = response.headers.get('etag') ?? undefined;
     return {
       status: response.status,
       headers: response.headers,
       body: text ? (JSON.parse(text) as Json) : {},
-      etag: response.headers.get('etag') ?? undefined,
+      ...(etag === undefined ? {} : { etag }),
     };
   };
 }
@@ -368,12 +377,7 @@ async function main() {
     results.push(
       await journey(session, 'recipe-editing', async () => {
         const recipe = await createSubject(call, editor, 'schema:Recipe', `Walk recipe ${token}`);
-        const time = await propose(
-          call,
-          editor,
-          recipe.id,
-          cited('schema:cookTime', { amount: '+25', unit: 'http://www.wikidata.org/entity/Q7727' }),
-        );
+        const time = await propose(call, editor, recipe.id, citedQuantity('schema:cookTime', '+25', MINUTE));
         requireStatus(await readSubject(call, recipe.id), 200, 'recipe');
         return {
           native: { id: recipe.id, cookTime: time.candidate },
@@ -535,7 +539,12 @@ async function main() {
     );
     results.push(
       await journey(session, 'original-authored-text', async () => {
-        const proposal = await propose(call, editor, termsBook.id, cited('schema:abstract', `Walk abstract ${token}`));
+        const proposal = await propose(
+          call,
+          editor,
+          termsBook.id,
+          citedDocument('schema:abstract', `Walk abstract ${token}`),
+        );
         const publicRead = await readSubject(call, termsBook.id);
         requireStatus(publicRead, 200, 'authored public');
         const selected = (publicRead.body.subject as { statements?: Record<string, { id: string }[]> }).statements?.[
@@ -647,8 +656,8 @@ async function main() {
       await journey(session, 'statement-consent', async () => {
         const person = await createSubject(call, editor, 'schema:Person', `Walk consent person ${token}`);
         const proposal = await propose(call, editor, termsBook.id, cited('schema:author', person.id));
-        const disclosed = await call('POST', `/v1/statements/${proposal.candidate}/disclose`, { bearer: editor });
-        const retracted = await call('POST', `/v1/statements/${proposal.candidate}/retract`, { bearer: editor });
+        const disclosed = await discloseStatement(call, editor, proposal.candidate);
+        const retracted = await retractStatement(call, editor, proposal.candidate);
         if (![200, 400, 403, 404, 409].includes(disclosed.status))
           throw new Error(`disclose HTTP ${disclosed.status}: ${JSON.stringify(disclosed.body).slice(0, 400)}`);
         return {

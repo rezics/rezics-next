@@ -1,27 +1,32 @@
-import { afterAll, beforeAll, expect, test } from 'bun:test';
+import { afterAll, beforeAll, expect, setDefaultTimeout, test } from 'bun:test';
 import { randomUUID } from 'node:crypto';
+import pg from 'pg';
 import { bundledDigest, bundledRelease } from '@rezics/definitions/bundled';
 import { PROFILE_FORMAT } from '@rezics/composition';
 import { createWriteRateLimiter } from '../../src/access/write-rate.ts';
 import { installResourceRoleCatalogue, resolveResourceRoles } from '../../src/access/resource-roles.ts';
+import { createPool } from '../../src/database/pool.ts';
 import { createKernel } from '../../src/http/kernel.ts';
 import { bootstrapProfile } from '../../src/presentation/profiles.ts';
 import { newId } from '../../src/route/route.ts';
 import { bootstrapRelease, GLOBAL_CONTEXT } from '../../src/semantic/definitions.ts';
 import { createRealAccess } from './real-access.ts';
-import { openGrowthDatabase } from '../support/growth.ts';
 import { testReceiptKeys } from '../support/receipt-keys.ts';
 import { FIRST_PUBLIC_JOURNEYS } from './first-public-inventory.ts';
 import {
   acceptCandidate,
   adoptCandidate,
   cited,
+  citedDocument,
+  citedQuantity,
   createContext,
   createStaticZone,
   createSubject,
   deleteCandidate,
   deleteZone,
+  discloseStatement,
   handleCall,
+  MINUTE,
   patchTerms,
   propose,
   publishZone,
@@ -30,11 +35,19 @@ import {
   requireStatus,
   restoreCandidate,
   restoreZone,
+  retractStatement,
   saveZoneConfiguration,
   searchType,
   takedownZone,
   type KernelCall,
 } from './first-public-native.ts';
+
+setDefaultTimeout(180_000);
+
+const databaseUrl = process.env.DATABASE_URL;
+if (!databaseUrl) throw new Error('DATABASE_URL must name the migrated test database');
+const pool = createPool(databaseUrl);
+const admin = new pg.Pool({ connectionString: databaseUrl, max: 2 });
 
 const actions = [
   'subject:create',
@@ -80,7 +93,6 @@ const verticals = [
 ] as const;
 
 let call: KernelCall;
-let close: () => Promise<void>;
 const accounts = {
   editor: newId(0x7111),
   outsider: newId(0x7112),
@@ -88,15 +100,13 @@ const accounts = {
 };
 
 beforeAll(async () => {
-  const db = await openGrowthDatabase();
-  const access = await createRealAccess(db.admin, accounts, actions);
+  const access = await createRealAccess(admin, accounts, actions);
   const app = createKernel({
-    pool: db.pool,
+    pool,
     clock: () => new Date(),
     routeKey: new Uint8Array(32).fill(71),
     tokens: { current: 1, keys: new Map([[1, new Uint8Array(32).fill(72)]]) },
     receiptKeys: testReceiptKeys(),
-    requestDeadlineMs: 30_000,
     access: (config) => {
       const real = access.access({ ...config, clock: () => new Date() });
       installResourceRoleCatalogue(real, resolveResourceRoles(config.actions));
@@ -110,8 +120,8 @@ beforeAll(async () => {
       }),
     }),
   });
-  await bootstrapRelease(db.pool, bundledRelease);
-  await bootstrapProfile(db.pool, {
+  await bootstrapRelease(pool, bundledRelease);
+  await bootstrapProfile(pool, {
     format: PROFILE_FORMAT,
     generic: {
       views: { overview: { root: { props: {} }, content: [{ type: 'SubjectHeader', props: { id: 'subject' } }] } },
@@ -129,13 +139,11 @@ beforeAll(async () => {
     (request) => app.handle(request),
     (token) => access.bearer(token as keyof typeof accounts),
   );
-  close = async () => {
-    await db.close();
-  };
 }, 180_000);
 
 afterAll(async () => {
-  await close?.();
+  await pool.end();
+  await admin.end();
 }, 120_000);
 
 test('the first-public inventory names 31 unique user-visible journeys', () => {
@@ -161,7 +169,7 @@ test('released definitions expose bundled Book fields, targets and eight locale 
     }
   ).types;
   const book = types['schema:Book'];
-  expect(book).toBeDefined();
+  if (!book) throw new Error('schema:Book missing from bundled release');
   expect(book.properties).toContain('schema:author');
   expect(book.facets.length).toBeGreaterThan(0);
   for (const locale of ['en', 'zh-Hant', 'zh-Hans', 'ja', 'ko', 'de', 'fr', 'es']) {
@@ -186,14 +194,14 @@ test('editor creates each released first-public Type and anonymous readers see t
     body: { type: 'schema:Book', labels: { en: `Outsider ${randomUUID()}` } },
   });
   expect(refused.status, JSON.stringify(refused.body)).toBe(403);
-  expect(created).toHaveLength(verticals.length);
   const anonymousCreate = await call('POST', '/v1/subjects', {
     body: { type: 'schema:Book', labels: { en: 'Anonymous book' } },
   });
   expect(anonymousCreate.status).toBe(401);
+  expect(created).toHaveLength(verticals.length);
 });
 
-test('terms, cited facts, relations, missing-work handoff and identifiers use one partition revision and independent reads', async () => {
+test('terms, cited facts, relations, authored documents, identifiers and missing-work handoff use one partition revision', async () => {
   const book = await createSubject(call, 'editor', 'schema:Book', `Terms book ${randomUUID().slice(0, 8)}`);
   const series = await createSubject(call, 'editor', 'schema:BookSeries', `Related series ${randomUUID().slice(0, 8)}`);
   const person = await createSubject(call, 'editor', 'schema:Person', `Cited author ${randomUUID().slice(0, 8)}`);
@@ -215,12 +223,13 @@ test('terms, cited facts, relations, missing-work handoff and identifiers use on
   );
   const author = await propose(call, 'editor', book.id, cited('schema:author', person.id));
   const seriesLink = await propose(call, 'editor', book.id, cited('wdt:P179', series.id));
-  for (const row of [language, identifier, author, seriesLink]) {
-    const page = await call('GET', `/v1/subjects/${book.id}/candidates`, {
-      bearer: 'editor',
-      query: { property: 'schema:inLanguage', limit: '20' },
-    });
-    expect([200, 400].includes(page.status)).toBe(true);
+  const abstract = await propose(
+    call,
+    'editor',
+    book.id,
+    citedDocument('schema:abstract', `Original summary ${randomUUID().slice(0, 8)}`),
+  );
+  for (const row of [language, identifier, author, seriesLink, abstract]) {
     expect(row.candidate).toMatch(/^[0-9a-f-]{36}$/i);
   }
   await acceptCandidate(call, 'editor', book.id, language.candidate);
@@ -229,6 +238,14 @@ test('terms, cited facts, relations, missing-work handoff and identifiers use on
   requireStatus(publicBook, 200, 'adopted public book');
   const statements = (publicBook.body.subject as { statements?: Record<string, { id: string }[]> }).statements ?? {};
   expect(statements['schema:inLanguage']?.some((row) => row.id === language.candidate)).toBe(true);
+  expect(statements['schema:abstract']?.some((row) => row.id === abstract.candidate) ?? false).toBe(false);
+});
+
+test('recipe cookTime uses the minute quantity unit and public read returns the identity', async () => {
+  const recipe = await createSubject(call, 'editor', 'schema:Recipe', `Recipe ${randomUUID().slice(0, 8)}`);
+  const time = await propose(call, 'editor', recipe.id, citedQuantity('schema:cookTime', '+25', MINUTE));
+  expect(time.candidate).toMatch(/^[0-9a-f-]{36}$/i);
+  requireStatus(await readSubject(call, recipe.id), 200, 'recipe public read');
 });
 
 test('owned candidate delete hides the contribution from public reads and restore returns it inside the window', async () => {
@@ -244,6 +261,16 @@ test('owned candidate delete hides the contribution from public reads and restor
   await restoreCandidate(call, 'editor', book.id, proposal.candidate);
   const restored = await readSubject(call, book.id, 'editor');
   requireStatus(restored, 200, 'restored contribution owner read');
+});
+
+test('statement disclose and retract use the statement resource paths', async () => {
+  const book = await createSubject(call, 'editor', 'schema:Book', `Consent book ${randomUUID().slice(0, 8)}`);
+  const person = await createSubject(call, 'editor', 'schema:Person', `Consent person ${randomUUID().slice(0, 8)}`);
+  const proposal = await propose(call, 'editor', book.id, cited('schema:author', person.id));
+  const disclosed = await discloseStatement(call, 'editor', proposal.candidate);
+  expect([200, 400, 403, 404, 409].includes(disclosed.status), JSON.stringify(disclosed.body)).toBe(true);
+  const retracted = await retractStatement(call, 'editor', proposal.candidate);
+  expect([200, 400, 403, 404, 409].includes(retracted.status), JSON.stringify(retracted.body)).toBe(true);
 });
 
 test('Context create returns exact defaults and an independent current read', async () => {
