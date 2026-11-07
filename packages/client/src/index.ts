@@ -124,6 +124,8 @@ export type {
 
 type NativePostHistoryPage = Routes['posts'][':id']['revisions']['get']['response'][200]['page'];
 type Routes = KernelType['~Routes']['v1'];
+type ZoneCollectionPage = Routes['zones'][':id']['collections']['get']['response'][200];
+export type ZoneCollectionPublicView = ZoneCollectionPage['collections'][number];
 export type RealmClaimReviewOperation = Routes['realms'][':realmId']['claimRequests']['get'];
 export type RealmClaimReviewQuery = RealmClaimReviewOperation['query'];
 export type RatingQuestionDirectoryQuery = Routes['rating-questions']['get']['query'];

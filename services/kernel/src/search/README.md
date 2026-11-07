@@ -13,6 +13,10 @@ Runtime lookup and discovery rebuild are separate from worker registration and g
 and Library definition reads retain memoized factories and typed forwarding. Outcome bases stay with subclasses;
 compatibility exports preserve value identity. Acceptance is typing.
 
+Decision: the installed service entry composes shared contracts, request admission, cursor planning, Search execution and
+page assembly. One identity-bound executed request follows the same admission through current disclosure, scope evaluation,
+cursor construction and result assembly; HTTP, presentation and native helpers import their owning contracts directly.
+
 Decision: Search Source, publication, scope, discovery and identity receiving consume Semantic, Access, Library,
 Content and Community natives through installed consumer-owned ports bound at composition. Global catalogue
 population is a Search leaf. Library scoped-Source construction lives in composition. Same-client transactions,
