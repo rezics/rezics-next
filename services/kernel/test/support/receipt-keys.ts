@@ -20,3 +20,12 @@ export function testReceiptKeysEnv(): { KERNEL_RECEIPT_KEYS: string } {
 export function configureTestReceiptKeys(pool: Pool): void {
   configureReceiptKeys(pool, testReceiptKeys());
 }
+
+/** Ordinary configured hosts receive the same dedicated material as native command fixtures. */
+export function testReceiptKeysEnv(): Record<'KERNEL_RECEIPT_KEYS', string> {
+  return {
+    KERNEL_RECEIPT_KEYS: [...testReceiptKeys().keys]
+      .map(([version, key]) => `${version}:${Buffer.from(key).toString('base64url')}`)
+      .join(','),
+  };
+}

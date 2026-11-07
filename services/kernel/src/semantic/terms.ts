@@ -10,6 +10,7 @@ import { fencedIds, sourceTuple, fenceKey } from './fences.ts';
 import { SUBJECT_REVISED } from './events.ts';
 import { publicState, recordSubjectPageTransition } from './subject-page-publication-store.ts';
 import { writeFacts, type StoredFact } from './write-facts.ts';
+import { declareCommandHistory } from '../history/application/index.ts';
 import {
   beginSemanticRecordSourceSet,
   appendSemanticRecordSourceSet,
@@ -309,6 +310,10 @@ export async function correctTerms(
             dependencies: tuple ? [{ kind: 'source-fence', route: tuple.route, key: fenceKey(tuple) }] : [],
           };
         }),
+      });
+      await declareCommandHistory(tx, 'subject.terms', {
+        response: { artifactType: 'command-receipt/v1', accounts: [] },
+        events: events.map(() => ({ artifactType: 'outbox-event/v1', accounts: [] })),
       });
       return { value: { subject: input.subject, revision }, events };
     },

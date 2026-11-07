@@ -5,7 +5,7 @@ import { readMembershipWorkConfig } from '../access/membership-work-config.ts';
 import { AccessUnavailableError } from '../access/unavailable.ts';
 import type { KernelClock } from '../clock.ts';
 import { readReceiptKeyRing } from '../command/receipt-key.ts';
-import { createKernel, realmAwareContentAccess } from '../http/kernel.ts';
+import { createKernelActionCatalogue, realmAwareContentAccess } from '../http/kernel.ts';
 import type { Access } from '../request/access.ts';
 import type { KeyRing } from '../tokens/seal.ts';
 import type { WorkClient } from './client.ts';
@@ -13,7 +13,7 @@ import type { WorkClient } from './client.ts';
 export type WorkerAuthorization = Readonly<{ access: Access; readConsent: CurrentConsentReader }>;
 export { readAuthConsentConfig };
 
-/** Trusted composition only: mounting the kernel creates no request or listener. */
+/** Trusted composition uses the complete mounted catalogue without compiling HTTP handlers. */
 export function createWorkerAuthorization(
   deps: Readonly<{
     pool: Pool;
@@ -32,7 +32,7 @@ export function createWorkerAuthorization(
         }
       : createAuthConsentReader(consent);
   let access: Access | undefined;
-  createKernel({
+  createKernelActionCatalogue({
     pool: deps.pool,
     workClient: deps.client,
     routeKey: config.routeKey,

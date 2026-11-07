@@ -30,7 +30,7 @@ export const preparePrivatePage = createIsomorphicFn()
   .client(() => undefined);
 
 function resolvedKernelOrigin(): string | undefined {
-  return kernelOrigin() ?? (env as { KERNEL_ORIGIN?: string }).KERNEL_ORIGIN;
+  return kernelOrigin();
 }
 
 export function hasKernelOrigin(): boolean {

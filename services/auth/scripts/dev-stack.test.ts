@@ -127,3 +127,29 @@ test('only explicit local storage receives a stable private native object bindin
       .LOCAL_MEDIA_TOKEN,
   ).not.toBe(binding.LOCAL_MEDIA_TOKEN);
 });
+
+test('the native Semantic walk client has explicit journey scopes and leaves importer registration narrow', async () => {
+  const { semanticWalkClientRegistration, importerScopes, localClientIds } = await import('./dev-stack.ts');
+  const client = semanticWalkClientRegistration();
+  expect(client.clientId).toBe(localClientIds.semanticWalk);
+  expect(client.firstParty).toBe(true);
+  expect(client.scopes).toEqual(
+    expect.arrayContaining([
+      'context:create',
+      'context:accept',
+      'context:adopt',
+      'statement:delete',
+      'statement:restore',
+      'zone:create',
+      'zone:configure',
+      'zone:publish',
+      'zone:delete',
+      'zone:restore',
+      'moderation:takedown',
+    ]),
+  );
+  expect(new Set(client.scopes).size).toBe(client.scopes.length);
+  expect(client.scopes).not.toContain('*');
+  expect(client.scopes).not.toContain('gate:any');
+  expect(importerScopes).not.toContain('zone:configure');
+});

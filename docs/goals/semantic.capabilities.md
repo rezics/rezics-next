@@ -98,6 +98,16 @@ Members reservation and touch reuse the mounted reader's current native eligibil
 private denials. Public-output fixtures follow the owning dynamic-only publication contract and exact expanded
 owner-family grants; the COMPLETE-versus-pending assertion checks activated output, while ordinal custody remains
 curated. Empty SQL projections cost zero result bytes without changing declared work or transaction funding.
+Native rule creation requests include the read scopes required by the released expanded rule as well as the list
+scopes required by execution; curated creation omits the dynamic-only wire fields. Producer reconciliation remains
+with the sole Members owner. The bounded bootstrap continuation and safe phase diagnostics are received through
+the existing native journeys; integration alone establishes no first-public or Content rerun pass.
+Worker lifecycle fixtures decorate the worker's installed module list after History composition and supply the same
+dedicated worker environment to direct registration. Registration counts, native link convergence and shutdown
+drain assertions remain unchanged; these fixture checks do not establish an admitted first-public pass.
+Direct registration uses the mounted worker authorization. Lifecycle readiness failures retain streamed child
+diagnostics and startup phases; failed fixture cleanup kills only its own child so a stalled graceful stop cannot
+hide the first failure. The tested successful shutdown still drains the native projector under its original lock.
 
 ## Evidence stages
 

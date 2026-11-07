@@ -1,3 +1,4 @@
+import { configureTestReceiptKeys } from '../support/receipt-keys.ts';
 import { afterAll, expect, spyOn, test } from 'bun:test';
 import { randomUUID } from 'node:crypto';
 import { DBOS } from '@dbos-inc/dbos-sdk';
@@ -24,6 +25,7 @@ process.env.KERNEL_RECEIPT_KEYS ??= workerTestEnv().KERNEL_RECEIPT_KEYS!;
 
 const pool = createPool(process.env.DATABASE_URL!);
 pool.options.max = 1;
+configureTestReceiptKeys(pool);
 const client = await createWorkClient(process.env.DATABASE_URL!);
 const signing = await generateKeyPair('ES256', { extractable: true });
 const jwk = { ...(await exportJWK(signing.publicKey)), kid: 'membership-component', alg: 'ES256' };
@@ -562,4 +564,21 @@ test('walk stacks fetch the public issuer JWKS URL from native Auth only', async
   } finally {
     native.stop();
   }
+});
+
+test('membership admission refuses JWKS on native Auth loopback port', () => {
+  expect(() =>
+    readMembershipWorkConfig({
+      ...env,
+      AUTH_ISSUER: 'http://127.0.0.1:20041',
+      AUTH_JWKS_URL: 'http://127.0.0.1:20042/.well-known/jwks.json',
+    }),
+  ).toThrow('AUTH_JWKS_URL');
+  expect(() =>
+    readMembershipWorkConfig({
+      ...env,
+      AUTH_ISSUER: 'http://127.0.0.1:20041',
+      AUTH_JWKS_URL: 'http://192.168.1.8:20042/.well-known/jwks.json',
+    }),
+  ).toThrow('AUTH_JWKS_URL');
 });
