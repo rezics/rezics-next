@@ -1,12 +1,15 @@
 import type { QueryClient } from '@tanstack/react-query';
-import { normalizeSessionObservation, sessionQueryKey } from './session-cache';
+import {
+  normalizeSessionObservation,
+  sessionQueryKey,
+  type BrowserReader,
+  type BrowserObservationSnapshot,
+} from './contract';
+
+export type { BrowserReader, BrowserObservationSnapshot } from './contract';
 
 export type BrowserCacheEvent = Parameters<Parameters<ReturnType<QueryClient['getQueryCache']>['subscribe']>[0]>[0];
 
-export type BrowserReader = { subject: string; id: number };
-export type BrowserObservationSnapshot =
-  | { state: 'unknown' | 'inactive' | 'signed-out' }
-  | { state: 'signed-in'; observation: BrowserReader };
 const closedObservation: BrowserObservationSnapshot = { state: 'unknown' };
 function isSessionKey(key: readonly unknown[]) {
   return key.length === 1 && key[0] === sessionQueryKey[0];

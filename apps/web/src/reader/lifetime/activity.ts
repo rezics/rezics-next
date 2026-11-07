@@ -2,7 +2,7 @@ import { QueryClientContext, type QueryKey } from '@tanstack/react-query';
 import { useContext, useMemo, useRef, useSyncExternalStore } from 'react';
 import { addressLease } from './lease';
 import { browserObservation } from './observation';
-import { sessionQueryKey } from './session-cache';
+import { sessionQueryKey } from './contract';
 
 /** Activity advice retires on fetching too; the enclosing reader still owns bodies and refresh. */
 export function useReaderActivityCurrent(publication: object | undefined, queryKey?: QueryKey) {

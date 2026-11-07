@@ -6,16 +6,16 @@ import { personalRead } from '../kernel/query';
 import type { SessionEnv } from './client';
 import {
   normalizeSessionObservation,
-  ownedSessionCsrfToken,
   sessionQueryKey,
   sessionStateSnapshot,
   signedOutSession,
   subscribeBrowserSession,
   unknownSession,
+  type BrowserSession,
 } from './browser-state';
-import { readSessionState, type SessionState } from './state';
+import { readSessionState } from './state';
 
-type ClientSession = { state: 'unknown' | SessionState; csrfToken: string | null; subject?: string | null };
+export { sessionCsrfToken } from './browser-state';
 
 const readSession = createServerFn({ method: 'GET' }).handler(async () => {
   const { env } = await import('cloudflare:workers');
@@ -23,11 +23,6 @@ const readSession = createServerFn({ method: 'GET' }).handler(async () => {
   const { state, csrfToken, subject } = await readSessionState(getRequest(), env as Partial<SessionEnv>);
   return { state, csrfToken, subject: subject ?? null };
 });
-
-// Imperative transports read the current browser client's successful session observation.
-export function sessionCsrfToken(): string | null {
-  return typeof window === 'undefined' ? null : ownedSessionCsrfToken();
-}
 
 export const sessionQuery = queryOptions({
   ...personalRead,
@@ -69,7 +64,7 @@ export const exposureQuery = queryOptions({
 /** Read-only registry hosts use an isolated client seeded with an anonymous session. */
 export const AnonymousSessionContext = createContext(false);
 
-function useBrowserSession(): ClientSession {
+function useBrowserSession(): BrowserSession {
   const anonymous = useContext(AnonymousSessionContext);
   const client = useQueryClient();
   const read = useCallback(() => client.ensureQueryData(sessionQuery), [client]);
@@ -89,5 +84,5 @@ function useBrowserSession(): ClientSession {
 }
 
 export const useSession = createIsomorphicFn()
-  .server((): ClientSession => ({ state: 'unknown', csrfToken: null }))
+  .server((): BrowserSession => ({ state: 'unknown', csrfToken: null }))
   .client(useBrowserSession);

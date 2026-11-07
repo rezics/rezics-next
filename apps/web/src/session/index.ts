@@ -5,12 +5,8 @@ export {
   type BrowserReader,
   type BrowserCacheEvent,
 } from './observation';
-export {
-  cachedBrowserSession,
-  normalizeSessionObservation,
-  sessionQueryKey,
-  type BrowserSession,
-} from './browser-state';
+export { cachedBrowserSession } from './browser-state';
+export { normalizeSessionObservation, sessionQueryKey, type BrowserSession } from '../reader/lifetime/contract';
 export {
   addressLease,
   readLease,
