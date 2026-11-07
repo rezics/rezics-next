@@ -115,7 +115,7 @@ test('private sources cannot publish and visibility reduction prevents a late ap
     b = { ...publicSource, generation: randomUUID() };
   await f.command(publicSource.collectionId, { b }, (tx) => begin(tx, { ...b, expectedMembers: 0 }));
   const response = await f.send(f.owner.bearer, 'PATCH', '/v1/collections/' + publicSource.collectionId, {
-    revision: 1,
+    revision: 2,
     visibility: 'private',
   });
   expect(response.status).toBe(200);

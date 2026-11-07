@@ -3246,6 +3246,8 @@ LRU/idle retirement. `createMembersPreparation` uses Core request admission and 
 duplicate admission neither touches nor enqueues. An explicit History original registers the actual
 reservation original and locator-only intent on the same transaction. The returned private transfers retain their
 original deadline and Pool and can be consumed only after successful COMMIT; a locator grants no transfer authority.
+Reserve and touch pass the same `collectionReadEligibility` producer as the mounted reader for the exact Collection
+resource; private evidence still falls through to the curator grant path.
 Runtime admission (`runtime: true`) opens that History original from documented static bounds; it does not require
 a NativeCollectionWork parent. The native runtime association, selected apply/completion and bounded cleanup bodies
 are retained for that integration. Metadata-only reservation does not install an original association or capture
