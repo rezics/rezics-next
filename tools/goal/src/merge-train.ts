@@ -613,10 +613,18 @@ export function controlPlaneChecks(
   ];
   if (!plan || plan.scope === 'all') {
     // Preserve the public synthetic default; live releases pass their captured candidate plan below.
-    checks.push(['bun', 'test', '--timeout', String(policy.testTimeoutMs), 'tools/goal/src']);
+    checks.push([
+      'bun',
+      'test',
+      '--timeout',
+      String(policy.testTimeoutMs),
+      'tools/goal/src',
+      ...(plan?.tests.filter((path) => !path.startsWith('tools/goal/src/')) ?? []),
+    ]);
   } else if (plan.scope === 'affected' && plan.tests.length) {
     checks.push(['bun', 'test', '--timeout', String(policy.testTimeoutMs), ...plan.tests]);
   }
+  for (const entrypoint of plan?.entrypoints ?? []) checks.push(['bun', entrypoint, '--help']);
   return checks;
 }
 /** Defaults for synthetic callers; the production train creates commands from its startup policy. */
@@ -7705,6 +7713,21 @@ export class MergeTrain {
     } finally {
       compatibilityWorkspace.release();
     }
+    if (plan.lifecycle === 'unchanged') {
+      // This describes the coverage actually obtained above; it is not a native lifecycle success or a cache hit.
+      const lifecycleEvidence =
+        `release boundary evidence: candidate=${candidate} dev-script-tree=${snapshot.devHead} ` +
+        `base=${snapshot.mainHead} coverage=impact-selected full-lifecycle=deferred`;
+      appendFileSync(logPath, `${lifecycleEvidence}\n`);
+      integrity(tree, candidate, 'bounded launch boundary coverage');
+      return finish({
+        passed: true,
+        timedOut: false,
+        output: lifecycleEvidence,
+        lifecycleEvidence,
+        compatibilityCommand,
+      });
+    }
     appendFileSync(logPath, '\nComplete real-boundary lifecycle suite on control-plane candidate\n');
     const smokeCommand = ['bun', 'tools/goal/scripts/launch-smoke.ts', '--expected-dev-script-tree', snapshot.devHead];
     const smokeRunner =
@@ -7834,8 +7857,13 @@ export class MergeTrain {
       return false;
     if (record.stabilizeCommit && !this.commitIsAncestor(record.stabilizeCommit, record.stabilizeBranch)) return false;
     if (!record.stabilizeCommit && this.refHead(record.stabilizeBranch) !== undefined) return false;
-    return record.lifecycleEvidence.includes(
-      `release evidence: candidate=${record.mainCommit} dev-script-tree=${record.devScriptTree}`,
+    return (
+      record.lifecycleEvidence.startsWith(
+        `release evidence: candidate=${record.mainCommit} dev-script-tree=${record.devScriptTree} `,
+      ) ||
+      record.lifecycleEvidence ===
+        `release boundary evidence: candidate=${record.mainCommit} dev-script-tree=${record.devScriptTree} ` +
+          `base=${record.mainExpected} coverage=impact-selected full-lifecycle=deferred`
     );
   }
 

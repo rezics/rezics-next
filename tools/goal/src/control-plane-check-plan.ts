@@ -1,9 +1,9 @@
 import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { spawnSync } from 'node:child_process';
-import { affectedTestFilesBySource } from './affected-tests.ts';
+import { affectedTestFilesBySource, executableSourceOwner, isSharedTestSupport } from './affected-tests.ts';
 
-const GOAL_TEST = /^tools\/goal\/src\/.*\.(?:test|spec)\.[cm]?[jt]sx?$/i;
+const GOAL_TEST = /^tools\/goal\/.*\.(?:test|spec)\.[cm]?[jt]sx?$/i;
 const GOAL_CODE = /^tools\/goal\/.*\.(?:[cm]?[jt]sx?|json)$/i;
 const DOCUMENTATION = /(?:^|\/)(?:README|CHANGELOG|CONTRIBUTING)(?:\.[^/]*)?$/i;
 const GENERATED_INTERFACE = /(?:^|\/)generated(?:[-_.][^/]*)?(?:\/|$)|\.d\.[cm]?ts$/i;
@@ -16,6 +16,7 @@ const LIFECYCLE_WORDS = [
   /(?:^|[-_.])(?:launch-smoke|lifecycle|agent-adapters)(?:[-_.]|$)/i,
   /(?:^|[-_.])(?:worker(?:-job)?|manager(?:-session)?|process|dispatch)(?:[-_.]|$)/i,
   /(?:^|[-_.])(?:cli|host|train)(?:[-_.]|$)/i,
+  /^(?:launch|agents|app-server|tasks|job|lease|containers|service|runtime|supervisor|managers|integration-cli|integration-runtime|attempt-resources)(?:[-.]|$)/i,
 ];
 
 export type ControlPlaneCheckPlan = {
@@ -25,6 +26,8 @@ export type ControlPlaneCheckPlan = {
   tests: string[];
   scope: 'none' | 'affected' | 'all';
   reasons: string[];
+  lifecycle: 'full' | 'unchanged';
+  entrypoints: string[];
 };
 
 export type ControlPlaneCheckPlanInput = {
@@ -35,16 +38,16 @@ export type ControlPlaneCheckPlanInput = {
   readFile: (path: string) => string | undefined;
 };
 
-function broadReason(path: string): string | undefined {
+function broadReason(path: string, executableOwner: string | undefined): string | undefined {
   const segments = path.split('/');
   if (
     ROOT_TOOLCHAIN.test(path) ||
     GOAL_TOOLCHAIN.test(path) ||
     path.startsWith('scripts/') ||
-    path.startsWith('tools/goal/scripts/')
+    (path.startsWith('tools/goal/scripts/') && !executableOwner)
   )
     return `shared toolchain change at ${path}`;
-  if (segments.some((segment) => SHARED_FIXTURE.test(segment)))
+  if (isSharedTestSupport(path) || segments.some((segment) => SHARED_FIXTURE.test(segment)))
     return `shared fixture or harness change at ${path}`;
   if (segments.some((segment) => segment === 'config' || CONFIGURATION_FILE.test(segment)))
     return `configuration change at ${path}`;
@@ -66,12 +69,19 @@ export function selectControlPlaneCheckPlan(input: ControlPlaneCheckPlanInput): 
   const changedPaths = [...new Set(input.changedPaths)].sort();
   const tracked = new Set(input.trackedFiles);
   const testFiles = [...tracked].filter((path) => GOAL_TEST.test(path)).sort();
-  const impact = affectedTestFilesBySource(changedPaths, input.trackedFiles, input.readFile);
+  const impact = affectedTestFilesBySource(changedPaths, input.trackedFiles, input.readFile, {
+    testedOwnerBoundaries: true,
+  });
   const selected = new Set<string>();
   const broaden = new Set<string>();
   const changedTests = new Set<string>();
   const affectedOwners = new Set<string>();
   const generatedOwners = new Set<string>();
+  const executableOwners = new Map<string, string>();
+  const manifest = tracked.has('tools/goal/package.json') ? input.readFile('tools/goal/package.json') : undefined;
+  const packageCommands = manifest
+    ? Object.values((JSON.parse(manifest) as { scripts?: Record<string, string> }).scripts ?? {})
+    : [];
 
   for (const path of changedPaths) {
     if (GOAL_TEST.test(path)) {
@@ -81,10 +91,16 @@ export function selectControlPlaneCheckPlan(input: ControlPlaneCheckPlanInput): 
       } else {
         broaden.add(`removed test cannot be selected at ${path}`);
       }
+      const reason = broadReason(path, 'changed-test');
+      if (reason) broaden.add(reason);
       continue;
     }
 
-    const sharedReason = broadReason(path);
+    const executableOwner = executableSourceOwner(path, input.trackedFiles, input.readFile);
+    const sharedCommand =
+      path.startsWith('tools/goal/scripts/') &&
+      packageCommands.some((command) => command.includes(path.slice('tools/goal/'.length)));
+    const sharedReason = broadReason(path, sharedCommand ? undefined : executableOwner);
     if (sharedReason) {
       broaden.add(sharedReason);
       continue;
@@ -97,6 +113,7 @@ export function selectControlPlaneCheckPlan(input: ControlPlaneCheckPlanInput): 
       if (consumers.length) {
         consumers.forEach((test) => selected.add(test));
         affectedOwners.add(path);
+        if (executableOwner) executableOwners.set(path, executableOwner);
         if (isGeneratedInterface(path)) generatedOwners.add(path);
       } else {
         broaden.add(`unresolved dependency impact at ${path}`);
@@ -119,14 +136,18 @@ export function selectControlPlaneCheckPlan(input: ControlPlaneCheckPlanInput): 
   } else if (selected.size) {
     scope = 'affected';
     tests = [...selected].sort();
-    if (changedTests.size)
-      reasons.push(`Changed Goal tests retained: ${[...changedTests].sort().join(', ')}`);
+    if (changedTests.size) reasons.push(`Changed Goal tests retained: ${[...changedTests].sort().join(', ')}`);
     if (affectedOwners.size)
       reasons.push(
-        `Changed owners and candidate source impact selected tests for ${[...affectedOwners].sort().join(', ')}: ${
-          [...selected].sort().join(', ')
-        }`,
+        `Changed owners and candidate source impact selected tests for ${[...affectedOwners].sort().join(', ')}: ${[
+          ...selected,
+        ]
+          .sort()
+          .join(', ')}`,
       );
+    reasons.push(
+      'Affected consumers stop at tested owner contracts and shared setup boundaries; wider transitive coverage remains with integrated-dev verification.',
+    );
     if (generatedOwners.size)
       reasons.push(
         `Generated interface consumers followed from the candidate graph: ${[...generatedOwners].sort().join(', ')}`,
@@ -134,16 +155,32 @@ export function selectControlPlaneCheckPlan(input: ControlPlaneCheckPlanInput): 
   } else {
     scope = 'none';
     tests = [];
-    reasons.push('No Goal test owner changed; typecheck, compatibility and lifecycle proof remain required.');
+    reasons.push('No Goal test owner changed; typecheck and captured main/dev compatibility remain required.');
   }
 
-  return { base: input.base, candidate: input.candidate, changedPaths, tests, scope, reasons };
+  for (const [entrypoint, owner] of executableOwners)
+    reasons.push(`Executable command ownership: ${entrypoint} delegates to ${owner}; owning CLI tests retained.`);
+  const lifecycle = broaden.size ? 'full' : 'unchanged';
+  reasons.push(
+    lifecycle === 'full'
+      ? 'Full native lifecycle required by changed launch/shared or unresolved impact.'
+      : 'Launch owners unchanged: affected owner tests and captured main/dev compatibility provide bounded coverage; full native lifecycle remains deferred to integrated-dev verification.',
+  );
+  return {
+    base: input.base,
+    candidate: input.candidate,
+    changedPaths,
+    tests,
+    scope,
+    reasons,
+    lifecycle,
+    entrypoints: [...executableOwners.keys()].sort(),
+  };
 }
 
 function gitText(cwd: string, args: string[]): string {
   const result = spawnSync('git', args, { cwd, encoding: 'utf8', maxBuffer: 64 * 1024 * 1024 });
-  if (result.status !== 0)
-    throw new Error(result.stderr?.trim() || result.error?.message || `git ${args[0]} failed`);
+  if (result.status !== 0) throw new Error(result.stderr?.trim() || result.error?.message || `git ${args[0]} failed`);
   return result.stdout;
 }
 

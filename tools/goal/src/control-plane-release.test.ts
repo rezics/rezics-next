@@ -383,14 +383,16 @@ test('a checked candidate publishes main, stabilize and dev together with exact 
   }
 });
 
-test('an ordinary release runs only tests reached from its changed source owner', async () => {
+test('an owned production report CLI keeps narrow checks and records bounded exact-candidate coverage', async () => {
   const h = integrationHarness();
   try {
+    const entrypoint = 'tools/goal/scripts/efficiency-report.ts';
+    const cliSource = readFileSync(join(import.meta.dir, '../scripts/efficiency-report.ts'), 'utf8');
     const baseFiles = {
-      'tools/goal/src/hourly-ledger.ts': 'export const readLedger = () => 1;\n',
-      'tools/goal/src/hourly-report.ts':
-        "import { readLedger } from './hourly-ledger.ts';\nexport const report = () => readLedger();\n",
-      'tools/goal/src/hourly-report.test.ts': "import { report } from './hourly-report.ts';\nvoid report;\n",
+      [entrypoint]: cliSource,
+      'tools/goal/src/efficiency-report.ts': 'export const renderHourlyEfficiencyReport = () => "report";\n',
+      'tools/goal/src/efficiency-report.test.ts':
+        "import { renderHourlyEfficiencyReport } from './efficiency-report.ts';\n",
       'tools/goal/src/provider.ts': 'export const provider = () => true;\n',
       'tools/goal/src/provider-fixture.test.ts': "import { provider } from './provider.ts';\nvoid provider;\n",
     };
@@ -399,29 +401,38 @@ test('an ordinary release runs only tests reached from its changed source owner'
       writeFileSync(join(h.root, path), contents);
     }
     git(h.root, 'add', '--', ...Object.keys(baseFiles));
-    git(h.root, 'commit', '-m', 'Seed impact selection fixture');
+    git(h.root, 'commit', '-m', 'Seed production command ownership fixture');
     const base = h.head('main');
     h.ensureDev();
-    const task = dispatchControlPlane(h, 'tools/goal/src/hourly-ledger.ts');
+    const task = dispatchControlPlane(h, entrypoint);
+    writeFileSync(
+      join(task.worktree, '.temp/worker-plan.json'),
+      JSON.stringify({ file: entrypoint, content: cliSource + '\n// Updated CLI output.\n' }),
+    );
     await h.start(task);
     const commands: string[][] = [];
-    await train(h, async (command) => {
-      commands.push([...command]);
-      return { passed: true, output: '', timedOut: false };
-    });
+    await train(
+      h,
+      async (command) => {
+        commands.push([...command]);
+        return { passed: true, output: '', timedOut: false };
+      },
+      async () => {
+        throw new Error('Unchanged launch owners must not invoke the full lifecycle suite');
+      },
+    );
 
     const candidate = h.head('main');
-    expect(commands).toContainEqual([
-      'bun',
-      'test',
-      '--timeout',
-      '30000',
-      'tools/goal/src/hourly-report.test.ts',
-    ]);
+    expect(commands).toContainEqual(['bun', 'test', '--timeout', '30000', 'tools/goal/src/efficiency-report.test.ts']);
+    expect(commands).toContainEqual(['bun', entrypoint, '--help']);
     expect(commands).not.toContainEqual(['bun', 'test', '--timeout', '30000', 'tools/goal/src']);
     expect(commands.flat()).not.toContain('tools/goal/src/provider-fixture.test.ts');
+    expect(commands.some((command) => command[1] === 'tools/goal/scripts/check-compatibility.ts')).toBe(true);
     expect(readFileSync(h.outcomes[0]!.logPath, 'utf8')).toContain(
       `Control-plane check plan base=${base} candidate=${candidate} scope=affected; 1 Goal test file(s)`,
+    );
+    expect(releaseRecords(h)[0]?.lifecycleEvidence).toBe(
+      `release boundary evidence: candidate=${candidate} dev-script-tree=${base} base=${base} coverage=impact-selected full-lifecycle=deferred`,
     );
     expect(h.outcomes[0]).toMatchObject({ passed: true });
   } finally {
@@ -563,61 +574,66 @@ test('a known dev add/add conflict prevents main and stabilize from advancing', 
   }
 });
 
-test('a durable record recovers a fully published release interrupted before queue completion', async () => {
-  const h = integrationHarness();
-  try {
-    h.ensureDev();
-    const base = h.head('main');
-    git(h.root, 'branch', 'stabilize', base);
-    const task = dispatchControlPlane(h);
-    await h.start(task);
-    const originalFinish = h.queue.finish.bind(h.queue);
-    h.queue.finish = ((..._args: Parameters<typeof h.queue.finish>) => {
-      throw new Error('interrupted after atomic ref publication');
-    }) as typeof h.queue.finish;
+for (const coverage of ['full', 'bounded'] as const)
+  test(`a durable record recovers ${coverage} coverage after publication interrupted before queue completion`, async () => {
+    const h = integrationHarness();
+    try {
+      h.ensureDev();
+      const base = h.head('main');
+      git(h.root, 'branch', 'stabilize', base);
+      const task =
+        coverage === 'bounded' ? dispatchControlPlane(h, 'tools/goal/src/report.test.ts') : dispatchControlPlane(h);
+      await h.start(task);
+      const originalFinish = h.queue.finish.bind(h.queue);
+      h.queue.finish = ((..._args: Parameters<typeof h.queue.finish>) => {
+        throw new Error('interrupted after atomic ref publication');
+      }) as typeof h.queue.finish;
 
-    await expect(train(h)).rejects.toThrow('interrupted after atomic ref publication');
-    const published = [h.head('main'), h.head('stabilize'), h.head('dev')];
-    expect(published[0]).not.toBe(base);
-    expect(releaseRecords(h)).toHaveLength(1);
-    h.queue.finish = originalFinish;
-    let gatesAfterRecovery = 0;
-    await new MergeTrain({
-      ...h.settings,
-      queue: h.queue,
-      fence: h.store,
-      sink: {
-        onGateOutcome(outcome) {
-          h.outcomes.push(outcome);
+      await expect(train(h)).rejects.toThrow('interrupted after atomic ref publication');
+      const published = [h.head('main'), h.head('stabilize'), h.head('dev')];
+      expect(published[0]).not.toBe(base);
+      expect(releaseRecords(h)).toHaveLength(1);
+      expect(releaseRecords(h)[0]?.lifecycleEvidence).toContain(
+        coverage === 'bounded' ? 'coverage=impact-selected full-lifecycle=deferred' : 'scenarios=worker-wake:passed',
+      );
+      h.queue.finish = originalFinish;
+      let gatesAfterRecovery = 0;
+      await new MergeTrain({
+        ...h.settings,
+        queue: h.queue,
+        fence: h.store,
+        sink: {
+          onGateOutcome(outcome) {
+            h.outcomes.push(outcome);
+          },
+          onDevLandingTranspileHandoff(handoff) {
+            h.job.onDevLandingTranspileHandoff(handoff);
+          },
         },
-        onDevLandingTranspileHandoff(handoff) {
-          h.job.onDevLandingTranspileHandoff(handoff);
+        runGate: async () => {
+          gatesAfterRecovery++;
+          throw new Error('recovery must use the durable release record');
         },
-      },
-      runGate: async () => {
-        gatesAfterRecovery++;
-        throw new Error('recovery must use the durable release record');
-      },
-      runLaunchSmoke: async () => {
-        gatesAfterRecovery++;
-        return { passed: false, output: '', timedOut: false };
-      },
-    }).run();
+        runLaunchSmoke: async () => {
+          gatesAfterRecovery++;
+          return { passed: false, output: '', timedOut: false };
+        },
+      }).run();
 
-    expect(gatesAfterRecovery).toBe(0);
-    expect([h.head('main'), h.head('stabilize'), h.head('dev')]).toEqual(published);
-    expect(h.outcomes.at(-1)).toMatchObject({ passed: true, mergedCommit: published[0] });
-    h.job.onGateOutcome(h.outcomes.at(-1)!);
-    await h.job.drain();
-    expect(releaseRecords(h)[0]).toMatchObject({
-      mainCommit: published[0],
-      stabilizeCommit: published[1],
-      devCommit: published[2],
-    });
-  } finally {
-    h.dispose();
-  }
-});
+      expect(gatesAfterRecovery).toBe(0);
+      expect([h.head('main'), h.head('stabilize'), h.head('dev')]).toEqual(published);
+      expect(h.outcomes.at(-1)).toMatchObject({ passed: true, mergedCommit: published[0] });
+      h.job.onGateOutcome(h.outcomes.at(-1)!);
+      await h.job.drain();
+      expect(releaseRecords(h)[0]).toMatchObject({
+        mainCommit: published[0],
+        stabilizeCommit: published[1],
+        devCommit: published[2],
+      });
+    } finally {
+      h.dispose();
+    }
+  });
 
 test('a nonzero main/dev compatibility contract result leaves main and dev unchanged', async () => {
   const h = integrationHarness();

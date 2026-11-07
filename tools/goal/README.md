@@ -2712,12 +2712,31 @@ development verifier runs acceptance on its captured `dev` head, alongside typec
 verification is recorded separately from the worker's original acceptance. Every control-plane release installs its
 dependencies and runs Goal typecheck on the exact `main` candidate. Its test plan compares that candidate with the
 captured main base, retains changed tests, and follows static, type-only and dynamic candidate imports—including
-generated interface consumers—to affected tests. Shared toolchain, configuration, fixture or harness, lifecycle,
-removed-test, and unresolved dependency changes select all Goal tests;
-the proof log records the base, candidate, scope and reason. Compatibility against captured dev scripts and the full
-real-boundary lifecycle proof remain mandatory on every candidate. The independent integrated-dev verifier supplies
-deferred receiving coverage; compiler-input settlement remains a separate verifier responsibility. Promotion gates
-its own frozen integration candidate.
+generated interface consumers—to affected tests. Consumer traversal stops at a consumer with its own tracked
+sibling tests: those tests exercise its public contract, while Goal typing settles callers' type contracts. Unchanged
+shared test setup does not turn an upstream implementation change into every fixture's change. Direct type consumers
+and generated/declaration interfaces remain selected; downstream type-only implementation edges belong to typing.
+The independent integrated-dev verifier supplies wider transitive and integrated behavioural coverage.
+
+A Goal executable with a shebang, a main guard, a help option and a direct same-named source import belongs to that
+source owner's tests. The plan also runs that exact entrypoint with `--help`, exercising module loading and argument
+admission without report delivery. Package check commands remain shared toolchain even when they delegate to a source
+owner. Other scripts have unresolved/shared command impact and widen visibly; the scripts directory is not exempt.
+For the captured six-file hourly-report candidate, this selects report, host scheduler/CLI, maintenance and urgent
+consumer tests plus the report entrypoint, without workspace/provider fixture suites.
+
+Shared toolchain, configuration, fixture/harness, actual launcher/process/controller owners, removed tests and
+unresolved dependency changes select all Goal tests and the full native launch lifecycle. The proof log records the
+base, candidate, scope and reasons. When those launch owners are unchanged, affected owner tests, entrypoint checks
+and fresh compatibility against the captured immutable dev scripts provide bounded coverage. The existing release
+record's `lifecycleEvidence` then explicitly says `release boundary evidence: candidate=<head>
+dev-script-tree=<dev> base=<base> coverage=impact-selected full-lifecycle=deferred` on one line. This is coverage on
+those exact revisions, not a lifecycle success or reused native proof. Recovery requires the same published candidate,
+captured base and dev tree. Full lifecycle evidence retains its `release evidence:` form and named scenarios.
+All individual, cohort, reformatted and compiler-repaired heads use this same final-candidate plan. Full-tree integrity,
+source identity and atomic publication fences are unchanged. Existing exact-source check reuse and compiler-input
+settlement remain separate contracts; this policy neither relabels old failures nor grants evidence reuse. Broader
+release/native/browser/money acceptance keeps its own evidence, and promotion gates its frozen integration candidate.
 
 ### Development verification
 
@@ -3351,7 +3370,7 @@ proof and publication record bind the approval identity; the final current-sourc
 approval arriving after a journal captured its inputs requires a fresh cohort. Ordinary landing permissions are
 unchanged. This API never grants native execution, critical priority, a retry, integration or a passing proof.
 The corrected main cohort still needs fresh full Goal typing, its impact-selected Goal tests, exact dev script
-compatibility, real provider lifecycle and atomic publication before its deferred dev handoff can be consumed. Retained
+compatibility, impact-selected launch boundary coverage and atomic publication before its deferred dev handoff can be consumed. Retained
 negative proofs, supersession generation mappings and unknown legacy physical inventory keep their existing meaning.
 
 The controller receiving entrypoint is
@@ -3380,9 +3399,9 @@ native requests before calling `MergeTrain.releaseControlPlaneBatch`.
 The train preserves source commits by merging them in an isolated tree with the delivered `TrainResolver`: actual
 rerere and proven additive unions precede one bounded fresh `gpt-6.1-sol` high session. It applies
 scope and frozen-file guards, formats the combined candidate, and runs the mandatory Goal installs, typing,
-impact-selected tests, main/dev script compatibility and complete real-boundary provider lifecycle proof on that final
+impact-selected tests, main/dev script compatibility and the required launch boundary coverage on that final
 head once. The test plan uses the captured main base and final formatted or repaired candidate. Compatibility
-uses the captured immutable dev tree; lifecycle evidence must identify the exact candidate and dev tree. An already
+uses the captured immutable dev tree; full or explicitly bounded lifecycle coverage identifies the exact candidate and dev tree. An already
 represented contribution is reported explicitly with no invented implementation commit. Unavailable, conflicting or
 refused sources are reported with their source identity, log, affected files and required owning-manager fix; compatible
 sources remain eligible.
@@ -3463,7 +3482,7 @@ uses its retained negative rather than rerunning the unchanged candidate. Passin
 fresh complete proof. Bisection may run one bounded probe of at most three failing Goal test files selected from the
 parent's actual impact-selected test output. A conclusive negative can split a group early. A passing or inconclusive
 probe cannot publish: every passing head still needs fresh Goal typing, its impact-selected tests, dev script
-compatibility and the real provider lifecycle proof before CAS.
+compatibility and the plan's full or bounded launch boundary coverage before CAS.
 
 For an interrupted, unpublished cohort with a retained completed native failure, the typed receiving operation is
 `receiveControlPlaneBatchSupersession(input: ControlPlaneBatchSupersession, runtime, env)`. The existing CLI also accepts

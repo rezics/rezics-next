@@ -1,7 +1,12 @@
 import { expect, test } from 'bun:test';
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
-import { affectedTestFiles, siblingTestFiles, workerTestCommands } from './affected-tests.ts';
+import {
+  affectedTestFiles,
+  affectedTestFilesBySource,
+  siblingTestFiles,
+  workerTestCommands,
+} from './affected-tests.ts';
 import { checkSettings, loadSettings } from './config.ts';
 import defaults from '../defaults.json';
 import { failingTestFiles } from './merge-train.ts';
@@ -73,19 +78,44 @@ test('changed sources select transitive candidate test consumers without unrelat
       'tools/goal/src/hourly-report.ts',
       "import { readLedger } from './ledger.ts';\nexport const report = () => readLedger();",
     ],
-    [
-      'tools/goal/src/hourly-report.test.ts',
-      "import { report } from './hourly-report.ts';\nvoid report;",
-    ],
+    ['tools/goal/src/hourly-report.test.ts', "import { report } from './hourly-report.ts';\nvoid report;"],
     ['tools/goal/src/provider.ts', 'export const provider = () => 1;'],
     ['tools/goal/src/provider-fixture.test.ts', "import { provider } from './provider.ts';\nvoid provider;"],
-    ['tools/goal/src/workspace-fixture.test.ts', "import { makeWorkspace } from './workspace.ts';\nvoid makeWorkspace;"],
+    [
+      'tools/goal/src/workspace-fixture.test.ts',
+      "import { makeWorkspace } from './workspace.ts';\nvoid makeWorkspace;",
+    ],
     ['tools/goal/src/workspace.ts', 'export const makeWorkspace = () => ({});'],
   ]);
 
-  expect(
-    affectedTestFiles(['tools/goal/src/ledger.ts'], [...files.keys()], (path) => files.get(path)),
-  ).toEqual(['tools/goal/src/hourly-report.test.ts']);
+  expect(affectedTestFiles(['tools/goal/src/ledger.ts'], [...files.keys()], (path) => files.get(path))).toEqual([
+    'tools/goal/src/hourly-report.test.ts',
+  ]);
+});
+
+test('release impact stops at tested consumers, type-only implementation edges and unchanged shared setup', () => {
+  const files = new Map([
+    ['tools/goal/src/clock.ts', 'export const hour = () => 1;'],
+    ['tools/goal/src/report.ts', "import { hour } from './clock.ts'; export const report = () => hour();"],
+    ['tools/goal/src/report.test.ts', "import { report } from './report.ts';"],
+    ['tools/goal/src/controller.ts', "import { report } from './report.ts'; export const control = report;"],
+    ['tools/goal/src/controller.test.ts', "import { control } from './controller.ts';"],
+    ['tools/goal/src/untyped.ts', "import { hour } from './clock.ts'; export const tick = hour;"],
+    ['tools/goal/src/types-only.ts', "import type { tick } from './untyped.ts'; export type Tick = typeof tick;"],
+    ['tools/goal/src/types-only.test.ts', "import type { Tick } from './types-only.ts';"],
+    ['tools/goal/src/test-support.ts', "import { hour } from './clock.ts'; export const fixture = hour;"],
+    ['tools/goal/src/provider.test.ts', "import { fixture } from './test-support.ts';"],
+  ]);
+  const affected = (path: string) =>
+    affectedTestFilesBySource([path], [...files.keys()], (path) => files.get(path), {
+      testedOwnerBoundaries: true,
+    }).get(path);
+  expect(affected('tools/goal/src/clock.ts')).toEqual(['tools/goal/src/report.test.ts']);
+  expect(affected('tools/goal/src/report.ts')).toEqual([
+    'tools/goal/src/controller.test.ts',
+    'tools/goal/src/report.test.ts',
+  ]);
+  expect(affected('tools/goal/src/test-support.ts')).toEqual(['tools/goal/src/provider.test.ts']);
 });
 
 type Harness = ReturnType<typeof integrationHarness>;
