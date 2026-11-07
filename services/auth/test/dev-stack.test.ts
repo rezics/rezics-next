@@ -87,7 +87,7 @@ test('fresh checkout starts native loopback Auth and signs a person into and out
       .split('\n')
       .find((line) => line.startsWith('DATABASE_URL='))!
       .slice(13);
-    const port = (await commands(['docker', 'port', database, '5432/tcp'])).trim().split(':').at(-1);
+    const port = (await commands(['docker', 'port', database, '5432/tcp'])).trim().split(':').at(-1)!;
     expect(new URL(kernelDatabaseUrl).port).toBe(port);
     for (const command of infra) await commands(command); // Existing, migrated development DB is a no-op.
     expect(await Bun.file(resolve(checkout, 'services/kernel/.env')).text()).toBe(kernelEnv);
