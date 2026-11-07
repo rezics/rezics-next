@@ -1,4 +1,5 @@
 /** Library consumes Access behaviour through this port; process composition supplies native implementations. */
+import type { DeletedContributionAttribution } from '../access/contract/contribution-attribution.ts';
 import type { deadlineClient as NativeDeadlineClient, within as NativeWithin } from '../access/authenticate.ts';
 import type {
   readAccount as NativeReadAccount,
@@ -218,8 +219,9 @@ export const readMembershipWorkConfig: LibraryAccessPorts['readMembershipWorkCon
 export const isAccessWorkDispatch: LibraryAccessPorts['isAccessWorkDispatch'] = () =>
   requireLibraryAccess().isAccessWorkDispatch();
 
-export const contributionDeleted: LibraryAccessPorts['contributionDeleted'] = (...args) =>
-  requireLibraryAccess().contributionDeleted(...args);
+export const contributionDeleted: LibraryAccessPorts['contributionDeleted'] = (
+  value,
+): value is DeletedContributionAttribution => requireLibraryAccess().contributionDeleted(value);
 
 export const readContributionAttributions: LibraryAccessPorts['readContributionAttributions'] = (...args) =>
   requireLibraryAccess().readContributionAttributions(...args);
