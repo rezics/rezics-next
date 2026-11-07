@@ -171,6 +171,28 @@ export function walkPortAllocated(text: string): boolean {
   return /port is already allocated/i.test(text);
 }
 
+/** Docker refused this admitted slot's published mapping; the walk skips it and admits another. */
+export class WalkPublishedPortAllocated extends Error {
+  readonly index: number;
+  readonly detail: string;
+  constructor(index: number, detail: string) {
+    super(`walk: slot ${index} published port is already allocated`);
+    this.name = 'WalkPublishedPortAllocated';
+    this.index = index;
+    this.detail = detail;
+  }
+}
+
+/** Classify a failed setup process whose output already contains Docker's allocated-port refusal. */
+export function walkPublishedPortAllocated(
+  status: number,
+  output: string,
+  index: number,
+): WalkPublishedPortAllocated | undefined {
+  if (status === 0 || !walkPortAllocated(output)) return undefined;
+  return new WalkPublishedPortAllocated(index, output);
+}
+
 /** A surviving container can own a slot's ports after its launcher's flock has been released. */
 export async function walkStackPortsAvailable(ports: WalkPorts): Promise<boolean> {
   const published = dockerPublishedPorts();
@@ -473,7 +495,8 @@ export function walkReadyUrls(ports: WalkPorts, env: Record<string, string | und
 /**
  * Waits for one of the host's walk slots. The queue is the stack-lease FIFO, in the walk directory with the walk
  * capacity, so developers' stacks and check slots are not counted here. `blocked` indexes stay skipped for this
- * launch after Docker refused their published ports.
+ * launch after Docker refused their published ports, including a `docker run` that still reported
+ * `port is already allocated` after admission thought the slot was free.
  */
 export function admitWalkStack(
   task: string,
