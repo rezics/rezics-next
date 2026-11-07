@@ -1,5 +1,33 @@
 # Thread authoring
 
+Decision: composed reader regressions use the existing per-file Web check lanes so server-module mocks cannot
+replace later files’ native client exports. Mounted route replacements update React state; privacy and return
+assertions remain unchanged. The native late-revocation cases remain the current-authority acceptance. The Content Goal seeded walk reuses that
+driver with Performance `waitUntilWalkReady` hydration recovery and does not add stories. Seed token minting keeps
+issuer `AUTH_ORIGIN` and forwards POST bodies through `walkIssuerForward`; the walk command restores the pinned
+dump cache before the run slice, including the Financial outer command basename, and waits for identity-epoch
+remaining zero before persona and seed. Worker Vite resolves Elysia/Eden ESM and live TypeBox re-exports; `vite-config.test.ts` pins that swap. The same walk receives
+Accounts published-post reply, mention and moderation delivery through the default worker, current preferences,
+replay, inbox and independent appeals. Catalogue CurrentPost attribution is received through those existing
+authoring-controls-family and own-drafts native, resume and commands checks: live identity, null unknown and
+id-free deletion, exact revision, body and licence, and viewer retirement. Ada fixtures are not native or visual
+proof; no extra stories or screenshots.
+Post-editing browser checks fetch the thread route only to learn Vite is up; they do not Playwright-hydrate Home
+during startup, because that compiled the Home client graph until Vite died at its 2 GiB heap. Finite test Vite
+starts skip SSR dependency discovery so the ready line is not held by the optimizer crawl. The same host answers
+the composed `reading-page` so edit, delete and edited-marker journeys see current posts. Owner edit and erase use
+the reading-page viewer when that page was admitted for the account, otherwise the signed-in session subject after
+anonymous SSR; the personal read still supplies reactions and review votes. A still-unknown session does not offer
+a stranger More-actions menu, so owner edit and delete appear on the first open after the session is observed.
+Journey navigation waits for DOMContentLoaded and hydration, not network idle. Post slots are the thread conversation rows
+(`ol[id^="thread-"] > li`); nested presentation lists are not indexes. Inline-edit discard
+confirms from a capture-phase host-input flag as well as published snapshot and host text, so
+Escape can confirm before Tiptap paints. Revision and erase Idempotency-Key values stay RFC 8941
+quoted strings; focused post-editing cases parse that header.
+The existing editing journey captures bounded client errors and failed request paths before hydration, includes the
+owned server's diagnostics on failure, and closes a context when opening fails before its caller can own it. This
+preserves the original hydration and editing assertions while preventing timed-out opens from accumulating browsers.
+
 ## New-thread destination and community rules
 
 The signed-in new-thread route projects the posting destination only from the current board response through
@@ -176,6 +204,10 @@ Decision: opening Review explicitly opens both full readings; selecting an index
 and **Read full document** restores the complete reader without changing either writing.
 
 The inline edit still inherits native licence and review metadata and offers no separate controls for them.
+Revision commands send that inherited licence. An author-erased slot without a restore window shows
+“Removed by its author” and no overflow menu; a restorable deletion keeps the deleted tombstone, copy
+menu and restore control. Edit discard reads live draft dirtiness, including the editor host text and a pending
+snapshot, so Escape can confirm before the debounced onChange paints.
 
 ## Browser-only writing recovery
 

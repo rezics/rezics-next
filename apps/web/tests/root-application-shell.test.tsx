@@ -35,6 +35,7 @@ const globals = {
   requestAnimationFrame: window.requestAnimationFrame.bind(window),
   cancelAnimationFrame: window.cancelAnimationFrame.bind(window),
   matchMedia: window.matchMedia.bind(window),
+  scrollTo: window.scrollTo.bind(window),
   IS_REACT_ACT_ENVIRONMENT: true,
 };
 const previous = new Map(Object.keys(globals).map((name) => [name, Object.getOwnPropertyDescriptor(globalThis, name)]));
@@ -60,7 +61,8 @@ mock.module('../src/shell/community-navigation-actions', () => ({
 
 const { QueryClient, QueryClientProvider } = await import('@tanstack/react-query');
 const { createRoot } = await import('react-dom/client');
-const { createMemoryHistory, createRootRoute, createRouter, RouterProvider } = await import('@tanstack/react-router');
+const { createMemoryHistory, createRootRouteWithContext, createRouter, RouterProvider } =
+  await import('@tanstack/react-router');
 const { Root } = await import('../src/routes/__root');
 const { sessionQuery } = await import('../src/session/query');
 const { viewerExposureLifetime, viewerExposureQuery } = await import('../src/kernel/viewer-exposure');
@@ -85,16 +87,22 @@ test('the installed root shell renders anonymously and follows admitted viewer r
   client.setQueryData(sessionQuery.queryKey, currentSession);
   client.setQueryData(['exposure', 'anonymous'], { state: 'ready', admitted: ['personal_library'] });
 
-  const route = createRootRoute({
+  const route = createRootRouteWithContext<{
+    queryClient: InstanceType<typeof QueryClient>;
+    credentialMode: 'anonymous' | 'session';
+  }>()({
     component: () => (
       <Root>
         <h1>Ordinary root page</h1>
       </Root>
     ),
   });
-  const router = createRouter({ routeTree: route, history: createMemoryHistory({ initialEntries: ['/en'] }) });
-  const host = window.document.createElement('div');
-  window.document.body.append(host);
+  const router = createRouter({
+    routeTree: route,
+    history: createMemoryHistory({ initialEntries: ['/en'] }),
+    context: { queryClient: client, credentialMode: 'anonymous' },
+  });
+  const host = window.document;
   const root = createRoot(host);
   const render = () => (
     <QueryClientProvider client={client}>
@@ -141,6 +149,5 @@ test('the installed root shell renders anonymously and follows admitted viewer r
   } finally {
     await act(async () => root.unmount());
     client.clear();
-    host.remove();
   }
 });

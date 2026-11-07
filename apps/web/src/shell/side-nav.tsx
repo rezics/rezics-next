@@ -4,7 +4,7 @@ import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@rezics/ui/
 import { ChevronDown, Globe, Users } from 'lucide-react';
 import { getLocale } from '../paraglide/runtime.js';
 import { m } from '../paraglide/messages.js';
-import { useHistoryCurrentOrigin } from '../library/history-current-origin';
+import { useReaderCurrentOrigin } from '../session/reader';
 import { navigationPathMatches } from './navigation';
 import { useLocation } from '@tanstack/react-router';
 import type { ShellCommunities } from './community-navigation';
@@ -84,7 +84,7 @@ const operations = ['follow.list'] as const;
 function FollowedCommunities({ children }: { children: ReactNode }) {
   const locale = getLocale();
   const { pathname } = useLocation();
-  const origin = useHistoryCurrentOrigin(`shell-communities:${locale}`, operations);
+  const origin = useReaderCurrentOrigin(`shell-communities:${locale}`, operations);
   const current = () => origin.current(0);
   const read = useQuery(
     {

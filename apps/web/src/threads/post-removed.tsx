@@ -52,6 +52,8 @@ export function RemovedPost({
   const deleted = erasedPost || ('removed' in post && post.removed === true);
   const restorableUntil = 'restorableUntil' in post ? post.restorableUntil : undefined;
   const owner = viewerId !== undefined && (authorId === viewerId || Boolean(restorableUntil) || deadlineUnknown);
+  const authorErased =
+    erasedPost && viewerId !== undefined && (authorId === viewerId || deadlineUnknown) && !restorableUntil;
   const common = {
     id: anchorId,
     ref: itemRef,
@@ -105,12 +107,12 @@ export function RemovedPost({
             {...(ownedRestorableUntil && onRestore ? { restoreUntil: ownedRestorableUntil, onRestore } : {})}
             labels={{
               unavailable: m.thread_post_unavailable(),
-              deleted: m.thread_post_deleted(),
+              deleted: authorErased ? m.thread_post_erased() : m.thread_post_deleted(),
               restore: m.thread_post_restore(),
               restoreUntil: (relative) => m.thread_post_restore_until({ relative }),
             }}
           />
-          {owner && deleted ? (
+          {owner && deleted && restorableUntil ? (
             <div className="absolute right-2 top-2">
               <Menu
                 title={m.thread_content_more_actions()}

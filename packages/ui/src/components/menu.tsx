@@ -210,13 +210,17 @@ export function Menu({
     }
   };
   const close = (fromHistory = false, restoreFocus = true) => {
-    if (openingRef.current) return;
+    // A sheet's opening tap can dismiss through the same pointer as it opens.
+    if (openingRef.current && formRef.current === 'sheet') return;
+    openingRef.current = false;
     setOpen(false);
     setStack([]);
     if (historyDepth.current && !fromHistory) window.history.go(-historyDepth.current);
     historyDepth.current = 0;
     if (restoreFocus) requestAnimationFrame(() => triggerRef.current?.focus());
   };
+  const ignoreOpeningDismiss = (reason: string | undefined) =>
+    openingRef.current && (reason === 'outside-press' || reason === 'trigger-press');
   useEffect(() => {
     if (!open) return;
     let inner = 0;
@@ -265,9 +269,9 @@ export function Menu({
     form === 'dropdown' ? (
       <D.DropdownMenu
         open={open}
-        onOpenChange={(value) => {
+        onOpenChange={(value, details) => {
           if (value) openMenu();
-          else if (formRef.current === 'dropdown') close();
+          else if (formRef.current === 'dropdown' && !ignoreOpeningDismiss(details.reason)) close();
         }}
       >
         <D.DropdownMenuTrigger
@@ -297,6 +301,7 @@ export function Menu({
                 openMenu();
                 return;
               }
+              if (ignoreOpeningDismiss(details.reason)) return;
               const target = details.event.target;
               if (details.reason === 'outside-press' && target instanceof Element && target.closest('nav a[href]')) {
                 details.cancel();
@@ -331,9 +336,9 @@ export function Menu({
         ) : (
           <D.DropdownMenu
             open={open && form === 'dropdown'}
-            onOpenChange={(value) => {
+            onOpenChange={(value, details) => {
               if (value) openMenu();
-              else if (formRef.current === 'dropdown') close();
+              else if (formRef.current === 'dropdown' && !ignoreOpeningDismiss(details.reason)) close();
             }}
           >
             <D.DropdownMenuTrigger

@@ -3,6 +3,7 @@ import { existsSync, mkdtempSync, readFileSync, rmSync, watch } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { basename, dirname, join } from 'node:path';
 import {
+  commandNeedsSharedDevServer,
   privateNetworkCommand,
   runOwnedCommand,
   sharedViteChildEnvironment,
@@ -124,3 +125,16 @@ test('cancellation settles the wrapper child and its compiler-like descendant', 
     }
   }
 }, 15_000);
+
+test('the self-hosted post editing journey keeps its own Worker bindings without an unused default server', () => {
+  expect(commandNeedsSharedDevServer(['bun', 'test', 'tests/post-editing.test.ts'])).toBe(false);
+  expect(commandNeedsSharedDevServer(['bun', 'test', '--max-concurrency=1', 'tests/post-editing.test.ts'])).toBe(false);
+  expect(
+    commandNeedsSharedDevServer(['bun', 'test', 'tests/root-application-shell.test.tsx', 'tests/post-editing.test.ts']),
+  ).toBe(false);
+  expect(
+    commandNeedsSharedDevServer(['bun', 'test', 'tests/post-editing.test.ts', 'tests/thread-reading.test.ts']),
+  ).toBe(true);
+  expect(commandNeedsSharedDevServer(['bun', 'test', 'tests'])).toBe(true);
+  expect(commandNeedsSharedDevServer(['bun', 'test'])).toBe(true);
+});

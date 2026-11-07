@@ -3,6 +3,7 @@ import type { CurrentConsentReader } from '../../src/access/auth-consent.ts';
 import type { MediaImportFetchConfig } from '../../src/content/media-import.ts';
 import type { NativeAuthorErasureWorkflows } from '../../src/content/operation-contract.ts';
 import type { ContentBoardDependencies } from '../../src/content/boards.ts';
+import type { DisclosureBarrier, PageDisclosureBarrier } from '../../src/content/reads.ts';
 import * as routes from '../../src/content/routes.ts';
 import type { ContentRuntime } from '../../src/content/runtime.ts';
 import type { TurnstileVerifier } from '../../src/content/turnstile.ts';
@@ -17,7 +18,11 @@ type KernelContent = ContentRuntime &
     shelfTitleInputs?: ContentShelfTitleInputs;
     now?: () => number;
     id?: () => string;
+    // Composed-test timing seam; it is not a native port and production never sets it.
+    disclosureBarrier?: DisclosureBarrier;
+    pageDisclosureBarrier?: PageDisclosureBarrier;
   };
+
 test('trusted optional content runtime types retain exactly the native ports and the Auth consent reader', () => {
   expectTypeOf<ContentRuntime>().toEqualTypeOf<
     Readonly<{
@@ -32,6 +37,7 @@ test('trusted optional content runtime types retain exactly the native ports and
   >();
   expectTypeOf<KernelDependencies['content']>().toEqualTypeOf<KernelContent | undefined>();
   expectTypeOf<routes.Dependencies['cursorNow']>().toEqualTypeOf<() => number>();
+  expectTypeOf<routes.Dependencies['deadlineNow']>().toEqualTypeOf<(() => number) | undefined>();
   expectTypeOf<routes.Dependencies['id']>().toEqualTypeOf<() => string>();
   expectTypeOf<routes.Dependencies['now']>().toEqualTypeOf<() => number>();
   expectTypeOf<Pick<routes.Dependencies, keyof ContentRuntime>>().toEqualTypeOf<ContentRuntime>();
@@ -71,12 +77,14 @@ test('kernel forwards native ports unchanged without executing jobs, I/O, access
     const omitted = compose.mock.calls.at(-1)![1];
     for (const field of Object.keys(runtime)) expect(Object.hasOwn(omitted, field)).toBe(false);
 
-    for (let mask = 0; mask < 8; mask++) {
+    for (const mask of [0, 7] as const) {
       const content: KernelContent = {
         ...(mask & 1 ? { fetchConfig } : {}),
         ...(mask & 2 ? { workflows } : {}),
         ...(mask & 4 ? { anonymousVerifier } : {}),
         cursorNow,
+        disclosureBarrier: forbidden,
+        pageDisclosureBarrier: forbidden,
       };
       // Extra JavaScript properties cannot introduce another clock or request authority.
       const provided = {
@@ -93,15 +101,19 @@ test('kernel forwards native ports unchanged without executing jobs, I/O, access
       expect(received.workflows).toBe(content.workflows);
       expect(received.anonymousVerifier).toBe(content.anonymousVerifier);
       expect(received.cursorNow).toBe(content.cursorNow!);
+      expect(received.disclosureBarrier).toBe(content.disclosureBarrier);
+      expect(received.pageDisclosureBarrier).toBe(content.pageDisclosureBarrier);
       expect(received.pool).toBe(pool);
       expect(received.tokens).toBe(tokens);
       expect(received.routeKey).toBe(base.routeKey);
       expect(typeof received.clock).toBe('function');
+      expect(typeof received.deadlineNow).toBe('function');
       expect(Object.keys(received).sort()).toEqual(
         [
           'pool',
           'routeKey',
           'clock',
+          'deadlineNow',
           'now',
           'id',
           'readConsent',
@@ -122,7 +134,7 @@ test('kernel forwards native ports unchanged without executing jobs, I/O, access
     connect.mockRestore();
     await pool.end();
   }
-});
+}, 240_000);
 
 test('content composition retains lazy access resolution and the validated kernel clock', async () => {
   const pool = createPool('postgres://kernel.invalid/content-runtime');

@@ -35,6 +35,21 @@ Personas: anonymous, author, Realm member, outsider and moderator. Fixtures: `ra
 and deterministic revocation; the bound thread/disclosure/media suites retain their own native fixtures. Media
 claims are covered here, including uploader identity, parent disclosure and lifecycle.
 
+Decision: reading-card `placeId` is the Board identity. Subject discussion pages confirm the Subject on the
+disclosed thread and the Board home separately; they do not pass the Board id to `readSubjectThread` as a place.
+Subject and author list query limits stay decimal-digit strings on the HTTP schema so a mismatched continuation is
+`400`, not a missing route. Focused post-editing browser cases remain the fewest that pin the mounted edit/delete
+journey; they consume the composed reading-page rather than split thread and post lists. Conversation-row items are
+the post slots; nested presentation lists are not indexes. Journey navigation waits for DOMContentLoaded and
+hydration. Owner edit and erase use the reading-page viewer when that page was admitted for the account, otherwise
+the signed-in session subject after anonymous SSR. An unknown session withholds the overflow menu so a
+stranger copy/report menu cannot open in place of owner edit and delete. Inline revisions send the inherited
+native licence; a permanent
+author-erased slot shows “Removed by its author” without overflow, while a restorable deletion keeps its deleted
+tombstone and restore window. Edit discard confirms from live draft dirtiness, including capture-phase editor input, host text and a
+pending snapshot so Escape can confirm before the next paint. Revision and erase Idempotency-Key headers
+stay RFC 8941 quoted strings.
+
 | Surface cell             | Scope and scenarios                                                                                                                                                   |
 | ------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | Catalogue                | In: the subject's discussion list, `test/content/subject-threads-http.test.ts`; bound thread/disclosure scenarios and `late-board-revocation` subject-thread reads.   |
@@ -54,21 +69,101 @@ Scenarios and evidence on this base:
   `author-item-public-views` coverage; stage **implementation exposed**.
 - `late-board-revocation`: take the board down or revoke its protected read grant after the board check for thread,
   post head, exact revision, subject-thread and author-activity reads. Final output must disclose no now-ineligible
-  item, summary, count, source or cursor material. Stage **specified red**; the deterministic composed binding for
-  these point reads is not established on this base.
-- `late-board-revocation-pages`: the new suite declares literal cases for hot, active and newest board first and
+  item, summary, count, source or cursor material. Stage **driver registered**:
+  `test/content/late-board-revocation-point-reads.test.ts` is the one native family for those surfaces.
+- `late-board-revocation-pages`: the frozen suite declares literal cases for hot, active and newest board first and
   continuation pages, and thread post first and continuation pages. Each has a late board takedown, late protected
-  read-grant revocation, and unchanged public and protected positive controls. Stage **specified red**; no user-cases driver is registered.
+  read-grant revocation, and unchanged public and protected positive controls. Stage **driver registered**:
+  `test/content/user-cases-driver.ts` binds `holdPage`, and `test/content/late-board-revocation-pages.test.ts` pins
+  the native HTTP family. No extra stories.
 
 Native acceptance commands, from the repository root:
 
 ```sh
-bun run --cwd services/kernel check test/content/thread-outcomes.test.ts test/content/disclosure-outcomes.test.ts test/content/media-outcomes.test.ts test/content/subject-threads-http.test.ts test/content/boards-http.test.ts test/content/board-ranking-http.test.ts test/content/board-hot-http.test.ts test/content/author-item-reads.test.ts test/content/author-item-public-views.test.ts
+bun run --cwd services/kernel check test/content/thread-outcomes.test.ts test/content/disclosure-outcomes.test.ts test/content/media-outcomes.test.ts test/content/subject-threads-http.test.ts test/content/boards-http.test.ts test/content/board-ranking-http.test.ts test/content/board-hot-http.test.ts test/content/author-item-reads.test.ts test/content/author-item-public-views.test.ts test/content/late-board-revocation-point-reads.test.ts test/content/late-board-revocation-pages.test.ts
 CONTENT_USER_CASES_DRIVER=/absolute/path/to/native-driver.ts bun test specs/content-user-cases-outcomes.test.ts --test-name-pattern late-board-revocation-pages
 ```
 
-The second command requires the future real binding. Neither existing board sort tests nor the missing-driver
-verifier establish the late point-read or page outcomes.
+The second command uses the bound native driver. Existing board-sort tests do not establish the late point-read or
+page outcomes.
+
+Decision: the Content Goal seeded walk uses the existing thread-board driver, seed-journal cleanup and Performance
+`waitUntilWalkReady` hydration recovery. When Docker refuses a slot's published port (`port is already allocated`),
+the walk adds that index to Performance `admitWalkStack` blocked set, releases the slot and admits another;
+same-slot `database.ts up` retry remains for start timeouts. The fewest tests that pin the skip are
+`scripts/walk-stack.test.ts` and `scripts/stack-run.test.ts`; composed native/browser proof is the seeded walk.
+The first-scope table walked on one admitted stack is the 18 named journeys
+in `FIRST_SCOPE_ROWS`: threads-and-boards, exact-revisions, board-paging, container-disclosure, late-revocation,
+edit-history-return, watches-and-reactions, takedown-erasure, author-erasure, media, realms-and-spaces,
+ratings-and-reviews, work-to-review, moderation-reports-appeals, notices, home-discovery, independent-queues and
+persona-matrix. Hourly passing/total uses that table. The walk records live issuer/JWKS origins and does not write
+`AUTH_JWKS_URL`; the launcher publishes issuer-origin JWKS and fetches that exact URL from native Auth. ce33 remains the canonical producer. No extra stories. Suspended bearers keep 401/403 on taken-down thread GET; ranking JWT lifetime follows wall time; each mounted
+HTTP request starts its envelope from wall time so a held late-revocation request cannot shrink the next command;
+author-item
+growth captures stay on a one-item page after bootstrapping the bundled release, and large other-author
+neighbourhoods use cost-folded capture so Access nested plan notices stay inside the 32MiB telemetry cap.
+Author-item growth cases allow 180s. Authenticated thread count bodies may include the viewer's own
+`authorErasure.authorId`; reaction-privacy checks drop only that field before scanning for reactor IDs. Post-page
+count growth uses the same cost-folded capture and ANALYZE of the filler neighbourhood. Public-view index proofs
+ANALYZE a same-route neighbourhood first so a handful of fixture rows cannot seq-scan the primary-key lookup;
+existing native HTTP, growth, runtime and walk pins stay the fewest tests, with no extra stories.
+Subject discussion listing HTTP uses the shared 30s test request budget so Access evaluation under parallel
+check instrumentation cannot turn an empty 200 page into 503; production stays 2s. Command: `REZICS_WALK_DEFER_FRONTENDS=0 bun services/auth/scripts/dev-stack.ts walk -- bun apps/web/scripts/seeded-content-goal-walk.ts`.
+Worker Vite resolves Elysia and Eden to their `exports.import` files and replaces TypeBox loaders with live ESM re-exports so workerd never evaluates CJS `module`. Focused test Vite skips the Home route crawl so edit journeys can start. Browser receiving waits for issuer `html[data-hydrated]` and the landed Sign in control. Seed token minting keeps issuer `AUTH_ORIGIN` so own-key assertions target `${issuer}/token`, and reaches native Auth through a loopback issuer proxy that uses `walkIssuerForward` because walk stacks defer Auth pages until after seed. The walk command restores the pinned Bangumi/VNDB dump cache onto the check host and extracts it before the run slice, the same way `vndb-seeded-journey` does, then points seed at `REZICS_DATASETS_DUMP_CACHE`. The dump-cache matcher also matches the Financial outer command `apps/web/tests/native/commerce-library-journeys.walk.ts` so that walk receives the same pinned archives. After journal cleanup the walk waits until identity-epoch topology remaining is zero before persona and seed, because `POST /v1/subjects:batchWrite` answered `503 semantic_not_ready` while 4096-home bootstrap was still open. VNDB release-fidelity seed scans admit the pinned 2026-11-04 dump (`entry_meta` 495184 rows, `releases` 160532). The fewest tests that pin that swap, crawl skip, walk inventory, dump-cache restore, Financial argv, remaining-zero wait and issuer-seed proxy are `vite-config.test.ts`, `scripts/cross-media-dump-cache.test.ts`, `scripts/walk-stack.test.ts` plus the walk unit tests; composed native/browser proof is the seeded walk; no extra stories.
+The sole walk receives Accounts published-post effects for reply, mention and moderation delivery, current access and
+preferences, replay, inbox and independent appeals. Ordinary HTTP grant receipts are the walk's authority proof, not
+seeded fixture rows. The frozen notification suite timeout stays 180 seconds; its assertions are unchanged.
+Catalogue CurrentPost attribution is received through existing `authoring-controls-family.test.tsx` and
+`own-drafts-native.test.tsx`, `own-drafts-resume.test.tsx` and `own-drafts-commands.test.tsx`. Live identity, null
+unknown and id-free deletion stay; exact revision, body, licence and viewer retirement stay. Ada fixtures are not
+native or visual proof; no extra stories or screenshots.
+
+Decision: a pre-seed identity-bootstrap timeout records the source revision, UTC, elapsed time and all eighteen rows
+as not reached in `setup-failure.json`, alongside the attempt's worker stack log in the returned Content walk
+evidence. It does not count setup as a product failure or infer a bootstrap cause from `remaining 4096`; Semantic
+receives the native trace through its existing bootstrap owner. Existing focused walk tests remain the regression
+check; no extra stories or duplicate acceptance suite.
+
+Decision: the Content walk explicitly selects `REZICS_WALK_DEFER_FRONTENDS=0`, retaining the real default worker,
+Search and standalone Kernel before identity bootstrap and seed. The walk launcher honors that existing mode while
+keeping its default lightweight Account mode and scoped names, ports and cleanup. The observed deferred launch had
+no worker and remained at 4096 bootstrap homes; this is launcher evidence, not a Semantic execution failure. Returned
+startup logs remove the native Auth `Password:` line's credential. The existing walk and startup tests pin these
+boundaries; no duplicate stories. The native membership registration fixture now expects the installed six named
+steps, including Realm finalize/cancel, while retaining all authority and compensation assertions.
+
+Decision: the isolated post-editing browser journey owns its issuer-bound server; the focused runner must not keep
+an unused default Vite/Worker graph beside it. Shared-server preparation remains per file for other journeys,
+including mixed selections. The existing runner fixture and server-selection tests pin this distinction; the shell
+regression stays at file scope and counts linked community icons independently of folding controls. No new stories.
+Reconciliation retains the shared wrapper's cancellation/descendant cleanup test and sticky host-wide admission
+assertions alongside the self-hosted editor selection and occupied-port recovery tests; neither replaces the other.
+Decision: the six original editing cases retain hydration and all interaction assertions. Their bounded diagnostic
+run exposes Worker-only imports in the browser graph through Settings profile helpers and the test binding
+transform; the existing Settings/Web and startup owners receive that complete boundary repair. Failed initial
+opens release their browser context. The same sole walk receives the integrated repair; no browser runtime shim,
+timeout increase, extra story or source-only acceptance replaces it.
+
+Decision: receive the integrated Library root boundary, Auth catalogue/lifetime and Boot receipt-key repairs on
+this handle, retaining Recent Search around the shell. Production-cache and walk Vite fixtures select and restore
+their runtime environment explicitly; the SSR fixture follows the installed include list for both React server
+entries. Existing tests retain their other assertions. Changed-workspace typing is worker completion; the sole dev
+verification retains native/browser/growth and promoted-revision closure under the current owner policy.
+The installed-root shell fixture mounts a document, supplies the application's router context and binds the DOM
+scroll API. Its anonymous rendering and admitted viewer-replacement assertions remain unchanged.
+The renewed Vite/root fixture pair belongs to the original dev verification, not intermediate worker acceptance;
+worker completion uses changed-workspace typing. The existing Accounts custody owner alone settles Bun leader
+completion and adopted descendants, preserving interrupted status, nonzero results and process-group absence.
+
+Decision: retain the coherent Auth deployment scope helper and catalogue/lifetime fixtures with the received
+Search native ports, Library/Recent Search root and Settings browser separation. Worker closure checks the changed
+Web, Auth, Kernel, Importer and UI workspaces sequentially in one typing invocation. The existing runner selection
+test also pins a mixed root-fixture/self-hosted-editor selection; all other assertions and stories stay unchanged.
+The sole eighteen-path dev verification retains native/browser/default-worker, growth, cleanup, installed root and
+promoted-revision proof; source integration and typing establish none of those runtime outcomes.
+The reconciled Web, Auth, Kernel, Importer and UI workspaces passed the combined typing command. Worker source
+completion preserves every original acceptance assertion; intermittent compiler database lifetime failures remain
+with the existing infrastructure owner and do not establish a runtime repair.
 
 ## realms-and-spaces
 

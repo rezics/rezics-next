@@ -49,3 +49,8 @@ unsupported result. Graph inspection keeps exact returns when admitted and offer
 visit when the combined address exceeds that budget. Album stories consume the editor type from its exporting
 view; Game stories construct statements against the generated native Subject read type. Existing interaction
 assertions remain unchanged; one graph test pins the over-budget return behaviour.
+
+The exported catalogue session port is server-only: publication handlers retain request/session preparation and
+private response headers without admitting Cloudflare or server response APIs into the shared route client bundle.
+Contribution lifecycle actions import only the server APIs used by their handlers; an unused server import must
+not pull those APIs into the common Subject route client graph.

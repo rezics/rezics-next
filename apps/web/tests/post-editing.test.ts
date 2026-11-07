@@ -1,13 +1,13 @@
-import { startDevServer } from './support/dev-server.ts';
 import { afterAll, expect, test } from 'bun:test';
 import { createHash, randomBytes, randomUUID } from 'node:crypto';
-import { join } from 'node:path';
 import { exportJWK, generateKeyPair, jwtVerify, SignJWT } from 'jose';
 
 import { chromium, type Browser, type Page } from 'playwright';
 import type { KernelClient } from '@rezics/client';
+import { authoredReadingPage } from '../src/kernel/fake/thread-reading-page';
+import type { ReadingPage } from '../src/threads/thread-page';
+import { startDevServer } from './support/dev-server.ts';
 
-const app = join(import.meta.dir, '..');
 const timeout = 300_000;
 const clientId = 'rezics-website';
 const session = '__Host-rezics_session';
@@ -107,6 +107,7 @@ function post(n: number, body = snapshot('Existing contribution'), threadId = id
     licence,
     subjectIds: [],
     mediaIds: [],
+    voteCitation: null,
     availability: 'available',
     body,
   };
@@ -118,6 +119,7 @@ function thread(n: number, title: string, body = snapshot('Opening contribution'
       id: id(n),
       boardId: id(1),
       authorId: id(90),
+      kind: 'discussion',
       licence,
       subjectIds: [],
       title,
@@ -205,6 +207,33 @@ function reset() {
   initialRevisedAt = null;
   current = thread(2, 'A shared reading', snapshot('Existing contribution'));
   posts = { posts: [post(12, snapshot('Existing contribution'))], next: null };
+}
+
+function actor(request: Request): string | undefined {
+  const authorization = request.headers.get('authorization');
+  if (!authorization?.startsWith('Bearer ')) return undefined;
+  return subjects.get(authorization.slice('Bearer '.length));
+}
+
+function readingPage(request: Request): ReadingPage {
+  const opening = current.thread.firstPost;
+  const replies = posts.posts.filter((entry) => entry.id !== opening.id) as ReadingPage['replies']['items'];
+  const authors = [
+    ...new Set(
+      [opening, ...replies].flatMap((entry) =>
+        entry.availability === 'available' && 'authorId' in entry ? [entry.authorId] : [],
+      ),
+    ),
+  ].map((authorId) => ({ id: authorId, displayName: null, handle: null, avatar: null }));
+  const page = authoredReadingPage(current.thread as ReadingPage['thread'], replies, authors);
+  const viewerId = actor(request);
+  if (viewerId) {
+    page.viewer = { kind: 'account', id: viewerId };
+    page.watch = { state: 'unavailable', retryable: true };
+    page.currentness.watch = 'unavailable';
+  }
+  page.query.cursor = new URL(request.url).searchParams.get('cursor');
+  return page;
 }
 
 // OpenID provider copied from posting.test.ts; tokens grant posting and media scopes.
@@ -381,7 +410,7 @@ const fake = Bun.serve({
     }
     if (url.pathname === postPath && request.method === 'DELETE') {
       const selected = posts.posts.find((entry) => entry.id === id(12)) ?? current.thread.firstPost;
-      const erased = { ...selected, body: null, availability: 'erased', removed: true };
+      const erased = { ...selected, body: null, sha256: null, availability: 'erased' as const, removed: true as const };
       posts = { ...posts, posts: posts.posts.map((entry) => (entry.id === id(12) ? erased : entry)) };
       current = { thread: { ...current.thread, firstPost: erased } };
       return new Response(null, { status: 204 });
@@ -441,7 +470,9 @@ const fake = Bun.serve({
         return json(page);
       }
       if (url.pathname === `/v1/threads/${current.thread.id}`) return json(current);
+      if (url.pathname === `/v1/threads/${current.thread.id}/reading-page`) return json(readingPage(request));
       if (url.pathname === `/v1/threads/${current.thread.id}/posts`) return json(posts);
+      if (/\/v1\/(?:posts|threads)\/[^/]+\/reaction$/.test(url.pathname)) return json({ kind: null });
     }
     if (
       request.method === 'POST' &&
@@ -463,25 +494,28 @@ const fake = Bun.serve({
   },
 });
 
-// The documented command, pointed at the fake through the environment it reads in development.
 let server: Awaited<ReturnType<typeof startDevServer>> | undefined;
 let started: Promise<string> | undefined;
 
 function site(): Promise<string> {
-  started ??= startDevServer({
-    env: {
-      KERNEL_ORIGIN: fake.url.origin,
-      AUTH_ISSUER: `${fake.url.origin}/auth`,
-      WEBSITE_CLIENT_ID: clientId,
-      WEBSITE_CLIENT_KEY: JSON.stringify(clientJwk),
-      API_RESOURCE: resource,
-      WEBSITE_SCOPES: scopes.join(' '),
-    },
-    warmUpPaths: [],
-  }).then((running) => {
-    server = running;
-    return running.origin;
-  });
+  started ??= (async () => {
+    server = await startDevServer({
+      env: {
+        KERNEL_ORIGIN: fake.url.origin,
+        AUTH_ISSUER: `${fake.url.origin}/auth`,
+        WEBSITE_CLIENT_ID: clientId,
+        WEBSITE_CLIENT_KEY: JSON.stringify(clientJwk),
+        API_RESOURCE: resource,
+        WEBSITE_SCOPES: scopes.join(' '),
+        NODE_OPTIONS: '--max-old-space-size=4096',
+      },
+      // Fetch the thread route only to learn Vite is up. Playwright-hydrating Home compiles its
+      // client graph until the default 2 GiB heap dies, so the authoring journey never starts.
+      firstPath: threadPath(),
+      warmUpPaths: [],
+    });
+    return server.origin;
+  })();
   return started;
 }
 
@@ -564,9 +598,37 @@ async function open(
     },
   ]);
   const page = await context.newPage();
-  await page.goto(`${origin}${path}`, { waitUntil: 'networkidle' });
-  await hydrated(page);
-  return { page, access: accessTokens.at(-1) };
+  const failures: string[] = [];
+  const recordFailure = (message: string) => {
+    // Preserve the first client failure even if the host subsequently reaches its memory limit.
+    if (failures.length === 20) return;
+    const bounded = message.slice(0, 2_000);
+    failures.push(bounded);
+    console.error(`[post-editing browser] ${bounded}`);
+  };
+  page.on('pageerror', (error) => recordFailure(error.stack ?? error.message));
+  page.on('console', (message) => {
+    if (message.type() === 'error') recordFailure(message.text());
+  });
+  page.on('requestfailed', (request) => {
+    const address = new URL(request.url());
+    recordFailure(`${request.method()} ${address.origin}${address.pathname}: ${request.failure()?.errorText}`);
+  });
+  try {
+    await page.goto(`${origin}${path}`, { waitUntil: 'domcontentloaded', timeout: 120_000 });
+    await hydrated(page);
+    return { page, access: accessTokens.at(-1) };
+  } catch (error) {
+    try {
+      throw new Error(
+        `Post-editing page did not hydrate.\nClient failures:\n${failures.join('\n')}\nServer:\n${server?.diagnostics()}`,
+        { cause: error },
+      );
+    } finally {
+      // The caller only receives a context after hydration, so it cannot clean up this failed open.
+      await context.close();
+    }
+  }
 }
 async function hydrated(page: Page) {
   await page.locator('html[data-hydrated]').waitFor({ state: 'attached', timeout: 120_000 });
@@ -588,9 +650,21 @@ async function eventually(check: () => boolean) {
   expect(check()).toBe(true);
 }
 
-const postSlot = (page: Page, index = 0) => page.locator('main ol > li').nth(index);
+const postSlot = (page: Page, index = 0) => page.locator('main ol[id^="thread-"] > li').nth(index);
 const inlineEditor = (slot: ReturnType<typeof postSlot>) => slot.locator('.ProseMirror[contenteditable="true"]');
 const saveEdit = (slot: ReturnType<typeof postSlot>) => slot.getByRole('button', { name: 'Save changes', exact: true });
+const moreActions = (slot: ReturnType<typeof postSlot>) => slot.getByRole('button', { name: 'More actions' });
+async function openOverflow(slot: ReturnType<typeof postSlot>) {
+  const trigger = moreActions(slot);
+  await trigger.evaluate((element) => element.scrollIntoView({ block: 'center', inline: 'nearest' }));
+  await trigger.click({ timeout: 120_000 });
+}
+async function dismissOverflow(page: Page) {
+  const menu = page.getByRole('menu');
+  if ((await menu.count()) === 0) return;
+  await page.keyboard.press('Escape');
+  await menu.waitFor({ state: 'hidden', timeout: 10_000 });
+}
 
 // The owner can revise the first post through its menu and the reply has the same menu.
 test(
@@ -604,7 +678,7 @@ test(
     const { page, access } = await open(threadPath());
     try {
       const slot = postSlot(page);
-      await slot.getByRole('button', { name: 'More actions' }).click();
+      await openOverflow(slot);
       await page.getByRole('menuitem', { name: 'Edit', exact: true }).click();
       await inlineEditor(slot).waitFor({ state: 'visible' });
       expect(await inlineEditor(slot).innerText()).toContain('Existing contribution');
@@ -618,7 +692,7 @@ test(
         ifMatch: `"${id(112)}"`,
         body: { licence, mediaIds: [] },
       });
-      expect(revision.key).toMatch(/^[0-9a-f-]{36}$/i);
+      expect(JSON.parse(revision.key!)).toMatch(/^[0-9a-f-]{36}$/i);
       expect(JSON.stringify(revision.body)).toContain('A revised contribution');
       expect(await postSlot(page, 1).getByRole('button', { name: 'More actions' }).count()).toBe(1);
     } finally {
@@ -640,12 +714,12 @@ test(
     const { page } = await open(threadPath(), false, id(91));
     try {
       for (const slot of [postSlot(page), postSlot(page, 1)]) {
-        await slot.getByRole('button', { name: 'More actions' }).click();
+        await openOverflow(slot);
         const menu = page.getByRole('menu');
         await menu.getByRole('menuitem', { name: 'Copy link' }).waitFor();
         expect(await menu.getByRole('menuitem', { name: 'Edit', exact: true }).count()).toBe(0);
         expect(await menu.getByRole('menuitem', { name: 'Delete', exact: true }).count()).toBe(0);
-        await page.keyboard.press('Escape');
+        await dismissOverflow(page);
       }
     } finally {
       await page.context().close();
@@ -667,7 +741,7 @@ test(
     const { page } = await open(threadPath());
     try {
       const slot = postSlot(page);
-      await slot.getByRole('button', { name: 'More actions' }).click();
+      await openOverflow(slot);
       await page.getByRole('menuitem', { name: 'Edit', exact: true }).click();
       const draft = 'A draft that must remain';
       await inlineEditor(slot).fill(draft);
@@ -686,7 +760,10 @@ test(
 
       await slot.getByRole('button', { name: 'Review current version', exact: true }).click();
       const recovery = page.getByRole('alertdialog');
-      await recovery.getByText('Current version on the server', { exact: true }).waitFor();
+      await recovery
+        .locator('p[data-block-id="paragraph"]')
+        .filter({ hasText: 'Current version on the server' })
+        .waitFor();
       expect(await inlineEditor(slot).innerText()).toContain(draft);
       await recovery.getByRole('button', { name: 'Keep editing', exact: true }).click();
       await inlineEditor(slot).waitFor({ state: 'visible' });
@@ -709,8 +786,8 @@ test(
     const { page } = await open(threadPath());
     try {
       const slot = postSlot(page);
-      const trigger = slot.getByRole('button', { name: 'More actions' });
-      await trigger.click();
+      const trigger = moreActions(slot);
+      await openOverflow(slot);
       await page.getByRole('menuitem', { name: 'Edit', exact: true }).click();
       await inlineEditor(slot).fill('Discard this edit');
       await slot.getByRole('button', { name: 'Cancel edit', exact: true }).click();
@@ -745,7 +822,7 @@ test(
     const { page } = await open(threadPath());
     try {
       const slot = postSlot(page);
-      await slot.getByRole('button', { name: 'More actions' }).click();
+      await openOverflow(slot);
       await page.getByRole('menuitem', { name: 'Delete', exact: true }).click();
       const confirmation = page.getByRole('alertdialog');
       await confirmation.getByRole('button', { name: 'Cancel' }).waitFor();
@@ -755,9 +832,10 @@ test(
       expect(await slot.getByRole('button', { name: 'More actions' }).count()).toBe(0);
       expect(await postSlot(page, 1).getByText('A reply', { exact: true }).count()).toBe(1);
       const deletion = calls.find((call) => call.method === 'DELETE' && call.path === `/v1/posts/${id(12)}`)!;
-      expect(deletion.key).toMatch(/^[0-9a-f-]{36}$/i);
+      expect(JSON.parse(deletion.key!)).toMatch(/^[0-9a-f-]{36}$/i);
 
-      await page.reload({ waitUntil: 'networkidle' });
+      await page.reload({ waitUntil: 'domcontentloaded', timeout: 120_000 });
+      await hydrated(page);
       await postSlot(page).getByText('Removed by its author', { exact: true }).waitFor();
       expect(await postSlot(page).getByRole('button', { name: 'More actions' }).count()).toBe(0);
       expect(await postSlot(page, 1).getByText('A reply', { exact: true }).count()).toBe(1);

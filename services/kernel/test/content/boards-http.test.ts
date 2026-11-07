@@ -1,8 +1,10 @@
 import { afterAll, beforeAll, expect, test } from 'bun:test';
 import { fromPlainText } from '@rezics/document';
+import { decodeCursor, encodeCursor } from '../../src/tokens/cursor.ts';
 import { runCommand } from '../../src/command/command.ts';
 import { readBatch, type CloudEvent } from '../../src/events/log.ts';
 import { applyBoardCandidate, createBoardEffect } from '../../src/content/board-projection.ts';
+import { testReceiptKeys } from '../support/receipt-keys.ts';
 import { createKernel } from '../../src/http/kernel.ts';
 import { openApiDocument } from '../../src/http/openapi.ts';
 import { actionCatalogue, SESSION_HEADER } from '../../src/http/request.ts';
@@ -42,7 +44,7 @@ beforeAll(async () => {
   } finally {
     fixture.access.authenticate = authenticate;
   }
-  const config = { pool: db.pool, routeKey, tokens, content: { cursorNow: () => now } };
+  const config = { pool: db.pool, routeKey, tokens, receiptKeys: testReceiptKeys(), content: { cursorNow: () => now } };
   app = createKernel(config);
   memberApp = createKernel({ ...config, access: fixture.access });
   // A single checkout detects accidental nested board/thread pool acquisitions.
@@ -152,11 +154,13 @@ test('board metadata and listing mount once with the actual read action and plur
       'visibility',
       'securityRevision',
       'availability',
+      'community',
       'createdAt',
       'realmId',
     ].sort(),
   );
   expect(detail.body.board.realmId).toBeNull();
+  expect(detail.body.board.community).toBeNull();
   expect((await get(path(id))).body).toEqual({ pinnedThreads: [], threads: [], next: null, rankRefreshedAt: null });
   for (const values of [{ limit: '0' }, { limit: '101' }, { limit: '1.5' }, { sort: 'popular' }])
     await invalid(path(id, values));
@@ -211,12 +215,24 @@ test('signed cursors bind board normalized query sort verified viewer epoch and 
   } finally {
     now -= 31 * 60 * 1000;
   }
-  await db.admin.query('UPDATE core.partition SET epoch=epoch+1 WHERE partition_no=$1', [partitionOf(boardRoute)]);
-  try {
-    await invalid(path(id, { cursor, query: 'searchable' }));
-  } finally {
-    await db.admin.query('UPDATE core.partition SET epoch=epoch-1 WHERE partition_no=$1', [partitionOf(boardRoute)]);
-  }
+  const binding = {
+    operation: 'board.threads.list',
+    parameters: {
+      boardId: id,
+      query: 'searchable',
+      sort: 'newest',
+      viewer: null,
+      representation: 'pinned-cohort-v2',
+      pinRevision: '0',
+    },
+  };
+  const decoded = decodeCursor(tokens, binding, cursor, now);
+  expect(decoded.ok).toBe(true);
+  if (!decoded.ok) throw new Error('Expected the actual Board continuation');
+  // Native lineage reconciliation owns partition activation. A valid signature
+  // with a different epoch exercises the same cursor fence without activating it.
+  const stale = encodeCursor(tokens, binding, { epoch: decoded.epoch + 1, after: decoded.after }, now);
+  await invalid(path(id, { cursor: stale, query: 'searchable' }));
 });
 
 test('every returned candidate passes current thread root and board disclosure while projection is paused', async () => {

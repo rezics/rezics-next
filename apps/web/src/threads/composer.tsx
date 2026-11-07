@@ -1432,20 +1432,55 @@ function InlinePostEditorContent({
   );
   const ready =
     snapshotPhase === 'ready' && hasDocumentContent(body) && !draftHasMediaIssues(failure, body) && !uncertainChanged;
+  const liveHostDirtyRef = useRef(false);
+  function liveEditorHost() {
+    return (
+      editorRoot.current?.querySelector<HTMLElement>(
+        '.ProseMirror[contenteditable="true"], [role="textbox"][contenteditable="true"]',
+      ) ?? null
+    );
+  }
+  function initialHostText() {
+    return documentText(initialBodyRef.current).trim();
+  }
+  function hostText(host: HTMLElement) {
+    return host.innerText.replace(/\u00a0/g, ' ').trim();
+  }
+  function noteLiveHostInput() {
+    if (!lifetime.current()) return;
+    liveHostDirtyRef.current = true;
+  }
+  function liveDraftDirty() {
+    const host = liveEditorHost();
+    if (host && hostText(host) !== initialHostText()) liveHostDirtyRef.current = true;
+    if (
+      liveHostDirtyRef.current ||
+      JSON.stringify(bodyRef.current) !== JSON.stringify(initialBodyRef.current) ||
+      snapshotPhaseRef.current !== 'ready' ||
+      pendingRef.current > 0 ||
+      editIntent.current.unresolved
+    )
+      return true;
+    return host !== null && hostText(host) !== initialHostText();
+  }
   const departureSignature = JSON.stringify([
     bodyRef.current,
     revisionId,
     pendingRef.current,
     submitting,
     editIntent.current.unresolved,
+    snapshotPhase,
   ]);
   const departure = useAuthoringDeparture(
-    lifetime.current() &&
-      (JSON.stringify(bodyRef.current) !== JSON.stringify(initialBodyRef.current) ||
-        pendingRef.current > 0 ||
-        editIntent.current.unresolved ||
-        uncertainChanged),
-    lifetime.current() && (submitting || editIntent.current.unresolved),
+    () =>
+      lifetime.current() &&
+      (liveDraftDirty() ||
+        !editIntent.current.canPrepare(
+          { title: '', body: bodyRef.current, mediaIds: mediaIdsFromSources(imageSources(bodyRef.current)) },
+          null,
+          commandContext(commandAction),
+        )),
+    () => lifetime.current() && (submittingRef.current || editIntent.current.unresolved),
     departureSignature,
     onCancel,
     () => lifetime.retire(),
@@ -1510,6 +1545,7 @@ function InlinePostEditorContent({
     publishingSnapshot.current = true;
     snapshotPhaseRef.current = 'ready';
     setSnapshotPhase('ready');
+    liveHostDirtyRef.current = false;
     invalidateInspection();
     bodyRef.current = next;
     setBody(next);
@@ -1631,6 +1667,7 @@ function InlinePostEditorContent({
     if (!lifetime.current()) return;
     const target = event.target;
     if (!(target instanceof HTMLElement) || target.getAttribute('contenteditable') !== 'true') return;
+    noteLiveHostInput();
     // Tiptap publishes the structured snapshot; only the pre-hydration fallback is plain text.
     if (target.classList.contains('ProseMirror')) return;
     const next = fromPlainText(target.innerText, 'blocks');
@@ -1755,23 +1792,22 @@ function InlinePostEditorContent({
     <div
       ref={editorRoot}
       className="min-w-0 space-y-4 rounded-xl border border-border/70 bg-card p-5 [overflow-wrap:anywhere]"
+      onBeforeInputCapture={noteLiveHostInput}
       onInputCapture={captureEditorInput}
       onKeyDownCapture={(event) => {
+        if (event.key !== 'Escape' || submittingRef.current) return;
+        const target = event.target;
         if (
-          event.target instanceof HTMLElement &&
-          (event.target.closest('[role="combobox"][aria-expanded="true"]') ||
-            event.currentTarget.querySelector('[data-slot="editor-mention"]'))
+          target instanceof HTMLElement &&
+          (target.closest('[data-slot="editor-mention"]') ||
+            target.closest('[role="alertdialog"][data-state="open"], [role="dialog"][data-state="open"]') ||
+            (target.closest('[role="combobox"][aria-expanded="true"]') &&
+              event.currentTarget.querySelector('[data-slot="editor-mention"]')))
         )
           return;
-        if (
-          event.key === 'Escape' &&
-          !submitting &&
-          !event.defaultPrevented &&
-          !(event.target instanceof HTMLElement && event.target.closest('[role="alertdialog"], [role="dialog"]'))
-        ) {
-          event.preventDefault();
-          departure.requestDiscard(onCancel);
-        }
+        event.preventDefault();
+        event.stopPropagation();
+        departure.requestDiscard(onCancel);
       }}
     >
       {foreignPendingRef.current > 0 ? (
