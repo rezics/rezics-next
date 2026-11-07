@@ -178,6 +178,7 @@ async function run(input: Input) {
     );
 
   let sequence = 0;
+  db.exec('BEGIN');
   for (let index = 0; index < input.settled; index += 1) {
     const id = `settled-${index}`;
     task(db, id, 'integrated', ++sequence, { goal: 'past', manager: 'past', markdown: id });
@@ -188,6 +189,7 @@ async function run(input: Input) {
     task(db, id, 'stopped', ++sequence, { goal: 'web', manager: 'web', markdown: id });
     event(db, id, 'stopped', NOW - 2 * 3_600_000 - index * 1_000);
   }
+  db.exec('COMMIT');
   if (input.ready) mkdirSync(join(backlog, 'web'), { recursive: true });
   for (let index = 0; index < input.ready; index += 1) {
     const file = join(backlog, 'web', `brief-${String(index).padStart(2, '0')}.md`);
@@ -255,7 +257,15 @@ test(
   GROWTH_SCENARIO,
   async () => {
     const empty = await run({ settled: 0, stopped: 0, ready: 0 });
-    expect(empty.sweeps[0]).toEqual({ dispatched: [], continued: [], refused: [], expired: [], woken: [] });
+    expect(empty.sweeps[0]).toEqual({
+      dispatched: [],
+      continued: [],
+      chained: [],
+      refused: [],
+      returned: [],
+      expired: [],
+      woken: [],
+    });
 
     const history: Awaited<ReturnType<typeof run>>[] = [];
     for (const settled of [100, 1_000, 5_000])

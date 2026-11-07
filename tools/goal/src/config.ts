@@ -3,6 +3,7 @@ import { existsSync, mkdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import defaults from '../defaults.json';
 import { defaultPolicy } from './policy.ts';
+import { dispatchArchitectureRepairs, openArchitectureCandidates, publishedOnRef } from './architecture-repair.ts';
 import type { Settings } from './types.ts';
 import { configurationProblem, reportedConfigurationProblem } from './local-settings.ts';
 import {
@@ -42,6 +43,7 @@ import { SharedInboxQueries } from './inbox-shared.ts';
 import { deliverDueReminders } from './notes.ts';
 import { alertUnspentAllowances, refreshCodexSchedule } from './pacing.ts';
 import { watch, sshProbe } from './watchdog.ts';
+import { readRiskOwnership } from './briefs.ts';
 import { readRouting } from './routing.ts';
 import { MergeTrain, type IntegrationCheck, type TrainOptions } from './merge-train.ts';
 import { promote } from './promotion.ts';
@@ -56,6 +58,7 @@ export { LANDING_CHECK_ENVIRONMENT } from './config-check-runtime.ts';
 import { captureLoadedCodeVersion, codeVersion } from './runtime-version.ts';
 import { completionChecker } from './completion.ts';
 import { TermspacesWindows } from './windows.ts';
+import { offloadHostTask, runHostOperation } from './service.ts';
 import type { IntegrationRuntime } from './integration-cli.ts';
 import type { ManagerServices, ManagerSpec } from './managers.ts';
 import {
@@ -69,7 +72,8 @@ import {
 import { emitHourlyLifecycleMetrics, lifecycleMetricsAsync } from './lifecycle-metrics.ts';
 import { sweepWidthGovernor } from './width-governor.ts';
 import { backlogDirectory, sweepBacklog } from './backlog.ts';
-import { authenticatedManager, type AuthenticatedManager } from './priority-authority.ts';
+import { chainRuntime } from './chain.ts';
+import { backlogManagerActor } from './priority-authority.ts';
 import type { BriefContinuation } from './types.ts';
 
 export type Runtime = IntegrationRuntime & {
@@ -87,6 +91,8 @@ export type Runtime = IntegrationRuntime & {
 };
 export type RuntimeOptions = {
   trainMode?: 'detached' | 'inline';
+  /** True in `_manager-host`: worker starts run in children so the host event loop stays free. */
+  hostLoop?: boolean;
   settings?: Settings;
   db?: Database;
   tasks?: WorkerTasks;
@@ -104,27 +110,6 @@ export type RuntimeOptions = {
   >;
 };
 
-function backlogManagerActor(db: Database, managerId: string): AuthenticatedManager | undefined {
-  if (!db.query("SELECT 1 FROM sqlite_master WHERE type='table' AND name='manager_sessions'").get()) return undefined;
-  const row = db.query('SELECT state FROM manager_sessions WHERE id=?').get(managerId) as { state: string } | null;
-  if (!row) return undefined;
-  try {
-    const state = JSON.parse(row.state) as { engine?: unknown; kind?: unknown; provider?: unknown; threadId?: unknown };
-    if (!state || typeof state !== 'object' || Array.isArray(state) || typeof state.threadId !== 'string')
-      return undefined;
-    const engine = state.engine ?? (state.kind === 'resident-supermanager' ? state.provider : undefined);
-    const env =
-      engine === 'claude'
-        ? { GOAL_MANAGER: managerId, CLAUDE_CODE_SESSION_ID: state.threadId }
-        : engine === 'codex'
-          ? { GOAL_MANAGER: managerId, CODEX_THREAD_ID: state.threadId }
-          : undefined;
-    return env ? authenticatedManager(db, env) : undefined;
-  } catch {
-    return undefined;
-  }
-}
-
 /** The only production composition: every module shares this database connection and worker fence. */
 export function createRuntime(options: RuntimeOptions = {}): Runtime {
   const settings = options.settings ?? options.tasks?.settings ?? loadSettings();
@@ -136,6 +121,8 @@ export function createRuntime(options: RuntimeOptions = {}): Runtime {
     : undefined;
   const codeIsCurrent = () =>
     startedCodeVersion === undefined || codeVersion(settings.mainCheckout, 'tools/goal') === startedCodeVersion;
+  // A host that retires for a newer revision starts no new attempt; see manager-host.ts.
+  const codeRetirement = { retiring: false };
   const databasePath = join(settings.stateDirectory, 'goal.sqlite');
   mkdirSync(settings.stateDirectory, { recursive: true });
   const db = options.db ?? options.tasks?.store.db ?? openDb(databasePath, settings.policy?.storage);
@@ -191,7 +178,23 @@ export function createRuntime(options: RuntimeOptions = {}): Runtime {
     // Short commands hand the train to a detached process, so recovering an orphan never makes `status` wait for a gate.
     return options.trainMode === 'detached' ? handOff() : pump();
   };
-  const job = new WorkerJob(tasks, queue, inbox, undefined, afterSettle);
+  const job = new WorkerJob(
+    tasks,
+    queue,
+    inbox,
+    undefined,
+    afterSettle,
+    undefined,
+    undefined,
+    () => !codeRetirement.retiring,
+    options.hostLoop
+      ? (taskId, kind) =>
+          offloadHostTask(taskId, kind, {
+            cli: join(settings.mainCheckout, 'tools/goal/src/cli.ts'),
+            cwd: settings.mainCheckout,
+          })
+      : undefined,
+  );
   const repairRouting = createRuntimeRepairRouting({ tasks, store, job, inbox, settings });
   const handOff = () =>
     new Promise<void>((resolve, reject) => {
@@ -327,6 +330,8 @@ export function createRuntime(options: RuntimeOptions = {}): Runtime {
     db,
     ...settings,
     settings,
+    ...(startedCodeVersion ? { loadedCodeVersion: startedCodeVersion } : {}),
+    codeRetirement,
     store,
     tasks,
     job,
@@ -419,10 +424,12 @@ export function createRuntime(options: RuntimeOptions = {}): Runtime {
         stateDirectory: settings.stateDirectory,
         policy: settings.policy,
         inbox,
-        async dispatch(brief) {
+        supermanager: settings.integration.supermanager,
+        async dispatch(brief, actor) {
           // The `goal dispatch` path. Its first start is a durable request that the host's sweep runs and follows,
           // so this short-lived process never waits for host capacity or a worker.
-          const task = tasks.dispatch(brief, null);
+          // Urgent briefs carry the Goal directory's confirmed manager so an active grant is honoured; others stay null.
+          const task = tasks.dispatch(brief, actor ?? null);
           if (task.state !== 'held') store.saveRetryIntent({ taskId: task.id, attempt: 0 }, {});
           return { taskId: task.id, lintWarnings: task.brief.lintWarnings ?? [] };
         },
@@ -435,16 +442,22 @@ export function createRuntime(options: RuntimeOptions = {}): Runtime {
           tasks.queueBacklogContinuation(task.id, goal, continuation.expectedAttempt, briefFile, actor);
         },
         cancel: (taskId) => tasks.cancel(taskId),
+        routing: {
+          table: readRouting(settings.routingFile, settings.policy?.routing),
+          ownership: readRiskOwnership(settings.riskAreasFile, settings.policy?.brief),
+          pools: settings.pools,
+          running: store.runningAttemptsByPool(),
+        },
+        chain: chainRuntime({ settings, store, tasks }),
       }),
     promote: () => promoteNow(),
     verify: () =>
       verifyDev({
         settings,
         store,
-        inbox,
         runGate: verifierGate,
         runBootSmoke: bootSmokeGate,
-        dispatchRepair: repairRouting.dispatchBootSmokeRepair,
+        dispatchTestRepair: repairRouting.dispatchTestFailureRepair,
         runPageData: async () =>
           runPageDataCycle({
             settings,
@@ -480,16 +493,37 @@ export function createRuntime(options: RuntimeOptions = {}): Runtime {
     },
     dispatchDailyStepAudit() {
       const template = join(import.meta.dir, '../templates/daily-step-audit.md');
+      // The host tick checks for an open audit every minute: read only unsettled tasks, not every task body.
       dispatchDailyStepAudit(
         db,
-        store.tasks(),
+        store.tasksInStates(['ready', 'held', 'running', 'landing', 'verified']),
         () => tasks.dispatch(template),
         new Date(),
         (summary) => inbox.deliver({ managerId: settings.integration.supermanager, kind: 'environment', summary }),
       );
     },
+    dispatchArchitectureRepairs() {
+      void runHostOperation('architecture repairs', async () => {
+        const published = await publishedOnRef(
+          settings.mainCheckout,
+          `refs/heads/${settings.integrationBranch}`,
+          openArchitectureCandidates(db),
+        );
+        dispatchArchitectureRepairs({
+          db,
+          // The host tick runs every minute: read only unsettled tasks, as the daily audit does.
+          unsettled: store.tasksInStates(['ready', 'held', 'running', 'landing', 'verified']),
+          published,
+          dispatch: (briefFile) => tasks.dispatch(briefFile, null, true, 'verifier'),
+          notify: (managerId, taskId, summary) => inbox.deliver({ managerId, taskId, kind: 'instruction', summary }),
+          reportFailure: (summary) =>
+            inbox.deliver({ managerId: settings.integration.supermanager, kind: 'environment', summary }),
+          stateDirectory: settings.stateDirectory,
+        });
+      }).catch((error) => console.error(error));
+    },
     recoverOrphans: async (options?: { adoptRunning?: boolean }) => {
-      await job.recoverOrphans(options);
+      await runHostOperation('orphan recovery', () => job.recoverOrphans(options));
       await afterSettle();
     },
     async drain() {

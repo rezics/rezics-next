@@ -107,6 +107,7 @@ test('fractional and retry-list policies reject invalid leaves and copy schedule
     { provider: { claudeRefreshMs: 0 } },
     { manager: { continuationBudgetPercent: 101 } },
     { pacing: { alertUnusedPercent: 101 } },
+    { pacing: { nearCeilingPercent: 101 } },
     { records: { sessionRecordBytes: 1.5 } },
     { routing: { implementation: { maxSteps: 0 } } },
     { host: { retryFailures: 1.5 } },

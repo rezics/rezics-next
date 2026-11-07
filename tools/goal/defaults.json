@@ -152,7 +152,8 @@
     },
     "termspacesCommand": "termspaces",
     "devPrelandingTypecheck": false,
-    "devLandingBootCheck": false
+    "devLandingBootCheck": false,
+    "devKernelImport": false
   },
   "codex": {
     "serviceTier": "default",
@@ -174,6 +175,7 @@
     "attemptsPerIntegrated": 1.5
   },
   "policy": {
+    "goalMaxInFlight": 6,
     "backlog": {
       "continuationReview": {},
       "lowWater": 8,
@@ -181,6 +183,7 @@
       "stoppedTaskLimitMs": 3600000,
       "stoppedTasksPerGoalPerRun": 20,
       "dispatchesPerSweep": 4,
+      "allowanceWaitingBound": 10,
       "settleMs": 10000,
       "refusalBriefs": 4,
       "refusalReasonCharacters": 160,
@@ -202,6 +205,12 @@
       "hourlyReportMaxTimeoutMs": 120000
     },
     "flowHistoryMs": 2592000000,
+    "chain": {
+      "maximumContextTokens": 150000,
+      "maximumTasks": 4,
+      "contextTailBytes": 1048576,
+      "offerWindowMs": 3600000
+    },
     "worker": {
       "capacityPauseMs": 10000,
       "usageLimitRetryPauseMs": 180000,
@@ -216,6 +225,8 @@
       "sweepYieldItems": 8,
       "retryIntentLeadMs": 1000,
       "toolRetryBackoffMs": [120000, 600000, 1800000],
+      "transportRetryBackoffMs": [60000, 120000, 240000],
+      "transportRetryLimit": 6,
       "toolRetryWindowMs": 3600000,
       "toolRetryEventRows": 5000,
       "settlementBackoffMs": [500, 1000, 2000, 4000, 8000],
@@ -253,8 +264,8 @@
     "containers": {
       "commandTimeoutMs": 15000,
       "maxAgeHours": 4,
-      "cleanupIntervalMs": 600000,
-      "keep": ["rezics-pagecheck-"]
+      "cleanupIntervalMs": 300000,
+      "keep": ["rezics-dev-", "rezics-doctor-", "rezics-kernel-dev", "rezics-pagecheck-"]
     },
     "process": {
       "groupPollMs": 1000,
@@ -337,7 +348,9 @@
       "alertUnusedPercent": 20,
       "alertResetHours": 24,
       "alertEveryMs": 10800000,
-      "burnSpanMs": 5400000
+      "burnSpanMs": 5400000,
+      "nearCeilingPercent": 25,
+      "nearCeilingStarts": 2
     },
     "manager": {
       "sleepAlarmPerHour": 10,
@@ -453,11 +466,12 @@
       "runRows": 5000,
       "concurrency": 3,
       "findingAssertions": 64,
-      "existingProbes": 8,
       "diagnosticCharacters": 6000,
-      "gitBufferBytes": 33554432,
       "residentPollMs": 60000,
-      "bootSmokeTimeoutMs": 120000
+      "bootSmokeTimeoutMs": 120000,
+      "roundIntervalMs": 3600000,
+      "roundDeadlineMs": 3300000,
+      "maxSelectionCommits": 1000
     },
     "pageData": {
       "intervalMs": 7200000,
@@ -571,17 +585,19 @@
       "systemdCommandTimeoutMs": 25000
     },
     "prompt": {
-      "workerRoleBytes": 3500,
+      "workerRoleBytes": 10000,
       "conditionBytes": 1500,
       "workerTotalBytes": 20000,
       "managerRoleBytes": 5000,
       "managerOpeningBytes": 30000,
-      "researchRoleBytes": 2500
+      "researchRoleBytes": 9000
     },
     "brief": {
       "bytes": 12288,
       "pathCharacters": 65536,
       "pathMatchStates": 1000000,
+      "minimumEstimateLines": 1200,
+      "maximumBodyCharacters": 4000,
       "sharedPaths": [
         "**/README.md",
         "docs/**",
@@ -669,7 +685,9 @@
     "service": {
       "logLines": 50,
       "socketTimeoutMs": 1000,
-      "diagnosticCharacters": 4096
+      "diagnosticCharacters": 4096,
+      "stallMs": 10000,
+      "stallLogEveryMs": 60000
     },
     "cpSync": {
       "configSmokeTimeoutMs": 60000,
@@ -687,7 +705,7 @@
       "failureLines": 30,
       "conflictPaths": 10,
       "changedPaths": 10,
-      "residentSamples": 10,
+      "residentSamples": 4,
       "residentSampleMs": 60000,
       "statColumns": 120
     },

@@ -15,6 +15,8 @@ import {
   pageDataClassCounts,
   parsePageDataOutput,
   PageDataStackError,
+  firstSubstantiveErrorLine,
+  terminalErrorLine,
   runPageDataCycle,
   type PageDataSection,
   type PageDataRepair,
@@ -79,6 +81,30 @@ const section = (className: PageDataSection['class']): PageDataSection => ({
   ...(className === 'API' ? { firstErrorLine: 'home anonymous feed API' } : {}),
 });
 
+test('page-data diagnostics skip command echoes, retain useful log references, and redact credentials', () => {
+  expect(
+    firstSubstantiveErrorLine(
+      '$ bun scripts/database.ts up\ntask: [database] bun scripts/database.ts up\nerror: role "rezics" does not exist\nsee /tmp/stack.log',
+    ),
+  ).toBe('error: role "rezics" does not exist; see /tmp/stack.log');
+  expect(firstSubstantiveErrorLine('$ bun scripts/database.ts up\npassword=supersecret failed to bind')).toBe(
+    '[redacted] failed to bind',
+  );
+});
+
+test('terminal stack diagnostics prefer the process-ending error over surviving retry failures', () => {
+  expect(
+    terminalErrorLine(
+      [
+        'Account discovery redrive failed 39 | retrying in the background',
+        '$ bun --watch src/server.ts',
+        'task: [server] bun --watch src/server.ts',
+        'fatal: kernel listener exited after address already in use',
+      ].join('\n'),
+    ),
+  ).toBe('fatal: kernel listener exited after address already in use');
+});
+
 test('the policy interval, defect transition, section output and per-run report preserve page classes', async () => {
   const h = fixture();
   try {
@@ -139,11 +165,13 @@ test('the policy interval, defect transition, section output and per-run report 
   }
 });
 
-test('a dedicated stack boot failure reaches the supermanager with its first error line', async () => {
+test('a readiness failure reaches the supermanager with its last probe and the saved stack log', async () => {
   const h = fixture();
   try {
     const notices: { managerId: string; kind: string; summary: string }[] = [];
     const now = new Date('2026-01-01T00:00:00.000Z');
+    const output = 'Account discovery redrive failed during a retry\nstack stayed alive\n';
+    const readinessFailure = 'http://127.0.0.1:4401/health returned HTTP 503';
     const result = await runPageDataCycle({
       settings: h.settings,
       db: h.db,
@@ -151,7 +179,7 @@ test('a dedicated stack boot failure reaches the supermanager with its first err
       inbox: { deliver: (notice) => notices.push(notice) },
       now: () => now,
       runStack: async () => {
-        throw new PageDataStackError('boot', 'database container did not start', 'docker: daemon unavailable');
+        throw new PageDataStackError('boot', 'stack did not become ready', readinessFailure, output);
       },
       routeDefect: async () => 'dispatched',
     });
@@ -160,13 +188,45 @@ test('a dedicated stack boot failure reaches the supermanager with its first err
       {
         managerId: 'supermanager',
         kind: 'environment',
-        summary: expect.stringContaining('docker: daemon unavailable'),
+        summary: expect.stringContaining(readinessFailure),
       },
     ]);
+    const logPath = notices[0]!.summary.match(/output log: (.+)$/)?.[1];
+    expect(logPath?.startsWith(join(h.settings.stateDirectory, 'page-data-failures'))).toBe(true);
+    expect(readFileSync(logPath!, 'utf8')).toBe(output);
     expect(flowReport(readFlow(h.db), []).pageDataRuns[0]?.failure).toEqual({
       phase: 'boot',
-      firstErrorLine: 'docker: daemon unavailable',
+      firstErrorLine: readinessFailure,
     });
+  } finally {
+    h.db.close();
+  }
+});
+
+test('a page-data check failure saves the stack and check output and names the log', async () => {
+  const h = fixture();
+  try {
+    const notices: { managerId: string; kind: string; summary: string }[] = [];
+    const stackOutput = 'stack stays up while the account redrive retries\n';
+    const checkOutput =
+      'background retry failed but the stack survived\nerror: page-data check exited on a failed request\n';
+    const result = await runPageDataCycle({
+      settings: h.settings,
+      db: h.db,
+      tasks: { tasks: () => [] },
+      inbox: { deliver: (notice) => notices.push(notice) },
+      now: () => new Date('2026-01-01T00:00:00.000Z'),
+      runStack: async () => ({ output: checkOutput, stackOutput, exitCode: 2, registry: h.registry }),
+      routeDefect: async () => 'dispatched',
+    });
+
+    expect(result).toBe('failed');
+    expect(notices[0]?.summary).toContain('error: page-data check exited on a failed request');
+    const logPath = notices[0]?.summary.match(/output log: (.+)$/)?.[1];
+    expect(logPath?.startsWith(join(h.settings.stateDirectory, 'page-data-failures'))).toBe(true);
+    const log = readFileSync(logPath!, 'utf8');
+    expect(log).toContain(stackOutput);
+    expect(log).toContain(checkOutput);
   } finally {
     h.db.close();
   }

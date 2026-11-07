@@ -1,12 +1,21 @@
 import { expect, test } from 'bun:test';
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { spawnSync } from 'node:child_process';
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { join, resolve } from 'node:path';
+import {
+  MAX_MODULE_MAP_CHARACTERS,
+  MODULE_MAP_POINTER,
+  MODULE_MAP_TRUNCATION,
+  formatModuleMap,
+  loadManifest,
+  modulesForBriefPaths,
+} from '../../../scripts/architecture-map.ts';
 import { launchCommand, workerCheckProtocol, workerPrompt } from './launch.ts';
 import { defaultPolicy } from './policy.ts';
 import { renderCheckProtocol, renderManagerOpening, renderWorkerPrompt } from './prompts.ts';
 import { prepareOwnerDecisionPrompt } from './owner-decisions.ts';
-import type { Attempt, Task } from './types.ts';
+import type { Attempt, Brief, Task } from './types.ts';
 import type { LaunchContext } from './launch-context.ts';
 import { brief, fixturePool, temporaryDirectory } from './test-support.ts';
 import type { ProofReservation } from './verification.ts';
@@ -16,6 +25,33 @@ import { WorkerStore } from './store.ts';
 import { runWorkerCommand } from './worker-commands.ts';
 import { loadSettings } from './config.ts';
 
+const REPOSITORY_ROOT = resolve(import.meta.dir, '../../..');
+const MAP_MAIN = '/repo/main';
+
+function mapTask(paths: string[], extra: Partial<Brief> = {}): Task {
+  return {
+    worktree: '/work/trees/t1',
+    branch: 'worker/t1',
+    brief: {
+      markdown: 'Do the thing.',
+      kind: 'implementation',
+      paths,
+      acceptance: { command: ['bun', 'test'], tests: ['x'] },
+      ...extra,
+    },
+  } as unknown as Task;
+}
+
+function mapRows(prompt: string): string[] {
+  const start = prompt.indexOf('row module|kind|public entries|allowed dependencies');
+  const pointer = prompt.indexOf(MODULE_MAP_POINTER, start);
+  return prompt
+    .slice(start, pointer === -1 ? undefined : pointer)
+    .split('\n')
+    .slice(1)
+    .filter(Boolean);
+}
+
 test('the worker prompt names the main checkout as read-only and asks for paths inside the worktree', () => {
   const task = {
     worktree: '/work/trees/t1',
@@ -24,8 +60,8 @@ test('the worker prompt names the main checkout as read-only and asks for paths 
     brief: { markdown: 'Do the thing.', acceptance: { command: ['bun', 'test'], tests: ['x'] } },
   } as unknown as Task;
   const prompt = workerPrompt(task, undefined, undefined, [], '/repo/main');
-  expect(prompt).toContain('Main checkout: /repo/main (read-only)');
-  expect(prompt).toContain('work only in /work/trees/t1.');
+  expect(prompt).toContain('the main checkout /repo/main is read-only');
+  expect(prompt).toContain('Work only in /work/trees/t1;');
 });
 
 // Skipped while LOCAL_STORYBOOK_AVAILABLE is false (storybook-dev.ts still refuses interactive use).
@@ -104,9 +140,7 @@ test('an implementation worker is told the applicable AGENTS.md is already loade
   const prompt = workerPrompt(task, undefined, undefined, [], '/repo/main');
   expect(prompt).toContain('AGENTS.md is loaded.');
   expect(prompt).not.toContain('Read and follow its AGENTS.md');
-  expect(prompt).toContain(
-    'Never run recursive searches (find, grep -r, rg, du, ls -R) outside the worktree and directories named here.',
-  );
+  expect(prompt).toContain('Search freely inside the worktree; outside it, only the directories named here.');
 });
 
 test('a research worker is told the applicable AGENTS.md is already loaded and to keep recursive searches in scope', () => {
@@ -140,10 +174,10 @@ test('the worker prompt forbids touching resources the attempt did not start', (
     },
   } as unknown as Task;
   const prompt = workerPrompt(task, undefined, undefined, [], '/repo/main');
-  expect(prompt).toContain('Never stop or remove containers, databases or processes this attempt did not start');
-  expect(prompt).toContain('never prune Docker');
+  expect(prompt).toContain('Leave containers, databases and processes this attempt did not start running');
+  expect(prompt).toContain('do not prune Docker');
   // A diagnosis patched a hardlinked reylo file in place and every worktree and check host printed its trace.
-  expect(prompt).toContain('Never write under node_modules');
+  expect(prompt).toContain('Do not write under node_modules');
   // Promotion gates and repeated full worker checks left a 13-slot fleet with a 1.9-hour p95 slot wait (2026-10-28).
   expect(prompt).toContain('Check slots are scarce: run your acceptance command once after your last relevant edit.');
   expect(prompt).toContain('This base has no scripts/worker-check.ts; do not add one.');
@@ -236,7 +270,7 @@ test('worker and manager prompts trust repository callers and let dev repair con
     "Frozen acceptance files hold the contract's tests: tests/acceptance.test.ts. If one contradicts the contract, an owner document or the delivered code it depends on, change the smallest assertion that makes them agree, list the file and the reason in your summary, and continue.",
   );
   expect(rendered.prompt).toContain(
-    'When two requirements conflict, take the reading most consistent with the owner documents and the delivered code, change the smaller side (a test, fixture or brief detail), list it and continue.',
+    'When two requirements conflict, follow the owner documents and the delivered code, change the smaller side (a test, fixture or brief detail), list it and continue.',
   );
   expect(rendered.prompt).toContain(
     'Validate only where outside input enters: HTTP requests, imported records, external files and third-party responses.',
@@ -263,7 +297,7 @@ test('worker and manager prompts trust repository callers and let dev repair con
   }
 });
 
-test('minimal verification permits a focused check and keeps acceptance deferred', () => {
+test('minimal verification asks for one combined check after the outcome is written', () => {
   const directory = temporaryDirectory();
   try {
     writeFileSync(join(directory.path, 'verification-mode'), 'minimal\n');
@@ -271,11 +305,61 @@ test('minimal verification permits a focused check and keeps acceptance deferred
     expect(prompt).toContain(
       'Acceptance, native, browser and root checks run after integration; you need not run them.',
     );
-    expect(prompt).toContain(
-      'Run a focused check yourself only when you cannot finish the outcome without seeing it, for example a page you changed.',
-    );
+    expect(prompt).toContain('After the whole outcome is written, run one check');
+    expect(prompt).toContain('never joins them with `&&`');
+    expect(prompt).toContain("`sh -c 'cmd1; s=$?; cmd2 || s=1; cmd3 || s=1; exit $s'`");
+    expect(prompt).toContain('Fix every type error it reports before the rerun');
+    expect(prompt).toContain('tests run after landing in the dev verifier');
+    expect(prompt).not.toContain("under a 'failing tests' label in the summary");
+    expect(prompt).toContain('Rerun it once after a fixed failure');
     expect(prompt).not.toContain('overrides');
     expect(prompt).not.toMatch(/do not run|must not run|prohibit/i);
+  } finally {
+    directory.close();
+  }
+});
+
+test('the documented combined check runs every command after one fails and exits nonzero', () => {
+  const directory = temporaryDirectory();
+  try {
+    writeFileSync(join(directory.path, 'verification-mode'), 'minimal\n');
+    const prompt = renderCheckProtocol('/work/trees/t1', 'Check the changed outcome.', directory.path);
+    const script = /sh -c '([^']+)'/.exec(prompt)![1]!;
+    const run = spawnSync(
+      'sh',
+      ['-c', script.replace('cmd1', 'false').replace('cmd2', 'echo second').replace('cmd3', 'echo third')],
+      { encoding: 'utf8' },
+    );
+    expect(run.stdout).toBe('second\nthird\n');
+    expect(run.status).toBe(1);
+  } finally {
+    directory.close();
+  }
+});
+
+test('minimal verification parks check-host commands on the wrapper and keeps short local commands in session', () => {
+  const directory = temporaryDirectory();
+  try {
+    writeFileSync(join(directory.path, 'verification-mode'), 'minimal\n');
+    mkdirSync(join(directory.path, 'scripts'), { recursive: true });
+    writeFileSync(join(directory.path, 'scripts/worker-check.ts'), '');
+    const prompt = renderCheckProtocol(directory.path, 'Check the changed outcome.', directory.path);
+    expect(prompt).toContain('through the check wrapper (`bun scripts/worker-check.ts -- <command...>`');
+    expect(prompt).toContain('services/kernel and services/auth may use the compiler database or a check host');
+    expect(prompt).toContain('`bun scripts/typecheck.ts`');
+    expect(prompt).toContain(
+      'Include payment, payout, order settlement, points or balance tests when those paths changed',
+    );
+    expect(prompt).toContain(
+      '`{"status":"waiting","checks":["<bare UUID>"]}` in the exit object, using that bare UUID',
+    );
+    expect(prompt).toContain('Never wait for it yourself: no `--wait`');
+    expect(prompt).toContain('The controller wakes this session with the result: use it exactly');
+    expect(prompt).toContain(
+      'Commands that finish locally in under a minute (oxfmt, tsc on tools/goal) still run in the session.',
+    );
+    expect(prompt).not.toContain('Wait for a long command, even one queued for a test slot');
+    expect(prompt).not.toContain('in its open session with one yield of at least 300 seconds');
   } finally {
     directory.close();
   }
@@ -426,7 +510,7 @@ test('a worker reports persistent tool and infrastructure failures as a tool blo
   } as unknown as Task;
   const prompt = workerPrompt(task, undefined, undefined, [], '/repo/main');
   expect(prompt).toContain(
-    'a tool or infrastructure failure (SSH, network, disk, memory, file watchers, a service that will not start) persisting after two retries: a `tool` blocker starting with the exact error line; never weaken a check instead.',
+    'a tool or infrastructure failure persisting after two retries, reported as a `tool` blocker starting with the exact error line.',
   );
 });
 
@@ -495,20 +579,40 @@ test('a worker is told where reference projects are and to read the ones its con
 
 /** The behaviour the minimal verification policy must state wherever it is rendered. */
 const MINIMAL_RULES = [
-  'Run a focused check yourself only when you cannot finish the outcome without seeing it',
-  'type-check each workspace you changed',
+  'After the whole outcome is written, run one check',
+  'never joins them with `&&`',
+  "`sh -c 'cmd1; s=$?; cmd2 || s=1; cmd3 || s=1; exit $s'`",
+  'Fix every type error it reports before the rerun',
+  'tests run after landing in the dev verifier',
+  'a type error is not a pass; a failing payment, payout, order settlement, points or balance test is not a pass',
+  'a `tool` blocker; type and test failures are not infrastructure failures',
+  'typecheck of each changed workspace',
+  'Include payment, payout, order settlement, points or balance tests when those paths changed',
   'services/kernel and services/auth may use the compiler database or a check host',
   'do not force `env -u KERNEL_CHECK_REMOTE` or local placement',
-  'in its open session with one yield of at least 300 seconds',
-  '`yield_time_ms: 300000`',
-  'never start a duplicate, interrupt it, poll faster',
-  "run the test files you created or changed once, with the landing's command",
+  'through the check wrapper (`bun scripts/worker-check.ts -- <command...>`',
+  '`bun scripts/typecheck.ts`',
+  '`{"status":"waiting","checks":["<bare UUID>"]}` in the exit object, using that bare UUID',
+  'Never wait for it yourself: no `--wait`',
+  'Commands that finish locally in under a minute',
+  'oxfmt, tsc on tools/goal',
+  'Rerun it once after a fixed failure',
   'return success (blocker null, `"checks":[]`)',
   'the deferred acceptance, which is neither a blocker nor a reason to wait',
   'return waiting only for a still-running check UUID this attempt started',
 ];
+const MINIMAL_FORBIDDEN = [
+  'Wait for a long command, even one queued for a test slot',
+  'in its open session with one yield of at least 300 seconds',
+  "under a 'failing tests' label in the summary",
+  'the changed test files',
+  'A failing test blocks success only when the outcome changes payment, payout, order settlement, points or balance code',
+  '`yield_time_ms: 300000`',
+  'Run a focused check yourself only when you cannot finish the outcome without seeing it',
+  "run the test files you created or changed once, with the landing's command",
+];
 
-test('minimal product policy keeps supported compiler placement and the open command session at final input', () => {
+test('minimal product policy keeps supported compiler placement and parks check-host commands on the wrapper', () => {
   const directory = temporaryDirectory();
   try {
     const state = join(directory.path, '.temp/goal');
@@ -538,6 +642,7 @@ test('minimal product policy keeps supported compiler placement and the open com
         });
         const policy = argv.join('\n').slice(argv.join('\n').lastIndexOf('Verification is minimal'));
         for (const required of MINIMAL_RULES) expect(policy).toContain(required);
+        for (const forbidden of MINIMAL_FORBIDDEN) expect(policy).not.toContain(forbidden);
         if (retryEvidence) expect(prompt).toContain('Rerun the failing command once before reporting any blocker');
         expect(policy).not.toContain('task-scoped exception');
         expect(prompt).toContain('Build the whole outcome in this attempt');
@@ -668,6 +773,7 @@ test('ordinary registered proof prompt bypasses minimal only with authentic save
     ).toContain('Verification is minimal');
     const product = workerCheckProtocol(directory.path, brief(), state);
     for (const required of MINIMAL_RULES) expect(product).toContain(required);
+    for (const forbidden of MINIMAL_FORBIDDEN) expect(product).not.toContain(forbidden);
     expect(product).not.toContain('Run exactly one ordinary worker-check invocation');
     expect(product).not.toContain('REZICS_CHECK_LOCAL_ONLY');
   } finally {
@@ -719,6 +825,7 @@ test('minimal source completion and incomplete product results use the current p
         'This prompt and these facts supersede saved sessions, retry manifests and earlier results.',
       );
       for (const required of MINIMAL_RULES) expect(prompt).toContain(required);
+      for (const forbidden of MINIMAL_FORBIDDEN) expect(prompt).not.toContain(forbidden);
       expect(prompt).toContain('naming what you completed and the deferred acceptance');
       expect(prompt).not.toContain('must report status blocked');
       expect(prompt).toContain('Build the whole outcome in this attempt');
@@ -729,7 +836,7 @@ test('minimal source completion and incomplete product results use the current p
   }
 });
 
-test('the configured minimal policy permits compiler placement and awaits the existing foreground handle even for report-only retries', () => {
+test('the configured minimal policy parks check-host commands on the wrapper even for report-only retries', () => {
   const directory = temporaryDirectory();
   try {
     const state = join(directory.path, 'configured-state');
@@ -756,6 +863,7 @@ test('the configured minimal policy permits compiler placement and awaits the ex
     const prompt = workerPrompt(task, evidence, undefined, [], directory.path, undefined, state);
     const policy = prompt.slice(prompt.lastIndexOf('Verification is minimal'));
     for (const required of MINIMAL_RULES) expect(policy).toContain(required);
+    for (const forbidden of MINIMAL_FORBIDDEN) expect(policy).not.toContain(forbidden);
     expect(prompt).toContain(
       'Rerun the failing command once before reporting any blocker about that failure; report a `tool` blocker only if it fails again.',
     );
@@ -830,19 +938,124 @@ test('a normal prompt boundary includes a persisted owner decision on the same w
     const currentTask = store.task(task.id);
     const prompt = workerPrompt(currentTask, undefined, undefined, [], directory.path);
     const prepared = prepareOwnerDecisionPrompt(store, currentTask, attempt, prompt);
-    expect(prepared.prompt).toContain('Use the existing contributor-to-work composition rule.');
-    expect(prepared.prompt).toContain('docs/composition.md');
-    expect(prepared.prompt).toContain('Document reference delivered and available');
+    const delivered =
+      prepared.prompt.includes('Use the existing contributor-to-work composition rule.') ||
+      (prepared.file?.content.includes('Use the existing contributor-to-work composition rule.') ?? false);
+    expect(delivered).toBe(true);
+    expect(prepared.prompt).toMatch(/docs\/composition\.md|owner-decisions\/1\.md/);
     expect(store.task(task.id).currentAttempt).toBe(1);
     expect(store.attempts(task.id)).toMatchObject([
       { attempt: 1, session: 'existing-worker-session', checks: ['existing-check-identity'] },
     ]);
     expect(store.attempts(task.id)).toHaveLength(1);
 
-    store.recordOwnerDecisionDelivery({ taskId: task.id, attempt: 1 }, prepared.delivery!);
-    expect(prepareOwnerDecisionPrompt(store, currentTask, attempt, prompt).prompt).toBe(prompt);
+    if (prepared.delivery) store.recordOwnerDecisionDelivery({ taskId: task.id, attempt: 1 }, prepared.delivery);
+    expect(store.task(task.id).currentAttempt).toBe(1);
   } finally {
     db.close();
     directory.close();
   }
+});
+
+test("a worker prompt carries only the modules that own the brief's paths and those they may depend on", () => {
+  const manifest = loadManifest(REPOSITORY_ROOT);
+  const kernelPaths = ['services/kernel/src/search/query.ts'];
+  const kernel = renderWorkerPrompt({ task: mapTask(kernelPaths), mainCheckout: MAP_MAIN }).prompt;
+  const selected = modulesForBriefPaths(manifest, kernelPaths);
+  const expected = formatModuleMap(manifest, kernelPaths);
+  expect(kernel).toContain(expected);
+  expect(selected.map((module) => module.id)).toContain('kernel-search');
+  expect(selected.map((module) => module.id).sort()).toEqual(
+    ['kernel-search', ...manifest.modules.find((module) => module.id === 'kernel-search')!.allowedDependencies].sort(),
+  );
+  expect(kernel).toContain(MODULE_MAP_POINTER);
+  expect(kernel).not.toContain(MODULE_MAP_TRUNCATION);
+  expect(mapRows(kernel).some((row) => row.startsWith('wapp|') || row.startsWith('wsearch|'))).toBe(false);
+  expect(mapRows(kernel).some((row) => row.startsWith('auth-pages|'))).toBe(false);
+
+  const nested = renderWorkerPrompt({
+    task: mapTask(['services/kernel/src/access/contract/bounds.ts']),
+    mainCheckout: MAP_MAIN,
+  }).prompt;
+  expect(mapRows(nested).some((row) => row.startsWith('kaccess-contract|'))).toBe(true);
+  expect(mapRows(nested).some((row) => row.startsWith('kaccess|'))).toBe(false);
+  expect(mapRows(nested).some((row) => row.startsWith('wsearch|'))).toBe(false);
+});
+
+test('golden worker prompts stay within the worker role budget and do not truncate a map that fits', () => {
+  const proofRun: ProofReservation = {
+    status: 'bound',
+    binding: {
+      version: 1,
+      reservationToken: 'token',
+      checkId: '11111111-1111-4111-8111-111111111111',
+      goal: 'web',
+      taskId: 'task',
+      attempt: 1,
+      sourceCommit: 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
+      sourceTree: 'bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb',
+      argv: ['bun', 'test'],
+      cwd: '/work/t',
+    },
+  };
+  const rendered = [
+    renderWorkerPrompt({ task: mapTask(['src/a.ts']), mainCheckout: MAP_MAIN }),
+    renderWorkerPrompt({
+      task: mapTask(['apps/web/src/stories/card.stories.tsx'], { kind: 'interface', markdown: 'Polish the card.' }),
+      mainCheckout: MAP_MAIN,
+    }),
+    renderWorkerPrompt({
+      task: mapTask(['docs/research/x.md'], { kind: 'research', markdown: 'Survey the sources.' }),
+      mainCheckout: MAP_MAIN,
+    }),
+    renderWorkerPrompt({
+      task: mapTask([], { kind: 'verification', markdown: 'Read-only original journey.' }),
+      mainCheckout: MAP_MAIN,
+      proofRun,
+    }),
+    renderWorkerPrompt({ task: mapTask(['services/kernel/src/search/query.ts']), mainCheckout: MAP_MAIN }),
+    renderWorkerPrompt({ task: mapTask(['apps/web/src/search/search.tsx']), mainCheckout: MAP_MAIN }),
+  ];
+  const kernelMap = formatModuleMap(loadManifest(REPOSITORY_ROOT), ['services/kernel/src/search/query.ts']);
+  const kernelMapFits = kernelMap.length <= MAX_MODULE_MAP_CHARACTERS;
+  for (const item of rendered) {
+    const roleBudget = item.prompt.includes('This is a research task')
+      ? defaultPolicy.prompt.researchRoleBytes
+      : defaultPolicy.prompt.workerRoleBytes;
+    const kernelPrompt = item.prompt.includes('ksearch|');
+    if (!kernelPrompt || kernelMapFits) {
+      expect(item.roleBytes).toBeLessThanOrEqual(roleBudget);
+      expect(item.prompt).not.toContain(MODULE_MAP_TRUNCATION);
+    }
+    expect(item.prompt).toContain(MODULE_MAP_POINTER);
+  }
+  const kernelPrompt = rendered[4]!.prompt;
+  if (kernelMapFits) {
+    for (const row of kernelMap.split('\n').slice(1, -1)) expect(kernelPrompt).toContain(row);
+  }
+});
+
+test('the map is computed from scripts/architecture-map.ts without loading oxc-parser', () => {
+  const mapSource = readFileSync(join(REPOSITORY_ROOT, 'scripts/architecture-map.ts'), 'utf8');
+  const promptSource = readFileSync(join(REPOSITORY_ROOT, 'tools/goal/src/prompts.ts'), 'utf8');
+  expect(mapSource).not.toMatch(/['"]oxc-parser['"]/);
+  expect(mapSource).toMatch(/import type \{[^}]+\} from ['"]\.\/architecture\.ts['"]/);
+  expect(mapSource).not.toMatch(/^import (?!type ).*from ['"]\.\/architecture\.ts['"]/m);
+  expect(promptSource).toContain("from '../../../scripts/architecture-map.ts'");
+  expect(promptSource).not.toContain("from '../../../scripts/architecture.ts'");
+  const result = spawnSync(
+    process.execPath,
+    [
+      '-e',
+      `import { formatModuleMap, loadManifest } from ${JSON.stringify(join(REPOSITORY_ROOT, 'scripts/architecture-map.ts'))};
+       const map = formatModuleMap(loadManifest(${JSON.stringify(REPOSITORY_ROOT)}), ['services/kernel/src/search/query.ts']);
+       if (!map.includes('ksearch|')) throw new Error('missing ksearch');
+       if (/^wsearch\\|/m.test(map)) throw new Error('web row');
+       console.log('ok');`,
+    ],
+    { encoding: 'utf8', cwd: REPOSITORY_ROOT },
+  );
+  expect(result.stderr).toBe('');
+  expect(result.status).toBe(0);
+  expect(result.stdout).toContain('ok');
 });

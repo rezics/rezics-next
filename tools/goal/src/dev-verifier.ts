@@ -2,37 +2,33 @@ import { existsSync, mkdirSync } from 'node:fs';
 import { join } from 'node:path';
 import { randomUUID } from 'node:crypto';
 import { spawnSync } from 'node:child_process';
-import type { DevVerifierEvidence, DevVerifierFinding, Settings, Task } from './types.ts';
+import type {
+  DevVerifierEvidence,
+  DevVerifierFinding,
+  DevVerifierRoundSummary,
+  DevVerifierRun,
+  Settings,
+  Task,
+} from './types.ts';
 import { defaultPolicy } from './policy.ts';
 import type { WorkerStore } from './store.ts';
-import type { SqliteManagerInbox } from './inbox.ts';
-import { firstFailure, gateRunner, git, type GateRunner } from './merge.ts';
+import { gateRunner, git } from './merge.ts';
 import { acquireDirectoryLease, LeaseHeldError } from './lease.ts';
 import {
-  checkInput,
-  checkSignature,
-  containsAssertion,
+  VERIFY_CONCURRENCY,
   dependencySetupKey,
-  locateNewFailure,
   makeFinding,
-  probeAt,
-  proveExistingOrReintroduced,
-  revisionSource,
-  runCacheKey,
-  selectionIdentity,
-  suspectsFor,
-  verifierExecution,
-  reconcileComparison,
-  type FindingGroup,
-  type IndexedCheck,
-  type Suspect,
+  runChecksAtHead,
+  type CheckRun,
 } from './dev-verifier-comparison.ts';
-import { recordFlow } from './flow.ts';
-import type { Database } from 'bun:sqlite';
 import { classifyRun, stableAssertions } from './dev-verifier-classification.ts';
-import { executeCheck, installDependenciesCached } from './dev-verifier-execution.ts';
+import { installDependenciesCached } from './dev-verifier-execution.ts';
 import {
-  checkSourceFiles,
+  countSourceIntervalCommits,
+  createFullVerifierChecks,
+  createVerifierChecks,
+  filesInCommits,
+  matches,
   placeInWorkspace,
   projectVerifierLandings,
   taskCommits,
@@ -40,476 +36,460 @@ import {
   type DevVerifierCheck,
   type VerifierLandings,
 } from './dev-verifier-plan.ts';
-
-export {
-  placeInWorkspace,
-  projectChecksSource,
-  projectRevisionSource,
-  projectSourceInterval,
-  projectVerifierLandings,
-  sourcePresentAt,
-} from './dev-verifier-plan.ts';
-export type { DevVerifierCheck, RevisionSource, SourceInterval, VerifierLandings } from './dev-verifier-plan.ts';
-export { classifyRun };
-export { withTreeBun } from './dev-verifier-execution.ts';
-export { checkInput, VERIFY_CONCURRENCY } from './dev-verifier-comparison.ts';
-type Check = DevVerifierCheck;
-
 import {
+  latestRound,
   readFindingCounts,
   saveFinding,
+  saveRun,
   type DevVerifierStorage,
   type VerificationFindingCounts,
 } from './dev-verifier-storage.ts';
 
-const ref = (branch: string) => `refs/heads/${branch}`;
+export { placeInWorkspace, projectSourceInterval, projectVerifierLandings } from './dev-verifier-plan.ts';
+export type { DevVerifierCheck, SourceInterval, VerifierLandings } from './dev-verifier-plan.ts';
+export { classifyRun };
+export { withTreeBun } from './dev-verifier-execution.ts';
+export { VERIFY_CONCURRENCY } from './dev-verifier-comparison.ts';
+
+type Check = DevVerifierCheck;
+const ref = (branch: string) => 'refs/heads/' + branch;
 const verifiedBranch = 'dev-verified';
+const TEST_FILE = /\.(?:test|spec)\.[cm]?[jt]sx?$/i;
+const tick = String.fromCharCode(96);
+
 function head(cwd: string, branch: string): string {
   return git(cwd, 'rev-parse', '--verify', ref(branch));
 }
-function recordVerified(
-  store: Pick<WorkerStore, 'tasks'> & { db?: Database },
-  history: VerifierLandings,
-  passedTaskIds: ReadonlySet<string>,
-): void {
-  if (!store.db) return;
-  const at = new Date().toISOString();
-  for (const task of history.tasks) {
-    // A verification receipt means this task's own acceptance passed on the exact head. A baseline failure on that
-    // command is never converted into a receipt for the task.
-    if (!passedTaskIds.has(task.id)) continue;
-    recordFlow(store.db, {
-      taskId: task.id,
-      attempt: task.currentAttempt,
-      stage: 'verification',
-      action: 'verified',
-      at,
-    });
-  }
-}
-export type BootSmokeRepair = {
+
+export type TestFailure = {
   test: string;
-  commit: string;
+  assertions: string[];
   error: string;
   owner: Task;
+};
+export type TestFailureRepair = {
+  goal: string;
+  manager: string;
+  commit: string;
+  owner: Task;
+  failures: TestFailure[];
+  paths: string[];
   existingTaskId?: string;
 };
 
 export type DevVerifierOptions = {
   settings: Settings;
-  store: Pick<WorkerStore, 'tasks' | 'task' | 'updateTask'> & DevVerifierStorage;
-  inbox: Pick<SqliteManagerInbox, 'deliver'>;
-  runGate?: GateRunner;
-  /** Local boot-smoke runner; defaults to `runGate` so tests can spy on one path. */
-  runBootSmoke?: GateRunner;
-  dispatchRepair?: (repair: BootSmokeRepair) => void;
-  /** Runs the separately scheduled seeded page-data stack when the policy interval is due. */
+  store: Pick<WorkerStore, 'tasks'> & DevVerifierStorage;
+  runGate?: ReturnType<typeof gateRunner>;
+  runBootSmoke?: ReturnType<typeof gateRunner>;
+  dispatchTestRepair?: (repair: TestFailureRepair) => void;
   runPageData?: () => Promise<unknown>;
 };
 
 const OPEN_REPAIR_STATES = new Set(['ready', 'held', 'running', 'landing', 'stopped']);
 
-function bootSmokeTestPath(check: Check): string {
-  return checkSourceFiles(check)[0] ?? check.command.filter((argument) => !argument.startsWith('-')).at(-1) ?? '';
+function identity(check: Check): string {
+  return JSON.stringify([check.command, check.closure, check.taskId ?? '', check.cwd ?? '']);
 }
 
-function bootSmokePathPattern(test: string): string {
-  const [area, name] = test.split('/');
-  return area && name && ['apps', 'services', 'packages'].includes(area) ? `${area}/${name}/**` : test;
+function uniqueChecks(checks: readonly Check[]): Check[] {
+  const result = new Map<string, Check>();
+  for (const check of checks) result.set(identity(check), check);
+  return [...result.values()];
 }
 
-export function bootSmokeRepairBrief(repair: BootSmokeRepair, policy = defaultPolicy.verifier): string {
-  const paths = repair.owner.brief.paths.length ? repair.owner.brief.paths : [bootSmokePathPattern(repair.test)];
-  const error = repair.error.slice(-policy.diagnosticCharacters);
-  return `---\n${JSON.stringify(
-    {
-      goal: repair.owner.brief.goal,
-      manager: repair.owner.brief.manager,
-      kind: 'implementation',
-      paths,
-      riskAreas: repair.owner.brief.riskAreas ?? [],
-      urgent: true,
-      acceptance: { failing: true },
-      criticalPath: false,
-      waiting: [],
-      after: [],
-    },
-    null,
-    2,
-  )}\n---\n\n# Repair the boot failure\n\nBoot-smoke repair for \`${repair.test}\`.\n\nCommit \`${repair.commit}\` broke the repository boot smoke.\n\n\`\`\`\n${error}\n\`\`\`\n`;
+function bootSmokeChecks(settings: Settings, commit: string): Check[] {
+  const tracked = trackedFilesAt(settings.mainCheckout, commit);
+  return (settings.bootSmoke?.tests ?? [])
+    .filter((test) => tracked.has(test))
+    .map((test) => placeInWorkspace({ command: ['bun', 'test', test], closure: ['**'] }, tracked));
 }
 
-function openBootRepair(store: Pick<WorkerStore, 'tasks'>, test: string): Task | undefined {
+function isAncestor(cwd: string, base: string, target: string): boolean {
+  return spawnSync('git', ['merge-base', '--is-ancestor', base, target], { cwd }).status === 0;
+}
+
+function shouldRunRound(previous: DevVerifierRun | undefined, now: number, intervalMs: number): boolean {
+  if (!previous?.round) return true;
+  const completedAt = Date.parse(previous.round.completedAt);
+  return !Number.isFinite(completedAt) || now - completedAt >= intervalMs;
+}
+
+function advanceVerified(settings: Settings, target: string): void {
+  const checkout = settings.mainCheckout;
+  for (let attempt = 0; attempt < 3; attempt++) {
+    const current = head(checkout, verifiedBranch);
+    if (current === target || isAncestor(checkout, target, current)) return;
+    try {
+      git(checkout, 'update-ref', ref(verifiedBranch), target, current);
+      return;
+    } catch {
+      // A concurrent ref update is retried against its actual value; the verifier never moves the ref backward.
+    }
+  }
+}
+
+function testFilesFor(check: CheckRun['check'], evidence: DevVerifierEvidence): string[] {
+  const normalize = (path: string) => {
+    const relative = path.replace(/^\.\//, '');
+    return check.cwd && !relative.startsWith(check.cwd + '/') ? check.cwd + '/' + relative : relative;
+  };
+  const found = new Set<string>();
+  const output = evidence.output.replaceAll('\\', '/');
+  const expression =
+    /(?:^|[\s([{"'])((?:[A-Za-z0-9_.@-]+\/)*[A-Za-z0-9_.@-]+\.(?:test|spec)\.[cm]?[jt]sx?)(?::\d+(?::\d+)?)?/g;
+  for (const match of output.matchAll(expression)) found.add(match[1]!);
+  if (found.size) return [...found].map(normalize);
+  const sourceFiles = check.command.filter((argument) => TEST_FILE.test(argument));
+  if (sourceFiles.length) return [...new Set(sourceFiles.map(normalize))];
+  const source = check.closure.find((path) => !path.includes('*') && TEST_FILE.test(path));
+  if (source) return [normalize(source)];
+  return [check.command.join(' ')];
+}
+
+function changedPaths(history: VerifierLandings | undefined, task: Task): string[] {
+  if (!history) return [];
+  return filesInCommits(history.interval, taskCommits(task, history.interval));
+}
+
+function ownerForFailure(
+  options: DevVerifierOptions,
+  history: VerifierLandings | undefined,
+  check: CheckRun['check'],
+  test: string,
+): Task | undefined {
+  const tasks = options.store.tasks();
+  if (check.taskId) {
+    const direct = tasks.find((task) => task.id === check.taskId);
+    if (direct) return direct;
+  }
+  const testIsPath = TEST_FILE.test(test);
+  const eligible = tasks.filter((task) => ['integrated', 'merged'].includes(task.state));
+  const relevant = eligible.filter((task) => {
+    const paths = task.brief.paths ?? [];
+    if (testIsPath && matches(test, paths, options.settings.policy?.brief)) return true;
+    return changedPaths(history, task).some(
+      (file) =>
+        matches(file, paths, options.settings.policy?.brief) &&
+        matches(file, check.closure, options.settings.policy?.brief),
+    );
+  });
+  const interval = history?.interval;
+  relevant.sort((left, right) => {
+    const leftCommit = left.integratedCommit ?? left.mergedCommit;
+    const rightCommit = right.integratedCommit ?? right.mergedCommit;
+    const leftPosition = interval && leftCommit ? (interval.position.get(leftCommit) ?? -1) : -1;
+    const rightPosition = interval && rightCommit ? (interval.position.get(rightCommit) ?? -1) : -1;
+    return rightPosition - leftPosition || right.sequence - left.sequence;
+  });
+  return relevant[0];
+}
+
+export function testFailureRepairBrief(repair: TestFailureRepair, policy = defaultPolicy.verifier): string {
+  const failures = repair.failures
+    .map((failure) => {
+      const assertions = failure.assertions.map((assertion) => '- ' + assertion).join('\n');
+      return (
+        '- Test file: ' +
+        tick +
+        failure.test +
+        tick +
+        '\n  Assertions:\n' +
+        assertions +
+        '\n\n  Output:\n\n  ' +
+        failure.error
+          .slice(-policy.diagnosticCharacters)
+          .split('\n')
+          .map((line) => '  ' + line)
+          .join('\n')
+      );
+    })
+    .join('\n\n');
+  const frontMatter = {
+    goal: repair.goal,
+    manager: repair.manager,
+    kind: 'implementation',
+    paths: repair.paths,
+    riskAreas: repair.owner.brief.riskAreas ?? [],
+    urgent: true,
+    acceptance: { failing: true },
+    criticalPath: false,
+    waiting: [],
+    after: [],
+  };
+  return (
+    '---\n' +
+    JSON.stringify(frontMatter, null, 2) +
+    '\n---\n\n' +
+    '# Repair failing tests\n\nTest failure repair batch for goal ' +
+    tick +
+    repair.goal +
+    tick +
+    ' at head ' +
+    tick +
+    repair.commit +
+    tick +
+    '.\n\n' +
+    failures +
+    '\n'
+  );
+}
+
+function openTestRepair(store: Pick<WorkerStore, 'tasks'>, goal: string): Task | undefined {
+  const marker = 'Test failure repair batch for goal ' + tick + goal + tick;
   return store
     .tasks()
     .find(
       (task) =>
-        OPEN_REPAIR_STATES.has(task.state) &&
-        task.brief.urgent === true &&
-        task.brief.markdown.includes(`Boot-smoke repair for \`${test}\``),
+        OPEN_REPAIR_STATES.has(task.state) && task.brief.urgent === true && task.brief.markdown.includes(marker),
     );
 }
 
-function bootSmokeChecks(settings: Settings, commit: string): IndexedCheck[] {
-  const tests = settings.bootSmoke?.tests ?? [];
-  const tracked = trackedFilesAt(settings.mainCheckout, commit);
-  return tests
-    .filter((test) => tracked.has(test))
-    .map((test, index) => {
-      const check = placeInWorkspace({ command: ['bun', 'test', test], closure: ['**'] }, tracked);
-      return { ...check, index, signature: checkSignature(check, index) };
-    });
-}
-
-/**
- * Checks the verifier runs at once. It verifies after integration at ordinary priority, so it takes a share of the
- * check hosts, never all of them: on 2026-10-30 one run started 48 checks together and workers waited an hour.
- */
-function advanceVerified(
-  settings: Settings,
-  store: DevVerifierOptions['store'],
-  expectedBase: string,
-  expectedDev: string,
-  history: VerifierLandings,
-  passedTaskIds: ReadonlySet<string>,
-): boolean {
-  try {
-    if (head(settings.mainCheckout, settings.integrationBranch) !== expectedDev) return false;
-    git(settings.mainCheckout, 'update-ref', ref(verifiedBranch), history.interval.target, expectedBase);
-    recordVerified(store, history, passedTaskIds);
-    return true;
-  } catch {
-    // Concurrent ref movement wins; the next verifier starts from the new exact pair.
-    return false;
+function dispatchTestRepairs(options: DevVerifierOptions, failures: readonly TestFailure[], commit: string): void {
+  if (!options.dispatchTestRepair || !failures.length) return;
+  const groups = new Map<string, TestFailure[]>();
+  for (const failure of failures) {
+    const goal = failure.owner.brief.goal;
+    const manager = failure.owner.brief.manager;
+    if (!goal || !manager) continue;
+    const key = goal + '\0' + manager;
+    groups.set(key, [...(groups.get(key) ?? []), failure]);
   }
-}
-
-function updateFindingOwner(
-  options: DevVerifierOptions,
-  findings: readonly DevVerifierFinding[],
-  task: Task | undefined,
-  reason: string,
-): void {
-  for (const finding of findings) {
-    finding.reason = reason;
-    if (task) finding.taskId = task.id;
-    saveFinding(options.store, finding, options.settings.policy?.verifier);
-  }
-}
-
-async function revertCulprits(
-  options: DevVerifierOptions,
-  history: VerifierLandings,
-  culprits: readonly { task: Task; findings: DevVerifierFinding[] }[],
-): Promise<string | undefined> {
-  if (!culprits.length) return undefined;
-  const { settings, store } = options;
-  const checkout = settings.mainCheckout;
-  const { interval } = history;
-  const target = interval.target;
-  const tree = join(settings.worktreeRoot, `dev-verify-revert-${randomUUID()}`);
-  mkdirSync(settings.worktreeRoot, { recursive: true });
-  git(checkout, 'worktree', 'add', '--detach', tree, target);
-  try {
-    git(tree, 'reset', '--hard', target);
-    git(tree, 'clean', '-fdx');
-    const selectedCommits = [...new Set(culprits.flatMap(({ task }) => taskCommits(task, interval)))]
-      .filter((commit) => interval.position.has(commit))
-      .sort((a, b) => interval.position.get(b)! - interval.position.get(a)!);
-    if (!selectedCommits.length) return undefined;
-    const reverted = spawnSync('git', ['revert', '--no-commit', ...selectedCommits], {
-      cwd: tree,
-      encoding: 'utf8',
-      maxBuffer: (settings.policy ?? defaultPolicy).verifier.gitBufferBytes,
-    });
-    if (reverted.status !== 0)
-      throw new Error(`Could not revert verifier culprit changes: ${reverted.stderr || reverted.stdout}`);
-    const labels = culprits.map(({ task }) => task.id).join(', ');
-    const committed = spawnSync('git', ['commit', '-m', `revert: ${labels} after dev verification`], {
-      cwd: tree,
-      encoding: 'utf8',
-      maxBuffer: (settings.policy ?? defaultPolicy).verifier.gitBufferBytes,
-    });
-    if (committed.status !== 0) throw new Error(`Could not commit verifier revert: ${committed.stderr}`);
-    const revertHead = git(tree, 'rev-parse', 'HEAD');
-    if (head(checkout, settings.integrationBranch) !== target) return undefined;
-    git(checkout, 'update-ref', ref(settings.integrationBranch), revertHead, target);
-    for (const { task, findings } of culprits) {
-      const current = store.task(task.id);
-      store.updateTask({ taskId: task.id, attempt: current.currentAttempt }, (item) => {
-        item.state = 'stopped';
-        delete item.integratedCommit;
-        delete item.integratedCommits;
-        delete item.integratedBase;
+  for (const [key, items] of groups) {
+    const [goal, manager] = key.split('\0') as [string, string];
+    const owner = items[0]!.owner;
+    const paths = [
+      ...new Set(
+        items.flatMap(({ owner: itemOwner, test }) => [
+          ...(itemOwner.brief.paths ?? []),
+          ...(TEST_FILE.test(test) ? [test] : []),
+        ]),
+      ),
+    ];
+    const existing = openTestRepair(options.store, goal);
+    try {
+      options.dispatchTestRepair({
+        goal,
+        manager,
+        commit,
+        owner,
+        failures: items,
+        paths,
+        ...(existing ? { existingTaskId: existing.id } : {}),
       });
-      const first = findings[0]!;
-      const output = first.head?.output ?? '';
-      options.inbox.deliver({
-        managerId: task.brief.manager,
-        taskId: task.id,
-        kind: 'instruction',
-        evidencePath: first.head?.logPath ?? '',
-        summary: `Landing ${task.id} was reverted from dev after ${first.check.command.join(' ')} failed. Log: ${first.head?.logPath ?? '(no log)'}\n${output.slice(-(settings.policy ?? defaultPolicy).verifier.diagnosticCharacters)}`,
-      });
+    } catch {
+      // Repair delivery is an external side effect; a delivery failure cannot stall verifier progress.
     }
-    return revertHead;
-  } finally {
-    git(checkout, 'worktree', 'remove', '--force', tree);
   }
 }
 
-async function dispatchBootOwner(
+function recordResults(
   options: DevVerifierOptions,
-  check: IndexedCheck,
-  assertion: string,
-  evidence: DevVerifierEvidence,
-  verified: string,
+  history: VerifierLandings | undefined,
+  base: string,
   target: string,
-): Promise<void> {
-  const test = bootSmokeTestPath(check);
-  const selection = selectionIdentity([check]);
-  const baseline = await probeAt(options, check, verified, selection, true);
-  if (containsAssertion(baseline, assertion, options.settings.policy?.verifier) === true) return;
-  const suspects = suspectsFor(
-    options.settings,
-    projectVerifierLandings(options.settings.mainCheckout, options.store, verified, target),
-    check,
-  );
-  const owner = await locateNewFailure(options, check, assertion, suspects, selection, undefined, true);
-  if (!owner) return;
-  const existing = openBootRepair(options.store, test);
-  options.dispatchRepair?.({
-    test,
-    commit: owner.integratedCommit ?? owner.mergedCommit ?? target,
-    error: evidence.output,
-    owner,
-    ...(existing ? { existingTaskId: existing.id } : {}),
-  });
+  runs: readonly CheckRun[],
+): { testsRun: number; passed: number; failed: number; unknown: number; repairs: TestFailure[] } {
+  let passed = 0;
+  let failed = 0;
+  let unknown = 0;
+  const repairs: TestFailure[] = [];
+  const failedTests = new Map<
+    string,
+    { check: CheckRun['check']; assertions: Set<string>; evidence: DevVerifierEvidence }
+  >();
+  for (const { check, evidence } of runs) {
+    const outcome = classifyRun(evidence, options.settings.policy?.verifier);
+    if (outcome === 'pass') {
+      passed++;
+      continue;
+    }
+    const testNames = testFilesFor(check, evidence);
+    if (outcome === 'fail') {
+      failed++;
+      const assertions = stableAssertions(evidence.output, options.settings.policy?.verifier);
+      for (const test of testNames) {
+        const previous = failedTests.get(test);
+        if (previous) assertions.forEach((assertion) => previous.assertions.add(assertion));
+        else failedTests.set(test, { check, assertions: new Set(assertions), evidence });
+      }
+      continue;
+    }
+    unknown++;
+    const test = testNames[0] ?? check.command.join(' ');
+    saveFinding(
+      options.store,
+      makeFinding(
+        check,
+        base,
+        target,
+        test,
+        'Unknown verifier result: ' + evidence.output.slice(-1200),
+        'unknown',
+        evidence,
+        'The check did not produce a stable result.',
+        'infrastructure',
+      ),
+      options.settings.policy?.verifier,
+    );
+  }
+  for (const [test, failure] of failedTests) {
+    const assertions = [...failure.assertions];
+    saveFinding(
+      options.store,
+      makeFinding(
+        failure.check,
+        base,
+        target,
+        test,
+        assertions.join('\n'),
+        'new',
+        failure.evidence,
+        'Failed at the current dev head during this verifier round.',
+        'fail',
+      ),
+      options.settings.policy?.verifier,
+    );
+    const owner = ownerForFailure(options, history, failure.check, test);
+    if (owner) repairs.push({ test, assertions, error: failure.evidence.output, owner });
+  }
+  return { testsRun: runs.length, passed, failed, unknown, repairs };
 }
 
-async function smokeHead(options: DevVerifierOptions, verified: string, target: string): Promise<boolean> {
+function saveRoundRecord(options: DevVerifierOptions, summary: DevVerifierRoundSummary): void {
+  const result = summary.failed ? 'fail' : summary.unknown ? 'infrastructure' : 'pass';
+  const record: DevVerifierRun = {
+    key: 'dev-verifier-round:' + summary.startedAt + ':' + randomUUID(),
+    createdAt: summary.completedAt,
+    evidence: {
+      commit: summary.headCommit,
+      command: ['dev-verifier-round'],
+      passed: result === 'pass',
+      timedOut: false,
+      output: JSON.stringify({
+        testsRun: summary.testsRun,
+        passed: summary.passed,
+        failed: summary.failed,
+        unknown: summary.unknown,
+        durationMs: summary.durationMs,
+      }),
+      logPath: '',
+      result,
+    },
+    round: summary,
+  };
+  saveRun(options.store, record, options.settings.policy?.verifier);
+}
+
+async function runRound(options: DevVerifierOptions, previous: DevVerifierRun | undefined): Promise<void> {
   const { settings } = options;
-  const execution = verifierExecution(options);
-  const checks = bootSmokeChecks(settings, target);
-  if (!checks.length) return false;
-  const selection = selectionIdentity(checks);
-  const runner =
-    options.runBootSmoke ??
-    options.runGate ??
-    gateRunner((settings.policy ?? defaultPolicy).verifier.bootSmokeTimeoutMs);
-  const tree = join(settings.worktreeRoot, `dev-verify-boot-${randomUUID()}`);
+  const checkout = settings.mainCheckout;
+  const startedMs = Date.now();
+  const startedAt = new Date(startedMs).toISOString();
+  const captured = head(checkout, settings.integrationBranch);
+  let verified: string;
+  try {
+    verified = head(checkout, verifiedBranch);
+  } catch {
+    git(checkout, 'update-ref', ref(verifiedBranch), captured, '');
+    verified = captured;
+  }
+  const previousHead = previous?.round?.headCommit ?? verified;
+  let history: VerifierLandings | undefined;
+  const firstRound = !previous?.round;
+  let fullSuite = firstRound || !isAncestor(checkout, previousHead, captured);
+  let freshChecks: Check[];
+  const bootChecks = bootSmokeChecks(settings, captured);
+  const bootPaths = settings.bootSmoke?.tests ?? [];
+  if (!fullSuite) {
+    const changedCommits = countSourceIntervalCommits(checkout, previousHead, captured);
+    if (changedCommits > (settings.policy ?? defaultPolicy).verifier.maxSelectionCommits) fullSuite = true;
+  }
+  if (fullSuite) freshChecks = createFullVerifierChecks(settings, captured, bootPaths);
+  else {
+    history = projectVerifierLandings(checkout, options.store, previousHead, captured);
+    freshChecks = createVerifierChecks(settings, history, captured, bootPaths);
+  }
+  const carriedChecks = previous?.round?.pendingChecks ?? [];
+  const regularChecks = uniqueChecks([...carriedChecks, ...freshChecks]).filter(
+    (check) => !bootChecks.some((boot) => identity(boot) === identity(check)),
+  );
+  const checks = [...uniqueChecks(bootChecks), ...regularChecks];
+  const policy = (settings.policy ?? defaultPolicy).verifier;
+  const deadline = startedMs + policy.roundDeadlineMs;
+  const controller = new AbortController();
+  const deadlineTimer = setTimeout(() => controller.abort(), Math.max(0, deadline - Date.now()));
+  const tree = join(settings.worktreeRoot, 'dev-verify-round-' + randomUUID());
   mkdirSync(settings.worktreeRoot, { recursive: true });
   mkdirSync(settings.stateDirectory, { recursive: true });
-  git(settings.mainCheckout, 'worktree', 'add', '--detach', tree, target);
+  let treeAdded = false;
+  let counts = { testsRun: 0, passed: 0, failed: 0, unknown: 0, repairs: [] as TestFailure[] };
+  let pendingChecks: Check[] = checks;
   try {
-    const setup = installDependenciesCached(execution, target, tree, dependencySetupKey(settings, target));
-    if (!setup.passed) return false;
-    const source = revisionSource(options, target, checks);
-    let failed = false;
-    for (const check of checks) {
-      const result = await executeCheck(
-        execution,
-        runner,
-        check,
-        target,
+    git(checkout, 'worktree', 'add', '--detach', tree, captured);
+    treeAdded = true;
+    const execution = {
+      settings,
+      readRun: (key: string) => options.store.devVerifierRun?.(key)?.evidence,
+      saveRun: (run: DevVerifierRun) => saveRun(options.store, run, settings.policy?.verifier),
+    };
+    const installed = installDependenciesCached(execution, captured, tree, dependencySetupKey(settings, captured));
+    if (!installed.passed) {
+      counts = { testsRun: checks.length, passed: 0, failed: 0, unknown: checks.length, repairs: [] };
+    } else if (checks.length) {
+      const executionResult = await runChecksAtHead(
+        options,
+        checks,
+        captured,
         tree,
-        runCacheKey(settings, target, check, selection),
-        checkInput(settings, target, check, source),
+        deadline,
+        controller.signal,
+        bootChecks.length,
       );
-      const assertions = result.passed ? [] : stableAssertions(result.output, settings.policy?.verifier);
-      const status = result.passed ? 'pass' : classifyRun(result, settings.policy?.verifier);
-      if (status !== 'fail' || !assertions.length) {
-        if (!result.passed) {
-          saveFinding(
-            options.store,
-            makeFinding(
-              check,
-              verified,
-              target,
-              assertions.join('\n') || firstFailure(result.output).assertion,
-              'unknown',
-              null,
-              result,
-              'Boot smoke did not yield a stable product assertion.',
-              status === 'pass' ? 'infrastructure' : status,
-            ),
-            settings.policy?.verifier,
-          );
-        }
-        continue;
-      }
-      failed = true;
-      const assertion = assertions[0]!;
-      const finding = makeFinding(
-        check,
-        verified,
-        target,
-        assertion,
-        'new',
-        null,
-        result,
-        'Boot smoke failed at the newest dev head.',
-        'fail',
-      );
-      saveFinding(options.store, finding, settings.policy?.verifier);
-      await dispatchBootOwner(options, check, assertion, result, verified, target);
-    }
-    return failed;
+      pendingChecks = executionResult.pending;
+      counts = recordResults(options, history, previousHead, captured, executionResult.results);
+    } else pendingChecks = [];
   } finally {
-    git(settings.mainCheckout, 'worktree', 'remove', '--force', tree);
+    clearTimeout(deadlineTimer);
+    controller.abort();
+    if (treeAdded) git(checkout, 'worktree', 'remove', '--force', tree);
   }
+
+  dispatchTestRepairs(options, counts.repairs, captured);
+  const completedAt = new Date().toISOString();
+  const summary: DevVerifierRoundSummary = {
+    baseCommit: previousHead,
+    headCommit: captured,
+    startedAt,
+    completedAt,
+    durationMs: Math.max(0, Date.now() - startedMs),
+    testsRun: counts.testsRun,
+    passed: counts.passed,
+    failed: counts.failed,
+    unknown: counts.unknown,
+    fullSuite,
+    pendingChecks,
+  };
+  saveRoundRecord(options, summary);
+  advanceVerified(settings, captured);
 }
 
-async function smokeNewestHeads(options: DevVerifierOptions, verified: string): Promise<boolean> {
-  const checkout = options.settings.mainCheckout;
-  let smoked: string | undefined;
-  let failed = false;
-  while (true) {
-    const latest = head(checkout, options.settings.integrationBranch);
-    if (latest === smoked || latest === verified) return failed;
-    if (spawnSync('git', ['merge-base', '--is-ancestor', verified, latest], { cwd: checkout }).status !== 0)
-      return failed;
-    if (await smokeHead(options, verified, latest)) failed = true;
-    smoked = latest;
-  }
-}
-
-/** Verify a fixed dev head; the ref moves only after a compare-and-swap against that exact head. */
+/** Run one due round on the newest captured dev head; intermediate heads never queue. */
 export async function verifyDev(options: DevVerifierOptions): Promise<void> {
-  const { settings, store } = options,
-    checkout = settings.mainCheckout;
+  const { settings } = options;
   await options.runPageData?.();
-  const lock = acquireDirectoryLease(join(settings.stateDirectory, 'dev-verifier.lease'), settings.policy?.leases);
+  let lock: ReturnType<typeof acquireDirectoryLease>;
   try {
-    const captured = head(checkout, settings.integrationBranch);
-    let verified: string;
-    try {
-      verified = head(checkout, verifiedBranch);
-    } catch {
-      // The train already checked every landing before this verifier was introduced.
-      try {
-        git(checkout, 'update-ref', ref(verifiedBranch), captured, '');
-      } catch {
-        /* another verifier initialized it */
-      }
-      return;
-    }
-    if (
-      verified === captured ||
-      spawnSync('git', ['merge-base', '--is-ancestor', verified, captured], { cwd: checkout }).status !== 0
-    )
-      return;
-
-    const bootFailed = await smokeNewestHeads(options, verified);
-    const dev = head(checkout, settings.integrationBranch);
-    if (
-      verified === dev ||
-      spawnSync('git', ['merge-base', '--is-ancestor', verified, dev], { cwd: checkout }).status !== 0
-    )
-      return;
-
-    const history = projectVerifierLandings(checkout, store, verified, dev);
-    const initial = await reconcileComparison(options, history);
-    const initialUnknown = initial.unknown;
-    let finalHead = dev;
-    let finalHistory = history;
-    let finalPassedTasks = new Set(initial.comparison.passTaskIds);
-    if (initial.groups.length) {
-      const owned: { group: FindingGroup; owners: Task[]; unknownOwner: boolean }[] = [];
-      for (const group of initial.groups) {
-        const suspects = suspectsFor(settings, history, group.check);
-        const owners: Task[] = [];
-        let unknownOwner = false;
-        for (const assertion of group.targets) {
-          const finding = group.findings.find((item) => item.assertion === assertion)!;
-          if (group.check.taskId) {
-            const direct = suspects.find((item) => item.task.id === group.check.taskId)?.task;
-            if (direct) owners.push(direct);
-            else unknownOwner = true;
-            continue;
-          }
-          // If the baseline failed the same assertion, a clean intermediate prefix gives the lower bound for owner
-          // bisection. New assertions use the ordinary first-failing-prefix search from the verified base.
-          const baseHasAssertion =
-            finding.baseline !== null &&
-            !finding.baseline.passed &&
-            stableAssertions(finding.baseline.output, settings.policy?.verifier).includes(assertion);
-          let cleanIndex: number | undefined;
-          if (baseHasAssertion) {
-            const proof = await proveExistingOrReintroduced(
-              options,
-              group.check,
-              assertion,
-              suspects,
-              selectionIdentity(initial.comparison.checks),
-            );
-            if (proof.status === 'unknown') {
-              unknownOwner = true;
-              updateFindingOwner(
-                options,
-                [finding],
-                undefined,
-                'New failure is visible, but its owner is unknown because prefix evidence was incomplete.',
-              );
-              continue;
-            }
-            if (proof.status === 'existing') {
-              updateFindingOwner(
-                options,
-                [finding],
-                undefined,
-                'Failure is pre-existing on the exact baseline; no landing was assigned.',
-              );
-              continue;
-            }
-            cleanIndex = proof.cleanIndex;
-          }
-          const owner = await locateNewFailure(
-            options,
-            group.check,
-            assertion,
-            suspects,
-            selectionIdentity(initial.comparison.checks),
-            cleanIndex,
-          );
-          if (owner === null) unknownOwner = true;
-          else if (owner) owners.push(owner);
-          else unknownOwner = true;
-          updateFindingOwner(
-            options,
-            [finding],
-            owner ?? undefined,
-            owner
-              ? `New failure attributed to the owning landing ${owner.id}.`
-              : 'New failure has no proven owner in the captured verified range.',
-          );
-        }
-        owned.push({ group, owners: [...new Map(owners.map((task) => [task.id, task])).values()], unknownOwner });
-      }
-      const byTask = new Map<string, { task: Task; findings: DevVerifierFinding[] }>();
-      for (const item of owned) {
-        for (const task of item.owners) {
-          const entry = byTask.get(task.id) ?? { task, findings: [] };
-          entry.findings.push(...item.group.findings);
-          byTask.set(task.id, entry);
-        }
-      }
-      for (const entry of byTask.values()) {
-        entry.findings = [...new Map(entry.findings.map((finding) => [finding.identity, finding])).values()];
-      }
-      if (!byTask.size) return;
-      const postRevert = await revertCulprits(options, history, [...byTask.values()]);
-      if (!postRevert) return;
-      finalHead = postRevert;
-      finalHistory = projectVerifierLandings(checkout, store, verified, postRevert);
-      const afterRevert = await reconcileComparison(options, finalHistory);
-      if (afterRevert.unknown || afterRevert.groups.length) return;
-      finalPassedTasks = new Set(afterRevert.comparison.passTaskIds);
-    } else if (initialUnknown) {
-      return;
-    }
-    if (bootFailed) return;
-    advanceVerified(settings, store, verified, finalHead === dev ? dev : finalHead, finalHistory, finalPassedTasks);
+    lock = acquireDirectoryLease(join(settings.stateDirectory, 'dev-verifier.lease'), settings.policy?.leases);
+  } catch (error) {
+    if (error instanceof LeaseHeldError) return;
+    throw error;
+  }
+  try {
+    const previous = latestRound(options.store);
+    const policy = (settings.policy ?? defaultPolicy).verifier;
+    if (!shouldRunRound(previous, Date.now(), policy.roundIntervalMs)) return;
+    await runRound(options, previous);
   } catch (error) {
     if (error instanceof LeaseHeldError) return;
     throw error;
@@ -531,9 +511,13 @@ export function devVerificationState(
   releaseGate: 'full-gate-required';
 } {
   try {
-    const verified = head(cwd, verifiedBranch),
-      dev = head(cwd, integrationBranch);
-    const landed = new Set(git(cwd, 'rev-list', '--reverse', `${verified}..${dev}`).split('\n').filter(Boolean));
+    const verified = head(cwd, verifiedBranch);
+    const dev = head(cwd, integrationBranch);
+    const landed = new Set(
+      git(cwd, 'rev-list', '--reverse', verified + '..' + dev)
+        .split('\n')
+        .filter(Boolean),
+    );
     const behind = tasks
       ? tasks.filter(
           (task) =>

@@ -2,17 +2,25 @@ import { expect, test } from 'bun:test';
 import { readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import {
+  assertEnvironmentWalkAdmission,
+  briefPathCloseness,
   controlPlaneReleaseBrief,
   classifyRiskAreas,
   devProductBrief,
+  ENVIRONMENT_WALK_DOC,
+  ENVIRONMENT_WALK_STATES,
   matchesPath,
   MAX_BRIEF_BYTES,
+  occupyingEnvironmentWalk,
   parseBrief,
   pathsOverlap,
+  productBriefSizeReturnReason,
+  productBriefSizeViolation,
   readRiskOwnership,
   riskAreaRulesFor,
   validatePath,
 } from './briefs.ts';
+import { defaultPolicy } from './policy.ts';
 import { workerCheckProtocol } from './launch.ts';
 import { classifyTask } from './routing.ts';
 import { harness, markdown } from './test-support.ts';
@@ -304,5 +312,137 @@ console.log(JSON.stringify({type:'turn.completed',usage:{input_tokens:1,output_t
     expect(landed).toHaveLength(1);
   } finally {
     await h.disposeAsync();
+  }
+});
+
+test('product brief size returns use policy floors and exempt urgent research mechanical specification and continuation', () => {
+  const policy = defaultPolicy.brief;
+  expect(policy.minimumEstimateLines).toBe(1200);
+  expect(policy.maximumBodyCharacters).toBe(4000);
+  expect(productBriefSizeViolation(markdown)).toEqual({ estimateLines: 100 });
+  expect(productBriefSizeReturnReason({ estimateLines: 100 }, policy)).toContain('brief.minimumEstimateLines is 1200');
+  const complete = markdown.replace('lines: 100', `lines: ${policy.minimumEstimateLines}`);
+  expect(productBriefSizeViolation(complete)).toBeUndefined();
+  const omitted = markdown.replace('estimate:\n  lines: 100\n  files: 4\n', '');
+  expect(productBriefSizeViolation(omitted)).toBeUndefined();
+  const header = /^---\r?\n[\s\S]*?\r?\n---(?:\r?\n|$)/.exec(complete)![0];
+  const atLimit = header + 'x'.repeat(policy.maximumBodyCharacters);
+  expect(productBriefSizeViolation(atLimit)).toBeUndefined();
+  const over = atLimit + 'y';
+  expect(productBriefSizeViolation(over)).toEqual({ bodyCharacters: policy.maximumBodyCharacters + 1 });
+  expect(productBriefSizeReturnReason({ bodyCharacters: policy.maximumBodyCharacters + 1 }, policy)).toContain(
+    'brief.maximumBodyCharacters is 4000',
+  );
+  expect(
+    productBriefSizeViolation(complete.replace('criticalPath: false', 'urgent: true\ncriticalPath: false')),
+  ).toBeUndefined();
+  for (const kind of ['research', 'mechanical', 'specification'] as const)
+    expect(productBriefSizeViolation(markdown.replace('kind: implementation', `kind: ${kind}`))).toBeUndefined();
+  expect(
+    productBriefSizeViolation(
+      markdown.replace('goal: fixture', 'goal: fixture\ncontinuation:\n  taskId: retained\n  expectedAttempt: 1'),
+    ),
+  ).toBeUndefined();
+  expect(productBriefSizeViolation(markdown, policy, 'continuation-abcd-1-rest.md')).toBeUndefined();
+  expect(
+    productBriefSizeViolation(
+      markdown.replace('kind: implementation', 'kind: verification').replace('paths: [result.txt]', 'paths: []'),
+    ),
+  ).toBeUndefined();
+  expect(
+    productBriefSizeViolation(markdown.replace('goal: fixture', 'goal: control-plane\ntarget: main')),
+  ).toBeUndefined();
+  expect(productBriefSizeViolation(complete, { ...policy, minimumEstimateLines: 2000 })).toEqual({
+    estimateLines: 1200,
+  });
+  expect(briefPathCloseness(['tools/goal/src/backlog.ts'], ['tools/goal/src/briefs.ts'])).toBeGreaterThan(
+    briefPathCloseness(['tools/goal/src/backlog.ts'], ['apps/web/src/page.ts']),
+  );
+});
+
+test('a native or browser walk occupies its Goal until it leaves ready, running, held or landing', () => {
+  const walk = { goal: 'web', kind: 'implementation', acceptance: { requires: ['native'] } };
+  const occupant = { id: 'walk-1', state: 'ready', brief: walk };
+  expect(occupyingEnvironmentWalk(walk, [])).toBeUndefined();
+  expect(occupyingEnvironmentWalk(walk, [occupant])?.id).toBe('walk-1');
+  expect(occupyingEnvironmentWalk(walk, [occupant], 'walk-1')).toBeUndefined();
+  expect(() => assertEnvironmentWalkAdmission(walk, [occupant])).toThrow(`environment walk ${occupant.id}`);
+  expect(() => assertEnvironmentWalkAdmission(walk, [occupant])).toThrow(ENVIRONMENT_WALK_DOC);
+  for (const state of ENVIRONMENT_WALK_STATES)
+    expect(occupyingEnvironmentWalk(walk, [{ ...occupant, state }])?.id).toBe('walk-1');
+  for (const state of ['stopped', 'cancelled', 'integrated', 'merged', 'verified'])
+    expect(occupyingEnvironmentWalk(walk, [{ ...occupant, state }])).toBeUndefined();
+  expect(occupyingEnvironmentWalk(walk, [{ ...occupant, brief: { ...walk, goal: 'other' } }])).toBeUndefined();
+  expect(occupyingEnvironmentWalk({ ...walk, kind: 'verification' }, [occupant])).toBeUndefined();
+  expect(
+    occupyingEnvironmentWalk({ ...walk, goal: 'control-plane' }, [
+      { ...occupant, brief: { ...walk, goal: 'control-plane' } },
+    ]),
+  ).toBeUndefined();
+  expect(
+    occupyingEnvironmentWalk(walk, [{ id: 'proof', state: 'running', brief: { ...walk, kind: 'verification' } }]),
+  ).toBeUndefined();
+  expect(occupyingEnvironmentWalk({ ...walk, acceptance: { requires: ['root'] } }, [occupant])).toBeUndefined();
+  expect(
+    occupyingEnvironmentWalk({ ...walk, acceptance: { requires: ['browser'] } }, [
+      { ...occupant, brief: { ...walk, acceptance: { requires: ['browser'] } } },
+    ])?.id,
+  ).toBe('walk-1');
+});
+
+test('dispatching or reshaping a native or browser walk is one per Goal', () => {
+  const h = harness();
+  try {
+    const withRequires = (source: string, requires: string, extra = '') =>
+      source
+        .replace('  failing: true\n', `  failing: true\n  requires: [${requires}]\n`)
+        .replace('waiting: []\n', `waiting: []\n${extra}`);
+    const file = (name: string, text: string) => {
+      const path = join(h.root, `.temp/goal/${name}.md`);
+      writeFileSync(path, text);
+      return path;
+    };
+
+    const dependency = h.tasks.dispatch(h.briefFile);
+    const walk = withRequires(markdown, 'native', `after: [${dependency.id}]\n`);
+    const first = h.tasks.dispatch(file('walk.md', walk));
+    expect(first.state).toBe('held');
+
+    const second = file(
+      'second.md',
+      withRequires(markdown, 'browser').replace('paths: [result.txt]', 'paths: [other.txt]'),
+    );
+    expect(() => h.tasks.dispatch(second)).toThrow(first.id);
+    expect(() => h.tasks.dispatch(second)).toThrow(ENVIRONMENT_WALK_DOC);
+
+    expect(
+      h.tasks.dispatch(
+        file('other-goal.md', withRequires(markdown, 'native').replace('goal: fixture', 'goal: elsewhere')),
+      ).state,
+    ).toBe('ready');
+
+    const controlPlaneWalk = withRequires(markdown, 'native')
+      .replace('goal: fixture', 'goal: control-plane')
+      .replace('paths: [result.txt]', 'paths: [tools/goal/src/briefs.ts]');
+    expect(h.tasks.dispatch(file('cp-1.md', controlPlaneWalk)).state).toBe('ready');
+    expect(
+      h.tasks.dispatch(
+        file('cp-2.md', controlPlaneWalk.replace('paths: [tools/goal/src/briefs.ts]', 'paths: [tools/goal/README.md]')),
+      ).state,
+    ).toBe('ready');
+
+    const reshaped = file(
+      'reshaped.md',
+      withRequires(markdown, 'native', `after: [${dependency.id}]\n`).replace(
+        'paths: [result.txt]',
+        'paths: [result.txt, extra.txt]',
+      ),
+    );
+    h.tasks.queueRetry(first.id, { brief: reshaped });
+    expect(h.store.task(first.id).brief.paths).toEqual(['result.txt', 'extra.txt']);
+    expect(h.store.task(first.id).state).toBe('held');
+    expect(() => h.tasks.queueRetry(dependency.id, { brief: second })).toThrow(first.id);
+  } finally {
+    h.dispose();
   }
 });

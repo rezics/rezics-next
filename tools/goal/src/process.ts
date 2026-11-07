@@ -1,4 +1,5 @@
 import { readdirSync, readFileSync, readlinkSync, statSync } from 'node:fs';
+import { readdir } from 'node:fs/promises';
 import { spawn } from 'node:child_process';
 import { resolve } from 'node:path';
 import { defaultPolicy } from './policy.ts';
@@ -56,7 +57,7 @@ function bootId(procRoot: string): string {
   return id;
 }
 /** A missing or dead process is distinct from process state we cannot inspect. */
-function inspectProcessSnapshot(
+export function inspectProcessSnapshot(
   pid: number,
   procRoot: string,
 ): { identity: ProcessIdentity; dead: boolean; cpuTicks?: bigint } | null {
@@ -91,13 +92,21 @@ function inspectProcessSnapshot(
   }
 }
 /** User plus system ticks for live members of an identified process group; missing when none are visible. */
-export function processGroupCpuTicks(identity: ProcessIdentity | null, procRoot = '/proc'): bigint | undefined {
+/** Scans of /proc yield to the event loop every this many entries, so one sample never holds the host loop. */
+const PROC_SCAN_CHUNK = 128;
+
+export async function processGroupCpuTicks(
+  identity: ProcessIdentity | null,
+  procRoot = '/proc',
+): Promise<bigint | undefined> {
   if (!identity) return undefined;
   try {
     let total = 0n;
     let any = false;
-    for (const name of readdirSync(procRoot)) {
+    let visited = 0;
+    for (const name of await readdir(procRoot)) {
       if (!/^\d+$/.test(name)) continue;
+      if (++visited % PROC_SCAN_CHUNK === 0) await new Promise<void>((resolve) => setImmediate(resolve));
       let snapshot: ReturnType<typeof inspectProcessSnapshot>;
       try {
         snapshot = inspectProcessSnapshot(Number(name), procRoot);
@@ -132,6 +141,15 @@ function matches(current: ProcessIdentity | null, identity: ProcessIdentity): bo
 }
 export function sameProcess(identity: ProcessIdentity, procRoot = '/proc'): boolean {
   return matches(processIdentity(identity.pid, procRoot), identity);
+}
+/** A recorded process is live while its leader or a member of its detached group runs in the same incarnation. */
+export function identityLive(identity: ProcessIdentity, procRoot = '/proc'): boolean {
+  return (
+    sameProcess(identity, procRoot) ||
+    groupMembers(identity.group, procRoot).some(
+      (member) => member.boot === identity.boot && BigInt(member.start) >= BigInt(identity.start),
+    )
+  );
 }
 /** Whether a visible live process is inside a directory; null means /proc scanning failed. */
 export function hasLiveProcessUnder(directory: string, procRoot = '/proc'): boolean | null {
@@ -178,23 +196,85 @@ function processGroupIsAbsent(group: number): boolean {
     throw new Error(`process group visibility unknown for group ${group}`, { cause: error });
   }
 }
+/** True only when the kernel reports no such group; any other answer leaves the full identity checks to decide. */
+function groupKnownAbsent(group: number): boolean {
+  if (!Number.isSafeInteger(group) || group <= 1) return false;
+  try {
+    return processGroupIsAbsent(group);
+  } catch {
+    return false;
+  }
+}
+function emptyGroupUnconfirmedMessage(group: number): string {
+  return `process group visibility unknown for group ${group}: no live members visible`;
+}
+/** kill(-pgid, 0) succeeded and /proc listed no live members of this group. */
+export function isEmptyProcessGroupUnconfirmed(error: unknown, group: number): boolean {
+  return error instanceof Error && error.message === emptyGroupUnconfirmedMessage(group);
+}
+/** Zombies keep the group visible to signal zero after every live member has exited. */
+function incarnationHasZombies(identity: ProcessIdentity, procRoot = '/proc'): boolean {
+  for (const name of readdirSync(procRoot)) {
+    if (!/^\d+$/.test(name)) continue;
+    let snapshot: ReturnType<typeof inspectProcessSnapshot>;
+    try {
+      snapshot = inspectProcessSnapshot(Number(name), procRoot);
+    } catch {
+      continue;
+    }
+    if (!snapshot?.dead) continue;
+    const member = snapshot.identity;
+    if (member.group !== identity.group || member.boot !== identity.boot) continue;
+    if (BigInt(member.start) < BigInt(identity.start)) continue;
+    return true;
+  }
+  return false;
+}
 /** Verify custody before either signalling a group or declaring it terminal. */
+export const REUSED_PID_REFUSAL = 'process identity changed; refusing to signal reused PID';
 export function checkedProcessGroup(identity: ProcessIdentity): ProcessIdentity[] {
   if (identity.group !== identity.pid || identity.group === inspectProcessIdentity(process.pid)?.group)
     throw new Error('worker must own a detached process group');
   // Dead leaders still carry a birth identity: a reused zombie must never authorize killing its children.
-  const current = inspectProcessSnapshot(identity.pid, '/proc')?.identity ?? null;
+  const leader = inspectProcessSnapshot(identity.pid, '/proc');
+  const current = leader?.identity ?? null;
   const members = groupMembers(identity.group);
   if (current && !matches(current, identity)) {
     const reused = current.start !== identity.start || current.boot !== identity.boot;
     if (reused && !members.length && processGroupIsAbsent(identity.group)) return [];
-    throw new Error('process identity changed; refusing to signal reused PID');
+    throw new Error(REUSED_PID_REFUSAL);
   }
   if (members.some((member) => member.boot !== identity.boot || BigInt(member.start) < BigInt(identity.start)))
     throw new Error('process group identity changed');
-  if (!members.length && !processGroupIsAbsent(identity.group))
-    throw new Error(`process group visibility unknown for group ${identity.group}: no live members visible`);
+  if (!members.length && !processGroupIsAbsent(identity.group)) {
+    if ((leader?.dead && current && matches(current, identity)) || incarnationHasZombies(identity)) return [];
+    throw new Error(emptyGroupUnconfirmedMessage(identity.group));
+  }
   return members;
+}
+function noLiveMembersVisible(error: unknown): boolean {
+  return error instanceof Error && error.message.includes('no live members visible');
+}
+/**
+ * Wait out a scan race and init reaping. A kernel-visible group with no live /proc members after the grace is gone:
+ * there is nobody to signal, and treating that leftover as unconfirmed custody left finished workers running.
+ */
+async function checkedProcessGroupAfterZombies(
+  identity: ProcessIdentity,
+  graceMs: number,
+  policy: typeof defaultPolicy.process,
+): Promise<ProcessIdentity[]> {
+  const deadline = Date.now() + Math.max(0, graceMs);
+  for (;;) {
+    try {
+      return checkedProcessGroup(identity);
+    } catch (error) {
+      if (!noLiveMembersVisible(error)) throw error;
+      const remaining = deadline - Date.now();
+      if (remaining <= 0) return [];
+      await new Promise<void>((resolve) => setTimeout(resolve, Math.min(policy.exitPollMs, remaining)));
+    }
+  }
 }
 /** Process groups with a live member, from one scan of /proc. */
 export function liveGroups(): Set<number> {
@@ -367,7 +447,10 @@ export async function terminateProcessGroup(
   policy = defaultPolicy.process,
 ): Promise<void> {
   if (!identity) return;
-  const members = checkedProcessGroup(identity);
+  // Signal zero answers for an absent group, zombies included, without scanning /proc. Maintenance reaps every recorded
+  // attempt whose worktree is gone, and one /proc scan per attempt outgrew its 45-second budget on 2026-11-07.
+  if (groupKnownAbsent(identity.group)) return;
+  const members = await checkedProcessGroupAfterZombies(identity, graceMs, policy);
   if (!members.length) return;
   for (const member of members) {
     await signalProcessIdentity(member, 'SIGTERM', policy);
@@ -384,7 +467,7 @@ export async function terminateProcessGroup(
   } finally {
     clearTimeout(timer);
   }
-  const remaining = checkedProcessGroup(identity);
+  const remaining = await checkedProcessGroupAfterZombies(identity, graceMs, policy);
   for (const member of remaining) {
     if (member.boot !== identity.boot || BigInt(member.start) < BigInt(identity.start))
       throw new Error('process group identity changed');
@@ -392,7 +475,8 @@ export async function terminateProcessGroup(
   }
   await Promise.all(remaining.map((identity) => waitForProcess(identity, undefined, undefined, policy)));
   await gone;
-  if (checkedProcessGroup(identity).length) throw new Error('worker process group is still alive');
+  if ((await checkedProcessGroupAfterZombies(identity, graceMs, policy)).length)
+    throw new Error('worker process group is still alive');
 }
 /**
  * Stop every process whose working directory is inside a directory, such as a finished attempt's worktree. A dev
@@ -458,4 +542,82 @@ export async function stopProcessesUnder(
   await signal(remaining, 'SIGKILL');
   await Promise.all(remaining.map((member) => waitForProcess(member, undefined, undefined, policy)));
   return found.length;
+}
+
+/** Kind of worker launch the manager host offloads onto a child so its own event loop stays free. */
+export type HostStartKind = 'start' | 'retry' | 'released' | 'first';
+export const HOST_START_KINDS = ['start', 'retry', 'released', 'first'] as const;
+export type HostProcessResult = {
+  code: number | null;
+  signal: NodeJS.Signals | null;
+  stdout: string;
+  stderr: string;
+  stdoutBuffer: Buffer;
+};
+export type HostProcessOptions = {
+  cwd?: string;
+  env?: NodeJS.ProcessEnv;
+  timeoutMs?: number;
+  maxBuffer?: number;
+};
+
+/**
+ * Run a child without blocking the caller's event loop. The manager host uses this for git, tmux, systemd-notify and
+ * the start/retry children: a spawnSync sleep of the same length would miss the watchdog ping.
+ */
+export function runHostProcess(
+  command: string,
+  args: readonly string[] = [],
+  options: HostProcessOptions = {},
+): Promise<HostProcessResult> {
+  return new Promise((resolve, reject) => {
+    const child = spawn(command, [...args], {
+      cwd: options.cwd,
+      env: options.env,
+      stdio: ['ignore', 'pipe', 'pipe'],
+    });
+    const chunks: Buffer[] = [];
+    const errors: Buffer[] = [];
+    const max = options.maxBuffer ?? 8 * 1024 * 1024;
+    let stdoutBytes = 0;
+    let stderrBytes = 0;
+    child.stdout?.on('data', (chunk: Buffer) => {
+      if (stdoutBytes >= max) return;
+      const slice = chunk.byteLength + stdoutBytes > max ? chunk.subarray(0, max - stdoutBytes) : chunk;
+      chunks.push(slice);
+      stdoutBytes += slice.byteLength;
+    });
+    child.stderr?.on('data', (chunk: Buffer) => {
+      if (stderrBytes >= max) return;
+      const slice = chunk.byteLength + stderrBytes > max ? chunk.subarray(0, max - stderrBytes) : chunk;
+      errors.push(slice);
+      stderrBytes += slice.byteLength;
+    });
+    let settled = false;
+    const timer =
+      options.timeoutMs !== undefined
+        ? setTimeout(() => {
+            child.kill('SIGTERM');
+          }, options.timeoutMs)
+        : undefined;
+    const finish = (error?: Error, result?: HostProcessResult) => {
+      if (settled) return;
+      settled = true;
+      if (timer) clearTimeout(timer);
+      if (error) reject(error);
+      else resolve(result!);
+    };
+    child.once('error', (error) => finish(error));
+    child.once('close', (code, signal) => {
+      const stdoutBuffer = Buffer.concat(chunks);
+      const stderrBuffer = Buffer.concat(errors);
+      finish(undefined, {
+        code,
+        signal,
+        stdout: stdoutBuffer.toString('utf8'),
+        stderr: stderrBuffer.toString('utf8'),
+        stdoutBuffer,
+      });
+    });
+  });
 }

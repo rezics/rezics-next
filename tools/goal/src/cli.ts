@@ -4,7 +4,7 @@ import { runIntegration, type IntegrationRuntime, recordManagerCommand } from '.
 import { runWorkerCommand, READ_ONLY_WORKER_COMMANDS } from './worker-commands.ts';
 import { parseWorkerCommandArguments, type ParsedWorkerCommandArguments } from './command-arguments.ts';
 import { installPrivate } from './shared-dependencies.ts';
-import { installService, reportServices } from './service.ts';
+import { HOST_START_KINDS, installService, reportServices, type HostStartKind } from './service.ts';
 import { MAINTENANCE_JOBS, runMaintenance, runResidentVerifier, type MaintenanceJob } from './maintenance.ts';
 import { runPublicationCommand } from './publication-command.ts';
 
@@ -34,6 +34,7 @@ const integrationCommands = [
   'backlog',
   'publication',
   '_manager-host',
+  '_host-start',
 ];
 export const commands = [...workerCommands, ...integrationCommands, 'service', 'maintenance'];
 /** Commands that run often and never settle workers themselves; the manager host's sweep recovers orphans. */
@@ -46,6 +47,8 @@ export const SWEEP_FREE_COMMANDS = new Set([
   'publication',
   'amend',
   'event',
+  '_manager-host',
+  '_host-start',
   ...READ_ONLY_WORKER_COMMANDS,
 ]);
 
@@ -54,6 +57,7 @@ export async function run(
   argv: string[],
   factory: (options?: {
     trainMode: 'detached' | 'inline';
+    hostLoop?: boolean;
   }) => Runtime | IntegrationRuntime | Promise<Runtime | IntegrationRuntime> = createRuntime,
 ): Promise<number> {
   const [command, ...args] = argv;
@@ -119,7 +123,7 @@ export async function run(
   let parsedWorkerArguments: ParsedWorkerCommandArguments | undefined;
   try {
     if (workerCommands.includes(command)) parsedWorkerArguments = parseWorkerCommandArguments(command, args);
-    runtime = await factory({ trainMode });
+    runtime = await factory({ trainMode, hostLoop: command === '_manager-host' });
     if (command === 'service') {
       if (args.length !== 1) throw new Error('usage: goal service run-verifier');
       return await runResidentVerifier(runtime);
@@ -129,6 +133,15 @@ export async function run(
         throw new Error('usage: goal maintenance all|reap|alarm|detect|regenerate');
       if (!('settings' in runtime)) throw new Error('Maintenance requires the configured Goal runtime');
       return await runMaintenance(args[0] as MaintenanceJob | 'all', runtime);
+    }
+    if (command === '_host-start') {
+      const [kind, taskId] = args;
+      if (!kind || !taskId || args.length !== 2 || !(HOST_START_KINDS as readonly string[]).includes(kind))
+        throw new Error('usage: _host-start start|retry|released|first <taskId>');
+      if (!('job' in runtime)) throw new Error('Host start requires the shared runtime');
+      await runtime.job.runHostTask(kind as HostStartKind, taskId);
+      await runtime.drainJobs?.();
+      return 0;
     }
     // A command settles only orphans whose worker has exited; the host adopts the ones still running. The train and
     // the inbox leave that to the host's sweep: every settle spawns a train, and each spawned train swept the whole

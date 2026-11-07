@@ -5,7 +5,7 @@ import type { LandingRequest } from './contracts.ts';
 import { newestWorktreeMtime, WorkerJob } from './job.ts';
 import { harness, tempDirectory } from './test-support.ts';
 
-test('newest worktree mtime ignores node_modules and .temp', () => {
+test('newest worktree mtime ignores node_modules and .temp', async () => {
   const root = tempDirectory();
   mkdirSync(join(root, 'src'), { recursive: true });
   mkdirSync(join(root, 'node_modules/pkg'), { recursive: true });
@@ -21,7 +21,7 @@ test('newest worktree mtime ignores node_modules and .temp', () => {
   utimesSync(kept, past, past);
   utimesSync(join(root, 'node_modules/pkg/index.js'), future, future);
   utimesSync(join(root, '.temp/scratch'), future, future);
-  expect(newestWorktreeMtime(root)).toBe(lstatSync(kept).mtimeMs);
+  expect(await newestWorktreeMtime(root)).toBe(lstatSync(kept).mtimeMs);
 });
 
 const fileActiveEmptyLogCli = `#!/usr/bin/env bun
@@ -65,10 +65,12 @@ test('A worker whose run log stays empty but whose worktree files or branch head
     await job.start(task.id);
     await job.drain();
     expect(active.store.task(task.id).currentAttempt).toBe(1);
-    expect(active.store.attempt({ taskId: task.id, attempt: 1 }).failureKind).toBeNull();
+    const activeAttempt = active.store.attempt({ taskId: task.id, attempt: 1 });
+    expect(activeAttempt.state).toBe('exited');
+    expect(activeAttempt.failureKind ?? null).toBeNull();
     expect(landings).toHaveLength(1);
   } finally {
-    active.dispose();
+    await active.disposeAsync();
   }
 
   const idle = harness(idleEmptyLogCli);
@@ -83,6 +85,6 @@ test('A worker whose run log stays empty but whose worktree files or branch head
     expect(first.failureKind).toBe('tool');
     expect(first.result).toBe('stalled: no output for 1 minute');
   } finally {
-    idle.dispose();
+    await idle.disposeAsync();
   }
 }, 30_000);

@@ -14,11 +14,14 @@ import type {
   Brief,
   DevVerifierFinding,
   DevVerifierRun,
+  BriefProposalRecord,
   IntegrationPlan,
+  PendingBriefProposal,
   PoolReading,
   PromotionRun,
   RetryIntent,
   Task,
+  TaskState,
   TerminationIntent,
   WorktreeCleanupDisposition,
 } from './types.ts';
@@ -223,6 +226,17 @@ CREATE TRIGGER worker_current_attempts_attempt_delete AFTER DELETE ON worker_att
 END;`,
   },
   workerRecordEndedAtMigration,
+  {
+    module: 'worker',
+    version: 13,
+    sql: `CREATE TABLE worker_brief_proposals (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      task_id TEXT NOT NULL REFERENCES worker_tasks(id),
+      written_for_attempt INTEGER NOT NULL,
+      body TEXT NOT NULL
+    );
+    CREATE INDEX worker_brief_proposals_task ON worker_brief_proposals(task_id, id);`,
+  },
   checkResultsMigration(),
   {
     module: 'dev-verifier',
@@ -375,12 +389,15 @@ export class WorkerStore implements AttemptFence {
   }
   /** All non-terminal tasks, bounded by the worker_tasks_state expression index. */
   activeTasks(): Task[] {
+    return this.tasksInStates(['held', 'ready', 'running', 'landing', 'stopped']);
+  }
+  /** Tasks in the given states, read through the worker_tasks_state expression index instead of every task body. */
+  tasksInStates(states: readonly TaskState[]): Task[] {
     this.refreshSnapshot();
+    const marks = states.map(() => '?').join(', ');
     return this.db
-      .query(
-        "SELECT id, body FROM worker_tasks WHERE json_extract(body, '$.state') IN ('held','ready','running','landing','stopped') ORDER BY sequence",
-      )
-      .all()
+      .query(`SELECT id, body FROM worker_tasks WHERE json_extract(body, '$.state') IN (${marks}) ORDER BY sequence`)
+      .all(...states)
       .map((row) => {
         const value = row as { id: string; body: string };
         const cached = this.taskSnapshot.get(value.id);
@@ -577,9 +594,77 @@ export class WorkerStore implements AttemptFence {
   runningAttemptsCount(): number {
     return this.currentAttemptsCount();
   }
+  /** Live sessions (pending start and running) on each pool, for `policy.maxConcurrent`. */
+  runningAttemptsByPool(): Record<string, number> {
+    return this.countAttemptsByPool(['pending', 'running']);
+  }
+  /** Started, waiting-check and landing tasks that count against one Goal's start cap. */
+  goalInFlightCount(goal: string, excludeTaskId?: string): number {
+    if (goal === 'control-plane') return 0;
+    const excluded = excludeTaskId ? ' AND id != ?' : '';
+    const row = this.db
+      .query(
+        `SELECT count(*) AS count FROM worker_tasks
+         WHERE json_extract(body, '$.brief.goal') = ?
+           AND coalesce(json_extract(body, '$.brief.urgent'), 0) != 1
+           AND json_extract(body, '$.state') IN ('running', 'landing')${excluded}`,
+      )
+      .get(...(excludeTaskId ? [goal, excludeTaskId] : [goal])) as { count: number };
+    return row.count;
+  }
+  /** Goal metadata for a live capacity ticket written by an older controller process. */
+  taskGoal(taskId: string): string | undefined {
+    const row = this.db
+      .query("SELECT json_extract(body, '$.brief.goal') AS goal FROM worker_tasks WHERE id=?")
+      .get(taskId) as { goal: string | null } | null;
+    return typeof row?.goal === 'string' ? row.goal : undefined;
+  }
+  /** Dispatch sequence used to keep same-Goal ready starts in their accepted order. */
+  taskSequence(taskId: string): number | undefined {
+    const row = this.db.query('SELECT sequence FROM worker_tasks WHERE id=?').get(taskId) as {
+      sequence: number;
+    } | null;
+    return row?.sequence;
+  }
+  /** Ready, nonurgent tasks accepted earlier than one queued start for the same Goal. */
+  goalReadyTaskIdsBefore(goal: string, sequence: number): string[] {
+    return (
+      this.db
+        .query(
+          `SELECT id FROM worker_tasks
+           WHERE json_extract(body, '$.brief.goal') = ?
+             AND coalesce(json_extract(body, '$.brief.urgent'), 0) != 1
+             AND json_extract(body, '$.state') = 'ready'
+             AND sequence < ?
+           ORDER BY sequence`,
+        )
+        .all(goal, sequence) as { id: string }[]
+    ).map((row) => row.id);
+  }
+  /** Attempts parked on checks; they do not occupy `policy.maxConcurrent`. */
+  waitingAttemptsByPool(): Record<string, number> {
+    return this.countAttemptsByPool(['waiting']);
+  }
+  private countAttemptsByPool(states: readonly string[]): Record<string, number> {
+    const placeholders = states.map(() => '?').join(', ');
+    const rows = this.db
+      .query(
+        `SELECT json_extract(a.body, '$.pool') AS pool, count(*) AS count
+         FROM worker_current_attempts AS c
+         JOIN worker_attempts AS a ON a.task_id = c.task_id AND a.attempt = c.current_attempt
+         WHERE c.attempt_state IN (${placeholders})
+         GROUP BY 1`,
+      )
+      .all(...states) as { pool: string | null; count: number }[];
+    const counts: Record<string, number> = {};
+    for (const row of rows) if (typeof row.pool === 'string' && row.pool) counts[row.pool] = row.count;
+    return counts;
+  }
   /** Count current attempts in the requested host lane; a waiting urgent attempt retains its reserved slot. */
   capacityAttemptsCount(urgent: boolean, taskId?: string, attempt?: number): number {
-    return this.currentAttemptsCount(urgent, urgent, taskId, attempt);
+    // Both lanes count live sessions only. Counting parked urgent attempts filled all 8 urgent slots with checks
+    // waiting and starved every urgent start for hours (2026-11-06).
+    return this.currentAttemptsCount(urgent, false, taskId, attempt);
   }
   private currentAttemptsCount(urgent?: boolean, includeWaiting = false, taskId?: string, attempt?: number): number {
     const liveStates = "attempt_state IN ('running', 'waiting')";
@@ -1105,6 +1190,16 @@ export class WorkerStore implements AttemptFence {
   devVerifierRun(key: string): DevVerifierRun | undefined {
     return decode<DevVerifierRun>(this.db.query('SELECT body FROM dev_verifier_runs WHERE cache_key=?').get(key));
   }
+  devVerifierLatestRound(): DevVerifierRun | undefined {
+    const run = decode<DevVerifierRun>(
+      this.db
+        .query(
+          "SELECT body FROM dev_verifier_runs WHERE cache_key LIKE 'dev-verifier-round:%' ORDER BY rowid DESC LIMIT 1",
+        )
+        .get(),
+    );
+    return run?.round ? run : undefined;
+  }
   saveDevVerifierRun(run: DevVerifierRun): void {
     this.db
       .transaction(() => {
@@ -1124,13 +1219,6 @@ export class WorkerStore implements AttemptFence {
       .query('SELECT body FROM dev_verifier_findings ORDER BY rowid DESC LIMIT ?')
       .all(Math.max(0, Math.min(this.policy.verifier.findingRows, limit)))
       .map((row) => decode<DevVerifierFinding>(row)!);
-  }
-  devVerifierHasKnownExisting(signature: string): boolean {
-    return Boolean(
-      this.db
-        .query("SELECT 1 FROM dev_verifier_findings WHERE signature=? AND status='existing' LIMIT 1")
-        .get(signature),
-    );
   }
   saveDevVerifierFinding(finding: DevVerifierFinding): void {
     this.db
@@ -1477,6 +1565,37 @@ export class WorkerStore implements AttemptFence {
     return decode<RetryIntent>(
       this.db.query('SELECT body FROM worker_retry_intents WHERE task_id=? AND attempt=?').get(ref.taskId, ref.attempt),
     );
+  }
+  saveBriefProposal(record: BriefProposalRecord): PendingBriefProposal {
+    return this.db
+      .transaction(() => {
+        const inserted = this.db
+          .query('INSERT INTO worker_brief_proposals(task_id, written_for_attempt, body) VALUES (?,?,?)')
+          .run(record.taskId, record.writtenForAttempt, JSON.stringify(record));
+        return { ...record, id: Number(inserted.lastInsertRowid) };
+      })
+      .immediate();
+  }
+  pendingBriefProposals(taskId: string): PendingBriefProposal[] {
+    return this.db
+      .query('SELECT id, body FROM worker_brief_proposals WHERE task_id=? ORDER BY id')
+      .all(taskId)
+      .map((row) => {
+        const value = row as { id: number; body: string };
+        return { ...JSON.parse(value.body), id: value.id } as PendingBriefProposal;
+      });
+  }
+  newestPendingBriefProposal(taskId: string): PendingBriefProposal | undefined {
+    return this.pendingBriefProposals(taskId).at(-1);
+  }
+  takePendingBriefProposals(taskId: string): PendingBriefProposal[] {
+    return this.db
+      .transaction(() => {
+        const pending = this.pendingBriefProposals(taskId);
+        if (pending.length) this.db.query('DELETE FROM worker_brief_proposals WHERE task_id=?').run(taskId);
+        return pending;
+      })
+      .immediate();
   }
   updateRetryIntent(ref: AttemptRef, update: (intent: RetryIntent) => void): RetryIntent {
     return this.db
@@ -1982,14 +2101,17 @@ export class WorkerStore implements AttemptFence {
         const attempt = this.attempt(ref);
         const at = new Date().toISOString();
         let intent = attempt.terminationIntent;
+        const waitingWithoutWorker = attempt.state === 'waiting' && attempt.process == null;
         if (!intent) {
           const auxiliaryProcesses = [...(attempt.auxiliaryProcesses ?? [])];
           const started = this.events(ref.taskId, ref.attempt).some((event) => event.kind === 'worker-run-started');
           const processIdentity = attempt.process
             ? 'known'
-            : !started && !auxiliaryProcesses.length && runPidFilePresence(attempt.logPath) === 'absent'
-              ? 'not-started'
-              : 'unknown';
+            : waitingWithoutWorker
+              ? 'waiting'
+              : !started && !auxiliaryProcesses.length && runPidFilePresence(attempt.logPath) === 'absent'
+                ? 'not-started'
+                : 'unknown';
           intent = {
             operation,
             requestedAt: at,
@@ -2003,6 +2125,14 @@ export class WorkerStore implements AttemptFence {
           this.db
             .query('INSERT INTO worker_events(task_id,attempt,kind,at,body) VALUES (?,?,?,?,?)')
             .run(ref.taskId, ref.attempt, 'termination-requested', at, JSON.stringify({ operation, processIdentity }));
+        } else if (waitingWithoutWorker && intent.processIdentity === 'unknown' && intent.state !== 'complete') {
+          intent.processIdentity = 'waiting';
+          intent.state = 'requested';
+          delete intent.error;
+          if (operation === 'cancel') {
+            intent.operation = 'cancel';
+            delete intent.settledAt;
+          }
         } else if (operation === 'cancel' && intent.operation !== 'cancel') {
           intent.operation = 'cancel';
           delete intent.settledAt;

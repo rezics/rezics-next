@@ -16,10 +16,13 @@ import { agentAdapter, requireOriginalProofProfile } from './agents.ts';
 import { spawnSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import { existsSync, lstatSync, mkdirSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
+import { hostname } from 'node:os';
 import { basename, dirname, join, resolve } from 'node:path';
 import {
   devProductBrief,
   assertBriefDispatchable,
+  assertEnvironmentWalkAdmission,
+  ENVIRONMENT_WALK_STATES,
   parseBrief,
   protectedRiskAreasForBrief,
   readRiskOwnership,
@@ -38,9 +41,11 @@ import { completeRebaseConflictContext } from './conflict-progress.ts';
 import {
   hasLiveProcessUnder,
   inspectProcessIdentity,
+  processIdentity,
   runPidFilePresence,
   sameProcess,
   terminateProcessGroup,
+  type ProcessIdentity,
 } from './process.ts';
 import { attemptSession, readMeasurement, makeRecord } from './records.ts';
 import { SqliteManagerInbox } from './inbox.ts';
@@ -65,6 +70,7 @@ import {
 } from './task-workspace.ts';
 import { webModule, WorkspaceController } from './workspace.ts';
 import { captureLaunchContext } from './launch-context.ts';
+import { consumeApplicableBriefProposal, recordReplacementBrief } from './durable-follow-up.ts';
 import { toolIncidentRetryAllowed } from './tool-incidents.ts';
 import { dependencyInstallationMatches } from './shared-dependencies.ts';
 import { prepareInitialDispatch } from './dispatch-preparation.ts';
@@ -80,6 +86,8 @@ import {
   type AuthenticatedManager,
 } from './priority-authority.ts';
 import type { PriorityGrant } from './types.ts';
+import { reapAttemptResources } from './attempt-resources.ts';
+import { resolveGoalManager } from './manager-ownership.ts';
 
 export { git };
 
@@ -186,6 +194,93 @@ function checkHasTerminalExit(worktree: string, id: string): boolean {
 function unresolvedCheckIds(task: Task, attempt: Attempt): string[] {
   return (attempt.checks ?? []).filter((id) => !checkHasTerminalExit(task.worktree, id));
 }
+
+const WAITING_CHECK_ID = /^[A-Za-z0-9_-]{1,128}$/;
+
+function waitingCheckResultPath(worktree: string, id: string): string {
+  return join(worktree, '.temp/goal/checks/results', `${id}.json`);
+}
+
+function readWaitingCheckRecord(worktree: string, id: string): Record<string, unknown> | null {
+  if (!WAITING_CHECK_ID.test(id)) return null;
+  try {
+    const document = JSON.parse(readFileSync(waitingCheckResultPath(worktree, id), 'utf8')) as unknown;
+    if (!document || typeof document !== 'object' || Array.isArray(document)) return null;
+    const record = document as Record<string, unknown>;
+    return record.result && typeof record.result === 'object' && !Array.isArray(record.result)
+      ? (record.result as Record<string, unknown>)
+      : record;
+  } catch {
+    return null;
+  }
+}
+
+function parseRecordedRunnerIdentity(value: unknown): ProcessIdentity | null {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
+  const identity = value as Record<string, unknown>;
+  if (
+    !Number.isSafeInteger(identity.pid) ||
+    Number(identity.pid) < 1 ||
+    typeof identity.start !== 'string' ||
+    !/^\d+$/.test(identity.start) ||
+    typeof identity.boot !== 'string' ||
+    !identity.boot.length ||
+    !Number.isSafeInteger(identity.group) ||
+    Number(identity.group) < 1
+  )
+    return null;
+  return { pid: Number(identity.pid), start: identity.start, boot: identity.boot, group: Number(identity.group) };
+}
+
+function waitingCheckRunnerIdentity(record: Record<string, unknown>): ProcessIdentity | null {
+  if (record.runnerIdentity !== undefined) return parseRecordedRunnerIdentity(record.runnerIdentity);
+  const pid = Number(record.runnerPid ?? record.runner_pid);
+  if (!Number.isSafeInteger(pid) || pid < 1) return null;
+  return processIdentity(pid);
+}
+
+function waitingCheckAlreadySettled(record: Record<string, unknown>): boolean {
+  const status = String(record.status ?? '').toLowerCase();
+  return status === 'finished' || status === 'abandoned';
+}
+
+function markWaitingCheckAbandoned(
+  worktree: string,
+  id: string,
+  operation: 'stop' | 'cancel',
+  record: Record<string, unknown>,
+): void {
+  writeFileSync(
+    waitingCheckResultPath(worktree, id),
+    JSON.stringify({
+      ...record,
+      id,
+      status: 'abandoned',
+      abandonedBy: operation,
+      abandonedAt: new Date().toISOString(),
+    }),
+  );
+}
+
+async function terminateWaitingCheckRunners(
+  worktree: string,
+  checks: readonly string[],
+  operation: 'stop' | 'cancel',
+  graceMs: number,
+  processPolicy: Parameters<typeof terminateProcessGroup>[2],
+): Promise<void> {
+  const localHost = hostname();
+  for (const id of checks) {
+    const record = readWaitingCheckRecord(worktree, id);
+    if (!record || waitingCheckAlreadySettled(record)) continue;
+    const host = record.runnerHost;
+    if (host === undefined || host === '' || host === localHost) {
+      const identity = waitingCheckRunnerIdentity(record);
+      if (identity) await terminateProcessGroup(identity, graceMs, processPolicy);
+    }
+    markWaitingCheckAbandoned(worktree, id, operation, record);
+  }
+}
 export type RetryOptions = {
   brief?: string;
   profile?: Profile;
@@ -267,6 +362,7 @@ export class WorkerTasks {
       now,
       spanMs,
       history: retainPoolReadings(this.settings.stateDirectory, readings, now, spanMs),
+      running: this.store.runningAttemptsByPool(),
     };
   }
   /**
@@ -319,6 +415,7 @@ export class WorkerTasks {
       readRiskOwnership(this.settings.riskAreasFile, this.settings.policy?.brief),
       this.settings.policy?.brief,
     );
+    brief.manager = resolveGoalManager(this.store.db, brief.goal, brief.manager);
     brief.lintWarnings = assertBriefDispatchable(
       markdown,
       this.settings.mainCheckout,
@@ -351,7 +448,11 @@ export class WorkerTasks {
     if (excludingTask) known.delete(excludingTask);
     for (const dependency of brief.after)
       if (!known.has(dependency)) throw new Error(`unknown dependency task: ${dependency}`);
+    this.assertEnvironmentWalkAdmission(brief, excludingTask);
     return { brief, taskClass };
+  }
+  private assertEnvironmentWalkAdmission(brief: Brief, excludingTask?: string): void {
+    assertEnvironmentWalkAdmission(brief, this.store.tasksInStates(ENVIRONMENT_WALK_STATES), excludingTask);
   }
   private assertLocalAcceptanceCustody(task: Task, nextBrief: Brief): void {
     if (nextBrief.acceptance.placement !== 'local' || task.currentAttempt === 0) return;
@@ -463,6 +564,7 @@ export class WorkerTasks {
       this.settings.policy?.leases,
     );
     try {
+      this.assertEnvironmentWalkAdmission(submittedBrief);
       const module = webModule(submittedBrief, this.settings);
       if (module) {
         const controller = new WorkspaceController(this.settings, this.store);
@@ -907,7 +1009,14 @@ export class WorkerTasks {
     options: RetryOptions = {},
     actor: AuthenticatedManager | null | undefined = undefined,
   ): void {
-    const expectedAttempt = options.expectedAttempt ?? this.store.task(taskId).currentAttempt;
+    const task = this.store.task(taskId);
+    const expectedAttempt = options.expectedAttempt ?? task.currentAttempt;
+    if (options.brief) {
+      const submitted = this.validateBrief(options.brief, taskId, actor).brief;
+      if (submitted.goal !== task.brief.goal || submitted.manager !== task.brief.manager)
+        throw new Error('a reshaped brief must keep the same goal and manager');
+      recordReplacementBrief(this.store, task, submitted.markdown, expectedAttempt);
+    }
     const lease = acquireDirectoryLease(
       join(this.settings.stateDirectory, 'leases', taskId),
       this.settings.policy?.leases,
@@ -973,8 +1082,14 @@ export class WorkerTasks {
   }
   private queueRetryLeased(taskId: string, options: RetryOptions, actor?: AuthenticatedManager | null): void {
     const task = this.store.task(taskId);
-    if (task.currentAttempt !== options.expectedAttempt)
-      throw new StaleAttemptError({ taskId, attempt: options.expectedAttempt! }, task.currentAttempt);
+    if (task.currentAttempt !== options.expectedAttempt) {
+      if (
+        options.brief === undefined ||
+        options.expectedAttempt === undefined ||
+        options.expectedAttempt > task.currentAttempt
+      )
+        throw new StaleAttemptError({ taskId, attempt: options.expectedAttempt! }, task.currentAttempt);
+    }
     if (!['ready', 'running', 'landing', 'stopped', 'held'].includes(task.state))
       throw new Error(`cannot retry ${task.state} task`);
     const nextBrief = options.brief === undefined ? task.brief : this.validateBrief(options.brief, taskId, actor).brief;
@@ -1001,11 +1116,25 @@ export class WorkerTasks {
     }
     this.assertLocalAcceptanceCustody(task, nextBrief);
     const ref = { taskId, attempt: task.currentAttempt };
+    const pendingIntent = this.store.retryIntent(ref);
+    const freshSessionOnly =
+      options.freshSession === true &&
+      options.brief === undefined &&
+      Object.keys(options).every((key) => key === 'freshSession' || key === 'expectedAttempt');
+    if (freshSessionOnly && pendingIntent?.status === 'pending') {
+      // Preserve the pending intent's order and options; the retry runner consumes this flag at launch.
+      this.store.updateRetryIntent(ref, (intent) => {
+        intent.options.freshSession = true;
+      });
+      return;
+    }
     const incidentHeld = !toolIncidentRetryAllowed(this.store, ref);
     // A held task's brief can change while its retry waits for dependencies: refusing it made managers cancel held
     // tasks and lose their branches. The pending retry then starts the amended brief.
     // A product retry still waiting to start takes an amended brief; the pending retry then starts that brief.
-    const amendPending = devProduct && options.brief !== undefined;
+    const amendPending =
+      (devProduct && options.brief !== undefined) ||
+      (options.freshSession === true && pendingIntent?.status === 'pending');
     if (task.state !== 'held' && !amendPending && !incidentHeld && this.store.retryIntent(ref)?.status === 'pending')
       throw new Error('a retry is already pending');
     if (task.state === 'held') {
@@ -1014,6 +1143,7 @@ export class WorkerTasks {
       if (reshaped.brief.goal !== task.brief.goal || reshaped.brief.manager !== task.brief.manager)
         throw new Error('a reshaped brief must keep the same goal and manager');
       if (sameBriefText(reshaped.brief.markdown, task.brief.markdown)) throw new BriefContractUnchangedError();
+      recordReplacementBrief(this.store, task, reshaped.brief.markdown, options.expectedAttempt ?? task.currentAttempt);
       const briefPath = join(this.settings.stateDirectory, 'briefs', `${taskId}-queued-${crypto.randomUUID()}.md`);
       mkdirSync(dirname(briefPath), { recursive: true });
       writeFileSync(briefPath, reshaped.brief.markdown, { flag: 'wx' });
@@ -1045,6 +1175,7 @@ export class WorkerTasks {
                 this.store.updateRetryIntent(ref, (value) => {
                   value.status = 'pending';
                   delete value.nextAttempt;
+                  if (options.freshSession && pendingIntent?.status === 'pending') value.options.freshSession = true;
                 });
               } else {
                 const retryOptions = { ...options };
@@ -1069,6 +1200,8 @@ export class WorkerTasks {
       throw new Error('a reshaped brief must keep the same goal and manager');
     if (reshaped && sameBriefText(reshaped.brief.markdown, task.brief.markdown))
       throw new BriefContractUnchangedError();
+    if (reshaped)
+      recordReplacementBrief(this.store, task, reshaped.brief.markdown, options.expectedAttempt ?? task.currentAttempt);
     const briefPath = reshaped
       ? join(this.settings.stateDirectory, 'briefs', `${taskId}-queued-${crypto.randomUUID()}.md`)
       : undefined;
@@ -1079,7 +1212,7 @@ export class WorkerTasks {
     const retryOptions = { ...options };
     delete retryOptions.brief;
     delete retryOptions.expectedAttempt;
-    delete retryOptions.freshSession;
+    if (pendingIntent?.status !== 'pending') delete retryOptions.freshSession;
     let priorityChanged = false;
     try {
       this.store.recordExplicitRetry(
@@ -1192,7 +1325,13 @@ export class WorkerTasks {
       startsFirst(task),
       taskId,
       task.currentAttempt + 1,
-      { policy: this.settings.policy?.capacity, urgent: task.brief.urgent },
+      {
+        policy: this.settings.policy?.capacity,
+        urgent: task.brief.urgent,
+        goal: task.brief.goal,
+        goalMaxInFlight: this.settings.policy?.goalMaxInFlight ?? defaultPolicy.goalMaxInFlight,
+        excludeTaskId: task.id,
+      },
     );
     try {
       // Several sweeps can find the same released task; the one holding its lease rebases, installs and launches, and
@@ -1366,6 +1505,9 @@ export class WorkerTasks {
         ? await awaitHostCapacity(this.store, this.settings.stateDirectory, plan.first, taskId, targetAttempt, {
             policy: this.settings.policy?.capacity,
             urgent: this.store.task(taskId).brief.urgent,
+            goal: this.store.task(taskId).brief.goal,
+            goalMaxInFlight: this.settings.policy?.goalMaxInFlight ?? defaultPolicy.goalMaxInFlight,
+            excludeTaskId: taskId,
           })
         : () => {};
     let lease: ReturnType<typeof acquireDirectoryLeaseWaiting> | undefined;
@@ -1380,6 +1522,19 @@ export class WorkerTasks {
       let task = this.store.task(taskId);
       if (options.expectedAttempt !== undefined && task.currentAttempt !== options.expectedAttempt)
         throw new StaleAttemptError({ taskId, attempt: options.expectedAttempt }, task.currentAttempt);
+      if (options.brief === undefined) {
+        const proposal = consumeApplicableBriefProposal(this.store, task);
+        if (proposal) {
+          const briefPath = join(
+            this.settings.stateDirectory,
+            'briefs',
+            `${taskId}-proposed-${crypto.randomUUID()}.md`,
+          );
+          mkdirSync(dirname(briefPath), { recursive: true });
+          writeFileSync(briefPath, proposal.markdown, { flag: 'wx' });
+          options = { ...options, brief: briefPath };
+        }
+      }
       this.store.assertRetryAllowed({ taskId, attempt: task.currentAttempt });
       if (!task.branch || !task.base) throw new Error('Imported attempts need a dispatchable contract before retry');
       const pageDataRepair = Boolean(options.pageDataRepairKey);
@@ -1483,6 +1638,8 @@ export class WorkerTasks {
       ensureWorktree(this.settings, task);
       const pools = this.poolPolicies.read();
       const old = task.currentAttempt ? this.store.attempt({ taskId, attempt: task.currentAttempt }) : null;
+      // A chained task's first attempt continues the landed session it was offered: route, pool and resume follow it.
+      const predecessor = old ?? (task.chain ? this.store.attempt(task.chain.from) : null);
       const previousConflict =
         options.escalation === 'rebase-conflict' && old
           ? priorRebaseConflict(this.store, taskId, old.attempt)
@@ -1517,8 +1674,12 @@ export class WorkerTasks {
           ...table.experiments.filter((e) => e.open && e.class === nextTaskClass).flatMap((e) => e.profiles),
         ].some((offered) => offered.cli === candidate.cli && offered.model === candidate.model);
       const route =
-        nextBrief.kind !== 'verification' && !pinned && old && routable(old.profile)
-          ? { profile: old.profile, tableVersion: old.tableVersion, experiment: old.experiment }
+        nextBrief.kind !== 'verification' && !pinned && predecessor && routable(predecessor.profile)
+          ? {
+              profile: predecessor.profile,
+              tableVersion: predecessor.tableVersion,
+              experiment: predecessor.experiment,
+            }
           : routeTask(nextBrief, task.sequence, table);
       const readings = pools.map((pool) =>
         withObservedExhaustion(this.reader(pool), pool, this.settings.stateDirectory),
@@ -1565,7 +1726,8 @@ export class WorkerTasks {
           readings,
           {
             policy: this.settings.policy?.provider,
-            ...(old && !switched ? { preferred: old.pool } : {}),
+            running: this.store.runningAttemptsByPool(),
+            ...(predecessor && !switched ? { preferred: predecessor.pool } : {}),
             ...(options.excludePools ? { exclude: options.excludePools } : {}),
           },
           this.settings.policy?.pacing.burnSpanMs ?? defaultPolicy.pacing.burnSpanMs,
@@ -1581,20 +1743,34 @@ export class WorkerTasks {
                 : undefined;
             },
       );
-      const oldSession = old ? attemptSession(old, this.settings.policy?.records) : null;
+      const oldSession =
+        !old && task.chain
+          ? task.chain.session
+          : predecessor
+            ? attemptSession(predecessor, this.settings.policy?.records)
+            : null;
       // Releasing a contract amended after its worker settled starts a new conversation. A held check waiter is
       // different: release stops its waiting attempt, but its saved checks still need their original session.
       // Terminal records take precedence over checks retained from an earlier waiting turn.
       const continuingCheckWait = old?.state === 'stopped' && Boolean(old.checks?.length) && !this.store.record(old);
       // The flag lives on the task, so it survives capacity waits, dependency holds and restarts until used.
+      const resumeFrom =
+        !old && task.chain
+          ? { pool: task.chain.pool, cli: task.chain.cli, model: task.chain.model }
+          : predecessor
+            ? { pool: predecessor.pool, cli: predecessor.profile.cli, model: predecessor.profile.model }
+            : null;
       const resumeSession =
+        // Cursor never resumes stored sessions, regardless of the provider-side store's size.
         !task.freshSession &&
+        !options.freshSession &&
         !(heldRelease && briefChange && !continuingCheckWait) &&
         oldSession &&
+        resumeFrom &&
         agentAdapter(profile.cli).canResume &&
-        old!.pool === pool.name &&
-        old!.profile.cli === profile.cli &&
-        old!.profile.model === profile.model
+        resumeFrom.pool === pool.name &&
+        resumeFrom.cli === profile.cli &&
+        resumeFrom.model === profile.model
           ? oldSession
           : undefined;
       if (pageDataRepair && (!resumeSession || !old || old.pool !== pool.name))
@@ -1970,6 +2146,7 @@ export class WorkerTasks {
         this.store.updateTask(ref, (t) => {
           t.state = cancelled ? 'cancelled' : 'stopped';
         });
+        await this.reapOwnedResources(this.store.task(taskId));
         return;
       }
       const settleLogPath = this.store.attempt(ref).logPath;
@@ -1993,6 +2170,19 @@ export class WorkerTasks {
             throw new Error(
               `${intent.operation} request retained with never-launched identity for task ${taskId} attempt ${ref.attempt} until current PID absence and worktree clearance are confirmed`,
             );
+        } else if (intent.processIdentity === 'waiting') {
+          try {
+            await terminateWaitingCheckRunners(
+              task.worktree,
+              this.store.attempt(ref).checks ?? [],
+              intent.operation,
+              this.settings.terminationGraceMs,
+              this.settings.policy?.process,
+            );
+          } catch (error) {
+            this.store.finishTermination(ref, String(error));
+            throw error;
+          }
         } else {
           try {
             const owned = new Map(
@@ -2010,6 +2200,7 @@ export class WorkerTasks {
         this.store.finishTermination(ref);
       }
       this.closeCurrentTermination(taskId, ref);
+      await this.reapOwnedResources(this.store.task(taskId));
     } finally {
       settlementLease?.release();
       lease.release();
@@ -2022,6 +2213,17 @@ export class WorkerTasks {
     const ref = { taskId, attempt: task.currentAttempt };
     const intent = this.store.attempt(ref).terminationIntent;
     if (!intent) return;
+    const attempt = this.store.attempt(ref);
+    if (
+      attempt.state === 'waiting' &&
+      attempt.process == null &&
+      intent.processIdentity === 'unknown' &&
+      !intent.settledAt
+    ) {
+      if (intent.operation === 'cancel') await this.cancel(taskId);
+      else await this.stop(taskId);
+      return;
+    }
     if (
       intent.processIdentity === 'unknown' ||
       (intent.processIdentity === 'not-started' && intent.state !== 'complete')
@@ -2091,6 +2293,15 @@ export class WorkerTasks {
       if (error instanceof StaleAttemptError) return this.store.updateHeldRetryTask(ref, apply);
       throw error;
     }
+  }
+  private async reapOwnedResources(task: Task): Promise<void> {
+    await reapAttemptResources({
+      taskId: task.id,
+      stateDirectory: this.settings.stateDirectory,
+      ...(task.workspace ? {} : { worktree: task.worktree }),
+      graceMs: this.settings.terminationGraceMs,
+      containers: this.settings.policy?.containers ?? defaultPolicy.containers,
+    });
   }
   completionScope(goal: string): string[] {
     return this.store.db

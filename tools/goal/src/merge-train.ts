@@ -48,6 +48,22 @@ import {
   transpileLandingCandidate,
   type LandingTranspileResult,
 } from './landing-transpile.ts';
+import {
+  LandingArchitectureInterruptedError,
+  architectureDiagnosticFile,
+  auditLandingArchitecture,
+  checkLandingArchitectureCandidate,
+  landableArchitectureViolation,
+  type LandingArchitectureResult,
+} from './landing-architecture.ts';
+import {
+  commitPublishedOn,
+  hasOpenArchitectureViolations,
+  recordArchitectureViolations,
+  settleArchitectureObservations,
+  storeArchitectureObservation,
+  type ArchitectureViolation,
+} from './architecture-repair.ts';
 import { regenerateLandingSchema, SCHEMA_MIGRATION_PATHS, type LandingSchemaResult } from './landing-schema.ts';
 import {
   importLandingKernelCandidate,
@@ -882,6 +898,170 @@ function assertTaskDeletionsAbsent(
   }
 }
 
+const markdownDuplicateDetail = 'union introduced a duplicate heading, table row or paragraph';
+const markdownTableSeparator = /^\|[\s:|-]+\|$/;
+
+function markdownLineBlocks(text: string): string[] {
+  const atoms: string[] = [];
+  const lines = text.split(/\r?\n/);
+  let fence: string | undefined;
+  let paragraph: string[] = [];
+  const flush = () => {
+    if (!paragraph.length) return;
+    atoms.push(`paragraph:${paragraph.join('\n')}`);
+    paragraph = [];
+  };
+  for (const line of lines) {
+    if (fence) {
+      paragraph.push(line);
+      if (line.startsWith(fence)) {
+        fence = undefined;
+        flush();
+      }
+      continue;
+    }
+    const opener = line.match(/^(`{3,}|~{3,})/);
+    if (opener) {
+      flush();
+      fence = opener[1];
+      paragraph.push(line);
+      continue;
+    }
+    if (/^#{1,6} /.test(line)) {
+      flush();
+      atoms.push(`heading:${line}`);
+      continue;
+    }
+    if (line.startsWith('|')) {
+      flush();
+      if (!markdownTableSeparator.test(line.trim())) atoms.push(`table-row:${line}`);
+      continue;
+    }
+    if (!line.trim()) {
+      flush();
+      continue;
+    }
+    paragraph.push(line);
+  }
+  flush();
+  return atoms;
+}
+
+function markdownBlockCounts(text: string): Map<string, number> {
+  const counts = new Map<string, number>();
+  for (const atom of markdownLineBlocks(text)) counts.set(atom, (counts.get(atom) ?? 0) + 1);
+  return counts;
+}
+
+/** A heading, table row or paragraph appears twice in the result when neither side had it twice. */
+function markdownIntroducesNewDuplicates(result: string, left: string, right: string): boolean {
+  const leftCounts = markdownBlockCounts(left);
+  const rightCounts = markdownBlockCounts(right);
+  for (const [atom, count] of markdownBlockCounts(result)) {
+    if (count < 2) continue;
+    if ((leftCounts.get(atom) ?? 0) < 2 && (rightCounts.get(atom) ?? 0) < 2) return true;
+  }
+  return false;
+}
+
+/** Union kept extra copies of a block that is rarer on dev than on the shared base. */
+function markdownRestoredCollapsedBlocks(union: string, base: string, dev: string): boolean {
+  const baseCounts = markdownBlockCounts(base);
+  const devCounts = markdownBlockCounts(dev);
+  for (const [atom, count] of markdownBlockCounts(union)) {
+    const onDev = devCounts.get(atom) ?? 0;
+    if ((baseCounts.get(atom) ?? 0) > onDev && count > onDev) return true;
+  }
+  return false;
+}
+
+function markdownLines(text: string): string[] {
+  if (!text) return [];
+  const lines = text.split('\n');
+  if (lines.at(-1) === '') lines.pop();
+  return lines;
+}
+
+function lineCounts(lines: readonly string[]): Map<string, number> {
+  const counts = new Map<string, number>();
+  for (const line of lines) counts.set(line, (counts.get(line) ?? 0) + 1);
+  return counts;
+}
+
+function lastLineIndex(lines: readonly string[], line: string): number {
+  for (let index = lines.length - 1; index >= 0; index--) if (lines[index] === line) return index;
+  return -1;
+}
+
+/**
+ * Keep the integration side of a rewritten Markdown block and splice in lines the task added against the base.
+ * Blank lines are spacing, not additions: the ordinary formatter restores heading separators.
+ */
+function applyMarkdownTaskAdditions(dev: string, base: string, task: string): string {
+  const devLines = markdownLines(dev);
+  const baseLines = markdownLines(base);
+  const taskLines = markdownLines(task);
+  const baseCounts = lineCounts(baseLines);
+  const added: { line: string; taskIndex: number }[] = [];
+  const seen = new Map<string, number>();
+  for (let taskIndex = 0; taskIndex < taskLines.length; taskIndex++) {
+    const line = taskLines[taskIndex]!;
+    if (!line) continue;
+    const n = (seen.get(line) ?? 0) + 1;
+    seen.set(line, n);
+    if (n > (baseCounts.get(line) ?? 0)) added.push({ line, taskIndex });
+  }
+  const devCounts = lineCounts(devLines);
+  const needed: { line: string; taskIndex: number }[] = [];
+  const placed = new Map<string, number>();
+  for (const item of added) {
+    const n = (placed.get(item.line) ?? 0) + 1;
+    placed.set(item.line, n);
+    if (n > (devCounts.get(item.line) ?? 0)) needed.push(item);
+  }
+  if (!needed.length) return dev;
+  const result = [...devLines];
+  let lastInsert = -1;
+  let lastLine = '';
+  for (const { line, taskIndex } of needed) {
+    let insertAt = -1;
+    let usedAnchor = '';
+    for (let index = taskIndex - 1; index >= 0; index--) {
+      const anchor = taskLines[index]!;
+      if (!anchor) continue;
+      const pos = lastLineIndex(result, anchor);
+      if (pos !== -1) {
+        insertAt = pos + 1;
+        usedAnchor = anchor;
+        break;
+      }
+    }
+    if (insertAt < 0) {
+      for (let index = taskIndex + 1; index < taskLines.length; index++) {
+        const anchor = taskLines[index]!;
+        if (!anchor) continue;
+        const pos = result.indexOf(anchor);
+        if (pos !== -1) {
+          insertAt = pos;
+          usedAnchor = anchor;
+          break;
+        }
+      }
+    }
+    if (insertAt < 0) insertAt = result.length;
+    if (usedAnchor === lastLine && lastInsert >= 0) insertAt = lastInsert + 1;
+    result.splice(insertAt, 0, line);
+    lastInsert = insertAt;
+    lastLine = line;
+  }
+  const ending = dev.endsWith('\n') || task.endsWith('\n') ? '\n' : '';
+  return `${result.join('\n')}${ending}`;
+}
+
+function finishMarkdownUnion(text: string): string {
+  return text.replace(/([^\n])\n(#{1,6}\s)/g, '$1\n\n$2');
+}
+
 function changedFrozenFiles(cwd: string, frozen: readonly { path: string; hash: string }[]): string[] {
   return frozen
     .filter((file) => {
@@ -1006,11 +1186,22 @@ function resolveMechanicalConflictsDetailed(
         // Treat that expected conflict status as a successful resolution; higher statuses indicate a tool error.
         if (merged.status === null || merged.status > 1) return { ok: false };
         // Preserve Markdown heading separators until the landing's ordinary formatter runs.
-        text = merged.stdout.replace(/([^\n])\n(#{1,6}\s)/g, '$1\n\n$2');
-        if (markdown === 'union')
-          assertTaskDeletionsAbsent(cwd, file, base!, stages[taskStage - 1]!, text, mergePolicy);
-        if (markdown === 'union' && text === ours && theirs !== ours && theirs !== base)
-          throw new WorkerConflictError(file);
+        text = finishMarkdownUnion(merged.stdout);
+        if (markdown === 'union') {
+          const task = stages[taskStage - 1]!;
+          const dev = stages[taskStage === 2 ? 2 : 1]!;
+          // Blind union concatenates rewritten copies. The 2026-11-06 README and importer-table landings
+          // reintroduced blocks dev had already collapsed; keep the integration block and the task's added lines.
+          if (markdownIntroducesNewDuplicates(text, ours!, theirs!))
+            throw new WorkerConflictError(file, markdownDuplicateDetail);
+          if (markdownRestoredCollapsedBlocks(text, base!, dev)) {
+            text = finishMarkdownUnion(applyMarkdownTaskAdditions(dev, base!, task));
+            if (markdownIntroducesNewDuplicates(text, ours!, theirs!))
+              throw new WorkerConflictError(file, markdownDuplicateDetail);
+          }
+          assertTaskDeletionsAbsent(cwd, file, base!, task, text, mergePolicy);
+          if (text === ours && theirs !== ours && theirs !== base) throw new WorkerConflictError(file);
+        }
         unionResolved.push(file);
       } finally {
         rmSync(scratch, { recursive: true, force: true });
@@ -1251,6 +1442,7 @@ export type TrainOptions = {
     devLandingChecks?: boolean;
     devPrelandingTypecheck?: boolean;
     devLandingBootCheck?: boolean;
+    devKernelImport?: boolean;
     gateTimeoutMs?: number;
   };
   queue: SqliteLandingQueue;
@@ -1413,6 +1605,32 @@ function transpileHandoff(
   };
 }
 
+function architectureHandoff(
+  entry: Pick<LandingEntry, 'id' | 'request'>,
+  sourceCommit: string,
+  changedFiles: readonly string[],
+  result: LandingArchitectureResult,
+): DevLandingTranspileHandoff {
+  if (result.outcome !== 'diagnostic' || result.elapsedMs === null || result.diagnostics.length === 0)
+    throw new Error('dev landing architecture handoff requires a measured architecture diagnostic');
+  return {
+    kind: 'dev-landing-transpile',
+    guard: 'dev-landing-architecture',
+    taskId: entry.request.taskId,
+    attempt: entry.request.attempt,
+    entryId: entry.id,
+    request: entry.request,
+    sourceCommit,
+    base: result.base,
+    candidate: result.candidate,
+    changedFiles: [...changedFiles],
+    typescriptFiles: [],
+    elapsedMs: result.elapsedMs,
+    logPath: result.logPath,
+    diagnostic: { file: null, line: null, column: null, message: result.diagnostics.join('\n') },
+  };
+}
+
 /** A failed Kernel entry import returns through the transpile handback; its diagnostic is the first useful error. */
 function kernelImportHandoff(
   entry: Pick<LandingEntry, 'id' | 'request'>,
@@ -1470,6 +1688,24 @@ function kernelImportOwner<T>(
   );
 }
 
+function architectureOwner<T>(
+  members: readonly T[],
+  changedFilesOf: (member: T) => readonly string[],
+  cwd: string,
+  diagnostics: readonly string[],
+): T {
+  const diagnosticFile = diagnostics.map(architectureDiagnosticFile).find((file): file is string => Boolean(file));
+  return (
+    (diagnosticFile
+      ? members.find((member) =>
+          changedFilesOf(member).some(
+            (path) => resolve(cwd, path) === resolve(cwd, diagnosticFile) || diagnosticFile.endsWith(`/${path}`),
+          ),
+        )
+      : undefined) ?? members[0]!
+  );
+}
+
 /** A failed schema regeneration returns through the transpile handback; its diagnostic is the first error line. */
 function schemaHandoff(
   entry: Pick<LandingEntry, 'id' | 'request'>,
@@ -1518,6 +1754,12 @@ class LandingTranspileUnavailableError extends Error {
   constructor(readonly result: LandingTranspileResult) {
     super(result.infrastructureError ?? 'dev landing transpile command unavailable');
     this.name = 'LandingTranspileUnavailableError';
+  }
+}
+class LandingArchitectureUnavailableError extends Error {
+  constructor(readonly result: LandingArchitectureResult) {
+    super(result.infrastructureError ?? 'dev landing architecture command unavailable');
+    this.name = 'LandingArchitectureUnavailableError';
   }
 }
 class LandingKernelImportUnavailableError extends Error {
@@ -1648,6 +1890,77 @@ export class MergeTrain {
         infrastructureError: result.infrastructureError ?? null,
       }),
     });
+  }
+
+  private recordDevArchitectureCheck(
+    request: LandingRequest,
+    result: LandingArchitectureResult,
+    outcome: 'passed' | 'diagnostic' | 'unavailable',
+  ): void {
+    if (!(this.options.fence instanceof WorkerStore)) return;
+    recordFlow(this.options.fence.db, {
+      ...request,
+      stage: 'landing',
+      action: 'dev-architecture',
+      at: new Date().toISOString(),
+      detail: JSON.stringify({
+        outcome,
+        base: result.base,
+        candidate: result.candidate,
+        changedFileCount: result.changedFileCount,
+        elapsedMs: result.elapsedMs,
+        violations: result.diagnostics.filter(landableArchitectureViolation).length,
+        logPath: result.logPath,
+        infrastructureError: result.infrastructureError ?? null,
+      }),
+    });
+  }
+
+  /**
+   * Records a dev candidate's landable boundary violations against the Goals of the tasks that own them, then lets it
+   * land. Earlier open lines are settled first, against the complete audit of this candidate when any are open. Rows
+   * are written before publication; the controller only dispatches repairs for lines whose candidate is on dev.
+   */
+  private async recordDevArchitecture(
+    cwd: string,
+    candidate: string,
+    architecture: LandingArchitectureResult,
+    owners: readonly { taskId: string; changedFiles: readonly string[] }[],
+    logPath: string,
+  ): Promise<void> {
+    const fence = this.options.fence;
+    if (!(fence instanceof WorkerStore)) return;
+    const published = commitPublishedOn(
+      this.options.mainCheckout,
+      `refs/heads/${this.options.integrationBranch ?? 'dev'}`,
+    );
+    settleArchitectureObservations(fence.db, published, true);
+    if (hasOpenArchitectureViolations(fence.db)) {
+      const audit = await auditLandingArchitecture({ cwd, logPath });
+      if (audit.outcome === 'unavailable')
+        appendFileSync(logPath, `Architecture resolution skipped: ${audit.infrastructureError ?? 'unavailable'}\n`);
+      else storeArchitectureObservation(fence.db, candidate, audit.diagnostics);
+    }
+    const violations: ArchitectureViolation[] = architecture.diagnostics
+      .filter(landableArchitectureViolation)
+      .map((line) => {
+        const owner = architectureOwner(owners, (item) => item.changedFiles, cwd, [line]);
+        const brief = fence.task(owner.taskId).brief;
+        const file = architectureDiagnosticFile(line);
+        const production = owner.changedFiles.filter((path) => /\.(?:ts|tsx|mts|cts)$/.test(path));
+        return {
+          goal: brief.goal,
+          manager: brief.manager,
+          line,
+          paths: file ? [file] : production.length ? production : [...owner.changedFiles],
+        };
+      });
+    if (!violations.length) return;
+    recordArchitectureViolations(fence.db, candidate, violations);
+    appendFileSync(
+      logPath,
+      `Candidate ${candidate} lands with ${violations.length} recorded boundary violation line${violations.length === 1 ? '' : 's'}; the same-day repair brief lists them.\n`,
+    );
   }
 
   private recordUnavailableDevKernelImport(request: LandingRequest, result: LandingKernelImportResult): void {
@@ -2527,6 +2840,65 @@ export class MergeTrain {
             throw new LandingTranspileUnavailableError(transpiled);
           }
           if (transpiled.outcome === 'passed') transpileEvidence = devTranspileEvidence(transpiled);
+          const architecture = await checkLandingArchitectureCandidate({
+            cwd: trainTree,
+            base,
+            candidate: finalCandidate,
+            changedFiles: finalChangedFiles,
+            logPath: batchLog,
+          });
+          let staleDuringArchitecture: LandingEntry | undefined;
+          for (const member of prepared) {
+            try {
+              o.fence.assertCurrent(member.entry.request);
+            } catch (error) {
+              if (!(error instanceof StaleAttemptError)) throw error;
+              staleDuringArchitecture = member.entry;
+              break;
+            }
+          }
+          if (staleDuringArchitecture) {
+            skipped.add(staleDuringArchitecture.id);
+            pending = pending.filter((entry) => entry.id !== staleDuringArchitecture!.id);
+            retry = true;
+            continue;
+          }
+          if (target() !== base) {
+            retry = true;
+            continue;
+          }
+          if (architecture.outcome === 'unavailable') {
+            this.recordDevArchitectureCheck(prepared[0]!.entry.request, architecture, 'unavailable');
+            throw new LandingArchitectureUnavailableError(architecture);
+          }
+          if (architecture.diagnostics.some((line) => !landableArchitectureViolation(line))) {
+            const owner = architectureOwner(
+              prepared,
+              (member) => member.result.changedFiles,
+              trainTree,
+              architecture.diagnostics,
+            );
+            return returnRepair(
+              owner,
+              architectureHandoff(
+                owner.entry,
+                owner.entry.request.workerCommit ?? finalCandidate,
+                finalChangedFiles,
+                architecture,
+              ),
+            );
+          }
+          await this.recordDevArchitecture(
+            trainTree,
+            finalCandidate,
+            architecture,
+            prepared.map((member) => ({
+              taskId: member.entry.request.taskId,
+              changedFiles: member.result.changedFiles,
+            })),
+            batchLog,
+          );
+          this.recordDevArchitectureCheck(prepared[0]!.entry.request, architecture, architecture.outcome);
         }
         if (
           !existsSync(join(trainTree, 'node_modules')) &&
@@ -2534,13 +2906,17 @@ export class MergeTrain {
           existsSync(join(trainTree, 'package.json'))
         )
           installShared(trainTree, undefined, undefined, this.options.policy);
+        // Off by default: a cold throwaway database and SQL analysis took 265-448 s per candidate (2026-11-05) and
+        // held every landing behind it. Turn it on once it reuses warm state.
         if (lane === 'dev') {
           const importedFiles = changedPathsBetween(trainTree, base, finalCandidate, this.options.policy?.merge);
+          // Off unless integration.devKernelImport: a cold throwaway database and SQL analysis took 265-448 s per
+          // candidate on 2026-11-05 and held every landing behind it. Re-enable once it reuses warm state.
           const imported = await importLandingKernelCandidate({
             cwd: trainTree,
             base,
             candidate: finalCandidate,
-            changedFiles: importedFiles,
+            changedFiles: this.kernelImportFiles(importedFiles),
             logPath: batchLog,
           });
           let staleDuringImport: LandingEntry | undefined;
@@ -2782,8 +3158,10 @@ export class MergeTrain {
         if (committed) throw error;
         if (
           error instanceof LandingTranspileUnavailableError ||
+          error instanceof LandingArchitectureUnavailableError ||
           error instanceof LandingKernelImportUnavailableError ||
-          error instanceof LandingTranspileInterruptedError
+          error instanceof LandingTranspileInterruptedError ||
+          error instanceof LandingArchitectureInterruptedError
         )
           throw error;
         if (error instanceof StaleAttemptError) {
@@ -2945,10 +3323,6 @@ export class MergeTrain {
     const observe = () => {
       if (controller.signal.aborted) return;
       if (devPending()) controller.abort(new ControlPlaneProofInterrupted('Product dev request needs the dev lane'));
-      else if (o.codeIsCurrent && !o.codeIsCurrent())
-        controller.abort(
-          new ControlPlaneProofInterrupted('Control-plane code changed; current controller must hand off'),
-        );
       else {
         try {
           o.fence.assertCurrent(entry.request);
@@ -2959,6 +3333,11 @@ export class MergeTrain {
     };
     const checkpoint = () => {
       observe();
+      // Stale code lets the command already running finish; the next boundary hands the request to a current controller.
+      if (o.codeIsCurrent && !o.codeIsCurrent())
+        controller.abort(
+          new ControlPlaneProofInterrupted('Control-plane code changed; current controller must hand off'),
+        );
       controller.signal.throwIfAborted();
       if (this.git(o.mainCheckout, 'rev-parse', `refs/heads/${entry.request.branch}`) !== source) {
         const error = new Error(
@@ -4054,6 +4433,39 @@ export class MergeTrain {
             throw new LandingTranspileUnavailableError(transpiled);
           }
           if (transpiled.outcome === 'passed') transpileEvidence = devTranspileEvidence(transpiled);
+          const architecture = await checkLandingArchitectureCandidate({
+            cwd: trainTree,
+            base,
+            candidate,
+            changedFiles: result.changedFiles,
+            logPath,
+          });
+          o.fence.assertCurrent(request);
+          if (target() !== base) continue;
+          if (architecture.outcome === 'unavailable') {
+            this.recordDevArchitectureCheck(request, architecture, 'unavailable');
+            throw new LandingArchitectureUnavailableError(architecture);
+          }
+          if (architecture.diagnostics.some((line) => !landableArchitectureViolation(line))) {
+            appendFileSync(
+              logPath,
+              `Candidate ${candidate} was not published; returning its architecture check failure to task ${request.taskId} attempt ${request.attempt}.\n`,
+            );
+            return architectureHandoff(
+              entry,
+              workerCommit ?? request.workerCommit ?? candidate,
+              result.changedFiles,
+              architecture,
+            );
+          }
+          await this.recordDevArchitecture(
+            trainTree,
+            candidate,
+            architecture,
+            [{ taskId: request.taskId, changedFiles: result.changedFiles }],
+            logPath,
+          );
+          this.recordDevArchitectureCheck(request, architecture, architecture.outcome);
           stage = 'gate';
           if (
             !existsSync(join(trainTree, 'node_modules')) &&
@@ -4061,11 +4473,13 @@ export class MergeTrain {
             existsSync(join(trainTree, 'package.json'))
           )
             installShared(trainTree, undefined, undefined, this.options.policy);
+          // Off unless integration.devKernelImport: a cold throwaway database and SQL analysis took 265-448 s per
+          // candidate on 2026-11-05 and held every landing behind it. Re-enable once it reuses warm state.
           const imported = await importLandingKernelCandidate({
             cwd: trainTree,
             base,
             candidate,
-            changedFiles: result.changedFiles,
+            changedFiles: this.kernelImportFiles(result.changedFiles),
             logPath,
           });
           o.fence.assertCurrent(request);
@@ -4665,8 +5079,10 @@ export class MergeTrain {
         custody?.signal.aborted ||
         error instanceof StaleAttemptError ||
         error instanceof LandingTranspileUnavailableError ||
+        error instanceof LandingArchitectureUnavailableError ||
         error instanceof LandingKernelImportUnavailableError ||
-        error instanceof LandingTranspileInterruptedError
+        error instanceof LandingTranspileInterruptedError ||
+        error instanceof LandingArchitectureInterruptedError
       )
         throw error;
       const message = String(error);
@@ -7269,6 +7685,11 @@ export class MergeTrain {
     throw new Error(result.stderr?.trim() || result.error?.message || `Cannot read ${branch}`);
   }
 
+  /** The changed files the dev-landing Kernel import sees; none (so it skips) unless integration.devKernelImport is on. */
+  private kernelImportFiles(files: readonly string[]): readonly string[] {
+    return this.options.integration?.devKernelImport === true ? files : [];
+  }
+
   private controlPlaneSnapshotMatches(snapshot: ControlPlaneReleaseSnapshot): boolean {
     return (
       this.refHead(snapshot.mainBranch) === snapshot.mainHead &&
@@ -7443,11 +7864,43 @@ export class MergeTrain {
           this.recordUnavailableDevTranspile(devLanding.owners[0]!.entry.request, transpiled);
           throw new LandingTranspileUnavailableError(transpiled);
         }
-        const imported = await importLandingKernelCandidate({
+        const architecture = await checkLandingArchitectureCandidate({
           cwd: tree,
           base: targetHead,
           candidate: commit,
           changedFiles: changed,
+          logPath,
+        });
+        for (const owner of devLanding.owners) this.options.fence.assertCurrent(owner.entry.request);
+        if (!this.controlPlaneSnapshotMatches(devLanding.snapshot)) return { moved: true };
+        if (architecture.outcome === 'unavailable') {
+          this.recordDevArchitectureCheck(devLanding.owners[0]!.entry.request, architecture, 'unavailable');
+          throw new LandingArchitectureUnavailableError(architecture);
+        }
+        if (architecture.diagnostics.some((line) => !landableArchitectureViolation(line))) {
+          const owner = architectureOwner(
+            devLanding.owners,
+            (item) => item.changedFiles,
+            tree,
+            architecture.diagnostics,
+          );
+          return {
+            transpileHandoff: architectureHandoff(owner.entry, owner.sourceCommit, changed, architecture),
+          };
+        }
+        await this.recordDevArchitecture(
+          tree,
+          commit,
+          architecture,
+          devLanding.owners.map((item) => ({ taskId: item.entry.request.taskId, changedFiles: item.changedFiles })),
+          logPath,
+        );
+        this.recordDevArchitectureCheck(devLanding.owners[0]!.entry.request, architecture, architecture.outcome);
+        const imported = await importLandingKernelCandidate({
+          cwd: tree,
+          base: targetHead,
+          candidate: commit,
+          changedFiles: this.kernelImportFiles(changed),
           logPath,
         });
         for (const owner of devLanding.owners) this.options.fence.assertCurrent(owner.entry.request);

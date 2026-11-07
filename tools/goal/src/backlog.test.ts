@@ -27,10 +27,15 @@ import { SqliteManagerInbox } from './inbox.ts';
 import { runIntegration } from './integration-cli.ts';
 import { acquireDirectoryLease } from './lease.ts';
 import { WorkerStore } from './store.ts';
-import { assertBriefDispatchable, MAX_BRIEF_BYTES } from './briefs.ts';
-import { brief as fixtureBrief, harness, markdown, temporaryDirectory } from './test-support.ts';
+import { assertBriefDispatchable, MAX_BRIEF_BYTES, readRiskOwnership } from './briefs.ts';
+import { defaultPolicy } from './policy.ts';
+import { brief as fixtureBrief, fixturePool, harness, markdown, temporaryDirectory } from './test-support.ts';
+import { countAllowanceWaiting } from './allowance.ts';
+import type { RoutingTable } from './routing.ts';
+import type { Pool, PoolReading, Profile } from './types.ts';
 
 const NOW = Date.UTC(2026, 10, 2, 12, 0);
+const complete = markdown.replace('lines: 100', `lines: ${defaultPolicy.brief.minimumEstimateLines}`);
 const cleanups: (() => void)[] = [];
 afterEach(() => {
   for (const cleanup of cleanups.splice(0)) cleanup();
@@ -120,7 +125,7 @@ function brief(state: string, goal: string, name: string, ageMs: number, text = 
   const directory = join(state, 'backlog', goal);
   mkdirSync(directory, { recursive: true });
   const file = join(directory, name);
-  writeFileSync(file, `${text.startsWith('---') ? text : `${markdown}\n\n${text}`}\n`);
+  writeFileSync(file, `${text.startsWith('---') ? text : `${complete}\n\n${text}`}\n`);
   const at = (NOW - ageMs) / 1000;
   utimesSync(file, at, at);
   return file;
@@ -186,10 +191,12 @@ test('ready briefs dispatch oldest first, round-robin across Goals, only up to t
   expect(existsSync(join(f.state, 'backlog', 'web', '.dispatching', 'a-older.md'))).toBe(false);
 
   expect(backlogStatus(f.state)).toEqual([
-    { goal: 'search', ready: 1, dispatched: 1, failed: 0 },
-    { goal: 'web', ready: 1, dispatched: 2, failed: 0 },
+    { goal: 'search', ready: 1, dispatched: 1, failed: 0, returned: 0 },
+    { goal: 'web', ready: 1, dispatched: 2, failed: 0, returned: 0 },
   ]);
-  expect(formatBacklogStatus(backlogStatus(f.state)).split('\n')[0]).toMatch(/^goal\s+ready\s+dispatched\s+failed$/);
+  expect(formatBacklogStatus(backlogStatus(f.state)).split('\n')[0]).toMatch(
+    /^goal\s+ready\s+dispatched\s+failed\s+returned$/,
+  );
 });
 
 test('the Goal served longest ago goes first, and a full cap dispatches nothing', async () => {
@@ -242,11 +249,10 @@ test('dispatch reports prompt and brief lints while retaining the task in dispat
     };
   };
   const content = [
-    markdown,
+    complete.replace('criticalPath: false', `notes: ${'n'.repeat(MAX_BRIEF_BYTES)}\ncriticalPath: false`),
     'See `.temp/goal/notes.md` and `/main/checkout`.',
     '',
     'A saved worker prompt used `bun scripts/worker-check.ts -- <command...>` and `--wait`.',
-    'x'.repeat(MAX_BRIEF_BYTES + 1),
   ].join('\n');
   brief(f.state, 'web', 'linted.md', 60_000, content);
 
@@ -302,7 +308,7 @@ test('an uncommitted interrupted claim returns to the ready backlog and dispatch
   const claims = join(f.state, 'backlog', 'web', '.dispatching');
   mkdirSync(claims, { recursive: true });
   const file = join(claims, 'interrupted.md');
-  const text = `${markdown}\n\nInterrupted brief\n`;
+  const text = `${complete}\n\nInterrupted brief\n`;
   writeFileSync(file, text);
   utimesSync(file, (NOW - 60_000) / 1000, (NOW - 60_000) / 1000);
 
@@ -547,14 +553,83 @@ test('goal backlog status prints ready, dispatched and failed counts per Goal', 
   const json = await run('status', '--json');
   expect(json.code).toBe(0);
   expect(JSON.parse(json.stdout)).toEqual([
-    { goal: 'imports', ready: 0, dispatched: 0, failed: 1 },
-    { goal: 'web', ready: 1, dispatched: 1, failed: 0 },
+    { goal: 'imports', ready: 0, dispatched: 0, failed: 1, returned: 0, inFlight: 0, maxInFlight: 6 },
+    { goal: 'web', ready: 1, dispatched: 1, failed: 0, returned: 0, inFlight: 0, maxInFlight: 6 },
   ]);
   const table = await run('status');
   expect(table.code).toBe(0);
-  expect(table.stdout.split('\n')[2]).toMatch(/^web\s+1\s+1\s+0$/);
+  expect(table.stdout.split('\n')[2]).toMatch(/^web\s+1\s+1\s+0\s+0\s+0\s+6$/);
   expect((await run('dispatch')).code).not.toBe(0);
 });
+
+test('backlog dispatch returns undersized or oversized product briefs to their manager with merge candidates', async () => {
+  const f = fixture();
+  const small = markdown
+    .replace('goal: fixture', 'goal: web\nmanager: web')
+    .replace('paths: [result.txt]', 'paths: [tools/goal/src/backlog.ts]');
+  const sibling = complete
+    .replace('goal: fixture', 'goal: web\nmanager: web')
+    .replace('paths: [result.txt]', 'paths: [tools/goal/src/briefs.ts]');
+  const long = `${complete
+    .replace('goal: fixture', 'goal: web\nmanager: web')
+    .replace(
+      'paths: [result.txt]',
+      'paths: [tools/goal/src/policy.ts]',
+    )}${'x'.repeat(defaultPolicy.brief.maximumBodyCharacters + 1)}`;
+  const urgent = markdown
+    .replace('goal: fixture', 'goal: web\nmanager: web')
+    .replace('criticalPath: false', 'urgent: true\ncriticalPath: false');
+  brief(f.state, 'web', 'small.md', 90_000, small);
+  brief(f.state, 'web', 'long.md', 80_000, long);
+  brief(f.state, 'web', 'sibling.md', 70_000, sibling);
+  brief(f.state, 'web', 'urgent.md', 60_000, urgent);
+  brief(
+    f.state,
+    'search',
+    'research.md',
+    90_000,
+    '---\ngoal: search\nmanager: search\nkind: research\npaths: [docs/research/topic.md]\n---\nResearch brief',
+  );
+  brief(f.state, 'imports', 'slice.md', 90_000, markdown.replace('goal: fixture', 'goal: imports\nmanager: imports'));
+
+  const sweep = await sweepBacklog(f.runtime);
+
+  expect(sweep.returned.map((entry) => `${entry.goal}/${entry.brief}`).sort()).toEqual([
+    'imports/slice.md',
+    'web/long.md',
+    'web/small.md',
+  ]);
+  expect(sweep.dispatched.map((entry) => `${entry.goal}/${entry.brief}`).sort()).toEqual([
+    'search/research.md',
+    'web/sibling.md',
+    'web/urgent.md',
+  ]);
+  expect(f.dispatched.map((entry) => entry.file).some((file) => file.endsWith('small.md'))).toBe(false);
+  const returned = join(f.state, 'backlog', 'web', 'returned');
+  expect(readdirSync(returned).sort()).toEqual(['long.md', 'long.reason', 'small.md', 'small.reason']);
+  expect(readFileSync(join(returned, 'small.reason'), 'utf8')).toContain('brief.minimumEstimateLines is 1200');
+  expect(readFileSync(join(returned, 'long.reason'), 'utf8')).toContain('brief.maximumBodyCharacters is 4000');
+  const web = f.inbox.pending('web');
+  expect(web).toHaveLength(1);
+  expect(web[0]!.event.summary).toContain('Backlog dispatch returned 2 product brief(s)');
+  expect(web[0]!.event.summary).toContain('small.md');
+  expect(web[0]!.event.summary).toContain('merge with');
+  expect(web[0]!.event.summary).toContain(returned);
+  expect(f.inbox.pending('imports')).toHaveLength(1);
+  expect(f.inbox.pending('search')).toHaveLength(0);
+  expect(backlogStatus(f.state)).toEqual([
+    { goal: 'imports', ready: 0, dispatched: 0, failed: 0, returned: 1 },
+    { goal: 'search', ready: 0, dispatched: 1, failed: 0, returned: 0 },
+    { goal: 'web', ready: 0, dispatched: 2, failed: 0, returned: 2 },
+  ]);
+  expect(
+    (
+      f.db.query("SELECT count(*) AS n FROM flow_events WHERE stage='dispatch' AND action='returned'").get() as {
+        n: number;
+      }
+    ).n,
+  ).toBe(3);
+}, 10_000);
 
 test('stopped tasks are cancelled at most twenty per Goal per run, oldest first, with one event per owner', async () => {
   const f = fixture({ workerCap: 0 });
@@ -700,7 +775,7 @@ test('seven continuations that share owner docs dispatch; a proposal does not bl
   expect(existsSync(join(root, 'proposed', 'continuation-bbbbbbbb-1-parked.md'))).toBe(true);
 });
 
-test('each continuation admission refreshes overlap after the preceding dispatch', async () => {
+test('a continuation that partly overlaps the preceding dispatch is admitted without an after edge', async () => {
   const f = fixture({ perSweep: 2 });
   f.runtime.policy = readControlPolicy({ backlog: { continuationReview: { web: false } } });
   let sequence = 0;
@@ -734,5 +809,150 @@ test('each continuation admission refreshes overlap after the preceding dispatch
 
   expect(sweep.dispatched.map((entry) => entry.brief)).toEqual([first, second]);
   expect(sweep.dispatched[0]?.taskId).toBe('admitted-1');
-  expect(f.dispatched[1]?.text).toContain('after:\n  - admitted-1');
+  expect(f.dispatched[1]?.text).not.toContain('admitted-1');
+});
+
+const SPAN_MS = 90 * 60 * 1000;
+const CODEX_PROFILE: Profile = { cli: 'codex', model: 'gpt-6-luna', effort: 'high', poolClass: 'codex' };
+const CURSOR_PROFILE: Profile = { cli: 'cursor', model: 'gpt-5.6-luna', effort: 'high', poolClass: 'cursor' };
+
+function observed(pool: Pool, usedPercent: number, at: number): PoolReading {
+  return {
+    pool: pool.name,
+    allowanceKey: pool.allowanceKey,
+    at: new Date(at).toISOString(),
+    observedAt: new Date(at).toISOString(),
+    exhausted: usedPercent >= 100,
+    error: null,
+    windows: [{ usedPercent, minutes: 10080, resetsAt: NOW + 8 * 3_600_000 }],
+  };
+}
+
+function route(first: Profile, fallbacks: Profile[] = []) {
+  return { first, fallbacks, maxSteps: 1, maxMs: 1 };
+}
+
+function testTable(implementationFallbacks: Profile[] = [CURSOR_PROFILE]): RoutingTable {
+  const implementation = route(CODEX_PROFILE, implementationFallbacks);
+  const claim = route(CODEX_PROFILE);
+  return {
+    version: '1',
+    classes: {
+      implementation,
+      interface: implementation,
+      'bulk-text': implementation,
+      claim,
+      specification: claim,
+      'critical-path': implementation,
+      research: claim,
+    },
+    experiments: [],
+    consultation: { cli: 'codex', model: 'gpt-5.4', effort: 'medium', poolClass: 'codex' },
+  };
+}
+
+function claimFields(goal = 'web'): Record<string, unknown> {
+  return {
+    goal,
+    manager: goal,
+    kind: 'claim',
+    paths: ['result.txt'],
+    riskAreas: [],
+    citesSources: false,
+    hostileInput: false,
+    criticalPath: false,
+    waiting: [],
+    after: [],
+    inseparable: false,
+    acceptance: { command: ['bun', 'test'], tests: ['acceptance'], failing: true },
+    estimate: { lines: 100, files: 4 },
+    markdown: '',
+  };
+}
+
+function attachRouting(
+  f: ReturnType<typeof fixture>,
+  options: { ceiling?: number; usedFrom?: number; usedTo?: number; fallbacks?: Profile[] } = {},
+) {
+  const now = f.clock.now;
+  const codex = {
+    ...fixturePool(),
+    policy: {
+      ...fixturePool().policy,
+      maxBurnPerHour: options.ceiling ?? 0.8,
+      allowUnknown: false,
+    },
+  };
+  const cursor = {
+    ...codex,
+    name: 'cursor-grok',
+    cli: 'cursor' as const,
+    classes: ['cursor'],
+    command: 'cursor-agent',
+    allowanceKey: 'cursor',
+    policy: { weight: 1, reservePercent: 0, allowUnknown: false, maxAgeMs: 60_000 },
+  };
+  const history = [observed(codex, options.usedFrom ?? 10, now - SPAN_MS)];
+  const current = observed(codex, options.usedTo ?? 12, now);
+  const cursorReading = observed(cursor, 5, now);
+  const readings = [...history, current, cursorReading];
+  f.runtime.routing = {
+    table: testTable(options.fallbacks ?? [CURSOR_PROFILE]),
+    ownership: readRiskOwnership(join(import.meta.dir, '../risk-areas.json')),
+    pools: [codex, cursor],
+    readings,
+  };
+  return { codex, cursor, readings };
+}
+
+test('With the codex pool over its burn ceiling and cursor-grok allowed, a sweep dispatches an older implementation brief routable to cursor-grok before newer claims, and claims waiting only on allowance do not fill the worker cap.', async () => {
+  const f = fixture({ workerCap: 2 });
+  const { codex, readings } = attachRouting(f);
+  for (let index = 0; index < 2; index++) task(f.db, `wait-${index}`, 'ready', claimFields(), index + 1);
+  brief(f.state, 'web', 'older-impl.md', 120_000);
+  brief(f.state, 'web', 'newer-claim.md', 60_000, complete.replace('kind: implementation', 'kind: claim'));
+  brief(f.state, 'web', 'newest-claim.md', 30_000, complete.replace('kind: implementation', 'kind: claim'));
+
+  const sweep = await sweepBacklog(f.runtime);
+
+  expect(sweep.dispatched.map((entry) => entry.brief)[0]).toBe('older-impl.md');
+  expect(sweep.dispatched.some((entry) => entry.brief === 'older-impl.md')).toBe(true);
+  expect(
+    countAllowanceWaiting(
+      [
+        {
+          first: CODEX_PROFILE,
+          fallbacks: [],
+        },
+        { first: CODEX_PROFILE, fallbacks: [] },
+      ],
+      f.runtime.routing!.pools,
+      readings,
+      { now: f.clock.now, spanMs: SPAN_MS, history: readings },
+    ),
+  ).toEqual({ [codex.name]: 2 });
+});
+
+test('Ready tasks waiting only on allowance count toward the cap only beyond a bound of 10.', async () => {
+  const under = fixture({ workerCap: 1 });
+  attachRouting(under);
+  for (let index = 0; index < 10; index++) task(under.db, `wait-${index}`, 'ready', claimFields(), index + 1);
+  brief(under.state, 'web', 'waiting-claim.md', 60_000, complete.replace('kind: implementation', 'kind: claim'));
+  expect((await sweepBacklog(under.runtime)).dispatched.map((entry) => entry.brief)).toEqual(['waiting-claim.md']);
+
+  const over = fixture({ workerCap: 1 });
+  attachRouting(over);
+  for (let index = 0; index < 11; index++) task(over.db, `wait-${index}`, 'ready', claimFields(), index + 1);
+  brief(over.state, 'web', 'blocked-claim.md', 60_000, complete.replace('kind: implementation', 'kind: claim'));
+  expect((await sweepBacklog(over.runtime)).dispatched).toEqual([]);
+  brief(over.state, 'web', 'allowed-impl.md', 50_000);
+  expect((await sweepBacklog(over.runtime)).dispatched.map((entry) => entry.brief)).toEqual(['allowed-impl.md']);
+});
+
+test('A paced pool admits at most two new starts per sweep while its measured rate is within 25% of its ceiling.', async () => {
+  const f = fixture({ workerCap: 5, perSweep: 5 });
+  attachRouting(f, { ceiling: 2, usedFrom: 10, usedTo: 13, fallbacks: [] });
+  for (let index = 0; index < 5; index++) brief(f.state, 'web', `work-${index}.md`, 120_000 - index * 1_000);
+  expect((await sweepBacklog(f.runtime)).dispatched).toHaveLength(2);
+  expect(readdirSync(join(f.state, 'backlog', 'web')).filter((name) => name.endsWith('.md'))).toHaveLength(3);
 });

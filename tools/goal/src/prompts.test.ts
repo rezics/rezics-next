@@ -10,12 +10,14 @@ import {
   writeFileSync,
 } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { join, resolve } from 'node:path';
 import { defaultPolicy } from './policy.ts';
+import { formatModuleMap, loadManifest } from '../../../scripts/architecture-map.ts';
 import {
   applyRenderedPrompt,
   DEFAULT_PROMPT_DIRECTORY,
   fillTemplate,
+  gitBlobSha,
   renderManagerOpening,
   renderWorkerPrompt,
   type RenderedPrompt,
@@ -160,10 +162,24 @@ function goldenCases(): { name: string; rendered: RenderedPrompt }[] {
         evidence: retryEvidence(),
       }),
     },
+    {
+      name: 'minimal-verification.txt',
+      rendered: renderWorkerPrompt({
+        task: worker(contract({ markdown: 'Complete the source.' })),
+        mainCheckout: MAIN,
+        stateDirectory: minimalState(),
+      }),
+    },
   ];
 }
 
-test('every template renders within its byte budget for the six golden tasks, and the renders equal the committed golden files', () => {
+function minimalState(): string {
+  const directory = mkdtempSync(join(tmpdir(), 'prompt-minimal-state-'));
+  writeFileSync(join(directory, 'verification-mode'), 'minimal\n');
+  return directory;
+}
+
+test('every template renders within its byte budget for the seven golden tasks, and the renders equal the committed golden files', () => {
   const update = process.env.UPDATE_PROMPT_GOLDENS === '1';
   if (update) mkdirSync(GOLDEN_DIRECTORY, { recursive: true });
   for (const { name, rendered } of goldenCases()) {
@@ -174,10 +190,24 @@ test('every template renders within its byte budget for the six golden tasks, an
     expect(rendered.conditionBytes).toBeLessThanOrEqual(defaultPolicy.prompt.conditionBytes);
     expect(rendered.manifest.layers.total).toBeLessThanOrEqual(defaultPolicy.prompt.workerTotalBytes);
     expect(rendered.manifest.overBudget).toEqual([]);
-    if (name === 'dev-implementation.txt')
-      expect(rendered.roleBytes + rendered.conditionPromptBytes).toBeLessThanOrEqual(5000);
+    expect(rendered.prompt).toContain('row module|kind|public entries|allowed dependencies');
+    expect(rendered.manifest.architectureModules).toMatch(/^[0-9a-f]{40}$/);
     if (update) writeFileSync(path, rendered.prompt);
     expect(rendered.prompt).toBe(readFileSync(path, 'utf8'));
+  }
+});
+
+test('implementation, research and verification worker roles receive the path-selected architecture map', () => {
+  const repositoryRoot = resolve(import.meta.dir, '../../..');
+  const moduleMap = formatModuleMap(loadManifest(repositoryRoot), contract().paths);
+  const kinds = ['implementation', 'research', 'verification'] as const;
+  for (const kind of kinds) {
+    const rendered = renderWorkerPrompt({ task: worker(contract({ kind })), mainCheckout: MAIN });
+    const roleBudget =
+      kind === 'research' ? defaultPolicy.prompt.researchRoleBytes : defaultPolicy.prompt.workerRoleBytes;
+    expect(rendered.prompt).toContain(moduleMap);
+    expect(rendered.manifest.architectureModules).toBe(gitBlobSha(moduleMap));
+    expect(rendered.roleBytes).toBeLessThanOrEqual(roleBudget);
   }
 });
 
@@ -254,6 +284,36 @@ test('a minimal-verification launch of a brief that requires browser checks reco
     );
     expect(task.deferredAcceptance).toEqual(['browser']);
     expect(attempt.prompt).toEqual(rendered.manifest);
+  } finally {
+    rmSync(directory, { recursive: true, force: true });
+  }
+});
+
+test('a control-plane worker runs its declared acceptance command even under minimal verification', () => {
+  const directory = mkdtempSync(join(tmpdir(), 'prompt-control-plane-'));
+  try {
+    writeFileSync(join(directory, 'verification-mode'), 'minimal\n');
+    const rendered = renderWorkerPrompt({
+      task: worker(
+        contract({
+          goal: 'control-plane',
+          acceptance: {
+            command: ['bun', 'test', 'tools/goal/src/dev-verifier.test.ts'],
+            tests: ['verifier rounds'],
+            failing: true,
+            workerOwned: true,
+          },
+        }),
+      ),
+      mainCheckout: MAIN,
+      stateDirectory: directory,
+    });
+    expect(rendered.prompt).toContain('run your acceptance command once after your last relevant edit');
+    expect(rendered.prompt).toContain(
+      "run the exact declared local command `'bun' 'test' 'tools/goal/src/dev-verifier.test.ts'",
+    );
+    expect(rendered.prompt).not.toContain('they run after landing in the dev verifier');
+    expect(rendered.deferredAcceptance).toEqual([]);
   } finally {
     rmSync(directory, { recursive: true, force: true });
   }

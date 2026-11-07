@@ -8,8 +8,10 @@ import {
   refreshHistoricalProofAdmission,
 } from './verification.ts';
 import { taskCommits } from './workspace.ts';
-import { spawnSync } from 'node:child_process';
-import { existsSync, mkdirSync, lstatSync, readdirSync, readFileSync, statSync, writeFileSync } from 'node:fs';
+import { execFile } from 'node:child_process';
+import { existsSync, mkdirSync, readFileSync, statSync, writeFileSync } from 'node:fs';
+import { lstat, readdir } from 'node:fs/promises';
+import { promisify } from 'node:util';
 import { watchOrPoll, type Watching } from './watch-or-poll.ts';
 import { isAbsolute, join, relative, resolve } from 'node:path';
 import { observeWorkerChecks } from './worker-check-observation.ts';
@@ -22,6 +24,7 @@ import type {
   AttemptRef,
 } from './contracts.ts';
 import { recordFlow } from './flow.ts';
+import { recordChainOffer } from './chain.ts';
 import {
   liveGroups,
   processGroupCpuTicks,
@@ -33,6 +36,7 @@ import {
   waitForWorkerExit,
   processIdentity,
   getProcessOwnershipAdapter,
+  type HostStartKind,
 } from './process.ts';
 import { assessUsageLimitRefusal, markExhausted } from './usage.ts';
 import { StaleAttemptError } from './contracts.ts';
@@ -55,6 +59,7 @@ import {
 } from './records.ts';
 import { readRouting } from './routing.ts';
 import { FINAL_REPORT_PROMPT, finalReportPending, isSqliteContention, settle } from './settle.ts';
+import { CURSOR_FRESH_SESSION_EVENT, CURSOR_FRESH_SESSION_PROMPT } from './agents/shared.ts';
 import { firstFailure } from './merge.ts';
 import {
   canonicalConflictPaths,
@@ -82,12 +87,18 @@ import { removeFinishedWorktree, type LifetimeRuntime } from './worktree-lifetim
 import { captureLaunchContext } from './launch-context.ts';
 import {
   holdRetryForToolIncident,
+  lastTransportFailure,
   recordToolBlockerFailure,
+  recordTransportFailure,
   recoverUndeliveredToolIncidentNotices,
+  noteToolIncidentProbeStarted,
   resolveToolIncidentsAfterAttempt,
+  resolveToolIncidentsAfterProviderProgress,
   toolIncidentForRetry,
   toolIncidentRetryAllowed,
+  transportIncidentResumeAllowed,
 } from './tool-incidents.ts';
+import { TRANSPORT_RESUME_PROMPT } from './agents/shared.ts';
 
 function rebaseConflictFiles(outcome: GateOutcome): string[] {
   const files = new Set(outcome.conflictedFiles ?? []);
@@ -138,27 +149,34 @@ export const SILENCE_WINDOW_MS = defaults.silenceMs;
 /** Run-log activity is checked at most once a minute when the filesystem watcher is unavailable. */
 const SKIP_WORKTREE_ACTIVITY = new Set(['node_modules', '.temp']);
 const WORKTREE_SAMPLE_TIMEOUT_MS = 1000;
+/** Directory entries a worktree walk visits before yielding to the event loop. */
+const WORKTREE_WALK_CHUNK = 256;
+const execFileAsync = promisify(execFile);
 
-function gitSample(worktree: string, args: string[]): string | undefined {
+/** Activity samples run for every running worker each minute; they run git and walk the worktree off the host loop. */
+async function gitSample(worktree: string, args: string[]): Promise<string | undefined> {
   try {
-    const result = spawnSync('git', args, { cwd: worktree, encoding: 'utf8', timeout: WORKTREE_SAMPLE_TIMEOUT_MS });
-    if (result.status !== 0) return undefined;
-    const text = result.stdout.trim();
-    return text || undefined;
+    const { stdout } = await execFileAsync('git', args, {
+      cwd: worktree,
+      encoding: 'utf8',
+      timeout: WORKTREE_SAMPLE_TIMEOUT_MS,
+    });
+    return stdout.trim() || undefined;
   } catch {
     return undefined;
   }
 }
 
 /** Newest file or directory mtime under the worktree, skipping `node_modules` and `.temp` at every level. */
-export function newestWorktreeMtime(root: string): number {
+export async function newestWorktreeMtime(root: string): Promise<number> {
   let newest = 0;
+  let visited = 0;
   const stack = [root];
   while (stack.length) {
     const dir = stack.pop()!;
     let names: string[];
     try {
-      names = readdirSync(dir);
+      names = await readdir(dir);
     } catch {
       continue;
     }
@@ -166,20 +184,23 @@ export function newestWorktreeMtime(root: string): number {
       if (SKIP_WORKTREE_ACTIVITY.has(name)) continue;
       const path = join(dir, name);
       try {
-        const st = lstatSync(path);
+        const st = await lstat(path);
         if (st.mtimeMs > newest) newest = st.mtimeMs;
         if (st.isDirectory()) stack.push(path);
       } catch {
         /* vanished between readdir and lstat */
       }
+      if (++visited % WORKTREE_WALK_CHUNK === 0) await new Promise<void>((resolve) => setImmediate(resolve));
     }
   }
   return newest;
 }
 
-function worktreeHeadSample(worktree: string): { head?: string; committedAt?: number } {
-  const head = gitSample(worktree, ['rev-parse', 'HEAD']);
-  const committed = gitSample(worktree, ['log', '-1', '--format=%ct']);
+async function worktreeHeadSample(worktree: string): Promise<{ head?: string; committedAt?: number }> {
+  const [head, committed] = await Promise.all([
+    gitSample(worktree, ['rev-parse', 'HEAD']),
+    gitSample(worktree, ['log', '-1', '--format=%ct']),
+  ]);
   const seconds = committed && /^\d+$/.test(committed) ? Number(committed) : undefined;
   return { ...(head ? { head } : {}), ...(seconds !== undefined ? { committedAt: seconds * 1000 } : {}) };
 }
@@ -213,7 +234,23 @@ export class WorkerJob implements GateOutcomeSink {
     private readonly acquireOrphanLease: (path: string) => DirectoryLease = (path) =>
       acquireDirectoryLease(path, tasks.settings.policy?.leases),
     private readonly worktreeLifetimeRuntime?: LifetimeRuntime,
+    // False once this host retires for a newer tools/goal: the attempts it already follows continue, but none starts.
+    private readonly startsAllowed: () => boolean = () => true,
+    // The manager host sets this so git, bun install and follow run in a child, not on the host event loop.
+    private readonly offloadStart?: (taskId: string, kind: HostStartKind) => Promise<void>,
   ) {}
+  async runHostTask(kind: HostStartKind, taskId: string): Promise<void> {
+    if (kind === 'retry') {
+      const task = this.tasks.store.task(taskId);
+      await this.runRetryIntent({ taskId, attempt: task.currentAttempt });
+      return;
+    }
+    if (kind === 'released') {
+      await this.startReleased(taskId);
+      return;
+    }
+    await this.start(taskId, kind === 'first' ? { expectedAttempt: 0 } : {});
+  }
   private track(work: Promise<void>): void {
     const handled = work.catch((error) => {
       if (!(error instanceof StaleAttemptError)) throw error;
@@ -243,8 +280,18 @@ export class WorkerJob implements GateOutcomeSink {
     }
   }
   private async runRetryIntent(ref: AttemptRef): Promise<void> {
+    if (!this.startsAllowed()) return;
     const key = `${ref.taskId}:${ref.attempt}`;
     if (this.retryIntentsInProgress.has(key)) return;
+    if (this.offloadStart) {
+      this.retryIntentsInProgress.add(key);
+      try {
+        await this.offloadStart(ref.taskId, 'retry');
+      } finally {
+        this.retryIntentsInProgress.delete(key);
+      }
+      return;
+    }
     this.retryIntentsInProgress.add(key);
     const store = this.tasks.store;
     try {
@@ -359,6 +406,11 @@ export class WorkerJob implements GateOutcomeSink {
       this.track(this.runRetryIntent({ taskId: intent.taskId, attempt: intent.attempt }));
   }
   async start(taskId: string, options: RetryOptions = {}): Promise<void> {
+    if (!this.startsAllowed()) return;
+    if (this.offloadStart) {
+      await this.offloadStart(taskId, options.expectedAttempt === 0 ? 'first' : 'start');
+      return;
+    }
     const task = this.tasks.store.task(taskId);
     if (
       task.currentAttempt > 0 &&
@@ -434,7 +486,16 @@ export class WorkerJob implements GateOutcomeSink {
   /** Released tasks this process is already starting; a sweep never starts the same one twice while it waits. */
   private readonly starting = new Set<string>();
   private async startReleased(taskId: string): Promise<void> {
-    if (this.starting.has(taskId)) return;
+    if (!this.startsAllowed() || this.starting.has(taskId)) return;
+    if (this.offloadStart) {
+      this.starting.add(taskId);
+      try {
+        await this.offloadStart(taskId, 'released');
+      } finally {
+        this.starting.delete(taskId);
+      }
+      return;
+    }
     this.starting.add(taskId);
     try {
       try {
@@ -477,11 +538,28 @@ export class WorkerJob implements GateOutcomeSink {
       if (observed.status === 'running') return null;
       return `Original proof result: ${JSON.stringify(observed)}`;
     }
+    const events = this.tasks.store.events(attempt.taskId, attempt.attempt);
+    const freshSessionRequest = events.findLast((event) => event.kind === CURSOR_FRESH_SESSION_EVENT);
+    const lastRun = events.findLast((event) => event.kind === 'worker-run-started');
+    // Once a new run starts, later check waits must use their own wake reason instead of replaying this prompt.
+    if (freshSessionRequest && (!lastRun || freshSessionRequest.sequence > lastRun.sequence))
+      return CURSOR_FRESH_SESSION_PROMPT;
     if (finalReportPending(this.tasks.store, attempt)) return FINAL_REPORT_PROMPT;
+    const transport = lastTransportFailure(this.tasks.store, attempt);
+    if (transport) {
+      if (Date.parse(transport.nextResumeAt) - Date.now() > this.policy.worker.retryIntentLeadMs) return null;
+      if (!transportIncidentResumeAllowed(this.tasks.store, attempt)) return null;
+    }
+    if (attempt.checks?.length) {
+      const observed = observeWorkerChecks(task, attempt.checks, this.policy.worker);
+      return observed.status === 'pending' ? null : observed.resumeText;
+    }
+    if (transport) return TRANSPORT_RESUME_PROMPT;
     const observed = observeWorkerChecks(task, attempt.checks ?? [], this.policy.worker);
     return observed.status === 'pending' ? null : observed.resumeText;
   }
   private async resumeWaiting(attempt: Attempt, task: Task, message: string): Promise<void> {
+    if (!this.startsAllowed()) return;
     const ref = { taskId: attempt.taskId, attempt: attempt.attempt };
     const failureCount = () =>
       this.tasks.store.events(ref.taskId, ref.attempt).filter((event) => event.kind === 'waiting-resume-launch-failed')
@@ -515,6 +593,11 @@ export class WorkerJob implements GateOutcomeSink {
           policy: this.tasks.settings.policy?.capacity,
           leasePolicy: this.tasks.settings.policy?.leases,
           urgent: task.brief.urgent,
+          goal: task.brief.goal,
+          // A parked attempt resuming is already in flight: the Goal cap limits new starts only. Applying it here
+          // deadlocked every Goal at or over its cap, since none of its parked attempts could resume (2026-11-06).
+          goalMaxInFlight: Number.POSITIVE_INFINITY,
+          excludeTaskId: task.id,
         },
       );
       let worker: RunningWorker | undefined;
@@ -644,12 +727,30 @@ export class WorkerJob implements GateOutcomeSink {
     let silenceFailure: string | undefined;
     let silenceStopping: Promise<void> | undefined;
     const activity = workerActivityBaseline(store, ref);
+    noteToolIncidentProbeStarted(store, ref);
+    const releaseOnProviderProgress = () => {
+      const resolved = resolveToolIncidentsAfterProviderProgress(store, ref, task, store.attempt(ref));
+      if (resolved.length) this.resumePendingRetries();
+    };
+    releaseOnProviderProgress();
     let { lastLogSize, lastLogMtime, lastLogActivityAt, checkWaitAtLastLogActivity } = activity;
     let lastHead: string | undefined;
     let lastNewestMtime = 0;
     let lastCpu: bigint | undefined;
     let sampledWork = false;
+    // Every log event wakes the checks, but the worktree walk, git and CPU samples run at most once per check interval.
+    const sampleEveryMs = Math.max(1, Math.min(this.policy.worker.silenceCheckMs, silenceMs));
+    let sampledAt = 0;
+    let steppedAt = 0;
+    // One sample per attempt is in flight at a time, so a slow git call or worktree walk never queues behind the timer.
+    let sampling: Promise<void> | undefined;
     const checkSilence = () => {
+      if (sampling || silenceStopping || silenceFailure) return;
+      sampling = sampleSilence().finally(() => {
+        sampling = undefined;
+      });
+    };
+    const sampleSilence = async () => {
       if (silenceStopping || silenceFailure) return;
       try {
         store.assertCurrent(ref);
@@ -657,7 +758,7 @@ export class WorkerJob implements GateOutcomeSink {
         if (attempt.state !== 'running') return;
         const now = Date.now();
         const noteNow = () => {
-          lastLogActivityAt = now;
+          lastLogActivityAt = Date.now();
           checkWaitAtLastLogActivity = checkWaitMs(ref.logPath);
         };
         const stat = statSync(ref.logPath, { throwIfNoEntry: false });
@@ -668,24 +769,52 @@ export class WorkerJob implements GateOutcomeSink {
           lastLogMtime = mtime;
           noteNow();
         }
-        const headSample = worktreeHeadSample(task.worktree);
-        const newest = newestWorktreeMtime(task.worktree);
-        const cpu = processGroupCpuTicks(attempt.process ?? null);
+        if (now - sampledAt < sampleEveryMs) return;
+        sampledAt = now;
+        const headSample = await worktreeHeadSample(task.worktree);
+        const newest = await newestWorktreeMtime(task.worktree);
+        const cpu = await processGroupCpuTicks(attempt.process ?? null);
+        store.assertCurrent(ref);
+        if (store.attempt(ref).state !== 'running') return;
+        const logAfterSample = statSync(ref.logPath, { throwIfNoEntry: false });
+        const sizeAfter = logAfterSample?.size ?? 0;
+        const mtimeAfter = logAfterSample?.mtimeMs ?? 0;
+        if (sizeAfter !== lastLogSize || mtimeAfter !== lastLogMtime) {
+          lastLogSize = sizeAfter;
+          lastLogMtime = mtimeAfter;
+          noteNow();
+        }
+        const hadWorkBaseline = sampledWork;
+        const hadCpu = lastCpu !== undefined;
         if (sampledWork) {
           if (headSample.head !== undefined && lastHead !== undefined && headSample.head !== lastHead) noteNow();
           if (newest > lastNewestMtime) noteNow();
           if (cpu !== undefined && lastCpu !== undefined && cpu > lastCpu) noteNow();
         } else {
           sampledWork = true;
-          if (newest > activity.startedAt) lastLogActivityAt = Math.max(lastLogActivityAt, Math.min(now, newest));
-          if (headSample.committedAt !== undefined && headSample.committedAt > activity.startedAt)
-            lastLogActivityAt = Math.max(lastLogActivityAt, Math.min(now, headSample.committedAt));
+          noteNow();
         }
         if (headSample.head !== undefined) lastHead = headSample.head;
         if (newest > lastNewestMtime) lastNewestMtime = newest;
         if (cpu !== undefined) lastCpu = cpu;
+        // The first worktree sample, and the first CPU reading, only record baselines. Timestamp them when the
+        // sample finishes so a slow git/walk/proc scan is not counted as silence. A process group that has not
+        // appeared yet is still starting: start grace owns that, not stall. One that has left /proc is exiting:
+        // settlement owns that, not stall. A log that already reports success is a finished worker, not a silent one.
+        if (!hadWorkBaseline) return;
+        if (!hadCpu && cpu !== undefined) return;
+        if (!hadCpu && cpu === undefined && attempt.process) {
+          const grace = this.tasks.settings.startGraceMs ?? this.policy.worker.startGraceMs;
+          if (Date.now() - activity.startedAt < grace) return;
+        }
+        if (hadCpu && cpu === undefined) return;
+        if (
+          reportsSuccess(readLogTail(ref.logPath, this.policy.worker.logTailBytes), agentAdapter(attempt.profile.cli))
+        )
+          return;
         // Check tools append elapsed check time beside the run log. Subtract it from idle time so a worker blocked on
-        // a local or remote check does not look silent while the command is running.
+        // a local or remote check does not look silent while the command is running. Idle time is the gap at sample
+        // start, so a slow /proc scan after that is not silence.
         const waitedMs = Math.max(0, checkWaitMs(ref.logPath) - checkWaitAtLastLogActivity);
         if (now - lastLogActivityAt - waitedMs < silenceMs) return;
         const minutes = Math.max(1, Math.ceil(silenceMs / 60_000));
@@ -789,11 +918,16 @@ export class WorkerJob implements GateOutcomeSink {
       watcher = watchOrPoll(
         ref.logPath,
         () => {
+          releaseOnProviderProgress();
           checkSilence();
+          // Reading the measurement scans the attempt log; step limits move slowly, so they are checked once per interval.
+          if (Date.now() - steppedAt < sampleEveryMs) return;
+          steppedAt = Date.now();
           stopIfStalled(false);
         },
         this.policy.worker.activityPollMs,
       );
+      const priorTransport = lastTransportFailure(store, ref)?.sequence ?? 0;
       try {
         await settle(this.tasks, worker, this.landing, async () => {
           clearTimeout(timer);
@@ -805,6 +939,28 @@ export class WorkerJob implements GateOutcomeSink {
       }
       if (stopping) await stopping;
       if (silenceStopping) await silenceStopping;
+      if (!stopping) {
+        const settled = store.attempt(ref);
+        const transport = lastTransportFailure(store, ref);
+        if (transport && transport.sequence > priorTransport)
+          recordTransportFailure(
+            store,
+            store.task(ref.taskId),
+            settled,
+            this.tasks.settings,
+            this.inbox,
+            transport.line,
+          );
+        else if (
+          settled.state === 'waiting' ||
+          (settled.state === 'exited' &&
+            !settled.failureKind &&
+            reportsSuccess(settled.result, agentAdapter(settled.profile.cli)))
+        ) {
+          const resolved = resolveToolIncidentsAfterAttempt(store, ref, store.task(ref.taskId), settled);
+          if (resolved.length) this.resumePendingRetries();
+        }
+      }
     } finally {
       clearTimeout(timer);
       clearTimeout(startCheck);
@@ -812,16 +968,11 @@ export class WorkerJob implements GateOutcomeSink {
       watcher?.close();
     }
     if (!stopping) {
-      const settledAttempt = store.attempt(ref);
       if (
-        settledAttempt.state === 'exited' &&
-        !settledAttempt.failureKind &&
-        reportsSuccess(settledAttempt.result, agentAdapter(settledAttempt.profile.cli))
+        silenceFailure &&
+        store.attempt(ref).state === 'exited' &&
+        !reportsSuccess(store.attempt(ref).result, agentAdapter(store.attempt(ref).profile.cli))
       ) {
-        const resolved = resolveToolIncidentsAfterAttempt(store, ref, store.task(ref.taskId), settledAttempt);
-        if (resolved.length) this.resumePendingRetries();
-      }
-      if (silenceFailure && store.attempt(ref).state === 'exited') {
         store.updateAttempt(ref, (attempt) => {
           attempt.failureKind = 'tool';
           attempt.result = silenceFailure!;
@@ -1020,6 +1171,8 @@ export class WorkerJob implements GateOutcomeSink {
    */
   /** Recovery failures already reported by this process, by task, step and first error line. */
   private readonly recoveryFailures = new Set<string>();
+  /** Stray worktrees kept because a live process cwd is inside them, reported once per path. */
+  private readonly strayKeptNotices = new Set<string>();
   /**
    * One task's failure in a recovery sweep is that task's problem, not the sweep's: it is logged, reported once to the
    * supermanager, and the sweep continues with the other tasks. Store contention affects every task and is only logged.
@@ -1186,17 +1339,38 @@ export class WorkerJob implements GateOutcomeSink {
       }
     if (adoptRunning)
       this.track(
-        removeFinishedWorktree(this.tasks.settings, store, this.worktreeLifetimeRuntime, (task, disposition) => {
-          const owner = disposition.owner ? `${disposition.owner.uid}:${disposition.owner.gid}` : 'unknown';
-          this.inbox.deliver({
-            managerId: task.brief.manager,
-            kind: 'environment',
-            taskId: task.id,
-            summary:
-              `environment: finished worktree cleanup for ${task.id} is blocked at ${disposition.path} (owner ${owner}); it will retry after the path's ownership or permissions change.`
-                .replace(/[\r\n]+/g, ' ')
-                .slice(0, this.policy.worker.summaryCharacters),
-          });
+        removeFinishedWorktree(this.tasks.settings, store, this.worktreeLifetimeRuntime, {
+          blocked: (task, disposition) => {
+            const owner = disposition.owner ? `${disposition.owner.uid}:${disposition.owner.gid}` : 'unknown';
+            this.inbox.deliver({
+              managerId: task.brief.manager,
+              kind: 'environment',
+              taskId: task.id,
+              summary:
+                `environment: finished worktree cleanup for ${task.id} is blocked at ${disposition.path} (owner ${owner}); it will retry after the path's ownership or permissions change.`
+                  .replace(/[\r\n]+/g, ' ')
+                  .slice(0, this.policy.worker.summaryCharacters),
+            });
+          },
+          failed: (task, error, path) => {
+            this.recoveryFailed(task?.id ?? path, 'worktree cleanup', error);
+          },
+          strayKept: (path, task) => {
+            if (this.strayKeptNotices.has(path)) return;
+            this.strayKeptNotices.add(path);
+            try {
+              this.inbox.deliver({
+                managerId: task?.brief.manager ?? this.tasks.settings.integration.supermanager,
+                kind: 'environment',
+                ...(task ? { taskId: task.id } : {}),
+                summary: `environment: stray worktree ${path} kept; a live process cwd is inside it.`
+                  .replace(/[\r\n]+/g, ' ')
+                  .slice(0, this.policy.worker.summaryCharacters),
+              });
+            } catch {
+              this.strayKeptNotices.delete(path);
+            }
+          },
         }).then(() => {}),
       );
     // A held task released by a train that then ended, or handed off to newer code, has no driver: the host starts
@@ -1693,6 +1867,7 @@ export class WorkerJob implements GateOutcomeSink {
           const silence = attempt.result.startsWith('stalled: no output for ');
           const fingerprint = blockerFingerprint(attempt, task.worktree, store.policy.worker);
           const repeated =
+            Boolean(fingerprint) &&
             previous?.failureKind === 'tool' &&
             blockerFingerprint(previous, task.worktree, store.policy.worker) === fingerprint;
           const unrerun =
@@ -1803,33 +1978,42 @@ export class WorkerJob implements GateOutcomeSink {
     store.assertCurrent(ref);
     const task = store.task(ref.taskId);
     const record = store.record(ref);
-    if (!record) throw new Error('dev landing compiler handback requires a settled worker record');
+    if (!record) throw new Error('dev landing repair handback requires a settled worker record');
+    const architectureRepair = handoff.guard === 'dev-landing-architecture';
     const schemaRepair = handoff.guard === 'dev-landing-schema';
     const kernelImportRepair = handoff.guard === 'dev-landing-kernel-import';
     const location = `${handoff.diagnostic.file ?? handoff.typescriptFiles[0]}${handoff.diagnostic.line ? `:${handoff.diagnostic.line}` : ''}${handoff.diagnostic.column ? `:${handoff.diagnostic.column}` : ''}`;
     const diagnostic = [
-      schemaRepair
-        ? `Schema dump regeneration rejected dev candidate ${handoff.candidate} based on ${handoff.base}.`
-        : kernelImportRepair
-          ? `Kernel entry import rejected dev candidate ${handoff.candidate} based on ${handoff.base}.`
-          : `Bun rejected dev candidate ${handoff.candidate} based on ${handoff.base}.`,
+      architectureRepair
+        ? `Architecture check rejected dev candidate ${handoff.candidate} based on ${handoff.base}.`
+        : schemaRepair
+          ? `Schema dump regeneration rejected dev candidate ${handoff.candidate} based on ${handoff.base}.`
+          : kernelImportRepair
+            ? `Kernel entry import rejected dev candidate ${handoff.candidate} based on ${handoff.base}.`
+            : `Bun rejected dev candidate ${handoff.candidate} based on ${handoff.base}.`,
       `Original source commit: ${handoff.sourceCommit}. Task ${handoff.taskId} attempt ${handoff.attempt}.`,
-      schemaRepair
-        ? `Regeneration error: ${handoff.diagnostic.message}`
-        : kernelImportRepair
-          ? `Import error (${handoff.entryPoint ?? 'services/kernel/src/server.ts'}): ${location}: ${handoff.diagnostic.message}`
-          : `Compiler error: ${location}: ${handoff.diagnostic.message}`,
-      schemaRepair
-        ? `Retained regeneration log: ${handoff.logPath}`
-        : kernelImportRepair
-          ? `Retained import log: ${handoff.logPath}`
-          : `Retained compiler log: ${handoff.logPath}`,
+      architectureRepair
+        ? `Architecture check failures (manifest, parser or boundary ratchet; boundary violations land and are repaired separately):\n${handoff.diagnostic.message}`
+        : schemaRepair
+          ? `Regeneration error: ${handoff.diagnostic.message}`
+          : kernelImportRepair
+            ? `Import error (${handoff.entryPoint ?? 'services/kernel/src/server.ts'}): ${location}: ${handoff.diagnostic.message}`
+            : `Compiler error: ${location}: ${handoff.diagnostic.message}`,
+      architectureRepair
+        ? `Retained architecture log: ${handoff.logPath}`
+        : schemaRepair
+          ? `Retained regeneration log: ${handoff.logPath}`
+          : kernelImportRepair
+            ? `Retained import log: ${handoff.logPath}`
+            : `Retained compiler log: ${handoff.logPath}`,
       kernelImportRepair && handoff.argv?.length ? `Argv: ${JSON.stringify(handoff.argv)}` : '',
-      schemaRepair
-        ? `Changed files: ${handoff.changedFiles.join(', ')}`
-        : kernelImportRepair
-          ? `Changed Kernel source files: ${handoff.typescriptFiles.join(', ')}`
-          : `Changed TypeScript files: ${handoff.typescriptFiles.join(', ')}`,
+      architectureRepair
+        ? `Changed paths: ${handoff.changedFiles.join(', ')}`
+        : schemaRepair
+          ? `Changed files: ${handoff.changedFiles.join(', ')}`
+          : kernelImportRepair
+            ? `Changed Kernel source files: ${handoff.typescriptFiles.join(', ')}`
+            : `Changed TypeScript files: ${handoff.typescriptFiles.join(', ')}`,
       `Repair ${schemaRepair ? 'the migration' : 'this source'} in place, then return through normal landing preparation in this same task session.`,
     ]
       .filter(Boolean)
@@ -1853,10 +2037,11 @@ export class WorkerJob implements GateOutcomeSink {
       recordFlow(store.db, {
         ...ref,
         stage: 'landing',
-        action: kernelImportRepair ? 'dev-kernel-import' : 'dev-transpile',
+        action: architectureRepair ? 'dev-architecture' : kernelImportRepair ? 'dev-kernel-import' : 'dev-transpile',
         at: new Date().toISOString(),
         detail: JSON.stringify({
           outcome: 'repair-handback',
+          guard: handoff.guard,
           base: handoff.base,
           candidate: handoff.candidate,
           changedFileCount: handoff.changedFiles.length,
@@ -1984,6 +2169,7 @@ export class WorkerJob implements GateOutcomeSink {
             }
           });
           if (plan) store.clearIntegrationPlan(outcome);
+          recordChainOffer(store.db, task, store.attempt(outcome), new Date().toISOString(), this.policy.records);
           released = this.releaseMetDependents();
           if (outcome.frozenAcceptanceChanges?.length) {
             const paths = canonicalConflictPaths(outcome.frozenAcceptanceChanges);

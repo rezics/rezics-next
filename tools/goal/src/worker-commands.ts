@@ -16,14 +16,24 @@ import type { Attempt, AttemptRecord, Effort, Settings, Task, TaskState, Tokens 
 import { devVerificationState } from './dev-verifier.ts';
 import { retryWait } from './watchdog.ts';
 import { authenticatedCallingManager } from './integration-cli.ts';
+import { readManagerOwnership } from './manager-ownership.ts';
 import { authenticatedManager } from './priority-authority.ts';
 import { submitOwnerDecision } from './owner-decisions.ts';
 import { projectToolIncidentStatus } from './tool-incidents.ts';
 import { parseWorkerCommandArguments, type ParsedWorkerCommandArguments } from './command-arguments.ts';
 import { trainLaneStatus } from './lease.ts';
-import { poolBurnStatus } from './allowance.ts';
+import { countAllowanceWaiting, poolBurnStatus } from './allowance.ts';
 import { defaultPolicy } from './policy.ts';
+import { architectureRepairStatus } from './architecture-repair.ts';
 import { readRetainedPoolReadings } from './pacing.ts';
+import { admissionProfiles, readRouting } from './routing.ts';
+import { reapedCountsLastHour } from './attempt-resources.ts';
+import { strayWorktreeStatus } from './worktree-lifetime.ts';
+import {
+  workerCheckBudgetDirectory,
+  workerCheckHostBudgetLimit,
+  workerCheckHostRunsUsed,
+} from './worker-check-budget.ts';
 
 export type WorkerCommandOptions = {
   runtime?: Runtime;
@@ -81,6 +91,14 @@ function heldDependencies(task: Task, tasks: WorkerTasks, store: WorkerStore) {
     }
     return { id, state, ready };
   });
+}
+
+function taskStateOrUndefined(store: WorkerStore, taskId: string): string | undefined {
+  try {
+    return store.task(taskId).state;
+  } catch {
+    return undefined;
+  }
 }
 
 /** Tests may inject individual services. Production commands always use the shared runtime. */
@@ -180,9 +198,18 @@ export async function runWorkerCommand(
                 reason: 'start',
               })
             : undefined;
+        const liveAttempt = current?.attempt.state === 'running' || current?.attempt.state === 'waiting';
         return {
           ...task,
           urgent: task.brief.urgent === true,
+          ...(liveAttempt
+            ? {
+                checksUsed: workerCheckHostRunsUsed(
+                  workerCheckBudgetDirectory(settings.stateDirectory, task.id, task.currentAttempt),
+                ),
+                checkBudget: workerCheckHostBudgetLimit(task, task.currentAttempt),
+              }
+            : {}),
           ...(terminationRequest ? { terminationRequest } : {}),
           ...(task.state === 'held'
             ? {
@@ -194,17 +221,54 @@ export async function runWorkerCommand(
         };
       };
       const selectedTasks = cohort.map(show);
+      const reapedLastHour = reapedCountsLastHour(settings.stateDirectory);
+      const stray = strayWorktreeStatus(settings);
       const trains = trainLaneStatus(settings.stateDirectory);
-      const pools = poolBurnStatus(
-        settings.pools ?? [],
-        readRetainedPoolReadings(settings.stateDirectory),
-        Date.now(),
-        settings.policy?.pacing.burnSpanMs ?? defaultPolicy.pacing.burnSpanMs,
+      const spanMs = settings.policy?.pacing.burnSpanMs ?? defaultPolicy.pacing.burnSpanMs;
+      const now = Date.now();
+      const readings = readRetainedPoolReadings(settings.stateDirectory);
+      const live = store.runningAttemptsByPool();
+      const parked = store.waitingAttemptsByPool();
+      const table = settings.routingFile ? readRouting(settings.routingFile, settings.policy?.routing) : undefined;
+      const allowanceWaiting = table
+        ? countAllowanceWaiting(
+            selectedTasks.flatMap((task) => {
+              if (task.state !== 'ready' || task.brief.urgent === true) return [];
+              try {
+                return [admissionProfiles(task.brief, table, task.sequence)];
+              } catch {
+                // Status already shows malformed task rows; they are not allowance waiters.
+                return [];
+              }
+            }),
+            settings.pools ?? [],
+            readings,
+            {
+              now,
+              spanMs,
+              history: readings,
+              policy: settings.policy?.provider,
+              running: live,
+            },
+          )
+        : {};
+      const pools = poolBurnStatus(settings.pools ?? [], readings, now, spanMs, live, parked).map((pool) =>
+        pool.maxConcurrent === undefined ? { ...pool, waiting: allowanceWaiting[pool.name] ?? 0 } : pool,
       );
+      const managers = readManagerOwnership(store.db);
       print(
         JSON.stringify(
           arg
-            ? { ...selectedTasks[0]!, toolIncidents: incidentProjection.toolIncidents, trains, pools }
+            ? {
+                ...selectedTasks[0]!,
+                managers,
+                toolIncidents: incidentProjection.toolIncidents,
+                trains,
+                pools,
+                reapedLastHour,
+                strayDirectories: stray.strayDirectories,
+                strayBytesReclaimedLastHour: stray.strayBytesReclaimedLastHour,
+              }
             : {
                 devVerification: devVerificationState(
                   settings.mainCheckout,
@@ -212,10 +276,15 @@ export async function runWorkerCommand(
                   settings.integrationBranch,
                   cohort,
                 ),
+                managers,
                 toolIncidents: incidentProjection.toolIncidents,
                 trains,
                 pools,
+                reapedLastHour,
+                strayDirectories: stray.strayDirectories,
+                strayBytesReclaimedLastHour: stray.strayBytesReclaimedLastHour,
                 tasks: selectedTasks,
+                architecture: architectureRepairStatus(store.db, (id) => taskStateOrUndefined(store, id)),
               },
           null,
           2,
@@ -268,9 +337,22 @@ export async function runWorkerCommand(
       if (flow) {
         const now = new Date();
         const metrics = lifecycleMetrics(store.db, now, settings.policy);
+        const records = store.records();
+        // Landed lines come from the latest passing attempt of each task, the one that integrated it.
+        const landed = new Map<string, { attempt: number; lines: number }>();
+        for (const record of records) {
+          if (record.outcome !== 'passed' || record.diffLines === null) continue;
+          const seen = landed.get(record.taskId);
+          if (!seen || record.attempt > seen.attempt)
+            landed.set(record.taskId, { attempt: record.attempt, lines: record.diffLines });
+        }
+        const tasks = readFlowTasks(store.db).map((task) => ({
+          ...task,
+          diffLines: landed.get(task.id)?.lines ?? null,
+        }));
         const result = {
-          ...flowReport(readFlow(store.db, since), readFlowTasks(store.db), now.getTime()),
-          guards: guardLedger(store.records(), store.attempts(), now.getTime()),
+          ...flowReport(readFlow(store.db, since), tasks, now.getTime()),
+          guards: guardLedger(records, store.attempts(), now.getTime()),
           lifecycle: metrics,
         };
         if (json) print(JSON.stringify(result, null, 2));
@@ -281,7 +363,9 @@ export async function runWorkerCommand(
               `Bottleneck: ${result.bottleneck ?? 'unknown'}`,
               `Over-budget launches by layer: ${JSON.stringify(result.overBudgetLaunchesByLayer)}`,
               `Attempts per integrated task: ${result.attemptsPerIntegrated ?? 'unknown'}`,
+              `Chained: ${result.chain.chained.tasks} tasks, ${result.chain.chained.integrated} integrated, ${result.chain.chained.linesPerWorkerHour === null ? 'unknown' : result.chain.chained.linesPerWorkerHour.toFixed(1)} lines per worker-hour; unchained: ${result.chain.unchained.tasks} tasks, ${result.chain.unchained.integrated} integrated, ${result.chain.unchained.linesPerWorkerHour === null ? 'unknown' : result.chain.unchained.linesPerWorkerHour.toFixed(1)} lines per worker-hour; offers ${result.chain.offered}, declined ${JSON.stringify(result.chain.declined)}`,
               `Dev landing transpile: ${result.devTranspile.successfulChecks} passed, ${result.devTranspile.repairHandbacks} repair handbacks, ${result.devTranspile.unavailable} unavailable; ${result.devTranspile.measuredChecks} measured checks, ${result.devTranspile.totalMs === null ? 'cost unavailable' : `${result.devTranspile.totalMs}ms total`}.`,
+              `Dev landing architecture: ${result.devArchitecture.successfulChecks} passed, ${result.devArchitecture.repairHandbacks} repair handbacks, ${result.devArchitecture.unavailable} unavailable; ${result.devArchitecture.measuredChecks} measured checks, ${result.devArchitecture.totalMs === null ? 'cost unavailable' : `${result.devArchitecture.totalMs}ms total`}.`,
               `Dev landing Kernel import: ${result.devKernelImport.successfulChecks} passed, ${result.devKernelImport.repairHandbacks} repair handbacks, ${result.devKernelImport.unavailable} unavailable; ${result.devKernelImport.measuredChecks} measured checks, setup ${result.devKernelImport.setupMs === null ? 'unavailable' : `${result.devKernelImport.setupMs}ms`}, import ${result.devKernelImport.importMs === null ? 'unavailable' : `${result.devKernelImport.importMs}ms`}, cleanup ${result.devKernelImport.cleanupMs === null ? 'unavailable' : `${result.devKernelImport.cleanupMs}ms`}, ${result.devKernelImport.totalMs === null ? 'cost unavailable' : `${result.devKernelImport.totalMs}ms total`}.`,
               `Urgent: ${result.urgent.tasks.length} tasks; ${result.urgent.integrated} integrated (${result.urgent.tasks.join(', ') || 'none'}); excluded from throughput.`,
               ...formatPageDataFlowRuns(result.pageDataRuns),

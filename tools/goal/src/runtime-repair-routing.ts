@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
-import { bootSmokeRepairBrief, type BootSmokeRepair } from './dev-verifier.ts';
+import { testFailureRepairBrief, type TestFailureRepair } from './dev-verifier.ts';
 import type { SqliteManagerInbox } from './inbox.ts';
 import type { WorkerJob } from './job.ts';
 import type { PageDataRepair } from './page-data.ts';
@@ -21,11 +21,14 @@ export type RuntimeRepairRoutingDependencies = {
   settings: RoutingSettings;
 };
 
-function dispatchBootSmokeRepair(
+function dispatchOwnedRepair(
   { tasks, store, inbox, settings }: RuntimeRepairRoutingDependencies,
-  repair: BootSmokeRepair,
+  repair: TestFailureRepair,
+  markdown: string,
+  directory: string,
+  created: string,
+  updated: string,
 ): void {
-  const markdown = bootSmokeRepairBrief(repair, settings.policy?.verifier);
   if (repair.existingTaskId) {
     const task = store.task(repair.existingTaskId);
     writeFileSync(task.briefPath, markdown);
@@ -36,11 +39,11 @@ function dispatchBootSmokeRepair(
       managerId: repair.owner.brief.manager,
       taskId: task.id,
       kind: 'instruction',
-      summary: `Boot smoke still fails on ${repair.test} at ${repair.commit}.`,
+      summary: updated,
     });
     return;
   }
-  const briefPath = join(settings.stateDirectory, 'boot-smoke-repairs', `${randomUUID()}.md`);
+  const briefPath = join(settings.stateDirectory, directory, `${randomUUID()}.md`);
   mkdirSync(dirname(briefPath), { recursive: true });
   writeFileSync(briefPath, markdown);
   const task = tasks.dispatch(briefPath, null, true, 'verifier');
@@ -48,8 +51,20 @@ function dispatchBootSmokeRepair(
     managerId: repair.owner.brief.manager,
     taskId: task.id,
     kind: 'instruction',
-    summary: `Urgent boot-smoke repair for ${repair.test} at ${repair.commit}.`,
+    summary: created,
   });
+}
+
+function dispatchTestFailureRepair(dependencies: RuntimeRepairRoutingDependencies, repair: TestFailureRepair): void {
+  const tests = repair.failures.map((failure) => failure.test);
+  dispatchOwnedRepair(
+    dependencies,
+    repair,
+    testFailureRepairBrief(repair, dependencies.settings.policy?.verifier),
+    'test-failure-repairs',
+    `Urgent repair for ${tests.length} failing tests at ${repair.commit}: ${tests.join(', ')}.`,
+    `These tests still fail at ${repair.commit}: ${tests.join(', ')}.`,
+  );
 }
 
 function pageDataRepairBrief(repair: PageDataRepair, goal: string, manager: string): string {
@@ -114,7 +129,7 @@ export async function routePageDataRepair(
 
 export function createRuntimeRepairRouting(dependencies: RuntimeRepairRoutingDependencies) {
   return {
-    dispatchBootSmokeRepair: (repair: BootSmokeRepair) => dispatchBootSmokeRepair(dependencies, repair),
+    dispatchTestFailureRepair: (repair: TestFailureRepair) => dispatchTestFailureRepair(dependencies, repair),
     routePageDataRepair: (repair: PageDataRepair) =>
       routePageDataRepair(
         dependencies.tasks,

@@ -4,15 +4,17 @@ import { chmodSync, closeSync, existsSync, openSync, readFileSync, renameSync, r
 import { createServer } from 'node:net';
 import { join } from 'node:path';
 import { createInterface } from 'node:readline';
-import { reapContainers } from './containers.ts';
+import { reapContainersAsync } from './containers.ts';
+import { readTerminalTaskOwners, sweepAbandonedResources } from './attempt-resources.ts';
 import { completedUtcHour } from './efficiency-report-time.ts';
 import { SqliteManagerInbox } from './inbox.ts';
 import type { HostRequest, IntegrationRuntime } from './integration-runtime.ts';
 import { acquireDirectoryLease } from './lease.ts';
 import { ManagerSessions } from './managers.ts';
 import { defaultPolicy } from './policy.ts';
-import { sameProcess, type ProcessIdentity } from './process.ts';
-import { startHostHeartbeat } from './service.ts';
+import { sameProcess, terminateProcessGroup, type ProcessIdentity } from './process.ts';
+import { currentCodeVersion } from './runtime-version.ts';
+import { runHostOperation, startHostHeartbeat } from './service.ts';
 
 /** Socket server, registry, shutdown and periodic host scheduling; CLI dispatch stays in `integration-cli.ts`. */
 
@@ -105,6 +107,13 @@ async function waitForProcessExit(identity: ProcessIdentity, timeoutMs: number, 
 }
 
 async function stopRecordedAppServer(identity: ProcessIdentity, policy: typeof defaultPolicy.appServer): Promise<void> {
+  // An app-server that leads its own process group (connectPool) takes its helpers and thread writers with it. Reclaim
+  // the whole group and wait until it is empty, so resuming threads never meets a writer from the previous host.
+  if (identity.group === identity.pid) {
+    await terminateProcessGroup(identity, policy.terminationGraceMs);
+    return;
+  }
+  // Records from before the group change name a shared group: only the recorded process can be signalled.
   if (!sameProcess(identity)) return;
   try {
     process.kill(identity.pid, 'SIGTERM');
@@ -123,7 +132,7 @@ async function stopRecordedAppServer(identity: ProcessIdentity, policy: typeof d
     throw new Error(`App-server process did not exit: ${identity.pid}`);
 }
 
-async function stopRecordedAppServers(path: string, policy: typeof defaultPolicy.appServer): Promise<void> {
+export async function stopRecordedAppServers(path: string, policy: typeof defaultPolicy.appServer): Promise<void> {
   const identities = readAppServerRegistry(path);
   for (const identity of identities) await stopRecordedAppServer(identity, policy);
   rmSync(path, { force: true });
@@ -160,9 +169,12 @@ export async function serveManagers(runtime: IntegrationRuntime): Promise<void> 
         let result: unknown;
         switch (request.command) {
           case 'register-supermanager':
-            if (!request.sessionId) throw new Error('Missing resident Claude session ID');
+            if (!request.sessionId) throw new Error('Missing resident provider session ID');
             if (!runtime.supermanager) throw new Error('Configured supermanager identity is missing');
-            result = await managers.registerResidentSupermanager(runtime.supermanager, request.sessionId);
+            result = await managers.registerResidentSupermanager(runtime.supermanager, request.sessionId, {
+              ...(request.residentProvider !== undefined ? { provider: request.residentProvider } : {}),
+              ...(request.replaceSession !== undefined ? { replaceSession: request.replaceSession } : {}),
+            });
             break;
           case 'start':
             if (!request.spec) throw new Error('Missing manager spec');
@@ -192,6 +204,10 @@ export async function serveManagers(runtime: IntegrationRuntime): Promise<void> 
               throw new Error('Incomplete outgoing manager message');
             result = await managers.outgoingMessage(request.manager, request.recipient, request.summary);
             break;
+          case 'assign':
+            if (!request.goal || !request.manager) throw new Error('Missing Goal or manager for assign');
+            result = await managers.assign(request.goal, request.manager);
+            break;
           default:
             throw new Error('Unknown manager host command');
         }
@@ -220,11 +236,35 @@ export async function serveManagers(runtime: IntegrationRuntime): Promise<void> 
   let stopHeartbeat: (() => void) | undefined;
   let stateTimer: ReturnType<typeof setInterval> | undefined;
   let recoveryTimer: ReturnType<typeof setInterval> | undefined;
+  let codePoll: ReturnType<typeof setInterval> | undefined;
   const recoverOrphans = () => {
     if (!runtime.recoverOrphans) return Promise.resolve();
     // A sweep may wait for adopted workers. Let later timer ticks start their own sweep so
     // newly orphaned tasks and retry intents are considered while those workers are running.
-    return runtime.recoverOrphans();
+    return runHostOperation('orphan recovery', () => runtime.recoverOrphans!());
+  };
+  // A host keeps the tools/goal it loaded. Once main publishes another revision it starts no new attempt and stops
+  // after its active requests, and systemd starts it on the published code. Retirement waits until this host has run
+  // for restartIntervalMs, so a burst of releases cannot restart it in a loop. cp-sync restarts the host regardless.
+  const loadedCode = runtime.loadedCodeVersion;
+  const hostStartedAt = Date.now();
+  let checkingCode = false;
+  const retireForPublishedCode = async () => {
+    if (checkingCode || stopRequested || loadedCode === undefined) return;
+    if (Date.now() - hostStartedAt < policy.host.restartIntervalMs) return;
+    checkingCode = true;
+    try {
+      const published = await currentCodeVersion(runtime.mainCheckout);
+      // An unreadable main is not a new revision: only a readable, different tools/goal retires this host.
+      if (published === undefined || published === loadedCode || stopRequested) return;
+      if (runtime.codeRetirement) runtime.codeRetirement.retiring = true;
+      console.log(
+        `tools/goal is published as ${published}; this host stops after its active requests so systemd restarts it.`,
+      );
+      stop();
+    } finally {
+      checkingCode = false;
+    }
   };
   try {
     await stopRecordedAppServers(registryPath, policy.appServer);
@@ -249,9 +289,11 @@ export async function serveManagers(runtime: IntegrationRuntime): Promise<void> 
     });
     chmodSync(runtime.managerSocket, 0o600);
     if (stopRequested) return;
+    // Readiness and the watchdog start with the socket: no recovery or scheduler pass can delay the heartbeat.
+    stopHeartbeat = await startHostHeartbeat(undefined, undefined, policy.service);
     let reportRecoveryProgress!: () => void;
     const recoveryProgress = new Promise<void>((resolve) => (reportRecoveryProgress = resolve));
-    void managers.recover(reportRecoveryProgress).catch((error) => {
+    void runHostOperation('manager recovery', () => managers.recover(reportRecoveryProgress)).catch((error) => {
       console.error('manager recovery failed:', error);
       reportRecoveryProgress();
     });
@@ -265,11 +307,17 @@ export async function serveManagers(runtime: IntegrationRuntime): Promise<void> 
     if (readinessTimer) clearTimeout(readinessTimer);
     // The socket is already accepting requests. Yield once so a submitted recovery RPC reaches its provider first.
     await new Promise<void>((resolve) => setImmediate(resolve));
-    stopHeartbeat = await startHostHeartbeat(undefined, undefined, policy.service);
     console.log('ready');
     const remind = () => {
       try {
-        runtime.dispatchDailyStepAudit?.();
+        runHostOperation('daily step audit', () => runtime.dispatchDailyStepAudit?.()).catch((error) =>
+          console.error(error),
+        );
+      } catch (error) {
+        console.error(error);
+      }
+      try {
+        runtime.dispatchArchitectureRepairs?.();
       } catch (error) {
         console.error(error);
       }
@@ -308,16 +356,34 @@ export async function serveManagers(runtime: IntegrationRuntime): Promise<void> 
         console.error('backlog run failed to start:', error);
       }
     };
-    // Containers that workers and checks leave running are removed every ten minutes, per <state>/containers.json.
+    // Ended-attempt resources and opted-in stale containers are reaped every five minutes.
     let reapedAt = 0;
+    let reaping: Promise<unknown> | undefined;
     const reap = () => {
-      if (Date.now() - reapedAt < policy.containers.cleanupIntervalMs) return;
+      if (reaping || Date.now() - reapedAt < policy.containers.cleanupIntervalMs) return;
       reapedAt = Date.now();
-      try {
-        reapContainers(runtime.db, runtime.stateDirectory, Date.now(), runtime.managerServices.policy?.containers);
-      } catch (error) {
-        console.error(error);
-      }
+      // Docker and task projection run after a yield: a slow daemon must not hold the manager socket.
+      reaping = Promise.resolve()
+        .then(() =>
+          runHostOperation('container reaper', async () => {
+            await sweepAbandonedResources({
+              tasks: readTerminalTaskOwners(runtime.db),
+              stateDirectory: runtime.stateDirectory,
+              containers: policy.containers,
+              graceMs: 1000,
+            });
+            await reapContainersAsync(
+              runtime.db,
+              runtime.stateDirectory,
+              Date.now(),
+              runtime.managerServices.policy?.containers,
+            );
+          }),
+        )
+        .catch((error) => console.error(error))
+        .finally(() => {
+          reaping = undefined;
+        });
     };
     let widthSweepRunning = false;
     const scheduleWidthSweep = () => {
@@ -326,7 +392,7 @@ export async function serveManagers(runtime: IntegrationRuntime): Promise<void> 
         if (widthSweepRunning) return;
         widthSweepRunning = true;
         void Promise.resolve()
-          .then(() => runtime.sweepWidth!())
+          .then(() => runHostOperation('width sweep', () => runtime.sweepWidth!()))
           .catch((error) => console.error('width sweep failed:', error))
           .finally(() => {
             widthSweepRunning = false;
@@ -352,11 +418,16 @@ export async function serveManagers(runtime: IntegrationRuntime): Promise<void> 
         }
       }, stateSweepIntervalMs);
       stateTimer.unref();
+      codePoll = setInterval(() => {
+        void retireForPublishedCode().catch((error) => console.error('tools/goal revision check failed:', error));
+      }, policy.host.codePollMs);
+      codePoll.unref();
     });
   } finally {
     stopHeartbeat?.();
     if (recoveryTimer) clearInterval(recoveryTimer);
     if (stateTimer) clearInterval(stateTimer);
+    if (codePoll) clearInterval(codePoll);
     closeServer();
     if (managers) await managers.close();
     rmSync(runtime.managerSocket, { force: true });

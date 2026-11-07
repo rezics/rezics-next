@@ -637,7 +637,6 @@ test('resident regressions roll back the published tree and restart the restored
       resident: {
         async observe() {
           return {
-            workReady: true,
             landingsRequested: true,
             liveWorkers: 2,
             passedGates: 2,
@@ -673,7 +672,7 @@ test('a failed rollback restores published code and a matching host after legacy
       ...f.options,
       resident: {
         async observe() {
-          return { liveWorkers: observations++ ? 0 : 1, passedGates: 1, landings: 1, workReady: true };
+          return { liveWorkers: observations++ ? 0 : 1, passedGates: 1, landings: 1 };
         },
         async restart(checkout, options) {
           if (++restarts === 1 && migrationFails) throw new Error('Installer failed after stopping legacy supervisor');
@@ -692,7 +691,7 @@ test('a failed rollback restores published code and a matching host after legacy
   }
 });
 
-test('resident comparison tolerates lower counts and idle windows without rolling back', async () => {
+test('resident comparison tolerates counts that fall by half or less and quiet windows, but not a worker loss beyond half', async () => {
   const f = fixture();
   let observations = 0;
   expect(
@@ -703,18 +702,15 @@ test('resident comparison tolerates lower counts and idle windows without rollin
         async observe() {
           return observations++ === 0
             ? { liveWorkers: 5, passedGates: 5, landings: 5 }
-            : { liveWorkers: 1, passedGates: 0, landings: 1, workReady: true, landingsRequested: true };
+            : { liveWorkers: 3, passedGates: 0, landings: 0, landingsRequested: false };
         },
       },
     }),
   ).toBe(0);
   expect(history(f.repo).map((entry) => entry.action)).toEqual(['sync']);
-  expect(
-    residentRegression(
-      { liveWorkers: 5, passedGates: 5, landings: 5 },
-      { liveWorkers: 0, passedGates: 0, landings: 0, workReady: false, landingsRequested: false },
-    ),
-  ).toBe(false);
+  const before = { liveWorkers: 5, passedGates: 5, landings: 5 };
+  expect(residentRegression(before, { liveWorkers: 3, passedGates: 0, landings: 0 })).toBe(false);
+  expect(residentRegression(before, { liveWorkers: 2, passedGates: 0, landings: 0 })).toBe(true);
 });
 
 test('cp-sync bootstraps missing service state from published main before legacy shutdown and observation', async () => {
@@ -965,11 +961,10 @@ test('resident observation counts living current workers and successful gates an
       '2000-01-01T00:00:00.000Z',
       JSON.stringify({ passed: true }),
     );
-    db.query('INSERT INTO worker_tasks VALUES (?,?,?)').run('ready', 0, JSON.stringify({ state: 'ready' }));
     db.query('INSERT INTO worker_tasks VALUES (?,?,?)').run('landing', 2, JSON.stringify({ state: 'landing' }));
     db.query('INSERT INTO landing_queue VALUES (?,1,0,NULL)').run('landing'); // Old attempt is not demand.
     let pauses = 0;
-    const observed = await observeResident(dir.path, async (milliseconds) => {
+    const observed = await observeResident(dir.path, { samples: 4, sampleMs: 60_000 }, async (milliseconds) => {
       expect(milliseconds).toBe(60_000);
       if (pauses++ === 0) {
         for (const outcome of [
@@ -985,18 +980,15 @@ test('resident observation counts living current workers and successful gates an
       }
       await Bun.sleep(1);
     });
-    expect(pauses).toBe(10);
+    expect(pauses).toBe(3);
     expect(observed).toEqual({
       liveWorkers: 1,
       passedGates: 2,
       landings: 1,
-      workReady: true,
       landingsRequested: false,
     });
     db.query('INSERT INTO landing_queue VALUES (?,2,0,NULL)').run('landing');
-    db.query("UPDATE worker_tasks SET body = ? WHERE id = 'ready'").run(JSON.stringify({ state: 'held' }));
-    expect(await observeResident(dir.path, async () => {})).toMatchObject({
-      workReady: false,
+    expect(await observeResident(dir.path, { samples: 1, sampleMs: 0 }, async () => {})).toMatchObject({
       landingsRequested: true,
     });
   } finally {

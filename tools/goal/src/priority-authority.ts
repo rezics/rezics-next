@@ -1,5 +1,6 @@
 import type { Database } from 'bun:sqlite';
 import { randomUUID } from 'node:crypto';
+import { ownedGoals, resolveGoalManager } from './manager-ownership.ts';
 import { classifyTask } from './routing.ts';
 import type { Brief, PriorityGrant, Task, TaskClass } from './types.ts';
 
@@ -7,10 +8,13 @@ export type AuthenticatedManager = { id: string; sessionId: string };
 type ManagerSession = {
   id?: unknown;
   kind?: unknown;
+  engine?: unknown;
   provider?: unknown;
   status?: unknown;
   threadId?: unknown;
   supermanager?: unknown;
+  goal?: unknown;
+  goals?: unknown;
 };
 
 function hasManagerSessions(db: Database): boolean {
@@ -49,7 +53,11 @@ export function authenticatedManager(
       continue;
     }
     if (!state || typeof state !== 'object' || Array.isArray(state)) continue;
-    if (state.kind === 'resident-supermanager' && (state.id !== row.id || state.provider !== 'claude')) continue;
+    if (state.kind === 'resident-supermanager') {
+      if (state.id !== row.id || (state.provider !== 'claude' && state.provider !== 'codex')) continue;
+      const providerSession = state.provider === 'codex' ? env.CODEX_THREAD_ID : env.CLAUDE_CODE_SESSION_ID;
+      if (!providerSession || state.threadId !== providerSession) continue;
+    }
     if (state.kind !== undefined && state.kind !== 'managed' && state.kind !== 'resident-supermanager') continue;
     if (state.status !== 'running' || typeof state.threadId !== 'string' || !sessionIds.includes(state.threadId))
       continue;
@@ -59,6 +67,33 @@ export function authenticatedManager(
   const manager = matches[0]!;
   if (env.GOAL_MANAGER && env.GOAL_MANAGER !== manager.id) return undefined;
   return manager;
+}
+
+/** Reconstruct a manager's live session as an authenticated actor for backlog dispatch and continuation. */
+export function backlogManagerActor(db: Database, managerId: string): AuthenticatedManager | undefined {
+  const state = managerSession(db, managerId);
+  if (!state || typeof state.threadId !== 'string') return undefined;
+  const engine = state.engine ?? (state.kind === 'resident-supermanager' ? state.provider : undefined);
+  const env =
+    engine === 'claude'
+      ? { GOAL_MANAGER: managerId, CLAUDE_CODE_SESSION_ID: state.threadId }
+      : engine === 'codex'
+        ? { GOAL_MANAGER: managerId, CODEX_THREAD_ID: state.threadId }
+        : undefined;
+  return env ? authenticatedManager(db, env) : undefined;
+}
+
+/**
+ * The manager named in a brief may submit backlog dispatch only when a live session owns that Goal, or when the
+ * manager id is the directory name and the session claims no other Goal.
+ */
+export function confirmedBacklogOwner(db: Database, goal: string, manager: string): AuthenticatedManager | undefined {
+  const ownerId = resolveGoalManager(db, goal, manager);
+  const actor = backlogManagerActor(db, ownerId);
+  if (!actor) return undefined;
+  const owned = ownedGoals(managerSession(db, ownerId));
+  if (owned.length ? !owned.includes(goal) : ownerId !== goal) return undefined;
+  return actor;
 }
 
 export function criticalPriority(brief: Pick<Brief, 'criticalPath'>, taskClass?: TaskClass): boolean {

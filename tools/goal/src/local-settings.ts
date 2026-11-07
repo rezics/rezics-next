@@ -13,6 +13,23 @@ import {
 } from 'node:fs';
 import { basename, dirname, isAbsolute, join, resolve } from 'node:path';
 
+const ignoredUnknownKeys = new Set<string>();
+
+/**
+ * Drop keys this revision does not know. Warn once per key on stderr so an older tools/goal can still read a
+ * newer shared local file. A known key with an invalid value is still an error at its field parser.
+ */
+export function ignoreUnknownKeys(value: Record<string, unknown>, allowed: readonly string[], label: string): void {
+  for (const key of Object.keys(value)) {
+    if (allowed.includes(key)) continue;
+    delete value[key];
+    const identity = `${label}:${key}`;
+    if (ignoredUnknownKeys.has(identity)) continue;
+    ignoredUnknownKeys.add(identity);
+    console.error(`ignoring unknown ${label} field: ${key}`);
+  }
+}
+
 /** `note` and `$comment` annotate any object in the local settings; they are removed before validation. */
 export function withoutAnnotations(value: unknown): unknown {
   if (Array.isArray(value)) return value.map(withoutAnnotations);

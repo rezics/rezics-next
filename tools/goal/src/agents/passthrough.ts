@@ -56,7 +56,7 @@ export function passthroughAdapter(cli: 'grok' | 'cursor'): AgentAdapter {
         event.type === 'error'
           ? (event.error?.message ?? event.message ?? event.result ?? '')
           : (event.error?.message ?? event.result ?? '');
-      return /usage limit|rate limit|quota exhausted/i.test(String(text));
+      return /usage limit|rate limit|quota exhausted|out of usage/i.test(String(text));
     },
     matchesEvent(event) {
       return Boolean(

@@ -39,6 +39,7 @@ export type PromptManifest = PromptBudgetManifest & {
   conditions: Record<string, string>;
   brief: string;
   policy: string;
+  architectureModules?: string;
   layers: { role: number; conditions: number; brief: number; total: number };
 };
 /** Original integrated acceptance identity; metadata alone never authorizes native execution. */
@@ -48,6 +49,17 @@ export type ProofMetadata = {
   sourceCommit: string;
 };
 export type BriefContinuation = { taskId: string; expectedAttempt: number };
+/** The landed attempt whose provider session a chained task resumes, with the session's identity at chain time. */
+export type ChainLink = {
+  from: { taskId: string; attempt: number };
+  session: string;
+  cli: Cli;
+  pool: string;
+  model: string;
+  effort: string;
+  /** Tasks in the chain including this one; the first task of a chain has depth 1. */
+  depth: number;
+};
 /** serviceTier is ignored at launch (the Codex tier is the codex.serviceTier setting); kept so older attempts still parse. */
 export type Profile = { cli: Cli; model: string; effort: Effort; poolClass: string; serviceTier?: 'default' | 'fast' };
 export type Pool = {
@@ -66,6 +78,8 @@ export type Pool = {
     allowUnknown: boolean;
     maxAgeMs: number;
     maxBurnPerHour?: number;
+    /** Optional cap on this pool's live sessions (pending start and running). Waiting attempts do not occupy it. */
+    maxConcurrent?: number;
   };
 };
 export type AffectedTestCheck = { paths: string[]; command: string[] };
@@ -149,6 +163,7 @@ export type Settings = {
     devLandingChecks: boolean;
     devPrelandingTypecheck?: boolean;
     devLandingBootCheck?: boolean;
+    devKernelImport?: boolean;
     gateConcurrency: number;
     gateTimeoutMs: number;
     managerDirectory: string;
@@ -251,6 +266,8 @@ export type Task = {
   pendingBriefChange?: { previousBriefHash: string; newBriefHash: string };
   /** `retry --fresh-session`: the next attempt starts a new provider session; cleared when that attempt is created. */
   freshSession?: boolean;
+  /** Set on a brief chained into the warm session of a landed task; its first attempt resumes that session. */
+  chain?: ChainLink;
   /** Checks the brief requires that this launch's conditions defer to the dev verifier. */
   deferredAcceptance?: AcceptanceRequirement[];
   integratedBase?: string;
@@ -296,6 +313,20 @@ export type DevVerifierRun = {
   key: string;
   createdAt: string;
   evidence: DevVerifierEvidence;
+  round?: DevVerifierRoundSummary;
+};
+export type DevVerifierRoundSummary = {
+  baseCommit: string;
+  headCommit: string;
+  startedAt: string;
+  completedAt: string;
+  durationMs: number;
+  testsRun: number;
+  passed: number;
+  failed: number;
+  unknown: number;
+  fullSuite: boolean;
+  pendingChecks: { command: string[]; closure: string[]; taskId?: string; cwd?: string }[];
 };
 export type DevVerifierFinding = {
   rangeKey: string;
@@ -307,6 +338,7 @@ export type DevVerifierFinding = {
   result: DevVerifierResult;
   check: { command: string[]; closure: string[]; taskId?: string; cwd?: string };
   assertion: string;
+  test?: string;
   baseline: DevVerifierEvidence | null;
   head: DevVerifierEvidence | null;
   reason: string;
@@ -324,6 +356,8 @@ export type RetryIntent = AttemptRef & {
     conflictFiles?: string[];
     /** A backed-off retry starts no earlier than this ISO time. */
     notBefore?: string;
+    /** Start the next attempt in a new provider session while preserving its branch and worktree. */
+    freshSession?: boolean;
     /** A check-host transport failure retries only while no check host is in a probed outage. */
     awaitCheckHosts?: boolean;
     profile?: Profile;
@@ -334,6 +368,17 @@ export type RetryIntent = AttemptRef & {
   abandonedBy?: 'stop' | 'cancel';
   nextAttempt?: number;
 };
+/** A manager-accepted replacement brief waiting for the next retry to consume it. */
+export type PendingBriefProposal = {
+  id: number;
+  taskId: string;
+  writtenForAttempt: number;
+  previousBriefHash: string;
+  newBriefHash: string;
+  markdown: string;
+  createdAt: string;
+};
+export type BriefProposalRecord = Omit<PendingBriefProposal, 'id'>;
 export type WorktreeCleanupDisposition = {
   taskId: string;
   /** Fingerprint of the exact offending path and its in-worktree ancestors. */
@@ -404,7 +449,7 @@ export type TerminationIntent = {
   operation: 'stop' | 'cancel';
   requestedAt: string;
   state: 'requested' | 'unknown' | 'complete';
-  processIdentity: 'known' | 'not-started' | 'unknown';
+  processIdentity: 'known' | 'not-started' | 'waiting' | 'unknown';
   process: ProcessIdentity | null;
   auxiliaryProcesses: ProcessIdentity[];
   error?: string;

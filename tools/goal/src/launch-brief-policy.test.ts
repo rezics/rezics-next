@@ -71,9 +71,9 @@ test('owner decisions use the caller message, input and total prompt limits', ()
   expect(prepare(readControlPolicy({ ...overrides, workerPrompt: { characters } })).delivery?.summaryDelivered).toBe(
     true,
   );
-  expect(() => prepare(readControlPolicy({ ...overrides, workerPrompt: { characters: characters - 1 } }))).toThrow(
-    'total prompt input limit',
-  );
+  const pointed = prepare(readControlPolicy({ ...overrides, workerPrompt: { characters: characters - 1 } }));
+  expect(pointed.prompt).not.toContain(summary);
+  expect(pointed.file?.path).toBe('.temp/owner-decisions/1.md');
   expect(
     prepare(readControlPolicy({ ...overrides, brief: { bytes: Buffer.byteLength(body) - 1 } })).delivery,
   ).toBeUndefined();

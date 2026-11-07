@@ -196,6 +196,38 @@ test('dev transpile reporting prices final checks and handbacks while keeping me
   });
 });
 
+test('dev architecture reporting records one measured candidate check and its repair handback', () => {
+  const result = flowReport(
+    [
+      {
+        taskId: 'architecture',
+        attempt: 1,
+        stage: 'landing',
+        action: 'dev-architecture',
+        at: date(1),
+        detail: JSON.stringify({ outcome: 'repair-handback', elapsedMs: 10_500, changedFileCount: 3 }),
+      },
+      {
+        taskId: 'architecture',
+        attempt: 2,
+        stage: 'landing',
+        action: 'dev-architecture',
+        at: date(2),
+        detail: JSON.stringify({ outcome: 'passed', elapsedMs: 10_200, changedFileCount: 3 }),
+      },
+    ],
+    [],
+  );
+  expect(result.devArchitecture).toMatchObject({
+    successfulChecks: 1,
+    repairHandbacks: 1,
+    unavailable: 0,
+    measuredChecks: 2,
+    totalMs: 20_700,
+    changedFiles: 6,
+  });
+});
+
 test('every task records durable timestamps for dispatch, start, each check-slot request, acquisition and release, worker finish, landing enqueue, landing start, dev update, verification and integration', () => {
   const dir = mkdtempSync(join(tmpdir(), 'flow-'));
   const path = join(dir, 'flow.db');

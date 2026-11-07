@@ -1153,6 +1153,7 @@ test('ordinary dev independence: startup backlog lands before main captures proo
 test('ordinary dev independence: stale proof hands off without reusing partial evidence or taking a live dev lease', async () => {
   const h = integrationHarness();
   let current = true;
+  let commands = 0;
   let owner: ReturnType<typeof acquireDirectoryLease> | undefined;
   try {
     h.ensureDev();
@@ -1165,11 +1166,10 @@ test('ordinary dev independence: stale proof hands off without reusing partial e
     let handoffs = 0;
     await train(
       h,
-      async (_command, _cwd, _log, options) => {
+      async () => {
+        // The command already running finishes its step; the next command boundary hands the request off.
+        commands++;
         current = false;
-        await new Promise<void>((resolve) =>
-          options!.signal!.addEventListener('abort', () => resolve(), { once: true }),
-        );
         return { passed: true, output: 'partial immutable-tree evidence', timedOut: false };
       },
       releaseEvidence,
@@ -1180,6 +1180,7 @@ test('ordinary dev independence: stale proof hands off without reusing partial e
         },
       },
     );
+    expect(commands).toBe(1);
     expect(handoffs).toBe(1);
     expect([h.head('main'), h.head('dev'), h.head(control.branch)]).toEqual([main, main, source]);
     expect(h.outcomes).toEqual([]);
@@ -1285,12 +1286,10 @@ test('ordinary dev independence: repeated interrupted admissions are finite acro
       let current = true;
       await train(
         h,
-        async (_command, _cwd, _log, options) => {
+        async () => {
+          // The command already running finishes its step; the next command boundary hands the request off.
           gateCalls++;
           current = false;
-          await new Promise<void>((resolve) =>
-            options!.signal!.addEventListener('abort', () => resolve(), { once: true }),
-          );
           return { passed: true, output: '', timedOut: false };
         },
         releaseEvidence,

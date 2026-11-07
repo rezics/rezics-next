@@ -5,7 +5,7 @@ import { retainPoolReadings } from './pacing.ts';
 import { readFileSync, statSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import type { Pool, PoolReading, Profile } from './types.ts';
-import { withoutAnnotations } from './local-settings.ts';
+import { ignoreUnknownKeys, withoutAnnotations } from './local-settings.ts';
 
 function object(value: unknown, label: string): Record<string, unknown> {
   if (value === null || typeof value !== 'object' || Array.isArray(value))
@@ -13,7 +13,7 @@ function object(value: unknown, label: string): Record<string, unknown> {
   return value as Record<string, unknown>;
 }
 function keys(value: Record<string, unknown>, allowed: string[], label: string): void {
-  for (const key of Object.keys(value)) if (!allowed.includes(key)) throw new Error(`unknown ${label} field: ${key}`);
+  ignoreUnknownKeys(value, allowed, label);
 }
 function text(value: unknown, label: string): string {
   if (typeof value !== 'string' || !value.trim()) throw new Error(`${label} must be a nonempty string`);
@@ -32,6 +32,10 @@ function positiveRate(value: unknown, label: string): number {
 function burnCeiling(value: unknown): number {
   return positiveRate(value, 'maxBurnPerHour');
 }
+function concurrentCap(value: unknown): number {
+  if (typeof value !== 'number' || !Number.isSafeInteger(value) || value < 1) throw new Error('invalid maxConcurrent');
+  return value;
+}
 
 /** Parse only the pool section so a live reload cannot change other process settings. */
 export function readPoolPolicies(value: unknown, localFile: string): Pool[] {
@@ -46,7 +50,7 @@ export function readPoolPolicies(value: unknown, localFile: string): Pool[] {
     const policy = object(pool.policy, 'pool policy');
     keys(
       policy,
-      ['weight', 'reservePercent', 'reservePerHour', 'allowUnknown', 'maxAgeMs', 'maxBurnPerHour'],
+      ['weight', 'reservePercent', 'reservePerHour', 'allowUnknown', 'maxAgeMs', 'maxBurnPerHour', 'maxConcurrent'],
       'pool policy',
     );
     if (typeof policy.allowUnknown !== 'boolean') throw new Error('allowUnknown must be explicit');
@@ -72,6 +76,7 @@ export function readPoolPolicies(value: unknown, localFile: string): Pool[] {
           ? {}
           : { reservePerHour: positiveRate(policy.reservePerHour, 'reservePerHour') }),
         ...(policy.maxBurnPerHour === undefined ? {} : { maxBurnPerHour: burnCeiling(policy.maxBurnPerHour) }),
+        ...(policy.maxConcurrent === undefined ? {} : { maxConcurrent: concurrentCap(policy.maxConcurrent) }),
       },
     };
   });

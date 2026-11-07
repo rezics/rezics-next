@@ -1,4 +1,5 @@
 import { expect, test } from 'bun:test';
+import { randomUUID } from 'node:crypto';
 import { runWorkerCommand } from './worker-commands.ts';
 import { authenticatedManager } from './priority-authority.ts';
 import { harness } from './test-support.ts';
@@ -233,6 +234,38 @@ test('legacy critical task records keep unknown setter provenance', () => {
     expect(legacy.brief.criticalPath).toBe(true);
     expect(legacy.priorityHistory).toBeUndefined();
     expect(legacy.priorityGrants).toBeUndefined();
+  } finally {
+    h.dispose();
+  }
+});
+
+test('resident authority binds the provider marker and persisted manager identity', () => {
+  const h = harness();
+  try {
+    const sessionId = randomUUID();
+    addManager(h.store.db, 'supermanager', sessionId, 'root');
+    const save = (provider: string, id = 'supermanager') =>
+      h.store.db
+        .query('UPDATE manager_sessions SET state = ? WHERE id = ?')
+        .run(
+          JSON.stringify({ kind: 'resident-supermanager', id, provider, status: 'running', threadId: sessionId }),
+          'supermanager',
+        );
+    for (const provider of ['codex', 'claude']) {
+      save(provider);
+      const env = provider === 'codex' ? { CODEX_THREAD_ID: sessionId } : { CLAUDE_CODE_SESSION_ID: sessionId };
+      const other = provider === 'codex' ? { CLAUDE_CODE_SESSION_ID: sessionId } : { CODEX_THREAD_ID: sessionId };
+      expect(authenticatedManager(h.store.db, env)).toEqual({ id: 'supermanager', sessionId });
+      expect(authenticatedManager(h.store.db, other)).toBeUndefined();
+      expect(authenticatedManager(h.store.db, { ...env, GOAL_MANAGER: 'ordinary-manager' })).toBeUndefined();
+      save(provider, 'different-manager');
+      expect(authenticatedManager(h.store.db, env)).toBeUndefined();
+    }
+    save('unsupported');
+    expect(authenticatedManager(h.store.db, { CODEX_THREAD_ID: sessionId })).toBeUndefined();
+    save('codex');
+    addManager(h.store.db, 'competing-manager', sessionId, 'supermanager');
+    expect(authenticatedManager(h.store.db, { CODEX_THREAD_ID: sessionId })).toBeUndefined();
   } finally {
     h.dispose();
   }

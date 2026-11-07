@@ -1,7 +1,14 @@
 import { defaultPolicy, type ControlPolicy } from './policy.ts';
 import { readFileSync } from 'node:fs';
 import { isAbsolute, win32 } from 'node:path';
-import type { AcceptancePlacement, AcceptanceRequirement, Brief, BriefContinuation, TaskKind } from './types.ts';
+import type {
+  AcceptancePlacement,
+  AcceptanceRequirement,
+  Brief,
+  BriefContinuation,
+  TaskKind,
+  TaskState,
+} from './types.ts';
 import { parseBunTestCommand, parseEnvironmentPrefix } from './command-shape.ts';
 import { parseProofMetadata } from './verification.ts';
 
@@ -51,6 +58,63 @@ export function acceptanceRequirements(
   const required = new Set<AcceptanceRequirement>(brief.acceptance?.requires ?? []);
   if (brief.kind === 'interface' || (brief.paths ?? []).some(pathImpliesStories)) required.add('browser');
   return [...required];
+}
+
+export const ENVIRONMENT_WALK_REQUIREMENTS = ['native', 'browser'] as const;
+export const ENVIRONMENT_WALK_STATES = ['ready', 'running', 'held', 'landing'] as const satisfies readonly TaskState[];
+export const ENVIRONMENT_WALK_DOC = 'docs/development/verification.md#check-selection-and-failures';
+
+export type EnvironmentWalkBrief = {
+  goal?: string;
+  kind?: string;
+  acceptance?: { requires?: readonly string[] };
+};
+
+export type EnvironmentWalkOccupant = {
+  id: string;
+  state: string;
+  brief: EnvironmentWalkBrief;
+};
+
+export function environmentWalkRequires(brief: EnvironmentWalkBrief): boolean {
+  const requires = brief.acceptance?.requires ?? [];
+  return ENVIRONMENT_WALK_REQUIREMENTS.some((item) => requires.includes(item));
+}
+
+/** Verification, proof-run (kind verification) and control-plane briefs sit outside the one-walk gate. */
+export function environmentWalkGateApplies(brief: EnvironmentWalkBrief): boolean {
+  return brief.kind !== 'verification' && brief.goal !== 'control-plane' && environmentWalkRequires(brief);
+}
+
+export function occupyingEnvironmentWalk(
+  brief: EnvironmentWalkBrief & { goal: string },
+  tasks: readonly EnvironmentWalkOccupant[],
+  excludingTaskId?: string,
+): EnvironmentWalkOccupant | undefined {
+  if (!environmentWalkGateApplies(brief)) return undefined;
+  return tasks.find(
+    (task) =>
+      task.id !== excludingTaskId &&
+      task.brief.goal === brief.goal &&
+      (ENVIRONMENT_WALK_STATES as readonly string[]).includes(task.state) &&
+      environmentWalkGateApplies(task.brief),
+  );
+}
+
+export function environmentWalkAdmissionError(occupant: EnvironmentWalkOccupant): string {
+  return (
+    `Goal already has environment walk ${occupant.id} (${occupant.state}); ` +
+    `keep at most one native or browser walk-and-repair task per Goal. See ${ENVIRONMENT_WALK_DOC}.`
+  );
+}
+
+export function assertEnvironmentWalkAdmission(
+  brief: EnvironmentWalkBrief & { goal: string },
+  tasks: readonly EnvironmentWalkOccupant[],
+  excludingTaskId?: string,
+): void {
+  const occupant = occupyingEnvironmentWalk(brief, tasks, excludingTaskId);
+  if (occupant) throw new Error(environmentWalkAdmissionError(occupant));
 }
 /** Visited (i, j) cells; wildcard products larger than this stall dispatch. */
 type BriefPolicy = ControlPolicy['brief'];
@@ -615,4 +679,134 @@ export function parseBrief(
     if (!brief.riskAreas.includes(area)) throw new Error(`declared paths touch undeclared risk area: ${area}`);
   }
   return brief;
+}
+
+export const PRODUCT_SIZE_EXEMPT_KINDS: ReadonlySet<TaskKind> = new Set(['research', 'mechanical', 'specification']);
+
+export type BriefSizeSnapshot = {
+  goal: string;
+  manager: string;
+  kind?: TaskKind;
+  target?: 'stabilize' | 'main';
+  urgent: boolean;
+  continuation: boolean;
+  paths: string[];
+  estimateLines?: number;
+  bodyCharacters: number;
+};
+
+export type ProductBriefSizeViolation = {
+  estimateLines?: number;
+  bodyCharacters?: number;
+};
+
+/** Front matter and body size of a backlog file. Invalid YAML is untrusted input and is not a size return. */
+export function readBriefSizeSnapshot(markdown: string): BriefSizeSnapshot | undefined {
+  const match = /^---\r?\n([\s\S]*?)\r?\n---(?:\r?\n|$)/.exec(markdown);
+  if (!match) return;
+  let raw: unknown;
+  try {
+    raw = Bun.YAML.parse(match[1]!);
+  } catch {
+    return;
+  }
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return;
+  const value = raw as Record<string, unknown>;
+  if (typeof value.goal !== 'string' || !value.goal.trim()) return;
+  const goal = value.goal.trim();
+  const manager = typeof value.manager === 'string' && value.manager.trim() ? value.manager.trim() : goal;
+  const kind = BRIEF_KINDS.includes(value.kind as TaskKind) ? (value.kind as TaskKind) : undefined;
+  const target = value.target === 'stabilize' || value.target === 'main' ? value.target : undefined;
+  const paths = Array.isArray(value.paths)
+    ? value.paths.filter((path): path is string => typeof path === 'string' && path.trim() !== '')
+    : [];
+  const estimate =
+    value.estimate && typeof value.estimate === 'object' && !Array.isArray(value.estimate)
+      ? (value.estimate as Record<string, unknown>).lines
+      : undefined;
+  const estimateLines =
+    typeof estimate === 'number' && Number.isSafeInteger(estimate) && estimate >= 1 ? estimate : undefined;
+  return {
+    goal,
+    manager,
+    ...(kind ? { kind } : {}),
+    ...(target ? { target } : {}),
+    urgent: value.urgent === true,
+    continuation: value.continuation !== undefined,
+    paths,
+    ...(estimateLines === undefined ? {} : { estimateLines }),
+    bodyCharacters: markdown.slice(match[0].length).length,
+  };
+}
+
+function sharedPathPrefix(left: string, right: string): number {
+  const a = left.split('/');
+  const b = right.split('/');
+  let n = 0;
+  while (n < a.length && n < b.length && a[n] === b[n]) n += 1;
+  return n;
+}
+
+/** Declared-path closeness: shared directory prefix, with a glob-overlap bonus. */
+export function briefPathCloseness(
+  left: readonly string[],
+  right: readonly string[],
+  policy: BriefPolicy = defaultPolicy.brief,
+): number {
+  let best = 0;
+  for (const a of left) {
+    for (const b of right) {
+      const score = sharedPathPrefix(a, b) + (pathsOverlap(a, b, policy) ? 1 : 0);
+      if (score > best) best = score;
+    }
+  }
+  return best;
+}
+
+/**
+ * A product brief below `brief.minimumEstimateLines` or over `brief.maximumBodyCharacters`.
+ * Urgent, research, mechanical, specification and continuation briefs are exempt; omitted estimates use 1,500 lines.
+ */
+export function productBriefSizeViolation(
+  markdown: string,
+  policy: BriefPolicy = defaultPolicy.brief,
+  fileName?: string,
+): ProductBriefSizeViolation | undefined {
+  if (fileName?.startsWith('continuation-')) return;
+  const snapshot = readBriefSizeSnapshot(markdown);
+  if (!snapshot?.kind || snapshot.urgent || snapshot.continuation) return;
+  if (PRODUCT_SIZE_EXEMPT_KINDS.has(snapshot.kind)) return;
+  if (
+    !devProductBrief({
+      goal: snapshot.goal,
+      kind: snapshot.kind,
+      ...(snapshot.target ? { target: snapshot.target } : {}),
+    })
+  )
+    return;
+  const frozen = /^\s*(?:`{3,}|~{3,})(?:[^\r\n]*[ \t])?path=/m.test(markdown);
+  const lines = snapshot.estimateLines ?? (frozen ? undefined : 1500);
+  const estimateLines = lines !== undefined && lines < policy.minimumEstimateLines ? lines : undefined;
+  const bodyCharacters = snapshot.bodyCharacters > policy.maximumBodyCharacters ? snapshot.bodyCharacters : undefined;
+  if (estimateLines === undefined && bodyCharacters === undefined) return;
+  return {
+    ...(estimateLines === undefined ? {} : { estimateLines }),
+    ...(bodyCharacters === undefined ? {} : { bodyCharacters }),
+  };
+}
+
+export function productBriefSizeReturnReason(
+  violation: ProductBriefSizeViolation,
+  policy: BriefPolicy = defaultPolicy.brief,
+): string {
+  const parts: string[] = [];
+  if (violation.estimateLines !== undefined)
+    parts.push(
+      `estimate.lines is ${violation.estimateLines}; brief.minimumEstimateLines is ${policy.minimumEstimateLines}`,
+    );
+  if (violation.bodyCharacters !== undefined)
+    parts.push(
+      `body is ${violation.bodyCharacters} characters; brief.maximumBodyCharacters is ${policy.maximumBodyCharacters}`,
+    );
+  return `${parts.join('. ')}. Merge with related briefs of the same Goal and area into one outcome, or rewrite it.`;
 }

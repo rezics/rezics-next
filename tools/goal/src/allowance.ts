@@ -8,6 +8,10 @@ export type PoolSelectionOptions = {
   now?: number;
   policy?: ControlPolicy['provider'] | undefined;
   spanMs?: number;
+  /** Live worker sessions on each pool name: pending start and running. Waiting attempts do not occupy the cap. */
+  running?: Readonly<Record<string, number>>;
+  /** Skip only the pool's burn ceiling; reserve, exhaustion and concurrency still refuse. */
+  ignoreBurnCeiling?: boolean;
 };
 
 export type PoolBurnStatus = {
@@ -15,7 +19,49 @@ export type PoolBurnStatus = {
   allowanceKey: string;
   burnPerHour: number;
   maxBurnPerHour?: number;
+  live?: number;
+  waiting?: number;
+  maxConcurrent?: number;
 };
+
+const liveStates = new Set(['pending', 'running']);
+
+function countByPool(
+  attempts: readonly { pool: string; state: string }[],
+  include: (state: string) => boolean,
+): Record<string, number> {
+  const counts: Record<string, number> = {};
+  for (const attempt of attempts) {
+    if (!include(attempt.state)) continue;
+    counts[attempt.pool] = (counts[attempt.pool] ?? 0) + 1;
+  }
+  return counts;
+}
+
+/** Occupancy that fills `policy.maxConcurrent`: pending-start and running sessions on each pool. */
+export function countRunningByPool(attempts: readonly { pool: string; state: string }[]): Record<string, number> {
+  return countByPool(attempts, (state) => liveStates.has(state));
+}
+
+/** Attempts parked on checks (state waiting); they do not occupy `policy.maxConcurrent`. */
+export function countWaitingByPool(attempts: readonly { pool: string; state: string }[]): Record<string, number> {
+  return countByPool(attempts, (state) => state === 'waiting');
+}
+
+type ReadingWindow = PoolReading['windows'][number];
+
+/**
+ * Providers stamp one window's reset a few milliseconds or seconds apart between readings, so readings pair within this
+ * tolerance. A real reset moves the stamp by a window length and starts a new series.
+ */
+const sameResetToleranceMs = 60_000;
+
+/** Equal window length and a reset stamp within the tolerance; an unknown stamp matches only another unknown one. */
+function sameWindow(past: ReadingWindow, window: ReadingWindow): boolean {
+  if (past.minutes !== window.minutes) return false;
+  if (past.resetsAt === null || window.resetsAt === null) return past.resetsAt === window.resetsAt;
+  return Math.abs(past.resetsAt - window.resetsAt) <= sameResetToleranceMs;
+}
 
 // Milliseconds per hour, minutes per day and percentages below are unit conversions, not admission policy.
 /** Same-window consumption over the measurement span, excluding resets. All reserve and pacing thresholds are local policy. */
@@ -39,9 +85,7 @@ export function burnPerHour(
         if (past.allowanceKey !== current.allowanceKey || !past.observedAt) continue;
         const at = Date.parse(past.observedAt);
         if (!Number.isFinite(at) || at < start || at >= currentAt) continue;
-        const old = past.windows.find(
-          (candidate) => candidate.resetsAt === window.resetsAt && candidate.minutes === window.minutes,
-        );
+        const old = past.windows.find((candidate) => sameWindow(candidate, window));
         if (!old) continue;
         if (earliestAt === undefined || at < earliestAt) {
           earliestAt = at;
@@ -60,6 +104,8 @@ export function poolBurnStatus(
   history: readonly PoolReading[],
   now = Date.now(),
   spanMs = defaultPolicy.pacing.burnSpanMs,
+  live: Readonly<Record<string, number>> = {},
+  waiting: Readonly<Record<string, number>> = {},
 ): PoolBurnStatus[] {
   return pools.map((pool) => {
     const series = history.filter((reading) => reading.allowanceKey === pool.allowanceKey && reading.observedAt);
@@ -72,6 +118,13 @@ export function poolBurnStatus(
       allowanceKey: pool.allowanceKey,
       burnPerHour: latest ? burnPerHour(latest, series, { now, spanMs }) : 0,
       ...(pool.policy.maxBurnPerHour === undefined ? {} : { maxBurnPerHour: pool.policy.maxBurnPerHour }),
+      ...(pool.policy.maxConcurrent === undefined
+        ? {}
+        : {
+            live: live[pool.name] ?? 0,
+            waiting: waiting[pool.name] ?? 0,
+            maxConcurrent: pool.policy.maxConcurrent,
+          }),
     };
   });
 }
@@ -116,7 +169,10 @@ function assessPool(
   now: number,
   policy: ControlPolicy['provider'] | undefined,
   spanMs: number,
+  running: Readonly<Record<string, number>>,
+  ignoreBurnCeiling: boolean,
 ): PoolAllowance {
+  if (pool.policy.maxConcurrent !== undefined && (running[pool.name] ?? 0) >= pool.policy.maxConcurrent) return null;
   const shared = indexedReadings.get(pool.allowanceKey) ?? [];
   const fresh = shared.filter(({ reading }) =>
     reading.observedAt
@@ -134,7 +190,12 @@ function assessPool(
     return null;
   if (!fresh.length && !pool.policy.allowUnknown) return null;
   const rates = fresh.map(({ reading, history }) => burnPerHour(reading, history, { now, spanMs }));
-  if (pool.policy.maxBurnPerHour !== undefined && rates.some((rate) => rate > pool.policy.maxBurnPerHour!)) return null;
+  if (
+    !ignoreBurnCeiling &&
+    pool.policy.maxBurnPerHour !== undefined &&
+    rates.some((rate) => rate > pool.policy.maxBurnPerHour!)
+  )
+    return null;
   const used = Math.max(0, ...fresh.flatMap(({ reading }) => reading.windows.map((window) => window.usedPercent)));
   return { score: (100 - used) * pool.policy.weight };
 }
@@ -155,7 +216,18 @@ function selectPool(
   const ranked = candidates
     .map((pool) => {
       if (!allowanceByPool.has(pool))
-        allowanceByPool.set(pool, assessPool(pool, indexedReadings, now, options.policy, spanMs));
+        allowanceByPool.set(
+          pool,
+          assessPool(
+            pool,
+            indexedReadings,
+            now,
+            options.policy,
+            spanMs,
+            options.running ?? {},
+            options.ignoreBurnCeiling === true,
+          ),
+        );
       const allowance = allowanceByPool.get(pool);
       return allowance ? { pool, score: allowance.score, preferred: pool.name === options.preferred } : null;
     })
@@ -185,20 +257,15 @@ export function choosePool(
   return selected;
 }
 
-/**
- * The routed profile's pool, or the first fallback profile that has one when the routed CLI has no quota. With a pacing
- * measure, a new task instead goes to the allowed profile whose allowance most needs spending before it resets; a
- * retry keeps its engine while that has quota. A pool over its burn ceiling is skipped; with no allowed fallback the
- * task waits. Running attempts are not stopped.
- */
-export function choosePoolWithFallback(
+/** The routed profile's pool, or the first fallback that has one; `undefined` when every candidate is refused. */
+export function findAllowedPool(
   profile: Profile,
   fallbacks: readonly Profile[],
   pools: readonly Pool[],
   readings: readonly PoolReading[],
   options: PoolSelectionOptions = {},
   urgency?: (pool: Pool) => number | undefined,
-): { profile: Profile; pool: Pool } {
+): { profile: Profile; pool: Pool } | undefined {
   const now = options.now ?? Date.now();
   const spanMs = options.spanMs ?? defaultPolicy.pacing.burnSpanMs;
   const selection = { ...options, now, spanMs };
@@ -219,5 +286,48 @@ export function choosePoolWithFallback(
     const pool = selectPool(candidate, pools, indexedReadings, fallbackOptions, now, spanMs, allowanceByPool);
     if (pool) return { profile: candidate, pool };
   }
-  throw noAllowedPool(profile);
+  return undefined;
+}
+
+/**
+ * The routed profile's pool, or the first fallback profile that has one when the routed CLI has no quota. With a pacing
+ * measure, a new task instead goes to the allowed profile whose allowance most needs spending before it resets; a
+ * retry keeps its engine while that has quota. A pool over its burn ceiling or concurrent-worker cap is skipped; with
+ * no allowed fallback the task waits. Running attempts are not stopped.
+ */
+export function choosePoolWithFallback(
+  profile: Profile,
+  fallbacks: readonly Profile[],
+  pools: readonly Pool[],
+  readings: readonly PoolReading[],
+  options: PoolSelectionOptions = {},
+  urgency?: (pool: Pool) => number | undefined,
+): { profile: Profile; pool: Pool } {
+  const selected = findAllowedPool(profile, fallbacks, pools, readings, options, urgency);
+  if (!selected) throw noAllowedPool(profile);
+  return selected;
+}
+
+/** The first configured pool the routed profile would use; ready tasks wait on this pool when none are allowed. */
+export function waitingPoolName(profile: Profile, pools: readonly Pool[]): string | undefined {
+  return [...pools]
+    .filter((pool) => pool.cli === profile.cli && pool.classes.includes(profile.poolClass))
+    .sort((a, b) => a.name.localeCompare(b.name))[0]?.name;
+}
+
+/** Ready tasks whose route has no allowed pool, counted on the pool their first profile would use. */
+export function countAllowanceWaiting(
+  items: readonly { first: Profile; fallbacks: readonly Profile[] }[],
+  pools: readonly Pool[],
+  readings: readonly PoolReading[],
+  options: PoolSelectionOptions = {},
+): Record<string, number> {
+  const counts: Record<string, number> = {};
+  for (const item of items) {
+    if (findAllowedPool(item.first, item.fallbacks, pools, readings, options)) continue;
+    const name = waitingPoolName(item.first, pools);
+    if (!name) continue;
+    counts[name] = (counts[name] ?? 0) + 1;
+  }
+  return counts;
 }

@@ -45,7 +45,8 @@ export function readControlPolicy(value: unknown = {}): ControlPolicy {
         }
         if (Array.isArray(fallback)) {
           // Tool retries may deliberately wait zero milliseconds; settlement pauses remain positive.
-          const minimum = label === 'policy.worker.toolRetryBackoffMs' ? 0 : 1;
+          const minimum =
+            label === 'policy.worker.toolRetryBackoffMs' || label === 'policy.worker.transportRetryBackoffMs' ? 0 : 1;
           if (
             !Array.isArray(candidate) ||
             !candidate.length ||
@@ -79,6 +80,7 @@ export function readControlPolicy(value: unknown = {}): ControlPolicy {
   for (const [label, percent] of [
     ['manager.continuationBudgetPercent', policy.manager.continuationBudgetPercent],
     ['pacing.alertUnusedPercent', policy.pacing.alertUnusedPercent],
+    ['pacing.nearCeilingPercent', policy.pacing.nearCeilingPercent],
   ] as const)
     if (percent > 100) throw new Error(`invalid policy.${label}`);
   if (policy.inbox.defaultPageSize > policy.inbox.maxPageSize)

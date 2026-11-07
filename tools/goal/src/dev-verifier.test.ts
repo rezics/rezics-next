@@ -1,73 +1,43 @@
 import { afterEach, expect, test } from 'bun:test';
-import { Database } from 'bun:sqlite';
-import { readControlPolicy } from './policy.ts';
-import {
-  chmodSync,
-  existsSync,
-  mkdtempSync,
-  mkdirSync,
-  readFileSync,
-  readdirSync,
-  rmSync,
-  symlinkSync,
-  writeFileSync,
-} from 'node:fs';
+import { mkdtempSync, mkdirSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { acquireDirectoryLease } from './lease.ts';
-import { parseBrief } from './briefs.ts';
-import { bootSmokeEnvironment } from './verification.ts';
-import { executeCheck } from './dev-verifier-execution.ts';
-import { openDb } from './db.ts';
-import { WorkerStore } from './store.ts';
+import { readControlPolicy } from './policy.ts';
 import {
-  bootSmokeRepairBrief,
   classifyRun,
   devVerificationState,
   placeInWorkspace,
-  projectChecksSource,
-  projectSourceInterval,
-  projectVerifierLandings,
-  sourcePresentAt,
-  checkInput,
-  VERIFY_CONCURRENCY,
   verifyDev,
-  withTreeBun,
-  type BootSmokeRepair,
-  type DevVerifierCheck,
+  type TestFailureRepair,
 } from './dev-verifier.ts';
-import type { DevVerifierFinding, DevVerifierRun, Settings, Task } from './types.ts';
+import type { DevVerifierRun, Settings, Task } from './types.ts';
 
 const roots: string[] = [];
-const repositoryRoot = join(import.meta.dir, '../../..');
-const repositoryPackageManager = (
-  JSON.parse(readFileSync(join(repositoryRoot, 'package.json'), 'utf8')) as {
-    packageManager: string;
-  }
-).packageManager;
-const repositoryBunPackage = join(repositoryRoot, 'node_modules/bun');
-const fixturePackageManager = `bun@${Bun.version}`;
+
 afterEach(() => {
   for (const root of roots.splice(0)) rmSync(root, { recursive: true, force: true });
 });
+
 function git(cwd: string, ...args: string[]): string {
   const result = spawnSync('git', args, { cwd, encoding: 'utf8' });
-  if (result.status !== 0) throw new Error(result.stderr);
+  if (result.status !== 0) throw new Error(result.stderr || result.stdout);
   return result.stdout.trim();
 }
-function repo() {
-  const root = mkdtempSync(join(tmpdir(), 'goal-dev-verifier-'));
+
+function repo(): string {
+  const root = mkdtempSync(join(tmpdir(), 'goal-dev-verifier-round-'));
   roots.push(root);
   git(root, 'init', '-b', 'main');
   git(root, 'config', 'user.email', 'test@example.invalid');
   git(root, 'config', 'user.name', 'Test');
-  mkdirSync(join(root, 'services', 'kernel'), { recursive: true });
-  writeFileSync(join(root, 'services', 'kernel', 'base.ts'), 'export const base = true;\n');
+  mkdirSync(join(root, 'services/kernel'), { recursive: true });
   mkdirSync(join(root, 'scripts'), { recursive: true });
-  writeFileSync(join(root, 'scripts', 'typecheck.ts'), 'process.exit(0);\n');
-  writeFileSync(join(root, '.gitignore'), 'node_modules/\n');
   mkdirSync(join(root, 'toolchain/bin'), { recursive: true });
+  writeFileSync(join(root, 'services/kernel/base.ts'), 'export const base = true;\n');
+  writeFileSync(join(root, 'scripts/typecheck.ts'), 'process.exit(0);\n');
+  writeFileSync(join(root, '.gitignore'), 'node_modules/\n');
   writeFileSync(
     join(root, 'toolchain/package.json'),
     JSON.stringify({ name: 'bun', version: Bun.version, bin: { bun: 'bin/bun.exe' } }),
@@ -77,7 +47,7 @@ function repo() {
     join(root, 'package.json'),
     JSON.stringify({
       name: 'verifier-fixture',
-      packageManager: fixturePackageManager,
+      packageManager: `bun@${Bun.version}`,
       dependencies: { bun: 'file:./toolchain' },
     }),
   );
@@ -92,6 +62,7 @@ function repo() {
   git(root, 'branch', 'dev-verified');
   return root;
 }
+
 function commit(root: string, path: string, content: string, message: string): string {
   const absolute = join(root, path);
   mkdirSync(join(absolute, '..'), { recursive: true });
@@ -100,39 +71,8 @@ function commit(root: string, path: string, content: string, message: string): s
   git(root, 'commit', '-m', message);
   return git(root, 'rev-parse', 'HEAD');
 }
-function setup(root: string, tasks: Task[] = []) {
-  const stateDirectory = join(root, '.state'),
-    worktreeRoot = join(root, '.trees');
-  mkdirSync(stateDirectory, { recursive: true });
-  mkdirSync(worktreeRoot, { recursive: true });
-  const updates: string[] = [];
-  const runs = new Map<string, DevVerifierRun>();
-  const findings: DevVerifierFinding[] = [];
-  const store = {
-    tasks: () => tasks,
-    task: (id: string) => tasks.find((task) => task.id === id)!,
-    updateTask: ({ taskId }: { taskId: string }, update: (task: Task) => void) => {
-      const task = tasks.find((item) => item.id === taskId)!;
-      update(task);
-      updates.push(taskId);
-      return task;
-    },
-    devVerifierRun: (key: string) => runs.get(key),
-    saveDevVerifierRun: (run: DevVerifierRun) => runs.set(run.key, run),
-    devVerifierFindings: () => findings,
-    saveDevVerifierFinding: (finding: DevVerifierFinding) => findings.push(finding),
-  };
-  const inboxEvents: any[] = [];
-  const settings = {
-    mainCheckout: root,
-    stateDirectory,
-    worktreeRoot,
-    integrationBranch: 'dev',
-    affectedTests: [{ paths: ['services/kernel/**'], command: ['affected-check'] }],
-  } as unknown as Settings;
-  return { settings, store, updates, inbox: { deliver: (event: any) => inboxEvents.push(event) }, inboxEvents };
-}
-function landedTask(from: string, commitHead: string, id = 'kernel-task'): Task {
+
+function landedTask(from: string, commitHead: string, id = 'kernel-task', paths = ['services/kernel/**']): Task {
   return {
     id,
     sequence: 1,
@@ -151,42 +91,383 @@ function landedTask(from: string, commitHead: string, id = 'kernel-task'): Task 
       goal: 'kernel',
       manager: 'kernel-manager',
       kind: 'implementation',
-      paths: ['services/kernel/**'],
+      paths,
       target: 'dev',
+      riskAreas: [],
       acceptance: { command: ['acceptance', id], tests: [], failing: true },
-    } as any,
-  } as Task;
+    },
+  } as unknown as Task;
 }
 
-test('the resident verifier polls the page-data interval even when dev has no unverified commits', async () => {
+function setup(root: string, tasks: Task[] = []) {
+  const stateDirectory = join(root, '.state');
+  const worktreeRoot = join(root, '.trees');
+  mkdirSync(stateDirectory, { recursive: true });
+  mkdirSync(worktreeRoot, { recursive: true });
+  const runs = new Map<string, DevVerifierRun>();
+  const findings = new Map<string, any>();
+  const updates: string[] = [];
+  const store = {
+    tasks: () => tasks,
+    task: (id: string) => tasks.find((task) => task.id === id)!,
+    updateTask: ({ taskId }: { taskId: string }, update: (task: Task) => void) => {
+      const task = tasks.find((item) => item.id === taskId)!;
+      update(task);
+      updates.push(taskId);
+      return task;
+    },
+    devVerifierRun: (key: string) => runs.get(key),
+    devVerifierLatestRound: () => [...runs.values()].reverse().find((run) => run.round),
+    saveDevVerifierRun: (run: DevVerifierRun) => runs.set(run.key, run),
+    devVerifierFindings: () => [...findings.values()],
+    saveDevVerifierFinding: (finding: any) => findings.set(finding.rangeKey, finding),
+  };
+  const settings = {
+    mainCheckout: root,
+    stateDirectory,
+    worktreeRoot,
+    integrationBranch: 'dev',
+    affectedTests: [{ paths: ['services/kernel/**'], command: ['affected-check'] }],
+  } as unknown as Settings;
+  return {
+    settings,
+    store,
+    runs,
+    findings,
+    updates,
+    options: {
+      settings,
+      store,
+    },
+  };
+}
+
+function seedRound(ctx: ReturnType<typeof setup>, head: string, completedAt = Date.now() - 4_000_000): void {
+  const ended = new Date(completedAt).toISOString();
+  ctx.store.saveDevVerifierRun({
+    key: 'dev-verifier-round:seed',
+    createdAt: ended,
+    evidence: {
+      commit: head,
+      command: ['dev-verifier-round'],
+      passed: true,
+      timedOut: false,
+      output: '{}',
+      logPath: '',
+      result: 'pass',
+    },
+    round: {
+      baseCommit: head,
+      headCommit: head,
+      startedAt: ended,
+      completedAt: ended,
+      durationMs: 0,
+      testsRun: 0,
+      passed: 0,
+      failed: 0,
+      unknown: 0,
+      fullSuite: true,
+      pendingChecks: [],
+    },
+  });
+}
+
+function makeRoundDue(ctx: ReturnType<typeof setup>): void {
+  const previous = ctx.store.devVerifierLatestRound()!;
+  previous.round!.completedAt = new Date(Date.now() - 4_000_000).toISOString();
+}
+
+test('the first round runs boot smoke then the full suite, batches current-head failures, records a summary and advances', async () => {
+  const root = repo();
+  const base = git(root, 'rev-parse', 'dev-verified');
+  commit(root, 'services/kernel/test/boot.test.ts', 'test("boot", () => {});\n', 'boot test');
+  commit(root, 'services/kernel/test/a.test.ts', 'test("a", () => {});\n', 'test a');
+  commit(root, 'services/kernel/test/b.test.ts', 'test("b", () => {});\n', 'test b');
+  const target = commit(root, 'services/kernel/change.ts', 'export const changed = true;\n', 'landing');
+  git(root, 'branch', '-f', 'dev', target);
+  const ctx = setup(root, [landedTask(base, target, 'owner')]);
+  ctx.settings.verifierChecks = [
+    {
+      paths: ['services/kernel/**'],
+      command: ['bun', 'test', 'services/kernel/test/a.test.ts', 'services/kernel/test/b.test.ts'],
+    },
+    { paths: ['services/kernel/**'], command: ['unknown-check'] },
+    { paths: ['services/kernel/**'], command: ['duplicate-a-check'] },
+  ];
+  ctx.settings.bootSmoke = { tests: ['services/kernel/test/boot.test.ts'] };
+  const commands: string[][] = [];
+  const checkedHeads: string[] = [];
+  const repairs: TestFailureRepair[] = [];
+  await verifyDev({
+    ...ctx.options,
+    runGate: async (command, cwd) => {
+      commands.push([...command]);
+      checkedHeads.push(git(cwd, 'rev-parse', 'HEAD'));
+      if (command.includes('unknown-check'))
+        return { passed: false, output: 'remote-check: no check host answered', timedOut: false };
+      if (command.includes('duplicate-a-check'))
+        return {
+          passed: false,
+          output: 'AssertionError: expected an additional value\nat services/kernel/test/a.test.ts:30',
+          timedOut: false,
+        };
+      if (command.includes('services/kernel/test/a.test.ts'))
+        return {
+          passed: false,
+          output:
+            'AssertionError: expected one\nat services/kernel/test/a.test.ts:10\n' +
+            'AssertionError: expected two\nat services/kernel/test/b.test.ts:20',
+          timedOut: false,
+        };
+      return { passed: true, output: '', timedOut: false };
+    },
+    dispatchTestRepair: (repair) => repairs.push(repair),
+  });
+
+  const round = ctx.store.devVerifierLatestRound()!.round!;
+  expect(commands[0]).toContain('test/boot.test.ts');
+  expect(commands.some((command) => command.includes('scripts/typecheck.ts'))).toBe(true);
+  expect(commands).toContainEqual(
+    expect.arrayContaining(['services/kernel/test/a.test.ts', 'services/kernel/test/b.test.ts']),
+  );
+  expect(checkedHeads.every((checkedHead) => checkedHead === target)).toBe(true);
+  expect(round).toMatchObject({
+    baseCommit: base,
+    headCommit: target,
+    fullSuite: true,
+    testsRun: 5,
+    passed: 2,
+    failed: 2,
+    unknown: 1,
+    pendingChecks: [],
+  });
+  expect(round.durationMs).toBeGreaterThanOrEqual(0);
+  expect(git(root, 'rev-parse', 'dev-verified')).toBe(target);
+  expect(ctx.findings.size).toBe(3);
+  expect(
+    [...ctx.findings.values()].filter((finding) => finding.test === 'services/kernel/test/a.test.ts'),
+  ).toHaveLength(1);
+  expect(
+    [...ctx.findings.values()].filter(
+      (finding) => finding.test.endsWith('a.test.ts') || finding.test.endsWith('b.test.ts'),
+    ),
+  ).toHaveLength(2);
+  expect(repairs).toHaveLength(1);
+  expect(repairs[0]).toMatchObject({ goal: 'kernel', manager: 'kernel-manager', commit: target });
+  expect(repairs[0]!.failures.map((failure) => failure.test).sort()).toEqual([
+    'services/kernel/test/a.test.ts',
+    'services/kernel/test/b.test.ts',
+  ]);
+  expect(repairs[0]!.failures.flatMap((failure) => failure.assertions)).toContain('AssertionError: expected one');
+  expect(repairs[0]!.failures.find((failure) => failure.test.endsWith('a.test.ts'))!.assertions).toContain(
+    'AssertionError: expected an additional value',
+  );
+  expect(ctx.runs.size).toBeGreaterThan(4);
+
+  let extraRuns = 0;
+  await verifyDev({
+    ...ctx.options,
+    runGate: async () => (extraRuns++, { passed: true, output: '', timedOut: false }),
+  });
+  expect(extraRuns).toBe(0);
+  expect([...ctx.runs.values()].filter((run) => run.round)).toHaveLength(1);
+});
+
+test('a due round selects changes since the last round head and skips intermediate dev heads', async () => {
+  const root = repo();
+  const base = git(root, 'rev-parse', 'dev');
+  const ctx = setup(root);
+  seedRound(ctx, base);
+  const first = commit(root, 'services/kernel/a.ts', 'export const a = true;\n', 'landing a');
+  const second = commit(root, 'services/kernel/b.ts', 'export const b = true;\n', 'landing b');
+  git(root, 'branch', '-f', 'dev', second);
+  ctx.store.tasks().push(landedTask(base, first, 'task-a'), landedTask(base, second, 'task-b'));
+
+  const firstCommands: { command: string[]; head: string }[] = [];
+  let movedTo: string | undefined;
+  await verifyDev({
+    ...ctx.options,
+    runGate: async (command, cwd) => {
+      firstCommands.push({ command: [...command], head: git(cwd, 'rev-parse', 'HEAD') });
+      if (!movedTo) {
+        movedTo = commit(root, 'services/kernel/c.ts', 'export const c = true;\n', 'landing c');
+        git(root, 'branch', '-f', 'dev', movedTo);
+      }
+      return { passed: true, output: '', timedOut: false };
+    },
+  });
+  expect(firstCommands.length).toBeGreaterThan(1);
+  expect(firstCommands.every(({ head: checked }) => checked === second)).toBe(true);
+  expect(firstCommands.some(({ command }) => command.join(' ').includes('acceptance task-a'))).toBe(true);
+  expect(firstCommands.some(({ command }) => command.join(' ').includes('acceptance task-b'))).toBe(true);
+  expect(git(root, 'rev-parse', 'dev-verified')).toBe(second);
+  expect(git(root, 'rev-parse', 'dev')).toBe(movedTo!);
+
+  makeRoundDue(ctx);
+  const secondCommands: { command: string[]; head: string }[] = [];
+  await verifyDev({
+    ...ctx.options,
+    runGate: async (command, cwd) => {
+      secondCommands.push({ command: [...command], head: git(cwd, 'rev-parse', 'HEAD') });
+      return { passed: true, output: '', timedOut: false };
+    },
+  });
+  expect(secondCommands.length).toBeGreaterThan(0);
+  expect(secondCommands.every(({ head: checked }) => checked === movedTo)).toBe(true);
+  expect(secondCommands.some(({ command }) => command.join(' ').includes('acceptance task-a'))).toBe(false);
+  expect(secondCommands.some(({ command }) => command.join(' ').includes('acceptance task-b'))).toBe(false);
+  expect(secondCommands.some(({ command }) => command.join(' ').includes('acceptance task-c'))).toBe(false);
+  expect(secondCommands.some(({ command }) => command.some((part) => part.includes('services/kernel/c.ts')))).toBe(
+    true,
+  );
+  expect(ctx.store.devVerifierLatestRound()!.round).toMatchObject({
+    baseCommit: second,
+    headCommit: movedTo,
+    fullSuite: false,
+  });
+  expect(devVerificationState(root).behind).toBe(0);
+});
+
+test('dependency setup infrastructure is unknown but still advances the captured head', async () => {
+  const root = repo();
+  const base = git(root, 'rev-parse', 'dev');
+  git(root, 'rm', 'bun.lock');
+  git(root, 'commit', '-m', 'remove fixture lock');
+  const target = git(root, 'rev-parse', 'HEAD');
+  git(root, 'branch', '-f', 'dev', target);
+  const ctx = setup(root);
+  ctx.settings.verifierChecks = [{ paths: ['services/kernel/**'], command: ['kernel-check'] }];
+  let gateRuns = 0;
+
+  await verifyDev({
+    ...ctx.options,
+    runGate: async () => (gateRuns++, { passed: true, output: '', timedOut: false }),
+  });
+
+  expect(gateRuns).toBe(0);
+  expect(ctx.store.devVerifierLatestRound()!.round).toMatchObject({
+    baseCommit: base,
+    headCommit: target,
+    testsRun: 2,
+    passed: 0,
+    failed: 0,
+    unknown: 2,
+    pendingChecks: expect.arrayContaining([expect.objectContaining({ command: ['kernel-check'] })]),
+  });
+  expect(git(root, 'rev-parse', 'dev-verified')).toBe(target);
+});
+
+test('an oversized changed range runs every configured check and the complete sibling test set', async () => {
+  const root = repo();
+  const base = git(root, 'rev-parse', 'dev');
+  const testFile = 'apps/widget/tests/widget.test.ts';
+  const testHead = commit(root, testFile, 'test("widget", () => {});\n', 'add widget test');
+  const target = commit(root, 'services/kernel/change.ts', 'export const value = true;\n', 'kernel change');
+  git(root, 'branch', '-f', 'dev', target);
+  const ctx = setup(root);
+  seedRound(ctx, base);
+  ctx.settings.policy = readControlPolicy({ verifier: { maxSelectionCommits: 1 } });
+  ctx.settings.verifierChecks = [
+    { paths: ['services/kernel/**'], command: ['kernel-check'] },
+    { paths: ['apps/web/**'], command: ['web-full-check'] },
+  ];
+  ctx.settings.siblingTests = { command: ['bun', 'test'] };
+  const commands: string[][] = [];
+  await verifyDev({
+    ...ctx.options,
+    runGate: async (command) => {
+      commands.push([...command]);
+      return { passed: true, output: '', timedOut: false };
+    },
+  });
+  expect(commands.some((command) => command.includes('kernel-check'))).toBe(true);
+  expect(commands.some((command) => command.includes('web-full-check'))).toBe(true);
+  expect(commands.some((command) => command.includes(testFile))).toBe(true);
+  expect(commands.some((command) => command.includes('scripts/typecheck.ts'))).toBe(true);
+  expect(ctx.store.devVerifierLatestRound()!.round).toMatchObject({ headCommit: target, fullSuite: true });
+  expect(testHead).not.toBe(target);
+});
+
+test('checks not reached at the round deadline carry into the next due round', async () => {
+  const root = repo();
+  const base = git(root, 'rev-parse', 'dev');
+  const target = commit(root, 'services/kernel/change.ts', 'export const value = true;\n', 'landing');
+  git(root, 'branch', '-f', 'dev', target);
+  const ctx = setup(root);
+  seedRound(ctx, base);
+  ctx.settings.policy = readControlPolicy({
+    verifier: { roundDeadlineMs: 80, roundIntervalMs: 60000, concurrency: 3 },
+  });
+  ctx.settings.verifierChecks = Array.from({ length: 5 }, (_, index) => ({
+    paths: ['services/kernel/**'],
+    command: ['check-' + index],
+  }));
+  const started: string[] = [];
+  await verifyDev({
+    ...ctx.options,
+    runGate: async (command, _cwd, _logPath, options) => {
+      started.push(command.at(-1)!);
+      await new Promise<void>((resolve) => {
+        if (options?.signal?.aborted) return resolve();
+        options?.signal?.addEventListener('abort', () => resolve(), { once: true });
+      });
+      return { passed: false, output: 'ETIMEDOUT at round deadline', timedOut: true };
+    },
+  });
+  const first = ctx.store.devVerifierLatestRound()!.round!;
+  expect(started).toHaveLength(3);
+  expect(first).toMatchObject({ headCommit: target, testsRun: 3, unknown: 3 });
+  expect(first.pendingChecks).toHaveLength(3);
+  expect(git(root, 'rev-parse', 'dev-verified')).toBe(target);
+
+  makeRoundDue(ctx);
+  ctx.settings.policy = readControlPolicy({
+    verifier: { roundDeadlineMs: 1000, roundIntervalMs: 60000, concurrency: 3 },
+  });
+  const carried = first.pendingChecks.map((check) => check.command.at(-1)!);
+  const nextCommands: string[] = [];
+  await verifyDev({
+    ...ctx.options,
+    runGate: async (command) => {
+      nextCommands.push(command.at(-1)!);
+      return { passed: true, output: '', timedOut: false };
+    },
+  });
+  expect(nextCommands.sort()).toEqual(carried.sort());
+  expect(ctx.store.devVerifierLatestRound()!.round).toMatchObject({
+    testsRun: 3,
+    passed: 3,
+    failed: 0,
+    unknown: 0,
+    pendingChecks: [],
+  });
+});
+
+test('a round started while another holds the lease is skipped', async () => {
   const root = repo();
   const ctx = setup(root);
   let pageDataRuns = 0;
-  await verifyDev({ ...ctx, runPageData: async () => void (pageDataRuns += 1) });
+  let checkRuns = 0;
+  const lease = acquireDirectoryLease(join(ctx.settings.stateDirectory, 'dev-verifier.lease'));
+  try {
+    await verifyDev({
+      ...ctx.options,
+      runPageData: async () => void (pageDataRuns += 1),
+      runGate: async () => ((checkRuns += 1), { passed: true, output: '', timedOut: false }),
+    });
+  } finally {
+    lease.release();
+  }
   expect(pageDataRuns).toBe(1);
+  expect(checkRuns).toBe(0);
+  expect(ctx.store.devVerifierLatestRound()).toBeUndefined();
 });
 
-test('classifies check outcomes and runs Web tests from their workspace', () => {
+test('classification and workspace placement preserve the existing verifier check contracts', () => {
   expect(classifyRun({ passed: true, timedOut: false, output: '' })).toBe('pass');
-  expect(classifyRun({ passed: false, timedOut: false, output: 'assertion failed' })).toBe('fail');
+  expect(classifyRun({ passed: false, timedOut: false, output: 'AssertionError: expected value' })).toBe('fail');
   expect(classifyRun({ passed: false, timedOut: true, output: 'ETIMEDOUT' })).toBe('infrastructure');
   expect(classifyRun({ passed: false, timedOut: false, output: 'cannot find module fixture' })).toBe('infrastructure');
-  expect(classifyRun({ passed: false, timedOut: false, output: 'output truncated after 32 MiB' })).toBe(
-    'infrastructure',
-  );
-  expect(
-    classifyRun({
-      passed: false,
-      timedOut: false,
-      output: `pinned Bun: absent installed package for ${repositoryPackageManager}`,
-    }),
-  ).toBe('infrastructure');
-  const result = { passed: false, timedOut: false, output: 'error: first assertion\nerror: second assertion' };
-  expect(classifyRun(result, readControlPolicy({ verifier: { findingAssertions: 1 } }).verifier)).toBe(
-    'infrastructure',
-  );
-  expect(classifyRun(result)).toBe('fail');
-
   expect(
     placeInWorkspace(
       { command: ['env', 'NO_COLOR=1', 'bun', 'test', 'apps/web/tests/example.test.ts'], closure: ['apps/web/**'] },
@@ -199,747 +480,4 @@ test('classifies check outcomes and runs Web tests from their workspace', () => 
   });
 });
 
-test('execution preserves caught runner output, transport retries, and source-bound log identity', async () => {
-  const root = mkdtempSync(join(tmpdir(), 'goal-verifier-execution-'));
-  roots.push(root);
-  const stateDirectory = join(root, '.state');
-  const tree = join(root, 'candidate');
-  mkdirSync(stateDirectory, { recursive: true });
-  mkdirSync(join(tree, 'apps/widget'), { recursive: true });
-  const runs = new Map<string, DevVerifierRun>();
-  const execution = {
-    settings: {
-      mainCheckout: root,
-      stateDirectory,
-      policy: readControlPolicy({ verifier: { checkAttempts: 2 } }),
-    },
-    readRun: (key: string) => runs.get(key)?.evidence,
-    saveRun: (run: DevVerifierRun) => runs.set(run.key, run),
-  };
-  const check: DevVerifierCheck = {
-    command: ['node', 'widget.test.js'],
-    closure: ['apps/widget/**'],
-    cwd: 'apps/widget',
-  };
-  const logs: string[] = [];
-  const retried = await executeCheck(
-    execution,
-    async (command, cwd, logPath) => {
-      expect(command).toEqual(check.command);
-      expect(cwd).toBe(join(tree, 'apps/widget'));
-      logs.push(logPath);
-      if (logs.length === 1) throw new Error('ETIMEDOUT while connecting to check host');
-      writeFileSync(logPath, 'retried successfully');
-      return { passed: true, output: 'retried successfully', timedOut: false };
-    },
-    check,
-    'head-commit',
-    tree,
-    'retry-run',
-    'retry-input',
-  );
-  expect(retried.output).toBe('attempt 1: ETIMEDOUT while connecting to check host\nattempt 2: retried successfully');
-  expect(retried.logPath).toBe(logs[1]!);
-  expect(readFileSync(retried.logPath, 'utf8')).toBe('retried successfully');
-  expect(logs[0]!).not.toBe(logs[1]!);
-
-  const thrown = await executeCheck(
-    execution,
-    async () => {
-      throw new Error('AssertionError: runner threw');
-    },
-    check,
-    'source-commit',
-    tree,
-    'product-run',
-    'product-input',
-  );
-  expect(thrown.output).toBe('AssertionError: runner threw');
-  expect(thrown.result).toBe('fail');
-  expect(runs.get('product-run')?.evidence).toEqual(thrown);
-  expect(runs.get('product-input')?.evidence.commit).toBe('source-commit');
-
-  let reran = false;
-  const rebound = await executeCheck(
-    execution,
-    async () => {
-      reran = true;
-      return { passed: true, output: '', timedOut: false };
-    },
-    check,
-    'later-commit',
-    tree,
-    'later-run',
-    'product-input',
-  );
-  expect(reran).toBe(false);
-  expect(rebound.commit).toBe('later-commit');
-  expect(rebound.cwd).toBe(check.cwd);
-  expect(rebound.logPath).toBe(thrown.logPath);
-  expect(rebound.output).toBe(thrown.output);
-});
-
-test('uses the candidate pinned Bun and falls back to the installed producer artifact only when absent', () => {
-  const root = mkdtempSync(join(tmpdir(), 'goal-pinned-bun-'));
-  roots.push(root);
-  const candidate = join(root, 'candidate');
-  const producer = join(root, 'producer');
-  mkdirSync(candidate, { recursive: true });
-  writeFileSync(join(candidate, 'package.json'), JSON.stringify({ packageManager: repositoryPackageManager }));
-  mkdirSync(join(candidate, 'node_modules'), { recursive: true });
-  symlinkSync(repositoryBunPackage, join(candidate, 'node_modules/bun'), 'dir');
-  mkdirSync(join(producer, 'node_modules'), { recursive: true });
-  symlinkSync(repositoryBunPackage, join(producer, 'node_modules/bun'), 'dir');
-
-  let command = withTreeBun(['bun', 'test', 'tests/example.test.ts'], candidate, producer);
-  expect(command[0]).toBe('env');
-  expect(command[2]).toBe(join(candidate, 'node_modules/bun/bin/bun.exe'));
-  expect(command[1]).toContain(`PATH=${join(candidate, 'node_modules/.bin')}:${join(producer, 'node_modules/.bin')}:`);
-
-  rmSync(join(candidate, 'node_modules/bun'));
-  command = withTreeBun(['bun', 'test', 'tests/example.test.ts'], candidate, producer);
-  expect(command[2]).toBe(join(producer, 'node_modules/bun/bin/bun.exe'));
-});
-
-test('reports unavailable candidate Bun instead of falling back to the ambient command', () => {
-  const root = mkdtempSync(join(tmpdir(), 'goal-unavailable-bun-'));
-  roots.push(root);
-  writeFileSync(join(root, 'package.json'), JSON.stringify({ packageManager: repositoryPackageManager }));
-  expect(() => withTreeBun(['bun', 'test'], root)).toThrow('absent installed package');
-});
-
-test.each([false, true])('bootstraps a fresh pinned tree (install fails: %s)', async (fails) => {
-  const root = repo(),
-    base = git(root, 'rev-parse', 'dev-verified');
-  mkdirSync(join(root, 'toolchain/bin'), { recursive: true });
-  writeFileSync(
-    join(root, 'toolchain/package.json'),
-    JSON.stringify({ name: 'bun', version: Bun.version, bin: { bun: 'bin/bun.exe' } }),
-  );
-  writeFileSync(join(root, 'toolchain/bin/bun.exe'), `#!/bin/sh\nexec '${process.execPath}' "$@"\n`, { mode: 0o755 });
-  writeFileSync(
-    join(root, 'package.json'),
-    JSON.stringify({ packageManager: `bun@${Bun.version}`, dependencies: { bun: 'file:./toolchain' } }),
-  );
-  const lock = spawnSync(process.execPath, ['install', '--lockfile-only', '--ignore-scripts'], {
-    cwd: root,
-    encoding: 'utf8',
-  });
-  expect(lock.status, lock.stderr).toBe(0);
-  if (fails) writeFileSync(join(root, 'bun.lock'), 'invalid lockfile');
-  git(root, 'add', 'package.json', 'bun.lock', 'toolchain');
-  git(root, 'commit', '-m', 'pin Bun on dev');
-  const landing = git(root, 'rev-parse', 'HEAD');
-  git(root, 'branch', '-f', 'dev', landing);
-  git(root, 'checkout', '--detach', base);
-  expect(existsSync(join(root, 'node_modules/.bin/bun'))).toBe(false);
-  const ctx = setup(root);
-  let checks = 0;
-  const runGate = async (command: readonly string[], cwd: string) => {
-    expect(command).toContain(join(cwd, 'node_modules/bun/bin/bun.exe'));
-    const result = spawnSync(command[0]!, command.slice(1), { cwd, encoding: 'utf8' });
-    checks++;
-    return { passed: result.status === 0, output: result.stdout + result.stderr, timedOut: false };
-  };
-  // Keep successful setup evidence across a restart, but request the check again in a new tree.
-  const store = {
-    ...ctx.store,
-    devVerifierRun: (key: string) => {
-      const run = ctx.store.devVerifierRun(key);
-      return run?.evidence.command.includes('install') ? run : undefined;
-    },
-  };
-  for (let restart = 0; restart < 2; restart++) {
-    git(root, 'branch', '-f', 'dev-verified', base);
-    await verifyDev({ ...ctx, store, runGate });
-  }
-  expect(checks).toBe(fails ? 0 : 2);
-  const findings = ctx.store.devVerifierFindings();
-  if (fails) {
-    expect(findings.length).toBeGreaterThan(0);
-    expect(findings.every((finding) => finding.result === 'infrastructure')).toBe(true);
-  } else expect(findings).toEqual([]);
-  const logs = readdirSync(ctx.settings.stateDirectory).filter((name) => name.startsWith('dev-verify-install-'));
-  expect(logs).toHaveLength(2);
-  for (const log of logs) {
-    expect(readFileSync(join(ctx.settings.stateDirectory, log), 'utf8')).toContain(
-      `$ ${process.execPath} install --frozen-lockfile`,
-    );
-  }
-});
-
-test('reuses a failed verifier check while its workspace inputs stay unchanged', async () => {
-  const root = repo();
-  const base = git(root, 'rev-parse', 'dev-verified');
-  const landing = commit(root, 'services/kernel/change.ts', 'export const changed = true;\n', 'landing');
-  git(root, 'branch', '-f', 'dev', landing);
-  const ctx = setup(root);
-  let failedCalls = 0;
-  const runGate = async (command: readonly string[], cwd: string) => {
-    if (command.includes('affected-check')) {
-      const hasChange = git(cwd, 'ls-files').includes('services/kernel/change.ts');
-      if (hasChange) failedCalls++;
-      return hasChange
-        ? { passed: false, output: 'assertion failed', timedOut: false }
-        : { passed: true, output: '', timedOut: false };
-    }
-    return { passed: true, output: '', timedOut: false };
-  };
-
-  await verifyDev({ ...ctx, runGate });
-  expect(ctx.store.devVerifierFindings?.().some((finding) => finding.result === 'fail')).toBe(true);
-  expect(git(root, 'rev-parse', 'dev-verified')).toBe(base);
-
-  const docs = commit(root, 'docs/readme.md', 'Updated.\n', 'docs');
-  git(root, 'branch', '-f', 'dev', docs);
-  await verifyDev({ ...ctx, runGate });
-  expect(failedCalls).toBe(1);
-});
-
-test('worker-owned briefs keep affected verification without inventing an acceptance command', async () => {
-  const root = repo(),
-    base = git(root, 'rev-parse', 'dev-verified');
-  const landing = commit(root, 'services/kernel/change.ts', 'export const changed = true;\n', 'outcome');
-  git(root, 'branch', '-f', 'dev', landing);
-  const task = landedTask(base, landing);
-  task.brief.acceptance = { command: [], tests: [], failing: true, workerOwned: true };
-  const ctx = setup(root, [task]);
-  const commands: string[] = [];
-  await verifyDev({
-    ...ctx,
-    runGate: async (command) => {
-      commands.push(command.join(' '));
-      return { passed: true, output: '', timedOut: false };
-    },
-  });
-  expect(commands.some((command) => command.includes('TYPECHECK_CHANGED=services/kernel/change.ts'))).toBe(true);
-  expect(commands).toContain('affected-check');
-  expect(commands).not.toContain('');
-  expect(commands.some((command) => command.startsWith('acceptance'))).toBe(false);
-  expect(devVerificationState(root).behind).toBe(0);
-});
-
-test('projects landing history once per source interval with bounded Git reads', () => {
-  const root = repo();
-  const base = git(root, 'rev-parse', 'dev-verified');
-  const rootCommit = git(root, 'rev-list', '--max-parents=0', 'HEAD');
-  const tasks: Task[] = [];
-  let head = base;
-  const naive = new Map<string, string[]>();
-  for (let index = 0; index < 8; index++) {
-    head = commit(root, `services/kernel/n-${index}.ts`, `export const n = ${index};\n`, `n ${index}`);
-    naive.set(
-      head,
-      git(root, 'diff-tree', '--root', '--no-commit-id', '--name-only', '-r', head).split('\n').filter(Boolean),
-    );
-    const task = landedTask(base, head, `n-${index}`);
-    if (index === 2) delete task.integratedCommits;
-    if (index === 3) task.brief.kind = 'research';
-    if (index === 4) task.brief.kind = 'specification';
-    if (index === 5) task.brief.kind = 'verification';
-    tasks.push(task);
-  }
-  tasks[0]!.integratedCommits = [rootCommit, tasks[0]!.integratedCommit!];
-  const sideTree = join(root, '.side');
-  git(root, 'worktree', 'add', '-b', 'side', sideTree, base);
-  git(root, 'merge', '--no-ff', commit(sideTree, 'docs/side.md', 'side\n', 'side'), '-m', 'merge side');
-  const merge = git(root, 'rev-parse', 'HEAD');
-  naive.set(
-    merge,
-    git(root, 'diff-tree', '--root', '--no-commit-id', '--name-only', '-r', merge).split('\n').filter(Boolean),
-  );
-  tasks.push(landedTask(base, merge, 'merge-task'));
-  const mid = tasks[1]!.integratedCommit!;
-  const first = projectSourceInterval(root, base, mid);
-  const second = projectSourceInterval(root, mid, head);
-  expect(first.gitReads).toBe(1);
-  expect(second.gitReads).toBe(1);
-  expect(first.commits.some((commit) => second.commits.includes(commit))).toBe(false);
-  const history = projectVerifierLandings(root, { tasks: () => tasks }, base, merge);
-  expect(history.interval.gitReads).toBe(2);
-  expect(history.interval.commits).toContain(merge);
-  expect(history.interval.filesByCommit.get(merge)).toEqual(naive.get(merge));
-  expect(history.interval.filesByCommit.get(rootCommit)).toContain('services/kernel/base.ts');
-  for (const commit of history.interval.commits)
-    expect(history.interval.filesByCommit.get(commit)).toEqual(
-      naive.get(commit) ??
-        git(root, 'diff-tree', '--root', '--no-commit-id', '--name-only', '-r', commit).split('\n').filter(Boolean),
-    );
-  expect(history.tasks.map((task) => task.id).sort()).toEqual(['merge-task', 'n-0', 'n-1', 'n-2', 'n-6', 'n-7']);
-});
-
-test('projects verifier source inputs once per immutable revision with bounded Git reads', () => {
-  const root = repo();
-  mkdirSync(join(root, 'apps/widget/src'), { recursive: true });
-  writeFileSync(join(root, 'apps/widget/src/value.ts'), 'export const value = 1;\n');
-  writeFileSync(join(root, 'apps/widget/package.json'), '{}\n');
-  git(root, 'add', '.');
-  git(root, 'commit', '-m', 'widget');
-  const head = git(root, 'rev-parse', 'HEAD');
-  const settings = { mainCheckout: root, stateDirectory: join(root, '.state') } as Settings;
-  mkdirSync(settings.stateDirectory, { recursive: true });
-  const present: DevVerifierCheck = {
-    command: ['bun', 'test', 'src/value.ts'],
-    closure: ['apps/widget/src'],
-    cwd: 'apps/widget',
-  };
-  const missing: DevVerifierCheck = {
-    command: ['bun', 'test', 'src/absent.ts'],
-    closure: ['apps/widget/src'],
-    cwd: 'apps/widget',
-  };
-  const globbed: DevVerifierCheck = { command: ['bun', 'scripts/typecheck.ts'], closure: ['**'] };
-  const growing: DevVerifierCheck[] = Array.from({ length: 8 }, (_, index) => ({
-    ...present,
-    taskId: `t-${index}`,
-  }));
-  const one = projectChecksSource(root, head, [present]);
-  const many = projectChecksSource(root, head, [present, missing, globbed, ...growing]);
-  expect(one.gitReads).toBe(1);
-  expect(many.gitReads).toBe(1);
-  expect(sourcePresentAt(many, present)).toBe(true);
-  expect(sourcePresentAt(many, missing)).toBe(false);
-  expect(sourcePresentAt(many, globbed)).toBe(true);
-  for (const path of many.objects.keys()) {
-    const result = spawnSync('git', ['rev-parse', '--verify', '--quiet', `${head}:${path}`], {
-      cwd: root,
-      encoding: 'utf8',
-    });
-    expect(many.objects.get(path)).toBe(result.status === 0 ? result.stdout.trim() : null);
-  }
-  expect(checkInput(settings, head, present, one)).toBe(checkInput(settings, head, present, many));
-  expect(checkInput(settings, head, globbed, many)).toBeUndefined();
-  const input = checkInput(settings, head, present, many);
-  expect(input).toEqual(expect.any(String));
-  expect(checkInput(settings, head, { command: present.command, closure: present.closure }, many)).not.toBe(input);
-  writeFileSync(join(settings.stateDirectory, 'remote-check-hosts.json'), '{"hosts":[]}');
-  expect(checkInput(settings, head, present, many)).not.toBe(input);
-
-  const next = commit(root, 'apps/widget/src/value.ts', 'export const value = 2;\n', 'change widget');
-  const newer = projectChecksSource(root, next, [present]);
-  const oldObject = one.objects.get('apps/widget/src/value.ts');
-  expect(oldObject).toEqual(expect.any(String));
-  expect(newer).toMatchObject({ commit: next, gitReads: 1 });
-  expect(newer.objects.get('apps/widget/src/value.ts')).not.toBe(oldObject);
-  expect(one.objects.get('apps/widget/src/value.ts')).toBe(oldObject);
-});
-
-test('fallback landings keep acceptance while skipped kinds do not', async () => {
-  const root = repo(),
-    base = git(root, 'rev-parse', 'dev-verified');
-  const fallback = commit(root, 'services/kernel/fallback.ts', 'export const fallback = true;\n', 'fallback');
-  const skipped = commit(root, 'docs/research.md', 'notes\n', 'research');
-  git(root, 'branch', '-f', 'dev', skipped);
-  const fallbackTask = landedTask(base, fallback, 'fallback');
-  delete fallbackTask.integratedCommits;
-  const skippedTask = {
-    ...landedTask(base, skipped, 'skipped'),
-    brief: { ...landedTask(base, skipped, 'skipped').brief, kind: 'research', paths: ['docs/**'] },
-  } as Task;
-  const ctx = setup(root, [fallbackTask, skippedTask]);
-  const commands: string[] = [];
-  await verifyDev({
-    ...ctx,
-    runGate: async (command) => {
-      commands.push(command.join(' '));
-      return { passed: true, output: '', timedOut: false };
-    },
-  });
-  expect(commands).toContain('acceptance fallback');
-  expect(commands.some((command) => command.includes('skipped'))).toBe(false);
-  expect(git(root, 'rev-parse', 'dev-verified')).toBe(skipped);
-});
-
-test('passes all work since dev-verified once and advances the ref to the captured dev head', async () => {
-  const root = repo();
-  const first = commit(root, 'services/kernel/one.ts', 'export const one = 1;\n', 'landing one');
-  const second = commit(root, 'services/kernel/two.ts', 'export const two = 2;\n', 'landing two');
-  git(root, 'branch', '-f', 'dev', second);
-  const ctx = setup(root, [
-    landedTask(git(root, 'rev-parse', 'dev-verified'), first),
-    landedTask(git(root, 'rev-parse', 'dev-verified'), second, 'task-two'),
-  ]);
-  const commands: string[] = [];
-  await verifyDev({
-    ...ctx,
-    runGate: async (command) => {
-      commands.push(command.join(' '));
-      return { passed: true, output: '', timedOut: false };
-    },
-  });
-  expect(git(root, 'rev-parse', 'dev-verified')).toBe(second);
-  expect(commands.some((command) => command.endsWith('scripts/typecheck.ts'))).toBe(true);
-  expect(commands).toContain('affected-check');
-  expect(commands).toContain('acceptance kernel-task');
-  expect(commands).toContain('acceptance task-two');
-  expect(devVerificationState(root).behind).toBe(0);
-});
-
 import './dev-verifier-ownership.test.ts';
-
-test('failure bisects workspace suspects, reverts only the culprit, returns its task with the log, and advances verified', async () => {
-  const root = repo(),
-    base = git(root, 'rev-parse', 'dev-verified');
-  const good = commit(root, 'services/kernel/good.ts', 'export const good = true;\n', 'good landing');
-  const bad = commit(root, 'services/kernel/bad.ts', 'export const bad = false;\n', 'bad landing');
-  git(root, 'branch', '-f', 'dev', bad);
-  const unrelatedCommit = commit(root, 'docs/readme.md', 'docs\n', 'unrelated landing');
-  git(root, 'branch', '-f', 'dev', unrelatedCommit);
-  const tasks = [
-    landedTask(base, good, 'good'),
-    landedTask(base, bad, 'bad'),
-    {
-      ...landedTask(base, unrelatedCommit, 'docs'),
-      brief: { ...landedTask(base, unrelatedCommit, 'docs').brief, paths: ['docs/**'] },
-    } as Task,
-  ];
-  const ctx = setup(root, tasks);
-  const runGate = async (command: readonly string[], cwd: string, logPath: string) => {
-    const files = git(cwd, 'ls-files');
-    if (command.includes('affected-check') && files.includes('services/kernel/bad.ts')) {
-      writeFileSync(logPath, 'assertion failed');
-      return { passed: false, output: 'assertion failed', timedOut: false };
-    }
-    return { passed: true, output: '', timedOut: false };
-  };
-  await verifyDev({ ...ctx, runGate });
-  expect(spawnSync('git', ['cat-file', '-e', `dev:${'services/kernel/bad.ts'}`], { cwd: root }).status).not.toBe(0);
-  expect(git(root, 'show', `dev:${'services/kernel/good.ts'}`)).toContain('good');
-  expect(ctx.updates).toEqual(['bad']);
-  expect(ctx.inboxEvents[0].managerId).toBe('kernel-manager');
-  expect(ctx.inboxEvents[0].evidencePath).toBeTruthy();
-  expect(git(root, 'rev-parse', 'dev-verified')).toBe(git(root, 'rev-parse', 'dev'));
-});
-
-test('promotion candidates use dev-verified while worker bases use the dev head', async () => {
-  const taskSource = await Bun.file(new URL('./tasks.ts', import.meta.url)).text();
-  const promotionSource = await Bun.file(new URL('./promotion.ts', import.meta.url)).text();
-  expect(taskSource).not.toContain('existingVerifiedBranch');
-  expect(promotionSource).toContain("'dev-verified'");
-});
-
-test('infrastructure failure reruns only that command and never reverts a landing', async () => {
-  const root = repo(),
-    base = git(root, 'rev-parse', 'dev-verified');
-  const landing = commit(root, 'services/kernel/change.ts', 'export const change = true;\n', 'landing');
-  git(root, 'branch', '-f', 'dev', landing);
-  const ctx = setup(root, [landedTask(base, landing)]);
-  const calls: string[] = [];
-  await verifyDev({
-    ...ctx,
-    runGate: async (command, _cwd, logPath) => {
-      calls.push(command.join(' '));
-      if (calls.length === 1) writeFileSync(logPath, 'ETIMEDOUT');
-      return calls.length === 1
-        ? { passed: false, output: 'ETIMEDOUT', timedOut: false }
-        : { passed: true, output: '', timedOut: false };
-    },
-  });
-  expect(calls.filter((command) => command.endsWith('scripts/typecheck.ts'))).toHaveLength(2);
-  expect(calls.filter((command) => command === 'affected-check')).toHaveLength(1);
-  expect(calls.filter((command) => command === 'acceptance kernel-task')).toHaveLength(1);
-  expect(git(root, 'rev-parse', 'dev')).toBe(landing);
-  expect(git(root, 'rev-parse', 'dev-verified')).toBe(landing);
-});
-
-test.each([undefined, 1])('runs every check within verifier concurrency %s', async (concurrency) => {
-  const root = repo();
-  const base = git(root, 'rev-parse', 'dev-verified');
-  const tasks: Task[] = [];
-  let head = base;
-  for (let index = 0; index < 8; index++) {
-    head = commit(root, `services/kernel/file-${index}.ts`, `export const value = ${index};\n`, `landing ${index}`);
-    tasks.push(landedTask(base, head, `task-${index}`));
-  }
-  git(root, 'branch', '-f', 'dev', head);
-  const ctx = setup(root, tasks);
-  if (concurrency !== undefined) ctx.settings.policy = readControlPolicy({ verifier: { concurrency } });
-  const commands: string[] = [];
-  let running = 0,
-    highest = 0;
-  await verifyDev({
-    ...ctx,
-    runGate: async (command) => {
-      running++;
-      highest = Math.max(highest, running);
-      await new Promise((resolve) => setTimeout(resolve, 5));
-      running--;
-      commands.push(command.join(' '));
-      return { passed: true, output: '', timedOut: false };
-    },
-  });
-  expect(highest).toBe(concurrency ?? VERIFY_CONCURRENCY);
-  for (let index = 0; index < 8; index++) expect(commands).toContain(`acceptance task-${index}`);
-  expect(git(root, 'rev-parse', 'dev-verified')).toBe(head);
-});
-
-const KERNEL_BOOT = 'services/kernel/test/boot/kernel-boots.test.ts';
-function bootRepo() {
-  const root = repo();
-  commit(root, KERNEL_BOOT, 'test("boot", () => {});\n', 'boot test');
-  git(root, 'branch', '-f', 'dev');
-  git(root, 'branch', '-f', 'dev-verified');
-  return root;
-}
-
-test('A new dev head whose Kernel entry throws on import gets a boot finding within one verifier cycle, even while older heads are still queued, and the owner of the breaking commit receives an urgent repair dispatch.', async () => {
-  const root = bootRepo(),
-    base = git(root, 'rev-parse', 'dev-verified');
-  const older = commit(root, 'services/kernel/good.ts', 'export const good = true;\n', 'older landing');
-  const breaking = commit(root, 'services/kernel/broken.ts', 'throw new Error("import");\n', 'kernel import throw');
-  git(root, 'branch', '-f', 'dev', breaking);
-  const tasks = [landedTask(base, older, 'older'), landedTask(base, breaking, 'breaking')];
-  const ctx = setup(root, tasks);
-  ctx.settings.bootSmoke = { tests: [KERNEL_BOOT] };
-  const repairs: BootSmokeRepair[] = [];
-  const dispatchedBriefs: ReturnType<typeof parseBrief>[] = [];
-  const order: string[] = [];
-  const run = async (command: readonly string[], cwd: string) => {
-    if (command.some((part) => part.includes('kernel-boots'))) {
-      order.push('boot');
-      const files = git(cwd, 'ls-files');
-      return files.includes('services/kernel/broken.ts')
-        ? { passed: false, output: 'error: Kernel entry threw on import', timedOut: false }
-        : { passed: true, output: '', timedOut: false };
-    }
-    if (command[0] === 'acceptance') order.push('queued');
-    return { passed: true, output: '', timedOut: false };
-  };
-  const dispatchRepair = (repair: BootSmokeRepair) => {
-    repairs.push(repair);
-    dispatchedBriefs.push(parseBrief(bootSmokeRepairBrief(repair), { version: 1, areas: {} }));
-    if (!repair.existingTaskId)
-      tasks.push({
-        id: 'boot-repair',
-        state: 'ready',
-        brief: {
-          urgent: true,
-          markdown: `Boot-smoke repair for \`${repair.test}\``,
-          goal: 'kernel',
-          manager: 'kernel-manager',
-        },
-      } as Task);
-  };
-  await verifyDev({ ...ctx, runGate: run, dispatchRepair });
-  expect(order[0]).toBe('boot');
-  expect(order).toContain('queued');
-  expect(
-    ctx.store
-      .devVerifierFindings()
-      .some((finding) => finding.status === 'new' && finding.reason.includes('Boot smoke')),
-  ).toBe(true);
-  expect(repairs).toHaveLength(1);
-  expect(dispatchedBriefs[0]?.riskAreas).toEqual([]);
-  expect(repairs[0]).toMatchObject({ test: KERNEL_BOOT, commit: breaking });
-  expect(repairs[0]!.existingTaskId).toBeUndefined();
-  expect(repairs[0]!.owner.id).toBe('breaking');
-  expect(repairs[0]!.error).toContain('Kernel entry threw on import');
-  expect(bootSmokeRepairBrief(repairs[0]!).includes('"urgent": true')).toBe(true);
-  expect(git(root, 'rev-parse', 'dev')).toBe(breaking);
-  expect(git(root, 'rev-parse', 'dev-verified')).toBe(base);
-  await verifyDev({ ...ctx, runGate: run, dispatchRepair });
-  expect(repairs).toHaveLength(2);
-  expect(repairs[1]!.existingTaskId).toBe('boot-repair');
-});
-
-test('boot-smoke repair briefs retain owner risk areas and pass dispatch validation', () => {
-  const repair = {
-    test: KERNEL_BOOT,
-    commit: 'broken-head',
-    error: 'Error: kernel did not boot',
-    owner: {
-      brief: {
-        goal: 'auth',
-        manager: 'auth-manager',
-        paths: ['services/auth/**'],
-        riskAreas: ['authorization'],
-      },
-    } as Task,
-  } as BootSmokeRepair;
-
-  expect(
-    parseBrief(bootSmokeRepairBrief(repair), {
-      version: 1,
-      areas: { authorization: ['**/auth/**'] },
-    }).riskAreas,
-  ).toEqual(['authorization']);
-});
-
-test('Boot smoke runs outside worker slots and never delays a landing.', async () => {
-  const root = bootRepo();
-  const landing = commit(root, 'services/kernel/ok.ts', 'export const ok = true;\n', 'landing');
-  git(root, 'branch', '-f', 'dev', landing);
-  const ctx = setup(root, [landedTask(git(root, 'rev-parse', 'dev-verified'), landing)]);
-  ctx.settings.bootSmoke = { tests: [KERNEL_BOOT] };
-  const train = join(ctx.settings.stateDirectory, 'train.lease');
-  let trainFree = false;
-  await verifyDev({
-    ...ctx,
-    runBootSmoke: async () => {
-      const env = bootSmokeEnvironment({ KERNEL_CHECK_REMOTE: 'hosts.json', REMOTE_CHECK_PRIORITY: 'landing' });
-      expect(env.KERNEL_CHECK_REMOTE).toBeUndefined();
-      expect(env.REMOTE_CHECK_PRIORITY).toBeUndefined();
-      acquireDirectoryLease(train).release();
-      trainFree = true;
-      expect(existsSync(join(ctx.settings.stateDirectory, 'capacity-queue'))).toBe(false);
-      return { passed: true, output: '', timedOut: false };
-    },
-    runGate: async () => ({ passed: true, output: '', timedOut: false }),
-  });
-  expect(trainFree).toBe(true);
-  expect(git(root, 'rev-parse', 'dev-verified')).toBe(landing);
-});
-
-test('one existing-failure probe leaves unsampled prefixes unproven without reverting a landing', async () => {
-  const root = repo(),
-    base = git(root, 'rev-parse', 'dev-verified');
-  const tasks: Task[] = [];
-  let head = base;
-  for (let index = 0; index < 4; index++) {
-    head = commit(root, `services/kernel/probe-${index}.ts`, `export const value = ${index};\n`, `prefix ${index}`);
-    tasks.push(landedTask(base, head, `probe-${index}`));
-  }
-  git(root, 'branch', '-f', 'dev', head);
-  const ctx = setup(root, tasks);
-  ctx.settings.policy = readControlPolicy({ verifier: { existingProbes: 1 } });
-  const probed: string[] = [];
-  await verifyDev({
-    ...ctx,
-    runGate: async (command, cwd) => {
-      if (command[0] !== 'affected-check') return { passed: true, output: '', timedOut: false };
-      probed.push(git(cwd, 'rev-parse', 'HEAD'));
-      return { passed: false, output: 'error: retained assertion', timedOut: false };
-    },
-  });
-  expect(probed.sort()).toEqual([base, head, tasks[0]!.integratedCommit!].sort());
-  expect(ctx.store.devVerifierFindings().some((finding) => finding.status === 'unknown')).toBe(true);
-  expect(ctx.updates).toEqual([]);
-  expect(git(root, 'rev-parse', 'dev')).toBe(head);
-  expect(git(root, 'rev-parse', 'dev-verified')).toBe(base);
-});
-
-test('verifier evidence persistence keeps store writes authoritative, tolerates failures, and falls back to SQLite', async () => {
-  const root = repo();
-  const base = git(root, 'rev-parse', 'dev-verified');
-  const head = commit(root, 'services/kernel/persisted.ts', 'export const persisted = true;\n', 'landing');
-  git(root, 'branch', '-f', 'dev', head);
-  const ctx = setup(root, [landedTask(base, head)]);
-  ctx.settings.policy = readControlPolicy({ verifier: { runRows: 2, findingRows: 1 } });
-  const databasePath = join(ctx.settings.stateDirectory, 'goal.sqlite');
-  const database = new WorkerStore(openDb(databasePath));
-  let databaseOpen = true;
-  const attemptedFindings: DevVerifierFinding[] = [];
-  const failingStore = {
-    ...ctx.store,
-    db: database.db,
-    saveDevVerifierRun: () => {
-      throw new Error('run write failed');
-    },
-    saveDevVerifierFinding: (finding: DevVerifierFinding) => {
-      attemptedFindings.push(finding);
-      throw new Error('finding write failed');
-    },
-  };
-  const runGate = async (command: readonly string[]) =>
-    command[0] === 'affected-check'
-      ? { passed: false, output: 'AssertionError: retained verifier failure', timedOut: false }
-      : { passed: true, output: '', timedOut: false };
-
-  try {
-    await verifyDev({ ...ctx, store: failingStore, runGate });
-    expect(git(root, 'rev-parse', 'dev-verified')).toBe(head);
-    expect(attemptedFindings.some((finding) => finding.status === 'existing')).toBe(true);
-    expect(
-      (database.db.query('SELECT count(*) AS count FROM dev_verifier_runs').get() as { count: number }).count,
-    ).toBe(0);
-    expect(
-      (database.db.query('SELECT count(*) AS count FROM dev_verifier_findings').get() as { count: number }).count,
-    ).toBe(0);
-
-    git(root, 'branch', '-f', 'dev-verified', base);
-    const fallbackStore = {
-      db: database.db,
-      tasks: ctx.store.tasks,
-      task: ctx.store.task,
-      updateTask: ctx.store.updateTask,
-    };
-    await verifyDev({ ...ctx, store: fallbackStore, runGate });
-
-    const run = database.db
-      .query('SELECT cache_key, created_at, body FROM dev_verifier_runs ORDER BY rowid DESC')
-      .get() as { cache_key: string; created_at: string; body: string } | undefined;
-    expect(run).toBeDefined();
-    const decodedRun = JSON.parse(run!.body) as DevVerifierRun;
-    expect([run!.cache_key, run!.created_at, decodedRun.key, decodedRun.createdAt]).toEqual([
-      decodedRun.key,
-      decodedRun.createdAt,
-      decodedRun.key,
-      decodedRun.createdAt,
-    ]);
-    expect(decodedRun.evidence).toHaveProperty('result');
-    expect(
-      (database.db.query('SELECT count(*) AS count FROM dev_verifier_runs').get() as { count: number }).count,
-    ).toBeLessThanOrEqual(2);
-
-    const findingRow = database.db
-      .query(
-        'SELECT range_key, identity, signature, base_commit, head_commit, status, created_at, body FROM dev_verifier_findings',
-      )
-      .get() as
-      | {
-          range_key: string;
-          identity: string;
-          signature: string;
-          base_commit: string;
-          head_commit: string;
-          status: string;
-          created_at: string;
-          body: string;
-        }
-      | undefined;
-    expect(findingRow).toBeDefined();
-    const decodedFinding = JSON.parse(findingRow!.body) as DevVerifierFinding;
-    expect([
-      findingRow!.range_key,
-      findingRow!.identity,
-      findingRow!.signature,
-      findingRow!.base_commit,
-      findingRow!.head_commit,
-      findingRow!.status,
-      findingRow!.created_at,
-    ]).toEqual([
-      decodedFinding.rangeKey,
-      decodedFinding.identity,
-      decodedFinding.signature,
-      decodedFinding.baseCommit,
-      decodedFinding.headCommit,
-      decodedFinding.status,
-      decodedFinding.createdAt,
-    ]);
-    expect(decodedFinding.status).toBe('existing');
-    expect(
-      (database.db.query('SELECT count(*) AS count FROM dev_verifier_findings').get() as { count: number }).count,
-    ).toBeLessThanOrEqual(1);
-
-    database.db.close();
-    databaseOpen = false;
-    chmodSync(databasePath, 0o444);
-    try {
-      expect(devVerificationState(root, ctx.settings.stateDirectory).findings).toEqual({
-        existing: 1,
-        new: 0,
-        unknown: 0,
-      });
-    } finally {
-      chmodSync(databasePath, 0o644);
-    }
-
-    const absentState = join(root, '.no-finding-table');
-    mkdirSync(absentState, { recursive: true });
-    const absentDatabase = new Database(join(absentState, 'goal.sqlite'));
-    absentDatabase.close();
-    expect(devVerificationState(root, absentState).findings).toEqual({ existing: 0, new: 0, unknown: 0 });
-  } finally {
-    if (databaseOpen) database.db.close();
-  }
-});

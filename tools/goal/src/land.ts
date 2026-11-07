@@ -10,6 +10,7 @@ import type { GateResult } from './merge.ts';
 import { migrate } from './db.ts';
 import { recordFlow } from './flow.ts';
 import { controlPlaneReleaseBrief } from './briefs.ts';
+import { identityLive, type ProcessIdentity } from './process.ts';
 
 export type LandingEntry = {
   id: number;
@@ -22,6 +23,8 @@ export type LandingEntry = {
 
 /** Requests and outcomes survive a train restart. Sink delivery is at least once. */
 export class SqliteLandingQueue implements LandingQueue {
+  /** Resolutions this queue began. Their resolver may not have started yet, so no sweep here may release them. */
+  private readonly resolving = new Set<number>();
   constructor(
     readonly db: Database,
     private readonly fence: AttemptFence,
@@ -400,6 +403,7 @@ export class SqliteLandingQueue implements LandingQueue {
   }
   finish(id: number, outcome: GateOutcome): void {
     this.db.query('UPDATE landing_queue SET outcome = ?, resolving = 0 WHERE id = ?').run(JSON.stringify(outcome), id);
+    this.resolving.delete(id);
     const row = this.db.query('SELECT task,attempt FROM landing_queue WHERE id=?').get(id) as {
       task: string;
       attempt: number;
@@ -415,12 +419,45 @@ export class SqliteLandingQueue implements LandingQueue {
   }
   acknowledge(id: number): void {
     this.db.query('UPDATE landing_queue SET delivered = 1, resolving = 0 WHERE id = ?').run(id);
+    this.resolving.delete(id);
   }
   beginResolution(id: number): void {
     const result = this.db
       .query('UPDATE landing_queue SET resolving = 1 WHERE id = ? AND delivered = 0 AND outcome IS NULL')
       .run(id);
     if (result.changes !== 1) throw new Error(`Cannot reserve landing ${id} for conflict resolution`);
+    this.resolving.add(id);
+  }
+  /**
+   * A train stopped mid-resolution leaves its landing reserved, and nothing else selects it. A reservation is released
+   * only when the attempt's newest resolver record is a process that is gone and never recorded its exit: a killed pass.
+   * Sweeps run at train start and on every lease, so the next train selects the released landing.
+   */
+  releaseAbandonedResolutions(): number {
+    const hasEvents = this.db
+      .query("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'worker_events'")
+      .get();
+    if (!hasEvents) return 0;
+    const rows = this.db
+      .query('SELECT id, task, attempt FROM landing_queue WHERE resolving = 1 AND delivered = 0 AND outcome IS NULL')
+      .all() as { id: number; task: string; attempt: number }[];
+    let released = 0;
+    for (const row of rows) {
+      if (this.resolving.has(row.id)) continue;
+      const identity = killedResolverIdentity(this.db, row.task, row.attempt);
+      if (!identity || identityLive(identity)) continue;
+      const result = this.db.query('UPDATE landing_queue SET resolving = 0 WHERE id = ? AND resolving = 1').run(row.id);
+      if (result.changes !== 1) continue;
+      released++;
+      recordFlow(this.db, {
+        taskId: row.task,
+        attempt: row.attempt,
+        stage: 'landing',
+        action: 'resolution-abandoned',
+        at: new Date().toISOString(),
+      });
+    }
+    return released;
   }
   requeueResolved(id: number, request: LandingRequest, candidate?: string): void {
     this.db
@@ -442,5 +479,17 @@ export class SqliteLandingQueue implements LandingQueue {
         });
       })
       .immediate();
+    this.resolving.delete(id);
   }
+}
+
+/** The identity of the attempt's newest resolver process when no exit follows it; undefined once it has finished. */
+function killedResolverIdentity(db: Database, taskId: string, attempt: number): ProcessIdentity | undefined {
+  const newest = db
+    .query(
+      "SELECT kind, body FROM worker_events WHERE task_id = ? AND attempt = ? AND kind IN ('train-resolver-process', 'train-resolver-completed') ORDER BY sequence DESC LIMIT 1",
+    )
+    .get(taskId, attempt) as { kind: string; body: string } | null;
+  if (newest?.kind !== 'train-resolver-process') return undefined;
+  return (JSON.parse(newest.body) as { process?: ProcessIdentity | null }).process ?? undefined;
 }

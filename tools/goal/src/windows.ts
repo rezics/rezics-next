@@ -1,5 +1,5 @@
 import { defaultPolicy, type ControlPolicy } from './policy.ts';
-import { spawnSync } from 'node:child_process';
+import { runHostProcess } from './process.ts';
 
 export type WindowSettings = {
   policy?: ControlPolicy['windows'] | undefined;
@@ -8,11 +8,10 @@ export type WindowSettings = {
   tmuxCommand?: string;
   termspacesCommand?: string;
 };
-export type WindowRunner = (executable: string, argv: string[]) => string;
-const run = (executable: string, argv: string[], policy = defaultPolicy.windows): string => {
-  const result = spawnSync(executable, argv, { encoding: 'utf8', timeout: policy.commandTimeoutMs });
-  if (result.error) throw result.error;
-  if (result.status !== 0) throw new Error((result.stderr || `${executable} failed`).trim());
+export type WindowRunner = (executable: string, argv: string[]) => string | Promise<string>;
+const run = async (executable: string, argv: string[], policy = defaultPolicy.windows): Promise<string> => {
+  const result = await runHostProcess(executable, argv, { timeoutMs: policy.commandTimeoutMs });
+  if (result.code !== 0) throw new Error((result.stderr || `${executable} failed`).trim());
   return result.stdout.trim();
 };
 const quote = (value: string) => `'${value.replaceAll("'", "'\\''")}'`;
@@ -66,14 +65,14 @@ const unavailableWindowStatus = (error: unknown) => {
 };
 
 export interface ManagerWindows {
-  register(manager: string, argv: string[], cwd: string): string;
-  unregister(manager: string): void;
+  register(manager: string, argv: string[], cwd: string): string | Promise<string>;
+  unregister(manager: string): void | Promise<void>;
   /** False when the manager's window is gone or its process has exited. Observation failures throw. */
-  alive?(manager: string): boolean;
+  alive?(manager: string): boolean | Promise<boolean>;
   /** Run argv in the manager's window again, replacing whatever it holds. */
-  respawn?(manager: string, argv: string[], cwd: string): void;
+  respawn?(manager: string, argv: string[], cwd: string): void | Promise<void>;
   /** Type a message into the manager's live session and submit it; the session queues it if a turn is running. */
-  prompt?(manager: string, text: string): void;
+  prompt?(manager: string, text: string): void | Promise<void>;
 }
 
 /** Resolve termspaces' stable session option; do not inspect or kill unrelated windows. */
@@ -82,40 +81,46 @@ export class TermspacesWindows implements ManagerWindows {
     private readonly settings: WindowSettings,
     private readonly execute: WindowRunner = (executable, argv) => run(executable, argv, settings.policy),
   ) {}
-  private tmux(argv: string[]): string {
-    return this.execute(this.settings.tmuxCommand ?? 'tmux', ['-u', '-S', this.settings.socket, ...argv]);
+  private tmux(argv: string[]): Promise<string> {
+    return Promise.resolve(
+      this.execute(this.settings.tmuxCommand ?? 'tmux', ['-u', '-S', this.settings.socket, ...argv]),
+    );
   }
-  private observe<T>(read: () => T): T | undefined {
+  private async observe<T>(read: () => Promise<T>): Promise<T | undefined> {
     try {
-      return read();
+      return await read();
     } catch (error) {
       if (isAbsentWindowObservation(error)) return undefined;
       throw unavailableWindowStatus(error);
     }
   }
-  private lookupSession(): string | undefined {
+  private lookupSession(): Promise<string | undefined> {
     return this.observe(
-      () =>
-        this.tmux(['list-sessions', '-F', '#{session_id}\t#{session_name}\t#{@ts-session-id}'])
+      async () =>
+        (await this.tmux(['list-sessions', '-F', '#{session_id}\t#{session_name}\t#{@ts-session-id}']))
           .split('\n')
           .map(tmuxFields)
           .find(([, name, id]) => name === this.settings.session || id === this.settings.session)?.[0],
     );
   }
-  private session(): string {
-    let session = this.lookupSession();
+  private async session(): Promise<string> {
+    let session = await this.lookupSession();
     if (!session) {
-      this.execute(this.settings.termspacesCommand ?? 'termspaces', ['--socket-path', this.settings.socket, 'apply']);
-      session = this.lookupSession();
+      await this.execute(this.settings.termspacesCommand ?? 'termspaces', [
+        '--socket-path',
+        this.settings.socket,
+        'apply',
+      ]);
+      session = await this.lookupSession();
     }
     if (!session) throw new Error(`Missing termspaces session: ${this.settings.session}`);
     return session;
   }
-  register(manager: string, argv: string[], cwd: string): string {
-    const session = this.session();
-    const existing = this.find(session, manager);
+  async register(manager: string, argv: string[], cwd: string): Promise<string> {
+    const session = await this.session();
+    const existing = await this.find(session, manager);
     if (existing) return existing;
-    const id = this.tmux([
+    const id = await this.tmux([
       'new-window',
       '-d',
       '-P',
@@ -130,52 +135,52 @@ export class TermspacesWindows implements ManagerWindows {
       argv.map(quote).join(' '),
     ]);
     try {
-      this.tmux(['set-option', '-w', '-t', id, '@goal-manager', manager]);
+      await this.tmux(['set-option', '-w', '-t', id, '@goal-manager', manager]);
     } catch (error) {
-      this.tmux(['kill-window', '-t', id]);
+      await this.tmux(['kill-window', '-t', id]);
       throw error;
     }
     return id;
   }
-  private find(session: string, manager: string): string | undefined {
+  private find(session: string, manager: string): Promise<string | undefined> {
     return this.observe(
-      () =>
-        this.tmux(['list-windows', '-t', session, '-F', '#{window_id}\t#{@goal-manager}'])
+      async () =>
+        (await this.tmux(['list-windows', '-t', session, '-F', '#{window_id}\t#{@goal-manager}']))
           .split('\n')
           .map(tmuxFields)
           .find(([, owner]) => owner === manager)?.[0],
     );
   }
-  alive(manager: string): boolean {
-    const session = this.lookupSession();
+  async alive(manager: string): Promise<boolean> {
+    const session = await this.lookupSession();
     if (!session) return false;
     return (
-      this.observe(() =>
-        this.tmux(['list-windows', '-t', session, '-F', '#{@goal-manager}\t#{pane_dead}'])
+      (await this.observe(async () =>
+        (await this.tmux(['list-windows', '-t', session, '-F', '#{@goal-manager}\t#{pane_dead}']))
           .split('\n')
           .map(tmuxFields)
           .some(([owner, dead]) => owner === manager && dead === '0'),
-      ) === true
+      )) === true
     );
   }
-  respawn(manager: string, argv: string[], cwd: string): void {
-    const id = this.find(this.session(), manager);
+  async respawn(manager: string, argv: string[], cwd: string): Promise<void> {
+    const id = await this.find(await this.session(), manager);
     if (!id) {
-      this.register(manager, argv, cwd);
+      await this.register(manager, argv, cwd);
       return;
     }
-    this.tmux(['respawn-pane', '-k', '-t', id, '-c', cwd, argv.map(quote).join(' ')]);
+    await this.tmux(['respawn-pane', '-k', '-t', id, '-c', cwd, argv.map(quote).join(' ')]);
   }
-  prompt(manager: string, text: string): void {
-    const id = this.find(this.session(), manager);
+  async prompt(manager: string, text: string): Promise<void> {
+    const id = await this.find(await this.session(), manager);
     if (!id) throw new Error(`Missing manager window: ${manager}`);
-    this.tmux(['send-keys', '-t', id, '-l', text.replace(/[\r\n]+/g, ' ')]);
-    this.tmux(['send-keys', '-t', id, 'Enter']);
+    await this.tmux(['send-keys', '-t', id, '-l', text.replace(/[\r\n]+/g, ' ')]);
+    await this.tmux(['send-keys', '-t', id, 'Enter']);
   }
-  unregister(manager: string): void {
-    const session = this.lookupSession();
+  async unregister(manager: string): Promise<void> {
+    const session = await this.lookupSession();
     if (!session) return;
-    const id = this.find(session, manager);
-    if (id) this.tmux(['kill-window', '-t', id]);
+    const id = await this.find(session, manager);
+    if (id) await this.tmux(['kill-window', '-t', id]);
   }
 }

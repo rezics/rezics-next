@@ -1,5 +1,5 @@
 import { expect, test } from 'bun:test';
-import { spawn, type ChildProcess } from 'node:child_process';
+import { spawn, spawnSync, type ChildProcess } from 'node:child_process';
 import { chmodSync, existsSync, mkdirSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
 import { join, relative } from 'node:path';
 import { createInterface } from 'node:readline';
@@ -589,3 +589,66 @@ test('extracted host answers while recovery continues and finishes one in-flight
     f.close();
   }
 }, 15_000);
+
+test('a host that loaded one tools/goal revision retires once main publishes another, and exits so systemd restarts it', async () => {
+  const f = fixture();
+  const script = join(f.path, 'retiring-host.ts');
+  const git = (...args: string[]) => {
+    const result = spawnSync('git', args, { cwd: f.path, encoding: 'utf8' });
+    if (result.status !== 0) throw new Error(`git ${args.join(' ')}: ${result.stderr}`);
+    return result.stdout.trim();
+  };
+  const publish = (text: string, message: string) => {
+    writeFileSync(join(f.path, 'tools/goal/src/a.ts'), text);
+    git('add', 'tools/goal');
+    git('commit', '-qm', message);
+  };
+  git('init', '-q', '-b', 'main');
+  git('config', 'user.email', 'test@example.invalid');
+  git('config', 'user.name', 'Test');
+  mkdirSync(join(f.path, 'tools/goal/src'), { recursive: true });
+  publish('export const revision = 1;\n', 'Loaded revision');
+  extractedHostScript(
+    script,
+    `
+      const { captureLoadedCodeVersion } = await import(${JSON.stringify(join(import.meta.dir, 'runtime-version.ts'))});
+      const { defaultPolicy } = await import(${JSON.stringify(join(import.meta.dir, 'policy.ts'))});
+      runtime.loadedCodeVersion = captureLoadedCodeVersion(runtime.mainCheckout);
+      runtime.codeRetirement = { retiring: false };
+      runtime.managerServices.policy = {
+        ...defaultPolicy,
+        host: { ...defaultPolicy.host, restartIntervalMs: 0, codePollMs: 25 },
+      };
+    `,
+  );
+  let child: ChildProcess | undefined;
+  let output = '';
+  try {
+    child = spawn(process.execPath, [script], { env: f.env, stdio: ['ignore', 'pipe', 'pipe'] });
+    const closed = new Promise<number | null>((resolve) => child!.once('close', (code) => resolve(code)));
+    child.stdout!.setEncoding('utf8');
+    child.stdout!.on('data', (chunk: string) => {
+      output += chunk;
+    });
+    await new Promise<void>((resolve, reject) => {
+      const lines = createInterface({ input: child!.stdout! });
+      lines.once('line', (line) => {
+        lines.close();
+        line === 'ready' ? resolve() : reject(new Error(line));
+      });
+      child!.once('exit', (code) => reject(new Error(`retiring host exited before ready (${code})`)));
+    });
+    publish('export const revision = 2;\n', 'Published revision');
+    const code = await Promise.race([
+      closed,
+      new Promise<'still running'>((resolve) => setTimeout(() => resolve('still running'), 10_000)),
+    ]);
+    expect(code).toBe(0);
+    expect(output).toContain('tools/goal is published as');
+    expect(existsSync(join(f.path, 'manager.sock'))).toBe(false);
+  } finally {
+    if (child && child.exitCode === null && child.signalCode === null) child.kill('SIGKILL');
+    await cleanHosted(f.path);
+    f.close();
+  }
+}, 20_000);

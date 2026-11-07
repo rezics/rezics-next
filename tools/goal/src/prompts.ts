@@ -1,7 +1,8 @@
 import { createHash } from 'node:crypto';
 import { existsSync, readFileSync, statSync } from 'node:fs';
-import { join } from 'node:path';
+import { join, resolve } from 'node:path';
 import { spawnSync } from 'node:child_process';
+import { formatModuleMap, loadManifest } from '../../../scripts/architecture-map.ts';
 import { defaultPolicy, type ControlPolicy } from './policy.ts';
 import { workerTestCommands } from './affected-tests.ts';
 import { CONTINUATION_DIRECTORY, continuesItself } from './continuation.ts';
@@ -45,8 +46,19 @@ export type ConditionId = (typeof CONDITION_IDS)[number];
 
 const PLACEHOLDER = /\{\{(policy|task)\.([A-Za-z0-9_.]+)\}\}/g;
 const RETRY_WORDS = ['zero', 'one', 'two'] as const;
-const WRAPPER_RESULT =
-  'If the wrapper prints a check id before the check ends, end the turn at once with `{"status":"waiting","checks":["<bare UUID>"]}` in the exit object, using that bare UUID. Never wait for it yourself: no `--wait` (obsolete, whatever older sessions say), status polls, log or process reads. The controller wakes this session with the result: use it exactly (missing, unknown or nonzero is not a pass) and do not return waiting again for those ids; success uses `"checks":[]`. A failure after the wrapper\'s own infrastructure rerun is final: a `tool` blocker. ';
+/** The wrapper's waiting protocol; `pass` says what a result must be to count, `infrastructure` what is final. */
+function wrapperResult(pass: string, infrastructure: string): string {
+  return `If the wrapper prints a check id before the check ends, end the turn at once with \`{"status":"waiting","checks":["<bare UUID>"]}\` in the exit object, using that bare UUID. Never wait for it yourself: no \`--wait\` (obsolete, whatever older sessions say), status polls, log or process reads. The controller wakes this session with the result: use it exactly (${pass}) and do not return waiting again for those ids; success uses \`"checks":[]\`. ${infrastructure} `;
+}
+const WRAPPER_RESULT = wrapperResult(
+  'missing, unknown or nonzero is not a pass',
+  "A failure after the wrapper's own infrastructure rerun is final: a `tool` blocker.",
+);
+// Under the typecheck-only check a nonzero exit is a type error, or a money-path test failure when those paths changed.
+const MINIMAL_WRAPPER_RESULT = wrapperResult(
+  'missing or unknown is not a pass; a type error is not a pass; a failing payment, payout, order settlement, points or balance test is not a pass',
+  "A transport or infrastructure failure that survives the wrapper's own rerun is final: a `tool` blocker; type and test failures are not infrastructure failures.",
+);
 const OWNED_ONCE =
   'This brief leaves acceptance to the worker. Choose or add a focused, meaningful check that exercises the stated outcome; no pass is presumed. Run the chosen command once after your last relevant edit and report its exact command and observed result.';
 const SCARCE_ONCE = 'Check slots are scarce: run your acceptance command once after your last relevant edit.';
@@ -63,8 +75,12 @@ const WAIT =
 const OWN_TESTS =
   "After your last edit, run the test files you created or changed once, with the landing's command (`bun test <files>`; services/kernel: `bun run --cwd services/kernel check <files>`; apps/web: `bun apps/web/scripts/focused.ts --private-network -- bun test <files>`), and fix failures you caused.";
 const REGRESSION = `Do not run the root typecheck or other regression suites yourself; the landing runs them. ${OWN_TESTS}`;
+const MINIMAL_SESSION_COMMANDS =
+  'Commands that finish locally in under a minute (oxfmt, tsc on tools/goal) still run in the session.';
+// The result rule travels with the wrapper result protocol in the footer; the condition body states the check itself.
+const MINIMAL_RESULT = `Then commit and return success (blocker null, \`"checks":[]\`) once every changed workspace type-checks, naming what you completed and the deferred acceptance, which is neither a blocker nor a reason to wait; return waiting only for a still-running check UUID this attempt started.`;
 const PROTOCOL_FOOTER: Partial<Record<ConditionId, string>> = {
-  'minimal-verification': `${WAIT} ${OWN_TESTS}`,
+  'minimal-verification': `${MINIMAL_RESULT} ${MINIMAL_SESSION_COMMANDS} ${MINIMAL_WRAPPER_RESULT}`.trimEnd(),
   'local-placement': `${WAIT} ${REGRESSION}`,
   wrapper: `${WAIT} ${REGRESSION}`,
   'no-wrapper': `${WAIT} ${REGRESSION}`,
@@ -72,6 +88,7 @@ const PROTOCOL_FOOTER: Partial<Record<ConditionId, string>> = {
 
 type TemplateCache = { mtimeMs: number; size: number; text: string; sha: string };
 const templateCache = new Map<string, TemplateCache>();
+const promptSourceRoot = resolve(import.meta.dir, '../../..');
 
 export type PromptView = Record<string, string>;
 export type RenderedPrompt = {
@@ -250,7 +267,11 @@ export function selectConditions(input: {
   else if (registeredProof(brief, authorization)) selected.push('registered-proof');
   // A brief that names its own native or browser acceptance (a seeded walk, for example) runs it in this attempt;
   // minimal mode defers only checks a brief does not ask for.
-  else if (minimalVerification(input.stateDirectory) && !brief.acceptance?.requires?.length)
+  else if (
+    minimalVerification(input.stateDirectory) &&
+    !brief.acceptance?.requires?.length &&
+    brief.goal !== 'control-plane'
+  )
     selected.push('minimal-verification');
   else {
     const { runner, local } = wrapperRunner(task.worktree, brief);
@@ -287,7 +308,7 @@ function promptView(input: WorkerPromptInput): PromptView {
   const research = brief.kind === 'research';
   const product = devProductBrief(brief);
   const manager = brief.manager ?? brief.goal ?? '<your manager>';
-  const owned = brief.acceptance?.workerOwned === true;
+  const owned = brief.acceptance?.workerOwned === true && brief.goal !== 'control-plane';
   const { runner, local } = wrapperRunner(task.worktree, brief);
   const command = brief.acceptance?.command;
   const exactCommand = command?.map(shellQuote).join(' ') ?? '<the declared acceptance argv>';
@@ -306,6 +327,8 @@ function promptView(input: WorkerPromptInput): PromptView {
   const proofInvocation = registeredProof(brief, authorization)
     ? ordinaryProofCommand(brief.acceptance.command).invocation.map(shellQuote).join(' ')
     : '';
+  const moduleRoot = existsSync(join(mainCheckout, 'docs/architecture/modules.json')) ? mainCheckout : promptSourceRoot;
+  const moduleMap = formatModuleMap(loadManifest(moduleRoot), task.brief.paths ?? []);
   const localRun = runner
     ? `Run it from the worktree root as \`${runner} --local -- ${exactCommand}\`; \`--local\` keeps it off remote hosts.`
     : `This base has no worker-check wrapper: run the exact declared local command \`${exactCommand}\` in the foreground from the worktree root, without a wrapper; it gives no check id and no waiting result.`;
@@ -314,6 +337,7 @@ function promptView(input: WorkerPromptInput): PromptView {
     goal: brief.goal ?? '',
     manager,
     mainCheckout,
+    moduleMap,
     worktree: task.worktree,
     researchWriteScope: research ? ` and the reference clones under ${mainCheckout}/.reference/` : '',
     mergeRule:
@@ -353,11 +377,11 @@ function promptView(input: WorkerPromptInput): PromptView {
       ? 'This base has no scripts/worker-check.ts; do not add one. Run your focused validation command in the foreground from the worktree root and let it finish; it gives no check id and no waiting result.'
       : 'This base has no scripts/worker-check.ts; do not add one. Run the acceptance command in the foreground from the worktree root and let it finish, then report its actual exit status; it gives no check id and no waiting result.',
     ownedNoWrapperTail: owned ? ' Do not report success unless the chosen validation actually exits zero.' : '',
-    wrapperInvocation: runner ? `${runner} -- <command...>` : '',
+    wrapperInvocation: runner ? `${runner} -- <command...>` : 'bun scripts/worker-check.ts -- <command...>',
     wrapperResult: local && runner ? WRAPPER_RESULT : '',
     localRun,
     minimalOwned: owned
-      ? 'This brief leaves validation to the worker. Choose or add focused tests that exercise the stated outcome, run them with the landing command below, and report the exact command and actual result; a missing acceptance command is not a pass. Broader acceptance remains deferred under this policy. '
+      ? 'This brief leaves validation to the worker. Choose or add focused tests that exercise the stated outcome; they run after landing in the dev verifier. A missing acceptance command is not a pass. Broader acceptance remains deferred under this policy. '
       : '',
     proofSourceCommit: proofSource,
     proofCheckId,
@@ -416,6 +440,13 @@ export function renderWorkerPrompt(input: WorkerPromptInput): RenderedPrompt {
         ].join('\n\n'),
       )
     : collapse(fillTemplate(roleFile.text, view, policy));
+  const roleWithModuleMap = roleText.includes(view.moduleMap!)
+    ? roleText
+    : collapse(
+        [roleText, 'Architecture module map (module|kind|public entries|allowed dependencies):', view.moduleMap].join(
+          '\n\n',
+        ),
+      );
   const selected = selectConditions(input);
   const renderedConditions = selected.map((id) => loadCondition(directory, id, view, policy));
   const conditionText = renderedConditions
@@ -459,18 +490,18 @@ export function renderWorkerPrompt(input: WorkerPromptInput): RenderedPrompt {
     selected.includes('local-placement') ? [view.localRun, view.wrapperResult].filter(Boolean).join(' ') : '',
     input.evidence ? `Continue from this retry manifest:\n${view.evidenceManifest}` : '',
     input.landingDiagnostic
-      ? `Dev landing compiler diagnostic; repair the source in place, then return through normal landing preparation:\n${input.landingDiagnostic}`
+      ? `Dev landing repair diagnostic; repair the source in place, then return through normal landing preparation:\n${input.landingDiagnostic}`
       : '',
     renderLaunchContext(input.launchContext, policy.launchContext),
     view.consultation,
     deferredSentence(deferred),
   ].filter(Boolean);
   const prompt = collapse(
-    [roleText, prefixText, 'The task contract follows:', briefText, ...taskGuidance, ...extras, suffixText]
+    [roleWithModuleMap, prefixText, 'The task contract follows:', briefText, ...taskGuidance, ...extras, suffixText]
       .filter(Boolean)
       .join('\n\n'),
   );
-  const roleBytes = bytes(roleText);
+  const roleBytes = bytes(roleWithModuleMap);
   const conditionBytes = conditionBodyBytes;
   const briefBytes = bytes(briefText);
   const totalBytes = bytes(prompt);
@@ -505,6 +536,7 @@ export function renderWorkerPrompt(input: WorkerPromptInput): RenderedPrompt {
       conditions: Object.fromEntries(renderedConditions.map((item) => [item.id, item.sha])),
       brief: gitBlobSha(task.brief.markdown),
       policy: policyHash(policy),
+      architectureModules: gitBlobSha(view.moduleMap!),
       ...budgetManifest,
     },
   };
@@ -545,10 +577,27 @@ export function renderCheckProtocol(
   return loadCondition(promptDirectory, check, view, policy).text;
 }
 
+/** Each owned Goal's definition and continuation, in that order, when the files exist. */
+export function readGoalDocuments(cwd: string, goals: readonly string[]): string[] {
+  const texts: string[] = [];
+  for (const goal of goals) {
+    for (const path of [
+      join(cwd, 'docs', 'goals', `${goal}.md`),
+      join(cwd, '.temp', 'goal', goal, 'CONTINUATION.md'),
+    ]) {
+      if (!existsSync(path)) continue;
+      const text = readFileSync(path, 'utf8').trim();
+      if (text) texts.push(text);
+    }
+  }
+  return texts;
+}
+
 export function renderManagerOpening(input: {
   spec: {
     id: string;
     goal: string;
+    goals?: string[];
     brief: string;
     cwd: string;
     engine: 'codex' | 'claude';
@@ -563,10 +612,11 @@ export function renderManagerOpening(input: {
   const policy = input.policy ?? defaultPolicy;
   const directory = input.promptDirectory ?? DEFAULT_PROMPT_DIRECTORY;
   const roleFile = readTemplate(join(directory, 'manager.md'));
-  const continuationPath = join('.temp', 'goal', input.spec.id, 'CONTINUATION.md');
+  const goals = input.spec.goals?.length ? input.spec.goals : [input.spec.goal];
+  const continuationPath = goals.map((goal) => join('.temp', 'goal', goal, 'CONTINUATION.md')).join(', ');
   const view: PromptView = {
     id: input.spec.id,
-    goal: input.spec.goal,
+    goal: goals.join(', '),
     backlogPath: input.backlogPath,
     command: input.command,
     continuationRef: input.continuationFile ? `the continuation ${input.continuationFile}` : 'continuation',
@@ -580,9 +630,11 @@ export function renderManagerOpening(input: {
         : `When no decision is pending, run ${input.command} inbox wait ${input.spec.id} in the background and end the turn.`,
   };
   const roleText = collapse(fillTemplate(roleFile.text, view, policy));
-  const goalPath = join(input.spec.cwd, 'docs', 'goals', `${input.spec.goal}.md`);
-  const goalText = existsSync(goalPath) ? readFileSync(goalPath, 'utf8').trim() : '';
-  const prompt = collapse([roleText, goalText, input.spec.brief, input.continuationText].filter(Boolean).join('\n\n'));
+  const prompt = collapse(
+    [roleText, ...readGoalDocuments(input.spec.cwd, goals), input.spec.brief, input.continuationText]
+      .filter(Boolean)
+      .join('\n\n'),
+  );
   const roleBytes = bytes(roleText);
   const openingBytes = bytes(prompt);
   const layers = { role: roleBytes, opening: openingBytes };

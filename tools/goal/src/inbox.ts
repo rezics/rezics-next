@@ -292,8 +292,12 @@ export class SqliteManagerInbox implements ManagerInbox {
     } | null;
     if (!row) return null;
     try {
-      const state = JSON.parse(row.state) as { goal?: unknown };
-      return typeof state.goal === 'string' && state.goal ? state.goal : null;
+      const state = JSON.parse(row.state) as { goal?: unknown; goals?: unknown };
+      const listed = Array.isArray(state.goals)
+        ? [...new Set(state.goals.filter((goal): goal is string => typeof goal === 'string' && goal.length > 0))]
+        : [];
+      const goals = listed.length ? listed : typeof state.goal === 'string' && state.goal ? [state.goal] : [];
+      return goals.length === 1 ? goals[0]! : null;
     } catch {
       return null;
     }
@@ -377,7 +381,33 @@ export class SqliteManagerInbox implements ManagerInbox {
     this.db.query('UPDATE manager_inbox SET notified = 1 WHERE id = ?').run(id);
   }
 
-  /** Subscribe before checking the database so delivery in the setup window cannot be lost. */
+  /**
+   * Move a Goal's inbox history to another manager without dropping rows. Unread wakeable items wake the new owner.
+   * When `moveUnattributed` is set, remaining items on the source (its last Goal) move too.
+   */
+  reassignGoal(goal: string, from: string, to: string, moveUnattributed = false): void {
+    if (from === to) return;
+    const hasTasks = Boolean(
+      this.db.query("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'worker_tasks'").get(),
+    );
+    const attributed = hasTasks
+      ? `goal_id = ? OR task_id IN (SELECT id FROM worker_tasks WHERE json_extract(body, '$.brief.goal') = ?)`
+      : 'goal_id = ?';
+    const attributedArgs = hasTasks ? [goal, goal] : [goal];
+    const where = moveUnattributed ? 'manager = ?' : `manager = ? AND (${attributed})`;
+    const args = moveUnattributed ? [to, to, from] : [to, to, from, ...attributedArgs];
+    this.db
+      .query(
+        `UPDATE manager_inbox
+         SET manager = ?,
+             event = CASE WHEN json_valid(event) THEN json_set(event, '$.managerId', ?) ELSE event END,
+             notified = CASE WHEN wakeable = 1 AND quiet = 0 AND read_at IS NULL THEN 0 ELSE notified END
+         WHERE ${where}`,
+      )
+      .run(...args);
+    if (this.pending(to).length) writeFileSync(this.signalPath(to), String(this.now()));
+  }
+
   /**
    * Resolve with the pending events once there are any. With `settleMs`, keep collecting for that long after the first
    * event, so a burst of events costs the reader one turn instead of one per event.

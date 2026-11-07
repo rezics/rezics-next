@@ -228,7 +228,7 @@ import { spawn, spawnSync } from 'node:child_process';
 import { existsSync, lstatSync, mkdirSync, readdirSync, readFileSync, realpathSync } from 'node:fs';
 import { isBuiltin } from 'node:module';
 import { hostname } from 'node:os';
-import { sameProcess, type ProcessIdentity } from './process.ts';
+import { runHostProcess, sameProcess, type ProcessIdentity } from './process.ts';
 import { isDeepStrictEqual } from 'node:util';
 import { pathToFileURL } from 'node:url';
 import { dirname, isAbsolute, join, relative, resolve } from 'node:path';
@@ -244,6 +244,15 @@ function proofGit(cwd: string, args: string[], policy = defaultPolicy.proof): st
   });
   if (result.status !== 0 || result.error)
     throw new Error(result.error?.message || result.stderr?.trim() || `git ${args[0]} failed`);
+  return result.stdout.trim();
+}
+async function proofGitAsync(cwd: string, args: string[], policy = defaultPolicy.proof): Promise<string> {
+  const result = await runHostProcess('git', args, {
+    cwd,
+    timeoutMs: policy.commandTimeoutMs,
+    maxBuffer: policy.gitBufferBytes,
+  });
+  if (result.code !== 0) throw new Error(result.stderr.trim() || `git ${args[0]} failed`);
   return result.stdout.trim();
 }
 
@@ -885,34 +894,32 @@ export type HistoricalProofReaderSource = {
 };
 const importedHistoricalSources = new Map<string, string>();
 /** Validate code against the controller's Git objects before importing any part of the native module closure. */
-export function validateHistoricalProofReaderSource(
+export async function validateHistoricalProofReaderSource(
   source: HistoricalProofReaderSource,
   policy = defaultPolicy.proof,
-): string {
+): Promise<string> {
   const { root, integrationRoot, integrationBranch } = source;
   if (
     !isAbsolute(root) ||
     realpathSync(root) !== root ||
-    proofGit(root, ['rev-parse', '--show-toplevel'], policy) !== root
+    (await proofGitAsync(root, ['rev-parse', '--show-toplevel'], policy)) !== root
   )
     throw new Error('Historical reader root must be a canonical Git checkout root');
-  const commit = proofGit(root, ['rev-parse', '--verify', 'HEAD^{commit}'], policy);
+  const commit = await proofGitAsync(root, ['rev-parse', '--verify', 'HEAD^{commit}'], policy);
   for (const [ancestor, descendant] of [
     [PROOF_PRODUCER_COMMIT, commit],
     [commit, `refs/heads/${integrationBranch}`],
   ]) {
-    if (
-      spawnSync('git', ['merge-base', '--is-ancestor', ancestor!, descendant!], {
-        cwd: integrationRoot,
-        stdio: 'ignore',
-        timeout: policy.commandTimeoutMs,
-      }).status !== 0
-    )
+    const ancestry = await runHostProcess('git', ['merge-base', '--is-ancestor', ancestor!, descendant!], {
+      cwd: integrationRoot,
+      timeoutMs: policy.commandTimeoutMs,
+    });
+    if (ancestry.code !== 0)
       throw new Error(
         'Historical reader source must contain the delivered producer and be a captured integration ancestor',
       );
   }
-  if (proofGit(root, ['status', '--porcelain', '--untracked-files=no'], policy))
+  if (await proofGitAsync(root, ['status', '--porcelain', '--untracked-files=no'], policy))
     throw new Error('Historical reader source must be Git-clean');
   if (importedHistoricalSources.has(root) && importedHistoricalSources.get(root) !== commit)
     throw new Error('Imported historical reader source changed; configure an immutable captured checkout');
@@ -931,16 +938,16 @@ export function validateHistoricalProofReaderSource(
       !lstatSync(absolute).isFile()
     )
       throw new Error(`Historical reader module is not a canonical native source file: ${path}`);
-    const entry = proofGit(integrationRoot, ['ls-tree', commit, '--', path], policy);
+    const entry = await proofGitAsync(integrationRoot, ['ls-tree', commit, '--', path], policy);
     if (!/^100644 blob [0-9a-f]{40}\t/.test(entry))
       throw new Error(`Historical reader module is not a captured regular file: ${path}`);
-    const expected = spawnSync('git', ['show', `${commit}:${path}`], {
+    const expected = await runHostProcess('git', ['show', `${commit}:${path}`], {
       cwd: integrationRoot,
       maxBuffer: policy.sourceBufferBytes,
-      timeout: policy.commandTimeoutMs,
+      timeoutMs: policy.commandTimeoutMs,
     });
     const contents = readFileSync(absolute);
-    if (expected.status !== 0 || !contents.equals(expected.stdout))
+    if (expected.code !== 0 || !contents.equals(expected.stdoutBuffer))
       throw new Error(`Historical reader module differs from captured integration source: ${path}`);
     for (const dependency of scanner.scanImports(contents.toString('utf8'))) {
       if (isBuiltin(dependency.path)) continue;
@@ -957,7 +964,7 @@ export async function loadHistoricalProofReader(
   source: HistoricalProofReaderSource,
   policy = defaultPolicy.proof,
 ): Promise<HistoricalProofReader> {
-  const commit = validateHistoricalProofReaderSource(source, policy);
+  const commit = await validateHistoricalProofReaderSource(source, policy);
   // Even a failed import can populate Bun's module cache. Never reuse that root for another captured revision.
   importedHistoricalSources.set(source.root, commit);
   const wrapper = join(source.root, 'scripts/worker-check.ts');
@@ -965,7 +972,7 @@ export async function loadHistoricalProofReader(
   const custody: unknown = await import(pathToFileURL(join(wrapper, '../check-custody.ts')).href);
   if (!isObject(custody) || typeof custody.validRegistration !== 'function')
     throw new Error('Native historical v1 registration validator unavailable');
-  if (validateHistoricalProofReaderSource(source) !== commit)
+  if ((await validateHistoricalProofReaderSource(source)) !== commit)
     throw new Error('Historical reader source changed during import');
   const validRegistration = custody.validRegistration;
   return {

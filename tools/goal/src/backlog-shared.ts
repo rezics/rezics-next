@@ -5,6 +5,7 @@ import { basename, join } from 'node:path';
 export const BACKLOG_DISPATCHING_DIRECTORY = '.dispatching';
 export const BACKLOG_DISPATCHED_DIRECTORY = 'dispatched';
 export const BACKLOG_FAILED_DIRECTORY = 'failed';
+export const BACKLOG_RETURNED_DIRECTORY = 'returned';
 
 export type BacklogDispatchResult = string | { taskId: string; lintWarnings?: string[] };
 

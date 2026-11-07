@@ -4,6 +4,11 @@ The main checkout /repo is read-only.
 
 Finish with the normal JSON exit object: status, summary, blocker, checks and approaches.
 
+Architecture module map (module|kind|public entries|allowed dependencies):
+
+row module|kind|public entries|allowed dependencies; kind t=contract,c=core,a=app,d=adapter,r=root,u=ui; path k=kernel,w=web,p=package,@=rezics; - = none
+Other modules: docs/architecture/modules.json
+
 The task contract follows:
 
 Read-only original journey.

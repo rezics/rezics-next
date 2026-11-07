@@ -1,5 +1,13 @@
 import { expect, test } from 'bun:test';
-import { burnPerHour, choosePool, choosePoolWithFallback, poolBurnStatus } from './allowance.ts';
+import {
+  burnPerHour,
+  choosePool,
+  choosePoolWithFallback,
+  countAllowanceWaiting,
+  countRunningByPool,
+  countWaitingByPool,
+  poolBurnStatus,
+} from './allowance.ts';
 import { fixturePool, reading } from './test-support.ts';
 import type { Pool, PoolReading, Profile } from './types.ts';
 
@@ -58,6 +66,65 @@ test('Integer percent readings taken every few minutes, where most consecutive r
   const current = history.at(-1)!;
   expect(burnPerHour(current, history.slice(-2, -1), { now, spanMs: span })).toBe(0);
   expect(burnPerHour(current, history.slice(0, -1), { now, spanMs: span })).toBeCloseTo(2 / 1.5, 5);
+});
+
+test('A pool with policy.maxConcurrent 8 and 8 running attempts admits no new task. A task routed to it takes its next allowed fallback or waits.', () => {
+  const base = fixturePool();
+  const codex = { ...base, policy: { ...base.policy, maxConcurrent: 8, allowUnknown: false } };
+  const cursor = {
+    ...codex,
+    name: 'cursor',
+    cli: 'cursor' as const,
+    classes: ['cursor'],
+    command: 'cursor-agent',
+    allowanceKey: 'cursor',
+    policy: { weight: 1, reservePercent: 0, allowUnknown: false, maxAgeMs: 60_000, maxConcurrent: 8 },
+  };
+  const current = observed(codex, 10, now);
+  const cursorReading = observed(cursor, 5, now);
+  const full = { fixture: 8 };
+  expect(choosePool(profile, [codex], [current], { now, running: { fixture: 7 } }).name).toBe('fixture');
+  expect(() => choosePool(profile, [codex], [current], { now, running: full })).toThrow('no allowed pool');
+  expect(() => choosePool(profile, [codex], [current], { now, running: full, preferred: 'fixture' })).toThrow(
+    'no allowed pool',
+  );
+  const chosen = choosePoolWithFallback(profile, [cursorProfile], [codex, cursor], [current, cursorReading], {
+    now,
+    running: full,
+  });
+  expect(chosen.profile).toBe(cursorProfile);
+  expect(chosen.pool.name).toBe('cursor');
+  expect(() => choosePoolWithFallback(profile, [], [codex], [current], { now, running: full })).toThrow(
+    'no allowed pool',
+  );
+  expect(
+    countAllowanceWaiting([{ first: profile, fallbacks: [] }], [codex], [current], { now, running: full }),
+  ).toEqual({ fixture: 1 });
+});
+
+test('Pools without maxConcurrent behave as today; status shows live and waiting against maxConcurrent per pool.', () => {
+  const open = { ...fixturePool(), policy: { ...fixturePool().policy, allowUnknown: false } };
+  const capped = {
+    ...open,
+    name: 'capped',
+    allowanceKey: 'capped',
+    policy: { ...open.policy, maxConcurrent: 8 },
+  };
+  const current = observed(open, 10, now);
+  expect(choosePool(profile, [open], [current], { now, running: { fixture: 8 } }).name).toBe('fixture');
+  const attempts = [
+    { pool: 'fixture', state: 'running' },
+    { pool: 'fixture', state: 'waiting' },
+    { pool: 'fixture', state: 'pending' },
+    { pool: 'fixture', state: 'exited' },
+    { pool: 'cursor', state: 'running' },
+  ];
+  expect(countRunningByPool(attempts)).toEqual({ fixture: 2, cursor: 1 });
+  expect(countWaitingByPool(attempts)).toEqual({ fixture: 1 });
+  expect(poolBurnStatus([open, capped], [current], now, span, { fixture: 8, capped: 5 }, { capped: 11 })).toEqual([
+    { name: 'fixture', allowanceKey: 'fixture', burnPerHour: 0 },
+    { name: 'capped', allowanceKey: 'capped', burnPerHour: 0, live: 5, waiting: 11, maxConcurrent: 8 },
+  ]);
 });
 
 test('A window reset between readings is not counted as burn', () => {

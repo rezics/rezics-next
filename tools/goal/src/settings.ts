@@ -7,7 +7,7 @@ import type { DerivedFile, Pool, PromotionPlacementSettings, Settings } from './
 import { validatePath } from './briefs.ts';
 import { readWebModules } from './workspace.ts';
 import { readPoolPolicies } from './pools.ts';
-import { loadLocalSettings, readLocalFile } from './local-settings.ts';
+import { ignoreUnknownKeys, loadLocalSettings, readLocalFile } from './local-settings.ts';
 import { parseNotes } from './notes.ts';
 import { DEFAULT_FLOW_THRESHOLDS } from './flow.ts';
 import { FORMAT_FLAGS } from './merge-train.ts';
@@ -159,7 +159,7 @@ function readArgvPrefix(
   return value as string[];
 }
 function keys(value: Record<string, unknown>, allowed: string[], label: string): void {
-  for (const key of Object.keys(value)) if (!allowed.includes(key)) throw new Error(`unknown ${label}.${key}`);
+  ignoreUnknownKeys(value, allowed, label);
 }
 /** The common Git directory identifies the main checkout even when invoked from a linked worktree. */
 export function mainCheckout(cwd = process.cwd()): string {
@@ -275,6 +275,7 @@ function settingsFromLocal(value: unknown, { env, initialMain, localFile }: Sett
       'checkScriptReaderRoot',
       'devPrelandingTypecheck',
       'devLandingBootCheck',
+      'devKernelImport',
       'hourlyReportNotifier',
     ],
     'integration',
@@ -431,6 +432,15 @@ function settingsFromLocal(value: unknown, { env, initialMain, localFile }: Sett
               if (typeof integration.devLandingBootCheck !== 'boolean')
                 throw new Error('devLandingBootCheck must be a boolean');
               return integration.devLandingBootCheck;
+            })(),
+          }),
+      ...(integration.devKernelImport === undefined
+        ? {}
+        : {
+            devKernelImport: (() => {
+              if (typeof integration.devKernelImport !== 'boolean')
+                throw new Error('devKernelImport must be a boolean');
+              return integration.devKernelImport;
             })(),
           }),
       tmuxCommand: text(integration.tmuxCommand, 'tmuxCommand'),

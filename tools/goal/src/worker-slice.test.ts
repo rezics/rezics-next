@@ -3,7 +3,7 @@ import { chmodSync, existsSync, mkdtempSync, mkdirSync, readFileSync, rmSync, wr
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, describe, expect, test } from 'bun:test';
-import { WORKER_CPU_WEIGHT, WORKER_IO_WEIGHT, WORKER_SLICE, WorkerSlice } from './worker-slice.ts';
+import { WORKER_CPU_WEIGHT, WORKER_IO_WEIGHT, WORKER_SCOPE_MEMORY_MAX, WORKER_SLICE, WorkerSlice } from './worker-slice.ts';
 import { readControlPolicy, type ControlPolicy } from './policy.ts';
 
 const temporary: string[] = [];
@@ -222,6 +222,7 @@ describe('worker systemd slice', () => {
       '--collect',
       '--quiet',
       `--slice=${WORKER_SLICE}`,
+      `--property=MemoryMax=${WORKER_SCOPE_MEMORY_MAX}`,
       expect.stringMatching(/^--unit=rezics-worker-task:one-3-[a-z0-9]+\.scope$/),
       'python3',
       '-c',
