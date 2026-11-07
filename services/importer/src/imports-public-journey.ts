@@ -13,7 +13,13 @@ import { resolve } from 'node:path';
 import { bangumiRecordUrl } from '@rezics/conversion/cross-media-entities';
 import { createAccountTokenProvider, IMPORTER_SCOPES, VNDB_IMPORTER_SCOPES } from './credentials.ts';
 import { runImportCli } from './cli.ts';
-import { createImportTransport, ImportTransportError } from './import-client.ts';
+import { createImportTransport, importTransportCause, ImportTransportError } from './import-client.ts';
+import {
+  formatSeedFailure,
+  mergeRemainingRequest,
+  remainingRequestFromPreparedJournal,
+  remainingRequestFromTransport,
+} from './seed-remaining-request.ts';
 import { ImportSession } from './import-session.ts';
 import { GLOBAL_CONTEXT, selectedSynopsisQueryFromPublic } from './public-bulk-client.ts';
 import { BOOK_OWNER_GRANT_ACTIONS, grantOrdinaryOwnerActions } from './ordinary-owner-grants.ts';
@@ -299,18 +305,7 @@ export function firstPublicRow(id: FirstPublicImportRowId) {
 const CHILD_ERROR_LINE = /^(?:error:|Error:|TypeError:|remote-check:.*failed|task: Failed)/;
 
 export function walkFailureCause(error: unknown): string {
-  if (error instanceof ImportTransportError) {
-    const nested =
-      error.status === undefined && error.cause instanceof Error
-        ? error.cause.message.split('\n')[0]!.slice(0, 120)
-        : undefined;
-    return ['Import transport request failed', error.status, error.type, error.code, error.phase, nested]
-      .filter((part) => part !== undefined && part !== '')
-      .join(' ')
-      .slice(0, 240);
-  }
-  const text = error instanceof Error ? error.message : String(error);
-  return text.split('\n')[0]!.slice(0, 240);
+  return importTransportCause(error);
 }
 
 function isRetryableWalkTransport(error: unknown): boolean {
@@ -887,7 +882,10 @@ export async function runImportsPublicJourney(): Promise<WalkInventory> {
       publication = loaded.publication;
       selectJourneyWorks(publication.published);
     } catch (error) {
-      seedCause = walkFailureCause(error);
+      const journal = remainingRequestFromPreparedJournal(resolve(root, '.temp/cross-media-seed/showcase.sqlite'));
+      const transport = error instanceof ImportTransportError ? remainingRequestFromTransport(error) : undefined;
+      const remaining = journal || transport ? mergeRemainingRequest(journal, transport) : undefined;
+      seedCause = remaining ? formatSeedFailure(error, remaining) : walkFailureCause(error);
     }
   }
 

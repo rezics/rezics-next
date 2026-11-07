@@ -3,7 +3,14 @@ import { chmod, mkdir, readFile, writeFile } from 'node:fs/promises';
 import { dirname, join, resolve } from 'node:path';
 import { createKernelClient } from '@rezics/client';
 import { createAccountTokenProvider, IMPORTER_SCOPES } from '../../services/importer/src/credentials.ts';
-import { createImportTransport } from '../../services/importer/src/import-client.ts';
+import { createImportTransport, ImportTransportError } from '../../services/importer/src/import-client.ts';
+import {
+  formatSeedFailure,
+  mergeRemainingRequest,
+  remainingRequestFromPreparedJournal,
+  remainingRequestFromTransport,
+  writeSeedRemainingRequest,
+} from '../../services/importer/src/seed-remaining-request.ts';
 import { createImportFetch } from '../../services/importer/src/import-fetch.ts';
 import {
   developmentPersonalListScopes,
@@ -332,7 +339,12 @@ if (import.meta.main) {
       if ((await runDevelopmentSeed()).state !== 'complete') process.exitCode = 1;
     } else await runCrossMediaSeedCli(args);
   } catch (error) {
-    process.stderr.write(`${error instanceof Error ? error.message : 'Cross-media seed failed'}\n`);
+    const directory = resolve(import.meta.dir, '../../.temp/cross-media-seed');
+    const journal = remainingRequestFromPreparedJournal(join(directory, 'showcase.sqlite'));
+    const transport = error instanceof ImportTransportError ? remainingRequestFromTransport(error) : undefined;
+    const remaining = journal || transport ? mergeRemainingRequest(journal, transport) : undefined;
+    if (remaining) await writeSeedRemainingRequest(directory, remaining);
+    process.stderr.write(`${formatSeedFailure(error, remaining)}\n`);
     process.exitCode = 1;
   }
 }

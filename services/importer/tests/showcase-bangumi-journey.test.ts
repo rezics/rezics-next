@@ -1,5 +1,5 @@
 import { expect, test } from 'bun:test';
-import { mkdir, mkdtemp, readdir, rm, writeFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, readFile, readdir, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { citedAnimeCreditTargets, journeyTargets, selectJourneyWorks } from '../src/showcase-bangumi-journey.ts';
@@ -12,6 +12,12 @@ import {
   type CrossMediaTables,
 } from '../src/cross-media-seed.ts';
 import { ImportTransportError } from '../src/import-client.ts';
+import {
+  formatSeedFailure,
+  remainingRequestFromPreparedCommand,
+  remainingRequestFromPreparedJournal,
+  writeSeedRemainingRequest,
+} from '../src/seed-remaining-request.ts';
 import {
   FIRST_PUBLIC_IMPORT_ROWS,
   applyWalkInventoryToCapabilities,
@@ -371,6 +377,10 @@ test('operator causes keep ImportTransportError status and seed causes keep the 
   expect(walkFailureCause(new ImportTransportError(403, 'about:blank', 'forbidden'))).toBe(
     'Import transport request failed 403 about:blank forbidden',
   );
+  const named = new ImportTransportError(503);
+  named.method = 'POST';
+  named.path = '/v1/subjects:batchWrite';
+  expect(walkFailureCause(named)).toBe('Import transport request failed 503 POST /v1/subjects:batchWrite');
   const nested = new ImportTransportError();
   nested.cause = new TypeError('Import requests must target the configured API origin under /v1/');
   expect(walkFailureCause(nested)).toBe(
@@ -387,6 +397,48 @@ test('operator causes keep ImportTransportError status and seed causes keep the 
   expect(walkChildFailure('seed', 1, 'noise\n', 'Invalid record binding operation\n').message).toBe(
     'seed exited 1: Invalid record binding operation',
   );
+});
+
+test('seed remaining request names the prepared classification create without bodies', async () => {
+  const directory = await mkdtemp(join(tmpdir(), 'seed-remaining-'));
+  try {
+    const remaining = remainingRequestFromPreparedCommand({
+      op: 'create',
+      source: {
+        source: 'vndb_cross_media',
+        external_id: 'vocabulary:vndb.releases.media',
+        converter_revision: 'vndb-release-classification-vocabulary@1',
+      },
+      subject: { type: 'skos:ConceptScheme' },
+    });
+    expect(remaining).toEqual({
+      method: 'POST',
+      path: '/v1/subjects:batchWrite',
+      op: 'create',
+      source: 'vndb_cross_media',
+      externalId: 'vocabulary:vndb.releases.media',
+      nativeType: 'skos:ConceptScheme',
+      converter: 'vndb-release-classification-vocabulary@1',
+      journalState: 'prepared',
+    });
+    const error = new ImportTransportError();
+    expect(formatSeedFailure(error, remaining)).toBe(
+      'Import transport request failed POST /v1/subjects:batchWrite create vndb_cross_media vocabulary:vndb.releases.media skos:ConceptScheme',
+    );
+    await writeSeedRemainingRequest(directory, remaining);
+    expect(JSON.parse(await readFile(join(directory, 'remaining-request.json'), 'utf8'))).toEqual(remaining);
+    const journal = join(directory, 'showcase.sqlite');
+    const { Database } = await import('bun:sqlite');
+    const db = new Database(journal);
+    db.exec(
+      `CREATE TABLE showcase_command (command_key TEXT PRIMARY KEY, command_json TEXT NOT NULL, state TEXT NOT NULL)`,
+    );
+    db.run("INSERT INTO showcase_command VALUES ('k','{\"op\":\"create\",\"source\":{\"source\":\"vndb_cross_media\",\"external_id\":\"vocabulary:vndb.releases.media\",\"converter_revision\":\"vndb-release-classification-vocabulary@1\"},\"subject\":{\"type\":\"skos:ConceptScheme\"}}','prepared')");
+    db.close();
+    expect(remainingRequestFromPreparedJournal(journal)?.externalId).toBe('vocabulary:vndb.releases.media');
+  } finally {
+    await rm(directory, { recursive: true, force: true });
+  }
 });
 
 test('bounded VNDB entry_meta pages continue until selected revisions are found', async () => {

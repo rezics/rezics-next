@@ -247,6 +247,8 @@ export type ImportTransportPhase = 'readiness' | 'merge403' | 'SubjectGET503';
 
 /** Error diagnostics retain only the HTTP classifier, never remote bodies or credentials. */
 export class ImportTransportError extends Error {
+  method?: string;
+  path?: string;
   constructor(
     readonly status?: number,
     readonly type?: string,
@@ -259,8 +261,47 @@ export class ImportTransportError extends Error {
     this.name = 'ImportTransportError';
   }
 }
+
+export function importTransportCause(error: unknown): string {
+  if (error instanceof ImportTransportError) {
+    const nested =
+      error.status === undefined && error.cause instanceof Error
+        ? error.cause.message.split('\n')[0]!.slice(0, 120)
+        : undefined;
+    return [
+      'Import transport request failed',
+      error.status,
+      error.type,
+      error.code,
+      error.phase,
+      error.method,
+      error.path,
+      nested,
+    ]
+      .filter((part) => part !== undefined && part !== '')
+      .join(' ')
+      .slice(0, 240);
+  }
+  const text = error instanceof Error ? error.message : String(error);
+  return text.split('\n')[0]!.slice(0, 240);
+}
+
 type ClientResponse = { status: number; data: unknown; error: unknown; response?: Response };
-function httpFailure(reply: ClientResponse): ImportTransportError {
+function requestPath(url: string | undefined): string | undefined {
+  if (!url) return undefined;
+  try {
+    const path = new URL(url).pathname;
+    return path.startsWith('/v1/') && path.length <= 200 ? path : undefined;
+  } catch {
+    return undefined;
+  }
+}
+function attachRequest(error: ImportTransportError, method?: string, path?: string): ImportTransportError {
+  if (method === 'GET' || method === 'POST' || method === 'PUT' || method === 'DELETE') error.method = method;
+  if (path) error.path = path;
+  return error;
+}
+function httpFailure(reply: ClientResponse, last?: { method: string; path: string }): ImportTransportError {
   // Only public problem identifiers are useful to callers. No remote diagnostic text is retained.
   const value: unknown =
     typeof reply.error === 'object' && reply.error !== null && !types.isProxy(reply.error)
@@ -287,18 +328,23 @@ function httpFailure(reply: ClientResponse): ImportTransportError {
       : typeof reply.status === 'number'
         ? reply.status
         : undefined;
-  return new ImportTransportError(
-    status,
-    safeType,
-    safeCode,
-    field('retryable') === true,
-    reply.response ? importRetryState(reply.response) : undefined,
+  return attachRequest(
+    new ImportTransportError(
+      status,
+      safeType,
+      safeCode,
+      field('retryable') === true,
+      reply.response ? importRetryState(reply.response) : undefined,
+    ),
+    last?.method ?? reply.response?.method,
+    last?.path ?? requestPath(reply.response?.url),
   );
 }
 async function response(
   call: () => Promise<ClientResponse>,
   expected: number | readonly number[],
   signal?: AbortSignal,
+  last?: () => { method: string; path: string } | undefined,
 ) {
   signal?.throwIfAborted();
   let reply: ClientResponse;
@@ -306,10 +352,11 @@ async function response(
     reply = await call();
   } catch (error) {
     signal?.throwIfAborted();
-    if (error instanceof ImportTransportError) throw error;
+    const request = last?.();
+    if (error instanceof ImportTransportError) throw attachRequest(error, request?.method, request?.path);
     const failure = new ImportTransportError();
     failure.cause = error;
-    throw failure;
+    throw attachRequest(failure, request?.method, request?.path);
   }
   signal?.throwIfAborted();
   if (
@@ -317,7 +364,7 @@ async function response(
     reply.error ||
     !(typeof expected === 'number' ? reply.status === expected : expected.includes(reply.status))
   )
-    throw httpFailure(reply);
+    throw httpFailure(reply, last?.());
   if (expected === 204) {
     ensure(reply.data === undefined || reply.data === null || reply.data === '');
     return { status: reply.status, body: null, headers: reply.response.headers };
@@ -379,23 +426,34 @@ export function createImportTransport(options: ImportTransportOptions) {
       !origin.hash,
   );
   const importFetch = options.importFetch ?? createImportFetch({ ...options, token: options.tokenProvider });
-  const observedFetch: typeof fetch = options.onDeniedResponse
-    ? Object.assign(
-        async (input: Parameters<typeof fetch>[0], init?: Parameters<typeof fetch>[1]) => {
-          const request = new Request(input, init);
-          const reply = await importFetch(request);
-          if (reply.status === 401 || reply.status === 403) {
-            await options.onDeniedResponse!({
-              method: request.method,
-              path: new URL(request.url).pathname,
-              response: reply.clone(),
-            });
-          }
-          return reply;
-        },
-        { preconnect: importFetch.preconnect },
-      )
-    : importFetch;
+  let lastRequest: { method: string; path: string } | undefined;
+  const observedFetch: typeof fetch = Object.assign(
+    async (input: Parameters<typeof fetch>[0], init?: Parameters<typeof fetch>[1]) => {
+      const request = new Request(input, init);
+      const path = requestPath(request.url);
+      lastRequest = {
+        method: request.method,
+        path: path ?? '/v1/subjects:batchWrite',
+      };
+      try {
+        const reply = await importFetch(request);
+        if (options.onDeniedResponse && (reply.status === 401 || reply.status === 403)) {
+          await options.onDeniedResponse({
+            method: request.method,
+            path: path ?? new URL(request.url).pathname,
+            response: reply.clone(),
+          });
+        }
+        return reply;
+      } catch (error) {
+        if (error instanceof ImportTransportError) throw attachRequest(error, lastRequest.method, lastRequest.path);
+        const failure = new ImportTransportError();
+        failure.cause = error;
+        throw attachRequest(failure, lastRequest.method, lastRequest.path);
+      }
+    },
+    { preconnect: importFetch.preconnect },
+  );
   const client =
     options.client ??
     createKernelClient(options.origin, {
@@ -404,6 +462,11 @@ export function createImportTransport(options: ImportTransportOptions) {
       ...(options.onSession === undefined ? {} : { onSession: options.onSession }),
     });
   const fetchOptions = (signal?: AbortSignal) => (signal === undefined ? {} : { fetch: { signal } });
+  const exchange = (
+    call: () => Promise<ClientResponse>,
+    expected: number | readonly number[],
+    signal?: AbortSignal,
+  ) => response(call, expected, signal, () => lastRequest);
 
   async function sendBatch(body: BatchWriteRequest, signal?: AbortSignal): Promise<BatchWriteResult> {
     const results: BatchWriteResult['results'] = [];
@@ -425,7 +488,7 @@ export function createImportTransport(options: ImportTransportOptions) {
           })();
       for (let attempt = 0; ; attempt++) {
         const request = { commands: indices.map((index) => body.commands[index]!) };
-        const reply = await response(
+        const reply = await exchange(
           () => client.subjects.$batchWrite.post(request, fetchOptions(controller.signal)),
           200,
           controller.signal,
@@ -482,7 +545,7 @@ export function createImportTransport(options: ImportTransportOptions) {
         (body.expected_metadata_revision === null ||
           (Number.isSafeInteger(body.expected_metadata_revision) && body.expected_metadata_revision > 0)),
     );
-    const reply = await response(
+    const reply = await exchange(
       () =>
         client['source-records'].$setMetadata.post(body, {
           headers: { 'idempotency-key': idempotencyKey(input.idempotencyKey) },
@@ -536,7 +599,7 @@ export function createImportTransport(options: ImportTransportOptions) {
   ): Promise<void> {
     ensure(typeof input.subjectId === 'string' && uuid.test(input.subjectId) && input.source === 'vndb');
     const body = sourceStatisticBody(input.value);
-    const reply = await response(
+    const reply = await exchange(
       () =>
         client
           .subjects({ id: input.subjectId })
@@ -580,7 +643,7 @@ export function createImportTransport(options: ImportTransportOptions) {
         new Date(`${value.asOf}T00:00:00.000Z`).toISOString().slice(0, 10) === value.asOf,
     );
     // The generated client maps the registered custom method to the public :clear URL.
-    await response(
+    await exchange(
       () =>
         client
           .subjects({ id: input.subjectId })
@@ -643,7 +706,7 @@ export function createImportTransport(options: ImportTransportOptions) {
         tuple.externalId.length <= 255 &&
         FIELD_GROUPS.includes(tuple.fieldGroup),
     );
-    const reply = await response(
+    const reply = await exchange(
       () => client.sourceFences.$check.get({ query: tuple, ...fetchOptions(signal) }),
       200,
       signal,
@@ -662,7 +725,7 @@ export function createImportTransport(options: ImportTransportOptions) {
   }
   async function postMedia(body: MediaImportRequest, key: string, signal?: AbortSignal) {
     const header = idempotencyKey(key);
-    const reply = await response(
+    const reply = await exchange(
       () => client.media.$importFromUrl.post(body, { headers: { 'idempotency-key': header }, ...fetchOptions(signal) }),
       202,
       signal,
@@ -695,7 +758,7 @@ export function createImportTransport(options: ImportTransportOptions) {
   }
   async function mediaStatus(id: string, signal?: AbortSignal) {
     mediaId(id);
-    const reply = await response(() => client.media({ id }).$importStatus.get(fetchOptions(signal)), 200, signal);
+    const reply = await exchange(() => client.media({ id }).$importStatus.get(fetchOptions(signal)), 200, signal);
     ensure(checkMediaImportStatus(reply.body).length === 0);
     const status = reply.body as MediaImportStatus;
     ensure(status.media.id === id);
@@ -714,7 +777,7 @@ export function createImportTransport(options: ImportTransportOptions) {
   ): Promise<MediaVariantDecision> {
     mediaId(id);
     ensure(/^(?:avif|webp)-[1-9][0-9]{0,4}$/u.test(variant));
-    const reply = await response(
+    const reply = await exchange(
       () => client.media({ id }).$authorizeDownload.get({ query: { variant }, ...fetchOptions(signal) }),
       200,
       signal,
@@ -761,7 +824,7 @@ export function createImportTransport(options: ImportTransportOptions) {
       });
       if (reply.status !== 308) {
         try {
-          const result = await response(async () => reply, 200, signal);
+          const result = await exchange(async () => reply, 200, signal);
           const read = result.body as ReviewedSubjectRead;
           ensure(read?.subject?.id === current);
           return read;
@@ -793,7 +856,7 @@ export function createImportTransport(options: ImportTransportOptions) {
     source: ReviewedPersonSource,
     signal?: AbortSignal,
   ): Promise<ReviewedPersonRead> {
-    const reply = await response(
+    const reply = await exchange(
       () => reviewedPersonRequests(client).read(id, source, fetchOptions(signal)),
       200,
       signal,
@@ -819,7 +882,7 @@ export function createImportTransport(options: ImportTransportOptions) {
   ): Promise<ReviewedPersonAdmission & { location: string }> {
     const safe = snapshot(body, BODY_BYTES) as ReviewedPersonMerge;
     try {
-      const reply = await response(
+      const reply = await exchange(
         () =>
           reviewedPersonRequests(client).merge(safe, {
             headers: { 'idempotency-key': idempotencyKey(key) },
@@ -840,7 +903,7 @@ export function createImportTransport(options: ImportTransportOptions) {
   }
   /** Admission is not completion: callers observe the supplied Location until survivor and redirect are final. */
   async function readReviewedPersonOperation(location: string, signal?: AbortSignal): Promise<ReviewedPersonOperation> {
-    const reply = await response(
+    const reply = await exchange(
       () => reviewedPersonRequests(client).operationAt(location, fetchOptions(signal)),
       200,
       signal,
@@ -878,7 +941,7 @@ export function createImportTransport(options: ImportTransportOptions) {
       ...(query.cursor !== undefined ? { cursor: query.cursor } : {}),
     };
     const safe = snapshot(safeQuery, BODY_BYTES) as typeof safeQuery;
-    const reply = await response(
+    const reply = await exchange(
       () => client.subjects({ id }).candidates.get({ query: safe, ...fetchOptions(signal) }),
       200,
       signal,
@@ -895,7 +958,7 @@ export function createImportTransport(options: ImportTransportOptions) {
     mediaId(id);
     mediaId(candidate);
     const safe = snapshot(body, BODY_BYTES) as typeof body;
-    const reply = await response(
+    const reply = await exchange(
       () =>
         client
           .subjects({ id })
@@ -917,7 +980,7 @@ export function createImportTransport(options: ImportTransportOptions) {
   ): Promise<ReviewedAdoption> {
     mediaId(id);
     const safe = snapshot(body, BODY_BYTES) as typeof body;
-    const reply = await response(
+    const reply = await exchange(
       () =>
         client.subjects({ id }).$adopt.post(safe, {
           headers: { 'idempotency-key': idempotencyKey(key) },
@@ -933,7 +996,7 @@ export function createImportTransport(options: ImportTransportOptions) {
     signal?: AbortSignal,
   ): Promise<readonly ImportSourceStatisticFigure[]> {
     ensure(typeof input.subjectId === 'string' && uuid.test(input.subjectId));
-    const reply = await response(
+    const reply = await exchange(
       () => client.subjects({ id: input.subjectId })['source-statistics'].get(fetchOptions(signal)),
       200,
       signal,
@@ -1002,7 +1065,7 @@ export function createImportTransport(options: ImportTransportOptions) {
     ensure(typeof input.subjectId === 'string' && uuid.test(input.subjectId));
     ensure(Array.isArray(input.associations) && input.associations.length <= 32);
     const associations = input.associations.map(associationBody);
-    const reply = await response(
+    const reply = await exchange(
       () => classifications(input.subjectId).$read.post({ associations }, fetchOptions(signal)),
       200,
       signal,
@@ -1031,7 +1094,7 @@ export function createImportTransport(options: ImportTransportOptions) {
       input.expectedObservation === null ||
         (typeof input.expectedObservation === 'string' && /^[0-9a-f]{64}$/.test(input.expectedObservation)),
     );
-    const body = await response(
+    const body = await exchange(
       () =>
         classifications(input.subjectId).$put.post(
           {
@@ -1077,7 +1140,7 @@ export function createImportTransport(options: ImportTransportOptions) {
       input.expectedObservation === null ||
         (typeof input.expectedObservation === 'string' && /^[0-9a-f]{64}$/.test(input.expectedObservation)),
     );
-    const body = await response(
+    const body = await exchange(
       () =>
         classifications(input.subjectId).$clear.post(
           {
@@ -1105,7 +1168,7 @@ export function createImportTransport(options: ImportTransportOptions) {
   }
   async function readPublicFigure(input: { subjectId: string }, signal?: AbortSignal): Promise<ImportPublicFigure> {
     ensure(typeof input.subjectId === 'string' && uuid.test(input.subjectId));
-    const reply = await response(
+    const reply = await exchange(
       () => client.subjects({ id: input.subjectId }).figure.get(fetchOptions(signal)),
       200,
       signal,

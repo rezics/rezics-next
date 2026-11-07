@@ -121,6 +121,30 @@ test('candidate listing keeps the kernel status when the Treaty reply has no Res
   }
 });
 
+test('a thrown fetch keeps the remaining request method and path', async () => {
+  const transport = createImportTransport({
+    origin: 'https://api.importer.test',
+    tokenProvider: async () => 'test-token',
+    maxAttempts: 1,
+    sleep: async () => {},
+    fetch: (async () => {
+      throw new TypeError('ECONNREFUSED');
+    }) as typeof fetch,
+  });
+  try {
+    await transport.reviewedCandidates(subjectId, {
+      property: 'schema:name',
+      context: '00000000-0000-4000-8000-000000000000',
+      limit: 100,
+    });
+    throw new Error('expected transport failure');
+  } catch (error) {
+    expect(error).toBeInstanceOf(ImportTransportError);
+    expect((error as ImportTransportError).method).toBe('GET');
+    expect((error as ImportTransportError).path).toBe(`/v1/subjects/${subjectId}/candidates`);
+  }
+});
+
 test('one batch deadline cancels a pending member retry and releases its timer', async () => {
   let expire!: () => void;
   let clears = 0;
