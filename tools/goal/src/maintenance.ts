@@ -4,7 +4,7 @@ import { existsSync, readFileSync, renameSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import type { Runtime } from './config.ts';
 import { acquireDirectoryLease, LeaseHeldError } from './lease.ts';
-import { terminateProcessGroup } from './process.ts';
+import { REUSED_PID_REFUSAL, terminateProcessGroup } from './process.ts';
 import { regenerateDerivedHead } from './promotion.ts';
 import { completedUtcHour } from './efficiency-report-time.ts';
 
@@ -82,7 +82,14 @@ export async function runMaintenance(job: MaintenanceJob | 'all', runtime: Runti
               signal.throwIfAborted();
               if (existsSync(task.worktree)) continue;
               for (const attempt of runtime.store.attempts(task.id))
-                if (attempt.process) await step(`reap ${task.id}`, () => terminateProcessGroup(attempt.process, 1000));
+                if (attempt.process)
+                  await step(`reap ${task.id}`, () =>
+                    terminateProcessGroup(attempt.process, 1000).catch((error: unknown) => {
+                      // A reused PID means the recorded worker is gone; there is nothing of this attempt left to reap.
+                      if (error instanceof Error && error.message === REUSED_PID_REFUSAL) return;
+                      throw error;
+                    }),
+                  );
             }
             break;
           case 'detect':

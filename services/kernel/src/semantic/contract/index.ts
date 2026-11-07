@@ -86,3 +86,14 @@ export type {
   SubjectReadingNativePort,
   SubjectReadingAuthorizationPort,
 } from './subject-reading.ts';
+
+export { CoverSummarySchema, SubjectSummarySchema, RelatedSubjectSummarySchema } from './summaries.ts';
+export type {
+  CoverCredit,
+  CoverSummary,
+  SubjectSummary,
+  RelatedSubjectSummary,
+  PublicSummaryQuery,
+  PublicSummaryRead,
+} from './summaries.ts';
+export type { SummarySources, SummaryCoverState, SubjectSummaryObservation } from './summaries.ts';

@@ -231,6 +231,7 @@ function incarnationHasZombies(identity: ProcessIdentity, procRoot = '/proc'): b
   return false;
 }
 /** Verify custody before either signalling a group or declaring it terminal. */
+export const REUSED_PID_REFUSAL = 'process identity changed; refusing to signal reused PID';
 export function checkedProcessGroup(identity: ProcessIdentity): ProcessIdentity[] {
   if (identity.group !== identity.pid || identity.group === inspectProcessIdentity(process.pid)?.group)
     throw new Error('worker must own a detached process group');
@@ -241,7 +242,7 @@ export function checkedProcessGroup(identity: ProcessIdentity): ProcessIdentity[
   if (current && !matches(current, identity)) {
     const reused = current.start !== identity.start || current.boot !== identity.boot;
     if (reused && !members.length && processGroupIsAbsent(identity.group)) return [];
-    throw new Error('process identity changed; refusing to signal reused PID');
+    throw new Error(REUSED_PID_REFUSAL);
   }
   if (members.some((member) => member.boot !== identity.boot || BigInt(member.start) < BigInt(identity.start)))
     throw new Error('process group identity changed');

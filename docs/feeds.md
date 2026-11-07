@@ -347,6 +347,7 @@ with `bun run --cwd services/kernel derived`; declaration emission can also shar
 through `bun run --cwd services/kernel typecheck --emit-client`.
 
 Decision: public feed types alias the mounted response so the Kernel generator remains their transport authority.
+FeedItemSchema and FeedPageSchema stamp the Content contract page types, so GET /v1/feedItems stays a closed route.
 
 Home experience acceptance requires its existing card owner to consume the installed response and review populated,
 concealed-parent, signed-out, retry and account-switch states. Transport compilation and native HTTP assertions
@@ -534,6 +535,11 @@ The mounted method is `KernelClient.feedItems.get` (`GET /v1/feedItems`). Its re
 `FeedParentContextSchema`. `@rezics/client` exports `FeedPage`, `FeedItem` and `FeedContentItem`
 from that mounted response. `createFeedReads(deps: FeedDependencies): FeedReads` exposes
 `list(actor: Actor, query: FeedReadQuery, deadline: number, languages: readonly string[]): Promise<FeedPage>`.
+Decision: that factory is the transport-facing native adapter. Construction and read orchestration live in the
+Content feed application; Library Continue and Semantic public summaries bind once at ordinary composition.
+Missing producer authority is unavailable. Wire shapes, page 20, candidate 160, one renderer and sparse
+frontiers are unchanged. Destination kinds remain distinct; disclosed summary and Continue page schemas stay
+composable TypeBox objects. The mounted schemas stamp those Content contract page types.
 `prepareFeedContentContext(dependencies: FeedContentContextDependencies, references: readonly FeedContentContextReference[],
 context: ReadContext, languages: readonly string[] = [], options: { observeThreads?: FeedThreadObserver } = {})`
 returns a single-use `FeedContentContextComposition.finish(): Promise<FeedContentContextFinished>`.

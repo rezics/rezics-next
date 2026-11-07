@@ -1,38 +1,13 @@
 import { memoizedValue } from '../memoized.ts';
-import { createBuiltinRuntime } from './builtin-runtime.ts';
 import { t } from 'elysia';
-import { deadlineClient } from '../access/authenticate.ts';
-import { attachCollectionListFacts } from './collection-list-facts.ts';
-import type { Pool } from 'pg';
 import type { TObject, TProperties } from 'typebox';
-import type {
-  FollowingSpaceActions,
-  FollowingSpaceDestination,
-  FollowingSpaceProjection,
-} from './following-space-contract.ts';
-import { ContributionAttributionSchema, type ContributionAttribution } from '../access/contribution-attribution.ts';
-import { readContributionAttributions } from '../access/public-identity.ts';
-import { readAccount } from '../access/account-data.ts';
-import { readPublicAccount } from '../access/public-identity.ts';
-import type { KernelClock } from '../clock.ts';
-import { readSpace, spaceReadEligibility } from '../community/space.ts';
-import { createResourcePublicEligibility } from '../access/public-eligibility.ts';
-import { withConnection } from '../database/pool.ts';
-import { ProblemError } from '../http/problem.ts';
-import { accessCheck, type Access, type Actor } from '../request/access.ts';
+import type { Actor } from '../request/access.ts';
 import { deadlineFor } from '../request/deadline.ts';
-import { routeOf } from '../route/route.ts';
-import { SubjectSummarySchema } from '../semantic/http/summaries.ts';
-import { readSubjectSummaryObservation, type SubjectSummary } from '../semantic/summaries.ts';
-import { currentCommandWorkAssociation } from '../command/work-context.ts';
-import { authoritativeTimeValue, mintReadTime } from '../command/command.ts';
-import { resolveSubject } from './subject-anchor.ts';
-import { decodeCursor, encodeCursor } from '../tokens/cursor.ts';
-import type { KeyRing } from '../tokens/seal.ts';
-import { createCollectionReads } from './collection-reads.ts';
-import collectionRead from './collection-reads-collection.sql';
-import memberPage from './collection-reads-members.sql';
-import { isOrdinalKey } from './ordinal.ts';
+import { ContributionAttributionSchema, type ContributionAttribution } from '../access/contract/index.ts';
+import { SubjectSummarySchema, type SubjectSummary } from '../semantic/contract/index.ts';
+import type { LibraryEmbedding, LibraryTargetSummary, FollowingSpaceProjection } from './contract/index.ts';
+import type { LibraryPresentationDependencies } from './adapters/presentation.ts';
+import { requireLibraryPresentation } from './domain-binding.ts';
 import { WORK_STEP_DEADLINE_MS } from './command-support.ts';
 
 export const viewQuery = { view: t.Optional(t.Union([t.Literal('BASIC'), t.Literal('FULL')])) };
@@ -80,161 +55,9 @@ export function basicQuery<Q extends { view?: string }>({ view: _view, ...query 
   return query;
 }
 
-type Dependencies = { routeKey: Uint8Array; pool: Pool; access: Access; tokens: KeyRing; clock?: KernelClock };
-type Summary = SubjectSummary | { id: string; label: string; type: string };
-type AccountSummary = { id: string; handle: string | null; displayName: string | null };
-type Embedding<T> = T extends readonly (infer R)[]
-  ? Embedding<R>[]
-  : T extends object
-    ? { [K in keyof T]: Embedding<T[K]> } & (T extends { subjectId: string } ? { subject?: Summary | null } : object) &
-        (T extends { versionSubjectId: string | null } ? { versionSubject?: Summary | null } : object) &
-        (T extends { curatorAccountId: string } ? { curator?: AccountSummary | null } : object) &
-        (T extends { accountId: string }
-          ? { account?: AccountSummary | null; attribution?: ContributionAttribution | null }
-          : object) &
-        (T extends { targetId: string } ? { target?: Summary | null } : object) &
-        (T extends { targetId: string; targetType: string }
-          ? { destination?: FollowingSpaceDestination; actions?: FollowingSpaceActions }
-          : object)
-    : T;
+type Dependencies = LibraryPresentationDependencies;
 
-/** A request owns its caches and four workers; failures settle before releasing the request. */
-async function bounded<T>(values: readonly T[], work: (value: T) => Promise<void>) {
-  let next = 0;
-  const results = await Promise.allSettled(
-    Array.from({ length: Math.min(4, values.length) }, async () => {
-      while (next < values.length) await work(values[next++]!);
-    }),
-  );
-  for (const result of results) if (result.status === 'rejected') throw result.reason;
-}
-
-class ViewReader {
-  readonly subjects = new Map<string, Summary | null>();
-  readonly accounts = new Map<string, AccountSummary | null>();
-  readonly attributions = new Map<string, ContributionAttribution | null>();
-  readonly targets = new Map<string, Summary | null>();
-  constructor(
-    readonly deps: Dependencies,
-    readonly actor: Actor,
-    readonly deadline: number,
-    readonly follow = false,
-    readonly withholdChangedSource = false,
-  ) {}
-
-  observationDeps() {
-    return {
-      ...this.deps,
-      actor: this.actor,
-      deadline: this.deadline,
-      ...(currentCommandWorkAssociation() ? { work: currentCommandWorkAssociation()!.access } : {}),
-    };
-  }
-
-  resolve(id: string) {
-    return resolveSubject(this.deps, this.actor, id, undefined, {
-      pool: this.deps.pool,
-      deadline: this.deadline,
-      ...(currentCommandWorkAssociation() ? { work: currentCommandWorkAssociation()!.access } : {}),
-    });
-  }
-
-  /** Follow FULL keeps the private edge. Published-log FULL keeps the snapshot. Other FULL views still refuse. */
-  discloseSource(originalId: string | undefined, currentId: string | undefined, observationCurrent: boolean): boolean {
-    if (observationCurrent && currentId === originalId) return true;
-    if (this.follow || this.withholdChangedSource) return false;
-    throw new ProblemError('dependency_unavailable');
-  }
-
-  /** Original/terminal authorization, identity/Source/cover fences and language/profile/type currentness
-   * come from Semantic's bounded summary/observation producer, not a full Subject home read.
-   */
-  async subject(id: string): Promise<Summary | null> {
-    const resolved = await this.resolve(id);
-    if (!resolved) return null;
-    const observed = await readSubjectSummaryObservation(this.observationDeps(), [resolved.subjectId], {
-      displayFallback: true,
-    });
-    const current = await this.resolve(id);
-    if (!this.discloseSource(resolved.subjectId, current?.subjectId, await observed.current())) return null;
-    return observed.summaries.get(resolved.subjectId) ?? null;
-  }
-
-  async loadSubjects(ids: readonly string[]) {
-    const unique = [...new Set(ids)];
-    const resolved = new Map<string, string>();
-    await bounded(unique, async (id) => {
-      const value = await this.resolve(id);
-      if (value) resolved.set(id, value.subjectId);
-      else this.subjects.set(id, null);
-    });
-    const terminals = [...new Set(resolved.values())];
-    if (terminals.length === 0) return;
-    const observed = await readSubjectSummaryObservation(this.observationDeps(), terminals, { displayFallback: true });
-    const observationCurrent = await observed.current();
-    await bounded([...resolved], async ([requested, terminal]) => {
-      const current = await this.resolve(requested);
-      if (!this.discloseSource(terminal, current?.subjectId, observationCurrent)) {
-        this.subjects.set(requested, null);
-        return;
-      }
-      this.subjects.set(requested, observed.summaries.get(terminal) ?? null);
-    });
-  }
-
-  async account(id: string): Promise<AccountSummary | null> {
-    const route = routeOf(id);
-    if (route === null) return null;
-    const value = await withConnection(this.deps.pool, (client) =>
-      readPublicAccount(deadlineClient(client, this.deadline), route, id),
-    );
-    return value && value.state !== 'deleted' && 'handle' in value
-      ? { id: value.accountId, handle: value.handle, displayName: value.displayName }
-      : null;
-  }
-
-  async target(id: string, type: string): Promise<Summary | null> {
-    if (type === 'subject') return this.subjects.get(id) ?? null;
-    const { pool, access } = this.deps;
-    if (type === 'collection') {
-      try {
-        const reads = createCollectionReads(this.deps);
-        const value = this.follow
-          ? await reads.readCollectionSummary(this.actor, id, this.deadline, currentCommandWorkAssociation()?.access)
-          : await reads.readCollection(this.actor, id, this.deadline);
-        return value.title === null ? null : { id, type, label: value.title };
-      } catch (error) {
-        if (error instanceof ProblemError && error.code === 'not_found') return null;
-        throw error;
-      }
-    }
-    const route = routeOf(id);
-    if (route === null) return null;
-    const identity = { route, id };
-    const check = await accessCheck(
-      access,
-      this.actor,
-      'space:read',
-      { ...identity, eligibility: spaceReadEligibility(identity) },
-      {
-        pool,
-        deadline: this.deadline,
-        ...(this.follow
-          ? { ...(currentCommandWorkAssociation() ? { work: currentCommandWorkAssociation()!.access } : {}) }
-          : {}),
-      },
-    );
-    return withConnection(pool, async (connection) => {
-      const client = deadlineClient(connection, this.deadline);
-      const time = await mintReadTime(client, this.deps.clock);
-      if (!(await check(client, time))) return null;
-      const value = await readSpace(client, id, authoritativeTimeValue(time));
-      return value ? { id, type, label: value.title ?? '' } : null;
-    });
-  }
-}
-
-/** FULL adds only public summaries. BASIC returns the original object without an extra read. */
+/** FULL construction and bounded reads belong to the composed Library application. */
 export async function fullView<T>(
   deps: Dependencies,
   actor: Actor,
@@ -250,233 +73,21 @@ export async function fullView<T>(
       deadline: number,
     ) => Promise<ReadonlyMap<string, FollowingSpaceProjection>>;
   }> = {},
-): Promise<Embedding<T>> {
-  if (view !== 'FULL') return body as Embedding<T>;
-  const reader = new ViewReader(
-    deps,
-    actor,
-    options.deadline ?? deadlineFor(WORK_STEP_DEADLINE_MS),
-    options.follow,
-    options.withholdChangedSource === true,
-  );
-  const rows = Object.values(body as Record<string, unknown>).flatMap((value) =>
-    Array.isArray(value) ? value : value && typeof value === 'object' ? [value] : [],
-  ) as Record<string, unknown>[];
-  const subjectIds = new Set<string>(),
-    accountIds = new Set<string>();
-  const targets = new Map<string, string>();
-  const spaceTargetIds = new Set<string>();
-  for (const row of rows) {
-    if (typeof row.subjectId === 'string') subjectIds.add(row.subjectId);
-    if (typeof row.versionSubjectId === 'string') subjectIds.add(row.versionSubjectId);
-    for (const key of ['curatorAccountId', 'accountId']) if (typeof row[key] === 'string') accountIds.add(row[key]);
-    if (typeof row.targetId === 'string' && typeof row.targetType === 'string') {
-      if (row.targetType === 'subject') subjectIds.add(row.targetId);
-      else if (row.targetType === 'space' && options.followingSpaces) spaceTargetIds.add(row.targetId);
-      else targets.set(row.targetId, row.targetType);
-    }
-  }
-  const followingSpaces = options.followingSpaces
-    ? await options.followingSpaces(actor, [...spaceTargetIds], options.deadline ?? deadlineFor(WORK_STEP_DEADLINE_MS))
-    : new Map<string, FollowingSpaceProjection>();
-  await reader.loadSubjects([...subjectIds]);
-  const attributions = await withConnection(deps.pool, (client) =>
-    readContributionAttributions(deadlineClient(client, reader.deadline), [...accountIds]),
-  );
-  for (const [id, attribution] of attributions) reader.attributions.set(id, attribution);
-  await bounded([...accountIds], async (id) => {
-    reader.accounts.set(id, await reader.account(id));
-  });
-  await bounded([...targets], async ([id, type]) => {
-    reader.targets.set(id, await reader.target(id, type));
-  });
-  const enrich = (row: Record<string, unknown>) => {
-    const spaceProjection =
-      typeof row.targetId === 'string' && row.targetType === 'space' && options.followingSpaces
-        ? followingSpaces.get(row.targetId)
-        : undefined;
-    return {
-      ...row,
-      ...(typeof row.subjectId === 'string' ? { subject: reader.subjects.get(row.subjectId) ?? null } : {}),
-      ...(typeof row.versionSubjectId === 'string'
-        ? { versionSubject: reader.subjects.get(row.versionSubjectId) ?? null }
-        : {}),
-      ...(typeof row.curatorAccountId === 'string'
-        ? { curator: reader.accounts.get(row.curatorAccountId) ?? null }
-        : {}),
-      ...(typeof row.accountId === 'string'
-        ? {
-            account: reader.accounts.get(row.accountId) ?? null,
-            attribution: reader.attributions.get(row.accountId) ?? null,
-          }
-        : {}),
-      ...(typeof row.targetId === 'string'
-        ? {
-            target:
-              row.targetType === 'subject'
-                ? (reader.subjects.get(row.targetId) ?? null)
-                : options.followingSpaces && row.targetType === 'space'
-                  ? (spaceProjection?.target ?? null)
-                  : (reader.targets.get(row.targetId) ?? null),
-          }
-        : {}),
-      ...(options.followingSpaces && typeof row.targetId === 'string' && row.targetType === 'space'
-        ? {
-            destination: spaceProjection?.destination ?? { kind: 'unavailable' as const },
-            actions: spaceProjection?.actions ?? { status: 'unavailable' as const },
-          }
-        : {}),
-    };
-  };
-  return Object.fromEntries(
-    Object.entries(body as Record<string, unknown>).map(([key, value]) => [
-      key,
-      Array.isArray(value)
-        ? value.map((row) => (row && typeof row === 'object' ? enrich(row) : row))
-        : value && typeof value === 'object'
-          ? enrich(value as Record<string, unknown>)
-          : value,
-    ]),
-  ) as Embedding<T>;
+) {
+  // BASIC is usable without a composed runtime and never opens a reader.
+  if (view !== 'FULL')
+    return body as LibraryEmbedding<T, SubjectSummary | LibraryTargetSummary, ContributionAttribution>;
+  const deadline = options.deadline ?? deadlineFor(WORK_STEP_DEADLINE_MS);
+  return requireLibraryPresentation().fullView(deps, actor, view, body, { ...options, deadline });
 }
 
-/** FULL members use the same cursor and anchored checks, retaining the readability result's label. */
-export async function fullMembers(
+/** Uses one native page and the original opaque sparse continuation. */
+export function fullMembers(
   deps: Dependencies,
   actor: Actor,
   collectionId: string,
   options: { cursor?: string; limit?: number; languages?: readonly string[] },
   deadline: number = deadlineFor(WORK_STEP_DEADLINE_MS),
 ) {
-  const builtins = createBuiltinRuntime(deps);
-  if (await builtins.read(actor, collectionId, 'collection:read', deadline))
-    return builtins.members(actor, collectionId, { ...options, deadline });
-  const parsedRoute = routeOf(collectionId);
-  if (parsedRoute === null) throw new ProblemError('not_found');
-  const route = parsedRoute;
-  const binding = { operation: 'library.collection.members', parameters: { collectionId } };
-  const limit = options.limit ?? 20;
-  if (!Number.isInteger(limit) || limit < 1 || limit > 100) throw new ProblemError('invalid_request');
-  async function readPage() {
-    const sink: { seen: boolean; row: Awaited<ReturnType<typeof collectionRead.run>> } = { seen: false, row: null };
-    const identity = { route, id: collectionId };
-    const check = await accessCheck(
-      deps.access,
-      actor,
-      'collection:read',
-      {
-        ...identity,
-        eligibility: createResourcePublicEligibility({
-          resource: identity,
-          action: 'collection:read',
-          async prepare() {
-            return { ready: true };
-          },
-          async verify({ client }) {
-            sink.row = await collectionRead.run(client, identity);
-            sink.seen = true;
-            return sink.row !== null && sink.row.state === 'active' && sink.row.visibility !== 'private';
-          },
-        }),
-      },
-      { pool: deps.pool, deadline },
-    );
-    return withConnection(deps.pool, async (connection) => {
-      const client = deadlineClient(connection, deadline);
-      await client.query('BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY');
-      try {
-        const viewer =
-          actor.kind === 'account' && routeOf(actor.accountId) !== null
-            ? await readAccount(client, routeOf(actor.accountId)!, actor.accountId)
-            : null;
-        const allowed = await check(client);
-        if (!sink.seen) sink.row = await collectionRead.run(client, identity);
-        const collection = sink.row;
-        if (!collection || collection.state !== 'active') throw new ProblemError('not_found');
-        // The same exact curator-T fence as BASIC members, before any child read.
-        if (collection.visibility !== 'public') {
-          const curator =
-            collection.curatorAccountId === null ? null : await readAccount(client, route, collection.curatorAccountId);
-          if (!curator || curator.state === 'deleted') throw new ProblemError('not_found');
-        }
-        // Match Collection reads: public/unlisted disclosure is independent of the private grant branch.
-        if (
-          collection.visibility === 'private' &&
-          !(
-            allowed &&
-            actor.kind === 'account' &&
-            viewer &&
-            viewer.route === routeOf(actor.accountId) &&
-            viewer.accountId === actor.accountId &&
-            viewer.kind === 'actor' &&
-            viewer.state === 'active' &&
-            !viewer.fenced &&
-            Number.isSafeInteger(actor.authnEpoch) &&
-            actor.authnEpoch > 0 &&
-            BigInt(actor.authnEpoch) >= viewer.minimumAuthnEpoch &&
-            actor.scopes.includes('collection:read')
-          )
-        )
-          throw new ProblemError('not_found');
-        if (collection.membershipKind === 'dynamic') {
-          await client.query('COMMIT');
-          return { dynamic: true } as const;
-        }
-        let after: { ordinalKey: string; memberId: string } | null = null;
-        if (options.cursor !== undefined) {
-          const cursor = decodeCursor(deps.tokens, binding, options.cursor);
-          if (
-            !cursor.ok ||
-            cursor.after.length !== 2 ||
-            typeof cursor.after[0] !== 'string' ||
-            !isOrdinalKey(cursor.after[0]) ||
-            typeof cursor.after[1] !== 'string' ||
-            routeOf(cursor.after[1]) !== route
-          )
-            throw new ProblemError('invalid_cursor');
-          if (cursor.epoch !== collection.orderEpoch + 1) throw new ProblemError('stale_cursor');
-          after = { ordinalKey: cursor.after[0], memberId: cursor.after[1] };
-        }
-        const rows = await memberPage.run(client, {
-          route,
-          collection_id: collectionId,
-          after_ordinal_key: after?.ordinalKey ?? null,
-          after_member_id: after?.memberId ?? null,
-          limit: limit + 1,
-        });
-        await client.query('COMMIT');
-        return { rows, epoch: collection.orderEpoch + 1, fence: collection };
-      } catch (error) {
-        await client.query('ROLLBACK');
-        throw error;
-      }
-    });
-  }
-  const page = await readPage();
-  if ('dynamic' in page)
-    return createCollectionReads(deps).readMembers(actor, collectionId, { ...options, view: 'FULL' }, deadline);
-  const considered = page.rows.slice(0, limit);
-  const members = await attachCollectionListFacts(
-    { ...deps, actor, deadline },
-    considered.map((row) => {
-      if (row.addedAt === null) throw new Error('A live Collection member must retain its added time');
-      return { id: row.id, subjectId: row.subjectId, note: row.note, addedAt: new Date(row.addedAt).toISOString() };
-    }),
-    {
-      ...(options.languages === undefined ? {} : { languages: options.languages }),
-      async revalidate() {
-        // Reauthorize after the released Semantic homes; never publish a page from a changed source.
-        const current = await readPage();
-        if (JSON.stringify(current) !== JSON.stringify(page)) throw new ProblemError('semantic_not_ready');
-      },
-    },
-  );
-  const last = considered.at(-1);
-  return {
-    members,
-    next:
-      page.rows.length > limit && last
-        ? encodeCursor(deps.tokens, binding, { epoch: page.epoch, after: [last.ordinalKey, last.id] })
-        : null,
-  };
+  return requireLibraryPresentation().fullMembers(deps, actor, collectionId, options, deadline);
 }

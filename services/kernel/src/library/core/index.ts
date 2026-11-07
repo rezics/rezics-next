@@ -72,3 +72,4 @@ export {
   CopyConditionInvalidError,
 } from './copy-input.ts';
 export * from './copy-operations.ts';
+export { currentLibraryAccount } from './presentation.ts';

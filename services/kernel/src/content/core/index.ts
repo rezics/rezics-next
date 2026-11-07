@@ -26,3 +26,20 @@ export {
   workerDeadline,
 } from './work-source.ts';
 export type { ContentWorkSourceIdentity } from './work-source.ts';
+export {
+  admitFeedCandidateReservation,
+  admitFeedPageLimit,
+  advanceFeedFrontier,
+  canonicalFeedObject,
+  feedCandidateBound,
+  feedHasReadyFrontier,
+  feedLaneWidths,
+  initialFeedPosition,
+  initialFeedSources,
+  isDiscoveryReview,
+  isFollowingPost,
+  isFollowingThread,
+  mergeFeedLanes,
+  rejectFeedKindMismatches,
+  rewindFeedLanes,
+} from './feed.ts';

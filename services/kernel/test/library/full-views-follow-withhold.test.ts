@@ -1,4 +1,4 @@
-import { expect, mock, test } from 'bun:test';
+import { expect, test } from 'bun:test';
 import type { AccountActor } from '../../src/request/access.ts';
 
 const original = '0192f3a0-6c1e-7b2a-9d4e-000000000001';
@@ -13,50 +13,60 @@ const attributions = new Map<
   { id: string; kind: 'actor'; displayName: string } | { displayName: 'Deleted account' } | null
 >([[original, { id: original, kind: 'actor', displayName: 'Owner' }]]);
 
-mock.module('../../src/library/subject-anchor.ts', () => ({
-  resolveSubject: async (_deps: unknown, _actor: unknown, id: string) => {
-    const next = resolutions.shift();
-    return { subjectId: next ?? id, requestedSubjectId: id };
-  },
-}));
+import {
+  createLibraryPresentationApplication,
+  createSubjectPresentationApplication,
+} from '../../src/library/application/index.ts';
+import type { SubjectIdentityObservation, SubjectIdentityCapability } from '../../src/library/contract/index.ts';
+import { ProblemError } from '../../src/http/problem.ts';
+import { withFollowContribution } from '../../src/library/follow-contribution.ts';
 
-mock.module('../../src/semantic/summaries.ts', () => ({
-  readSubjectSummaryObservation: async (_deps: unknown, ids: readonly string[]) => ({
-    current: async () => observationCurrent,
-    summaries: new Map(ids.map((id) => [id, { id, type: 'schema:Book', label: { value: 'Book', language: 'en' } }])),
-  }),
-}));
-
-mock.module('../../src/database/pool.ts', () => ({
-  withConnection: async (_pool: unknown, work: (client: unknown) => Promise<unknown>) => work({}),
-}));
-
-mock.module('../../src/access/account-data.ts', () => ({
-  readAccount: async () => null,
-  readPublicAccount: async () => ({
-    accountId: original,
-    kind: 'actor',
-    state: 'active',
-    handle: 'owner',
-    displayName: 'Owner',
-  }),
-  readContributionAttributions: async (_client: unknown, ids: readonly string[]) =>
-    new Map(ids.map((id) => [id, attributions.has(id) ? attributions.get(id)! : null])),
-}));
-mock.module('../../src/access/public-identity.ts', () => ({
-  readContributionAttributions: async (_client: unknown, ids: readonly string[]) =>
-    new Map(ids.map((id) => [id, attributions.has(id) ? attributions.get(id)! : null])),
-}));
-
-const { fullView } = await import('../../src/library/views.ts');
-const { withFollowContribution } = await import('../../src/library/follow-contribution.ts');
-
-const deps = {
-  routeKey: new Uint8Array(32).fill(7),
-  pool: {} as never,
-  access: {} as never,
-  tokens: { current: 1, keys: new Map() },
+// The consumer seam replaces global module mocks; all existing observable assertions stay intact.
+let currentTerminal = original;
+const identity: SubjectIdentityCapability<undefined, SubjectIdentityObservation> = {
+  validId: () => true,
+  redirected: (from, to) => new Error(`${from} redirects to ${to}`),
+  readMappings: async (_context, ids) =>
+    ids.map((id) => {
+      currentTerminal = resolutions.shift() ?? id;
+      return { state: 'mapped', terminal: currentTerminal, epoch: 1n };
+    }),
+  prepareReference: async (_context, id) => async () =>
+    id === currentTerminal ? { state: 'present' } : { state: 'redirect', from: id, to: currentTerminal },
 };
+const deps = {};
+const unavailable = () => new ProblemError('dependency_unavailable');
+async function fullView<T>(
+  _deps: unknown,
+  _actor: AccountActor,
+  view: string,
+  body: T,
+  options: { follow?: true; withholdChangedSource?: true } = {},
+) {
+  const withholdChangedSource = options.follow === true || options.withholdChangedSource === true;
+  const subjects = createSubjectPresentationApplication(identity, {
+    unavailable,
+    observe: async (ids) => ({
+      current: async () => observationCurrent,
+      summaries: new Map(ids.map((id) => [id, { id, type: 'schema:Book', label: { value: 'Book', language: 'en' } }])),
+    }),
+  });
+  const full = createLibraryPresentationApplication({
+    unavailable,
+    subjects: (ids) => subjects(undefined, ids, withholdChangedSource),
+    account: async () => ({
+      value: { id: original, handle: 'owner', displayName: 'Owner' },
+      current: async () => true,
+    }),
+    attributions: async (ids) => ({
+      value: new Map(ids.map((id) => [id, attributions.get(id) ?? null])),
+      current: async () => true,
+    }),
+    target: async () => ({ value: null, current: async () => true }),
+  });
+  return full(view, body, { withholdChangedSource });
+}
+
 const actor: AccountActor = {
   kind: 'account',
   accountId: original,

@@ -1,6 +1,13 @@
 /** Native SQL and foreign Library adapters. Composition is the only production importer. */
 
 export { createProgressOperationCatalog, PROGRESS_MEANING_SQL, PROGRESS_REFRESH_SQL } from './progress-statements.ts';
+export {
+  continuePageSchema,
+  createContinuePageAdapter,
+  type DisclosedContinuePage,
+  type DisclosedContinueSubject,
+} from './continue-page.ts';
+
 export { createAuthorizationAdapter, type AuthorizationAdapterPorts } from './authorization.ts';
 export { createIdentityDisclosureAdapter, type IdentityDisclosureAdapterPorts } from './identity-disclosure.ts';
 export { createNativeIdentityBoundsAdapter } from './identity-native.ts';
@@ -69,3 +76,9 @@ export {
   type NativeCopyTypes,
   type NativeCopyProducers,
 } from './copies.ts';
+export { createNativeLibraryPresentation } from './presentation.ts';
+export type {
+  NativeLibraryPresentation,
+  NativeLibraryPresentationPorts,
+  LibraryPresentationDependencies,
+} from './presentation.ts';

@@ -43,3 +43,10 @@ export function createNativeSemanticCopyWorkReaderPort(searchEvidence: CopyWorkS
 }
 export { nativeReleasedDefinitions, type NativeReleasedDefinitions } from './released-definitions.ts';
 export { nativeCopyListContext, type NativeCopyListContext } from './copy-list-context.ts';
+
+export {
+  createLibrarySubjectIdentityAdapter,
+  observeLibrarySubjectSummaries,
+  readLibraryIdentityMappings,
+} from './library-presentation.ts';
+export type { LibrarySubjectIdentityContext } from './library-presentation.ts';
