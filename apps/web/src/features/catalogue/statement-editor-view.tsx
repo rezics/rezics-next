@@ -8,7 +8,7 @@ import { Field, FieldLabel } from '@rezics/ui/shadcn/field';
 import { Input } from '@rezics/ui/shadcn/input';
 import { NativeSelect, NativeSelectOption } from '@rezics/ui/shadcn/native-select';
 import { AuthoringDepartureBoundary, useAuthoringDeparture } from '../../threads/authoring-departure';
-import { useId, useLayoutEffect, useRef, useState } from 'react';
+import { useId, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -25,23 +25,26 @@ import { m } from '../../paraglide/messages.js';
 import { DefinitionGuideLink } from './definition-guide-view';
 import { DefinitionMeaning } from './definition-meaning';
 import { CandidateReview, type CandidateTransport } from '../../subject/candidate-review';
-import { subjectHref } from '../../subject/subject-href';
+import { subjectHref } from '../../subject/load-subject';
 import { ContributionLifecycle } from './contribution-lifecycle-view';
 import type { ContributionAddress, ContributionTransport } from './contribution-lifecycle';
 import {
-  correctionProperty,
+  applyEditorReload,
   correctionInspectionAvailability,
   correctionProposalAvailability,
   editableScalar,
-  statementInput,
-  validateStatement,
+  initialEditorDraft,
+  proposalDecision,
+  proposalFromDraft,
   type EditorRead,
   type EditorTransport,
   type ProposalCommand,
   type ProposalResult,
   type SnakInput,
   type StatementInput,
-} from './statement-editor';
+} from './statement-edit-application';
+import type { StatementFieldsRead, StatementScalarRead } from './statement-editor-contract';
+import { PartValue, StatementReadingProvider, type StatementReadingPort } from './statement-reading';
 import { quantityUnitLabel, unitSymbols } from '../../subject/quantity-presentation';
 
 import {
@@ -53,21 +56,13 @@ import {
 } from './statement-validation-presentation';
 import { statementDraftChanged } from './statement-editor-navigation';
 
-type Current = Extract<EditorRead, { ok: true }>;
-type ScalarRead = {
-  release: Pick<Current['release'], 'types' | 'properties'>;
-  public: Pick<Current['public'], 'related'>;
-};
 type StatementRemovalKind = 'qualifier' | 'reference' | 'part';
 const statementHolderKeys = new WeakMap<object, number>();
 export function statementHolderKey(value: object): number | undefined {
   return statementHolderKeys.get(value);
 }
-/** Creation has no subject DTO or invented identity; controls need only its chosen Type and related summaries. */
-export type StatementFieldsRead = ScalarRead & {
-  source: Current['source'];
-  public: ScalarRead['public'] & { subject: Pick<Current['public']['subject'], 'type'> };
-};
+export { PartValue };
+export type { StatementFieldsRead };
 const gregorian = 'http://www.wikidata.org/entity/Q1985727';
 const julian = 'http://www.wikidata.org/entity/Q1985786';
 
@@ -177,19 +172,6 @@ function StatementEditorNavigation({ dirty, pending }: { dirty: boolean; pending
   return null;
 }
 
-/** A read-only part still participates in the submitted statement. It is never filtered away. */
-export function PartValue({ part, read, locale }: { part: SnakInput; read: ScalarRead; locale: string }) {
-  const definition = read.release.properties[part.property.id];
-  if (!definition) return <span>{m.candidate_value_unavailable({}, { locale: locale as never })}</span>;
-  return (
-    <CandidateValue
-      snak={{ property: { ...part.property, data_type: definition?.datatype ?? '' }, value: part.value }}
-      related={read.public.related}
-      locale={locale}
-    />
-  );
-}
-
 function ScalarControl({
   part,
   definition,
@@ -204,7 +186,7 @@ function ScalarControl({
   ariaLabel?: string | undefined;
   part: SnakInput;
   definition: PropertyDefinition | undefined;
-  read: ScalarRead;
+  read: StatementScalarRead;
   locale: string;
   onChange: (value: SnakInput['value']) => void;
   unitLabel?: ((id: string) => string | null) | undefined;
@@ -1193,10 +1175,25 @@ export function StatementFields({
 
 export const StatementEditor = catalogueEditor(StatementEditorWorkspace);
 
+function liveStatementReadingPort(): StatementReadingPort {
+  return {
+    renderValue: ({ snak, related, locale, link }) => (
+      <CandidateValue snak={snak} related={related} locale={locale} link={link} />
+    ),
+  };
+}
+
+function LiveStatementReading({ children }: { children: ReactNode }) {
+  const port = useMemo(liveStatementReadingPort, []);
+  return <StatementReadingProvider port={port}>{children}</StatementReadingProvider>;
+}
+
 function StatementEditorWorkspace(props: Parameters<typeof StatementEditorLive>[0]) {
   return (
     <AuthoringDepartureBoundary sessionBound={false}>
-      <StatementEditorLive {...props} />
+      <LiveStatementReading>
+        <StatementEditorLive {...props} />
+      </LiveStatementReading>
     </AuthoringDepartureBoundary>
   );
 }
@@ -1220,12 +1217,8 @@ function StatementEditorLive({
   const o = { locale: locale as never };
   const feedbackId = useId();
   const [read, setRead] = useState(initial);
-  const [baseline, setBaseline] = useState<StatementInput | null>(() =>
-    initial.ok && initial.source ? statementInput(initial.source) : null,
-  );
-  const [draft, setDraft] = useState<StatementInput | null>(() =>
-    initial.ok && initial.source ? statementInput(initial.source) : null,
-  );
+  const [baseline, setBaseline] = useState<StatementInput | null>(() => initialEditorDraft(initial));
+  const [draft, setDraft] = useState<StatementInput | null>(() => initialEditorDraft(initial));
   const [failure, setFailure] = useState<Extract<ProposalResult, { ok: false }> | null>(null);
   const [result, setResult] = useState<Extract<ProposalResult, { ok: true }> | null>(null);
   const [busy, setBusy] = useState(false);
@@ -1300,35 +1293,6 @@ function StatementEditorLive({
       setFailure(null);
     }
   };
-  function matching(next: EditorRead): EditorRead {
-    if (!next.ok) return next;
-    const original = address.current;
-    const subject = next.public?.subject;
-    if (
-      !subject ||
-      !subject.labels ||
-      !subject.statements ||
-      !next.public.related ||
-      !next.release?.types ||
-      !next.release.properties ||
-      !next.release.types[subject.type]
-    )
-      return { ok: false, reason: 'unavailable' };
-    if (
-      original &&
-      (subject.id !== original.public.subject.id ||
-        subject.type !== original.public.subject.type ||
-        next.source?.id !== original.source?.id ||
-        next.source?.property.id !== original.source?.property.id)
-    )
-      return { ok: false, reason: 'stale' };
-    if (next.source) {
-      if (!correctionProperty(next.release, subject.type, next.source.property.id))
-        return { ok: false, reason: 'invalid' };
-      if (validateStatement(statementInput(next.source)).length) return { ok: false, reason: 'unavailable' };
-    }
-    return next;
-  }
   async function reload(event: MouseEvent<HTMLButtonElement>) {
     if (!lifetime.active() || running.current || pending.current || result) return;
     reloadIntent.current =
@@ -1344,15 +1308,14 @@ function StatementEditorLive({
     setBusy(true);
     const active = () => mount.active() && draftRevision.current === revision;
     try {
-      const next = matching(await transport.read());
+      const next = applyEditorReload(await transport.read(), address.current, draft);
       if (!active()) return;
-      setRead(next);
-      if (next.ok) {
-        address.current ??= next;
-        if (!draft && next.source) {
-          const nextDraft = statementInput(next.source);
-          setBaseline(nextDraft);
-          setDraft(nextDraft);
+      setRead(next.read);
+      if (next.read.ok) {
+        address.current ??= next.read;
+        if (next.draft) {
+          setBaseline(next.baseline ?? next.draft);
+          setDraft(next.draft);
         }
       }
     } catch {
@@ -1369,13 +1332,13 @@ function StatementEditorLive({
     if (!lifetime.active()) return;
     if (!draft || !subject || running.current) return;
     if (!pending.current) {
-      if (proposalAvailability !== 'allowed') return;
-      const errors = validateStatement(draft, current?.release);
-      if (errors.length) {
-        setFailure({ ok: false, reason: 'invalid', errors });
+      const decision = proposalDecision(draft, current?.release, proposalAvailability);
+      if ('blocked' in decision) return;
+      if ('errors' in decision) {
+        setFailure({ ok: false, reason: 'invalid', errors: decision.errors });
         return;
       }
-      pending.current = { id: subject.id, statement: structuredClone(draft), key: crypto.randomUUID() };
+      pending.current = proposalFromDraft(subject.id, draft, crypto.randomUUID());
     }
     running.current = true;
     setBusy(true);

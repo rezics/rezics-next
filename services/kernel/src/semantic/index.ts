@@ -11,7 +11,21 @@ export { readSemanticLifecycle } from './lifecycle-state.ts';
 export { admitZoneCleanup, advanceZoneCleanupGrants } from './deletion/index.ts';
 export type { ZoneCleanupAdmission, ZoneCleanupIntent } from './deletion/index.ts';
 export {
+  readCopyWorkDisclosure,
   readWorkReleaseCards,
+  createFacetPopulationSource,
+  readListPresentationFacts,
+  bindSemanticCopyWorkApplication,
+  createSemanticCopyWorkApplication,
+  semanticCopyWorkApplication,
+} from './copy-work-application.ts';
+export {
+  COPY_WORK_DISCLOSURE_LOOKAHEAD,
+  COPY_WORK_DISCLOSURE_MAX_RAW,
+  COPY_WORK_DISCLOSURE_MAX_WORKS,
+  COPY_WORK_PROPERTY,
+} from './copy-work-disclosure-contract.ts';
+export {
   workReleaseCardFieldLimit,
   workReleaseCardLimit,
   workReleaseCardProperties,
@@ -20,9 +34,8 @@ export {
   workReleaseCardReferencePartLimit,
   workReleaseCardStatementBytes,
   workReleaseCardResponseBytes,
-} from './work-release-cards.ts';
+} from './copy-work-reader-port.ts';
 export type { WorkReleaseCard, WorkReleaseCardField, WorkReleaseCards } from './work-release-cards.ts';
-export { readListPresentationFacts } from './list-presentation.ts';
 export { readIdentityRatingReview } from './identity-adapters/read.ts';
 export type {
   IdentityRatingControlLocator,
@@ -49,20 +62,22 @@ export type {
   IdentityRatingRepairVoteKey,
 } from './identity-rating-repair-producer.ts';
 export type { DefinitionImportRoutes } from './definition-import.ts';
-export {
-  readCopyWorkDisclosure,
-  COPY_WORK_DISCLOSURE_LOOKAHEAD,
-  COPY_WORK_DISCLOSURE_MAX_RAW,
-  COPY_WORK_DISCLOSURE_MAX_WORKS,
-  COPY_WORK_PROPERTY,
-} from './copy-work-disclosure.ts';
 export type {
-  CopyWorkDisclosureDependencies,
   CopyWorkDisclosureObservation,
   CopyWorkDisclosureRequest,
   CopyWorkDisclosureState,
   CopyWorkReference,
 } from './copy-work-disclosure-contract.ts';
+export type {
+  CopyWorkDisclosureDependencies,
+  CopyWorkSearchEvidencePort,
+  CopyWorkReaderPort,
+  CopyWorkListPresentationDependencies,
+  CopyWorkListPresentationOptions,
+  CopyWorkListPresentationResult,
+  CopyWorkListFact,
+  CopyWorkWorkContext,
+} from './copy-work-reader-port.ts';
 
 export { semanticRetention } from './retention.ts';
 export type { RetentionPage, RetentionInput } from './retention.ts';
@@ -79,7 +94,6 @@ export type {
   FacetPopulationSource,
   FacetPopulationSourceFactory,
 } from './facet-population-contract.ts';
-export { createFacetPopulationSource } from './facet-population.ts';
 
 export { bindIdentitySourceConsumerRuntime, identitySourceConsumerRuntime } from './identity-source-consumer-ports.ts';
 export type { IdentitySourceConsumerRuntime, IdentitySourceWorkDeclaration } from './identity-source-consumer-ports.ts';

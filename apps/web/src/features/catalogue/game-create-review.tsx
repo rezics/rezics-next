@@ -30,7 +30,7 @@ function NativePart({ part, read, locale }: { part: SnakInput; read: StatementFi
   const datatype = definition?.datatype;
   const native = gameCreateNativeContent(part, datatype);
   const related = datatype === 'wikibase-item' && typeof native === 'string' ? read.public.related[native] : undefined;
-  const relatedName = related ? pickText(related.labels, locale) : undefined;
+  const relatedName = related ? pickText(related.labels ?? {}, locale) : undefined;
   return (
     <div className="min-w-0 space-y-1">
       {datatype && (

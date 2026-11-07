@@ -3,7 +3,7 @@ import { isDeepStrictEqual } from 'node:util';
 import type { Pool } from 'pg';
 import { ProblemError } from '../http/problem.ts';
 import { activeRelease } from '../semantic/definitions.ts';
-import { readListPresentationFacts } from '../semantic/list-presentation.ts';
+import { readListPresentationFacts } from '../semantic/index.ts';
 import type { Access, Actor } from '../request/access.ts';
 import { workContextKind, validWorkContext, type WorkContext, type WorkContextStatement } from './work-context.ts';
 import type {

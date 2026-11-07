@@ -5,7 +5,7 @@ import { useCatalogueLifetime } from '../../subject/candidate-lifetime';
 import { useLayoutEffect, useMemo } from 'react';
 import { defaultReader, type Reader } from '../../subject/reader';
 import { useSession } from '../../session/query';
-import { FollowTargetControl } from '../../library/follow-target-control';
+import { useSearchLibraryActionHost } from '../../search/library-action-port';
 import { ConceptAssociations, ConceptAliases, ConceptWorksDisclosure } from './source-concept-reading/associations';
 import { catalogueEntries } from '../catalogue/catalogue-entry';
 import type { ConceptRead } from '../catalogue/source-concept-explorer';
@@ -118,6 +118,7 @@ function ConceptVisitView({
     ]),
     admission,
   );
+  const { FollowTarget } = useSearchLibraryActionHost();
   const followOrigin = useMemo(() => ({ lifetime: source, isCurrent: source.active }), [source]);
   const { state: sessionState } = useSession();
   const title = pickText(read?.public.subject.labels ?? {}, locale);
@@ -202,7 +203,7 @@ function ConceptVisitView({
           >
             {title.text || m.concept_explore_title({}, o)}
           </h1>
-          {read?.admitted && <FollowTargetControl targetId={read.public.subject.id} origin={followOrigin} />}
+          {read?.admitted && <FollowTarget targetId={read.public.subject.id} origin={followOrigin} />}
         </div>
         {read?.definition && (
           <p className="max-w-prose whitespace-pre-line" lang={read.definition.lang ?? undefined}>

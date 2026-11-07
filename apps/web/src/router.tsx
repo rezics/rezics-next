@@ -2,6 +2,7 @@ import { createIsomorphicFn } from '@tanstack/react-start';
 import { getRequest } from '@tanstack/react-start/server';
 import { requestNonce } from './security/nonce.ts';
 import { BuyerHistoryVisit } from './checkout/buyer-history-visit';
+import { checkoutCurrentVisit } from './session/index';
 import { createRouter } from '@tanstack/react-router';
 import { anonymousReadMode } from './kernel/credential';
 import { createDefaultReaderQueryClient } from './shell/default-reader';
@@ -119,7 +120,11 @@ export function getRouter() {
   const cspNonce = nonce();
   const queryClient = createDefaultReaderQueryClient();
   const router = createRouter({
-    context: { queryClient, credentialMode: anonymousReadMode, buyerHistory: new BuyerHistoryVisit(queryClient) },
+    context: {
+      queryClient,
+      credentialMode: anonymousReadMode,
+      buyerHistory: new BuyerHistoryVisit(checkoutCurrentVisit(queryClient)),
+    },
     defaultPreload: 'intent',
     defaultPreloadStaleTime: 0,
     defaultPendingComponent: PendingPage,

@@ -91,6 +91,10 @@ never weaken them. Continued empty pages remain page-local absence. Suppressed r
 identity recovery or extra requests. Native row order, duplicate destinations and source/membership fences remain
 unchanged. List/grid, filter and member links carry the supported visit address through the existing shared readers.
 
+## Search Library action host
+
+Decision: Search owns saved-filter selection, the one-use handoff store and the mounted Library action port. Library `search-action-binding.tsx` installs SaveQuery, current Collection owner observation and FollowTarget at the Library application host. Search results and configured Concept pages consume that host; they do not import private Library save, selection or follow-target files. Native follow commands, owner session/resource lifetime, original intent keys, cancellation and settlement stay on the Library adapter. Isolated trees without the host render no save or follow chrome. Existing hourly walks receive the integrated behavior; this pair adds no native or browser stack.
+
 ## Rule presentation boundary
 
 Decision: Library owns the saved-query condition presentation port and owner-leaf extension. Ordinary new/edit rule

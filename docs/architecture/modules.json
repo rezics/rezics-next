@@ -195,6 +195,15 @@
   ],
   "modules": [
     {
+      "id": "content-edition-contract",
+      "kind": "contract",
+      "owner": "content",
+      "paths": ["apps/web/src/content-editions/contract.ts"],
+      "publicEntries": ["apps/web/src/content-editions/contract.ts"],
+      "allowedDependencies": ["document"],
+      "capabilities": []
+    },
+    {
       "id": "kernel-access",
       "kind": "adapter",
       "owner": "accounts",
@@ -1076,7 +1085,8 @@
         "apps/web/src/library/loans-query.ts",
         "apps/web/src/library/loans-actions.ts",
         "apps/web/src/library/settings-contract.ts",
-        "apps/web/src/library/settings-adapter.ts"
+        "apps/web/src/library/settings-adapter.ts",
+        "apps/web/src/library/search-action-binding.tsx"
       ],
       "allowedDependencies": [
         "client",
@@ -1165,6 +1175,7 @@
         "apps/web/src/search/contracts/**"
       ],
       "publicEntries": [
+        "apps/web/src/features/pages/subject-slots.tsx",
         "apps/web/src/search/search.tsx",
         "apps/web/src/search/query-text-limit.ts",
         "apps/web/src/search/search-window/index.ts",
@@ -1174,11 +1185,15 @@
         "apps/web/src/features/pages/agent-reader-read/index.ts",
         "apps/web/src/features/pages/showcase-work/index.ts",
         "apps/web/src/features/pages/shared.tsx",
+        "apps/web/src/features/pages/semantic-render-port.ts",
+        "apps/web/src/features/pages/subject-page-application.tsx",
         "apps/web/src/search/public-collection-directory/index.ts",
         "apps/web/src/search/saved-query-condition-input.tsx",
         "apps/web/src/features/pages/account-profile-port.ts",
         "apps/web/src/features/pages/account-page-application.tsx",
-        "apps/web/src/features/pages/page-model.ts"
+        "apps/web/src/features/pages/page-model.ts",
+        "apps/web/src/search/saved-query-selection.ts",
+        "apps/web/src/search/library-action-port.tsx"
       ],
       "allowedDependencies": [
         "client",
@@ -1258,8 +1273,21 @@
       "kind": "UI/transport library",
       "owner": "commerce",
       "paths": ["apps/web/src/checkout/**"],
-      "publicEntries": ["apps/web/src/checkout/reader-origin.ts"],
-      "allowedDependencies": ["client", "money", "ui", "web-app", "web-content", "web-search"],
+      "publicEntries": [
+        "apps/web/src/checkout/reader-origin.ts",
+        "apps/web/src/checkout/creator-offers.ts",
+        "apps/web/src/checkout/money-schema.ts",
+        "apps/web/src/checkout/subject-purchase.ts"
+      ],
+      "allowedDependencies": [
+        "client",
+        "money",
+        "ui",
+        "web-app",
+        "web-content",
+        "web-search",
+        "content-edition-contract"
+      ],
       "capabilities": ["checkout-pages"]
     },
     {
@@ -1320,11 +1348,15 @@
         "apps/web/src/features/catalogue/definition-publication/actions.ts",
         "apps/web/src/features/catalogue/definition-publication/workspace.tsx",
         "apps/web/src/features/catalogue/work-reading-port.tsx",
+        "apps/web/src/features/catalogue/statement-reading.tsx",
         "apps/web/src/features/catalogue/game-reader/entry.tsx",
         "apps/web/src/features/catalogue/game-reader/model.ts",
         "apps/web/src/features/catalogue/manga-reader/entry.tsx",
         "apps/web/src/features/catalogue/manga-reader/model.ts",
-        "apps/web/src/features/catalogue/manga-reader/navigation.ts"
+        "apps/web/src/features/catalogue/manga-reader/navigation.ts",
+        "apps/web/src/features/catalogue/screen-reading-port.ts",
+        "apps/web/src/features/catalogue/screen-reading-application.tsx",
+        "apps/web/src/features/catalogue/page-render-binding.tsx"
       ],
       "allowedDependencies": [
         "client",
@@ -1380,6 +1412,7 @@
       "owner": "web",
       "paths": ["apps/web/src/**"],
       "excludes": [
+        "apps/web/src/content-editions/contract.ts",
         "apps/web/src/library/**",
         "apps/web/src/search/**",
         "apps/web/src/features/pages/**",
@@ -1403,6 +1436,8 @@
         "apps/web/src/reader/lifetime/**"
       ],
       "publicEntries": [
+        "apps/web/src/content-editions/sale-review.tsx",
+        "apps/web/src/session/state.ts",
         "apps/web/src/kernel/client.ts",
         "apps/web/src/kernel/exposure.ts",
         "apps/web/src/session/index.ts",
@@ -1438,6 +1473,7 @@
         "apps/web/src/features/count.ts"
       ],
       "allowedDependencies": [
+        "content-edition-contract",
         "client",
         "composition",
         "definitions",

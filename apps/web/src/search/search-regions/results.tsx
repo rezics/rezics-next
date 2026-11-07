@@ -15,8 +15,7 @@ import { DiscoveryResults } from '../discovery-results';
 import { realmCatalogueSubjectHref } from '../realm-catalogue-handoff';
 import { SearchWindowControls } from '../search-window';
 import type { SearchWindowNavigation } from '../search-window';
-import { SaveQueryLink } from '../../library/save-query';
-import { searchSavedQuerySelection } from '../saved-query-selection';
+import { useSearchLibraryActionHost } from '../library-action-port';
 
 import type { SearchPageData } from '../search-query-contract';
 import type { useSearchRetryFocus } from '../search-retry-focus';
@@ -87,11 +86,12 @@ export function SearchResultsRegion({
   hrefForState,
   formAction,
 }: SearchResultsRegionProps) {
+  const { SaveQuery, selectionFromExecuted } = useSearchLibraryActionHost();
   if (!result && !data?.discovery && !data?.recovery) return null;
   const options = messageOptions(locale);
   const hrefFor = (state: SearchLoaderDeps) => hrefForState?.(state) ?? discoverySearchHref(locale, state);
   const executedState = retryState ?? data?.queryState;
-  const savedQuery = searchSavedQuerySelection(executedState);
+  const savedQuery = selectionFromExecuted(executedState);
   const retryWithoutWaiting = onRetry
     ? () => {
         void onRetry();
@@ -112,7 +112,7 @@ export function SearchResultsRegion({
         <div className="flex flex-wrap items-center justify-between gap-3">
           <p className="text-sm text-muted-foreground">{m.search_results({}, options)}</p>
           <div className="flex flex-wrap items-center gap-3">
-            {savedQuery.state === 'admitted' ? <SaveQueryLink id="catalogue-search" selection={savedQuery} /> : null}
+            {savedQuery.state === 'admitted' ? <SaveQuery id="catalogue-search" selection={savedQuery} /> : null}
             <SearchSort
               sort={data?.sort ?? 'relevance'}
               locale={locale}

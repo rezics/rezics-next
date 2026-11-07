@@ -60,7 +60,7 @@ mock.module('cloudflare:workers', () => ({
     },
   },
 }));
-const { readCreatorOfferEditor, readCreatorOffers } = await import('../src/checkout/creator-offers');
+const { readCreatorOfferEditor, readCreatorOffers } = await import('../src/routes/-creator-offer-read');
 const { viewerCredential } = await import('../src/session/request');
 
 beforeEach(() => {

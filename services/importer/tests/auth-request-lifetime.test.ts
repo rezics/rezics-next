@@ -140,3 +140,74 @@ test('coalesced cancelled renewal disposes a late fetch body and leaves another 
     await rm(f.dir, { recursive: true, force: true });
   }
 });
+
+test('walk-stack account-key sign-in reads issuer Origin from the local-stack environment', async () => {
+  const f = await credentials();
+  const native = 'http://127.0.0.1:20022';
+  const issuer = 'http://127.0.0.1:20021';
+  const previous = process.env.REZICS_LOCAL_STACK_ISSUER_ORIGIN;
+  const seen: string[] = [];
+  process.env.REZICS_LOCAL_STACK_ISSUER_ORIGIN = issuer;
+  try {
+    const token = await createAccountTokenProvider({
+      ...f.options,
+      authOrigin: native,
+      fetch: (async (input: RequestInfo | URL) => {
+        const request = input instanceof Request ? input : new Request(input);
+        seen.push(`${new URL(request.url).pathname}:${request.headers.get('origin') ?? ''}`);
+        if (new URL(request.url).pathname === '/signin/key') {
+          const body = (await request.clone().json()) as { assertion?: string };
+          const payload = JSON.parse(Buffer.from(body.assertion!.split('.')[1]!, 'base64url').toString()) as {
+            aud?: string;
+          };
+          expect(payload.aud).toBe(`${issuer}/token`);
+          return new Response('{}', { status: 200, headers: { 'set-cookie': 'session=env; Path=/' } });
+        }
+        return Response.json({ access_token: 'env-token', token_type: 'Bearer', expires_in: 120 });
+      }) as typeof fetch,
+    });
+    expect(await token()).toBe('env-token');
+    expect(seen).toEqual(['/signin/key:http://127.0.0.1:20021', '/token:http://127.0.0.1:20021']);
+  } finally {
+    if (previous === undefined) delete process.env.REZICS_LOCAL_STACK_ISSUER_ORIGIN;
+    else process.env.REZICS_LOCAL_STACK_ISSUER_ORIGIN = previous;
+    await rm(f.dir, { recursive: true, force: true });
+  }
+});
+
+test('walk-stack account-key sign-in posts to native Auth with issuer Origin and audience', async () => {
+  const f = await credentials();
+  const native = 'http://127.0.0.1:20022';
+  const issuer = 'http://127.0.0.1:20021';
+  const seen: { url: string; origin: string; aud: string | undefined }[] = [];
+  try {
+    const token = await createAccountTokenProvider({
+      ...f.options,
+      authOrigin: native,
+      issuerOrigin: issuer,
+      fetch: (async (input: RequestInfo | URL) => {
+        const request = input instanceof Request ? input : new Request(input);
+        const origin = request.headers.get('origin') ?? '';
+        let aud: string | undefined;
+        if (new URL(request.url).pathname === '/signin/key') {
+          const body = (await request.clone().json()) as { assertion?: string };
+          const payload = JSON.parse(Buffer.from(body.assertion!.split('.')[1]!, 'base64url').toString()) as {
+            aud?: string;
+          };
+          aud = payload.aud;
+        }
+        seen.push({ url: request.url, origin, aud });
+        if (new URL(request.url).pathname === '/signin/key')
+          return new Response('{}', { status: 200, headers: { 'set-cookie': 'session=walk; Path=/' } });
+        return Response.json({ access_token: 'walk-token', token_type: 'Bearer', expires_in: 120 });
+      }) as typeof fetch,
+    });
+    expect(await token()).toBe('walk-token');
+    expect(seen).toEqual([
+      { url: `${native}/signin/key`, origin: issuer, aud: `${issuer}/token` },
+      { url: `${native}/token`, origin: issuer, aud: undefined },
+    ]);
+  } finally {
+    await rm(f.dir, { recursive: true, force: true });
+  }
+});

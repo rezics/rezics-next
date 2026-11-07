@@ -23,3 +23,20 @@ export { createNativeRatingVoteSemantic } from './rating-votes.ts';
 export type { IdentityTerminalCommand } from './agent-identity-maintenance.ts';
 export { nativeContextAccess } from './context-access.ts';
 export { createSubjectScopeEvidence, type NativeScopeReader } from './scope-evidence.ts';
+
+import { createCopyWorkDisclosureNativeReader } from '../copy-work-disclosure.ts';
+import { createNativeFacetPopulationSource } from '../facet-population.ts';
+import { readNativeListPresentationFacts } from '../list-presentation.ts';
+import { readNativeWorkReleaseCards } from '../work-release-cards.ts';
+import type { CopyWorkReaderPort, CopyWorkSearchEvidencePort } from '../copy-work-reader-port.ts';
+
+/** Bind Semantic's native read producers to the Search evidence shape without inward value imports. */
+export function createNativeSemanticCopyWorkReaderPort(searchEvidence: CopyWorkSearchEvidencePort): CopyWorkReaderPort {
+  return Object.freeze({
+    searchEvidence,
+    copyWorkDisclosure: createCopyWorkDisclosureNativeReader(),
+    readWorkReleaseCards: readNativeWorkReleaseCards,
+    createFacetPopulationSource: createNativeFacetPopulationSource,
+    readListPresentationFacts: readNativeListPresentationFacts,
+  });
+}

@@ -4,7 +4,7 @@ import type { Meta, StoryObj } from '@storybook/react-vite';
 import { expect, userEvent, within } from 'storybook/test';
 import { SubjectPurchaseSlot, type SubjectPurchaseContext } from '../features/pages/subject-slots';
 import { SubjectOffersView, SubjectOwnedBenefitsRegion } from '../checkout/subject-offers-region';
-import { SubjectOffersRegion } from '../checkout/subject-purchase';
+import { CurrentSubjectOffersRegion as SubjectOffersRegion } from '../routes/-subject-purchase';
 import { formatMinorAmount } from '../checkout/money';
 import {
   subjectOfferFixture,

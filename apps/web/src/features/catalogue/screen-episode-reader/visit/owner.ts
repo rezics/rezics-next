@@ -1,10 +1,10 @@
 import { useEffect, useLayoutEffect, useRef, useState, type MouseEvent } from 'react';
 import { addressLease, type AddressLease } from '../../../../session';
-import { subjectVisitReturn } from '../../../pages/subject-visit-navigation';
+import { useScreenReadingApplication } from '../../screen-reading-application';
+import type { ScreenVisitReturn } from '../../screen-reading-port';
 import type { ScreenEpisodeRead } from '../read';
 import {
   SCREEN_EPISODE_VISIT_LIMIT,
-  screenEpisodeContinuationHref,
   screenEpisodeCursorIntent,
   screenEpisodeEntryElementId,
   screenEpisodeReadingAddress,
@@ -44,6 +44,21 @@ type ReturnReceipt = {
   parentReturn?: string;
   focusMembership?: string;
   observation: object;
+};
+
+export type ScreenEpisodeVisit = {
+  previousHref?: string;
+  startHref?: string;
+  canContinue: boolean;
+  stopped?: 'limit' | 'cycle';
+  visitKey: string;
+  returnHref?: string;
+  returnMembershipId?: string;
+  onNavigate: (kind: NavigationKind, href: string, event: MouseEvent<HTMLAnchorElement>) => void;
+  onRetry: (event: MouseEvent<HTMLButtonElement>) => void;
+  onEntryNavigate: (href: string, event: MouseEvent<HTMLAnchorElement>) => void;
+  onReturnNavigate: (href: string, membershipId: string, event: MouseEvent<HTMLAnchorElement>) => void;
+  current: () => boolean;
 };
 
 let returnReceipt: ReturnReceipt | undefined;
@@ -96,20 +111,22 @@ function setEntryReceipt({
   parentReturn,
   locale,
   observation,
+  visitReturn,
 }: {
   from: string;
   childHref: string;
   parentReturn?: string;
   locale: string;
   observation: object;
+  visitReturn: ScreenVisitReturn;
 }) {
   const target = originFromHref(childHref);
   if (!target) return;
   const targetUrl = new URL(childHref, 'https://rezics.invalid');
-  const via = subjectVisitReturn(targetUrl.searchParams.get('via'), locale);
+  const via = visitReturn(targetUrl.searchParams.get('via'), locale);
   const child = routeWithoutVia(`${target.pathname}${target.searchStr}`);
   const expected = via && canonicalAddress(via);
-  const safeParentReturn = parentReturn ? subjectVisitReturn(parentReturn, locale) : undefined;
+  const safeParentReturn = parentReturn ? visitReturn(parentReturn, locale) : undefined;
   if (!child || !expected) return;
   returnReceipt = {
     from: canonicalAddress(from) ?? from,
@@ -126,14 +143,16 @@ function setReturnReceipt({
   focusMembership,
   locale,
   observation,
+  visitReturn,
 }: {
   from: string;
   target: string;
   focusMembership?: string;
   locale: string;
   observation: object;
+  visitReturn: ScreenVisitReturn;
 }) {
-  const safeTarget = subjectVisitReturn(target, locale);
+  const safeTarget = visitReturn(target, locale);
   const child = routeWithoutVia(from);
   const expected = safeTarget && canonicalAddress(safeTarget);
   if (!child || !expected) return;
@@ -155,6 +174,7 @@ function resolveReturnReceipt(
   childSearch: string,
   locale: string,
   observation: object,
+  visitReturn: ScreenVisitReturn,
 ): { parentReturn?: string; focusMembership?: string } | undefined {
   const saved = returnReceipt;
   if (!saved) return;
@@ -170,7 +190,7 @@ function resolveReturnReceipt(
       ...(saved.focusMembership ? { focusMembership: saved.focusMembership } : {}),
     };
   }
-  const safeVia = subjectVisitReturn(new URLSearchParams(childSearch).get('via'), locale);
+  const safeVia = visitReturn(new URLSearchParams(childSearch).get('via'), locale);
   if (routeWithoutVia(current) === saved.child && safeVia === saved.target)
     return saved.parentReturn ? { parentReturn: saved.parentReturn } : {};
   if (currentAddress !== saved.from) returnReceipt = undefined;
@@ -199,7 +219,8 @@ export function useScreenEpisodeVisit({
   loading: boolean;
   settledKey: string;
   directReturn?: { href: string; membershipId: string };
-}) {
+}): ScreenEpisodeVisit {
+  const { visitReturn } = useScreenReadingApplication();
   const currentHref = routeAddress(origin);
   const currentAddress = screenEpisodeWindowAddress(origin);
   const currentCursor = screenEpisodeCursorIntent(origin.searchStr);
@@ -232,7 +253,7 @@ export function useScreenEpisodeVisit({
   }
   const [resolvedReturn, setResolvedReturn] = useState<{ page: string; href?: string }>();
   useLayoutEffect(() => {
-    const restored = resolveReturnReceipt(currentHref, origin.searchStr, locale, observation);
+    const restored = resolveReturnReceipt(currentHref, origin.searchStr, locale, observation, visitReturn);
     if (!restored) {
       setResolvedReturn(undefined);
       return;
@@ -248,13 +269,13 @@ export function useScreenEpisodeVisit({
         lease: owner.lease,
       };
     }
-  }, [currentHref, currentAddress, pageKey, sourceKey, locale, observation, owner]);
+  }, [currentHref, currentAddress, pageKey, sourceKey, locale, observation, owner, visitReturn]);
 
   const chosenReturn =
     directReturn ??
     (resolvedReturn?.page === pageKey && resolvedReturn.href
       ? (() => {
-          const value = subjectVisitReturn(resolvedReturn.href, locale);
+          const value = visitReturn(resolvedReturn.href, locale);
           if (!value) return undefined;
           const url = new URL(value, 'https://rezics.invalid');
           const membershipId = new URLSearchParams(url.search).get('screenSelection');
@@ -382,28 +403,36 @@ export function useScreenEpisodeVisit({
       ...(chosenReturn?.href ? { parentReturn: chosenReturn.href } : {}),
       locale,
       observation,
+      visitReturn,
     });
     focus.current = undefined;
   }
 
   function onReturnNavigate(href: string, membershipId: string, event: MouseEvent<HTMLAnchorElement>) {
     if (!localActivation(event) || !owner.lease.current()) return;
-    setReturnReceipt({ from: currentHref, target: href, focusMembership: membershipId, locale, observation });
+    setReturnReceipt({
+      from: currentHref,
+      target: href,
+      focusMembership: membershipId,
+      locale,
+      observation,
+      visitReturn,
+    });
     focus.current = undefined;
   }
 
   return {
-    previousHref: previous?.href,
-    startHref,
     canContinue: !!canContinue,
-    stopped: atLimit ? ('limit' as const) : repeatedCursor ? ('cycle' as const) : undefined,
     visitKey: `${sourceKey}:${pageKey}:${settledKey}`,
-    returnHref: chosenReturn?.href,
-    returnMembershipId: chosenReturn?.membershipId,
     onNavigate,
     onRetry,
     onEntryNavigate,
     onReturnNavigate,
     current: () => owner.lease.current(),
+    ...(previous?.href ? { previousHref: previous.href } : {}),
+    ...(startHref ? { startHref } : {}),
+    ...(atLimit ? { stopped: 'limit' as const } : repeatedCursor ? { stopped: 'cycle' as const } : {}),
+    ...(chosenReturn?.href ? { returnHref: chosenReturn.href } : {}),
+    ...(chosenReturn?.membershipId ? { returnMembershipId: chosenReturn.membershipId } : {}),
   };
 }

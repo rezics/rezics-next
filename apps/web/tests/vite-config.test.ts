@@ -12,7 +12,9 @@ import {
   bindViteDepCacheAlign,
   elysiaTypeboxLiveModuleCode,
   viteEnvironmentDepHashes,
+  webViteClientOptimizeDepsFor,
   webViteTypeboxWorkerGraph,
+  webViteWalkClientOptimizeDeps,
   webViteWarmSsrEnvName,
   webViteWorkerSsrOptimizeDeps,
   webViteWorkerSsrResolve,
@@ -243,6 +245,27 @@ test('WEB_VITE_CACHE_DIR selects the host-local optimizeDeps cache and allows re
     if (previous === undefined) delete process.env.WEB_VITE_CACHE_DIR;
     else process.env.WEB_VITE_CACHE_DIR = previous;
     await rm(cacheDir, { recursive: true, force: true });
+  }
+}, 30_000);
+
+test('a walk stack compiles the visited client page on demand instead of crawling every route', async () => {
+  const previousSlot = process.env.REZICS_WALK_STACK_SLOT;
+  const previousCache = process.env.WEB_VITE_CACHE_DIR;
+  process.env.REZICS_WALK_STACK_SLOT = '2';
+  delete process.env.WEB_VITE_CACHE_DIR;
+  try {
+    expect(webViteClientOptimizeDepsFor({ REZICS_WALK_STACK_SLOT: '2' })).toEqual(webViteWalkClientOptimizeDeps);
+    expect(webViteWalkClientOptimizeDeps.holdUntilCrawlEnd).toBe(false);
+    expect(webViteWalkClientOptimizeDeps.entries).toEqual([]);
+    const config = await resolveWebViteConfig({ command: 'serve', mode: 'development' }, appRoot);
+    expect(config.optimizeDeps?.holdUntilCrawlEnd).toBe(false);
+    expect(config.optimizeDeps?.entries).toEqual([]);
+    expect(config.cacheDir).toBe(resolve(workspaceRoot, '.temp/web-vite', '2'));
+  } finally {
+    if (previousSlot === undefined) delete process.env.REZICS_WALK_STACK_SLOT;
+    else process.env.REZICS_WALK_STACK_SLOT = previousSlot;
+    if (previousCache === undefined) delete process.env.WEB_VITE_CACHE_DIR;
+    else process.env.WEB_VITE_CACHE_DIR = previousCache;
   }
 }, 30_000);
 

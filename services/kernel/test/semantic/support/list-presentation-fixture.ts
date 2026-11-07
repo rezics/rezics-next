@@ -12,6 +12,7 @@ import { nativeFixture } from '../../access/native-account-bindings-fixture.ts';
 import { createPersonas } from '../../support/personas.ts';
 import { testKernel, testRouteKey } from '../../support/test-kernel.ts';
 import { createWriteRateLimiter } from '../../../src/access/write-rate.ts';
+import { installSemanticCopyWork } from '../../../src/composition/semantic-copy-work.ts';
 import { deletePersona } from '../../support/account-deletion.ts';
 import { openGrowthDatabase, type GrowthDatabase } from '../../support/growth.ts';
 import { identityEpochDatabase } from './identity-epoch.ts';
@@ -38,6 +39,7 @@ export const citedValue = (property: string, content: unknown, references = true
 
 /** Thin native API setup: no selected values, mapping, readiness or receipt is preseeded. */
 export async function createListPresentationFixture(options: { poolMax?: number; db?: GrowthDatabase } = {}) {
+  installSemanticCopyWork();
   const isolated = options.db ? undefined : await identityEpochDatabase();
   const db = options.db ?? (await openGrowthDatabase(isolated!.url));
   const pool: Pool = db.openPool({ max: options.poolMax ?? 1 });

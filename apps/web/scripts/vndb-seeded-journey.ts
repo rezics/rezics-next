@@ -6,6 +6,8 @@ import type { Browser, Page } from 'playwright';
 import type { CrossMediaSeedResult } from '../../../services/importer/src/cross-media-seed.ts';
 import type { DevelopmentShowcaseReport } from '../../../scripts/datasets/cross-media-seed.ts';
 import { releaseWalkFileCache, walkIssuerForward } from '../../../scripts/walk-stack.ts';
+import { issuerPublicJwksUrl } from '../../../services/auth/scripts/dev-stack.ts';
+import { websiteAccessToken } from './semantic-first-public-native.ts';
 
 const root = resolve(import.meta.dir, '../../..');
 const evidence = resolve(root, '.temp/vndb-journey');
@@ -122,33 +124,12 @@ function data<T>(response: { data: T | null; error: unknown; status: number }, l
 
 async function websiteBearer(password: string): Promise<string> {
   const binding = await envFile(resolve(root, 'apps/web/.dev.vars'));
-  const signed = await fetch(`${stack.issuer}/signin`, {
-    method: 'POST',
-    headers: { origin: stack.issuer, 'content-type': 'application/json' },
-    body: JSON.stringify({
-      email: 'developer@rezics.test',
-      password,
-      client_id: binding.WEBSITE_CLIENT_ID,
-      scope: binding.WEBSITE_SCOPES,
-    }),
+  return websiteAccessToken(stack.issuer, {
+    email: 'developer@rezics.test',
+    password,
+    clientId: binding.WEBSITE_CLIENT_ID ?? 'rezics-website',
+    ...(binding.WEBSITE_SCOPES === undefined ? {} : { scope: binding.WEBSITE_SCOPES }),
   });
-  assert(signed.ok, `Native sign-in: HTTP ${signed.status}`);
-  const token = await fetch(`${stack.issuer}/token`, {
-    method: 'POST',
-    headers: {
-      origin: stack.issuer,
-      'content-type': 'application/json',
-      cookie: signed.headers
-        .getSetCookie()
-        .map((cookie) => cookie.split(';')[0])
-        .join('; '),
-    },
-    body: '{}',
-  });
-  assert(token.ok, `Native token: HTTP ${token.status}`);
-  const response = (await token.json()) as { access_token: string };
-  assert.equal(typeof response.access_token, 'string');
-  return response.access_token;
 }
 
 async function capture(page: Page, name: string): Promise<void> {
@@ -234,12 +215,13 @@ try {
   assert(jwks.ok, `Native Auth JWKS must answer before seed: HTTP ${jwks.status}`);
   const proxy = issuerProxy();
   try {
-    const issuerJwks = await fetch(`${stack.issuer}/.well-known/jwks.json`, { signal: AbortSignal.timeout(5_000) });
+    const issuerJwks = await fetch(issuerPublicJwksUrl(stack.issuer), { signal: AbortSignal.timeout(5_000) });
     assert(issuerJwks.ok, `Issuer JWKS through native Auth must answer before seed: HTTP ${issuerJwks.status}`);
     await run([...bun, 'scripts/datasets/cross-media-seed.ts', '--dev'], {
       ...process.env,
       ...(await envFile(resolve(root, '.temp/local-stack/seed.env'))),
-      AUTH_ORIGIN: stack.issuer,
+      AUTH_ORIGIN: stack.native,
+      REZICS_LOCAL_STACK_ISSUER_ORIGIN: stack.issuer,
       KERNEL_ORIGIN: stack.kernel,
     });
   } finally {

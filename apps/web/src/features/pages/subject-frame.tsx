@@ -1,5 +1,4 @@
 import { SubjectStreamDirectory } from './subject-streams';
-import { mangaObservedOrigin } from '../catalogue/manga-public-visit';
 import { LiteraryProfileEntry } from '../catalogue/literary-profile-entry';
 import { GameProfileEntry } from '../catalogue/game-profile-entry';
 import { EditorialEntry } from '../catalogue/editorial-entry';
@@ -25,8 +24,8 @@ import { AlbumProfileEntry } from '../catalogue/album-profile-entry';
 import { ReleaseFidelityEntry } from '../catalogue/release-fidelity/entry';
 import { CatalogueFileProfileEntry } from '../catalogue/catalogue-file-profile/entry';
 import { candidateContext } from '../../subject/candidates';
-import { conceptPublicReturnHref } from '../catalogue/source-concept-explorer/public-visit';
-import type { AuthoredPublicOrigin } from '../catalogue/authored-public-visit';
+import { conceptPublicReturnHref, mangaObservedOrigin } from './subject-page-application';
+import type { AuthoredPublicOrigin } from './semantic-render-port';
 import type { KernelClient } from '@rezics/client';
 import { assertSubjectPageReadActive, type SubjectPageReadLifetime } from './subject-page-read-lifetime';
 import {

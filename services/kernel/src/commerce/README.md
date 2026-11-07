@@ -88,8 +88,9 @@ The illustrative `kernel.local` transport explicitly returns 503 until an actual
 The served offer review now also carries current credentials and preserves named denials; it retains the existing
 observed revision, consent and uncertain-creation retry path.
 
-`checkout/subject-purchase.ts` exports `SubjectOffersRegion`, `SubjectOwnedBenefitsRegion` and the immutable
-`subjectPurchaseRegions` configuration. Root passes it through `AppShell.subjectPurchase` and the existing shared
+`checkout/subject-purchase.ts` exports `SubjectOffersRegion` and `SubjectOwnedBenefitsRegion`.
+The ordinary `routes/-subject-purchase.tsx` composition binds the installed session producer to the public region
+and supplies the immutable `subjectPurchaseRegions` configuration. Root passes it through `AppShell.subjectPurchase` and the existing shared
 `ComponentType<{subjectId,subjectType,locale}>` seam. Public discovery waits for hydration/session preparation;
 actor/session-bound browser queries cancel and discard old responses on session change. No personal query or opaque
 entitlement fact enters shared SSR data. Native denial/unavailability/preparation and a successful page with no

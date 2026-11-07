@@ -29,6 +29,7 @@ import {
   importerScopes,
   stackProcessCommands,
   walkSetupScripts,
+  webLaunchEnvironment,
 } from '../scripts/dev-stack.ts';
 import { localJwksTransport, readMembershipWorkConfig } from '../../kernel/src/access/membership-work-config.ts';
 import { developmentEnv } from '../../kernel/scripts/database.ts';
@@ -469,6 +470,20 @@ test('parallel local startup has a configured connection allowance while the ord
   expect(developmentEnv('KERNEL_POOL_ACQUIRE_TIMEOUT_MS=500\n', 'postgres://127.0.0.1/rezics')).toContain(
     'KERNEL_POOL_ACQUIRE_TIMEOUT_MS=500\n',
   );
+});
+
+test('walk Web launch uses the product Vite child and does not raise Node heap', () => {
+  const child = webLaunchEnvironment({
+    PATH: '/bin',
+    REZICS_TEST_RUNTIME: '1',
+    NODE_OPTIONS: '--max-old-space-size=8192',
+    AUTH_ORIGIN: 'http://127.0.0.1:20022',
+  });
+  expect(child.REZICS_TEST_RUNTIME).toBeUndefined();
+  expect(child.CLOUDFLARE_VITE_FORCE_LOCAL).toBe('true');
+  expect(child.CLOUDFLARE_CF_FETCH_ENABLED).toBe('false');
+  expect(child.AUTH_ORIGIN).toBe('http://127.0.0.1:20022');
+  expect(child.NODE_OPTIONS).toBe('--max-old-space-size=8192');
 });
 
 test('walk stacks start Kernel without a watcher and can omit Vite until mounted pages', () => {

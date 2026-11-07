@@ -23,7 +23,7 @@ import { isSignedInPath } from '../session/guard';
 import { createNavigation } from '../shell/navigation';
 import { m } from '../paraglide/messages.js';
 import { Tags, ChartNoAxesCombined, FileText } from 'lucide-react';
-import { subjectPurchaseRegions } from '../checkout/subject-purchase';
+import { subjectPurchaseRegions } from './-subject-purchase';
 import { contextsNavigation } from '../features/contexts/navigation';
 import { myLogsNavigation } from '../library/my-logs';
 import { threadsNavigation } from '../threads/navigation';
@@ -35,6 +35,10 @@ import { libraryNavigation } from '../library/navigation';
 import { LocaleNavigationProvider } from '../shell/locale-navigation/context';
 import { LibraryApplicationBoundary } from '../session/library-application';
 import { OwnVotesReturnProvider } from '../ratings/own-votes/return';
+import { pageRenderBinding } from '../features/catalogue/page-render-binding';
+import { installSemanticRenderPort } from '../features/pages/subject-page-application';
+
+installSemanticRenderPort(pageRenderBinding);
 
 export const commerceNavigation = createNavigation([
   ...contextsNavigation,

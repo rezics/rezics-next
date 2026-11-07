@@ -25,7 +25,7 @@ const { SubjectOffersView, SubjectOwnedBenefitsRegion, subjectOffersQuery } =
   await import('../src/checkout/subject-offers-region');
 const { SubjectPurchaseSlot } = await import('../src/features/pages/subject-slots');
 const { FeatureSlotsProvider } = await import('../src/shell/feature-slots');
-const { subjectPurchaseRegions } = await import('../src/checkout/subject-purchase');
+const { subjectPurchaseRegions } = await import('../src/routes/-subject-purchase');
 const { loadOffer } = await import('../src/checkout/offer.server');
 const { OfferPage } = await import('../src/checkout/offer-page');
 const { startCheckout } = await import('../src/checkout/start');

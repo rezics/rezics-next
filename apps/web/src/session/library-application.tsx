@@ -5,6 +5,7 @@ import { exposureQuery } from './query';
 import { sessionQuery, useSession } from './index';
 import type { RecoveryObserver, RecoveryObservation } from '../library/application';
 import { LibraryPrivateLifetime } from '../library/private-lifetime';
+import { SearchLibraryActionBinding } from '../library/search-action-binding';
 import type { ReactNode } from 'react';
 import { LibraryApplicationContext, type LibraryApplication } from '../library/application';
 import {
@@ -31,7 +32,9 @@ export const libraryApplication: LibraryApplication = {
 export function LibraryApplicationBoundary({ children }: { children: ReactNode }) {
   return (
     <LibraryApplicationContext value={libraryApplication}>
-      <LibraryPrivateLifetime>{children}</LibraryPrivateLifetime>
+      <SearchLibraryActionBinding>
+        <LibraryPrivateLifetime>{children}</LibraryPrivateLifetime>
+      </SearchLibraryActionBinding>
     </LibraryApplicationContext>
   );
 }

@@ -11,6 +11,13 @@ views are organised. Mechanisms live with their owners: covers in [Cover](../pac
 This page spans those modules because a reader experiences one page; splitting its rules across owners would let
 each owner ship a correct part and the page still fail.
 
+Decision: Configured Subject page composition owns profile selection, slot assembly and visit descriptor orchestration
+through the page-owned contract in `features/pages/semantic-render-port.ts` and application in
+`features/pages/subject-page-application.tsx`. The Semantic catalogue binding in
+`features/catalogue/page-render-binding.tsx` installs the current readers and descriptors at the Web route
+composition root; the page application owns the installed operation and its disclosure, continuation, receipt and
+work-budget semantics.
+
 ## Reader Type display
 
 Reader labels, cover proportions and explicit Schema.org hints come from the shared Web Type-directory
@@ -65,6 +72,8 @@ open the exact Episode or Season page. If the assertion projection is withheld, 
 Decision: preserve native episode link order and position strings; an absent released episode-kind fact stays unknown.
 
 Decision: anime Movies, TVSeries, TVSeason, Episode and `rezics:AnimeRelease` publications remain separate Subject identities; only TVSeries and TVSeason browse episodes through the released inverse `schema:isPartOf` window.
+
+Decision: Screen profile and episode continuation construct through one Semantic reading application. Navigation descriptors stay dependency-free values; Search binds page values, spoiler gates, `subjectHref` and visit return at `OverviewRoot` and `ScreenReadingBoundary`. Fewest tests pin that seam; existing episode and current-visit assertions stay. No new stories.
 
 ### Screen episode reader Cost
 
