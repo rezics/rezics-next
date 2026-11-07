@@ -32,9 +32,9 @@ specification update; the observed issuer/JWKS gate joins the existing urgent re
 
 ### Current dev census
 
-Observed walk revision: `06f822b6d30aa9f3291fc112ab0a5f09a2d4b147` (docs-only commits on product
-`4904c8e26e1994442c45dce707a642dda0125168`). This row set replaces the prior 439.242 s census with a new
-2026-11-07 02:48 UTC execution. The 269.257 s launcher interval is the current-dev observation, not a journey
+Observed walk revision: `60ae00e8b0f6b3d681bad9570890276ab8eb7adb` (docs-only commits on product
+`4904c8e26e1994442c45dce707a642dda0125168`). This row set replaces the prior 269.257 s census with a new
+2026-11-07 03:13 UTC execution. The 142.542 s launcher interval is the current-dev observation, not a journey
 pass. Decision: the six rows are the acceptance evidence; no extra product tests. Kernel postlanding cells do
 not pass an unexecuted journey.
 
@@ -43,8 +43,8 @@ One admitted slot, with PostgreSQL and OpenSearch, ran
 The child would run native `persona`, load private `seed.env`, run `bun scripts/datasets/cross-media-seed.ts --dev`,
 then start seeded frontends. The launcher failed before that child started. No second concurrent Search walk ran.
 
-Native startup was observed from **2026-11-07 02:48:40.036 UTC** through **02:53:09.293 UTC**:
-**269.257 seconds** wall from walk start to identity reject. Slot **3/6** after 24 ms. This is the recorded
+Native startup was observed from **2026-11-07 03:13:03.042 UTC** through **03:15:25.584 UTC**:
+**142.542 seconds** wall from walk start to identity reject. Slot **3/6** after 27 ms. This is the recorded
 shared prerequisite interval, not six separately timed journeys. Every row below inherits this actual failure.
 No journey reached native Search HTTP or a mounted page.
 
@@ -55,12 +55,12 @@ not provisioned. Anonymous is not a substitute for those identities. Phone 390, 
 
 | Journey               | User-visible path and passing result                                                                                                                                                                                         | Exposure                                                                            | Dev walk result                                                                                | Evidence / first failure                                                                                                                                       |
 | --------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Mixed Search          | Open Search, submit text, open a permitted result and return to the executed query; continued pages remain useful and current after a visibility change.                                                                     | Existing Search grant                                                               | FAIL — setup persona; 269.257 s shared startup; rev `06f822b6d30aa9f3291fc112ab0a5f09a2d4b147` | Native startup rejected `AUTH_JWKS_URL` before `Worker ready`; query/result/return and visibility change not executed. [Repair](#native-startup-repair).       |
-| Refine and continue   | Submit supported Type/filter operands, inspect current facet choices, continue and restart in the same executed query; changed reader or resource scope retires old values and cursors.                                      | Existing Search grant; advanced second-scope operands remain outside this inventory | FAIL — setup persona; 269.257 s shared startup; rev `06f822b6d30aa9f3291fc112ab0a5f09a2d4b147` | Same first startup failure; supported filters/facets, continuation and scope retirement not executed. [Repair](#native-startup-repair).                        |
-| Multilingual names    | Type an original-language name or current alias, select a suggestion, open the matching Subject and change locale without losing the query or authored language order.                                                       | Existing Search grant                                                               | FAIL — setup persona; 269.257 s shared startup; rev `06f822b6d30aa9f3291fc112ab0a5f09a2d4b147` | Same first startup failure; suggestions and locale return not executed. [Repair](#native-startup-repair).                                                      |
-| Search recovery       | Correct an invalid authored operand or deliberately retry a preparing/unavailable request after its deadline; generation loss restarts that executed request and renders useful output.                                      | Existing Search grant                                                               | FAIL — setup persona; 269.257 s shared startup; rev `06f822b6d30aa9f3291fc112ab0a5f09a2d4b147` | Same first startup failure; invalid-input correction, deadline/manual retry and generation restart not executed. [Repair](#native-startup-repair).             |
-| Configured reading    | Open a configured Subject or static Zone page and read its declared lists in document order; unavailable slots leave supported siblings usable, and a current continuation/retry reaches the right list.                     | Public configured reader where the owning scope admits it                           | FAIL — setup persona; 269.257 s shared startup; rev `06f822b6d30aa9f3291fc112ab0a5f09a2d4b147` | Same first startup failure; no independent native-ready public page survived; Subject/Zone list reading not executed. [Repair](#native-startup-repair).        |
-| Published composition | Publish an admitted shared profile or curated Collection presentation, open the selected public version while the editor has a later draft, and deliberately recover a refused/lost response to the actual published result. | Existing publication authority and public selected-version reading                  | FAIL — setup persona; 269.257 s shared startup; rev `06f822b6d30aa9f3291fc112ab0a5f09a2d4b147` | Same first startup failure; no publication identity, selected public A, later draft B or response-loss recovery was created. [Repair](#native-startup-repair). |
+| Mixed Search          | Open Search, submit text, open a permitted result and return to the executed query; continued pages remain useful and current after a visibility change.                                                                     | Existing Search grant                                                               | FAIL — setup persona; 142.542 s shared startup; rev `60ae00e8b0f6b3d681bad9570890276ab8eb7adb` | Native startup rejected `AUTH_JWKS_URL` before `Worker ready`; query/result/return and visibility change not executed. [Repair](#native-startup-repair).       |
+| Refine and continue   | Submit supported Type/filter operands, inspect current facet choices, continue and restart in the same executed query; changed reader or resource scope retires old values and cursors.                                      | Existing Search grant; advanced second-scope operands remain outside this inventory | FAIL — setup persona; 142.542 s shared startup; rev `60ae00e8b0f6b3d681bad9570890276ab8eb7adb` | Same first startup failure; supported filters/facets, continuation and scope retirement not executed. [Repair](#native-startup-repair).                        |
+| Multilingual names    | Type an original-language name or current alias, select a suggestion, open the matching Subject and change locale without losing the query or authored language order.                                                       | Existing Search grant                                                               | FAIL — setup persona; 142.542 s shared startup; rev `60ae00e8b0f6b3d681bad9570890276ab8eb7adb` | Same first startup failure; suggestions and locale return not executed. [Repair](#native-startup-repair).                                                      |
+| Search recovery       | Correct an invalid authored operand or deliberately retry a preparing/unavailable request after its deadline; generation loss restarts that executed request and renders useful output.                                      | Existing Search grant                                                               | FAIL — setup persona; 142.542 s shared startup; rev `60ae00e8b0f6b3d681bad9570890276ab8eb7adb` | Same first startup failure; invalid-input correction, deadline/manual retry and generation restart not executed. [Repair](#native-startup-repair).             |
+| Configured reading    | Open a configured Subject or static Zone page and read its declared lists in document order; unavailable slots leave supported siblings usable, and a current continuation/retry reaches the right list.                     | Public configured reader where the owning scope admits it                           | FAIL — setup persona; 142.542 s shared startup; rev `60ae00e8b0f6b3d681bad9570890276ab8eb7adb` | Same first startup failure; no independent native-ready public page survived; Subject/Zone list reading not executed. [Repair](#native-startup-repair).        |
+| Published composition | Publish an admitted shared profile or curated Collection presentation, open the selected public version while the editor has a later draft, and deliberately recover a refused/lost response to the actual published result. | Existing publication authority and public selected-version reading                  | FAIL — setup persona; 142.542 s shared startup; rev `60ae00e8b0f6b3d681bad9570890276ab8eb7adb` | Same first startup failure; no publication identity, selected public A, later draft B or response-loss recovery was created. [Repair](#native-startup-repair). |
 
 ### Native observation and operands
 
@@ -102,7 +102,7 @@ bearer, personas, seed and pages.
 
 ### Scope of this census and handoff
 
-The result is **0/6 passing**. All six rows fail at the recorded 269.257-second shared launcher interval; Mixed Search
+The result is **0/6 passing**. All six rows fail at the recorded 142.542-second shared launcher interval; Mixed Search
 is the representative slowest failing journey. Its first failing step is worker identity startup, and its repair
 artifact is [Native startup repair](#native-startup-repair). Partial public steps do not pass an unexecuted whole
 journey. Existing broader acceptance below is preserved.
@@ -141,10 +141,14 @@ intentional invalid-policy assertions. Do not add catalogue actions from Search 
 `init` (90 s) with SIGKILL drain. Retain the existing default-worker assertions and rerun through the owning Kernel
 runner after worker init completes. This is not a new Imports outcome.
 
-Web Character local-selection and with-dev-server cells were not executed: `bun apps/web/scripts/focused.ts
---private-network -- bun test tests/character-local-selection.test.tsx tests/with-dev-server.test.ts` failed twice
-with `Web check unavailable: the selected Performance snapshot is not integrated into canonical dev`. Commerce
-401f58 assertions remain required. Loans query/read stay Commerce-owned.
+Web Character local-selection, with-dev-server and following-return-frontier cells did not run: focused Web
+twice returned `Web check unavailable: the selected Performance snapshot is not integrated into canonical
+dev`. Commerce 401f58 and following-return assertions remain required. Loans query/read stay Commerce-owned.
+
+**Following-return source review (not a journey pass):** canonical parent `7c49c2a4ec` drops two `root as never`
+casts in `following-return-frontier.test.ts` and keeps inspect identity plus absent-target null. This worktree
+still has the casts. No production behaviour change. Following return stays Content/Web-owned; the 03:13 walk
+never consumed the return seam.
 
 ## Evidence rules and common boundaries
 
