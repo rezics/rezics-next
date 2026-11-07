@@ -4,7 +4,8 @@ Decision: a successful revisioned write to a historical NULL-incarnation entry s
 incarnation before storing the receipt; the exact caller body remains the digest. A fresh entry may add one
 type-preparation create receipt and one no-effect revalidation receipt; only creation and entry emit events.
 Session writes resolve accepted releases by their stored digest through Library's composed identity-disclosure
-capability and validate against both original and current profiles.
+capability and validate against both original and current profiles. That no-effect revalidation may issue its one
+`shelf_writer_owner` `ON CONFLICT DO NOTHING` initialization statement; it does not write an entry or deletion row.
 
 Decision: retain the original 64/512/4096 native growth axes while seeding one retained entry per fresh account and
 one live same-owner entry per unique subject. Seed the Semantic source subjects through the supported historical
