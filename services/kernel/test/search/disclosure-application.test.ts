@@ -287,7 +287,7 @@ test('the installed application preserves owner context and order through nested
     },
     async () => {
       const hits = await application.discloseOwnerHits(ports, candidates, context);
-      expect(hits.map((hit) => hit?.key.id)).toEqual(ids);
+      expect(hits.map((hit) => hit?.key.id)).toEqual([...ids]);
       expect(hits[0]?.summary.value).toEqual({
         id: ids[0],
         kind: 'review',
