@@ -179,7 +179,32 @@ export function renderJourneyTable(rows: JourneyRow[]): string {
   return [...header, ...body].join('\n');
 }
 
-export async function writeJourneyTable(rows: JourneyRow[], markdownPath = join(root, CAPABILITIES)): Promise<void> {
+const CENSUS_PATTERN =
+  /Round \d{4}-\d{2}-\d{2}T.*?Causal repairs: `\.temp\/continuation\/auth-website-kernel-bearer\.md`, `auth-recovery-and-credentials\.md`, `accounts-operations-e18\.md`, `accounts-follow\.md`, `accounts-walk-browser\.md`\./;
+const CENSUS_REPAIRS =
+  '`.temp/continuation/auth-website-kernel-bearer.md`, `auth-recovery-and-credentials.md`, `accounts-operations-e18.md`, `accounts-follow.md`, `accounts-walk-browser.md`';
+
+export function renderWalkCensus(
+  rows: JourneyRow[],
+  sourceRevision: string,
+  observedAt: string,
+  nextHourly: string,
+  deferFrontends = process.env.REZICS_WALK_DEFER_FRONTENDS === '1',
+): string {
+  const passing = rows.filter((row) => row.result === 'PASS');
+  const failing = rows.filter((row) => row.result === 'FAIL');
+  const slowest = [...failing].sort((left, right) => parseInt(right.elapsed, 10) - parseInt(left.elapsed, 10))[0];
+  const passList = passing.map((row) => row.id).join(', ') || 'none';
+  const slowestText = slowest ? `${slowest.id} ${slowest.elapsed} ${cell(slowest.cause).slice(0, 120)}` : 'none';
+  const observed = observedAt.replace(/\.\d+Z$/, 'Z');
+  return `Round ${observed} on \`${sourceRevision}\` with \`REZICS_WALK_DEFER_FRONTENDS=${deferFrontends ? '1' : '0'}\`: ${passing.length}/19 PASS (${passList}). Slowest FAIL ${slowestText}. Next hourly due ${nextHourly}. Causal repairs: ${CENSUS_REPAIRS}.`;
+}
+
+export async function writeJourneyTable(
+  rows: JourneyRow[],
+  markdownPath = join(root, CAPABILITIES),
+  census?: { revision: string; observedAt: string; nextHourly: string },
+): Promise<void> {
   const markdown = await readFile(markdownPath, 'utf8');
   const heading = markdown.indexOf(JOURNEY_HEADING);
   if (heading < 0) throw new Error('First-public journeys heading is missing');
@@ -196,7 +221,14 @@ export async function writeJourneyTable(rows: JourneyRow[], markdownPath = join(
   }
   end = start + consumed;
   if (markdown.slice(end - 1, end) === '\n') end -= 1;
-  await writeFile(markdownPath, `${markdown.slice(0, start)}${renderJourneyTable(rows)}${markdown.slice(end)}`);
+  let output = `${markdown.slice(0, start)}${renderJourneyTable(rows)}${markdown.slice(end)}`;
+  if (census) {
+    const sentence = renderWalkCensus(rows, census.revision, census.observedAt, census.nextHourly);
+    const next = output.replace(CENSUS_PATTERN, sentence);
+    if (next === output) throw new Error('Walk census sentence is missing');
+    output = next;
+  }
+  await writeFile(markdownPath, output);
 }
 
 function origin(variable: string, fallback: string): string {
@@ -333,6 +365,13 @@ function asId(value: unknown, label: string): string {
 function accountRow(value: Json): Json | undefined {
   const accounts = value.accounts;
   return Array.isArray(accounts) ? (accounts[0] as Json | undefined) : undefined;
+}
+
+function agentSubjectId(row: Json | undefined, label: string): string {
+  const subject = row?.subject;
+  const id = subject && typeof subject === 'object' ? (subject as Json).id : undefined;
+  if (typeof id !== 'string' || !uuid.test(id)) throw new Error(`${label} omitted a public agent subject`);
+  return id;
 }
 
 async function kernel(
@@ -671,7 +710,11 @@ if (import.meta.main) {
     await writeFile(join(evidenceDir, 'journeys.json'), `${JSON.stringify({ evidence, rows: [...rows.values()] }, null, 2)}\n`, {
       mode: 0o600,
     });
-    await writeJourneyTable([...rows.values()]);
+    await writeJourneyTable([...rows.values()], join(root, CAPABILITIES), {
+      revision: sourceRevision,
+      observedAt: new Date().toISOString(),
+      nextHourly: new Date(Date.now() + 3_600_000).toISOString().replace(/\.\d+Z$/, 'Z'),
+    });
   }
 
   async function runJourney(id: JourneyId, reached: string, body: () => Promise<string | void>) {
@@ -1107,15 +1150,22 @@ if (import.meta.main) {
     const follower = walker ?? (await signup(stack, 'j13a'));
     followTarget = await signup(stack, 'j13b');
     const token = await websiteToken(stack, follower, bindings, keys.website);
-    followTargetId = followTarget.accountId;
-    const followed = await kernel(stack, 'PUT', `/v1/follows/${followTargetId}`, { bearer: token.bearer, body: {} });
+    const publicTarget = accountRow(
+      requireStatus(
+        await kernel(stack, 'GET', '/v1/accounts', { query: { handle: followTarget.handle } }),
+        'public follow target',
+        200,
+      ),
+    );
+    followTargetId = agentSubjectId(publicTarget, 'follow target');
+    const followed = await kernel(stack, 'PUT', `/v1/follows/${followTargetId}`, { bearer: token.bearer });
     if (followed.status !== 200)
       throw new Error(`follow HTTP ${followed.status}: ${summarize(followed.value)}`);
     const listed = await kernel(stack, 'GET', '/v1/follows', { bearer: token.bearer, query: { limit: '20' } });
     requireStatus(listed, 'Following', 200);
     const removed = await kernel(stack, 'DELETE', `/v1/follows/${followTargetId}`, { bearer: token.bearer });
     requireStatus(removed, 'unfollow', 200);
-    const again = await kernel(stack, 'PUT', `/v1/follows/${followTargetId}`, { bearer: token.bearer, body: {} });
+    const again = await kernel(stack, 'PUT', `/v1/follows/${followTargetId}`, { bearer: token.bearer });
     requireStatus(again, 'refollow', 200);
     const deleteSession = await signIn(
       stack,
@@ -1151,12 +1201,20 @@ if (import.meta.main) {
     const target = outsider ?? (await signup(stack, 'j14b'));
     const token = await websiteToken(stack, follower, bindings, keys.website);
     const stranger = await websiteToken(stack, target, bindings, keys.website);
-    await kernel(stack, 'PUT', `/v1/follows/${target.accountId}`, { bearer: token.bearer, body: {} });
+    const publicTarget = accountRow(
+      requireStatus(
+        await kernel(stack, 'GET', '/v1/accounts', { query: { handle: target.handle } }),
+        'public count target',
+        200,
+      ),
+    );
+    const subjectId = agentSubjectId(publicTarget, 'count target');
+    await kernel(stack, 'PUT', `/v1/follows/${subjectId}`, { bearer: token.bearer });
     const own = await kernel(stack, 'GET', '/v1/followCounts/outgoing', { bearer: token.bearer });
     await rememberKernelBearerFailure(own, 'own outgoing count');
     requireStatus(own, 'own outgoing count', 200);
     if (typeof own.value.followingCount !== 'number') throw new Error('outgoing omitted followingCount');
-    const concealed = await kernel(stack, 'GET', `/v1/followCounts/subject/${target.accountId}`, {
+    const concealed = await kernel(stack, 'GET', `/v1/followCounts/subject/${subjectId}`, {
       bearer: stranger.bearer,
     });
     if (concealed.status === 200 && typeof concealed.value.followerCount === 'number')
