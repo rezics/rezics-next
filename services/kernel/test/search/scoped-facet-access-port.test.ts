@@ -2,10 +2,7 @@ import { expect, test } from 'bun:test';
 import { AccessUnavailableError } from '../../src/access/unavailable.ts';
 import { ProblemError } from '../../src/http/problem-error.ts';
 import { createSearchAccessFacetObservation } from '../../src/composition/search-access.ts';
-import {
-  classifyFacetAccessFailure,
-  passthroughFacetAccessObservation,
-} from '../../src/search/facet-access-port.ts';
+import { classifyFacetAccessFailure, passthroughFacetAccessObservation } from '../../src/search/facet-access-port.ts';
 import {
   createScopedFacetApplication,
   createServiceScopeFacetPorts,

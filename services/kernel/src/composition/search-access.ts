@@ -16,8 +16,7 @@ import {
 } from '../search/facet-access-port.ts';
 
 export function classifySearchAccessFacetFailure(error: unknown): FacetAccessClosedStatus | undefined {
-  if (error instanceof AccessUnavailableError)
-    return classifyFacetAccessFailure({ name: error.name });
+  if (error instanceof AccessUnavailableError) return classifyFacetAccessFailure({ name: error.name });
   if (error instanceof ProblemError) return facetAccessHttpClosedStatus(error.code);
   if (error instanceof Error) return classifyFacetAccessFailure({ name: error.name });
   return undefined;

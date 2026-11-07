@@ -121,7 +121,9 @@ function closed<Observe extends boolean>(
 ): Observe extends true
   ? Extract<ScopedFacetObservation, { status: 'unready' | 'unavailable' }>
   : Extract<ScopedFacetCandidatePage, { status: FacetAccessClosedStatus }> {
-  return { status: observe ? foldFacetAccessObserveStatus(status) : status, cost } as ReturnType<typeof closed<Observe>>;
+  return { status: observe ? foldFacetAccessObserveStatus(status) : status, cost } as ReturnType<
+    typeof closed<Observe>
+  >;
 }
 
 type MatchedFacetMembership = Extract<ScopedFacetMembership, { status: 'matched' }>;
@@ -201,9 +203,7 @@ export function createServiceScopeFacetPorts(
       });
       const cost = workCost(request);
       if (ran.status !== 'ready') return closed(ran.status, cost, true);
-      return ran.value
-        ? { status: 'observed', identity: request.identity, cost }
-        : { status: 'unready', cost };
+      return ran.value ? { status: 'observed', identity: request.identity, cost } : { status: 'unready', cost };
     },
     async readCandidates(opaque, after, inputLimit, _context) {
       const request = opaque as ServiceScopeFacetRequest;
