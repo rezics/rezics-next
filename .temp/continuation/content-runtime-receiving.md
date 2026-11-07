@@ -22,13 +22,35 @@ Goal-walk execution policy remain unchanged.
 
 Decision: preserve every original journey assertion, add only the merged selector regression to the existing
 runner test, and finish worker closure with one sequential Web/Auth/Kernel/Importer/UI typing invocation.
-All92 accepted owner references below remain retained. No acceptance tests, native/browser/root or growth
+All 99 accepted owner references below remain retained. No acceptance tests, native/browser/root or growth
 commands run during this reconciliation. Dev verification receives the original reaction-count and six Editing
 cases, prepared session/body/key/readback and full-cost obligations on their original Pool, actor, Access and
 deadline. Installed callable/root, native command/effect/relay/default-worker, browser, nested growth, cleanup
 and promoted-commit evidence stay separate. The independent identity-readiness failure is not inferred fixed.
 Accounts e249 alone owns leader settlement with actual143/nonzero/group absence; no custody writer is added.
 The failure descriptions below are prior observations, not results on this integrated revision.
+
+## Current typing infrastructure handback
+
+The combined typing command on 54559bc014 is:
+`bun scripts/worker-check.ts -- sh -c 'bun run --cwd apps/web typecheck; s=$?; bun run --cwd services/auth typecheck || s=1; bun run --cwd services/kernel typecheck || s=1; bun run --cwd services/importer typecheck || s=1; bun run --cwd packages/ui typecheck || s=1; exit $s'`.
+Checks f50e3114-e462-4959-b230-84ec490223fd and 29fdb03e-3e70-4ab9-9949-613a4fa69a79 both exited 1 on the
+unchanged source. Their full logs under .temp/check-logs were read. Neither emitted TypeScript diagnostics;
+Importer and UI explicitly reported no type errors, and Web completed both compiler programs. Kernel typing
+is not established: the first run lost its compiler database before SQL type analysis/compilation and the retry
+failed at native pg_dump. Both cleanup paths reported that the database container's removal was already in
+progress. The existing compiler-database/lifecycle owner receives this concrete class failure: preserve database
+reachability through schema capture and compilation, then prove one owned cleanup. No local placement override,
+process manipulation, custody writer or SQL/type suppression is introduced. Earlier typing receipts cannot make
+this changed integrated Kernel source a pass.
+
+The latest native6f/startup23db packets remain receiving obligations for their existing owners. Source-fence and
+policy assertions, original reaction counts, all eighteen paths and six Editing cases remain intact. Native6f's
+ancestry and terminal transport result were not supplied; its interleaved failures are not a current owner census.
+Startup23db reached messages preparation but no Vite ready line or first HTTP request. That startup frontier,
+e249 leader custody and the independent identity-readiness failure remain distinct. Compare their failures with
+the named integrated native/Auth/authored/media fixtures before any owner creates a repair; no duplicate coding
+or acceptance run is added here.
 
 ## Exact editing failure and whole repair handback
 
@@ -268,3 +290,10 @@ Every prior owner reference remains in force; later observations do not erase in
 - .temp/goal/content/settings90-and-library-growth-receiving-20261107.md
 - .temp/goal/backlog/performance/decisions/settings-browser-worker-composition-receiving.md
 - .temp/goal/content/content11-auth-scope-reconciliation-20261107.md
+- .temp/goal/content/native6f-and-library-launch-repair-20261107.md
+- .temp/goal/content/startup23db-causal-receiving-20261107.md
+- .temp/goal/content/startup23db.log
+- .temp/goal/content/startup23db-result.json
+- .temp/goal/backlog/performance/decisions/native-6f2775-owner-repairs.md
+- .temp/goal/performance/native-6f2775-causal-excerpts.txt
+- .temp/goal/performance/native-6f2775-failure-index.json
