@@ -154,11 +154,9 @@ function RootRoutes() {
   return (
     <LibraryApplicationBoundary>
       <PageVisitBinding>
-        <RecentSearchBinding>
-          <OwnVotesReturnProvider>
-            <CurrentReadingOutlet />
-          </OwnVotesReturnProvider>
-        </RecentSearchBinding>
+        <OwnVotesReturnProvider>
+          <CurrentReadingOutlet />
+        </OwnVotesReturnProvider>
       </PageVisitBinding>
     </LibraryApplicationBoundary>
   );
@@ -256,9 +254,11 @@ function Root({ children }: { children: ReactNode }) {
           <SettingsAmbientProvider ambient={performanceAmbient.settings}>
             <InboxAmbientProvider ambient={performanceAmbient.inbox}>
               <LocaleNavigationProvider>
-                <AppShell navigation={commerceNavigation} subjectPurchase={subjectPurchaseRegions}>
-                  {platformClosed ? <ClosedPage /> : children}
-                </AppShell>
+                <RecentSearchBinding>
+                  <AppShell navigation={commerceNavigation} subjectPurchase={subjectPurchaseRegions}>
+                    {platformClosed ? <ClosedPage /> : children}
+                  </AppShell>
+                </RecentSearchBinding>
               </LocaleNavigationProvider>
             </InboxAmbientProvider>
           </SettingsAmbientProvider>

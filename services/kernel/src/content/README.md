@@ -82,6 +82,42 @@ parent disclosure precede and follow foreign work; final assembly compares origi
 and authority. Revoked, concealed, renamed, deleted or replaced sources withhold labels and controls. Requests never
 repair any source, grant or membership history.
 
+### Late Board revocation for point and page reads
+
+Thread and post heads retain their original source fingerprint and prepared Access checks across reaction enrichment.
+The final check validates that exact source, including its current Board and Realm authority; a different head cannot
+validate bytes selected earlier. Thread post pages retain each selected post and the containing opening in the same
+way. A changed reply is omitted without refilling or moving the bounded selection frontier. Counts and their oldest
+source watermark describe only the final disclosed entries. A concealed containing Board or opening returns `404`.
+Subject discussions and author activity retain their native final disclosure and context assembly.
+
+Decision: retain original source authority through enrichment, preserve sparse continuation frontiers, and use
+connection-free timing barriers for late-revocation acceptance. `disclosureBarrier` pauses after initial Board/Access
+checks; `pageDisclosureBarrier` pauses after page enrichment. Both change timing only and are absent in production.
+Author and Subject page handlers accept the limit as a decimal-digit query string (1 through 20) and convert it for internal paging, so a mismatched continuation stays `400` instead of a missing route. A bound Subject discussion cursor is checked against place, kind and viewer before disclosure.
+Selected reading references validate each Board’s own routed identity. Current thread-to-Board membership supplies
+placement authority; the Board and thread need not share a native home. Subject discussion cards keep the Subject
+key and confirm it on the disclosed thread; they do not treat the Board id as a Subject place.
+Native tests create identities, Boards, threads, replies and revisions through HTTP and run production effects/relays.
+They cover anonymous takedown and protected read-grant revocation for heads, exact revisions, Subject discussions,
+author activity, all three Board orders and thread posts, including first/continuing pages and eligible controls.
+Decision: those two native files plus the frozen composed page cases are the fewest tests for the named families;
+no extra stories. A suspended bearer fails authentication (401/403) before a taken-down thread is named; concealment
+404 is for authenticable readers. Ranking HTTP personas sign JWT iat/exp on wall time because Access validates
+credentials on wall time while the kernel clock drives ranking formulas. Each mounted HTTP request starts its
+envelope from wall time so a held late-revocation or leaked ALS deadline cannot shrink the next command; inner
+`deadlineFor` may only inherit that envelope. Author-item growth captures keep a one-item
+page and fold large other-author neighbourhoods so Access permission-check plan notices stay inside the 32MiB
+telemetry cap; public-view index proofs ANALYZE that neighbourhood first so a tiny fixture cannot seq-scan the
+account primary key. Kernel composition always forwards the Community `deadlineNow` ambient onto Content HTTP.
+Subject discussion listing HTTP tests use the shared 30s test request budget so Access evaluation under
+parallel check instrumentation cannot turn an empty 200 page into 503; production stays 2s. Author-item
+cases bootstrap the bundled
+definitions release so review subject observation is a current source. The Goal walk on an admitted seeded stack reuses that driver, seed-journal cleanup and Performance
+`waitUntilWalkReady` recovery; it restores the pinned dump cache before the run slice, waits for identity-epoch
+topology remaining to reach zero before persona and seed, forwards issuer seed POSTs
+through `walkIssuerForward`, and does not add stories.
+
 ### Cost: native directory assembly
 
 Touches: shared HTTP authentication/admission; initial and final installation point reads; one bounded candidate index
@@ -880,7 +916,7 @@ use their own optional, default-on `thread_watch` preference, separate from repl
 
 Decision: `thread_watch` has its own default-on preference, and a reader can clear their own watch after access to the thread is lost.
 
-Decision: Notice fixtures create discussion boards through ordinary Space, Realm and board routes; a SQL-inserted Board without Realm, purpose or identity is not a thread parent. Realm creation after Space creation uses Community's landed witness refresh (`20261106082422_space_witness_reference_epoch.sql`), which copies identity-only reference removals with epoch 0 and pending work with its stored epoch. Community producer 989baccc1a's locked-old-witness provenance is not landed; this consumer does not add a second Community migration. Native-system setup, reply-notice, notification-outcome and account-erasure staff each hold `space:create`, `realm:create` and `subject:create` as ordinary `POST /v1/grants` receipts (`grantNativeCreationAuthority`). Identical grant intents reuse one receipt key; a second random-key insert of the same Global creation row is Access-forbidden. Space creators also receive an ordinary `space:manage` receipt on that Space. `createRealm` extras wrap Access `preparePage` because the Global parent uses the typed `semantic.context` page path; wrapping only `prepare` left the evidence deadline unset and denied every authorize. Governance bootstrap does not mint those actions. One operator provisions public and protected boards in sequence so scheme creation does not exhaust the subject partition fence. `thread:read` and `post:read` are not Global-reach, and Content owner roles omit `access:grant`, so notice fixtures install those rows with `seedGovernanceAuthority` while Global creation stays ordinary receipts. The native reply-notice fixture keeps a GrowthDatabase over the cloned app namespace so existing consumer assertions and growth captures stay unchanged. Leftover History consumers after the composition split import `history/contract` and `history/application` public entries; Zone commands already bind History evidence, so kernel-zones depends on those modules. History's lazy Semantic source-set producer loads that public entry from `history/adapters` (`../../semantic/record-source-set.ts`); the stale sibling path treated the owner as unavailable and 500'd scheme creation. Semantic `beginSemanticRecordSourceSet` already declares that set; History consumers must not declare it a second time. The isolated notification effect host is a plain bun process, so it calls `installNativeHistory` and binds `KERNEL_RECEIPT_KEYS` onto its pool from `workerTestEnv` the same way `startWorker` does; bun test History preloads and parent-pool WeakMap bindings do not apply to that child. Account-erasure notice fixtures drive optional effects from `post.published`, not `post.created`; creation events are not notice authority. Existing native notification assertions remain the pin; no extra stories. The frozen notification-outcomes suite uses a 180-second default so native system and sequential board provision can finish.
+Decision: Notice fixtures create discussion boards through ordinary Space, Realm and board routes; a SQL-inserted Board without Realm, purpose or identity is not a thread parent. Realm creation after Space creation uses Community's landed witness refresh (`20261106082422_space_witness_reference_epoch.sql`), which copies identity-only reference removals with epoch 0 and pending work with its stored epoch. Community producer 989baccc1a's locked-old-witness provenance is not landed; this consumer does not add a second Community migration. Native-system setup, reply-notice, notification-outcome and account-erasure staff each hold `space:create`, `realm:create` and `subject:create` as ordinary `POST /v1/grants` receipts (`grantNativeCreationAuthority`). Identical grant intents reuse one receipt key; a second random-key insert of the same Global creation row is Access-forbidden. Space creators also receive an ordinary `space:manage` receipt on that Space. `createRealm` extras wrap Access `preparePage` because the Global parent uses the typed `semantic.context` page path; wrapping only `prepare` left the evidence deadline unset and denied every authorize. Governance bootstrap does not mint those actions. One operator provisions public and protected boards in sequence so scheme creation does not exhaust the subject partition fence. `thread:read` and `post:read` are not Global-reach, and Content owner roles omit `access:grant`, so notice fixtures install those rows with `seedGovernanceAuthority` while Global creation stays ordinary receipts. The native reply-notice fixture keeps a GrowthDatabase over the cloned app namespace so existing consumer assertions and growth captures stay unchanged. Leftover History consumers after the composition split import `history/contract` and `history/application` public entries; Zone commands already bind History evidence, so kernel-zones depends on those modules. History's lazy Semantic source-set producer loads that public entry from `history/adapters` (`../../semantic/record-source-set.ts`); the stale sibling path treated the owner as unavailable and 500'd scheme creation. Semantic `beginSemanticRecordSourceSet` already declares that set; History consumers must not declare it a second time. The isolated notification effect host is a plain bun process, so it calls `installNativeHistory` and binds `KERNEL_RECEIPT_KEYS` onto its pool from `workerTestEnv` the same way `startWorker` does; bun test History preloads and parent-pool WeakMap bindings do not apply to that child. Account-erasure notice fixtures drive optional effects from `post.published`, not `post.created`; creation events are not notice authority. Existing native notification assertions remain the pin; no extra stories. The frozen notification-outcomes suite uses a 180-second default so native system and sequential board provision can finish. The Content Goal seeded walk receives those published-post effects on the admitted stack through ordinary HTTP and the default worker; it does not bind a second notification driver.
 
 A published post with a parent notifies that parent's author with `reply`. A published post without a parent
 notifies the thread's opening-post author. Creating the opening post never notifies its own author. A `mention`
@@ -2911,6 +2947,9 @@ Cost per operation:
 Authenticated `GET /v1/threads/{id}` adds the private optional envelope field
 `authorErasure: { authorId: string, mayErase: boolean }`. Anonymous reads omit it. The acting account supplies
 `authorId`; no request selector, displayed post, ownership flag or Global staff role supplies this admission.
+Reaction-count privacy still withholds reactor identities; it does not treat that viewer `authorId` as a leak.
+`test/content/reaction-counts-http.test.ts` drops only that field before scanning for other accounts, and its
+post-page count growth uses cost-folded capture so Access nested plan notices stay inside the 32MiB telemetry cap.
 `author-erasure-admission.ts` reuses `read-first-erasure-post.sql`'s two same-thread/same-author indexed prefix
 seeks, then current native Access `post:erase` on the actual first selected post. It binds native read time,
 clock, deadline and account lifetime, releasing each connection before consulting an independent anchor.

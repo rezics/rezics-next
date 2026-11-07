@@ -153,11 +153,18 @@ export type RevisionView = Omit<StoredRevisionView, 'availability' | 'body' | 's
 export type PostEntry = ItemView | (ErasedPlaceholder & { readonly restorableUntil?: string }) | WithheldPostEntry;
 export type ThreadView = Omit<StoredThreadView, 'firstPost'> & Readonly<{ firstPost: PostEntry }>;
 
+/** Timing seam for composed tests. It runs after a read's initial Board and Access checks and before its final
+ * disclosure; it never changes what the read returns. Production leaves it absent. */
+export type DisclosureBarrier = (target: Readonly<{ threadId: string; postId?: string }>) => Promise<void>;
+/** Timing-only observation after page enrichment, with all source connections released. */
+export type PageDisclosureBarrier = (target: Readonly<{ boardId: string; threadId?: string }>) => Promise<void>;
 export type ContentReadDependencies = Readonly<{
   pool: Pool;
   access: Access;
   tokens: KeyRing;
   clock: () => Date;
+  disclosureBarrier?: DisclosureBarrier;
+  pageDisclosureBarrier?: PageDisclosureBarrier;
   /** Real wall time for realm read deadlines; absent callers keep the composition clock. */
   deadlineNow?: () => number;
 }>;
@@ -1485,6 +1492,7 @@ async function disclose(
       firstPost: item,
     };
   };
+  await dependencies.disclosureBarrier?.({ threadId, ...(postId === undefined ? {} : { postId }) });
   let disclosed = await snapshot(dependencies, threadId, context, discloseCurrent);
   // Admission may consult independent anchors only after ordinary disclosure has
   // succeeded and released its connections. Keep the original rows/checks as the
@@ -1783,6 +1791,16 @@ export async function withReactionCountsAndCoverage<T extends { readonly id: str
   return readReactionCountProjection(dependencies, targets, deadline);
 }
 
+/** Keep the final disclosed source and the reaction fields read before that last check. */
+export function retainCurrentReactions<T extends object, E extends object>(current: T, enriched: E): T & E {
+  return {
+    ...enriched,
+    ...current,
+    ...('reactions' in enriched ? { reactions: enriched.reactions } : {}),
+    ...('viewerReaction' in enriched ? { viewerReaction: enriched.viewerReaction } : {}),
+  } as T & E;
+}
+
 /** Read at most five relayed subject totals per id with one statement per target partition. */
 export async function readSubjectReactionCounts(
   dependencies: Pick<ContentReadDependencies, 'pool'>,
@@ -1833,6 +1851,7 @@ export async function readThread(
   dependencies: ContentReadDependencies,
   threadId: ThreadId,
   context: ReadContext,
+  retain?: RetainContentRead<ThreadView>,
 ): Promise<Anchored<ThreadView | null>> {
   return withRealmDisclosureScope(
     async () =>
@@ -1847,6 +1866,8 @@ export async function readThread(
         undefined,
         true,
         threadReadAdmission.getStore(),
+        false,
+        retain as RetainContentRead<PostEntry | ThreadView | NativeDraftMetadata> | undefined,
       )) as Anchored<ThreadView | null>,
   );
 }
@@ -2075,10 +2096,14 @@ async function list(
   context: ReadContext,
   cursor: string | undefined,
   limit: number,
+  beforeFinal?: (entries: readonly PostEntry[]) => Promise<void>,
 ): Promise<Page<PostEntry>> {
   const clock = dependencies.clock;
   if (!Number.isInteger(limit) || limit < 1 || limit > 100) throw new RangeError('Page limit must be 1 to 100');
-  const root = await readThread(dependencies, threadId, context);
+  let finishRoot!: Parameters<RetainContentRead<ThreadView>>[0];
+  const root = await readThread(dependencies, threadId, context, (finish) => {
+    finishRoot = finish;
+  });
   if (!root.value) throw new ContentNotFoundError();
   const binding: CursorBinding = {
     operation: 'content.posts',
@@ -2104,6 +2129,7 @@ async function list(
     after = { at: decoded.after[0], id: decoded.after[1] };
   }
   const entries: PostEntry[] = [];
+  const finishEntries: Parameters<RetainContentRead<PostEntry>>[0][] = [];
   const selectedKeys: Key[] = [];
   let scanned = 0;
   let more = false;
@@ -2117,6 +2143,10 @@ async function list(
       after = key;
       scanned++;
       selectedKeys.push(key);
+      let finishEntry!: Parameters<RetainContentRead<PostEntry>>[0];
+      const retainEntry: RetainContentRead<PostEntry> = (finish) => {
+        finishEntry = finish;
+      };
       const result = await withRealmDisclosureScope(
         async () =>
           (await disclose(
@@ -2129,18 +2159,30 @@ async function list(
             undefined,
             undefined,
             true,
+            undefined,
+            false,
+            retainEntry as RetainContentRead<PostEntry | ThreadView | NativeDraftMetadata>,
           )) as Anchored<PostEntry | null>,
       );
       if (!result.value) continue;
       entries.push(result.value);
+      finishEntries.push(finishEntry);
     }
     if (!more) break;
   }
-  // Recheck the root after hydration; concealed and missing roots share absence.
-  const final = await readThread(dependencies, threadId, context);
+  // Later reads (reaction totals) run before the root's final disclosure, so a Board takedown or revoked
+  // read grant committed in that window is still observed by the last check. Concealed and missing roots share absence.
+  await beforeFinal?.(entries);
+  await dependencies.pageDisclosureBarrier?.({ boardId: root.value.boardId, threadId });
+  const currentEntries: PostEntry[] = [];
+  for (const finish of finishEntries) {
+    const current = await finish();
+    if (current.value) currentEntries.push(current.value);
+  }
+  const final = await finishRoot();
   if (!final.value) throw new ContentNotFoundError();
   const page: Page<PostEntry> = {
-    entries,
+    entries: currentEntries,
     anchor: final.anchor,
     nextCursor:
       more && after
@@ -2159,14 +2201,16 @@ async function list(
   return page;
 }
 
+/** `beforeFinal` receives the disclosed entries and runs once, before the thread's final disclosure. */
 export async function listThreadPosts(
   dependencies: ContentReadDependencies,
   threadId: ThreadId,
   context: ReadContext,
   cursor?: string,
   limit = 100,
+  beforeFinal?: (entries: readonly PostEntry[]) => Promise<void>,
 ): Promise<Page<PostEntry>> {
-  return (await list(dependencies, threadId, context, cursor, limit)) as Page<PostEntry>;
+  return (await list(dependencies, threadId, context, cursor, limit, beforeFinal)) as Page<PostEntry>;
 }
 export async function listPostRevisions(
   dependencies: ContentReadDependencies,

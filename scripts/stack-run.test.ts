@@ -247,7 +247,7 @@ process.exit(99);
 
 // A stateful docker: containers and volumes persist in one file, so a walk stack's teardown is observable without a daemon.
 const walkDocker = `#!/usr/bin/env bun
-import { appendFileSync, existsSync, readFileSync, writeFileSync } from 'node:fs';
+import { appendFileSync, existsSync, readFileSync, unlinkSync, writeFileSync } from 'node:fs';
 const dir = process.env.FAKE_DIR!;
 const args = process.argv.slice(2);
 appendFileSync(dir + '/docker.log', JSON.stringify(args) + '\\n');
@@ -264,6 +264,13 @@ else if (args[0] === 'volume' && args[1] === 'ls') print(listed('volumes'));
 else if (args[0] === 'volume' && args[1] === 'create') { add(state.volumes, args[2]); save(); }
 else if (args[0] === 'volume' && args[1] === 'rm') { state.volumes = state.volumes.filter((name) => name !== args[2]); save(); }
 else if (args[0] === 'run') {
+  const mapping = args.find((_, index) => args[index - 1] === '-p') ?? '';
+  const refuse = dir + '/refuse-allocated-port';
+  if (existsSync(refuse) && mapping.includes('20014')) {
+    unlinkSync(refuse);
+    process.stderr.write('docker: Error response from daemon: Bind for 127.0.0.1:20014 failed: port is already allocated\\n');
+    process.exit(1);
+  }
   add(state.containers, args[args.indexOf('--name') + 1]);
   args.forEach((argument, index) => { if (args[index - 1] === '-v') add(state.volumes, argument.split(':')[0]); });
   save();
@@ -1326,6 +1333,26 @@ test('a walk ready probe gives up when a listener never writes a response', asyn
     hanging.stop(true);
   }
 });
+
+test('a walk skips a slot after Docker refuses its published port and admits another', async () => {
+  const fixture = walkFixture();
+  writeFileSync(join(fixture.dir, 'refuse-allocated-port'), '');
+  const walker = spawnWalk(fixture, 'walk-skip', ['sleep', '60']);
+  const first = walkStackNames('walk-skip', 1).database;
+  const second = walkStackNames('walk-skip', 2).database;
+  await until(
+    () => dockerRan(fixture, second),
+    () => walker.stderr(),
+  );
+  expect(dockerCalls(fixture).some((args) => args[0] === 'run' && args.includes(first))).toBe(true);
+  expect(dockerCalls(fixture).find((args) => args[0] === 'run' && args.includes(second))).toEqual(
+    expect.arrayContaining(['--name', second, '-p', '127.0.0.1:20024:5432']),
+  );
+  expect(walker.stderr()).toContain('published port is already allocated');
+  expect(walker.stderr()).toContain('admitting another');
+  walker.child.kill('SIGTERM');
+  expect(await walker.child.exited).toBe(143);
+}, 60_000);
 
 test('walk admission is host-wide and creators set its sticky directory despite restrictive umask', () => {
   expect(walkStackDirectory(repository, {})).toBe(WALK_STACK_DIRECTORY);

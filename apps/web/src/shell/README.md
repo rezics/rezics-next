@@ -8,10 +8,21 @@ Library and Collections stay visible as unavailable destinations while session o
 
 Navigation reads are private and bound to the current account, locale and operation admission. Unread counts use the inbox's existing current-viewer query and blue badges. AppShell binds Inbox's shell port so the badge observes that same session query, and Settings' shell port so display, heading, subject addresses and exposure use the installed shell and kernel implementations.
 
+Decision: followed-community navigation consumes `session/reader` directly, preserving the current viewer, locale,
+operation and response guards. The root shell surrounds the Library route boundary; its default rail must render
+without that boundary. The existing mounted `app-shell.test.tsx` case exercises the default rail rather than replacing
+it with prepared communities, retaining its landmark and destination assertions. The test is registered at file
+scope. Community icon assertions count the two linked category icons independently of the group folding controls.
+
 Decision: locale selection uses router-managed document navigation, preserving the current page, query and fragment
 in browser history and honoring leave-page blockers. The destination rereads native data and renders translated UI;
 supplied names and source text keep their original language. The focused locale regression covers the production
 rewrite/provider as well as the injected reader lifetime; seeded native/browser acceptance remains required.
+
+Decision: the root mounts the existing RecentSearchBinding around both AppShell and its route outlet. Header
+search and route consumers share one QueryClient-owned host, session observer and retirement boundary. Mounting it
+inside the outlet leaves the header without a host and makes ordinary `/en` SSR fail; the focused Web startup and
+existing header tests retain this receiving contract.
 
 ## Phone navigation clearance
 

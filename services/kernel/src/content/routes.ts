@@ -101,8 +101,11 @@ import {
   type ItemView,
   type PostEntry,
   type ThreadView,
+  type RetainContentRead,
   withReactionCounts,
+  withReactionCountsAndCoverage,
   withViewerReactions,
+  retainCurrentReactions,
   type SubjectReactionKind,
 } from './reads.ts';
 import {
@@ -369,19 +372,49 @@ function sitemapFailures() {
   }));
 }
 function subjectThreadsQuery() {
-  return memoizedValue(subjectThreadsQuery, () => strictContentSchema(SubjectThreadsQuerySchema));
+  return memoizedValue(subjectThreadsQuery, () =>
+    strictContentSchema(
+      t.Object(
+        {
+          ...SubjectThreadsQuerySchema.properties,
+          limit: t.Optional(t.String({ pattern: '^(?:[1-9]|1[0-9]|20)$' })),
+        },
+        { additionalProperties: false },
+      ),
+    ),
+  );
 }
 function subjectThreadsResponse() {
   return memoizedValue(subjectThreadsResponse, () => strictContentSchema(SubjectThreadsResponseSchema()));
 }
 function authorThreadsQuery() {
-  return memoizedValue(authorThreadsQuery, () => strictContentSchema(AuthorThreadsQuerySchema));
+  return memoizedValue(authorThreadsQuery, () =>
+    strictContentSchema(
+      t.Object(
+        {
+          ...AuthorThreadsQuerySchema.properties,
+          limit: t.Optional(t.String({ pattern: '^(?:[1-9]|1[0-9]|20)$' })),
+        },
+        { additionalProperties: false },
+      ),
+    ),
+  );
 }
 function authorThreadsResponse() {
   return memoizedValue(authorThreadsResponse, () => strictContentSchema(AuthorThreadsResponseSchema()));
 }
 function authorPostsQuery() {
-  return memoizedValue(authorPostsQuery, () => strictContentSchema(AuthorPostsQuerySchema));
+  return memoizedValue(authorPostsQuery, () =>
+    strictContentSchema(
+      t.Object(
+        {
+          ...AuthorPostsQuerySchema.properties,
+          limit: t.Optional(t.String({ pattern: '^(?:[1-9]|1[0-9]|20)$' })),
+        },
+        { additionalProperties: false },
+      ),
+    ),
+  );
 }
 function authorPostsResponse() {
   return memoizedValue(authorPostsResponse, () => strictContentSchema(AuthorPostsResponseSchema()));
@@ -1013,7 +1046,11 @@ export function contentRoutes(app: ReturnType<typeof definitionRoutes>, dependen
           admission.run('normal', job, async () => {
             let authorErasure: AuthorErasureAdmission | undefined;
             const context = { actor, deadline: job.deadline };
-            const read = () => readThread(dependencies, id, context);
+            let finish!: Parameters<RetainContentRead<ThreadView>>[0];
+            const read = () =>
+              readThread(dependencies, id, context, (current) => {
+                finish = current;
+              });
             const result = await (actor.kind === 'account'
               ? withThreadReadAdmission(async () => {
                   authorErasure = await readAuthorErasureAdmission(dependencies, id, { ...context, actor });
@@ -1026,8 +1063,16 @@ export function contentRoutes(app: ReturnType<typeof definitionRoutes>, dependen
             const counted = await withReactionCounts(dependencies, [thread], job.deadline);
             const shown = counted.items[0];
             if (!shown) throw new ProblemError('not_found');
+            // Recheck the original source and authority after enrichment; a replacement head is not this response.
+            const final = await finish();
+            if (!final.value) throw new ProblemError('not_found');
+            session.record(sessionComponent(final.anchor));
             if (actor.kind === 'account') set.headers['cache-control'] = 'private, no-store';
-            return { thread: shown, reactionsAsOf: counted.reactionsAsOf, ...(authorErasure ? { authorErasure } : {}) };
+            return {
+              thread: retainCurrentReactions(final.value, shown),
+              reactionsAsOf: counted.reactionsAsOf,
+              ...(authorErasure ? { authorErasure } : {}),
+            };
           }),
         );
       },
@@ -1096,17 +1141,41 @@ export function contentRoutes(app: ReturnType<typeof definitionRoutes>, dependen
         existingId(id);
         return contentOperation(() =>
           admission.run('normal', job, async () => {
+            // Totals are read between the entries' disclosure and the thread's final disclosure.
+            let counted: Awaited<ReturnType<typeof withReactionCountsAndCoverage<PostEntry>>> | undefined;
             const page = await listThreadPosts(
               dependencies,
               id,
               { actor, deadline: job.deadline },
               query.cursor,
               query.limit ?? 20,
+              async (entries) => {
+                const posts = await withViewerReactions(dependencies, actor, entries, job.deadline);
+                counted = await withReactionCountsAndCoverage(dependencies, posts, job.deadline);
+              },
             );
+            if (!counted) throw new Error('Thread post totals did not complete');
             session.record(sessionComponent(page.anchor));
-            const posts = await withViewerReactions(dependencies, actor, page.entries, job.deadline);
-            const counted = await withReactionCounts(dependencies, posts, job.deadline);
-            return { posts: [...counted.items], next: page.nextCursor, reactionsAsOf: counted.reactionsAsOf };
+            const enriched = new Map(counted.items.map((post) => [post.id, post]));
+            const visible = new Set(page.entries.map((post) => post.id));
+            const sources = counted.targetFreshness.filter((target) => visible.has(target.id));
+            let reactionsAsOf: typeof counted.reactionsAsOf = null;
+            for (const { source } of sources) {
+              if (
+                !reactionsAsOf ||
+                source.epoch < reactionsAsOf.epoch ||
+                (source.epoch === reactionsAsOf.epoch && BigInt(source.position) < BigInt(reactionsAsOf.position))
+              )
+                reactionsAsOf = source;
+            }
+            return {
+              posts: page.entries.map((post) => {
+                const countedPost = enriched.get(post.id);
+                return countedPost === undefined ? post : retainCurrentReactions(post, countedPost);
+              }),
+              next: page.nextCursor,
+              reactionsAsOf,
+            };
           }),
         );
       },
@@ -1160,7 +1229,16 @@ export function contentRoutes(app: ReturnType<typeof definitionRoutes>, dependen
         contentOperation(() =>
           admission.run('normal', job, async () => {
             const context = { actor, deadline: job.deadline };
-            const post = await readContributedPost(dependencies, await containingThread(id, context), id, context);
+            let finish!: Parameters<RetainContentRead<PostEntry>>[0];
+            const post = await readContributedPost(
+              dependencies,
+              await containingThread(id, context),
+              id,
+              context,
+              (current) => {
+                finish = current;
+              },
+            );
             session.record(sessionComponent(post.anchor));
             if (!isErasedPlaceholder(post.value)) set.headers.etag = JSON.stringify(post.value.revisionId);
             const [personal] = await withViewerReactions(dependencies, actor, [post.value], job.deadline);
@@ -1168,8 +1246,16 @@ export function contentRoutes(app: ReturnType<typeof definitionRoutes>, dependen
             const counted = await withReactionCounts(dependencies, [personal], job.deadline);
             const shown = counted.items[0];
             if (!shown) throw new ProblemError('not_found');
+            const final = await finish();
+            if (!final.value) throw new ProblemError('not_found');
+            session.record(sessionComponent(final.anchor));
             if (actor.kind === 'account') set.headers['cache-control'] = 'private, no-store';
-            return { post: shown };
+            return {
+              post:
+                'authorId' in final.value
+                  ? retainCurrentReactions(post.value, shown)
+                  : retainCurrentReactions(final.value, shown),
+            };
           }),
         ),
     )

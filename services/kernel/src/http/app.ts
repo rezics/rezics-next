@@ -391,7 +391,9 @@ export function createApp({
     );
     return (request) => {
       return withCommandTiming(() =>
-        withRequestDeadline(deadlineFor(requestDeadlineMs), () => {
+        // The outer envelope is wall time. deadlineFor would inherit a leaked ALS
+        // from a held sibling request and starve later commands of their budget.
+        withRequestDeadline(Date.now() + requestDeadlineMs, () => {
           const url = new URL(request.url);
           const path = url.pathname;
           // Also refuse encoded dollar signs so router aliases cannot expose internal routes.

@@ -302,32 +302,33 @@ export function ThreadReading({
     () => new Map([...branches.byId].map(([id, row]) => [id, posts.posts[row.index]!])),
     [branches, posts.posts],
   );
-  // Private data is consumed only while the session still says signed in.
-  const observationMatches =
-    !page.composed || threadPageViewerMatches(page.composed, session === 'signed-in' ? personal?.viewerId : null);
+  // Private composed advice is consumed only while the session still says signed in.
+  const currentPersonal = pageCurrent && session === 'signed-in' ? personal : undefined;
+  const signedInViewer =
+    session === 'signed-in' ? (currentPersonal?.viewerId ?? page.viewerId ?? readerSubject ?? undefined) : undefined;
+  const observationMatches = !page.composed || threadPageViewerMatches(page.composed, signedInViewer ?? null);
   const replyAvailable =
     !page.composed ||
     (observationMatches &&
       page.composed.currentness.actions === 'current' &&
       page.composed.actions.state === 'current' &&
       page.composed.actions.reply.state === 'available');
-  const currentPersonal = pageCurrent && session === 'signed-in' ? personal : undefined;
   const retainedCommandAuthority = useRef<{
     session: SessionState | 'unknown';
     viewerId?: string | null;
     personalReady: boolean;
   }>(undefined);
-  if (pageCurrent && session === 'signed-in' && currentPersonal && !retainedCommandAuthority.current)
+  if (pageCurrent && session === 'signed-in' && signedInViewer && !retainedCommandAuthority.current)
     retainedCommandAuthority.current = {
       session,
-      viewerId: currentPersonal.viewerId,
+      viewerId: signedInViewer,
       personalReady: true,
     };
   const commandAuthority = retainedCommandAuthority.current;
   const commandSession = pageCurrent ? session : (commandAuthority?.session ?? session);
-  const commandViewerId = pageCurrent ? currentPersonal?.viewerId : commandAuthority?.viewerId;
+  const commandViewerId = pageCurrent ? signedInViewer : commandAuthority?.viewerId;
   const commandPersonalReady = pageCurrent
-    ? session !== 'signed-in' || currentPersonal !== undefined
+    ? session !== 'signed-in' || currentPersonal !== undefined || Boolean(commandViewerId)
     : (commandAuthority?.personalReady ?? false);
   const client = useContext(QueryClientContext);
   const observation = useMemo(() => authorErasureSessionSource(client), [client]);
@@ -528,6 +529,7 @@ export function ThreadReading({
                       counts={firstPost ? (thread.reactions ?? {}) : 'reactions' in post ? (post.reactions ?? {}) : {}}
                       value={reactionKinds.find((kind) => kind === reactionValue) ?? null}
                       signedIn={commandSession === 'signed-in'}
+                      sessionKnown={commandSession === 'signed-in' || commandSession === 'signed-out'}
                       returnTo={returnTo}
                       verification={verification}
                       onMutation={onMutation}

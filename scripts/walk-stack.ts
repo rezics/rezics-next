@@ -172,6 +172,28 @@ export function walkPortAllocated(text: string): boolean {
   return /port is already allocated/i.test(text);
 }
 
+/** Docker refused this admitted slot's published mapping; the walk skips it and admits another. */
+export class WalkPublishedPortAllocated extends Error {
+  readonly index: number;
+  readonly detail: string;
+  constructor(index: number, detail: string) {
+    super(`walk: slot ${index} published port is already allocated`);
+    this.name = 'WalkPublishedPortAllocated';
+    this.index = index;
+    this.detail = detail;
+  }
+}
+
+/** Classify a failed setup process whose output already contains Docker's allocated-port refusal. */
+export function walkPublishedPortAllocated(
+  status: number,
+  output: string,
+  index: number,
+): WalkPublishedPortAllocated | undefined {
+  if (status === 0 || !walkPortAllocated(output)) return undefined;
+  return new WalkPublishedPortAllocated(index, output);
+}
+
 /** A surviving container can own a slot's ports after its launcher's flock has been released. */
 export async function walkStackPortsAvailable(ports: WalkPorts): Promise<boolean> {
   const published = dockerPublishedPorts();
@@ -384,6 +406,29 @@ export async function waitUntilWalkReady(options: {
   }
 }
 
+/** Seed import writes wait until topology remaining is zero, not only until one subject POST succeeds. */
+export async function waitUntilIdentityBootstrapRemainingZero(
+  remaining: () => Promise<number | string>,
+  options: { ms?: number; now?: () => number; sleep?: (ms: number) => Promise<void> } = {},
+): Promise<void> {
+  const ms = options.ms ?? 1_200_000;
+  const now = options.now ?? Date.now;
+  const sleep = options.sleep ?? ((wait: number) => Bun.sleep(wait));
+  const deadline = now() + ms;
+  let last = 'no remaining';
+  while (now() < deadline) {
+    try {
+      const value = await remaining();
+      if (value === 0) return;
+      last = `remaining ${value}`;
+    } catch (error) {
+      last = error instanceof Error ? error.message : String(error);
+    }
+    await sleep(1_000);
+  }
+  throw new Error(`identity epoch bootstrap not caught up: ${last}`);
+}
+
 /** The variables that give one admitted stack its own names, ports and origins. */
 export function walkStackEnvironment(task: string, index: number): Record<string, string> {
   const names = walkStackNames(task, index);
@@ -425,7 +470,13 @@ export function walkProcessEnvironment(
   for (const [name, value] of Object.entries(env)) {
     if (value !== undefined && name !== 'KERNEL_CHECK_ON_REMOTE') merged[name] = value;
   }
-  return { ...merged, ...walkStackEnvironment(task, index) };
+  const scoped = walkStackEnvironment(task, index);
+  return {
+    ...merged,
+    ...scoped,
+    // Full-effect journeys need the default worker and Search before seed. Keep Account walks deferred by default.
+    REZICS_WALK_DEFER_FRONTENDS: env.REZICS_WALK_DEFER_FRONTENDS ?? scoped.REZICS_WALK_DEFER_FRONTENDS!,
+  };
 }
 
 /** Re-exec the walk parent under bun --smol once, so its module graph shares the 6 GiB slice. */
@@ -474,7 +525,8 @@ export function walkReadyUrls(ports: WalkPorts, env: Record<string, string | und
 /**
  * Waits for one of the host's walk slots. The queue is the stack-lease FIFO, in the walk directory with the walk
  * capacity, so developers' stacks and check slots are not counted here. `blocked` indexes stay skipped for this
- * launch after Docker refused their published ports.
+ * launch after Docker refused their published ports, including a `docker run` that still reported
+ * `port is already allocated` after admission thought the slot was free.
  */
 export function admitWalkStack(
   task: string,

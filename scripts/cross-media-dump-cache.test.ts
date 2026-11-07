@@ -33,6 +33,26 @@ test('seeded walk and dump-fetch commands restore the host dump cache; ordinary 
   ).toBe(true);
   expect(commandNeedsCrossMediaDumpCache(['bun', 'scripts/datasets/cross-media-seed.ts', '--dev'])).toBe(true);
   expect(commandNeedsCrossMediaDumpCache(['bun', 'scripts/datasets/fetch-dumps.ts'])).toBe(true);
+  expect(
+    commandNeedsCrossMediaDumpCache([
+      'bun',
+      'services/auth/scripts/dev-stack.ts',
+      'walk',
+      '--',
+      'bun',
+      'apps/web/scripts/seeded-content-goal-walk.ts',
+    ]),
+  ).toBe(true);
+  expect(
+    commandNeedsCrossMediaDumpCache([
+      'bun',
+      'services/auth/scripts/dev-stack.ts',
+      'walk',
+      '--',
+      'bun',
+      'apps/web/tests/native/commerce-library-journeys.walk.ts',
+    ]),
+  ).toBe(true);
   expect(commandNeedsCrossMediaDumpCache(['bun', 'test', 'scripts/remote-check.test.ts'])).toBe(false);
   expect(commandNeedsCrossMediaDumpCache(['true'])).toBe(false);
 });

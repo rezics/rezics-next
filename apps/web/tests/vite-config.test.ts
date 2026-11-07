@@ -2,6 +2,7 @@ import { createServer as createHttpServer } from 'node:http';
 import { mkdirSync, realpathSync, writeFileSync, readFileSync } from 'node:fs';
 import { mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
+import { createRequire } from 'node:module';
 import { dirname, join, relative, resolve, sep, isAbsolute } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { expect, test } from 'bun:test';
@@ -19,6 +20,11 @@ import {
   webViteWorkerSsrOptimizeDeps,
   webViteWorkerSsrResolve,
 } from './support/vite-dep-cache.ts';
+import {
+  elysiaWorkerdTypebox,
+  resolveElysiaFamilyImport,
+  transformElysiaTypeboxLoader,
+} from '../vite-elysia-typebox.ts';
 
 const appRoot = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const workspaceRoot = resolve(appRoot, '../..');
@@ -33,6 +39,41 @@ function pluginNames(config: Awaited<ReturnType<typeof resolveWebViteConfig>>): 
       plugin !== null && typeof plugin === 'object' && 'name' in plugin ? [String(plugin.name)] : [],
     );
 }
+
+function installedElysiaTypeFile(name: string): string {
+  const require = createRequire(join(workspaceRoot, 'packages/client/package.json'));
+  return realpathSync(join(dirname(require.resolve('elysia/package.json')), 'dist', 'type', name));
+}
+
+test('Worker Vite loads Elysia and Eden ESM and replaces TypeBox loaders with live re-exports', () => {
+  const clientPackage = join(workspaceRoot, 'packages/client/package.json');
+  const typeFile = installedElysiaTypeFile('typebox-type.mjs');
+  const valueFile = installedElysiaTypeFile('typebox-value.mjs');
+  const requireFile = installedElysiaTypeFile('typebox-value-require.mjs');
+  const typeJs = installedElysiaTypeFile('typebox-type.js');
+  const type = transformElysiaTypeboxLoader(readFileSync(typeFile, 'utf8'), typeFile);
+  const value = transformElysiaTypeboxLoader(readFileSync(valueFile, 'utf8'), valueFile);
+  const required = transformElysiaTypeboxLoader(readFileSync(requireFile, 'utf8'), requireFile);
+  if (!type || !value || !required) throw new Error('Elysia TypeBox loaders were not rewritten');
+  expect(type).toBe("export * from './typebox-type-live.mjs';\n");
+  expect(value).toBe("export * from './typebox-value-live.mjs';\n");
+  expect(required).toContain('requireTypebox = () => undefined');
+  expect(required).not.toContain('require("./typebox-value-ops.mjs")');
+  expect(transformElysiaTypeboxLoader(readFileSync(typeJs, 'utf8'), typeJs)).toBe(
+    "export * from './typebox-type-live.mjs';\n",
+  );
+  expect(resolveElysiaFamilyImport('elysia', clientPackage)).toMatch(/\/elysia\/dist\/index\.mjs$/);
+  expect(resolveElysiaFamilyImport('@elysia/eden', clientPackage)).toMatch(/\/@elysia\/eden\/dist\/index\.mjs$/);
+  expect(resolveElysiaFamilyImport('elysia/type', clientPackage)).toMatch(/\/elysia\/dist\/type\/exports\.mjs$/);
+  expect(resolveElysiaFamilyImport('react', clientPackage)).toBeNull();
+  const plugin = elysiaWorkerdTypebox();
+  expect(plugin.name).toBe('elysia-workerd-typebox');
+  const resolveId = plugin.resolveId;
+  const handler =
+    typeof resolveId === 'function' ? resolveId : resolveId && 'handler' in resolveId ? resolveId.handler : undefined;
+  if (typeof handler !== 'function') throw new Error('elysia-workerd-typebox is missing resolveId');
+  expect(handler.call(undefined, 'elysia')).toMatch(/\/elysia\/dist\/index\.mjs$/);
+});
 
 function isWithin(parent: string, child: string): boolean {
   const path = relative(parent, child);
@@ -64,6 +105,8 @@ test('test Worker bindings are startup-only and production has no fixture header
     process.env.REZICS_TEST_RUNTIME = '1';
     process.env.WEB_TEST_WORKER_BINDINGS = '{"KERNEL_ORIGIN":"https://test.example"}';
     const testRuntime = await resolveWebViteConfig({ command: 'serve', mode: 'test' }, appRoot);
+    expect(testRuntime.optimizeDeps?.holdUntilCrawlEnd).toBe(false);
+    expect(testRuntime.optimizeDeps?.entries).toEqual(['src/server.ts', 'src/session/routes.ts']);
     expect(pluginNames(testRuntime)).toContain('rezics-test-env-bindings');
     expect(testRuntime.define).not.toHaveProperty('__REZICS_TEST_WORKER_BINDINGS__');
     const plugins = (testRuntime.plugins ?? []).flatMap((plugin) => (Array.isArray(plugin) ? plugin : [plugin]));
@@ -164,6 +207,12 @@ test('WEB_VITE_CACHE_DIR selects the host-local optimizeDeps cache and allows re
     expect(align).toBeTruthy();
     expect(align && 'enforce' in align ? align.enforce : undefined).toBe('pre');
     expect(pluginNames(config).at(0)).toBe('web-vite-dep-cache-align');
+    const typebox = plugins.find(
+      (plugin) =>
+        plugin !== null && typeof plugin === 'object' && 'name' in plugin && plugin.name === 'elysia-workerd-typebox',
+    );
+    expect(typebox).toBeTruthy();
+    expect(typebox && 'enforce' in typebox ? typebox.enforce : undefined).toBe('pre');
     mkdirSync(join(cacheDir, 'deps_ssr'), { recursive: true });
     const metadataPath = join(cacheDir, 'deps_ssr', '_metadata.json');
     writeFileSync(

@@ -22,6 +22,7 @@ import {
   seedJournalsNameDifferentDatabase,
   stackStartPlan,
   waitUntilWalkReady,
+  waitUntilIdentityBootstrapRemainingZero,
   walkCgroupPath,
   walkDockerOutput,
   walkIssuerForward,
@@ -29,6 +30,9 @@ import {
   walkPageBodyIsUseful,
   walkParentInvocation,
   walkPortAllocated,
+  walkProcessEnvironment,
+  walkPublishedPortAllocated,
+  WalkPublishedPortAllocated,
   walkReadyResponse,
   walkReadyUrls,
   walkReadyWaitingMessage,
@@ -81,6 +85,18 @@ test('walk stacks cap OpenSearch, Postgres and bun heaps inside the host run sli
   expect(() => searchRunArgs('native-policy-test-image', { KERNEL_SEARCH_MEMORY: '1g' })).toThrow(
     'KERNEL_SEARCH_MEMORY',
   );
+});
+
+test('full-effect walks retain their worker mode while slot identities remain scoped', () => {
+  const env = walkProcessEnvironment('content-mode', 2, {
+    REZICS_WALK_DEFER_FRONTENDS: '0',
+    KERNEL_CHECK_ON_REMOTE: '1',
+    KERNEL_DATABASE_PORT: '5432',
+  });
+  expect(env.REZICS_WALK_DEFER_FRONTENDS).toBe('0');
+  expect(env.KERNEL_CHECK_ON_REMOTE).toBeUndefined();
+  expect(env.KERNEL_DATABASE_PORT).toBe(String(walkStackPorts(2).database));
+  expect(walkProcessEnvironment('account-mode', 1, {}).REZICS_WALK_DEFER_FRONTENDS).toBe('1');
 });
 
 test('the walk parent and Docker teardown stay inside the 6 GiB slice', () => {
@@ -167,6 +183,16 @@ test('Docker published mappings occupy a walk slot even when nothing is listenin
     ),
   ).toBe(true);
   expect(walkPortAllocated('walk: services/kernel/scripts/database.ts up failed')).toBe(false);
+  const allocated = walkPublishedPortAllocated(
+    1,
+    'docker: Error response from daemon: Bind for 127.0.0.1:20064 failed: port is already allocated',
+    6,
+  );
+  expect(allocated).toBeInstanceOf(WalkPublishedPortAllocated);
+  expect(allocated?.index).toBe(6);
+  expect(allocated?.message).toBe('walk: slot 6 published port is already allocated');
+  expect(walkPublishedPortAllocated(0, 'port is already allocated', 6)).toBeUndefined();
+  expect(walkPublishedPortAllocated(1, 'walk: services/kernel/scripts/database.ts up failed', 6)).toBeUndefined();
 });
 
 test('walk admission preserves an occupied slot and reuses it after its listener closes', async () => {
@@ -351,6 +377,29 @@ test('untilReady retains observed probe, fetch and child-exit causes instead of 
   }).catch((error: Error) => error);
   expect(fetches[0]).toEqual([`stack: fetch ${url} HTTP 503`]);
   expect(JSON.stringify(fetches)).not.toContain('ECONNREFUSED');
+});
+
+test('identity remaining wait returns once topology remaining is zero', async () => {
+  const seen: number[] = [];
+  await waitUntilIdentityBootstrapRemainingZero(
+    async () => {
+      seen.push(seen.length === 0 ? 12 : 0);
+      return seen.at(-1)!;
+    },
+    { sleep: async () => {}, ms: 5_000 },
+  );
+  expect(seen).toEqual([12, 0]);
+});
+
+test('identity remaining wait names the last remaining count', async () => {
+  let now = 0;
+  await expect(
+    waitUntilIdentityBootstrapRemainingZero(async () => 17, {
+      now: () => (now += 600),
+      sleep: async () => {},
+      ms: 1_000,
+    }),
+  ).rejects.toThrow('identity epoch bootstrap not caught up: remaining 17');
 });
 
 test('seeded Web is ready only on useful /en HTML, not a Vite missing-module overlay', async () => {
