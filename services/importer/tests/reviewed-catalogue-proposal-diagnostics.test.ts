@@ -160,14 +160,22 @@ test('a lost proposal reply resumes the sealed bytes and native idempotency prev
       const command = commands[0]!;
       if (command.op === 'create')
         return {
-          results: [{ key: command.key, status: 201 as const, value: { id: '019a1b2c-3d4e-7f00-8a00-1a0000000101', revision: 1 } }],
+          results: [
+            {
+              key: command.key,
+              status: 201 as const,
+              value: { id: '019a1b2c-3d4e-7f00-8a00-1a0000000101', revision: 1 },
+            },
+          ],
         };
       proposalBytes.push(JSON.stringify({ commands }));
       const prior = receipts.get(command.key);
       if (prior) return prior;
       proposalEffects++;
       const result: BatchWriteResult = {
-        results: [{ key: command.key, status: 201, value: { candidate: '019a1b2c-3d4e-7f00-8a00-1a0000000102', revision: 2 } }],
+        results: [
+          { key: command.key, status: 201, value: { candidate: '019a1b2c-3d4e-7f00-8a00-1a0000000102', revision: 2 } },
+        ],
       };
       receipts.set(command.key, result);
       throw new ImportTransportError(undefined, undefined, undefined, true, undefined, undefined, {

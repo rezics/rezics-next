@@ -2,11 +2,7 @@ import type { Database } from 'bun:sqlite';
 import type { BatchCommand, BatchStatement, Source } from '@rezics/definitions/bulk';
 import { commandKey, reviewedReferenceKey, sourceDigest, sourceEnvelope } from '@rezics/conversion/support';
 import { checkBatch } from './accepted-checks.ts';
-import {
-  type createImportTransport,
-  type ReviewedAcceptance,
-  type ReviewedAdoption,
-} from './import-client.ts';
+import { type createImportTransport, type ReviewedAcceptance, type ReviewedAdoption } from './import-client.ts';
 import { isImportSourceRecord } from './source-record-runtime.ts';
 import type { ImportSourceRecordMetadataCommand } from './import-contract.ts';
 import type { Owner, RecordBindings } from './record-bindings.ts';
