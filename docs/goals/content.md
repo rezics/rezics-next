@@ -84,7 +84,7 @@ installs activity, current review context, exact document-media and bounded ment
 reading adapters. Explicit optional outcomes preserve unknown/deleted identities, historical citations, exact
 revision anchors and partial sibling presentation. Existing closed reading/history shapes and final native
 authorization remain; HTTP mapping stays at the compatibility boundary. Focused application/composition tests pin
-these states without new stories. Runtime/growth acceptance stays with the integrated verifier. Platform defineModule
+these states without new stories. Runtime/growth acceptance stays with sole Goal walks. Platform defineModule
 is undelivered, so contentDeclaration()/contentHttpDeclaration() remain. Work registrations compose in
 composition/work-modules.ts; startWorker binds Content and shares the original database pool with WorkClient and
 composeWork. Native queue registration refuses a stub; edition consent stays explicit with no pool WeakMap.

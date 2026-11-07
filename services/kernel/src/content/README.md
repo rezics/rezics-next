@@ -652,7 +652,7 @@ variants and older consumers retain wire shapes, pool/deadline, exact revisions,
 Final native authorization follows enrichment. Partial sibling presentation preserves readable documents; failed
 batches retain unavailable state and selected keys. Media observation uses the original budget, including the
 producer's expired-budget empty result. Application/composition tests pin these states; runtime/growth acceptance
-stays with the integrated verifier. No extra stories or publisher.
+stays with sole Goal walks. No extra stories or publisher.
 
 ## Worker authorization composition
 
@@ -1863,7 +1863,7 @@ raw SQL fixture changes and gate changes without a committed original event cann
   or provider history; global exposure changes affect the complete directory.
 - Growth check: the focused lifecycle test adds more than 100 disappeared identities across native partitions and
   unrelated dependencies, checks bounded examined counts, continuation, replay and explicit removal. This is a focused
-  outcome/batch-bound check; physical block growth remains a dev-verifier measurement.
+  outcome/batch-bound check; sole Goal walks retain physical block growth measurement.
 
 #### Cost: changed-source catch-up and refresh
 

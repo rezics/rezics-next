@@ -26,7 +26,7 @@ const place = {
   realmId: null,
 };
 
-function document(id: string, image: string, mentions: readonly string[] = []): ReadingPagePost {
+function document(id: string, image: string, mentions: readonly string[] = []) {
   return {
     id,
     threadId: place.threadId,
@@ -43,7 +43,7 @@ function document(id: string, image: string, mentions: readonly string[] = []): 
         ],
       },
     },
-  };
+  } satisfies ReadingPagePost;
 }
 
 function review(): ReadingPageCitationThread {
@@ -222,14 +222,14 @@ test('mention keys stay bounded and immutable; live, deleted, unknown and failed
     selection,
   );
   expect(value.identities.slice(0, 4)).toEqual([
-    { id: ids[0], state: 'active', handle: 'reader' },
-    { id: ids[1], state: 'erased' },
-    { id: ids[2], state: 'concealed' },
-    { id: ids[3], state: 'concealed' },
+    { id: ids[0]!, state: 'active', handle: 'reader' },
+    { id: ids[1]!, state: 'erased' },
+    { id: ids[2]!, state: 'concealed' },
+    { id: ids[3]!, state: 'concealed' },
   ]);
   const failed = await readReadingPageMentions({ read: async () => unavailable }, selection);
   expect(failed).toMatchObject({ state: 'unavailable', retryable: true, identities: [], overflow: true });
-  expect(failed.sources).toEqual(selection.sources);
+  expect(failed.sources).toEqual([...selection.sources]);
   const empty = await readReadingPageMentions(
     {
       read: async () => {

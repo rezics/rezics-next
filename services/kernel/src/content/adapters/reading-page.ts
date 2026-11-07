@@ -29,7 +29,7 @@ function citationPost(post: PostEntry): ReadingPageCitationPost {
     threadId: post.threadId,
     route: post.route,
     availability: post.availability,
-    revisionId: 'revisionId' in post ? post.revisionId : undefined,
+    ...('revisionId' in post ? { revisionId: post.revisionId } : {}),
     voteCitation: 'voteCitation' in post ? post.voteCitation : null,
     disclosure: readCitationDisclosure(post),
   };

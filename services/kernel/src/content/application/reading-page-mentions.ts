@@ -65,11 +65,11 @@ export function readingPageMentionIdentityViews(
     seen.add(id);
     const account = byId.get(id);
     identities.push(
-      !account || account.state === 'unknown'
-        ? { id, state: 'concealed' }
-        : account.state === 'deleted'
+      account?.state === 'active'
+        ? { id, state: 'active', handle: account.handle }
+        : account?.state === 'deleted'
           ? { id, state: 'erased' }
-          : { id, state: 'active', handle: account.handle },
+          : { id, state: 'concealed' },
     );
   }
   return identities;
