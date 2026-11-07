@@ -1,6 +1,7 @@
 /** Library contract barrel. Cross-module callers import this entry or work-dimensions.ts. */
 
 export type { WorkAllowance, WorkDimensions, WorkReceipt } from './work-dimensions.ts';
+export type * from './native-public-output.ts';
 export { libraryActorOf } from './actors.ts';
 export type { GrantedAccount, LibraryAccountActor, LibraryActor, LibraryAnonymousActor } from './actors.ts';
 export {
