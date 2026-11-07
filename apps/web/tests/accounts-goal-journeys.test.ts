@@ -3,6 +3,7 @@ import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import {
   JOURNEYS,
+  finishUnobservedJourneys,
   KERNEL_BEARER_JOURNEYS,
   parseJourneyTable,
   renderJourneyTable,
@@ -21,7 +22,9 @@ test('every first-public Accounts journey has a published row with causal repair
   for (const [index, row] of rows.entries()) {
     const expected = JOURNEYS[index]!;
     expect(row.journey).toBe(expected.journey);
-    expect(row.owner).toBe(expected.owner);
+    expect([expected.owner, 'Content (walk stack infrastructure)']).toContain(row.owner);
+    expect(row.persona.length).toBeGreaterThan(0);
+    expect(row.evidence).toMatch(/^\.temp\/accounts\//);
     expect(['PASS', 'FAIL', 'unobserved']).toContain(row.result);
     expect(row.reached.length).toBeGreaterThan(0);
     expect(row.revision.length).toBeGreaterThan(0);
@@ -64,29 +67,63 @@ test('a website-bearer Kernel 401 fails only dependent Kernel journeys and keeps
 test('the table-shape check does not boot Storybook, and follow writes the public agent subject without a body', () => {
   expect(commandNeedsSharedDevServer(['bun', 'test', 'tests/accounts-goal-journeys.test.ts'])).toBe(false);
   expect(
-    commandNeedsSharedDevServer(['bun', 'test', 'tests/accounts-goal-journeys.test.ts', 'tests/with-dev-server.test.ts']),
+    commandNeedsSharedDevServer([
+      'bun',
+      'test',
+      'tests/accounts-goal-journeys.test.ts',
+      'tests/with-dev-server.test.ts',
+    ]),
   ).toBe(false);
   expect(commandNeedsSharedDevServer(['bun', 'test', 'tests/session.test.ts'])).toBe(true);
   const source = readFileSync(walk, 'utf8');
   expect(source).toContain("const session = await signIn(stack, person, 'login', []);");
-  expect(source).toContain("followTargetId = await waitForPublicAgentSubject(stack, followTarget.handle, 'follow target')");
+  expect(source).toContain(
+    "followTargetId = await waitForPublicAgentSubject(stack, followTarget.handle, 'follow target')",
+  );
   expect(source).toContain("kernel(stack, 'PUT', `/v1/follows/${followTargetId}`, { bearer: token.bearer })");
   expect(source).not.toMatch(/follows\/\$\{followTargetId\}.*body:/);
-  expect(source).toContain("`${stack.native}/revoke`");
+  expect(source).toContain('`${stack.native}/revoke`');
   expect(source).toContain("visibility: 'protected'");
   expect(source).toContain("join(root, '.temp/local-stack/recovery'");
   expect(source).toContain('delete rest.confirmation');
   expect(source).toContain("operation.kind === 'organization' || operation.kind === 'delete'");
-  expect(source).toContain("`/v1/realms/${realmId}/members`");
+  expect(source).toContain('`/v1/realms/${realmId}/members`');
   expect(source).toContain('outsider opened the software session');
   expect(source).toContain('/operator-sessions/open');
   expect(source).toMatch(/\/account-operations\/execute[\s\S]{0,220}30_000/);
   expect(source).toMatch(/credential-effects\/stage[\s\S]{0,240}30_000/);
   const rows = parseJourneyTable(readFileSync(capabilities, 'utf8'));
   const census = renderWalkCensus(rows, rows[0]!.revision, rows[0]!.observedAt, '2026-11-07T03:42:43Z', true);
-  expect(census).toMatch(/^Round .+ Causal repairs: `\.temp\/continuation\/rating-walk-setup.md`/);
+  expect(census).toMatch(/^Round .+ Causal repairs: `\.temp\/continuation\/accounts-walk-admission.md`/);
   expect(replaceWalkCensus(readFileSync(capabilities, 'utf8'), census)).toContain(census);
   const withProse = `## First-public journeys\n\nCensus refresh locates the dated census line. Round 2026-11-07T00:00:00Z on \`abc\`. The table-shape check does not start Storybook.\n`;
   expect(replaceWalkCensus(withProse, 'Round 2026-11-07T01:00:00Z on `def`.')).toContain('dated census line');
-  expect(replaceWalkCensus(withProse, 'Round 2026-11-07T01:00:00Z on `def`.')).toContain('Round 2026-11-07T01:00:00Z on `def`.');
+  expect(replaceWalkCensus(withProse, 'Round 2026-11-07T01:00:00Z on `def`.')).toContain(
+    'Round 2026-11-07T01:00:00Z on `def`.',
+  );
+});
+
+test('admission EACCES replaces only unobserved rows with the exact first cause and infrastructure owner', () => {
+  const rows = parseJourneyTable(readFileSync(capabilities, 'utf8'));
+  const pending = rows.map((row) => ({ ...row, result: 'unobserved' as const }));
+  const passed = { ...rows[0]!, result: 'PASS' as const, cause: 'native callback completed' };
+  const cause = "EACCES: permission denied, open '/tmp/rezics-walk-stacks/sequence.next'";
+  const finished = finishUnobservedJourneys(
+    [passed, ...pending.slice(1)],
+    `215 | writeFileSync(...)\n${cause}\n at acquireStackSlot`,
+    1,
+    '2026-11-07T09:15:00Z',
+    317,
+  );
+  expect(finished[0]).toEqual(passed);
+  expect(finished.slice(1)).toHaveLength(18);
+  for (const row of finished.slice(1)) {
+    expect(row.result).toBe('FAIL');
+    expect(row.reached).toBe('not reached: dev-stack walk admission/startup');
+    expect(row.cause).toBe(cause);
+    expect(row.owner).toBe('Content (walk stack infrastructure)');
+    expect(row.persona).toBe('not reached: no persona provisioned');
+    expect(row.elapsed).toBe('317ms');
+    expect(row.evidence).toBe('.temp/accounts/launcher.log');
+  }
 });
