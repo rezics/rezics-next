@@ -21,6 +21,7 @@ import {
   remainingRequestFromPreparedJournal,
 } from './seed-remaining-request.ts';
 import { ImportSession } from './import-session.ts';
+import { sameStatementProvenance } from './statement-provenance.ts';
 import { GLOBAL_CONTEXT, selectedSynopsisQueryFromPublic } from './public-bulk-client.ts';
 import { BOOK_OWNER_GRANT_ACTIONS, grantOrdinaryOwnerActions } from './ordinary-owner-grants.ts';
 import {
@@ -262,30 +263,82 @@ Reproduce with the retained walk command on one admitted stack. Fix the owning m
 `;
 }
 
-export async function writeWalkInventoryArtifacts(inventory: WalkInventory): Promise<void> {
-  const capabilitiesPath = resolve(root, 'docs/goals/imports.capabilities.md');
+/** Remote returns are outputs: never declare the owner document or shared continuation directory. */
+export async function writeWalkInventoryArtifacts(inventory: WalkInventory, repository = root): Promise<void> {
+  const output = resolve(repository, '.temp/imports-walk');
+  const capabilitiesPath = resolve(repository, 'docs/goals/imports.capabilities.md');
   const markdown = applyWalkInventoryToCapabilities(await readFile(capabilitiesPath, 'utf8'), inventory);
-  await writeFile(capabilitiesPath, markdown);
-  await mkdir(resolve(root, '.temp/continuation'), { recursive: true, mode: 0o700 });
+  await mkdir(output, { recursive: true, mode: 0o700 });
+  await writeFile(resolve(output, 'imports.capabilities.md'), markdown);
+  const drafts = resolve(output, 'continuation');
+  await mkdir(drafts, { recursive: true, mode: 0o700 });
   const failing = inventory.rows.filter((row) => row.result === 'failing');
   const shared = failing.length === inventory.total && failing.every((row) => row.evidence.sharedStartup === true);
   if (shared && failing[0]) {
     await writeFile(
-      resolve(root, '.temp/continuation/imports-walk-shared-startup.md'),
-      `# Shared walk startup\n\nGoal: imports\nManager: imports\n\nAll twelve first-public rows failed before product paths ran: ${failing[0].cause}\n\nReproduce with the retained walk command. Persona/token sign-in must use the live Auth origin on an admitted stack.\n`,
+      resolve(drafts, 'imports-walk-shared-startup.md'),
+      `# Shared walk startup
+
+Goal: imports
+Manager: semantic
+
+Command: ${inventory.command}
+Revision: ${inventory.revision}
+Started: ${inventory.startedAt}; ended: ${inventory.endedAt}
+All twelve rows failed before product paths ran: ${failing[0].cause}
+
+Reproduce with the retained walk command on one admitted stack. Restore ordinary Auth persona setup before claiming any path passed. Preserve the existing assertions and independently read the current facts.
+`,
     );
     return;
   }
-  for (const row of failing) {
-    const skip = walkRepairSkipReason(row);
-    const name = `imports-walk-${row.id.toLowerCase()}.md`;
-    const path = resolve(root, '.temp/continuation', name);
-    if (skip) {
-      await writeFile(path, `# ${row.id} ${row.path}\n\n${skip}\n`);
-      continue;
-    }
-    await writeFile(path, walkRepairBrief(inventory, row));
+  const seedRows = failing.filter((row) => row.evidence.seed === true);
+  if (seedRows[0]) {
+    const cause = seedRows[0].cause ?? 'seed unavailable';
+    const owner = /sourceFences/.test(cause) ? 'Content d66' : 'Semantic cf23';
+    await writeFile(
+      resolve(drafts, 'imports-walk-seed.md'),
+      `# Resume catalogue paths after shared seed failure
+
+Goal: imports
+Manager: semantic
+
+Command: ${inventory.command}
+Revision: ${inventory.revision}
+Started: ${inventory.startedAt}; ended: ${inventory.endedAt}
+Elapsed seed work: ${seedRows[0].elapsedMs}ms
+Affected rows: ${seedRows.map((row) => row.id).join(', ')}
+Cause: ${cause}
+
+Existing owner: ${owner}. This is input for that repair, not a second implementation assignment. Proposal contention and sourceFences remain separate incidents. Operation/partition/server phase are unretained unless present in the safe request evidence. No catalogue current read or browser path was exercised after the failed seed.
+
+Use the returned seed.log and remaining-request.json, retaining the exact prepared source tuple, native type, converter, method/path/status and any safe problem/correlation. Resume only through ordinary APIs and the original sealed body/key. The complete fresh manifest must finish before catalogue reads. Rerun this same twelve-row command; preserve exact id/type, public facts, provenance, separate acceptance/adoption and phone/desktop assertions. Tags' same-handle continuation and Semantic's concurrent Sources erasure keep their existing owners.
+`,
+    );
   }
+  for (const row of failing) {
+    if (row.evidence.seed === true) continue;
+    const skip = walkRepairSkipReason(row);
+    if (skip) continue;
+    await writeFile(resolve(drafts, `imports-walk-${row.id.toLowerCase()}.md`), walkRepairBrief(inventory, row));
+  }
+}
+
+/** Apply returned output locally after the check settles; source inputs survive artifact cleanup. */
+export async function receiveWalkInventoryArtifacts(repository = root): Promise<WalkInventory> {
+  const output = resolve(repository, '.temp/imports-walk');
+  const inventory: WalkInventory = JSON.parse(await readFile(resolve(output, 'inventory.json'), 'utf8'));
+  await writeWalkInventoryArtifacts(inventory, repository);
+  await writeFile(
+    resolve(repository, 'docs/goals/imports.capabilities.md'),
+    await readFile(resolve(output, 'imports.capabilities.md')),
+  );
+  const { readdir } = await import('node:fs/promises');
+  const destination = resolve(repository, '.temp/continuation');
+  await mkdir(destination, { recursive: true, mode: 0o700 });
+  for (const name of await readdir(resolve(output, 'continuation')))
+    await writeFile(resolve(destination, name), await readFile(resolve(output, 'continuation', name)));
+  return inventory;
 }
 
 /** Current Character endpoints on a Work; only `wd:Q95074` identities count. */
@@ -612,7 +665,7 @@ async function runOperator(id: 'I01' | 'I02' | 'I03' | 'I04', persona: SeedEnv):
       denials.push({ method, path, status: response.status });
     },
   });
-  const adopted: { key: string; id: string; type: string; candidate: string }[] = [];
+  const adopted: { key: string; id: string; type: string; candidate: string; statement: unknown }[] = [];
   for (const [key, id] of subjects) {
     const page = await retryWalkTransport(() =>
       review.reviewedCandidates(id, {
@@ -629,7 +682,7 @@ async function runOperator(id: 'I01' | 'I02' | 'I03' | 'I04', persona: SeedEnv):
         'external_id' in row.source &&
         row.source.external_id === key,
     );
-    assert.ok(candidate && 'id' in candidate, `${spec.source} ${key} has no current ${spec.property} candidate`);
+    assert.ok(candidate && 'statement' in candidate, `${spec.source} ${key} has no current ${spec.property} candidate`);
     await retryWalkTransport(() =>
       review.acceptReviewedCandidate(
         id,
@@ -653,7 +706,8 @@ async function runOperator(id: 'I01' | 'I02' | 'I03' | 'I04', persona: SeedEnv):
     );
     const read = await currentSubject(persona.kernel, id);
     assert.equal(read.subject.id, id);
-    adopted.push({ key, id, type: read.subject.type, candidate: candidate.id });
+    assertCurrentOperatorFact(read, spec.property, candidate.statement);
+    adopted.push({ key, id, type: read.subject.type, candidate: candidate.id, statement: candidate.statement });
   }
   const again = await runImportCli(argv, {
     testOrigin: persona.kernel,
@@ -668,7 +722,9 @@ async function runOperator(id: 'I01' | 'I02' | 'I03' | 'I04', persona: SeedEnv):
       if (claim?.state === 'bound') assert.equal(claim.subject, id, `${spec.source} ${key} identity moved on reopen`);
       const current = await currentSubject(persona.kernel, id);
       assert.equal(current.subject.id, id);
-      assert.equal(current.subject.type, adopted.find((row) => row.key === key)!.type);
+      const expected = adopted.find((row) => row.key === key)!;
+      assert.equal(current.subject.type, expected.type);
+      assertCurrentOperatorFact(current, spec.property, expected.statement);
     }
   } finally {
     reread.close();
@@ -691,6 +747,17 @@ async function loadSeedReport(): Promise<{
     throw new TypeError('Cross-media seed result has no published showcase identities');
   const report = reportValue as unknown as CrossMediaSeedReport;
   return { report, publication: report.showcase as ShowcasePublicationResult };
+}
+
+export function assertCurrentOperatorFact(
+  read: { subject: { statements: Record<string, unknown[]> } },
+  property: string,
+  expected: unknown,
+): void {
+  assert.ok(
+    (read.subject.statements[property] ?? []).some((statement) => sameStatementProvenance(statement, expected)),
+    `anonymous current ${property} differs from the independently accepted/adopted statement and provenance`,
+  );
 }
 
 function statementContents(read: { subject: { statements: Record<string, unknown[]> } }, property: string): unknown[] {
@@ -840,6 +907,7 @@ async function walkRow(
     const evidence = await run();
     return { id, path: meta.path, result: 'passing', elapsedMs: Date.now() - started, cause: null, evidence };
   } catch (error) {
+    console.error(`${id} failing; ${Date.now() - started}ms; ${walkFailureCause(error)}`);
     return {
       id,
       path: meta.path,
@@ -885,6 +953,8 @@ export async function runImportsPublicJourney(): Promise<WalkInventory> {
     }
   }
 
+  const seedStarted = Date.now();
+  let seedElapsedMs = 0;
   let seedCause: string | null = sharedStartup;
   let publication: ShowcasePublicationResult | undefined;
   let report: CrossMediaSeedReport | undefined;
@@ -908,6 +978,8 @@ export async function runImportsPublicJourney(): Promise<WalkInventory> {
     }
   }
 
+  seedElapsedMs = Date.now() - seedStarted;
+  if (seedCause) console.error(`shared seed failing; ${seedElapsedMs}ms; ${seedCause}`);
   const catalogueFromSeed = ['I05', 'I06', 'I07', 'I08', 'I09', 'I10', 'I11', 'I12'] as const;
   if (seedCause || !publication || !report) {
     for (const id of catalogueFromSeed)
@@ -915,7 +987,7 @@ export async function runImportsPublicJourney(): Promise<WalkInventory> {
         id,
         path: firstPublicRow(id).path,
         result: 'failing',
-        elapsedMs: 0,
+        elapsedMs: seedElapsedMs,
         cause: seedCause ?? 'seed report unavailable',
         evidence: { sharedStartup: Boolean(sharedStartup), seed: true },
       });

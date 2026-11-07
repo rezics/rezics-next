@@ -363,7 +363,7 @@ if (import.meta.main) {
     const remaining =
       reviewed || journal || transport ? mergeRemainingRequest(reviewed ?? journal, transport) : undefined;
     if (remaining) await writeSeedRemainingRequest(directory, remaining);
-    process.stderr.write(`${formatSeedFailure(error, remaining)}\n`);
+    process.stderr.write(`${seedFailureDetail(error)}${remaining ? ` remaining{${formatSeedFailure(undefined, remaining)}}` : ''}\n`);
     process.exitCode = 1;
   }
 }

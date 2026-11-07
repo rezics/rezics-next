@@ -137,7 +137,7 @@ export function formatSeedRemainingRequest(remaining: SeedRemainingRequest): str
 }
 
 export function formatSeedFailure(error: unknown, remaining?: SeedRemainingRequest): string {
-  const cause = importTransportCause(error);
+  const cause = error === undefined ? '' : importTransportCause(error);
   if (!remaining) return cause;
   const request =
     remaining.path && !cause.includes(remaining.path) ? `${remaining.method} ${remaining.path}` : undefined;

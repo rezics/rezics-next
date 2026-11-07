@@ -323,25 +323,7 @@ export function formatImportTransportError(error: ImportTransportError): string 
 }
 
 export function importTransportCause(error: unknown): string {
-  if (error instanceof ImportTransportError) {
-    const nested =
-      error.status === undefined && error.cause instanceof Error
-        ? error.cause.message.split('\n')[0]!.slice(0, 120)
-        : undefined;
-    return [
-      'Import transport request failed',
-      error.status,
-      error.type,
-      error.code,
-      error.phase,
-      error.method,
-      error.path,
-      nested,
-    ]
-      .filter((part) => part !== undefined && part !== '')
-      .join(' ')
-      .slice(0, 240);
-  }
+  if (error instanceof ImportTransportError) return formatImportTransportError(error);
   const text = error instanceof Error ? error.message : String(error);
   return text.split('\n')[0]!.slice(0, 240);
 }

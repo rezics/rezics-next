@@ -21,6 +21,9 @@ import {
 } from '../src/seed-remaining-request.ts';
 import {
   FIRST_PUBLIC_IMPORT_ROWS,
+  assertCurrentOperatorFact,
+  writeWalkInventoryArtifacts,
+  receiveWalkInventoryArtifacts,
   applyWalkInventoryToCapabilities,
   capabilitiesResultCell,
   currentAnimeCharacterIds,
@@ -394,18 +397,18 @@ test('leftover walk journals are archived before persona so wiped slot databases
 });
 
 test('operator causes keep ImportTransportError status and seed causes keep the stderr TypeError', () => {
-  expect(walkFailureCause(new ImportTransportError(404))).toBe('Import transport request failed 404');
+  expect(walkFailureCause(new ImportTransportError(404))).toContain('status=404');
   expect(walkFailureCause(new ImportTransportError(403, 'about:blank', 'forbidden'))).toBe(
-    'Import transport request failed 403 about:blank forbidden',
+    expect.stringContaining('status=403 problem=forbidden'),
   );
-  const named = new ImportTransportError(503);
-  named.method = 'POST';
-  named.path = '/v1/subjects:batchWrite';
-  expect(walkFailureCause(named)).toBe('Import transport request failed 503 POST /v1/subjects:batchWrite');
+  const named = new ImportTransportError(503, undefined, undefined, false, undefined, undefined, {
+    method: 'POST', path: '/v1/subjects:batchWrite',
+  });
+  expect(walkFailureCause(named)).toContain('method=POST target=unknown-origin/v1/subjects:batchWrite status=503');
   const nested = new ImportTransportError();
   nested.cause = new TypeError('Import requests must target the configured API origin under /v1/');
   expect(walkFailureCause(nested)).toBe(
-    'Import transport request failed Import requests must target the configured API origin under /v1/',
+    expect.not.stringContaining('Import requests must target'),
   );
   expect(
     walkChildFailure(
@@ -443,9 +446,10 @@ test('seed remaining request names the prepared classification create without bo
       journalState: 'prepared',
     });
     const error = new ImportTransportError();
-    expect(formatSeedFailure(error, remaining)).toBe(
-      'Import transport request failed POST /v1/subjects:batchWrite create vndb_cross_media vocabulary:vndb.releases.media skos:ConceptScheme',
+    expect(formatSeedFailure(undefined, remaining)).toBe(
+      'POST /v1/subjects:batchWrite create vndb_cross_media vocabulary:vndb.releases.media skos:ConceptScheme',
     );
+    expect(walkFailureCause(error)).toContain('status=none');
     await writeSeedRemainingRequest(directory, remaining);
     expect(JSON.parse(await readFile(join(directory, 'remaining-request.json'), 'utf8'))).toEqual(remaining);
     const journal = join(directory, 'showcase.sqlite');
@@ -562,4 +566,54 @@ test('bounded VNDB entry_meta pages continue until selected revisions are found'
   });
   expect(plan.records.vndb).toEqual([]);
   expect(plan.gaps.some((gap) => gap.reason.includes('entry_meta exceeded its bounded scan'))).toBe(true);
+});
+
+
+test('current operator acceptance requires the exact adopted value and citation after reopen', () => {
+  const statement = {
+    property: { id: 'schema:name' },
+    value: { type: 'value', content: 'Licensed title' },
+    references: [{ parts: [{ property: { id: 'schema:url' }, value: { type: 'value', content: 'https://bgm.tv/subject/233' } }] }],
+  };
+  const read = (facts: unknown[]) => ({ subject: { statements: { 'schema:name': facts } } });
+  expect(() => assertCurrentOperatorFact(read([{ ...statement, id: 'current-id', rank: 'normal' }]), 'schema:name', statement)).not.toThrow();
+  expect(() => assertCurrentOperatorFact(read([]), 'schema:name', statement)).toThrow('anonymous current');
+  expect(() => assertCurrentOperatorFact(read([{ ...statement, references: [] }]), 'schema:name', statement)).toThrow('provenance');
+  expect(() => assertCurrentOperatorFact(read([{ ...statement, value: { type: 'value', content: 'Other title' } }]), 'schema:name', statement)).toThrow('anonymous current');
+});
+
+test('walk outputs preserve source documents and sibling drafts and group a shared seed repair', async () => {
+  const repository = await mkdtemp(join(tmpdir(), 'imports-walk-output-'));
+  try {
+    const document = join(repository, 'docs/goals/imports.capabilities.md');
+    await mkdir(join(repository, 'docs/goals'), { recursive: true });
+    await mkdir(join(repository, '.temp/continuation'), { recursive: true });
+    const original = '| I05 | Anime | Pending |\n| I11 | Books | Pending |\n\nBooks owner-grant composition uses ordinary grants.\n';
+    await writeFile(document, original);
+    const sibling = join(repository, '.temp/continuation/sibling.md');
+    await writeFile(sibling, 'another owner');
+    const rows: WalkRowResult[] = (['I05', 'I11'] as const).map((id) => ({
+      id, path: id, result: 'failing', elapsedMs: 41000,
+      cause: 'semantic_not_ready POST /v1/subjects:batchWrite', evidence: { seed: true },
+    }));
+    const inventory: WalkInventory = {
+      command: 'walk', revision: 'source-head', startedAt: 't0', endedAt: 't1', passing: 0, total: 2,
+      slowestFailing: { id: 'I05', path: 'Anime', elapsedMs: 41000, cause: rows[0]!.cause! }, rows,
+    };
+    await writeWalkInventoryArtifacts(inventory, repository);
+    expect(await readFile(document, 'utf8')).toBe(original);
+    expect(await readFile(sibling, 'utf8')).toBe('another owner');
+    const draft = await readFile(join(repository, '.temp/imports-walk/continuation/imports-walk-seed.md'), 'utf8');
+    expect(draft).toContain('Affected rows: I05, I11');
+    expect(draft).toContain('Elapsed seed work: 41000ms');
+    expect(draft).toContain('Semantic cf23');
+    expect(draft).toContain('No catalogue current read or browser path was exercised');
+    await writeFile(join(repository, '.temp/imports-walk/inventory.json'), JSON.stringify(inventory));
+    await receiveWalkInventoryArtifacts(repository);
+    expect(await readFile(document, 'utf8')).toContain('Revision `source-head`');
+    expect(await readFile(join(repository, '.temp/continuation/imports-walk-seed.md'), 'utf8')).toBe(draft);
+    expect(await readFile(sibling, 'utf8')).toBe('another owner');
+  } finally {
+    await rm(repository, { recursive: true, force: true });
+  }
 });
