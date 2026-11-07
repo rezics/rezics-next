@@ -48,8 +48,8 @@ test('the agent templates define the account views beside the graph views, in th
     'details',
   ]);
   for (const type of agents) {
-    const accountSections = templateViews(entry(type)).overview!.content
-      .map((node) => node.props.id)
+    const accountSections = templateViews(entry(type))
+      .overview!.content.map((node) => node.props.id)
       .filter((id) => id === 'account-posts' || id === 'account-reviews' || id === 'account-collections');
     expect(accountSections).toEqual(['account-posts', 'account-reviews', 'account-collections']);
   }
