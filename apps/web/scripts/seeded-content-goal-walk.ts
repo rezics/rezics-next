@@ -230,16 +230,13 @@ export function requireStatus(
 ) {
   const allowed = typeof expected === 'number' ? [expected] : expected;
   if (!allowed.includes(result.status))
-    throw new Error(`${label} returned HTTP ${result.status}: ${JSON.stringify(publicFields(result.value)).slice(0, 600)}`);
+    throw new Error(
+      `${label} returned HTTP ${result.status}: ${JSON.stringify(publicFields(result.value)).slice(0, 600)}`,
+    );
   return result.value;
 }
 
-async function issuerJson(
-  stack: Stack,
-  path: string,
-  body: Json,
-  expected: number | readonly number[],
-): Promise<Json> {
+async function issuerJson(stack: Stack, path: string, body: Json, expected: number | readonly number[]): Promise<Json> {
   const response = await fetch(`${stack.issuer}${path}`, {
     method: 'POST',
     headers: { origin: stack.issuer, 'content-type': 'application/json' },
@@ -400,7 +397,9 @@ async function provisionCommunity(stack: Stack, developer: Persona, workId: stri
         type: 'skos:Concept',
         labels: { en: 'Content walk discussion' },
         statements: {
-          'skos:inScheme': [{ property: { id: 'skos:inScheme' }, value: { type: 'value', content: realm.boardSchemeId } }],
+          'skos:inScheme': [
+            { property: { id: 'skos:inScheme' }, value: { type: 'value', content: realm.boardSchemeId } },
+          ],
         },
       },
     }),
@@ -782,7 +781,12 @@ async function walkThreadsAndBoards(context: WalkContext): Promise<Json> {
     const ids = threads.map((item) => asId((item.thread as Json | undefined)?.id ?? item.id, `${sort} thread`));
     if (ids.includes(threadId) === false && threads.length === 20)
       throw new Error(`${sort} first page is full without the walk thread`);
-    sorts[sort] = { count: threads.length, next: page.next ?? null, pinned: pinned.length, hasWalkThread: ids.includes(threadId) };
+    sorts[sort] = {
+      count: threads.length,
+      next: page.next ?? null,
+      pinned: pinned.length,
+      hasWalkThread: ids.includes(threadId),
+    };
   }
   const posts = requireStatus(
     await kernel(stack, 'GET', `/v1/threads/${threadId}/posts`, { query: { limit: '20' } }),
@@ -818,7 +822,10 @@ async function walkThreadsAndBoards(context: WalkContext): Promise<Json> {
     'point erasure',
   );
   const erasedRead = await kernel(stack, 'GET', `/v1/posts/${asId(disposable.id, 'erasable post')}`);
-  if (erasedRead.status === 200 && documentText((erasedRead.value.post as Json | undefined)?.body) === 'Author point that will be erased.')
+  if (
+    erasedRead.status === 200 &&
+    documentText((erasedRead.value.post as Json | undefined)?.body) === 'Author point that will be erased.'
+  )
     throw new Error('erased post still disclosed its original body');
   const erasureThread = requireStatus(
     await kernel(stack, 'POST', '/v1/threads', {
@@ -999,7 +1006,10 @@ async function walkWorkToReview(context: WalkContext): Promise<Json> {
     201,
   ).thread as Json;
   const threadId = asId(submitted.id ?? submitted.threadId, 'review thread');
-  const acknowledged = requireStatus(await kernel(stack, 'GET', `/v1/threads/${threadId}`), 'authoritative acknowledgement');
+  const acknowledged = requireStatus(
+    await kernel(stack, 'GET', `/v1/threads/${threadId}`),
+    'authoritative acknowledgement',
+  );
   const subjectPage = await kernel(stack, 'GET', `/v1/subjects/${showcase.workId}/threads`, {
     query: { place: globalContext, kind: 'review', limit: '20' },
   });
@@ -1068,7 +1078,8 @@ async function walkMedia(context: WalkContext): Promise<Json> {
 
 async function walkReports(context: WalkContext): Promise<Json> {
   const { stack, author, member, reviewer, developer, community, showcase } = context;
-  if (!author.accountId || !reviewer.accountId) throw new Error('author and reviewer accounts are required for appeals');
+  if (!author.accountId || !reviewer.accountId)
+    throw new Error('author and reviewer accounts are required for appeals');
   const created = requireStatus(
     await kernel(stack, 'POST', '/v1/threads', {
       bearer: author.bearer,
@@ -1164,13 +1175,19 @@ async function walkReports(context: WalkContext): Promise<Json> {
   await waitForPersonNotices(
     stack,
     author,
-    (item) => item.kind === 'moderation_decision' && noticeDecisionId(item) === decisionId && item.id !== decisionNotice.id,
+    (item) =>
+      item.kind === 'moderation_decision' && noticeDecisionId(item) === decisionId && item.id !== decisionNotice.id,
     'appeal resolution notice',
   );
-  const restored = requireStatus(await kernel(stack, 'GET', `/v1/posts/${postId}`, { bearer: member.bearer }), 'restored post');
+  const restored = requireStatus(
+    await kernel(stack, 'GET', `/v1/posts/${postId}`, { bearer: member.bearer }),
+    'restored post',
+  );
   const reporterInbox = await readInbox(stack, member);
   requireStatus(reporterInbox, 'reporter inbox');
-  const reporterNotices = reporterInbox.items.filter((item) => item.reportId === reportId || item.kind === 'moderation_decision');
+  const reporterNotices = reporterInbox.items.filter(
+    (item) => item.reportId === reportId || item.kind === 'moderation_decision',
+  );
   const replayed = await readInbox(stack, author);
   requireStatus(replayed, 'author inbox after appeal replay');
   const decisionNotices = replayed.items.filter((item) => noticeDecisionId(item) === decisionId);
@@ -1206,7 +1223,8 @@ async function walkReports(context: WalkContext): Promise<Json> {
 async function walkNotices(context: WalkContext): Promise<Json> {
   // Published-post effects (`post.published`) are the notice authority; the default worker delivers them.
   const { stack, author, member, outsider, community } = context;
-  if (!author.accountId || !outsider.accountId) throw new Error('author and outsider accounts are required for notices');
+  if (!author.accountId || !outsider.accountId)
+    throw new Error('author and outsider accounts are required for notices');
   const reply = requireStatus(
     await kernel(stack, 'POST', `/v1/threads/${community.threadId}/posts`, {
       bearer: member.bearer,
@@ -1219,12 +1237,15 @@ async function walkNotices(context: WalkContext): Promise<Json> {
   const replies = await waitForPersonNotices(
     stack,
     author,
-    (item) => item.kind === 'reply' && ((item.postId === replyId) || ((item.target as Json | undefined)?.postId === replyId)),
+    (item) =>
+      item.kind === 'reply' && (item.postId === replyId || (item.target as Json | undefined)?.postId === replyId),
     'author reply notice',
   );
   const actorNotice = await readInbox(stack, member);
   requireStatus(actorNotice, 'actor inbox');
-  if (actorNotice.items.some((item) => item.postId === replyId || (item.target as Json | undefined)?.postId === replyId))
+  if (
+    actorNotice.items.some((item) => item.postId === replyId || (item.target as Json | undefined)?.postId === replyId)
+  )
     throw new Error('the acting member received their own reply notice');
   const mention = requireStatus(
     await kernel(stack, 'POST', `/v1/threads/${community.threadId}/posts`, {
@@ -1241,7 +1262,8 @@ async function walkNotices(context: WalkContext): Promise<Json> {
   const mentions = await waitForPersonNotices(
     stack,
     outsider,
-    (item) => item.kind === 'mention' && ((item.postId === mentionId) || ((item.target as Json | undefined)?.postId === mentionId)),
+    (item) =>
+      item.kind === 'mention' && (item.postId === mentionId || (item.target as Json | undefined)?.postId === mentionId),
     'outsider mention notice',
   );
   await setMentionPreference(stack, outsider, false);
@@ -1257,14 +1279,14 @@ async function walkNotices(context: WalkContext): Promise<Json> {
   await assertNoMatchingNotice(
     stack,
     outsider,
-    (item) => (item.postId === suppressedId) || ((item.target as Json | undefined)?.postId === suppressedId),
+    (item) => item.postId === suppressedId || (item.target as Json | undefined)?.postId === suppressedId,
     'preference-off mention',
   );
   await setMentionPreference(stack, outsider, true);
   await assertNoMatchingNotice(
     stack,
     outsider,
-    (item) => (item.postId === suppressedId) || ((item.target as Json | undefined)?.postId === suppressedId),
+    (item) => item.postId === suppressedId || (item.target as Json | undefined)?.postId === suppressedId,
     'replay after mention preference restored',
     8_000,
   );
@@ -1279,7 +1301,10 @@ async function walkNotices(context: WalkContext): Promise<Json> {
   const replayed = await readInbox(stack, author);
   const replyIds = new Set(
     afterSeen.items
-      .filter((item) => item.kind === 'reply' && ((item.postId === replyId) || ((item.target as Json | undefined)?.postId === replyId)))
+      .filter(
+        (item) =>
+          item.kind === 'reply' && (item.postId === replyId || (item.target as Json | undefined)?.postId === replyId),
+      )
       .map((item) => item.id),
   );
   if (replyIds.size !== 1) throw new Error(`reply notice duplicated under replay: ${replyIds.size}`);
@@ -1314,7 +1339,10 @@ async function walkHomeDiscovery(context: WalkContext): Promise<Json> {
     await kernel(stack, 'GET', `/v1/boards/${showcase.boardId}/page`),
     'seeded board opening',
   );
-  const thread = requireStatus(await kernel(stack, 'GET', `/v1/threads/${showcase.threadId}/reading-page`), 'seeded reading-page');
+  const thread = requireStatus(
+    await kernel(stack, 'GET', `/v1/threads/${showcase.threadId}/reading-page`),
+    'seeded reading-page',
+  );
   return {
     home: home.status,
     discovery: discovery.status,
@@ -1367,13 +1395,16 @@ async function walkPersonaMatrix(context: WalkContext): Promise<Json> {
       visibility: 'published',
     },
   });
-  if (suspendedThread.status === 201) throw new Error('suspended account published a thread; correct result is 401 or 403');
+  if (suspendedThread.status === 201)
+    throw new Error('suspended account published a thread; correct result is 401 or 403');
   const protectedAnonymous = await kernel(stack, 'GET', `/v1/boards/${protectedBoardId}/threads`);
   const protectedOutsider = await kernel(stack, 'GET', `/v1/boards/${protectedBoardId}/threads`, {
     bearer: outsider.bearer,
   });
   if (member.accountId) await grantBoardRead(stack, developer, protectedBoardId, member.accountId);
-  const protectedMember = await kernel(stack, 'GET', `/v1/boards/${protectedBoardId}/threads`, { bearer: member.bearer });
+  const protectedMember = await kernel(stack, 'GET', `/v1/boards/${protectedBoardId}/threads`, {
+    bearer: member.bearer,
+  });
   const publishedAnonymous = requireStatus(
     await kernel(stack, 'GET', `/v1/threads/${community.threadId}`),
     'anonymous public thread',
@@ -1382,8 +1413,10 @@ async function walkPersonaMatrix(context: WalkContext): Promise<Json> {
     await kernel(stack, 'GET', `/v1/threads/${community.threadId}`, { bearer: author.bearer }),
     'author public thread',
   );
-  if (protectedAnonymous.status !== 404) throw new Error(`anonymous protected board HTTP ${protectedAnonymous.status}; correct result is 404`);
-  if (protectedOutsider.status !== 404) throw new Error(`outsider protected board HTTP ${protectedOutsider.status}; correct result is 404`);
+  if (protectedAnonymous.status !== 404)
+    throw new Error(`anonymous protected board HTTP ${protectedAnonymous.status}; correct result is 404`);
+  if (protectedOutsider.status !== 404)
+    throw new Error(`outsider protected board HTTP ${protectedOutsider.status}; correct result is 404`);
   return {
     ban: publicFields(ban) as Json,
     bannedParticipation: bannedParticipation.status,
@@ -1667,7 +1700,10 @@ async function walkTakedownErasure(context: WalkContext): Promise<Json> {
     'point erasure',
   );
   const erasedRead = await kernel(stack, 'GET', `/v1/posts/${created.postId}`);
-  if (erasedRead.status === 200 && documentText((erasedRead.value.post as Json | undefined)?.body) === 'Author point that will be erased.')
+  if (
+    erasedRead.status === 200 &&
+    documentText((erasedRead.value.post as Json | undefined)?.body) === 'Author point that will be erased.'
+  )
     throw new Error('erased post still disclosed its original body');
   return {
     postId: created.postId,
@@ -1720,7 +1756,10 @@ async function walkIndependentQueues(context: WalkContext): Promise<Json> {
   if (memberDirectory.status === 200 && moderatorDirectory.status === 200) {
     const memberState = memberDirectory.value.state ?? memberDirectory.value.code;
     const moderatorState = moderatorDirectory.value.state ?? moderatorDirectory.value.code;
-    if (memberState === moderatorState && JSON.stringify(memberDirectory.value) === JSON.stringify(moderatorDirectory.value))
+    if (
+      memberState === moderatorState &&
+      JSON.stringify(memberDirectory.value) === JSON.stringify(moderatorDirectory.value)
+    )
       throw new Error('member and moderator directory pages were identical; queues must stay independent');
   }
   return {
@@ -1730,6 +1769,24 @@ async function walkIndependentQueues(context: WalkContext): Promise<Json> {
     reports: reports.status,
     reviewerAppeals: reviewerAppeals.status,
   };
+}
+
+async function signInThroughIssuer(page: import('playwright').Page, stack: Stack, email: string, password: string) {
+  for (let attempt = 0; attempt < 4 && new URL(page.url()).origin === stack.issuer; attempt++) {
+    await page.locator('html[data-hydrated]').waitFor({ state: 'attached', timeout: 180_000 });
+    const emailField = page.locator('input[name="email"]');
+    if ((await emailField.count()) > 0) {
+      await emailField.fill(email);
+      await page.locator('input[name="password"]').fill(password);
+    }
+    const submit = page.getByRole('button', { name: 'Sign in', exact: true });
+    if ((await submit.count()) > 0) await submit.click();
+    else await page.locator('form button[type="submit"]').first().click();
+    await page.waitForLoadState('domcontentloaded');
+    const approve = page.getByRole('button', { name: 'Approve' });
+    if (await approve.isVisible({ timeout: 8_000 }).catch(() => false)) await approve.click();
+  }
+  await page.waitForURL((url) => url.origin === stack.web, { timeout: 180_000 });
 }
 
 async function walkBrowser(context: WalkContext, rows: RowResult[]): Promise<Json> {
@@ -1770,20 +1827,14 @@ async function walkBrowser(context: WalkContext, rows: RowResult[]): Promise<Jso
     const member = await browser.newContext({ locale: 'en-US' });
     const signed = await member.newPage();
     signed.setDefaultTimeout(90_000);
-    await signed.goto(`${context.stack.web}/en/auth/sign-in?return_to=${encodeURIComponent(`/en/subjects/${context.showcase.workId}`)}`, {
-      waitUntil: 'domcontentloaded',
-      timeout: 180_000,
-    });
-    for (let attempt = 0; attempt < 4 && new URL(signed.url()).origin === context.stack.issuer; attempt++) {
-      const email = signed.locator('input[type="email"]');
-      if ((await email.count()) > 0) {
-        await email.fill(context.member.email);
-        await signed.locator('input[type="password"]').fill(context.member.password);
-      }
-      await signed.locator('form button[type="submit"]').first().click();
-      await signed.waitForLoadState('domcontentloaded');
-    }
-    await signed.waitForURL((url) => url.origin === context.stack.web, { timeout: 180_000 });
+    await signed.goto(
+      `${context.stack.web}/en/auth/sign-in?return_to=${encodeURIComponent(`/en/subjects/${context.showcase.workId}`)}`,
+      {
+        waitUntil: 'domcontentloaded',
+        timeout: 180_000,
+      },
+    );
+    await signInThroughIssuer(signed, context.stack, context.member.email, context.member.password);
     await signed.locator('main').waitFor({ state: 'visible', timeout: 60_000 });
     const composer = `${context.stack.web}/en/boards/${context.community.boardId}/new?subject=${encodeURIComponent(context.showcase.workId)}&returnTo=${encodeURIComponent(`/en/subjects/${context.showcase.workId}`)}`;
     const compose = await signed.goto(composer, { waitUntil: 'domcontentloaded', timeout: 180_000 });
@@ -1805,16 +1856,7 @@ async function walkBrowser(context: WalkContext, rows: RowResult[]): Promise<Jso
       waitUntil: 'domcontentloaded',
       timeout: 180_000,
     });
-    for (let attempt = 0; attempt < 4 && new URL(inboxPage.url()).origin === context.stack.issuer; attempt++) {
-      const email = inboxPage.locator('input[type="email"]');
-      if ((await email.count()) > 0) {
-        await email.fill(context.author.email);
-        await inboxPage.locator('input[type="password"]').fill(context.author.password);
-      }
-      await inboxPage.locator('form button[type="submit"]').first().click();
-      await inboxPage.waitForLoadState('domcontentloaded');
-    }
-    await inboxPage.waitForURL((url) => url.origin === context.stack.web, { timeout: 180_000 });
+    await signInThroughIssuer(inboxPage, context.stack, context.author.email, context.author.password);
     await inboxPage.locator('main').waitFor({ state: 'visible', timeout: 60_000 });
     pages.push({
       persona: 'author',
@@ -1914,7 +1956,8 @@ async function main(): Promise<void> {
     const joined = await kernel(stack, 'POST', `/v1/realms/${community.realmId}/membership`, { bearer: person.bearer });
     if (joined.status !== 202 && joined.status !== 200 && joined.status !== 409)
       throw new Error(`${person.label} join returned HTTP ${joined.status}`);
-    if (joined.status === 202 || joined.status === 200) await waitForMembership(stack, community.realmId, person.bearer);
+    if (joined.status === 202 || joined.status === 200)
+      await waitForMembership(stack, community.realmId, person.bearer);
   }
   const protectedBoardId = await createProtectedBoard(stack, developer);
   const context: WalkContext = {
@@ -1953,9 +1996,9 @@ async function main(): Promise<void> {
     const browser = await walkBrowser(context, rows);
     const summary = summarizeWalk(rows);
     const revision = Bun.spawnSync(['git', 'rev-parse', 'HEAD'], { cwd: root }).stdout.toString().trim();
-    const briefs = (
-      await Promise.all(rows.map((row) => writeRepairBrief(row, revision)))
-    ).filter((path): path is string => path !== null);
+    const briefs = (await Promise.all(rows.map((row) => writeRepairBrief(row, revision)))).filter(
+      (path): path is string => path !== null,
+    );
     const evidence = {
       sourceRevision: revision,
       seedExit: seedCode,

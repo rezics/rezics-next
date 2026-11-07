@@ -60,6 +60,8 @@ test('the Content Goal walk names every first-scope row and summarises passing, 
   expect(source).toContain('mention');
   expect(source).toContain('independent');
   expect(source).toContain('boards/${boardId}:takeDown');
+  expect(source).toContain('html[data-hydrated]');
+  expect(source).toContain("getByRole('button', { name: 'Sign in', exact: true })");
   expect(source).not.toMatch(/AUTH_JWKS_URL\s*=/);
 });
 

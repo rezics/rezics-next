@@ -105,7 +105,7 @@ ANALYZE a same-route neighbourhood first so a handful of fixture rows cannot seq
 existing native HTTP, growth, runtime and walk pins stay the fewest tests, with no extra stories.
 Subject discussion listing HTTP uses the shared 30s test request budget so Access evaluation under parallel
 check instrumentation cannot turn an empty 200 page into 503; production stays 2s. Command: `bun services/auth/scripts/dev-stack.ts walk -- bun apps/web/scripts/seeded-content-goal-walk.ts`.
-Worker Vite resolves Elysia and Eden to their `exports.import` files and replaces TypeBox loaders with live ESM re-exports so workerd never evaluates CJS `module`. Focused test Vite skips the Home route crawl so edit journeys can start. The fewest tests that pin that swap and crawl skip are `vite-config.test.ts` plus the existing walk unit tests; no extra stories.
+Worker Vite resolves Elysia and Eden to their `exports.import` files and replaces TypeBox loaders with live ESM re-exports so workerd never evaluates CJS `module`. Focused test Vite skips the Home route crawl so edit journeys can start. Browser receiving waits for issuer `html[data-hydrated]` and the landed Sign in control. The fewest tests that pin that swap, crawl skip and walk inventory are `vite-config.test.ts` plus the three walk unit tests; composed native/browser proof is the seeded walk; no extra stories.
 The sole walk receives Accounts published-post effects for reply, mention and moderation delivery, current access and
 preferences, replay, inbox and independent appeals. Ordinary HTTP grant receipts are the walk's authority proof, not
 seeded fixture rows. The frozen notification suite timeout stays 180 seconds; its assertions are unchanged.
