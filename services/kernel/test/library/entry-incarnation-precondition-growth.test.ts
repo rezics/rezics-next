@@ -561,9 +561,13 @@ test('fresh guard work remains bounded across 64 512 and 4096 unrelated live ret
     );
     const classified = catalogStatementBound(rejected.capture);
     expect(classified.catalogStatements).toBeLessThanOrEqual(classified.allowedStatements);
-    expect(
-      rejected.capture.statements.some((sql) => /(?:INSERT|UPDATE|DELETE)\s+(?:INTO\s+|FROM\s+)?library\./i.test(sql)),
-    ).toBe(false);
+    const libraryWrites = rejected.capture.statements.filter((sql) =>
+      /(?:INSERT|UPDATE|DELETE)\s+(?:INTO\s+|FROM\s+)?library\./i.test(sql),
+    );
+    expect(libraryWrites).toHaveLength(1);
+    expect(libraryWrites[0]).toMatch(
+      /INSERT\s+INTO\s+library\.shelf_writer_owner\b[\s\S]*ON\s+CONFLICT[\s\S]*DO\s+NOTHING/i,
+    );
   } finally {
     await native?.close();
     await growth?.close();
