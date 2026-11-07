@@ -211,7 +211,10 @@ const subjectThreads: FakeRoute['story'] = ({ request, match }) => {
       ? undefined
       : selected === communityCurrentEntry(kind, subject, place).board.id
         ? communityCurrentEntry(kind, subject, place, request.headers.has('authorization') ? 'allowed' : 'sign-in')
-        : { state: 'concealed' as const, request: { subjectId: subject.id, placeId: place, kind, selectedBoardId: selected } };
+        : {
+            state: 'concealed' as const,
+            request: { subjectId: subject.id, placeId: place, kind, selectedBoardId: selected },
+          };
   return {
     status: 200,
     ...communityThreadPage(

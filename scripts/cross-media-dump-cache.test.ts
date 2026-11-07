@@ -93,7 +93,14 @@ test('host dump extract reuses a matching pin marker and otherwise extracts unde
 });
 
 test('remote runs always point seed at the host dump cache', () => {
-  const script = runScript('dump-cache', '/srv/rezics-check/runs/dump-cache', '.', ['true'], 'a', repositoryBun(repository));
+  const script = runScript(
+    'dump-cache',
+    '/srv/rezics-check/runs/dump-cache',
+    '.',
+    ['true'],
+    'a',
+    repositoryBun(repository),
+  );
   expect(script).toContain(`${CROSS_MEDIA_DUMP_CACHE_ENV}=${CHECK_HOST_DUMP_CACHE}`);
   expect(script).toContain('KERNEL_CHECK_ON_REMOTE=1');
 });

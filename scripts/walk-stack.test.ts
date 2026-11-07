@@ -81,13 +81,15 @@ test('walk stacks cap OpenSearch, Postgres and bun heaps inside the host run sli
 });
 
 test('the walk parent and Docker teardown stay inside the 6 GiB slice', () => {
-  expect(
-    walkParentInvocation({}, ['/pinned/bun', 'services/auth/scripts/dev-stack.ts', 'walk', '--', 'true']),
-  ).toEqual(['/pinned/bun', '--smol', 'services/auth/scripts/dev-stack.ts', 'walk', '--', 'true']);
+  expect(walkParentInvocation({}, ['/pinned/bun', 'services/auth/scripts/dev-stack.ts', 'walk', '--', 'true'])).toEqual(
+    ['/pinned/bun', '--smol', 'services/auth/scripts/dev-stack.ts', 'walk', '--', 'true'],
+  );
   expect(
     walkParentInvocation({ REZICS_WALK_SMOL: '1' }, ['/pinned/bun', 'services/auth/scripts/dev-stack.ts', 'walk']),
   ).toBeUndefined();
-  expect(walkParentInvocation({}, ['/pinned/bun', '--smol', 'services/auth/scripts/dev-stack.ts', 'walk'])).toBeUndefined();
+  expect(
+    walkParentInvocation({}, ['/pinned/bun', '--smol', 'services/auth/scripts/dev-stack.ts', 'walk']),
+  ).toBeUndefined();
   expect(walkDockerOutput({ status: 0, stdout: 'abc\n' })).toBe('abc');
   expect(walkDockerOutput({ status: null, stdout: '' })).toBe('');
   expect(walkDockerOutput({ status: 1, stdout: 'ignored' })).toBe('');
@@ -151,9 +153,9 @@ TypeError: Unsealed or mismatched native Semantic source set
 });
 
 test('Docker published mappings occupy a walk slot even when nothing is listening', () => {
-  expect(
-    publishedHostPorts('127.0.0.1:20014->5432/tcp\n127.0.0.1:20015->9200/tcp, 127.0.0.1:20020->80/tcp'),
-  ).toEqual(new Set([20014, 20015, 20020]));
+  expect(publishedHostPorts('127.0.0.1:20014->5432/tcp\n127.0.0.1:20015->9200/tcp, 127.0.0.1:20020->80/tcp')).toEqual(
+    new Set([20014, 20015, 20020]),
+  );
   expect(publishedHostPorts('[::]:20014->5432/tcp')).toEqual(new Set([20014]));
   expect(publishedHostPorts('5432/tcp')).toEqual(new Set());
   expect(

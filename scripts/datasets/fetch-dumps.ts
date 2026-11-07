@@ -607,11 +607,7 @@ export async function fetchCrossMediaDumps(
   const bangumiTarget = join(cacheRoot, 'bangumi', 'dump-2026-10-20.210332Z');
   await mkdir(cacheRoot, { recursive: true });
 
-  const reusedBangumi = await reuseVerifiedDumpExtraction(
-    bangumiTarget,
-    BANGUMI_ARCHIVE_SHA256,
-    bangumiDirectory,
-  );
+  const reusedBangumi = await reuseVerifiedDumpExtraction(bangumiTarget, BANGUMI_ARCHIVE_SHA256, bangumiDirectory);
   const bangumiDigest = reusedBangumi
     ? BANGUMI_ARCHIVE_SHA256
     : await cacheDumpAsset(BANGUMI_ARCHIVE_URL, bangumiArchive, BANGUMI_ARCHIVE_SHA256, options);

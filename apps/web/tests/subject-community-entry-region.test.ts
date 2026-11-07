@@ -7,7 +7,13 @@ import { threadCreationPreset } from '../src/threads/thread-creation-lifetime';
 const subject = '01a17a3b-0884-721b-91ef-d7ffd7bb58e4';
 const board = '01a17a3b-0884-721b-91ef-d7ffd7bb58e5';
 const otherBoard = '01a17a3b-0884-721b-91ef-d7ffd7bb58e6';
-const plain: CommunityRequest = { kind: 'subjectThreads', id: subject, place: GLOBAL, threadKind: 'discussion', limit: 5 };
+const plain: CommunityRequest = {
+  kind: 'subjectThreads',
+  id: subject,
+  place: GLOBAL,
+  threadKind: 'discussion',
+  limit: 5,
+};
 const withBoard: CommunityRequest = { ...plain, board };
 const context = {
   subject: { id: subject, label: null, source: { partition: 0, epoch: 1, position: '1' } },
@@ -34,9 +40,10 @@ const current = (action: string) => ({
 
 test('a Subject region without a supplied Board is not_selected and offers no creation Board', () => {
   expect(composedCommunityRegion(page(), plain)).toMatchObject({ state: 'ready', entry: { state: 'not_selected' } });
-  expect(
-    composedCommunityRegion(page({ state: 'not_selected', request: requestOf() }), plain),
-  ).toMatchObject({ state: 'ready', entry: { state: 'not_selected' } });
+  expect(composedCommunityRegion(page({ state: 'not_selected', request: requestOf() }), plain)).toMatchObject({
+    state: 'ready',
+    entry: { state: 'not_selected' },
+  });
 });
 
 test('a supplied Board receives its exact current entry with allowed, denied, sign-in and unavailable advice distinct', () => {
@@ -79,8 +86,8 @@ test('the allowed entry link opens the composer with the exact Subject preset an
 
 test('a supplied Board without its explicit entry, or with another Board, fails closed', () => {
   expect(composedCommunityRegion(page(), withBoard).state).toBe('unavailable');
-  expect(
-    composedCommunityRegion(page({ state: 'concealed', request: requestOf(otherBoard) }), withBoard).state,
-  ).toBe('unavailable');
+  expect(composedCommunityRegion(page({ state: 'concealed', request: requestOf(otherBoard) }), withBoard).state).toBe(
+    'unavailable',
+  );
   expect(composedCommunityRegion(page(current('allowed')), plain).state).toBe('unavailable');
 });

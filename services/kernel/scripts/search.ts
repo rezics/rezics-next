@@ -80,8 +80,7 @@ export function cgroupArgs(env: NodeJS.ProcessEnv = process.env): string[] {
 /** Docker memory pair so a walk volume's file cache cannot fill the host run slice. */
 export function containerMemoryArgs(value: string | undefined, name: string): string[] {
   if (!value) return [];
-  if (!/^[1-9][0-9]{0,3}m$/.test(value))
-    throw new Error(`${name} must be 1-9999m, received ${JSON.stringify(value)}`);
+  if (!/^[1-9][0-9]{0,3}m$/.test(value)) throw new Error(`${name} must be 1-9999m, received ${JSON.stringify(value)}`);
   return ['--memory', value, '--memory-swap', value];
 }
 

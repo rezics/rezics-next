@@ -10,11 +10,7 @@ test('local showcase uses a separate first-party client while the importer stays
     clientId: localClientIds.showcase,
     firstParty: true,
     scopes: [
-      ...new Set([
-        ...DEVELOPMENT_SHOWCASE_SCOPES,
-        ...developmentCollectionScopes,
-        ...developmentPersonalListScopes,
-      ]),
+      ...new Set([...DEVELOPMENT_SHOWCASE_SCOPES, ...developmentCollectionScopes, ...developmentPersonalListScopes]),
     ],
   });
   expect(localClientIds.showcase).not.toBe(localClientIds.importer);

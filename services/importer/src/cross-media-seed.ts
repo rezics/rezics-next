@@ -3517,11 +3517,7 @@ export async function runCrossMediaSeedCli(
   for (const flag of requiredFlags) ensure(values.has(flag), 'Missing seed option: ' + flag);
   const api = normalizeCrossMediaSeedOrigin(values.get('--api')!),
     auth = normalizeCrossMediaSeedOrigin(values.get('--auth')!);
-  const input = new CrossMediaDumpFiles(
-    values.get('--bangumi')!,
-    values.get('--vndb')!,
-    options.onDumpTableReleased,
-  );
+  const input = new CrossMediaDumpFiles(values.get('--bangumi')!, values.get('--vndb')!, options.onDumpTableReleased);
   let plan = await planCrossMediaSeed(input, {
     deferVndbCharacterAppearances: true,
     ...(options.selection ? { selection: showcaseFranchiseSelection(options.selection) } : {}),

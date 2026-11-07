@@ -40,10 +40,12 @@ function admitsResponse(value: unknown): value is AuthorContributionActionsRespo
 export function authorContributionActionsWire(client: KernelClient): AuthorContributionActionsWire {
   return {
     async read(input, signal) {
-      const result = await client.accounts({ accountId: input.accountId })['contribution-actions'].post(
-        { proof: input.proof, references: [...input.references], view: input.view, cursor: input.cursor },
-        { fetch: { cache: 'no-store', signal } },
-      );
+      const result = await client
+        .accounts({ accountId: input.accountId })
+        ['contribution-actions'].post(
+          { proof: input.proof, references: [...input.references], view: input.view, cursor: input.cursor },
+          { fetch: { cache: 'no-store', signal } },
+        );
       if (result.status !== 200 || !admitsResponse(result.data))
         throw new Error(`Author contribution actions responded with ${result.status}`);
       return result.data;
