@@ -1,5 +1,5 @@
 import type { Pool } from 'pg';
-import { shareAccount } from '../access/account-share.ts';
+import { shareAccount } from './access-port.ts';
 import { currentCommand, noEffect, registerCommandCallback, runCommand } from '../command/command.ts';
 import { partitionOf, routeOf } from '../route/route.ts';
 import { withRequestDeadline } from '../request/deadline.ts';

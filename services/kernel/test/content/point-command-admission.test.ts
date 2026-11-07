@@ -13,7 +13,8 @@ import { beginAuthorErasure } from '../../src/content/operations.ts';
 import { createPool } from '../../src/database/pool.ts';
 import { createKernel } from '../../src/http/kernel.ts';
 import { actionCatalogue } from '../../src/http/request.ts';
-import { AuthenticationError, type Access, type AccountActor } from '../../src/request/access.ts';
+import { AuthenticationError } from '../../src/request/authentication-error.ts';
+import { type Access, type AccountActor } from '../../src/request/access.ts';
 import { newId, partitionOf } from '../../src/route/route.ts';
 import { checkGrowth, openGrowthDatabase, seed, type GrowthDatabase, type Population } from '../support/growth.ts';
 

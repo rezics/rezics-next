@@ -1,13 +1,15 @@
 import { AuthenticationError } from './authentication-error.ts';
 export { AuthenticationError } from './authentication-error.ts';
-import { accessCheck } from './access-check.ts';
+import { accessCheck } from '../access/check.ts';
 export {
   accessCheck,
   accessExplicitCheck,
   prepareReadDecisions,
+  resourcePage,
+  validReadDecisionActions,
   installPreparedAccessCheckWork,
   nativePreparedAccessCheckWork,
-} from './access-check.ts';
+} from '../access/check.ts';
 import type { AccessWorkAccounting, AccessWorkProducer } from '../access/work.ts';
 import type { ContentEditionBenefit, ContentEditionBuyerFactReader } from '../access/authenticated-benefit.ts';
 import { throwAccessUnavailable } from '../access/unavailable.ts';
@@ -23,7 +25,6 @@ import {
   type CommandAuthorization,
 } from '../command/command.ts';
 import type { ResourceEligibility } from '../access/eligibility.ts';
-import { routeOf } from '../route/route.ts';
 import { permissionHistoryAccounts } from '../access/permission.ts';
 import type { KindAudienceAccess } from '../access/kind-audience.ts';
 import { bindCommandHistoryEvidence } from '../history/application/index.ts';
@@ -58,30 +59,6 @@ export type ResourcePage = Readonly<{
   resourceType: string;
   ids: readonly string[];
 }>;
-
-/** Reject malformed pages synchronously, before any database or actor read. */
-export function resourcePage(page: ResourcePage): ResourcePage {
-  if (
-    !page ||
-    'authenticatedBenefit' in page ||
-    !Number.isInteger(page.route) ||
-    page.route < 0 ||
-    page.route > 65535 ||
-    typeof page.resourceType !== 'string' ||
-    page.resourceType.length === 0 ||
-    !Array.isArray(page.ids) ||
-    page.ids.length < 1 ||
-    page.ids.length > 100 ||
-    page.ids.some((id) => typeof id !== 'string' || routeOf(id) !== page.route) ||
-    new Set(page.ids).size !== page.ids.length
-  )
-    throw new RangeError('Invalid resource page');
-  return Object.freeze({
-    route: page.route,
-    resourceType: page.resourceType,
-    ids: Object.freeze([...page.ids].sort()),
-  });
-}
 
 export type ActionMetadata = {
   anonymous: boolean;
@@ -195,18 +172,6 @@ export type PrepareReadDecisionsInput = {
   time?: AuthoritativeTime;
   context: AccessContext;
 };
-/** Validate the bounded catalogue before reading any authority dependency. */
-export function validReadDecisionActions(input: PrepareReadDecisionsInput, catalogue: ActionCatalogue): boolean {
-  if (!input.actions.size || [...input.actions].some((action) => !catalogue.has(action))) return false;
-  if (!input.typeActions) return input.actions.size <= 64;
-  if (!input.typeActions.size || input.typeActions.size > 100) return false;
-  const union = new Set<string>();
-  for (const [type, actions] of input.typeActions) {
-    if (!type.length || !actions.size || actions.size > 64) return false;
-    for (const action of actions) union.add(action);
-  }
-  return union.size === input.actions.size && [...union].every((action) => input.actions.has(action));
-}
 export type PreparedAccessCheckInvocation = Readonly<{
   client: AccessClient;
   time: AuthoritativeTime;

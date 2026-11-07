@@ -1,6 +1,5 @@
 import type { Pool } from 'pg';
-import { readAccount } from '../access/account-data.ts';
-import { within } from '../access/authenticate.ts';
+import { readAccount, within } from './access-port.ts';
 import { systemClock, type KernelClock } from '../clock.ts';
 import { ProblemError } from '../http/problem-error.ts';
 import type { Actor } from '../request/access.ts';

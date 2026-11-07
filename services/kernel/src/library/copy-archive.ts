@@ -2,8 +2,7 @@ import { memoizedValue } from '../memoized.ts';
 import { createHash } from 'node:crypto';
 import type { Pool } from 'pg';
 import { bundledRelease } from '@rezics/definitions/bundled';
-import { readAccount } from '../access/account-data.ts';
-import { admitGroup } from '../access/gates/admission.ts';
+import { readAccount, admitGroup } from './access-port.ts';
 import {
   authoritativeTimeValue,
   commandTime,

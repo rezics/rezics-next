@@ -4,7 +4,7 @@ import { nativeReceiptKeyCandidates } from '../command/receipt-key.ts';
 import { HANDLE_LOOKUP_PATTERN, isClaimHandle, isReservedHandle } from './handle-policy.ts';
 import { PLATFORM_RESOURCE } from './bootstrap-governance.ts';
 import { tryAccessApplication } from './adapters/bind.ts';
-import { ProblemError } from '../http/problem.ts';
+import { ProblemError } from '../http/problem-error.ts';
 import { accessClock } from './access-clock.ts';
 import { workflowApprovalBinding } from './workflow-approvals.ts';
 import tombstoneOperator from './workflow-approvals-tombstone-operator.sql';

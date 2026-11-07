@@ -3,7 +3,7 @@ import { createHash, createHmac, timingSafeEqual } from 'node:crypto';
 import { CommandUnavailableError } from '../command/command.ts';
 import { readPartition, readPartitions } from '../partition/partition.ts';
 import { partitionOf, routeOf } from '../route/route.ts';
-import { accessCheck } from '../request/access.ts';
+import { accessCheck } from './access-port.ts';
 import { withReadTransaction } from '../semantic/read.ts';
 import { GLOBAL_CONTEXT } from '../semantic/definitions.ts';
 import { subjectReadEligibility } from '../semantic/eligibility.ts';

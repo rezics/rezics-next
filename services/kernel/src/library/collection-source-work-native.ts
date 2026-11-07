@@ -3,7 +3,7 @@ import { memoizedValue } from '../memoized.ts';
 import { createHash } from 'node:crypto';
 import { isDeepStrictEqual } from 'node:util';
 import type { Pool, QueryResultRow } from 'pg';
-import { type Bound } from '@rezics/bounds';
+import type { Bound } from '@rezics/bounds';
 import { currentOperationalResources, hasLiveOperationalTransaction } from '../command/operational.ts';
 const deadlineClient = <T extends object>(client: T, deadline: number): T =>
   requireLibraryDomain().authorization.deadlineClient(client, deadline);

@@ -6,5 +6,4 @@ export {
   createNativeLibraryScopeWork,
   nativeLibraryScopeWork,
 } from './library-preparation.ts';
-export type { SearchLibraryScopePort } from '../library-scope-port.ts';
-export { createSearchLibraryScopePort } from './library-scope.ts';
+export type { SearchLibraryScopePort } from './library-scope.ts';

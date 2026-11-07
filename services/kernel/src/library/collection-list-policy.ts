@@ -1,5 +1,5 @@
 import { peekLibraryDomain } from './domain-binding.ts';
-import { specializeCollectionList } from '../access/adapters/collection-policy.ts';
+import { specializeCollectionList } from './access-port.ts';
 import type { CollectionListFilter } from './contract/index.ts';
 
 export type { CollectionListFilter };

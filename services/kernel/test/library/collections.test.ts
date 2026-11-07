@@ -6,7 +6,7 @@ import { exportJWK, generateKeyPair, SignJWT } from 'jose';
 import type { Pool } from 'pg';
 import { Value } from 'typebox/value';
 import { bundledDigest, bundledRelease } from '@rezics/definitions/bundled';
-import { GrantDeniedError } from '../../src/access/grant-commands.ts';
+import { GrantDeniedError } from '../../src/access/contract/errors.ts';
 import { IdempotencyConflictError } from '../../src/command/command.ts';
 import { createPool, withConnection } from '../../src/database/pool.ts';
 import { EVENT_TYPES } from '../../src/events/log.ts';

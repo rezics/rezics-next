@@ -2,9 +2,7 @@ import { nativeSourceFence } from './native-source-fence.ts';
 export { nativeSourceFence } from './native-source-fence.ts';
 /** Derived native access paths. References and ready pointers never grant membership or Access. */
 import type { Pool } from 'pg';
-
 import type { ListingStamp } from './listing-freshness-contract.ts';
-
 import {
   CANONICAL_SOURCE_STATEMENTS,
   assertCanonicalSourceStatement,
@@ -16,7 +14,6 @@ import {
   identityScopeWorkReceipt,
   type CanonicalSourceStatement,
 } from './canonical-source-bounds.ts';
-
 import { CANONICAL_SOURCE_RAW_KEY_LIMIT } from './canonical-source-limits.ts';
 export { CANONICAL_SOURCE_RAW_KEY_LIMIT } from './canonical-source-limits.ts';
 
@@ -185,7 +182,6 @@ export type CanonicalRepairStep =
 export type CanonicalPublication =
   | CanonicalNotReady
   | { readonly state: 'published' | 'basis_changed' | 'incomplete'; readonly work: CanonicalWork };
-
 import { createHash, randomUUID } from 'node:crypto';
 import type { PoolClient, QueryResultRow } from 'pg';
 import { withConnection } from '../database/pool.ts';
@@ -213,9 +209,9 @@ import {
 } from './collection-source-native.ts';
 import type { WorkAllowance } from './contract/work-dimensions.ts';
 import { readOwnerNativeFactPage, type OwnerNativeFactDriver } from './owner-index.ts';
-import { deadlineClient } from '../access/authenticate.ts';
-import { creationDeclares } from '../access/parent-creation.ts';
-import { shareAccount } from '../access/account-share.ts';
+import { deadlineClient } from './access-port.ts';
+import { creationDeclares } from './access-port.ts';
+import { shareAccount } from './access-port.ts';
 import { currentCommand, currentCommandResources, type CommandTransaction } from '../command/command.ts';
 import { isDeepStrictEqual } from 'node:util';
 

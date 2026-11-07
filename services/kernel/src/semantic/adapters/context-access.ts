@@ -3,12 +3,10 @@ import { memoizedValue } from '../../memoized.ts';
 import { deadlineClient } from '../../access/authenticate.ts';
 import { requireAccessDeadline } from '../../access/unavailable.ts';
 import { GrantDeniedError } from '../../access/resource-access-errors.ts';
-import {
-  createResourcePublicEligibility,
-  initializeResourceGrants,
-  resourceAuthorization,
-  viewerActionReadTime,
-} from '../../access/index.ts';
+import { createResourcePublicEligibility } from '../../access/eligibility.ts';
+import { initializeResourceGrants } from '../../access/resource-initialization.ts';
+import { resourceAuthorization } from '../../access/resource-authorization.ts';
+import { viewerActionReadTime } from '../../access/read-bindings.ts';
 import { prepareReadDecisions, type Access, type AccessClient, type Actor } from '../../request/access.ts';
 import { ProblemError } from '../../http/problem-error.ts';
 import { withReadTransaction } from '../read.ts';

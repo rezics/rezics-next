@@ -1,6 +1,5 @@
 import type { Pool } from 'pg';
-import { accountDiscoverySource, readAccountDiscoverySummaries } from '../access/account-discovery-source.ts';
-import { readSubjectSummaries } from '../semantic/summaries.ts';
+import { accountDiscoverySource, readAccountDiscoverySummaries, readSubjectSummaries } from './native-bindings.ts';
 import type {
   DiscoveryOwnerAdapterSlots,
   DiscoveryOwnerRegistry,

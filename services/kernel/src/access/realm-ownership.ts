@@ -19,7 +19,7 @@ import {
 import type { Access, AccessClient, Resource } from '../request/access.ts';
 import { partitionOf, routeOf } from '../route/route.ts';
 import { withConnection } from '../database/pool.ts';
-import { deadlineClient, within } from './authenticate.ts';
+import { deadlineClient, within } from './deadline.ts';
 import { shareAccount } from './account-share.ts';
 import { LifecycleDeniedError } from './lifecycle-20261025094010-command.ts';
 import {

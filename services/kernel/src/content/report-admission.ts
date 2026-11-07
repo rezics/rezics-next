@@ -5,9 +5,11 @@ import { discardConnection, withConnection } from '../database/pool.ts';
 import { readPartition } from '../partition/partition.ts';
 import { partitionOf, routeOf } from '../route/route.ts';
 import { ANONYMOUS_PRINCIPAL_ID } from '../command/command.ts';
-import { ProblemError } from '../http/problem.ts';
-import { IDEMPOTENCY_HEADER, idempotencyKeyOf } from '../http/request.ts';
-import { accessCheck, type Actor } from '../request/access.ts';
+import { ProblemError } from '../http/problem-error.ts';
+import { IDEMPOTENCY_HEADER } from '@rezics/operations/protocol';
+import { idempotencyKeyOf } from '../http/idempotency-key.ts';
+import { accessCheck } from './access-port.ts';
+import type { Actor } from '../request/access.ts';
 import type { ReportDependencies, ReportRequestContext } from './reports.ts';
 
 /** The shared request stage has already charged report/1 before this runs.

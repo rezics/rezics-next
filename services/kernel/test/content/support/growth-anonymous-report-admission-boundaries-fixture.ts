@@ -8,7 +8,7 @@ const registerContent = createContentWorkModule({ fetch: (request) => fetch(requ
 import { createTurnstileVerifier } from '../../../src/content/turnstile.ts';
 import { relayEffects } from '../../../src/events/effects.ts';
 import { createKernel } from '../../../src/http/kernel.ts';
-import { anonymousCommandTarget } from '../../../src/http/request.ts';
+import { anonymousCommandTarget } from '../../../src/command/request.ts';
 import { newId, partitionOf, routeOf } from '../../../src/route/route.ts';
 import { createWorkClient } from '../../../src/work/client.ts';
 import { composeWork } from '../../../src/work/registry.ts';

@@ -1,7 +1,7 @@
 /** Structured header decoding shared by command route adapters. */
 import { parseItem } from 'structured-headers';
 import { ProblemError } from './problem-error.ts';
-import { normalizeCommandKey, type CommandPrincipal } from '../command/command.ts';
+import { normalizeCommandKey, type CommandPrincipal } from '../command/key.ts';
 
 export function idempotencyKeyOf(header: string | null | undefined, principal?: CommandPrincipal): string {
   if (typeof header !== 'string')

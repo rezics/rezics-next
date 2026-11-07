@@ -7,7 +7,8 @@ import {
   durableInitiatorCommitment,
 } from './access-port.ts';
 import type { DurableInitiatorRecord } from '../access/durable-initiator.ts';
-import { accessCommandAuthorization, accessCheck, type Access, type Actor } from '../request/access.ts';
+import { accessCommandAuthorization, accessCheck } from './access-port.ts';
+import type { Access, Actor } from '../request/access.ts';
 import {
   authoritativeTimeValue,
   principalCommandIdentity,

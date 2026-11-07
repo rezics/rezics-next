@@ -7,7 +7,7 @@ import type {
   CurrentAuthReceivingClosure,
 } from '@rezics/auth-contract';
 import { discardConnection, withConnection } from '../database/pool.ts';
-import { deadlineClient, within } from './authenticate.ts';
+import { deadlineClient, within } from './deadline.ts';
 export type { CurrentAuthReceivingClosure } from '@rezics/auth-contract';
 import { routeOf } from '../route/route.ts';
 import proofRead from './shared-history-auth.sql';

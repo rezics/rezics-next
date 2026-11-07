@@ -13,7 +13,7 @@ import { PageResponseSchema, extendPageResponseSchema } from './page-contract.ts
 import type { createApp } from '../../http/app.ts';
 import { customMethod, customMethodPath } from '../../http/custom-method.ts';
 import { ProblemError, problemSchema, type FieldError } from '../../http/problem.ts';
-import { createAccess } from '../../access/index.ts';
+import { createAccess } from '../../access/factory.ts';
 import { actionCatalogue, SESSION_HEADER } from '../../http/request.ts';
 import type { Access, AccessFactory } from '../../request/access.ts';
 import { GLOBAL_CONTEXT } from '../../semantic/definitions.ts';

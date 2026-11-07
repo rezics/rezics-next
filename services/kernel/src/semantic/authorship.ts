@@ -1,5 +1,6 @@
 import { currentCommand, type CommandTransaction } from '../command/command.ts';
-import { creationDeclares, initializeResourceGrants } from '../access/index.ts';
+import { creationDeclares } from '../access/parent-creation.ts';
+import { initializeResourceGrants } from '../access/resource-initialization.ts';
 import type { Resource } from '../request/access.ts';
 import { derivedId, routeOf } from '../route/route.ts';
 import { recordSemanticProducerRole, recordSemanticSourceCommit } from './erasure-producer.ts';

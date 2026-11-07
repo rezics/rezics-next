@@ -12,7 +12,8 @@ import {
   runCommand,
   type CommandAuthorization,
 } from '../command/command.ts';
-import { accessCommandAuthorization, type Actor } from '../request/access.ts';
+import { accessCommandAuthorization } from './access-port.ts';
+import type { Actor } from '../request/access.ts';
 import { partitionOf, routeOf } from '../route/route.ts';
 import { ContentNotFoundError, ReviewConflictError } from './commands.ts';
 import type { ErasePostDependencies, ErasePostContext } from './erase-post.ts';

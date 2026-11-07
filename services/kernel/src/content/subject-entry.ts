@@ -3,7 +3,7 @@ import { deadlineClient, within } from './access-port.ts';
 import type { RealmParticipationReadDecision } from '../community/participation.ts';
 import { CommandUnavailableError } from '../command/command.ts';
 import { discardConnection, withConnection } from '../database/pool.ts';
-import { ProblemError } from '../http/problem.ts';
+import { ProblemError } from '../http/problem-error.ts';
 import { partitionOf, routeOf } from '../route/route.ts';
 import type { Actor } from '../request/access.ts';
 import { readPartition } from '../partition/partition.ts';

@@ -1,5 +1,5 @@
 import type { PoolClient } from 'pg';
-import { resourceRoleHeld } from '../access/index.ts';
+import { resourceRoleHeld } from '../access/resource-role-held.ts';
 import { authoritativeTimeValue, type AuthoritativeTime } from '../command/command.ts';
 import { partitionOf, routeOf } from '../route/route.ts';
 import readCandidate from './lifecycle-read-candidate.sql';

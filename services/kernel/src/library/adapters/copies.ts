@@ -43,7 +43,7 @@ import {
   sameLibraryProfileAnchor,
   type LibraryProfileSource,
 } from '../profile-source.ts';
-import { deadlineClient, within } from '../../access/authenticate.ts';
+import { deadlineClient, within } from '../access-port.ts';
 import type { CopyPresentation } from '../copy-model.ts';
 import { prepareCopyPresentation } from '../copy-presentation.ts';
 import { prepareCopyInventory, readCopyInventoryValues } from '../copy-inventory.ts';
@@ -53,7 +53,6 @@ import {
   mergeCopyConditionFields,
   type CopyConditionPatch,
 } from '../copy-condition.ts';
-
 import type { CommandAttempt, CommandOutcome } from '../../command/command.ts';
 import type { Release } from '@rezics/definitions';
 import type {

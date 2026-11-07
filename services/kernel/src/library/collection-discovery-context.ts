@@ -1,7 +1,7 @@
 /** Public, bounded context for a native Collection card. No saved query or personal facts. */
 import { createHash } from 'node:crypto';
 import { isDeepStrictEqual } from 'node:util';
-import { readAccountDiscoverySummaries } from '../access/account-discovery-source.ts';
+import { readAccountDiscoverySummaries } from './access-port.ts';
 import type { AccessClient } from '../request/access.ts';
 import { readSubjectSummaryObservation } from '../semantic/summaries.ts';
 import type { SummaryReaderDependencies, SubjectSummary } from '../semantic/summaries.ts';

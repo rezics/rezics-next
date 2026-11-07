@@ -122,4 +122,10 @@ export {
   ApprovalIdentityDeniedError,
   DurableInitiatorUnavailableError,
   PlatformClosedError,
+  LifecycleDeniedError,
+  AccessUnavailableError,
+  CommandUnavailableError,
+  LiveCopyPendingError,
 } from './errors.ts';
+export { AuthenticationError } from './authentication.ts';
+export { ERASURE_PARTICIPANTS } from './erasure.ts';

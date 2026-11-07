@@ -12,6 +12,8 @@ import { withConnection } from '../database/pool.ts';
 import { partitionOf, routeOf, newId } from '../route/route.ts';
 import type { WorkClient } from '../work/client.ts';
 import { CommandUnavailableError } from './unavailable.ts';
+import { LiveCopyPendingError } from './contract/errors.ts';
+export { LiveCopyPendingError } from './contract/errors.ts';
 import { encodeLocator, validateRoleMask } from '../history/contract/index.ts';
 
 /** Internal native business-copy protocol. It grants no Access or Source authority. */
@@ -37,8 +39,6 @@ export type LiveCopy = Readonly<{
 }>;
 export type LiveCopyResult = Readonly<{ resultId: string; outcome: 'applied' | 'cancelled' | 'superseded' }>;
 export type LiveCopyDependencies = { pool: Pool; client: WorkClient };
-/** Missing native admission evidence is pending, never an empty inventory or an ACK. */
-export class LiveCopyPendingError extends Error {}
 type Client = Pick<PoolClient, 'query'>;
 const SELECT = `SELECT route,transition_id,module,source_domain,source_epoch,effect_key,receiver_route,
  receiver_domain,receiver_epoch,payload,roles,state,result_id,outcome FROM access.live_copy_transition`;

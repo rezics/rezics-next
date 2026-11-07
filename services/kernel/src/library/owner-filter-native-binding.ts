@@ -4,8 +4,7 @@ import { AsyncLocalStorage } from 'node:async_hooks';
 import { randomUUID } from 'node:crypto';
 import { isDeepStrictEqual } from 'node:util';
 import type { Pool, PoolClient, QueryResultRow } from 'pg';
-import { deadlineClient } from '../access/authenticate.ts';
-import { commandAccessContext, requireCommandAdmission } from '../access/command-admission.ts';
+import { deadlineClient, commandAccessContext, requireCommandAdmission } from './access-port.ts';
 import { requireAccessDeadline } from '../access/unavailable.ts';
 import type { KernelClock } from '../clock.ts';
 import {
@@ -31,7 +30,7 @@ import {
   createOrdinaryCollectionPageSource,
   type CollectionSourceObservation,
 } from './collection-source.ts';
-import { type WorkAllowance, type WorkDimensions } from './contract/work-dimensions.ts';
+import type { WorkAllowance, WorkDimensions } from './contract/work-dimensions.ts';
 import { readNativeCollectionMetadata, type NativeCollectionMetadata } from './collection-source-native.ts';
 import { NativeCollectionWork } from './collection-native-work.ts';
 import { prepareNativeCollectionMemberAuthority, type CollectionMemberAdmission } from './owner-filter.ts';

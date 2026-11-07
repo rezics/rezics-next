@@ -1,4 +1,4 @@
-import { AuthenticationError } from '../../src/request/access.ts';
+import { AuthenticationError } from '../../src/request/authentication-error.ts';
 import { suspendAccount, reinstateAccount } from '../support/native-suspension-driver.ts';
 import { afterAll, beforeAll, expect, setDefaultTimeout, test } from 'bun:test';
 import { createHash, randomUUID } from 'node:crypto';

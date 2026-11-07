@@ -5,7 +5,7 @@ import { withConnection } from '../database/pool.ts';
 import { routeOf } from '../route/route.ts';
 import { readAccount } from './account-data.ts';
 import { AuthBindingDeniedError } from './auth-bindings.ts';
-import { deadlineClient, within } from './authenticate.ts';
+import { deadlineClient, within } from './deadline.ts';
 import { readOperatorTransferState, ManagementSourceRefusedError } from './management-source.ts';
 import { requireAccessDeadline } from './unavailable.ts';
 

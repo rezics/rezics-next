@@ -9,8 +9,9 @@ import {
   type CollectionDiscoveryContextFilters,
   type DiscoveryMemberKey,
 } from './collection-discovery-context.ts';
-import { deadlineClient } from '../access/authenticate.ts';
-import { AccessUnavailableError, CommandUnavailableError, requireAccessDeadline } from '../access/unavailable.ts';
+import { deadlineClient } from './access-port.ts';
+import { requireAccessDeadline } from '../access/unavailable.ts';
+import { AccessUnavailableError, CommandUnavailableError } from '../access/contract/errors.ts';
 import { mintReadTime, releaseOperationalTime, type AuthoritativeTime } from '../command/command.ts';
 import { discardConnection, withConnection } from '../database/pool.ts';
 import { readPartition } from '../partition/partition.ts';
@@ -21,7 +22,7 @@ import {
 import { readCollectionDiscoveryFollowCounts } from './adapters/follow-count-discovery.ts';
 import { FollowCountUnavailableError } from './contract/index.ts';
 import { prepareReadDecisions } from '../request/access-check.ts';
-import { type Actor } from '../request/access.ts';
+import type { Actor } from '../request/access.ts';
 import { PARTITIONS, partitionOf, routeOf } from '../route/route.ts';
 import {
   collectionPresentation,

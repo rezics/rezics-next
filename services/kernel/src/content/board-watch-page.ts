@@ -1,8 +1,9 @@
 import { isDeepStrictEqual } from 'node:util';
 import { deadlineClient, within } from './access-port.ts';
 import { withConnection } from '../database/pool.ts';
-import { ProblemError } from '../http/problem.ts';
-import { accessCheck, type Actor } from '../request/access.ts';
+import { ProblemError } from '../http/problem-error.ts';
+import { accessCheck } from './access-port.ts';
+import type { Actor } from '../request/access.ts';
 import { routeOf } from '../route/route.ts';
 import type { BoardWatchState } from './board-watch.ts';
 import { ContentNotFoundError, readBoard } from './reads.ts';

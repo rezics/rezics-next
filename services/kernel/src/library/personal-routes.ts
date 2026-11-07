@@ -8,8 +8,8 @@ import type { Static, TSchema } from 'typebox';
 import { bundledRelease } from '@rezics/definitions/bundled';
 import { customMethod } from '../http/custom-method.ts';
 import type { Pool } from 'pg';
-import { deadlineClient } from '../access/authenticate.ts';
-import { GrantDeniedError } from '../access/resource-access-errors.ts';
+import { deadlineClient } from './access-port.ts';
+import { GrantDeniedError } from '../access/contract/errors.ts';
 import { systemClock, type KernelClock } from '../clock.ts';
 import { withConnection } from '../database/pool.ts';
 import { ProblemError } from '../http/problem-error.ts';
@@ -19,7 +19,7 @@ import { IDEMPOTENCY_HEADER } from '@rezics/operations/protocol';
 import { idempotencyKeyOf } from '../http/idempotency-key.ts';
 import { readPartition } from '../partition/partition.ts';
 import { AuthenticationError } from '../request/authentication-error.ts';
-import { type Access, type Actor } from '../request/access.ts';
+import type { Access, Actor } from '../request/access.ts';
 import { partitionOf, routeOf } from '../route/route.ts';
 import type { definitionRoutes } from '../semantic/http/definitions.ts';
 import { languageRanges } from '../semantic/language.ts';
@@ -96,7 +96,6 @@ import { readViewerFactsPage } from './viewer-facts.ts';
 import { viewerFactsResponseSchema } from './viewer-facts-schema.ts';
 import { attachCollectionListFacts } from './collection-list-facts.ts';
 import { assertShelfPageCurrent } from './shelf-viewer-currentness.ts';
-
 import { followContributionTarget, withFollowContribution } from './follow-contribution.ts';
 import { followResponse as serializeFollowResponse, withFollowWork } from './follow-operation-bounds.ts';
 import {

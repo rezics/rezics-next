@@ -9,12 +9,12 @@ import {
 } from '../command/command.ts';
 import { discardConnection, withConnection } from '../database/pool.ts';
 import { readPartition } from '../partition/partition.ts';
-import { accessCheck, type Access, type AccessClient, type Actor } from '../request/access.ts';
+import { accessCheck, type Access, type AccessClient, type Actor } from './check.ts';
 import { deadlineFor } from '../request/deadline.ts';
 import { partitionOf, routeOf } from '../route/route.ts';
 import { accessClock } from './access-clock.ts';
 import { readAccount } from './account-data.ts';
-import { deadlineClient, within } from './authenticate.ts';
+import { deadlineClient, within } from './deadline.ts';
 import assignmentRead from './delegation-read.sql';
 import { CommandUnavailableError, requireAccessDeadline, throwAccessUnavailable } from './unavailable.ts';
 import operatorRead from './management-source-operator.sql';

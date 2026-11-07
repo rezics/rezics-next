@@ -13,6 +13,13 @@ Runtime lookup and discovery rebuild are separate from worker registration and g
 and Library definition reads retain memoized factories and typed forwarding. Outcome bases stay with subclasses;
 compatibility exports preserve value identity. Acceptance is typing.
 
+Decision: Search Source, publication, scope, discovery and identity receiving consume Semantic, Access, Library,
+Content and Community natives through installed consumer-owned ports bound at composition. Global catalogue
+population is a Search leaf. Library scoped-Source construction lives in composition. Same-client transactions,
+Source admission, identity observations, typed outcomes, replay and settlement keep their producer functions.
+Native-port wiring acceptance compares every installed capability with its direct binding and the publication
+application; behavior assertions stay unchanged. Native, browser and broader acceptance run after integration.
+
 [Rejected text query repair](text-query-repair.md) owns bounded parser diagnostics and deliberate in-place correction.
 
 Search owns the subject search projection, indexing consumers, disclosure checks, query API, freshness and index

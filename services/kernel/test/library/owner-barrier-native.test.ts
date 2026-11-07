@@ -1,7 +1,7 @@
 import { afterAll, beforeAll, expect, test } from 'bun:test';
 import { createHash, randomUUID } from 'node:crypto';
 import { bundledDigest, bundledRelease } from '@rezics/definitions/bundled';
-import { GrantDeniedError } from '../../src/access/grant-commands.ts';
+import { GrantDeniedError } from '../../src/access/contract/errors.ts';
 import { createLifecycleCommands, LIFECYCLE_ACTIONS } from '../../src/access/lifecycle.ts';
 import { createPool } from '../../src/database/pool.ts';
 import { createCopyCommands } from '../../src/library/copies.ts';

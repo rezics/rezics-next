@@ -1,9 +1,7 @@
 import { memoizedValue } from '../memoized.ts';
 import { BOUND_AXES, declareBound, repeatBound, sumBounds, withinCeiling, type Bound } from '@rezics/bounds';
-import {
-  COLLECTION_AUTHORIZATION_MEMBERSHIPS,
-  collectionAuthorizationPreparationWork,
-} from '../access/adapters/collection-policy.ts';
+import { collectionAuthorizationPreparationWork } from './access-port.ts';
+import { COLLECTION_AUTHORIZATION_MEMBERSHIPS } from '../access/contract/collection-policy.ts';
 import accountShare from '../access/account-share.sql';
 import eventFence from '../command/fence.sql';
 import noEffectFence from '../command/no-effect-fence.sql';

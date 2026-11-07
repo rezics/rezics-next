@@ -1,14 +1,12 @@
 import { createHash } from 'node:crypto';
-import { shareAccount } from '../access/account-share.ts';
-import { resourceAuthorization } from '../access/resource-authorization.ts';
+import { shareAccount } from './access-port.ts';
+import { resourceAuthorization, readAccount, deadlineClient } from './access-port.ts';
 import { noEffect, principalCommandIdentity, runCommand } from '../command/command.ts';
-import { readAccount } from '../access/account-data.ts';
-import { deadlineClient } from '../access/authenticate.ts';
-import { CommandUnavailableError } from '../access/unavailable.ts';
+import { CommandUnavailableError } from '../access/contract/errors.ts';
 import { ProblemError } from '../http/problem-error.ts';
 import { readPartition } from '../partition/partition.ts';
 import { AuthenticationError } from '../request/authentication-error.ts';
-import { type AccountActor, type Actor } from '../request/access.ts';
+import type { AccountActor, Actor } from '../request/access.ts';
 import { deadlineFor, withRequestDeadline } from '../request/deadline.ts';
 import { partitionOf, routeOf } from '../route/route.ts';
 import { withReadTransaction } from '../semantic/read.ts';

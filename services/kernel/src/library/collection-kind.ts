@@ -16,7 +16,7 @@ import {
   type CollectionSourceContext,
   type PreparedCollectionSource,
 } from './collection-source.ts';
-import { type WorkAllowance, type WorkDimensions, type WorkReceipt } from './contract/work-dimensions.ts';
+import type { WorkAllowance, WorkDimensions, WorkReceipt } from './contract/work-dimensions.ts';
 import { createCollectionKindPreparation } from './collection-kind-preparation.ts';
 export { COLLECTION_KIND_INPUT_DECLARATION } from './collection-kind-input-bounds.ts';
 import type { KindAudienceAccess } from '../access/kind-audience.ts';

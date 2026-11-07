@@ -1,7 +1,7 @@
 import type { Release } from '@rezics/definitions';
 import type { Pool } from 'pg';
 import { deadlineFor } from '../request/deadline.ts';
-import { installStandingParentGrant } from '../access/index.ts';
+import { installStandingParentGrant } from '../access/standing-parent.ts';
 import type { Access, AccountActor } from '../request/access.ts';
 import { bootstrapRelease } from './definitions.ts';
 import { GLOBAL_SUBJECT_CONTEXT as GLOBAL_CONTEXT } from './contract/subject-values.ts';

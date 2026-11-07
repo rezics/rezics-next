@@ -1,5 +1,5 @@
 import { memoizedValue } from '../memoized.ts';
-import { ProblemError } from '../http/problem.ts';
+import { ProblemError } from '../http/problem-error.ts';
 import { readVisibleRatingQuestion } from '../rating/question-directory.ts';
 import { STANDARD_QUESTION_ID } from '../rating/votes.ts';
 import { createHash } from 'node:crypto';
@@ -39,17 +39,9 @@ import { AccessUnavailableError } from '../access/unavailable.ts';
 import { CommandUnavailableError } from '../command/command.ts';
 import { discardConnection, withConnection } from '../database/pool.ts';
 import { readPartition, readPartitions, type Partition } from '../partition/partition.ts';
-import {
-  accessExplicitCheck,
-  accessCheck,
-  type Access,
-  type AccessCheck,
-  type AccessClient,
-  type Actor,
-  type ReadDecisions,
-  type Resource,
-} from '../request/access.ts';
-import { prepareReadDecisions } from '../request/access.ts';
+import { accessExplicitCheck, accessCheck } from './access-port.ts';
+import type { Access, AccessCheck, AccessClient, Actor, ReadDecisions, Resource } from '../request/access.ts';
+import { prepareReadDecisions } from './access-port.ts';
 import { partitionOf, routeOf } from '../route/route.ts';
 import { decodeCursor, encodeCursor, type CursorBinding } from '../tokens/cursor.ts';
 import type { KeyRing } from '../tokens/seal.ts';

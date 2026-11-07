@@ -1,7 +1,7 @@
 import { requireAccessDeadline } from '../access/unavailable.ts';
 import { readRealm, type RealmView } from '../community/realm.ts';
-import { ProblemError } from '../http/problem.ts';
-import { accessCheck } from '../request/access.ts';
+import { ProblemError } from '../http/problem-error.ts';
+import { accessCheck } from './access-port.ts';
 import { routeOf } from '../route/route.ts';
 import { GLOBAL_CONTEXT } from '../semantic/definitions.ts';
 import { subjectReadEligibility } from '../semantic/eligibility.ts';

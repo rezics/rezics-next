@@ -8,7 +8,7 @@ import { PLATFORM_RESOURCE } from './bootstrap-governance.ts';
 import globalRead from './bootstrap-governance-read.sql';
 import { continuationEntryDigest, insertDeletionContinuation } from './committed-continuations.ts';
 import fenceSource from './committed-continuation-fence-source.sql';
-import { GrantDeniedError } from './grant-commands.ts';
+import { GrantDeniedError } from './resource-access-errors.ts';
 import fenceClear from './lifecycle-fence-clear.sql';
 import { resourceAuthorization } from './resource-authorization.ts';
 import reinstateStatement from './reinstatement-update.sql';

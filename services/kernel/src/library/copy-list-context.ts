@@ -1,6 +1,7 @@
 import type { Pool } from 'pg';
-import { classifyUnavailability, AccessUnavailableError, requireAccessDeadline } from '../access/unavailable.ts';
-import { deadlineClient } from '../access/authenticate.ts';
+import { classifyUnavailability, requireAccessDeadline } from '../access/unavailable.ts';
+import { AccessUnavailableError } from '../access/contract/errors.ts';
+import { deadlineClient } from './access-port.ts';
 import { withConnection } from '../database/pool.ts';
 import { ProblemError } from '../http/problem-error.ts';
 import type { Access, Actor } from '../request/access.ts';

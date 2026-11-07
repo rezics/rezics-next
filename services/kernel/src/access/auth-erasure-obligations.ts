@@ -7,7 +7,7 @@ import type {
 import type { Pool, PoolClient } from 'pg';
 import { routeOf } from '../route/route.ts';
 import { discardConnection, withConnection } from '../database/pool.ts';
-import { deadlineClient, within } from './authenticate.ts';
+import { deadlineClient, within } from './deadline.ts';
 
 const uuid = (value: string) => /^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$/.test(value);
 const ordinal = (value: string) => /^(0|[1-9][0-9]{0,18})$/.test(value) && BigInt(value) <= 9223372036854775807n;

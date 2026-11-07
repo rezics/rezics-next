@@ -2,8 +2,8 @@ import { afterAll, beforeAll, expect, setDefaultTimeout, spyOn, test } from 'bun
 import { createHash } from 'node:crypto';
 import { fromPlainText, serializeDocument } from '@rezics/document';
 import { appendAuthoredField, readAuthoredField, type AuthoredFieldInput } from '../../src/content/authored-fields.ts';
+import { ANONYMOUS_PRINCIPAL_ID } from '../../src/command/key.ts';
 import {
-  ANONYMOUS_PRINCIPAL_ID,
   authoritativeTimeValue,
   currentCommand,
   type CommandAuthorization,

@@ -1,10 +1,10 @@
 import { createBuiltinRuntime } from '../builtin-runtime.ts';
 import { attachCollectionListFacts } from '../collection-list-facts.ts';
-import { deadlineClient } from '../../access/authenticate.ts';
+import { deadlineClient } from '../access-port.ts';
 import { withConnection } from '../../database/pool.ts';
 import { ProblemError } from '../../http/problem-error.ts';
 import { accessCheck } from '../../request/access-check.ts';
-import { type Actor } from '../../request/access.ts';
+import type { Actor } from '../../request/access.ts';
 import { deadlineFor } from '../../request/deadline.ts';
 import { routeOf } from '../../route/route.ts';
 import { decodeCursor, encodeCursor } from '../../tokens/cursor.ts';

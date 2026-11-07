@@ -1,4 +1,4 @@
-import { ProblemError } from '../http/problem.ts';
+import { ProblemError } from '../http/problem-error.ts';
 import type { DiscoveryUnionHit } from '../search/index.ts';
 import { routeOf } from '../route/route.ts';
 import type { FeedItem } from './feed-contract.ts';

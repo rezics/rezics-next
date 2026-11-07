@@ -11,14 +11,7 @@ import { readAccountActionStates } from './account-viewer-actions.ts';
 import { createResourcePublicEligibility } from './public-eligibility.ts';
 import { requireAccessDeadline } from './unavailable.ts';
 import { GrantDeniedError } from './resource-access-errors.ts';
-import {
-  accessCheck,
-  type Access,
-  type AccessClient,
-  type AccessContext,
-  type Actor,
-  type Resource,
-} from '../request/access.ts';
+import { accessCheck, type Access, type AccessClient, type AccessContext, type Actor, type Resource } from './check.ts';
 import type {
   AuthoritativeTime,
   CommandAttempt,

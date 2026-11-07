@@ -21,7 +21,8 @@ import {
 } from './membership-inverse.ts';
 import { createRealmMembershipTransitions, type RealmMembershipTransition } from './realm-membership-transition.ts';
 import { createAccess as trustedPermissionAccess } from './permission.ts';
-import { createAccess, createWorkflowApprovals } from './index.ts';
+import { createAccess } from './factory.ts';
+import { createWorkflowApprovals } from './workflow-approvals.ts';
 import {
   MEMBERSHIP_WORK_DEADLINE_MS,
   readMembershipRouteKey,
