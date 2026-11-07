@@ -297,9 +297,11 @@ async function response(
   let reply: ClientResponse;
   try {
     reply = await call();
-  } catch {
+  } catch (caught) {
     signal?.throwIfAborted();
-    throw new ImportTransportError();
+    const failed = new ImportTransportError();
+    if (caught instanceof Error) failed.cause = caught;
+    throw failed;
   }
   signal?.throwIfAborted();
   if (
