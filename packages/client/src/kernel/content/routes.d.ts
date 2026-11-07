@@ -14281,7 +14281,7 @@ export declare function contentRoutes(app: ReturnType<typeof definitionRoutes>, 
                     headers: unknown;
                     response: {
                         200: {
-                            post: PostEntry & {
+                            post: import("./contribution-present.ts").ContributedPostEntry & {
                                 readonly viewerReaction?: ("downvote" | "insightful" | "laugh" | "like" | "love" | "sad" | "upvote") | null;
                             } & {
                                 readonly reactions?: {

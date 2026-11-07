@@ -1,7 +1,8 @@
 import type { KeyRing } from '../../tokens/seal.ts';
 import { type NativeDefinitionCatalogue } from '../definition-catalogue.ts';
 import type { Pool } from 'pg';
-import type { subjectRoutes } from './subjects.ts';
+import type { SubjectRoutes, subjectRoutes } from './subjects.ts';
+export type { SubjectRoutes };
 import { type Access, type AccessFactory } from '../../request/access.ts';
 import type { Resource } from '../../request/access.ts';
 import { type DefinitionImportRequest, type ImportedPreview } from '../definition-import.ts';
