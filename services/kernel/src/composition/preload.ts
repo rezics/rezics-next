@@ -1,16 +1,14 @@
-import { installRatingVoteSemantic } from './rating-votes.ts';
 import { installNativeHistory } from './history.ts';
 import { composeContentReading } from './content.ts';
 import { composeAccessApplication } from './access.ts';
-import { installIdentityRatingRepairProducer } from './identity-rating-repair.ts';
 import { composeZoneCollection } from './zones.ts';
+import { composeSemanticAdapters } from './semantic.ts';
 
-/** Test and command preloads use the same Access, History, Zone Collection and Rating repair composition as server and worker. */
+/** Test and command preloads use the same Access, Content reading, History, Zone Collection and Semantic adapters as server and worker. */
 export function installNativeHistoryPreload(): void {
   composeAccessApplication();
   composeContentReading();
   installNativeHistory();
   composeZoneCollection();
-  installIdentityRatingRepairProducer();
-  installRatingVoteSemantic();
+  composeSemanticAdapters();
 }

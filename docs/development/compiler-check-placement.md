@@ -27,7 +27,7 @@ status 75 explicitly refuses relocation: the current producer has no declared sa
 credentials and SQL semantics. It neither copies credentials nor substitutes a fresh database. A normal admitted
 root run prepares one database with both schemas, shares it with the selected workspaces and removes it after all
 consumers finish. Direct Kernel and Auth retain their existing migration, SQL analysis, construct, diagnostic,
-failure-status and cleanup behavior. SQL content mappers and the selected tsconfig are unchanged. A workspace whose tsconfig names a content mapper declares that mapper's package itself, so the mapper resolves from that workspace (Web declares `reylo` 0.7.0 beside its `contentMappers` entry).
+failure-status and cleanup behavior. SQL content mappers and the selected tsconfig are unchanged. A workspace whose tsconfig names a content mapper declares that mapper's package itself, so the mapper resolves from that workspace (Web declares `reylo` 0.7.0 in `devDependencies` only, beside its `contentMappers` entry).
 
 Decision: Web's official typecheck and check gate both execute `tsc --noEmit --runExternalCode` for `tsconfig.json`
 then `tsconfig.scripts.json`. The scripts program still runs after a red web program. The check gate does not
@@ -53,14 +53,18 @@ use that same profile; external projects remain unsupported.
 
 Decision: Root, Kernel and Auth classify placed host statuses 75, 124, 130 and 143 as infrastructure status 75,
 retaining the raw host status and `phase=placement` in diagnostics. Other placed statuses and ordinary compiler
-statuses remain native. Exceptions at placement, database setup, executable launch and database cleanup are
-infrastructure failures, not compiler diagnostics. Direct wrappers report `placement`, `database-setup`, `compiler`
-or `database-cleanup`; Kernel output publication has its own phase. Cleanup still runs after compiler failure, and
-cleanup diagnostics retain the original compiler error or native status. Invalid external configuration continues
-to fail validation before any placement or database starts.
+statuses remain native. Exceptions at placement, database setup and executable launch are infrastructure failures,
+not compiler diagnostics. Direct wrappers report `placement`, `database-setup`, `compiler` or `database-cleanup`;
+Kernel output publication has its own phase. Kernel construct and the Kernel, Auth and Web typecheck CLIs publish
+the terminal compiler status with `process.exit` after owned cleanup settles, matching root typecheck. Late mapper
+activity cannot reprice that completed result. Ordinary cleanup still runs after compiler failure, verifies container
+and volume settlement, and reports that error beside the original compiler identity without replacing a completed
+native status. Invalid external configuration continues to fail validation before any placement or database starts.
 
 The existing direct-wrapper acceptance in `scripts/typecheck-placement.test.ts` pins these cases with inert
-placement, database and compiler boundaries. Its old Auth executable-launch assertion expected a rejected promise;
+placement, database and compiler boundaries. Its admitted and Auth diagnostic subprocesses schedule leftover mapper
+work after cleanup returns and still observe native 23, including Auth throwaway settlement; a source match on
+`process.exit` does not prove that failure. Its old Auth executable-launch assertion expected a rejected promise;
 it now expects status 75 while retaining the original cleanup assertion. Placement-path units inject a refusing
 recognizer so they still relocate when the suite itself runs inside a check-host checkout. Composition fixtures that
 call `runOnCheckHost` also inject that recognizer and a fake remote so nested-candidate refusal does not fire against
@@ -68,6 +72,52 @@ the admitted checkout. Compiler diagnostic assertions unset `REZICS_CHECK_PHASES
 tsc stderr. Compiler diagnostic/status,
 selection, output and physical admission assertions remain unchanged. Native, browser and full root journeys remain
 separate acceptance; focused execution does not establish them.
+
+Decision: `scripts/check-startup.ts` is the combined startup selection: migrated compiler database for Auth
+composition, project Go Task on PATH, inert SQL-analysis/admission seams so native 23 reaches the fake compiler,
+placed 124/130/143 as infrastructure 75 with raw status and placement phase, heartbeat SSH reaped before results,
+and `--acceptance` keeping live root plus Auth native/browser suites. Both Web programs stay mandatory. Pin on the
+existing suites plus `scripts/check-startup.test.ts`. Fewest tests: those existing placement, compiler-database,
+check-startup and Auth config assertions already pin native 23, placed 75/124/130/143, Auth Task/DATABASE_URL,
+ordinary cleanup settlement, detached signal cleanup and late mapper activity after a completed native status;
+add no extra suite. A source-regex `process.exit` assertion cannot prove that failure. Typecheck repair updates Follow,
+contribution-story, public-scope walk and Auth retirement fixtures to current contracts; those assertions stay. Ordinary compiler-database cleanup
+waits for `docker rm -f -v` then inspects the container and labelled volume gone; that error stays beside native
+0/23 and does not become 75. Root's shared-database cleanup uses the same keep-status rule, and its SIGINT/SIGTERM handlers pass `wait=false` into that removal. spawnSync removal waits
+in-process; only SIGTERM/SIGINT uses `beginDetachedDockerRm` so a 200ms SIGKILL cannot abort it. `docker run` retries once after spawn
+timeout and nonce reap; that failure stays 75. Kernel derived throwaway create and check-host PostgreSQL create use that
+same one retry. Labelled reap lists (`ps -aq`) use the run timeout. Combined units run after landing.
+
+Decision: receive Search's unchanged default heap and explicit heap/container overrides, additive account messages
+and History's distinct local/full native module assertion through the combined selection. SSH retirement requires
+an affirmatively dead listener under the same exclusive lock that acquisition holds shared; a control-check timeout
+remains uncertainty. Home and VN Realm register resources immediately and await every independent cleanup while
+retaining the primary error. Their original positive walks remain in `--acceptance`. The existing upload move and
+stale-directory sweep remain authoritative; the linked receiving correction cancels additional durable move state.
+The Web received-value label needs only a subject identity, matching its existing caller and runtime behavior.
+
+Decision: receive Zone Collection port/preload binding `b96e751c2753` through this Driver's original Kernel/Auth/both-Web
+typing and full History preload. Zone owns the Collection port and work host; Library supplies the native adapter;
+composition binds it when that owner lands. Keep the six existing walk selections and unchanged work budgets. No extra
+startup task or native growth walk. Existing placement, compiler-database, check-startup and Auth config tests remain
+the fewest pins for native 23, placed 75/124/130/143 and cleanup.
+
+Additional sources: the integrated Search/History, History semantic return, Web compiler/settlement and integrated
+startup receiving decisions, their linked upload-move correction, and the installed Search, History, Web and SSH
+callers and tests. Regression changes distinguish affirmatively dead listeners from uncertain control checks;
+the existing native/compiler assertions remain intact.
+
+The combined Kernel selection also executes History's real Semantic source-set declaration, seal callback and event
+copy association. Positive cases require the installed producer; an unavailable-producer branch cannot establish a
+native pass. Receive its existing fixture correction: native begin owns the sole declaration, registered seal work
+requires an event, and a digest mismatch uses a well-formed digest. History's owner prose remains with its owner.
+
+Sources for this repair: this placement contract, Scripts, verification and local-stack owner runbooks, the two
+contract-linked receiving decisions, the installed compiler/transport fixtures and Auth startup callers, and the
+read-only reference index. Go Task's [official installation guidance](https://taskfile.dev/docs/installation) supports
+a project dependency whose installer verifies the downloaded binary checksum. Frozen-install identity checks the
+public `bin/task` once with a 30-second bound; Bun store copies of the same package are not executed, and the 5-second
+Docker probe window does not apply. No product authorization boundary changes.
 
 ## Authored acceptance and execution receipts
 

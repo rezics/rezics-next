@@ -9,6 +9,7 @@ import { randomBytes } from 'node:crypto';
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { join, resolve } from 'node:path';
 import { chromium, type Browser, type BrowserContext, type Page } from 'playwright';
+import { withWalkResources } from '../../../scripts/walk-stack.ts';
 import { startSeededFrontends } from '../../../services/auth/scripts/dev-stack.ts';
 
 const root = resolve(import.meta.dir, '../../..');
@@ -255,32 +256,37 @@ async function main() {
   const seedEnv = { ...process.env, ...(await parseEnv(join(root, '.temp/local-stack/seed.env'))) };
   await child(['bun', 'scripts/datasets/cross-media-seed.ts', '--dev'], 'seed', seedEnv);
   // Auth pages and Web start after the seed, as an admitted stack requires; `stop` runs before evidence is written.
-  const frontends = await startSeededFrontends();
-  const showcase = await readShowcase();
-  steps.push({
-    name: 'seed',
-    observed: { workId: showcase.workId, boardId: showcase.boardId, collections: showcase.collections.length },
-  });
+  const observed = await withWalkResources(async (own) => {
+    const frontends = await startSeededFrontends();
+    own('Home frontends', () => frontends.stop());
+    const showcase = await readShowcase();
+    steps.push({
+      name: 'seed',
+      observed: { workId: showcase.workId, boardId: showcase.boardId, collections: showcase.collections.length },
+    });
 
-  const keys = JSON.parse(await readFile(join(root, '.temp/local-stack/keys.json'), 'utf8')) as { password: string };
-  const developer = await accessToken(stack, 'developer@rezics.test', keys.password);
-  const collection = showcase.collections.find((row) => row.memberIds.length > 0);
-  if (!collection) throw new Error('the seed published no Collection with members');
-  const reader = {
-    handle: `walk-${randomBytes(3).toString('hex')}`,
-    email: `walk.reader.${randomBytes(4).toString('hex')}@rezics.test`,
-    password: randomBytes(18).toString('base64url'),
-  };
+    const keys = JSON.parse(await readFile(join(root, '.temp/local-stack/keys.json'), 'utf8')) as { password: string };
+    const developer = await accessToken(stack, 'developer@rezics.test', keys.password);
+    const collection = showcase.collections.find((row) => row.memberIds.length > 0);
+    if (!collection) throw new Error('the seed published no Collection with members');
+    const reader = {
+      handle: `walk-${randomBytes(3).toString('hex')}`,
+      email: `walk.reader.${randomBytes(4).toString('hex')}@rezics.test`,
+      password: randomBytes(18).toString('base64url'),
+    };
 
-  // Chromium's Unix socket paths must fit a short root; the inherited temporary root may be too long.
-  await mkdir('/tmp/rw', { recursive: true, mode: 0o700 });
-  const browser: Browser = await chromium.launch({ headless: true, env: { ...process.env, TMPDIR: '/tmp/rw' } });
-  const anonymous: BrowserContext = await browser.newContext({
-    locale: 'en-US',
-    viewport: { width: 1280, height: 900 },
-  });
-  const member: BrowserContext = await browser.newContext({ locale: 'en-US', viewport: { width: 1280, height: 900 } });
-  try {
+    // Chromium's Unix socket paths must fit a short root; the inherited temporary root may be too long.
+    await mkdir('/tmp/rw', { recursive: true, mode: 0o700 });
+    const browser: Browser = await chromium.launch({ headless: true, env: { ...process.env, TMPDIR: '/tmp/rw' } });
+    own('Home browser', () => browser.close());
+    const anonymous: BrowserContext = await browser.newContext({
+      locale: 'en-US',
+      viewport: { width: 1280, height: 900 },
+    });
+    const member: BrowserContext = await browser.newContext({
+      locale: 'en-US',
+      viewport: { width: 1280, height: 900 },
+    });
     const signupPage = await member.newPage();
     await signUp(signupPage, stack, reader);
     steps.push({ name: 'reader signup', observed: { handle: reader.handle } });
@@ -366,20 +372,11 @@ async function main() {
     if ((await signupPage.locator('[data-slot="home-work-library-score"]').count()) !== 0)
       throw new Error('developer session displayed the reader score');
     steps.push({ name: 'replacement session', observed: { developer: Boolean(developer) } });
-  } finally {
-    await browser.close();
-  }
-
-  await frontends.stop();
-  await writeFile(
-    join(evidenceDir, 'evidence.json'),
-    JSON.stringify(
-      { stack, steps, collection: collection.id, work: showcase.workId, thread: showcase.threadId },
-      null,
-      2,
-    ) + '\n',
-    { mode: 0o600 },
-  );
+    return { collection: collection.id, work: showcase.workId, thread: showcase.threadId };
+  });
+  await writeFile(join(evidenceDir, 'evidence.json'), JSON.stringify({ stack, steps, ...observed }, null, 2) + '\n', {
+    mode: 0o600,
+  });
   console.log(`home walk complete: ${steps.length} steps recorded in .temp/home-walk/evidence.json`);
 }
 

@@ -1,5 +1,11 @@
 # Local development stack
 
+Frozen dependency installation supplies the pinned Go Task CLI as `node_modules/.bin/task`; add that directory to
+PATH when invoking native startup outside a package script. A global `go-task` installation remains supported.
+The integrated startup runner supplies this PATH and a migrated compiler database for mounted Auth composition
+tests. Its native/browser acceptance clears the compiler URL before the fresh checkout runs `dev:infra`, so the
+generated Kernel `.env` remains the native stack's database input.
+
 Use Bun, Docker and Go Task (`task`, or the repository's `go-task` binary). From a fresh checkout:
 
 ```sh
@@ -309,6 +315,9 @@ cannot replace a seeded product walk. Walk `start` waits for the walk signal rat
 Decision: an admitted stack gates on native JWKS and Kernel only. Its Auth pages and Web start after the journey's seed,
 through `startSeededFrontends`, and are killed on exit; the Home and VN-realm walks use it, and a stack's Vite never
 compiles while the seed runs.
+Each walk registers frontend and browser cleanup immediately after acquisition. Every registered cleanup is awaited
+on provisioning, seed, locale, persona and browser failures. Independent cleanup failures retain the original cause
+and do not prevent other resources from settling.
 
 Decision: generate Paraglide modules before Vite starts, wait for useful `/en` HTML, and report the observed probe,
 fetch or child-exit cause. Only an actual ECONNREFUSED is hydration startup; a closed-listener probe does not invent

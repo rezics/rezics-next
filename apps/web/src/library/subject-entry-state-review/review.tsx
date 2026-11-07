@@ -180,7 +180,7 @@ function LibraryStateSelect({
   );
 }
 
-function ReceivedValue({ entry, label }: { entry: { subjectId: string } | null; label: string }) {
+function ReceivedValue({ entry, label }: { entry: Pick<SubjectSlotEntry, 'subjectId'> | null; label: string }) {
   return <span data-entry-state-received-value>{entry ? label : m.library_entry_review_absent()}</span>;
 }
 
@@ -195,7 +195,7 @@ function ReviewValues({ draft, receivedLabel }: { draft: Draft; receivedLabel: s
       </dd>
       <dt className="font-medium text-muted-foreground">{m.library_entry_review_received()}</dt>
       <dd className="m-0 min-w-0 whitespace-normal break-words [overflow-wrap:anywhere]">
-        <ReceivedValue entry={draft.basis} label={receivedLabel} />
+        <ReceivedValue entry={draft.basis ? { subjectId: draft.basis.subjectId } : null} label={receivedLabel} />
       </dd>
       <dt className="font-medium text-muted-foreground">{m.library_entry_review_proposed()}</dt>
       <dd className="m-0 min-w-0 whitespace-normal break-words [overflow-wrap:anywhere]">{draft.label}</dd>
@@ -227,7 +227,7 @@ function ConflictReview({
         <dl className="mt-2 grid min-w-0 gap-x-4 gap-y-2 sm:grid-cols-[max-content_minmax(0,1fr)]">
           <dt className="font-medium text-muted-foreground">{m.library_entry_review_received()}</dt>
           <dd className="m-0 min-w-0 whitespace-normal break-words [overflow-wrap:anywhere]">
-            <ReceivedValue entry={captureEntryStateBasis(entry)} label={receivedLabel} />
+            <ReceivedValue entry={entry} label={receivedLabel} />
           </dd>
           <dt className="font-medium text-muted-foreground">{m.library_entry_review_proposed()}</dt>
           <dd className="m-0 min-w-0 whitespace-normal break-words [overflow-wrap:anywhere]">{conflict.stateLabel}</dd>

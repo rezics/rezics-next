@@ -154,9 +154,9 @@ async function run(args: readonly string[]): Promise<number> {
 
 if (import.meta.main) {
   try {
-    process.exitCode = await run(process.argv.slice(2));
+    process.exit(await run(process.argv.slice(2)));
   } catch (error) {
     console.error(`Web typecheck infrastructure failure: ${error instanceof Error ? error.message : String(error)}`);
-    process.exitCode = 75;
+    process.exit(75);
   }
 }

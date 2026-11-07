@@ -1,17 +1,23 @@
 import { afterEach, expect, test } from 'bun:test';
 import { createServer } from 'node:net';
-import { chmodSync, mkdtempSync, rmSync } from 'node:fs';
+import { chmodSync, mkdtempSync, readFileSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import {
+  beginDetachedDockerRm,
   COMPILER_NONCE_LABEL,
   COMPILER_PID_LABEL,
   DOCKER_BUILD_TIMEOUT_MS,
   DOCKER_PROBE_TIMEOUT_MS,
   DOCKER_RUN_TIMEOUT_MS,
   cleanupStaleCompilerDatabases,
+  compilerDatabaseInspectArgs,
   compilerDatabaseListenUrl,
+  compilerDatabaseRemoveArgs,
   compilerDatabaseRunArgs,
+  compilerDatabaseVolumeLsArgs,
+  keepCompilerStatusAfterCleanup,
+  settleCompilerDatabaseRemoval,
   dockerNetworkArgs,
   dockerProcessText,
   dockerSpawnSyncOptions,
@@ -43,14 +49,18 @@ test('docker run, create and forced rm use Auth run timeout; probes stay short',
   expect(dockerTimeoutMs(['run', '-d', '--rm', 'postgres'])).toBe(DOCKER_RUN_TIMEOUT_MS);
   expect(dockerTimeoutMs(['create', '--name', 'x', 'postgres'])).toBe(DOCKER_RUN_TIMEOUT_MS);
   expect(dockerTimeoutMs(['rm', '-f', '-v', 'x'])).toBe(DOCKER_RUN_TIMEOUT_MS);
+  expect(dockerTimeoutMs(['rm', '-f', 'x'])).toBe(DOCKER_RUN_TIMEOUT_MS);
   expect(dockerTimeoutMs(['build', '--tag', 'x', '.'])).toBe(DOCKER_BUILD_TIMEOUT_MS);
   expect(dockerTimeoutMs(['exec', 'x', 'pg_isready'])).toBe(DOCKER_PROBE_TIMEOUT_MS);
+  expect(dockerTimeoutMs(['ps', '-aq', '--filter', 'label=rezics.compiler.nonce=x'])).toBe(DOCKER_RUN_TIMEOUT_MS);
   expect(dockerTimeoutMs(['ps', '-a'])).toBe(DOCKER_PROBE_TIMEOUT_MS);
   expect(dockerTimeoutMs(['port', 'x', '5432/tcp'])).toBe(DOCKER_PROBE_TIMEOUT_MS);
   const removal = dockerSpawnSyncOptions(['rm', '-f', '-v', 'x']);
   expect(removal.timeout).toBe(DOCKER_RUN_TIMEOUT_MS);
-  expect(removal.detached).toBe(true);
-  const probe = dockerSpawnSyncOptions(['ps', '-aq']);
+  expect(removal.detached).toBeUndefined();
+  const reapList = dockerSpawnSyncOptions(['ps', '-aq', '--filter', 'label=rezics.compiler.nonce=x']);
+  expect(reapList.timeout).toBe(DOCKER_RUN_TIMEOUT_MS);
+  const probe = dockerSpawnSyncOptions(['ps', '-a']);
   expect(probe.timeout).toBe(DOCKER_PROBE_TIMEOUT_MS);
   expect(probe.detached).toBeUndefined();
 });
@@ -75,18 +85,90 @@ test('a failed docker run reaps the nonce before the error escapes', () => {
   const calls: string[][] = [];
   const docker = (args: string[]): string => {
     calls.push(args);
+    if (args[0] === 'run') throw new Error('docker run failed with status 125: daemon error');
+    return args[0] === 'ps' ? 'created-unstarted' : '';
+  };
+  expect(() => startCompilerContainer(9, 'nonce-fail', docker, {})).toThrow(/status 125/);
+  expect(calls[0]![0]).toBe('run');
+  expect(calls[1]).toEqual(['ps', '-aq', '--filter', `label=${COMPILER_NONCE_LABEL}=nonce-fail`]);
+  expect(calls[2]).toEqual(compilerDatabaseRemoveArgs('created-unstarted'));
+  expect(calls).toHaveLength(3);
+  reapCompilerNonce('already-gone', 9, () => {
+    throw new Error('daemon timeout');
+  });
+});
+
+test('a docker run spawn timeout reaps the nonce, retries once, then keeps the second failure', () => {
+  const calls: string[][] = [];
+  const docker = (args: string[]): string => {
+    calls.push(args);
     if (args[0] === 'run') {
       throw Object.assign(new Error('spawnSync docker ETIMEDOUT'), { code: 'ETIMEDOUT' });
     }
     return args[0] === 'ps' ? 'created-unstarted' : '';
   };
   expect(() => startCompilerContainer(9, 'nonce-fail', docker, {})).toThrow(/ETIMEDOUT/);
-  expect(calls[0]![0]).toBe('run');
+  const runs = calls.filter((args) => args[0] === 'run');
+  expect(runs).toHaveLength(2);
   expect(calls[1]).toEqual(['ps', '-aq', '--filter', `label=${COMPILER_NONCE_LABEL}=nonce-fail`]);
-  expect(calls[2]).toEqual(['rm', '-f', '-v', 'created-unstarted']);
-  reapCompilerNonce('already-gone', 9, () => {
-    throw new Error('daemon timeout');
-  });
+  expect(calls[2]).toEqual(compilerDatabaseRemoveArgs('created-unstarted'));
+  const retryNonce = runs[1]!
+    .find((arg, index) => runs[1]![index - 1] === '--label' && arg.startsWith(`${COMPILER_NONCE_LABEL}=`))
+    ?.slice(`${COMPILER_NONCE_LABEL}=`.length);
+  expect(retryNonce).toBeDefined();
+  expect(retryNonce).not.toBe('nonce-fail');
+  expect(calls[4]).toEqual(['ps', '-aq', '--filter', `label=${COMPILER_NONCE_LABEL}=${retryNonce}`]);
+  expect(calls[5]).toEqual(compilerDatabaseRemoveArgs('created-unstarted'));
+});
+
+test('ordinary compiler cleanup waits for container and volume settlement', () => {
+  const calls: string[][] = [];
+  const docker = (args: string[]): string => {
+    calls.push(args);
+    if (args[0] === 'inspect') throw new Error('Error: No such object: owned');
+    if (args[0] === 'volume') return '';
+    return '';
+  };
+  settleCompilerDatabaseRemoval('owned', 9, docker);
+  expect(calls[0]).toEqual(compilerDatabaseRemoveArgs('owned'));
+  expect(calls[1]).toEqual(compilerDatabaseInspectArgs('owned'));
+  expect(calls[2]).toEqual(compilerDatabaseVolumeLsArgs(9));
+});
+
+test('ordinary compiler cleanup reports a remaining volume without inventing container identity', () => {
+  const docker = (args: string[]): string => {
+    if (args[0] === 'inspect') throw new Error('Error: No such object: owned');
+    if (args[0] === 'volume') return 'vol-still-here';
+    return '';
+  };
+  expect(() => settleCompilerDatabaseRemoval('owned', 9, docker)).toThrow(
+    /volume remains after removal: vol-still-here/,
+  );
+});
+
+test('a completed native compiler status survives a later cleanup error', () => {
+  const printed: string[] = [];
+  const original = console.error;
+  console.error = (...args: unknown[]) => {
+    printed.push(args.map(String).join(' '));
+  };
+  try {
+    expect(keepCompilerStatusAfterCleanup(23, new Error('docker rm ETIMEDOUT'), 'Auth typecheck')).toBe(23);
+    expect(printed.join('\n')).toContain('compiler status 23');
+    expect(printed.join('\n')).toContain('docker rm ETIMEDOUT');
+    expect(keepCompilerStatusAfterCleanup(undefined, new Error('docker rm ETIMEDOUT'), 'Auth typecheck')).toBe(75);
+  } finally {
+    console.error = original;
+  }
+});
+
+test('signal-path compiler cleanup stays detached so SIGKILL cannot abort it', () => {
+  expect(compilerDatabaseRemoveArgs('owned')).toEqual(['rm', '-f', '-v', 'owned']);
+  expect(beginDetachedDockerRm('')).toBeUndefined();
+  const source = readFileSync(new URL('./compiler-database.ts', import.meta.url), 'utf8');
+  expect(source).toContain('beginDetachedDockerRm(container)');
+  expect(source).toContain('remove(false)');
+  expect(source).toContain('settleCompilerDatabaseRemoval(container)');
 });
 
 test('isolated stack attachment uses container identity, never a Linux ns path as a network name', () => {
@@ -178,7 +260,7 @@ test('stale compiler databases whose owner pid is gone are removed with their vo
     '--format',
     '{{.ID}} {{.Label "rezics.compiler.pid"}}',
   ]);
-  expect(calls[1]).toEqual(['rm', '-f', '-v', 'dead-compiler']);
+  expect(calls[1]).toEqual(compilerDatabaseRemoveArgs('dead-compiler'));
 });
 
 async function unixEcho(directory: string): Promise<{ path: string; close: () => Promise<void> }> {
@@ -320,7 +402,7 @@ test('docker stdout and stderr are UTF-8 text whether the runtime returns a stri
     return args[0] === 'ps' ? 'half-created\n' : '';
   });
   expect(calls[0]).toEqual(['ps', '-aq', '--filter', 'label=rezics.kernel.check.nonce=n1']);
-  expect(calls[1]).toEqual(['rm', '-f', '-v', 'half-created']);
+  expect(calls[1]).toEqual(compilerDatabaseRemoveArgs('half-created'));
 });
 
 test('the forwarder child exits when the owner closes stdin', async () => {
