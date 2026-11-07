@@ -50,7 +50,6 @@ const RETRY_WORDS = ['zero', 'one', 'two'] as const;
 function wrapperResult(pass: string, infrastructure: string): string {
   return `If the wrapper prints a check id before the check ends, end the turn at once with \`{"status":"waiting","checks":["<bare UUID>"]}\` in the exit object, using that bare UUID. Never wait for it yourself: no \`--wait\` (obsolete, whatever older sessions say), status polls, log or process reads. The controller wakes this session with the result: use it exactly (${pass}) and do not return waiting again for those ids; success uses \`"checks":[]\`. ${infrastructure} `;
 }
-const WRAPPER_RESULT = wrapperResult('missing, unknown or nonzero is not a pass', '{{task.wrapperFailureRule}}');
 // Under the typecheck-only check a nonzero exit is a type error, or a money-path test failure when those paths changed.
 const MINIMAL_WRAPPER_RESULT = wrapperResult(
   'missing or unknown is not a pass; a type error is not a pass; a failing payment, payout, order settlement, points or balance test is not a pass',
@@ -312,6 +311,9 @@ function promptView(input: WorkerPromptInput): PromptView {
   const servers = storybookServers(task.worktree, brief);
   const quote = (value: string) => `'${value.replaceAll("'", `'\\''`)}'`;
   const frozen = ((task as Task & { frozenFiles?: { path: string }[] }).frozenFiles ?? []).map((file) => file.path);
+  const wrapperFailureRule = product
+    ? 'A wrapper-classified shared infrastructure-only failure uses the dev product source-success rule above; keep every failed, skipped and unreached check unverified, and do not retry source solely for infrastructure.'
+    : "A failure after the wrapper's own infrastructure rerun is final: a `tool` blocker; type, test and product failures are not infrastructure failures.";
   const tests = task.workspace ? [] : workerTestCommands(branchChangedPaths(task, policy), task.worktree);
   const proofRun =
     input.proofRun ?? (task.proofRun?.binding.attempt === task.currentAttempt ? task.proofRun : undefined);
@@ -356,9 +358,7 @@ function promptView(input: WorkerPromptInput): PromptView {
     devInfrastructure: product
       ? "On dev, for a completed and committed product after the wrapper's own rerun, source success is allowed only when every remaining check failure is explicitly shared transport or infrastructure. Name each failed check and its exact error, and each skipped or unreached check as unverified; never label any of them passed. Do not retry source solely for infrastructure. Type, test and product failures remain non-success; the dev verifier completes deferred checks after merge."
       : '',
-    wrapperFailureRule: product
-      ? 'A wrapper-classified shared infrastructure-only failure uses the dev product source-success rule above; keep every failed, skipped and unreached check unverified, and do not retry source solely for infrastructure.'
-      : "A failure after the wrapper's own infrastructure rerun is final: a `tool` blocker; type, test and product failures are not infrastructure failures.",
+    wrapperFailureRule,
     minimalInfrastructureException: product
       ? ', except when the wrapper reports that the only missing passes are shared transport or infrastructure failures after its own rerun, as described by the dev product source-success rule above'
       : '',
@@ -381,7 +381,8 @@ function promptView(input: WorkerPromptInput): PromptView {
       : 'This base has no scripts/worker-check.ts; do not add one. Run the acceptance command in the foreground from the worktree root and let it finish, then report its actual exit status; it gives no check id and no waiting result.',
     ownedNoWrapperTail: owned ? ' Do not report success unless the chosen validation actually exits zero.' : '',
     wrapperInvocation: runner ? `${runner} -- <command...>` : 'bun scripts/worker-check.ts -- <command...>',
-    wrapperResult: local && runner ? WRAPPER_RESULT : '',
+    wrapperResult:
+      local && runner ? wrapperResult('missing, unknown or nonzero is not a pass', wrapperFailureRule) : '',
     localRun,
     minimalOwned: owned
       ? 'This brief leaves validation to the worker. Choose or add focused tests that exercise the stated outcome; they run after landing in the dev verifier. A missing acceptance command is not a pass. Broader acceptance remains deferred under this policy. '

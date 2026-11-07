@@ -354,6 +354,20 @@ test('minimal dev infrastructure failures remain unverified source success while
     expect(mainRelease.prompt).toContain('is final: a `tool` blocker');
     expect(mainRelease.prompt).not.toContain('dev product source-success rule above');
 
+    const localMainRelease = renderWorkerPrompt({
+      task: worker(
+        contract({
+          goal: 'control-plane',
+          target: 'main',
+          acceptance: { command: ['bun', 'test'], tests: ['x'], failing: true, placement: 'local' },
+        }),
+        { worktree: repositoryRoot },
+      ),
+      mainCheckout: MAIN,
+    });
+    expect(localMainRelease.prompt).not.toMatch(/\{\{task\./);
+    expect(localMainRelease.prompt).toContain('is final: a `tool` blocker');
+
     const proofRun: ProofReservation = {
       status: 'bound',
       binding: {
@@ -383,7 +397,7 @@ test('minimal dev infrastructure failures remain unverified source success while
     });
     expect(proof.prompt).toContain('Missing, unknown, timed out or nonzero wrapper results stay non-green.');
     expect(proof.prompt).not.toContain('dev product source-success rule above');
-    for (const rendered of [minimalDev, wrappedDev, mainRelease, proof])
+    for (const rendered of [minimalDev, wrappedDev, mainRelease, localMainRelease, proof])
       expect(rendered.manifest.overBudget).toEqual([]);
   } finally {
     rmSync(directory, { recursive: true, force: true });
