@@ -14,11 +14,7 @@ import type {
 } from '../semantic/index.ts';
 import type { OpenSearch } from './opensearch.ts';
 import type { AccountDiscoveryRepairObservation } from '../access/account-discovery-source.ts';
-import type {
-  PublicFilterSourceBinding,
-  NativeSourceRepairLocator,
-  PublicSourceRepair,
-} from '../semantic/index.ts';
+import type { PublicFilterSourceBinding, NativeSourceRepairLocator, PublicSourceRepair } from '../semantic/index.ts';
 
 /** Structural Source data copied by trusted producers; custody never certifies Source authority. */
 export type CustodyDefinition<Capture extends PublicCanonicalCaptureInput = PublicFilterConsumerCaptureInput> =

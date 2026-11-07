@@ -3,15 +3,8 @@ import { isDeepStrictEqual } from 'node:util';
 import type { Pool } from 'pg';
 import type { KernelClock } from '../clock.ts';
 import { ProblemError } from '../http/problem-error.ts';
-import type {
-  PublicFilterSource,
-  PublicFilterProjectionMeaning,
-  PublicFilterCost,
-} from '../semantic/index.ts';
-import type {
-  PublicFilterSourceBootstrapBinding,
-  PublicFilterSourceCaptureInput,
-} from '../semantic/index.ts';
+import type { PublicFilterSource, PublicFilterProjectionMeaning, PublicFilterCost } from '../semantic/index.ts';
+import type { PublicFilterSourceBootstrapBinding, PublicFilterSourceCaptureInput } from '../semantic/index.ts';
 import {
   createPublicFilterConsumerOperations,
   queryScopeOrderedKeys,

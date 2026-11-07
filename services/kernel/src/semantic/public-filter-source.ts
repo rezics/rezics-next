@@ -304,19 +304,24 @@ export function createNativePublicFilterSource(
       try {
         accessPort.requireDeadline(readContext.deadline);
         return await withRequestDeadline(readContext.deadline, () =>
-          inReadSnapshot(config.pool, readContext.deadline, async (client) => {
-            const owner = await readPartition(client, request.partition);
-            if (!owner) return unavailable('missing_owner');
-            if (owner.writeState === 'moved') return unavailable('moved');
-            if (owner.writeState !== 'active') return unready('owner_pending');
-            const row = await readPrivacyHead.run(client, {
-              partition_no: request.partition,
-            });
-            if (!row) return unready('metadata_missing');
-            if (row.population_fenced || row.owner_epoch !== owner.epoch) return unready('owner_pending');
-            const head = privacyHead(request.partition, owner.epoch, row.position);
-            return { status: 'home', head, cost: cost(1) };
-          }, accessPort),
+          inReadSnapshot(
+            config.pool,
+            readContext.deadline,
+            async (client) => {
+              const owner = await readPartition(client, request.partition);
+              if (!owner) return unavailable('missing_owner');
+              if (owner.writeState === 'moved') return unavailable('moved');
+              if (owner.writeState !== 'active') return unready('owner_pending');
+              const row = await readPrivacyHead.run(client, {
+                partition_no: request.partition,
+              });
+              if (!row) return unready('metadata_missing');
+              if (row.population_fenced || row.owner_epoch !== owner.epoch) return unready('owner_pending');
+              const head = privacyHead(request.partition, owner.epoch, row.position);
+              return { status: 'home', head, cost: cost(1) };
+            },
+            accessPort,
+          ),
         );
       } catch (error) {
         if (accessPort.isUnavailable(error)) return unavailable('deadline');
@@ -340,88 +345,94 @@ export function createNativePublicFilterSource(
       try {
         accessPort.requireDeadline(request.context.deadline);
         return await withRequestDeadline(request.context.deadline, () =>
-          inReadSnapshot(config.pool, request.context.deadline, async (client) => {
-            const owner = await readPartition(client, request.partition);
-            if (!owner) return unavailable('missing_owner');
-            if (owner.writeState === 'moved') return unavailable('moved');
-            if (owner.writeState !== 'active') return unready('owner_pending');
-            if (owner.epoch !== request.epoch) return { status: 'changed', cost: cost() };
-            const currentRow = await readPrivacyHead.run(client, {
-              partition_no: request.partition,
-            });
-            if (!currentRow) return unready('metadata_missing');
-            if (currentRow.population_fenced || currentRow.owner_epoch !== owner.epoch) return unready('owner_pending');
-            const current = BigInt(currentRow.position);
-            if (request.through > current) return { status: 'changed', cost: cost(1) };
-            if (request.after === request.through)
-              return {
-                status: 'complete',
-                head: { partition: request.partition, epoch: owner.epoch, position: request.through },
-                entries: [],
-                after: request.through,
-                cost: cost(1),
-              };
-            const found = rows(
-              await readPrivacyEntries.run(client, {
+          inReadSnapshot(
+            config.pool,
+            request.context.deadline,
+            async (client) => {
+              const owner = await readPartition(client, request.partition);
+              if (!owner) return unavailable('missing_owner');
+              if (owner.writeState === 'moved') return unavailable('moved');
+              if (owner.writeState !== 'active') return unready('owner_pending');
+              if (owner.epoch !== request.epoch) return { status: 'changed', cost: cost() };
+              const currentRow = await readPrivacyHead.run(client, {
                 partition_no: request.partition,
-                after: request.after.toString(),
-                through: request.through.toString(),
-                input_limit: request.inputLimit,
-              }),
-            );
-            const entries: PrivacyReductionLogEntry[] = [];
-            for (const row of found) {
-              const { affected, impacts } = row;
+              });
+              if (!currentRow) return unready('metadata_missing');
+              if (currentRow.population_fenced || currentRow.owner_epoch !== owner.epoch)
+                return unready('owner_pending');
+              const current = BigInt(currentRow.position);
+              if (request.through > current) return { status: 'changed', cost: cost(1) };
+              if (request.after === request.through)
+                return {
+                  status: 'complete',
+                  head: { partition: request.partition, epoch: owner.epoch, position: request.through },
+                  entries: [],
+                  after: request.through,
+                  cost: cost(1),
+                };
+              const found = rows(
+                await readPrivacyEntries.run(client, {
+                  partition_no: request.partition,
+                  after: request.after.toString(),
+                  through: request.through.toString(),
+                  input_limit: request.inputLimit,
+                }),
+              );
+              const entries: PrivacyReductionLogEntry[] = [];
+              for (const row of found) {
+                const { affected, impacts } = row;
+                if (
+                  !Array.isArray(affected) ||
+                  !affected.every((value) => validDependency(value, request.partition)) ||
+                  !Array.isArray(impacts) ||
+                  !impacts.every((value) => validImpact(value, request.partition))
+                )
+                  return { ...unready('metadata_missing'), cost: cost(found.length) };
+                entries.push({
+                  head: privacyHead(request.partition, owner.epoch, row.position),
+                  transactionId: row.transaction_id,
+                  cause: row.cause,
+                  affected,
+                  impacts,
+                });
+              }
               if (
-                !Array.isArray(affected) ||
-                !affected.every((value) => validDependency(value, request.partition)) ||
-                !Array.isArray(impacts) ||
-                !impacts.every((value) => validImpact(value, request.partition))
+                entries.some(
+                  (entry) =>
+                    !/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(
+                      entry.transactionId,
+                    ) ||
+                    ![
+                      'subject',
+                      'candidate',
+                      'selection',
+                      'sourceTuple',
+                      'consent',
+                      'collection',
+                      'realm',
+                      'board',
+                    ].includes(entry.cause) ||
+                    !validBroadReduction(entry),
+                )
               )
                 return { ...unready('metadata_missing'), cost: cost(found.length) };
-              entries.push({
-                head: privacyHead(request.partition, owner.epoch, row.position),
-                transactionId: row.transaction_id,
-                cause: row.cause,
-                affected,
-                impacts,
-              });
-            }
-            if (
-              entries.some(
-                (entry) =>
-                  !/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(
-                    entry.transactionId,
-                  ) ||
-                  ![
-                    'subject',
-                    'candidate',
-                    'selection',
-                    'sourceTuple',
-                    'consent',
-                    'collection',
-                    'realm',
-                    'board',
-                  ].includes(entry.cause) ||
-                  !validBroadReduction(entry),
-              )
-            )
-              return { ...unready('metadata_missing'), cost: cost(found.length) };
-            const after = entries.at(-1)?.head.position ?? request.after;
-            const contiguous = entries.every(
-              (entry, index) => entry.head.position === request.after + BigInt(index) + 1n,
-            );
-            if (!contiguous || (entries.length === 0 && request.after < request.through))
-              return { ...unready('metadata_missing'), cost: cost(found.length) };
-            const complete = after === request.through;
-            return {
-              status: complete ? ('complete' as const) : ('progress' as const),
-              head: { partition: request.partition, epoch: owner.epoch, position: request.through },
-              entries,
-              after,
-              cost: cost(found.length),
-            };
-          }, accessPort),
+              const after = entries.at(-1)?.head.position ?? request.after;
+              const contiguous = entries.every(
+                (entry, index) => entry.head.position === request.after + BigInt(index) + 1n,
+              );
+              if (!contiguous || (entries.length === 0 && request.after < request.through))
+                return { ...unready('metadata_missing'), cost: cost(found.length) };
+              const complete = after === request.through;
+              return {
+                status: complete ? ('complete' as const) : ('progress' as const),
+                head: { partition: request.partition, epoch: owner.epoch, position: request.through },
+                entries,
+                after,
+                cost: cost(found.length),
+              };
+            },
+            accessPort,
+          ),
         );
       } catch (error) {
         if (accessPort.isUnavailable(error)) return unavailable('deadline');

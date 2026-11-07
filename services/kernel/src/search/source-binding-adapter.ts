@@ -1,15 +1,9 @@
 import { isDeepStrictEqual } from 'node:util';
 import { releaseDigest } from '@rezics/definitions';
 import { admitFilter, walkFilter } from '@rezics/filter';
-import type {
-  PublicFilterSearchBindingPort,
-  SourceBindingCaptureInput,
-} from '../semantic/index.ts';
+import type { PublicFilterSearchBindingPort, SourceBindingCaptureInput } from '../semantic/index.ts';
 import type { PublicFilterConsumerCaptureInput } from './public-filter-consumer-contract.ts';
-import type {
-  PublicFilterDependencyKey,
-  PublicFilterProjectionMeaning,
-} from '../semantic/index.ts';
+import type { PublicFilterDependencyKey, PublicFilterProjectionMeaning } from '../semantic/index.ts';
 import { publicFilterCatalogue } from './discovery-catalogue.ts';
 import { compileDiscoveryConsumerCapture } from './discovery-filter.ts';
 import { compileFilter } from './filter.ts';
@@ -98,9 +92,7 @@ function searchKeys(
   if (Array.isArray(input.overflowProperties))
     for (const property of input.overflowProperties) keys.push({ kind: 'property', property });
   if (text)
-    keys.push(
-      ...(['labels', 'aliases', 'descriptions'] as const).map((field) => ({ kind: 'field' as const, field })),
-    );
+    keys.push(...(['labels', 'aliases', 'descriptions'] as const).map((field) => ({ kind: 'field' as const, field })));
   if (['name', 'collections', 'rating'].includes(input.sort))
     keys.push({ kind: 'field', field: 'name_sort' }, { kind: 'field', field: 'labels' });
   if (input.sort === 'collections') keys.push({ kind: 'function', input: 'public_collection_count' });

@@ -210,10 +210,12 @@ export type SourceBindingNativeOwner = Readonly<{
     routeDigest: string,
     search: PublicFilterSearchBindingPort,
     maxBytes?: number,
-  ): Promise<Readonly<{
-    definition: import('./public-filter-source-binding.ts').PublicFilterSourceDefinition;
-    bytes: number;
-  }>>;
+  ): Promise<
+    Readonly<{
+      definition: import('./public-filter-source-binding.ts').PublicFilterSourceDefinition;
+      bytes: number;
+    }>
+  >;
 }>;
 
 export type SourceBindingApplicationPorts = Readonly<{
@@ -223,7 +225,11 @@ export type SourceBindingApplicationPorts = Readonly<{
 }>;
 
 export type SourceBindingApplication = Readonly<{
-  createBinding(pool: Pool, routing: Uint8Array, access: Access): import('./public-filter-source-binding.ts').PublicFilterSourceBootstrapBinding;
+  createBinding(
+    pool: Pool,
+    routing: Uint8Array,
+    access: Access,
+  ): import('./public-filter-source-binding.ts').PublicFilterSourceBootstrapBinding;
   createSource(config: SourceBindingConfiguration): PublicFilterSource;
   sourceOrigin(source: PublicFilterSource): SourceBindingConfiguration | undefined;
   readDefinition(

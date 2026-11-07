@@ -205,9 +205,10 @@ function validBindings(
     }
     if (row.execution === null || row.consumer_window === null) return false;
     const execution = search.decodeState<CustodyExecution>(row.execution);
-    const window = search.decodeState<{ raw: ({ id: string } | { key: { id: string; owner: string } })[]; rounds: number }>(
-      row.consumer_window,
-    );
+    const window = search.decodeState<{
+      raw: ({ id: string } | { key: { id: string; owner: string } })[];
+      rounds: number;
+    }>(row.consumer_window);
     if (
       execution.id !== request.execution ||
       !isDeepStrictEqual(execution.start, request.start) ||

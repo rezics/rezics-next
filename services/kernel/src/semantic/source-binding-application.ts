@@ -49,11 +49,6 @@ export function publicFilterSourceOrigin(source: PublicFilterSource): SourceBind
 }
 
 /** Read immutable Source custody through the Search capability installed with the native owner. */
-export function readPublicFilterSourceDefinition(
-  id: string,
-  pool: Pool,
-  routeDigest: string,
-  maxBytes?: number,
-) {
+export function readPublicFilterSourceDefinition(id: string, pool: Pool, routeDigest: string, maxBytes?: number) {
   return sourceBindingApplication().readDefinition(id, pool, routeDigest, maxBytes);
 }

@@ -596,11 +596,7 @@ export async function applyPublicFilterConsumerActions(
 
 import { randomUUID } from 'node:crypto';
 import type { Pool } from 'pg';
-import type {
-  PublicFilterCost,
-  PrivacyReductionStart,
-  PublicFilterProjectionRecord,
-} from '../semantic/index.ts';
+import type { PublicFilterCost, PrivacyReductionStart, PublicFilterProjectionRecord } from '../semantic/index.ts';
 import { advanceNativePublicFilterPreparation } from '../semantic/index.ts';
 import type {
   PublicFilterSourceBinding,

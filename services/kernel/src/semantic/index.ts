@@ -159,7 +159,12 @@ export type {
   SubjectSourceKeyPage,
   SubjectSourceKeyPages,
 } from './subject-source-key-pages.ts';
-export { publicFilterSource, publicFilterSourceOrigin, createNativePublicFilterSource, recordPrivacyReduction } from './public-filter-source.ts';
+export {
+  publicFilterSource,
+  publicFilterSourceOrigin,
+  createNativePublicFilterSource,
+  recordPrivacyReduction,
+} from './public-filter-source.ts';
 export type * from './public-filter-source-contract.ts';
 export {
   bindSourceBindingApplication,
