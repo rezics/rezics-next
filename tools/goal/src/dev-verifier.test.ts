@@ -7,6 +7,7 @@ import { acquireDirectoryLease } from './lease.ts';
 import { readControlPolicy } from './policy.ts';
 import { checkSignature, runCacheKey, selectionIdentity } from './dev-verifier-comparison.ts';
 import {
+  testFailureRepairBrief,
   classifyRun,
   devVerificationState,
   placeInWorkspace,
@@ -655,9 +656,7 @@ test('Web failure attribution keeps the selected file before trailing program ar
   const target = commit(root, file, 'test("selected", () => {});\n', 'web selected test');
   git(root, 'branch', '-f', 'dev', target);
   const ctx = setup(root, [landedTask(base, target, 'web-owner', ['apps/web/**'])]);
-  ctx.settings.verifierChecks = [
-    { paths: ['apps/web/**'], command: ['bun', 'test', file, '--', 'fixture.test.ts'] },
-  ];
+  ctx.settings.verifierChecks = [{ paths: ['apps/web/**'], command: ['bun', 'test', file, '--', 'fixture.test.ts'] }];
   const commands: string[][] = [];
   await verifyDev({
     ...ctx.options,
@@ -750,3 +749,39 @@ test('routed result identity includes the effective Web file and captured candid
 });
 
 import './dev-verifier-ownership.test.ts';
+
+test('command repair diagnostics preserve argv and never call an env assignment a test file', () => {
+  const command = [
+    'env',
+    'TYPECHECK_CHANGED=apps/web/src/routes/a.ts apps/web/src/routes/b.ts',
+    'bun',
+    'scripts/typecheck.ts',
+  ];
+  const owner = { brief: { goal: 'web', riskAreas: [] } } as unknown as Task;
+  const failure = {
+    test: JSON.stringify(command),
+    assertions: ['original compiler failure'],
+    error: 'TS2322: original error',
+    owner,
+  };
+  const markdown = testFailureRepairBrief({
+    goal: 'web',
+    manager: 'content',
+    commit: 'retained-source',
+    owner,
+    failures: [failure],
+    paths: ['apps/web'],
+  });
+  expect(markdown).toContain('- Command: `' + JSON.stringify(command) + '`');
+  expect(markdown).not.toContain('- Test file:');
+  expect(markdown).toContain('TS2322: original error');
+  const file = testFailureRepairBrief({
+    goal: 'web',
+    manager: 'content',
+    commit: 'retained-source',
+    owner,
+    failures: [{ ...failure, test: 'apps/web/tests/regression.test.ts' }],
+    paths: ['apps/web'],
+  });
+  expect(file).toContain('- Test file: `apps/web/tests/regression.test.ts`');
+});

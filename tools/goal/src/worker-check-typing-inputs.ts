@@ -2,9 +2,17 @@
 import { createHash } from 'node:crypto';
 import { spawnSync } from 'node:child_process';
 import { createRequire } from 'node:module';
-import { existsSync, lstatSync, mkdirSync, readFileSync, readlinkSync, renameSync, writeFileSync } from 'node:fs';
+import {
+  existsSync,
+  lstatSync,
+  statSync,
+  mkdirSync,
+  readFileSync,
+  readlinkSync,
+  renameSync,
+  writeFileSync,
+} from 'node:fs';
 import { dirname, isAbsolute, join, relative, resolve } from 'node:path';
-import type ts from 'typescript';
 
 export type TypingInput = { path: string; digest: string };
 export type TypingInputs = {
@@ -54,7 +62,10 @@ function input(root: string, file: string): TypingInput {
       path: file,
       digest: info.isSymbolicLink()
         ? hash(
-            Buffer.concat([Buffer.from(`link\0${readlinkSync(join(root, file))}\0`), readFileSync(join(root, file))]),
+            Buffer.concat([
+              Buffer.from(`link\0${readlinkSync(join(root, file))}\0`),
+              statSync(join(root, file)).isFile() ? readFileSync(join(root, file)) : Buffer.alloc(0),
+            ]),
           )
         : info.isFile()
           ? hash(readFileSync(join(root, file)))
@@ -97,35 +108,32 @@ function knownCompiler(root: string, argv: readonly string[], files: readonly st
 
 /** Config parsing uses TypeScript's own include/extends semantics, including ignored generated root files. */
 function configuredInputs(root: string, files: readonly string[]): { paths: Set<string>; documents: Set<string> } {
-  const compiler = createRequire(import.meta.url)('typescript') as typeof ts;
+  const require = createRequire(import.meta.url);
+  const executable = join(dirname(require.resolve('typescript/package.json')), 'bin/tsc');
   const paths = new Set<string>();
   const documents = new Set<string>();
   const configs = files.filter(
     (file) => file === 'tsconfig.json' || /^(?:apps|services|packages)\/[^/]+\/tsconfig(?:\.[^/]+)?\.json$/.test(file),
   );
   if (configs.length === 0) throw new Error('typing inputs: no owning compiler configurations');
-  const host: ts.ParseConfigFileHost = {
-    ...compiler.sys,
-    readFile(file) {
-      const inside = localPath(root, file);
-      if (inside && !inside.split('/').includes('node_modules')) paths.add(inside);
-      return compiler.sys.readFile(file);
-    },
-    onUnRecoverableConfigFileDiagnostic(diagnostic) {
-      throw new Error(compiler.flattenDiagnosticMessageText(diagnostic.messageText, '\n'));
-    },
-  };
   for (const config of configs) {
-    const parsed = compiler.getParsedCommandLineOfConfigFile(join(root, config), {}, host);
-    if (!parsed) throw new Error(`typing inputs: config unavailable: ${config}`);
-    // A custom external mapper can read inputs outside TypeScript's import graph.
-    const raw = compiler.readConfigFile(join(root, config), compiler.sys.readFile).config as {
+    // Use the installed compiler's config expansion. Its synchronous JS API requires Node-only pipe internals;
+    // --showConfig is read-only, needs no database and works under the repository's Bun runner.
+    const run = spawnSync(executable, ['--showConfig', '-p', join(root, config)], {
+      cwd: root,
+      encoding: 'utf8',
+      maxBuffer: 16 * 1024 * 1024,
+    });
+    if (run.status !== 0) throw new Error(`typing inputs: config unavailable: ${config}: ${run.stdout || run.stderr}`);
+    const parsed = JSON.parse(run.stdout) as {
+      files?: string[];
       contentMappers?: { package?: string; extensions?: string[] }[];
     };
-    if (raw.contentMappers?.some((mapper) => mapper.package !== 'reylo' || !same(mapper.extensions, ['.sql'])))
+    if (parsed.contentMappers?.some((mapper) => mapper.package !== 'reylo' || !same(mapper.extensions, ['.sql'])))
       throw new Error('typing inputs: custom mapper');
-    for (const file of parsed.fileNames) {
-      const inside = localPath(root, file);
+    paths.add(config);
+    for (const file of parsed.files ?? []) {
+      const inside = localPath(root, resolve(root, dirname(config), file));
       if (inside && !inside.split('/').includes('node_modules')) paths.add(inside);
     }
   }
@@ -137,26 +145,20 @@ function configuredInputs(root: string, files: readonly string[]): { paths: Set<
     const name = document.split('/').at(-1)!;
     byName.set(name, [...(byName.get(name) ?? []), document]);
   }
+  // All non-document source stays in the inventory. Scan its asset references conservatively, including
+  // type-only imports, mapper literals and generator helpers; config includes also discover ignored declarations.
+  for (const file of files.filter((file) => /\.[cm]?[jt]sx?$/.test(file))) paths.add(file);
   for (const file of paths) {
-    if (!existsSync(join(root, file))) continue;
+    if (!existsSync(join(root, file)) || !statSync(join(root, file)).isFile()) continue;
     const source = readFileSync(join(root, file), 'utf8');
-    const imports = compiler.preProcessFile(source, true, true);
-    for (const dependency of [...imports.importedFiles, ...imports.referencedFiles]) {
-      const resolved = compiler.resolveModuleName(
-        dependency.fileName,
-        join(root, file),
-        {
-          moduleResolution: compiler.ModuleResolutionKind.Bundler,
-          allowJs: true,
-        },
-        compiler.sys,
-      ).resolvedModule?.resolvedFileName;
-      const target = localPath(root, resolved ?? resolve(root, dirname(file), dependency.fileName));
-      if (target && !target.split('/').includes('node_modules')) paths.add(target);
+    for (const match of source.matchAll(/(?:from\s*|import\s*\(?|require\s*\(|reference\s+path=)["'](\.[^"']+)["']/g)) {
+      const target = resolve(root, dirname(file), match[1]!);
+      const resolved = [target, ...['.ts', '.tsx', '.d.ts', '/index.ts'].map((ext) => target + ext)].find(
+        (candidate) => existsSync(candidate) && statSync(candidate).isFile(),
+      );
+      const inside = resolved && localPath(root, resolved);
+      if (inside && !inside.split('/').includes('node_modules')) paths.add(inside);
     }
-    // Runtime generators may read assets as data. Ordinary compiler source literals are not executed;
-    // imported assets above remain covered. Unknown generation commands already select conservative mode.
-    if (!/(?:^|\/)(?:scripts\/(?:generate|typecheck)\.ts|\.storybook\/.*\.ts|vite\.config\.ts)$/.test(file)) continue;
     for (const match of source.matchAll(/['"`]([^'"`\r\n]*\.md)(?:\?[^'"`\r\n]*)?['"`]/g)) {
       const literal = match[1]!;
       if (/[*?${}]/.test(literal)) {

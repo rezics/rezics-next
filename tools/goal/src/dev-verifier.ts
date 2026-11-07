@@ -54,7 +54,7 @@ export { VERIFY_CONCURRENCY } from './dev-verifier-comparison.ts';
 type Check = DevVerifierCheck;
 const ref = (branch: string) => 'refs/heads/' + branch;
 const verifiedBranch = 'dev-verified';
-const TEST_FILE = /\.(?:test|spec)\.[cm]?[jt]sx?$/i;
+const TEST_FILE = /^(?:[A-Za-z0-9_.@-]+\/)*[A-Za-z0-9_.@-]+\.(?:test|spec)\.[cm]?[jt]sx?$/i;
 const tick = String.fromCharCode(96);
 
 function head(cwd: string, branch: string): string {
@@ -152,7 +152,7 @@ function testFilesFor(check: CheckRun['check'], evidence: DevVerifierEvidence): 
   if (found.size) return [...found].map(normalize);
   const source = check.closure.find((path) => !path.includes('*') && TEST_FILE.test(path));
   if (source) return [normalize(source)];
-  return [check.command.join(' ')];
+  return [JSON.stringify(check.command)];
 }
 
 function changedPaths(history: VerifierLandings | undefined, task: Task): string[] {
@@ -198,7 +198,7 @@ export function testFailureRepairBrief(repair: TestFailureRepair, policy = defau
     .map((failure) => {
       const assertions = failure.assertions.map((assertion) => '- ' + assertion).join('\n');
       return (
-        '- Test file: ' +
+        (TEST_FILE.test(failure.test) ? '- Test file: ' : '- Command: ') +
         tick +
         failure.test +
         tick +

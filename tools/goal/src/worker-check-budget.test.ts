@@ -11,6 +11,7 @@ import type { Attempt, Settings } from './types.ts';
 import { runWorkerCommand } from './worker-commands.ts';
 import type { WorkerTasks } from './tasks.ts';
 import {
+  checkCommandIncludesTypecheck,
   admitWorkerCheckHostRun,
   readWorkerCheckHostStamp,
   classifyOrdinaryProductCommand,
@@ -664,4 +665,11 @@ test('verification, proof-run, control-plane, urgent and requires briefs keep th
   } finally {
     directory.close();
   }
+});
+
+// Regression commands containing a compiler test filename are tests, not owning compiler invocations.
+test('typing evidence is requested only for a compiler command, not its regression filename', () => {
+  expect(checkCommandIncludesTypecheck(['bun', 'test', 'scripts/typecheck.test.ts'])).toBe(false);
+  expect(checkCommandIncludesTypecheck(['bun', 'scripts/typecheck.ts', '--selection={}'])).toBe(true);
+  expect(checkCommandIncludesTypecheck(['bun', 'run', '--cwd', 'tools/goal', 'typecheck'])).toBe(true);
 });

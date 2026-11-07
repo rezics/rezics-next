@@ -21,6 +21,7 @@ import { keepCompilerStatusAfterCleanup } from './compiler-database.ts';
 import { resolveBunCommand } from './gate.ts';
 import { runOnCheckHost, type StackRun } from './stack-run.ts';
 import { recognizeCheckHostRun } from './check-placement.ts';
+import { compilerSettlementReceiver } from './compiler-settlement.ts';
 import { beginTypingInputReceipt } from '../tools/goal/src/worker-check-typing-inputs.ts';
 
 const repository = resolve(fileURLToPath(new URL('..', import.meta.url)));
@@ -813,6 +814,7 @@ export async function typecheck(options: TypecheckOptions = {}): Promise<number>
     placed = await placeCompilerRun(
       {
         label: 'root typecheck',
+        settled: compilerSettlementReceiver(env),
         root,
         cwd: root,
         command: ['bun', 'scripts/typecheck.ts', typecheckSelectionArgument(changed), ...config],

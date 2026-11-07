@@ -1616,11 +1616,15 @@ prefix. It runs `bun scripts/page-data-check.ts`, records each section's class a
 its mapped files when its retained session can resume; otherwise one repair task is dispatched to that section's
 Goal. Boot and check failures write their bounded captured stack output, plus failing command output when present, to
 `stateDirectory/page-data-failures/<runId>-<phase>.log`; the supermanager notice includes that log path. When the stack
-exits, the notice selects its final substantive error line and skips Task command echoes. When readiness expires while
-the stack remains alive, the notice uses the last failed probe with its origin and HTTP status or error. Logs and notices
-redact recognized credentials.
+exits, the notice retains the first substantive pre-teardown cause and skips Task command echoes. When readiness
+expires without a producer error, the notice uses the final failed probe with its origin and HTTP status or error.
+Bounded capture correlates source, run, original argv, resolved executable/package versions, effective nonsecret
+runtime/cache flags, observed child PID/start/parent/executable identities, ordered producer lines, probe transitions
+and teardown reason. Observed config output proves only that stage was reached; missing later stages stay unknown.
+A later teardown error stays in the transcript without replacing the pre-teardown cause. Content owns Web stage
+instrumentation and startup repair; page-data owns child/readiness capture. Logs and notices redact recognized credentials.
 
-Decision: persist each bounded page-data boot/check transcript in a run-scoped state-directory log, name that path in the supermanager notice, report the terminal process error or final origin-specific readiness probe, and redact recognized credentials.
+Decision: persist each bounded page-data boot/check transcript in a run-scoped state-directory log, name that path in the supermanager notice, retain the pre-teardown cause alongside cleanup and the final origin-specific readiness probe, and redact recognized credentials.
 
 A `control-plane` brief may declare only `tools/goal/` paths; dispatch refuses outside paths and tells the manager to
 split them into a dev task. Without a `target` line it starts from `dev` and lands there mechanically, with unlimited
@@ -2530,6 +2534,15 @@ tasks spent, with declined offers counted by reason.
 
 Cost: offers read through the flow table's (stage, action, time) index within the window, and each decision reads the
 Goal's ready briefs until one overlaps. The chain adds at most the sweep's dispatch budget per run.
+
+Compiler gate cleanup consumes the existing remote custodian's versioned settlement through a fresh invocation-bound
+metadata file. Host/run identity, native command status, transport-child reaping and physical resource cleanup stay
+separate from local wrapper status. A rich remote database-owner line is never compared to the local launcher PID,
+and local Docker cannot prove remote cleanup. Missing or failed physical settlement remains unproven, including
+cancellation; the original command exit is retained alongside wrapper/cleanup diagnostics. Local compiler-owner lines
+accept PID/parent/group/start identity and compare the recorded process start and group before local labeled cleanup.
+Legacy local PID-only output remains readable. Command failure briefs preserve JSON argv and label it as a command;
+only a syntactically valid test path receives a test-file label.
 
 ### Check result reuse
 

@@ -32,6 +32,7 @@ function fixture() {
   git('config', 'user.name', 'Typing');
   write(root, '.gitignore', '.temp/\n**/generated/\napps/web/src/paraglide/\n');
   write(root, 'apps/web/tsconfig.json', '{"include":["src/**/*.ts"]}');
+  write(root, 'apps/web/src/placeholder.ts', 'export const ready = true;');
   write(root, 'package.json', '{"name":"fixture"}');
   write(root, 'bun.lock', 'dependency identity');
   write(root, 'tsconfig.base.json', '{"compilerOptions":{"strict":true}}');

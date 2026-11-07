@@ -20,7 +20,7 @@ export const WORKER_CHECK_HOST_TYPECHECK_REFUSAL =
 export const WORKER_CHECK_HOST_INFRASTRUCTURE_EXIT = 75;
 export const WORKER_CHECK_TESTS_AFTER_LANDING = 'Tests run after landing in the dev verifier.';
 const STAMP_NAME = /^[1-9]\d*$/;
-const TYPECHECK_COMMAND = /\btypecheck\b|scripts\/typecheck\.ts/;
+const TYPECHECK_COMMAND = /(?:^|[\s;|&])(?:[^\s;|&]*\/)?typecheck(?:\.ts|:root)?(?=$|[\s;|&])/;
 const TYPECHECK_FAILURE =
   /error TS\d+|error: script "typecheck" exited|error:\s*"typecheck" exited|error: Failed to run .*typecheck/;
 const TYPING_LOG_CHARACTERS = 8192;

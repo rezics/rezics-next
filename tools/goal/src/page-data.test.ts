@@ -2,13 +2,17 @@ import { afterEach, expect, test } from 'bun:test';
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { spawnSync } from 'node:child_process';
+import { EventEmitter } from 'node:events';
+import { PassThrough } from 'node:stream';
+import { spawnSync, type ChildProcess } from 'node:child_process';
 import { openDb } from './db.ts';
 import { flowReport, formatPageDataFlowRuns, readFlow } from './flow.ts';
 import { WorkerJob } from './job.ts';
 import { routePageDataRepair } from './config.ts';
 import { SqliteManagerInbox } from './inbox.ts';
 import {
+  waitForStack,
+  type PageDataCapture,
   duePageDataRun,
   latestSectionOwner,
   newlyDefectiveSections,
@@ -256,7 +260,9 @@ test('the latest integrated task that changed a mapped section file owns its def
 test('an integrated author task resumes its retained provider session with the section evidence', async () => {
   const script = `#!/usr/bin/env bun
 import { mkdirSync, writeFileSync } from 'node:fs';
-import { spawnSync } from 'node:child_process';
+import { EventEmitter } from 'node:events';
+import { PassThrough } from 'node:stream';
+import { spawnSync, type ChildProcess } from 'node:child_process';
 const args = process.argv.slice(2);
 const resumed = args.includes('resume');
 mkdirSync('.temp', { recursive: true });
@@ -360,4 +366,61 @@ test('a non-resumable author task gets one Goal repair task for the cause', asyn
   } finally {
     await h.disposeAsync();
   }
+});
+
+test('readiness captures config without inventing listen and preserves its cause before teardown errors', async () => {
+  const child = Object.assign(new EventEmitter(), {
+    pid: 1234,
+    exitCode: null as number | null,
+    signalCode: null as NodeJS.Signals | null,
+    stdout: new PassThrough(),
+    stderr: new PassThrough(),
+  });
+  const captured: PageDataCapture = {
+    value: '',
+    context: {
+      source: 'retained-source',
+      run: 'retained-run',
+      command: ['bun', 'dev-stack.ts', 'start'],
+    },
+  };
+  let now = 0;
+  let emitted = false;
+  let failure: unknown;
+  try {
+    await waitForStack(child as unknown as ChildProcess, ['http://web/en'], 1000, 16384, 1, captured, {
+      now: () => now,
+      tree: () => [{ pid: 1234, start: '100', parent: 12, executable: '/actual/bun' }],
+      probe: (async () => {
+        if (!emitted) {
+          child.stdout.write('Vite localization config current attempt 0\n');
+          child.stderr.write('Error:');
+          child.stderr.write(' config producer stalled\n');
+          emitted = true;
+        }
+        throw new Error('ECONNREFUSED');
+      }) as typeof fetch,
+      pause: async (ms) => {
+        now += ms;
+      },
+      signal: (_child, signal) => {
+        child.stderr.write('Error: A command must emit at least one event after teardown\n');
+        child.signalCode = signal;
+        child.emit('close', null, signal);
+      },
+    });
+  } catch (error) {
+    failure = error;
+  }
+  expect(failure).toBeInstanceOf(PageDataStackError);
+  const result = failure as PageDataStackError;
+  expect(result.firstErrorLine).toBe('Error: config producer stalled');
+  expect(result.output).toContain('after teardown');
+  expect(result.output).toContain('retained-source');
+  expect(result.output).toContain('retained-run');
+  expect(result.output).toContain('/actual/bun');
+  expect(result.output).toContain('readiness-deadline');
+  expect(result.output).toContain('ECONNREFUSED');
+  expect(captured.events?.some((event) => event.kind === 'ready')).toBe(false);
+  expect(Buffer.byteLength(result.output)).toBeLessThanOrEqual(16384);
 });

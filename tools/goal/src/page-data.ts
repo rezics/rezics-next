@@ -1,9 +1,10 @@
-import { createHash } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 import { spawn, spawnSync, type ChildProcess } from 'node:child_process';
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, readlinkSync, realpathSync, writeFileSync } from 'node:fs';
 import { createServer } from 'node:net';
 import { join } from 'node:path';
 import type { Database } from 'bun:sqlite';
+import { processTreeMembers } from '../../../scripts/check-custody.ts';
 import { acquireDirectoryLease, LeaseHeldError } from './lease.ts';
 import { matchesPath } from './briefs.ts';
 import { defaultPolicy } from './policy.ts';
@@ -759,7 +760,92 @@ function boundedAppend(current: string, chunk: string, maximum: number): string 
 }
 
 type ProcessResult = { exitCode: number; stdout: string; stderr: string; output: string };
-type BoundedOutput = { value: string };
+export type PageDataCapture = {
+  value: string;
+  context?: Record<string, unknown>;
+  events?: Record<string, unknown>[];
+  firstCause?: string;
+  teardown?: boolean;
+};
+type BoundedOutput = PageDataCapture;
+
+function captureEvent(captured: PageDataCapture, event: Record<string, unknown>): void {
+  const events = (captured.events ??= []);
+  events.push({ sequence: Number(events.at(-1)?.sequence ?? 0) + 1, at: new Date().toISOString(), ...event });
+  if (events.length > 48) events.shift();
+}
+
+export function pageDataCaptureOutput(captured: PageDataCapture, maximum: number): string {
+  const events = [...(captured.events ?? [])];
+  const serialize = () => JSON.stringify({ version: 1, ...captured.context, firstCause: captured.firstCause, events });
+  let metadata = serialize();
+  while (events.length && Buffer.byteLength(metadata) > maximum / 2) {
+    events.shift();
+    metadata = serialize();
+  }
+  const header = `page-data capture ${metadata}\n`;
+  const remaining = Math.max(0, maximum - Buffer.byteLength(header));
+  return Buffer.byteLength(header) <= maximum
+    ? header + boundedAppend('', captured.value, remaining)
+    : boundedAppend('', header, maximum);
+}
+
+function childTree(child: ChildProcess): unknown[] {
+  if (!child.pid) return [];
+  return processTreeMembers(child.pid)
+    .slice(0, 32)
+    .map((identity) => {
+      try {
+        const stat = readFileSync(`/proc/${identity.pid}/stat`, 'utf8');
+        const fields = stat
+          .slice(stat.lastIndexOf(')') + 2)
+          .trim()
+          .split(/\s+/);
+        return { ...identity, parent: Number(fields[1]), executable: readlinkSync(`/proc/${identity.pid}/exe`) };
+      } catch (error) {
+        if (['ENOENT', 'ESRCH', 'EACCES'].includes((error as NodeJS.ErrnoException).code ?? ''))
+          return { ...identity, executable: 'unavailable' };
+        throw error;
+      }
+    });
+}
+
+function launchContext(
+  worktree: string,
+  head: string,
+  command: string[],
+  env: NodeJS.ProcessEnv,
+): Record<string, unknown> {
+  const packages: Record<string, unknown> = {};
+  for (const name of ['vite', '@cloudflare/vite-plugin', '@tanstack/react-start']) {
+    try {
+      const file = join(worktree, 'apps/web/node_modules', name, 'package.json');
+      packages[name] = { path: realpathSync(file), version: JSON.parse(readFileSync(file, 'utf8')).version };
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error;
+      packages[name] = 'unavailable';
+    }
+  }
+  return {
+    run: randomUUID(),
+    source: head,
+    command,
+    cwd: worktree,
+    executable: process.execPath,
+    runtime: { bun: Bun.version, revision: Bun.revision },
+    packages,
+    flags: Object.fromEntries(
+      [
+        'NODE_ENV',
+        'NODE_DISABLE_COMPILE_CACHE',
+        'REZICS_TEST_RUNTIME',
+        'REZICS_WALK_STACK_SLOT',
+        'VITE_CACHE_DIR',
+        'XDG_CACHE_HOME',
+      ].map((name) => [name, env[name] ?? null]),
+    ),
+  };
+}
 
 function commandOutput(stdout: string, stderr: string): string {
   if (!stdout) return stderr;
@@ -837,65 +923,128 @@ async function runCommand(
   return { exitCode: code ?? -1, stdout, stderr, output: stdout };
 }
 
-async function waitForStack(
+/** Existing readiness seam; injectable time/probes let causal tests use an inert owned child. */
+export async function waitForStack(
   child: ChildProcess,
   origins: string[],
   timeoutMs: number,
   outputLimit: number,
   stopTimeoutMs: number,
-  captured: BoundedOutput,
+  captured: PageDataCapture,
+  dependencies: {
+    probe?: typeof fetch;
+    now?: () => number;
+    pause?: (ms: number) => Promise<void>;
+    signal?: typeof signalGroup;
+    tree?: typeof childTree;
+  } = {},
 ): Promise<void> {
+  const now = dependencies.now ?? Date.now;
+  const pause = dependencies.pause ?? ((ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms)));
+  const signal = dependencies.signal ?? signalGroup;
+  const probe = dependencies.probe ?? fetch;
   let spawnFailure: Error | undefined;
-  child.stdout?.on('data', (chunk: Buffer) => {
-    captured.value = boundedAppend(captured.value, chunk.toString(), outputLimit);
-  });
-  child.stderr?.on('data', (chunk: Buffer) => {
-    captured.value = boundedAppend(captured.value, chunk.toString(), outputLimit);
-  });
+  const partial = { stdout: '', stderr: '' };
+  const observe = (text: string, stream: 'stdout' | 'stderr') => {
+    for (const line of text.split(/\r?\n/)) {
+      if (!captured.teardown && !captured.firstCause && /\b(?:error|fatal|failed|panic|exception)\b/i.test(line))
+        captured.firstCause = safeLine(line);
+      if (/stack:|paraglide|localization|vite|phase|config|listening/i.test(line))
+        captureEvent(captured, { kind: 'producer', stream, line: safeLine(line) });
+    }
+  };
+  const append = (chunk: Buffer, stream: 'stdout' | 'stderr') => {
+    const text = chunk.toString();
+    captured.value = boundedAppend(captured.value, text, Math.floor(outputLimit / 2));
+    const lines = (partial[stream] + text).split(/\r?\n/);
+    partial[stream] = lines.pop()!.slice(-2048);
+    observe(lines.join('\n'), stream);
+  };
+  const flush = () => {
+    for (const stream of ['stdout', 'stderr'] as const) {
+      observe(partial[stream], stream);
+      partial[stream] = '';
+    }
+  };
+  child.stdout?.on('data', (chunk: Buffer) => append(chunk, 'stdout'));
+  child.stderr?.on('data', (chunk: Buffer) => append(chunk, 'stderr'));
   const closed = new Promise<number | null>((resolve) => {
     child.once('error', (error) => {
       spawnFailure = error;
       resolve(null);
     });
-    child.once('close', (code) => resolve(code));
+    child.once('close', (code, signal) => {
+      flush();
+      captureEvent(captured, { kind: 'exit', pid: child.pid, code, signal, afterTeardown: !!captured.teardown });
+      resolve(code);
+    });
   });
-  const deadline = Date.now() + timeoutMs;
+  const deadline = now() + timeoutMs;
   let lastFailure = '';
-  while (Date.now() < deadline) {
-    if (spawnFailure) {
-      const line = errorMessage(spawnFailure);
-      throw new PageDataStackError('boot', line, line, captured.value);
+  let lastTree = '';
+  const probeStates = new Map<string, string>();
+  while (now() < deadline) {
+    const tree = (dependencies.tree ?? childTree)(child);
+    const identity = JSON.stringify(tree);
+    if (identity !== lastTree) {
+      captureEvent(captured, { kind: 'children', identities: tree });
+      lastTree = identity;
     }
-    if (child.exitCode !== null || child.signalCode !== null) {
+    if (spawnFailure || child.exitCode !== null || child.signalCode !== null) {
       await closed;
-      const line = captured.value.trim()
-        ? terminalErrorLine(captured.value)
-        : `Local stack exited ${child.exitCode ?? child.signalCode}`;
-      throw new PageDataStackError('boot', line, line, captured.value);
+      const line =
+        captured.firstCause ??
+        (spawnFailure
+          ? errorMessage(spawnFailure)
+          : captured.value.trim()
+            ? terminalErrorLine(captured.value)
+            : `Local stack exited ${child.exitCode ?? child.signalCode}`);
+      captured.firstCause = line;
+      captureEvent(captured, { kind: 'terminal', reason: 'child-exit', cause: line });
+      throw new PageDataStackError('boot', line, line, pageDataCaptureOutput(captured, outputLimit));
     }
     let ready = true;
     for (const origin of origins) {
+      let state: string;
       try {
-        const response = await fetch(origin, { signal: AbortSignal.timeout(2000) });
+        const response = await probe(origin, { signal: AbortSignal.timeout(2000) });
+        state = `HTTP ${response.status}`;
         if (response.status >= 400) {
           ready = false;
-          lastFailure = `${origin} returned HTTP ${response.status}`;
+          lastFailure = `${origin} returned ${state}`;
         }
       } catch (error) {
         ready = false;
-        lastFailure = `${origin} ${errorMessage(error)}`;
+        state = errorMessage(error);
+        lastFailure = `${origin} ${state}`;
+      }
+      if (probeStates.get(origin) !== state) {
+        captureEvent(captured, { kind: 'probe', origin, result: state });
+        probeStates.set(origin, state);
       }
     }
-    if (ready) return;
-    await new Promise((resolve) => setTimeout(resolve, 500));
+    if (ready) {
+      captureEvent(captured, { kind: 'ready', origins });
+      return;
+    }
+    await pause(500);
   }
-  if (child.exitCode === null && child.signalCode === null) signalGroup(child, 'SIGTERM');
-  await Promise.race([closed, new Promise((resolve) => setTimeout(resolve, stopTimeoutMs))]);
-  if (child.exitCode === null && child.signalCode === null) signalGroup(child, 'SIGKILL');
+  // Freeze the cause before signalling: teardown output is a separate observation.
+  flush();
+  const line = captured.firstCause ?? (lastFailure || 'Local stack did not become ready');
+  captured.firstCause = line;
+  captured.teardown = true;
+  captureEvent(captured, {
+    kind: 'teardown',
+    reason: 'readiness-deadline',
+    cause: line,
+    pending: origins.filter((origin) => !/^HTTP [123]/.test(probeStates.get(origin) ?? '')),
+  });
+  if (child.exitCode === null && child.signalCode === null) signal(child, 'SIGTERM');
+  await Promise.race([closed, pause(stopTimeoutMs)]);
+  if (child.exitCode === null && child.signalCode === null) signal(child, 'SIGKILL');
   await closed;
-  const line =
-    lastFailure || (captured.value.trim() ? terminalErrorLine(captured.value) : 'Local stack did not become ready');
-  throw new PageDataStackError('boot', line, line, captured.value);
+  throw new PageDataStackError('boot', line, line, pageDataCaptureOutput(captured, outputLimit));
 }
 
 async function stopStack(child: ChildProcess, timeoutMs: number): Promise<void> {
@@ -962,7 +1111,10 @@ async function runDedicatedPageDataStack(
     env = stackEnvironment(worktree, config, names, settings.mainCheckout);
   }
   const seeded = join(settings.stateDirectory, 'page-data-seeded');
-  const stackCapture: BoundedOutput = { value: '' };
+  const stackCapture: BoundedOutput = {
+    value: '',
+    context: launchContext(worktree, head, [bun, 'services/auth/scripts/dev-stack.ts', 'start'], env),
+  };
   let child: ChildProcess | undefined;
   let checked: ProcessResult | undefined;
   let registry: ReadonlyMap<string, SectionConfig> | undefined;
@@ -1077,7 +1229,12 @@ async function runDedicatedPageDataStack(
     failed = true;
     failure = error;
   } finally {
-    if (child) await stopStack(child, policy.stopTimeoutMs);
+    if (child) {
+      if (!stackCapture.teardown)
+        captureEvent(stackCapture, { kind: 'teardown', reason: failed ? 'failure' : 'checks-complete' });
+      stackCapture.teardown = true;
+      await stopStack(child, policy.stopTimeoutMs);
+    }
   }
   if (failed) {
     if (failure instanceof PageDataStackError)
@@ -1085,16 +1242,24 @@ async function runDedicatedPageDataStack(
         failure.phase,
         failure.message,
         failure.firstErrorLine,
-        combineFailureOutput(stackCapture.value, failure.output || failure.message),
+        combineFailureOutput(
+          pageDataCaptureOutput(stackCapture, policy.outputBytes),
+          failure.output || failure.message,
+        ),
       );
     const message = errorMessage(failure);
-    throw new PageDataStackError('boot', message, undefined, stackCapture.value || message);
+    throw new PageDataStackError(
+      'boot',
+      message,
+      undefined,
+      pageDataCaptureOutput(stackCapture, policy.outputBytes) || message,
+    );
   }
   const result = checked!;
   return {
     output: result.stdout,
     exitCode: result.exitCode,
     registry: registry!,
-    stackOutput: stackCapture.value,
+    stackOutput: pageDataCaptureOutput(stackCapture, policy.outputBytes),
   };
 }
