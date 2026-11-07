@@ -6,7 +6,9 @@ import {
   KERNEL_BEARER_JOURNEYS,
   parseJourneyTable,
   renderJourneyTable,
+  renderWalkCensus,
 } from '../scripts/accounts-goal-walk.ts';
+import { commandNeedsSharedDevServer } from '../scripts/with-dev-server.ts';
 
 const capabilities = resolve(import.meta.dir, '../../../docs/goals/accounts.capabilities.md');
 const walk = resolve(import.meta.dir, '../scripts/accounts-goal-walk.ts');
@@ -55,4 +57,17 @@ test('a website-bearer Kernel 401 fails only dependent Kernel journeys and keeps
   expect(source).toContain('person public HTTP 200 without private fields; not reached:');
   expect(source).toContain('anonymous outgoing HTTP');
   expect(source).toContain('exited ${child.exitCode} before becoming ready');
+});
+
+test('the table-shape check does not boot Storybook, and follow writes the public agent subject without a body', () => {
+  expect(commandNeedsSharedDevServer(['bun', 'test', 'tests/accounts-goal-journeys.test.ts'])).toBe(false);
+  expect(commandNeedsSharedDevServer(['bun', 'test', 'tests/session.test.ts'])).toBe(true);
+  const source = readFileSync(walk, 'utf8');
+  expect(source).toContain("followTargetId = agentSubjectId(publicTarget, 'follow target')");
+  expect(source).toContain("kernel(stack, 'PUT', `/v1/follows/${followTargetId}`, { bearer: token.bearer })");
+  expect(source).not.toMatch(/follows\/\$\{followTargetId\}.*body:/);
+  const rows = parseJourneyTable(readFileSync(capabilities, 'utf8'));
+  expect(renderWalkCensus(rows, rows[0]!.revision, rows[0]!.observedAt, '2026-11-07T03:42:43Z', true)).toMatch(
+    /^Round .+ Causal repairs: `\.temp\/continuation\/auth-website-kernel-bearer\.md`/,
+  );
 });
