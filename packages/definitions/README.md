@@ -24,6 +24,8 @@ Decision: fewest tests pin user-visible publication behaviour and named-state st
 
 ## Compiler layers
 
+Decision: preserve release 1.0.10 and its recordings; follow reviewed type, facet and qualifier contracts; pin historical sources and dependencies in a Gitless archive.
+
 Release vocabulary, digest, catalogue formats and publication helpers are the contract
 (`@rezics/definitions/contract`, browser root). Compilation, release validation and
 catalogue artifact admission are one compiler application (`src/compiler/application.ts`)

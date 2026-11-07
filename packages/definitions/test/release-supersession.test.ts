@@ -47,10 +47,9 @@ test('VNDB source row keeps id as the superseding release and maps rid to the ex
   };
   const table = inventory.tables.find((item) => item.name === 'releases_supersedes')!;
   expect(table.type).toBe('rezics:releaseSupersedes');
-  expect(table.columns.find((column) => column.name === 'id')).toMatchObject({
-    status: 'omitted',
-    reason: expect.stringContaining('Superseding Release'),
-  });
+  const sourceId = table.columns.find((column) => column.name === 'id');
+  expect(sourceId?.status).toBe('omitted');
+  expect(sourceId?.reason).toContain('Superseding Release');
   expect(table.columns.find((column) => column.name === 'rid')).toMatchObject({
     status: 'existing',
     term: 'rezics:releaseSupersedes',

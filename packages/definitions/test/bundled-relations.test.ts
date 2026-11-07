@@ -8,8 +8,13 @@ const creditQualifiers = ['schema:position', 'wdt:P1932', 'wdt:P3831', 'wdt:P518
 
 test('every bundled item property declares how it reads in both directions', () => {
   expect(validateRelease(bundledRelease)).toEqual([]);
-  for (const property of Object.values(properties)) {
+  for (const [key, property] of Object.entries(properties)) {
     if (property.datatype !== 'wikibase-item') continue;
+    if (key === 'wdt:P1303') {
+      expect(property.relation).toBeUndefined();
+      expect(properties['schema:performer']?.qualifiers).toContain(key);
+      continue;
+    }
     expect(property.relation).toBeDefined();
     const relation = property.relation!;
     if (relation.inverse && relation.inverse !== 'none') {
@@ -119,7 +124,9 @@ test('credit properties are admitted on episodes and releases', () => {
     'wdt:P58',
     'wdt:P725',
   ];
-  expect(credits.map(([term]) => term).sort()).toEqual([...oldRoles, 'marcrel:fds', 'schema:byArtist'].sort());
+  expect(credits.map(([term]) => term).sort()).toEqual(
+    [...oldRoles, 'marcrel:fds', 'schema:byArtist', 'schema:performer'].sort(),
+  );
   const applicability = {
     'schema:Episode': oldRoles,
     'bf:Instance': oldRoles,
@@ -136,6 +143,12 @@ test('credit properties are admitted on episodes and releases', () => {
     for (const term of roles) expect(types[holder]?.properties).toContain(term);
   }
   for (const [term, property] of credits) {
+    if (term === 'schema:performer') {
+      expect(property.qualifiers).toEqual(['wdt:P1303', 'wdt:P1932', 'wdt:P3831']);
+      expect(property.relation?.order).toBe('name');
+      expect(property.relation?.filter).toBe('wdt:P1303');
+      continue;
+    }
     expect(property.qualifiers).toEqual(expect.arrayContaining(creditQualifiers));
     expect(property.relation?.order).toBe('position');
     expect(property.relation?.filter).toEqual(['wdt:P3831', 'wdt:P518']);

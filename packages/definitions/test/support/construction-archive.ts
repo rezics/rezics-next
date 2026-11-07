@@ -22,7 +22,7 @@ import manifest from '../fixtures/definition-historical-construction.json';
 
 const root = resolve(import.meta.dir, '../../../..');
 const helperPath = 'packages/definitions/test/support/construction-archive.ts';
-const dependencies = ['canonicalize', 'typebox', 'recheck'];
+const dependencies = ['canonicalize', 'typebox', 'recheck', 'recheck-historical'];
 const inside = (directory: string, path: string) => {
   const name = relative(directory, path);
   return name !== '..' && !name.startsWith('../') && !isAbsolute(name);
@@ -35,11 +35,26 @@ function assertGitless(root: string) {
   }
 }
 
+function gitlessTemporaryRoot(): string {
+  for (const candidate of new Set([tmpdir(), '/tmp', '/var/tmp'])) {
+    if (!existsSync(candidate)) continue;
+    const root = realpathSync(candidate);
+    try {
+      assertGitless(root);
+      return root;
+    } catch (error) {
+      if (error instanceof Error && error.message.startsWith('Archive has Git metadata: ')) continue;
+      throw error;
+    }
+  }
+  throw new Error('No Gitless temporary directory is available');
+}
+
 /** Copy workspace modules, never workspace symlinks. Only installed third-party
  * packages may resolve outside the archive. No Git command produces this tree.
  */
 export function createConstructionArchive() {
-  const directory = mkdtempSync(join(tmpdir(), 'rezics-construction-archive-'));
+  const directory = mkdtempSync(join(gitlessTemporaryRoot(), 'rezics-construction-archive-'));
   const records: { argv: string[]; stdout: string; stderr: string; exitCode: number }[] = [];
   const helper = join(directory, helperPath);
   const modules = join(directory, 'loaded.jsonl');

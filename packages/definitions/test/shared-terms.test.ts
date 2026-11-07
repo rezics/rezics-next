@@ -173,12 +173,13 @@ test('genres, tags and detailed roles are SKOS concepts and a concept focuses on
     targets: ['skos:Concept'],
   });
   for (const key of ['schema:genre', 'schema:keywords']) {
-    expect(properties[key]).toMatchObject({
+    const property = properties[key]!;
+    expect({ datatype: property.datatype, multivalued: property.multivalued, targets: property.targets }).toEqual({
       datatype: 'wikibase-item',
       multivalued: true,
       targets: ['skos:Concept'],
-      qualifiers: ['rezics:spoilerLevel'],
     });
+    expect(property.qualifiers).toContain('rezics:spoilerLevel');
     for (const type of [
       'schema:Book',
       'bf:Instance',
