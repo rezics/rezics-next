@@ -3,7 +3,9 @@
 Decision: composed reader regressions use the existing per-file Web check lanes so server-module mocks cannot
 replace later files’ native client exports. Mounted route replacements update React state; privacy and return
 assertions remain unchanged. The native late-revocation cases remain the current-authority acceptance. The Content Goal seeded walk reuses that
-driver with Performance `waitUntilWalkReady` hydration recovery and does not add stories. Worker Vite resolves Elysia/Eden ESM and live TypeBox re-exports; `vite-config.test.ts` pins that swap. The same walk receives
+driver with Performance `waitUntilWalkReady` hydration recovery and does not add stories. Seed token minting keeps
+issuer `AUTH_ORIGIN` and forwards POST bodies through `walkIssuerForward`; the walk command restores the pinned
+dump cache before the run slice. Worker Vite resolves Elysia/Eden ESM and live TypeBox re-exports; `vite-config.test.ts` pins that swap. The same walk receives
 Accounts published-post reply, mention and moderation delivery through the default worker, current preferences,
 replay, inbox and independent appeals. Catalogue CurrentPost attribution is received through those existing
 authoring-controls-family and own-drafts native, resume and commands checks: live identity, null unknown and
