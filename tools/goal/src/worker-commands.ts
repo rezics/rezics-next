@@ -60,9 +60,26 @@ const taskStates = new Set<TaskState>([
   'cancelled',
   'verified',
 ]);
+const completedStatusStates = new Set<TaskState>(['integrated', 'merged', 'cancelled', 'verified']);
 
 function isTaskState(value: unknown): value is TaskState {
   return typeof value === 'string' && taskStates.has(value as TaskState);
+}
+
+function statusTaskCounts(tasks: readonly Task[]) {
+  const byGoal = new Map<string, number>();
+  const byState = new Map<string, number>();
+  for (const task of tasks) {
+    const goal = typeof task.brief?.goal === 'string' && task.brief.goal ? task.brief.goal : 'unknown';
+    const state = isTaskState(task.state) ? task.state : 'unknown';
+    byGoal.set(goal, (byGoal.get(goal) ?? 0) + 1);
+    byState.set(state, (byState.get(state) ?? 0) + 1);
+  }
+  return {
+    total: tasks.length,
+    byGoal: Object.fromEntries([...byGoal].sort(([a], [b]) => a.localeCompare(b))),
+    byState: Object.fromEntries([...byState].sort(([a], [b]) => a.localeCompare(b))),
+  };
 }
 
 function heldDependencies(task: Task, tasks: WorkerTasks, store: WorkerStore) {
@@ -165,8 +182,9 @@ export async function runWorkerCommand(
     } else if (parsedArguments.command === 'status') {
       const arg = parsedArguments.taskId;
       const cohort = arg ? [store.task(arg)] : store.tasks();
+      const statusCohort = arg ? cohort : cohort.filter((task) => !completedStatusStates.has(task.state));
       const references = new Map<string, { attempt: Attempt; intent: ReturnType<WorkerStore['retryIntent']> }>();
-      for (const task of cohort) {
+      for (const task of statusCohort) {
         if (!task.currentAttempt) continue;
         const ref = { taskId: task.id, attempt: task.currentAttempt };
         references.set(task.id, { attempt: store.attempt(ref), intent: store.retryIntent(ref) });
@@ -199,8 +217,7 @@ export async function runWorkerCommand(
               })
             : undefined;
         const liveAttempt = current?.attempt.state === 'running' || current?.attempt.state === 'waiting';
-        return {
-          ...task,
+        const state = {
           urgent: task.brief.urgent === true,
           ...(liveAttempt
             ? {
@@ -219,8 +236,23 @@ export async function runWorkerCommand(
             : {}),
           ...(wait ? { pendingRetry: wait } : {}),
         };
+        return arg
+          ? { ...task, ...state }
+          : {
+              id: task.id,
+              sequence: task.sequence,
+              brief: {
+                goal: task.brief.goal,
+                manager: task.brief.manager,
+                ...(task.brief.urgent === true ? { urgent: true } : {}),
+              },
+              taskClass: task.taskClass,
+              state: task.state,
+              currentAttempt: task.currentAttempt,
+              ...state,
+            };
       };
-      const selectedTasks = cohort.map(show);
+      const selectedTasks = statusCohort.map(show);
       const reapedLastHour = reapedCountsLastHour(settings.stateDirectory);
       const stray = strayWorktreeStatus(settings);
       const trains = trainLaneStatus(settings.stateDirectory);
@@ -232,7 +264,7 @@ export async function runWorkerCommand(
       const table = settings.routingFile ? readRouting(settings.routingFile, settings.policy?.routing) : undefined;
       const allowanceWaiting = table
         ? countAllowanceWaiting(
-            selectedTasks.flatMap((task) => {
+            statusCohort.flatMap((task) => {
               if (task.state !== 'ready' || task.brief.urgent === true) return [];
               try {
                 return [admissionProfiles(task.brief, table, task.sequence)];
@@ -283,6 +315,7 @@ export async function runWorkerCommand(
                 reapedLastHour,
                 strayDirectories: stray.strayDirectories,
                 strayBytesReclaimedLastHour: stray.strayBytesReclaimedLastHour,
+                taskCounts: statusTaskCounts(cohort),
                 tasks: selectedTasks,
                 architecture: architectureRepairStatus(store.db, (id) => taskStateOrUndefined(store, id)),
               },
