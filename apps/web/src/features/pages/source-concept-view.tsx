@@ -13,7 +13,7 @@ import { actionClass, linkClass, ConceptHierarchy, visitAnnouncement } from './s
 import { ConceptMembershipReading } from './source-concept-reading/membership';
 import { useConceptVisit, type ConceptTransport } from './source-concept-reading/visit';
 import { originatingConceptReturn } from './source-concept-reading/origin';
-import { subjectHref } from '../../subject/subject-href';
+import { subjectHref } from '../../subject/load-subject';
 import {
   conceptVisitAddressFor,
   conceptVisitHref,
