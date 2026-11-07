@@ -446,6 +446,26 @@ CREATE TABLE commerce.creator_sale (
 
 
 --
+-- Name: creator_sale_admission_recovery; Type: TABLE; Schema: commerce; Owner: -
+--
+
+CREATE TABLE commerce.creator_sale_admission_recovery (
+    partition_no integer NOT NULL,
+    "position" bigint NOT NULL,
+    event_seq integer NOT NULL,
+    epoch bigint NOT NULL,
+    event_id uuid NOT NULL,
+    event_type text NOT NULL,
+    retry_at timestamp with time zone DEFAULT (now() + '00:10:00'::interval) NOT NULL,
+    CONSTRAINT creator_sale_admission_recovery_epoch_check CHECK ((epoch >= 1)),
+    CONSTRAINT creator_sale_admission_recovery_event_seq_check CHECK (((event_seq >= 0) AND (event_seq <= 999))),
+    CONSTRAINT creator_sale_admission_recovery_event_type_check CHECK ((event_type = ANY (ARRAY['com.rezics.commerce.order.created.v1'::text, 'com.rezics.commerce.order.updated.v1'::text]))),
+    CONSTRAINT creator_sale_admission_recovery_partition_no_check CHECK (((partition_no >= 0) AND (partition_no <= 4095))),
+    CONSTRAINT creator_sale_admission_recovery_position_check CHECK (("position" >= 1))
+);
+
+
+--
 -- Name: creator_sale_receipt; Type: TABLE; Schema: commerce; Owner: -
 --
 
@@ -837,6 +857,14 @@ ALTER TABLE ONLY commerce.checkout_creation_attempt
 
 
 --
+-- Name: creator_sale_admission_recovery creator_sale_admission_recovery_pkey; Type: CONSTRAINT; Schema: commerce; Owner: -
+--
+
+ALTER TABLE ONLY commerce.creator_sale_admission_recovery
+    ADD CONSTRAINT creator_sale_admission_recovery_pkey PRIMARY KEY (partition_no, "position", event_seq);
+
+
+--
 -- Name: creator_sale creator_sale_pkey; Type: CONSTRAINT; Schema: commerce; Owner: -
 --
 
@@ -969,6 +997,13 @@ ALTER TABLE ONLY commerce.subject_offer_reference
 --
 
 CREATE UNIQUE INDEX benefit_acquisition_account_page ON commerce.benefit_acquisition USING btree (route, buyer_account_id, slot_id);
+
+
+--
+-- Name: creator_sale_admission_recovery_due; Type: INDEX; Schema: commerce; Owner: -
+--
+
+CREATE INDEX creator_sale_admission_recovery_due ON commerce.creator_sale_admission_recovery USING btree (partition_no, retry_at, "position", event_seq);
 
 
 --
