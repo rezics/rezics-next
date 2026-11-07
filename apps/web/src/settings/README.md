@@ -2,6 +2,20 @@
 
 **Decision:** Collection privacy uses the existing private owner inventory and native `collection:update` advice; logical built-ins remain inspectable and read-only without a command revision.
 
+**Decision:** Settings consumes private Collection owner windows, privacy command/readback and Shelf type/default/column preferences through the typed Library port (`ports/library.ts`). Visibility, occurrence, frontier and preference vocabulary live in Library `settings-contract`; transport and presentation bind at `settings-adapter` and ordinary `/settings` composition. Exact failed cursors, independent command/read deadlines, drafts and acknowledged-original recovery stay on that port. Fewest tests: keep the existing Collection privacy and Shelf recovery suites and add one port-composition pin rather than a second suite.
+
+### Cost: private Collection owner window
+
+- Touches: one signed-in `GET /v1/collections?curatorAccountId&ownerManagement=true&limit=20` with the exact opaque cursor. Nested Library work is the owner inventory page plus native `collection:update` advice on each returned row. Dynamic titles use the existing Collection title helper; there is no member, pin or Shelf scan.
+- Bound: one 20-row window; the first occurrence of a Collection ID wins; a successful page replaces the retained rows. Retry repeats the exact failed cursor; Restart is cursor-free. One controller keeps one accepted page, one failed request and independent row command/read deadlines.
+- Growth check: focused Collection privacy suites pin retained rows, exact failed cursors and released callbacks. Native examined-row evidence stays with Library Collection directory growth; Settings does not add a Settings-owned SQL suite.
+
+### Cost: Collection privacy command and current readback
+
+- Touches: one `PATCH /v1/collections/{id}?ownerManagement=true` of the frozen original visibility, revision, credential and idempotency key, then one independent FULL owner GET for current readback. Nested Library work is the Collection update and point read.
+- Bound: one unresolved original; later drafts cannot rewrite it. Command and current-read each use the existing ten-second deadline and their own Retry-After. A validated receipt stays acknowledged through a failed current read.
+- Growth check: existing Collection privacy recovery suites. Native Collection update/point examined-row evidence stays with Library.
+
 **Decision:** Within each native page, the first row for a Collection ID wins; every successful page replaces the current 20-row window.
 
 **Decision:** One mounted Collection privacy viewer keeps the longest Retry-After deadline for its list endpoint across cursors; Retry retains the failed request and Restart stays cursor-free, with expiry enabling deliberate recovery only. Row reads and commands keep independent deadlines.
@@ -261,6 +275,12 @@ selected override, global scope, unsent draft or original command. Only the curr
 new choices; absent saved overrides remain visible and removable within the existing 32-layout/256-scope bounds.
 The editor keeps eight predecessor coordinates and one staged target, never historical rows, labels or counts.
 Existing Save, uncertain original custody and the single Stay/Leave owner remain unchanged.
+
+### Cost: Shelf type defaults discovery
+
+- Touches: one private Library type-index GET at limit 20 with the exact cursor, plus the existing optional label batch for that page. Settings does not read counts, historical type rows or a shared QueryClient cache.
+- Bound: one current 20-row DTO, eight predecessor coordinates, one staged target. Previous, Next, First and exact Retry are view operations; they never edit a layout, draft or original command.
+- Growth check: existing Shelf type-defaults recovery and type-window suites. Nested native type-index work stays with Library; Settings reports request and retained-coordinate bounds only.
 
 ## Account safety
 

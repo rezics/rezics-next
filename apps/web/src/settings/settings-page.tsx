@@ -20,14 +20,13 @@ import { m } from '../paraglide/messages.js';
 import { PageHeading } from '../shell/page-heading';
 import { ProfileSection } from './profile';
 import { ReadingCard } from './reading-card';
-import { ShelfPreferencesCard } from './shelf-preferences';
+import { BoundCollectionPrivacySection, BoundShelfPreferencesCard } from './adapters/library.tsx';
 import { ReadingNavigation, SettingsNavigationProvider, useSettingsNavigationOwner } from './reading-navigation';
 import { DisplayPreferences } from './display-preferences';
 import { NotificationsCard } from './notifications';
 import { PublicViewsSection } from './public-views';
 import type { NativePreferenceFailure, SettingsPage } from './preferences';
 import { usePreferenceRetry } from './preferences';
-import { CollectionPrivacySection } from './collection-privacy';
 import { VerificationSection } from './verification';
 import { observeVerificationRead, verificationQueryKey } from './verification-recovery';
 import { useOperation, useOperationAdmission } from '../kernel/exposure';
@@ -323,6 +322,8 @@ function SettingsSections({
   preferenceIO,
   watchReturn = null,
   profileReturn = null,
+  ShelfCard = BoundShelfPreferencesCard,
+  PrivacySection = BoundCollectionPrivacySection,
 }: {
   page: Extract<SettingsPage, { signedIn: true }> & { accountId: string };
   csrfToken: string | null;
@@ -331,6 +332,8 @@ function SettingsSections({
   preferenceIO: PreferenceIO;
   watchReturn?: WatchReturnReceipt | null;
   profileReturn?: import('./settings-return').ProfileReturnSnapshot | null;
+  ShelfCard?: typeof BoundShelfPreferencesCard;
+  PrivacySection?: typeof BoundCollectionPrivacySection;
 }) {
   const collectionsAdmission = useOperationAdmission('account.collections');
   const collectionsAdmitted = collectionsAdmission === 'available';
@@ -411,7 +414,7 @@ function SettingsSections({
       <div id="display" className="scroll-mt-6 space-y-6">
         <DisplayPreferences />
         {'preferences' in page ? (
-          <ShelfPreferencesCard
+          <ShelfCard
             initial={page.preferences}
             version={version}
             csrfToken={csrfToken}
@@ -463,7 +466,7 @@ function SettingsSections({
         </section>
       ) : null,
     watches: <SettingsWatchesOwner io={watchesIO} initialReturn={watchReturn} />,
-    privacy: <CollectionPrivacySection />,
+    privacy: <PrivacySection />,
     verification: (
       <section id="verification" aria-label={m.settings_verification_heading()} className="scroll-mt-6" tabIndex={-1}>
         <VerificationSection />
@@ -611,6 +614,8 @@ function OwnedSettingsPage({
   managedAccountsIO,
   watchesIO,
   onRetry,
+  ShelfCard,
+  PrivacySection,
 }: {
   page: Extract<SettingsPage, { signedIn: true }> & { accountId: string };
   csrfToken: string | null;
@@ -618,6 +623,8 @@ function OwnedSettingsPage({
   managedAccountsIO?: ManagedAccountsIO | undefined;
   watchesIO?: WatchManagementIO | undefined;
   onRetry: () => void;
+  ShelfCard?: typeof BoundShelfPreferencesCard;
+  PrivacySection?: typeof BoundCollectionPrivacySection;
 }) {
   const owner = useSettingsSessionOwner(csrfToken, page.accountId)!;
   const [returnEntry] = useState(() =>
@@ -642,6 +649,8 @@ function OwnedSettingsPage({
           watchesIO={watchesIO}
           watchReturn={returnEntry.receipt}
           profileReturn={returnEntry.profile}
+          ShelfCard={ShelfCard}
+          PrivacySection={PrivacySection}
         />
       </SettingsNavigationProvider>
     </SettingsSessionContext.Provider>
@@ -654,6 +663,8 @@ export function SettingsPageView({
   managedAccountsIO,
   watchesIO,
   preferenceIO = nativePreferences,
+  ShelfCard = BoundShelfPreferencesCard,
+  PrivacySection = BoundCollectionPrivacySection,
 }: {
   page: SettingsPage;
   csrfToken: string | null;
@@ -662,6 +673,8 @@ export function SettingsPageView({
   managedAccountsIO?: ManagedAccountsIO | undefined;
   watchesIO?: WatchManagementIO | undefined;
   preferenceIO?: PreferenceIO;
+  ShelfCard?: typeof BoundShelfPreferencesCard;
+  PrivacySection?: typeof BoundCollectionPrivacySection;
 }) {
   const location = useLocation();
   const router = useRouter();
@@ -724,6 +737,8 @@ export function SettingsPageView({
           managedAccountsIO={managedAccountsIO}
           watchesIO={watchesIO}
           onRetry={retry}
+          ShelfCard={ShelfCard}
+          PrivacySection={PrivacySection}
         />
       ) : signedOut ? (
         <SignedOutSettings returnTo={location.publicHref} />

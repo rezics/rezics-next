@@ -4,30 +4,10 @@ import { Checkbox } from '@rezics/ui/shadcn/checkbox';
 import { Field, FieldLabel } from '@rezics/ui/shadcn/field';
 import { useNavigate } from '@tanstack/react-router';
 import { useId } from 'react';
-import { m } from '../paraglide/messages.js';
-import { shelfColumnIds, shelfColumns, type ShelfPresentationIntent, type PersonalShelfColumnId } from './shelf-params';
+import { shelfColumnIds, shelfColumns, type ShelfPresentationIntent } from './shelf-params';
 import { replaceShelfAddress } from './shelf-preferences';
 
-export function shelfColumnLabel(id: PersonalShelfColumnId): string {
-  switch (id) {
-    case 'cover':
-      return m.library_column_cover();
-    case 'title':
-      return m.library_column_title();
-    case 'type':
-      return m.library_column_type();
-    case 'status':
-      return m.library_column_status();
-    case 'progress':
-      return m.library_entry_progress();
-    case 'added':
-      return m.library_sort_created();
-    case 'finished':
-      return m.library_sort_finished();
-    case 'lastActivity':
-      return m.library_sort_activity();
-  }
-}
+export { shelfColumnLabel } from './shelf-column-label';
 
 /** The personal table's existing fields, using the same display URL as layout and size. */
 export function ShelfColumnsControl({

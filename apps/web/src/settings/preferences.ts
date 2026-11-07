@@ -11,8 +11,19 @@ import {
 } from '@rezics/client';
 import { MediaProblem } from '../media/kernel';
 import { isPlatformClosedError } from '../kernel/platform-closed';
-import type { CollectionVisibility } from '../library/reads';
-import { dynamicCollectionTitle } from '../library/dynamic-collection';
+import { dynamicCollectionTitle } from '../../library/settings-adapter';
+import {
+  collectionVisibilities,
+  shelfPreferenceColumns,
+  shelfPreferenceLayouts,
+  shelfPreferenceSortFields,
+  shelfPreferenceTabs,
+  type CollectionVisibility,
+  type OwnedCollection,
+  type OwnedCollectionsPage,
+  type ShelfPreferencePatch,
+  type ShelfPreferences,
+} from './ports/library';
 import { getLocale } from '../paraglide/runtime.js';
 import type { SessionEnv } from '../session/client';
 import { prepareSession, sessionSubject, viewerCredential } from '../session/request';
@@ -51,52 +62,18 @@ export { profileFieldErrors } from './profile-write';
 
 export type SpoilerLevel = 0 | 1 | 2;
 export type Suitability = 'blur' | 'show';
-export const shelfPreferenceLayouts = ['grid', 'list', 'table'] as const;
-export const shelfPreferenceTabs = ['in_progress', 'planned', 'completed', 'paused', 'dropped', 'all'] as const;
-export const shelfPreferenceSortFields = [
-  'last_activity',
-  'added',
-  'finished',
-  'title',
-  'rating',
-  'release_date',
-  'progress',
-] as const;
-export const shelfPreferenceColumns = [
-  'cover',
-  'title',
-  'creator',
-  'type',
-  'status',
-  'progress',
-  'rating',
-  'added',
-  'started',
-  'finished',
-  'last_activity',
-] as const;
-export type ShelfPreferenceTab = (typeof shelfPreferenceTabs)[number];
-export type ShelfPreferenceSort = {
-  field: (typeof shelfPreferenceSortFields)[number];
-  direction: 'asc' | 'desc';
-};
-export type ShelfPreferences = {
-  layouts?: Record<string, (typeof shelfPreferenceLayouts)[number]>;
-  sorts?: Partial<Record<ShelfPreferenceTab, ShelfPreferenceSort>>;
-  gridSize?: 'small' | 'medium' | 'large';
-  tableColumns?: (typeof shelfPreferenceColumns)[number][];
-};
-export type ShelfPreferencePatch = {
-  layouts?: Record<string, (typeof shelfPreferenceLayouts)[number] | null> | null;
-  sorts?: Partial<
-    Record<
-      ShelfPreferenceTab,
-      { field?: ShelfPreferenceSort['field'] | null; direction?: ShelfPreferenceSort['direction'] | null } | null
-    >
-  > | null;
-  gridSize?: ShelfPreferences['gridSize'] | null;
-  tableColumns?: ShelfPreferences['tableColumns'] | null;
-};
+export {
+  shelfPreferenceColumns,
+  shelfPreferenceLayouts,
+  shelfPreferenceSortFields,
+  shelfPreferenceTabs,
+  type OwnedCollection,
+  type OwnedCollectionsPage,
+  type ShelfPreferencePatch,
+  type ShelfPreferenceSort,
+  type ShelfPreferenceTab,
+  type ShelfPreferences,
+} from './ports/library';
 export type ReadingAdvice = PreferencePageAdvice;
 export type ShelfAdvice = PreferenceShelfAdvice;
 
@@ -213,22 +190,6 @@ export type PreferenceWriteResult =
       failure?: NativePreferenceFailure;
     };
 
-export type OwnedCollection = {
-  id: string;
-  title: string;
-  kind: 'curated' | 'dynamic' | 'builtin';
-  membershipKind: 'curated' | 'dynamic';
-  builtinKind?: 'everything' | 'state' | 'liked';
-  builtin?:
-    | { kind: 'everything' | 'liked' }
-    | { kind: 'state'; profileId: string; stateSetId: string; stateId: string };
-  visibility: CollectionVisibility;
-  /** Logical built-ins have no command revision. */
-  revision: number | null;
-  /** Native advice lists only visibility changes the current viewer may make. */
-  allowedVisibilityActions: CollectionVisibility[];
-};
-export type OwnedCollectionsPage = { collections: OwnedCollection[]; next: string | null };
 export type CollectionVisibilityWrite =
   | { ok: true; collection: OwnedCollection }
   | {
@@ -241,7 +202,6 @@ type NativeOwnedCollection = NonNullable<
   Awaited<ReturnType<ReturnType<KernelClient['collections']>['get']>>['data']
 >['collection'];
 
-const collectionVisibilities = ['private', 'unlisted', 'public'] as const;
 type OwnerManagementRead = {
   ownerManagement: 'owner';
   ownerAccountId: string;

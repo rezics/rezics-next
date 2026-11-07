@@ -1060,7 +1060,9 @@
         "apps/web/src/library/score-write.ts",
         "apps/web/src/library/loans-current.tsx",
         "apps/web/src/library/loans-query.ts",
-        "apps/web/src/library/loans-actions.ts"
+        "apps/web/src/library/loans-actions.ts",
+        "apps/web/src/library/settings-contract.ts",
+        "apps/web/src/library/settings-adapter.ts"
       ],
       "allowedDependencies": [
         "client",
@@ -1212,7 +1214,16 @@
       "kind": "UI/transport library",
       "owner": "performance",
       "paths": ["apps/web/src/settings/**", "apps/web/src/inbox/**"],
-      "publicEntries": ["apps/web/src/settings/preferences.ts"],
+      "publicEntries": [
+        "apps/web/src/settings/preferences.ts",
+        "apps/web/src/settings/ports/library.ts",
+        "apps/web/src/settings/adapters/library.ts",
+        "apps/web/src/settings/adapters/library.tsx",
+        "apps/web/src/settings/shelf-preferences-current.tsx",
+        "apps/web/src/inbox/ports/library.ts",
+        "apps/web/src/inbox/adapters/library.ts",
+        "apps/web/src/inbox/adapters/library.tsx"
+      ],
       "allowedDependencies": ["client", "ui", "web-accounts", "web-app", "web-content", "web-library", "web-search"],
       "capabilities": ["account-settings"]
     },

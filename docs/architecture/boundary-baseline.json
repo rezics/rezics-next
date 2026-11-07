@@ -21665,11 +21665,6 @@
         {
           "rule": "rule 2",
           "file": "apps/web/src/routes/library/index.tsx",
-          "edge": "value import \"../../settings/shelf-preferences-current\" #1 => apps/web/src/settings/shelf-preferences-current.tsx"
-        },
-        {
-          "rule": "rule 2",
-          "file": "apps/web/src/routes/library/index.tsx",
           "edge": "value import \"../../shell/head-context\" #1 => apps/web/src/shell/head-context.ts"
         },
         {
@@ -27563,11 +27558,6 @@
         {
           "rule": "rule 2",
           "file": "apps/web/src/library/shelf-preferences-current.tsx",
-          "edge": "type import \"../settings/shelf-preferences-current\" #1 => apps/web/src/settings/shelf-preferences-current.tsx"
-        },
-        {
-          "rule": "rule 2",
-          "file": "apps/web/src/library/shelf-preferences-current.tsx",
           "edge": "value import \"../session/observation\" #1 => apps/web/src/session/observation.ts"
         },
         {
@@ -27984,11 +27974,6 @@
         {
           "rule": "rule 2",
           "file": "apps/web/src/settings/actions.ts",
-          "edge": "type import \"../library/reads\" #1 => apps/web/src/library/reads.ts"
-        },
-        {
-          "rule": "rule 2",
-          "file": "apps/web/src/settings/actions.ts",
           "edge": "type import \"../session/client\" #1 => apps/web/src/session/client.ts"
         },
         {
@@ -28004,22 +27989,7 @@
         {
           "rule": "rule 2",
           "file": "apps/web/src/settings/collection-privacy-data.ts",
-          "edge": "value import \"../library/reads\" #1 => apps/web/src/library/reads.ts"
-        },
-        {
-          "rule": "rule 2",
-          "file": "apps/web/src/settings/collection-privacy-data.ts",
           "edge": "value import \"../media/kernel\" #1 => apps/web/src/media/kernel.ts"
-        },
-        {
-          "rule": "rule 2",
-          "file": "apps/web/src/settings/collection-privacy-recovery.ts",
-          "edge": "type import \"../library/reads\" #1 => apps/web/src/library/reads.ts"
-        },
-        {
-          "rule": "rule 2",
-          "file": "apps/web/src/settings/collection-privacy.tsx",
-          "edge": "type import \"../library/reads\" #1 => apps/web/src/library/reads.ts"
         },
         {
           "rule": "rule 2",
@@ -28129,22 +28099,12 @@
         {
           "rule": "rule 2",
           "file": "apps/web/src/settings/preferences.ts",
-          "edge": "type import \"../library/reads\" #1 => apps/web/src/library/reads.ts"
-        },
-        {
-          "rule": "rule 2",
-          "file": "apps/web/src/settings/preferences.ts",
           "edge": "type import \"../session/client\" #1 => apps/web/src/session/client.ts"
         },
         {
           "rule": "rule 2",
           "file": "apps/web/src/settings/preferences.ts",
           "edge": "value import \"../kernel/platform-closed\" #1 => apps/web/src/kernel/platform-closed.ts"
-        },
-        {
-          "rule": "rule 2",
-          "file": "apps/web/src/settings/preferences.ts",
-          "edge": "value import \"../library/dynamic-collection\" #1 => apps/web/src/library/dynamic-collection.ts"
         },
         {
           "rule": "rule 2",
@@ -28235,36 +28195,6 @@
           "rule": "rule 2",
           "file": "apps/web/src/settings/shelf-preferences-current.tsx",
           "edge": "value import \"../session/request\" #1 => apps/web/src/session/request.ts"
-        },
-        {
-          "rule": "rule 2",
-          "file": "apps/web/src/settings/shelf-preferences.tsx",
-          "edge": "type import \"../library/shelf-types-read\" #1 => apps/web/src/library/shelf-types-read.ts"
-        },
-        {
-          "rule": "rule 2",
-          "file": "apps/web/src/settings/shelf-preferences.tsx",
-          "edge": "value import \"../library/shelf-columns\" #1 => apps/web/src/library/shelf-columns.tsx"
-        },
-        {
-          "rule": "rule 2",
-          "file": "apps/web/src/settings/shelf-preferences.tsx",
-          "edge": "value import \"../library/shelf-params\" #1 => apps/web/src/library/shelf-params.ts"
-        },
-        {
-          "rule": "rule 2",
-          "file": "apps/web/src/settings/shelf-preferences.tsx",
-          "edge": "value import \"../library/shelf-preferences\" #1 => apps/web/src/library/shelf-preferences.ts"
-        },
-        {
-          "rule": "rule 2",
-          "file": "apps/web/src/settings/shelf-type-defaults/editor.tsx",
-          "edge": "value import \"../../library/shelf-params\" #1 => apps/web/src/library/shelf-params.ts"
-        },
-        {
-          "rule": "rule 2",
-          "file": "apps/web/src/settings/shelf-type-defaults/editor.tsx",
-          "edge": "value import \"../../library/shelf-types-read\" #1 => apps/web/src/library/shelf-types-read.ts"
         },
         {
           "rule": "rule 2",

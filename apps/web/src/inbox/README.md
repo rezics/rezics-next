@@ -31,6 +31,8 @@ waits stay independent. A failed or zero summary does not hide the loaded page o
 Inbox links to `/settings#notifications` for supported preferences. The thread watch toggle remains on its existing
 thread page; board subscription management remains in the existing Settings Watches section.
 
+**Decision:** Inbox publishes the same Library consumer port and adapter as Settings so the web-performance/web-library pair has one typed Collection/Shelf contract. Inbox pages do not mount Collection privacy or Shelf editors; `/settings` composition binds those adapters.
+
 **Decision:** Page reads and target navigation never imply acknowledgement; only the selected-item command or the
 owner-admitted displayed boundary may mark notices read. Unread continuation does not admit bulk mark-through.
 
