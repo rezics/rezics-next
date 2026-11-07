@@ -215,13 +215,17 @@ function independentFacts(before: Awaited<ReturnType<NativeProfileFixture['inspe
   for (const key of ['entries', 'copies', 'entitlements', 'follows'] as const) expect(after[key]).toEqual(before[key]);
 }
 
-test('native controls use provisioned identities real Access semantic sources and unchanged session algorithms', async () => {
+test('native session writes resolve the accepted release after current profile replacement and preserve the session algorithm', async () => {
   const subject = await native.createSubject('game');
   expect((await native.send(owner.bearer, 'GET', `/v1/subjects/${subject}`)).status).toBe(200);
   const s = await start(subject);
   expect(s).toMatchObject({ mode: 'scalar_amount', unit: 'page', state: 'active', revision: 1 });
+  expect((await fact(s.id)).library_profile_pin).toEqual(pin());
+  await native.activate(replacement);
   const r = await commands.recordProgress(owner.actor, s.id, { revision: 1, amount: '12.000001' }, entryKey());
   expect(r.value.amount).toBe('12.000001');
+  expect(r.value.total).toBeNull();
+  expect((await fact(s.id)).library_profile_pin).toEqual(pin());
   expect((await contents(s.id)).changes.map((c) => c.intent)).toEqual([{ amount: '12.000001' }]);
   await expect(commands.readSession(other.actor, s.id)).rejects.toBeInstanceOf(LibraryNotFoundError);
   await rejectRecord(s.id, 2, { amount: '01' });
@@ -647,7 +651,7 @@ test('Owner session detail exposes exact resolved historic display and advisory 
   await json(await send('POST', `${path(s.id)}:complete`, { revision: 2 }), 200);
 });
 
-test('opt-in owner presentation conceals foreign anonymous reduced-scope suspended and revoked readers without effects', async () => {
+test('opt-in owner presentation conceals private reads while preserving scope and revoked-reader denials', async () => {
   const subject = await native.createSubject('game');
   const s = await start(subject);
   const url = `${path(s.id)}?presentation=FULL&view=FULL`;
@@ -666,7 +670,9 @@ test('opt-in owner presentation conceals foreign anonymous reduced-scope suspend
     scopes: ['subject:read'],
   });
   await noSessionEffects(s.id)(async () => {
-    await problem(await send('GET', url, undefined, entryKey(), limited), 404, 'not_found', 'not_applicable');
+    const response = await send('GET', url, undefined, entryKey(), limited);
+    await problem(response, 403, 'forbidden', 'not_applicable');
+    expect(response.headers.get('www-authenticate')).toContain('insufficient_scope');
   });
   for (const fence of ['suspension', 'authn'] as const) {
     const identity = await native.identity(scopes);

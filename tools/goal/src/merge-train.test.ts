@@ -11,6 +11,7 @@ import { failingTestFiles, MergeTrain, devPushScript, rebaseOnto, resolveMechani
 import { firstFailure, gateRunner, git } from './merge.ts';
 import { parseBrief, protectedRiskAreasForBrief, readRiskOwnership } from './briefs.ts';
 import { WorkerStore } from './store.ts';
+import { TrainResolver } from './train-resolver.ts';
 import { repository } from './test-support.ts';
 
 function setup() {
@@ -576,6 +577,67 @@ Update the control plane.
 }
 
 describe('control-plane launch smoke gate', () => {
+  test('mixed release source retains dev conflict resolution without admitting a main proof', async () => {
+    const s = controlPlaneLanding('tools/goal/src/mixed.ts');
+    try {
+      const task = new WorkerStore(s.goalDb).task(s.request.taskId);
+      new WorkerStore(s.db).createTask(
+        task.brief,
+        {
+          briefPath: task.briefPath,
+          worktree: s.request.worktree,
+          branch: s.request.branch,
+          base: git(s.main, 'rev-parse', 'main'),
+        },
+        'implementation',
+        s.request.taskId,
+      );
+      const product = 'scripts/product.ts';
+      writeFileSync(join(s.request.worktree, product), 'export const value = "worker";\n');
+      git(s.request.worktree, 'add', '--', product);
+      git(s.request.worktree, 'commit', '-m', 'Product repair');
+      const devTree = join(s.path, 'dev-conflict');
+      git(s.main, 'worktree', 'add', devTree, 'dev');
+      writeFileSync(join(devTree, product), 'export const value = "dev";\n');
+      git(devTree, 'add', '--', product);
+      git(devTree, 'commit', '-m', 'Concurrent product change');
+      const main = git(s.main, 'rev-parse', 'main');
+      const queued = s.queue.nextBatch(1, [], 'main')[0]!;
+      const resolver = new TrainResolver(new WorkerStore(s.goalDb));
+      resolver.devConflictStarted = () => {};
+      resolver.devConflictReturned = () => {};
+      let resolutions = 0;
+      resolver.compose = async () => {
+        resolutions++;
+        throw new Error('Original product conflict remains owned');
+      };
+      let smokeRuns = 0;
+      await new MergeTrain({
+        ...s.options,
+        integrationBranch: 'dev',
+        trainResolver: resolver,
+        runGate: async () => ({ passed: true, output: '', timedOut: false }),
+        runLaunchSmoke: async () => {
+          smokeRuns++;
+          return { passed: true, output: '', timedOut: false };
+        },
+      }).run();
+      expect(s.outcomes.map((outcome) => outcome.firstFailure?.assertion)).toEqual([
+        expect.stringContaining('Original product conflict remains owned'),
+      ]);
+      expect(resolutions).toBe(1);
+      expect(smokeRuns).toBe(0);
+      expect(s.outcomes[0]?.passed).toBe(false);
+      expect(s.outcomes[0]?.conflictedFiles).toContain(product);
+      expect(s.outcomes[0]?.firstFailure?.assertion).toContain('Original product conflict remains owned');
+      expect(git(s.main, 'rev-parse', 'main')).toBe(main);
+      expect(existsSync(join(s.options.stateDirectory, `control-plane-proof-${queued.id}.json`))).toBe(false);
+    } finally {
+      s.goalDb.close();
+      s.close();
+    }
+  });
+
   test('untargeted control-plane work lands on dev without the main release proof', async () => {
     const s = controlPlaneLanding('tools/goal/src/dev-change.ts', false);
     try {

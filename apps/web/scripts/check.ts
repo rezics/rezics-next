@@ -54,6 +54,8 @@ export type WebTestLanesOptions = {
   seedTimingsFile?: string;
   env?: NodeJS.ProcessEnv;
   testScript?: string;
+  /** Bun filters are forwarded to each fresh per-file process. */
+  testArgs?: string[];
   onComplete?: (outcome: FileOutcome<string>) => void;
   /** JUnit reports are written here. The caller removes it unless `retainReport` is set. */
   reportDirectory?: string;
@@ -145,9 +147,15 @@ export async function runWebTestLanes(options: WebTestLanesOptions): Promise<Web
           : ['bun', 'test'];
         recordRunMarker(env.WEB_CHECK_EVENTS, 'start', file);
         try {
+          const testArguments = (options.testArgs ?? []).filter((argument, index, all) => {
+            if (argument === '--reporter' || argument === '--reporter-outfile') return false;
+            if (argument.startsWith('--reporter=') || argument.startsWith('--reporter-outfile=')) return false;
+            if (all[index - 1] === '--reporter' || all[index - 1] === '--reporter-outfile') return false;
+            return argument !== '--dots' && argument !== '--only-failures';
+          });
           const result = await capture(
             invocation[0]!,
-            [...invocation.slice(1), ...testCommand(file, report).slice(1)],
+            [...invocation.slice(1), ...testCommand(file, report, undefined, testArguments).slice(1)],
             env,
             directory,
           );
@@ -233,6 +241,27 @@ export type BrowserPlacement = {
   timings: Record<string, FileTiming>;
 };
 
+export type BrowserWorkerCommandOptions = {
+  files: string[];
+  report: string;
+  testScript?: string;
+  testArgs?: string[];
+};
+
+/** Serialize the complete selected Bun invocation for the check-host worker. */
+export function browserWorkerCommand(input: BrowserWorkerCommandOptions): string[] {
+  return [
+    'bun',
+    'scripts/check.ts',
+    '--browser',
+    '--report',
+    input.report,
+    ...(input.testScript === undefined ? [] : ['--test-command', input.testScript]),
+    ...input.files,
+    ...(input.testArgs?.length ? ['--', ...input.testArgs] : []),
+  ];
+}
+
 function readReportFragment(directory: string): { failed: string[]; timings: Record<string, FileTiming> } {
   let timings: Record<string, FileTiming> = {};
   const timingsPath = join(directory, 'timings.json');
@@ -253,6 +282,7 @@ export async function runBrowserWorker(input: {
   files: string[];
   report: string;
   testScript?: string;
+  testArgs?: string[];
   env?: NodeJS.ProcessEnv;
 }): Promise<number> {
   if (input.report === '' || input.report.startsWith('/') || input.report.split('/').includes('..')) {
@@ -262,6 +292,7 @@ export async function runBrowserWorker(input: {
   const reportDirectory = resolve(root, input.report);
   const result = await runWebTestLanes({
     files: input.files,
+    ...(input.testArgs === undefined ? {} : { testArgs: input.testArgs }),
     // A placed worker shares one generated source tree and Vite cache between its browser files.
     env: { ...(input.env ?? process.env), WEB_BROWSER_CHECK_CONCURRENCY: '1' },
     ...(input.testScript === undefined ? {} : { testScript: input.testScript }),
@@ -275,15 +306,20 @@ export async function runBrowserWorker(input: {
 }
 
 /** `--browser` is the command a check host runs; it carries the report directory the caller asked to have back. */
-export function browserWorkerRequest(args: string[]): { files: string[]; report: string; testScript: string } | null {
-  if (!args.includes('--browser')) return null;
-  const testScript = testScriptArgument(args);
-  const reportAt = args.indexOf('--report');
-  const report = reportAt >= 0 ? args[reportAt + 1] : undefined;
+export function browserWorkerRequest(
+  args: string[],
+): { files: string[]; report: string; testScript: string; testArgs: string[] } | null {
+  const separator = args.indexOf('--');
+  const checkArgs = separator < 0 ? args : args.slice(0, separator);
+  const testArgs = separator < 0 ? [] : args.slice(separator + 1);
+  if (!checkArgs.includes('--browser')) return null;
+  const testScript = testScriptArgument(checkArgs);
+  const reportAt = checkArgs.indexOf('--report');
+  const report = reportAt >= 0 ? checkArgs[reportAt + 1] : undefined;
   if (!report || report.startsWith('--')) throw new Error('--browser needs --report <directory>');
   const files: string[] = [];
-  for (let index = 0; index < args.length; index += 1) {
-    const argument = args[index]!;
+  for (let index = 0; index < checkArgs.length; index += 1) {
+    const argument = checkArgs[index]!;
     if (argument === '--browser' || argument === '--skip-format') continue;
     if (argument === '--report' || argument === '--test-command') {
       index += 1;
@@ -292,7 +328,7 @@ export function browserWorkerRequest(args: string[]): { files: string[]; report:
     if (argument.startsWith('--')) throw new Error(`Unknown option: ${argument}`);
     files.push(argument);
   }
-  return { files, report, testScript };
+  return { files, report, testScript, testArgs };
 }
 
 /**
@@ -301,7 +337,7 @@ export function browserWorkerRequest(args: string[]): { files: string[]; report:
  */
 export async function placeBrowserCheck(
   files: string[],
-  options: { env?: NodeJS.ProcessEnv; testScript?: string } = {},
+  options: { env?: NodeJS.ProcessEnv; testScript?: string; testArgs?: string[] } = {},
 ): Promise<BrowserPlacement> {
   mkdirSync(join(root, '.temp'), { recursive: true });
   const report = relative(root, mkdtempSync(join(root, '.temp/web-check-')))
@@ -315,15 +351,12 @@ export async function placeBrowserCheck(
         label: 'web browser check',
         root,
         cwd: app,
-        command: [
-          'bun',
-          'scripts/check.ts',
-          '--browser',
-          '--report',
+        command: browserWorkerCommand({
+          files,
           report,
-          ...(testScript === undefined ? [] : ['--test-command', testScript]),
-          ...files,
-        ],
+          ...(testScript === undefined ? {} : { testScript }),
+          ...(options.testArgs === undefined ? {} : { testArgs: options.testArgs }),
+        }),
         returns: [report],
       },
       async (slotEnv) => {
@@ -331,6 +364,7 @@ export async function placeBrowserCheck(
           files,
           report,
           ...(testScript === undefined ? {} : { testScript }),
+          ...(options.testArgs === undefined ? {} : { testArgs: options.testArgs }),
           env: { ...(options.env ?? process.env), ...slotEnv },
         });
       },
@@ -483,7 +517,7 @@ export type WebHostTestRuntime = {
   /** Override the Web root in routing tests; normal checks use the current app. */
   directory?: string;
   /** Runs the Auth fixture through its existing Auth-owned database lane. */
-  runAuthBinding?: (env: NodeJS.ProcessEnv) => Promise<void>;
+  runAuthBinding?: (env: NodeJS.ProcessEnv, testArguments: string[]) => Promise<void>;
   /** Runs the remaining native host files through Bun's existing host-test runner. */
   runNative?: (
     files: string[],
@@ -498,6 +532,41 @@ export type WebNativeHostExecution = {
   selection?: WebTestSelectionContext;
 };
 
+function selectionTestArguments(selection: WebTestSelectionContext | undefined): string[] {
+  if (!selection) return [];
+  const argv = selection.normalizedArgv;
+  const separator = argv.indexOf('--');
+  const checkArgs = separator < 0 ? argv : argv.slice(0, separator);
+  const selectors = new Set(testSelectorArgumentIndices(checkArgs, 'web-check'));
+  const arguments_: string[] = [];
+  for (let index = 0; index < checkArgs.length; index += 1) {
+    if (selectors.has(index)) continue;
+    const argument = checkArgs[index]!;
+    if (argument === '--test-command') {
+      index += 1;
+      continue;
+    }
+    if (argument === '--skip-format' || argument === '--tests-only' || argument === '--host') continue;
+    arguments_.push(argument);
+  }
+  if (separator >= 0) arguments_.push('--', ...argv.slice(separator + 1));
+  return arguments_;
+}
+
+function bunTestFilesCommand(files: string[], testArgs: string[], prefixArgs: string[] = []): string[] {
+  const separator = testArgs.indexOf('--');
+  const bunArgs = separator < 0 ? testArgs : testArgs.slice(0, separator);
+  const programArgs = separator < 0 ? [] : testArgs.slice(separator + 1);
+  return [
+    'bun',
+    'test',
+    ...prefixArgs,
+    ...bunArgs,
+    ...files.map((file) => `./${file}`),
+    ...(separator < 0 ? [] : ['--', ...programArgs]),
+  ];
+}
+
 function discoverWebHostFiles(directory: string): string[] {
   return [...new Set(new Bun.Glob('tests/**/*.host.test.ts').scanSync({ cwd: directory }))].sort();
 }
@@ -509,14 +578,16 @@ export async function runWebHostTests(
   selection?: WebTestSelectionContext,
 ): Promise<void> {
   const directory = runtime.directory ?? app;
-  const files = selection?.selectedFiles.length ? selection.selectedFiles.slice() : discoverWebHostFiles(directory);
+  const selectedFiles = selection?.selectedFiles ?? [];
+  const files = selectedFiles.length ? selectedFiles.slice() : discoverWebHostFiles(directory);
+  const testArguments = selectionTestArguments(selection);
   const authFile = 'tests/auth-binding.host.test.ts';
   const nativeFiles = files.filter((file) => file !== authFile);
   const failures: string[] = [];
   const runAuthBinding = runtime.runAuthBinding ?? runAuthBindingHostTest;
   const nativeExecution: WebNativeHostExecution = {
     cwd: directory,
-    command: ['bun', 'test', '--path-ignore-patterns=node_modules/**', ...nativeFiles.map((file) => `./${file}`)],
+    command: bunTestFilesCommand(nativeFiles, testArguments, ['--path-ignore-patterns=node_modules/**']),
     ...(selection === undefined ? {} : { selection }),
   };
   const runNative =
@@ -529,7 +600,7 @@ export async function runWebHostTests(
 
   if (files.includes(authFile)) {
     try {
-      await runAuthBinding(env);
+      await runAuthBinding(env, testArguments);
     } catch (error) {
       failures.push(error instanceof Error ? error.message : String(error));
     }
@@ -568,37 +639,47 @@ function testScriptArgument(args: string[]): string {
   return command;
 }
 
-async function runTests(files: string[], env: NodeJS.ProcessEnv, testScript: string): Promise<void> {
+async function runTests(
+  files: string[],
+  env: NodeJS.ProcessEnv,
+  testScript: string,
+  testArgs: string[] = [],
+): Promise<void> {
   const browserFiles = files.filter((file) => isBrowserTest(file, app));
   const unitFiles = files.filter((file) => !browserFiles.includes(file));
   const failed: string[] = [];
   let browserTimings: Record<string, FileTiming> = {};
   let unitTimings: Record<string, FileTiming> = {};
-  await Promise.all([
-    (async () => {
-      if (browserFiles.length === 0) return;
-      const placed = await placeBrowserCheck(browserFiles, { env, testScript });
-      browserTimings = placed.timings;
-      failed.push(...placed.failed);
-    })(),
-    (async () => {
-      if (unitFiles.length === 0) return;
-      const fragment = join(root, '.temp', `web-unit-timings-${process.pid}-${Date.now()}.json`);
-      try {
-        const result = await runWebTestLanes({
-          files: unitFiles,
-          env,
-          testScript,
-          timingsFile: fragment,
-          previousTimingsFile: defaultTimingsFile,
-        });
-        unitTimings = result.timings;
-        failed.push(...result.failed);
-      } finally {
-        rmSync(fragment, { force: true });
-      }
-    })(),
-  ]);
+  const runBrowser = async () => {
+    if (browserFiles.length === 0) return;
+    const placed = await placeBrowserCheck(browserFiles, { env, testScript, testArgs });
+    browserTimings = placed.timings;
+    failed.push(...placed.failed);
+  };
+  const runUnits = async () => {
+    if (unitFiles.length === 0) return;
+    const fragment = join(root, '.temp', `web-unit-timings-${process.pid}-${Date.now()}.json`);
+    try {
+      const result = await runWebTestLanes({
+        files: unitFiles,
+        testArgs,
+        env,
+        testScript,
+        timingsFile: fragment,
+        previousTimingsFile: defaultTimingsFile,
+      });
+      unitTimings = result.timings;
+      failed.push(...result.failed);
+    } finally {
+      rmSync(fragment, { force: true });
+    }
+  };
+  if (env.WEB_CHECK_SERIAL_LANES === '1') {
+    await runBrowser();
+    await runUnits();
+  } else {
+    await Promise.all([runBrowser(), runUnits()]);
+  }
   writeTimings(defaultTimingsFile, readTimings(defaultTimingsFile) ?? readTimings(seedTimingsFile) ?? {}, {
     ...unitTimings,
     ...browserTimings,
@@ -695,8 +776,9 @@ export async function main(args: string[], runtime: WebCheckRuntime = {}): Promi
 
   const env = process.env;
   const testScript = testScriptArgument(currentArgs);
+  const testArgs = selectionTestArguments(selection);
   if (currentArgs.includes('--stories')) {
-    await runTests(['tests/page-stories.test.ts'], env, testScript);
+    await runTests(['tests/page-stories.test.ts'], env, testScript, testArgs);
     return;
   }
 
@@ -714,7 +796,7 @@ export async function main(args: string[], runtime: WebCheckRuntime = {}): Promi
   if (requestedFiles.length > 0) {
     const nativeFiles = requestedFiles.filter(isWebHostTestFile);
     const ordinaryFiles = requestedFiles.filter((file) => !isWebHostTestFile(file));
-    await runTests(ordinaryFiles, env, testScript);
+    await runTests(ordinaryFiles, env, testScript, testArgs);
     if (nativeFiles.length > 0) {
       await runWebHostTests(
         env,
@@ -724,7 +806,7 @@ export async function main(args: string[], runtime: WebCheckRuntime = {}): Promi
     }
     return;
   }
-  const results = await Promise.allSettled([runWebTypecheck(env), runTests(files, env, testScript)]);
+  const results = await Promise.allSettled([runWebTypecheck(env), runTests(files, env, testScript, testArgs)]);
   const hostResult = await Promise.allSettled([runHostTests(env)]);
   const failures = results
     .flatMap((result) =>

@@ -1,10 +1,40 @@
 # Library
 
+Decision: a successful revisioned write to a historical NULL-incarnation entry stamps and returns its new
+incarnation before storing the receipt; the exact caller body remains the digest. A fresh entry may add one
+type-preparation create receipt and one no-effect revalidation receipt; only creation and entry emit events.
+Session writes resolve accepted releases by their stored digest through Library's composed identity-disclosure
+capability and validate against both original and current profiles. That no-effect revalidation may issue its one
+`shelf_writer_owner` `ON CONFLICT DO NOTHING` initialization statement; it does not write an entry or deletion row.
+Before a stale native delete guard is checked, owner sequencing also ensures the corresponding `progress_head` with its
+`ON CONFLICT DO UPDATE` statement. Its exact rejected-command inventory is these two statements; the conflict rolls
+back the transaction and no live entry or retained deletion row is written.
+
+Decision: retain the original 64/512/4096 native growth axes while seeding one retained entry per fresh account and
+one live same-owner entry per unique subject. Seed the Semantic source subjects through the supported historical
+import window before native identity installation, then let native bootstrap map them; retain all Library entry
+mutations as native commands. Keep fresh-account entries on one shared subject, refresh fixture actors every 16 units,
+refresh those actors immediately after the supported 4096-subject fixture bootstrap, reuse the fixture's already
+accepted baseline Subject and live entry as the initial incarnation, give every direct fixture command, including setup
+and measured commands, its own configured 30-second HTTP request context, and omit redundant refills. The bootstrap can
+exceed Access's 180-second identity observation freshness window, so the first native command must reauthenticate the
+fixture actors. The fixture has already created its baseline entry; the growth test reads it instead of attempting a
+duplicate insert. Native command admission, authorization, SQL work and growth bounds remain unchanged; this context
+supplies the per-request deadline that the HTTP layer normally establishes before invoking the command.
+
+Decision: apply the shared measured-page path rule to those growth samples: reject sequential scans only when a guarded
+relation exceeds eight pages. A scan count without its measured relation footprint cannot establish a growth-path
+regression, so replace the unconditional zero-scan assertion with `assertGrowthAccessPaths`; retain the same four
+guarded relations, 64/512/4096 population and fixed-work bounds.
+
 Decision: Library consumes native Access behaviour through `access-port.ts`; the existing domain binding holds that
 consumer-owned port and `composition/library.ts` installs Access's native adapter. Shared refusal constructors,
 erasure participant lists and work/policy vocabulary belong to Access contract leaves; compatibility entries re-export
 those same identities. SQL descriptors stay on their defining Access leaves. Acceptance remains typing only; focused
 composition, forwarding and constructor-identity tests preserve existing behaviour assertions and run after landing.
+
+Decision: the profile entry fixture composes its native Library domain once when lazy Access is ready, preserving its
+Pool, route key and selected clock for entry, session and growth commands through startup.
 
 Decision: Collection directory/list/order authorization consumes Library `AuthorizationCapability.specializeCollectionList` and Access's funded collection-update preparation bound. Access adapters own the catalogue residual, permission SQL and inverse membership limit (1000); Library directory SQL binds only the admitted curator/public parameter map. Collection mutation and Progress descriptors stay independent. Fewest tests: owner/public/unavailable list outcomes, preparation memberships, directory public-floor bytes, unchanged order/read assertions.
 
@@ -2413,13 +2443,24 @@ reauthorize native actor retirement and target readability. Other consumers must
 
 ### Entry put
 
-- Touches: One subject resolve, then own-account `library_entry:update`. A missing revision inserts one `entry` primary key. A supplied revision compare-and-swaps that primary key. State `in_progress` also runs one follow upsert in the same command and may emit a second event. The event subject is the account id.
+- Touches: One subject resolve, then own-account `library_entry:update`. A missing revision inserts one `entry`
+  primary key. A supplied revision compare-and-swaps that primary key. A successful revisioned write to a legacy
+  NULL-incarnation row stamps a fresh incarnation in that transaction and returns it; its caller-supplied body and
+  digest remain unchanged. A fresh profiled create may commit one `library.type-preparation.create` receipt and
+  one `library.type-preparation.revalidate` receipt before the entry receipt; revalidation emits no event, and exact
+  replay repeats neither preparation effect. State `in_progress` also runs one follow upsert in the same command
+  and may emit a second event. The event subject is the account id.
 - Bound: Constant exact-key rows and statements, logarithmic index blocks, including the native profile,
   owner sequence, fact hooks and command envelope. Revisioned writes add one locked current entry point before
   their existing state CAS. In-progress writes retain their existing follow upsert/event envelope.
 - Growth check: `test/library/entry-incarnation-precondition-growth.test.ts` measures complete success, missing/wrong
   guard rejection, replacement ABA and exact historical replay at 64/512/4096 unrelated live/retained/receipt histories,
-  including native physical/control work. `entries.test.ts` keeps the existing statement-count regression.
+  including native physical/control work. It uses cost-folded plan evidence to stay inside the fixed 32 MiB capture
+  budget without changing measured rows, blocks, statements or backends. `entries.test.ts` keeps the existing
+  statement-count regression. Each scale unit adds one retained entry from a fresh native account on a shared
+  subject and one live entry for the same owner on a unique subject; this preserves the growing account, archive,
+  live-entry and receipt populations. Shared native actors refresh every sixteen units to keep the long fixture
+  inside Access's admitted identity freshness window, without redundant delete/refill rounds.
 
 ### Retained entry clear
 
@@ -2633,8 +2674,9 @@ terms and controller-owned growth acceptance that remains unmeasured.
 The owner detail additionally accepts `presentation=FULL`, independently of summary `view=FULL`. The
 [profile consumer contract](../../../../docs/library-profile-consumers.md#owner-session-display-and-current-recording)
 owns the exact display/advisory DTO and preservation rules. `progress-presentation.ts` uses the stored pin's exact
-immutable release for historic English labels/count forms and the existing current source/profile and native
-validators for recording hints. It never relabels from the active head, exposes pins, or changes old values.
+immutable release, resolved by digest through Library's composed identity-disclosure capability, for historic
+English labels/count forms and the existing current source/profile and native validators for recording hints. It
+never relabels from the active head, exposes pins, or changes old values.
 Missing original release means unavailable; unknown old pair means raw unknown; only actual readable current
 profile/pair absence or incompatible meaning proves unsupported. Source uncertainty remains unavailable.
 

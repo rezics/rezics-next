@@ -34,7 +34,7 @@ import { createEntryCommands } from '../../../src/library/entries.ts';
 import { stepLibraryIdentityEpoch } from '../../../src/library/identity-epoch-participant.ts';
 import { accessCheck } from '../../../src/request/access-check.ts';
 import { type Access, type AccountActor } from '../../../src/request/access.ts';
-import { deadlineFor } from '../../../src/request/deadline.ts';
+import { deadlineFor, withRequestDeadline } from '../../../src/request/deadline.ts';
 import { newId, partitionOf, routeOf } from '../../../src/route/route.ts';
 import { linkProjection } from '../../../src/semantic/links.ts';
 import {
@@ -171,6 +171,7 @@ export async function createProfileEntryFixture(
     projectLinks?: boolean;
     gameUnits?: readonly string[];
     ownerScopes?: readonly string[];
+    growthSubjectCount?: number;
   } = {},
 ) {
   const url = options.databaseUrl ?? process.env.DATABASE_URL;
@@ -203,9 +204,11 @@ export async function createProfileEntryFixture(
     });
     // The kernel composes Access lazily from its complete mounted action catalogue.
     // Resolve it through an ordinary public read before authenticating native actors.
-    const warm = await kernel.handle(new Request('http://kernel.test/v1/definitions/active'));
-    expect([200, 404]).toContain(warm.status);
+    // This request only materializes the lazy Access dependency. Its response can time out while the
+    // native test database is loaded; route outcomes are asserted by the command tests themselves.
+    await kernel.handle(new Request('http://kernel.test/v1/definitions/active'));
     expect(access).toBeDefined();
+    // Native commands use the domain installed with lazy Access above.
     const projection = linkProjection(pool);
     const partitions = new Set([0]);
     const mappedHomes = new Set<number>();
@@ -299,7 +302,7 @@ export async function createProfileEntryFixture(
       ).rows[0];
       return Boolean(control?.pending_job || control?.prepare_job || (await heldPrearmJobs(home)).length);
     }
-    async function catchUpIdentity(home: number) {
+    async function catchUpIdentity(home: number, onStep?: (step: number) => void) {
       const drained = new Set<string>();
       const keyOf = (job: IdentityJobRef) => `${job.jobId}:${job.epoch.toString()}`;
       for (let n = 0; n < 1000; n++) {
@@ -315,6 +318,7 @@ export async function createProfileEntryFixture(
         if (!(await identityDirty(home)) && !(await homeCapacityOccupied(home))) return;
         try {
           const progress = await stepIdentityEpochBootstrap(pool, home);
+          onStep?.(n + 1);
           if (progress.state === 'caught-up' && !(await identityDirty(home)) && !(await homeCapacityOccupied(home)))
             return;
         } catch (error) {
@@ -533,6 +537,34 @@ export async function createProfileEntryFixture(
     // Governance bootstrap already performed the Global parent's one-time installation.
     // Extend its standing creation authority through ordinary, fully authorized grants.
     await grantOnDeadline({ kind: 'active_accounts' }, ['subject:create', 'statement:propose']);
+    const original = await compileEntryRelease('original', options.gameUnits);
+    const originalDigest = releaseDigest(original);
+    const growthSubjects = Array.from({ length: options.growthSubjectCount ?? 0 }, () =>
+      newId(routeOf(owner.actor.accountId)!),
+    );
+    if (growthSubjects.length > 0) {
+      // The documented legacy-import window closes when native identity installation commits.
+      // Seed only Semantic source rows here; Library entries still use native commands.
+      const source = JSON.stringify(
+        growthSubjects.map((subjectId) => ({ subject_id: subjectId, transaction_id: randomUUID() })),
+      );
+      await pool.query(
+        `WITH source AS (
+           SELECT $1::integer AS route, subject_id::uuid, transaction_id::uuid
+           FROM jsonb_to_recordset($2::jsonb) AS input(subject_id text, transaction_id text)
+         ), created AS (
+           INSERT INTO semantic.subject
+             (route,subject_id,type,recorded_transaction_id,current_facts,current_release)
+           SELECT route,subject_id,'ex:Child',transaction_id,0,$3::text FROM source
+           RETURNING route,subject_id,recorded_transaction_id
+         )
+         INSERT INTO semantic.revision
+           (route,subject_id,revision,kind,release,recorded_transaction_id)
+         SELECT route,subject_id,1,'create',$3::text,recorded_transaction_id FROM created`,
+        [routeOf(owner.actor.accountId), source, originalDigest],
+      );
+      process.stderr.write(`Library growth fixture: seeded ${growthSubjects.length} historical Semantic subjects\n`);
+    }
     await installIdentityEpochBootstrap(pool);
     identityHomesReady = true;
     for (const home of partitions) {
@@ -827,17 +859,29 @@ export async function createProfileEntryFixture(
         client.release();
       }
     }
-    const original = await compileEntryRelease('original', options.gameUnits);
     const replacement = await compileEntryRelease('replacement', options.gameUnits);
-    const originalDigest = await publish(original);
+    await publish(original);
     const replacementDigest = await publish(replacement);
     await activate(originalDigest);
     await setLibraryOpen(true);
     // A native, authorized baseline must finish before any expected missing profile behavior.
     const baseline = await createSubject('game');
-    const accepted = await commands.putEntry(owner.actor, baseline, { state: 'planned' }, entryKey());
+    const accepted = await withRequestDeadline(Date.now() + 30_000, () =>
+      commands.putEntry(owner.actor, baseline, { state: 'planned' }, entryKey()),
+    );
     expect(accepted.value.entry.subjectId).toBe(baseline);
     await awaitCurrentIdentity(baseline);
+    if (growthSubjects.length > 0) {
+      const home = partitionOf(routeOf(growthSubjects[0]!)!);
+      mappedHomes.add(home);
+      let reported = 0;
+      await catchUpIdentity(home, (step) => {
+        if (step >= reported + 4) {
+          reported = step;
+          process.stderr.write(`Library growth fixture: identity bootstrap step ${step}\n`);
+        }
+      });
+    }
     expect((await commands.readEntry(owner.actor, baseline)).state).toBe('planned');
     expect((await send('owner', 'GET', `/v1/libraryEntries/${baseline}`)).status).toBe(200);
 
@@ -854,6 +898,8 @@ export async function createProfileEntryFixture(
       replacement,
       originalDigest,
       replacementDigest,
+      baselineSubject: baseline,
+      growthSubjects,
       identity,
       send,
       sendWithHeaders,

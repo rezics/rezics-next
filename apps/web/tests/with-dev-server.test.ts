@@ -140,7 +140,8 @@ test('cancellation settles the wrapper child and its compiler-like descendant', 
   }
 }, 15_000);
 
-test('the self-hosted post editing journey keeps its own Worker bindings without an unused default server', () => {
+test('server-independent suites do not start an unused default server', () => {
+  expect(commandNeedsSharedDevServer(['bun', 'test', 'tests/check-lanes.test.ts'])).toBe(false);
   expect(commandNeedsSharedDevServer(['bun', 'test', 'tests/post-editing.test.ts'])).toBe(false);
   expect(commandNeedsSharedDevServer(['bun', 'test', '--max-concurrency=1', 'tests/post-editing.test.ts'])).toBe(false);
   expect(

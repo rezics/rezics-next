@@ -36,7 +36,6 @@ import { authoritativeTimeValue } from '../command/command.ts';
 import { checkMediaObject } from '../content/cover-reference.ts';
 import { decideDownload } from '../content/media.ts';
 import { readIdentityMappings } from '../semantic/identity-adapters/read.ts';
-import { activeRelease, readRelease } from '../semantic/definitions.ts';
 import { compileCurrentOwnerFilter } from '../search/current-filter-plan.ts';
 import { createSearchScopeForService, type SearchService } from '../search/service-scope.ts';
 import { routeOf } from '../route/route.ts';
@@ -148,7 +147,14 @@ function nativeAuthorizationPorts(): AuthorizationAdapterPorts {
 }
 
 function nativeIdentityDisclosurePorts(): IdentityDisclosureAdapterPorts {
-  return { readRelease, readActiveRelease: activeRelease, readIdentityMappings, durableInitiatorCommitment, within };
+  const definitions = nativeReleasedDefinitions();
+  return {
+    readRelease: definitions.read,
+    readActiveRelease: definitions.active,
+    readIdentityMappings,
+    durableInitiatorCommitment,
+    within,
+  };
 }
 
 function nativeSearchPreparationPorts(search?: unknown): SearchPreparationAdapterPorts {

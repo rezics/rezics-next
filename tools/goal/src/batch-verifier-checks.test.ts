@@ -561,3 +561,61 @@ fi
     rmSync(directory, { recursive: true, force: true });
   }
 }, 20_000);
+
+test('compiler settlement uses remote custody instead of comparing its rich owner to the local launcher', async () => {
+  const directory = mkdtempSync(resolve(import.meta.dir, '../../../.temp/compiler-settlement-'));
+  try {
+    for (const cleanupVerified of [true, false]) {
+      const code = cleanupVerified ? 0 : 7;
+      const script = `
+        import { compilerSettlementReceiver } from ${JSON.stringify(resolve(import.meta.dir, '../../../scripts/compiler-settlement.ts'))};
+        console.log('Compiler database owner PID=2628388 PPID=2626242 PGID=2626242 START=129996911');
+        const host = 'b', run = 'original-physical-run';
+        compilerSettlementReceiver(process.env)({ schema: 1, host, run,
+            native: { schema: 1, host, run, exitCode: ${code}, resources: { schema: 1, host, run,
+              boot: 'b1b1b1b1-1111-4111-8111-111111111111', supervisor: { pid: 2626242, group: 2626242, start: '129996911' } } },
+            cleanup: { schema: 1, host, run, status: '${cleanupVerified ? 'verified' : 'unknown'}',
+              supervisorStopped: true, commandGroupTerminal: true, containersRemoved: ${cleanupVerified},
+              runDirectoryRemoved: true, failures: ${JSON.stringify(cleanupVerified ? [] : ['remote database removal denied'])} },
+            transportChildReaped: true });
+        process.exit(${cleanupVerified ? 0 : 75});
+      `;
+      const result = await processGroupRunner(5000)(
+        [process.execPath, '-e', script, 'scripts/typecheck.ts'],
+        directory,
+        join(directory, `compiler-${code}.log`),
+      );
+      expect(result.commandExitCode).toBe(code);
+      expect(result.wrapperExitCode).toBe(cleanupVerified ? 0 : 75);
+      expect(result.passed).toBe(cleanupVerified);
+      expect(result.output).not.toContain('producer reported owner PID');
+      if (!cleanupVerified) {
+        expect(result.output).toContain('on b run original-physical-run');
+        expect(result.output).toContain('remote database removal denied');
+        expect(result.output).toContain('original command exit 7');
+      }
+    }
+  } finally {
+    rmSync(directory, { recursive: true, force: true });
+  }
+});
+
+test('a rich local compiler identity is checked against the launched process before local cleanup', async () => {
+  const directory = mkdtempSync(resolve(import.meta.dir, '../../../.temp/compiler-local-'));
+  mkdirSync(join(directory, 'bin'));
+  writeFileSync(join(directory, 'bin/docker'), '#!/bin/sh\nexit 0\n', { mode: 0o755 });
+  try {
+    const script = `import { readFileSync } from 'node:fs';
+      const fields = readFileSync('/proc/self/stat', 'utf8').split(') ')[1].trim().split(/\\s+/);
+      console.log('Compiler database owner PID=' + process.pid + ' PPID=' + fields[1] + ' PGID=' + fields[2] + ' START=' + fields[19]);`;
+    const result = await processGroupRunner(5000, undefined, {
+      ...process.env,
+      PATH: `${directory}/bin:${process.env.PATH}`,
+    })([process.execPath, '-e', script, 'scripts/typecheck.ts'], directory, join(directory, 'compiler.log'));
+    expect(result.passed).toBe(true);
+    expect(result.commandExitCode).toBe(0);
+    expect(result.output).not.toContain('could not be proven');
+  } finally {
+    rmSync(directory, { recursive: true, force: true });
+  }
+});

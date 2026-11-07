@@ -209,6 +209,11 @@ release, while holding the main lane, borrows the existing dev lane only when it
 refs or forming its candidate. With no new dev work it retains both leases through all required checks and the final
 atomic main/dev/stabilize compare-and-swap, including verification of the accepted source ref.
 
+Proof admission and integration routing use the same committed source diff from its fork from `main`. A release brief
+whose source also changes files outside `tools/goal/` follows the existing dev integration and conflict resolver path;
+it does not create an ordinary control-plane proof attempt. Recovery of an already published release retains its exact
+source and original main fork rather than reclassifying an empty diff after publication.
+
 While that proof is running, its controller observes the native dev queue every 50 ms and checks custody before each
 proof command and publication. A newly queued dev request interrupts the controller's own proof. Per-invocation
 `GateRunner` cancellation kills only that proof's command groups and awaits the complete runner, including terminal
@@ -1608,6 +1613,11 @@ existing transport retries, unverified environment classification and failure lo
 latest-head rounds, selects changes since its prior round, reports current-head failures and advances `dev-verified`
 when each round ends regardless of its results.
 
+The due verifier round and page-data cycle start independently under their existing separate leases and check
+admission. A pending Web boot does not postpone native checks or hold the verifier lease after its round settles.
+The resident invocation awaits both owned cycles before returning; one failure retains its original error, and
+simultaneous failures retain both errors. Page-data failure notices and native round evidence keep their own identities.
+
 Decision: every two hours by default, the resident verifier refreshes a dedicated detached `dev` checkout against a
 persistent seeded local stack whose PostgreSQL and OpenSearch containers and volumes use the `rezics-pagecheck-`
 prefix. It runs `bun scripts/page-data-check.ts`, records each section's class and the run's per-class counts in
@@ -1616,11 +1626,15 @@ prefix. It runs `bun scripts/page-data-check.ts`, records each section's class a
 its mapped files when its retained session can resume; otherwise one repair task is dispatched to that section's
 Goal. Boot and check failures write their bounded captured stack output, plus failing command output when present, to
 `stateDirectory/page-data-failures/<runId>-<phase>.log`; the supermanager notice includes that log path. When the stack
-exits, the notice selects its final substantive error line and skips Task command echoes. When readiness expires while
-the stack remains alive, the notice uses the last failed probe with its origin and HTTP status or error. Logs and notices
-redact recognized credentials.
+exits, the notice retains the first substantive pre-teardown cause and skips Task command echoes. When readiness
+expires without a producer error, the notice uses the final failed probe with its origin and HTTP status or error.
+Bounded capture correlates source, run, original argv, resolved executable/package versions, effective nonsecret
+runtime/cache flags, observed child PID/start/parent/executable identities, ordered producer lines, probe transitions
+and teardown reason. Observed config output proves only that stage was reached; missing later stages stay unknown.
+A later teardown error stays in the transcript without replacing the pre-teardown cause. Content owns Web stage
+instrumentation and startup repair; page-data owns child/readiness capture. Logs and notices redact recognized credentials.
 
-Decision: persist each bounded page-data boot/check transcript in a run-scoped state-directory log, name that path in the supermanager notice, report the terminal process error or final origin-specific readiness probe, and redact recognized credentials.
+Decision: persist each bounded page-data boot/check transcript in a run-scoped state-directory log, name that path in the supermanager notice, retain the pre-teardown cause alongside cleanup and the final origin-specific readiness probe, and redact recognized credentials.
 
 A `control-plane` brief may declare only `tools/goal/` paths; dispatch refuses outside paths and tells the manager to
 split them into a dev task. Without a `target` line it starts from `dev` and lands there mechanically, with unlimited
@@ -2531,7 +2545,32 @@ tasks spent, with declined offers counted by reason.
 Cost: offers read through the flow table's (stage, action, time) index within the window, and each decision reads the
 Goal's ready briefs until one overlaps. The chain adds at most the sweep's dispatch budget per run.
 
+Compiler gate cleanup consumes the existing remote custodian's versioned settlement through a fresh invocation-bound
+metadata file. Host/run identity, native command status, transport-child reaping and physical resource cleanup stay
+separate from local wrapper status. A rich remote database-owner line is never compared to the local launcher PID,
+and local Docker cannot prove remote cleanup. Missing or failed physical settlement remains unproven, including
+cancellation; the original command exit is retained alongside wrapper/cleanup diagnostics. Local compiler-owner lines
+accept PID/parent/group/start identity and compare the recorded process start and group before local labeled cleanup.
+Legacy local PID-only output remains readable. Command failure briefs preserve JSON argv and label it as a command;
+only a syntactically valid test path receives a test-file label.
+
 ### Check result reuse
+
+Worker typing settlement uses a separate version 1 compiler-input receipt, bound to the original invocation and
+physical run. The owning root compiler captures source before execution and inputs after its preparation and compiler
+programs finish in the frozen checkout. Source changes during execution invalidate the receipt. The receipt includes
+root/workspace configuration, runner and toolchain/dependency identities, generated declarations, SQL and schema
+inputs. Known owning preparation may produce Paraglide and route declarations before compilation; other prepared
+inputs must remain stable throughout the run. Locally unchanged pre-run generated files may differ from the remote
+prepared view; both inventories remain recorded. Changed local prepared inputs must match the compiled view.
+
+Only documents absent from the configured TypeScript import graph and owning generator asset references can be
+excluded. Unknown compiler, mapper or generation commands keep the complete Git-visible inventory. A typing pass
+does not satisfy document validation. Budget accounting, admission, exact candidate custody and command identity
+continue to use the full Git-visible content tree. This receipt grants no additional check or placement permission.
+Unchanged legacy stamps remain valid under their original full-tree comparison. A changed legacy tree with no retained
+compiler closure, or a new invocation without its matching receipt, reports missing evidence with the original check
+status and log; settlement never invents an old closure or labels it a transport failure.
 
 Landing and promotion checks record only clean, successful runs. Each result is keyed by the normalized command, the
 allowlisted environment (`CI`, `DATABASE_URL`, `NODE_ENV`, `PATH`, `PLAYWRIGHT_BROWSERS_PATH`, and `TZ`), the Git tree
@@ -2984,6 +3023,14 @@ head. Findings and round summaries use the bounded dev_verifier_findings and dev
 Decision: dev-verifier-storage.ts owns bounded check evidence, one summary record per round and findings; the verifier advances the round head regardless of pass, failure or unknown results.
 
 Decision: dev-verifier-plan.ts owns shared changed-path and full-suite planning; dev-verifier-comparison.ts executes each selected check once at the captured head, with no baseline reconciliation.
+
+Decision: each selected Web test file is an independent verifier check routed through `apps/web/scripts/check.ts`, which owns check-host admission, preparation, browser placement, and fresh per-file Bun processes. Browser and unit lanes run serially for verifier selections to keep nested concurrency within the round's three-check cap. Web boot smoke uses `apps/web/scripts/focused.ts`. The routed command, exact file selection, and captured candidate commit are part of the verifier cache identity; findings prefer the selected file for attribution, and deadline carry stores each unstarted file as its own check.
+
+Browser placement serializes Bun filters, timeout/retry options and program arguments after `--`; the receiving
+`--browser` route restores them for each child. The owning runner retains reporter flags for returned JUnit evidence.
+Attribution uses the selected file before trailing program arguments, even when diagnostics mention another file.
+Infrastructure retries preserve every attempt's output and classify the final attempt. Focused checks decide shared
+server wrapping per child; native/browser readiness, growth and release acceptance still require integrated execution.
 
 Each fresh verifier tree installs its own dependencies, even after an earlier tree's setup passed. Installation uses
 an available matching repository Bun or bootstraps with the verifier process's Bun, and logs the executable used.

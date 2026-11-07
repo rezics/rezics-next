@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, test } from 'bun:test';
 import { execFileSync } from 'node:child_process';
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { lstat } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import { runDocsCheck } from './docs-check';
@@ -213,6 +214,34 @@ describe('documentation links and owner rules', () => {
       'tracked-temp | .temp/new.md | newly tracked temporary file | remedy:',
     );
   });
+});
+
+test('changed Markdown excludes missing temporary notes and tolerates a vanished optional note', async () => {
+  write('.temp/optional.md', '[broken](./missing.md)\n');
+  execFileSync('git', ['add', '.temp/optional.md'], { cwd: root });
+  commit();
+  rmSync(path.join(root, '.temp/optional.md'));
+  write('optional.md', '# Optional\n');
+  const markdownStat = (async (...args: Parameters<typeof lstat>) => {
+    if (String(args[0]).endsWith('/optional.md'))
+      throw Object.assign(new Error('optional note vanished'), { code: 'ENOENT' });
+    return lstat(...args);
+  }) as typeof lstat;
+  const result = await runDocsCheck(root, ['--changed', 'HEAD'], { markdownStat });
+  expect(result.exitCode).toBe(0);
+  expect(output(result)).not.toContain('link-target');
+});
+
+test('a live owner document retains its stat I/O diagnostic instead of appearing empty', async () => {
+  write('docs/development/owner.md', '# Owner\n[dependency](./dependency.md)\n');
+  const failure = Object.assign(new Error('permission denied by fixture'), { code: 'EACCES' });
+  const markdownStat = (async (...args: Parameters<typeof lstat>) => {
+    if (String(args[0]).endsWith('/docs/development/owner.md')) throw failure;
+    return lstat(...args);
+  }) as typeof lstat;
+  await expect(runDocsCheck(root, [], { markdownStat })).rejects.toThrow(
+    'docs-check: cannot stat docs/development/owner.md: Error: permission denied by fixture',
+  );
 });
 
 describe('brief dispatch checks', () => {

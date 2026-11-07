@@ -1,16 +1,24 @@
 import { afterAll, beforeAll, expect, test } from 'bun:test';
 import { createHash } from 'node:crypto';
 import canonicalize from 'canonicalize';
+import pg from 'pg';
 import { GrantDeniedError } from '../../src/access/contract/errors.ts';
 import { principalCommandIdentity } from '../../src/command/command.ts';
+import { nativeReceiptKeyCandidates } from '../../src/command/receipt-key.ts';
 import { createLibraryCommandRunner } from '../../src/library/command-support.ts';
 import { admitEntryAttempt } from '../../src/library/entry-lifecycle.ts';
 import * as store from '../../src/library/entry-store.ts';
 import { LibraryConflictError } from '../../src/library/entries.ts';
-import { deadlineFor } from '../../src/request/deadline.ts';
+import { deadlineFor, withRequestDeadline } from '../../src/request/deadline.ts';
 import { routeOf } from '../../src/route/route.ts';
 import { accountToken, authenticateAccount } from '../support/admitted-access.ts';
-import { capture, catalogStatementBound, checkGrowth, openGrowthDatabase } from '../support/growth.ts';
+import {
+  assertGrowthAccessPaths,
+  capture,
+  catalogStatementBound,
+  checkGrowth,
+  openGrowthDatabase,
+} from '../support/growth.ts';
 import { createProfileEntryFixture, entryKey, type NativeProfileFixture } from './support/profile-entry-fixture.ts';
 
 let f: NativeProfileFixture;
@@ -23,6 +31,7 @@ afterAll(async () => {
 });
 const path = (subjectId: string) => `/v1/libraryEntries/${subjectId}`;
 const scopes = ['subject:read', 'library_entry:read', 'library_entry:update', 'library_entry:delete'];
+const fixtureRequest = <T>(run: () => Promise<T>) => withRequestDeadline(Date.now() + 30_000, run);
 
 async function legacyNull(f: NativeProfileFixture, subjectId: string) {
   // Only historical storage setup: no forged identity, scope, receipt or readiness flag.
@@ -65,22 +74,29 @@ async function historicalDelete(f: NativeProfileFixture, subjectId: string, revi
 
 async function oldReceipts(f: NativeProfileFixture) {
   const subjectId = await f.createSubject('game');
-  const first = (await f.commands.putEntry(f.owner.actor, subjectId, { state: 'playing' }, entryKey())).value.entry;
+  const first = (
+    await fixtureRequest(() => f.commands.putEntry(f.owner.actor, subjectId, { state: 'playing' }, entryKey()))
+  ).value.entry;
   await legacyNull(f, subjectId);
   const key = entryKey(),
     input = { state: 'playing', revision: first.revision };
-  const updated = await f.commands.putEntry(f.owner.actor, subjectId, input, key);
-  expect(updated.value.entry.incarnationId).toBeNull();
+  const updated = await fixtureRequest(() => f.commands.putEntry(f.owner.actor, subjectId, input, key));
+  // The first accepted revisioned write closes legacy NULL compatibility by
+  // stamping the exact live row before the ordinary receipt is committed.
+  expect(updated.value.entry.incarnationId).not.toBeNull();
+  expect(updated.value.entry.incarnationId).not.toBe(first.incarnationId);
   const deleteKey = entryKey();
-  const deleted = await historicalDelete(f, subjectId, updated.value.entry.revision, deleteKey);
-  const replacement = (await f.commands.putEntry(f.owner.actor, subjectId, { state: 'planned' }, entryKey())).value
-    .entry;
+  const deleted = await fixtureRequest(() => historicalDelete(f, subjectId, updated.value.entry.revision, deleteKey));
+  const replacement = (
+    await fixtureRequest(() => f.commands.putEntry(f.owner.actor, subjectId, { state: 'planned' }, entryKey()))
+  ).value.entry;
   const receipts = (await f.inspect(f.owner.actor.accountId)).receipts;
   for (const [kind, requestKey, body] of [
     ['library.entry.put', key, { subjectId, requestedSubjectId: null, ...input }],
     ['library.entry.delete', deleteKey, { subjectId, revision: updated.value.entry.revision }],
   ] as const) {
-    const receipt = receipts.find((x) => x.row.command_kind === kind && x.row.idempotency_key === requestKey)!.row;
+    const candidates = new Set(nativeReceiptKeyCandidates(f.pool, kind, f.owner.actor.accountId, requestKey));
+    const receipt = receipts.find((x) => x.row.command_kind === kind && candidates.has(x.row.idempotency_key))!.row;
     const digest = createHash('sha256')
       .update(canonicalize([principalCommandIdentity(f.owner.actor), kind, body])!)
       .digest('hex');
@@ -96,7 +112,7 @@ test('exact historical revisioned HTTP bodies retain native digest and response 
   expect(replay.status).toBe(200);
   expect((await replay.json()).libraryEntry).toEqual({
     subjectId: old.subjectId,
-    incarnationId: null,
+    incarnationId: old.updated.value.entry.incarnationId,
     state: old.updated.value.entry.state,
     revision: old.updated.value.entry.revision,
     createdAt: old.updated.value.entry.createdAt,
@@ -312,26 +328,29 @@ test('legacy NULL compatibility ends on the actual stamped row and supplied mism
     { state: 'playing', revision: created.revision },
     key,
   );
-  expect(legacy.value.entry.incarnationId).toBeNull();
+  expect(legacy.value.entry.incarnationId).not.toBeNull();
+  expect(legacy.value.entry.incarnationId).not.toBe(created.incarnationId);
   const locked = (await f.inspect()).entries.find((x) => x.row.subject_id === subjectId)!.row;
-  const stamped = await f.pool.query(
-    'UPDATE library.entry SET incarnation_id=$4 WHERE route=$1 AND account_id=$2 AND subject_id=$3 AND revision=$5 AND transaction_id=$6 AND incarnation_id IS NULL RETURNING incarnation_id',
-    [
-      routeOf(f.owner.actor.accountId),
-      f.owner.actor.accountId,
-      subjectId,
-      created.incarnationId,
-      locked.revision,
-      locked.transaction_id,
-    ],
-  );
-  expect(stamped.rowCount).toBe(1);
+  expect(locked.incarnation_id).toBe(legacy.value.entry.incarnationId);
+  expect(locked.revision).toBe(legacy.value.entry.revision);
   const cutover = await f.inspect();
   await expect(
     f.commands.putEntry(
       f.owner.actor,
       subjectId,
       { state: 'completed', revision: legacy.value.entry.revision },
+      entryKey(),
+    ),
+  ).rejects.toBeInstanceOf(LibraryConflictError);
+  await expect(
+    f.commands.putEntry(
+      f.owner.actor,
+      subjectId,
+      {
+        state: 'completed',
+        revision: legacy.value.entry.revision,
+        incarnationId: created.incarnationId!,
+      },
       entryKey(),
     ),
   ).rejects.toBeInstanceOf(LibraryConflictError);
@@ -347,7 +366,7 @@ test('legacy NULL compatibility ends on the actual stamped row and supplied mism
     subjectId,
     legacy.value.entry.revision,
     entryKey(),
-    created.incarnationId!,
+    legacy.value.entry.incarnationId!,
   );
 }, 120000);
 
@@ -411,123 +430,188 @@ test('concurrent exact legacy stamping and a guardless state mutation serialize 
     expect(current).toEqual(original);
   } else {
     expect(mutation).toHaveProperty('value');
-    expect(current.incarnationId).toBeNull();
+    expect(current.incarnationId).not.toBeNull();
+    expect(current.incarnationId).not.toBe(original.incarnationId);
     expect(current.revision).toBe(original.revision + 1);
   }
 }, 120000);
 
 test('fresh guard work remains bounded across 64 512 and 4096 unrelated live retained and receipt histories including physical native controls', async () => {
-  const db = await openGrowthDatabase();
+  const template = await openGrowthDatabase();
+  let growth: Awaited<ReturnType<typeof openGrowthDatabase>> | undefined;
   let native: NativeProfileFixture | undefined;
+  const cloneName = `entry_incarnation_growth_${Bun.randomUUIDv7().replaceAll('-', '').slice(0, 16)}`;
+  let cloneCreated = false;
   try {
-    native = await createProfileEntryFixture({ pool: db.pool, singleConnection: true, projectLinks: false });
+    const cloneUrl = new URL(template.url);
+    cloneUrl.pathname = `/${cloneName}`;
+    await template.admin.query(`CREATE DATABASE "${cloneName}" TEMPLATE rezics`);
+    cloneCreated = true;
+    growth = await openGrowthDatabase(cloneUrl.toString());
+    const pool = growth.pool;
+    native = await createProfileEntryFixture({
+      pool,
+      databaseUrl: cloneUrl.toString(),
+      projectLinks: false,
+      growthSubjectCount: 4096,
+    });
     const f = native;
-    const target = await f.createSubject('game');
-    let current = (await f.commands.putEntry(f.owner.actor, target, { state: 'planned' }, entryKey())).value.entry;
+    async function refreshFixtureActors() {
+      // Keep the long-running fixture actors inside Access's native identity freshness window.
+      for (const who of [f.owner, f.steward, f.other]) {
+        who.bearer = await accountToken(who.actor);
+        who.actor = await f.access.authenticate(who.bearer, { pool: f.pool, deadline: deadlineFor(30000) });
+      }
+    }
+    // Historical source seeding and identity catch-up above can outlive Access's
+    // 180-second observation window before the first measured command begins.
+    await refreshFixtureActors();
+    const target = f.baselineSubject;
+    let current = await fixtureRequest(() => f.commands.readEntry(f.owner.actor, target));
     const original = current;
-    await f.commands.deleteEntry(f.owner.actor, target, current.revision, entryKey(), current.incarnationId!);
-    current = (await f.commands.putEntry(f.owner.actor, target, { state: 'planned' }, entryKey())).value.entry;
+    await fixtureRequest(() =>
+      f.commands.deleteEntry(f.owner.actor, target, current.revision, entryKey(), current.incarnationId!),
+    );
+    current = (await fixtureRequest(() => f.commands.putEntry(f.owner.actor, target, { state: 'planned' }, entryKey())))
+      .value.entry;
     const old = await oldReceipts(f);
     const operation = async () => {
       for (const guard of [undefined, entryKey(), original.incarnationId!]) {
         await expect(
-          f.commands.putEntry(
-            f.owner.actor,
-            target,
-            { state: 'planned', revision: current.revision, ...(guard === undefined ? {} : { incarnationId: guard }) },
-            entryKey(),
+          fixtureRequest(() =>
+            f.commands.putEntry(
+              f.owner.actor,
+              target,
+              {
+                state: 'planned',
+                revision: current.revision,
+                ...(guard === undefined ? {} : { incarnationId: guard }),
+              },
+              entryKey(),
+            ),
           ),
         ).rejects.toBeInstanceOf(LibraryConflictError);
         await expect(
-          f.commands.deleteEntry(f.owner.actor, target, current.revision, entryKey(), guard),
+          fixtureRequest(() => f.commands.deleteEntry(f.owner.actor, target, current.revision, entryKey(), guard)),
         ).rejects.toBeInstanceOf(LibraryConflictError);
       }
       current = (
-        await f.commands.putEntry(
-          f.owner.actor,
-          target,
-          { state: 'planned', revision: current.revision, incarnationId: current.incarnationId! },
-          entryKey(),
+        await fixtureRequest(() =>
+          f.commands.putEntry(
+            f.owner.actor,
+            target,
+            { state: 'planned', revision: current.revision, incarnationId: current.incarnationId! },
+            entryKey(),
+          ),
         )
       ).value.entry;
       const key = entryKey();
-      const removed = await f.commands.deleteEntry(
-        f.owner.actor,
-        target,
-        current.revision,
-        key,
-        current.incarnationId!,
+      const removed = await fixtureRequest(() =>
+        f.commands.deleteEntry(f.owner.actor, target, current.revision, key, current.incarnationId!),
       );
       const deleted = current;
-      current = (await f.commands.putEntry(f.owner.actor, target, { state: 'planned' }, entryKey())).value.entry;
+      current = (
+        await fixtureRequest(() => f.commands.putEntry(f.owner.actor, target, { state: 'planned' }, entryKey()))
+      ).value.entry;
       expect(
-        await f.commands.deleteEntry(f.owner.actor, target, deleted.revision, key, deleted.incarnationId!),
+        await fixtureRequest(() =>
+          f.commands.deleteEntry(f.owner.actor, target, deleted.revision, key, deleted.incarnationId!),
+        ),
       ).toEqual({ ...removed, replayed: true });
-      expect(await f.commands.putEntry(f.owner.actor, old.subjectId, old.input, old.key)).toEqual({
-        ...old.updated,
-        replayed: true,
-      });
+      expect(await fixtureRequest(() => f.commands.putEntry(f.owner.actor, old.subjectId, old.input, old.key))).toEqual(
+        { ...old.updated, replayed: true },
+      );
       expect(
-        await f.commands.deleteEntry(f.owner.actor, old.subjectId, old.updated.value.entry.revision, old.deleteKey),
+        await fixtureRequest(() =>
+          f.commands.deleteEntry(f.owner.actor, old.subjectId, old.updated.value.entry.revision, old.deleteKey),
+        ),
       ).toEqual({ ...old.deleted, replayed: true });
     };
-    const report = await checkGrowth(db, {
+    const report = await checkGrowth(growth, {
       name: 'fresh native incarnation admission success rejection replay and ABA',
       scales: [64, 512, 4096],
       bounds: { rows: 'constant', statements: 'constant', blocks: 'logarithmic' },
+      captureMode: 'cost-folded',
       includeBackends: true,
       async grow(_db, scale, previous) {
-        // One ordinary subject supports many unrelated private owner slots.
-        const subjectId = await f.createSubject('game');
+        // Retain one native entry per fresh account on the shared subject and one same-owner
+        // entry per distinct imported subject, keeping both index populations independent.
         for (let n = previous; n < scale; n++) {
-          for (const who of [f.owner, f.steward, f.other]) {
-            who.bearer = await accountToken(who.actor);
-            who.actor = await f.access.authenticate(who.bearer, { pool: db.pool, deadline: deadlineFor(30000) });
-          }
-          // Native identities, Access and receipt/outbox producers all grow together.
+          if ((n - previous) % 16 === 0) await refreshFixtureActors();
+          // Keep one retained native entry per fresh actor and one live owner slot per scale unit.
+          // Replacing each actor's row adds no coverage beyond its delete receipt and archive.
           const who = await f.identity(scopes);
-          const first = (await f.commands.putEntry(who.actor, subjectId, { state: 'planned' }, entryKey())).value.entry;
-          await f.commands.deleteEntry(who.actor, subjectId, first.revision, entryKey(), first.incarnationId!);
-          await f.commands.putEntry(who.actor, subjectId, { state: 'planned' }, entryKey());
-          const ownSubject = await f.createSubject('game');
-          const own = (await f.commands.putEntry(f.owner.actor, ownSubject, { state: 'planned' }, entryKey())).value
-            .entry;
-          await f.commands.deleteEntry(f.owner.actor, ownSubject, own.revision, entryKey(), own.incarnationId!);
-          await f.commands.putEntry(f.owner.actor, ownSubject, { state: 'planned' }, entryKey());
+          const first = (
+            await fixtureRequest(() => f.commands.putEntry(who.actor, target, { state: 'planned' }, entryKey()))
+          ).value.entry;
+          await fixtureRequest(() =>
+            f.commands.deleteEntry(who.actor, target, first.revision, entryKey(), first.incarnationId!),
+          );
+          await fixtureRequest(() =>
+            f.commands.putEntry(f.owner.actor, f.growthSubjects[n]!, { state: 'planned' }, entryKey()),
+          );
+          if ((n + 1) % 128 === 0)
+            process.stderr.write(`Library entry growth scale ${scale}: seeded ${n + 1}/${scale}\n`);
         }
-        for (const who of [f.owner, f.steward, f.other]) {
-          who.bearer = await accountToken(who.actor);
-          who.actor = await f.access.authenticate(who.bearer, { pool: db.pool, deadline: deadlineFor(30000) });
-        }
+        await refreshFixtureActors();
       },
       operation,
     });
+    const guardedRelations = [
+      'library.entry',
+      'library.entry_deleted',
+      'library.owner_write_counter',
+      'library.fact_source_head',
+    ];
+    const observedScans = report.samples.flatMap(({ scale, cost }) =>
+      guardedRelations.flatMap((relation) => {
+        const scans = cost.relations[relation]?.sequentialScans ?? 0;
+        return scans > 0 ? [`${relation} at scale ${scale}: ${scans}`] : [];
+      }),
+    );
+    if (observedScans.length > 0)
+      process.stderr.write(`Library growth scan diagnostics: ${observedScans.join('; ')}\n`);
     for (const sample of report.samples) {
       expect(sample.cost.plans).toBeGreaterThan(0);
-      for (const relation of [
-        'library.entry',
-        'library.entry_deleted',
-        'library.owner_write_counter',
-        'library.fact_source_head',
-      ])
-        expect(sample.cost.relations[relation]?.sequentialScans ?? 0).toBe(0);
     }
+    assertGrowthAccessPaths(report.name, report.samples, guardedRelations);
     const rejected = await capture(
-      db,
+      growth,
       async () => {
         await expect(
-          f.commands.deleteEntry(f.owner.actor, target, current.revision, entryKey()),
+          fixtureRequest(() => f.commands.deleteEntry(f.owner.actor, target, current.revision, entryKey())),
         ).rejects.toBeInstanceOf(LibraryConflictError);
       },
       { includeBackends: true },
     );
     const classified = catalogStatementBound(rejected.capture);
     expect(classified.catalogStatements).toBeLessThanOrEqual(classified.allowedStatements);
+    const libraryWrites = rejected.capture.statements.filter((sql) =>
+      /(?:INSERT|UPDATE|DELETE)\s+(?:INTO\s+|FROM\s+)?library\./i.test(sql),
+    );
+    expect(libraryWrites).toHaveLength(2);
     expect(
-      rejected.capture.statements.some((sql) => /(?:INSERT|UPDATE|DELETE)\s+(?:INTO\s+|FROM\s+)?library\./i.test(sql)),
-    ).toBe(false);
+      libraryWrites.filter((sql) =>
+        /INSERT\s+INTO\s+library\.shelf_writer_owner\b[\s\S]*ON\s+CONFLICT[\s\S]*DO\s+NOTHING/i.test(sql),
+      ),
+    ).toHaveLength(1);
+    expect(
+      libraryWrites.filter((sql) =>
+        /INSERT\s+INTO\s+library\.progress_head\b[\s\S]*ON\s+CONFLICT[\s\S]*DO\s+UPDATE/i.test(sql),
+      ),
+    ).toHaveLength(1);
+    expect(libraryWrites.every((sql) => !/INSERT\s+INTO\s+library\.entry(?:_deleted)?\b/i.test(sql))).toBe(true);
   } finally {
     await native?.close();
-    await db.close();
+    await growth?.close();
+    await template.close();
+    if (cloneCreated) {
+      const cleanup = new pg.Pool({ connectionString: template.url, max: 1 });
+      try {
+        await cleanup.query(`DROP DATABASE IF EXISTS "${cloneName}" WITH (FORCE)`);
+      } finally {
+        await cleanup.end();
+      }
+    }
   }
 }, 3600000);
