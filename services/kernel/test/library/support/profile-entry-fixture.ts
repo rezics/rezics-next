@@ -24,7 +24,8 @@ import { createLifecycleInternals, type ProvisioningEvidence } from '../../../sr
 import { resourceRoleCatalogue } from '../../../src/access/resource-roles.ts';
 import { createSuspensionCommands } from '../../../src/access/suspension.ts';
 import { createWriteRateLimiter } from '../../../src/access/write-rate.ts';
-import type { KernelClock } from '../../../src/clock.ts';
+import { systemClock, type KernelClock } from '../../../src/clock.ts';
+import { composeLibraryDomain } from '../../../src/composition/library.ts';
 import { createPool } from '../../../src/database/pool.ts';
 import { createKernel } from '../../../src/http/kernel.ts';
 import { actionCatalogue } from '../../../src/http/request.ts';
@@ -191,6 +192,9 @@ export async function createProfileEntryFixture(
       requestDeadlineMs: 30_000,
       access(config) {
         return (access = admittedAccess(config));
+      },
+      onAccessReady(access) {
+        composeLibraryDomain({ pool, access, routeKey, clock: options.clock ?? systemClock });
       },
       writeRate: createWriteRateLimiter({
         secret: 'native-profile-entry-test-rate-secret',

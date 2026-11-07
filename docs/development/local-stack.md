@@ -376,7 +376,7 @@ cancellation forwards its signal, escalates to SIGKILL after one second, and wai
 settle before releasing the shared lock. Dev-server readiness still waits for useful `/en` HTML and reports the
 observed probe, fetch or child-exit cause. Only an actual ECONNREFUSED is hydration startup; a closed-listener
 probe does not invent that code. The generator parent stays lightweight and only its isolated worker imports the
-Paraglide compiler. Original native walks remain open.
+Paraglide compiler. A barrel without `messages/access_account.js` is not current. Original native walks remain open.
 
 Decision: `storybook-dev --app` logs entry before loading check custody, uses lightweight physical Web admission for
 finite Vite commands, and imports operator policy only when `--operator` is present. Regular app startup does not load
