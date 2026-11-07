@@ -3188,6 +3188,27 @@ export class MergeTrain {
   }
 
   /** Main may borrow idle dev custody, but product work always gets the next turn. */
+  private controlPlaneSourceFork(request: LandingRequest, sourceTip: string): string | undefined {
+    const o = this.options;
+    const mainBranch = o.mainBranch ?? 'main';
+    const published = this.readControlPlaneRecord(request);
+    const exactPublishedSource =
+      published?.mainBranch === mainBranch &&
+      published.source?.branch === request.branch &&
+      published.source?.commit === sourceTip;
+    // Recovery must retain the original fork even after the source is already represented on main.
+    const fork = this.git(
+      o.mainCheckout,
+      'merge-base',
+      sourceTip,
+      exactPublishedSource ? published.mainExpected : `refs/heads/${mainBranch}`,
+    );
+    const changes = changedPathsBetween(o.mainCheckout, fork, sourceTip, o.policy?.merge);
+    return exactPublishedSource || (changes.length > 0 && changes.every((path) => path.startsWith(CONTROL_PLANE_PATH)))
+      ? fork
+      : undefined;
+  }
+
   private async integrateOrdinary(
     entry: LandingEntry,
     lane: 'main' | 'dev',
@@ -3201,6 +3222,10 @@ export class MergeTrain {
       !controlPlaneReleaseBrief(taskIntegrationTarget(o.stateDirectory, entry.request.taskId, o.policy?.storage))
     )
       return this.integrate(entry);
+    const source = this.git(o.mainCheckout, 'rev-parse', `${entry.request.branch}^{commit}`);
+    // A release brief may retain an authorized product repair. Its actual source follows the normal dev route,
+    // including resolver handoffs, rather than entering custody that only permits a control-plane main release.
+    if (this.controlPlaneSourceFork(entry.request, source) === undefined) return this.integrate(entry);
 
     const devPending = () => o.queue.nextBatch(1, [], 'dev').length > 0;
     const policy = o.policy ?? defaultPolicy;
@@ -3954,19 +3979,8 @@ export class MergeTrain {
       // diff. Only the commits after the main fork are considered for the main landing.
       let controlPlaneFork: string | undefined;
       if (!workspace && controlPlaneReleaseBrief(recorded) && o.integrationBranch !== undefined) {
-        const published = this.readControlPlaneRecord(request);
-        const exactPublishedSource =
-          published?.mainBranch === mainBranch &&
-          published.source?.branch === request.branch &&
-          published.source?.commit === sourceTip;
-        const fork = exactPublishedSource
-          ? this.git(o.mainCheckout, 'merge-base', sourceTip, published.mainExpected)
-          : this.git(o.mainCheckout, 'merge-base', sourceTip, `refs/heads/${mainBranch}`);
-        const taskChanges = changedPathsBetween(o.mainCheckout, fork, sourceTip, this.options.policy?.merge);
-        controlPlane =
-          exactPublishedSource ||
-          (taskChanges.length > 0 && taskChanges.every((path) => path.startsWith(CONTROL_PLANE_PATH)));
-        if (controlPlane) controlPlaneFork = fork;
+        controlPlaneFork = this.controlPlaneSourceFork(request, sourceTip);
+        controlPlane = controlPlaneFork !== undefined;
       }
       if (controlPlane) {
         integrationTarget = 'main';
@@ -4026,10 +4040,8 @@ export class MergeTrain {
             request.workerCommit = prepared.tip;
           }
           if (prepared.committed && controlPlaneReleaseBrief(recorded) && o.integrationBranch !== undefined) {
-            const fork = this.git(o.mainCheckout, 'merge-base', sourceTip, `refs/heads/${mainBranch}`);
-            const taskChanges = changedPathsBetween(o.mainCheckout, fork, sourceTip, this.options.policy?.merge);
-            controlPlane = taskChanges.length > 0 && taskChanges.every((path) => path.startsWith(CONTROL_PLANE_PATH));
-            controlPlaneFork = controlPlane ? fork : undefined;
+            controlPlaneFork = this.controlPlaneSourceFork(request, sourceTip);
+            controlPlane = controlPlaneFork !== undefined;
             if (controlPlane) {
               integrationTarget = 'main';
               targetBranch = mainBranch;

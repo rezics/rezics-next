@@ -209,6 +209,11 @@ release, while holding the main lane, borrows the existing dev lane only when it
 refs or forming its candidate. With no new dev work it retains both leases through all required checks and the final
 atomic main/dev/stabilize compare-and-swap, including verification of the accepted source ref.
 
+Proof admission and integration routing use the same committed source diff from its fork from `main`. A release brief
+whose source also changes files outside `tools/goal/` follows the existing dev integration and conflict resolver path;
+it does not create an ordinary control-plane proof attempt. Recovery of an already published release retains its exact
+source and original main fork rather than reclassifying an empty diff after publication.
+
 While that proof is running, its controller observes the native dev queue every 50 ms and checks custody before each
 proof command and publication. A newly queued dev request interrupts the controller's own proof. Per-invocation
 `GateRunner` cancellation kills only that proof's command groups and awaits the complete runner, including terminal
