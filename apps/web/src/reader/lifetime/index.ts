@@ -26,5 +26,5 @@ export {
   type ReadLease,
   type OperationLease,
 } from './lease';
-export { ReaderNavigationContext, useReaderAddress, useReaderVisit } from './navigation';
+export { ReaderNavigationContext, useReaderNavigationHost, useReaderAddress, useReaderVisit } from './navigation';
 export { useReaderActivityCurrent } from './activity';

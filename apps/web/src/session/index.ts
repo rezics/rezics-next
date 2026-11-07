@@ -15,3 +15,5 @@ export {
   type OperationLease,
 } from '../reader/lease';
 export { SessionRecoveryPage } from './recovery';
+export { sessionQuery, useSession, sessionCsrfToken, AnonymousSessionContext } from './query';
+export { ReaderNavigationContext, useReaderNavigationHost } from '../reader/lifetime/index';

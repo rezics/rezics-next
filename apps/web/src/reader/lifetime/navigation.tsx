@@ -1,6 +1,6 @@
 import { createContext, useContext, useMemo, useRef, useSyncExternalStore } from 'react';
 import { QueryClientContext } from '@tanstack/react-query';
-import { useRouter } from '@tanstack/react-router';
+import { useRouter, type AnyRouter } from '@tanstack/react-router';
 import type { ReaderNavigation } from './contract';
 import { browserObservation } from './observation';
 
@@ -9,21 +9,46 @@ export const ReaderNavigationContext = createContext<ReaderNavigation | undefine
 const emptySubscribe = () => () => {};
 const browserAddress = () => (typeof window === 'undefined' ? '' : window.location.href);
 
+/** Share departure observation while readers are mounted; an idle host reads the Router's current address. */
+function routerNavigation(router: AnyRouter): ReaderNavigation {
+  let address = router.latestLocation.href;
+  const listeners = new Set<() => void>();
+  let stop: (() => void) | undefined;
+  return {
+    address: () => (stop ? address : router.latestLocation.href),
+    subscribe(changed) {
+      if (!stop) {
+        address = router.latestLocation.href;
+        stop = router.subscribe('onBeforeNavigate', ({ toLocation }) => {
+          address = toLocation.href;
+          for (const notify of [...listeners]) notify();
+        });
+      }
+      listeners.add(changed);
+      return () => {
+        listeners.delete(changed);
+        if (listeners.size === 0) {
+          stop?.();
+          stop = undefined;
+        }
+      };
+    },
+  };
+}
+
+/** Bind the installed shell Router without introducing session state or another session provider. */
+export function useReaderNavigationHost(): ReaderNavigation {
+  const router = useRouter();
+  return useMemo(() => routerNavigation(router), [router]);
+}
+
 /** Prepared mounts may already have a Router without mounting the application shell. */
 function useReaderNavigation() {
   const supplied = useContext(ReaderNavigationContext);
   const router = useRouter({ warn: false });
   const isolated = useMemo<ReaderNavigation | undefined>(() => {
     if (supplied || !router) return undefined;
-    let address = router.latestLocation.href;
-    return {
-      address: () => address,
-      subscribe: (changed) =>
-        router.subscribe('onBeforeNavigate', ({ toLocation }) => {
-          address = toLocation.href;
-          changed();
-        }),
-    };
+    return routerNavigation(router);
   }, [supplied, router]);
   return supplied ?? isolated;
 }

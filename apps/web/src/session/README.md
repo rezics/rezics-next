@@ -89,14 +89,13 @@ Decision: Threads and moderation reporter history/status consume the session-own
 session cache observation, credential lookup, leases, cache-only session source, activity retirement and optional
 address/locale visits. The existing root session hook and QueryClient install its shared cache observation once.
 Default navigation adapts the existing application Router; isolated mounts need neither a Router nor another provider.
-A host may supply the narrow navigation capability. Performance owns attachment to its shared session provider when
-that public export is delivered; train reconciliation owns the overlapping host. No session value, cache, fetch or
-authentication is added.
-Decision: until Performance exports its shared session provider, retain this existing root hook and optional Router
-fallback. Attach `ReaderNavigationContext` exactly once inside that provider when it is available, using only
-`ReaderNavigation.address` and `subscribe` from `reader/lifetime/contract.ts`; do not introduce an interim session
-provider. `tests/thread-reader-boundary.test.tsx` covers host and Router departure before replacement render,
-irreversible return visits and isolated QueryClient mounts.
+Decision: the installed root shell supplies `ReaderNavigationContext` once, binding its existing Router through
+`useReaderNavigationHost` from the public session entry. The capability has only `ReaderNavigation.address` and
+`subscribe` from `reader/lifetime/contract.ts`; its mounted readers share one departure subscription, released when
+the last reader leaves. An idle host reads the current Router address before a new reader subscribes. There is no
+generic session-provider dependency, added session value, cache, fetch or authentication. Performance/session train
+receiving resolves overlapping host edits. `tests/thread-reader-boundary.test.tsx` covers hosted and fallback Router
+departure before replacement render, irreversible return visits and isolated QueryClient mounts.
 The old observation, browser-state, lease and credential files remain compatibility entries for other owners.
 
 The leaf adapter has no Web application or feature dependency. Cache-only Threads consumers no longer load the
