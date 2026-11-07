@@ -27,6 +27,13 @@ at use; Source admission multiplicity is pure `contract/identity-source-schedule
 outcome assertions remain unchanged; focused capability tests cover forwarding and reset, with native acceptance
 owned by integrated Goal walks.
 
+`contract/index.ts` owns the parametric scope reader and exact scope observation/host contracts.
+`adapters/index.ts` exports `NativeScopeReader` and `createSubjectScopeEvidence`. The latter retains the original
+reference/state point plans, Subject read eligibility and native snapshot anchors; a redirected original never
+substitutes its target. Content composes this independent evidence with its own current carrier disclosure.
+Publication is no ownership or authority proof. Borrowed snapshot/point capabilities preserve the existing caller
+root and Source bounds; Semantic neither enumerates a Content population nor opens a second ledger.
+
 The identity coordinator receives Search currentness and Library custody as `IdentityEpochParticipantPorts` and dispatches producers through the composed application. The process composition root (`composition/semantic.ts`) binds the real Library, Search, Rating and Content implementations, hashing and routing, and injects them through `createKernelWorkModules` and `createSemanticWorkModule`. Subject, summaries and bulk HTTP resolve Content lifecycle through `adapters/ports.ts` and the composed registry; they do not value-import `adapters/content-lifecycle.ts`, so native cover-reference stays out of that inward value graph. `composeSemanticAdapters` binds the native cover adapter even when identity participants are absent. Ordinary createKernel/server/worker uses those native adapters; a fake-port application loads without them. Native authority and opaque proof contracts retain their owners. Remaining adapter-internal retention, binding and index cycles stay in the boundary baseline until a later extraction breaks them.
 Decision: Identity Rating repair values stay on `identity-rating-repair-producer.ts` and mapping-read `identity-adapters/read.ts`; the Semantic barrel type-exports them only. Source custody/maintenance import Library `collection-native-work.ts`. Composition binds Kind raw input and Rating installation. HTTP takes `DefinitionImportRoutes` from the Semantic barrel. The producer takes `requireAccessDeadline` from Access `authenticate.ts`.
 

@@ -22,3 +22,4 @@ export { hashingOf, routingOf, contentLifecycleOf, bindOrdinaryContentLifecycle 
 export { createNativeRatingVoteSemantic } from './rating-votes.ts';
 export type { IdentityTerminalCommand } from './agent-identity-maintenance.ts';
 export { nativeContextAccess } from './context-access.ts';
+export { createSubjectScopeEvidence, type NativeScopeReader } from './scope-evidence.ts';

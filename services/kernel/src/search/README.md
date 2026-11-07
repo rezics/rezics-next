@@ -5,10 +5,17 @@
 Search owns the subject search projection, indexing consumers, disclosure checks, query API, freshness and index
 generations.
 
-The first released subject search slice, generic public hit bases and bounded kind metadata are built but
-closed behind `search` platform grants. Advanced filters/scopes, facets and rating remain behind
-`search_advanced`. Complete population/privacy, physical incarnation, erasure and native growth proofs remain
-deferred; this closed slice does not complete the Search Goal.
+Subject search, public hit bases and bounded kind metadata require `search` grants; advanced filters/scopes,
+facets and ratings require `search_advanced`. Population/privacy, incarnation, erasure and native growth proofs remain
+Goal acceptance. Search, suggest and facets use one typed problem family: invalid, invalid-cursor, session, closed,
+denied, restart, index-not-ready, source-not-ready, unavailable and ready. `503 semantic_not_ready` is preparation;
+generation/identity changes restart execution. Suggest documents that 503. `searchHttpExecute` applies these families
+to HTTP search, releases, facets, typeahead and discovery, omitting absent optional fields.
+
+`contract/index.ts` owns scope dimensions, axes and zero values. `adapters/index.ts` exports the existing `ScopeWork`
+and `withRealmDisclosureWork`, the native Access-to-Search bridge. It keeps reservations, settlement on failure,
+bounds, caller deadline and root unchanged. Content consumes a port; its native sparse cursor and allowance stay
+with their original owners.
 
 Decision: `disclosure-application.ts` owns candidate admission, current-text matching, owner revalidation,
 concept preparation and source/index recovery. `createKernelRuntimeDefaults().searchDisclosure`

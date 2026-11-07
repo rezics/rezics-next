@@ -10,3 +10,5 @@ export { createNativeCommunityPorts, communityDeclaredEffects } from './native.t
 export { ensureCommunityApplication, startCommunityApplication } from './runtime.ts';
 /** Native Space producer for process composition. */
 export { readSpace } from '../space.ts';
+
+export { createRealmScopeEvidence } from './scope-evidence.ts';

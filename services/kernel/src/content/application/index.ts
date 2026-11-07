@@ -18,3 +18,5 @@ export {
   unavailableReadingPageMentions,
   readingPageMentionIdentityViews,
 } from './reading-page-mentions.ts';
+
+export { createContentRealmApplication } from './realm.ts';
