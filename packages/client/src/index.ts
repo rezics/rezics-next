@@ -258,6 +258,24 @@ export type SourceClassificationClearInput = MethodBody<ClassificationMethod<'$c
 export type SourceClassificationClearResult = MethodResult<ClassificationMethod<'$clear'>>;
 
 export type KernelClient = GeneratedKernelClient;
+export { COPY_CONDITION_VALUES } from './copy-contracts.ts';
+export type {
+  CopyConditionChoice,
+  CopyConditionDisplay,
+  CopyConditionEditing,
+  CopyConditionPatch,
+  CopyConditionPresentation,
+  CopyConditionValue,
+  CopyInventoryOptions,
+} from './copy-contracts.ts';
+
+/** Loan contracts read the generated copy-loans route, so Web and package consumers share one union. */
+type CopyLoansRoute = GeneratedKernelClient['copy-loans'];
+export type LoanPage = NonNullable<Awaited<ReturnType<CopyLoansRoute['get']>>['data']>;
+export type Loan = LoanPage['items'][number]['loan'];
+export type LoanFilter = NonNullable<NonNullable<NonNullable<Parameters<CopyLoansRoute['get']>[0]>['query']>['filter']>;
+export type LoanWrite = Parameters<CopyLoansRoute['post']>[0];
+export type LoanMutation = NonNullable<Awaited<ReturnType<CopyLoansRoute['post']>>['data']>;
 export type PostHistoryPage = NativePostHistoryPage;
 export type ModerationDecisionPage = Static<ReturnType<typeof DecisionPageSchema>>;
 export type DecisionPageAppeal = NonNullable<ModerationDecisionPage['appeal']>;

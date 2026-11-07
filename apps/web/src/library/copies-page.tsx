@@ -38,6 +38,14 @@ import {
   invalidCopyFields,
   type CopyDraft as Draft,
 } from './copy-fields';
+import {
+  copyConditionDraftOf,
+  copyConditionDisplayText,
+  copyConditionOperand,
+  copyConditionWritten,
+  kindAdmitsCondition,
+} from './copy-condition';
+import { CopyLoanPanel } from './copy-loan-panel';
 import { CopyTextReader, dateText } from './copy-inventory-review/text-reader';
 import { CopyInventoryReview } from './copy-inventory-review/view';
 import { useCopyInventoryReview } from './copy-inventory-review/selection';
@@ -59,6 +67,8 @@ const draftOf = (copy?: CopyItem): Draft => ({
   acquiredOn: copy?.acquiredOn ?? '',
   disposedOn: copy?.disposedOn ?? '',
   note: copy?.note ?? '',
+  mediaCondition: copyConditionDraftOf(copy?.mediaCondition),
+  packagingCondition: copyConditionDraftOf(copy?.packagingCondition),
 });
 
 /** Optional for pure stories; the actual route always supplies the originating private lifetime. */
@@ -324,12 +334,16 @@ export function CopyForm({
     if (!intent.current) {
       if (!copy && !subjectId && (!edition || editionBinding?.subject.id !== edition.id)) return;
       if (!copy && !selected?.statuses.some((status) => status.id === draft.status)) return;
+      const mediaCondition = copyConditionOperand(draft.mediaCondition);
+      const packagingCondition = copyConditionOperand(draft.packagingCondition);
       const fields = {
         location: blank(draft.location),
         source: blank(draft.source),
         acquiredOn: blank(draft.acquiredOn),
         disposedOn: blank(draft.disposedOn),
         note: blank(draft.note),
+        ...(mediaCondition === undefined ? {} : { mediaCondition }),
+        ...(packagingCondition === undefined ? {} : { packagingCondition }),
       };
       const status = copy ? copyStatusChange(copy, draft.status) : undefined;
       if (copy && !status) {
@@ -358,7 +372,6 @@ export function CopyForm({
     }
     const captured = intent.current;
     if (!current(operation)) return;
-    captured.headers = new Headers(credentialHeaders);
     const lease = { current: () => current(operation) };
     flight.current = lease;
     busy.current = true;
@@ -383,6 +396,10 @@ export function CopyForm({
         );
         return;
       }
+      const written = (field: 'mediaCondition' | 'packagingCondition') =>
+        Object.hasOwn(captured.data, field)
+          ? copyConditionWritten(copy?.[field], captured.data[field] as Parameters<typeof copyConditionWritten>[1])
+          : copy?.[field];
       if (copy) {
         if (result.copy.id !== copy.id) {
           setFailure(m.library_copy_failure());
@@ -406,6 +423,8 @@ export function CopyForm({
           acquiredOn: result.copy.acquiredOn,
           disposedOn: result.copy.disposedOn,
           note: result.copy.note,
+          mediaCondition: written('mediaCondition'),
+          packagingCondition: written('packagingCondition'),
           idempotencyKey: crypto.randomUUID(),
         });
       } else {
@@ -413,6 +432,8 @@ export function CopyForm({
         onCreated({
           ...result.copy,
           kind: result.copy.kind ?? null,
+          mediaCondition: written('mediaCondition'),
+          packagingCondition: written('packagingCondition'),
           subject:
             editionBinding && edition
               ? {
@@ -460,8 +481,6 @@ export function CopyForm({
       send: deleteCopy,
       data: { id: copy.id, revision: copy.revision, idempotencyKey: copy.idempotencyKey },
     };
-    const captured = intent.current;
-    captured.headers = new Headers(credentialHeaders);
     const lease = { current: () => current('copy.delete') };
     flight.current = lease;
     busy.current = true;
@@ -469,6 +488,7 @@ export function CopyForm({
     setFailure(null);
     try {
       deleteStarted.current ??= Date.now();
+      const captured = intent.current;
       if (captured.operation !== 'delete') return;
       const result = await captured.send({ data: captured.data, headers: captured.headers });
       if (!current('copy.delete')) return;
@@ -531,276 +551,302 @@ export function CopyForm({
       </button>
     </div>
   ) : (
-    <form
-      ref={formRef}
-      method="post"
-      action={`/${locale()}/library/copies`}
-      aria-label={title}
-      data-idempotency-key={copy?.idempotencyKey ?? addKey}
-      onSubmit={submit}
-      className="min-w-0 max-w-full space-y-4 [overflow-wrap:anywhere] [&_input]:min-h-11 [&_input]:min-w-0 [&_input]:text-base [&_[data-slot=input-group]]:h-auto [&_[data-slot=input-group]]:min-h-11"
-      aria-busy={pending}
-      onKeyDown={(event) => {
-        if (confirming && event.key === 'Escape') {
-          event.preventDefault();
-          event.stopPropagation();
-          if (pending) requestClose();
-          else if (current()) setConfirming(false);
-        }
-      }}
-    >
-      {copy?.subject ? (
-        <section
-          aria-label={m.library_copy_edition()}
-          className="flex min-w-0 items-start gap-3 rounded-lg border border-border p-3"
-        >
-          <div className="w-14 shrink-0">
-            <SubjectCover subject={copy.subject} ratio={rowRatio([copy.subject])} size="fill" />
-          </div>
-          <div className="min-w-0 space-y-1">
-            <p className="text-sm text-muted-foreground">{m.library_copy_edition()}</p>
-            <p
-              lang={displayLibraryTitle(copy.subject.label, locale()).lang}
-              className="whitespace-pre-wrap font-medium [overflow-wrap:anywhere]"
-            >
-              {displayLibraryTitle(copy.subject.label, locale()).text}
-            </p>
-            {copy.subject.typeLabel ? <p className="text-sm text-muted-foreground">{copy.subject.typeLabel}</p> : null}
-          </div>
-        </section>
-      ) : null}
-      <CopyValidationSummary
-        fields={invalidFields}
-        prefix={fieldsId}
-        onFocusField={(field) => {
-          if (!current()) return;
-          validationTarget.current = `${fieldsId}-${field}`;
-          setMore(true);
-          setValidationAttempt((attempt) => attempt + 1);
+    <>
+      <form
+        ref={formRef}
+        method="post"
+        action={`/${locale()}/library/copies`}
+        aria-label={title}
+        data-idempotency-key={copy?.idempotencyKey ?? addKey}
+        onSubmit={submit}
+        className="min-w-0 max-w-full space-y-4 [overflow-wrap:anywhere] [&_input]:min-h-11 [&_input]:min-w-0 [&_input]:text-base [&_[data-slot=input-group]]:h-auto [&_[data-slot=input-group]]:min-h-11"
+        aria-busy={pending}
+        onKeyDown={(event) => {
+          if (confirming && event.key === 'Escape') {
+            event.preventDefault();
+            event.stopPropagation();
+            if (pending) requestClose();
+            else if (current()) setConfirming(false);
+          }
         }}
-      />
-      <input type="hidden" name="intent" value={copy ? 'update' : 'create'} />
-      <input type="hidden" name="idempotencyKey" value={copy?.idempotencyKey ?? addKey} />
-      <input
-        type="hidden"
-        name="subjectId"
-        value={subjectId ?? (editionProfile.state === 'ready' ? (edition?.id ?? '') : '')}
-      />
-      <input type="hidden" name="sendKind" value={String(sendKind)} />
-      {!copy && !subjectId ? (
-        <CopyEditionPicker
-          value={edition}
-          disabled={pending || !!intent.current}
-          onChange={(subject) => void chooseEdition(subject)}
-        />
-      ) : null}
-      {!copy && !subjectId && editionProfile.state !== 'idle' && editionProfile.state !== 'ready' ? (
-        <div className="space-y-2">
-          <p role="status">
-            {editionProfile.state === 'loading'
-              ? m.library_copy_profile_loading()
-              : editionProfile.state === 'unsupported'
-                ? m.library_copy_unsupported()
-                : editionProfile.state === 'forbidden'
-                  ? m.library_copy_profile_forbidden()
-                  : editionProfile.state === 'closed'
-                    ? m.library_copy_lookup_closed()
-                    : m.library_copy_profile_unavailable()}
-          </p>
-          {edition && editionProfile.state === 'unavailable' ? (
-            <button type="button" className={quiet} disabled={pending} onClick={() => void chooseEdition(edition)}>
-              {m.subject_view_retry()}
-            </button>
-          ) : null}
-        </div>
-      ) : null}
-      {!copy && selected ? (
-        choices!.kinds.length > 1 ? (
-          <CopyChoiceField
-            name="kind"
-            label={m.library_copy_kind()}
-            value={kind}
-            choices={choices!.kinds}
-            onChange={(value) => {
-              if (!current() || intent.current) return;
-              setKind(value);
-              change('status', choices!.kinds.find((item) => item.id === value)?.statuses[0]?.id ?? '');
-            }}
-          />
-        ) : (
-          <input type="hidden" name="kind" value={kind} />
-        )
-      ) : null}
-      {copy ? (
-        <div className="space-y-3">
-          <dl className="space-y-2">
-            <div>
-              <dt className="text-sm text-muted-foreground">{m.library_copy_kind()}</dt>
-              <dd>
-                <span lang={copy.kindLabelLanguage}>{copy.kindLabel ?? copy.kind ?? m.library_other()}</span>
-              </dd>
+      >
+        {copy?.subject ? (
+          <section
+            aria-label={m.library_copy_edition()}
+            className="flex min-w-0 items-start gap-3 rounded-lg border border-border p-3"
+          >
+            <div className="w-14 shrink-0">
+              <SubjectCover subject={copy.subject} ratio={rowRatio([copy.subject])} size="fill" />
             </div>
-            <div>
-              <dt className="text-sm text-muted-foreground">{m.library_copy_status()}</dt>
-              <dd>
-                <span lang={copy.statusLabelLanguage}>{copy.statusLabel ?? copy.status}</span>
-              </dd>
-            </div>
-          </dl>
-          {copy.meaning !== 'known' ? (
-            <p className="text-sm text-muted-foreground">
-              {copy.meaning === 'unknown' ? m.library_copy_meaning_unknown() : m.library_history_unavailable()}
-            </p>
-          ) : null}
-          {detailState === 'loading' ? <p role="status">{m.library_copy_detail_loading()}</p> : null}
-          {detailState === 'unavailable' ? (
-            <div className="space-y-2">
-              <p role="status">{m.library_copy_detail_unavailable()}</p>
-              {onRetryDetail && !conflicted ? (
-                <button
-                  type="button"
-                  className={quiet}
-                  disabled={pending || !!intent.current}
-                  onClick={() => current('copy.get') && !intent.current && onRetryDetail()}
-                >
-                  {m.subject_view_retry()}
-                </button>
+            <div className="min-w-0 space-y-1">
+              <p className="text-sm text-muted-foreground">{m.library_copy_edition()}</p>
+              <p
+                lang={displayLibraryTitle(copy.subject.label, locale()).lang}
+                className="whitespace-pre-wrap font-medium [overflow-wrap:anywhere]"
+              >
+                {displayLibraryTitle(copy.subject.label, locale()).text}
+              </p>
+              {copy.subject.typeLabel ? (
+                <p className="text-sm text-muted-foreground">{copy.subject.typeLabel}</p>
               ) : null}
             </div>
-          ) : null}
-          {statusEditable ? (
-            <>
-              <p className="text-sm text-muted-foreground">{m.library_current_choices()}</p>
-              <CopyChoiceField
-                name="status"
-                label={m.library_copy_new_status()}
-                value={draft.status}
-                choices={[
-                  {
-                    id: copy.status,
-                    label: copy.statusLabel ?? copy.status,
-                    ...(copy.statusLabelLanguage ? { labelLanguage: copy.statusLabelLanguage } : {}),
-                  },
-                  ...statusChoices.filter((status) => status.id !== copy.status),
-                ]}
-                onChange={(value) => change('status', value)}
-              />
-            </>
-          ) : detailState !== 'loading' ? (
-            <p className="text-sm text-muted-foreground">
-              {copy.statusEditing?.state === 'unsupported'
-                ? m.library_copy_status_unsupported()
-                : m.library_copy_status_unavailable()}
-            </p>
-          ) : null}
-        </div>
-      ) : selected ? (
-        <CopyChoiceField
-          name="status"
-          label={m.library_copy_status()}
-          value={draft.status}
-          choices={selected.statuses}
-          onChange={(value) => change('status', value)}
-        />
-      ) : null}
-      {editable ? (
-        <CopyOptionalFields
-          draft={draft}
+          </section>
+        ) : null}
+        <CopyValidationSummary
+          fields={invalidFields}
           prefix={fieldsId}
-          expanded={more}
-          showErrors={showFieldErrors}
-          onExpandedChange={(expanded) => current() && setMore(expanded)}
-          onChange={change}
+          onFocusField={(field) => {
+            if (!current()) return;
+            validationTarget.current = `${fieldsId}-${field}`;
+            setMore(true);
+            setValidationAttempt((attempt) => attempt + 1);
+          }}
         />
-      ) : null}
-      {pending ? (
-        <p role="status" className="rounded-lg bg-muted p-3 text-sm">
-          {m.library_copy_editor_pending()}
-        </p>
-      ) : intent.current ? (
-        <p role="status" className="rounded-lg bg-muted p-3 text-sm">
-          {m.library_copy_editor_uncertain()}
-        </p>
-      ) : null}
-      {failure ? <p role="alert">{failure}</p> : null}
-      {conflicted ? (
-        <CopyConflictReview
-          review={review}
-          disabled={!current('copy.get') || pending || confirming || !!intent.current}
-          onReview={() => void reviewCurrent()}
-          onAccept={acceptCurrent}
+        <input type="hidden" name="intent" value={copy ? 'update' : 'create'} />
+        <input type="hidden" name="idempotencyKey" value={copy?.idempotencyKey ?? addKey} />
+        <input
+          type="hidden"
+          name="subjectId"
+          value={subjectId ?? (editionProfile.state === 'ready' ? (edition?.id ?? '') : '')}
         />
-      ) : null}
-      {confirming ? (
-        <div
-          role="alertdialog"
-          aria-modal="false"
-          aria-labelledby={confirmationId}
-          className="min-w-0 space-y-3 rounded-lg border border-border p-4"
-        >
-          <p id={confirmationId}>{m.library_copy_delete_question()}</p>
-          <div className="flex flex-wrap gap-3">
-            <button
-              ref={cancelDelete}
-              type="button"
-              className={quiet}
-              disabled={pending}
-              onClick={() => current() && setConfirming(false)}
-            >
-              {m.library_copy_cancel()}
-            </button>
-            <button type="button" className={button} disabled={pending} onClick={() => void remove()}>
-              {m.library_copy_delete_confirm()}
-            </button>
+        <input type="hidden" name="sendKind" value={String(sendKind)} />
+        {!copy && !subjectId ? (
+          <CopyEditionPicker
+            value={edition}
+            disabled={pending || !!intent.current}
+            onChange={(subject) => void chooseEdition(subject)}
+          />
+        ) : null}
+        {!copy && !subjectId && editionProfile.state !== 'idle' && editionProfile.state !== 'ready' ? (
+          <div className="space-y-2">
+            <p role="status">
+              {editionProfile.state === 'loading'
+                ? m.library_copy_profile_loading()
+                : editionProfile.state === 'unsupported'
+                  ? m.library_copy_unsupported()
+                  : editionProfile.state === 'forbidden'
+                    ? m.library_copy_profile_forbidden()
+                    : editionProfile.state === 'closed'
+                      ? m.library_copy_lookup_closed()
+                      : m.library_copy_profile_unavailable()}
+            </p>
+            {edition && editionProfile.state === 'unavailable' ? (
+              <button type="button" className={quiet} disabled={pending} onClick={() => void chooseEdition(edition)}>
+                {m.subject_view_retry()}
+              </button>
+            ) : null}
           </div>
-        </div>
-      ) : null}
-      <div className="sticky bottom-0 z-10 flex flex-wrap gap-3 border-t border-border bg-background pt-3 pb-[max(0.75rem,env(safe-area-inset-bottom))]">
-        {editable ? (
-          <button
-            type="submit"
-            className={button}
-            disabled={
-              pending ||
-              conflicted ||
-              confirming ||
-              intent.current?.operation === 'delete' ||
-              !headers(copy ? 'copy.update' : 'copy.create')
-            }
-          >
-            {!pending && intent.current && intent.current.operation !== 'delete'
-              ? m.library_copy_editor_retry_save()
-              : copy
-                ? m.library_copy_save()
-                : m.library_copy_add_submit()}
-          </button>
+        ) : null}
+        {!copy && selected ? (
+          choices!.kinds.length > 1 ? (
+            <CopyChoiceField
+              name="kind"
+              label={m.library_copy_kind()}
+              value={kind}
+              choices={choices!.kinds}
+              onChange={(value) => {
+                if (!current() || intent.current) return;
+                setKind(value);
+                change('status', choices!.kinds.find((item) => item.id === value)?.statuses[0]?.id ?? '');
+              }}
+            />
+          ) : (
+            <input type="hidden" name="kind" value={kind} />
+          )
         ) : null}
         {copy ? (
-          <button
-            type="button"
-            ref={deleteControl}
-            className={quiet}
-            disabled={
-              pending ||
-              conflicted ||
-              !editable ||
-              (intent.current !== null && intent.current.operation !== 'delete') ||
-              !headers('copy.delete')
-            }
-            onClick={() =>
-              current() && (!intent.current || intent.current.operation === 'delete') && setConfirming(true)
-            }
-          >
-            {!pending && intent.current?.operation === 'delete'
-              ? m.library_copy_editor_retry_delete()
-              : m.library_copy_delete()}
-          </button>
+          <div className="space-y-3">
+            <dl className="space-y-2">
+              <div>
+                <dt className="text-sm text-muted-foreground">{m.library_copy_kind()}</dt>
+                <dd>
+                  <span lang={copy.kindLabelLanguage}>{copy.kindLabel ?? copy.kind ?? m.library_other()}</span>
+                </dd>
+              </div>
+              <div>
+                <dt className="text-sm text-muted-foreground">{m.library_copy_status()}</dt>
+                <dd>
+                  <span lang={copy.statusLabelLanguage}>{copy.statusLabel ?? copy.status}</span>
+                </dd>
+              </div>
+            </dl>
+            {copy.meaning !== 'known' ? (
+              <p className="text-sm text-muted-foreground">
+                {copy.meaning === 'unknown' ? m.library_copy_meaning_unknown() : m.library_history_unavailable()}
+              </p>
+            ) : null}
+            {detailState === 'loading' ? <p role="status">{m.library_copy_detail_loading()}</p> : null}
+            {detailState === 'unavailable' ? (
+              <div className="space-y-2">
+                <p role="status">{m.library_copy_detail_unavailable()}</p>
+                {onRetryDetail && !conflicted ? (
+                  <button
+                    type="button"
+                    className={quiet}
+                    disabled={pending || !!intent.current}
+                    onClick={() => current('copy.get') && !intent.current && onRetryDetail()}
+                  >
+                    {m.subject_view_retry()}
+                  </button>
+                ) : null}
+              </div>
+            ) : null}
+            {statusEditable ? (
+              <>
+                <p className="text-sm text-muted-foreground">{m.library_current_choices()}</p>
+                <CopyChoiceField
+                  name="status"
+                  label={m.library_copy_new_status()}
+                  value={draft.status}
+                  choices={[
+                    {
+                      id: copy.status,
+                      label: copy.statusLabel ?? copy.status,
+                      ...(copy.statusLabelLanguage ? { labelLanguage: copy.statusLabelLanguage } : {}),
+                    },
+                    ...statusChoices.filter((status) => status.id !== copy.status),
+                  ]}
+                  onChange={(value) => change('status', value)}
+                />
+              </>
+            ) : detailState !== 'loading' ? (
+              <p className="text-sm text-muted-foreground">
+                {copy.statusEditing?.state === 'unsupported'
+                  ? m.library_copy_status_unsupported()
+                  : m.library_copy_status_unavailable()}
+              </p>
+            ) : null}
+          </div>
+        ) : selected ? (
+          <CopyChoiceField
+            name="status"
+            label={m.library_copy_status()}
+            value={draft.status}
+            choices={selected.statuses}
+            onChange={(value) => change('status', value)}
+          />
         ) : null}
-        <button type="button" className={quiet} onClick={requestClose}>
-          {m.library_copy_cancel()}
-        </button>
-      </div>
-    </form>
+        {editable ? (
+          <CopyOptionalFields
+            draft={draft}
+            prefix={fieldsId}
+            expanded={more}
+            showErrors={showFieldErrors}
+            onExpandedChange={(expanded) => current() && setMore(expanded)}
+            onChange={change}
+            condition={
+              copy
+                ? copy.conditionEditing || copy.mediaCondition || copy.packagingCondition
+                  ? {
+                      editing: copy.conditionEditing,
+                      media: copy.mediaCondition,
+                      packaging: copy.packagingCondition,
+                      disabled: pending || !!intent.current,
+                    }
+                  : undefined
+                : kindAdmitsCondition(selected?.condition)
+                  ? {
+                      editing: { state: 'supported', currentness: 'current', choices: [] },
+                      media: { state: 'not_recorded' },
+                      packaging: { state: 'not_recorded' },
+                      disabled: pending || !!intent.current,
+                    }
+                  : undefined
+            }
+          />
+        ) : null}
+        {pending ? (
+          <p role="status" className="rounded-lg bg-muted p-3 text-sm">
+            {m.library_copy_editor_pending()}
+          </p>
+        ) : intent.current ? (
+          <p role="status" className="rounded-lg bg-muted p-3 text-sm">
+            {m.library_copy_editor_uncertain()}
+          </p>
+        ) : null}
+        {failure ? <p role="alert">{failure}</p> : null}
+        {conflicted ? (
+          <CopyConflictReview
+            review={review}
+            disabled={!current('copy.get') || pending || confirming || !!intent.current}
+            onReview={() => void reviewCurrent()}
+            onAccept={acceptCurrent}
+          />
+        ) : null}
+        {confirming ? (
+          <div
+            role="alertdialog"
+            aria-modal="false"
+            aria-labelledby={confirmationId}
+            className="min-w-0 space-y-3 rounded-lg border border-border p-4"
+          >
+            <p id={confirmationId}>{m.library_copy_delete_question()}</p>
+            <div className="flex flex-wrap gap-3">
+              <button
+                ref={cancelDelete}
+                type="button"
+                className={quiet}
+                disabled={pending}
+                onClick={() => current() && setConfirming(false)}
+              >
+                {m.library_copy_cancel()}
+              </button>
+              <button type="button" className={button} disabled={pending} onClick={() => void remove()}>
+                {m.library_copy_delete_confirm()}
+              </button>
+            </div>
+          </div>
+        ) : null}
+        <div className="sticky bottom-0 z-10 flex flex-wrap gap-3 border-t border-border bg-background pt-3 pb-[max(0.75rem,env(safe-area-inset-bottom))]">
+          {editable ? (
+            <button
+              type="submit"
+              className={button}
+              disabled={
+                pending ||
+                conflicted ||
+                confirming ||
+                intent.current?.operation === 'delete' ||
+                !headers(copy ? 'copy.update' : 'copy.create')
+              }
+            >
+              {!pending && intent.current && intent.current.operation !== 'delete'
+                ? m.library_copy_editor_retry_save()
+                : copy
+                  ? m.library_copy_save()
+                  : m.library_copy_add_submit()}
+            </button>
+          ) : null}
+          {copy ? (
+            <button
+              type="button"
+              ref={deleteControl}
+              className={quiet}
+              disabled={
+                pending ||
+                conflicted ||
+                !editable ||
+                (intent.current !== null && intent.current.operation !== 'delete') ||
+                !headers('copy.delete')
+              }
+              onClick={() =>
+                current() && (!intent.current || intent.current.operation === 'delete') && setConfirming(true)
+              }
+            >
+              {!pending && intent.current?.operation === 'delete'
+                ? m.library_copy_editor_retry_delete()
+                : m.library_copy_delete()}
+            </button>
+          ) : null}
+          <button type="button" className={quiet} onClick={requestClose}>
+            {m.library_copy_cancel()}
+          </button>
+        </div>
+      </form>
+      {copy && originating ? (
+        <CopyLoanPanel copy={copy} originating={originating} disabled={pending || !!intent.current || conflicted} />
+      ) : null}
+    </>
   );
 
   const navigation = (
@@ -888,8 +934,8 @@ export function CopyRow({
           <SubjectCover subject={copy.subject} ratio={ratio} size="fill" />
         </div>
       }
-      metadata={
-        <div className="w-full min-w-0">
+      preview={
+        <div className="w-full min-w-0 text-muted-foreground">
           <p className="text-sm text-muted-foreground">
             <MetaLine
               items={[
@@ -935,6 +981,16 @@ export function CopyRow({
               expandLabel={m.library_copy_note_reader_expand_note()}
               collapseLabel={m.library_copy_note_reader_collapse_note()}
             />
+          ) : null}
+          {copy.mediaCondition && copy.mediaCondition.state !== 'not_recorded' ? (
+            <p className="text-sm text-muted-foreground">
+              {m.library_copy_condition_media()}: {copyConditionDisplayText(copy.mediaCondition)}
+            </p>
+          ) : null}
+          {copy.packagingCondition && copy.packagingCondition.state !== 'not_recorded' ? (
+            <p className="text-sm text-muted-foreground">
+              {m.library_copy_condition_packaging()}: {copyConditionDisplayText(copy.packagingCondition)}
+            </p>
           ) : null}
           <CopyInventoryHistory copy={copy} />
         </div>
@@ -1034,7 +1090,7 @@ function LoadedCopiesPage({
   const restoreIntent = useRef<{
     removal: typeof removed;
     data: { id: string; deletionId: string; revision: number; idempotencyKey: string };
-    headers: HeadersInit;
+    headers: Headers;
     send: typeof undoCopy;
   } | null>(null);
   const [editorKey, setEditorKey] = useState(0);
@@ -1144,31 +1200,42 @@ function LoadedCopiesPage({
   };
   const firstPageEmpty = !page.requestedCursor && !page.next && !page.copies.length && !changed;
   const recoverable = Boolean(page.requestedCursor) || (!copies.length && !firstPageEmpty);
-  const emptiedHere = changed && copies.length === 0;
-  const firstAvailable = windows?.current !== undefined ? windows.current !== null || emptiedHere : recoverable;
+  const firstAvailable = windows?.current !== undefined ? windows.current !== null : recoverable;
   const previousAvailable = windows?.previous !== undefined;
-  const recoveryLocked = editing !== undefined;
   return (
     <div className="max-w-4xl space-y-6 text-foreground">
       <header className="flex flex-wrap items-center justify-between gap-4">
         <PageHeading id="copies-inventory-heading" tabIndex={-1}>
           {m.library_copy_heading()}
         </PageHeading>
-        {page.inventoryState !== 'forbidden' && (!page.subjectId || page.profile?.kinds.length) ? (
-          <button
-            type="button"
-            className={button}
-            onClick={(event) => {
-              if (!currentPage('copy.create')) return;
-              editorLauncher.current = event.currentTarget;
-              setEditorKey(++inspection.current);
-              setDetailState('ready');
-              setEditing(null);
-            }}
-          >
-            {m.library_copy_add()}
-          </button>
-        ) : null}
+        <div className="flex flex-wrap items-center gap-3">
+          <Exposure operation="copy.list">
+            <Link
+              to="/library/loans"
+              className={quiet}
+              onClick={(event) => {
+                if (!currentPage('copy.list')) event.preventDefault();
+              }}
+            >
+              {m.library_copy_loans()}
+            </Link>
+          </Exposure>
+          {page.inventoryState !== 'forbidden' && (!page.subjectId || page.profile?.kinds.length) ? (
+            <button
+              type="button"
+              className={button}
+              onClick={(event) => {
+                if (!currentPage('copy.create')) return;
+                editorLauncher.current = event.currentTarget;
+                setEditorKey(++inspection.current);
+                setDetailState('ready');
+                setEditing(null);
+              }}
+            >
+              {m.library_copy_add()}
+            </button>
+          ) : null}
+        </div>
       </header>
       {page.cursorRestarted ? <p role="status">{m.library_copies_address_cursor_restarted()}</p> : null}
       {failure ? (
@@ -1182,15 +1249,17 @@ function LoadedCopiesPage({
       <noscript>
         {page.inventoryState === 'forbidden' ? null : <CopiesFallback page={page} csrfToken={page.csrfToken} />}
       </noscript>
-      <Exposure operation="copy.list">
-        <CopyInventoryFilters
-          subjectId={page.subjectId}
-          kind={page.kind ?? null}
-          status={page.status ?? null}
-          filterOptions={page.filterOptions}
-          current={() => currentPage('copy.list')}
-        />
-      </Exposure>
+      {page.filterOptions || page.kind || page.status ? (
+        <Exposure operation="copy.list">
+          <CopyInventoryFilters
+            subjectId={page.subjectId}
+            kind={page.kind ?? null}
+            status={page.status ?? null}
+            filterOptions={page.filterOptions}
+            current={() => currentPage('copy.list')}
+          />
+        </Exposure>
+      ) : null}
       {page.subjectId ? (
         <p className="flex flex-wrap items-baseline gap-x-4 gap-y-2">
           <span>{m.library_copy_filtered_heading({ title: filteredTitle ?? m.library_copy_this_edition() })}</span>
@@ -1310,9 +1379,8 @@ function LoadedCopiesPage({
                     ? {}
                     : { cursor: windows.previous }),
                 }}
-                aria-disabled={recoveryLocked || undefined}
                 onClick={(event) => {
-                  if (recoveryLocked || !currentPage('copy.list')) {
+                  if (!currentPage('copy.list')) {
                     event.preventDefault();
                     return;
                   }
@@ -1328,9 +1396,8 @@ function LoadedCopiesPage({
               <Link
                 to="/library/copies"
                 search={firstPageSearch}
-                aria-disabled={recoveryLocked || undefined}
                 onClick={(event) => {
-                  if (recoveryLocked || !currentPage('copy.list')) {
+                  if (!currentPage('copy.list')) {
                     event.preventDefault();
                     return;
                   }
@@ -1344,9 +1411,8 @@ function LoadedCopiesPage({
             {page.next ? (
               <Link
                 to="/library/copies"
-                aria-disabled={recoveryLocked || undefined}
                 onClick={(event) => {
-                  if (recoveryLocked || !currentPage('copy.list')) {
+                  if (!currentPage('copy.list')) {
                     event.preventDefault();
                     return;
                   }
@@ -1388,7 +1454,6 @@ function LoadedCopiesPage({
                   send: undoCopy,
                 };
               const captured = restoreIntent.current;
-              captured.headers = new Headers(headers);
               const result = await captured.send({ data: captured.data, headers: captured.headers });
               if (!result.ok && result.reason !== 'unavailable' && restoreIntent.current === captured)
                 restoreIntent.current = null;

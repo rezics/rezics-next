@@ -9,6 +9,8 @@ import { CopyReadingContextView } from '../copy-reading-context/view';
 import { CopyInventoryHistory } from './history';
 import { CopyTextReader, dateText } from './text-reader';
 import type { CopyInventorySelection, RetiredCopy } from './selection';
+import { copyConditionDisplayText } from '../copy-condition';
+import type { CopyConditionDisplay } from '@rezics/client';
 
 const control =
   'inline-flex min-h-11 min-w-11 max-w-full cursor-pointer items-center justify-center rounded-lg border border-border px-3 py-2 text-center text-sm whitespace-normal [overflow-wrap:anywhere] hover:bg-muted focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring disabled:cursor-default disabled:opacity-60';
@@ -86,6 +88,14 @@ function ReceivedCopy({
   const compared = selected.length > 1;
   const different = (field: 'location' | 'source' | 'note' | 'acquiredOn' | 'disposedOn') =>
     selected.some((other) => other[field] !== copy[field]);
+  const conditionKey = (value: CopyConditionDisplay | undefined) =>
+    !value || value.state === 'not_recorded'
+      ? 'not_recorded'
+      : value.state === 'recorded'
+        ? `recorded:${value.id}`
+        : value.state;
+  const differentCondition = (field: 'mediaCondition' | 'packagingCondition') =>
+    selected.some((other) => conditionKey(other[field]) !== conditionKey(copy[field]));
   // A missing historical label stays separate from the raw identifier and its historical meaning.
   const differentKind = selected.some(
     (other) =>
@@ -185,6 +195,28 @@ function ReceivedCopy({
               expandLabel={m.library_copy_note_reader_expand_note()}
               collapseLabel={m.library_copy_note_reader_collapse_note()}
             />
+          )}
+        </Fact>
+        <Fact
+          label={m.library_copy_condition_media()}
+          different={differentCondition('mediaCondition')}
+          compared={compared}
+        >
+          {copy.mediaCondition && copy.mediaCondition.state !== 'not_recorded' ? (
+            copyConditionDisplayText(copy.mediaCondition)
+          ) : (
+            <MissingObservation />
+          )}
+        </Fact>
+        <Fact
+          label={m.library_copy_condition_packaging()}
+          different={differentCondition('packagingCondition')}
+          compared={compared}
+        >
+          {copy.packagingCondition && copy.packagingCondition.state !== 'not_recorded' ? (
+            copyConditionDisplayText(copy.packagingCondition)
+          ) : (
+            <MissingObservation />
           )}
         </Fact>
         <div className="min-w-0 border-t border-border py-3">

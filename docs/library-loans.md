@@ -15,6 +15,9 @@ the package's partial dates and astronomical years do not widen these inputs. Va
 trimming or reserialization, and trailing newlines are invalid. Copy dates remain nullable, Web empty fields become
 null, and omitted native updates leave the stored day unchanged.
 
+Decision: Web chooses those days through the locale Calendar grid, never a native date input, so stored Gregorian
+days are not passed through browser timezone controls.
+
 Years range from 0001 through 9999. Impossible calendar days, partial dates, instants and normalized overflow dates
 are invalid. Stored dates are compared as dates and are never passed through browser timezone formatting. An absent
 due date is undated. A date equal to the response boundary is due; an earlier date is overdue. Return takes precedence
@@ -74,21 +77,79 @@ context bytes. It reports `available`, `scope`, `withheld`, `missing`, `unsuppor
 withholding the private loan. Person presentation is capped at 100 IDs. Empty language preferences are omitted from
 the Semantic facts request, which otherwise rejects an empty language array.
 
+Decision: each copy context's `facts` is the closed union the generated client declares (`item`, `time`, `quantity`,
+`code`), so a loan page serializes through the Web server function without casts. Loans read and refresh under the
+`copy.list` gate, the personal-library operation Copies already uses; the exposure table has no loan-specific operation.
+
+Decision: loan commands receive the transaction-bound History evidence through the request access seam, which binds the
+prepared history accounts on the live command transaction. They do not import the evidence leaf themselves.
+
 Returned history is private to the owner for the owner's lifetime and survives copy deletion or disposal. Terminal
 owner erasure removes loan rows and the generation row through the existing owned-graph receiver, in batches of at
 most 100 keys per work step. No separate cleanup scheduler or retention timer was added.
 
-## Still to deliver
+## Installed web journey
 
-The native HTTP slice is installed, but the `/library/loans` page, contextual copy action, overflow navigation,
-generated web client delivery, locale strings, stories and rendered page cases are not. The native focused case does
-not yet cover concurrent create/disposal, foreign accounts and owner retirement, concealed-person threats,
-lost-acknowledgement refresh, stale-cursor recovery or independent 64/512/4096 cost cases for every pool. The
-native code uses bounded SQL and disclosure helpers, but complete measured costs for admission/currentness, SQL,
-locks, dispatch, receipts, hydration, serialization, retention and cleanup remain unverified. These requirements
-are the continuation; no browser or frozen acceptance pass is claimed.
+Decision: until whole-Kernel declaration emission publishes `copy-loans`, `@rezics/client` overlays the mounted
+GET/POST/PATCH/return contracts and yields when that envelope exists. Web uses only those official types.
+
+`/library/loans` lists open and returned history through the current-viewer reader, with first/more cursor moves,
+extend and return on each eligible row, and a named-counterparty create form. The Copy editor offers the same create,
+extend and return commands beside the copy form for the inspected holding, so loan fields cannot block copy Save, and
+links to the loans page. Copy and loan day fields keep a locale Calendar grid that does not import `react-day-picker`
+or `date-fns`. Host-b ready evidence: Worker discovery printed `(ssr) [optimizer] scanning dependencies...`
+and then nothing for 150s; later `noDiscovery` plus an explicit include still printed no Vite
+line inside the isolated network, with diagnostics showing only the storybook-dev command and no
+CJS/`module` exception. The composition that reaches ready is Web's host-local `optimizeDeps`
+cache: `vite optimize --force` plus a Node middleware-mode SSR warm keyed by `bun.lock`,
+`patches/` and the pinned include/entries, then restamped onto the serve plugin list so an
+isolated start reuses it. Worker `noDiscovery` keeps an explicit include of React, TanStack's
+server store and `@inlang/paraglide-js/urlpattern-polyfill`. Copies still aliases
+`urlpattern-polyfill` to ESM `index.js`, serves those files through filtered Worker resolve/load
+hooks, and shims remaining CJS, because Workerd's export-type inspection uses
+workerd/worker/module/browser conditions, not `import`. Adding `import` hung Rolldown before
+ready. The nested package and `react-dom/server` stay off include and off exclude; calendar
+packages stay on exclude. Serve reuses current Paraglide output through `messagesCurrent`, skips
+generate under `REZICS_TEST_RUNTIME` unless a test supplies `REZICS_PARAGLIDE_COMPILER_MODULE`,
+and takes a `.temp` lock when it does generate. A focused private-network check warms that cache
+on the host, then starts one shared Vite for `/en` before the suite. Copies reuses it through
+per-file Worker overlays; signed-in-routes copies that cache into a private config and compiles
+after the shared server. Test Vite startup disables Miniflare's `Request.cf` metadata fetch and
+uses its deterministic fallback, so the private-network server does not depend on network geo
+metadata. The first pre hook aligns the cache before Cloudflare's eager Worker optimizer init and
+restamps immediately before init. Vite config identity stays Node-loadable: `prepareViteDepCache`
+and Bun process custody live in `vite-dep-cache-build.ts`, not in the module `vite.config.ts`
+imports. `REZICS_WEB_SERIAL_VITE` and `--max-concurrency=1` keep exclusive Worker graphs off one
+6 GiB slot. Isolation tests that need overlapping helpers leave that variable unset.
+`WEB_TEST_STATE_DIR` remains the focused run root; Worker persistence still allocates its own
+instance directory unless a caller passes `WEB_TEST_STATE_INSTANCE_DIR`. Return uses the mounted
+`POST /v1/copy-loans/:loanId/return` path, not an AIP-136 `:return` method. signed-in-routes uses
+the same `startDevServer` ready and `/en` first-response path as Copies.
+
+Acceptance pins the mounted return path and the locale Calendar source, and keeps the existing Copies
+page/browser cases. No extra page stories. Keep the original Copies, loan, label, signed-in-route and
+five custody suites; do not add page stories. Public contribution on LabelShelf is live id/kind/displayName,
+id-free Deleted account/organization, or null unknown; loan counterparties stay loan-owned.
+
+Cross-capability receiving keeps the existing exposure parity assertion narrow: run only its operation-to-group
+case from `closed-controls.test.ts`, together with Home Continue admission and viewer-exposure lifetime, before the
+Copies journey. The remaining closed-controls browser cases stay out of this selection. The Worker denied-file
+loader resolves `/src/...` and realpath aliases before its browser guard; the served-startup case must still load the
+Worker while browser reads of those files remain denied. Web exposure maps mounted `definitions.import` onto `definition_publication`, and the generated client supplies
+`definitions.imports.post`. Parity keeps that operation-to-group case.
+Worker SSR resolves TanStack Store's `use-sync-external-store/shim/with-selector` import to the local ESM adapter;
+the package entry is CommonJS and reaches Workerd with a runtime `require` call. The browser keeps the package
+implementation. Focused checks regenerate Paraglide when the generated message index refers to a module missing
+from disk, even if the top-level output timestamp is fresh.
+
+The native focused case does not yet cover concurrent create/disposal, foreign accounts and owner retirement,
+concealed-person threats, lost-acknowledgement refresh, stale-cursor recovery or independent 64/512/4096 cost cases
+for every pool. Complete measured costs for admission/currentness, SQL, locks, dispatch, receipts, hydration,
+serialization, retention and cleanup remain unverified.
 
 ## Verification
+
+Product-first landing decision: finish the production outcome and changed workspace typechecks, then land with the exact one-shot journey results recorded; non-money test failures may accompany landing, and landing alone is not end-to-end acceptance.
 
 `bun run --cwd services/kernel check test/library/loan-http.test.ts` executed the mounted native journey: 1 test
 passed with 29 assertions. It covers exact create receipt replay, conflicting open create, due-day inclusivity,

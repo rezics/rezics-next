@@ -86,7 +86,7 @@ Source read for this surface: the native edition model, routes, reads and fixed-
 edition publication route/controls and shell-integrated stories; and the existing creator-offer list transport/view.
 No external reference-project source applies to this metadata list.
 Local Worker values are opt-in: `bun run check --prepare-only` creates ignored `.dev.vars` from `.dev.vars.example` only when absent. Normal checks and isolated test startup leave it untouched.
-Vite pre-bundles browser dependencies by scanning the site routes and their imported components before the first page load. The Worker environment does not scan its server graph: it pre-bundles only React, TanStack's server set and the paraglide polyfill, and loads other packages directly, so the first Worker request does not wait for a whole-graph scan. A focused check compiles the message catalogues once: the Vite config reuses Paraglide output that is current, including every catalogue leaf, instead of compiling again. The Cloudflare plugin denies the dependencies of `cloudflare.config.ts` to browsers; the Worker environment still loads the denied file the Worker imports (`src/session/website-scopes.ts`).
+Vite pre-bundles browser dependencies by scanning the site routes and their imported components before the first page load. The Worker environment does not scan its server graph: it pre-bundles only React, TanStack's server set and the paraglide polyfill, and loads other packages directly, so the first Worker request does not wait for a whole-graph scan. Worker SSR keeps discovery off and uses a pinned optimizeDeps set. That set includes `react-dom/server.edge` so Vite converts its CommonJS wrapper before the Worker runner evaluates it; the generic `react-dom/server` entry stays on Vite's transform path. A focused check compiles the message catalogues once: the Vite config reuses Paraglide output that is current, including every catalogue leaf, instead of compiling again. The Cloudflare plugin denies the dependencies of `cloudflare.config.ts` to browsers; the Worker environment still loads the denied file the Worker imports (`src/session/website-scopes.ts`), and the browser read stays denied.
 Run `bun run storybook` to browse the page stories. Run `bun run record` to create committed page recordings; it needs Docker with permission to start a disposable PostgreSQL container and Bun, and does not use a development kernel or database.
 The Worker inspector is off by default; `WORKER_INSPECTOR_PORT=<port> bun run dev` opens it on that port for DevTools.
 
@@ -140,6 +140,35 @@ hardcoded react-start/font list do not establish that closure. Serving proof is 
 denial of a file outside those roots; host TMPDIR is not an external fixture. An explicit
 `bun test tests/*.host.test.ts` through this runner uses the same `--path-ignore-patterns=node_modules/**` override as
 `bun run test:host`, so bunfig's host-file exclusion does not hide a named file.
+
+Decision: explicit test files run one per fresh runtime, because Bun module mocks otherwise survive across file
+boundaries. A command that needs the shared dev server is wrapped per runtime by `scripts/with-dev-server.ts`, which
+reuses the warmed dependency cache; `--private-network` applies inside that wrapper, not outside it. Each focused
+invocation runs one Worker graph at a time (`--max-concurrency=1`).
+
+Decision: Copies' native and browser journeys compose the shared dev-server and process custody in `tests/support`.
+Their acceptance evidence is recorded from the composed landing check; a local focused run is not that evidence.
+
+Decision: the owned process tree is recorded from launch by PID and `/proc` start time. A descendant that leaves the
+process group and is reparented stays owned while its parent was live with the recorded start time. Signals and
+settlement act only on recorded members whose start time still matches, so a reused PID is never signalled, and a
+zombie is not live. A failed settlement names each remaining member's state, parent and group.
+
+Decision: the root's group number is adopted only while the recorded root is alive and still leads that group. Once the
+root has exited, nothing is adopted by number, even while the group still has members, because the number may name an
+unrelated group after the old one empties. A member that no record owns is reported as unattributed in the close error,
+is left running and is never signalled.
+Real guarantee: children of live owned members are sampled every 5 to 50 ms, and the root's group every 500 ms and at
+close. A descendant created and reparented between two samples is not recorded unless it stays in the root's group while
+the root still leads it. Full custody needs a launch-time mechanism the launcher owns; this module does not claim it.
+
+Decision: a dev server reads its Worker bindings once from `WEB_TEST_WORKER_BINDINGS` when Vite starts, and they stay
+fixed for that server. A running server is shared only with a request whose bindings are compatible; a private server
+reuses the shared run server's Vite cache directory when one is advertised. The production entry reads no fixture
+header and imports no test runtime, so no request header can inject origin, API or Auth bindings. The Worker SSR
+pre-bundle lists every CommonJS package a graph walk of the Worker entry reaches (`react-dom/server`, `satori/standalone`,
+and Puck's `flat` and `object-hash`), or the selector plugin replaces it at load (TipTap's `use-sync-external-store`
+shims). The Worker runner cannot evaluate CommonJS unbundled.
 
 Browser tests wait for `html[data-hydrated]` before interacting with a page.
 Browser tests start the dev server through `tests/support/dev-server.ts`, whose errors name the phase that failed; a test never imports another test file.

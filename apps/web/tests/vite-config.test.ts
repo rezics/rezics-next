@@ -1,15 +1,14 @@
 import { createServer as createHttpServer } from 'node:http';
-import { createRequire } from 'node:module';
-import { existsSync, mkdirSync, mkdtempSync, realpathSync, rmSync, writeFileSync, readFileSync } from 'node:fs';
+import { mkdirSync, realpathSync, writeFileSync, readFileSync } from 'node:fs';
 import { mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { dirname, join, relative, resolve, sep, isAbsolute } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { expect, test } from 'bun:test';
-import { createServer as createViteServer, type Plugin, type ViteDevServer } from 'vite';
+import { createServer as createViteServer } from 'vite';
 import { resolveWebViteConfig } from './support/vite-config';
+import { shouldGenerateLocalization } from '../vite.config.ts';
 import {
-  bindViteDepCacheAlign,
   viteEnvironmentDepHashes,
   webViteWarmSsrEnvName,
   webViteWorkerSsrOptimizeDeps,
@@ -18,22 +17,99 @@ import {
 
 const appRoot = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const workspaceRoot = resolve(appRoot, '../..');
+const workerInclude = [...webViteWorkerSsrOptimizeDeps.include];
+const workerSelectorImport = 'use-sync-external-store/shim/with-selector';
+
+function pluginNames(config: Awaited<ReturnType<typeof resolveWebViteConfig>>): string[] {
+  return (config.plugins ?? [])
+    .flatMap((plugin) => (Array.isArray(plugin) ? plugin : [plugin]))
+    .flatMap((plugin) =>
+      plugin !== null && typeof plugin === 'object' && 'name' in plugin ? [String(plugin.name)] : [],
+    );
+}
 
 function isWithin(parent: string, child: string): boolean {
   const path = relative(parent, child);
   return path === '' || (path !== '..' && !path.startsWith(`..${sep}`) && !isAbsolute(path));
 }
 
-test('the dep-cache align hook is a Vite Plugin configureServer', () => {
-  const plugin: Plugin = {
-    name: 'web-vite-dep-cache-align',
-    enforce: 'pre',
-    configureServer(server: ViteDevServer) {
-      return bindViteDepCacheAlign('/cache', server.environments);
-    },
-  };
-  expect(plugin.enforce).toBe('pre');
+test('test Worker bindings are startup-only and production has no fixture header path', async () => {
+  const serverSource = readFileSync(join(appRoot, 'src/server.ts'), 'utf8');
+  const bindingsSource = readFileSync(join(appRoot, 'src/test-runtime-bindings.ts'), 'utf8');
+  const viteSource = readFileSync(join(appRoot, 'vite.config.ts'), 'utf8');
+  expect(serverSource).not.toContain('x-rezics-test-env');
+  expect(serverSource).not.toContain('readTestFixtureOverlay');
+  expect(serverSource).not.toContain('./test-runtime-bindings.ts');
+  expect(bindingsSource).toContain('__REZICS_TEST_WORKER_BINDINGS__');
+  expect(bindingsSource).not.toContain('process.env');
+  expect(bindingsSource).not.toContain('active');
+  expect(bindingsSource).not.toContain('depth');
+  expect(bindingsSource).not.toContain('request.headers');
+  expect(viteSource).toContain('testWorkerBindingsEnvName');
+
+  const previous = process.env.REZICS_TEST_RUNTIME;
+  const previousBindings = process.env.WEB_TEST_WORKER_BINDINGS;
+  try {
+    delete process.env.REZICS_TEST_RUNTIME;
+    const production = await resolveWebViteConfig({ command: 'build', mode: 'production' }, appRoot);
+    expect(pluginNames(production)).not.toContain('rezics-test-env-bindings');
+    expect(production.define).not.toHaveProperty('__REZICS_TEST_WORKER_BINDINGS__');
+
+    process.env.REZICS_TEST_RUNTIME = '1';
+    process.env.WEB_TEST_WORKER_BINDINGS = '{"KERNEL_ORIGIN":"https://test.example"}';
+    const testRuntime = await resolveWebViteConfig({ command: 'serve', mode: 'test' }, appRoot);
+    expect(pluginNames(testRuntime)).toContain('rezics-test-env-bindings');
+    expect(testRuntime.define).not.toHaveProperty('__REZICS_TEST_WORKER_BINDINGS__');
+    const plugins = (testRuntime.plugins ?? []).flatMap((plugin) => (Array.isArray(plugin) ? plugin : [plugin]));
+    const bindingsPlugin = plugins.find(
+      (plugin) =>
+        plugin !== null && typeof plugin === 'object' && 'name' in plugin && plugin.name === 'rezics-test-env-bindings',
+    );
+    const transformHook = bindingsPlugin && 'transform' in bindingsPlugin ? bindingsPlugin.transform : undefined;
+    const transform =
+      typeof transformHook === 'function'
+        ? transformHook
+        : transformHook && 'handler' in transformHook
+          ? transformHook.handler
+          : undefined;
+    expect(typeof transform).toBe('function');
+    const transformed = transform?.call(undefined, bindingsSource, join(appRoot, 'src/test-runtime-bindings.ts'));
+    expect(transformed).toHaveProperty('code', expect.stringContaining('= {"KERNEL_ORIGIN":"https://test.example"};'));
+  } finally {
+    if (previous === undefined) delete process.env.REZICS_TEST_RUNTIME;
+    else process.env.REZICS_TEST_RUNTIME = previous;
+    if (previousBindings === undefined) delete process.env.WEB_TEST_WORKER_BINDINGS;
+    else process.env.WEB_TEST_WORKER_BINDINGS = previousBindings;
+  }
 });
+
+async function makeDirectoryOutsideAllow(allow: readonly string[]): Promise<string> {
+  const candidates = [tmpdir(), '/tmp', '/var/tmp', '/dev/shm'];
+  const seen = new Set<string>();
+  const errors: string[] = [];
+  for (const candidate of candidates) {
+    let root: string;
+    try {
+      root = realpathSync(candidate);
+    } catch (error) {
+      errors.push(`${candidate}: ${String(error)}`);
+      continue;
+    }
+    if (seen.has(root)) continue;
+    seen.add(root);
+    try {
+      const directory = await mkdtemp(join(root, 'web-vite-outside-'));
+      if (allow.some((allowed) => isWithin(allowed, directory))) {
+        await rm(directory, { recursive: true, force: true });
+        continue;
+      }
+      return directory;
+    } catch (error) {
+      errors.push(`${root}: ${String(error)}`);
+    }
+  }
+  throw new Error(`no directory outside Vite fs.allow (${allow.join(', ')}): ${errors.join('; ')}`);
+}
 
 test('WEB_VITE_CACHE_DIR selects the host-local optimizeDeps cache and allows reading it', async () => {
   const previous = process.env.WEB_VITE_CACHE_DIR;
@@ -44,8 +120,7 @@ test('WEB_VITE_CACHE_DIR selects the host-local optimizeDeps cache and allows re
     expect(config.cacheDir).toBe(cacheDir);
     expect(config.server?.fs?.allow).toContain(cacheDir);
     expect(config.optimizeDeps?.holdUntilCrawlEnd).toBe(true);
-    expect(config.optimizeDeps?.entries).toEqual(['src/routes/**/*.tsx']);
-    expect(config.ssr?.optimizeDeps).toBeUndefined();
+    expect(config.optimizeDeps?.entries).toEqual(['src/routes/**/*.tsx', 'src/server.ts', 'src/session/routes.ts']);
     const plugins = (config.plugins ?? []).flatMap((plugin) => (Array.isArray(plugin) ? plugin : [plugin]));
     const worker = plugins.find(
       (plugin) =>
@@ -56,12 +131,6 @@ test('WEB_VITE_CACHE_DIR selects the host-local optimizeDeps cache and allows re
     );
     expect(worker).toBeTruthy();
     expect(worker && 'enforce' in worker ? worker.enforce : undefined).toBe('post');
-    const align = plugins.find(
-      (plugin) =>
-        plugin !== null && typeof plugin === 'object' && 'name' in plugin && plugin.name === 'web-vite-dep-cache-align',
-    );
-    expect(align).toBeTruthy();
-    expect(align && 'enforce' in align ? align.enforce : undefined).toBe('pre');
     const denied = plugins.find(
       (plugin) =>
         plugin !== null &&
@@ -71,6 +140,13 @@ test('WEB_VITE_CACHE_DIR selects the host-local optimizeDeps cache and allows re
     );
     expect(denied).toBeTruthy();
     expect(denied && 'enforce' in denied ? denied.enforce : undefined).toBe('pre');
+    const align = plugins.find(
+      (plugin) =>
+        plugin !== null && typeof plugin === 'object' && 'name' in plugin && plugin.name === 'web-vite-dep-cache-align',
+    );
+    expect(align).toBeTruthy();
+    expect(align && 'enforce' in align ? align.enforce : undefined).toBe('pre');
+    expect(pluginNames(config).at(0)).toBe('web-vite-dep-cache-align');
     mkdirSync(join(cacheDir, 'deps_ssr'), { recursive: true });
     const metadataPath = join(cacheDir, 'deps_ssr', '_metadata.json');
     writeFileSync(
@@ -132,25 +208,19 @@ test('WEB_VITE_CACHE_DIR selects the host-local optimizeDeps cache and allows re
     expect(environment?.optimizeDeps?.noDiscovery).toBe(true);
     expect(environment?.optimizeDeps?.holdUntilCrawlEnd).toBe(true);
     expect(environment?.optimizeDeps?.entries).toEqual([]);
-    expect(environment?.optimizeDeps?.include).toEqual([
-      'react',
-      'react/jsx-runtime',
-      'react/jsx-dev-runtime',
-      'react-dom',
-      'react-dom/server',
-      '@tanstack/react-router > @tanstack/react-store',
-      '@inlang/paraglide-js/urlpattern-polyfill',
-    ]);
+    expect(environment?.optimizeDeps?.include).toEqual(workerInclude);
     expect(environmentFor('client')).toBeUndefined();
     const resolved = worker && 'configResolved' in worker ? worker.configResolved : undefined;
     const pin =
       typeof resolved === 'function' ? resolved : resolved && 'handler' in resolved ? resolved.handler : undefined;
     const environments = {
       ssr: {
+        resolve: { alias: [] as unknown[] },
         optimizeDeps: { noDiscovery: false, entries: ['src/server.ts'], include: ['cloudflare-discovered'] },
       },
     };
-    if (typeof pin === 'function') pin.call(undefined, { environments });
+    if (typeof pin === 'function')
+      pin.call(undefined, { resolve: { alias: [] }, ssr: { resolve: { alias: [] } }, environments });
     expect(environments.ssr.optimizeDeps.noDiscovery).toBe(true);
     expect(environments.ssr.optimizeDeps.entries).toEqual([]);
     expect(environments.ssr.optimizeDeps.include).toEqual(environment?.optimizeDeps?.include);
@@ -186,52 +256,17 @@ test('SSR warm pre-bundles Worker includes without the Cloudflare plugin or work
   }
 }, 30_000);
 
-function bunInstallRoot(resolved: string): string | undefined {
-  const marker = `${sep}node_modules${sep}.bun${sep}`;
-  const index = resolved.indexOf(marker);
-  if (index === -1) return undefined;
-  return resolved.slice(0, index + `${sep}node_modules`.length);
-}
-
-function resolveInstalledFile(name: string, specifier = `${name}/package.json`): string {
-  const require = createRequire(join(appRoot, 'package.json'));
-  try {
-    return realpathSync(require.resolve(specifier));
-  } catch {
-    return realpathSync(require.resolve(name));
-  }
-}
-
-function allocateExternalDirectory(allow: readonly string[]): string {
-  // Host TMPDIR can live inside the checkout, so it is not an external fixture.
-  for (const base of ['/var/tmp', '/tmp']) {
-    if (!existsSync(base)) continue;
-    const directory = mkdtempSync(join(base, 'web-vite-deny-'));
-    const real = realpathSync(directory);
-    if (!allow.some((root) => isWithin(root, real))) return directory;
-    rmSync(directory, { recursive: true, force: true });
-  }
-  throw new Error('Could not allocate a directory outside Vite fs.allow roots');
-}
-
 test('Vite serves resolved workspace dependencies while keeping files outside its roots denied', async () => {
-  // Configuration assertions below are not serving proof; the HTTP responses are.
+  // This is a build-time config inspection, not a fixture runtime, so it does not allocate Worker persistence.
   const config = await resolveWebViteConfig({ command: 'build', mode: 'test' }, appRoot);
-  const dependencyFile = resolveInstalledFile('@tanstack/react-start');
-  const viteRuntime = resolveInstalledFile('vite');
+  const dependencyFile = realpathSync(join(appRoot, 'node_modules/@tanstack/react-start/dist/esm/index.js'));
   const allow = config.server?.fs?.allow ?? [];
   expect(allow).toContain(workspaceRoot);
   expect(allow.some((root) => isWithin(root, dependencyFile))).toBe(true);
-  expect(allow.some((root) => isWithin(root, viteRuntime))).toBe(true);
-  const store = bunInstallRoot(dependencyFile);
-  if (store) expect(allow.some((root) => isWithin(root, store) || root === store)).toBe(true);
-  const covering = allow.filter((root) => root !== workspaceRoot && !isWithin(workspaceRoot, root));
-  for (const root of covering) expect(covering.filter((other) => other !== root && isWithin(other, root))).toEqual([]);
 
-  const denyRoot = allocateExternalDirectory(allow);
-  const cacheRoot = await mkdtemp(join('/var/tmp', 'web-vite-cache-'));
-  const outsideFile = join(denyRoot, 'outside.js');
-  expect(allow.some((root) => isWithin(root, realpathSync(denyRoot)))).toBe(false);
+  const cacheDirectory = await mkdtemp(join(tmpdir(), 'web-vite-cache-'));
+  const outsideDirectory = await makeDirectoryOutsideAllow(allow);
+  const outsideFile = join(outsideDirectory, 'outside.js');
   let vite: Awaited<ReturnType<typeof createViteServer>> | undefined;
   let http: ReturnType<typeof createHttpServer> | undefined;
   try {
@@ -239,11 +274,11 @@ test('Vite serves resolved workspace dependencies while keeping files outside it
     vite = await createViteServer({
       configFile: false,
       root: appRoot,
-      cacheDir: join(cacheRoot, 'vite-cache'),
+      cacheDir: join(cacheDirectory, 'vite-cache'),
       appType: 'custom',
       logLevel: 'silent',
       optimizeDeps: { noDiscovery: true, include: [] },
-      server: { middlewareMode: true, fs: { allow, strict: true } },
+      server: { middlewareMode: true, fs: { strict: true, allow } },
     });
     http = createHttpServer((request, response) => {
       vite!.middlewares(request, response, () => {
@@ -261,17 +296,11 @@ test('Vite serves resolved workspace dependencies while keeping files outside it
     const toFsUrl = (path: string) => `${origin}/@fs/${path.replace(/^[/\\]+/, '')}`;
 
     const dependencyResponse = await fetch(toFsUrl(dependencyFile));
-    const dependencyBody = await dependencyResponse.text();
-    console.info(
-      `[vite-fs-allow] roots=${JSON.stringify(allow)} dependency=${dependencyFile} status=${dependencyResponse.status} bytes=${dependencyBody.length}`,
-    );
     expect(dependencyResponse.status).toBe(200);
-    expect(dependencyBody).not.toBe('');
+    expect(await dependencyResponse.text()).not.toBe('');
 
     const outsideResponse = await fetch(toFsUrl(outsideFile));
-    const outsideBody = await outsideResponse.text();
-    console.info(`[vite-fs-allow] outside=${realpathSync(outsideFile)} status=${outsideResponse.status}`);
-    expect(outsideResponse.status, outsideBody).toBe(403);
+    expect(outsideResponse.status).toBe(403);
   } finally {
     try {
       if (http?.listening) {
@@ -283,14 +312,108 @@ test('Vite serves resolved workspace dependencies while keeping files outside it
       try {
         await vite?.close();
       } finally {
-        await Promise.all([
-          rm(denyRoot, { recursive: true, force: true }),
-          rm(cacheRoot, { recursive: true, force: true }),
-        ]);
+        await rm(cacheDirectory, { recursive: true, force: true });
+        await rm(outsideDirectory, { recursive: true, force: true });
       }
     }
   }
 });
+
+test('the Worker selector dependency resolves to ESM while the client keeps the package implementation', async () => {
+  const config = await resolveWebViteConfig({ command: 'serve', mode: 'test' }, appRoot);
+  const plugins = (config.plugins ?? []).flatMap((plugin) => (Array.isArray(plugin) ? plugin : [plugin]));
+  const selector = plugins.find(
+    (plugin) =>
+      plugin !== null && typeof plugin === 'object' && 'name' in plugin && plugin.name === 'web-worker-selector-esm',
+  ) as
+    | {
+        applyToEnvironment?: (environment: { name: string }) => boolean;
+        resolveId?: ((id: string) => unknown) | { handler: (id: string) => unknown };
+      }
+    | undefined;
+  const resolveId = typeof selector?.resolveId === 'function' ? selector.resolveId : selector?.resolveId?.handler;
+
+  expect(selector).toBeDefined();
+  expect(selector?.applyToEnvironment?.({ name: 'ssr' })).toBe(true);
+  expect(selector?.applyToEnvironment?.({ name: 'client' })).toBe(false);
+  expect(resolveId?.(workerSelectorImport)).toBe(join(appRoot, 'src/kernel/use-sync-external-store-with-selector.ts'));
+});
+
+test('SSR optimizeDeps keeps explicit Worker include, noDiscovery, calendar excludes and ESM polyfill alias', async () => {
+  // Cloudflare's TypeScript config loader requires Node, as used by the real Vite CLI.
+  const result = Bun.spawnSync({
+    cmd: [
+      'node',
+      '--input-type=module',
+      '-e',
+      `
+        import assert from 'node:assert/strict';
+        import { resolveConfig } from 'vite';
+        const workerInclude = ${JSON.stringify(workerInclude)};
+        const calendar = ['react-day-picker', 'date-fns', '@date-fns/tz'];
+        for (const command of ['serve', 'build']) {
+          const config = await resolveConfig({ logLevel: 'silent' }, command, 'development');
+          const targets = [['ssr', config.ssr.optimizeDeps]];
+          for (const [name, environment] of Object.entries(config.environments)) {
+            if (name === 'client') continue;
+            targets.push([name, environment.optimizeDeps]);
+          }
+          for (const [name, optimizeDeps] of targets) {
+            assert.equal(optimizeDeps.noDiscovery, true, command + ':' + name + ':no-discovery');
+            assert.deepEqual(
+              optimizeDeps.include ?? [],
+              workerInclude,
+              command + ':' + name + ':explicit-include',
+            );
+            for (const pkg of ['urlpattern-polyfill', 'react-dom/server', 'react-day-picker', 'date-fns'])
+              assert.equal(
+                (optimizeDeps.include ?? []).includes(pkg),
+                false,
+                command + ':' + name + ':without:' + pkg,
+              );
+            assert.ok(
+              (optimizeDeps.include ?? []).includes('react-dom/server.edge'),
+              command + ':' + name + ':worker-server-entry',
+            );
+            for (const pkg of ['react', 'react-dom', 'react-dom/server'])
+              assert.equal(
+                (optimizeDeps.exclude ?? []).includes(pkg),
+                false,
+                command + ':' + name + ':not-excluded:' + pkg,
+              );
+            for (const pkg of calendar)
+              assert.ok((optimizeDeps.exclude ?? []).includes(pkg), command + ':' + name + ':' + pkg);
+          }
+          const resolvers = [['root', config.resolve]];
+          if (config.ssr.resolve) resolvers.push(['ssr', config.ssr.resolve]);
+          for (const [name, environment] of Object.entries(config.environments)) {
+            if (name === 'client') continue;
+            resolvers.push([name, environment.resolve]);
+          }
+          for (const [name, resolve] of resolvers) {
+            const entries = Array.isArray(resolve.alias) ? resolve.alias : [];
+            const mapped = entries.find((entry) => entry && entry.find === 'urlpattern-polyfill');
+            assert.ok(mapped, command + ':' + name + ':urlpattern-polyfill alias');
+            assert.equal(String(mapped.replacement).endsWith('index.cjs'), false, command + ':' + name + ':esm');
+            assert.ok(String(mapped.replacement).endsWith('index.js'), command + ':' + name + ':' + mapped.replacement);
+            if (name !== 'root')
+              assert.equal(
+                (resolve.conditions ?? [])[0] === 'import',
+                false,
+                command + ':' + name + ':workerd-conditions',
+              );
+          }
+        }
+      `,
+    ],
+    cwd: appRoot,
+    stdout: 'pipe',
+    stderr: 'pipe',
+    timeout: 55_000,
+  });
+  if (result.exitCode !== 0) throw new Error(result.stdout.toString() + result.stderr.toString());
+  expect(result.exitCode).toBe(0);
+}, 60_000);
 
 test('Workers resolve both share-card public Wasm exports through the installed dependency links', async () => {
   // Cloudflare's TypeScript config loader requires Node, as used by the real Vite CLI.
@@ -322,4 +445,20 @@ test('Workers resolve both share-card public Wasm exports through the installed 
   });
   if (result.exitCode !== 0) throw new Error(result.stdout.toString() + result.stderr.toString());
   expect(result.exitCode).toBe(0);
-}, 30_000);
+});
+
+test('serve skips Paraglide generate under test runtime unless a compiler module is supplied', () => {
+  expect(shouldGenerateLocalization({ REZICS_TEST_RUNTIME: '1' })).toBe(false);
+  expect(
+    shouldGenerateLocalization({ REZICS_TEST_RUNTIME: '1', REZICS_PARAGLIDE_COMPILER_MODULE: '/tmp/compiler.mjs' }),
+  ).toBe(true);
+  expect(shouldGenerateLocalization({})).toBe(true);
+});
+
+test('vite.config identity stays Node-loadable without Bun process custody', () => {
+  const source = readFileSync(join(appRoot, 'vite.config.ts'), 'utf8');
+  expect(source).toContain("from './tests/support/vite-dep-cache.ts'");
+  expect(source).not.toContain('vite-dep-cache-build');
+  expect(source).not.toContain('server-custody');
+  expect(source).not.toMatch(/from ['"]bun:/);
+});

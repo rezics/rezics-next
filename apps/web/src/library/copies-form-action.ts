@@ -6,6 +6,12 @@ import { removeCopy, saveCopy, submitCopy } from './copies-read';
 export async function postCopyForm(client: KernelClient, request: Request, env: Partial<SessionEnv>) {
   const form = await request.clone().formData();
   const data = Object.fromEntries(form);
+  const condition = (field: 'mediaCondition' | 'packagingCondition') => {
+    const value = data[field];
+    if (value === undefined || value === '') return {};
+    if (value === '__clear__') return { [field]: null };
+    return { [field]: value };
+  };
   const input = {
     ...data,
     revision: Number(data.revision),
@@ -14,6 +20,8 @@ export async function postCopyForm(client: KernelClient, request: Request, env: 
     acquiredOn: data.acquiredOn ?? null,
     disposedOn: data.disposedOn ?? null,
     note: data.note ?? null,
+    ...condition('mediaCondition'),
+    ...condition('packagingCondition'),
   };
   if (data.intent === 'delete') return removeCopy(client, request, env, input);
   if (data.intent === 'update') return saveCopy(client, request, env, input);

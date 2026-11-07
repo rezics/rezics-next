@@ -32,6 +32,8 @@ test('Character local choices preserve exact recovery on Stay and fence abandone
     MutationObserver: window.MutationObserver,
     ResizeObserver: window.ResizeObserver,
     getComputedStyle: window.getComputedStyle.bind(window),
+    requestAnimationFrame: window.requestAnimationFrame.bind(window),
+    cancelAnimationFrame: window.cancelAnimationFrame.bind(window),
     IS_REACT_ACT_ENVIRONMENT: true,
   };
   const saved = new Map(Object.keys(globals).map((key) => [key, Object.getOwnPropertyDescriptor(globalThis, key)]));
@@ -158,10 +160,13 @@ test('Character local choices preserve exact recovery on Stay and fence abandone
     await choose(m.character_choose_existing(), 'second-result');
     await click(m.thread_authoring_leave(), screen);
     await waitFor(() => expect(loads.at(-1)?.id).toBe(characterProfileId));
-    const loadCount = loads.length;
+    let loadCount = loads.length;
     await act(async () => {
       oldPicker([{ id: 'retired-choice' }]);
-      oldScalar({ target: { value: 'https://example.org/retired-choice' } });
+      oldScalar({
+        target: { value: 'https://example.org/retired-choice' },
+        currentTarget: { value: 'https://example.org/retired-choice' },
+      });
       finishCreate({ ok: true, id: 'late-created', reader: { state: 'unavailable' } });
     });
     expect(loads).toHaveLength(loadCount);
@@ -179,9 +184,13 @@ test('Character local choices preserve exact recovery on Stay and fence abandone
     await choose(m.relation_target(), characterProfileId);
     const citation = canvas.getByRole('textbox', { name: m.relation_citation() }) as HTMLInputElement;
     await act(async () => user.type(citation, 'https://example.test/credit'));
+    await click(m.relation_add_citation());
+    await act(async () => user.type(citation, 'https://example.test/credit'));
     await click(m.relation_propose());
     const confirmation = within(
-      canvas.getByRole('group', { name: m.candidate_confirm_title({ action: m.relation_propose() }) }),
+      await waitFor(() =>
+        canvas.getByRole('group', { name: m.candidate_confirm_title({ action: m.relation_propose() }) }),
+      ),
     );
     await click(m.relation_propose(), confirmation);
     await waitFor(() => expect(proposals).toHaveLength(1));
@@ -209,10 +218,12 @@ test('Character local choices preserve exact recovery on Stay and fence abandone
     await act(async () => oldWorkPicker([{ id: 'retired-work' }]));
     expect(loads.at(-1)?.work).toBe(fixture.work.id);
 
-    const reload = canvas.getByRole('button', { name: m.correction_reload() });
+    const reload = canvas
+      .getAllByRole('button', { name: m.correction_reload() })
+      .find((button) => button.getAttribute('aria-busy') !== null)!;
     const pointerTarget = window.document.createElement('button');
     host.append(pointerTarget);
-    let loadCount = loads.length;
+    loadCount = loads.length;
     deferNextLoad = true;
     await act(async () => {
       reload.focus();

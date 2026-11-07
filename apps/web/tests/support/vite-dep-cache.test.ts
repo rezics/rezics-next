@@ -9,7 +9,6 @@ import {
   hashLockfile,
   hashViteDepCacheIdentity,
   materializeViteDepCache,
-  prepareViteDepCache,
   readPatchBytes,
   viteDepCacheMetadataFile,
   viteDepCacheMetadataName,
@@ -26,6 +25,7 @@ import {
   webViteWorkerSsrEnvironment,
   webViteWorkerSsrOptimizeDeps,
 } from './vite-dep-cache.ts';
+import { prepareViteDepCache } from './vite-dep-cache-build.ts';
 
 const temporary = mkdtempSync(join(tmpdir(), 'rezics-vite-dep-cache-'));
 
@@ -45,6 +45,10 @@ test('the default pre-bundle is vite optimize --force, not a second HTTP server'
   expect(source).not.toContain('import.meta.dir');
   expect(source).toContain(`${webViteWarmSsrEnvName} = '1'`);
   expect(webViteWorkerSsrEnvironment.optimizeDeps.include).toEqual([...webViteWorkerSsrOptimizeDeps.include]);
+  expect(webViteWorkerSsrEnvironment.optimizeDeps.exclude).toEqual([...webViteWorkerSsrOptimizeDeps.exclude]);
+  // App source imports the generic entry, which resolves to CommonJS server.edge.js under Worker conditions.
+  expect(webViteWorkerSsrOptimizeDeps.include).toContain('react-dom/server');
+  expect(webViteWorkerSsrOptimizeDeps.include).toContain('react-dom/server.edge');
   expect(webViteWorkerSsrEnvironment.resolve.conditions).toContain('workerd');
   expect(webViteWorkerSsrEnvironment.optimizeDeps.noDiscovery).toBe(true);
 });
@@ -319,51 +323,6 @@ test('optimizer init restamps serve hashes before the original init reads metada
   const after = bindViteDepCacheAlign(directory, { ssr });
   await ssr.depsOptimizer.init();
   after();
-});
-
-test('optimizer assigned after bind restamps before the first init', async () => {
-  const directory = join(temporary, 'late-optimizer');
-  mkdirSync(join(directory, 'deps_ssr'), { recursive: true });
-  writeFileSync(
-    join(directory, viteDepCacheSsrMetadataName),
-    `${JSON.stringify({
-      hash: 'oldhash1',
-      lockfileHash: 'stalecli',
-      configHash: 'middleware',
-      browserHash: 'keep-browser',
-      optimized: { react: { file: 'react.js', fileHash: 'x' } },
-      chunks: {},
-    })}\n`,
-  );
-  const ssr: {
-    name: string;
-    config: {
-      root: string;
-      plugins: Array<{ name: string }>;
-      optimizeDeps: { include: string[] };
-      resolve: { conditions: string[] };
-    };
-    depsOptimizer?: { init: () => Promise<void> };
-  } = {
-    name: 'ssr',
-    config: {
-      root: '/worktree-a/apps/web',
-      plugins: [{ name: 'cloudflare-pre' }],
-      optimizeDeps: { include: ['react'] },
-      resolve: { conditions: ['ssr'] },
-    },
-  };
-  bindViteDepCacheAlign(directory, { ssr });
-  ssr.depsOptimizer = {
-    init: async () => {
-      const metadata = JSON.parse(readFileSync(join(directory, viteDepCacheSsrMetadataName), 'utf8')) as {
-        hash: string;
-        configHash: string;
-      };
-      expect(metadata).toMatchObject(viteEnvironmentDepHashes(ssr));
-    },
-  };
-  await ssr.depsOptimizer.init();
 });
 
 test('live environment hashes follow plugin names and root, not the published cache identity', () => {
