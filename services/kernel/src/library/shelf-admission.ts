@@ -1,7 +1,8 @@
 import { admitGroup } from '../access/gates/admission.ts';
 import { ProblemError } from '../http/problem-error.ts';
 import type { Actor } from '../request/access.ts';
-import { SHELF_PROGRESS_ACTION, SHELF_PROGRESS_GATE, type ShelfAdmissionDependencies } from './shelf-contract.ts';
+import { SHELF_PROGRESS_ACTION, SHELF_PROGRESS_GATE } from './contract/index.ts';
+import { type ShelfAdmissionDependencies } from './shelf-contract.ts';
 
 export async function admitShelfRead(deps: ShelfAdmissionDependencies, actor: Actor, deadline: number): Promise<void> {
   if (actor.kind !== 'account' || !actor.scopes.includes(SHELF_PROGRESS_ACTION)) throw new ProblemError('forbidden');

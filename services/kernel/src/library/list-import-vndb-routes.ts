@@ -1,7 +1,7 @@
 import { memoizedValue } from '../memoized.ts';
 import { t } from 'elysia';
 import { bundledRelease } from '@rezics/definitions/bundled';
-import { GrantDeniedError } from '../access/grant-commands.ts';
+import { GrantDeniedError } from '../access/resource-access-errors.ts';
 import { customMethod } from '../http/custom-method.ts';
 import { ProblemError } from '../http/problem-error.ts';
 import { problemSchema } from '../http/problem-schema.ts';
@@ -10,7 +10,7 @@ import { IDEMPOTENCY_HEADER } from '@rezics/operations/protocol';
 import { idempotencyKeyOf } from '../http/idempotency-key.ts';
 import type { Access } from '../request/access.ts';
 import type { definitionRoutes } from '../semantic/http/definitions.ts';
-import { LibraryNotFoundError } from './command-support.ts';
+import { LibraryNotFoundError } from './collection-command-work.ts';
 import { createVndbImport } from './list-import-vndb.ts';
 import { vndbLabelAdoptionRoutes } from './list-import-vndb-label-routes.ts';
 import { VNDB_LIMITS, VndbInvalid } from './list-import-vndb-parser.ts';

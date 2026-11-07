@@ -1,6 +1,6 @@
 import type { Pool, PoolClient } from 'pg';
 import { readAccount } from '../access/account-data.ts';
-import { GrantDeniedError } from '../access/grant-commands.ts';
+import { GrantDeniedError } from '../access/resource-access-errors.ts';
 import { LifecycleDeniedError } from '../access/lifecycle-20261025094010-command.ts';
 import { shareAccount } from '../access/account-share.ts';
 import { authoritativeTimeValue, noEffect, runCommand } from '../command/command.ts';
@@ -12,7 +12,8 @@ import type { AccountActor, Actor } from '../request/access.ts';
 import { deadlineFor, withRequestDeadline } from '../request/deadline.ts';
 import { newId, routeOf } from '../route/route.ts';
 import { EntryAnnotationReviewStoppedError, LibraryConflictError } from './entry-errors.ts';
-import { LibraryNotFoundError, requireRoute, WORK_STEP_DEADLINE_MS, workStepDeadline } from './command-support.ts';
+import { LibraryNotFoundError, requireRoute, workStepDeadline } from './collection-command-work.ts';
+import { WORK_STEP_DEADLINE_MS } from './work-step-deadline.ts';
 import {
   parsePersonalNote,
   parsePersonalPriority,

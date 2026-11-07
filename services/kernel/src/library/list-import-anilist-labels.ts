@@ -1,13 +1,14 @@
 import { randomUUID } from 'node:crypto';
 import type { Pool, PoolClient } from 'pg';
 import type { KernelClock } from '../clock.ts';
-import { GrantDeniedError } from '../access/grant-commands.ts';
+import { GrantDeniedError } from '../access/resource-access-errors.ts';
 import { ProblemError } from '../http/problem-error.ts';
 import type { Access, Actor, AccountActor } from '../request/access.ts';
 import { deadlineFor } from '../request/deadline.ts';
 import type { KeyRing } from '../tokens/seal.ts';
-import { createLibraryCommandRunner, LibraryNotFoundError, requireRoute, sameAccountRoute } from './command-support.ts';
-import { LibraryConflictError } from './entries.ts';
+import { createLibraryCommandRunner } from './command-support.ts';
+import { LibraryNotFoundError, requireRoute, sameAccountRoute } from './collection-command-work.ts';
+import { LibraryConflictError } from './entry-errors.ts';
 import { createPersonalLabelCommands } from './label-commands.ts';
 import { createLabelAssignmentCommands } from './label-assignment-commands.ts';
 import { normalizePersonalLabelName, readPersonalLabel } from './label-store.ts';

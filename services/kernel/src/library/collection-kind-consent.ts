@@ -22,7 +22,8 @@ import {
 } from '../command/operational.ts';
 import { partitionOf, routeOf } from '../route/route.ts';
 import type { WorkClient } from '../work/client.ts';
-import { WORK_STEP_DEADLINE_MS, workStepDeadline } from './command-support.ts';
+import { WORK_STEP_DEADLINE_MS } from './work-step-deadline.ts';
+import { workStepDeadline } from './collection-command-work.ts';
 import accountFence from '../access/account-share.sql';
 import operationalFence from '../command/operational-fence.sql';
 import readTime from '../command/time.sql';

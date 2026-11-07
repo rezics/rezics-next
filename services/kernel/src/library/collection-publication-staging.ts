@@ -32,7 +32,7 @@ import type { CollectionOutputRef } from './collection-source-output.ts';
 import type { CollectionSourceObservation } from './collection-source.ts';
 import type { WorkAllowance, WorkReceipt } from './contract/work-dimensions.ts';
 import { readCollectionSourceWorkState } from './collection-source-work-native.ts';
-import { NativeCollectionWork } from './collection-source-work.ts';
+import { NativeCollectionWork } from './collection-native-work.ts';
 import { createNativeLibrarySourceCustody, type NativeSourceIdentity } from './native-source-custody.ts';
 import {
   enterCataloguePublicationMembers,

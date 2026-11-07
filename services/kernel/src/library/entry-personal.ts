@@ -2,7 +2,7 @@ import { createHash } from 'node:crypto';
 import type { Pool, PoolClient } from 'pg';
 import canonicalize from 'canonicalize';
 import { readAccount } from '../access/account-data.ts';
-import { GrantDeniedError } from '../access/grant-commands.ts';
+import { GrantDeniedError } from '../access/resource-access-errors.ts';
 import type { KernelClock } from '../clock.ts';
 import {
   authoritativeTimeValue,
@@ -16,13 +16,9 @@ import { ProblemError } from '../http/problem-error.ts';
 import type { Access, AccountActor, Actor } from '../request/access.ts';
 import { deadlineFor, withRequestDeadline } from '../request/deadline.ts';
 import { newId, routeOf } from '../route/route.ts';
-import {
-  createLibraryCommandRunner,
-  libraryCommandReceiptDigestForActor,
-  LibraryNotFoundError,
-  requireRoute,
-  WORK_STEP_DEADLINE_MS,
-} from './command-support.ts';
+import { createLibraryCommandRunner, libraryCommandReceiptDigestForActor } from './command-support.ts';
+import { LibraryNotFoundError, requireRoute } from './collection-command-work.ts';
+import { WORK_STEP_DEADLINE_MS } from './work-step-deadline.ts';
 import { resolveSubject } from './subject-anchor.ts';
 import {
   EntryAnnotationReviewStoppedError,

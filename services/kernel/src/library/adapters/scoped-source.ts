@@ -10,7 +10,7 @@ import { nativeCollectionOrdinalPageBound } from '../collection-source-native.ts
 import { readCollectionSourceWorkGroup, readCollectionSourceWorkState } from '../collection-source-work-native.ts';
 import { createMembersPreparation } from '../members-preparation.ts';
 import { CANONICAL_SOURCE_RECEIVING_COST } from '../canonical-source-bounds.ts';
-import { COLLECTION_SOURCE_WORK_GROUP_LIMIT } from '../contract/source.ts';
+import { COLLECTION_SOURCE_WORK_GROUP_LIMIT } from '../contract/index.ts';
 import type {
   CanonicalSourceReceivingCost,
   CollectionSource,

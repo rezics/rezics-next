@@ -1,4 +1,4 @@
-import type { Pool, PoolClient } from 'pg';
+import type { Pool } from 'pg';
 import {
   authoritativeTimeValue,
   mintReadTime,
@@ -16,13 +16,8 @@ import { withRequestDeadline } from '../../request/deadline.ts';
 import { newId, partitionOf } from '../../route/route.ts';
 import { decodeCursor, encodeCursor } from '../../tokens/cursor.ts';
 import type { KeyRing } from '../../tokens/seal.ts';
-import {
-  createLibraryCommandRunner,
-  LibraryNotFoundError,
-  requireRoute,
-  sameAccountRoute,
-  workStepDeadline,
-} from '../command-support.ts';
+import { createLibraryCommandRunner } from '../command-support.ts';
+import { LibraryNotFoundError, requireRoute, sameAccountRoute, workStepDeadline } from '../collection-command-work.ts';
 import type { Copy, CopyChanges } from '../entry-model.ts';
 import * as store from '../entry-store.ts';
 import { hasCopyStatus, resolveLibraryProfilePin } from '../profile.ts';
@@ -63,7 +58,6 @@ import type { CommandAttempt, CommandOutcome } from '../../command/command.ts';
 import type { Release } from '@rezics/definitions';
 import type {
   CopyApplicationPorts,
-  CopyInput,
   CopyPatch,
   CopyAccountAuthority,
   CopyReleasedDefinitions,

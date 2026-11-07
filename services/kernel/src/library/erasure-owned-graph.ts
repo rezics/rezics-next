@@ -3,7 +3,7 @@ import { createHash } from 'node:crypto';
 import type { Pool } from 'pg';
 import { normalizeCommandKey, noEffect, runCommand, type CommandResult } from '../command/command.ts';
 import { partitionOf } from '../route/route.ts';
-import { requireRoute, workStepDeadline } from './command-support.ts';
+import { requireRoute, workStepDeadline } from './collection-command-work.ts';
 import scope from './erasure-scope.sql';
 import { ownedQueries } from './erasure-owned-queries.ts';
 import session from './erasure-owned-session.sql';

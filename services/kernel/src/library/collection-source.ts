@@ -7,8 +7,7 @@ import type { KernelClock } from '../clock.ts';
 import type { AuthoritativeTime } from '../command/command.ts';
 import { ProblemError } from '../http/problem-error.ts';
 import type { Access, Actor } from '../request/access.ts';
-import type { CollectionMemberRow, CollectionRow } from './collection-model.ts';
-import type { ListingStamp } from './listing-freshness-contract.ts';
+
 import type { RawOrdinalCollectionPrefix, ReadRawOrdinalCollectionPrefix } from './collection-source-order.ts';
 import type { ScopeWorkContext } from './adapters/preparation-work.ts';
 import { isDeepStrictEqual } from 'node:util';
@@ -103,17 +102,17 @@ import {
   probeNativeCollectionOriginal,
   type NativeCollectionMetadata,
 } from './collection-source-native.ts';
-import { CollectionSourceLedger } from './collection-source-work.ts';
+import { CollectionSourceLedger } from './collection-native-work.ts';
 import {
   readCanonicalSourceState,
   readCanonicalSourceGroup,
   seekCanonicalSourceGroup,
-  nativeSourceFence,
   type CanonicalAllowance,
   type CanonicalBasis,
   type CanonicalWork,
   type CanonicalRawKey,
 } from './canonical-source-store.ts';
+import { nativeSourceFence } from './native-source-fence.ts';
 import { resolveSubject } from './subject-anchor.ts';
 // Cursor driver ordinals; the order is part of the encoded cursor and matches COLLECTION_SOURCE_DRIVER_COUNT.
 const sourceDrivers = ['member', 'entry', 'label', 'session', 'copy', 'output'] as const;

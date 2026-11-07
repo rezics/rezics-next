@@ -15,7 +15,7 @@ import {
   FollowCountUnavailableError,
 } from './follow-count-target.ts';
 import { readFollow } from './follow-store.ts';
-import { workStepDeadline } from './command-support.ts';
+import { workStepDeadline } from './collection-command-work.ts';
 
 const workflowName = 'library.followActivityBackfill';
 type Input = { accountId: string; target: FeedActivityTarget; cursor?: string; examined: number; root: string };

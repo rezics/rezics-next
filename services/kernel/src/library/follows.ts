@@ -3,7 +3,7 @@ import { commandAccessContext } from '../access/command-admission.ts';
 import { readAccountCommandState } from '../access/account-data.ts';
 import { deadlineClient } from '../access/authenticate.ts';
 import { currentCommandWorkAssociation } from '../command/work-context.ts';
-import { GrantDeniedError } from '../access/grant-commands.ts';
+import { GrantDeniedError } from '../access/resource-access-errors.ts';
 import {
   authoritativeTimeValue,
   mintReadTime,
@@ -19,7 +19,8 @@ import { type Access, type AccountActor, type Actor } from '../request/access.ts
 import { withRequestDeadline } from '../request/deadline.ts';
 import { routeOf } from '../route/route.ts';
 import { readCollection } from './collection-store.ts';
-import { createLibraryCommandRunner, LibraryNotFoundError, workStepDeadline } from './command-support.ts';
+import { createLibraryCommandRunner } from './command-support.ts';
+import { LibraryNotFoundError, workStepDeadline } from './collection-command-work.ts';
 import type { Follow, FollowPageCursor, FollowTargetType } from './follow-model.ts';
 import { applyFollow, pageFollows, readFollow as readStoredFollow } from './follow-store.ts';
 import { resolveSubject } from './subject-anchor.ts';

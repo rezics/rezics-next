@@ -14,7 +14,7 @@ import { readPartition } from '../partition/partition.ts';
 import { PARTITIONS, partitionOf } from '../route/route.ts';
 import type { WorkContext } from '../work/registry.ts';
 import { COMMAND_STEP_RETRIES } from '../work/retries.ts';
-import { requireRoute, runLibraryBoundedOperation, workStepDeadline } from './command-support.ts';
+import { requireRoute, runLibraryBoundedOperation, workStepDeadline } from './collection-command-work.ts';
 import {
   executePublishedLogDue,
   executePublishedLogPurge,

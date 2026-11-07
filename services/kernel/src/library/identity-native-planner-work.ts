@@ -8,7 +8,7 @@ import {
   isPrepaidIdentitySourceConsumerMaintenance,
   identitySourceConsumerScheduleReceipt,
 } from '../semantic/identity-source-consumer-maintenance.ts';
-import { NativeCollectionWork, instrumentNativeCollectionWork } from './collection-source-work.ts';
+import { NativeCollectionWork, instrumentNativeCollectionWork } from './collection-native-work.ts';
 import type { WorkAllowance, WorkDimensions } from './contract/work-dimensions.ts';
 import { peekLibraryDomain } from './domain-binding.ts';
 import {

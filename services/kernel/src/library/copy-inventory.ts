@@ -11,8 +11,8 @@ import {
   COPY_FILTER_OPTION_QUERY_LIMIT,
   MAX_COPY_FILTER_OPTIONS_BYTES,
   MAX_COPY_FILTER_OPTIONS,
-  copyInventoryValuesStatementPlan,
-} from './copy-operation-bounds.ts';
+} from './contract/index.ts';
+import { copyInventoryValuesStatementPlan } from './copy-operation-bounds.ts';
 
 export { MAX_COPY_FILTER_OPTIONS };
 

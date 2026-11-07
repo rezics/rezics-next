@@ -5,7 +5,7 @@ import type { KernelClock } from '../clock.ts';
 import { mintReadTime, noEffect } from '../command/command.ts';
 import { readAccount } from '../access/account-data.ts';
 import accountShare from '../access/account-share.sql';
-import { GrantDeniedError } from '../access/grant-commands.ts';
+import { GrantDeniedError } from '../access/resource-access-errors.ts';
 import { ProblemError } from '../http/problem-error.ts';
 import { withConnection } from '../database/pool.ts';
 import { partitionReadClient } from '../database/read-snapshot.ts';
@@ -18,8 +18,10 @@ import type { KeyRing } from '../tokens/seal.ts';
 import readClaim from '../semantic/bulk-read-claim.sql';
 import { readLibraryProfileSourceObservation } from './profile-source.ts';
 import type { LibraryProfileDescriptor } from './profile.ts';
-import { createLibraryCommandRunner, LibraryNotFoundError, requireRoute } from './command-support.ts';
-import { createEntryCommands, LibraryConflictError } from './entries.ts';
+import { createLibraryCommandRunner } from './command-support.ts';
+import { LibraryNotFoundError, requireRoute } from './collection-command-work.ts';
+import { createEntryCommands } from './entries.ts';
+import { LibraryConflictError } from './entry-errors.ts';
 import { readEntry } from './entry-store.ts';
 import {
   createAniListLabelAdoption,

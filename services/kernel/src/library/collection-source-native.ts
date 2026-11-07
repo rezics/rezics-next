@@ -2,7 +2,7 @@ import { memoizedValue } from '../memoized.ts';
 import { statementBytes } from '../database/statement-bytes.ts';
 import ordinalPage from './collection-source-native-ordinal.sql';
 import { types, type Pool, type PoolClient, type QueryResult, type QueryConfig } from 'pg';
-import { declareBound, type Bound } from '@rezics/bounds';
+
 import { requireLibraryDomain } from './domain-binding.ts';
 const deadlineClient = <T extends object>(client: T, deadline: number): T =>
   requireLibraryDomain().authorization.deadlineClient(client, deadline);
@@ -27,12 +27,12 @@ import { accessCheck } from '../request/access-check.ts';
 import { type Access, type Actor } from '../request/access.ts';
 import { partitionOf, routeOf } from '../route/route.ts';
 import type { CanonicalRawKey } from './canonical-source-store.ts';
-import { nativeSourceFence } from './canonical-source-store.ts';
+import { nativeSourceFence } from './native-source-fence.ts';
 import type { NativeSourceIdentity } from './native-source-custody.ts';
 import type { WorkAllowance, WorkDimensions, WorkReceipt } from './contract/work-dimensions.ts';
 import { grantCapable } from './account-grant.ts';
 import { admittedOwnerWorkingSource } from './owner-filter-working-source.ts';
-import { instrumentNativeCollectionWork, NativeCollectionWork } from './collection-source-work.ts';
+import { instrumentNativeCollectionWork, NativeCollectionWork } from './collection-native-work.ts';
 import {
   assertLibraryIdentityWork,
   assertLibraryIdentityResources,

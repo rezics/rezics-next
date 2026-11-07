@@ -5,10 +5,10 @@ import { authoritativeTimeValue, commandTime } from '../command/command.ts';
 import { enqueueIntent, runOperationalTransaction, type OperationalTransaction } from '../command/operational.ts';
 import { withConnection } from '../database/pool.ts';
 import { ProblemError } from '../http/problem-error.ts';
-import { partitionOf } from '../route/route.ts';
+import { partitionOf, routeOf } from '../route/route.ts';
 import type { WorkContext } from '../work/registry.ts';
 import { COMMAND_STEP_RETRIES } from '../work/retries.ts';
-import { workStepDeadline } from './command-support.ts';
+import { workStepDeadline } from './collection-command-work.ts';
 import {
   preparationObservation,
   readPreparationStep,
@@ -17,6 +17,10 @@ import {
   type PreparationIntent,
   type PreparationLocator,
   type PreparationStepState,
+  createMembersPreparation,
+  readPreparationScope,
+  readPreparationSource,
+  readPreparationOwnerFence,
 } from './members-preparation.ts';
 import type { CollectionSourceObservation } from './collection-source.ts';
 import type { WorkReceipt } from './contract/work-dimensions.ts';
@@ -39,16 +43,11 @@ import sourceMetadata from './members-preparation-source.sql';
 import ownerFence from './owner-filter-native-binding-fence.sql';
 import { MEMBERS_PREPARATION_STEP_CEILING, MEMBERS_PREPARATION_LOCAL_COST } from './members-preparation-cost.ts';
 import { MEMBERS_PREPARATION_SOURCE_COST } from './members-preparation-source-declaration.ts';
-import { NativeCollectionWork } from './collection-source-work.ts';
+import { NativeCollectionWork } from './collection-native-work.ts';
 import { readMembershipRouteKey } from '../access/membership-work-config.ts';
-import {
-  createMembersPreparation,
-  readPreparationScope,
-  readPreparationSource,
-  readPreparationOwnerFence,
-} from './members-preparation.ts';
+
 import { isDeepStrictEqual } from 'node:util';
-import { routeOf } from '../route/route.ts';
+
 import {
   SelectedRuntimeUnavailable,
   type SelectedInvocation,

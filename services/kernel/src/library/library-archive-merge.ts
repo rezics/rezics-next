@@ -3,7 +3,7 @@ import { memoizedValue } from '../memoized.ts';
 import { createHash } from 'node:crypto';
 import canonicalize from 'canonicalize';
 import type { Pool } from 'pg';
-import { bundledRelease } from '@rezics/definitions/bundled';
+
 import { readAccount } from '../access/account-data.ts';
 import { admitGroup } from '../access/gates/admission.ts';
 import { LifecycleDeniedError } from '../access/lifecycle-20261025094010-command.ts';
@@ -26,12 +26,9 @@ import { deadlineFor } from '../request/deadline.ts';
 import { newId, partitionOf, routeOf } from '../route/route.ts';
 import type { KeyRing } from '../tokens/seal.ts';
 import type { WorkClient } from '../work/client.ts';
-import {
-  libraryCommandAuthorization,
-  createLibraryCommandRunner,
-  LibraryNotFoundError,
-  WORK_STEP_DEADLINE_MS,
-} from './command-support.ts';
+import { libraryCommandAuthorization, createLibraryCommandRunner } from './command-support.ts';
+import { LibraryNotFoundError } from './collection-command-work.ts';
+import { WORK_STEP_DEADLINE_MS } from './work-step-deadline.ts';
 import {
   ArchiveValidationError,
   decodeLibraryArchive,
@@ -39,8 +36,9 @@ import {
   type ArchiveCoverage,
   type ArchiveRecord,
 } from './library-archive.ts';
-import { createEntryCommands, LibraryConflictError } from './entries.ts';
-import { SourceObservationCapacityError } from './entry-errors.ts';
+import { createEntryCommands } from './entries.ts';
+import { LibraryConflictError, SourceObservationCapacityError } from './entry-errors.ts';
+
 import { createEntryPersonalCommands } from './entry-personal.ts';
 import {
   parsePersonalNote,

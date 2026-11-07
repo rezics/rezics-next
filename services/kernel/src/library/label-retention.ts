@@ -5,7 +5,7 @@ import type { KernelClock } from '../clock.ts';
 import { authoritativeTimeValue, noEffect, runCommand } from '../command/command.ts';
 import { withConnection } from '../database/pool.ts';
 import { PARTITIONS, routeOf } from '../route/route.ts';
-import { workStepDeadline } from './command-support.ts';
+import { workStepDeadline } from './collection-command-work.ts';
 import { lockLabelAssignmentSubject } from './label-assignment-store.ts';
 
 type Key = {

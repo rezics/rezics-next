@@ -1,6 +1,7 @@
 import { jsonParameter } from '../database/json.ts';
-import { consumeSessionWork, sessionProfileMigrationWork } from './session-operation-bounds.ts';
 import {
+  consumeSessionWork,
+  sessionProfileMigrationWork,
   sessionInsertPlan,
   sessionReadPlan,
   sessionUpdatePlan,
@@ -18,25 +19,20 @@ import {
   sessionMeaningInsertPlan,
   sessionMeaningRefreshPlan,
 } from './session-operation-bounds.ts';
+
 import { assertPreProfileLibraryRead } from './profile-source.ts';
 import type { PoolClient } from 'pg';
 import type { ProgressMode, ProgressState } from './progress.ts';
 import { decodeLibraryProfilePin } from './profile-pin.ts';
 import type { LibraryProgressUnitDescriptor, LibraryProfilePin } from './profile.ts';
 import changeAppend from './progress-store-change-append.sql';
-import changePage from './progress-store-change-page.sql';
-import sessionInsert from './progress-store-session-insert.sql';
-import sessionPage from './progress-store-session-page.sql';
-import discoveryPage from './progress-discovery-page.sql';
-import discoveryGenerationRead from './progress-discovery-generation-read.sql';
+
 import sessionRead from './progress-store-session-read.sql';
-import sessionUpdate from './progress-store-session-update.sql';
-import sessionJournalLock from './progress-store-session-journal-lock.sql';
+
 import sessionJournalRead from './progress-store-session-journal-read.sql';
-import sessionJournalUpdate from './progress-store-session-journal-update.sql';
-import unitAdd from './progress-store-unit-add.sql';
+
 import unitPage from './progress-store-unit-page.sql';
-import unitRemove from './progress-store-unit-remove.sql';
+
 import {
   MAX_PROGRESS_PAGE_SIZE,
   MAX_PROGRESS_UNIT_IDS,

@@ -7,7 +7,7 @@ import readTime from '../command/time.sql';
 import partitionRead from '../partition/read.sql';
 import { collectionDirectoryRowPlan } from './collection-directory-bounds.ts';
 import type { PinStoreStatement } from './pin-store.ts';
-import { runLibraryBoundedStep } from './command-support.ts';
+import { runLibraryBoundedStep } from './collection-command-work.ts';
 
 const uuid = 'f'.repeat(36);
 const escaped = (characters: number) => '\0'.repeat(characters);

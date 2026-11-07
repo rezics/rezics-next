@@ -20,9 +20,10 @@ import {
   canonicalSourceWorkDimensions,
   type CanonicalSourceStatement,
 } from './canonical-source-bounds.ts';
-import { COLLECTION_SOURCE_WORK_GROUP_LIMIT } from './canonical-source-limits.ts';
+
 export { COLLECTION_SOURCE_WORK_GROUP_LIMIT } from './canonical-source-limits.ts';
-import { nativeSourceFence, type CanonicalBasis, type CanonicalRawKey } from './canonical-source-store.ts';
+import { nativeSourceFence } from './native-source-fence.ts';
+import { type CanonicalBasis, type CanonicalRawKey } from './canonical-source-store.ts';
 import { readNativeCollectionMetadataForWork, type NativeCollectionMetadata } from './collection-source-native.ts';
 import type { CollectionSourceObservation } from './collection-source.ts';
 import type { WorkReceipt } from './contract/work-dimensions.ts';

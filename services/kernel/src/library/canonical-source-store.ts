@@ -1,3 +1,5 @@
+import { nativeSourceFence } from './native-source-fence.ts';
+export { nativeSourceFence } from './native-source-fence.ts';
 /** Derived native access paths. References and ready pointers never grant membership or Access. */
 import type { Pool } from 'pg';
 
@@ -198,7 +200,7 @@ import type {
   IdentityScopeObservation,
   IdentityScopeWork,
 } from '../semantic/identity-scope-types.ts';
-import { CollectionSourceLedger } from './collection-source-work.ts';
+import { CollectionSourceLedger } from './collection-native-work.ts';
 import {
   createNativeLibrarySourceCustody,
   type NativeSourceIdentity,
@@ -242,16 +244,7 @@ type Generation = {
 };
 type Client = Pick<PoolClient, 'query'>;
 const hash = (value: unknown) => createHash('sha256').update(JSON.stringify(value)).digest('hex');
-export function nativeSourceFence(metadata: NativeCollectionMetadata): string {
-  return hash([
-    metadata.incarnation,
-    metadata.stamp.epoch,
-    metadata.authority,
-    metadata.sourceGeneration,
-    metadata.factFence,
-    metadata.outputGeneration,
-  ]);
-}
+
 /** Native identity allocation is shared by initial owner commands and the existing capture producer.
  * Allocation never certifies a capture, scoped observation, repair, exhaustion or output receipt.
  */

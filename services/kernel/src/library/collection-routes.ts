@@ -1,10 +1,12 @@
+import { strict } from './collection-schema-validation.ts';
+export { strict } from './collection-schema-validation.ts';
 import { memoizedValue } from '../memoized.ts';
 import { t } from 'elysia';
 import type { Pool } from 'pg';
-import type { Static, TSchema } from 'typebox';
-import { Compile } from 'typebox/compile';
+import type { Static } from 'typebox';
+
 import { ContributionAttributionSchema } from '../access/contribution-attribution.ts';
-import { GrantDeniedError } from '../access/grant-commands.ts';
+import { GrantDeniedError } from '../access/resource-access-errors.ts';
 import { SitemapQuerySchema, SitemapBoardPageSchema } from '../content/schemas.ts';
 import type { KernelClock } from '../clock.ts';
 import { customMethod } from '../http/custom-method.ts';
@@ -497,24 +499,7 @@ function detail(operationId: string, action: string, anonymous = false) {
 }
 
 /** Validate original JSON without Elysia's removal of undeclared body properties. */
-export function strict<S extends TSchema>(schema: S) {
-  const validator = Compile(schema);
-  return {
-    '~standard': {
-      version: 1 as const,
-      vendor: 'typebox',
-      types: undefined as { input: Static<S>; output: Static<S> } | undefined,
-      validate(value: unknown) {
-        return validator.Check(value)
-          ? { value: value as Static<S> }
-          : {
-              issues: [{ message: 'Value does not match the Collection schema' }],
-            };
-      },
-      jsonSchema: { input: () => schema, output: () => schema },
-    },
-  };
-}
+
 function requireAccount(actor: Actor) {
   if (actor.kind !== 'account') throw new AuthenticationError(401, 'Bearer');
 }

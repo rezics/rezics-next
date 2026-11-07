@@ -1,3 +1,6 @@
+import { nativeAdmissions } from './owner-filter-admission.ts';
+
+export { readNativeCollectionMemberAdmission } from './owner-filter-admission.ts';
 import { statementBytes } from '../database/statement-bytes.ts';
 import { admitFilter, FilterError, parseFilter, walkFilter, type FilterDocument, type OwnerLeaf } from '@rezics/filter';
 import type { Release } from '@rezics/definitions';
@@ -29,7 +32,7 @@ import { holdsCurrentStatements, holdsCurrentType } from '../search/current-leaf
 import type { LeafEvidence } from '../semantic/scope-leaf-evidence.ts';
 import { createCollectionSource, type PrepareCollectionSource } from './collection-source.ts';
 import { type WorkDimensions } from './contract/work-dimensions.ts';
-import { NativeCollectionWork } from './collection-source-work.ts';
+import { NativeCollectionWork } from './collection-native-work.ts';
 import type { AdmittedCollectionRule, CollectionRuleSource } from './collection-rules.ts';
 import { decodeLibraryProfilePin } from './profile-pin.ts';
 import {
@@ -431,23 +434,7 @@ export type CollectionMemberQuery = {
 };
 
 type Dependencies = { pool: Pool; access: Access; clock?: KernelClock };
-const nativeAdmissions = new WeakMap<
-  CollectionMemberAdmission,
-  Readonly<{
-    actor: Actor;
-    pool: Pool;
-    deadline: number;
-    retainedMeaning: boolean;
-    source: CollectionRuleSource;
-  }>
->();
 
-/** Exact native grammar/family admission, not a permission verdict or a serializable capability.
- * Consumers must repeat ordinary current authority and Source/identity fences at their actual T.
- */
-export function readNativeCollectionMemberAdmission(admission: CollectionMemberAdmission) {
-  return nativeAdmissions.get(admission);
-}
 type PrivateRead = { action: string; group: string };
 
 /** Native family list authority, including branches whose truth could otherwise short circuit. */

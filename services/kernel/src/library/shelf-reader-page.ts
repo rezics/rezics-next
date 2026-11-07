@@ -1,10 +1,5 @@
-import {
-  isShelfEntryState,
-  MAX_SHELF_PAGE_SIZE,
-  type ShelfDateReader,
-  type ShelfDateRows,
-  type ShelfPageReader,
-} from './shelf-contract.ts';
+import { isShelfEntryState, MAX_SHELF_PAGE_SIZE } from './contract/index.ts';
+import { type ShelfDateReader, type ShelfDateRows, type ShelfPageReader } from './shelf-contract.ts';
 import { routeOf } from '../route/route.ts';
 import { createShelfActiveReader } from './shelf-active.ts';
 import { createShelfActivityAscReader } from './shelf-page-activity-asc.ts';

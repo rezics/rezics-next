@@ -5,7 +5,8 @@ import type { Access, Actor } from '../request/access.ts';
 import { ProblemError } from '../http/problem-error.ts';
 import { withConnection } from '../database/pool.ts';
 import { newId, routeOf } from '../route/route.ts';
-import { createLibraryCommandRunner, requireRoute } from './command-support.ts';
+import { createLibraryCommandRunner } from './command-support.ts';
+import { requireRoute } from './collection-command-work.ts';
 import { shelfTitleKey } from './shelf-title-key.ts';
 import {
   currentShelfTitleBasis,

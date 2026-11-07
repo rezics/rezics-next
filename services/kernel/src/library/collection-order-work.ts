@@ -11,14 +11,16 @@ import {
 import { partitionOf, routeOf } from '../route/route.ts';
 import type { WorkContext } from '../work/registry.ts';
 import { COMMAND_STEP_RETRIES } from '../work/retries.ts';
-import { runLibraryCommand, workStepDeadline } from './command-support.ts';
+import { runLibraryCommand } from './library-command-execution.ts';
+import { workStepDeadline } from './collection-command-work.ts';
 import {
   COLLECTION_ORDER_MAX_STEP,
   COLLECTION_ORDER_SQL,
   withCollectionOrderDeclaration,
-} from './collection-order-bounds.ts';
-import {
   COLLECTION_ORDER_WORKFLOW,
+} from './collection-order-bounds.ts';
+
+import {
   collectionOrderEvent,
   lockOrderParent,
   type CollectionOrderLocator,
