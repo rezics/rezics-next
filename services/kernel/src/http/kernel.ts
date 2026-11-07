@@ -429,8 +429,8 @@ export function createKernelAccessResolver(options: {
   return { resolveAccess, realmRoleReader };
 }
 
-/** The route key must stay the same across restarts, or retries lose their receipts. */
-export function createKernel(dependencies: KernelDependencies): Kernel {
+/** Shared native mount for catalogue inspection and serving hosts. */
+function mountKernel(dependencies: KernelDependencies): Kernel {
   bindOrdinaryContentLifecycle(nativeContentLifecycle());
   bindContextAccess(nativeContextAccess());
   bindZoneResourceApplication(createZoneResourceApplication(bindZoneResourceAccess(createZoneResourceAccess())));
@@ -1049,9 +1049,20 @@ export function createKernel(dependencies: KernelDependencies): Kernel {
     bindings: viewerBindings,
   });
   mountSubjectPagePublication(zones, resolvePublication);
-  // Route/schema compilation is startup work, before the first request's fixed deadline.
-  zones.compile();
   return zones as Kernel;
+}
+
+/** Complete native declarations and composition checks, without compiling an HTTP request host. */
+export function createKernelActionCatalogue(dependencies: KernelDependencies): AccessConfig['actions'] {
+  return actionCatalogue(mountKernel(dependencies));
+}
+
+/** The route key must stay the same across restarts, or retries lose their receipts. */
+export function createKernel(dependencies: KernelDependencies): Kernel {
+  const kernel = mountKernel(dependencies);
+  // Route/schema compilation is startup work, before the first request's fixed deadline.
+  kernel.compile();
+  return kernel;
 }
 
 // The module inherits definition routes. Keep their existing schemas only once: intersecting
