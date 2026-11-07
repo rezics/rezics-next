@@ -297,21 +297,28 @@ test('worker and manager prompts trust repository callers and let dev repair con
   }
 });
 
-test('minimal verification asks for one combined check after the outcome is written', () => {
+test('minimal verification keeps one wrapper budget and fail-fast dependency ordering', () => {
   const directory = temporaryDirectory();
   try {
     writeFileSync(join(directory.path, 'verification-mode'), 'minimal\n');
     const prompt = renderCheckProtocol('/work/trees/t1', 'Check the changed outcome.', directory.path);
+    expect(prompt).toContain('Defer ordinary acceptance/native/browser/root/growth suites; run declared control-plane acceptance before exit');
+    expect(prompt).toContain('Typecheck each changed workspace');
+    expect(prompt).toContain('Order producers before consumers');
+    expect(prompt).toContain('On prerequisite failure, stop and leave unreached checks unverified');
+    expect(prompt).toContain('Use one wrapper submission for the pass');
     expect(prompt).toContain(
-      'Acceptance, native, browser and root checks run after integration; you need not run them.',
+      'Parallel independent children require an existing entry point that admits and aggregates them under the same check/budget',
     );
-    expect(prompt).toContain('After the whole outcome is written, run one check');
-    expect(prompt).toContain('never joins them with `&&`');
-    expect(prompt).toContain("`sh -c 'cmd1; s=$?; cmd2 || s=1; cmd3 || s=1; exit $s'`");
-    expect(prompt).toContain('Fix every type error it reports before the rerun');
-    expect(prompt).toContain('tests run after landing in the dev verifier');
+    expect(prompt).toContain('No extra submissions or shell fanout');
+    expect(prompt).toContain('Kernel/Auth/Web mapper typechecks stay within the per-run memory cap');
+    expect(prompt).toContain("`sh -c 'cmd1 && cmd2 && cmd3'`");
+    expect(prompt).not.toContain('never joins them with `&&`');
+    expect(prompt).not.toContain("cmd1; s=$?; cmd2 || s=1");
+    expect(prompt).toContain('All must pass for success; reuse unchanged passing evidence');
+    expect(prompt).toContain('Run checks through the wrapper');
     expect(prompt).not.toContain("under a 'failing tests' label in the summary");
-    expect(prompt).toContain('Rerun it once after a fixed failure');
+    expect(prompt).toContain('Fix each failure before one rerun of its chain');
     expect(prompt).not.toContain('overrides');
     expect(prompt).not.toMatch(/do not run|must not run|prohibit/i);
   } finally {
@@ -319,19 +326,27 @@ test('minimal verification asks for one combined check after the outcome is writ
   }
 });
 
-test('the documented combined check runs every command after one fails and exits nonzero', () => {
+test('the documented dependency chain stops at a failed prerequisite and reaches all checks on success', () => {
   const directory = temporaryDirectory();
   try {
     writeFileSync(join(directory.path, 'verification-mode'), 'minimal\n');
     const prompt = renderCheckProtocol('/work/trees/t1', 'Check the changed outcome.', directory.path);
     const script = /sh -c '([^']+)'/.exec(prompt)![1]!;
-    const run = spawnSync(
+    const failed = spawnSync(
       'sh',
-      ['-c', script.replace('cmd1', 'false').replace('cmd2', 'echo second').replace('cmd3', 'echo third')],
+      ['-c', script.replace('cmd1', 'echo producer').replace('cmd2', 'false').replace('cmd3', 'echo consumer')],
       { encoding: 'utf8' },
     );
-    expect(run.stdout).toBe('second\nthird\n');
-    expect(run.status).toBe(1);
+    expect(failed.stdout).toBe('producer\n');
+    expect(failed.status).toBe(1);
+
+    const succeeded = spawnSync(
+      'sh',
+      ['-c', script.replace('cmd1', 'echo producer').replace('cmd2', 'echo middle').replace('cmd3', 'echo consumer')],
+      { encoding: 'utf8' },
+    );
+    expect(succeeded.stdout).toBe('producer\nmiddle\nconsumer\n');
+    expect(succeeded.status).toBe(0);
   } finally {
     directory.close();
   }
@@ -344,11 +359,10 @@ test('minimal verification parks check-host commands on the wrapper and keeps sh
     mkdirSync(join(directory.path, 'scripts'), { recursive: true });
     writeFileSync(join(directory.path, 'scripts/worker-check.ts'), '');
     const prompt = renderCheckProtocol(directory.path, 'Check the changed outcome.', directory.path);
-    expect(prompt).toContain('through the check wrapper (`bun scripts/worker-check.ts -- <command...>`');
-    expect(prompt).toContain('services/kernel and services/auth may use the compiler database or a check host');
-    expect(prompt).toContain('`bun scripts/typecheck.ts`');
+    expect(prompt).toContain('Run checks through the wrapper (`bun scripts/worker-check.ts -- <command...>`)');
+    expect(prompt).toContain('Kernel/Auth may use compiler DB/host');
     expect(prompt).toContain(
-      'Include payment, payout, order settlement, points or balance tests when those paths changed',
+      'include payment, payout, order settlement, points or balance tests when changed',
     );
     expect(prompt).toContain(
       '`{"status":"waiting","checks":["<bare UUID>"]}` in the exit object, using that bare UUID',
@@ -579,29 +593,37 @@ test('a worker is told where reference projects are and to read the ones its con
 
 /** The behaviour the minimal verification policy must state wherever it is rendered. */
 const MINIMAL_RULES = [
-  'After the whole outcome is written, run one check',
-  'never joins them with `&&`',
-  "`sh -c 'cmd1; s=$?; cmd2 || s=1; cmd3 || s=1; exit $s'`",
-  'Fix every type error it reports before the rerun',
-  'tests run after landing in the dev verifier',
+  'Typecheck each changed workspace',
+  'Order producers before consumers',
+  'chain them fail-fast with `&&`',
+  "`sh -c 'cmd1 && cmd2 && cmd3'`",
+  'On prerequisite failure, stop and leave unreached checks unverified',
+  'Use one wrapper submission for the pass',
+  'Parallel independent children require an existing entry point that admits and aggregates them under the same check/budget',
+  'No extra submissions or shell fanout',
+  'Kernel/Auth/Web mapper typechecks stay within the per-run memory cap',
+  'reuse unchanged passing evidence',
+  'All must pass for success; reuse unchanged passing evidence',
+  'Fix each failure before one rerun of its chain',
+  'Defer ordinary acceptance/native/browser/root/growth suites; run declared control-plane acceptance before exit',
   'a type error is not a pass; a failing payment, payout, order settlement, points or balance test is not a pass',
   'a `tool` blocker; type and test failures are not infrastructure failures',
-  'typecheck of each changed workspace',
-  'Include payment, payout, order settlement, points or balance tests when those paths changed',
-  'services/kernel and services/auth may use the compiler database or a check host',
-  'do not force `env -u KERNEL_CHECK_REMOTE` or local placement',
-  'through the check wrapper (`bun scripts/worker-check.ts -- <command...>`',
-  '`bun scripts/typecheck.ts`',
+  'Typecheck each changed workspace',
+  'include payment, payout, order settlement, points or balance tests when changed',
+  'Kernel/Auth may use compiler DB/host',
+  "don't unset KERNEL_CHECK_REMOTE or force local",
+  'Run checks through the wrapper (`bun scripts/worker-check.ts -- <command...>`)',
   '`{"status":"waiting","checks":["<bare UUID>"]}` in the exit object, using that bare UUID',
   'Never wait for it yourself: no `--wait`',
   'Commands that finish locally in under a minute',
   'oxfmt, tsc on tools/goal',
-  'Rerun it once after a fixed failure',
   'return success (blocker null, `"checks":[]`)',
   'the deferred acceptance, which is neither a blocker nor a reason to wait',
   'return waiting only for a still-running check UUID this attempt started',
 ];
 const MINIMAL_FORBIDDEN = [
+  'never joins them with `&&`',
+  "`sh -c 'cmd1; s=$?; cmd2 || s=1; cmd3 || s=1; exit $s'`",
   'Wait for a long command, even one queued for a test slot',
   'in its open session with one yield of at least 300 seconds',
   "under a 'failing tests' label in the summary",

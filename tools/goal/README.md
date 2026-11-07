@@ -111,11 +111,15 @@ run the tests in the test files they created or changed once, with the command t
 them: `bun test <files>`, the kernel check for kernel tests and the focused Web runner for Web tests. The prompt names
 these commands for the files the branch already changes, including the sibling tests of changed sources. Waits use one
 call with a yield of at least 300 seconds, except under minimal verification: after the whole outcome is written the
-worker runs one wrapper invocation of a `sh -c` script that runs the typecheck of each changed workspace in turn, never
-joined with `&&`, so every failure is reported at once; when the attempt changed payment, payout, order settlement,
-points or balance code it includes those paths' tests in the same script. A test file, native, browser or growth command
-is otherwise refused before any upload: tests run after landing in the dev verifier. It fixes every type error and may
-rerun that command once after a fixed failure. Host-placing commands use the wrapper parking protocol
+worker checks every changed workspace and required money-path tests through the check wrapper. It orders producers
+before consumers and chains dependent checks with fail-fast `&&`; the first prerequisite failure stops its dependents,
+which remain unverified until repair. One wrapper submission covers the pass. Parallel independent children require
+an existing entry point that admits and aggregates them under the same check and budget; otherwise keep them in the
+fail-fast chain. Kernel/Auth/Web mapper typechecks stay within the per-run memory cap. No extra wrapper submissions or
+shell fanout. The payment, payout, order settlement, points or
+balance tests run when those paths changed. Unchanged passing evidence is reused, and every changed workspace plus
+required money-path test must pass before success. Other test, native, browser or growth commands remain deferred to
+the dev verifier. Fix failures before the one permitted rerun of affected checks. Host-placing commands use the wrapper parking protocol
 above, and the worker ends the turn with `waiting` and the printed check id instead of holding the live session.
 Commands that finish locally in under a minute still run in the session. A supplied acceptance command defines the
 worker's check. For an ordinary
@@ -313,7 +317,7 @@ acceptance already does.
 Decision: a check waiting on a full upload host moves after two minutes when another performance host can start it now;
 it uploads there, takes the slot, releases the first copy, and keeps gate and landing order on the host it moves to.
 A later move needs another two minutes full. A host with a free slot never moves.
-Decision: the minimal check runs every changed-workspace typecheck in one `sh -c` script and never joins them with `&&`. Product attempts keep the typing-only rule, with money-path tests included when those paths changed; other product acceptance runs in dev verifier rounds. Control-plane attempts run their declared acceptance command before exit, including when minimal verification is enabled. The product result rule sits in the minimal footer, so the condition body stays within `policy.prompt.conditionBytes`.
+Decision: minimal verification orders producer checks before consumers and joins dependent commands with fail-fast `&&`; it stops after a prerequisite failure and leaves unreached checks unverified until repair. One wrapper submission covers the pass. Parallel independent children require an existing admitting and aggregating entry point under the same check and budget; otherwise checks stay in the dependency chain. Kernel/Auth/Web mapper typechecks stay within the per-run memory cap, with no extra submissions or shell fanout. Every changed workspace and required money-path test must pass before success; valid unchanged passes are reused. Other product acceptance runs in dev verifier rounds. Control-plane attempts run their declared acceptance command before exit, including when minimal verification is enabled. The product result rule sits in the minimal footer, so the condition body stays within `policy.prompt.conditionBytes`.
 
 Ordinary contracts can be amended before their first worker starts:
 
