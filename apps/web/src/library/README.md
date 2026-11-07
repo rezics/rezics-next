@@ -342,8 +342,12 @@ subject-summary fields through one helper: require id+type, build the explicit i
 then call `subjectOf`. Actor, organization and deleted-account targets stay unlabeled. Private edge, destination and optional null
 target behaviour stay on the follow row. Return from a target restores the original
 list cursor, kind and row from this visit's history state with the current session; the destination URL never carries
-the private cursor. Command replay resends the original credential, idempotency key and body. Fewest tests: one typed
-transport bind and one return-frontier pin; native/browser/growth walks remain later integration.
+the private cursor. Command replay resends the original credential, idempotency key and body. The native host
+journey now drives actual Auth sign-in and served controls, exact replay, FULL reload and a deep page, destination
+departure/Back with the same cursor, target row and focus, keyboard removal at desktop English and phone zh-Hans,
+same-context session replacement, and genuine empty exhaustion after the last edge is removed. The worker-owned
+fixture and journey are implemented here; their native/browser run remains in the post-integration controller
+check. Keep one typed transport bind and one return-frontier pin as the compact transport-level tests.
 
 # Progress return navigation
 

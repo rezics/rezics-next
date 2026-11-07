@@ -166,9 +166,11 @@ open. Driver main versus canonical publication is a control-plane owner item.
 Decision: a signed-in member follows a supported target through the native command and recovers that exact private
 edge on FULL list and point reads; replay returns the acknowledged result; a changed Source withholds the target and
 keeps the edge; empty, other-member and anonymous views use their own admission; return from a target restores the
-original list frontier with the current session. Web binds list GET and the callable point separately. Fewest tests:
-one HTTP journey, one FULL withhold, one transport bind, one return-frontier pin. Native, browser and growth walks
-remain later integration.
+original list frontier with the current session. Web binds list GET and the callable point separately. Point FULL
+skips contribution attribution after the Source gate withholds `target: null`. The native host fixture encodes Auth
+sign-in, served follow/removal, replay, FULL reload, deep continuation, return, empty exhaustion and session
+replacement; native/browser execution remains the post-integration controller check. Fewest tests: extend
+following-kind-growth, personal-http and full-views withhold, plus one transport bind and one return-frontier pin.
 Decision: pin Kernel check combined type, Reylo, lint, format, module CREATE EXTENSION and selected-test failure
 reporting with the existing runner tests in `scripts/check.test.ts`, `test/check-file-mode.test.ts`,
 `test/check-reylo.test.ts` and `test/check.test.ts`, plus changed-workspace typing in one worker-check, rather than a

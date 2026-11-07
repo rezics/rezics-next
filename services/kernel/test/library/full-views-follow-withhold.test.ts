@@ -49,6 +49,7 @@ mock.module('../../src/access/public-identity.ts', () => ({
 }));
 
 const { fullView } = await import('../../src/library/views.ts');
+const { withFollowContribution } = await import('../../src/library/follow-contribution.ts');
 
 const deps = {
   routeKey: new Uint8Array(32).fill(7),
@@ -77,6 +78,22 @@ test('FULL follow withholds a changed Source and keeps the private edge', async 
   resolutions.splice(0, resolutions.length, original, moved);
   const withheld = await fullView(deps, actor, 'FULL', { follows: [edge] }, { follow: true });
   expect(withheld.follows[0]).toEqual({ ...edge, target: null });
+});
+
+test('point contribution projection cannot replace a FULL target withheld by the Source gate', async () => {
+  const contribution = { id: moved, kind: 'actor' as const, displayName: 'Current owner' };
+  const withheld = withFollowContribution({ ...edge, target: null }, contribution, true);
+  expect(withheld).toEqual({ ...edge, target: null });
+
+  const current = withFollowContribution(
+    { ...edge, target: { id: original, type: 'schema:Book', label: 'Book' } },
+    contribution,
+    true,
+  );
+  expect(current.target).toEqual(contribution);
+
+  const basic = withFollowContribution({ ...edge }, contribution, false);
+  expect(basic.target).toEqual(contribution);
 });
 
 test('non-follow FULL still refuses a changed Source', async () => {

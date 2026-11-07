@@ -68,6 +68,10 @@ export function targetFields() {
     target: t.Optional(t.Union([summarySchema(), ContributionAttributionSchema()])),
   }));
 }
+/** A native page embeds a current target summary, while point recovery may add contribution attribution. */
+export function summaryTargetFields() {
+  return memoizedValue(summaryTargetFields, () => ({ target: t.Optional(summarySchema()) }));
+}
 export function embedded<S extends TProperties, F extends TProperties>(schema: TObject<S>, fields: F) {
   return t.Object({ ...schema.properties, ...fields }, { additionalProperties: false });
 }

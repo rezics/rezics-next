@@ -151,10 +151,20 @@ result on command replay. Empty exhaustion and other-member/anonymous views use 
 
 **Personas:** Alice on her own follows; Bob with an empty or unrelated list; anonymous without a private edge.
 
-**Decision for this increment:** land typed list/point transport, FULL withhold of a changed Source, frozen original
-command frame, and Following history-state return. Fewest tests: one HTTP follow/replay/foreign/empty journey, one
-FULL withhold, one typed transport bind, one return-frontier pin. Native Auth-persona/browser/growth walks stay
-open until their owning check.
+**Decision for this increment:** complete the served Following outcome around the existing typed list/point
+transport, FULL changed-Source withhold, frozen command frame, and history-state return. The native fixture now
+drives Auth sign-in, served follow controls, acknowledged replay, private FULL reload and deep continuation,
+departure/return to the same cursor and focused row, desktop and zh-Hans phone keyboard removal, session
+replacement, a hidden Collection tombstone, and genuine empty exhaustion. The bounded-growth case holds 102
+selected Subject edges fixed while unrelated Follow rows and shared receipt/outbox/write-basis history grow in
+separate 64/512/4096 passes. Its evidence emits the exact native page SQL, dispatcher-derived positional binds,
+plans, rows, buffers, statements and request/response bytes and checks them against the declared page work.
+
+The concrete correction is in point FULL recovery: a contribution-attribution lookup can no longer replace
+target: null after the repeated current-Source check withheld that target. Native/browser promotion remains with
+the post-integration controller check; this worker completes its fixture and measurement code but does not claim
+unrun native evidence. Fewest added pins: one contribution/withhold regression, the fixed-neighborhood growth
+paths, and the missing native return/empty/session journey.
 
 ## native-notice-consumption
 
