@@ -1215,11 +1215,16 @@ Credits keep their main role property and credited subject together with that st
 
 ## Native Context discovery
 
+Decision: each `createContextApplication(port)` instance closes over its supplied Access port across directory
+metadata, lifecycle, native reads, creation, public eligibility, role provenance and background preparation. Nested
+read and preparation helpers receive that instance's port directly; application calls never rebind process state.
+Standalone compatibility functions resolve the port installed by ordinary composition.
+
 Directory paging, lifecycle reads and historical-party enrollment use the Semantic-owned Access port in
-`context-access-port.ts`, installed by `composeSemanticContext` at the Kernel composition root (and by `createKernel`).
-`createContextApplication` is the concrete application for those operations. Context reads do not import Access,
-request admission or erasure implementations; composition binds those adapters. Qualified list work-context helpers
-stay local: they have no Access operations and are not on this port.
+`context-access-port.ts`. `composeSemanticContext` installs the concrete native adapter for ordinary Kernel
+composition, and `createContextApplication` binds that capability to each application's operations. Context reads do
+not import Access, request admission or erasure implementations; composition binds those adapters. Qualified list
+work-context helpers stay local: they have no Access operations and are not on this port.
 
 `createContextDirectory({pool,access,tokens,clock?})` exports `list` and `lifecycle`, together with
 `ContextDirectoryEntrySchema` and the corresponding exact types from `semantic/index.ts`.

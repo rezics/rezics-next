@@ -158,17 +158,29 @@ export { createIdentityScopedObservations } from './identity-scoped-observations
 export { receiveIdentityScopePrearm, cancelIdentityScopePrearm } from './identity-scoped-prearm.ts';
 
 export {
+  bindContextApplication,
+  createContextApplication,
   createContextDirectory,
   ContextDirectoryEntrySchema,
   ContextDirectoryPreparingError,
 } from './context-application.ts';
 export type {
+  ContextAccessHandle,
+  ContextActor,
+  ContextApplication,
+  ContextApplicationDependencies,
   ContextDirectory,
   ContextDirectoryEntry,
   ContextDirectoryPage,
   ContextDirectoryQuery,
   ContextDirectoryRead,
+  ContextQueryClient,
+  ContextRecord,
+  ContextRoleEnrollmentResult,
+  ContextRoleOccurrenceInput,
 } from './context-application.ts';
+export { bindContextAccess } from './context-access-port.ts';
+export type { ContextAccessPort } from './context-access-port.ts';
 
 export {
   createPublicIdentityOutputCapture,

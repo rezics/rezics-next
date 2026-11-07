@@ -126,7 +126,7 @@ export function createContextDirectory(dependencies: {
         expected: new Map(snapshot.rows.map((row) => [row.id, { version: row.version, epoch: row.source_epoch }])),
         actor: input.actor,
         deadline: input.deadline,
-      });
+      }, port);
       const entries = new Map(authorized.map((entry) => [entry.id, entry]));
       const contexts: ContextDirectoryEntry[] = [];
       const emitted = new Set<string>();
@@ -190,7 +190,7 @@ export function createContextDirectory(dependencies: {
     },
     async lifecycle(input) {
       if (routeOf(input.id) === null) return null;
-      return (await authorizedContextMetadata(dependencies, { ...input, ids: [input.id] }))[0] ?? null;
+      return (await authorizedContextMetadata(dependencies, { ...input, ids: [input.id] }, port))[0] ?? null;
     },
   };
 }
@@ -223,9 +223,14 @@ type SourceContext = {
 /** One retained native home step. Route/key order is indexed; raw100 includes keys with no eligible payload.
  * The native Source connection closes before the receiving Source command. No account/history completion is inferred.
  */
-export async function stepContextDirectory(pool: Pool, home: number, clock?: () => Date): Promise<boolean> {
+export async function stepContextDirectory(
+  pool: Pool,
+  home: number,
+  clock?: () => Date,
+  accessPort?: ContextAccessPort,
+): Promise<boolean> {
   if (!Number.isInteger(home) || home < 0 || home > 4095) throw new RangeError('Invalid Context directory home');
-  const port = contextAccess();
+  const port = accessPort ?? contextAccess();
   const source = (
     await runCommand(pool, { partition: home, clock }, async (tx) => {
       const owner = await readPartition(tx, home);
@@ -276,10 +281,7 @@ export async function stepContextDirectory(pool: Pool, home: number, clock?: () 
   if (source.complete && !source.rows.length) return true;
   // A bounded account-role capture is itself actual private Source data. Fence every role before receiving it.
   if (Buffer.byteLength(JSON.stringify(source.rows)) > 65536) throw new ContextDirectoryPreparingError();
-  const fenced = await fencedDirectoryAccounts(
-    pool,
-    source.rows.flatMap((row) => row.roles),
-  );
+  const fenced = await fencedDirectoryAccounts(pool, source.rows.flatMap((row) => row.roles), port);
   for (const row of source.rows) {
     if (row.state === 'purged') continue;
     if (row.roles.some((role) => fenced.has(role.account_id))) {
@@ -390,7 +392,11 @@ export async function stepContextDirectory(pool: Pool, home: number, clock?: () 
 }
 
 /** Existing effect delivery bridges changes; retained maintenance frontiers populate old native Contexts. */
-export function contextDirectoryEffect(pool: Pool, clock?: () => Date): Effect {
+export function contextDirectoryEffect(
+  pool: Pool,
+  clock?: () => Date,
+  accessPort?: ContextAccessPort,
+): Effect {
   return {
     name: 'semantic_context_directory',
     types: [
@@ -402,18 +408,19 @@ export function contextDirectoryEffect(pool: Pool, clock?: () => Date): Effect {
       const data = event.data as { id?: string; kind?: string };
       if (typeof data?.id !== 'string' || (data.kind !== undefined && data.kind !== 'context')) return;
       const route = routeOf(data.id);
-      if (route !== null) await stepContextDirectory(pool, partitionOf(route), clock);
+      if (route !== null) await stepContextDirectory(pool, partitionOf(route), clock, accessPort);
     },
   };
 }
 
-export async function registerContextDirectoryWork(context: WorkContext) {
+export async function registerContextDirectoryWork(context: WorkContext, accessPort?: ContextAccessPort) {
+  const port = accessPort ?? contextAccess();
   const page = DBOS.registerStep(
     async () => {
       // The partial index returns the next unfinished home. It is technical native progress, never a user result.
-      const home = await nextDirectoryHome(context.pool, context.clock);
+      const home = await nextDirectoryHome(context.pool, context.clock, port);
       if (home === undefined) return true;
-      await stepContextDirectory(context.pool, home, context.clock);
+      await stepContextDirectory(context.pool, home, context.clock, port);
       return false;
     },
     { name: 'semantic.contextDirectory.page', retriesAllowed: true, maxAttempts: 3 },
@@ -446,8 +453,11 @@ function directoryKey(value: string): string {
   return result;
 }
 
-async function fencedDirectoryAccounts(pool: Pool, roles: readonly ContextCopyRole[]): Promise<Set<string>> {
-  const port = contextAccess();
+async function fencedDirectoryAccounts(
+  pool: Pool,
+  roles: readonly ContextCopyRole[],
+  port: ContextAccessPort,
+): Promise<Set<string>> {
   const groups = new Map<number, string[]>();
   for (const id of new Set(roles.map((role) => role.account_id))) {
     const home = partitionOf(routeOf(id)!);
@@ -473,12 +483,18 @@ async function fencedDirectoryAccounts(pool: Pool, roles: readonly ContextCopyRo
   return fenced;
 }
 
-export async function populateContextDirectory(pool: Pool, clock?: () => Date, steps = 100) {
+export async function populateContextDirectory(
+  pool: Pool,
+  clock?: () => Date,
+  steps = 100,
+  accessPort?: ContextAccessPort,
+) {
+  const port = accessPort ?? contextAccess();
   for (let step = 0; step < steps; step++) {
-    const home = await nextDirectoryHome(pool, clock);
+    const home = await nextDirectoryHome(pool, clock, port);
     if (home === undefined) return;
     try {
-      await stepContextDirectory(pool, home, clock);
+      await stepContextDirectory(pool, home, clock, port);
     } catch (error) {
       if (error instanceof ContextDirectoryPreparingError) return;
       throw error;
@@ -486,8 +502,11 @@ export async function populateContextDirectory(pool: Pool, clock?: () => Date, s
   }
 }
 
-async function nextDirectoryHome(pool: Pool, clock?: () => Date): Promise<number | undefined> {
-  const port = contextAccess();
+async function nextDirectoryHome(
+  pool: Pool,
+  clock: (() => Date) | undefined,
+  port: ContextAccessPort,
+): Promise<number | undefined> {
   const repair = (
     await pool.query<{ id: string }>(
       'SELECT context_id::text AS id FROM semantic.context_directory_entry WHERE route=0 AND refresh_pending ORDER BY context_id LIMIT 1',
