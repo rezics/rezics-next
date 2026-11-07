@@ -6,17 +6,15 @@ import {
   EditableProfileReadError,
   officialProfileRead,
 } from '../src/settings/editable-profile-source';
+import { loadProfileRecord, saveProfileRecord } from '../src/settings/profile-data';
 import {
-  loadProfileRecord,
   profileReadResult,
   profileReadSetupFailure,
   profileReadValue,
-  runReadProfile,
-  runSaveProfile,
-  saveProfileRecord,
   serializeProfileResult,
   type ProfileValues,
-} from '../src/settings/profile-data';
+} from '../src/settings/profile-model';
+import { runReadProfile, runSaveProfile } from '../src/settings/profile-server';
 import { ProfileEditor } from '../src/settings/profile-write';
 import { MediaProblem } from '../src/media/kernel';
 import { createBrowserSettingsAmbient } from '../src/settings/adapters/ambient';
@@ -342,7 +340,7 @@ test('a PATCH without the matching account acknowledgement keeps the original un
 });
 
 test('native applicability and each public-view flag gate complete patches without granting missing advice', async () => {
-  const { profilePatchAdmitted, profileFieldAdmitted } = await import('../src/settings/profile-data');
+  const { profilePatchAdmitted, profileFieldAdmitted } = await import('../src/settings/profile-model');
   const advice = closedProfileEditing(profile);
   advice.fields.displayName.applicable = false;
   advice.fields.publicViews.flags = ['posts'];

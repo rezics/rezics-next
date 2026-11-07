@@ -6,7 +6,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@rezi
 import { Input } from '@rezics/ui/shadcn/input';
 import { Textarea } from '@rezics/ui/shadcn/textarea';
 import { m } from '../paraglide/messages.js';
-import { profileChanges, profileHasLocalPreview, profilePatchAdmitted, profileFieldAdmitted } from './profile-data';
+import { profileChanges, profileHasLocalPreview, profilePatchAdmitted, profileFieldAdmitted } from './profile-model';
 import { ProfileEditor, profileFieldErrors, type ProfileScope, type ProfileEditorState } from './profile-write';
 import { useProfileEditor } from './profile-write-query';
 import { ProfileAvatar, useProfileAvatarUpload } from './profile-avatar';

@@ -4,7 +4,7 @@ import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { AccountProfileEditor } from '../src/accounts/profile-editor/editor';
 import type { ProfileAttempt } from '../src/settings/profile-write';
-import type { ProfileValues, ProfileSaveResult } from '../src/settings/profile-data';
+import type { ProfileValues, ProfileSaveResult } from '../src/settings/profile-model';
 import { EditableProfileReadError } from '../src/settings/editable-profile-source';
 import { m } from '../src/paraglide/messages.js';
 import { createBrowserSettingsAmbient } from '../src/settings/adapters/ambient';

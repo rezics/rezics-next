@@ -1,9 +1,11 @@
 import { expect, mock, test } from 'bun:test';
+import { join } from 'node:path';
 import { createKernelClient } from '@rezics/client';
 import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { settingsCommandKeyHeader } from '../src/settings/command-headers';
-import { loadProfileRecord, saveProfileRecord, type ProfileValues } from '../src/settings/profile-data';
+import { loadProfileRecord, saveProfileRecord } from '../src/settings/profile-data';
+import type { ProfileValues } from '../src/settings/profile-model';
 import type { EditableProfile } from '../src/settings/editable-profile-source';
 import { createStoryRecordedKernelFetch } from '../src/kernel/fake';
 import { EditableProfileReadError, officialProfileRead } from '../src/settings/editable-profile-source';
@@ -12,6 +14,8 @@ import { MediaProblem } from '../src/media/kernel';
 import { m } from '../src/paraglide/messages.js';
 import { createBrowserSettingsAmbient } from '../src/settings/adapters/ambient';
 import { performanceAmbientTree } from './performance-ambient';
+import { createSettingsViteRuntime } from './support/settings-vite-runtime';
+import type { Plugin } from 'vite';
 
 const settingsAmbient = createBrowserSettingsAmbient();
 
@@ -119,6 +123,87 @@ test('profile reads editable values once by immutable id through the authenticat
   ]);
   expect(profile).not.toHaveProperty('speakersListed');
 });
+
+test('the composed Profile read dispatch uses the startup Worker fixture and records the native private read', async () => {
+  const accountId = '019a0000-0000-7000-8000-000000000001';
+  const requestBoundary = '\0settings-profile-request-boundary';
+  const sessionBoundary = '\0settings-profile-session-boundary';
+  const kernelBoundary = '\0settings-profile-kernel-boundary';
+  const state = globalThis as typeof globalThis & {
+    __settingsProfileDispatch?: {
+      preparedOrigins: string[];
+      responseHeaders: string[];
+      nativeReads: Array<{ path: string; cache: string; authorization: string | null }>;
+    };
+  };
+  state.__settingsProfileDispatch = { preparedOrigins: [], responseHeaders: [], nativeReads: [] };
+  const boundary = `
+    const state = globalThis.__settingsProfileDispatch;
+    export function getRequest() { return new Request('https://site.test/en/settings'); }
+    export function setResponseHeader(name, value) { state.responseHeaders.push(name + ': ' + value); }
+    export async function prepareSession(_request, env) { state.preparedOrigins.push(env.KERNEL_ORIGIN); }
+    export function sessionSubject() { return ${JSON.stringify(accountId)}; }
+    export function viewerCredential() { return 'Bearer worker-fixture'; }
+    export function requestCsrfToken() { return 'csrf-fixture'; }
+    export function requestLocale() { return 'en'; }
+  `;
+  const kernel = `
+    import { createKernelClient } from '@rezics/client';
+    import { officialProfileRead } from ${JSON.stringify(join(import.meta.dir, '../src/settings/editable-profile-source.ts'))};
+    const id = ${JSON.stringify(accountId)};
+    const profile = { id, kind: 'actor', handle: 'reader', displayName: 'Fixture Reader', bio: 'Stored notes',
+      avatar: null, links: [], publicViews: { posts: true, reviews: true, collections: true, realms: false } };
+    const client = createKernelClient('https://kernel.fixture', { fetch: async (input, init) => {
+      const request = new Request(input, init);
+      const url = new URL(request.url);
+      globalThis.__settingsProfileDispatch.nativeReads.push({ path: url.pathname, cache: request.cache,
+        authorization: request.headers.get('authorization') });
+      return Response.json(officialProfileRead(profile), { headers: { 'cache-control': 'private, no-store' } });
+    }});
+    export function kernelClient() { return client; }
+  `;
+  const boundaries: Plugin = {
+    name: 'settings-profile-dispatch-context',
+    enforce: 'pre',
+    resolveId(id, importer) {
+      if (id === '@tanstack/react-start/server') return requestBoundary;
+      if (id === '../session/request' && importer?.includes('/src/settings/')) return sessionBoundary;
+      if (id === '../kernel/client' && importer?.includes('/src/settings/')) return kernelBoundary;
+    },
+    load(id) {
+      if (id === requestBoundary) return boundary;
+      if (id === sessionBoundary) return boundary;
+      if (id === kernelBoundary) return kernel;
+    },
+  };
+  const runtime = await createSettingsViteRuntime({ KERNEL_ORIGIN: 'https://settings-worker-fixture.test' }, [
+    boundaries,
+  ]);
+  try {
+    const actions = (await runtime.vite.ssrLoadModule('/src/settings/actions.ts')) as {
+      readProfile: () => Promise<{ ok: true; profile: ProfileValues; editing: unknown }>;
+    };
+    const result = await actions.readProfile();
+    expect(result).toMatchObject({
+      ok: true,
+      profile: { accountId, displayName: 'Fixture Reader', biography: 'Stored notes' },
+    });
+    expect(state.__settingsProfileDispatch).toMatchObject({
+      preparedOrigins: ['https://settings-worker-fixture.test'],
+      responseHeaders: ['cache-control: private, no-store'],
+      nativeReads: [
+        {
+          path: `/v1/accounts/${accountId}/profile`,
+          cache: 'no-store',
+          authorization: 'Bearer worker-fixture',
+        },
+      ],
+    });
+  } finally {
+    await runtime.close();
+    delete state.__settingsProfileDispatch;
+  }
+}, 60_000);
 
 test('profile save sends only changed fields and an idempotency key, then returns the confirmed values', async () => {
   const { client, calls } = clientFor(() => Response.json({ accountId: 'alice' }));

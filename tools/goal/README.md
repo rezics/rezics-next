@@ -2043,11 +2043,20 @@ The supermanager sets direction and the managers own the work. This applies to e
 #### Resident event delivery
 
 The resident watchdog service runs `bun tools/goal/scripts/supermanager-watch.ts --db <store> --tmux-socket
-<socket> --pane <target>`. It reads the registered provider and thread from the store and delivers real inbox events
-within its two-second coalescing interval, independently of read, acknowledgement and host notification state.
-A separate atomic `--cursor <file>` checkpoints successful verified tmux submission; failed transport retains pending
-IDs. Worker info and successful manager renewal notices stay quiet. There are no periodic model turns.
-An initial `--start-after <id>` explicitly selects the historical backlog boundary when no cursor exists.
+<socket> --pane <target> --transcript <path>`. It reads the registered provider and thread from the store and verifies
+the Codex transcript's session identity. Incremental turn lifecycle events establish busy or idle state; silence,
+long tools and old-turn completions never establish idleness. Unsupported provider activity stays unknown.
+The two-second token-free loop sends a fixed short mailbox notification only when actionable personally unread mail
+is at least 60 seconds old and the session has been explicitly idle for ten seconds. All event bodies remain in the
+native inbox. Worker info and successful manager renewal notices stay quiet. There are no periodic model turns.
+The atomic `--cursor <file>` and transport journal retain one outstanding notification until personal read progress across
+retries and restarts. Consuming its triggering event rearms notification for remaining unread pages once explicitly
+idle; new mail without owner consumption coalesces. Waking never consumes messages. Global read, acknowledgement
+and host notification flags are independent of the resident owner's durable personal read cursor.
+When no personal cursor exists, `--start-after <id>` explicitly selects the genuinely consumed backlog boundary.
+Bootstrap the same boundary with the authenticated owner's first `inbox read <manager> --cursor <id>`; subsequent
+owner reads always continue the durable cursor and advance only over returned rows. Recovery producers emit inbox
+events and never independently type a wake. Operator recovery can still resume the registered provider session.
 The same script accepts `--emit --source hourly-report --summary <report>` to write the existing report's computed
 alarm into the native inbox. Metrics remain owned by the hourly report; the bridge does not recompute them.
 
@@ -2060,7 +2069,10 @@ recipient's message read or acknowledged, set notification state, wake a manager
 `inbox wait` and `inbox ack` retain their per-recipient behavior. `inbox read` returns one bounded page of that
 recipient's unacknowledged wakeable events, oldest id first, and marks only those rows read. Pages use the same size as
 shared queries (default 50, maximum 100) and include `hasMore` and `nextCursor`. Remaining unread events stay pending.
-`inbox wait` returns one unread page, so a later wait continues from the remaining work.
+`inbox wait` returns one unread page, so a later wait continues from the remaining work. For the authenticated
+resident owner's `inbox read`, personal consumption replaces shared flags: it returns full oldest personally unread
+events even when another manager already read or acknowledged them. Shared queries and foreign readers do not advance
+this cursor. Other managed managers retain the existing read behavior.
 
 ```sh
 bun tools/goal/src/cli.ts inbox log [--from <manager>] [--to <manager>] [--goal <goal>] [--task <task>] \
@@ -2717,6 +2729,22 @@ CODEX_HOME="/absolute/path/to/<cli-config-directory>" bun tools/goal/scripts/smo
 ```
 
 ## Control plane on dev: cp-sync
+
+The existing fast snapshot publisher calls `bun tools/goal/scripts/cp-fast-preserve.ts prepare <owner>` before
+capturing its candidate. Set `GOAL_MAIN_CHECKOUT` to the main checkout and, if different from its `.temp/goal`,
+`GOAL_STATE_DIRECTORY` to the native state directory. Success prints the captured main and adopted dev SHAs;
+publish that dev SHA, and check main still equals the captured SHA immediately before replacing its tree. After
+the publisher's smoke succeeds, call `bun tools/goal/scripts/cp-fast-preserve.ts checkpoint <published-main> <source-dev>`.
+The helper retains publication/adoption anchors in `watch/cp-fast-state.json`. On first use it derives the latest
+fast publication from its commit subject and verifies an exact full-tree match with the recorded source; an explicit
+checkpoint can bootstrap an older verified snapshot. A checkpoint is never recorded for a failed or reverted smoke.
+
+Before each snapshot, main changes since the retained anchor are three-way merged into current dev using an
+explicit merge base and an atomic main-verification/dev compare-and-swap. Neither checkout is modified. Replays
+produce no duplicate adoption commit, and unrelated dev advances survive. A genuine overlap leaves both refs intact
+and sends the supplied owner one native inbox question per main revision, with paths in `watch/cp-fast-conflict.json`.
+Only fast publication waits: reconcile the hotfix onto dev and retry; product work continues. This helper belongs to
+the existing publisher and introduces no timer, model loop, or separate release gate.
 
 Control-plane changes iterate on `dev` with the products: a `control-plane` brief without a `target` lands there
 mechanically, like product work. `cp-sync` is their release gate; it makes dev's `tools/goal` live on `main` without the

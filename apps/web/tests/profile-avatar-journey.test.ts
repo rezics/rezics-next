@@ -11,7 +11,7 @@ import { UploadRefusal, type UploadRefusalReason } from '../src/threads/upload-v
 import type { AvatarAdviceRead, AvatarAdviceReadResult, AvatarResume } from '../src/settings/profile-avatar-upload';
 import { ProfileAvatarUpload, type AvatarUpload } from '../src/settings/profile-avatar-upload';
 import type { SettingsAvatarMedia } from '../src/settings/ports/content';
-import type { ProfileValues } from '../src/settings/profile-data';
+import type { ProfileValues } from '../src/settings/profile-model';
 import { ProfileEditor, type ProfileAttempt } from '../src/settings/profile-write';
 import { managedReadTimeout } from '../src/settings/managed-read-deadline';
 import { settingsMediaFailure } from '../src/settings/adapters/content';

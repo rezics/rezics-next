@@ -8,8 +8,9 @@ import {
   type ProfilePatch,
   type ProfileSaveResult,
   type ProfileValues,
-} from './profile-data';
-import { profileReadFailure, type EditableProfileFailure, type ProfileEditing } from './editable-profile-source';
+} from './profile-model';
+import { profileReadFailure, type EditableProfileFailure } from './profile-failure';
+import type { ProfileEditing } from './editable-profile-source';
 import { isPlatformClosedError } from './ports/vocabulary';
 import { preferenceRetryDeadline, type SettingsAmbient } from './ports/ambient';
 import type { SettingsContentFailureReader } from './ports/content';

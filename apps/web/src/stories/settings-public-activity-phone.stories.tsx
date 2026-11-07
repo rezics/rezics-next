@@ -14,7 +14,7 @@ import { m } from '../paraglide/messages.js';
 import { ProfileCard } from '../settings/profile';
 import { settingsContent } from '../settings/adapters/presentation';
 import { PublicViewsCard } from '../settings/public-views';
-import type { ProfileValues } from '../settings/profile-data';
+import type { ProfileValues } from '../settings/ports/profile-editor';
 import { ProfileEditor, type ProfileAttempt } from '../settings/profile-write';
 import { ProfileNavigation } from '../settings/profile-navigation';
 

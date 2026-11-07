@@ -2,7 +2,7 @@ import type { Meta, StoryObj } from '@storybook/react-vite';
 import { expect, userEvent, waitFor, within } from 'storybook/test';
 import { env } from '../../.storybook/cloudflare-workers';
 import { m } from '../paraglide/messages.js';
-import type { EditableProfile } from '../settings/editable-profile-source';
+import type { EditableProfile } from '../settings/ports/profile-editor';
 import { PageStory, pageReady } from './page';
 import { selectSettingsCategory } from './settings-category-navigation';
 

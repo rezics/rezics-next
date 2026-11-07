@@ -351,6 +351,10 @@ function sameInode(
   return BigInt(left.dev) === BigInt(right.dev) && BigInt(left.ino) === BigInt(right.ino);
 }
 
+function isDisappearedEntry(error: unknown): boolean {
+  return error !== null && typeof error === 'object' && 'code' in error && error.code === 'ENOENT';
+}
+
 /**
  * Add owner-write on directories so a tree can be deleted. Files stay untouched (they may be hardlinks); symlinks
  * are not followed. `scripts/check-git.ts` publishes remote-check caches at 0555/0444, which plain `rm -rf` cannot
@@ -367,12 +371,24 @@ export function makeOwnedTreeWritable(path: string): number {
     if ((stat.mode & 0o700) !== 0o700) fchmodSync(fd, (stat.mode & 0o7777) | 0o700);
     for (const name of readdirSync(descriptorPath(fd))) {
       const child = join(descriptorPath(fd), name);
-      const before = lstatSync(child);
+      let before: ReturnType<typeof lstatSync>;
+      try {
+        before = lstatSync(child);
+      } catch (error) {
+        if (isDisappearedEntry(error)) continue;
+        throw error;
+      }
       if (!before.isDirectory() || before.isSymbolicLink()) {
         bytes += Number(before.size);
         continue;
       }
-      const childFd = openSync(child, directoryFlags);
+      let childFd: number;
+      try {
+        childFd = openSync(child, directoryFlags);
+      } catch (error) {
+        if (isDisappearedEntry(error)) continue;
+        throw error;
+      }
       try {
         if (!sameInode(before, fstatSync(childFd)))
           throw new Error(`refusing cleanup of replaced worktree directory: ${path}`);
