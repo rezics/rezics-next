@@ -102,6 +102,14 @@ The newer authorization-binding increment remains with its Semantic owner: this 
 same stale host contract, so no additional increment or unchanged rerun is selected here. The original broad native
 and browser receiving remains on integrated dev. The last measured census remains unchanged below.
 
+Landing retry decision: complete the controller-started rebase onto `d83d857aa1cb986eed483ae7dd9aaf180214fd96`,
+preserving current message preparation, process custody, Vite and Library setup behavior together with the original
+curated-occurrence assertions and safe HTTP failure diagnostics. The ignored-artifact staging failure reproduced
+with `git add -- .temp/search-walk`; narrow `.gitignore` exceptions now retain only the five reviewed evidence files.
+This is the additional outside-path change. The retry runs the three prescribed Kernel, Web and scripts selections
+once on the rebased source; prior typing remains historical evidence, not a fresh native or mounted pass. No new
+assertions or second walk stack are added for conflict resolution. The six-path census stays unchanged.
+
 The retained seventeen-file Kernel command at `cea61c8e7dbf418048ea308a87b37031cb7d08ad` returned exit 1 on host b
 in 1722.930 seconds. Compilation passed in 21.101 seconds and eight files passed, including native boot, original
 receiving-store custody, bulk no-effect and Members composition. Nine files failed. These are native receiving
