@@ -165,6 +165,14 @@ test('the admitted walk executes every first-public inventory id', () => {
     'utf8',
   );
   expect(source).toContain("from '../../../services/kernel/test/semantic/first-public-inventory.ts'");
+  expect(source).toContain('scope: nativeWebsiteScopes(bindings.WEBSITE_SCOPES)');
+  expect(source).toContain("['openid', 'offline_access'");
+  expect(readFileSync(resolve(import.meta.dir, '../../../../apps/web/src/kernel/client.ts'), 'utf8')).toMatch(
+    /function resolvedKernelOrigin\(\)[^{]*\{[^}]*return kernelOrigin\(\);/,
+  );
+  expect(
+    readFileSync(resolve(import.meta.dir, '../../../../apps/web/src/features/catalogue/definition-guide-actions.ts'), 'utf8'),
+  ).not.toMatch(/^import \{ env \} from ['"]cloudflare:workers['"]/m);
   for (const row of FIRST_PUBLIC_JOURNEYS) {
     expect(source).toContain(`'${row.id}'`);
   }

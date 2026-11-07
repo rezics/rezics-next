@@ -1,6 +1,5 @@
 import { createServerFn } from '@tanstack/react-start';
 import { getRequest, setResponseHeader } from '@tanstack/react-start/server';
-import { env } from 'cloudflare:workers';
 import { kernelClient } from '../../kernel/client';
 import type { SessionEnv } from '../../session/client';
 import { prepareSession, viewerCredential } from '../../session/request';
@@ -86,6 +85,7 @@ async function withGuideReader<T extends { ok: boolean }>(
 ): Promise<T | { ok: false; reason: GuideFailure }> {
   setResponseHeader('cache-control', 'private, no-store');
   try {
+    const { env } = await import('cloudflare:workers');
     const request = getRequest();
     const stale = await prepareSession(request, env as Partial<SessionEnv>);
     if (stale) return { ok: false, reason: 'denied' };
@@ -130,6 +130,7 @@ export async function withCatalogueSession<T>(
 ): Promise<T | { ok: false; reason: 'denied' | 'signed-out' | 'unavailable' }> {
   setResponseHeader('cache-control', 'private, no-store');
   try {
+    const { env } = await import('cloudflare:workers');
     const request = getRequest();
     const stale = await prepareSession(request, env as Partial<SessionEnv>);
     if (stale) return { ok: false, reason: 'denied' };

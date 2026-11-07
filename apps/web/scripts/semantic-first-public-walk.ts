@@ -176,20 +176,28 @@ function fetchCall(stack: Stack): KernelCall {
   };
 }
 
+function nativeWebsiteScopes(configured: string | undefined): string[] {
+  return [...new Set(['openid', 'offline_access', ...(configured ?? '').split(/\s+/).filter(Boolean)])];
+}
+
 async function accessToken(stack: Stack, email: string, password: string): Promise<string> {
   const bindings = await parseEnv(join(root, 'apps/web/.dev.vars'));
   const body = JSON.stringify({
     email,
     password,
     client_id: bindings.WEBSITE_CLIENT_ID ?? 'rezics-website',
-    scope: bindings.WEBSITE_SCOPES,
+    scope: nativeWebsiteScopes(bindings.WEBSITE_SCOPES),
   });
   const signin = await fetch(`${stack.native}/signin`, {
     method: 'POST',
     headers: { origin: stack.issuer, 'content-type': 'application/json' },
     body,
   });
-  if (!signin.ok) throw new Error(`website sign-in for ${email} at ${stack.native} HTTP ${signin.status}`);
+  const signinBody = await signin.text();
+  if (!signin.ok)
+    throw new Error(
+      `website sign-in for ${email} at ${stack.native} HTTP ${signin.status}: ${signinBody.slice(0, 240)}`,
+    );
   const issued = await fetch(`${stack.native}/token`, {
     method: 'POST',
     headers: {
@@ -202,8 +210,9 @@ async function accessToken(stack: Stack, email: string, password: string): Promi
     },
     body: '{}',
   });
-  if (!issued.ok) throw new Error(`token for ${email} at ${stack.native} HTTP ${issued.status}`);
-  const token = (await issued.json()) as { access_token?: string };
+  const issuedBody = await issued.text();
+  if (!issued.ok) throw new Error(`token for ${email} at ${stack.native} HTTP ${issued.status}: ${issuedBody.slice(0, 240)}`);
+  const token = (issuedBody ? JSON.parse(issuedBody) : {}) as { access_token?: string };
   if (!token.access_token) throw new Error(`token for ${email} at ${stack.native} omitted access_token`);
   return token.access_token;
 }
@@ -441,13 +450,16 @@ async function main() {
       AUTH_ORIGIN: stack.native,
       KERNEL_ORIGIN: stack.kernel,
     };
-    seedCode = await child(['bun', 'scripts/datasets/cross-media-seed.ts', '--dev'], 'seed', seedEnv, {
-      allowFailure: true,
-    });
-    seedCause =
-      seedCode === 0
-        ? undefined
-        : `seed ${((await lastLogLine('seed')) ?? `exited ${seedCode} without a log line`)}`;
+    for (let attempt = 0; attempt < 3; attempt++) {
+      seedCode = await child(['bun', 'scripts/datasets/cross-media-seed.ts', '--dev'], 'seed', seedEnv, {
+        allowFailure: true,
+      });
+      seedCause =
+        seedCode === 0
+          ? undefined
+          : `seed ${((await lastLogLine('seed')) ?? `exited ${seedCode} without a log line`)}`;
+      if (!seedCause || !/deadline_exceeded|503/.test(seedCause)) break;
+    }
   }
   const setupRecord = kernelCause ?? personaCause ?? seedCause;
   if (setupRecord)
@@ -520,22 +532,26 @@ async function main() {
       // Playwright did not start: every row already carries that cause.
     } else {
     if (editor && !frontendCause && keys) {
-      const signIn = await session.member.newPage();
-      await signIn.goto(`${stack.web}/en/auth/sign-in?return_to=${encodeURIComponent('/en/catalogue/new')}`, {
-        waitUntil: 'domcontentloaded',
-        timeout: 180_000,
-      });
-      for (let attempt = 0; attempt < 4 && new URL(signIn.url()).origin === stack.issuer; attempt++) {
-        await hydrated(signIn);
-        const email = signIn.locator('input[type="email"]');
-        if (await email.count()) {
-          await email.fill('developer@rezics.test');
-          await signIn.locator('input[type="password"]').fill(keys.password);
+      try {
+        const signIn = await session.member.newPage();
+        await signIn.goto(`${stack.web}/en/auth/sign-in?return_to=${encodeURIComponent('/en/catalogue/new')}`, {
+          waitUntil: 'domcontentloaded',
+          timeout: 180_000,
+        });
+        for (let attempt = 0; attempt < 4 && new URL(signIn.url()).origin === stack.issuer; attempt++) {
+          await hydrated(signIn);
+          const email = signIn.locator('input[type="email"]');
+          if (await email.count()) {
+            await email.fill('developer@rezics.test');
+            await signIn.locator('input[type="password"]').fill(keys.password);
+          }
+          await signIn.locator('form button[type="submit"]').first().click();
+          await signIn.waitForLoadState('domcontentloaded');
         }
-        await signIn.locator('form button[type="submit"]').first().click();
-        await signIn.waitForLoadState('domcontentloaded');
+        await signIn.close();
+      } catch (error) {
+        frontendCause = error instanceof Error ? error.message : String(error);
       }
-      await signIn.close();
     }
     const setupCause = editorCause ?? personaCause ?? kernelCause ?? seedCause;
     if (setupCause && !editor) {
@@ -548,7 +564,16 @@ async function main() {
     results.push(await journey(session, 'released-definitions', () => releasedDefinitions(session)));
     results.push(
       await journey(session, 'catalogue-browsing', async () => {
-        const searched = await searchType(call, 'schema:Book', 8);
+        const deadline = Date.now() + 120_000;
+        let searched = await searchType(call, 'schema:Book', 8);
+        while (
+          Date.now() < deadline &&
+          searched.status === 503 &&
+          searched.body.code === 'index_not_ready'
+        ) {
+          await Bun.sleep(5_000);
+          searched = await searchType(call, 'schema:Book', 8);
+        }
         if (searched.status !== 200)
           throw new Error(`catalogue search HTTP ${searched.status}: ${JSON.stringify(searched.body).slice(0, 400)}`);
         const subjects = (searched.body.subjects as { id?: string; labels?: Record<string, string> }[]) ?? [];
