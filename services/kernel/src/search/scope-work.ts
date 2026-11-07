@@ -7,28 +7,8 @@ import type {
   LeafWork,
 } from './scope-execution.ts';
 
-export const scopeWorkAxes = [
-  'candidateKeys',
-  'nativeRows',
-  'identityMetadataRows',
-  'emptySeeks',
-  'nativePoints',
-  'witnessKeys',
-  'statements',
-  'bytes',
-] as const;
-export function zeroScopeWork(): WorkDimensions {
-  return {
-    candidateKeys: 0,
-    nativeRows: 0,
-    identityMetadataRows: 0,
-    emptySeeks: 0,
-    nativePoints: 0,
-    witnessKeys: 0,
-    statements: 0,
-    bytes: 0,
-  };
-}
+export { scopeWorkAxes, zeroScopeWork } from './contract/index.ts';
+import { scopeWorkAxes, zeroScopeWork } from './contract/index.ts';
 /** Compatibility ceilings are independent of the candidate reservation. They never grow on refill. */
 export function scopeAllowance(keys: number, reservationId: string, remaining?: WorkDimensions): WorkAllowance {
   return {

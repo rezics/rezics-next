@@ -106,11 +106,10 @@ a metadata revision rechecks current visibility. The publication list fixture de
 `search_selection_state` then the subject under Semantic erasure cleanup. Existing realm visibility
 and publication disclosure tests pin those states; no extra stories.
 
-Type compatibility repairs preserve outcome assertions and align callers with producer-owned contracts without
-changing behavior. Access resolver fixtures supply Community `deadlineNow`; existing assertions stay. Community
-domain clocks stay required on holders that already have one; deadlineNow is a separate ambient; Access-facing
-public entry includes realmReadEligibility. Tests pin declaration inventory, ambient deadline refusal, and one
-populated Realm witness revision/replay including stale work; no extra stories.
+Decision: compose Realm community, exact disclosure and Subject scope as one Content application over
+consumer-owned ports; bind independent Community/Semantic evidence and Search execution at existing roots.
+Focused identity, unavailable-authority and final-currentness tests preserve existing outcome assertions; no extra
+stories or positive default-journey claim. Typing is implementation acceptance; the Goal walk owns runtime acceptance.
 
 ## Dependencies
 

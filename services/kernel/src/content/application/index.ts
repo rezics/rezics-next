@@ -7,3 +7,5 @@ export { createHttpContext } from './http-context.ts';
 export { createPublication } from './publication.ts';
 export { createRanking } from './ranking.ts';
 export { createWorkBudgets } from './work.ts';
+
+export { createContentRealmApplication } from './realm.ts';

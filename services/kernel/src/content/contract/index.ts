@@ -72,3 +72,5 @@ export type {
   ContentWorkRegistrationPort,
   RankScoreInput,
 } from './ports.ts';
+
+export * from './realm.ts';

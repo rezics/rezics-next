@@ -18,3 +18,5 @@ export {
   resolvedSemanticDomain,
 } from './registry.ts';
 export { hashingOf, routingOf, contentLifecycleOf, bindOrdinaryContentLifecycle } from './ports.ts';
+
+export { createSubjectScopeEvidence, type NativeScopeReader } from './scope-evidence.ts';

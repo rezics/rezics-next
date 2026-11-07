@@ -8,3 +8,5 @@ export {
 export { createNativeCommunityAmbient, systemCommunityAmbient, systemCommunityClock } from './ambient.ts';
 export { createNativeCommunityPorts, communityDeclaredEffects } from './native.ts';
 export { ensureCommunityApplication, startCommunityApplication } from './runtime.ts';
+
+export { createRealmScopeEvidence } from './scope-evidence.ts';

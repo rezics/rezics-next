@@ -36,3 +36,5 @@ export type {
   CommunitySurfaceDeclaration,
   CommunityWorkModule,
 } from './ports.ts';
+
+export type { ScopeEvidenceObservation, ScopeEvidenceHost } from './scope-evidence.ts';
