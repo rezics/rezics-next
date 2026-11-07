@@ -449,3 +449,9 @@ frontiers, bounded selection and admitted focus restoration remain with their ex
 Decision: bind Library consumer capabilities to the existing producers now; receive Performance's shared shell/session
 provider through the same capability surface when that producer is delivered. This adapter adds no competing provider.
 Typing is the worker gate; focused authored regressions and native/browser acceptance run after integration.
+
+Decision: retain the delivered adapter and archive application-lifetime assertions until Performance supplies an
+explicit shared-provider commit and capability inventory; receive that commit through the train resolver, compare
+the inventory with `LibraryApplication`, then replace the binding and complete query/closed-state receiving together.
+No replacement provider or Settings/Inbox changes belong to this receiving step. The existing archive regression
+already pins equal-value replacement, A/B/A, query recreation and synchronous completed-byte erasure.
