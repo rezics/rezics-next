@@ -169,9 +169,12 @@ export async function serveManagers(runtime: IntegrationRuntime): Promise<void> 
         let result: unknown;
         switch (request.command) {
           case 'register-supermanager':
-            if (!request.sessionId) throw new Error('Missing resident Claude session ID');
+            if (!request.sessionId) throw new Error('Missing resident provider session ID');
             if (!runtime.supermanager) throw new Error('Configured supermanager identity is missing');
-            result = await managers.registerResidentSupermanager(runtime.supermanager, request.sessionId);
+            result = await managers.registerResidentSupermanager(runtime.supermanager, request.sessionId, {
+              ...(request.residentProvider !== undefined ? { provider: request.residentProvider } : {}),
+              ...(request.replaceSession !== undefined ? { replaceSession: request.replaceSession } : {}),
+            });
             break;
           case 'start':
             if (!request.spec) throw new Error('Missing manager spec');

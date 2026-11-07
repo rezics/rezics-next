@@ -53,7 +53,11 @@ export function authenticatedManager(
       continue;
     }
     if (!state || typeof state !== 'object' || Array.isArray(state)) continue;
-    if (state.kind === 'resident-supermanager' && (state.id !== row.id || state.provider !== 'claude')) continue;
+    if (state.kind === 'resident-supermanager') {
+      if (state.id !== row.id || (state.provider !== 'claude' && state.provider !== 'codex')) continue;
+      const providerSession = state.provider === 'codex' ? env.CODEX_THREAD_ID : env.CLAUDE_CODE_SESSION_ID;
+      if (!providerSession || state.threadId !== providerSession) continue;
+    }
     if (state.kind !== undefined && state.kind !== 'managed' && state.kind !== 'resident-supermanager') continue;
     if (state.status !== 'running' || typeof state.threadId !== 'string' || !sessionIds.includes(state.threadId))
       continue;

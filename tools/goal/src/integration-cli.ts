@@ -257,7 +257,15 @@ export async function runIntegration(argv: string[], runtime: IntegrationRuntime
     return 0;
   }
   if (command === 'manager' && subcommand === 'register-supermanager') {
-    if (id || flags.length) throw new Error('usage: manager register-supermanager');
+    if (id !== undefined && (id !== '--replace-session' || flags.length !== 1))
+      throw new Error('usage: manager register-supermanager [--replace-session <previous-thread-id>]');
+    if (id === undefined && flags.length)
+      throw new Error('usage: manager register-supermanager [--replace-session <previous-thread-id>]');
+    const replaceSession = id === '--replace-session' ? flags[0] : undefined;
+    const validSession = (value: string) =>
+      /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(value);
+    if (replaceSession !== undefined && !validSession(replaceSession))
+      throw new Error('Previous resident session ID is malformed');
     const manager = runtime.supermanager?.trim();
     if (!manager || manager !== runtime.supermanager)
       throw new Error('Configured supermanager identity is missing or malformed');
@@ -267,12 +275,12 @@ export async function runIntegration(argv: string[], runtime: IntegrationRuntime
     const claudeSession = env.CLAUDE_CODE_SESSION_ID;
     const codexSession = env.CODEX_THREAD_ID;
     if (claudeSession && codexSession) throw new Error('Provider session identity is ambiguous');
-    if (
-      !claudeSession ||
-      claudeSession.trim() !== claudeSession ||
-      !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(claudeSession)
-    )
-      throw new Error('Run this command from the resident Claude session with a valid CLAUDE_CODE_SESSION_ID');
+    const sessionId = codexSession || claudeSession;
+    const provider = codexSession ? 'codex' : 'claude';
+    if (!sessionId || !validSession(sessionId))
+      throw new Error(
+        'Run this command from the resident session with a valid CODEX_THREAD_ID or CLAUDE_CODE_SESSION_ID',
+      );
     const authenticated = authenticatedManager(runtime.db, env);
     if (authenticated && authenticated.id !== manager)
       throw new Error(`Authenticated manager ${authenticated.id} cannot register the configured supermanager`);
@@ -284,13 +292,30 @@ export async function runIntegration(argv: string[], runtime: IntegrationRuntime
     try {
       result = await requestHost({
         command: 'register-supermanager',
-        sessionId: claudeSession,
+        sessionId,
+        residentProvider: provider,
+        ...(replaceSession !== undefined ? { replaceSession } : {}),
       });
     } catch (error) {
       if (String(error).includes('Unknown manager host command'))
         throw new Error('The running manager host does not support resident registration; retry after it restarts');
       throw error;
     }
+    if (
+      !result ||
+      typeof result !== 'object' ||
+      !('kind' in result) ||
+      result.kind !== 'resident-supermanager' ||
+      !('id' in result) ||
+      result.id !== manager ||
+      !('provider' in result) ||
+      result.provider !== provider ||
+      !('threadId' in result) ||
+      result.threadId !== sessionId
+    )
+      throw new Error(
+        'The manager host did not register the requested resident identity; restart it on updated code and retry',
+      );
     console.log(JSON.stringify(result));
     return 0;
   }
