@@ -80,6 +80,8 @@ test('the table-shape check does not boot Storybook, and follow writes the publi
   expect(source).toContain("`/v1/realms/${realmId}/members`");
   expect(source).toContain('outsider opened the software session');
   expect(source).toContain('/operator-sessions/open');
+  expect(source).toMatch(/\/account-operations\/execute[\s\S]{0,220}30_000/);
+  expect(source).toMatch(/credential-effects\/stage[\s\S]{0,240}30_000/);
   const rows = parseJourneyTable(readFileSync(capabilities, 'utf8'));
   const census = renderWalkCensus(rows, rows[0]!.revision, rows[0]!.observedAt, '2026-11-07T03:42:43Z', true);
   expect(census).toMatch(/^Round .+ Causal repairs: `\.temp\/continuation\/auth-website-kernel-bearer\.md`/);

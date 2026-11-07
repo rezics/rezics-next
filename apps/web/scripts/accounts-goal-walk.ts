@@ -631,18 +631,30 @@ async function credentialEffect(
   subjectId: string,
   credential: Json,
 ): Promise<{ status: number; value: Json }> {
-  const staged = await auth(stack, '/credential-effects/stage', session, {
-    key: crypto.randomUUID(),
-    subjectId,
-    credential,
-  });
+  const staged = await auth(
+    stack,
+    '/credential-effects/stage',
+    session,
+    {
+      key: crypto.randomUUID(),
+      subjectId,
+      credential,
+    },
+    30_000,
+  );
   if (staged.status !== 200) return staged;
-  const approval = await auth(stack, '/credential-effects/approve', session, staged.value);
+  const approval = await auth(stack, '/credential-effects/approve', session, staged.value, 30_000);
   if (approval.status !== 200) return approval;
-  return auth(stack, '/credential-effects/apply', session, {
-    ...staged.value,
-    reference: approval.value.reference,
-  });
+  return auth(
+    stack,
+    '/credential-effects/apply',
+    session,
+    {
+      ...staged.value,
+      reference: approval.value.reference,
+    },
+    30_000,
+  );
 }
 
 function loopbackOnly(route: import('playwright').Route) {
@@ -1084,18 +1096,30 @@ if (import.meta.main) {
       operatorAccountId: developer.accountId,
       handle: softwareHandle,
     };
-    const approval = await auth(stack, '/account-operations/approve', management, {
-      operationKey,
-      operation,
-      accountId: management.accountId,
-    });
+    const approval = await auth(
+      stack,
+      '/account-operations/approve',
+      management,
+      {
+        operationKey,
+        operation,
+        accountId: management.accountId,
+      },
+      30_000,
+    );
     if (approval.status !== 200) throw new Error(`software approval HTTP ${approval.status}: ${summarize(approval.value)}`);
-    const executed = await auth(stack, '/account-operations/execute', management, {
-      operationKey,
-      operation,
-      accountId: management.accountId,
-      reference: approval.value.reference,
-    });
+    const executed = await auth(
+      stack,
+      '/account-operations/execute',
+      management,
+      {
+        operationKey,
+        operation,
+        accountId: management.accountId,
+        reference: approval.value.reference,
+      },
+      30_000,
+    );
     if (executed.status !== 200) throw new Error(`software execute HTTP ${executed.status}: ${summarize(executed.value)}`);
     humanSoftwareId = asId(executed.value.accountId, 'software');
     const passwordSet = await credentialEffect(stack, management, humanSoftwareId, {
@@ -1111,18 +1135,30 @@ if (import.meta.main) {
       operatorAccountId: opening.accountId,
       subjectAccountId: humanSoftwareId,
     };
-    const openingApproval = await auth(stack, '/account-operations/approve', opening, {
-      operationKey: openingKey,
-      operation: openingOperation,
-      accountId: opening.accountId,
-    });
+    const openingApproval = await auth(
+      stack,
+      '/account-operations/approve',
+      opening,
+      {
+        operationKey: openingKey,
+        operation: openingOperation,
+        accountId: opening.accountId,
+      },
+      30_000,
+    );
     requireStatus(openingApproval, 'operator approve', 200);
-    const opened = await auth(stack, '/operator-sessions/open', opening, {
-      operationKey: openingKey,
-      operation: openingOperation,
-      accountId: opening.accountId,
-      reference: openingApproval.value.reference,
-    });
+    const opened = await auth(
+      stack,
+      '/operator-sessions/open',
+      opening,
+      {
+        operationKey: openingKey,
+        operation: openingOperation,
+        accountId: opening.accountId,
+        reference: openingApproval.value.reference,
+      },
+      30_000,
+    );
     requireStatus(opened, 'operator opening', 200);
     if (opened.value.account_id !== humanSoftwareId) throw new Error('operator opening returned a foreign actor');
     outsider = outsider ?? (await signup(stack, 'out'));
@@ -1133,18 +1169,30 @@ if (import.meta.main) {
       operatorAccountId: outsider.accountId,
       subjectAccountId: humanSoftwareId,
     };
-    const outsiderApproval = await auth(stack, '/account-operations/approve', outsiderSession, {
-      operationKey: outsiderKey,
-      operation: outsiderOperation,
-      accountId: outsiderSession.accountId,
-    });
-    if (outsiderApproval.status === 200) {
-      const outsiderOpened = await auth(stack, '/operator-sessions/open', outsiderSession, {
+    const outsiderApproval = await auth(
+      stack,
+      '/account-operations/approve',
+      outsiderSession,
+      {
         operationKey: outsiderKey,
         operation: outsiderOperation,
         accountId: outsiderSession.accountId,
-        reference: outsiderApproval.value.reference,
-      });
+      },
+      30_000,
+    );
+    if (outsiderApproval.status === 200) {
+      const outsiderOpened = await auth(
+        stack,
+        '/operator-sessions/open',
+        outsiderSession,
+        {
+          operationKey: outsiderKey,
+          operation: outsiderOperation,
+          accountId: outsiderSession.accountId,
+          reference: outsiderApproval.value.reference,
+        },
+        30_000,
+      );
       if (outsiderOpened.status === 200) throw new Error('outsider opened the software session');
       return `software ${humanSoftwareId}; outsider open HTTP ${outsiderOpened.status}`;
     }
