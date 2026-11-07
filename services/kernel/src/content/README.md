@@ -98,7 +98,9 @@ envelope from wall time so a held late-revocation or leaked ALS deadline cannot 
 page and fold large other-author neighbourhoods so Access permission-check plan notices stay inside the 32MiB
 telemetry cap; public-view index proofs ANALYZE that neighbourhood first so a tiny fixture cannot seq-scan the
 account primary key. Kernel composition always forwards the Community `deadlineNow` ambient onto Content HTTP.
-They bootstrap the bundled
+Subject discussion listing HTTP tests use the shared 30s test request budget so Access evaluation under
+parallel check instrumentation cannot turn an empty 200 page into 503; production stays 2s. Author-item
+cases bootstrap the bundled
 definitions release so review subject observation is a current source. The Goal walk on an admitted seeded stack reuses that driver, seed-journal cleanup and Performance
 `waitUntilWalkReady` recovery; it does not add stories.
 

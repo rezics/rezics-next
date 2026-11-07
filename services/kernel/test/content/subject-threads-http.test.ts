@@ -7,6 +7,7 @@ import { newId, routeOf } from '../../src/route/route.ts';
 import { GLOBAL_CONTEXT } from '../../src/semantic/definitions.ts';
 import { openGrowthDatabase } from '../support/growth.ts';
 import { testReceiptKeys } from '../support/receipt-keys.ts';
+import { TEST_REQUEST_DEADLINE_MS } from '../support/test-kernel.ts';
 
 const routeKey = new Uint8Array(32).fill(7);
 const tokens = { current: 1, keys: new Map([[1, new Uint8Array(32).fill(8)]]) };
@@ -19,7 +20,14 @@ let app: ReturnType<typeof createKernel>;
 
 beforeAll(async () => {
   db = await openGrowthDatabase();
-  app = createKernel({ pool: db.pool, routeKey, tokens, receiptKeys: testReceiptKeys() });
+  app = createKernel({
+    pool: db.pool,
+    routeKey,
+    tokens,
+    receiptKeys: testReceiptKeys(),
+    requestDeadlineMs: TEST_REQUEST_DEADLINE_MS,
+  });
+  app.compile();
   db.pool.options.max = 1;
 });
 
