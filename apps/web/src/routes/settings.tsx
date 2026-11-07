@@ -1,4 +1,5 @@
 import { NativeAccountsProvider } from '../settings/adapters/accounts-browser';
+import { NativeVerificationProvider } from '../settings/adapters/verification-view.tsx';
 import { accountProfileHref } from '../accounts/profile-editor/address';
 import { requirePrivatePageAccess } from '../session/guard';
 import { loadPrivatePage } from '../session/private-page';
@@ -34,14 +35,16 @@ function SettingsRoute() {
   const { page, requestSession } = data;
   return (
     <NativeAccountsProvider profileHref={accountProfileHref}>
-      <SettingsPageView
-        page={page}
-        csrfToken={requestSession?.csrfToken ?? null}
-        requestSession={requestSession}
-        ShelfCard={BoundShelfPreferencesCard}
-        PrivacySection={BoundCollectionPrivacySection}
-        content={settingsContent}
-      />
+      <NativeVerificationProvider>
+        <SettingsPageView
+          page={page}
+          csrfToken={requestSession?.csrfToken ?? null}
+          requestSession={requestSession}
+          ShelfCard={BoundShelfPreferencesCard}
+          PrivacySection={BoundCollectionPrivacySection}
+          content={settingsContent}
+        />
+      </NativeVerificationProvider>
     </NativeAccountsProvider>
   );
 }

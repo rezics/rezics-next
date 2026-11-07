@@ -1,61 +1,35 @@
 import type { KernelClient } from '@rezics/client';
 import { isPlatformClosedError } from './ports/vocabulary';
 import { m } from '../paraglide/messages.js';
-import { validateVerificationDraft } from './verification-validation';
+import { portableVerificationFailure, validateVerificationDraft } from './core/verification';
 import { settingsCommandKeyHeader } from './command-headers';
 import { serverSettingsTimer } from './adapters/ambient';
-import { withVerificationDeadline } from './verification-request-deadline';
+import { withVerificationDeadline } from './application/verification';
 import type { SettingsContentFailureReader } from './ports/content';
 
-export type VerificationInput = {
-  subject: string;
-  statement: string;
-  links: { label: string; url: string }[];
-  idempotencyKey: string;
-};
+import {
+  VerificationReadError,
+  type AgentVerificationRequest,
+  type AgentVerificationViewerAction,
+  type VerificationCommandResult,
+  type VerificationFailure,
+  type VerificationInput,
+  type VerificationStatus,
+} from './contract/verification';
 
-type VerificationResponse = NonNullable<
-  Awaited<ReturnType<ReturnType<KernelClient['accounts']>['verification']['get']>>['data']
->;
-export type AgentVerificationRequest = NonNullable<VerificationResponse['verificationRequest']>;
-export type AgentVerificationViewerAction = { action: string; operations: string[] };
-export type VerificationStatus = {
-  verificationRequest: AgentVerificationRequest | null;
-  viewerActions: AgentVerificationViewerAction[];
-};
-
-export type VerificationFailure = {
-  status: number;
-  message: string;
-  code?: string;
-  retryable?: boolean;
-  requestId?: string;
-  retryAfter?: string;
-};
-export type VerificationCommandResult =
-  | { ok: true; verificationRequest: AgentVerificationRequest }
-  | ({ ok: false; outcome?: 'refused' } & VerificationFailure);
-
-/** Explicit private transport envelope: server-function Error serialization drops custom properties. */
-export type VerificationReadResult<T> = { ok: true; value: T } | { ok: false; failure: VerificationFailure };
-
-export type VerificationSearchFailure = Omit<VerificationFailure, 'requestId'> & {
-  kind: 'refused' | 'closed' | 'unavailable';
-};
-export type VerificationSearchResult<T> = { ok: true; value: T } | { ok: false; failure: VerificationSearchFailure };
-
-export class VerificationReadError extends Error {
-  constructor(readonly failure: VerificationFailure) {
-    super(failure.message);
-    this.name = 'VerificationReadError';
-  }
-}
-
-/** Keep the existing snapshot-or-thrown-error read contract at the caller boundary. */
-export function unwrapVerificationRead<T>(result: VerificationReadResult<T>): T {
-  if (!result.ok) throw new VerificationReadError(result.failure);
-  return result.value;
-}
+export {
+  unwrapVerificationRead,
+  VerificationReadError,
+  type AgentVerificationRequest,
+  type AgentVerificationViewerAction,
+  type VerificationCommandResult,
+  type VerificationFailure,
+  type VerificationInput,
+  type VerificationReadResult,
+  type VerificationSearchFailure,
+  type VerificationSearchResult,
+  type VerificationStatus,
+} from './contract/verification';
 
 function record(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
@@ -155,7 +129,8 @@ export function verificationFailureFromException(
   fallbackMessage = m.settings_verification_request_failed(),
   mediaFailure: SettingsContentFailureReader = () => undefined,
 ): VerificationFailure | undefined {
-  if (error instanceof VerificationReadError) return error.failure;
+  const portable = portableVerificationFailure(error, fallbackMessage);
+  if (portable) return portable;
   const contentFailure = mediaFailure(error);
   if (contentFailure)
     return nativeFailure({
@@ -168,7 +143,6 @@ export function verificationFailureFromException(
       status: error.status,
       error: record(error.problem) ? { value: error.problem } : undefined,
     });
-  if (error instanceof DOMException && error.name === 'TimeoutError') return { status: 0, message: fallbackMessage };
   return undefined;
 }
 
@@ -286,48 +260,5 @@ export async function withdrawVerification(
   }
 }
 
-/** Optional display data has its own request, never part of authoritative review/readback. */
-export async function readVerificationTitle(
-  client: KernelClient,
-  subjectId: string,
-  authorization: string,
-  languages: string[],
-  caller?: AbortSignal,
-): Promise<string | null> {
-  try {
-    return await withVerificationDeadline(
-      async (signal) => {
-        const subject = await client.subjects({ id: subjectId }).get({ headers: { authorization }, fetch: { signal } });
-        const labels = subject.error ? undefined : subject.data?.subject?.labels;
-        return labels
-          ? (languages.map((language) => labels[language]).find((label) => label !== undefined) ??
-              Object.values(labels)[0] ??
-              null)
-          : null;
-      },
-      caller,
-      serverSettingsTimer(),
-    );
-  } catch {
-    return null;
-  }
-}
-
-/** A fresh, caller-bound release read cannot inherit a stalled shared display-cache promise. */
-export async function readVerificationEligibility(client: KernelClient, authorization: string, caller?: AbortSignal) {
-  return withVerificationDeadline(
-    async (signal) => {
-      const options = { headers: { authorization }, fetch: { signal } };
-      const active = await client.definitions.active.get(options);
-      const digest = active.data?.digest;
-      if (active.error || !digest) throw new Error('Eligibility unavailable');
-      signal.throwIfAborted();
-      const released = await client.definitions.releases({ digest }).get(options);
-      if (released.error || released.data?.digest !== digest || !released.data.release)
-        throw new Error('Eligibility unavailable');
-      return released.data.release;
-    },
-    caller,
-    serverSettingsTimer(),
-  );
-}
+export { readVerificationEligibility, readVerificationTitle } from './adapters/verification';
+export { validateVerificationDraft } from './core/verification';

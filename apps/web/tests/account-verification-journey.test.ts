@@ -14,14 +14,14 @@ import {
   readVerificationTitle,
   requestVerification,
   withdrawVerification,
-} from '../src/settings/verification-core';
+} from '../src/settings/adapters/verification';
 import {
   canRequestVerification,
   canRetryVerification,
   canWithdrawVerification,
   VerificationRecovery,
   verificationWithdrawalObservation,
-} from '../src/settings/verification-recovery';
+} from '../src/settings/application/verification';
 import { readAccountRenameContext } from '../src/settings/adapters/accounts';
 import { accountRenameHref, accountSafetyLinks, securityHrefFromIssuer } from '../src/settings/account-safety-links';
 import { officialProfileRead } from '../src/settings/editable-profile-source';
