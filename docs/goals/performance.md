@@ -212,3 +212,10 @@ compiler and cleanup results remain independent. Same-run remote returns retry o
 status only after observed process and Docker-resource settlement. Auth prepares a schema/toolchain/content-keyed SQL
 view for Auth plus imported Kernel sources, seeding from a compatible Kernel snapshot and preserving explicit owner
 Reylo configurations.
+Decision: native development preparation reuses the existing Kernel SQL analysis producer and shares its private view
+with ordinary runtime children; only a real-mounted website projection is cached by database/schema/source/configuration.
+The existing catalogue/configuration and cancellation fixtures are the fewest tests for fresh/repeated preparation,
+refresh, binding and original failure attribution. [Local stack](../development/local-stack.md#native-preparation-before-useful-web)
+owns anchors and every nested setup/runtime cost. The measured 156896ms cold import precedes Worker launch at about
+250332ms of the unchanged 270000ms fixture lifetime; it cannot establish a Worker/Vite stall. Original native
+sign-in/out and full Worker/Web qualification run after integration through their retained controller selections.

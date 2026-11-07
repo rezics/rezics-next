@@ -42,6 +42,14 @@ import {
   type WalkNames,
 } from '../../../scripts/walk-stack.ts';
 import { localJwksTransport } from '../../kernel/src/access/membership-work-config.ts';
+import {
+  developmentDatabaseUrl,
+  developmentNativeWebsite,
+  disposeDevelopmentNative,
+  nativePhase,
+  prepareDevelopmentNative,
+  withDevelopmentDatabase,
+} from './dev-stack-native.ts';
 
 export const root = resolve(import.meta.dir, '../../..');
 const state = resolve(root, '.temp/local-stack');
@@ -173,38 +181,39 @@ export function developmentMediaBindings(
 /** Build the same mounted Kernel declarations used by the host; no request-time discovery. */
 export async function developmentWebsiteConfiguration(env?: Record<string, string>) {
   const environment = env ?? (await kernelEnvironment());
-  const [{ createKernelActionCatalogue }, { readConfig }, { accessActionCatalogue }] = await withDevelopmentDatabase(
-    environment,
-    () =>
-      Promise.all([
-        import('../../kernel/src/http/kernel.ts'),
-        import('../../kernel/src/server.ts'),
-        import('../../kernel/src/access/index.ts'),
-      ]),
-  );
-  const config = await phase('catalogue-configuration', () => readConfig(environment));
-  const pool = new Pool({ connectionString: config.databaseUrl });
-  try {
-    // Setup and page bindings need every mounted declaration, not an HTTP host's compiled handlers.
-    // Use the same native mount and checks as createKernel; neither cache nor substitute authority is involved.
-    const catalogue = await phase('catalogue-native-mount', () =>
-      createKernelActionCatalogue({
-        pool,
-        tokens: config.tokens,
-        routeKey: config.routeKey,
-        ...(config.receiptKeys ? { receiptKeys: config.receiptKeys } : {}),
-      }),
+  return await developmentNativeWebsite(environment, async () => {
+    const [{ createKernelActionCatalogue }, { readConfig }, { accessActionCatalogue }] = await phase(
+      'native-imports',
+      () =>
+        Promise.all([
+          import('../../kernel/src/http/kernel.ts'),
+          import('../../kernel/src/server.ts'),
+          import('../../kernel/src/access/index.ts'),
+        ]),
     );
-    return await phase('catalogue-website-scopes', () => {
-      const siteActions = accessActionCatalogue(catalogue);
-      return {
-        ...developmentWebsiteScopeConfiguration(mountedWebsiteConfiguration(catalogue)),
-        AUTH_SECURITY_SCOPE_CONFIGURATION: authSecurityScopeConfiguration(siteActions.keys()),
-      };
-    });
-  } finally {
-    await phase('catalogue-pool-settlement', () => pool.end());
-  }
+    const config = await phase('catalogue-configuration', () => readConfig(environment));
+    const pool = new Pool({ connectionString: config.databaseUrl });
+    try {
+      // The reusable projection is produced only by this real native mount, without compiling HTTP handlers.
+      const catalogue = await phase('catalogue-native-mount', () =>
+        createKernelActionCatalogue({
+          pool,
+          tokens: config.tokens,
+          routeKey: config.routeKey,
+          ...(config.receiptKeys ? { receiptKeys: config.receiptKeys } : {}),
+        }),
+      );
+      return await phase('catalogue-website-scopes', () => {
+        const siteActions = accessActionCatalogue(catalogue);
+        return {
+          ...developmentWebsiteScopeConfiguration(mountedWebsiteConfiguration(catalogue)),
+          AUTH_SECURITY_SCOPE_CONFIGURATION: authSecurityScopeConfiguration(siteActions.keys()),
+        };
+      });
+    } finally {
+      await phase('catalogue-pool-settlement', () => pool.end());
+    }
+  });
 }
 
 export const importerScopes = [
@@ -505,30 +514,7 @@ export async function identityEpochBootstrapRemaining(databaseUrl: string): Prom
   }
 }
 export function localDatabase(url: string): URL {
-  const parsed = new URL(url);
-  if (!['postgres:', 'postgresql:'].includes(parsed.protocol) || parsed.hostname !== '127.0.0.1')
-    throw new Error('Local stack requires a PostgreSQL database on 127.0.0.1');
-  return parsed;
-}
-
-/**
- * Reylo's first SQL import creates a worker with a snapshot of process.env. Native
- * Kernel imports reach SQL before readConfig can consume the supplied environment.
- * Admit that exact local database before registration and native loading. Runtime
- * pools still use explicit configuration; restore the caller's ambient environment
- * after loading, including when an import fails.
- */
-async function withDevelopmentDatabase<T>(environment: Record<string, string>, load: () => Promise<T>): Promise<T> {
-  const databaseUrl = localDatabase(environment.DATABASE_URL!).href;
-  const previous = process.env.DATABASE_URL;
-  process.env.DATABASE_URL = databaseUrl;
-  try {
-    await phase('native-registration', () => import('reylo/register'));
-    return await phase('native-imports', load);
-  } finally {
-    if (previous === undefined) delete process.env.DATABASE_URL;
-    else process.env.DATABASE_URL = previous;
-  }
+  return new URL(developmentDatabaseUrl(url));
 }
 
 async function authDatabaseUrl() {
@@ -540,49 +526,40 @@ async function authDatabaseUrl() {
 
 async function setup() {
   if (process.env.NODE_ENV === 'production') throw new Error('Local stack is development only');
-  const env = await phase('setup-environment', kernelEnvironment());
+  const env = await phase('setup-environment', kernelEnvironment);
   const kernelUrl = localDatabase(env.DATABASE_URL!);
-  await phase(
-    'setup-auth-database',
-    (async () => {
-      const pool = new Pool({ connectionString: kernelUrl.href });
-      try {
-        // The service has its own database even though development shares one PostgreSQL server.
-        if (!(await pool.query("SELECT 1 FROM pg_database WHERE datname='rezics_auth'")).rowCount) {
-          try {
-            await pool.query('CREATE DATABASE rezics_auth');
-          } catch (error) {
-            if ((error as { code?: string }).code !== '42P04') throw error;
-          }
+  await phase('setup-auth-database', async () => {
+    const pool = new Pool({ connectionString: kernelUrl.href });
+    try {
+      // The service has its own database even though development shares one PostgreSQL server.
+      if (!(await pool.query("SELECT 1 FROM pg_database WHERE datname='rezics_auth'")).rowCount) {
+        try {
+          await pool.query('CREATE DATABASE rezics_auth');
+        } catch (error) {
+          if ((error as { code?: string }).code !== '42P04') throw error;
         }
-      } finally {
-        await pool.end();
       }
-    })(),
-  );
-  await phase(
-    'setup-auth-migrations',
-    authDatabaseUrl().then((url) => migrate(url)),
-  );
-  const keys = await phase('setup-keys', developmentKeys());
+    } finally {
+      await pool.end();
+    }
+  });
+  await phase('setup-auth-migrations', async () => migrate(await authDatabaseUrl()));
+  const keys = await phase('setup-keys', developmentKeys);
   const contentBindings = developmentContentBindings(env);
+  Object.assign(env, contentBindings, developmentKernelBindings());
   const kernelEnvFile = resolve(root, 'services/kernel/.env');
-  await phase(
-    'setup-kernel-bindings',
-    (async () => {
-      await privateFile(
-        kernelEnvFile,
-        updateEnvironmentText(await readFile(kernelEnvFile, 'utf8'), {
-          ...contentBindings,
-          ...developmentKernelBindings(),
-        }),
-      );
-      await privateFile(resolve(state, 'importer.jwk'), JSON.stringify(keys.importer));
-    })(),
-  );
+  await phase('setup-kernel-bindings', async () => {
+    await privateFile(
+      kernelEnvFile,
+      updateEnvironmentText(await readFile(kernelEnvFile, 'utf8'), {
+        ...contentBindings,
+        ...developmentKernelBindings(),
+      }),
+    );
+    await privateFile(resolve(state, 'importer.jwk'), JSON.stringify(keys.importer));
+  });
   const website = await phase('setup-catalogue', () => developmentWebsiteConfiguration(env));
-  await phase(
-    'setup-web-bindings',
+  await phase('setup-web-bindings', () =>
     privateFile(
       resolve(root, 'apps/web/.dev.vars'),
       developmentBindings({
@@ -622,14 +599,16 @@ export async function assemble(options?: {
     { createNativeAccountBindings },
     { readConfig },
   ] = await withDevelopmentDatabase(env, () =>
-    Promise.all([
-      import('../src/index.ts'),
-      import('../../kernel/src/http/kernel.ts'),
-      import('../../kernel/src/http/request.ts'),
-      import('../../kernel/src/access/index.ts'),
-      import('../../kernel/src/access/native-account-bindings.ts'),
-      import('../../kernel/src/server.ts'),
-    ]),
+    phase('native-imports', () =>
+      Promise.all([
+        import('../src/index.ts'),
+        import('../../kernel/src/http/kernel.ts'),
+        import('../../kernel/src/http/request.ts'),
+        import('../../kernel/src/access/index.ts'),
+        import('../../kernel/src/access/native-account-bindings.ts'),
+        import('../../kernel/src/server.ts'),
+      ]),
+    ),
   );
   const config = readConfig(env);
   const kernelPool = new Pool({ connectionString: config.databaseUrl });
@@ -1097,6 +1076,8 @@ async function start() {
   process.once('SIGINT', stop);
   process.once('SIGTERM', stop);
   try {
+    Object.assign(env, await phase('runtime-native-preparation', () => prepareDevelopmentNative(env)));
+    if (stopping) return;
     const identity = launch(['bun', 'services/auth/scripts/dev-stack.ts', 'host']);
     if (env.REZICS_WALK_DEFER_FRONTENDS === '1') {
       await phase('identity', untilReady([...plan.nativeReady, `${origins.kernel}/health`], [identity]));
@@ -1128,6 +1109,7 @@ async function start() {
   } finally {
     stopping = true;
     await stopChildren(children);
+    disposeDevelopmentNative();
     process.off('SIGINT', stop);
     process.off('SIGTERM', stop);
   }
@@ -1135,24 +1117,7 @@ async function start() {
 
 /** Names the startup phase that failed, so the stack output says which dependency was missing. */
 async function phase<T>(name: string, work: Promise<T> | (() => T | Promise<T>)): Promise<T> {
-  // Fixed operation names only: never print environment values, credentials or request data.
-  const started = performance.now();
-  console.error(`stack: ${name} starting utc=${new Date().toISOString()}`);
-  try {
-    const value = await (typeof work === 'function' ? work() : work);
-    console.error(
-      `stack: ${name} ready utc=${new Date().toISOString()} elapsedMs=${Math.round(performance.now() - started)}`,
-    );
-    return value;
-  } catch (error) {
-    console.error(
-      `stack: ${name} failed utc=${new Date().toISOString()} elapsedMs=${Math.round(performance.now() - started)}`,
-    );
-    throw new Error(
-      `walk: the ${name} phase did not start: ${error instanceof Error ? error.message : String(error)}`,
-      { cause: error },
-    );
-  }
+  return await nativePhase(name, () => (typeof work === 'function' ? work() : work));
 }
 
 /** Resolves once `child` prints `marker`; its output keeps flowing to this process's stdout for the child's lifetime. */

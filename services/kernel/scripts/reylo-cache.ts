@@ -41,6 +41,11 @@ export type ReyloAnalysisDependencies = {
   schemaWorkspace?: string;
   schemaDumps?: (url: string, workspace: string) => Record<string, string>;
   identity?: (repository: string, workspace: string, sourceWorkspaces?: readonly string[]) => string;
+  /** Native startup requires diagnostics instead of silently retrying live imports. */
+  requireAnalysis?: boolean;
+  /** A native caller has already inspected the schema through its exact published URL. */
+  allowDirectDatabase?: boolean;
+  phase?: <T>(name: string, work: () => T | Promise<T>) => Promise<T>;
   generate?: (
     files: readonly string[],
     configFile: string,
@@ -345,7 +350,7 @@ export async function prepareReyloAnalysisCache(
   });
   if (
     !env.DATABASE_URL ||
-    !env.KERNEL_DATABASE_CONTAINER ||
+    (!env.KERNEL_DATABASE_CONTAINER && !dependencies.allowDirectDatabase) ||
     env.REYLO_CONFIG !== undefined ||
     sourceWorkspaces.some(
       (project) => existsSync(resolve(project, '.reylo.yaml')) || existsSync(resolve(project, '.reylo.yml')),
@@ -353,11 +358,16 @@ export async function prepareReyloAnalysisCache(
   )
     return noCache();
 
-  const dumps = (dependencies.schemaDumps ?? schemaDumps)(env.DATABASE_URL, schemaWorkspace);
+  const phase = dependencies.phase ?? (async <T>(_name: string, work: () => T | Promise<T>) => await work());
+  const dumps = await phase('schema', () =>
+    (dependencies.schemaDumps ?? schemaDumps)(env.DATABASE_URL!, schemaWorkspace),
+  );
   const schemaDigest = schemaDumpDigest(dumps);
   const cacheIdentity = dependencies.identity ?? reyloAnalysisIdentity;
   const databaseConfiguration = stableDatabaseConfiguration(env.DATABASE_URL, env);
-  const identity = sha256(cacheIdentity(repository, workspace, sourceWorkspaces), databaseConfiguration);
+  const identity = await phase('compiler-identity', () =>
+    sha256(cacheIdentity(repository, workspace, sourceWorkspaces), databaseConfiguration),
+  );
   const cacheRoot = dependencies.cacheRoot ?? typecheckCacheRoot(env);
   const namespace = `reylo-${basename(workspace)}`;
   const base = join(cacheRoot, namespace, identity, schemaDigest);
@@ -373,7 +383,9 @@ export async function prepareReyloAnalysisCache(
       path: resolve(project, file),
     }));
   });
-  const hashes = Object.fromEntries(sourceFiles.map(({ key, path }) => [key, sha256(readFileSync(path))]));
+  const hashes = await phase('sql-sources', () =>
+    Object.fromEntries(sourceFiles.map(({ key, path }) => [key, sha256(readFileSync(path))])),
+  );
   let changed = sourceFiles.filter(({ key }) => previous.files[key] !== hashes[key]);
   const runRoot = join(repository, '.temp/typecheck/reylo-runs');
   mkdirSync(runRoot, { recursive: true });
@@ -383,7 +395,7 @@ export async function prepareReyloAnalysisCache(
   try {
     let inherited = false;
     if (snapshot) {
-      if (!copyVerifiedSnapshot(snapshot, privateRoot)) {
+      if (!(await phase('snapshot', () => copyVerifiedSnapshot(snapshot, privateRoot)))) {
         previous = { version: 1, files: {} };
         changed = sourceFiles;
       }
@@ -391,7 +403,7 @@ export async function prepareReyloAnalysisCache(
       const seedIdentity = sha256(cacheIdentity(repository, seedWorkspace, [seedWorkspace]), databaseConfiguration);
       const seedBase = join(cacheRoot, `reylo-${basename(seedWorkspace)}`, seedIdentity, schemaDigest);
       const seedSnapshot = readCacheSnapshot(seedBase);
-      if (seedSnapshot && copyVerifiedSnapshot(seedSnapshot, privateRoot)) {
+      if (seedSnapshot && (await phase('seed-snapshot', () => copyVerifiedSnapshot(seedSnapshot, privateRoot)))) {
         const prefix = relative(repository, seedWorkspace).split(sep).join('/');
         previous = {
           version: 1,
@@ -399,22 +411,29 @@ export async function prepareReyloAnalysisCache(
             Object.entries(seedSnapshot.manifest.files).map(([path, digest]) => [`${prefix}/${path}`, digest]),
           ),
         };
+        changed = sourceFiles.filter(({ key }) => previous.files[key] !== hashes[key]);
         inherited = true;
       }
     }
+    if (inherited && changed.length === 0)
+      await phase('database-binding', () => rekeyEntries(join(privateRoot, '.reylo', 'queries'), env.DATABASE_URL!));
     let written = 0;
     if (changed.length > 0) {
       writeFileSync(configFile, `direct_url: ${JSON.stringify(env.DATABASE_URL)}\n`);
       const queries = join(privateRoot, '.reylo', 'queries');
-      rekeyEntries(queries, env.DATABASE_URL);
+      await phase('database-binding', () => rekeyEntries(queries, env.DATABASE_URL!));
       const before = entryCount(queries);
-      const generated = await (dependencies.generate ?? generateReyloAnalysis)(
-        changed.map(({ input }) => input),
-        configFile,
-        env,
-        workspace,
+      const generated = await phase('generate', () =>
+        (dependencies.generate ?? generateReyloAnalysis)(
+          changed.map(({ input }) => input),
+          configFile,
+          env,
+          workspace,
+        ),
       );
       if (generated.status !== 0) {
+        if (dependencies.requireAnalysis)
+          throw new Error(`Reylo generation exited (${generated.status})\n${generated.stdout}${generated.stderr}`);
         rmSync(privateRoot, { recursive: true, force: true });
         return noCache();
       }
@@ -424,7 +443,7 @@ export async function prepareReyloAnalysisCache(
     if (changed.length > 0 || inherited) {
       const manifest = JSON.stringify({ version: 1, files: hashes } satisfies ReyloCacheManifest) + '\n';
       mkdirSync(base, { recursive: true });
-      publishCacheSnapshot(base, privateRoot, manifest);
+      await phase('publish', () => publishCacheSnapshot(base, privateRoot, manifest));
     }
     keep = true;
     return {

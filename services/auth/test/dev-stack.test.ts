@@ -3,7 +3,7 @@ import { chromium } from 'playwright';
 import { expect as browserExpect } from 'playwright/test';
 import { randomUUID } from 'node:crypto';
 import { existsSync } from 'node:fs';
-import { cp, mkdir, mkdtemp, readdir, symlink, rm } from 'node:fs/promises';
+import { cp, mkdir, mkdtemp, readdir, symlink, rm, stat } from 'node:fs/promises';
 import { dirname, resolve } from 'node:path';
 import { Pool } from 'pg';
 import { root } from '../scripts/dev-stack.ts';
@@ -115,8 +115,15 @@ test('fresh checkout starts native loopback Auth and signs a person into and out
         .at(-1)!;
       expect(port).toBe(selected.KERNEL_DATABASE_PORT!);
       expect(new URL(kernelDatabaseUrl).port).toBe(port);
+      const preparedDirectory = resolve(checkout, '.temp/local-stack/native-website');
+      const prepared = await readdir(preparedDirectory);
+      expect(prepared).toHaveLength(1);
+      const preparedFile = resolve(preparedDirectory, prepared[0]!);
+      const preparedAt = (await stat(preparedFile)).mtimeMs;
       for (const [index, command] of infra.entries()) await commands(`setup-repeat-${index}`, command, true); // Existing, migrated development DB is a no-op.
       expect(await Bun.file(resolve(checkout, 'services/kernel/.env')).text()).toBe(kernelEnv);
+      expect(await readdir(preparedDirectory)).toEqual(prepared);
+      expect((await stat(preparedFile)).mtimeMs).toBe(preparedAt);
       stack = lifetime.start('start', devCommand, {
         cwd: checkout,
         env,

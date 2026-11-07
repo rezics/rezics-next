@@ -5,7 +5,7 @@ import { processIdentity } from '../../../scripts/check-custody.ts';
 // The full scope composition imports Kernel SQL, so run its existing assertions in the native database lane.
 import '../scripts/dev-stack.test.ts';
 import { mkdir, mkdtemp, readFile, readdir, rm, stat, utimes, writeFile } from 'node:fs/promises';
-import { relative, resolve } from 'node:path';
+import { dirname, relative, resolve } from 'node:path';
 import { createRequire } from 'node:module';
 import {
   developmentKeys,
@@ -595,7 +595,7 @@ test('installed host receives management operations and independent reads from i
 });
 
 for (const mode of ['cancel', 'failure'] as const) {
-  test(`fixture ${mode} settles setup descendants before its resources can be removed`, async () => {
+  test(`fixture ${mode} settles native generator descendants before its resources can be removed`, async () => {
     await mkdir(resolve(root, '.temp'), { recursive: true });
     const directory = await mkdtemp(resolve(root, '.temp/stack-lifetime-'));
     const marker = resolve(directory, 'descendant.json');
@@ -607,13 +607,19 @@ for (const mode of ['cancel', 'failure'] as const) {
       writeFileSync(${JSON.stringify(marker)}, JSON.stringify({pid: process.pid}));
       setInterval(() => {}, 1000);
     `;
-    const parent = `
-      import { existsSync } from 'node:fs';
+    const generator = `
       Bun.spawn([process.execPath, '--eval', ${JSON.stringify(grandchild)}], {
-        stdout: 'inherit', stderr: 'inherit', detached: ${mode === 'cancel'},
+        stdout: 'inherit', stderr: 'inherit',
       });
-      while (!existsSync(${JSON.stringify(marker)})) await Bun.sleep(10);
-      ${mode === 'failure' ? 'process.exit(42);' : "process.on('SIGTERM', () => process.exit(0)); setInterval(() => {}, 1000);"}
+      while (!Bun.file(${JSON.stringify(marker)}).size) await Bun.sleep(10);
+      ${mode === 'failure' ? 'process.exit(42);' : 'setInterval(() => {}, 1000);'}
+    `;
+    const parent = `
+      const { runDevelopmentNativeGenerator } = await import('./services/auth/scripts/dev-stack-native.ts');
+      const result = await runDevelopmentNativeGenerator(
+        [process.execPath, '--eval', ${JSON.stringify(generator)}], process.cwd(), process.env,
+      );
+      process.exit(result.status);
     `;
     try {
       const command = lifetime.command('setup-witness', [process.execPath, '--eval', parent], {
@@ -653,5 +659,178 @@ test('fixture deadline terminates and awaits a pending setup command', async () 
     await expect(pending).rejects.toThrow('Local stack fixture work deadline exceeded');
   } finally {
     await lifetime.close();
+  }
+});
+
+test('native preparation reuses real mounted output and refreshes database, schema, source and compiler inputs', async () => {
+  const { developmentNativeWebsite, disposeDevelopmentNative, prepareDevelopmentNative, withDevelopmentDatabase } =
+    await import('../scripts/dev-stack-native.ts');
+  const { prepareReyloAnalysisCache } = await import('../../kernel/scripts/reylo-cache.ts');
+  await mkdir(resolve(root, '.temp'), { recursive: true });
+  const directory = await mkdtemp(resolve(root, '.temp/native-preparation-'));
+  const workspace = resolve(directory, 'kernel');
+  await mkdir(resolve(workspace, 'src'), { recursive: true });
+  const query = resolve(workspace, 'src/query.sql');
+  await writeFile(query, 'SELECT 1');
+  let schema = 'schema-one';
+  let source = 'source-one';
+  let compiler = 'compiler-one';
+  let mounts = 0;
+  let generated = 0;
+  const urls: string[] = [];
+  const privateViews: string[] = [];
+  const env = { DATABASE_URL: 'postgres://127.0.0.1:54329/native_one', KERNEL_DATABASE_CONTAINER: 'native-one' };
+  const previous = { DATABASE_URL: process.env.DATABASE_URL, REYLO_CONFIG: process.env.REYLO_CONFIG };
+  const previousArtifact = process.env.WEBSITE_CONFIGURATION_FILE;
+  const dependencies = {
+    directory: resolve(directory, 'website'),
+    sourceIdentity: () => `${source}:${compiler}`,
+    schemaDumps: (url: string) => {
+      urls.push(url);
+      expect(process.env.KERNEL_DATABASE_CONTAINER).toBe('native-one');
+      return { 'schema.sql': schema };
+    },
+    prepareSql: async (environment: NodeJS.ProcessEnv, options: Parameters<typeof prepareReyloAnalysisCache>[1]) => {
+      const analysis = await prepareReyloAnalysisCache(environment, {
+        ...options,
+        repository: directory,
+        workspace,
+        sourceWorkspaces: [workspace],
+        schemaWorkspace: workspace,
+        identity: () => compiler,
+        cacheRoot: resolve(directory, 'cache'),
+        generate: async (files, config, supplied) => {
+          generated++;
+          expect(files).toEqual(['src/query.sql']);
+          expect(await readFile(config, 'utf8')).toContain(JSON.stringify(supplied.DATABASE_URL));
+          const entries = resolve(dirname(config), '.reylo/queries');
+          await mkdir(entries, { recursive: true });
+          await writeFile(
+            resolve(entries, 'entry.json'),
+            JSON.stringify({ schema, sql: await readFile(query, 'utf8') }),
+          );
+          return { status: 0, stdout: '', stderr: '' };
+        },
+      });
+      privateViews.push(dirname(analysis.environment.REYLO_CONFIG!));
+      return analysis;
+    },
+  };
+  const mount = async () => {
+    mounts++;
+    expect(process.env.DATABASE_URL).toBe(new URL(env.DATABASE_URL).href);
+    expect(await readFile(process.env.REYLO_CONFIG!, 'utf8')).toBe('direct_url: ""\n');
+    return { scopes: [`mounted-${source}-${schema}`] };
+  };
+  try {
+    const website = await developmentNativeWebsite(env, mount, dependencies);
+    expect(await developmentNativeWebsite(env, mount, dependencies)).toEqual(website);
+    expect([mounts, generated]).toEqual([1, 1]);
+    // The launch caller gets the same native view, and a child accepts that exact handoff without generating it again.
+    const runtime = await prepareDevelopmentNative(env, dependencies);
+    expect((await prepareDevelopmentNative(runtime, dependencies)).REYLO_CONFIG).toBe(runtime.REYLO_CONFIG);
+    await withDevelopmentDatabase(
+      runtime,
+      async () => expect(process.env.REYLO_CONFIG).toBe(runtime.REYLO_CONFIG),
+      dependencies,
+    );
+    expect(generated).toBe(1);
+    expect({ DATABASE_URL: process.env.DATABASE_URL, REYLO_CONFIG: process.env.REYLO_CONFIG }).toEqual(previous);
+    source = 'source-two';
+    await writeFile(query, 'SELECT 2');
+    expect(await developmentNativeWebsite(env, mount, dependencies)).not.toEqual(website);
+    expect([mounts, generated]).toEqual([2, 2]);
+    schema = 'schema-two';
+    await developmentNativeWebsite(env, mount, dependencies);
+    compiler = 'compiler-two';
+    await developmentNativeWebsite(env, mount, dependencies);
+    expect([mounts, generated]).toEqual([4, 4]);
+    env.DATABASE_URL = 'postgres://127.0.0.1:54330/native_two';
+    await developmentNativeWebsite(env, mount, dependencies);
+    expect(mounts).toBe(5);
+    expect(urls).toContain(new URL(env.DATABASE_URL).href);
+    expect(generated).toBe(5);
+    const artifact = resolve(directory, 'website-deployment.json');
+    process.env.WEBSITE_CONFIGURATION_FILE = artifact;
+    await writeFile(artifact, '{"WEBSITE_SCOPES":"first"}');
+    await developmentNativeWebsite(env, mount, dependencies);
+    await writeFile(artifact, '{"WEBSITE_SCOPES":"second"}');
+    await developmentNativeWebsite(env, mount, dependencies);
+    expect(mounts).toBe(7);
+    expect(generated).toBe(5);
+  } finally {
+    if (previousArtifact === undefined) delete process.env.WEBSITE_CONFIGURATION_FILE;
+    else process.env.WEBSITE_CONFIGURATION_FILE = previousArtifact;
+    disposeDevelopmentNative();
+    expect(privateViews.every((path) => !existsSync(path))).toBe(true);
+    await rm(directory, { recursive: true, force: true });
+  }
+});
+
+test('native preparation preserves SQL diagnostics, retries failed preparation and restores the original import environment', async () => {
+  const { developmentNativeWebsite, disposeDevelopmentNative, nativePhase, withDevelopmentDatabase } =
+    await import('../scripts/dev-stack-native.ts');
+  const { prepareReyloAnalysisCache } = await import('../../kernel/scripts/reylo-cache.ts');
+  await mkdir(resolve(root, '.temp'), { recursive: true });
+  const directory = await mkdtemp(resolve(root, '.temp/native-diagnostic-'));
+  await mkdir(resolve(directory, 'src'), { recursive: true });
+  await writeFile(resolve(directory, 'src/query.sql'), 'SELECT missing_column');
+  let failing = true;
+  const dependencies = {
+    directory: resolve(directory, 'website'),
+    sourceIdentity: () => directory,
+    schemaDumps: () => ({ 'schema.sql': 'schema' }),
+    prepareSql: (environment: NodeJS.ProcessEnv, options: Parameters<typeof prepareReyloAnalysisCache>[1]) =>
+      prepareReyloAnalysisCache(environment, {
+        ...options,
+        repository: directory,
+        workspace: directory,
+        sourceWorkspaces: [directory],
+        identity: () => 'compiler',
+        cacheRoot: resolve(directory, 'cache'),
+        generate: async (_files, config) => {
+          if (failing)
+            return { status: 1, stdout: 'query.sql:1:8\n', stderr: 'column missing_column does not exist\n' };
+          await mkdir(resolve(dirname(config), '.reylo/queries'), { recursive: true });
+          return { status: 0, stdout: '', stderr: '' };
+        },
+      }),
+  };
+  const env = { DATABASE_URL: 'postgres://127.0.0.1:54329/diagnostics', REYLO_CONFIG: '/foreign/compiler/.reylo.yaml' };
+  const original = { DATABASE_URL: process.env.DATABASE_URL, REYLO_CONFIG: process.env.REYLO_CONFIG };
+  let mounted = false;
+  try {
+    await expect(
+      developmentNativeWebsite(
+        env,
+        async () => {
+          mounted = true;
+          return {};
+        },
+        dependencies,
+      ),
+    ).rejects.toThrow('Reylo generation exited (1)\nquery.sql:1:8\ncolumn missing_column does not exist');
+    expect(mounted).toBe(false);
+    expect(existsSync(dependencies.directory)).toBe(false);
+    failing = false;
+    const failure = new Error('native-caller.ts:17: original import failure');
+    try {
+      await withDevelopmentDatabase(
+        env,
+        () =>
+          nativePhase('native-imports', () => {
+            throw failure;
+          }),
+        dependencies,
+      );
+      throw new Error('expected the import failure');
+    } catch (error) {
+      expect((error as Error).cause).toBe(failure);
+      expect((error as Error).message).toContain('native-imports phase did not start: native-caller.ts:17');
+    }
+    expect({ DATABASE_URL: process.env.DATABASE_URL, REYLO_CONFIG: process.env.REYLO_CONFIG }).toEqual(original);
+  } finally {
+    disposeDevelopmentNative();
+    await rm(directory, { recursive: true, force: true });
   }
 });

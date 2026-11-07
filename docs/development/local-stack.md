@@ -462,3 +462,45 @@ The seed's `REZICS_DEV_PERSONA_*`, `AUTH_ORIGIN` and `KERNEL_ORIGIN` environment
 configured local account. Optional `REZICS_DEV_BANGUMI_GAME_ENVIRONMENT_BINDINGS` names the reviewed Game
 platform/engine JSON used by `--bangumi-game-environment-bindings`; missing input omits those proposals only.
 Seed origins accept HTTPS or loopback HTTP (`localhost`, `127.0.0.1`, `[::1]`).
+
+### Native preparation before useful Web
+
+Decision: prepare imported Kernel SQL through the existing schema/toolchain/source-keyed Reylo cache, share the
+private view with ordinary runtime children, and reuse only a real-mounted website projection keyed by database,
+schema, source and configuration. Extend the existing causal fixtures; keep the 270000ms native work lifetime.
+Auth's SQL files are read as text and belong to its separate database; they are not Kernel SQL-import prerequisites.
+
+`services/auth/scripts/dev-stack-native.ts` owns preparation. The selected loopback database URL, PostgreSQL options,
+actual schema dumps, compiler/engine inputs and retained TS/SQL/package sources anchor reuse. A changed database,
+schema, SQL file, declaration, compiler or website configuration (including the selected deployment artifact bytes)
+retires the relevant result. A fresh source copy
+can reuse the host's verified Kernel analysis snapshot across database ports; each consumer owns its private view.
+An inherited compiler `REYLO_CONFIG` does not select the native database. Workspace Reylo project files retain their
+explicit semantics. The first mount still uses `createKernelActionCatalogue` and the mounted action catalogue;
+its cached projection grants no access and never substitutes a runtime Kernel or Auth registration.
+
+Setup retains Auth database creation/migration, private keys, Kernel/media bindings and Web bindings. Repeated setup
+reads the current preparation inputs and reuses the unchanged mounted projection. `start` prepares before spawning
+Auth, then gives the same view to Kernel, the default Worker and frontend binding callers. Auth still provisions its
+native persona and registers clients; Kernel bootstraps before Worker discovery, and useful `/en` remains Web's
+readiness target. Stop settles children before removing their private SQL view. The generator owns its detached
+process tree, allows 250ms for TERM and awaits KILL settlement before releasing temporary files.
+
+Preparation is admitted setup work, not a request or background Worker cost. `setup-catalogue` contains
+`native-schema` (all per-module schema dumps), `native-sources` (all retained source/compiler input bytes),
+`catalogue-deployment-input` when selected, `catalogue-prepared-read`, and, on a miss, `native-sql-preparation`, `native-registration`, `native-imports`,
+`catalogue-configuration`, `catalogue-native-mount`, `catalogue-website-scopes`, `catalogue-pool-settlement` and
+`catalogue-prepared-publish`. SQL preparation reports `native-sql-schema`, `native-sql-compiler-identity`,
+`native-sql-sql-sources`, snapshot verification/copy, database re-keying, generation and publication, with actual
+analyzed/reused file and written-entry counts. Its schema phase reuses the dump already measured by `native-schema`.
+Parent durations include their nested costs; do not add them again. `runtime-native-preparation` accounts for the
+launch parent's view; child schema/source checks and all remaining native loading stay visible under those children.
+Generator failures preserve complete stdout/stderr, SQL locations and their original phase; import failures retain
+their original cause. No failed generation publishes a website projection or retries through an unmeasured live load.
+
+The measured 156896ms cold `native-imports` cost consumed the same absolute fixture lifetime as repeated setup and
+launch. Worker began about 250332ms into that lifetime, followed by 18.697s through cancellation settlement; Web
+never launched. This establishes preparation cost, not a Worker or Vite stall. The existing supplied-catalogue and
+configuration fixtures pin reuse, fresh input refresh, exact database binding, failure attribution and owned generator
+cancellation. Fresh native sign-in/out and the full Worker/Web journeys qualify the integrated revision separately;
+focused preparation checks do not establish that end-to-end timing result.

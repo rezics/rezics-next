@@ -436,6 +436,13 @@ Placement, database setup/cleanup and compiler launch exceptions retain their or
 compiler statuses remain native. See [compiler placement](../docs/development/compiler-check-placement.md#execution-failure-classification). The local prelanding cache is copy-on-write from the dev commit to the
 candidate commit and includes compiler, lockfile, Reylo configuration, Kernel/Auth SQL sources and migrations.
 
+Native stack setup and launch also consume that Kernel SQL analysis cache through
+`services/auth/scripts/dev-stack-native.ts`. It prepares before native imports, shares the private view with ordinary
+Auth/Kernel/Worker children, and reuses the real-mounted website projection across repeated setup and frontend binding.
+[Native preparation](../docs/development/local-stack.md#native-preparation-before-useful-web) owns input anchors,
+nested phases, diagnostics, cancellation and the unchanged native fixture lifetime. This preparation does not run
+Auth SQL against the Kernel database; Auth reads those files as text.
+
 Kernel SQL analysis uses the immutable host-local Reylo cache described in the [Kernel scripts owner document](../services/kernel/scripts/README.md).
 Phase receipts separate database image, migrations, SQL analysis and TypeScript checking so the measured cache effect
 can be compared without timing assertions.
