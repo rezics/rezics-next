@@ -120,17 +120,16 @@ export function RecentSearchBinding({
 }) {
   const client = useQueryClient();
   const anonymous = useContext(AnonymousSessionContext);
-  const host = useMemo(
-    () =>
-      createRecentSearchHost({
-        client,
-        anonymous,
-        ensureSession: !anonymous && personalRead.enabled ? () => client.ensureQueryData(sessionQuery) : undefined,
-        transport,
-      }),
-    [anonymous, client, transport],
-  );
-  return createElement(RecentSearchHostBoundary, { host }, children);
+  const host = useMemo(() => {
+    const ensureSession = !anonymous && personalRead.enabled ? () => client.ensureQueryData(sessionQuery) : undefined;
+    return createRecentSearchHost({
+      client,
+      anonymous,
+      ...(ensureSession ? { ensureSession } : {}),
+      ...(transport ? { transport } : {}),
+    });
+  }, [anonymous, client, transport]);
+  return createElement(RecentSearchHostBoundary, { host, children });
 }
 
 export { recentSearchSessionKey };
