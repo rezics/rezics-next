@@ -67,6 +67,8 @@ export type StackRun = {
   estimateMs?: number;
   /** Called after the host slot is acquired and the remote command is about to start. */
   started?: (host: string) => void;
+  /** Physical custodian settlement, separate from compiler stdout and wrapper status. */
+  settled?: RemoteCheck['settled'];
   /** The run writes files the caller keeps; remote placement requires declared return paths. */
   keepsFiles?: boolean;
   /**
@@ -315,6 +317,7 @@ export async function runOnCheckHost(
           ...(run.returns === undefined && profile === undefined && env.GROWTH_PROFILE === undefined
             ? {}
             : { returns: [...(run.returns ?? []), ...(profile === undefined ? [] : [profile])] }),
+          ...(run.settled === undefined ? {} : { settled: run.settled }),
           started: (host) => {
             run.started?.(host);
             console.error(`stack-run: ${run.label}${priority ? ` priority ${priority}` : ''} on ${host}`);

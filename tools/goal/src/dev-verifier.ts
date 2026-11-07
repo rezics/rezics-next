@@ -29,7 +29,7 @@ import {
   createVerifierChecks,
   filesInCommits,
   matches,
-  placeInWorkspace,
+  placeBootSmokeCheck,
   projectVerifierLandings,
   taskCommits,
   trackedFilesAt,
@@ -54,7 +54,7 @@ export { VERIFY_CONCURRENCY } from './dev-verifier-comparison.ts';
 type Check = DevVerifierCheck;
 const ref = (branch: string) => 'refs/heads/' + branch;
 const verifiedBranch = 'dev-verified';
-const TEST_FILE = /\.(?:test|spec)\.[cm]?[jt]sx?$/i;
+const TEST_FILE = /^(?:[A-Za-z0-9_.@-]+\/)*[A-Za-z0-9_.@-]+\.(?:test|spec)\.[cm]?[jt]sx?$/i;
 const tick = String.fromCharCode(96);
 
 function head(cwd: string, branch: string): string {
@@ -102,7 +102,9 @@ function bootSmokeChecks(settings: Settings, commit: string): Check[] {
   const tracked = trackedFilesAt(settings.mainCheckout, commit);
   return (settings.bootSmoke?.tests ?? [])
     .filter((test) => tracked.has(test))
-    .map((test) => placeInWorkspace({ command: ['bun', 'test', test], closure: ['**'] }, tracked));
+    .flatMap((test) =>
+      placeBootSmokeCheck({ command: ['bun', 'test', test], closure: ['**'] }, tracked, settings.mainCheckout),
+    );
 }
 
 function isAncestor(cwd: string, base: string, target: string): boolean {
@@ -134,17 +136,23 @@ function testFilesFor(check: CheckRun['check'], evidence: DevVerifierEvidence): 
     const relative = path.replace(/^\.\//, '');
     return check.cwd && !relative.startsWith(check.cwd + '/') ? check.cwd + '/' + relative : relative;
   };
+  const webRunner = check.command.indexOf('scripts/check.ts');
+  const runnerArguments = webRunner >= 0 ? check.command.slice(webRunner + 1) : check.command;
+  const separator = webRunner >= 0 ? runnerArguments.indexOf('--') : -1;
+  const selectionArguments = separator < 0 ? runnerArguments : runnerArguments.slice(0, separator);
+  const hostSelection = selectionArguments.indexOf('--host');
+  const selectedFile = hostSelection >= 0 ? selectionArguments[hostSelection + 1] : selectionArguments.at(-1);
+  const selectedFiles = selectedFile && TEST_FILE.test(selectedFile) ? [normalize(selectedFile)] : [];
+  if (selectedFiles.length === 1) return selectedFiles;
   const found = new Set<string>();
   const output = evidence.output.replaceAll('\\', '/');
   const expression =
     /(?:^|[\s([{"'])((?:[A-Za-z0-9_.@-]+\/)*[A-Za-z0-9_.@-]+\.(?:test|spec)\.[cm]?[jt]sx?)(?::\d+(?::\d+)?)?/g;
   for (const match of output.matchAll(expression)) found.add(match[1]!);
   if (found.size) return [...found].map(normalize);
-  const sourceFiles = check.command.filter((argument) => TEST_FILE.test(argument));
-  if (sourceFiles.length) return [...new Set(sourceFiles.map(normalize))];
   const source = check.closure.find((path) => !path.includes('*') && TEST_FILE.test(path));
   if (source) return [normalize(source)];
-  return [check.command.join(' ')];
+  return [JSON.stringify(check.command)];
 }
 
 function changedPaths(history: VerifierLandings | undefined, task: Task): string[] {
@@ -190,7 +198,7 @@ export function testFailureRepairBrief(repair: TestFailureRepair, policy = defau
     .map((failure) => {
       const assertions = failure.assertions.map((assertion) => '- ' + assertion).join('\n');
       return (
-        '- Test file: ' +
+        (TEST_FILE.test(failure.test) ? '- Test file: ' : '- Command: ') +
         tick +
         failure.test +
         tick +
@@ -474,10 +482,8 @@ async function runRound(options: DevVerifierOptions, previous: DevVerifierRun | 
   advanceVerified(settings, captured);
 }
 
-/** Run one due round on the newest captured dev head; intermediate heads never queue. */
-export async function verifyDev(options: DevVerifierOptions): Promise<void> {
+async function verifyDueRound(options: DevVerifierOptions): Promise<void> {
   const { settings } = options;
-  await options.runPageData?.();
   let lock: ReturnType<typeof acquireDirectoryLease>;
   try {
     lock = acquireDirectoryLease(join(settings.stateDirectory, 'dev-verifier.lease'), settings.policy?.leases);
@@ -496,6 +502,17 @@ export async function verifyDev(options: DevVerifierOptions): Promise<void> {
   } finally {
     lock.release();
   }
+}
+
+/** Run independent owned cycles together; intermediate dev heads never queue. */
+export async function verifyDev(options: DevVerifierOptions): Promise<void> {
+  const pageData = (async () => {
+    await options.runPageData?.();
+  })();
+  const outcomes = await Promise.allSettled([verifyDueRound(options), pageData]);
+  const failures = outcomes.flatMap((outcome) => (outcome.status === 'rejected' ? [outcome.reason] : []));
+  if (failures.length === 1) throw failures[0];
+  if (failures.length > 1) throw new AggregateError(failures, 'Dev verification and page-data both failed');
 }
 
 export function devVerificationState(

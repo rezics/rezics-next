@@ -1227,3 +1227,8 @@ does not typecheck these producer scripts. No scripts compiler command is implie
 ## Documentation checks
 
 Run `bun scripts/docs-check.ts` to check byte budgets, their ratchet baseline, research registration, owner-document rules, Markdown links and tracked temporary files. Run `bun scripts/docs-check.ts --changed <base>` to check changed Markdown and inbound links to deleted or renamed files. Run `bun scripts/docs-check.ts --update-baseline` after a shrink to lower existing baseline entries; this mode never raises them. Briefs can be checked at dispatch with `bun scripts/docs-check.ts --brief <file>`.
+
+Temporary notes under `.temp/` are excluded from Markdown link parsing in both full and changed modes; newly tracked
+temporary files still violate the tracked-file rule. Missing optional Markdown (`ENOENT` or `ENOTDIR`) has no parsed
+links. Stat failures on live documents, including `EACCES` and `EIO`, retain the document path and original cause and
+fail the check. A typing receipt does not replace these documentation checks.
