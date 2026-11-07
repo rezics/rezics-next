@@ -26,94 +26,91 @@ evidence reference. FAIL includes a path not observed because its setup or an ea
 rather than claiming the unexecuted product is defective. A passing implementation typecheck supplies no walk pass.
 The latest observed path result replaces its previous result. Existing broader native acceptance remains separate.
 
-Decision: one failed shared startup prerequisite fails every dependent journey; unexecuted product steps remain
-explicit, and existing broader acceptance assertions retain their separate evidence. This is an empirical
-specification update; the observed issuer/JWKS gate joins the existing urgent repair, with no Search duplicate.
+Decision: the six first-public rows remain the walk evidence. JWKS receiving keeps the existing issuer-origin
+transport tests and adds no Search journey tests. One failed shared setup step fails every dependent journey;
+independent executable paths still run, and unexecuted product steps stay explicit.
 
 ### Current dev census
 
-Observed walk revision: `60ae00e8b0f6b3d681bad9570890276ab8eb7adb` (docs-only commits on product
-`4904c8e26e1994442c45dce707a642dda0125168`). This row set replaces the prior 269.257 s census with a new
-2026-11-07 03:13 UTC execution. The 142.542 s launcher interval is the current-dev observation, not a journey
-pass. Decision: the six rows are the acceptance evidence; no extra product tests. Kernel postlanding cells do
-not pass an unexecuted journey.
+Observed walk revision: `57cf6851b1048225e13b334f8c50fb999a463f75` (issuer-origin JWKS receiving on product
+`4904c8e26e1994442c45dce707a642dda0125168`). This row set replaces the prior 142.542 s JWKS-startup census with a
+2026-11-07 03:57–04:23 UTC execution. Worker identity started. Partial native public reads do not pass an
+unexecuted whole journey.
 
 One admitted slot, with PostgreSQL and OpenSearch, ran
-`bun services/auth/scripts/dev-stack.ts walk -- bun .temp/worker-tmp/search-first-public-walk.ts`.
-The child would run native `persona`, load private `seed.env`, run `bun scripts/datasets/cross-media-seed.ts --dev`,
-then start seeded frontends. The launcher failed before that child started. No second concurrent Search walk ran.
+`bun services/auth/scripts/dev-stack.ts walk -- bun apps/web/scripts/search-first-public-walk.ts`.
+The child ran native `persona` (58.186 s), then `bun scripts/datasets/cross-media-seed.ts --dev`, which exited 1.
+Seeded frontends therefore never started. No second concurrent Search walk ran.
 
-Native startup was observed from **2026-11-07 03:13:03.042 UTC** through **03:15:25.584 UTC**:
-**142.542 seconds** wall from walk start to identity reject. Slot **3/6** after 27 ms. This is the recorded
-shared prerequisite interval, not six separately timed journeys. Every row below inherits this actual failure.
-No journey reached native Search HTTP or a mounted page.
+Launcher wall **1586.911 seconds** from **2026-11-07 03:57:32.322 UTC** through **04:23:59.233 UTC**. Slot **5/6**
+after 28 ms. Child observations begin **04:09:46.370 UTC**. Persona **anonymous** for every row: a developer
+account was created, but issuer pages were down so no bearer was issued. Phone 390, desktop 1280 and
+`en`/`zh-Hant`/`ja` were attempted only where a page URL was opened; Web never listened.
 
-Persona **setup** means the walk never obtained a usable native persona or session.
-Granted signed-in reader/editor, ungranted reader, suspended reader's pre-suspension bearer and revoked reader were
-not provisioned. Anonymous is not a substitute for those identities. Phone 390, desktop 1280 and
-`en`/`zh-Hant`/`ja` were planned but never mounted. Neither browser interaction nor screenshot/capture ran.
-
-| Journey               | User-visible path and passing result                                                                                                                                                                                         | Exposure                                                                            | Dev walk result                                                                                | Evidence / first failure                                                                                                                                       |
-| --------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Mixed Search          | Open Search, submit text, open a permitted result and return to the executed query; continued pages remain useful and current after a visibility change.                                                                     | Existing Search grant                                                               | FAIL — setup persona; 142.542 s shared startup; rev `60ae00e8b0f6b3d681bad9570890276ab8eb7adb` | Native startup rejected `AUTH_JWKS_URL` before `Worker ready`; query/result/return and visibility change not executed. [Repair](#native-startup-repair).       |
-| Refine and continue   | Submit supported Type/filter operands, inspect current facet choices, continue and restart in the same executed query; changed reader or resource scope retires old values and cursors.                                      | Existing Search grant; advanced second-scope operands remain outside this inventory | FAIL — setup persona; 142.542 s shared startup; rev `60ae00e8b0f6b3d681bad9570890276ab8eb7adb` | Same first startup failure; supported filters/facets, continuation and scope retirement not executed. [Repair](#native-startup-repair).                        |
-| Multilingual names    | Type an original-language name or current alias, select a suggestion, open the matching Subject and change locale without losing the query or authored language order.                                                       | Existing Search grant                                                               | FAIL — setup persona; 142.542 s shared startup; rev `60ae00e8b0f6b3d681bad9570890276ab8eb7adb` | Same first startup failure; suggestions and locale return not executed. [Repair](#native-startup-repair).                                                      |
-| Search recovery       | Correct an invalid authored operand or deliberately retry a preparing/unavailable request after its deadline; generation loss restarts that executed request and renders useful output.                                      | Existing Search grant                                                               | FAIL — setup persona; 142.542 s shared startup; rev `60ae00e8b0f6b3d681bad9570890276ab8eb7adb` | Same first startup failure; invalid-input correction, deadline/manual retry and generation restart not executed. [Repair](#native-startup-repair).             |
-| Configured reading    | Open a configured Subject or static Zone page and read its declared lists in document order; unavailable slots leave supported siblings usable, and a current continuation/retry reaches the right list.                     | Public configured reader where the owning scope admits it                           | FAIL — setup persona; 142.542 s shared startup; rev `60ae00e8b0f6b3d681bad9570890276ab8eb7adb` | Same first startup failure; no independent native-ready public page survived; Subject/Zone list reading not executed. [Repair](#native-startup-repair).        |
-| Published composition | Publish an admitted shared profile or curated Collection presentation, open the selected public version while the editor has a later draft, and deliberately recover a refused/lost response to the actual published result. | Existing publication authority and public selected-version reading                  | FAIL — setup persona; 142.542 s shared startup; rev `60ae00e8b0f6b3d681bad9570890276ab8eb7adb` | Same first startup failure; no publication identity, selected public A, later draft B or response-loss recovery was created. [Repair](#native-startup-repair). |
+| Journey               | User-visible path and passing result                                                                                                                                                                                         | Exposure                                                                            | Dev walk result                                                                                 | Evidence / first failure                                                                                                                                                          |
+| --------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Mixed Search          | Open Search, submit text, open a permitted result and return to the executed query; continued pages remain useful and current after a visibility change.                                                                     | Existing Search grant                                                               | FAIL — native search; 180.415 s; rev `57cf6851b1048225e13b334f8c50fb999a463f75`                  | Anonymous `POST /v1/subjects:search` text `Steins;Gate` stayed **503 `index_not_ready`**. Result open, return and visibility change not executed. [Repair](#seed-import-repair).  |
+| Refine and continue   | Submit supported Type/filter operands, inspect current facet choices, continue and restart in the same executed query; changed reader or resource scope retires old values and cursors.                                      | Existing Search grant; advanced second-scope operands remain outside this inventory | FAIL — native search; 180.294 s; rev `57cf6851b1048225e13b334f8c50fb999a463f75`                  | Typed search `The` / `schema:Book` stayed **503 `index_not_ready`**. Facets, continuation and reader retirement not executed. [Repair](#seed-import-repair).                      |
+| Multilingual names    | Type an original-language name or current alias, select a suggestion, open the matching Subject and change locale without losing the query or authored language order.                                                       | Existing Search grant                                                               | FAIL — native suggest; 0.372 s; rev `57cf6851b1048225e13b334f8c50fb999a463f75`                   | `GET /v1/subjects:suggest?q=シュタインズ・ゲート` **503 `index_not_ready`**. Suggestion, Subject and locale return not executed. [Repair](#seed-import-repair).                     |
+| Search recovery       | Correct an invalid authored operand or deliberately retry a preparing/unavailable request after its deadline; generation loss restarts that executed request and renders useful output.                                      | Existing Search grant                                                               | FAIL — corrected search; 182.587 s; rev `57cf6851b1048225e13b334f8c50fb999a463f75`               | Invalid `"unclosed` returned **422 `unsupported_query`**. Corrected `Steins;Gate` stayed **503 `index_not_ready`**. Search page `ERR_CONNECTION_REFUSED`. [Repair](#seed-import-repair). |
+| Configured reading    | Open a configured Subject or static Zone page and read its declared lists in document order; unavailable slots leave supported siblings usable, and a current continuation/retry reaches the right list.                     | Public configured reader where the owning scope admits it                           | FAIL — mounted page; 0.076 s; rev `57cf6851b1048225e13b334f8c50fb999a463f75`                     | Native `GET /v1/presentation/active` **200** digest `sha256:192d23c559f0befa1f7e4ecbe1dadd0a6eb766c2c668ce7652c2e07cd8492002`. Home `http://127.0.0.1:20050/en/` `ERR_CONNECTION_REFUSED`. [Repair](#frontend-after-seed-repair). |
+| Published composition | Publish an admitted shared profile or curated Collection presentation, open the selected public version while the editor has a later draft, and deliberately recover a refused/lost response to the actual published result. | Existing publication authority and public selected-version reading                  | FAIL — editor bearer; 0.102 s; rev `57cf6851b1048225e13b334f8c50fb999a463f75`                    | Public A GET **200**, lost digest **404**, recover **200**; anonymous publish **401 `authentication_required`**. Bearer not issued; page refused. [Repair](#frontend-after-seed-repair). |
 
 ### Native observation and operands
 
-Secret-free evidence is the walk stack log for this attempt: slot, public origins, the JWKS error, and the
-unexecuted persona/seed/frontend stages. No bearer, password, key, cookie or private seed environment is recorded.
+Secret-free evidence is `.temp/search-walk/evidence.json` plus the walk stack log: slot, public origins, JWKS
+identity, HTTP statuses and codes. No bearer, password, key, cookie or private seed environment is recorded.
 
-- Launcher operands: slot 3; Web `http://127.0.0.1:20030`, issuer `http://127.0.0.1:20031`, native Auth
-  `http://127.0.0.1:20032`, Kernel `http://127.0.0.1:20033`.
-- Actual native readback: readiness probes to native Auth `http://127.0.0.1:20032/.well-known/jwks.json` and
-  Kernel `http://127.0.0.1:20033/v1/definitions` reported `ECONNREFUSED`. No successful HTTP response, seeded UUID
-  or mounted DOM was obtained.
-- First causal error: **`Invalid or missing AUTH_JWKS_URL`**, followed by worker exit 1 and
-  `walk: the identity phase did not start: walk: "Worker ready" was not printed; the process exited (1)`.
-- `developmentKernelBindings` still sets `AUTH_ISSUER` from the issuer origin (`:20031`) and `AUTH_JWKS_URL` from
-  the native origin (`:20032/.well-known/jwks.json`). This was not a missing variable: their origins differ.
+- Launcher operands: slot 5; Web `http://127.0.0.1:20050`, issuer `http://127.0.0.1:20051`, native Auth
+  `http://127.0.0.1:20052`, Kernel `http://127.0.0.1:20053`.
+- `AUTH_ISSUER` `http://127.0.0.1:20051`; `AUTH_JWKS_URL` `http://127.0.0.1:20051/.well-known/jwks.json`. Worker
+  printed `Worker ready`. Native transport served JWKS on `:20052`.
+- Persona step created `developer@rezics.test`. Seed step printed **`Import transport request failed`** and exited 1
+  (unphased `ImportTransportError`: the Kernel fetch threw, with no HTTP status). Showcase collections: 0.
+- Developer bearer: issuer `:20051/signin` **ECONNREFUSED** because Auth pages start only after seed.
+- Actual native Search: mixed/typed/suggest **503 `index_not_ready`** with `retry-after: 1` through the 180 s
+  wait. Invalid operand **422 `unsupported_query`**. Public presentation active/profile read **200**; publish without
+  a bearer **401**.
+- Mounted pages: Web `:20050` never listened. Desktop 1280 `en` navigations returned `ERR_CONNECTION_REFUSED`.
+  Phone 390 and `zh-Hant`/`ja` pages were not reached after that.
 
-Planned, unexecuted downstream operands were mixed text `Steins;Gate`, a supported Book Type refinement,
-original names `シュタインズ・ゲート`/`CLANNAD`, invalid authored text correction, the seed's actual configured
-Subject/static-Zone targets, and admitted selected-public A versus later-draft B. No Subject/Collection/Zone ID,
-release, published profile, persona or reviewed provider binding was invented to replace absent seed results.
-Anonymous configured-list and selected-public composition reads were not reached: Kernel never became ready.
-Authenticated Search/publication stays blocked on the existing urgent issuer/JWKS repair; those steps were not a
-second failure.
+### Seed import repair
 
-### Native startup repair
+**Cause and owner:** `bun scripts/datasets/cross-media-seed.ts --dev` threw unphased
+`ImportTransportError` in [import-client.ts](../../services/importer/src/import-client.ts) (`response()` catch:
+the Kernel call threw before an HTTP status). Imports owns the seed producer; Content owns the walk child that
+invokes it. Search `index_not_ready` is the missing population after that failed seed, not a second Search
+indexer defect.
 
-**Cause and owner:** the walk launcher supplies native-origin JWKS through `developmentKernelBindings` in
-[dev-stack.ts](../../services/auth/scripts/dev-stack.ts). Accounts registration in
-[work-modules.ts](../../services/kernel/src/composition/work-modules.ts) calls
-[readMembershipWorkConfig](../../services/kernel/src/access/membership-work-config.ts), which requires JWKS and
-issuer origins to match. [Authentication](../../services/kernel/src/access/authenticate.ts) independently has the
-same requirement. Content owns the walk launcher; Accounts owns the authentication integration.
+Repair: print the transport `status`/`type`/`code`/`phase` from `ImportTransportError` on the seed CLI, wait for
+Kernel `GET /v1/definitions/active` **200** before the first import fetch, and rerun the same `--dev` seed on an
+admitted stack. Do not invent source records. Do not treat a thrown fetch as a finished import.
 
-This census **returns the same anonymous startup gate to the existing urgent issuer/JWKS repair**
-(`ce33aabc-b3eb-4691-bcd2-45524f4e4115`). Search does not duplicate that implementation. Canonical issuer-origin
-JWKS, exact native-key transport into both worker and Kernel consumers, key readiness before Worker ready, and a
-real issued bearer remain required. The next Search walk after that integration records the actual revision,
-bearer, personas, seed and pages.
+### Frontend after seed repair
+
+**Cause and owner:** the walk child starts seeded Auth pages and Web only after seed. A failed seed left
+`:20050`/`:20051` closed, so independent public page reads and password sign-in could not run. Content owns the
+walk driver.
+
+Repair: start `startSeededFrontends` after persona even when seed exits unsuccessfully, then run the remaining
+anonymous page and native paths. Sign-in still uses the real issuer pages and a real password from persona, never a
+synthesized bearer.
 
 ### Scope of this census and handoff
 
-The result is **0/6 passing**. All six rows fail at the recorded 142.542-second shared launcher interval; Mixed Search
-is the representative slowest failing journey. Its first failing step is worker identity startup, and its repair
-artifact is [Native startup repair](#native-startup-repair). Partial public steps do not pass an unexecuted whole
-journey. Existing broader acceptance below is preserved.
+The result is **0/6 passing**. Search recovery is the slowest failing journey at **182.587 s**; its first failing
+product step is corrected search still **503 `index_not_ready`**. Mixed Search is the representative granted-search
+failure at **180.415 s**. The shared setup cause is [Seed import repair](#seed-import-repair); page and bearer
+gaps join [Frontend after seed repair](#frontend-after-seed-repair). Partial public presentation reads do not pass
+Configured reading or Published composition. Existing broader acceptance below is preserved.
 
 The prior registration-handle failure was not reached. The importer-proposal `POST /v1/grants` 403 was not reached.
-Members' binding/fixtures, Web's Character/Person search, condition weights and composition, Semantic's tagged works,
-Imports' reviewed records and Performance's fake-discovery notices have no mounted-journey verdict from this startup
-failure. Their assertions remain required. Deferred metadata stays deferred. No new Imports outcome.
+Members' binding/fixtures, Web's Character/Person search, condition weights and composition, Semantic's tagged works
+and Performance's fake-discovery notices have no mounted-journey verdict from this seed failure. Their assertions
+remain required. Deferred metadata stays deferred. The seed transport failure is an Imports repair, not a new
+Imports Goal outcome.
 
 Teardown left this attempt's walk containers and volumes absent. No unrelated stack was stopped or pruned.
-Native persona/seed, mounted browser checks and root typecheck did not run after the setup failure.
 Documentation formatting is the focused delivery check; it supplies no native/browser PASS.
 
 ### Additional owner-requested acceptance
@@ -147,8 +144,8 @@ dev`. Commerce 401f58 and following-return assertions remain required. Loans que
 
 **Following-return source review (not a journey pass):** canonical parent `7c49c2a4ec` drops two `root as never`
 casts in `following-return-frontier.test.ts` and keeps inspect identity plus absent-target null. This worktree
-still has the casts. No production behaviour change. Following return stays Content/Web-owned; the 03:13 walk
-never consumed the return seam.
+still has the casts. No production behaviour change. Following return stays Content/Web-owned; this walk
+never consumed the return seam. Source review is not receiving acceptance.
 
 ## Evidence rules and common boundaries
 
