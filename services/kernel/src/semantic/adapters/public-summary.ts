@@ -5,11 +5,7 @@ import {
   type SummaryReaderDependencies,
 } from '../summaries.ts';
 
-export {
-  CoverSummarySchema,
-  RelatedSubjectSummarySchema,
-  SubjectSummarySchema,
-} from './public-summary-schema.ts';
+export { CoverSummarySchema, RelatedSubjectSummarySchema, SubjectSummarySchema } from './public-summary-schema.ts';
 export type { CoverCredit, CoverSummary, RelatedSubjectSummary, SubjectSummary } from './public-summary-schema.ts';
 
 export type PublicSummaryAdapter = Readonly<{

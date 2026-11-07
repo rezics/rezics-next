@@ -52,7 +52,10 @@ function toFeedActor(actor: Actor): FeedActor {
 /** Native factory. HTTP mapping stays on the route; construction runs through the Content application. */
 export function createFeedReads(deps: FeedDependencies): FeedReads {
   let actor: Actor;
-  const application = createFeedApplication(createNativeFeedPorts(deps, () => actor), { route: feedRoute });
+  const application = createFeedApplication(
+    createNativeFeedPorts(deps, () => actor),
+    { route: feedRoute },
+  );
   return {
     list(requestActor, query, deadline, languages) {
       actor = requestActor;

@@ -42,12 +42,14 @@ export function feedLaneWidths(input: Readonly<{ stream: FeedStream; personal: b
   };
 }
 
-export function admitFeedCandidateReservation(input: Readonly<{
-  discovery: number;
-  following: number;
-  continued: boolean;
-  spaceSelected: boolean;
-}>): number {
+export function admitFeedCandidateReservation(
+  input: Readonly<{
+    discovery: number;
+    following: number;
+    continued: boolean;
+    spaceSelected: boolean;
+  }>,
+): number {
   const candidateBound = feedCandidateBound(input.discovery, input.following, input.continued);
   const authorKeys = input.following * FEED_AUTHOR_KEYS_PER_CANDIDATE;
   const spaceKeys = input.spaceSelected
@@ -63,11 +65,13 @@ export function canonicalFeedObject(item: FeedItem): string {
   return `${owner}:${item.key.id}`;
 }
 
-export function initialFeedPosition(input: Readonly<{
-  stream: FeedStream;
-  personal: boolean;
-  boundary: string;
-}>): FeedPosition {
+export function initialFeedPosition(
+  input: Readonly<{
+    stream: FeedStream;
+    personal: boolean;
+    boundary: string;
+  }>,
+): FeedPosition {
   return {
     boundary: input.boundary,
     turn: 0,
@@ -97,16 +101,17 @@ export function rejectFeedKindMismatches(
   if (kind === undefined) return lanes;
   for (const lane of FEED_LANES)
     for (const candidate of lanes[lane])
-      if (candidate.item && candidate.item.key.kind !== kind)
-        (candidate as { item: FeedItem | null }).item = null;
+      if (candidate.item && candidate.item.key.kind !== kind) (candidate as { item: FeedItem | null }).item = null;
   return lanes;
 }
 
-export function mergeFeedLanes(input: Readonly<{
-  lanes: Record<FeedLane, readonly FeedLaneCandidate[]>;
-  turn: number;
-  limit: number;
-}>): Readonly<{ items: FeedItem[]; offsets: Record<FeedLane, number>; turn: number }> {
+export function mergeFeedLanes(
+  input: Readonly<{
+    lanes: Record<FeedLane, readonly FeedLaneCandidate[]>;
+    turn: number;
+    limit: number;
+  }>,
+): Readonly<{ items: FeedItem[]; offsets: Record<FeedLane, number>; turn: number }> {
   const preferred = new Map<string, FeedLane>();
   for (const lane of FEED_LANES)
     for (const candidate of input.lanes[lane])
@@ -133,13 +138,15 @@ export function mergeFeedLanes(input: Readonly<{
   return { items, offsets, turn };
 }
 
-export function advanceFeedFrontier(input: Readonly<{
-  position: FeedPosition;
-  lanes: Record<FeedLane, readonly FeedLaneCandidate[]>;
-  offsets: Record<FeedLane, number>;
-  turn: number;
-  continueFingerprint: string;
-}>): FeedPosition {
+export function advanceFeedFrontier(
+  input: Readonly<{
+    position: FeedPosition;
+    lanes: Record<FeedLane, readonly FeedLaneCandidate[]>;
+    offsets: Record<FeedLane, number>;
+    turn: number;
+    continueFingerprint: string;
+  }>,
+): FeedPosition {
   const next: {
     -readonly [K in keyof FeedPosition]: FeedPosition[K];
   } = { ...input.position, resume: input.position.resume };
@@ -157,10 +164,7 @@ export function advanceFeedFrontier(input: Readonly<{
   return next;
 }
 
-export function rewindFeedLanes(
-  items: FeedItem[],
-  affected: ReadonlySet<FeedLane>,
-): FeedItem[] {
+export function rewindFeedLanes(items: FeedItem[], affected: ReadonlySet<FeedLane>): FeedItem[] {
   return items.filter((item) => !affected.has(item.source as FeedLane));
 }
 

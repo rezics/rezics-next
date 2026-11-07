@@ -190,8 +190,7 @@ export function createFeedApplication(
               return ports.refuse('stale_cursor');
             const offset = position.resume
               ? presented.findIndex(
-                  (row) =>
-                    ports.cursor.fingerprint([row.subjectId, row.lastActivityAt]) === position.resume!.after,
+                  (row) => ports.cursor.fingerprint([row.subjectId, row.lastActivityAt]) === position.resume!.after,
                 ) + 1
               : 0;
             if (position.resume && !offset) return ports.refuse('stale_cursor');
@@ -282,8 +281,7 @@ export function createFeedApplication(
 
       const confirmed = await ports.finish.confirmConversation(feedItems, deadline);
       feedItems = confirmed.items;
-      if (confirmed.rewind)
-        rewind(confirmed.rewind, confirmed.error ?? new FeedRefusedError('dependency_unavailable'));
+      if (confirmed.rewind) rewind(confirmed.rewind, confirmed.error ?? new FeedRefusedError('dependency_unavailable'));
 
       const reopenSelected = async () => {
         const retained = { ...next };
@@ -312,13 +310,7 @@ export function createFeedApplication(
 
       let viewerPersonalActions: FeedPage['viewerPersonalActions'];
       if (personal && stream === 'home') {
-        const personalPage = await ports.finish.personalActions(
-          feedItems,
-          actor,
-          languages,
-          deadline,
-          reopenSelected,
-        );
+        const personalPage = await ports.finish.personalActions(feedItems, actor, languages, deadline, reopenSelected);
         feedItems = personalPage.items;
         viewerPersonalActions = personalPage.viewerPersonalActions;
       } else if (stream === 'home' && advice.hasTargets) await reopenSelected();
