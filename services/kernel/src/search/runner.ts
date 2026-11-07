@@ -61,18 +61,12 @@ function runnerSearch(search: OpenSearch, signal: AbortSignal): OpenSearch {
     ) {
       return search.request<T>(method, path, body, { ...options, signal });
     },
-    bulk<T>(
-      lines: readonly unknown[],
-      options?: { query?: SearchQuery; timeoutMs?: number; signal?: AbortSignal },
-    ) {
+    bulk<T>(lines: readonly unknown[], options?: { query?: SearchQuery; timeoutMs?: number; signal?: AbortSignal }) {
       return search.bulk<T>(lines, { ...options, signal });
     },
     ...(search.bulkRaw
       ? {
-          bulkRaw<T>(
-            body: string,
-            options?: { query?: SearchQuery; timeoutMs?: number; signal?: AbortSignal },
-          ) {
+          bulkRaw<T>(body: string, options?: { query?: SearchQuery; timeoutMs?: number; signal?: AbortSignal }) {
             return search.bulkRaw!<T>(body, { ...options, signal });
           },
         }
@@ -179,9 +173,10 @@ export async function startSearchIndexing(options: {
       if (state.active !== null) {
         if (options.publicPreparation) {
           const index = subjectIndexName(options.prefix, state.active);
-          const { body } = await search.request<
-            Record<string, { mappings?: { _meta?: { activated_at?: unknown } } }>
-          >('GET', `/${index}/_mapping`);
+          const { body } = await search.request<Record<string, { mappings?: { _meta?: { activated_at?: unknown } } }>>(
+            'GET',
+            `/${index}/_mapping`,
+          );
           if (stopped) return;
           const value = body[index]?.mappings?._meta?.activated_at;
           if (typeof value === 'string') {
