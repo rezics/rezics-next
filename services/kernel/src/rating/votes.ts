@@ -1,8 +1,15 @@
 import type { RatingCapabilities } from './contract/capabilities.ts';
 import { ratingCapabilities } from './adapters/ambient.ts';
 import type { Pool, PoolClient } from 'pg';
-import { GrantDeniedError } from '../access/grant-commands.ts';
-import { readAccount } from '../access/account-data.ts';
+import {
+  GrantDeniedError,
+  readAccount,
+  LibraryNotFoundError,
+  createLibraryCommandRunner,
+  libraryCommandReceiptDigestForActor,
+  requireRoute,
+} from './dependencies.ts';
+
 import type { KernelClock } from '../clock.ts';
 import { authoritativeTimeValue, commandAttemptDeadline, type CommandEvent } from '../command/command.ts';
 import type { SessionComponent } from '../tokens/session.ts';
@@ -14,12 +21,7 @@ import type {
 import type { CommandTransaction } from '../command/command.ts';
 import { ratingVoteSemantic, type RatingVoteSemantic } from './adapters/vote-semantic.ts';
 type IdentityRatingCommitParticipant = CommitParticipant<CommandTransaction>;
-import {
-  LibraryNotFoundError,
-  createLibraryCommandRunner,
-  libraryCommandReceiptDigestForActor,
-  requireRoute,
-} from '../library/command-support.ts';
+
 import type { Access, AccountActor, Actor } from '../request/access.ts';
 import { partitionOf, routeOf } from '../route/route.ts';
 import { deadlineFor } from '../request/deadline.ts';

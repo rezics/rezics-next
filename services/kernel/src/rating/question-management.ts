@@ -2,15 +2,22 @@ import type { RatingCapabilities } from './contract/capabilities.ts';
 import { ratingCapabilities } from './adapters/ambient.ts';
 import { createHash } from 'node:crypto';
 import type { Pool } from 'pg';
-import { deadlineClient } from '../access/authenticate.ts';
+import {
+  deadlineClient,
+  accessCheck,
+  AuthenticationError,
+  type Access,
+  type Actor,
+  withReadTransaction,
+} from './dependencies.ts';
 import { AccessUnavailableError } from '../access/unavailable.ts';
 import type { KernelClock } from '../clock.ts';
 import { withConnection } from '../database/pool.ts';
 import { partitionReadClient } from '../database/read-snapshot.ts';
-import { ProblemError } from '../http/problem.ts';
-import { accessCheck, AuthenticationError, type Access, type Actor } from '../request/access.ts';
+import { ProblemError } from '../http/problem-error.ts';
+
 import { partitionOf, routeOf } from '../route/route.ts';
-import { withReadTransaction } from '../semantic/read.ts';
+
 import { decodeCursor, encodeCursor, type CursorBinding } from '../tokens/cursor.ts';
 import type { KeyRing } from '../tokens/seal.ts';
 import {

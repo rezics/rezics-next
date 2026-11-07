@@ -3,7 +3,8 @@ import { t } from 'elysia';
 import { RatingQuestionLifecycleSchema, RatingQuestionResponseSchema } from './vote-response-schemas.ts';
 export { RatingQuestionResponseSchema, RatingVoteResponseSchema } from './vote-response-schemas.ts';
 import { SourceFiguresSchema } from './source-figures.ts';
-import { SourceFenceQuerySchema, strictContentSchema } from '../content/schemas.ts';
+import { SourceFenceQuerySchema } from '../content/source-fence-schemas.ts';
+import { strictContentSchema } from '../content/schema-validation.ts';
 
 const closed = { additionalProperties: false } as const;
 const id = t.String({ format: 'uuid' });

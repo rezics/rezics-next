@@ -20,7 +20,7 @@ import { partitionOf, routeOf } from '../route/route.ts';
 import type { WorkContext } from '../work/registry.ts';
 import { COMMAND_STEP_RETRIES } from '../work/retries.ts';
 import { ACCESS_EVENTS } from '../access/events.ts';
-import { GLOBAL_CONTEXT } from '../access/gates/catalogue.ts';
+import { GLOBAL_CONTEXT_RESOURCE as GLOBAL_CONTEXT } from '../semantic/contract/global-context.ts';
 import { RATING_EVENTS } from './events.ts';
 import { isRatingEligibilityJob, readRatingEligibilityJob, type RatingEligibilityJob } from './eligibility.ts';
 import { populationsForVoteKey } from './voter-realms.ts';

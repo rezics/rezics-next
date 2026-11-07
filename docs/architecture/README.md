@@ -1,5 +1,11 @@
 # Architecture check
 
+Decision: Rating owns its foreign runtime capabilities in `rating/dependencies.ts`. Kernel process, reading and
+worker composition bind the exact native functions and constructors before Rating use; live bindings preserve
+error identity, generic signatures and overloads. Rating imports shared Global context vocabulary from Semantic's
+contract and Content schema helpers from their defining leaves. Existing facade exports and behavior assertions
+stay compatible. Typing is the acceptance for this import-only migration; runtime checks run after integration.
+
 Decision: Search result saving and configured Concept following invert private Library save, owner observation and follow through a Search-owned `SearchLibraryActionPort`. `library-action-port.tsx` and `saved-query-selection.ts` are Search public entries; `search-action-binding.tsx` is the Library public adapter installed once by `LibraryApplicationBoundary`. Search results and `source-concept-view` consume the host; they no longer value-import `save-query`, `saved-query-editor/selection` or `follow-target-control`. Subject `pages/data`, overview and `load-subject` stay read/href composition for this pair.
 
 Decision: Game edition/evidence and Manga evidence invert `pages/data` `CandidateValue` through a catalogue-owned `WorkReadingPort`. `work-reading-binding.tsx` binds that adapter at Subject page composition; the readers are public entries and no longer value-import `pages/data` or `overview.sectionClass`.

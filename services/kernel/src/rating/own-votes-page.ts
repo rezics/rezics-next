@@ -1,24 +1,32 @@
 import type { RatingCapabilities } from './contract/capabilities.ts';
 import { ratingCapabilities } from './adapters/ambient.ts';
 import type { Pool, PoolClient } from 'pg';
-import { readAccount } from '../access/account-data.ts';
-import { GrantDeniedError } from '../access/grant-commands.ts';
+import {
+  readAccount,
+  GrantDeniedError,
+  LibraryNotFoundError,
+  readableSubjects,
+  SubjectIdentityUnavailableError,
+  identityEpochStore,
+  admitIdentityRatingEffect,
+  withReadTransaction,
+  activeRelease,
+  readSubjectSummaryObservation,
+  type SubjectSummary,
+} from './dependencies.ts';
+
 import { AccessUnavailableError } from '../access/unavailable.ts';
 import type { KernelClock } from '../clock.ts';
 import { partitionReadClient } from '../database/read-snapshot.ts';
 import { readPartition, type Partition } from '../partition/partition.ts';
-import { LibraryNotFoundError } from '../library/command-support.ts';
+
 import commandGate from '../library/shelf-maintenance-gate-read.sql';
-import { ProblemError } from '../http/problem.ts';
-import { readableSubjects, SubjectIdentityUnavailableError } from '../library/subject-anchor.ts';
+import { ProblemError } from '../http/problem-error.ts';
+
 import type { Access, AccountActor, Actor } from '../request/access.ts';
 import { partitionOf, routeOf } from '../route/route.ts';
 import type { IdentityMapping } from '../semantic/identity-epoch-contract.ts';
-import { identityEpochStore } from '../semantic/identity-adapters/index.ts';
-import { admitIdentityRatingEffect } from '../semantic/identity-rating-admission.ts';
-import { withReadTransaction } from '../semantic/read.ts';
-import { activeRelease } from '../semantic/definitions.ts';
-import { readSubjectSummaryObservation, type SubjectSummary } from '../semantic/summaries.ts';
+
 import { decodeCursor, encodeCursor, type CursorBinding } from '../tokens/cursor.ts';
 import type { KeyRing } from '../tokens/seal.ts';
 import { ratingQuestionView, requireRealmQuestionRead, type RatingQuestionView } from './question-directory.ts';

@@ -1,12 +1,12 @@
 import type { Pool, PoolClient } from 'pg';
-import { deadlineClient } from '../access/authenticate.ts';
+import { deadlineClient, readRealm, accessCheck, type Access, type Actor } from './dependencies.ts';
 import { requireAccessDeadline } from '../access/unavailable.ts';
-import { GLOBAL_CONTEXT } from '../access/gates/catalogue.ts';
-import { readRealm } from '../community/realm.ts';
+import { GLOBAL_CONTEXT_RESOURCE as GLOBAL_CONTEXT } from '../semantic/contract/global-context.ts';
+
 import { withConnection } from '../database/pool.ts';
 import { partitionReadClient } from '../database/read-snapshot.ts';
-import { ProblemError } from '../http/problem.ts';
-import { accessCheck, type Access, type Actor } from '../request/access.ts';
+import { ProblemError } from '../http/problem-error.ts';
+
 import { partitionOf, routeOf } from '../route/route.ts';
 import { ratingVoteSemantic, type RatingVoteSemantic } from './adapters/vote-semantic.ts';
 import directory from './question-directory.sql';

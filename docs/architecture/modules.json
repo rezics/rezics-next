@@ -250,7 +250,9 @@
         "services/kernel/src/access/durable-initiator-capture.ts",
         "services/kernel/src/access/unavailable.ts",
         "services/kernel/src/access/resource-access-errors.ts",
-        "services/kernel/src/access/zone-resource-adapter.ts"
+        "services/kernel/src/access/zone-resource-adapter.ts",
+        "services/kernel/src/access/account-data.ts",
+        "services/kernel/src/access/grant-commands.ts"
       ],
       "allowedDependencies": [
         "access-policy",
@@ -352,7 +354,9 @@
         "services/kernel/src/content/cover-reference.ts",
         "services/kernel/src/content/cover-reference-read.ts",
         "services/kernel/src/content/imported-contract.ts",
-        "services/kernel/src/content/media.ts"
+        "services/kernel/src/content/media.ts",
+        "services/kernel/src/content/schema-validation.ts",
+        "services/kernel/src/content/source-fence-schemas.ts"
       ],
       "allowedDependencies": [
         "definitions",
@@ -438,7 +442,8 @@
         "services/kernel/src/community/space-discovery.ts",
         "services/kernel/src/community/membership.ts",
         "services/kernel/src/community/work.ts",
-        "services/kernel/src/community/adapters/index.ts"
+        "services/kernel/src/community/adapters/index.ts",
+        "services/kernel/src/community/realm.ts"
       ],
       "allowedDependencies": [
         "auth-contract",
@@ -501,7 +506,8 @@
         "services/kernel/src/rating/events.ts",
         "services/kernel/src/rating/own-votes-review.ts",
         "services/kernel/src/rating/identity-work-frame-limits.ts",
-        "services/kernel/src/rating/vote-observation.ts"
+        "services/kernel/src/rating/vote-observation.ts",
+        "services/kernel/src/rating/dependencies.ts"
       ],
       "allowedDependencies": [
         "kernel-access",
@@ -580,7 +586,9 @@
         "services/kernel/src/library/collection-kind-input.ts",
         "services/kernel/src/library/subject-anchor.ts",
         "services/kernel/src/library/zone-collection-adapter.ts",
-        "services/kernel/src/library/members-preparation-source-declaration.ts"
+        "services/kernel/src/library/members-preparation-source-declaration.ts",
+        "services/kernel/src/library/command-support.ts",
+        "services/kernel/src/library/shelf-reader-unavailable.ts"
       ],
       "allowedDependencies": [
         "access-policy",
@@ -738,7 +746,15 @@
         "services/kernel/src/semantic/identity-receiving-effects.ts",
         "services/kernel/src/semantic/identity-receiving-effects-types.ts",
         "services/kernel/src/semantic/identity-search-receiving-statements.ts",
-        "services/kernel/src/semantic/character-public-reading-documents.ts"
+        "services/kernel/src/semantic/character-public-reading-documents.ts",
+        "services/kernel/src/semantic/classification-association.ts",
+        "services/kernel/src/semantic/current-relations.ts",
+        "services/kernel/src/semantic/eligibility.ts",
+        "services/kernel/src/semantic/identity-rating-admission.ts",
+        "services/kernel/src/semantic/statement-disclosure.ts",
+        "services/kernel/src/semantic/subject-source-key-pages.ts",
+        "services/kernel/src/semantic/summaries.ts",
+        "services/kernel/src/semantic/context.ts"
       ],
       "allowedDependencies": [
         "composition",
@@ -877,7 +893,9 @@
         "services/kernel/src/command/read-receipt.sql",
         "services/kernel/src/command/work-context.ts",
         "services/kernel/src/command/index.ts",
-        "services/kernel/src/partition/read.sql"
+        "services/kernel/src/partition/read.sql",
+        "services/kernel/src/http/problem.ts",
+        "services/kernel/src/http/request.ts"
       ],
       "allowedDependencies": [
         "auth-contract",
@@ -2000,7 +2018,8 @@
         "services/kernel/src/semantic/contract/domain-ports.ts",
         "services/kernel/src/semantic/contract/subject-values.ts",
         "services/kernel/src/semantic/contract/summaries.ts",
-        "services/kernel/src/semantic/contract/index.ts"
+        "services/kernel/src/semantic/contract/index.ts",
+        "services/kernel/src/semantic/contract/global-context.ts"
       ],
       "allowedDependencies": [],
       "capabilities": ["semantic-contract"]

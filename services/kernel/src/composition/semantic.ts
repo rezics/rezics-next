@@ -1,3 +1,4 @@
+import { composeRatingDependencies } from './rating.ts';
 import { installRatingVoteSemantic } from './rating-votes.ts';
 import type { Pool } from 'pg';
 import type { KernelClock } from '../clock.ts';
@@ -74,6 +75,7 @@ export function composeSemanticIdentityParticipants(
 
 /** Native Content cover and tuple routing, bound even when identity participants are unavailable. */
 export function composeSemanticAdapters(): void {
+  composeRatingDependencies();
   bindOrdinaryContentLifecycle(nativeContentLifecycle());
   composeSemanticContext();
   composeZoneResource();
@@ -85,6 +87,7 @@ export function composeSemanticAdapters(): void {
 
 /** One request-independent reading application for the ordinary Kernel. */
 export function composeSubjectReadingApplication() {
+  composeRatingDependencies();
   return createSubjectReadingApplication(createNativeSubjectReadingPort());
 }
 

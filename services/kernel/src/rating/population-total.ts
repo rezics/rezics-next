@@ -7,7 +7,7 @@ import { withConnection } from '../database/pool.ts';
 import type { Effect } from '../events/effects.ts';
 import type { CloudEvent } from '../events/log.ts';
 import { partitionOf, routeOf } from '../route/route.ts';
-import { withReadTransaction } from '../semantic/read.ts';
+import { withReadTransaction } from './dependencies.ts';
 import {
   POPULATION_TOTAL_DELIVERY,
   RATING_EVENTS,
@@ -16,7 +16,7 @@ import {
 } from './events.ts';
 import applyTotal from './population-total-component-apply.sql';
 import { STANDARD_QUESTION_ID } from './standard-question.ts';
-import { GLOBAL_CONTEXT } from '../access/gates/catalogue.ts';
+import { GLOBAL_CONTEXT_RESOURCE as GLOBAL_CONTEXT } from '../semantic/contract/global-context.ts';
 import {
   assertPopulationDeliveryDelta,
   MAX_RATING_CHANGE_PAGE,
