@@ -1,7 +1,7 @@
 import { suspendAccount } from '../support/native-suspension-driver.ts';
 import { afterAll, beforeAll, expect, test } from 'bun:test';
 import { createPool } from '../../src/database/pool.ts';
-import { GrantDeniedError } from '../../src/access/grant-commands.ts';
+import { GrantDeniedError } from '../../src/access/contract/errors.ts';
 import {
   IdempotencyConflictError,
   authoritativeTimeValue,

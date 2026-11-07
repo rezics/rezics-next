@@ -1,7 +1,7 @@
 import type { Actor } from '../request/access.ts';
 import { createHash } from 'node:crypto';
-import { GrantDeniedError } from '../access/resource-access-errors.ts';
-import { AccessUnavailableError } from '../access/unavailable.ts';
+import { GrantDeniedError } from '../access/contract/errors.ts';
+import { AccessUnavailableError } from '../access/contract/errors.ts';
 import { ProblemError } from '../http/problem-error.ts';
 import { nativeProgressUnit, type LibraryProfileDescriptor, type LibraryProfilePin } from './profile.ts';
 import { parseProgressMeasureCreate, parseRecord, parseSessionCreate, type ProgressSessionCreate } from './progress.ts';

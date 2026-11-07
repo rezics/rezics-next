@@ -2,12 +2,12 @@ import { memoizedValue } from '../memoized.ts';
 import { createHash } from 'node:crypto';
 import canonicalize from 'canonicalize';
 import type { Pool, PoolClient } from 'pg';
-import { admitGroup } from '../access/gates/admission.ts';
+import { admitGroup } from './access-port.ts';
 import type { KernelClock } from '../clock.ts';
 import { withConnection } from '../database/pool.ts';
 import { ProblemError } from '../http/problem-error.ts';
 import { AuthenticationError } from '../request/authentication-error.ts';
-import { type Access, type Actor } from '../request/access.ts';
+import type { Access, Actor } from '../request/access.ts';
 import { deadlineFor } from '../request/deadline.ts';
 import { newId, routeOf } from '../route/route.ts';
 

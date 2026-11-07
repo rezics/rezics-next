@@ -5,8 +5,8 @@ import type { CollectionCleanupPage, CollectionDeletionKey, CollectionRetirement
 export type { CollectionCleanupPage, CollectionDeletionKey } from './contract/index.ts';
 import { DBOS } from '@dbos-inc/dbos-sdk';
 import type { Pool, PoolClient } from 'pg';
-import { shareAccount } from '../access/account-share.ts';
-import { LifecycleDeniedError } from '../access/lifecycle-20261025094010-command.ts';
+import { shareAccount } from './access-port.ts';
+import { LifecycleDeniedError } from '../access/contract/errors.ts';
 import type { KernelClock } from '../clock.ts';
 import {
   authoritativeTimeValue,

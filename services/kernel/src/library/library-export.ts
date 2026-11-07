@@ -1,9 +1,8 @@
 import { memoizedValue } from '../memoized.ts';
 import type { Pool } from 'pg';
 import { bundledRelease } from '@rezics/definitions/bundled';
-import { readAccount } from '../access/account-data.ts';
-import { admitGroup } from '../access/gates/admission.ts';
-import { LifecycleDeniedError } from '../access/lifecycle-20261025094010-command.ts';
+import { readAccount, admitGroup } from './access-port.ts';
+import { LifecycleDeniedError } from '../access/contract/errors.ts';
 import { authoritativeTimeValue, commandTime, principalCommandIdentity } from '../command/command.ts';
 import { runOperationalTransaction, type OperationalTransaction } from '../command/operational.ts';
 import { systemClock, type KernelClock } from '../clock.ts';

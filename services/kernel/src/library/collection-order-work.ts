@@ -1,6 +1,6 @@
 import { DBOS } from '@dbos-inc/dbos-sdk';
-import { shareAccount } from '../access/account-share.ts';
-import { LifecycleDeniedError } from '../access/lifecycle-20261025094010-command.ts';
+import { shareAccount } from './access-port.ts';
+import { LifecycleDeniedError } from '../access/contract/errors.ts';
 import {
   authoritativeTimeValue,
   noEffect,

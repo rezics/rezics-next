@@ -4,9 +4,8 @@ import { createHash } from 'node:crypto';
 import canonicalize from 'canonicalize';
 import type { Pool } from 'pg';
 
-import { readAccount } from '../access/account-data.ts';
-import { admitGroup } from '../access/gates/admission.ts';
-import { LifecycleDeniedError } from '../access/lifecycle-20261025094010-command.ts';
+import { readAccount, admitGroup } from './access-port.ts';
+import { LifecycleDeniedError } from '../access/contract/errors.ts';
 import {
   authoritativeTimeValue,
   commandTime,

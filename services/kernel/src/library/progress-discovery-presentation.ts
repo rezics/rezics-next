@@ -1,6 +1,6 @@
 import { releaseDigest, validateRelease, type Release } from '@rezics/definitions';
 import type { Pool } from 'pg';
-import { deadlineClient } from '../access/authenticate.ts';
+import { deadlineClient } from './access-port.ts';
 import { withConnection } from '../database/pool.ts';
 import { deadlineFor } from '../request/deadline.ts';
 import { WORK_STEP_DEADLINE_MS } from './work-step-deadline.ts';

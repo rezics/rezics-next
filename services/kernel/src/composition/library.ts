@@ -1,3 +1,4 @@
+import { createLibraryAccessPorts } from '../access/adapters/library.ts';
 import { createNativeCopyAccountAdmission } from '../access/adapters/copy-account.ts';
 import { nativeReleasedDefinitions, nativeCopyListContext } from '../semantic/adapters/index.ts';
 import {
@@ -67,6 +68,7 @@ import {
 import { createLibraryCollectionPolicyMethods } from '../access/adapters/collection-policy.ts';
 import {
   bindLibraryDomain,
+  bindLibraryAccess,
   bindLibraryPresentation,
   peekLibraryDomain,
   requireLibraryDomain,
@@ -264,10 +266,12 @@ function nativeLibraryPresentation() {
 
 /** Preloads install the same native presentation as server/worker without a placeholder Collection Source. */
 export function composeLibraryPresentation(): void {
+  bindLibraryAccess(createLibraryAccessPorts());
   bindLibraryPresentation(nativeLibraryPresentation());
 }
 
 export function composeLibraryDomain(options: LibraryComposeOptions = {}): ReturnType<typeof bindLibraryDomain> {
+  bindLibraryAccess(createLibraryAccessPorts());
   const identityNative =
     options.capabilities?.identityNative ?? createIdentityNativeApplication(createIdentityNativeCatalog());
   const sourceCapture =

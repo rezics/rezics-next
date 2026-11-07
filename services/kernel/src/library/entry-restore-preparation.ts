@@ -1,7 +1,7 @@
 import type { Pool } from 'pg';
 import type { KernelClock } from '../clock.ts';
 import type { AuthoritativeTime, CommandAttempt } from '../command/command.ts';
-import { deadlineClient, within } from '../access/authenticate.ts';
+import { deadlineClient, within } from './access-port.ts';
 import { withConnection } from '../database/pool.ts';
 import { requireAccessDeadline } from '../access/unavailable.ts';
 import type { Access, Actor } from '../request/access.ts';

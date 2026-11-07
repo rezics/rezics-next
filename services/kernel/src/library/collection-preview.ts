@@ -1,4 +1,4 @@
-import { deadlineClient } from '../access/authenticate.ts';
+import { deadlineClient } from './access-port.ts';
 import { ProblemError } from '../http/problem-error.ts';
 import type { Actor } from '../request/access.ts';
 import { routeOf } from '../route/route.ts';

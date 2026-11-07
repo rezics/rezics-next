@@ -1,30 +1,32 @@
 import { statementBytes } from '../database/statement-bytes.ts';
-import { EMPTY_ACCESS_WORK, type AccessWorkAccounting } from '../access/work.ts';
+import type { AccessWorkAccounting } from '../access/work.ts';
+import { EMPTY_ACCESS_WORK } from '../access/contract/bounds.ts';
 import outputHeadForRetention from './collection-source-output-head.sql';
 import { createBuiltinRuntime, type BuiltinCollectionView } from './builtin-runtime.ts';
 import type { Pool, PoolClient } from 'pg';
-import { deadlineClient } from '../access/authenticate.ts';
-import { commandAccessContext } from '../access/command-admission.ts';
+import {
+  deadlineClient,
+  commandAccessContext,
+  readAccount,
+  readAccountCommandState,
+  createResourcePublicEligibility,
+} from './access-port.ts';
 import {
   mintReadTime,
   releaseOperationalTime,
   type AuthoritativeTime,
   type CommandAttempt,
 } from '../command/command.ts';
-import { readAccount, readAccountCommandState, type Account } from '../access/account-data.ts';
-import {
-  contributionDeleted,
-  readContributionAttributions,
-  type ContributionAttribution,
-} from '../access/public-identity.ts';
-import { readPublicViews } from '../access/public-views.ts';
+import type { Account } from '../access/account-data.ts';
+import type { ContributionAttribution } from '../access/public-identity.ts';
+import { contributionDeleted, readContributionAttributions } from './access-port.ts';
+import { readPublicViews } from './access-port.ts';
 import publicGeneration from './collection-public-generation.sql';
-import { createResourcePublicEligibility } from '../access/public-eligibility.ts';
 import { withConnection } from '../database/pool.ts';
 import { ProblemError } from '../http/problem-error.ts';
 import { readPartition } from '../partition/partition.ts';
 import { accessCheck } from '../request/access-check.ts';
-import { type AccountActor, type Actor } from '../request/access.ts';
+import type { AccountActor, Actor } from '../request/access.ts';
 import { deadlineFor } from '../request/deadline.ts';
 import { partitionOf, routeOf } from '../route/route.ts';
 import { decodeCursor, encodeCursor, type CursorBinding, type CursorKey } from '../tokens/cursor.ts';

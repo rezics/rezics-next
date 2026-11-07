@@ -16,7 +16,7 @@ import {
 } from './entry-personal-model.ts';
 import type { Actor } from '../request/access.ts';
 import type { CommandOutcome } from '../command/command.ts';
-import { GrantDeniedError } from '../access/resource-access-errors.ts';
+import { GrantDeniedError } from '../access/contract/errors.ts';
 import { LibraryNotFoundError } from './collection-command-work.ts';
 import { LibraryConflictError } from './entry-errors.ts';
 import {

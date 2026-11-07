@@ -1,6 +1,6 @@
 import type { Pool, PoolClient } from 'pg';
 import type { AuthoritativeTime } from '../command/command.ts';
-import { deadlineClient } from '../access/authenticate.ts';
+import { deadlineClient } from './access-port.ts';
 import type { Access, AccountActor } from '../request/access.ts';
 import { routeOf } from '../route/route.ts';
 import { LibraryConflictError } from './entry-errors.ts';

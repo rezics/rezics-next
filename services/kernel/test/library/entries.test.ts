@@ -4,7 +4,7 @@ import { randomUUID } from 'node:crypto';
 import { Value } from 'typebox/value';
 import type pg from 'pg';
 import { readAccount, type Account } from '../../src/access/account-data.ts';
-import { GrantDeniedError } from '../../src/access/grant-commands.ts';
+import { GrantDeniedError } from '../../src/access/contract/errors.ts';
 import { IdempotencyConflictError } from '../../src/command/command.ts';
 import { EVENT_TYPES, readBatch } from '../../src/events/log.ts';
 import { LibraryNotFoundError } from '../../src/library/command-support.ts';

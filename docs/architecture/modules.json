@@ -291,7 +291,15 @@
         "services/kernel/src/access/zone-resource-adapter.ts",
         "services/kernel/src/access/account-data.ts",
         "services/kernel/src/access/grant-commands.ts",
-        "services/kernel/src/access/content-adapter.ts"
+        "services/kernel/src/access/content-adapter.ts",
+        "services/kernel/src/access/public-eligibility.ts",
+        "services/kernel/src/access/parent-creation.ts",
+        "services/kernel/src/access/resource-initialization.ts",
+        "services/kernel/src/access/adapters/copy-account.ts",
+        "services/kernel/src/access/adapters/library.ts",
+        "services/kernel/src/access/public-views.ts",
+        "services/kernel/src/access/live-copy.ts",
+        "services/kernel/src/access/resource-roles.ts"
       ],
       "allowedDependencies": [
         "access-policy",
@@ -324,7 +332,10 @@
         "services/kernel/src/access/contract/index.ts",
         "services/kernel/src/access/contract/authentication.ts",
         "services/kernel/src/access/contract/bounds.ts",
-        "services/kernel/src/access/contract/collection-policy.ts"
+        "services/kernel/src/access/contract/collection-policy.ts",
+        "services/kernel/src/access/contract/errors.ts",
+        "services/kernel/src/access/contract/erasure.ts",
+        "services/kernel/src/access/contract/contribution-attribution.ts"
       ],
       "allowedDependencies": [],
       "capabilities": ["access-vocabulary"]
@@ -654,7 +665,8 @@
         "services/kernel/src/library/owner-filter-native-binding.ts",
         "services/kernel/src/library/native-source-custody.ts",
         "services/kernel/src/library/collection-kind-work-admission.ts",
-        "services/kernel/src/library/collection-publication-work-admission.ts"
+        "services/kernel/src/library/collection-publication-work-admission.ts",
+        "services/kernel/src/library/access-port.ts"
       ],
       "allowedDependencies": [
         "access-policy",
@@ -680,7 +692,8 @@
         "operations",
         "progress",
         "kernel-library-core",
-        "kernel-search-contract"
+        "kernel-search-contract",
+        "kernel-access-contract"
       ],
       "capabilities": ["library"],
       "postgresPaths": ["services/kernel/src/library/**"]

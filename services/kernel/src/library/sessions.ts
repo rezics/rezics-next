@@ -1,8 +1,8 @@
 import type { Release } from '@rezics/definitions';
 import { applyJournalPatch, sameJournalValues, recordedProgressValues } from '@rezics/progress';
 import type { Pool } from 'pg';
-import { readAccount } from '../access/account-data.ts';
-import { GrantDeniedError } from '../access/resource-access-errors.ts';
+import { readAccount, deadlineClient, within } from './access-port.ts';
+import { GrantDeniedError } from '../access/contract/errors.ts';
 import type { KernelClock } from '../clock.ts';
 import {
   authoritativeTimeValue,
@@ -14,7 +14,7 @@ import {
 import { withConnection } from '../database/pool.ts';
 import { ProblemError } from '../http/problem-error.ts';
 import { readPartition } from '../partition/partition.ts';
-import { type Access, type AccountActor, type Actor } from '../request/access.ts';
+import type { Access, AccountActor, Actor } from '../request/access.ts';
 import { newId, partitionOf, routeOf } from '../route/route.ts';
 import { decodeCursor, encodeCursor, type CursorBinding, type CursorKey } from '../tokens/cursor.ts';
 import type { KeyRing } from '../tokens/seal.ts';
@@ -50,7 +50,6 @@ import { peekLibraryDomain } from './domain-binding.ts';
 import { deadlineFor, withRequestDeadline } from '../request/deadline.ts';
 import { WORK_STEP_DEADLINE_MS } from './work-step-deadline.ts';
 import { createShelfHeads, createProgressActivity } from './shelf-heads.ts';
-import { deadlineClient, within } from '../access/authenticate.ts';
 import { prepareProgressPresentation } from './progress-presentation.ts';
 import {
   sessionLockPlan,
