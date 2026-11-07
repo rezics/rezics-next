@@ -6,6 +6,8 @@ import { bindContentApplication, tryContentApplication } from '../../src/content
 test('default composition binds Continue, public summary and presentation producers before IO', () => {
   const previous = tryContentApplication();
   try {
+    unbindContentApplication();
+    expect(tryFeedCapabilities()).toBeUndefined();
     composeContentApplication();
     const bound = tryFeedCapabilities();
     expect(bound?.createContinuation).toBeFunction();

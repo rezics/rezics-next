@@ -18,24 +18,15 @@ import { CollectionDiscoverySummarySchema } from '../search/index.ts';
 import { continuePageSchema } from '../library/adapters/continue-page.ts';
 import { REACTION_KINDS } from './events.ts';
 import type { ReactionCountFreshness, ViewerReactionKind } from './reads.ts';
+import type { ReactionTarget } from './reactions.ts';
 import { FeedParentContextSchema, FeedReviewContextSchema } from './feed-context-schema.ts';
 import type { FeedParentContext, FeedReviewContext } from './model.ts';
-import type {
-  FeedAuthor,
-  FeedConversationActivity,
-  FeedItem,
-  FeedPage,
-  FeedReactionAdvice,
-  FeedReactionCounts,
-  FeedReactionTarget,
-  FeedSelection,
-  FeedSubjectReactions,
-} from './contract/index.ts';
 
 const closed = { additionalProperties: false } as const;
 const nullable = t.Union([t.String(), t.Null()]);
 const uuid = t.String({ format: 'uuid' });
 export const FeedSelectionIdSchema = t.String({ format: 'uuid' });
+export type FeedSelection = { spaceId?: string; ratingQuestionId?: string };
 
 export const FeedKindSchema = t.String({ minLength: 1, maxLength: 256 });
 
@@ -84,9 +75,15 @@ const accountSummary = t.Unsafe<AccountDiscoverySummary>(
     closed,
   ),
 );
-export const FeedAuthorSchema = t.Unsafe<FeedAuthor>(
+export const FeedAuthorSchema = t.Unsafe<Pick<AccountDiscoverySummary, 'displayName' | 'handle' | 'avatar'>>(
   t.Object({ displayName: nullable, handle: nullable, avatar: t.Union([avatar, t.Null()]) }, closed),
 );
+export type FeedAuthor = Static<typeof FeedAuthorSchema>;
+export type FeedReactionTarget = Readonly<{
+  targetKind: Extract<ReactionTarget['targetKind'], 'thread' | 'post'>;
+  targetId: ReactionTarget['targetId'];
+}>;
+export type FeedReactionCounts = Partial<Record<ViewerReactionKind, number>>;
 function reactionKind() {
   return memoizedValue(reactionKind, () => t.Union(REACTION_KINDS.map((kind) => t.Literal(kind))));
 }
@@ -116,6 +113,9 @@ const reactionFreshness = t.Unsafe<ReactionCountFreshness>(
     closed,
   ),
 );
+export type FeedReactionAdvice =
+  | Readonly<{ target: FeedReactionTarget; state: 'current'; allowed: readonly ViewerReactionKind[] }>
+  | Readonly<{ target: FeedReactionTarget; state: 'sign_in' | 'unavailable' }>;
 function reactionAdvice() {
   return memoizedValue(reactionAdvice, () =>
     t.Unsafe<FeedReactionAdvice>(
@@ -169,13 +169,14 @@ export const FeedSubjectReactionsSchema = t.Object(
   },
   closed,
 );
+export type FeedSubjectReactions = Static<typeof FeedSubjectReactionsSchema>;
 function feedSubjectSummary() {
   return memoizedValue(feedSubjectSummary, () =>
     t.Object({ ...SubjectSummarySchema.properties, subjectReactions: t.Optional(FeedSubjectReactionsSchema) }, closed),
   );
 }
 
-type FeedContentSummaryFields = {
+export type FeedContentSummary = {
   author?: FeedAuthor;
   excerpt?: string;
   reviewContext?: FeedReviewContext;
@@ -185,9 +186,18 @@ type FeedContentSummaryFields = {
   viewerReaction?: ViewerReactionKind | null;
   reactionAdvice?: FeedReactionAdvice;
 };
+export type FeedConversationActivity =
+  | Readonly<{
+      state: 'current';
+      cohort: 'public';
+      count: ConversationActivityReplyCount;
+      lastActivityAt: string | null;
+    }>
+  | Readonly<{ state: 'withheld' }>;
 type ConversationActivityReplyCount = Readonly<
   { kind: 'exact'; value: number } | { kind: 'lower-bound'; value: number }
 >;
+type FeedContentSummaryFields = FeedContentSummary;
 const conversationActivity = t.Unsafe<FeedConversationActivity>(
   t.Union([
     t.Object(
@@ -474,18 +484,8 @@ export function FeedPageSchema() {
     ),
   );
 }
-export type {
-  FeedItem,
-  FeedPage,
-  FeedSourceState,
-  FeedAuthor,
-  FeedContentSummary,
-  FeedReactionAdvice,
-  FeedReactionCounts,
-  FeedReactionTarget,
-  FeedSubjectReactions,
-  FeedConversationActivity,
-  FeedSelection,
-} from './contract/index.ts';
-export type FeedItemWire = Static<ReturnType<typeof FeedItemSchema>>;
-export type FeedPageWire = Static<ReturnType<typeof FeedPageSchema>>;
+export type FeedItem = Static<ReturnType<typeof FeedItemSchema>>;
+export type FeedPage = Static<ReturnType<typeof FeedPageSchema>>;
+export type FeedSourceState = Static<typeof FeedSourceStateSchema>;
+export type FeedItemWire = FeedItem;
+export type FeedPageWire = FeedPage;

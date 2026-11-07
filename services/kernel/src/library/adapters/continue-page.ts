@@ -3,7 +3,7 @@ import { t } from 'elysia';
 import { SubjectSummarySchema, type SubjectSummary } from '../../semantic/adapters/public-summary-schema.ts';
 import { sessionSchema } from '../transport-contract.ts';
 import { createContinueReads } from '../continue-reads.ts';
-import type { ContinuePage, ContinueReads, ContinueSubject } from '../contract/index.ts';
+import type { ContinuePage, ContinueSubject } from '../contract/index.ts';
 
 const continueClosed = { additionalProperties: false } as const;
 const continueNullable = t.Union([t.String(), t.Null()]);
@@ -40,6 +40,6 @@ export function continuePageSchema() {
 /** Native Continue producer. Composition binds this; Content consumes the page, not Library storage. */
 export function createContinuePageAdapter(
   ...args: Parameters<typeof createContinueReads>
-): ContinueReads<SubjectSummary> {
-  return createContinueReads(...args) as ContinueReads<SubjectSummary>;
+): ReturnType<typeof createContinueReads> {
+  return createContinueReads(...args);
 }

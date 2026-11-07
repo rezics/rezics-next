@@ -523,6 +523,7 @@
       "paths": ["services/kernel/src/library/contract/**"],
       "publicEntries": [
         "services/kernel/src/library/contract/work-dimensions.ts",
+        "services/kernel/src/library/contract/continue.ts",
         "services/kernel/src/library/contract/index.ts"
       ],
       "allowedDependencies": [],

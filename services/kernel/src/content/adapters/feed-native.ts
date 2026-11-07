@@ -43,21 +43,6 @@ import type { SearchService } from '../../search/service-scope.ts';
 import type { ViewerPersonalActionsReader } from '../../library/viewer-personal-actions.ts';
 import type { ReadingPageViewerActionRuntime } from '../reading-page.ts';
 import { tryFeedCapabilities } from './feed-bind.ts';
-
-export type FeedDependencies = {
-  pool: Pool;
-  routeKey: Uint8Array;
-  tokens: KeyRing;
-  clock: KernelClock;
-  deadlineNow: () => number;
-  access: Access;
-  contentAccess: Access;
-  workClient: () => Promise<WorkClient>;
-  discovery?: DiscoverySearch;
-  search?: SearchService;
-  viewerPersonalActions: ViewerPersonalActionsReader;
-  viewerActionRuntime?: () => ReadingPageViewerActionRuntime;
-};
 import { isDiscoveryReview, isFollowingPost, isFollowingThread } from '../core/index.ts';
 import type {
   FeedActor,
@@ -73,6 +58,21 @@ import type {
   FeedRefusalCode,
   FeedSourceState,
 } from '../contract/index.ts';
+
+export type FeedDependencies = {
+  pool: Pool;
+  routeKey: Uint8Array;
+  tokens: KeyRing;
+  clock: KernelClock;
+  deadlineNow: () => number;
+  access: Access;
+  contentAccess: Access;
+  workClient: () => Promise<WorkClient>;
+  discovery?: DiscoverySearch;
+  search?: SearchService;
+  viewerPersonalActions: ViewerPersonalActionsReader;
+  viewerActionRuntime?: () => ReadingPageViewerActionRuntime;
+};
 
 function asPlatformActor(actor: FeedActor, live: Actor): Actor {
   if (actor.kind === 'anonymous') return { kind: 'anonymous' };
