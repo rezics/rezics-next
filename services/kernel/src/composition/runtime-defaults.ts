@@ -13,6 +13,7 @@ import { composeWorkApplication } from './work.ts';
 import { installSemanticCopyWork } from './semantic-copy-work.ts';
 import { installNativeHistory } from './history.ts';
 import { composeSemanticAdapters } from './semantic.ts';
+import { composeSearchSemanticSource } from './search-semantic.ts';
 import { ConfigError } from '../commerce/config.ts';
 import { assertReceiptKeyRing, readReceiptKeyRing } from '../command/receipt-key.ts';
 import { systemClock } from '../clock.ts';
@@ -95,6 +96,7 @@ export function createKernelRuntimeDefaults(overrides: KernelRuntimeOverrides = 
   composeCommunityApplication();
   installNativeHistory();
   composeSemanticAdapters();
+  composeSearchSemanticSource();
   composeLibraryDomain();
   composeZoneCollection();
   installSemanticCopyWork();

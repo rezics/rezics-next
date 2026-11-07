@@ -8,7 +8,7 @@ import type { KeyRing } from '../tokens/seal.ts';
 import { ProblemError } from '../http/problem.ts';
 import { isDeepStrictEqual } from 'node:util';
 import { activeRelease } from '../semantic/definitions.ts';
-import { publicFilterSource } from '../semantic/public-filter-source.ts';
+import { searchSourcePublicationApplication } from './source-publication-application.ts';
 import { createWorkClient } from '../work/client.ts';
 import { deadlineClient } from '../access/authenticate.ts';
 import { discardConnection, withConnection } from '../database/pool.ts';
@@ -259,7 +259,7 @@ export function createDefaultDiscoverySearch(
 ): DefaultDiscoverySearch {
   const freshness = new Map<number, ReturnType<typeof createFreshness>>();
   const runtime = createDefaultPublicFilterRuntime(config);
-  const source = publicFilterSource(config);
+  const source = searchSourcePublicationApplication().publicFilterSource(config);
   const { subjects, accounts } = producers;
   const disclosureApplication =
     config.disclosure ??

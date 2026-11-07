@@ -1,10 +1,13 @@
 import { createHash } from 'node:crypto';
+import type { Pool } from 'pg';
 import { accountAgentId, accountAgentsForSubjects } from '../semantic/agents.ts';
-import { readIdentityMappings } from '../semantic/identity-adapters/read.ts';
 import { withReadTransaction } from '../semantic/read.ts';
-import type { SummaryReaderDependencies } from '../semantic/summaries.ts';
 import { requireAccessDeadline } from '../access/unavailable.ts';
 import { routeOf } from '../route/route.ts';
+import type { SearchIdentityMapping } from './semantic-source-port.ts';
+import { searchSourcePublicationApplication } from './source-publication-application.ts';
+
+type AccountContextDependencies = Readonly<{ pool: Pool; deadline: number }>;
 
 type Account = {
   id: string;
@@ -18,7 +21,7 @@ type Account = {
  * identity publication must prove the subject; a formula or an Account UUID never does.
  * The caller compares two observations around anonymous subject hydration.
  */
-export async function readAccountContextBindings(deps: SummaryReaderDependencies, accounts: readonly Account[]) {
+export async function readAccountContextBindings(deps: AccountContextDependencies, accounts: readonly Account[]) {
   if (accounts.length > 100) throw new RangeError('Account context accepts at most 100 native accounts');
   requireAccessDeadline(deps.deadline);
   const candidates = accounts.map((account) => account.agent ?? accountAgentId(account.id));
@@ -40,7 +43,8 @@ export async function readAccountContextBindings(deps: SummaryReaderDependencies
   const originals = [
     ...new Set(accounts.flatMap((account, index) => [accountAgentId(account.id), candidates[index]!])),
   ];
-  const mappings = new Map<string, Awaited<ReturnType<typeof readIdentityMappings>>[number]>();
+  const readIdentityMappings = searchSourcePublicationApplication().readIdentityMappings;
+  const mappings = new Map<string, SearchIdentityMapping>();
   for (let offset = 0; offset < originals.length; offset += 100) {
     requireAccessDeadline(deps.deadline);
     const group = originals.slice(offset, offset + 100);

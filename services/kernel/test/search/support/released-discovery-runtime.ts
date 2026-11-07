@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import type { Pool } from 'pg';
 import type { Access } from '../../../src/request/access.ts';
+import { composeSearchSemanticSource } from '../../../src/composition/search-semantic.ts';
 import {
   createDefaultPublicFilterRuntime,
   type DefaultPublicFilterRuntime,
@@ -308,6 +309,7 @@ export function releasedDiscoveryRuntime(
     },
     onAccessReady(access: Access): void {
       if (sealed || !config || publicFilters) throw new Error('Released discovery Access composition is not available');
+      composeSearchSemanticSource();
       publicFilters = createDefaultPublicFilterRuntime({
         pool: config.pool,
         routeKey: config.routeKey,

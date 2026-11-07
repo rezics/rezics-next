@@ -3,18 +3,23 @@ import { createSearchGenerationPublication } from '../../../src/search/generatio
 import { createOpenSearch } from '../../../src/search/opensearch.ts';
 import { unavailableSearchWriterPublication } from '../../../src/search/writer-guard.ts';
 import { createSubjectSourceKeyPages } from '../../../src/semantic/subject-source-key-pages.ts';
-import { createPublicFilterSourceBinding } from '../../../src/semantic/public-filter-source-binding.ts';
+import {
+  createPublicFilterSourceBinding,
+  readNativePublicFilterPublicationCompletion,
+} from '../../../src/semantic/public-filter-source-binding.ts';
 import type { PublicFilterConsumer, PublicFilterSource } from '../../../src/semantic/public-filter-source-contract.ts';
 import { readContext, type Fixture } from './public-filter-source.ts';
 
 /** Retain an actual generation job through its owner; no Source/engine receipt is manufactured. */
 export async function publicationJob(f: Fixture, source: PublicFilterSource, consumer: PublicFilterConsumer) {
+  const binding = createPublicFilterSourceBinding(f.db.pool, f.config.routeKey, f.config.access);
   const publication = createSearchGenerationPublication({
     pool: f.db.pool,
     search: createOpenSearch(process.env.OPENSEARCH_URL!),
     source,
     sourceKeys: createSubjectSourceKeyPages(f.db.pool, f.config.routeKey, f.config.access),
-    binding: createPublicFilterSourceBinding(f.db.pool, f.config.routeKey, f.config.access),
+    binding,
+    readPublicationCompletion: (request, context) => readNativePublicFilterPublicationCompletion(binding, request, context),
     clock: f.config.clock,
     meaning: f.meaning,
     writerGuard: {

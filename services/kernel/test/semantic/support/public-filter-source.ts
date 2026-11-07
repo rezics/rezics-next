@@ -10,6 +10,7 @@ import { actionCatalogue } from '../../../src/http/request.ts';
 import { createWriteRateLimiter } from '../../../src/access/write-rate.ts';
 import { activeRelease } from '../../../src/semantic/definitions.ts';
 import { createKernel } from '../../../src/http/kernel.ts';
+import { testReceiptKeys } from '../../support/receipt-keys.ts';
 import { bootstrapRelease, GLOBAL_CONTEXT } from '../../../src/semantic/definitions.ts';
 import { partitionOf, routeOf, newId } from '../../../src/route/route.ts';
 import type {
@@ -92,25 +93,28 @@ export async function fixture() {
       labels: { en: name },
     };
   }
-  release.properties['schema:author']!.qualifiers = ['ex:left', 'ex:right', 'wdt:P1114'];
+  release.properties['schema:author']!.qualifiers = [
+    ...new Set([...release.properties['schema:author']!.qualifiers, 'ex:left', 'ex:right', 'wdt:P1114']),
+  ].sort();
   release.properties['ex:credit'] = {
     ...structuredClone(release.properties['schema:author']!),
     iri: 'https://example.test/credit',
     labels: { en: 'Credit' },
     relation: { group: 'credit', inverse: 'none', order: 'name', slotKey: 'ex:left' },
   };
-  release.types['schema:Book']!.properties.push('ex:credit');
+  release.types['schema:Book']!.properties = [...release.types['schema:Book']!.properties, 'ex:credit'].sort();
   release.types['schema:Organization']!.facets = ['rezics:penNameOf'];
-  release.types['schema:Book']!.facets = ['schema:author', 'schema:inLanguage', 'ex:credit'];
+  release.types['schema:Book']!.facets = ['schema:author', 'schema:inLanguage', 'ex:credit'].sort();
   await bootstrapRelease(db.pool, release);
   const digest = releaseDigest(release);
   const kernel = createKernel({
     pool: db.pool,
     routeKey,
+    receiptKeys: testReceiptKeys(),
     access: real.access,
     clock: systemClock,
     writeRate: createWriteRateLimiter({
-      secret: 'public-filter-native-fixture',
+      secret: 'public-filter-native-test-fixture-secret',
       overrides: JSON.stringify(
         Object.fromEntries(
           ['anonymous', 'new-account', 'member', 'trusted', 'service'].map((name) => [
