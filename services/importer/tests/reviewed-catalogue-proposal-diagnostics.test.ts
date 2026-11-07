@@ -2,7 +2,9 @@ import { expect, test } from 'bun:test';
 import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { resolve } from 'node:path';
+import type { BatchWriteResult } from '@rezics/definitions/bulk';
 import { ImportSession } from '../src/import-session.ts';
+import { ImportTransportError } from '../src/import-client.ts';
 import {
   formatReviewedCatalogueCommandError,
   formatReviewedCatalogueSeedError,
@@ -13,6 +15,7 @@ import {
 import { writeReviewedCatalogueSeedFailure } from '../src/reviewed-catalogue-cli.ts';
 import { reviewedCatalogueOwner, seedReviewedCatalogue } from '../src/reviewed-catalogue.ts';
 import type { ReviewedCataloguePort } from '../src/reviewed-catalogue.ts';
+import { releasedReviewedVocabulary } from '../src/reviewed-vocabulary-port.ts';
 
 const scheme = 'https://rezics.com/schemes/bangumi/public-tags';
 
@@ -122,6 +125,85 @@ test('a retryable proposal 503 keeps sealed journal bytes and does not ACK', asy
       expect(session.bindings.candidates(owner, 'facts', { limit: 100 })).toEqual([]);
     } finally {
       session.close();
+    }
+  } finally {
+    await rm(directory, { recursive: true, force: true });
+  }
+});
+
+test('a lost proposal reply resumes the sealed bytes and native idempotency prevents duplicate effects', async () => {
+  const directory = await mkdtemp(resolve(tmpdir(), 'reviewed-proposal-lost-reply-'));
+  const released = releasedReviewedVocabulary();
+  const seed = released.inventory.find((row) => row.key === 'source-scheme')!;
+  const vocabulary = { revision: released.revision, inventory: [seed] };
+  const proposalBytes: string[] = [];
+  const receipts = new Map<string, BatchWriteResult>();
+  let proposalEffects = 0;
+  const stopAfterProposal = new Error('Stop after the proposal acknowledgement');
+  const unused = async (): Promise<never> => {
+    throw new Error('Review should stop after the resumed proposal');
+  };
+  const port: ReviewedCataloguePort = {
+    readReviewedSubject: unused,
+    reviewedCandidates: async () => {
+      throw stopAfterProposal;
+    },
+    acceptReviewedCandidate: unused,
+    adoptReviewedCandidates: unused,
+    fence: async () => ({ fenced: false, securityRevision: null }),
+    setSourceRecordMetadata: async ({ command }) => ({
+      record: command.metadata,
+      metadata_revision: 1,
+      effect: 'filled',
+    }),
+    batch: async ({ commands }) => {
+      const command = commands[0]!;
+      if (command.op === 'create')
+        return {
+          results: [{ key: command.key, status: 201 as const, value: { id: '019a1b2c-3d4e-7f00-8a00-1a0000000101', revision: 1 } }],
+        };
+      proposalBytes.push(JSON.stringify({ commands }));
+      const prior = receipts.get(command.key);
+      if (prior) return prior;
+      proposalEffects++;
+      const result: BatchWriteResult = {
+        results: [{ key: command.key, status: 201, value: { candidate: '019a1b2c-3d4e-7f00-8a00-1a0000000102', revision: 2 } }],
+      };
+      receipts.set(command.key, result);
+      throw new ImportTransportError(undefined, undefined, undefined, true, undefined, undefined, {
+        method: 'POST',
+        path: '/v1/subjects:batchWrite',
+        phase: 'network',
+        networkCode: 'ECONNRESET',
+      });
+    },
+  };
+  const path = resolve(directory, 'state.sqlite');
+  try {
+    const first = await seedReviewedCatalogue({ path, port, vocabulary }).catch((error: unknown) => error);
+    expect(first).toBeInstanceOf(ImportTransportError);
+    const owner = reviewedCatalogueOwner(scheme, '');
+    const firstRequest = JSON.parse(proposalBytes[0]!) as { commands: [{ key: string }] };
+    const proposalKey = firstRequest.commands[0]!.key;
+    const session = new ImportSession(path);
+    try {
+      expect(session.bindings.journal(owner, proposalKey)?.bytes).toBe(proposalBytes[0]);
+      expect(session.bindings.candidates(owner, 'facts', { limit: 100 })).toEqual([]);
+    } finally {
+      session.close();
+    }
+
+    const second = await seedReviewedCatalogue({ path, port, vocabulary }).catch((error: unknown) => error);
+    expect(second).toBe(stopAfterProposal);
+    expect(proposalBytes).toHaveLength(2);
+    expect(proposalBytes[1]).toBe(proposalBytes[0]);
+    expect(proposalEffects).toBe(1);
+    const resumed = new ImportSession(path);
+    try {
+      expect(resumed.bindings.journal(owner, proposalKey)?.bytes).toBe(proposalBytes[0]);
+      expect(resumed.bindings.candidates(owner, 'facts', { limit: 100 })).toHaveLength(1);
+    } finally {
+      resumed.close();
     }
   } finally {
     await rm(directory, { recursive: true, force: true });

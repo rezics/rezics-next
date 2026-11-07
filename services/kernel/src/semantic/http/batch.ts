@@ -9,9 +9,8 @@ import {
   problemSchema,
   type FieldError,
 } from '../../http/problem.ts';
-import { EditorialConflictError, SubjectNotFoundError } from '../candidates.ts';
+import { EditorialConflictError, SubjectNotFoundError, SubjectRedirectError } from '../contract/subject-errors.ts';
 import { SubjectInputError } from '../item.ts';
-import { SubjectRedirectError } from '../merges.ts';
 import { SubjectAccessDeniedError } from '../subject.ts';
 
 export const BULK_WRITE_ROUTE = '/v1/subjects:batchWrite';
