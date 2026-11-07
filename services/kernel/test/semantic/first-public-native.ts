@@ -1,17 +1,21 @@
 import { randomUUID } from 'node:crypto';
-import { PROFILE_FORMAT, type CompositionDocument, type ZoneStarter } from '@rezics/composition';
+import { type CompositionDocument, type ZoneStarter } from '@rezics/composition';
+import { fromPlainText } from '@rezics/document';
 import { slug } from '@rezics/definitions/slug';
 import bookStarter from '../../../../packages/definitions/presentation/book/zone.json';
 
 export type Json = Record<string, unknown>;
-export type KernelAnswer = { status: number; headers: Headers; body: Json; etag?: string };
-export type KernelCall = (
-  method: string,
-  path: string,
-  options?: { bearer?: string; body?: unknown; ifMatch?: string; query?: Record<string, string> },
-) => Promise<KernelAnswer>;
+export type KernelOptions = {
+  bearer?: string | undefined;
+  body?: unknown;
+  ifMatch?: string | undefined;
+  query?: Record<string, string> | undefined;
+};
+export type KernelAnswer = { status: number; headers: Headers; body: Json; etag?: string | undefined };
+export type KernelCall = (method: string, path: string, options?: KernelOptions) => Promise<KernelAnswer>;
 
 export const CITATION = 'https://example.test/first-public-evidence';
+export const MINUTE = 'http://www.wikidata.org/entity/Q7727';
 
 export function cited(property: string, content: unknown) {
   return {
@@ -25,6 +29,14 @@ export function cited(property: string, content: unknown) {
   };
 }
 
+export function citedDocument(property: string, text: string, language = 'en') {
+  return cited(property, { language, document: fromPlainText(text), licence: 'CC-BY-4.0' });
+}
+
+export function citedQuantity(property: string, amount: string, unit: string) {
+  return cited(property, { amount, unit });
+}
+
 export function staticPage(text: string): CompositionDocument {
   return {
     root: { props: {} },
@@ -35,7 +47,7 @@ export function staticPage(text: string): CompositionDocument {
 export function staticZone(label: string, home: string, about: string): ZoneStarter {
   const configuration = structuredClone(bookStarter) as ZoneStarter;
   configuration.scope = [];
-  configuration.labels = { en: label };
+  configuration.labels = { ...configuration.labels, en: label };
   configuration.pages = [
     { route: '', document: staticPage(home) },
     { route: 'about', document: staticPage(about) },
@@ -92,7 +104,7 @@ export async function createSubject(
 }
 
 export async function readSubject(call: KernelCall, id: string, bearer?: string): Promise<KernelAnswer> {
-  return call('GET', `/v1/subjects/${id}`, bearer ? { bearer } : {});
+  return call('GET', `/v1/subjects/${id}`, bearer === undefined ? {} : { bearer });
 }
 
 export async function propose(
@@ -174,6 +186,14 @@ export async function restoreCandidate(call: KernelCall, bearer: string, subject
   );
 }
 
+export async function discloseStatement(call: KernelCall, bearer: string, candidate: string) {
+  return call('POST', `/v1/statements/${candidate}/disclose`, { bearer });
+}
+
+export async function retractStatement(call: KernelCall, bearer: string, candidate: string) {
+  return call('POST', `/v1/statements/${candidate}/retract`, { bearer });
+}
+
 export async function createContext(call: KernelCall, bearer: string, label: string) {
   const created = await call('POST', '/v1/contexts', { bearer, body: { labels: { en: label } } });
   requireStatus(created, 201, 'create Context');
@@ -223,7 +243,10 @@ export async function publishZone(call: KernelCall, bearer: string, id: string, 
 }
 
 export async function readZonePage(call: KernelCall, id: string, route = '', bearer?: string) {
-  return call('POST', `/v1/zones/${id}:readPage`, { bearer, body: { target: { route } } });
+  return call('POST', `/v1/zones/${id}:readPage`, {
+    ...(bearer === undefined ? {} : { bearer }),
+    body: { target: { route } },
+  });
 }
 
 export async function deleteZone(call: KernelCall, bearer: string, id: string, revision: string) {
@@ -244,7 +267,7 @@ export async function takedownZone(call: KernelCall, bearer: string, id: string,
 
 export async function searchType(call: KernelCall, type: string, limit = 8, bearer?: string) {
   return call('POST', '/v1/subjects:search', {
-    bearer,
+    ...(bearer === undefined ? {} : { bearer }),
     body: { filter: { type: { in: [type] } }, sort: 'id', limit },
   });
 }
@@ -269,13 +292,14 @@ export function handleCall(
       }),
     );
     const text = await response.text();
+    const etag = response.headers.get('etag') ?? undefined;
     return {
       status: response.status,
       headers: response.headers,
       body: text ? (JSON.parse(text) as Json) : {},
-      etag: response.headers.get('etag') ?? undefined,
+      ...(etag === undefined ? {} : { etag }),
     };
   };
 }
 
-export { PROFILE_FORMAT, slug };
+export { slug };
