@@ -1,27 +1,19 @@
 import { isDeepStrictEqual } from 'node:util';
 import type { Pool } from 'pg';
 import { admitGroup } from '../access/gates/admission.ts';
-import { ProblemError } from '../http/problem.ts';
-import { collectionReadView, createCollectionReads, type CollectionResourceView } from '../library/collection-reads.ts';
+import { ProblemError } from '../http/problem-error.ts';
 import type { Access, Actor } from '../request/access.ts';
-import { decodeListCursor, encodeListCursor, type ListCursorBinding } from '../tokens/list-cursor.ts';
 import type { KeyRing } from '../tokens/seal.ts';
+import { zoneCollectionReads, type ZoneCollectionPublicView } from './collection-port.ts';
+import {
+  decodeZoneCollectionsCursor,
+  encodeZoneCollectionsCursor,
+  zoneCollectionsCursorBinding,
+} from './page-continuation.ts';
 import { createZoneReads, type ZoneCollectionBasis } from './resource-reads.ts';
 
-const CURSOR_EPOCH = 1;
-const CURSOR_ROUTE = 'GET /v1/zones/{id}/collections';
-
-function publicCollectionView(value: CollectionResourceView) {
-  const view = collectionReadView(value);
-  if (!('allowedVisibilityActions' in view)) return view;
-  const { allowedVisibilityActions: _ownerActions, ...publicView } = view;
-  return publicView;
-}
-
-type PublicCollectionView = ReturnType<typeof publicCollectionView>;
-
 export type ZoneCollectionPage = {
-  collections: PublicCollectionView[];
+  collections: ZoneCollectionPublicView[];
   next: string | null;
 };
 
@@ -52,37 +44,19 @@ export async function readZoneCollections(
   });
 
   const limit = input.limit ?? 20;
-  const binding: ListCursorBinding = {
-    route: CURSOR_ROUTE,
-    viewer: actor.kind === 'account' ? actor.accountId : null,
-    query: { zoneId: id, limit },
-  };
-  const cursor = input.cursor === undefined ? null : await decodeListCursor(tokens, binding, input.cursor, clock());
-  if (cursor && !cursor.ok) throw new ProblemError('invalid_cursor');
-  let after: string | null = null;
-  if (cursor?.ok) {
-    const [idAfter, revision, lifecycleRevision] = cursor.after;
-    if (
-      cursor.epoch !== CURSOR_EPOCH ||
-      cursor.after.length !== 3 ||
-      typeof idAfter !== 'string' ||
-      typeof revision !== 'string' ||
-      typeof lifecycleRevision !== 'string'
-    )
-      throw new ProblemError('invalid_cursor');
-    if (revision !== first.revision || lifecycleRevision !== first.lifecycleRevision)
-      throw new ProblemError('stale_cursor');
-    after = idAfter;
-  }
+  const binding = zoneCollectionsCursorBinding(actor, id, limit);
+  const cursor = await decodeZoneCollectionsCursor(tokens, binding, input.cursor, clock(), first);
+  if (!cursor.ok) throw new ProblemError(cursor.reason === 'stale' ? 'stale_cursor' : 'invalid_cursor');
+  const after = cursor.after;
 
-  const collections = createCollectionReads({ pool, access, tokens });
+  const collections = zoneCollectionReads({ pool, access, tokens });
   const readVisible = async (mounts: readonly string[]) => {
-    const visible: PublicCollectionView[] = [];
+    const visible: ZoneCollectionPublicView[] = [];
     for (const mount of mounts) {
       try {
-        visible.push(publicCollectionView(await collections.readCollection(actor, mount, deadline)));
+        visible.push(collections.projectPublic(await collections.readCollection(actor, mount, deadline)));
       } catch (error) {
-        if (error instanceof ProblemError && error.code === 'not_found') continue;
+        if (collections.isConcealed(error)) continue;
         throw error;
       }
     }
@@ -93,7 +67,7 @@ export async function readZoneCollections(
   const finalSources = await readVisible(first.mounts);
   const final = await zones.collectionBasis(actor, id, deadline);
   if (!sameBasis(first, final) || !isDeepStrictEqual(selected, finalSources))
-    throw new ProblemError(cursor?.ok ? 'stale_cursor' : 'conflict');
+    throw new ProblemError(input.cursor !== undefined && cursor.ok ? 'stale_cursor' : 'conflict');
 
   const start = after === null ? 0 : finalSources.findIndex((collection) => collection.id === after) + 1;
   if (after !== null && start === 0) throw new ProblemError('stale_cursor');
@@ -101,13 +75,10 @@ export async function readZoneCollections(
   const last = page.at(-1);
   const next =
     last && start + page.length < finalSources.length
-      ? await encodeListCursor(
+      ? await encodeZoneCollectionsCursor(
           tokens,
           binding,
-          {
-            epoch: CURSOR_EPOCH,
-            after: [last.id, final.revision, final.lifecycleRevision],
-          },
+          { id: last.id, revision: final.revision, lifecycleRevision: final.lifecycleRevision },
           clock(),
         )
       : null;

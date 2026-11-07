@@ -14,6 +14,7 @@ import {
 import { t } from 'elysia';
 import type { Static, TLiteral, TOptional, TSchema, TUnion } from 'typebox';
 import { extendPageResponseSchema } from '../presentation/http/page-contract.ts';
+import { zoneCollectionResourceSchema } from './collection-port.ts';
 
 const closed = { additionalProperties: false } as const;
 const MAX_ZONE_MOUNTS = 16;
@@ -333,3 +334,18 @@ export function ZoneSubjectListResponseSchema() {
 
 export type ZoneSubjectListItem = Static<ReturnType<typeof zoneSubjectListItemSchema>>;
 export type ZoneSubjectListResponse = Static<ReturnType<typeof ZoneSubjectListResponseSchema>>;
+
+/** Mounted Collection summaries use the Collection owner's existing safe resource projection. */
+export function ZoneCollectionListResponseSchema() {
+  return memoizedValue(ZoneCollectionListResponseSchema, () =>
+    t.Object(
+      {
+        collections: t.Array(zoneCollectionResourceSchema(), { maxItems: 100 }),
+        next: t.Union([t.String(), t.Null()]),
+      },
+      closed,
+    ),
+  );
+}
+
+export type ZoneCollectionListResponse = Static<ReturnType<typeof ZoneCollectionListResponseSchema>>;
