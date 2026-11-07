@@ -47,6 +47,8 @@ export type ManagerSessionSnapshot = ManagerSpec & {
   kind?: 'managed';
   threadId: string | null;
   activeTurnId: string | null;
+  /** Native Goal autonomy must remain paused until a real inbox event is dispatched. */
+  waitingForInbox?: boolean;
   status: 'starting' | 'running' | 'paused' | 'complete' | 'renewal-failed';
   startedAt: number;
   turns: number;
@@ -364,7 +366,7 @@ export class ManagerSessions {
     if (state) this.background(state.id, () => this.handleNotification(state.id, notification));
   }
   private async handleNotification(id: string, { method, params }: Notification): Promise<void> {
-    const state = this.get(id);
+    let state = this.get(id);
     assertManagedManager(state);
     let completedCurrentTurn = false;
     // Notifications from a retired Codex thread can already be queued when renewal swaps sessions.
@@ -372,6 +374,11 @@ export class ManagerSessions {
     if (method === 'turn/started') {
       this.turnStarted(state, params.turn.id);
       if (state.status !== 'running') await this.pauseRemote(state);
+      else if (state.waitingForInbox && this.inbox.notifications(id).length === 0) {
+        await this.pauseForInbox(id);
+        state = this.get(id);
+        assertManagedManager(state);
+      }
     } else if (method === 'turn/completed') {
       completedCurrentTurn = this.turnEnded(state, params.turn.id);
     } else if (method === 'thread/goal/updated') {
@@ -384,20 +391,23 @@ export class ManagerSessions {
       return;
     } else return;
     this.save(state);
+    if (
+      method === 'thread/goal/updated' &&
+      state.status === 'running' &&
+      state.waitingForInbox &&
+      state.goalState?.status === 'active' &&
+      this.inbox.notifications(id).length === 0
+    ) {
+      await this.pauseForInbox(id);
+      state = this.get(id);
+      assertManagedManager(state);
+    }
     if (state.status === 'running') {
       if (method === 'thread/goal/updated' && (await this.handleGoalUpdate(state))) return;
       if (await this.checkLimits(state)) return;
       if (state.goalState?.status === 'complete') await this.completeInternal(state.id);
-      // A stale completion may arrive after a wake started another turn; pause only the turn that actually ended.
-      if (
-        completedCurrentTurn &&
-        state.engine === 'codex' &&
-        state.threadId &&
-        state.goalState?.status === 'active' &&
-        this.inbox.notifications(state.id).length === 0
-      )
-        await this.pauseRemote(state);
     }
+    if (completedCurrentTurn) await this.pauseForInbox(id);
   }
   /** Event-driven managers sleep only by ending the turn: a `clock.sleep` loop re-reads the whole context each call. */
   private countSleep(state: ManagedManagerState): void {
@@ -530,6 +540,7 @@ export class ManagerSessions {
       goals: ownedGoals(spec).length ? ownedGoals(spec) : [spec.goal],
       threadId: null,
       activeTurnId: null,
+      waitingForInbox: false,
       status: 'starting',
       startedAt: this.now(),
       turns: 0,
@@ -651,6 +662,7 @@ export class ManagerSessions {
     const {
       threadId: _threadId,
       activeTurnId: _activeTurnId,
+      waitingForInbox: _waitingForInbox,
       status: _status,
       startedAt: _startedAt,
       turns: _turns,
@@ -927,13 +939,37 @@ export class ManagerSessions {
       await this.failRenewal(id, error, attempts);
     }
   }
-  private async pauseRemote(state: ManagerState): Promise<void> {
+  private async pauseForInbox(id: string): Promise<void> {
+    const state = this.get(id);
+    assertManagedManager(state);
+    if (
+      state.status !== 'running' ||
+      state.engine !== 'codex' ||
+      !state.threadId ||
+      this.inbox.notifications(id).length > 0
+    )
+      return;
+    state.waitingForInbox = true;
+    this.save(state);
+    if (state.goalState?.status === 'active') {
+      await this.pauseRemote(state, true);
+    } else if (state.activeTurnId) {
+      const client = await this.transport.client(state.pool);
+      if (this.inbox.notifications(id).length === 0)
+        await this.transport.interruptTurn(client, state, state.threadId, state.activeTurnId);
+    }
+  }
+  private async pauseRemote(state: ManagerState, preservePendingDelivery = false): Promise<void> {
     assertManagedManager(state);
     if (state.engine === 'codex' && state.threadId) {
       const client = await this.transport.client(state.pool);
       state.goalState = await this.transport.setGoalStatus(client, state.threadId, 'paused');
       this.save(state);
-      if (state.activeTurnId) await this.transport.interruptTurn(client, state, state.threadId, state.activeTurnId);
+      if (
+        state.activeTurnId &&
+        (!preservePendingDelivery || this.inbox.notifications(state.id).length === 0)
+      )
+        await this.transport.interruptTurn(client, state, state.threadId, state.activeTurnId);
     }
   }
   private async stopInternal(id: string): Promise<void> {
@@ -967,8 +1003,13 @@ export class ManagerSessions {
     const events = this.inbox.notifications(id);
     // Inbox polling with no delivery must leave native Goal autonomy paused.
     if (events.length === 0) return;
+    const waitingForInbox = state.waitingForInbox === true;
+    if (waitingForInbox) {
+      state.waitingForInbox = false;
+      this.save(state);
+    }
     const client = await this.transport.client(state.pool);
-    if (state.goalState?.status === 'paused') {
+    if (waitingForInbox || state.goalState?.status === 'paused') {
       state.goalState = await this.transport.setGoalStatus(client, state.threadId!, 'active');
       this.save(state);
     }
@@ -1208,6 +1249,11 @@ export class ManagerSessions {
             this.save(current);
             await this.pauseRemote(current);
             return;
+          }
+          if (current.engine === 'codex' && (current.waitingForInbox || current.activeTurnId === null)) {
+            await this.pauseForInbox(current.id);
+            current = this.get(current.id);
+            assertManagedManager(current);
           }
           this.save(current);
           if (current.engine === 'codex' && current.threadId) {

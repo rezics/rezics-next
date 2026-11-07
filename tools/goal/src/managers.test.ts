@@ -10,7 +10,10 @@ import { defaultPolicy, type ControlPolicy } from './policy.ts';
 import type { ProcessIdentity } from './process.ts';
 import { temporaryDirectory } from './test-support.ts';
 
-async function setup(policy?: ControlPolicy, options: { autoTurnOnGoalActivation?: boolean } = {}) {
+async function setup(
+  policy?: ControlPolicy,
+  options: { autoTurnOnGoalActivation?: boolean; autoTurnDuringGoalPause?: boolean } = {},
+) {
   const temporary = temporaryDirectory();
   const db = openDb(join(temporary.path, 'state.sqlite'));
   const log = join(temporary.path, 'rpc.jsonl');
@@ -20,6 +23,7 @@ async function setup(policy?: ControlPolicy, options: { autoTurnOnGoalActivation
     FAKE_RPC_LOG: log,
     FAKE_RPC_FAIL_FILE: failFile,
     FAKE_RPC_AUTO_TURN_ON_GOAL_ACTIVATION: options.autoTurnOnGoalActivation ? '1' : '0',
+    FAKE_RPC_AUTO_TURN_DURING_GOAL_PAUSE: options.autoTurnDuringGoalPause ? '1' : '0',
   });
   await client.initialize();
   const inbox = new SqliteManagerInbox(db, temporary.path);
@@ -634,6 +638,45 @@ test('A Codex manager pauses native Goal while idle and wakes once for an inbox 
   }
 });
 
+test('A native turn started during the idle pause RPC is interrupted before it can continue.', async () => {
+  const s = await setup(undefined, { autoTurnDuringGoalPause: true });
+  try {
+    const manager = await s.managers.start(s.spec);
+    await s.notify({
+      method: 'turn/completed',
+      params: { threadId: manager.threadId, turn: { id: manager.activeTurnId, status: 'completed' } },
+    });
+
+    expect(s.managers.get(manager.id)).toMatchObject({
+      status: 'running',
+      activeTurnId: null,
+      goalState: { status: 'paused' },
+      waitingForInbox: true,
+    });
+    expect(s.requests().filter((r) => r.method === 'turn/start')).toHaveLength(1);
+    expect(s.requests().filter((r) => r.method === 'turn/interrupt')).toEqual([
+      expect.objectContaining({
+        params: { threadId: manager.threadId, turnId: 'turn-2' },
+      }),
+    ]);
+    await s.notify({
+      method: 'thread/goal/updated',
+      params: {
+        threadId: manager.threadId,
+        goal: { status: 'active', tokensUsed: 0, timeUsedSeconds: 0, tokenBudget: s.spec.budget },
+      },
+    });
+    expect(s.managers.get(manager.id)).toMatchObject({
+      status: 'running',
+      activeTurnId: null,
+      waitingForInbox: true,
+      goalState: { status: 'paused', objective: s.spec.objective, tokenBudget: s.spec.budget },
+    });
+  } finally {
+    await s.close();
+  }
+});
+
 test('Inbox decisions wake the existing thread once before and after host recovery, preserving Goal objective, budget, usage and worker sessions.', async () => {
   const s = await setup();
   let recovered: ManagerSessions | undefined;
@@ -675,14 +718,25 @@ test('Inbox decisions wake the existing thread once before and after host recove
     // The managed daemon survives a host disconnect; retain that fake transport across the handoff.
     s.client.close = () => {};
     await s.managers.close();
-    s.inbox.deliver({ managerId: state.id, kind: 'instruction', summary: 'Committed while the host was down' });
     recovered = new ManagerSessions(s.db, s.inbox, s.services);
     await recovered.recover();
     await recovered.flush();
     expect(recovered.get(state.id)).toMatchObject({
       threadId: state.threadId,
       status: 'running',
+      activeTurnId: null,
+      waitingForInbox: true,
+      goalState: { status: 'paused', objective: s.spec.objective, tokenBudget: s.spec.budget },
+    });
+    expect(s.requests().filter((r) => r.method === 'turn/start')).toHaveLength(2);
+    s.inbox.deliver({ managerId: state.id, kind: 'instruction', summary: 'Committed while the host was down' });
+    await recovered.recover();
+    await recovered.flush();
+    expect(recovered.get(state.id)).toMatchObject({
+      threadId: state.threadId,
+      status: 'running',
       activeTurnId: 'turn-3',
+      waitingForInbox: false,
       usage: { total: { totalTokens: 900 } },
       goalState: { status: 'active', objective: s.spec.objective, tokenBudget: s.spec.budget },
     });
