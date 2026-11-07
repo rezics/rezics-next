@@ -144,6 +144,12 @@ transform; the existing Settings/Web and startup owners receive that complete bo
 opens release their browser context. The same sole walk receives the integrated repair; no browser runtime shim,
 timeout increase, extra story or source-only acceptance replaces it.
 
+Decision: receive the integrated Library root boundary, Auth catalogue/lifetime and Boot receipt-key repairs on
+this handle, retaining Recent Search around the shell. Production-cache and walk Vite fixtures select and restore
+their runtime environment explicitly; the SSR fixture follows the installed include list for both React server
+entries. Existing tests retain their other assertions. Changed-workspace typing is worker completion; the sole dev
+verification retains native/browser/growth and promoted-revision closure under the current owner policy.
+
 ## realms-and-spaces
 
 Scope row: **Realms and Spaces**. Stage: **specified red** for the complete capability.

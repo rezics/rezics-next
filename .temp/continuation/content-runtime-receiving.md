@@ -53,8 +53,8 @@ three consecutive failed opens in the aggregate check. No new stories or product
   termination after teardown is not the cause. Product result is 0/18 not reached, with no installed root or seed
   proof; the slowest product failure is unknown. Setup command elapsed 930.437 seconds. Do not repeat an unchanged
   launch as proof or substitute the deferred-worker mode.
-- Web composition: the separately queued Library shell/provider repair remains due through the same browser and
-  native receiving, independently of this newly retained browser-import failure.
+- Web composition: the integrated Library shell/provider repair is received below; browser and native receiving
+  remain independent of this newly retained browser-import failure.
 - Shared checks: root check34faf59a-8d7a-4b95-af1d-4240a19628f5 exited 1, 318 pass, one skip, 24 fail and two
   errors. Performance retains transport/admission fixture repair (native exits, source fingerprint/manifest,
   occupied-port recovery, sticky admission and container/volume custody); its preparation fixture also throws
@@ -64,15 +64,45 @@ three consecutive failed opens in the aggregate check. No new stories or product
   sixteen new-thread reader cases, then exited137 while editing lacked hydration. The focused diagnostic rerun
   above supersedes the missing browser cause; sixteen passing reader cases are not aggregate Web acceptance.
 
-## Resume and acceptance
+## Integrated inputs and remaining owner work
 
-Receive the integrated owner candidates on the controller's candidate without starting another rebase. Keep all
-original authority, retirement/ABA, immutable intent, command acknowledgement, canonical revision, cleanup and
-cost assertions. Run the three exact landing groups from the active contract on the repaired candidate, plus the
-same sole walk with `--returns .temp/content-walk` and the launcher stack.log, selecting
-`REZICS_WALK_DEFER_FRONTENDS=0`. Keep source typing, installed root/callable, native HTTP/default-worker effects,
-browser interactions, owner growth and promoted-commit evidence separate. Root typecheck belongs to landing;
-no passing native/browser/root aggregate or promoted verification is claimed here.
+The current handle received only the named integrated candidates, without rebasing: Library88e80e5817 becomes
+64fd7d5011, Auth31f519929c and9fc8c4745a become2b913eeb32 and44fbcc46bc, and Boote18772206f becomesf7bcbe44f0.
+The root reconciliation keeps RecentSearchBinding around AppShell and mounts the Library boundary outside it;
+there is one instance of each. These are source inputs, not proof of hydration, readiness or default-worker effects.
+The three receiving documents at the end of this file supersede the earlier repeated-worker-check policy:
+worker completion uses changed-workspace typing; dev verification owns the original native/browser/growth/root
+and promotion assertions. No additional broad suite or stack is launched to receive these inputs.
+
+The three required groups ran once on94e2e55d24 before these inputs and all failed:
+
+- Kernel70af9e45-6ceb-44a8-8c75-24d5416f37a2 exited1. Compiler and SQL analysis passed. The isolated late
+  revocation point rerun passed after the aggregate 503 deadline; reaction-counts remained failed because the
+  installed Search worker binding throws `TypeError: subjectSource is not a function`. Search retains that repair.
+- Weba68c8a9a-1acf-4a50-9d50-5cfacd9d69ac exited1. Six editing cases still fail at browser Worker imports.
+  Three configuration assertions also exposed fixture defects: production-cache and walk cases inherited
+  `REZICS_TEST_RUNTIME=1`; SSR asserted that the generic React server entry was absent while the installed pinned
+  include list contains it. The two scenarios now select and restore their environment, and the SSR assertion
+  explicitly checks both server entries. The other assertions are unchanged.
+- The same Web run failed the retained wrapper cancellation case with `ECHILD: unknown error, waitpid` at
+  with-dev-server.ts:205 after abort. Shared custody calls libc waitpid from observeLeaderExit and zombie reaping
+  while runOwnedCommand awaits Bun child.exited. Semantic's existing startup-custody owner must settle the native
+  child exactly once without competing Bun/FFI reapers, retain its actual exit/signal and descendant cleanup, and
+  preserve the cancellation assertion143. Do not swallow ECHILD or infer a successful native exit.
+- Rootb5a26592-2e49-4a82-858f-aafc03114bcf exited1 with28 failing cases and two errors. Existing Performance,
+  Auth and Imports handbacks remain. Returned transport additionally reports no increasing transfer bytes for
+  120000ms after the native command failed. The exact error is `remote-check: returns failed after native command
+  exit 1: remote-check: connection to b failed during returns copy before a result; no-progress watchdog stopped
+  and reaped the original local rsync child after 120000 ms without increasing transfer bytes (last observed byte
+  count: none)`. Do not turn either the native assertions or the return failure into a pass.
+
+Full terminal logs are `.temp/check-logs/<bare-check-id>.log`. The exact three command selections remain in the
+active contract and controller results. Dev verification receives these source inputs and repairs from the existing
+owners, then runs those original groups and the same sole walk with `--returns .temp/content-walk` and launcher
+stack.log, selecting `REZICS_WALK_DEFER_FRONTENDS=0`. Preserve every original authority, retirement/ABA,
+immutable-intent, acknowledgement, canonical-revision, cleanup and cost assertion. Source typing, installed
+root/callable, native/default-worker effects, browser receiving, owner growth and promoted-commit evidence remain
+separate. No passing native/browser/root aggregate or promoted verification is claimed here.
 
 Contract-named orientation read before design: docs/goals/content.md, docs/goals/content.capabilities.md,
 docs/development/verification.md, docs/development/local-stack.md, services/kernel/src/content/README.md,
@@ -165,3 +195,6 @@ Every prior owner reference remains in force; later observations do not erase in
 - .temp/goal/content/web-shell-library-capability-repair-20261107.md
 - .temp/goal/content/web-startup-custody-collateral-receiving-20261107.md
 - .temp/goal/content/content11-identity-worker-readiness-20261107.md
+- .temp/goal/content/library-shell-integrated-receiving-20261107.md
+- .temp/goal/content/typing-only-worker-receiving-20261107-1330.md
+- .temp/goal/content/auth-boot-integrated-receiving-20261107-1340.md

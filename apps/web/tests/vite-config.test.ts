@@ -173,8 +173,12 @@ async function makeDirectoryOutsideAllow(allow: readonly string[]): Promise<stri
 
 test('WEB_VITE_CACHE_DIR selects the host-local optimizeDeps cache and allows reading it', async () => {
   const previous = process.env.WEB_VITE_CACHE_DIR;
+  const previousRuntime = process.env.REZICS_TEST_RUNTIME;
+  const previousSlot = process.env.REZICS_WALK_STACK_SLOT;
   const cacheDir = await mkdtemp(join(tmpdir(), 'rezics-web-vite-cache-config-'));
   process.env.WEB_VITE_CACHE_DIR = cacheDir;
+  delete process.env.REZICS_TEST_RUNTIME;
+  delete process.env.REZICS_WALK_STACK_SLOT;
   try {
     const config = await resolveWebViteConfig({ command: 'build', mode: 'test' }, appRoot);
     expect(config.cacheDir).toBe(cacheDir);
@@ -293,6 +297,10 @@ test('WEB_VITE_CACHE_DIR selects the host-local optimizeDeps cache and allows re
   } finally {
     if (previous === undefined) delete process.env.WEB_VITE_CACHE_DIR;
     else process.env.WEB_VITE_CACHE_DIR = previous;
+    if (previousRuntime === undefined) delete process.env.REZICS_TEST_RUNTIME;
+    else process.env.REZICS_TEST_RUNTIME = previousRuntime;
+    if (previousSlot === undefined) delete process.env.REZICS_WALK_STACK_SLOT;
+    else process.env.REZICS_WALK_STACK_SLOT = previousSlot;
     await rm(cacheDir, { recursive: true, force: true });
   }
 }, 30_000);
@@ -300,8 +308,10 @@ test('WEB_VITE_CACHE_DIR selects the host-local optimizeDeps cache and allows re
 test('a walk stack compiles the visited client page on demand instead of crawling every route', async () => {
   const previousSlot = process.env.REZICS_WALK_STACK_SLOT;
   const previousCache = process.env.WEB_VITE_CACHE_DIR;
+  const previousRuntime = process.env.REZICS_TEST_RUNTIME;
   process.env.REZICS_WALK_STACK_SLOT = '2';
   delete process.env.WEB_VITE_CACHE_DIR;
+  delete process.env.REZICS_TEST_RUNTIME;
   try {
     expect(webViteClientOptimizeDepsFor({ REZICS_WALK_STACK_SLOT: '2' })).toEqual(webViteWalkClientOptimizeDeps);
     expect(webViteWalkClientOptimizeDeps.holdUntilCrawlEnd).toBe(false);
@@ -315,6 +325,8 @@ test('a walk stack compiles the visited client page on demand instead of crawlin
     else process.env.REZICS_WALK_STACK_SLOT = previousSlot;
     if (previousCache === undefined) delete process.env.WEB_VITE_CACHE_DIR;
     else process.env.WEB_VITE_CACHE_DIR = previousCache;
+    if (previousRuntime === undefined) delete process.env.REZICS_TEST_RUNTIME;
+    else process.env.REZICS_TEST_RUNTIME = previousRuntime;
   }
 }, 30_000);
 
@@ -490,7 +502,7 @@ test('SSR optimizeDeps keeps explicit Worker include, noDiscovery, calendar excl
               workerInclude,
               command + ':' + name + ':explicit-include',
             );
-            for (const pkg of ['urlpattern-polyfill', 'react-dom/server', 'react-day-picker', 'date-fns'])
+            for (const pkg of ['urlpattern-polyfill', 'react-day-picker', 'date-fns'])
               assert.equal(
                 (optimizeDeps.include ?? []).includes(pkg),
                 false,
@@ -499,6 +511,10 @@ test('SSR optimizeDeps keeps explicit Worker include, noDiscovery, calendar excl
             assert.ok(
               (optimizeDeps.include ?? []).includes('react-dom/server.edge'),
               command + ':' + name + ':worker-server-entry',
+            );
+            assert.ok(
+              (optimizeDeps.include ?? []).includes('react-dom/server'),
+              command + ':' + name + ':server-entry',
             );
             assert.ok(
               (optimizeDeps.include ?? []).includes(typebox.specifier),
