@@ -22,7 +22,13 @@ import { discoveryIndexName, discoveryIndexUuid } from './indices.ts';
 import type { PublicPreparation } from './public-preparation.ts';
 import type { Pool } from 'pg';
 import { startRelays } from '../events/relays.ts';
-import { OpenSearchError, SearchUnavailableError, type OpenSearch } from './opensearch.ts';
+import {
+  OpenSearchError,
+  SearchUnavailableError,
+  type OpenSearch,
+  type SearchQuery,
+  type SearchRequestOptions,
+} from './opensearch.ts';
 import retire from './retire.sql';
 import {
   createSubjectIndex,
@@ -43,6 +49,36 @@ import type { DiscoveryProducerEntry } from './index.ts';
 
 import { subjectConsumer } from './consumer-name.ts';
 export { subjectConsumer } from './consumer-name.ts';
+
+/** Bind native requests to the lifetime that owns the runner and its relays. */
+function runnerSearch(search: OpenSearch, signal: AbortSignal): OpenSearch {
+  return {
+    request<T>(
+      method: 'GET' | 'PUT' | 'POST' | 'DELETE' | 'HEAD',
+      path: string,
+      body?: unknown,
+      options?: SearchRequestOptions,
+    ) {
+      return search.request<T>(method, path, body, { ...options, signal });
+    },
+    bulk<T>(
+      lines: readonly unknown[],
+      options?: { query?: SearchQuery; timeoutMs?: number; signal?: AbortSignal },
+    ) {
+      return search.bulk<T>(lines, { ...options, signal });
+    },
+    ...(search.bulkRaw
+      ? {
+          bulkRaw<T>(
+            body: string,
+            options?: { query?: SearchQuery; timeoutMs?: number; signal?: AbortSignal },
+          ) {
+            return search.bulkRaw!<T>(body, { ...options, signal });
+          },
+        }
+      : {}),
+  };
+}
 
 export async function startSearchIndexing(options: {
   pool: Pool;
@@ -66,9 +102,12 @@ export async function startSearchIndexing(options: {
   const retireAfterMs = options.retireAfterMs ?? 15 * 60_000;
   if (!Number.isFinite(retireAfterMs) || retireAfterMs < 0)
     throw new RangeError('retireAfterMs must be a non-negative finite number');
+  const lifetime = new AbortController();
+  const search = runnerSearch(options.search, lifetime.signal);
   const mixed = options.discovery
     ? startDiscoveryIndexing({
         ...options,
+        search,
         routeKey: options.discovery.routeKey,
         source: options.discovery.producers.subjects,
         producers: options.discovery.producers,
@@ -93,12 +132,12 @@ export async function startSearchIndexing(options: {
   const discover = async () => {
     if (stopped) return;
     try {
-      let state = await subjectGenerations(options.search, options.prefix);
+      let state = await subjectGenerations(search, options.prefix);
       if (stopped) return;
       if (state.generations.length === 0) {
-        await createSubjectIndex(options.search, options.prefix, 1);
+        await createSubjectIndex(search, options.prefix, 1);
         if (stopped) return;
-        state = await subjectGenerations(options.search, options.prefix);
+        state = await subjectGenerations(search, options.prefix);
         if (!state.generations.includes(1))
           throw new SearchUnavailableError('Subject generation allocation could not be observed');
       }
@@ -107,24 +146,24 @@ export async function startSearchIndexing(options: {
       if (!options.publicPreparation && state.active === null) {
         if (state.generations.length !== 1 || state.generations[0] !== 1)
           throw new SearchUnavailableError('Subject bootstrap activation is unavailable');
-        await ensureSubjectRatingMapping(options.search, options.prefix, 1);
+        await ensureSubjectRatingMapping(search, options.prefix, 1);
         confirmedRatingMappings.add(1);
         if (stopped) return;
-        await ensureSubjectActivationMetadata(options.search, options.prefix, 1);
+        await ensureSubjectActivationMetadata(search, options.prefix, 1);
         if (stopped) return;
         await observedWrite(
           () =>
-            options.search.request('POST', '/_aliases', {
+            search.request('POST', '/_aliases', {
               actions: [{ add: { index: subjectIndexName(options.prefix, 1), alias: subjectAlias(options.prefix) } }],
             }),
           async () => {
-            const observed = await subjectGenerations(options.search, options.prefix);
+            const observed = await subjectGenerations(search, options.prefix);
             return observed.generations.includes(1) && observed.active === 1;
           },
           'Subject bootstrap activation could not be established',
         );
         if (stopped) return;
-        state = await subjectGenerations(options.search, options.prefix);
+        state = await subjectGenerations(search, options.prefix);
         if (state.active !== 1 || !state.generations.includes(1))
           throw new SearchUnavailableError('Subject bootstrap activation is unavailable');
       }
@@ -132,14 +171,15 @@ export async function startSearchIndexing(options: {
       if (options.publicPreparation) {
         for (const generation of state.generations)
           if (state.active === null || generation > state.active)
-            await options.publicPreparation.initialize(generation);
+            await options.publicPreparation.initialize(generation, lifetime.signal);
+        if (stopped) return;
         await options.publicPreparation.discover();
       }
       let activatedAt: number | undefined;
       if (state.active !== null) {
         if (options.publicPreparation) {
           const index = subjectIndexName(options.prefix, state.active);
-          const { body } = await options.search.request<
+          const { body } = await search.request<
             Record<string, { mappings?: { _meta?: { activated_at?: unknown } } }>
           >('GET', `/${index}/_mapping`);
           if (stopped) return;
@@ -149,7 +189,7 @@ export async function startSearchIndexing(options: {
             if (Number.isFinite(parsed)) activatedAt = parsed;
           }
         } else {
-          const observed = await readSubjectActivationTime(options.search, options.prefix, state.active);
+          const observed = await readSubjectActivationTime(search, options.prefix, state.active);
           if (observed === null) throw new SearchUnavailableError('Active Subject generation metadata is unavailable');
           activatedAt = observed;
         }
@@ -175,7 +215,7 @@ export async function startSearchIndexing(options: {
         for (const generation of liveGenerations) {
           if (stopped) return;
           if (!confirmedRatingMappings.has(generation))
-            await ensureSubjectRatingMapping(options.search, options.prefix, generation);
+            await ensureSubjectRatingMapping(search, options.prefix, generation);
         }
         if (stopped) return;
         const previous = current;
@@ -185,11 +225,11 @@ export async function startSearchIndexing(options: {
         if (stopped) return;
         const relays = await Promise.all(
           liveGenerations.map(async (generation) => {
-            const calendarFormat = await readSubjectCalendarMappingFormat(options.search, options.prefix, generation);
-            const creditFormat = await readSubjectCreditMappingFormat(options.search, options.prefix, generation);
+            const calendarFormat = await readSubjectCalendarMappingFormat(search, options.prefix, generation);
+            const creditFormat = await readSubjectCreditMappingFormat(search, options.prefix, generation);
             return createSubjectIndexer({
               pool: options.pool,
-              search: options.search,
+              search,
               source: options.source,
               listing: options.listing,
               index: subjectIndexName(options.prefix, generation),
@@ -199,7 +239,7 @@ export async function startSearchIndexing(options: {
               writer: createSearchWriterGuard({
                 consumer: subjectConsumer(options.prefix, generation),
                 pool: options.pool,
-                search: options.search,
+                search,
                 source: options.source,
                 listing: options.listing,
                 index: subjectIndexName(options.prefix, generation),
@@ -226,7 +266,7 @@ export async function startSearchIndexing(options: {
         if (stopped) return;
         try {
           try {
-            await options.search.request('DELETE', `/${subjectIndexName(options.prefix, generation)}`);
+            await search.request('DELETE', `/${subjectIndexName(options.prefix, generation)}`);
           } catch (error) {
             if (!(error instanceof OpenSearchError && error.status === 404)) throw error;
           }
@@ -237,7 +277,7 @@ export async function startSearchIndexing(options: {
         }
       }
     } catch (error) {
-      console.error(`Search index discovery failed for ${options.prefix}`, error);
+      if (!stopped) console.error(`Search index discovery failed for ${options.prefix}`, error);
     }
   };
 
@@ -247,7 +287,6 @@ export async function startSearchIndexing(options: {
     discovery = next;
     return next;
   };
-  await refresh();
   const schedule = () => {
     if (stopped || paused || timer !== undefined) return;
     timer = setTimeout(() => {
@@ -256,7 +295,8 @@ export async function startSearchIndexing(options: {
       void refresh().then(schedule, schedule);
     }, discoverMs);
   };
-  schedule();
+  // Keep the initial inventory refresh owned without making worker registration wait for it.
+  void refresh().then(schedule, schedule);
 
   return {
     pause() {
@@ -296,6 +336,7 @@ export async function startSearchIndexing(options: {
       if (closing) return closing;
       stopped = true;
       paused = true;
+      lifetime.abort(new Error('Search runner stopped'));
       resumeAfter = undefined;
       clearSchedule();
       const previous = current;
@@ -347,6 +388,7 @@ export function startDiscoveryIndexing(options: {
     if (stopped || paused) return;
     const producers = options.producers;
     const ownerAdapters = producers ? await resolveDiscoveryOwnerAdapters(producers) : undefined;
+    if (stopped || paused) return;
     const registry = await nativeDiscoveryRegistry(
       options.pool,
       options.routeKey,
@@ -359,6 +401,7 @@ export function startDiscoveryIndexing(options: {
           }
         : undefined,
     );
+    if (stopped || paused) return;
     const metadataProducers = ownerAdapters?.metadataProducers;
     const reviewSource = producers?.reviewSource ?? options.reviewSource;
     let readiness: Error | undefined;
@@ -375,12 +418,15 @@ export function startDiscoveryIndexing(options: {
         throw error;
       readiness = error;
     }
+    if (stopped || paused) return;
     const generations = await discoveryGenerations(options.pool, options.prefix);
+    if (stopped || paused) return;
     delay =
       !readiness && generations.some((row) => !['active', 'retiring', 'quarantined'].includes(row.state))
         ? 0
         : (options.intervalMs ?? 100);
     for (const target of generations) {
+      if (stopped || paused) return;
       if (!target.uuid || ['allocated', 'retired', 'quarantined', 'retiring'].includes(target.state)) continue;
       const binding = `${target.uuid}:${target.incarnation}`;
       if (incarnations.has(target.generation) && incarnations.get(target.generation) !== binding) {
@@ -400,7 +446,8 @@ export function startDiscoveryIndexing(options: {
           reviewSource &&
           registry.ownerAdapters?.review?.readiness === 'ready' &&
           (await projection.hasMetadataPopulation?.('review'))
-        )
+        ) {
+          if (stopped || paused) return;
           receivers.set(
             target.generation,
             createReviewDiscoveryReceiving({
@@ -409,6 +456,7 @@ export function startDiscoveryIndexing(options: {
               source: reviewSource,
             }),
           );
+        }
         relays.set(
           target.generation,
           startRelays(
@@ -425,10 +473,13 @@ export function startDiscoveryIndexing(options: {
     }
     // One finite current-review page per live target, sharing this supervisor's lifecycle and transport.
     for (const target of generations) {
+      if (stopped || paused) return;
       if (target.uuid && !['allocated', 'retiring', 'retired', 'quarantined'].includes(target.state))
         await receivers.get(target.generation)?.next();
     }
+    if (stopped || paused) return;
     for (const target of generations.filter((row) => row.state === 'retiring')) {
+      if (stopped || paused) return;
       await relays.get(target.generation)?.stop();
       relays.delete(target.generation);
       receivers.delete(target.generation);
@@ -440,19 +491,21 @@ export function startDiscoveryIndexing(options: {
         generations.find((row) => row.state === 'active'),
       );
     }
-    for (const [generation, relay] of relays)
+    for (const [generation, relay] of relays) {
+      if (stopped || paused) return;
       if (!generations.some((row) => row.generation === generation && row.state !== 'quarantined')) {
         await relay.stop();
         relays.delete(generation);
         receivers.delete(generation);
         incarnations.delete(generation);
       }
+    }
     if (readiness) throw readiness;
   };
   const refresh = () => {
     const next = running.then(step);
     running = next.catch((error) => {
-      console.error('Discovery maintenance failed', error);
+      if (!stopped) console.error('Discovery maintenance failed', error);
     });
     return next;
   };

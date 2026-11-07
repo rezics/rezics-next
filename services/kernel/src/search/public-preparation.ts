@@ -33,10 +33,12 @@ export type PublicPreparationOptions = {
 };
 
 /** Resolve actual physical identity before each admitted write. The name alone conveys no readiness. */
-async function indexUuid(search: OpenSearch, index: string): Promise<string> {
+async function indexUuid(search: OpenSearch, index: string, signal?: AbortSignal): Promise<string> {
   const { status, body } = await search.request<Record<string, { settings?: { index?: { uuid?: string } } }>>(
     'GET',
     `/${index}/_settings`,
+    undefined,
+    signal ? { signal } : undefined,
   );
   const uuid = body[index]?.settings?.index?.uuid;
   if (status !== 200 || Object.keys(body).length !== 1 || typeof uuid !== 'string' || !uuid)
@@ -117,31 +119,43 @@ export function createPublicPreparation(options: PublicPreparationOptions) {
     writer(_generation: number): import('./indexer.ts').SubjectApplyGuard {
       return async (_partition, _envelopes, apply) => apply();
     },
-    async initialize(generation: number): Promise<string> {
-      const current = await activeRelease(options.pool);
-      if (!current) throw new SearchUnavailableError('Public preparation release is unavailable');
-      const state = await subjectGenerations(options.search, options.prefix);
-      if (!state.generations.includes(generation)) {
-        if (state.generations.length >= 3) throw new SearchUnavailableError('Public generation limit reached');
-        await createSubjectIndex(options.search, options.prefix, generation, 1);
-      }
-      return store.retain(
-        {
-          kind: 'population',
-          key: String(generation),
-          generation,
-          uuid: await indexUuid(options.search, subjectIndexName(options.prefix, generation)),
-          meaning: current.digest,
-          publication: null,
-          partition: 0,
-          epoch: null,
-          through: null,
-          after: null,
-          phase: 'native',
-          pending: null,
-        },
-        Date.now() + 24 * 60 * 60 * 1000,
-      );
+    initialize(generation: number, signal?: AbortSignal): Promise<string> {
+      return track(async () => {
+        const ensureLive = () => {
+          if (stopped || signal?.aborted)
+            throw new SearchUnavailableError('Public preparation initialization was cancelled');
+        };
+        ensureLive();
+        const current = await activeRelease(options.pool);
+        ensureLive();
+        if (!current) throw new SearchUnavailableError('Public preparation release is unavailable');
+        const state = await subjectGenerations(options.search, options.prefix, undefined, signal);
+        ensureLive();
+        if (!state.generations.includes(generation)) {
+          if (state.generations.length >= 3) throw new SearchUnavailableError('Public generation limit reached');
+          await createSubjectIndex(options.search, options.prefix, generation, 1, signal);
+          ensureLive();
+        }
+        const uuid = await indexUuid(options.search, subjectIndexName(options.prefix, generation), signal);
+        ensureLive();
+        return store.retain(
+          {
+            kind: 'population',
+            key: String(generation),
+            generation,
+            uuid,
+            meaning: current.digest,
+            publication: null,
+            partition: 0,
+            epoch: null,
+            through: null,
+            after: null,
+            phase: 'native',
+            pending: null,
+          },
+          Date.now() + 24 * 60 * 60 * 1000,
+        );
+      });
     },
     run(id: string, revision: string): Promise<void> {
       return track(async () => {
