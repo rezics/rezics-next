@@ -202,12 +202,45 @@ function gitTemplate(kind: 'repository' | 'harness', build: (root: string) => vo
   return temporary.path;
 }
 
+function seedArchitectureFixture(root: string): void {
+  mkdirSync(join(root, 'scripts'), { recursive: true });
+  writeFileSync(
+    join(root, 'scripts/architecture.ts'),
+    readFileSync(resolve(import.meta.dir, '../../../scripts/architecture.ts'), 'utf8'),
+  );
+  writeFileSync(
+    join(root, 'scripts/architecture-map.ts'),
+    readFileSync(resolve(import.meta.dir, '../../../scripts/architecture-map.ts'), 'utf8'),
+  );
+  mkdirSync(join(root, 'docs/architecture'), { recursive: true });
+  writeFileSync(
+    join(root, 'docs/architecture/modules.json'),
+    JSON.stringify({
+      version: 1,
+      sourceRoots: [{ path: 'packages/fixture', extensions: ['.ts', '.tsx', '.js', '.jsx', '.mts', '.cts'] }],
+      modules: [
+        {
+          id: 'fixture',
+          kind: 'adapter',
+          owner: 'platform',
+          paths: ['packages/fixture/**'],
+          publicEntries: [],
+          allowedDependencies: [],
+          capabilities: [],
+        },
+      ],
+    }),
+  );
+  writeFileSync(join(root, 'docs/architecture/boundary-baseline.json'), JSON.stringify({ version: 1, modules: {} }));
+}
+
 function repositoryGitTemplate(): string {
   return gitTemplate('repository', (root) => {
     repositoryGit(root, 'init', '-b', 'main');
     repositoryGit(root, 'config', 'user.email', 'test@example.invalid');
     repositoryGit(root, 'config', 'user.name', 'Test');
     writeFileSync(join(root, 'base'), 'base\n');
+    seedArchitectureFixture(root);
     repositoryGit(root, 'add', '.');
     repositoryGit(root, 'commit', '-m', 'Initial');
   });
@@ -225,34 +258,7 @@ function harnessGitTemplate(): string {
     );
     mkdirSync(join(root, 'scripts'), { recursive: true });
     writeFileSync(join(root, 'scripts/typecheck.ts'), 'process.exit(0);\n');
-    writeFileSync(
-      join(root, 'scripts/architecture.ts'),
-      readFileSync(resolve(import.meta.dir, '../../../scripts/architecture.ts'), 'utf8'),
-    );
-    writeFileSync(
-      join(root, 'scripts/architecture-map.ts'),
-      readFileSync(resolve(import.meta.dir, '../../../scripts/architecture-map.ts'), 'utf8'),
-    );
-    mkdirSync(join(root, 'docs/architecture'), { recursive: true });
-    writeFileSync(
-      join(root, 'docs/architecture/modules.json'),
-      JSON.stringify({
-        version: 1,
-        sourceRoots: [{ path: 'packages/fixture', extensions: ['.ts', '.tsx', '.js', '.jsx', '.mts', '.cts'] }],
-        modules: [
-          {
-            id: 'fixture',
-            kind: 'adapter',
-            owner: 'platform',
-            paths: ['packages/fixture/**'],
-            publicEntries: [],
-            allowedDependencies: [],
-            capabilities: [],
-          },
-        ],
-      }),
-    );
-    writeFileSync(join(root, 'docs/architecture/boundary-baseline.json'), JSON.stringify({ version: 1, modules: {} }));
+    seedArchitectureFixture(root);
     mkdirSync(join(root, 'packages/definitions'), { recursive: true });
     writeFileSync(
       join(root, 'packages/definitions/package.json'),

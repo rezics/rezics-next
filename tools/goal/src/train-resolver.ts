@@ -777,7 +777,7 @@ os.execvp('timeout',['timeout','--signal=TERM','--kill-after=${this.store.policy
         throw new TrainResolverInfrastructureError('Train resolver provider allowance refused the bounded session');
       if (code !== 0 || failure) throw new Error(failure ?? `Train resolver exited with ${code}`);
       if (this.git(tree, 'rev-parse', 'HEAD') !== head || this.git(tree, 'ls-files', '--stage', '-z') !== index)
-        throw new Error('Train resolver changed Git source or index');
+        throw new Error('Train resolver changed Git source refs or index');
       if (snapshot(tree, paths, this.store.policy.merge) !== before)
         throw new Error('Train resolver edited outside conflicted files or frozen inputs');
       for (const path of paths) {

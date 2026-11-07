@@ -1034,19 +1034,31 @@ export class WorkerTasks {
     options: RetryOptions = {},
     actor: AuthenticatedManager | null | undefined = undefined,
   ): void {
-    const task = this.store.task(taskId);
-    const expectedAttempt = options.expectedAttempt ?? task.currentAttempt;
+    const initial = this.store.task(taskId);
+    const expectedAttempt = options.expectedAttempt ?? initial.currentAttempt;
+    if (initial.currentAttempt !== expectedAttempt)
+      throw new StaleAttemptError({ taskId, attempt: expectedAttempt }, initial.currentAttempt);
     if (options.brief) {
       const submitted = this.validateBrief(options.brief, taskId, actor).brief;
-      if (submitted.goal !== task.brief.goal || submitted.manager !== task.brief.manager)
+      if (submitted.goal !== initial.brief.goal || submitted.manager !== initial.brief.manager)
         throw new Error('a reshaped brief must keep the same goal and manager');
-      recordReplacementBrief(this.store, task, submitted.markdown, expectedAttempt);
+      this.store.db
+        .transaction(() => {
+          const current = this.store.task(taskId);
+          if (current.currentAttempt !== expectedAttempt)
+            throw new StaleAttemptError({ taskId, attempt: expectedAttempt }, current.currentAttempt);
+          recordReplacementBrief(this.store, current, submitted.markdown, expectedAttempt);
+        })
+        .immediate();
     }
     const lease = acquireDirectoryLease(
       join(this.settings.stateDirectory, 'leases', taskId),
       this.settings.policy?.leases,
     );
     try {
+      const task = this.store.task(taskId);
+      if (task.currentAttempt !== expectedAttempt)
+        throw new StaleAttemptError({ taskId, attempt: expectedAttempt }, task.currentAttempt);
       this.queueRetryLeased(taskId, { ...options, expectedAttempt }, actor);
     } finally {
       lease.release();
@@ -1107,14 +1119,8 @@ export class WorkerTasks {
   }
   private queueRetryLeased(taskId: string, options: RetryOptions, actor?: AuthenticatedManager | null): void {
     const task = this.store.task(taskId);
-    if (task.currentAttempt !== options.expectedAttempt) {
-      if (
-        options.brief === undefined ||
-        options.expectedAttempt === undefined ||
-        options.expectedAttempt > task.currentAttempt
-      )
-        throw new StaleAttemptError({ taskId, attempt: options.expectedAttempt! }, task.currentAttempt);
-    }
+    if (options.expectedAttempt !== undefined && task.currentAttempt !== options.expectedAttempt)
+      throw new StaleAttemptError({ taskId, attempt: options.expectedAttempt }, task.currentAttempt);
     if (!['ready', 'running', 'landing', 'stopped', 'held'].includes(task.state))
       throw new Error(`cannot retry ${task.state} task`);
     const nextBrief = options.brief === undefined ? task.brief : this.validateBrief(options.brief, taskId, actor).brief;

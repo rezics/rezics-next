@@ -2617,6 +2617,7 @@ for (const legacy of [false, true])
           for (const member of handoff.members)
             h.store.updateTask(member, (task) => {
               task.brief = { ...task.brief, goal: 'dev-fixture' };
+              delete task.brief.target;
             });
         },
       };
