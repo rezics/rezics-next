@@ -34,8 +34,11 @@ export async function sourceRuntimeFixture() {
       'collection:update',
       'collection:delete',
       'library_entry:list',
+      'library_entry:read',
       'progress_session:list',
+      'progress_session:read',
       'copy:list',
+      'copy:read',
     ]);
     async function collection(
       visibility: 'private' | 'public' | 'unlisted' = 'public',
@@ -44,8 +47,7 @@ export async function sourceRuntimeFixture() {
       const response = await native.send(owner.bearer, 'POST', '/v1/collections', {
         title: 'Explicit source runtime',
         visibility,
-        membershipKind,
-        ...(membershipKind === 'dynamic' ? { rule: { filter: { owner: { presence: true } } } } : {}),
+        ...(membershipKind === 'dynamic' ? { membershipKind, rule: { filter: { owner: { presence: true } } } } : {}),
       });
       expect(response.status, await response.clone().text()).toBe(201);
       const id = (await response.json()).collection.id as string;

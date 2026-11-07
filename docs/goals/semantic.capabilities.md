@@ -98,6 +98,10 @@ Members reservation and touch reuse the mounted reader's current native eligibil
 private denials. Public-output fixtures follow the owning dynamic-only publication contract and exact expanded
 owner-family grants; the COMPLETE-versus-pending assertion checks activated output, while ordinal custody remains
 curated. Empty SQL projections cost zero result bytes without changing declared work or transaction funding.
+Native rule creation requests include the read scopes required by the released expanded rule as well as the list
+scopes required by execution; curated creation omits the dynamic-only wire fields. Producer reconciliation remains
+with the sole Members owner. The bounded bootstrap continuation and safe phase diagnostics are received through
+the existing native journeys; integration alone establishes no first-public or Content rerun pass.
 
 ## Evidence stages
 
