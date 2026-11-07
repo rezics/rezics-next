@@ -652,6 +652,8 @@
         "services/kernel/src/semantic/identity-adapters/identity-epoch-binding.ts",
         "services/kernel/src/semantic/work-module.ts",
         "services/kernel/src/semantic/access-capabilities.ts",
+        "services/kernel/src/semantic/context-access-port.ts",
+        "services/kernel/src/semantic/context-application.ts",
         "services/kernel/src/semantic/agents.ts",
         "services/kernel/src/semantic/public-subject-facts.ts",
         "services/kernel/src/semantic/adapters/native-domain.ts",

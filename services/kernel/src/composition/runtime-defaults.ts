@@ -12,6 +12,7 @@ import { installNativeHistory } from './history.ts';
 import { installIdentitySourceConsumerRuntime } from './identity-source-consumer.ts';
 import { installIdentityRatingRepairProducer } from './identity-rating-repair.ts';
 import { bindOrdinaryContentLifecycle, nativeContentLifecycle } from '../semantic/adapters/index.ts';
+import { composeSemanticContext } from './semantic-context.ts';
 import { ConfigError } from '../commerce/config.ts';
 import { assertReceiptKeyRing, readReceiptKeyRing } from '../command/receipt-key.ts';
 import { systemClock } from '../clock.ts';
@@ -87,6 +88,7 @@ export function createKernelRuntimeDefaults(overrides: KernelRuntimeOverrides = 
   installIdentitySourceConsumerRuntime();
   installIdentityRatingRepairProducer();
   bindOrdinaryContentLifecycle(nativeContentLifecycle());
+  composeSemanticContext();
   composeLibraryDomain();
   const env = overrides.env ?? process.env;
   const tokens = overrides.tokens ?? readTokenKeys(env);

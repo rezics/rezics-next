@@ -147,14 +147,14 @@ export {
   createContextDirectory,
   ContextDirectoryEntrySchema,
   ContextDirectoryPreparingError,
-} from './context-directory.ts';
+} from './context-application.ts';
 export type {
   ContextDirectory,
   ContextDirectoryEntry,
   ContextDirectoryPage,
   ContextDirectoryQuery,
   ContextDirectoryRead,
-} from './context-directory.ts';
+} from './context-application.ts';
 
 export {
   createPublicIdentityOutputCapture,

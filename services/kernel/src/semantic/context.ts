@@ -1,11 +1,7 @@
 import { enrollResourceRecordSources } from './record-purge-custody.ts';
-import { withReadTransaction } from './read.ts';
 import type { Pool } from 'pg';
-import { createResourcePublicEligibility, initializeResourceGrants, type ParentAnchor } from '../access/index.ts';
-import { readAccount } from '../access/account-data.ts';
 import { authoritativeTimeValue, runCommand, type CommandAuthorization } from '../command/command.ts';
 import { readPartition } from '../partition/partition.ts';
-import type { AccessCheck, AccountActor, Resource } from '../request/access.ts';
 import { anchorRoute, newId, partitionOf, routeOf } from '../route/route.ts';
 import { itemFacts } from './item.ts';
 import insertContext from './create-context.sql';
@@ -15,16 +11,24 @@ import readContextStatement from './read-context.sql';
 import readGlobalContext from './context-read-global.sql';
 import readCommunityContext from './context-read-community.sql';
 import readContextCreator from './context-read-creator.sql';
-import { GLOBAL_CONTEXT } from './definitions.ts';
+import type { ResourceEligibility } from '../access/index.ts';
+import {
+  CONTEXT_GLOBAL_ID,
+  contextAccess,
+  type ContextAccountActor,
+  type ContextParentAnchor,
+  type ContextQueryClient,
+  type ContextResource,
+} from './context-access-port.ts';
 
 export const CREATE_CONTEXT = 'context.create';
+export { CONTEXT_GLOBAL_ID };
 
-export const globalContextAnchor: ParentAnchor = Object.freeze({
-  // Literal identity so this module can finish while definitions.ts is still evaluating.
-  resource: Object.freeze({ route: 0, id: '00000000-0000-8000-8000-000000000000' }),
+export const globalContextAnchor: ContextParentAnchor = Object.freeze({
+  resource: Object.freeze({ route: 0, id: CONTEXT_GLOBAL_ID }),
   async validate(client, time) {
     authoritativeTimeValue(time);
-    const found = await readGlobalContext.run(client, { route: 0, context_id: GLOBAL_CONTEXT });
+    const found = await readGlobalContext.run(client, { route: 0, context_id: CONTEXT_GLOBAL_ID });
     return found !== null;
   },
 });
@@ -33,8 +37,8 @@ export const globalContextAnchor: ParentAnchor = Object.freeze({
  * this binding fixes its route and verifies the community row on the released
  * authorization connection before Access evaluates the grant at command T.
  */
-export function editorialContextAnchor(id: string): ParentAnchor {
-  if (id === GLOBAL_CONTEXT) return globalContextAnchor;
+export function editorialContextAnchor(id: string): ContextParentAnchor {
+  if (id === CONTEXT_GLOBAL_ID) return globalContextAnchor;
   const route = routeOf(id);
   if (route === null) throw new RangeError('Context anchor id must carry a route');
   return Object.freeze({
@@ -48,7 +52,7 @@ export function editorialContextAnchor(id: string): ParentAnchor {
   });
 }
 
-export function contextTarget(routeKey: Uint8Array, accountId: string, idempotencyKey: string): Resource {
+export function contextTarget(routeKey: Uint8Array, accountId: string, idempotencyKey: string): ContextResource {
   const route = anchorRoute(routeKey, `${accountId}\n${CREATE_CONTEXT}\n${idempotencyKey}`);
   return { route, id: newId(route) };
 }
@@ -78,14 +82,14 @@ export type ContextRecord = {
 export async function createContext(
   pool: Pool,
   options: {
-    actor: AccountActor;
-    target: Resource;
+    actor: ContextAccountActor;
+    target: ContextResource;
     idempotencyKey: string;
     digest: Uint8Array;
     input: unknown;
     settings?: ContextRecord['settings'];
     defaults?: ContextRecord['defaults'];
-    authorize?: AccessCheck;
+    authorize?: (client: ContextQueryClient, time?: unknown) => Promise<boolean>;
     authorization?: CommandAuthorization;
     deadline?: number;
     clock?: () => Date;
@@ -139,7 +143,7 @@ export async function createContext(
         birth: true,
       });
       if (options.authorization)
-        await initializeResourceGrants(tx, {
+        await contextAccess().initializeResourceGrants(tx, {
           resource: options.target,
           type: 'semantic.context',
           creator: options.actor.accountId,
@@ -170,12 +174,13 @@ type ContextRow = {
 export async function readContext(
   pool: Pool,
   id: string,
-  authorize: (client: Parameters<AccessCheck>[0]) => Promise<boolean>,
+  authorize: (client: ContextQueryClient) => Promise<boolean>,
 ): Promise<{ context: ContextRecord; component: { partition: number; epoch: number; position: bigint } } | null> {
   const route = routeOf(id);
   if (route === null) return null;
+  const port = contextAccess();
   const partitionNo = partitionOf(route);
-  return withReadTransaction(pool, async (client) => {
+  return port.withReadTransaction(pool, async (client) => {
     const partition = await readPartition(client, partitionNo);
     if (!partition) {
       return null;
@@ -187,7 +192,7 @@ export async function readContext(
     if (row.kind === 'community') {
       const creator = await readContextCreator.run(client, { route, context_id: id });
       if (!creator?.accountId) return null;
-      const account = await readAccount(client, routeOf(creator.accountId)!, creator.accountId);
+      const account = await port.readAccount(client, routeOf(creator.accountId)!, creator.accountId);
       if (!account || account.state !== 'active' || account.fenced) return null;
     }
     return {
@@ -219,8 +224,9 @@ export function contextLabels(id: string, input: unknown): Record<string, string
   return labels;
 }
 
-export function publicContextEligibility(resource: Resource) {
-  return createResourcePublicEligibility({
+export function publicContextEligibility(resource: ContextResource): ResourceEligibility {
+  const port = contextAccess();
+  return port.createPublicEligibility({
     resource,
     action: 'context:read',
     async prepare({ pool, resource: identity }) {
@@ -231,5 +237,5 @@ export function publicContextEligibility(resource: Resource) {
       const row = await contextPublicExists.run(client, { route: identity.route, context_id: identity.id });
       return row !== null;
     },
-  });
+  }) as ResourceEligibility;
 }
