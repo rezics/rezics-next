@@ -600,10 +600,21 @@ test('selected VNDB entry_meta rows continue from the exact unread dump offset',
 });
 
 test('release scan limits fit the pinned 2026-11-04 dump tables', () => {
-  expect(vndbReleaseScanLimits.entry_meta?.maxRows).toBeGreaterThanOrEqual(495_184);
-  expect(vndbReleaseScanLimits.entry_meta?.maxBytes).toBeGreaterThanOrEqual(17_493_195);
-  expect(vndbReleaseScanLimits.releases?.maxRows).toBeGreaterThanOrEqual(160_532);
-  expect(vndbReleaseScanLimits.releases?.maxBytes).toBeGreaterThanOrEqual(15_913_985);
+  const pinned: Record<string, { rows: number; bytes: number }> = {
+    vn: { rows: 67_682, bytes: 29_049_047 },
+    vn_titles: { rows: 78_386, bytes: 4_716_431 },
+    entry_meta: { rows: 495_184, bytes: 17_493_195 },
+    releases_vn: { rows: 171_613, bytes: 3_887_692 },
+    releases: { rows: 160_532, bytes: 15_913_985 },
+    releases_titles: { rows: 206_275, bytes: 14_632_450 },
+    releases_supersedes: { rows: 3_458, bytes: 52_244 },
+    releases_platforms: { rows: 230_374, bytes: 2_630_152 },
+    releases_media: { rows: 155_615, bytes: 1_949_022 },
+  };
+  for (const [table, size] of Object.entries(pinned)) {
+    expect(vndbReleaseScanLimits[table]!.maxRows).toBeGreaterThanOrEqual(size.rows);
+    expect(vndbReleaseScanLimits[table]!.maxBytes).toBeGreaterThanOrEqual(size.bytes);
+  }
 });
 
 test('dump table scan overflow uses the contract error the release planner catches', async () => {

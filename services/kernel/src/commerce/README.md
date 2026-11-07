@@ -414,6 +414,8 @@ edition ID, immutable revision ID/hash and publication `editionRevision`. It is 
 permission token. `sameCapturedContentEdition` compares every immutable field, including that reference. The
 `captureCurrentContentEdition` / `requireCurrentContentEdition` helpers use the actual request Actor;
 `requireMechanicalContentEdition` uses only Content's mechanical entrypoint for trusted order work.
+Order create, Checkout create and apply forward the same Auth consent reader as offer create, so
+initiator restoration can run; omitting it refuses the sale as unavailable.
 
 The private `withSalePreparation` composition in [commands](commands.ts) forwards parent `prepare`, `authorize`
 and `finalize` with the exact original evidence, preserving the creation registry and account floor before receipt
@@ -1009,21 +1011,81 @@ Disclosure/rights stay with existing Access and target owners. [Shared deletion]
 Financial Commerce is separate from Library's erasure participant. It must acknowledge actual minimized cleanup
 or no applicable data, never mere dispatch; minimal completion outside workflow history prevents late resurrection.
 The native live-copy purpose extends existing lifecycle coordination; it adds no account restore, workflow engine or lifecycle service.
+The [Commerce erasure participant](erasure-participant.md) owns the fixed native-test order-retention seam, Checkout
+minimization, deadline purge and separate Access resolution; it distinguishes this fixture policy from unresolved
+production financial retention and remaining shared custody.
+Decision: genuine-order native acceptance uses Content's isolated native system and Access `grant.create`; operator
+history stays on the shared Auth/persona fixture; Accounts consumes `prepareNativeRetainedOrder`.
+Decision: first-public user-visible acceptance is the 26-row seeded walk
+`bun services/auth/scripts/dev-stack.ts walk -- bun apps/web/tests/native/commerce-library-journeys.walk.ts`;
+this genuine-order suite remains the financial retention proof. No extra outcome suites. Walk evidence keeps all
+26 rows. Seed dump scans throw the shared scan-limit class and the pinned 2026-11-04 VNDB dump fits the release
+budgets, so overflow is a gap rather than a seed crash. The walker waits for an importer fence after persona, and
+admitted stacks start a signed Stripe fixture so purchase settles through `checkout.session.completed`.
+Decision: admitted walk processes bind `KERNEL_ORIGIN`, `AUTH_ORIGIN` and `KERNEL_PORT` to the slot. Seed talks to
+that Kernel; an inherited default-port `KERNEL_ORIGIN` is the observed import-transport setup failure. Bun
+`--env-file` does not override an existing `KERNEL_ORIGIN`, so the walker merges persona `seed.env` after the slot
+origins. The finishing register is `docs/goals/commerce.capabilities.md#first-public-journeys-on-dev`.
+Decision: walk stacks always retire leftover seed journals because a new database reuses the slot's PostgreSQL
+identity string. The walker then waits for identity-epoch topology remaining to reach zero, then an importer fence
+and a subject write before seed, and seed bun uses `--no-env-file` so slot `KERNEL_ORIGIN` stays. Fewest
+first-public tests remain the seeded walk, `erasure-participant.test.ts`, and the VNDB scan-budget cases.
+Choice summary: each full-effect walk owns a signed loopback Stripe fixture, resets prior seed journals for its fresh
+database, starts Auth issuer pages before Kernel, and defers Web until seeding completes.
+Decision: Content's canonical issuer owns JWKS: `AUTH_ISSUER` and `AUTH_JWKS_URL` share the issuer origin and port;
+membership admission does not allow a distinct native JWKS port. The walk command stays on the worker host so
+`GOAL_ACCEPTANCE_REQUIRES` is not stripped; Auth pages start before Kernel so issuer JWKS is reachable for seed.
+Decision: one native purchase/retention/expiry journey uses two quantity-one editions so refund and late paid stay on distinct genuine orders; unused-actor operator history stays the second case. The composed kernel uses the 30-second native test request deadline; the production two-second default is not this fixture's Access admission budget. Reylo page and locator statements are normalized to a list so a single entitlement or order is purged. Board and offer
+grants, edition publication and Commerce HTTP share one composed kernel. That kernel reuses Content's native Access,
+which is already compiled from the full mounted catalogue (including Commerce) and Score `nativeAuth.handler`; Auth
+tokens use the ordinary client and omit `media:complete`. A second Access on the same pool disagrees at the board
+current-role seam. `grant.create` authenticates the governance bearer on that Access so command admission sees the
+same actor snapshot; a Content-issued actor object is not reused. Seller Global grants are
+`board:create` and `offer:create` only, because Content already installed `subject:create`, `space:create` and
+`realm:create`. Genuine-order editions use a public Realm published board; Global showcase board current-role
+projection stays with Accounts. Typed parent creation through derived Access keeps page ports, and
+Realm extra host/context checks wrap that path, so `POST /v1/realms` can mint that board. Buyer sale capture
+seeds `thread:read` on each protected source thread and `board:read` on that Realm board; `grant.create` cannot admit
+`thread:read`. The composed worker is
+startWorker's live default composition under `workerTestEnv`, decorated so only `commerce_erasure` consumes
+account tombstones; `KERNEL_WORK_MODULES` pins registration names only. Semantic's overflowing Subject-source
+page stays that owner's repair. Financial outcome-driver children use the same live composition. Readiness waits for
+the effects consumer to catch up and the 5ms queue poll. Tombstone drain waits for that envelope, not a moving
+partition head. Paid-order checks wait for committed entitlement and settlement rows. After late-pay and deletion
+release their holds, catch-up runs again before SIGKILL so expiry restart does not inherit an in-flight envelope.
+Ceiling is 120s.
+The board-read current-role projection stays with Accounts.
+Decision: paid genuine-order settlement uses the parent kernel's Content Access and Auth-database
+consent; the worker child's second Access cannot restore mechanical sale authority until that
+projection is repaired, and its webhook replays the committed payment.
+Decision: fresh native `POST /v1/offers` sends only `contentEditionId` and ordinary commercial terms;
+`targetSubjectId` is the historical-replay body and is rejected on the same object. Native genuine-order
+acceptance reads `expectedOfferRevision` from public `GET /v1/offers/:offerId`; seller create responses stay
+revisionless. The native suite is that one journey plus unused-actor operator history.
+Decision: creator-sale event receipt/work is admitted only after exact buyer and creator role inventory is committed;
+missing source identity advances its checkpoint without an unindexed locator for bounded order/source recovery.
+Space metadata uses the native discovery snapshot position as its monotonic index revision; the UUID head revision
+remains source identity.
 
 The [financial lifecycle and cost review](../../../../docs/research/commerce-cost-lifecycle-quality.md)
-retains its recorded source bindings and unavailable measurements. It identifies a source-level mismatch between
-the unused-account test's `none` expectation and the participant's pending result, not an observed failing exit.
-Preserve that expectation: local emptiness cannot prove absence of historical financial roles. Complete native
-History coverage and Accounts' opaque terminal proof must precede a safe `none`. Financial field expiry and
-external-payment attestation policy still require their owners' decisions.
+retains its recorded source bindings and unavailable measurements. Local emptiness cannot prove absence of
+historical financial roles. Commerce consults the actual History owner coverage after local cleanup and records
+its registry gaps on unused accounts. Complete shared-history coverage still leaves Commerce `pending`: foreign
+financial-role inventory and the production field/expiry schedule remain. The unused-account fixture therefore
+asserts `pending` with an explicit history gap rather than inventing `none`.
+The bounded local Checkout
+retention journey is implemented; production financial field expiry and external-payment attestation still require
+their owners' decisions.
 
 At T conceal private orders/statements/entitlements and fence late producers. Minimize offer party data, buyer/target
 relations and Checkout payloads, entitlement relations, immutable transaction/royalty source relations and statement
 payment references except the restricted legally necessary fields with purpose and expiry. Immutable guards do not
 create retention exemptions. Enumerate exact shared receipt/outbox/write-basis/work payload locators; actual store
 owners minimize and acknowledge them. Account-linked indexed child pages and atomic checkpoints must replace global
-principal/JSON/history scans. Full financial erasure participant, shared custody and retained-field expiry remain
-undelivered; the account barrier alone does not close them. A jurisdiction/category/field retention schedule and
+principal/JSON/history scans. The native test-only Checkout exception is finite and records only its declared fields;
+it does not approve a jurisdiction/category/field financial schedule or alter accepted money. Broader financial
+erasure, shared custody and retained-field expiry remain undelivered; the account barrier alone does not close them.
+A jurisdiction/category/field retention schedule and
 provider metadata deletion limits are external conditions, not a reason to omit deterministic fence/cleanup work.
 
 Every provider attempt charges all sends/retries/body parsing, expansions, abandoned work and capacity until physical

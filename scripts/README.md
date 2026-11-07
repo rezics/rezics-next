@@ -370,8 +370,8 @@ The caller's environment is not copied to the host; callers must pass required v
 
 Kept outputs require declared workspace-relative return paths; stack-heavy runs remain on a or b.
 A walk worker whose brief lists native or browser acceptance may run one bounded local stack through `dev-stack.ts walk`;
-its admission, names and teardown are in [local stack walk stacks](../docs/development/local-stack.md#walk-stacks). Its
-checks keep the placement above.
+its admission, names and teardown are in [local stack walk stacks](../docs/development/local-stack.md#walk-stacks). The
+walk command stays on the worker host; other checks keep the placement above.
 Local/off markers such as `REZICS_STACK_REMOTE=off`, `REZICS_STACK_SLOT`, `KERNEL_CHECK_ON_REMOTE` and `REZICS_STACK_LEASE` do not change heavy-check placement.
 
 `KERNEL_CHECK_ON_REMOTE` and `REZICS_STACK_LEASE` do not decide shared stack placement.

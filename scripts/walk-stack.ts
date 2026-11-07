@@ -522,6 +522,26 @@ export function walkReadyUrls(ports: WalkPorts, env: Record<string, string | und
   return [`http://127.0.0.1:${ports.web}/`, `http://127.0.0.1:${ports.issuer}/`, `http://127.0.0.1:${ports.kernel}/`];
 }
 
+/** Kernel and Access use the issuer origin for public JWKS identity; Auth pages serve that URL locally. */
+export function issuerJwksUrl(issuerOrigin: string): string {
+  return `${issuerOrigin.replace(/\/$/u, '')}/.well-known/jwks.json`;
+}
+
+/** Signed local Stripe fixtures for Commerce journey walks; Checkout return URLs stay HTTPS. */
+export function walkCommerceProviderEnvironment(port: number, webhookSecret: string): Record<string, string> {
+  if (!Number.isInteger(port) || port < 1 || port > 65_535)
+    throw new Error('Walk Stripe port is not a loopback TCP port');
+  if (!/^whsec_[A-Za-z0-9_]+$/u.test(webhookSecret)) throw new Error('Walk Stripe webhook secret is not a fixture secret');
+  return {
+    STRIPE_SECRET_KEY: 'sk_test_walk_commerce',
+    STRIPE_API_HOST: `http://127.0.0.1:${port}`,
+    STRIPE_WEBHOOK_SECRETS: webhookSecret,
+    STRIPE_MANAGED_PAYMENTS: 'false',
+    CHECKOUT_SUCCESS_URL: 'https://example.test/orders/{ORDER_ID}/paid',
+    CHECKOUT_CANCEL_URL: 'https://example.test/orders/{ORDER_ID}/cancel',
+  };
+}
+
 /**
  * Waits for one of the host's walk slots. The queue is the stack-lease FIFO, in the walk directory with the walk
  * capacity, so developers' stacks and check slots are not counted here. `blocked` indexes stay skipped for this

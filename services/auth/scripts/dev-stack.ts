@@ -21,11 +21,14 @@ import {
 import {
   admitWalkStack,
   firstRedactedDiagnostic,
+  issuerJwksUrl,
   SEED_JOURNAL_IDENTITY_FILE,
   seedJournalDatabaseIdentity,
   seedJournalsNameDifferentDatabase,
   stackPhaseLine,
   stackStartPlan,
+  walkCommerceProviderEnvironment,
+  walkOriginListening,
   walkProcessEnvironment,
   walkPublishedPortAllocated,
   walkStackLimit,
@@ -411,6 +414,17 @@ export async function retireStaleSeedJournals(repository: string, databaseUrl: s
   const archived = await retireDevelopmentSeedState(repository);
   await mkdir(seedDirectory, { recursive: true, mode: 0o700 });
   await writeFile(identityPath, `${current}\n`, { mode: 0o600 });
+  return archived;
+}
+
+/** Each walk receives a fresh database, even when a reused slot has the same PostgreSQL identity string. */
+export async function resetWalkSeedJournals(repository: string, databaseUrl: string): Promise<string | undefined> {
+  const archived = await retireDevelopmentSeedState(repository);
+  const seedDirectory = resolve(repository, '.temp/cross-media-seed');
+  await mkdir(seedDirectory, { recursive: true, mode: 0o700 });
+  await writeFile(resolve(seedDirectory, SEED_JOURNAL_IDENTITY_FILE), `${seedJournalDatabaseIdentity(databaseUrl)}\n`, {
+    mode: 0o600,
+  });
   return archived;
 }
 
@@ -987,6 +1001,17 @@ async function start() {
     ...(await kernelEnvironment()),
     ...developmentKernelBindings(),
   };
+  // Walk fixture keys survive kernel .env, which can contain a developer's Stripe bindings.
+  if (process.env.STRIPE_SECRET_KEY === 'sk_test_walk_commerce') {
+    Object.assign(env, {
+      STRIPE_SECRET_KEY: process.env.STRIPE_SECRET_KEY,
+      STRIPE_API_HOST: process.env.STRIPE_API_HOST,
+      STRIPE_WEBHOOK_SECRETS: process.env.STRIPE_WEBHOOK_SECRETS,
+      STRIPE_MANAGED_PAYMENTS: process.env.STRIPE_MANAGED_PAYMENTS,
+      CHECKOUT_SUCCESS_URL: process.env.CHECKOUT_SUCCESS_URL,
+      CHECKOUT_CANCEL_URL: process.env.CHECKOUT_CANCEL_URL,
+    });
+  }
   const plan = stackStartPlan(env, origins);
   const identityLine = ownerProcessIdentity();
   console.info(stackPhaseLine('owner', identityLine));
@@ -1041,6 +1066,11 @@ async function start() {
         ]),
       );
       if (stopping) return;
+      if (plan.deferPages) {
+        const pages = launch(['bun', 'services/auth/scripts/dev-stack.ts', 'pages']);
+        await phase('pages', untilReady([issuerJwksUrl(origins.issuer)], [pages, identity, worker]));
+        if (stopping) return;
+      }
       const kernel = launch(plan.kernel);
       await phase('kernel', untilReady(plan.kernelReady, [kernel, worker, identity]));
       if (stopping) return;
@@ -1182,7 +1212,9 @@ async function untilReady(
  * slot's ports listening; `stop` is the normal teardown.
  */
 export async function startSeededFrontends(): Promise<{ stop(): Promise<void> }> {
-  const children = ['pages', 'web'].map((action) =>
+  const pagesUp = await walkOriginListening(origins.issuer);
+  const actions = pagesUp ? (['web'] as const) : (['pages', 'web'] as const);
+  const children = actions.map((action) =>
     Bun.spawn(['bun', 'services/auth/scripts/dev-stack.ts', action], {
       cwd: root,
       env: process.env,
@@ -1197,7 +1229,10 @@ export async function startSeededFrontends(): Promise<{ stop(): Promise<void> }>
   process.once('exit', killOnExit);
   try {
     await untilReady(
-      [`${origins.issuer}/.well-known/openid-configuration`, `${origins.web}${SEEDED_WEB_READY_PATH}`],
+      [
+        ...(pagesUp ? [] : [`${origins.issuer}/.well-known/openid-configuration`]),
+        `${origins.web}${SEEDED_WEB_READY_PATH}`,
+      ],
       children,
     );
   } catch (error) {
@@ -1277,8 +1312,12 @@ async function walk(command: string[]): Promise<number> {
       let starting: ReturnType<typeof Bun.spawn> | undefined;
       let walkFailure: unknown;
       let occupiedSlot: number | undefined;
+      let stripe: { port: number; webhookSecret: string; stop(): void } | undefined;
       try {
         try {
+          const { startFakeStripe } = await import('../../kernel/test/commerce/support/fake-stripe.ts');
+          stripe = startFakeStripe();
+          Object.assign(env, walkCommerceProviderEnvironment(stripe.port, stripe.webhookSecret));
           removeWalkStack(names); // an interrupted attempt of this slot may have left its stack behind
           for (const script of walkSetupScripts(env)) {
             // A setup step that fails once is retried: a busy host can time out a container start.
@@ -1299,9 +1338,9 @@ async function walk(command: string[]): Promise<number> {
           const log = join(root, '.temp', 'walk', task, 'stack.log');
           await mkdir(dirname(log), { recursive: true });
           await writeFile(log, '');
-          // Journals from another database cannot replay into this stack; retire them before the seed reads them.
+          // Every walk creates a new database, so retire old native identifiers even when slot URLs are reused.
           const kernelEnv = await kernelEnvironment();
-          if (kernelEnv.DATABASE_URL) await retireStaleSeedJournals(root, kernelEnv.DATABASE_URL);
+          if (kernelEnv.DATABASE_URL) await resetWalkSeedJournals(root, kernelEnv.DATABASE_URL);
           starting = current = Bun.spawn([process.execPath, 'services/auth/scripts/dev-stack.ts', 'start'], {
             cwd: root,
             env,
@@ -1331,6 +1370,7 @@ async function walk(command: string[]): Promise<number> {
           walkFailure = error;
           throw error;
         } finally {
+          stripe?.stop();
           if (starting) await stopSpawned(starting);
           try {
             removeWalkStack(names);

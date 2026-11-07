@@ -267,10 +267,10 @@ bun services/auth/scripts/dev-stack.ts walk -- <command...>
    earlier slot cannot occupy a later slot's names.
    Admission skips slots whose ports still have listeners, including containers surviving an interrupted launcher.
    Those listeners remain untouched; when all slots are occupied, the launch keeps its queue position.
-3. Runs `db up`, `search up` and `setup`, retires seed journals that name another database, then starts native Auth,
-   the worker and Kernel. Kernel verifies issuer-origin JWKS and fetches that exact public document from native Auth.
-   An admitted stack runs Kernel without `--watch`
-   and does not start Auth pages or Web: its journey seeds first and then starts them.
+3. Runs `db up`, `search up` and `setup`, retires the previous seed journal for this fresh database, then starts native
+   Auth, the worker and Kernel. Kernel verifies issuer-origin JWKS and fetches that exact public document from native
+   Auth. Full-effect walks start Auth pages before Kernel so issuer-origin JWKS is available during seed; Web waits
+   until the journey seeds. An admitted stack runs Kernel without `--watch`.
    The default lightweight Account mode (`REZICS_WALK_DEFER_FRONTENDS=1`) also omits OpenSearch, the Kernel worker and a second Kernel process, serves
    Kernel HTTP from the Auth host, and waits for native JWKS and Kernel health instead; the child starts issuer then
    Web when it needs mounted pages. Full-effect walks such as Content set `REZICS_WALK_DEFER_FRONTENDS=0`
@@ -324,10 +324,13 @@ SIGTERM, and bounded docker kill then removal so a Vite SSR abort loop, a stuck 
 cannot replace a seeded product walk. Walk `start` waits for the walk signal rather than the first child exit.
 `stopSpawned` accepts Bun subprocesses whose `signalCode` may be a number or a signal name.
 
-Decision: an admitted stack gates on native JWKS and Kernel only. Its Auth pages and Web start after the journey's seed,
-through `startSeededFrontends`, and are killed on exit; the Home and VN-realm walks use it, and a stack's Vite never
-compiles while the seed runs. Seed and account-key calls use native Auth as transport and keep CSRF Origin plus assertion
-audience on the issuer; `REZICS_LOCAL_STACK_ISSUER_ORIGIN` supplies that issuer when `AUTH_ORIGIN` is the native port.
+Decision: lightweight account walks gate on native JWKS and Kernel health, then start Auth pages and Web after seeding
+through `startSeededFrontends`; full-effect walks start Auth issuer pages before Kernel and start Web after seeding.
+Both modes defer Vite compilation until after seed and stop only the child processes they started. Seed and account-key
+calls use native Auth as transport and keep CSRF Origin plus assertion audience on the issuer;
+`REZICS_LOCAL_STACK_ISSUER_ORIGIN` supplies that issuer when `AUTH_ORIGIN` is the native port. Each admitted stack also
+owns a signed loopback Stripe fixture and resets prior seed journals because the new database reuses the slot's
+PostgreSQL identity string.
 Each walk registers frontend and browser cleanup immediately after acquisition. Every registered cleanup is awaited
 on provisioning, seed, locale, persona and browser failures. Independent cleanup failures retain the original cause
 and do not prevent other resources from settling.

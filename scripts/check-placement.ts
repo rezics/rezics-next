@@ -651,6 +651,11 @@ function classifyCommand(argv: readonly string[], cwd: string, root: string, dep
         : { placement: 'remote', reason: 'check command may run scripts or tests' };
     }
     if (operation === 'fmt') return { placement: 'local', reason: 'formatter command' };
+    if (
+      (operation?.replaceAll('\\', '/').endsWith('services/auth/scripts/dev-stack.ts') ?? false) &&
+      rest[0] === 'walk'
+    )
+      return { placement: 'local', reason: 'admitted walk stack stays on the worker host' };
     return { placement: 'remote', reason: 'unknown Bun command' };
   }
 

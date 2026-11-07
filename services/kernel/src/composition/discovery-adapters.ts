@@ -140,13 +140,13 @@ function reviewRecords(partition: number, position: bigint, reviews: readonly In
   return records;
 }
 
-function spaceRecords(partition: number, spaces: readonly IndexedSpace[]) {
+function spaceRecords(partition: number, position: bigint, spaces: readonly IndexedSpace[]) {
   return spaces.map((space): SecondScopeDiscoveryRecord => {
     const key = metadataKey('content', 'space', space.id);
     if (partitionOf(key.route) !== partition) throw new TypeError('Space source returned a foreign partition key');
     return {
       key,
-      revision: BigInt(space.revision),
+      revision: position,
       sourceVersion: null,
       names: [space.name],
       descriptions: [space.description],
@@ -273,13 +273,13 @@ function createSpacePopulationProducer(adapter: SpaceDiscoveryAdapter): Discover
         next: page.next,
         continuation: null,
         keys: page.spaces.map((space) => metadataKey('content', 'space', space.id)),
-        records: spaceRecords(partition, page.spaces),
+        records: spaceRecords(partition, page.position, page.spaces),
       };
     },
     async read(partition, ids) {
       const keys = requestedKeys('content', 'space', partition, ids);
       const snapshot = await adapter.source.read(partition, ids);
-      return { position: snapshot.position, keys, records: spaceRecords(partition, snapshot.spaces) };
+      return { position: snapshot.position, keys, records: spaceRecords(partition, snapshot.position, snapshot.spaces) };
     },
     async position(partition) {
       return (await adapter.source.read(partition, [])).position;
