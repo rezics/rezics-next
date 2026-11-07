@@ -4,8 +4,6 @@ import { tmpdir } from 'node:os';
 import { resolve } from 'node:path';
 import { reviewedVocabularyInventory as seeds } from '@rezics/definitions/reviewed-vocabulary';
 import {
-  REVIEWED_CATALOGUE_RETRY_ATTEMPTS,
-  ReviewedCatalogueProblemError,
   reviewedCatalogueOwner,
   reviewedCatalogueKey,
   reviewedCatalogueSlot,
@@ -179,71 +177,3 @@ test('reviewed bootstrap refusal names its seed and sends no proposal', async ()
   }
 });
 
-test('reviewed proposal retries retryable 503 on the same sealed command then names the seed', async () => {
-  const directory = await mkdtemp(resolve(tmpdir(), 'reviewed-retryable-'));
-  const unused = async (): Promise<never> => {
-    throw new Error('Review preceded proposal delivery');
-  };
-  let proposals = 0;
-  let waits = 0;
-  const port: ReviewedCataloguePort = {
-    readReviewedSubject: unused,
-    reviewedCandidates: unused,
-    acceptReviewedCandidate: unused,
-    adoptReviewedCandidates: unused,
-    fence: async () => ({ fenced: false, securityRevision: null }),
-    setSourceRecordMetadata: async ({ command }) => ({
-      record: command.metadata,
-      metadata_revision: 1,
-      effect: 'filled',
-    }),
-    batch: async ({ commands }) => ({
-      results: commands.map((command) =>
-        command.op === 'create'
-          ? { key: command.key, status: 201 as const, value: { id: crypto.randomUUID(), revision: 1 } }
-          : (() => {
-              proposals++;
-              return {
-                key: command.key,
-                status: 503 as const,
-                problem: {
-                  type: 'https://rezics.com/problems/transaction_retry_exhausted',
-                  title: 'Transaction Retry Exhausted',
-                  status: 503,
-                  code: 'transaction_retry_exhausted',
-                  retryable: true,
-                },
-              };
-            })(),
-      ),
-    }),
-  };
-  try {
-    const failure = seedReviewedCatalogue({
-      path: resolve(directory, 'state.sqlite'),
-      port,
-      wait: async () => {
-        waits++;
-      },
-    });
-    await expect(failure).rejects.toBeInstanceOf(ReviewedCatalogueProblemError);
-    const error = await failure.catch((caught: unknown) => caught);
-    expect(error).toMatchObject({
-      kind: 'proposal',
-      seedKey: seeds[0]!.key,
-      remaining: {
-        method: 'POST',
-        path: '/v1/subjects:batchWrite',
-        op: 'propose',
-        source: 'rezics_reviewed_vocabulary',
-        nativeType: seeds[0]!.type,
-        status: 503,
-        code: 'transaction_retry_exhausted',
-      },
-    });
-    expect(proposals).toBe(REVIEWED_CATALOGUE_RETRY_ATTEMPTS);
-    expect(waits).toBe(REVIEWED_CATALOGUE_RETRY_ATTEMPTS - 1);
-  } finally {
-    await rm(directory, { recursive: true, force: true });
-  }
-});

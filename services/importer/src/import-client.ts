@@ -352,6 +352,10 @@ function httpFailure(reply: ClientResponse, last?: { method: string; path: strin
   const nested = outer === undefined ? undefined : Object.getOwnPropertyDescriptor(outer, 'value')?.value;
   const value =
     typeof nested === 'object' && nested !== null && !types.isProxy(nested) ? nested : (outer as object | undefined);
+  // Eden represents a rejected fetch as a 503 error envelope with the thrown value.
+  // Recover our request-local error before interpreting public HTTP problem fields.
+  if (!reply.response && value instanceof ImportTransportError)
+    return attachRequest(value, last?.method, last?.path);
   const field = (name: string): unknown =>
     value && !types.isProxy(value) ? Object.getOwnPropertyDescriptor(value, name)?.value : undefined;
   const type = field('type');

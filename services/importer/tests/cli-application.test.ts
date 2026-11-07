@@ -33,6 +33,8 @@ test('batch nested jobs use the constructed executor and retain host fetch, cloc
   const directory = await mkdtemp(join(tmpdir(), 'cli-application-'));
   await writeFile(join(directory, 'bangumi.jsonl'), await readFile(bangumiDump), { mode: 0o600 });
   await writeFile(join(directory, 'openlibrary.tsv'), await readFile(libraryDump), { mode: 0o600 });
+  // Batch preflight admits existing state files before constructing a job executor.
+  await writeFile(join(directory, 'state.sqlite'), '', { mode: 0o600 });
   const pair = generateKeyPairSync('ec', { namedCurve: 'prime256v1' });
   const key = join(directory, 'account.jwk');
   await writeFile(
@@ -85,6 +87,7 @@ test('batch nested jobs use the constructed executor and retain host fetch, cloc
       },
     },
   );
+  expect(result.stderr).toBe('');
   expect(result.code).toBe(0);
   expect(calls).toHaveLength(2);
   expect(calls.every((call) => call.options.fetch === fetchImpl)).toBe(true);

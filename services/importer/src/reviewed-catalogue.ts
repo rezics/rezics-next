@@ -58,4 +58,3 @@ export function createReviewedCatalogueLookup(
   return application(options.vocabulary).lookup(bindings, port, options);
 }
 
-export { REVIEWED_CATALOGUE_RETRY_ATTEMPTS, ReviewedCatalogueProblemError } from './reviewed-catalogue-application.ts';

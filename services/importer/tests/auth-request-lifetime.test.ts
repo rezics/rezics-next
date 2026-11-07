@@ -193,8 +193,10 @@ test('walk-stack account-key sign-in reads issuer Origin from the local-stack en
   const native = 'http://127.0.0.1:20022';
   const issuer = 'http://127.0.0.1:20021';
   const previous = process.env.REZICS_LOCAL_STACK_ISSUER_ORIGIN;
+  const previousNative = process.env.REZICS_LOCAL_STACK_NATIVE_ORIGIN;
   const seen: string[] = [];
   process.env.REZICS_LOCAL_STACK_ISSUER_ORIGIN = issuer;
+  process.env.REZICS_LOCAL_STACK_NATIVE_ORIGIN = native;
   try {
     const token = await createAccountTokenProvider({
       ...f.options,
@@ -216,6 +218,8 @@ test('walk-stack account-key sign-in reads issuer Origin from the local-stack en
     expect(await token()).toBe('env-token');
     expect(seen).toEqual(['/signin/key:http://127.0.0.1:20021', '/token:http://127.0.0.1:20021']);
   } finally {
+    if (previousNative === undefined) delete process.env.REZICS_LOCAL_STACK_NATIVE_ORIGIN;
+    else process.env.REZICS_LOCAL_STACK_NATIVE_ORIGIN = previousNative;
     if (previous === undefined) delete process.env.REZICS_LOCAL_STACK_ISSUER_ORIGIN;
     else process.env.REZICS_LOCAL_STACK_ISSUER_ORIGIN = previous;
     await rm(f.dir, { recursive: true, force: true });
