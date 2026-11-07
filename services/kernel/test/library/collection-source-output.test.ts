@@ -68,6 +68,33 @@ test('explicit COMPLETE A retains membership while pending B never becomes outpu
     allowance: sourceAllowance(),
   });
   expect(observed.metadata?.authority).toBe('activated_output');
+  // Curated native authority remains occurrences. Publication storage is never silently substituted for them.
+  const curated = await f.collection('public', 'curated');
+  for (const note of ['first occurrence', 'second occurrence'])
+    expect(
+      (
+        await f.send(f.owner.bearer, 'POST', `/v1/collections/${curated.collectionId}/members`, {
+          subjectId: ids[0],
+          note,
+        })
+      ).status,
+    ).toBe(201);
+  const curatedObservation = await readNativeCollectionMetadata(f.pool, curated, {
+    deadline: Date.now() + 30000,
+    allowance: sourceAllowance(),
+  });
+  expect(curatedObservation.metadata?.authority).toBe('curated');
+  if (!curatedObservation.metadata) throw new Error('Native curated metadata is required');
+  const occurrences = await readNativeCollectionRawPage(f.pool, curatedObservation.metadata, {
+    driver: 'member',
+    after: null,
+    limit: 2,
+    deadline: Date.now() + 30000,
+    allowance: sourceAllowance(),
+  });
+  expect(occurrences.rows).toHaveLength(2);
+  expect(occurrences.rows.map((row) => row.key.storedSubjectId)).toEqual([ids[0]!, ids[0]!]);
+  expect(occurrences.rows[0]!.key.factId).not.toBe(occurrences.rows[1]!.key.factId);
 });
 
 test('failed native append rolls back checkpoint and keys, then cancellation retains exact custody and refuses a third copy', async () => {

@@ -26,149 +26,351 @@ evidence reference. FAIL includes a path not observed because its setup or an ea
 rather than claiming the unexecuted product is defective. A passing implementation typecheck supplies no walk pass.
 The latest observed path result replaces its previous result. Existing broader native acceptance remains separate.
 
-Decision: one failed shared startup prerequisite fails every dependent journey; unexecuted product steps remain
-explicit, and existing broader acceptance assertions retain their separate evidence. This is an empirical
-specification update; the concrete startup repair below belongs in a typing-only implementation task.
+Decision: the six first-public rows remain the walk evidence. Retain the exact authorization test
+`every walk-stack process names AUTH_JWKS_URL on the issuer origin that signs tokens` in
+`services/auth/test/dev-stack-config.test.ts`, including its issuer-origin and native-port rejection assertions;
+retain `local JWKS transport fetches only the issuer JWKS URL from native Auth` and the isolated-stack assertions.
+No new authorization behavior is introduced by the census. Native/default-worker and mounted return assertions,
+Character local-selection and with-dev-server receiving remain required. A complete path passes only when every
+required step has an asserted observation; successful earlier requests never fill an unreached step. Focused
+reporting tests pin that distinction, actual first-failure retention and failing-journey timing. They are not native
+or mounted acceptance. Each round uses a distinct `.temp/search-walk/<UTC-start>/` directory and writes evidence after
+each journey, before later journeys can fail. Setup time remains separate from product time. Independent executable
+paths continue after persona, seed or sign-in failure. Receive the creator/provisioning repair before ordinary
+admission; do not change permissions or create a separate queue from Search.
 
-### Current dev census
+Orientation before this reporting change: [scope](../scope.md), this manifest,
+[verification](../development/verification.md), [local stack](../development/local-stack.md),
+[Search](../../services/kernel/src/search/README.md),
+[native Search acceptance](../../services/kernel/test/search/README.md),
+[Presentation](../../services/kernel/src/presentation/README.md) and
+[Composition](../../packages/composition/README.md).
 
-Observed dev: `8c1b1fa29d01653fbc254ede3fd7b0950f6a0a70`; walk source:
-`8871f1ae7f99b7010bce2f3514fbbb2b7d7c636c` (that dev revision plus this ledger's initial commit).
-The named Web revision `4a0921248bc3d3559eee4f7d7fc2a6931901eef9` and Members' current binding/fixture and
-all-current-page kind-witness repairs are ancestors of the walked source. Their assertions were retained.
+### Receiving status
 
-One admitted slot, with PostgreSQL and OpenSearch, ran
-`bun services/auth/scripts/dev-stack.ts walk -- zsh -f`. Its child was to run native `persona`, load private
-`seed.env`, run `bun scripts/datasets/cross-media-seed.ts --dev`, then start seeded frontends.
-The launcher failed before admitting that child. No second concurrent Search walk or native-suite walk ran.
+The creator/provisioning repair is received: implementation `52503f7f63b1673826a554eda1c8baf1fa3598ae`,
+integrated binding `6948a89278c0383165a7ed4ca69f1c99506c74a2`, received here as
+`2aa83f1adb21aca8b4718d7ba5193176bf14c521`. Ordinary admission succeeded in the new census below.
+The prior permission failure is historical. The complete dependency delivery `452da6ea5f43e26967726283ed2fec7c04d3e8ca`
+and Source factory delivery `5db0f76f7fc3e81841541152cb1a471692fa5ff7` are also received.
+The installed-producer delivery is received below; its original default-worker assertions remain required on
+integrated dev.
 
-Native startup was observed from **2026-11-06 23:31:25.808 UTC** through **23:32:56.279 UTC**:
-**90.471 seconds**, measured from the stack log's creation and final startup-error write. This is the recorded
-shared prerequisite interval, not six separately executed 90-second flows; preceding infrastructure/setup and
-later teardown were not timed. Every row below inherits this actual failure and interval, not an inferred product
-failure. Full end-to-end journey timing is unavailable because no journey reached its first mounted page.
+The complete producer range `311230ca33..91c91989eb` is now received, together with the cumulative root/custody
+and Settings deliveries ending at `1b0a5e366a` and `90fe893300`. This includes deferred startup imports, generator
+settlement, Library capabilities around the root shell, normalized test selectors and the Settings browser/worker
+split. Conflict resolution follows those complete deliveries; the exact issuer-origin JWKS tests and original
+Mapping receipt assertions remain. One identical overlapping source-binding test is deduplicated without removing
+an assertion. No second stack is launched by this integration.
 
-Persona **setup** means anonymous native readiness probes ran, but no usable native persona/session was obtained.
-Granted signed-in reader/editor, ungranted reader, suspended reader's pre-suspension bearer and revoked reader were
-not provisioned. Anonymous is not a substitute for those identities. Phone 390, desktop 1280, light/dark and
-`en`/`zh-Hant`/`ja` were planned but never mounted. Browser connector inventory was empty; Playwright was the
-planned fallback. Neither browser interaction nor screenshot/capture was executed.
+Landing decision: retain the complete producer/current-owner integration and require current changed-workspace
+typing. Original six-path, native/default-worker, mounted browser, Character local-selection and with-dev-server
+acceptance run on integrated dev; they remain unaccepted here. No further broad prelanding selection or second stack
+is launched. Unchanged passing compilation and independently passing test files remain valid.
 
-| Journey               | User-visible path and passing result                                                                                                                                                                                         | Exposure                                                                            | Dev walk result                                                                               | Evidence / first failure                                                                                                                                       |
-| --------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Mixed Search          | Open Search, submit text, open a permitted result and return to the executed query; continued pages remain useful and current after a visibility change.                                                                     | Existing Search grant                                                               | FAIL — setup persona; 90.471 s shared startup; dev `8c1b1fa29d01653fbc254ede3fd7b0950f6a0a70` | Native startup rejected `AUTH_JWKS_URL` before `Worker ready`; query/result/return and visibility change not executed. [Repair](#native-startup-repair).       |
-| Refine and continue   | Submit supported Type/filter operands, inspect current facet choices, continue and restart in the same executed query; changed reader or resource scope retires old values and cursors.                                      | Existing Search grant; advanced second-scope operands remain outside this inventory | FAIL — setup persona; 90.471 s shared startup; dev `8c1b1fa29d01653fbc254ede3fd7b0950f6a0a70` | Same first startup failure; supported filters/facets, continuation and scope retirement not executed. [Repair](#native-startup-repair).                        |
-| Multilingual names    | Type an original-language name or current alias, select a suggestion, open the matching Subject and change locale without losing the query or authored language order.                                                       | Existing Search grant                                                               | FAIL — setup persona; 90.471 s shared startup; dev `8c1b1fa29d01653fbc254ede3fd7b0950f6a0a70` | Same first startup failure; suggestions and locale return not executed. [Repair](#native-startup-repair).                                                      |
-| Search recovery       | Correct an invalid authored operand or deliberately retry a preparing/unavailable request after its deadline; generation loss restarts that executed request and renders useful output.                                      | Existing Search grant                                                               | FAIL — setup persona; 90.471 s shared startup; dev `8c1b1fa29d01653fbc254ede3fd7b0950f6a0a70` | Same first startup failure; invalid-input correction, deadline/manual retry and generation restart not executed. [Repair](#native-startup-repair).             |
-| Configured reading    | Open a configured Subject or static Zone page and read its declared lists in document order; unavailable slots leave supported siblings usable, and a current continuation/retry reaches the right list.                     | Public configured reader where the owning scope admits it                           | FAIL — setup persona; 90.471 s shared startup; dev `8c1b1fa29d01653fbc254ede3fd7b0950f6a0a70` | Same first startup failure; no independent native-ready public page survived; Subject/Zone list reading not executed. [Repair](#native-startup-repair).        |
-| Published composition | Publish an admitted shared profile or curated Collection presentation, open the selected public version while the editor has a later draft, and deliberately recover a refused/lost response to the actual published result. | Existing publication authority and public selected-version reading                  | FAIL — setup persona; 90.471 s shared startup; dev `8c1b1fa29d01653fbc254ede3fd7b0950f6a0a70` | Same first startup failure; no publication identity, selected public A, later draft B or response-loss recovery was created. [Repair](#native-startup-repair). |
+The supported-host delivery `0949130e09dc1be6351d33b1f8f2f9e03fd69b1a` and the complete Imports range
+`3df1971c0b..7ba752519e` are now received. Host callers supply current native ports, receipt keys and WorkContext;
+Imports consumes served publication heads, ranks and tombstones and composes Library. The overlapping bulk
+no-effect fixture uses its explicit test keyring for both receipt lookup and the before-finalization absence
+assertion. All original behavior assertions remain. These source repairs do not promote the native failures below
+to passes. Home already loads the active release before page reading; its missing anonymous/member
+TypeList-versus-standalone assertions belong to original integrated-dev receiving, not another prelanding selection.
 
-### Native observation and operands
+The changed-workspace typing command at `0ef8ecb3f3160b77d71e7728b5f4a2f491ca7909` returned exit 1.
+Auth service, Auth pages and Importer each returned exit 0. Web's product program passed; its scripts program
+reported a missing await for asynchronous message preparation and optional evidence fields supplied as undefined.
+The isolated runner now awaits preparation and the walk omits absent optional fields, preserving serialized
+evidence. No guard or new behavior selection is added. The complete owned log is
+`.temp/goal/checks/worker-check-a51d2b6b-d016-41c7-a48b-a35b6edf2ac4-2026-11-07T16-20-35.425Z-7bfb4207.log`.
+Relevant typing is repeated for Web, Kernel, Auth service and Importer after this receiving; unchanged Auth pages
+reuse their passing result. Besides the expected walk and manifest paths, this receiving changes Web's isolated
+runner and the delivered Search composition, native fixtures, Imports source/tests and stack/check placement
+bindings. No second stack is started and no browser or native acceptance pass is inferred from typing.
 
-Secret-free evidence is `.temp/search-walk/evidence.json` and `.temp/search-walk/startup.log` in this attempt.
-The JSON records full source/dev revisions, UTC interval, exact public origins, three timed configuration
-reproductions, a same-origin configuration control, and the unexecuted persona/seed/frontend stages.
-No bearer, password, key, cookie or private seed environment is recorded there.
+Current landing typing passed at `17aa104b4f98138af072dfd470e1901f2f819157`: Kernel, Web, Auth service and
+Importer each returned exit 0. The command ran on host b in 630.654 seconds, peaking at 6311 MiB. Kernel SQL
+analysis, compilation and construction passed; both Web programs passed; Importer checked 509 files. The wrapper
+reported cleanup of its artifact staging. Complete owned log:
+`.temp/goal/checks/worker-check-5217fded-5770-4eb9-9d6b-a3efb65594f4-2026-11-07T16-38-15.680Z-efde0314.log`.
+Exact command:
 
-- Launcher operands: slot 1; Web `http://127.0.0.1:20010`, issuer `http://127.0.0.1:20011`, native Auth
-  `http://127.0.0.1:20012`, Kernel `http://127.0.0.1:20013`.
-- Actual native readback: readiness probes to native Auth `/.well-known/jwks.json` and Kernel `/v1/definitions`
-  repeatedly reported `ECONNREFUSED`. No successful HTTP response, seeded UUID or mounted DOM was obtained.
-- First causal error: **`Invalid or missing AUTH_JWKS_URL`**, followed by worker exit 1 and
-  `walk: the identity phase did not start: walk: "Worker ready" was not printed; the process exited (1)`.
-- `AUTH_ISSUER=http://127.0.0.1:20011` and
-  `AUTH_JWKS_URL=http://127.0.0.1:20012/.well-known/jwks.json` were the actual generated operands.
-  This was not a missing variable: their origins differ.
-- At 23:39:19 UTC, the real `readMembershipWorkConfig` reproduced that exact error in an initial call and two
-  retries. Changing only its JWKS operand to the issuer-origin URL admitted the configuration. This was a
-  configuration-only control; no token verification or transport success is claimed.
+```sh
+bun scripts/worker-check.ts -- bun -e 'let status = 0; for (const workspace of ["services/kernel", "apps/web", "services/auth", "services/importer"]) { console.log("Workspace typing: " + workspace); const child = Bun.spawn(["bun", "run", "--cwd", workspace, "typecheck"], { stdin: "inherit", stdout: "inherit", stderr: "inherit" }); const code = await child.exited; console.log("Workspace typing result: " + workspace + " exit=" + code); if (status === 0 && code !== 0) status = code; } process.exit(status);'
+```
 
-Planned, unexecuted downstream operands were mixed text `Steins;Gate`, a supported Book Type refinement,
-original names `シュタインズ・ゲート`/`CLANNAD`, invalid authored text correction, the seed's actual configured
-Subject/static-Zone targets, and admitted selected-public A versus later-draft B. No Subject/Collection/Zone ID,
-release, published profile, persona or reviewed provider binding was invented to replace absent seed results.
+The newer authorization-binding increment remains with its Semantic owner: this settled typing did not expose the
+same stale host contract, so no additional increment or unchanged rerun is selected here. The original broad native
+and browser receiving remains on integrated dev. The last measured census remains unchanged below.
 
-### Native startup repair
+The retained seventeen-file Kernel command at `cea61c8e7dbf418048ea308a87b37031cb7d08ad` returned exit 1 on host b
+in 1722.930 seconds. Compilation passed in 21.101 seconds and eight files passed, including native boot, original
+receiving-store custody, bulk no-effect and Members composition. Nine files failed. These are native receiving
+measurements, not six-path journey durations. Exact command and file results are retained in
+`.temp/search-walk/native-receiving-2026-11-07T15-44-09Z.json`; full owned evidence is
+`.temp/goal/checks/worker-check-e3b27aa8-09bc-463d-92fe-0f4209c4b106-2026-11-07T15-44-09.792Z-121e98b4.log`.
 
-**Cause and owner:** the walk launcher supplies native-origin JWKS through `developmentKernelBindings` in
-[dev-stack.ts](../../services/auth/scripts/dev-stack.ts). Accounts registration in
-[work-modules.ts](../../services/kernel/src/composition/work-modules.ts) calls
-[readMembershipWorkConfig](../../services/kernel/src/access/membership-work-config.ts), which requires JWKS and
-issuer origins to match. [Authentication](../../services/kernel/src/access/authenticate.ts) independently has the
-same requirement, so bypassing only the first validator would leave authentication broken. Content owns the walk
-launcher; Accounts owns the authentication integration. Search's manager should route one complete repair across
-those owners, without attributing this observed cause to an unexecuted Search consumer.
+| Existing cause owner         | Reached native failure retained for integrated receiving                                                                                                                                                                                                                               |
+| ---------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Search composition           | `nativePorts.subjectSource` undefined at `rated-source.ts:29` from the outcome supervisor; server fixtures omit `KERNEL_RECEIPT_KEYS` and `addEffects`; both complete default-discovery cases time out at 240 seconds.                                                                 |
+| Native public output custody | Original receiving reserve returns `dependency_unavailable` at `collection-native-work.ts:327`; Collection build returns `conflict` at `collection-source-output.ts:119`; projection exceeds its plan at `native-public-output-work.ts:68`; read-only INSERT returns SQLSTATE `25006`. |
+| Semantic composition         | Native projector start/drain and relation convergence time out; the direct composition fixture has undefined `nativePorts.createIdentitySourceSupportReader` at `composition/semantic.ts:79`; the layer assertion rejects `typebox` and `@rezics/definitions/contract`.                |
 
-**Ready repair proposal:** preserve the canonical same-origin issuer/JWKS contract. Configure the issuer-origin
-JWKS URL and supply the existing trusted `AuthenticationConfig.fetch` seam from explicit local composition to
-route only that exact public JWKS request to the admitted native Auth origin. Wire that same typed local
-transport into both default worker authorization and Kernel authentication, with normal JWT issuer/audience
-checks unchanged. Keep the public issuer metadata canonical, refuse arbitrary request forwarding, and leave
-production URL validation intact. The native host must serve keys before worker readiness; Auth pages and Web
-must still start after the supported seed. This uses an existing trusted composition seam, not a new public bypass.
+No HTTP endpoint, status or correlation is invented for these native calls. The existing cause owners receive this
+packet through Semantic. None of these failures changes the last observed census: **0/6 passing**, all six journeys
+unexecuted after setup, with no measured failing journey or slowest journey duration.
 
-Extend the existing launcher assertions in `services/auth/scripts/dev-stack.test.ts`, membership configuration
-cases in `services/kernel/test/access/native-membership-work.test.ts`, and authentication cases in
-`services/kernel/test/access/authenticate.test.ts`. Pin the actual differing-port tuple, exact JWKS dispatch,
-unchanged foreign-origin production rejection, and a real issued bearer accepted by both installed consumers.
-The repair lands through ordinary typing checks; the manager's next single scheduled Goal walk must then reach
-native persona setup, the supported cross-media `result.json`, seeded frontends and all six mounted paths.
-A configuration-control pass alone cannot close this failure.
+The preceding fifteen-file Web selection at `dfad29c91c92f247a0f6b8ff43d79819b2248fa5` returned exit 1 after its
+own infrastructure rerun. The first physical run, host b `mw6ekf4h-47d3d1a9`, reached four pre-Vite readiness failures
+and then `remote-check: deadline reached after 7200000 ms`; its command ran 6996.010 seconds. The wrapper retried
+that transport failure on host c. All fifteen selections then failed before test execution, each waiting approximately
+150 seconds for a Vite ready line; the command ran 2308.792 seconds, peaking at 5302 MiB. Its first exact diagnostic:
+`dev server ready failed for /en; elapsed 150000.10742100002 ms; last error: Error: phase timed out; last error: Error: Vite ready line has not been printed`.
+No selected test, including the log-redaction assertion, passed or failed its product assertions. These are setup
+measurements, not journey durations. The original startup owner receives both physical outcomes; unchanged
+reruns do not replace the newly delivered class repair. Evidence:
+`.temp/goal/checks/worker-check-195d7b92-d55d-43de-85b4-07051749241c-2026-11-07T12-51-05.691Z-ee9a9f5d.log`.
+
+Fixture decision: reconcile the genuine completed Mapping receipt before asserting the control ACK in native Search
+receiving. Keep the existing 128-step bound and every original custody, transaction, replay and completion assertion.
+Do not increase limits to substitute for receipt reconciliation. Setup evidence is checkpointed before each phase;
+the concrete persona `Password:` output is redacted before retaining child logs.
+
+The final single-file reporting selection also failed before its test executed:
+`bun scripts/worker-check.ts -- bun apps/web/scripts/focused.ts --private-network -- bun test tests/search-first-public-walk-report.test.ts`.
+At revision `e5fd604190034f643a182acd908768d7fa64f831`, host b returned exit 1 after 210.886 seconds. First diagnostic:
+`dev server ready failed for /en; elapsed 150000.487164 ms; last error: Error: phase timed out; last error: Error: Vite ready line has not been printed`.
+Evidence: `.temp/goal/checks/worker-check-c42a7cbc-ee93-4c1d-907a-eb7a69fc1e3d-2026-11-07T11-24-24.906Z-599a279e.log`.
+This repeats the existing startup failure; no reporting, Character or with-dev-server pass is inferred. Subsequent
+Semantic worker-fixture repair has one existing owner. Receiving keeps the workspace-import parser explanation and
+root-spec scope once, and adopts its 60-second repository-wide assertion deadline without relaxing any import assertion.
+
+The authorized proposal-retry range `6ccd350eae..849c1bee2ca6de9f17be5a8f346bbb47e3b85695` is integrated into this
+walk branch. Its four source commits retain command deadlines, actor/receipt identity, sealed importer journals and
+safe diagnostics. Native proposal, separate authorized adoption and independent current-fact readback remain
+required through the cross-media seed. Content's source-fence repair remains independent. The Importer receiving
+command `bun test services/importer/tests/reviewed-catalogue-preflight.test.ts services/importer/tests/reviewed-catalogue-proposal-diagnostics.test.ts`
+passed all 11 tests; fixture replay does not establish native convergence or growth.
+
+The focused command
+`bun scripts/worker-check.ts -- bun apps/web/scripts/focused.ts --private-network -- bun test tests/search-first-public-walk-report.test.ts tests/character-local-selection.test.tsx tests/with-dev-server.test.ts`
+failed on host b before the selected tests. Each file's shared server failed `/en` readiness without a Vite ready
+line at approximately 150 seconds; the complete command took 497.418 seconds. Exact first diagnostic:
+`dev server ready failed for /en; elapsed 150000.257595 ms; last error: Error: phase timed out; last error: Error: Vite ready line has not been printed`.
+Owned evidence is `.temp/goal/checks/worker-check-d515db4b-47a0-4458-82fe-3c5c22149460-2026-11-07T09-44-25.762Z-3b064030.log`.
+Performance receives this separable shared-startup failure. None of these timings is product journey time, and none
+of the three test files has a pass from this command.
+
+The landing command `bun test scripts/docs-check.test.ts services/auth/test/dev-stack-config.test.ts` returned
+42 pass and 1 fail. The existing mounted scope-composition case could not load a SQL statement because
+`services/kernel/src/content/community-presentation-rules.sql: Cannot connect to the database at 127.0.0.1:20064/rezics (DATABASE_URL in .env): error connecting to server: Connection refused (os error 111); .reylo has no analysis of this statement, so run reylo generate where the database can be reached.`
+The exact issuer-origin, native-port refusal, isolated-stack and native-JWKS-transport assertions passed. The SQL
+failure is a configured-stack dependency, not a changed JWKS assertion. No unrelated stack is started to hide it.
+
+The installed Members application/runtime is received through the named dev revision
+`863e5266e3ec973617a5c97e7f0d202817b36ff6`, including implementation
+`7b57f6bfe8f418d322db9a700861dec97a912982`. Its original intent and 64/512/4096 growth assertions remain required;
+source integration does not pass them. The merge also supplies its existing Library public-output dependencies.
+
+The native command
+`bun scripts/worker-check.ts -- bun run --cwd services/kernel check test/semantic/batch-write-diagnostics.test.ts test/semantic/bulk-no-effect.test.ts test/search/review-population-readiness.test.ts test/search/second-scope-generations.test.ts test/search/review-discovery-receiving.test.ts test/search/default-discovery.test.ts`
+ran on host b at walk revision `b97e6a3082f2dedfc188a913848b797513bac51c`, before the Members integration.
+It returned exit 1 after 1029.508 seconds. Batch-write diagnostics passed all 3 tests; review-population readiness
+passed all 3 tests. The Collection-producing reconciliation fixture failed coverage with
+`DiscoveryProducerCoverageError: Discovery generation is not ready: native producer coverage is incomplete (missing kinds: collection)`
+(10 pass / 1 fail). Review receiving still failed with
+`RangeError: concurrency must be a positive integer below the pool size` (0 pass / 1 fail).
+The fixture declared only Account despite publishing Collection metadata. Its registry and generation kinds now
+declare both actual producers; raw frontier, currentness and physical target assertions are unchanged. This fixture
+failure does not establish a production missing-kind defect. Default-worker startup exposes
+`TypeError: createIdentitySourceSupportReader is not a function. (In 'createIdentitySourceSupportReader(config)', 'createIdentitySourceSupportReader' is undefined)`
+at `search/identity-receiving-native.ts:136` during Semantic registration. Both complete discovery cases timed out;
+the runner reproduced the failure alone. Source/coverage and readiness retain their existing causes and unchanged
+assertions; these results were returned to Semantic with owned evidence
+`.temp/goal/checks/worker-check-28c4b0af-09aa-4ba9-8ede-3ba3bdd88c98-2026-11-07T09-58-00.894Z-9da9df64.log`.
+The proposal no-effect fixture stopped at `error: KERNEL_RECEIPT_KEYS is required` before its assertions. It now
+supplies the existing dedicated `testReceiptKeys()` capability, as the ordinary bulk fixture does; no assertion is
+removed or weakened. Native check time is not a six-path journey duration.
+
+The subsequent native receiving at `9eac1f44cbaf5b42a844d527f884d5bb674b5c62` returned exit 1 in 173.046 seconds.
+Batch diagnostics passed 3/3 and installed Members composition passed 2/2. Original Members intent passed 3/28;
+25 cases, including the 64/512/4096 growth cases, failed after mounted Collection admission at native
+`library.membersPreparation.reserve` or `library.membersPreparation.touch` with `ProblemError: Not Found`, code
+`not_found`. There is no HTTP status or correlation for these native calls. Semantic receives this cause for the
+Members owner with unchanged private-denial, intent, replay, retirement and growth assertions. Owned server evidence:
+`.temp/goal/checks/worker-check-82772a82-ef7d-41b9-ba80-612ca65c83c2-2026-11-07T10-20-46.644Z-9db9684c.log`.
+Bulk no-effect passed 2/3: its remaining failure exposed a fixture lookup still using the raw command key rather
+than the executor's derived receipt key. Both the before-finalization and after-commit fixture queries now use the
+existing native receipt-key reader; exactly-one receipt, replay, authorization and no-effect assertions stay intact.
+
+The expanded root landing selection returned 106 pass / 4 fail in 86.96 seconds. Signup, step-up, Importer and
+page-data receiving passed except for the retained challenge-reset assertion at `turnstile-lifetime.test.tsx:877`
+(expected one reset, received zero). Workspace-import receiving reported ten undeclared imports, including Auth's
+Operations test import and Importer's Playwright import; its repository scan also exceeded its five-second timeout.
+The configured SQL connection refusal above remained. The fresh-stack test failed before startup with
+`Bind for 127.0.0.1:54329 failed: port is already allocated`; its `finally` cleanup removed its UUID-owned container,
+volume and source copy. These are receiving failures, not journey measurements or permission to change unrelated
+authorization and dependency owners. The exact root selection is the landing command supplied with this walk;
+all original assertions remain in place.
+
+The eight-file native landing selection at `73b3712c88270d8e81a6fa17f53665ba61f47500` returned exit 1 in
+296.254 seconds on host a. Account discovery passed 7/7, copy construction 3/3, Members composition 2/2,
+batch diagnostics 3/3 and the corrected bulk no-effect fixture 3/3. Collection source-output (1/10) and canonical
+public-output capture (1/16) stopped at Collection creation, expected 201 but received 503. The Subject fixture now
+composes the full Library domain in `onAccessReady`, matching the installed server. Boot (1/2) reached its independent
+native account synchronization but lacked ReceiptKeys on that newly constructed Pool; the fixture now supplies its
+dedicated keys. No original output, disclosure, receipt or startup assertions are weakened. Owned evidence:
+`.temp/goal/checks/worker-check-83e6cc48-d843-4b1d-b2ec-17db91b9a9f2-2026-11-07T10-33-45.521Z-e7b3ddbd.log`.
+Installed Members authority, Source process-root installation and Pool-aware relay lifecycle remain repairs of their
+existing owners. This walk receives their delivered integrations rather than creating another producer.
+
+The nine-file native selection at `7d4f8fe601856792cfaeff8e46d2bf5a3f1329d6` returned exit 1 in 180.700 seconds
+on host b. Account discovery passed 7/7, boot 2/2, copy construction 3/3, Members composition 2/2, second-scope
+generations 11/11, batch diagnostics 3/3 and bulk no-effect 3/3. Collection source-output remained 1/10 and canonical
+capture 1/16. Full Library composition removed the previous Collection POST 503: curated output fixtures then
+reached native `not_found`, while dynamic capture setup received HTTP 403. The historical 503 problem code,
+correlation and first native phase were not retained and cannot be reconstructed from the status assertion.
+Owned evidence: `.temp/goal/checks/worker-check-e0d75f33-40dc-4e00-9882-1ea59baae08b-2026-11-07T10-43-54.757Z-17f8be25.log`.
+
+Fixture decision: explicit public output uses dynamic membership with the actual `library_entry:list`,
+`progress_session:list` and `copy:list` scopes and their ordinary exposure gates. Curated authority remains asserted
+on a separate actual curated Collection, including two distinct occurrences of the same Subject; activated output,
+independent metadata readback, original holds, rollback and money guards remain asserted. Collection setup now
+retains only safe phase/endpoint/status/problem/correlation diagnostics on failure. This corrects fixtures to the
+installed contract without adding authorization behavior. The existing Members repair owns
+`Native public output projection exceeds its plan` at `native-public-output-work.ts:68` and the following
+SQLSTATE `25006`, `cannot execute INSERT in a read-only transaction`; no producer repair is duplicated here.
+Bootstrap continuation source `b09b9bb129ae6cdb5f6606612d4a4af3ca28f3ca`, integrated on dev as
+`08ac6bbe43eea4859cdf8ec5ab6534f9f660aae7`, is received. Its work-module assertions remain required; integration
+alone supplies no runtime pass.
+
+The ten-file receiving run at `e9cd0124304e01b936e48912593cb0da0adcd9fb` failed in 217.742 seconds on host c.
+The previous seven files still passed. The new curated occurrence assertion needed a non-null Subject ID type
+assertion; that compiler defect is corrected. Dynamic setup now records the actual first failure as
+`POST /v1/collections`, phase `create-source-collection`, HTTP 403, problem `forbidden`, no correlation header.
+Creation requires the three families' `:read` scopes in addition to the already supplied `:list` scopes, so the
+fixture now carries both. Work-module receiving exposed missing History installation before inspecting module
+names and missing route-key configuration in direct registration. Its child now decorates the live `startWorker`
+module list, and direct registration uses the existing worker environment; lifecycle and registration assertions
+are retained. Evidence: `.temp/goal/checks/worker-check-22d6f13b-4b7c-4793-b98f-0eb8ff02e05b-2026-11-07T10-55-21.456Z-31d2dbd7.log`.
+
+Receiving at `90be1ee714927d0681386e12fb12ea13355762c1` passed compiler and quality checks and the same seven native
+files; the command failed in 304.105 seconds on host a. The dynamic creation 403 is resolved. Both output suites now
+reach native `Conflict` at `collection-source-output.ts:119` from allocation at line 167; the unheld-output case still
+reaches the projection-plan failure and the following transfer case SQLSTATE 25006. The separate output-custody
+repair owns these observations. Work-module startup did not converge and reproduced alone; direct registration
+also reached its fixture's throwing authorization callback. That callback now returns the real mounted worker
+authorization, and child stderr is retained during readiness waits so a timeout cannot conceal its first diagnostic.
+No timeout or lifecycle assertion is relaxed. Evidence:
+`.temp/goal/checks/worker-check-191c3565-91de-46dd-beb0-8961a4fdd8aa-2026-11-07T11-05-47.789Z-cb565bff.log`.
+
+The final ten-file native run at `4d25eec24f11b2ba659fdd1bcc06a093736f7a16` passed compiler and quality checks;
+the command returned exit 1 in 286.021 seconds on host a. The same seven files passed. Direct Semantic registration
+now passes with bootstrap effects retained; its two original worker lifecycle cases still time out at 30/60 seconds
+and fail again alone. No child phase, stdout or stderr was produced before the readiness failure, so no hidden
+endpoint, status or correlation is inferred. Collection output remains 1/10 and canonical capture 1/16 with the
+same allocation Conflict, projection-plan error and subsequent read-only transaction failure. Their original
+assertions remain required after the existing output-custody, Source-installation and startup repairs integrate.
+Owned evidence: `.temp/goal/checks/worker-check-d2764b95-6e78-4d35-83a8-b70604fa688a-2026-11-07T11-16-04.644Z-7181afbe.log`.
+The remote runner recorded cleanup of its databases, process group and artifact staging. No walk stack was admitted
+or started by this receiving round.
+
+The focused native receiving command after Mapping fixture reconciliation was
+`bun scripts/worker-check.ts -- bun run --cwd services/kernel check test/search/identity-receiving-native.test.ts`.
+At `6efbbf6073f15a333f7a1e622b94204c8445f37b`, compiler and quality checks passed. The suite returned
+**1 pass / 7 fail, 66 assertions, 22.55 seconds**. Mapping completion and its genuine receipt reconciliation are now
+observed. All seven remaining cases fail at `collection-native-work.ts:327` `reserve`, through
+`identity-search-receiving-work.ts:168`, with `dependency_unavailable`. Their intended interruption and receiving
+completion assertions remain unreached; no expected failure was weakened to accept this refusal.
+One retained failure reports native points 1 and statements 3, other axes zero; the SQL footprint is unretained.
+The existing finite-work/output-custody owner receives this failure separately from startup.
+
+The command also returned an independent cleanup failure after 240.207 seconds:
+`spawnSync docker ETIMEDOUT ["docker","rm","-f","-v","0603c5d8049b690ca6f5f4eba12359652f1af2f10b9febb813be9f40ef04ac0a"]`.
+The original check runner retains cleanup custody; no unrelated Docker resources are changed. Whole command exit 1,
+319.226 seconds on host b. Evidence:
+`.temp/goal/checks/worker-check-c93c0287-7474-46b3-97ed-f4f12771a817-2026-11-07T12-40-21.558Z-35896e8b.log`.
+
+### Last observed dev census
+
+Observed revision: `2aa83f1adb21aca8b4718d7ba5193176bf14c521`. One ordinary admitted walk used
+`bun services/auth/scripts/dev-stack.ts walk -- bun apps/web/scripts/search-first-public-walk.ts`.
+The script's round began **2026-11-07 12:26:23.118 UTC**. No terminal UTC timestamp survived the memory kill;
+the check returned **exit 137**. Slot 1/6 was admitted in **1.006 seconds**. That is setup time, not product time.
+The previous round was archived before this run. No second Search stack was launched.
+
+Native persona setup completed for `developer@rezics.test`, Account `99e7b230-90dd-83ae-b5dc-932fcb45ae35`.
+Cross-media seed then failed with the retained diagnostic
+`Import transport failed phase=response method=unknown target=unknown-origin status=503 problem=none network=none correlation=none`.
+Its exact endpoint, problem code and correlation were not retained; none is inferred. Setup continued to frontends.
+Web printed Vite ready in **214061 ms**, then the check host terminated the command:
+`remote-check: check exceeded its memory limit (6 GiB) while running the check command`.
+No bearer/sign-in, browser launch, native Search request or mounted journey observation was saved.
+
+| Journey               | Result                                   | Unexecuted complete path                                                                                 |
+| --------------------- | ---------------------------------------- | -------------------------------------------------------------------------------------------------------- |
+| Mixed Search          | FAIL — setup; journey elapsed unmeasured | Submit, open permitted result, return query, phone 390 results, continue, current visibility.            |
+| Refine and continue   | FAIL — setup; journey elapsed unmeasured | Type/filter operands, current facets, continuation, restart, mounted facets, reader/resource retirement. |
+| Multilingual names    | FAIL — setup; journey elapsed unmeasured | Original-language name, current alias, suggestion, Subject, locale/query/language order.                 |
+| Search recovery       | FAIL — setup; journey elapsed unmeasured | Invalid input, corrected native request, mounted correction, lost generation, useful restart.            |
+| Configured reading    | FAIL — setup; journey elapsed unmeasured | Selected profile, Subject lists, static-Zone lists, document order, continuation/retry, usable siblings. |
+| Published composition | FAIL — setup; journey elapsed unmeasured | Publish A, working B, public A over B, lost/refused response, reconciliation, mounted public A.          |
+
+The result is **0/6 passing**. There is **no slowest measured failing journey**, because no journey began.
+Planned operands were `Steins;Gate`, book text `The`, `シュタインズ・ゲート`, alias `CLANNAD`, invalid text `"unclosed`,
+Types `wd:Q689445` and `schema:Book`; desktop 1280, phone 390 and `en`/`zh-Hant`/`ja` visits remain unexecuted.
+Seed 503 and frontend memory termination are separable setup failures, not measured Search product failures.
+The existing startup owner receives the memory diagnostic; the existing seed/source-fence owner receives the 503
+with unavailable endpoint/correlation explicitly marked. No heap, deadline, pool or permission change is made here.
+
+Secret-free retained evidence:
+`.temp/search-walk/2026-11-07T12-26-23-118Z/census.json`, `persona.log`, `seed.log` and `stack.redacted.log`.
+The census was reconstructed only from returned artifacts, not a completed walk report. Persona passwords are redacted.
+The full owned check log is
+`.temp/goal/checks/worker-check-ef268857-9864-46fb-ab95-2656f01f54d9-2026-11-07T12-13-33.053Z-f3dcd568.log`.
+The remote runner reported artifact staging cleanup. No walk-specific container/lease cleanup receipt was retained,
+so this ledger does not independently assert that cleanup completed.
 
 ### Scope of this census and handoff
 
-The result is **0/6 passing**. All failures tie on the recorded 90.471-second native startup interval; Mixed Search
-is the representative slowest failing journey. Its first failing step is worker identity startup, and its repair
-artifact is [Native startup repair](#native-startup-repair). No independent configured/public path could proceed
-without the same native-ready stack. Existing broader acceptance below is preserved, not replaced with these fails.
-
-The prior registration-handle failure was not reached. The importer-proposal `POST /v1/grants` 403 was not reached
-and is not evidence about ordinary own-account Collection creation or JWT scopes. Members' binding/fixtures and
-kind witnesses, Web's Character/Person search, condition weights and composition, Semantic's tagged works,
-Imports' reviewed records and Performance's fake-discovery notices have no new runtime verdict from this startup
-failure. Their assertions remain required; no implementation regression or successful receiving is inferred.
-The existing default-worker product repair retains its owner; this configuration failure must not silently replace it.
-
-Teardown initially reported `spawnSync docker ETIMEDOUT` removing this attempt's search container. The containers
-were subsequently absent; the two surviving attempt-owned volumes were explicitly removed. No unrelated stack was
-stopped or pruned. The manager owns the next hourly pass through normal controller scheduling; this attempt adds
-no watcher. Native persona/seed, mounted browser checks and root typecheck did not run after the setup failure.
-Documentation formatting is the focused delivery check; it supplies no native/browser PASS.
+The earlier permission failures at 07:33/07:34 UTC (0.887/0.711 seconds, revision
+`93eb7908d8e983998d4b280ea275b131aaa444a1`) are superseded by successful ordinary admission.
+Native/default-worker receiving and mounted Character/with-dev-server assertions remain required. Compiler,
+fixture and reporting passes cannot fill any of the six unexecuted paths. Existing output-custody, installed-producer,
+WorkModule lifecycle and frontend startup repairs retain their current owners.
 
 ### Additional owner-requested acceptance
 
-The later owner decision assigned `test/search/second-scope-generations.test.ts`,
-`test/search/review-population-readiness.test.ts`, `test/search/review-discovery-receiving.test.ts` and retained
-`test/search/default-discovery.test.ts` to this same admitted walk through the owning Kernel runner/preloads.
-That walk had already ended at the recorded identity-startup failure. All four are **not executed**, with that
-same prerequisite as their first failure; no second stack was opened to substitute for the requested environment.
-Search retains retirement/reallocation convergence; Content retains eligible Threads Home/Space recovery.
-Their original assertions stay required. The [startup repair](#native-startup-repair) precedes their next scheduled
-walk, which must record the actual tested dev revision and commands rather than inherit a pass from another owner.
+Owner-requested Kernel cells ran through the owning runner on this attempt (host b, 2026-11-07 07:35–07:48 UTC,
+rev `93eb7908d8e983998d4b280ea275b131aaa444a1`). They are not mounted-journey evidence and do not pass any of the six
+rows.
 
-Separate controller-requested landing checks tested source `1e69e64edc7774488df1d88f0fa2b124a7df9776`, whose
-product and test code matches the recorded dev revision. These results do not supply mounted-journey evidence:
+| File                                              | Actual result                                                                                                                                                                                                                                                                                                                                                                                     |
+| ------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `test/search/review-population-readiness.test.ts` | PASS (3 tests). Executed 2026-11-07 07:35 UTC through the Kernel runner.                                                                                                                                                                                                                                                                                                                          |
+| `test/search/second-scope-generations.test.ts`    | FAIL: `DiscoveryProducerCoverageError: Discovery generation is not ready: native producer coverage is incomplete (missing kinds: collection)` at `generations.ts` `assertDiscoveryProducerCoverage`; case “a later metadata reconciliation step resumes the committed raw frontier before indexed cleanup” (10 pass / 1 fail). The injected setup already has a collection producer.              |
+| `test/search/review-discovery-receiving.test.ts`  | FAIL: `RangeError: concurrency must be a positive integer below the pool size` at `events/relays.ts` `startRelays` from `search/runner.ts:414` (`concurrency: options.concurrency ?? 2`) during `runner.refresh()`; case “default mixed supervisor applies current reviews and recovers exact journal progress” (0 pass / 1 fail). Prior `unknown-resource-action` catalogue error did not recur. |
+| `test/search/default-discovery.test.ts`           | FAIL: both cases `OutcomeRpcError: init did not complete within 90000 ms`, then `Worker did not drain: {"code":null,"signal":"SIGKILL"}` (0 pass / 2 fail, 477.19 s). Child stdout in the drain error was empty.                                                                                                                                                                                  |
 
-| Command (from worktree root, through `bun scripts/worker-check.ts --`)                             | Actual result                                                                                                                                                                                 |
-| -------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `bun run --cwd services/kernel check test/search/routes.test.ts test/search/service-scope.test.ts` | First run exited 1 before assertions: `error: spawnSync docker ETIMEDOUT` starting PostgreSQL. Requested retry exited 1 after assertions: routes 14 pass/0 fail; service-scope 3 pass/1 fail. |
-| `bun test tools/goal/src/briefs.test.ts`                                                           | First run exited 1: 11 pass/2 timeouts, `error: git rev-parse: git exited null`. Requested retry exited 0.                                                                                    |
+**Receiving coverage repair, Source/publication owner `bf195aa3`:** the failing metadata-reconciliation case already
+injects a `collection` producer (`owner: commerce`) in `metadataProducers`; the injected registry/target kinds are
+account-only. Reconcile that registry/target/producer contract in existing receiving, then rerun the same case. Do not
+install a new producer, drop the coverage assertion, or open deferred metadata. Commerce remains owner of Collection
+records.
 
-The native scope failure is “native readiness reuses the real client prefix source pool and authenticated context”:
-`ProblemError: Semantic Layer Not Ready` (`semantic_not_ready`) at `scope-source.ts`'s
-`resolvePublicFilterCapture`, before the fixture's expected ready page. The native Source binding returned a
-non-resolved outcome; the wrapper did not emit its underlying reason. This is an observed current-dev readiness
-failure in inherited code, not evidence that the documentation change broke Search or that a specific owner
-refused a request. The test's real constructor, prefix, source, actor and result assertions remain unchanged.
+**Review relay concurrency repair, readiness owner `7a3f2fc9`:** `startRelays` refuses `concurrency >= pool.options.max`.
+`runner.ts` defaults `concurrency` to 2. Size the Review discovery fixture pool above 2, or pass
+`relayConcurrencyForPool(options.pool)` instead of 2. Keep the existing coverage assertions. Do not loosen
+`startRelays`. The prior Content/Accounts catalogue fixture error did not recur on this product.
 
-**Ready fixture/consumer repair, existing Members binding owner:** retain the real constructor and expose the
-native binding's typed refusal reason in the existing test's failure diagnostic. Repair the fixture's native
-release/capture/source preparation against that actual reason, then prove the current reader can prepare, prefix
-and evaluate the expected Book. If the owner runtime is incomplete, deliver its documented native binding rather
-than substituting SQL state, a permissive Source, a manual service registration or a changed ready assertion.
-Rerun this existing case through the owning Kernel runner after the typing-only repair; retain the 14 route
-assertions and the six-path setup failure separately. No claim of a missing definition, missing source or successful
-preparation follows from the currently opaque refusal. The manager receives this native failure through the ledger.
+**Default-worker init repair, readiness owner `7a3f2fc9`:** both default-discovery cases failed at
+`startOutcomeWorkerProcess` `rpc.request('init')` (`timeoutMs: 90_000`). Child `outcome-worker.ts` `startWorker` never
+replied; `close()` awaits that `ready` then SIGKILLs at 90 s (`Worker did not drain: {"code":null,"signal":"SIGKILL"}`).
+The drain error carried empty child stdout. Capture child stdout in the 90 s init window. Keep the existing assertions.
+This is not a new Imports outcome. Receive those integrated changes in the sole walk; no second native producer.
+
+Web Character local-selection and with-dev-server cells were retried 2026-11-07 07:48 UTC after `95e3fac9` became an
+ancestor: focused Web again returned `Web check unavailable: the selected Performance snapshot is not integrated into
+canonical dev`. Commerce 401f58 assertions remain required. Loans query/read stay Commerce-owned.
 
 ## Evidence rules and common boundaries
 

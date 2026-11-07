@@ -69,14 +69,7 @@ const work = (): PublicIdentityOutputWork => ({
 });
 const config = () => ({ pool: f.pool, access: f.access, routeKey: testRouteKey(), clock: systemClock });
 async function setup(ids: readonly string[], visibility: 'public' | 'private' = 'public') {
-  const response = await f.send(f.owner.bearer, 'POST', '/v1/collections', {
-    membershipKind: 'dynamic',
-    title: 'Canonical output capture',
-    visibility,
-    rule: { filter: { owner: { presence: true } } },
-  });
-  expect(response.status).toBe(201);
-  const collectionId = (await response.json()).collection.id as string;
+  const { collectionId } = await f.collection(visibility);
   const ref = { route: routeOf(collectionId)!, collectionId, generation: randomUUID() };
   await f.command(collectionId, { begin: ref }, (tx) =>
     beginCollectionSourceOutput(tx, { ...ref, expectedMembers: ids.length }),

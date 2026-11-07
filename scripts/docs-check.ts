@@ -194,6 +194,10 @@ function gitBlobHash(bytes: Uint8Array): string {
   return createHash('sha1').update(header).update(bytes).digest('hex');
 }
 
+function liveMarkdown(file: string): boolean {
+  return file.endsWith('.md') && !file.startsWith('.temp/');
+}
+
 async function parsedMarkdown(
   root: string,
   file: string,
@@ -201,9 +205,19 @@ async function parsedMarkdown(
 ): Promise<ParsedMarkdown> {
   const present = memory.get(file);
   if (present) return present;
+  const empty: ParsedMarkdown = { links: [], anchors: [] };
   const fullPath = path.join(root, file);
-  const info = await lstat(fullPath);
-  if (!info.isFile() || info.isSymbolicLink()) return { links: [], anchors: [] };
+  let info: Awaited<ReturnType<typeof lstat>>;
+  try {
+    info = await lstat(fullPath);
+  } catch {
+    memory.set(file, empty);
+    return empty;
+  }
+  if (!info.isFile() || info.isSymbolicLink()) {
+    memory.set(file, empty);
+    return empty;
+  }
   const bytes = await readFile(fullPath);
   const hash = gitBlobHash(bytes);
   const cacheFile = path.join(root, CACHE_PATH, `${hash}.json`);
@@ -653,10 +667,10 @@ export async function runDocsCheck(root = process.cwd(), argv = process.argv.sli
     if (entry.newPath) {
       diffPaths.add(entry.oldPath);
       diffPaths.add(entry.newPath);
-      if (entry.status.startsWith('R')) deletedOrRenamed.add(entry.oldPath);
+      if (entry.status.startsWith('R') && liveMarkdown(entry.oldPath)) deletedOrRenamed.add(entry.oldPath);
     } else {
       diffPaths.add(entry.oldPath);
-      if (entry.status.startsWith('D')) deletedOrRenamed.add(entry.oldPath);
+      if (entry.status.startsWith('D') && liveMarkdown(entry.oldPath)) deletedOrRenamed.add(entry.oldPath);
     }
   }
   const newlyTrackedTemp = diff.filter(
@@ -739,11 +753,11 @@ export async function runDocsCheck(root = process.cwd(), argv = process.argv.sli
       );
   }
 
-  const allMarkdown = allFiles.filter((file) => !file.startsWith('.temp/') && file.endsWith('.md') && sizes.has(file));
+  const allMarkdown = allFiles.filter((file) => liveMarkdown(file) && sizes.has(file));
   const changedMarkdown = new Set<string>();
   if (changedMode) {
-    for (const file of diffPaths) if (file.endsWith('.md') && sizes.has(file)) changedMarkdown.add(file);
-    for (const file of untracked) if (file.endsWith('.md')) changedMarkdown.add(file);
+    for (const file of diffPaths) if (liveMarkdown(file) && sizes.has(file)) changedMarkdown.add(file);
+    for (const file of untracked) if (liveMarkdown(file)) changedMarkdown.add(file);
   }
   const ownerFiles = changedMode ? [...changedMarkdown].filter(ownerDocument) : allMarkdown.filter(ownerDocument);
   for (const file of ownerFiles) {
@@ -821,7 +835,7 @@ export async function runDocsCheck(root = process.cwd(), argv = process.argv.sli
       const parsed = await parsedMarkdown(root, source, markdownMemory);
       for (const link of parsed.links) {
         const resolved = linkTarget(root, source, link.target);
-        if (resolved && deletedOrRenamed.has(resolved.file)) {
+        if (resolved && deletedOrRenamed.has(resolved.file) && liveMarkdown(resolved.file)) {
           sourceSet.add(source);
           const targets = linkSources.get(source) ?? new Set<string>();
           targets.add(link.target);

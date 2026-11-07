@@ -2,10 +2,12 @@ import { afterAll, expect, test } from 'bun:test';
 import pg from 'pg';
 import { bundledDigest, bundledRelease } from '@rezics/definitions/bundled';
 import { createPool } from '../../src/database/pool.ts';
+import { installNativeHistory } from '../../src/composition/history.ts';
 import { createKernel } from '../../src/http/kernel.ts';
 import { partitionOf, routeOf } from '../../src/route/route.ts';
 import { bootstrapRelease, GLOBAL_CONTEXT } from '../../src/semantic/definitions.ts';
 import { createSemanticWorkModule } from '../../src/semantic/work-module.ts';
+import { createWorkerAuthorization } from '../../src/work/authorization.ts';
 import { composeSemanticIdentityParticipants } from '../../src/composition/semantic.ts';
 import { KERNEL_WORK_MODULES } from '../support/default-work-modules.ts';
 import { testReceiptKeys } from '../support/receipt-keys.ts';
@@ -14,6 +16,7 @@ import { createRealAccess } from './real-access.ts';
 
 const databaseUrl = process.env.DATABASE_URL;
 if (!databaseUrl) throw new Error('DATABASE_URL must name the migrated test database');
+installNativeHistory();
 const pool = createPool(databaseUrl);
 const admin = new pg.Pool({ connectionString: databaseUrl, max: 4 });
 afterAll(async () => {
@@ -50,19 +53,12 @@ const program = `
     return startRelays(nativePool, relays, ...rest);
   });
   const { readWorkerConfig, startWorker } = await import('./src/worker.ts');
-  import { createDiscoveryProducerEntry } from './src/composition/discovery.ts';
-  import { createKernelRuntimeDefaults } from './src/composition/runtime-defaults.ts';
-    import { createKernelWorkModules } from './src/composition/work-modules.ts';
-    import { composeSemanticIdentityParticipants } from './src/composition/semantic.ts';
-    const KERNEL_WORK_MODULES = createKernelWorkModules(
-      createDiscoveryProducerEntry,
-      createKernelRuntimeDefaults,
-      composeSemanticIdentityParticipants,
-    );
   let pool;
   let starts = 0;
   let stops = 0;
   let registrations = 0;
+  const fail = process.env.SEMANTIC_START_FAILURE === 'true';
+  const decorate = (KERNEL_WORK_MODULES) => {
   assert.equal(KERNEL_WORK_MODULES.filter(m => m.name === 'semantic').length, 1);
   const modules = KERNEL_WORK_MODULES.map(module => ({
     name: module.name,
@@ -94,12 +90,13 @@ const program = `
       }});
     }
   }));
-  const fail = process.env.SEMANTIC_START_FAILURE === 'true';
   if (fail) modules.push({ name: 'startup-failure', register(context) {
     context.addService(() => { throw new Error('later starter failed'); });
   }});
+  return modules;
+  };
   try {
-    const worker = await startWorker(readWorkerConfig(process.env), modules);
+    const worker = await startWorker(readWorkerConfig(process.env), decorate);
     assert.equal(fail, false);
     assert.equal(registrations, 1);
     assert.equal(identityRegistrations, 1);
@@ -158,22 +155,30 @@ function runtime(fail = false) {
   const read = (async () => {
     for await (const chunk of child.stdout) output += new TextDecoder().decode(chunk);
   })();
-  const errors = new Response(child.stderr).text();
+  let errors = '';
+  const readErrors = (async () => {
+    for await (const chunk of child.stderr) errors += new TextDecoder().decode(chunk);
+  })();
   return {
     application,
     child,
     output: () => output,
     async until(marker: string) {
-      await until(async () => {
-        if (output.includes(marker)) return true;
-        if (child.exitCode !== null) throw new Error(`${output}\n${await errors}`);
-        return false;
-      });
+      try {
+        await until(async () => {
+          if (output.includes(marker)) return true;
+          if (child.exitCode !== null) throw new Error(`Semantic child exited before ${marker}`);
+          return false;
+        });
+      } catch (error) {
+        throw new Error(`${error instanceof Error ? error.message : error}\n${output}\n${errors}`);
+      }
     },
     async finish() {
       const status = await child.exited;
       await read;
-      expect(status, `${output}\n${await errors}`).toBe(0);
+      await readErrors;
+      expect(status, `${output}\n${errors}`).toBe(0);
     },
   };
 }
@@ -379,15 +384,18 @@ test('default Semantic composition registers its real locator and bounded local 
   const { createWorkClient } = await import('../../src/work/client.ts');
   const { WORK_QUEUES } = await import('../../src/work/queues.ts');
   const client = await createWorkClient(databaseUrl!, pool);
+  const env = { ...process.env, ...workerTestEnv() };
+  const clock = () => new Date();
   try {
+    const authorization = createWorkerAuthorization({ pool, client, env, clock, receiptKeys: testReceiptKeys() });
     await createSemanticWorkModule(composeSemanticIdentityParticipants).register({
       pool,
-      env: process.env,
-      clock: () => new Date(),
+      env,
+      clock,
       queues: WORK_QUEUES,
       client,
       getAuthorization() {
-        throw new Error('Semantic fixture does not consume worker authorization');
+        return authorization;
       },
       addEffects(registered) {
         effects.push(...registered);

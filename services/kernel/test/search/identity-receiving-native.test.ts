@@ -128,7 +128,11 @@ async function admitted(original: string, terminal: string) {
   }
   expect((await store().readJob(f.pool, job))?.state).toBe('pending');
   for (let attempt = 0; attempt < 128; attempt++) {
-    if ((await stepIdentityEpochMapping(f.pool, job)).state === 'complete') break;
+    const progress = await stepIdentityEpochMapping(f.pool, job);
+    if (progress.state === 'complete') {
+      expect(await store().reconcileStepReceipt(f.pool, progress.receipt)).toEqual(progress);
+      break;
+    }
   }
   expect((await store().readJob(f.pool, job))?.mapping?.state).toBe('complete');
   return job;

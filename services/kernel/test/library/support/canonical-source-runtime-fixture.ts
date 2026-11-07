@@ -38,9 +38,8 @@ export async function sourceRuntimeFixture() {
   try {
     // Dynamic owner rules require the same installed Library domain as production.
     composeLibraryDomain({ pool: native.pool, access: native.access });
-    expect((await native.send('steward', 'POST', '/v1/platform/exposure/collections:open')).status).toBe(200);
-    expect((await native.send('steward', 'POST', '/v1/platform/exposure/personal_library:open')).status).toBe(200);
-    expect((await native.send('steward', 'POST', '/v1/platform/exposure/reading_progress:open')).status).toBe(200);
+    for (const group of ['collections', 'personal_library', 'reading_progress'])
+      expect((await native.send('steward', 'POST', `/v1/platform/exposure/${group}:open`)).status).toBe(200);
     const owner = await native.identity([
       'subject:read',
       'collection:create',
@@ -71,8 +70,21 @@ export async function sourceRuntimeFixture() {
           ? { membershipKind, rule: { filter: { owner: { presence: true } }, sort: 'id' } }
           : {}),
       });
-      if (response.status !== 201)
-        throw new Error(`Collection creation returned ${response.status}: ${await response.text()}`);
+      if (response.status !== 201) {
+        const problem = await response.clone().json();
+        expect(
+          response.status,
+          JSON.stringify({
+            phase: 'create-source-collection',
+            method: 'POST',
+            endpoint: '/v1/collections',
+            status: response.status,
+            code: problem.code,
+            type: problem.type,
+            correlation: response.headers.get('x-correlation-id'),
+          }),
+        ).toBe(201);
+      }
       expect(response.status).toBe(201);
       const id = (await response.json()).collection.id as string;
       if (createdVisibility !== visibility) {

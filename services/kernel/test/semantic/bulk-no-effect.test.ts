@@ -226,7 +226,17 @@ async function invocation(command: BatchCommand, fault?: Error) {
           await tx.query(
             `SELECT 1 FROM core.receipt WHERE partition_no=$1 AND principal_kind='account'
          AND principal_id=$2 AND command_kind=$3 AND idempotency_key=$4`,
-            [partition, actor.accountId, `subject.batch_${command.op}`, command.key],
+            [
+              partition,
+              actor.accountId,
+              `subject.batch_${command.op}`,
+              encodeReceiptKey(
+                testReceiptKeys(),
+                `subject.batch_${command.op}`,
+                { kind: 'account', id: actor.accountId },
+                command.key,
+              ),
+            ],
           )
         ).rows,
       ).toEqual([]);
