@@ -18,6 +18,9 @@ import { readMembershipWorkConfig } from '../../src/access/membership-work-confi
 import { createWorkClient } from '../../src/work/client.ts';
 import { WORK_QUEUES } from '../../src/work/queues.ts';
 import { newId, routeOf } from '../../src/route/route.ts';
+import { workerTestEnv } from '../support/worker-env.ts';
+
+process.env.KERNEL_RECEIPT_KEYS ??= workerTestEnv().KERNEL_RECEIPT_KEYS!;
 
 const pool = createPool(process.env.DATABASE_URL!);
 pool.options.max = 1;
@@ -33,6 +36,7 @@ const env = {
     current: 7,
     keys: { 7: Buffer.alloc(32, 71).toString('base64url') },
   }),
+  KERNEL_RECEIPT_KEYS: process.env.KERNEL_RECEIPT_KEYS,
   AUTH_ISSUER: issuer,
   AUTH_AUDIENCE: 'https://api.membership.test',
   AUTH_JWKS_URL: `${issuer}/jwks`,
