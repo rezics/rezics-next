@@ -136,6 +136,8 @@ Decision: the isolated post-editing browser journey owns its issuer-bound server
 an unused default Vite/Worker graph beside it. Shared-server preparation remains per file for other journeys,
 including mixed selections. The existing runner fixture and server-selection tests pin this distinction; the shell
 regression stays at file scope and counts linked community icons independently of folding controls. No new stories.
+Reconciliation retains the shared wrapper's cancellation/descendant cleanup test and sticky host-wide admission
+assertions alongside the self-hosted editor selection and occupied-port recovery tests; neither replaces the other.
 
 ## realms-and-spaces
 
