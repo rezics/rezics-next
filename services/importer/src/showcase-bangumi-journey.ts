@@ -148,7 +148,7 @@ export type JourneyBrowserTarget = {
   citation: string;
   statementId: string;
   holder: string;
-  kind: 'episode' | 'person' | 'organization' | 'book' | 'book-series' | 'anime';
+  kind: 'episode' | 'person' | 'organization' | 'book' | 'book-series' | 'anime' | 'character';
 };
 type PublicLink = {
   subject: string;
@@ -270,9 +270,11 @@ function targetFromInverseLink(
           ? 'book-series'
           : expectedType === 'schema:TVSeries'
             ? 'anime'
-            : expectedType === 'schema:Organization'
-              ? 'organization'
-              : 'person';
+            : expectedType === 'wd:Q95074'
+              ? 'character'
+              : expectedType === 'schema:Organization'
+                ? 'organization'
+                : 'person';
   return {
     id: link.summary.id,
     property,
@@ -323,7 +325,8 @@ function statementTargets(
     if (typeof id !== 'string' || typeof statement.id !== 'string') return [];
     const citation = citationUrls(statement).find((value) => citations.has(value));
     if (!citation) return [];
-    const kind = property === 'schema:publisher' ? 'organization' : 'person';
+    const kind =
+      property === 'schema:publisher' ? 'organization' : property === 'schema:character' ? 'character' : 'person';
     return [{ id, property, citation, statementId: statement.id, holder: read.subject.id, kind }];
   });
 }
@@ -349,13 +352,15 @@ function assertCurrentIdentity(read: PublicSubject, target: JourneyBrowserTarget
       ? ['schema:Organization']
       : target.kind === 'person'
         ? ['schema:Person', 'schema:Organization']
-        : target.kind === 'episode'
-          ? ['schema:Episode']
-          : target.kind === 'book'
-            ? ['schema:Book']
-            : target.kind === 'book-series'
-              ? ['schema:BookSeries']
-              : ['schema:TVSeries'];
+        : target.kind === 'character'
+          ? ['wd:Q95074']
+          : target.kind === 'episode'
+            ? ['schema:Episode']
+            : target.kind === 'book'
+              ? ['schema:Book']
+              : target.kind === 'book-series'
+                ? ['schema:BookSeries']
+                : ['schema:TVSeries'];
   assert.ok(expected.includes(read.subject.type), `${target.id} is current ${target.kind} (${read.subject.type})`);
 }
 
@@ -606,8 +611,10 @@ export async function runBangumiJourney(options: BangumiJourneyOptions = {}) {
   });
   assert.ok(cast.length, 'anime 233 has a current cited Bangumi voice-cast target');
   assert.ok(staff.length, 'anime 233 has a current cited Bangumi staff target');
-  for (const target of [...cast, ...staff]) assertCurrentIdentity(await current(api, target.id), target);
-  keepTargets('233', [episodes[0]!, cast[0]!, staff[0]!]);
+  const characters = statementTargets(animeWorkRead, 'schema:character', sourceCitations(animeRow, 'schema:character'));
+  assert.ok(characters.length, 'anime 233 has a current cited Character');
+  for (const target of [...cast, ...staff, ...characters]) assertCurrentIdentity(await current(api, target.id), target);
+  keepTargets('233', [episodes[0]!, cast[0]!, staff[0]!, characters[0]!]);
 
   // Preserve independently current public identities and their exact source evidence for diagnosis.
   await writeFile(
@@ -621,6 +628,7 @@ export async function runBangumiJourney(options: BangumiJourneyOptions = {}) {
           episodes,
           cast,
           staff,
+          characters,
         },
       },
       null,

@@ -266,6 +266,21 @@ export async function writeWalkInventoryArtifacts(inventory: WalkInventory): Pro
   }
 }
 
+/** Current Character endpoints on a Work; only `wd:Q95074` identities count. */
+export function currentAnimeCharacterIds(
+  links: readonly { summary: { id: string; type: string }; property: string }[],
+): string[] {
+  const ids = [
+    ...new Set(
+      links
+        .filter((link) => link.property === 'schema:character' && link.summary.type === 'wd:Q95074')
+        .map((link) => link.summary.id),
+    ),
+  ];
+  if (ids.length === 0) throw new Error('anime has no current Characters');
+  return ids;
+}
+
 export function selectPublished(
   published: readonly JourneyPublishedRow[],
   provider: string,
@@ -825,11 +840,18 @@ export async function runImportsPublicJourney(): Promise<WalkInventory> {
         const staff = citedAnimeCreditTargets(cited, '233', 'staff');
         assert.ok(cast.length, 'anime 233 has no current cited cast');
         assert.ok(staff.length, 'anime 233 has no current cited staff');
+        const characterLinks = await currentLinks(api, anime.row.subjectId, 'schema:character');
+        const characters = currentAnimeCharacterIds(characterLinks);
+        for (const id of characters) {
+          const character = await currentSubject(api, id);
+          assert.equal(character.subject.type, 'wd:Q95074', `Character ${id} current type`);
+        }
         return {
           id: anime.row.subjectId,
           episodes: episodes.length,
           cast: cast.length,
           staff: staff.length,
+          characters: characters.length,
           citation: bangumiRecordUrl('233'),
         };
       }),

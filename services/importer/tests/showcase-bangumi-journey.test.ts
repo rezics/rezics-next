@@ -15,6 +15,7 @@ import {
   FIRST_PUBLIC_IMPORT_ROWS,
   applyWalkInventoryToCapabilities,
   capabilitiesResultCell,
+  currentAnimeCharacterIds,
   firstPublicRow,
   licensedVndbArchive,
   selectPublished,
@@ -126,6 +127,20 @@ test('anime Work targets require the selected Bangumi credit row and preserve it
       kind: 'person',
     }),
   ]);
+});
+
+test('I05 current Character reads keep only wd:Q95074 schema:character endpoints', () => {
+  expect(
+    currentAnimeCharacterIds([
+      { property: 'schema:character', summary: { id: 'character-1', type: 'wd:Q95074' } },
+      { property: 'schema:character', summary: { id: 'character-1', type: 'wd:Q95074' } },
+      { property: 'wdt:P725', summary: { id: 'person-1', type: 'schema:Person' } },
+      { property: 'schema:character', summary: { id: 'work-1', type: 'schema:TVSeries' } },
+    ]),
+  ).toEqual(['character-1']);
+  expect(() =>
+    currentAnimeCharacterIds([{ property: 'wdt:P725', summary: { id: 'person-1', type: 'schema:Person' } }]),
+  ).toThrow('anime has no current Characters');
 });
 
 test('the first-public walk names twelve operator and catalogue rows once each', () => {
