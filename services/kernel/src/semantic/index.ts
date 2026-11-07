@@ -36,7 +36,13 @@ export {
   workReleaseCardResponseBytes,
 } from './copy-work-reader-port.ts';
 export type { WorkReleaseCard, WorkReleaseCardField, WorkReleaseCards } from './work-release-cards.ts';
-export { installIdentityAdapterRuntime, identityAdapterRuntime } from './identity-adapter-runtime.ts';
+export {
+  createIdentityAdapterApplication,
+  createNativeIdentityCapabilities,
+  installIdentityAdapterRuntime,
+  identityAdapterRuntime,
+  resolveIdentityAdapterRuntime,
+} from './identity-adapter-runtime.ts';
 export type {
   IdentityAdapterPort,
   NativeAccountIdentity,

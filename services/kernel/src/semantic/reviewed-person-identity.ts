@@ -6,6 +6,7 @@ import { CommandUnavailableError } from '../access/unavailable.ts';
 import { readPartition } from '../partition/partition.ts';
 import { partitionOf, routeOf } from '../route/route.ts';
 import { nativeIdentityCapabilities } from './identity-adapter-bind.ts';
+import type { NativeIdentityCapabilities, NativeReviewedPersonOperations } from './identity-adapter-port.ts';
 import type {
   ReviewedPersonEndpoint,
   ReviewedPersonExpectation,
@@ -95,8 +96,8 @@ export function ReviewedPersonGuardUnavailableError() {
 }
 export type ReviewedPersonGuardUnavailableError = InstanceType<ReturnType<typeof ReviewedPersonGuardUnavailableError>>;
 
-/** Caller has already authorized this original in its final read transaction. Never follows redirects. */
-export async function observeReviewedPersonIdentity(
+async function observeReviewedPersonIdentityWith(
+  capabilities: NativeIdentityCapabilities,
   tx: CommandTransaction,
   subject: string,
   source: ReviewedPersonSource,
@@ -111,7 +112,7 @@ export async function observeReviewedPersonIdentity(
     release.properties[identity.property]?.datatype !== 'external-id'
   )
     return null;
-  const caps = nativeIdentityCapabilities();
+  const caps = capabilities;
   const visible = await readVisible.run(tx, { route, subject_id: subject });
   if (visible?.type !== 'schema:Person') return null;
   if ((await readRedirect.run(tx, { route, subject_id: subject }))?.target) return null;
@@ -162,14 +163,14 @@ export async function observeReviewedPersonIdentity(
   };
 }
 
-/** Runs only inside the authorized first-effect callback; every restarted callback reacquires exclusions. */
-export async function guardReviewedPersonIdentity(
+async function guardReviewedPersonIdentityWith(
+  capabilities: NativeIdentityCapabilities,
   tx: CommandTransaction,
   expected: ReviewedPersonExpectation,
   routeKey: Uint8Array,
   release: Release,
 ): Promise<void> {
-  const caps = nativeIdentityCapabilities();
+  const caps = capabilities;
   const partition = caps.command.currentCommand(tx).partition;
   const keys = expected.endpoints.map((endpoint) => ({
     endpoint,
@@ -217,7 +218,15 @@ export async function guardReviewedPersonIdentity(
       throw new (ReviewedPersonGuardUnavailableError())(partition);
   }
   for (const { endpoint } of keys) {
-    const observed = await observeReviewedPersonIdentity(tx, endpoint.subject, endpoint, routeKey, release, true);
+    const observed = await observeReviewedPersonIdentityWith(
+      capabilities,
+      tx,
+      endpoint.subject,
+      endpoint,
+      routeKey,
+      release,
+      true,
+    );
     if (
       !observed ||
       observed.revision !== endpoint.revision ||
@@ -228,4 +237,58 @@ export async function guardReviewedPersonIdentity(
     )
       throw caps.slots.editorialConflict();
   }
+}
+
+const reviewedPersonByCapabilities = new WeakMap<NativeIdentityCapabilities, NativeReviewedPersonOperations>();
+
+/** Reviewed Person observe/guard closed over one routing, slot and command set. */
+export function createReviewedPersonOperations(
+  capabilities: NativeIdentityCapabilities,
+): NativeReviewedPersonOperations {
+  const cached = reviewedPersonByCapabilities.get(capabilities);
+  if (cached) return cached;
+  const operations: NativeReviewedPersonOperations = Object.freeze({
+    observe: (
+      tx: CommandTransaction,
+      subject: string,
+      source: ReviewedPersonSource,
+      routeKey: Uint8Array,
+      release: Release,
+      lockSelected?: boolean,
+    ) => observeReviewedPersonIdentityWith(capabilities, tx, subject, source, routeKey, release, lockSelected),
+    guard: (
+      tx: CommandTransaction,
+      expected: ReviewedPersonExpectation,
+      routeKey: Uint8Array,
+      release: Release,
+    ) => guardReviewedPersonIdentityWith(capabilities, tx, expected, routeKey, release),
+  });
+  reviewedPersonByCapabilities.set(capabilities, operations);
+  return operations;
+}
+
+function defaultReviewedPerson() {
+  return createReviewedPersonOperations(nativeIdentityCapabilities());
+}
+
+/** Caller has already authorized this original in its final read transaction. Never follows redirects. */
+export async function observeReviewedPersonIdentity(
+  tx: CommandTransaction,
+  subject: string,
+  source: ReviewedPersonSource,
+  routeKey: Uint8Array,
+  release: Release,
+  lockSelected = false,
+): Promise<ReviewedPersonEndpoint | null> {
+  return defaultReviewedPerson().observe(tx, subject, source, routeKey, release, lockSelected);
+}
+
+/** Runs only inside the authorized first-effect callback; every restarted callback reacquires exclusions. */
+export async function guardReviewedPersonIdentity(
+  tx: CommandTransaction,
+  expected: ReviewedPersonExpectation,
+  routeKey: Uint8Array,
+  release: Release,
+): Promise<void> {
+  return defaultReviewedPerson().guard(tx, expected, routeKey, release);
 }

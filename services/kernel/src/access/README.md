@@ -26,7 +26,7 @@ Decision: native erasure completion acknowledges the coordinator through a requi
 with the real `acknowledgeErasure` command. Normal startup and the isolated native preload use the same composition;
 local Access completion remains distinct from pending shared-history custody. Live-copy discovery binds the same
 Work execution contract as server and worker on each client it opens; there is no process-global client.
-`composeAccessApplication` also installs Semantic `installIdentityAdapterRuntime`, so Agent source, technical
+`composeAccessApplication` also resolves Semantic `resolveIdentityAdapterRuntime`, so Agent source, technical
 receiver and reversal ports are the same constructed native capabilities used for epoch binding, publication and
 replay. IdentityEpochStoreError remains the single runtime class from Semantic `contract/identity-errors`.
 

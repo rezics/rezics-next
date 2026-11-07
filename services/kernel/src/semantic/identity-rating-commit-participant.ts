@@ -18,6 +18,7 @@ import {
   type IdentityRatingReviewResult,
 } from './identity-adapters/identity-epoch-read.ts';
 import { nativeIdentityCapabilities } from './identity-adapter-bind.ts';
+import type { NativeIdentityCapabilities } from './identity-adapter-port.ts';
 import lockOwner from './identity-rating-commit-participant-lock-owner.sql';
 
 const MAX_REVIEW_KEYS = IDENTITY_RATING_REVIEW_MAX_KEYS;
@@ -476,7 +477,9 @@ function throwUnavailable(
 }
 
 /** Native same-home mapping participant. Its stable core owner lock lasts to executor COMMIT/ROLLBACK. */
-export function createIdentityRatingCommitParticipant(): IdentityRatingCommitParticipant {
+export function createIdentityRatingCommitParticipant(
+  capabilities: NativeIdentityCapabilities = nativeIdentityCapabilities(),
+): IdentityRatingCommitParticipant {
   const inputs = new WeakMap<IdentityRatingCommitPreparation, IdentityRatingReviewOperand>();
   return Object.freeze({
     prepare(input: IdentityRatingReviewOperand) {
@@ -488,7 +491,7 @@ export function createIdentityRatingCommitParticipant(): IdentityRatingCommitPar
     async admit(tx: CommandTransaction, prepared: IdentityRatingCommitPreparation): Promise<IdentityRatingCommitHeld> {
       const operand = inputs.get(prepared);
       if (!operand) throw new TypeError('Unknown identity rating commit preparation');
-      const caps = nativeIdentityCapabilities();
+      const caps = capabilities;
       const command = caps.command.currentCommand(tx);
       const { deadline } = caps.command.currentCommandResources(tx);
       requireAccessDeadline(deadline);
