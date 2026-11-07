@@ -1,13 +1,6 @@
 import type { QueryClient } from '@tanstack/react-query';
 import { browserObservation } from './observation';
-
-export const sessionQueryKey = ['session'] as const;
-
-export type BrowserSession = {
-  state: 'unknown' | 'signed-in' | 'signed-out' | 'unavailable';
-  csrfToken: string | null;
-  subject?: string | null;
-};
+import { normalizeSessionObservation, sessionQueryKey, unknownSession, type BrowserSession } from './contract';
 
 type ClientEntry = {
   client: QueryClient;
@@ -22,42 +15,6 @@ type ClientEntry = {
 // perform their own session read, but they never enter the list of browser token owners.
 const entries: ClientEntry[] = [];
 const owners: ClientEntry[] = [];
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === 'object' && value !== null && !Array.isArray(value);
-}
-
-function nonEmptyString(value: unknown): value is string {
-  return typeof value === 'string' && value.trim() !== '';
-}
-
-const unknownSession: BrowserSession = { state: 'unknown', csrfToken: null };
-const unavailableSession: BrowserSession = { state: 'unavailable', csrfToken: null, subject: null };
-const signedOutSession: BrowserSession = { state: 'signed-out', csrfToken: null, subject: null };
-
-/** Convert an untrusted successful response into the session states the browser may observe. */
-export function normalizeSessionObservation(value: unknown): BrowserSession {
-  if (!isRecord(value)) return unavailableSession;
-  const hasOwn = (key: string) => Object.prototype.hasOwnProperty.call(value, key);
-  if (!hasOwn('state')) return unavailableSession;
-
-  if (value.state === 'signed-in') {
-    const subject = value.subject;
-    const csrfToken = value.csrfToken;
-    if (
-      !hasOwn('subject') ||
-      !hasOwn('csrfToken') ||
-      !nonEmptyString(subject) ||
-      !(csrfToken === null || nonEmptyString(csrfToken))
-    )
-      return unavailableSession;
-    return { state: 'signed-in', subject, csrfToken };
-  }
-
-  if (value.state === 'signed-out') return signedOutSession;
-  if (value.state === 'unavailable') return unavailableSession;
-  return unavailableSession;
-}
 
 function entryFor(client: QueryClient): ClientEntry {
   let entry = entries.find((candidate) => candidate.client === client);
@@ -163,8 +120,6 @@ export function ownedSessionCsrfToken(): string | null {
   const session = currentOwnedSession();
   return session?.state === 'signed-in' ? session.csrfToken : null;
 }
-
-export { unknownSession, signedOutSession };
 
 /** The current mounted owner supplies dispatch credentials; server rendering never lends one. */
 export function sessionCsrfToken(): string | null {

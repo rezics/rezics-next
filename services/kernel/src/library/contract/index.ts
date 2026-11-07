@@ -266,5 +266,5 @@ export {
   BULK_RESULTS_HOURS,
   BULK_COMMAND_DEADLINE_MS,
 } from './bulk-limits.ts';
-
 export { continuePageSchema, progressPresentationSchema, sessionSchema } from './continue-schema.ts';
+export type { LibraryCursorBinding, LibraryCursorCapability } from './cursor.ts';

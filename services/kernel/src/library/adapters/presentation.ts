@@ -7,7 +7,6 @@ import type { AuthoritativeTime } from '../../command/command.ts';
 import type { KeyRing } from '../../tokens/seal.ts';
 import type { ContributionAttribution } from '../../access/contract/index.ts';
 import type { SubjectSummary, IdentityMapping } from '../../semantic/contract/index.ts';
-import type { LibrarySubjectIdentityAdapter } from '../../semantic/adapters/index.ts';
 import type {
   LibrarySemanticObservationCapability,
   LibrarySemanticSummaryObservation,
@@ -29,6 +28,10 @@ import type {
   LibraryAccountSummary,
   LibraryTargetSummary,
   FollowingSpaceProjection,
+  LibraryCursorCapability,
+  SubjectIdentityCapability,
+  SubjectReferenceObservation,
+  WorkDimensions,
 } from '../contract/index.ts';
 import { createCollectionReads } from '../collection-reads.ts';
 import { readNativeFullMembers } from './presentation-members.ts';
@@ -59,7 +62,12 @@ type SummaryContext = {
 /** Composition supplies real foreign adapters; this host owns no producer implementation or fallback. */
 export type NativeLibraryPresentationPorts = {
   semanticObservations: LibrarySemanticObservationCapability;
-  identity: LibrarySubjectIdentityAdapter;
+  cursors: LibraryCursorCapability<KeyRing>;
+  identity: SubjectIdentityCapability<
+    LibraryIdentityContext,
+    IdentityMapping,
+    SubjectReferenceObservation & Readonly<{ work: WorkDimensions }>
+  >;
   readMappings(
     pool: Pool,
     ids: readonly string[],
@@ -91,7 +99,7 @@ export type NativeLibraryPresentationPorts = {
 };
 
 export function createNativeLibraryPresentation(ports: NativeLibraryPresentationPorts) {
-  const identity: LibrarySubjectIdentityAdapter = {
+  const identity: NativeLibraryPresentationPorts['identity'] = {
     ...ports.identity,
     async readMappings(context, ids) {
       const observed = await consumeFollowWork(

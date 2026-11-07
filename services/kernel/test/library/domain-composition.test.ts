@@ -613,6 +613,22 @@ test('ordinary composeLibraryDomain installs native identity, authorization and 
   try {
     const domain = composeLibraryDomain();
     expect(peekLibraryDomain()).toBe(domain);
+    const tokens = { current: 1, keys: new Map([[1, new Uint8Array(32).fill(7)]]) };
+    const nativeFailure = new Error('native Semantic checkout reached');
+    const pool = {
+      connect: async () => {
+        throw nativeFailure;
+      },
+    } as unknown as import('pg').Pool;
+    const copies = domain.copyPorts!({ pool, access: {} as import('../../src/request/access.ts').Access, tokens });
+    const binding = { operation: 'library.copy.list', parameters: { accountId } };
+    const continuation = { epoch: 9, after: ['2026-11-01T00:00:00.000Z', subjectId] };
+    const cursor = copies.encodeCursor(binding, continuation);
+    expect(copies.decodeCursor(binding, cursor)).toEqual({ ok: true, ...continuation });
+    expect(copies.decodeCursor({ ...binding, parameters: { accountId: publicationId } }, cursor).ok).toBe(false);
+    expect(copies.decodeCursor({ ...binding, operation: 'library.collection.members' }, cursor).ok).toBe(false);
+    expect(copies.decodeCursor(binding, `${cursor}x`).ok).toBe(false);
+    await expect(domain.presentation!.readMappings(pool, [subjectId])).rejects.toBe(nativeFailure);
     expect(domain.identityNative.jobSizeSQL).toContain('identity_epoch_job');
     const basis = domain.identityNative.basisStatements();
     expect(basis).toHaveLength(7);

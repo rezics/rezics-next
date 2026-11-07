@@ -1,12 +1,15 @@
-/** Compatibility entry for session query adapters. One browser cache owner lives in the reader boundary. */
+/** Session hook composition over the shared reader capability; no second cache observer. */
 export {
-  sessionQueryKey,
-  normalizeSessionObservation,
   subscribeBrowserSession,
   sessionStateSnapshot,
   cachedBrowserSession,
   ownedSessionCsrfToken,
+  sessionCsrfToken,
+} from '../reader/lifetime/index';
+export {
+  sessionQueryKey,
+  normalizeSessionObservation,
   unknownSession,
   signedOutSession,
   type BrowserSession,
-} from '../reader/lifetime/index';
+} from '../reader/lifetime/contract';

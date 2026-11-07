@@ -47,7 +47,7 @@ test('the mounted Subject reader shares one session listener and retires each su
   const { createRoot } = await import('react-dom/client');
   const { QueryClient, QueryClientProvider } = await import('@tanstack/react-query');
   const { useSubjectPersonalReader } = await import('../src/features/pages/subject-personal-reader');
-  const { useSession } = await import('../src/session/query');
+  const { useSession, browserObservation } = await import('../src/session');
   const { personalRead } = await import('../src/kernel/query');
   const previousEnabled = personalRead.enabled;
   Object.assign(personalRead, { enabled: true });
@@ -92,6 +92,7 @@ test('the mounted Subject reader shares one session listener and retires each su
     expect(peak).toBe(1);
     for (const replace of [
       () => client.setQueryData(['session'], { ...session }),
+      () => client.setQueryData(['session'], { ...session, csrfToken: 'replacement' }),
       () => {
         client.removeQueries({ queryKey: ['session'], exact: true });
         client.setQueryData(['session'], session);
@@ -102,11 +103,22 @@ test('the mounted Subject reader shares one session listener and retires each su
       },
     ]) {
       const old = lease!;
+      const observation = browserObservation(client).getSnapshot();
+      if (observation.state !== 'signed-in') throw new Error('Expected the mounted reader');
+      const exposureKey = ['exposure', 'viewer', observation.observation.subject, observation.observation.id];
+      client.setQueryData(exposureKey, { admitted: ['personal_library'] });
+      let focused = false;
+      const lateFocus = () => {
+        if (old.isCurrent()) focused = true;
+      };
       await act(async () => {
         replace();
         expect(old.isCurrent()).toBe(false);
+        queueMicrotask(lateFocus);
         await settle();
       });
+      expect(focused).toBe(false);
+      expect(client.getQueryData(exposureKey)).toBeUndefined();
       expect(lease?.isCurrent()).toBe(true);
       expect(lease?.key).not.toBe(old.key);
       expect(old.beginRatingWrite(undefined, { reader: 'reader-a', kind: 'ready', units: 10 })).toBeNull();

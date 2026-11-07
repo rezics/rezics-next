@@ -108,6 +108,16 @@ receiving resolves overlapping host edits. `tests/thread-reader-boundary.test.ts
 departure before replacement render, irreversible return visits and isolated QueryClient mounts.
 The old observation, browser-state, lease and credential files remain compatibility entries for other owners.
 
+Decision: the pure `reader/lifetime/contract.ts` owns the session key, browser session/reader vocabulary and
+successful-response normalization. Observation, cache effects, activity and the cache-only source depend on that
+leaf; observation never imports session-cache. The existing public `session/index.ts` composes the installed
+session hook and the same credential lookup with this capability. Compatibility entries only re-export those
+bindings. No observer, registry or Router requirement is added. The runtime graph already belongs to the declared
+browser-reader-lifetime adapter, so no classifier correction is needed. `tests/session-reader-imports.test.ts`
+pins executable acyclicity; the mounted Subject regression retains synchronous retirement and adds credential
+replacement, exposure eviction and queued focus fencing through the public session entry. Existing mounted
+browser and native receiving remain separate acceptance after landing.
+
 The leaf adapter has no Web application or feature dependency. Cache-only Threads consumers no longer load the
 fetching session query, server request preparation or exposure code through their session key. Credential-mode and local-return
 vocabulary have a separate pure entry so native read and revision-return contracts do not evaluate browser adapters.
