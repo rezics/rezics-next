@@ -1,4 +1,3 @@
-import type { Release } from '@rezics/definitions';
 import { applyJournalPatch, sameJournalValues, recordedProgressValues } from '@rezics/progress';
 import type { Pool } from 'pg';
 import { readAccount, deadlineClient, within } from './access-port.ts';
@@ -46,7 +45,7 @@ import {
   resolveLibraryProfilePin,
   type LibraryProfileDescriptor,
 } from './profile.ts';
-import { peekLibraryDomain } from './domain-binding.ts';
+import { readRelease } from '../semantic/definitions.ts';
 import { deadlineFor, withRequestDeadline } from '../request/deadline.ts';
 import { WORK_STEP_DEADLINE_MS } from './work-step-deadline.ts';
 import { createShelfHeads, createProgressActivity } from './shelf-heads.ts';
@@ -384,14 +383,11 @@ export function createSessionCommands(config: Dependencies) {
             );
             if (!fact || fact.session.accountId !== owner.accountId) throw new LibraryNotFoundError();
             if (fact.pin === null) throw new ProblemError('unsupported_library_profile');
-            const release = (await consumeSessionWork(
+            const release = await consumeSessionWork(
               'original-release',
               sessionReleaseWork(fact.pin.releaseDigest),
-              () =>
-                peekLibraryDomain()?.identityDisclosure.readRelease(pool, fact.pin!.releaseDigest, {
-                  composed: false,
-                }) ?? Promise.resolve(null),
-            )) as Release | null;
+              () => readRelease(pool, fact.pin!.releaseDigest, { composed: false }),
+            );
             const original = release && resolveLibraryProfilePin({ digest: fact.pin.releaseDigest, release }, fact.pin);
             if (!original) throw new ProblemError('unsupported_library_profile');
             const sourceDeps = { pool, access, actor: owner, at: attempt.time, deadline },

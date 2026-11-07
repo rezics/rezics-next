@@ -70,7 +70,10 @@ async function oldReceipts(f: NativeProfileFixture) {
   const key = entryKey(),
     input = { state: 'playing', revision: first.revision };
   const updated = await f.commands.putEntry(f.owner.actor, subjectId, input, key);
-  expect(updated.value.entry.incarnationId).toBeNull();
+  // The first accepted revisioned write closes legacy NULL compatibility by
+  // stamping the exact live row before the ordinary receipt is committed.
+  expect(updated.value.entry.incarnationId).not.toBeNull();
+  expect(updated.value.entry.incarnationId).not.toBe(first.incarnationId);
   const deleteKey = entryKey();
   const deleted = await historicalDelete(f, subjectId, updated.value.entry.revision, deleteKey);
   const replacement = (await f.commands.putEntry(f.owner.actor, subjectId, { state: 'planned' }, entryKey())).value
@@ -96,7 +99,7 @@ test('exact historical revisioned HTTP bodies retain native digest and response 
   expect(replay.status).toBe(200);
   expect((await replay.json()).libraryEntry).toEqual({
     subjectId: old.subjectId,
-    incarnationId: null,
+    incarnationId: old.updated.value.entry.incarnationId,
     state: old.updated.value.entry.state,
     revision: old.updated.value.entry.revision,
     createdAt: old.updated.value.entry.createdAt,
@@ -312,26 +315,29 @@ test('legacy NULL compatibility ends on the actual stamped row and supplied mism
     { state: 'playing', revision: created.revision },
     key,
   );
-  expect(legacy.value.entry.incarnationId).toBeNull();
+  expect(legacy.value.entry.incarnationId).not.toBeNull();
+  expect(legacy.value.entry.incarnationId).not.toBe(created.incarnationId);
   const locked = (await f.inspect()).entries.find((x) => x.row.subject_id === subjectId)!.row;
-  const stamped = await f.pool.query(
-    'UPDATE library.entry SET incarnation_id=$4 WHERE route=$1 AND account_id=$2 AND subject_id=$3 AND revision=$5 AND transaction_id=$6 AND incarnation_id IS NULL RETURNING incarnation_id',
-    [
-      routeOf(f.owner.actor.accountId),
-      f.owner.actor.accountId,
-      subjectId,
-      created.incarnationId,
-      locked.revision,
-      locked.transaction_id,
-    ],
-  );
-  expect(stamped.rowCount).toBe(1);
+  expect(locked.incarnation_id).toBe(legacy.value.entry.incarnationId);
+  expect(locked.revision).toBe(legacy.value.entry.revision);
   const cutover = await f.inspect();
   await expect(
     f.commands.putEntry(
       f.owner.actor,
       subjectId,
       { state: 'completed', revision: legacy.value.entry.revision },
+      entryKey(),
+    ),
+  ).rejects.toBeInstanceOf(LibraryConflictError);
+  await expect(
+    f.commands.putEntry(
+      f.owner.actor,
+      subjectId,
+      {
+        state: 'completed',
+        revision: legacy.value.entry.revision,
+        incarnationId: created.incarnationId!,
+      },
       entryKey(),
     ),
   ).rejects.toBeInstanceOf(LibraryConflictError);
@@ -347,7 +353,7 @@ test('legacy NULL compatibility ends on the actual stamped row and supplied mism
     subjectId,
     legacy.value.entry.revision,
     entryKey(),
-    created.incarnationId!,
+    legacy.value.entry.incarnationId!,
   );
 }, 120000);
 
@@ -411,7 +417,8 @@ test('concurrent exact legacy stamping and a guardless state mutation serialize 
     expect(current).toEqual(original);
   } else {
     expect(mutation).toHaveProperty('value');
-    expect(current.incarnationId).toBeNull();
+    expect(current.incarnationId).not.toBeNull();
+    expect(current.incarnationId).not.toBe(original.incarnationId);
     expect(current.revision).toBe(original.revision + 1);
   }
 }, 120000);
