@@ -1,4 +1,6 @@
 import defaults from '../defaults.json';
+import { recoverWorkerTyping } from './typing-recovery.ts';
+import { isTypingEvidenceUnavailableResult } from './worker-check-budget.ts';
 import { defaultPolicy } from './policy.ts';
 import {
   ProofCapacityQueuedError,
@@ -314,6 +316,13 @@ export class WorkerJob implements GateOutcomeSink {
         return;
       }
       if (task.currentAttempt !== ref.attempt) return;
+      if (ref.attempt > 0) {
+        const completed = store.attempt(ref);
+        if (completed.typingEvidencePending || isTypingEvidenceUnavailableResult(completed.result)) {
+          await recoverWorkerTyping(this.tasks, this.landing, ref, undefined, this.afterSettle);
+          return;
+        }
+      }
       if (task.state === 'held') return;
       const incident = toolIncidentForRetry(store, ref);
       const incidentProbe = incident !== null;
@@ -1740,6 +1749,21 @@ export class WorkerJob implements GateOutcomeSink {
   /** Launch/exit facts do not fabricate a gate outcome. */
   onAttemptExit(ref: AttemptRef): void {
     const store = this.tasks.store;
+    const completed = store.attempt(ref);
+    if (completed.typingEvidencePending || isTypingEvidenceUnavailableResult(completed.result)) {
+      if (!store.events(ref.taskId, ref.attempt).some((event) => event.kind === 'typing-evidence-notified')) {
+        const task = store.task(ref.taskId);
+        store.event(ref, 'typing-evidence-notified', { command: 'typing-recover' });
+        this.inbox.deliver({
+          managerId: task.brief.manager,
+          taskId: task.id,
+          kind: 'environment',
+          summary: `Completed source retained pending only compiler evidence. Run bun tools/goal/src/cli.ts typing-recover ${task.id} --expected-attempt ${ref.attempt}; no source-writing retry.`,
+          evidencePath: completed.evidencePath,
+        });
+      }
+      return;
+    }
     let retry = false,
       capacity = false,
       retryDelayMs = 0;

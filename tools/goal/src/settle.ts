@@ -182,6 +182,7 @@ export async function settle(
     let finished = false;
     let exited = false;
     let bundle = false;
+    let typingEvidencePending: { result: string; command?: string[] } | undefined;
     // Whether the branch has commits matters only for a nonzero exit without a session.
     let committed = false;
     if (code !== null && code !== 0)
@@ -424,8 +425,12 @@ export async function settle(
           limit: workerCheckHostBudgetLimit(task, ref.attempt),
         });
         if (!typing.ok) {
-          finalMeasurement.failureKind = 'tool';
-          finalMeasurement.result = typing.result;
+          if (typing.kind === 'evidence-unavailable') {
+            typingEvidencePending = { result: typing.result, ...(typing.command ? { command: typing.command } : {}) };
+          } else {
+            finalMeasurement.failureKind = 'tool';
+            finalMeasurement.result = typing.result;
+          }
         }
       }
       store.updateAttempt(ref, (a) => {
@@ -433,12 +438,25 @@ export async function settle(
         a.result = finalMeasurement.result;
         a.blocker = finalMeasurement.blocker;
         a.failureKind = finalMeasurement.failureKind;
+        if (typingEvidencePending) a.typingEvidencePending = typingEvidencePending;
+        else delete a.typingEvidencePending;
         a.approaches.push(
           ...reportedApproaches(finalMeasurement.result, agentAdapter(attempt.profile.cli), policy.records),
         );
       });
       store.putRecord(makeRecord(task, attempt, finalMeasurement));
       bundle = true;
+      if (typingEvidencePending) {
+        store.updateTask(ref, (current) => {
+          current.state = 'stopped';
+        });
+        if (store.retryIntent(ref)?.status === 'pending')
+          store.updateRetryIntent(ref, (intent) => {
+            intent.status = 'abandoned';
+          });
+        store.event(ref, 'typing-evidence-pending', typingEvidencePending);
+        return;
+      }
       if (finalMeasurement.failureKind && !proofTask) return;
       if (proofTask && proofObservation) {
         const run = task.proofRun;

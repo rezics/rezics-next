@@ -19,6 +19,7 @@ export type ParsedWorkerCommandArguments =
   | { command: 'dispatch'; brief: string; urgent?: true }
   | { command: 'urgent'; action: 'grant' | 'revoke'; managerId: string }
   | { command: 'amend'; taskId: string; expectedAttempt: number; brief: string; active?: true }
+  | { command: 'typing-recover'; taskId: string; expectedAttempt: number }
   | { command: 'status'; taskId?: string }
   | ({ command: 'attempts' } & AttemptsArguments)
   | { command: 'report'; flow: boolean; json: boolean; since?: string }
@@ -128,6 +129,16 @@ export function parseWorkerCommandArguments(command: string, argv: string[]): Pa
       if (!arg || arg.startsWith('--') || expectedAttempt === undefined || !brief) throw new Error(usage);
       return { command, taskId: arg, expectedAttempt, brief, ...(active ? { active: true as const } : {}) };
     }
+    case 'typing-recover':
+      if (
+        !arg ||
+        argv.length !== 3 ||
+        argv[1] !== '--expected-attempt' ||
+        !/^[1-9]\d*$/.test(argv[2]!) ||
+        !Number.isSafeInteger(Number(argv[2]))
+      )
+        throw new Error('usage: typing-recover <task> --expected-attempt <n>');
+      return { command, taskId: arg, expectedAttempt: Number(argv[2]) };
     case 'status':
       if (argv.length > 1) throw new Error('usage: status [task]');
       return { command, ...(arg ? { taskId: arg } : {}) };

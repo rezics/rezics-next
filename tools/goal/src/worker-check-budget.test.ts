@@ -5,6 +5,10 @@ import { join } from 'node:path';
 import { startWorkerCheck, workerCheckNeedsStack } from '../../../scripts/worker-check.ts';
 import { openDb } from './db.ts';
 import { settle } from './settle.ts';
+import { recoverWorkerTyping } from './typing-recovery.ts';
+import { WorkerJob } from './job.ts';
+import { captureTypingInputs } from './worker-check-typing-inputs.ts';
+import { readFileSync } from 'node:fs';
 import { WorkerStore } from './store.ts';
 import { brief, harness, temporaryDirectory } from './test-support.ts';
 import type { Attempt, Settings } from './types.ts';
@@ -501,7 +505,11 @@ test('settlement of a success report after a failed host typecheck retries inste
   }
 }, 15_000);
 
-async function settleSuccessWithHostCheck(h: ReturnType<typeof harness>, log: string) {
+async function settleSuccessWithHostCheck(
+  h: ReturnType<typeof harness>,
+  log: string,
+  beforeSettle?: (budget: string, worktree: string) => void,
+) {
   const task = h.tasks.dispatch(h.briefFile);
   const startedAt = new Date().toISOString();
   const attempt = h.store.nextAttempt({ taskId: task.id, attempt: 0 }, (n): Attempt => ({
@@ -564,6 +572,7 @@ async function settleSuccessWithHostCheck(h: ReturnType<typeof harness>, log: st
   });
   env.GOAL_WORKER_CHECK_BUDGET_STAMP = '1';
   countedFailure(env, join(h.settings.stateDirectory, `${task.id}.log`), log);
+  beforeSettle?.(budget, task.worktree);
   const landings: unknown[] = [];
   await settle(
     h.tasks,
@@ -672,4 +681,103 @@ test('typing evidence is requested only for a compiler command, not its regressi
   expect(checkCommandIncludesTypecheck(['bun', 'test', 'scripts/typecheck.test.ts'])).toBe(false);
   expect(checkCommandIncludesTypecheck(['bun', 'scripts/typecheck.ts', '--selection={}'])).toBe(true);
   expect(checkCommandIncludesTypecheck(['bun', 'run', '--cwd', 'tools/goal', 'typecheck'])).toBe(true);
+});
+
+test('missing compiler evidence parks completed source without a model retry, then native reconciliation lands its same attempt', async () => {
+  const h = harness();
+  try {
+    const command = ['bun', 'run', '--cwd', 'services/kernel', 'typecheck'];
+    const retained = await settleSuccessWithHostCheck(h, 'kernel typecheck completed', (budget, worktree) => {
+      const file = join(budget, '1');
+      const stamp = JSON.parse(readFileSync(file, 'utf8'));
+      stamp.exitCode = 0;
+      stamp.typingRequest = {
+        physicalRunId: 'a1a1a1a1-1111-4111-8111-111111111111',
+        command,
+        capture: 'physical-command',
+        localPrepared: captureTypingInputs(worktree, ['bun', 'scripts/typecheck.ts']).prepared,
+      };
+      writeFileSync(file, JSON.stringify(stamp));
+    });
+    expect(retained.landings).toEqual([]);
+    expect(h.store.attempt(retained.ref)).toMatchObject({
+      failureKind: null,
+      result: 'RESULT: success',
+      typingEvidencePending: { command },
+    });
+    const notices: unknown[] = [];
+    const landing: unknown[] = [];
+    const job = new WorkerJob(
+      h.tasks,
+      { enqueue: (request) => landing.push(request) },
+      { deliver: (event) => notices.push(event) },
+    );
+    job.onAttemptExit(retained.ref);
+    await job.drain();
+    expect(h.store.retryIntent(retained.ref)).toBeUndefined();
+    expect(h.store.task(retained.task.id)).toMatchObject({ currentAttempt: 1, state: 'stopped' });
+    expect(notices).toHaveLength(1);
+    h.store.saveRetryIntent(retained.ref, {});
+    const originalRetry = h.tasks.retry;
+    let sourceStarts = 0;
+    h.tasks.retry = async () => {
+      sourceStarts++;
+      throw new Error('missing evidence must not invoke a source writer');
+    };
+    try {
+      job.resumePendingRetries();
+      await job.drain();
+    } finally {
+      h.tasks.retry = originalRetry;
+    }
+    expect(sourceStarts).toBe(0);
+    expect(h.store.retryIntent(retained.ref)?.status).toBe('abandoned');
+    const pending = await recoverWorkerTyping(h.tasks, job.landing, retained.ref);
+    expect(pending).toMatchObject({
+      status: 'pending',
+      proof: {
+        commands: [['bun', join(h.settings.mainCheckout, 'scripts/worker-check.ts'), '--run', '--', ...command]],
+      },
+    });
+    expect(landing).toEqual([]);
+    await expect(
+      runWorkerCommand('typing-recover', [retained.task.id, '--expected-attempt', '1'], { tasks: h.tasks, env: {} }),
+    ).rejects.toThrow('authenticated owning or operations');
+    await expect(
+      runWorkerCommand('typing-recover', [retained.task.id, '--expected-attempt', '2'], { tasks: h.tasks, env: {} }),
+    ).rejects.toThrow('stale');
+    // Captured legacy workspace producer: exact full-tree evidence is available, but no compiler could emit the new artifact.
+    const file = join(workerCheckBudgetDirectory(h.settings.stateDirectory, retained.task.id, 1), '1');
+    const legacy = JSON.parse(readFileSync(file, 'utf8'));
+    delete legacy.typingRequest.capture;
+    writeFileSync(file, JSON.stringify(legacy));
+    h.settings.integration.operationsManager = 'operations';
+    h.store.db.exec('CREATE TABLE manager_sessions (id TEXT PRIMARY KEY, state TEXT NOT NULL)');
+    h.store.db.query('INSERT INTO manager_sessions VALUES (?,?)').run(
+      'operations',
+      JSON.stringify({
+        id: 'operations',
+        kind: 'resident-supermanager',
+        provider: 'claude',
+        status: 'running',
+        threadId: 'operations-session',
+      }),
+    );
+    const output: string[] = [];
+    expect(
+      await runWorkerCommand('typing-recover', [retained.task.id, '--expected-attempt', '1'], {
+        tasks: h.tasks,
+        landing: job.landing,
+        env: { CLAUDE_CODE_SESSION_ID: 'operations-session' },
+        print: (value) => output.push(value),
+      }),
+    ).toBe(0);
+    expect(JSON.parse(output[0]!)).toMatchObject({ status: 'landing', attempt: 1 });
+    expect(landing).toHaveLength(1);
+    expect(h.store.task(retained.task.id).currentAttempt).toBe(1);
+    expect(h.store.attempt(retained.ref).typingEvidencePending).toBeUndefined();
+    expect(h.store.retryIntent(retained.ref)?.status).toBe('abandoned');
+  } finally {
+    await h.disposeAsync();
+  }
 });

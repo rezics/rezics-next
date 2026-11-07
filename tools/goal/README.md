@@ -2614,8 +2614,10 @@ only a syntactically valid test path receives a test-file label.
 ### Check result reuse
 
 Worker typing settlement uses a separate version 1 compiler-input receipt, bound to the original invocation and
-physical run. The owning root compiler captures source before execution and inputs after its preparation and compiler
-programs finish in the frozen checkout. Source changes during execution invalidate the receipt. The receipt includes
+physical run. The admitted physical command wrapper captures workspace and wrapped typechecks, including older
+workspace entrypoints, before and after execution in the frozen checkout. An owning compiler may provide its more precise
+receipt; a later check failure never overwrites that compiler verdict. Local capture uses the repository-pinned Bun,
+and remote capture runs inside the admitted check-host command with the standard returned artifact. Source changes during execution invalidate the receipt. The receipt includes
 root/workspace configuration, runner and toolchain/dependency identities, generated declarations, SQL and schema
 inputs. Known owning preparation may produce Paraglide and route declarations before compilation; other prepared
 inputs must remain stable throughout the run. Locally unchanged pre-run generated files may differ from the remote
@@ -2625,9 +2627,26 @@ Only documents absent from the configured TypeScript import graph and owning gen
 excluded. Unknown compiler, mapper or generation commands keep the complete Git-visible inventory. A typing pass
 does not satisfy document validation. Budget accounting, admission, exact candidate custody and command identity
 continue to use the full Git-visible content tree. This receipt grants no additional check or placement permission.
-Unchanged legacy stamps remain valid under their original full-tree comparison. A changed legacy tree with no retained
-compiler closure, or a new invocation without its matching receipt, reports missing evidence with the original check
-status and log; settlement never invents an old closure or labels it a transport failure.
+Unchanged legacy stamps remain valid under their original full-tree comparison. Older workspace invocations that
+requested an artifact their compiler could not produce can reuse their successful original full-tree stamp only while
+the tree and retained prepared dependency inputs still match. Modern physical capture requires its matching artifact;
+a rejected artifact, changed legacy input or missing modern receipt never becomes a pass. True compiler failures retain
+their verdict and log. Unavailable evidence parks completed source with `typingEvidencePending`, preserving the attempt,
+commits and check IDs instead of creating a source-writing retry.
+
+Authenticated owning or operations managers reconcile that same attempt without starting a model:
+
+```sh
+bun tools/goal/src/cli.ts typing-recover <task> --expected-attempt <n>
+```
+
+The task lease and current generation fence cover reconciliation and re-settlement into the ordinary landing queue.
+A queued source retry for missing compiler evidence uses this same reconciliation boundary. If the original unchanged
+evidence suffices, the existing completed attempt lands. Otherwise the command returns `pending` with the exact
+worktree, ownership environment and smallest typing-only wrapper commands. Run those commands through the returned
+current control-plane wrapper, wait for their real results, then repeat `typing-recover`. Required money/native checks
+remain recorded and required; they are not substituted by this proof request. Real source typing failures remain source
+failures. Provider, model CLI and allowance failures keep their separate handling.
 
 Landing and promotion checks record only clean, successful runs. Each result is keyed by the normalized command, the
 allowlisted environment (`CI`, `DATABASE_URL`, `NODE_ENV`, `PATH`, `PLAYWRIGHT_BROWSERS_PATH`, and `TZ`), the Git tree
