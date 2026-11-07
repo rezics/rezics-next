@@ -14,6 +14,68 @@ owns a native kernel and a production web Worker; all served-page assertions cro
 Owner suites listed below remain their owners' acceptance; a served-page binding marked pending does not become
 covered merely by linking a kernel test.
 
+Decision: pin the 35 first-public-scope path IDs in one focused walk-source test; add no extra stories. Native host
+coverage stays in `stack.host`, `auth-stack.host`, `native-agent-identity.host` and `web-publication-interrupt.host`.
+
+## Current-dev first-public-scope walk
+
+Observed source `8529d3359d` on base `76ee0200bf`. One admitted walk slot (2/6) ran
+`bun services/auth/scripts/dev-stack.ts walk -- bun apps/web/scripts/first-public-scope-walk.ts`.
+Native identity startup ran from **2026-11-07 01:05:42.589 UTC** through **01:11:32.463 UTC** (**349.874 s**).
+The journey command, persona, seed and seeded frontends did not start. Persona is **setup**. Phone/desktop and
+launch locales were not mounted. Secret-free evidence is `.temp/goal/web/evidence.json` in this attempt.
+
+Operands: Web `http://127.0.0.1:20020`, issuer `http://127.0.0.1:20021`, native Auth `http://127.0.0.1:20022`,
+Kernel `http://127.0.0.1:20023`. `AUTH_ISSUER=http://127.0.0.1:20021` and
+`AUTH_JWKS_URL=http://127.0.0.1:20022/.well-known/jwks.json`. First causal error: **`Invalid or missing AUTH_JWKS_URL`**,
+then worker exit 1 and `walk: the identity phase did not start: walk: "Worker ready" was not printed; the process exited (1)`.
+Readiness probes to native JWKS and Kernel `/v1/definitions` reported `ECONNREFUSED`. No seeded UUID or mounted page
+was obtained.
+
+Hourly: **0/35**. Slowest failing path: **W01** (shared 349.874 s identity startup). Anonymous paths did not proceed:
+Kernel never became ready. Signed-in paths remain unreached for the same prerequisite; urgent **ce33aabc** is the
+single issuer/JWKS sign-in startup repair and is not implemented here. No other reached product failure was observed,
+so no additional repair brief is opened. Original `stack.host`, `auth-stack.host`, `native-agent-identity.host` and
+`web-publication-interrupt.host` coverage is unchanged. Rerun after ce33aabc lands.
+
+| Path | User-visible path                                                                           | Persona |   Elapsed | Result         | First wrong result                                                                    |
+| ---- | ------------------------------------------------------------------------------------------- | ------- | --------: | -------------- | ------------------------------------------------------------------------------------- |
+| W01  | All public pages → localized shell → navigate on phone and desktop                          | setup   | 349.874 s | FAIL-unreached | `Invalid or missing AUTH_JWKS_URL`; identity phase exited 1 before persona/seed/pages |
+| W02  | Public Subject → each released work, release and agent reader                               | setup   | 349.874 s | FAIL-unreached | Same identity-phase startup; page not executed                                        |
+| W03  | Subject → Editions → next native page → exact Edition → return                              | setup   | 349.874 s | FAIL-unreached | Same identity-phase startup; page not executed                                        |
+| W04  | Subject → Contents → next native page → child → return                                      | setup   | 349.874 s | FAIL-unreached | Same identity-phase startup; page not executed                                        |
+| W05  | Subject → Cast → Character → return to the same cast page                                   | setup   | 349.874 s | FAIL-unreached | Same identity-phase startup; page not executed                                        |
+| W06  | Subject → Crew → qualified Person or Organization credit → return                           | setup   | 349.874 s | FAIL-unreached | Same identity-phase startup; page not executed                                        |
+| W07  | Person or Character → credited works → exact work → multilingual return                     | setup   | 349.874 s | FAIL-unreached | Same identity-phase startup; page not executed                                        |
+| W08  | Subject → Relations or graph → exact related item → return                                  | setup   | 349.874 s | FAIL-unreached | Same identity-phase startup; page not executed                                        |
+| W09  | Subject → Details → competing sourced facts → immutable history                             | setup   | 349.874 s | FAIL-unreached | Same identity-phase startup; page not executed                                        |
+| W10  | Public agent or handle → its single canonical profile and Subject                           | setup   | 349.874 s | FAIL-unreached | Same identity-phase startup; page not executed                                        |
+| W11  | Signed-out Home → native mixed public discovery → Subject                                   | setup   | 349.874 s | FAIL-unreached | Same identity-phase startup; page not executed                                        |
+| W12  | Signed-in Home → Following or Continue item → act → return after session replacement        | setup   | 349.874 s | FAIL-unreached | Same identity-phase startup; sign-in not reached                                      |
+| W13  | Home → kind, exact Space and question Context selection → next or retry                     | setup   | 349.874 s | FAIL-unreached | Same identity-phase startup; sign-in not reached                                      |
+| W14  | Library → profile or state shelf → bounded filters → Subject → return                       | setup   | 349.874 s | FAIL-unreached | Same identity-phase startup; sign-in not reached                                      |
+| W15  | Library → private labels → create or edit → read back the same label                        | setup   | 349.874 s | FAIL-unreached | Same identity-phase startup; sign-in not reached                                      |
+| W16  | New curated Collection → add or transfer occurrences → review exact members                 | setup   | 349.874 s | FAIL-unreached | Same identity-phase startup; sign-in not reached                                      |
+| W17  | Built-in dynamic Collection → filters → native continuation → Subject                       | setup   | 349.874 s | FAIL-unreached | Same identity-phase startup; sign-in not reached                                      |
+| W18  | Owned Collection → explicit publication → anonymous public reader and ItemList              | setup   | 349.874 s | FAIL-unreached | Same identity-phase startup; anonymous reader not executed                            |
+| W19  | Subject or Library → progress session → update → current readback and return                | setup   | 349.874 s | FAIL-unreached | Same identity-phase startup; sign-in not reached                                      |
+| W20  | Library → copies or holdings → edit → resolve newer reading → save and undo                 | setup   | 349.874 s | FAIL-unreached | Same identity-phase startup; sign-in not reached                                      |
+| W21  | Following → bounded targets → inspect admitted destination → follow or stop → readback      | setup   | 349.874 s | FAIL-unreached | Same identity-phase startup; sign-in not reached                                      |
+| W22  | Private destination → sign-up or sign-in → safe return → sign-out                           | setup   | 349.874 s | FAIL-unreached | Same identity-phase startup; sign-in not reached                                      |
+| W23  | Auth request → consent → approve or decline → current caller return                         | setup   | 349.874 s | FAIL-unreached | Same identity-phase startup; sign-in not reached                                      |
+| W24  | Security settings → step-up → change credential → renewed session                           | setup   | 349.874 s | FAIL-unreached | Same identity-phase startup; sign-in not reached                                      |
+| W25  | Settings → profile, reading or privacy preference → save → replacement or deletion recovery | setup   | 349.874 s | FAIL-unreached | Same identity-phase startup; sign-in not reached                                      |
+| W26  | Admitted personal page → upload completion or download → current caller result              | setup   | 349.874 s | FAIL-unreached | Same identity-phase startup; sign-in not reached                                      |
+| W27  | Subject → admitted offer → checkout → payment return with authoritative fulfilment          | setup   | 349.874 s | FAIL-unreached | Same identity-phase startup; sign-in not reached                                      |
+| W28  | Orders or entitlements → captured fixed Edition → same-tab reader → exact detail return     | setup   | 349.874 s | FAIL-unreached | Same identity-phase startup; sign-in not reached                                      |
+| W29  | Board → thread → post or reply → current native conversation and history                    | setup   | 349.874 s | FAIL-unreached | Same identity-phase startup; anonymous board not executed                             |
+| W30  | Subject → Global standard rating or review → explicit write → current native readback       | setup   | 349.874 s | FAIL-unreached | Same identity-phase startup; sign-in not reached                                      |
+| W31  | Realm or Space → current public home → admitted membership or appearance action → readback  | setup   | 349.874 s | FAIL-unreached | Same identity-phase startup; public home not executed                                 |
+| W32  | Readable content → report → owner resolution → affected-author receipt and appeal           | setup   | 349.874 s | FAIL-unreached | Same identity-phase startup; sign-in not reached                                      |
+| W33  | Signed-in Inbox → reply, mention or moderation notice → current destination and preference  | setup   | 349.874 s | FAIL-unreached | Same identity-phase startup; sign-in not reached                                      |
+| W34  | Configured static Zone address → localized routed page → native browser return              | setup   | 349.874 s | FAIL-unreached | Same identity-phase startup; page not executed                                        |
+| W35  | Anonymous page → canonical, sharing and JSON-LD → robots and every eligible sitemap shard   | setup   | 349.874 s | FAIL-unreached | Same identity-phase startup; page not executed                                        |
+
 ## Subject pages, relations, editions and credits
 
 - **User job**: Read a work, release or agent, traverse every related item in order, understand qualified credits,
