@@ -109,7 +109,7 @@ test('empty full pass idles, source events wake one home, and bounded recovery r
   expect(f.stats().attempts).toBe(0);
   await f.advance(1 + 4096 * STEP);
   expect(f.homes).toEqual([37, ...Array.from({ length: 4096 }, (_, i) => i)]);
-  expect(f.stats().statements).toBe(4097 * 9);
+  expect(f.stats().statements).toBe(4097 * 8);
   await f.advance(IDLE - STEP);
   expect(f.homes.length).toBe(4097);
   await Promise.all([f.wake(), f.wake()]);

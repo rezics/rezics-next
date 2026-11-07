@@ -180,9 +180,9 @@ const timers: AccountDiscoveryTimers = {
  * most one pool connection, leaving the rest for boot and foreground requests.
  * It starts after SDK launch with a one-second grace and yields if the pool has
  * waiters or only one free slot. Empty steady state: zero queries during the
- * 15-minute idle interval; an empty 4096-home pass costs 36,864 SQL statements
- * (two intent reads plus seven coverage statements per home), about 39 SQL/s
- * averaged over pass + idle at the minimum 10 ms step, versus about 900 SQL/s
+ * 15-minute idle interval; an empty 4096-home pass costs 32,768 SQL statements
+ * (two intent reads plus six coverage statements per home), about 35 SQL/s
+ * averaged over pass + idle at the minimum 10 ms step, versus about 800 SQL/s
  * continuously before backoff. Events wake only their home without restarting
  * that idle scan. Durable intents make coalesced in-memory wakeups disposable.
  */
