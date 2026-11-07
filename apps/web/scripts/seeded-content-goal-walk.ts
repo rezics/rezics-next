@@ -28,13 +28,22 @@ const launchLocales = ['en', 'zh-Hant', 'ja'] as const;
 
 export const FIRST_SCOPE_ROWS = [
   'threads-and-boards',
+  'exact-revisions',
+  'board-paging',
+  'container-disclosure',
+  'late-revocation',
+  'edit-history-return',
+  'watches-and-reactions',
+  'takedown-erasure',
+  'author-erasure',
+  'media',
   'realms-and-spaces',
   'ratings-and-reviews',
   'work-to-review',
-  'media',
   'moderation-reports-appeals',
   'notices',
   'home-discovery',
+  'independent-queues',
   'persona-matrix',
 ] as const;
 
@@ -635,6 +644,57 @@ function noticeDecisionId(item: InboxItem): string | null {
   if (target && target.kind === 'moderation_decision' && typeof target.decisionId === 'string')
     return asId(target.decisionId, 'decision');
   return null;
+}
+
+function publicRuntime(): Json {
+  const issuer = process.env.REZICS_LOCAL_STACK_ISSUER_ORIGIN ?? process.env.AUTH_ISSUER ?? null;
+  const native = process.env.REZICS_LOCAL_STACK_NATIVE_ORIGIN ?? null;
+  const jwks = process.env.AUTH_JWKS_URL ?? null;
+  const issuerJwks = typeof issuer === 'string' ? `${issuer.replace(/\/$/, '')}/.well-known/jwks.json` : null;
+  const nativeJwks = typeof native === 'string' ? `${native.replace(/\/$/, '')}/.well-known/jwks.json` : null;
+  return {
+    issuer,
+    native,
+    jwks,
+    jwksMatchesIssuer: Boolean(jwks && issuerJwks && jwks === issuerJwks),
+    jwksMatchesNative: Boolean(jwks && nativeJwks && jwks === nativeJwks),
+  };
+}
+
+async function createPublishedThread(
+  stack: Stack,
+  author: Persona,
+  boardId: string,
+  workId: string,
+  title: string,
+  body: string,
+): Promise<{ threadId: string; postId: string; revisionId: string }> {
+  const created = requireStatus(
+    await kernel(stack, 'POST', '/v1/threads', {
+      bearer: author.bearer,
+      body: {
+        boardId,
+        title,
+        kind: 'discussion',
+        body: fromPlainText(body),
+        licence: 'CC-BY-4.0',
+        subjectIds: [workId],
+        visibility: 'published',
+      },
+    }),
+    title,
+    201,
+  ).thread as Json;
+  const opening = created.firstPost as Json | undefined;
+  return {
+    threadId: asId(created.id ?? created.threadId, `${title} thread`),
+    postId: asId(opening?.id ?? created.postId, `${title} post`),
+    revisionId: asId(opening?.revisionId ?? created.revisionId, `${title} revision`),
+  };
+}
+
+function pageContains(page: Json, identity: string): boolean {
+  return JSON.stringify(page).includes(identity);
 }
 
 async function timedRow(row: FirstScopeRow, run: () => Promise<Json>): Promise<RowResult> {
@@ -1338,6 +1398,340 @@ async function walkPersonaMatrix(context: WalkContext): Promise<Json> {
   };
 }
 
+async function walkExactRevisions(context: WalkContext): Promise<Json> {
+  const { stack, member, showcase, community } = context;
+  const created = await createPublishedThread(
+    stack,
+    member,
+    community.boardId,
+    showcase.workId,
+    'Exact revision walk',
+    'Canonical opening bytes for exact revision retention.',
+  );
+  const before = requireStatus(
+    await kernel(stack, 'GET', `/v1/posts/${created.postId}/revisions/${created.revisionId}`),
+    'exact original revision',
+  ).post as Json;
+  const revised = requireStatus(
+    await kernel(stack, 'POST', `/v1/posts/${created.postId}/revisions`, {
+      bearer: member.bearer,
+      body: { body: fromPlainText('Edited bytes for immutable history.'), licence: 'MIT' },
+      ifMatch: created.revisionId,
+    }),
+    'revise for exact history',
+  ).post as Json;
+  const exact = requireStatus(
+    await kernel(stack, 'GET', `/v1/posts/${created.postId}/revisions/${created.revisionId}`),
+    'retained exact revision',
+  ).post as Json;
+  if (exact.revisionId !== before.revisionId) throw new Error('exact revision identity moved');
+  if (exact.licence !== before.licence) throw new Error(`exact revision licence ${String(exact.licence)}`);
+  if (exact.sha256 !== before.sha256) throw new Error('exact revision hash changed');
+  if (documentText(exact.body) !== documentText(before.body)) throw new Error('exact revision body changed');
+  if (revised.revisionId === created.revisionId) throw new Error('revision did not create a new immutable head');
+  return {
+    postId: created.postId,
+    originalRevision: created.revisionId,
+    revisedRevision: revised.revisionId,
+    exactLicence: exact.licence,
+    exactHash: exact.sha256,
+  };
+}
+
+async function walkBoardPaging(context: WalkContext): Promise<Json> {
+  const { stack, author, showcase, community } = context;
+  const created = await createPublishedThread(
+    stack,
+    author,
+    community.boardId,
+    showcase.workId,
+    'Paging walk thread',
+    'A thread used to prove sparse hot, active and newest pages.',
+  );
+  const sorts: Record<string, Json> = {};
+  for (const sort of ['hot', 'active', 'newest'] as const) {
+    const page = requireStatus(
+      await kernel(stack, 'GET', `/v1/boards/${community.boardId}/threads`, { query: { sort, limit: '20' } }),
+      `${sort} board page`,
+    );
+    const threads = Array.isArray(page.threads) ? (page.threads as Json[]) : [];
+    const pinned = Array.isArray(page.pinnedThreads) ? page.pinnedThreads : [];
+    const ids = threads.map((item) => asId((item.thread as Json | undefined)?.id ?? item.id, `${sort} thread`));
+    const pinnedIds = pinned.flatMap((item) => {
+      const record = item as Json;
+      const id = record.id ?? (record.thread as Json | undefined)?.id;
+      return typeof id === 'string' ? [id] : [];
+    });
+    if (pinnedIds.some((id) => ids.includes(id)))
+      throw new Error(`${sort} page mixed pinned threads into the sparse continuation`);
+    if (ids.includes(created.threadId) === false && threads.length === 20)
+      throw new Error(`${sort} first page is full without the paging walk thread`);
+    sorts[sort] = {
+      count: threads.length,
+      next: page.next ?? null,
+      pinned: pinned.length,
+      hasWalkThread: ids.includes(created.threadId),
+    };
+  }
+  return { threadId: created.threadId, sorts };
+}
+
+async function walkContainerDisclosure(context: WalkContext): Promise<Json> {
+  const { stack, community } = context;
+  const reading = requireStatus(
+    await kernel(stack, 'GET', `/v1/threads/${community.threadId}/reading-page`),
+    'container-chain reading-page',
+  );
+  const thread = reading.thread as Json;
+  if (asId(thread.id, 'reading thread') !== community.threadId) throw new Error('reading-page thread drifted');
+  if (asId(thread.boardId ?? (thread.board as Json | undefined)?.id, 'reading board') !== community.boardId)
+    throw new Error('reading-page board drifted from the current container');
+  return {
+    threadId: community.threadId,
+    boardId: community.boardId,
+    title: thread.title,
+    posts: Array.isArray(reading.posts) ? (reading.posts as unknown[]).length : null,
+  };
+}
+
+async function walkLateRevocation(context: WalkContext): Promise<Json> {
+  const { stack, developer, author, showcase } = context;
+  const concept = requireStatus(
+    await kernel(stack, 'POST', '/v1/subjects', {
+      bearer: developer.bearer,
+      body: { type: 'skos:Concept', labels: { en: 'Late revocation walk Board' } },
+    }),
+    'late-revocation concept',
+    201,
+  ).subject as Json;
+  const board = requireStatus(
+    await kernel(stack, 'POST', '/v1/boards', {
+      bearer: developer.bearer,
+      body: {
+        conceptId: concept.id,
+        title: 'Late revocation walk Board',
+        purpose: 'discussion',
+        visibility: 'published',
+      },
+    }),
+    'late-revocation board',
+    201,
+  ).board as Json;
+  const boardId = asId(board.id, 'late-revocation board');
+  const created = await createPublishedThread(
+    stack,
+    author,
+    boardId,
+    showcase.workId,
+    'Late revocation walk thread',
+    'This thread must vanish from every reader surface after Board takedown.',
+  );
+  const baseline = requireStatus(
+    await kernel(stack, 'GET', `/v1/threads/${created.threadId}`),
+    'late-revocation baseline thread',
+  );
+  requireStatus(await kernel(stack, 'GET', `/v1/posts/${created.postId}`), 'late-revocation baseline post');
+  requireStatus(
+    await kernel(stack, 'GET', `/v1/posts/${created.postId}/revisions/${created.revisionId}`),
+    'late-revocation baseline revision',
+  );
+  requireStatus(
+    await kernel(stack, 'POST', `/v1/boards/${boardId}:takeDown`, {
+      bearer: developer.bearer,
+      body: { reason: 'Content walk late Board revocation' },
+    }),
+    'late Board takedown',
+  );
+  const afterThread = await kernel(stack, 'GET', `/v1/threads/${created.threadId}`);
+  const afterPost = await kernel(stack, 'GET', `/v1/posts/${created.postId}`);
+  const afterRevision = await kernel(stack, 'GET', `/v1/posts/${created.postId}/revisions/${created.revisionId}`);
+  if (afterThread.status !== 404)
+    throw new Error(`taken-down board thread HTTP ${afterThread.status}; correct result is 404 with no item`);
+  if (afterPost.status !== 404)
+    throw new Error(`taken-down board post HTTP ${afterPost.status}; correct result is 404 with no item`);
+  if (afterRevision.status !== 404)
+    throw new Error(`taken-down board revision HTTP ${afterRevision.status}; correct result is 404 with no item`);
+  const pages: Record<string, Json> = {};
+  for (const sort of ['hot', 'active', 'newest'] as const) {
+    const page = await kernel(stack, 'GET', `/v1/boards/${boardId}/threads`, { query: { sort, limit: '20' } });
+    if (page.status === 200 && pageContains(page.value, created.threadId))
+      throw new Error(`${sort} page disclosed the revoked thread`);
+    pages[sort] = { status: page.status, disclosed: pageContains(page.value, created.threadId) };
+  }
+  const subject = await kernel(stack, 'GET', `/v1/subjects/${showcase.workId}/threads`, {
+    query: { place: globalContext, kind: 'discussion', limit: '20' },
+  });
+  if (subject.status === 200 && pageContains(subject.value, created.threadId))
+    throw new Error('subject threads disclosed the revoked thread');
+  const authorActivity = author.accountId
+    ? await kernel(stack, 'GET', `/v1/accounts/${author.accountId}/threads`, {
+        bearer: author.bearer,
+        query: { kind: 'discussion', limit: '20' },
+      })
+    : { status: 0, value: {} };
+  if (authorActivity.status === 200 && pageContains(authorActivity.value, created.threadId))
+    throw new Error('author activity disclosed the revoked thread');
+  return {
+    boardId,
+    threadId: created.threadId,
+    baseline: (baseline.thread as Json | undefined)?.id ?? created.threadId,
+    afterThread: afterThread.status,
+    afterPost: afterPost.status,
+    afterRevision: afterRevision.status,
+    pages,
+    subject: subject.status,
+    authorActivity: authorActivity.status,
+  };
+}
+
+async function walkEditHistoryReturn(context: WalkContext): Promise<Json> {
+  const { stack, member, showcase, community } = context;
+  const created = await createPublishedThread(
+    stack,
+    member,
+    community.boardId,
+    showcase.workId,
+    'Edit history return',
+    'Opening body before the captured return edit.',
+  );
+  const revised = requireStatus(
+    await kernel(stack, 'POST', `/v1/posts/${created.postId}/revisions`, {
+      bearer: member.bearer,
+      body: { body: fromPlainText('Edited body after Board inspection.'), licence: 'CC-BY-4.0' },
+      ifMatch: created.revisionId,
+    }),
+    'return edit',
+  ).post as Json;
+  const history = requireStatus(
+    await kernel(stack, 'GET', `/v1/posts/${created.postId}/revisions/${created.revisionId}`),
+    'history after edit',
+  ).post as Json;
+  const reading = requireStatus(
+    await kernel(stack, 'GET', `/v1/threads/${created.threadId}/reading-page`, { bearer: member.bearer }),
+    'reading-page after edit',
+  );
+  const returnTo = `/en/subjects/${showcase.workId}`;
+  if (history.revisionId !== created.revisionId) throw new Error('edit history lost the original revision');
+  if (revised.revisionId === created.revisionId) throw new Error('edit did not create a new head');
+  return {
+    threadId: created.threadId,
+    originalRevision: created.revisionId,
+    headRevision: revised.revisionId,
+    historyLicence: history.licence,
+    readingId: (reading.thread as Json | undefined)?.id ?? created.threadId,
+    returnTo,
+  };
+}
+
+async function walkWatchesAndReactions(context: WalkContext): Promise<Json> {
+  const { stack, member, community } = context;
+  const watched = await kernel(stack, 'PUT', `/v1/threads/${community.threadId}/watch`, { bearer: member.bearer });
+  if (watched.status !== 204 && watched.status !== 200)
+    throw new Error(`watch returned HTTP ${watched.status}; correct result is 204`);
+  const watchState = requireStatus(
+    await kernel(stack, 'GET', `/v1/threads/${community.threadId}/watch`, { bearer: member.bearer }),
+    'watch state',
+  );
+  if (watchState.watching !== true) throw new Error('watch state was not true after PUT');
+  const reaction = requireStatus(
+    await kernel(stack, 'PUT', `/v1/threads/${community.threadId}/reaction`, {
+      bearer: member.bearer,
+      body: { kind: 'upvote' },
+    }),
+    'thread reaction',
+  );
+  const counts = await kernel(stack, 'GET', `/v1/threads/${community.threadId}/reactions`);
+  return {
+    threadId: community.threadId,
+    watching: watchState.watching,
+    reaction: reaction.kind,
+    counts: counts.status,
+  };
+}
+
+async function walkTakedownErasure(context: WalkContext): Promise<Json> {
+  const { stack, author, showcase, community } = context;
+  const created = await createPublishedThread(
+    stack,
+    author,
+    community.boardId,
+    showcase.workId,
+    'Synchronous point erasure',
+    'Author point that will be erased.',
+  );
+  const erased = requireStatus(
+    await kernel(stack, 'POST', `/v1/posts/${created.postId}:erase`, {
+      bearer: author.bearer,
+      body: { reason: 'Content walk synchronous point erasure' },
+    }),
+    'point erasure',
+  );
+  const erasedRead = await kernel(stack, 'GET', `/v1/posts/${created.postId}`);
+  if (erasedRead.status === 200 && documentText((erasedRead.value.post as Json | undefined)?.body) === 'Author point that will be erased.')
+    throw new Error('erased post still disclosed its original body');
+  return {
+    postId: created.postId,
+    erasure: publicFields(erased) as Json,
+    read: erasedRead.status,
+  };
+}
+
+async function walkAuthorErasure(context: WalkContext): Promise<Json> {
+  const { stack, author, showcase, community } = context;
+  if (!author.accountId) throw new Error('author account is required for bounded erasure');
+  const created = await createPublishedThread(
+    stack,
+    author,
+    community.boardId,
+    showcase.workId,
+    'Bounded author erasure walk',
+    'This thread exists so author erasure can make bounded progress.',
+  );
+  const authorErasure = requireStatus(
+    await kernel(stack, 'POST', `/v1/threads/${created.threadId}:erase`, {
+      bearer: author.bearer,
+      body: { authorId: author.accountId },
+    }),
+    'bounded author erasure',
+    [202, 200],
+  );
+  return {
+    threadId: created.threadId,
+    authorErasure: publicFields(authorErasure) as Json,
+  };
+}
+
+async function walkIndependentQueues(context: WalkContext): Promise<Json> {
+  const { stack, developer, member, reviewer } = context;
+  const anonymousDirectory = await kernel(stack, 'GET', '/v1/me/moderation-directory');
+  const moderatorDirectory = await kernel(stack, 'GET', '/v1/me/moderation-directory', { bearer: developer.bearer });
+  const memberDirectory = await kernel(stack, 'GET', '/v1/me/moderation-directory', { bearer: member.bearer });
+  const reports = await kernel(stack, 'GET', '/v1/reports/me', { bearer: member.bearer, query: { limit: '20' } });
+  const reviewerAppeals = reviewer.accountId
+    ? await kernel(stack, 'GET', `/v1/threads/${context.community.threadId}/appeals`, {
+        bearer: reviewer.bearer,
+        query: { limit: '20' },
+      })
+    : { status: 0, value: {} };
+  if (anonymousDirectory.status === 200)
+    throw new Error('anonymous caller received the moderator directory; correct result withholds it');
+  if (moderatorDirectory.status !== 200 && moderatorDirectory.status !== 404)
+    throw new Error(`moderator directory HTTP ${moderatorDirectory.status}`);
+  if (memberDirectory.status === 200 && moderatorDirectory.status === 200) {
+    const memberState = memberDirectory.value.state ?? memberDirectory.value.code;
+    const moderatorState = moderatorDirectory.value.state ?? moderatorDirectory.value.code;
+    if (memberState === moderatorState && JSON.stringify(memberDirectory.value) === JSON.stringify(moderatorDirectory.value))
+      throw new Error('member and moderator directory pages were identical; queues must stay independent');
+  }
+  return {
+    anonymousDirectory: anonymousDirectory.status,
+    moderatorDirectory: moderatorDirectory.status,
+    memberDirectory: memberDirectory.status,
+    reports: reports.status,
+    reviewerAppeals: reviewerAppeals.status,
+  };
+}
+
 async function walkBrowser(context: WalkContext, rows: RowResult[]): Promise<Json> {
   const require = createRequire(resolve(root, 'apps/web/package.json'));
   const { chromium } = require('playwright') as typeof import('playwright');
@@ -1440,8 +1834,7 @@ async function writeRepairBrief(row: RowResult, revision: string): Promise<strin
   if (row.status !== 'failing' || !row.defect) return null;
   const path = join(root, '.temp/continuation', `content-${row.row}.md`);
   await mkdir(join(root, '.temp/continuation'), { recursive: true });
-  const owner =
-    row.row === 'ratings-and-reviews' ? 'content/rating' : row.row === 'notices' || row.row === 'moderation-reports-appeals' ? 'content' : 'content';
+  const owner = row.row === 'ratings-and-reviews' ? 'content/rating' : 'content';
   await writeFile(
     path,
     `# Repair ${row.row}
@@ -1540,13 +1933,22 @@ async function main(): Promise<void> {
   const rows: RowResult[] = [];
   try {
     rows.push(await timedRow('threads-and-boards', () => walkThreadsAndBoards(context)));
+    rows.push(await timedRow('exact-revisions', () => walkExactRevisions(context)));
+    rows.push(await timedRow('board-paging', () => walkBoardPaging(context)));
+    rows.push(await timedRow('container-disclosure', () => walkContainerDisclosure(context)));
+    rows.push(await timedRow('late-revocation', () => walkLateRevocation(context)));
+    rows.push(await timedRow('edit-history-return', () => walkEditHistoryReturn(context)));
+    rows.push(await timedRow('watches-and-reactions', () => walkWatchesAndReactions(context)));
+    rows.push(await timedRow('takedown-erasure', () => walkTakedownErasure(context)));
+    rows.push(await timedRow('author-erasure', () => walkAuthorErasure(context)));
+    rows.push(await timedRow('media', () => walkMedia(context)));
     rows.push(await timedRow('realms-and-spaces', () => walkRealmsAndSpaces(context)));
     rows.push(await timedRow('ratings-and-reviews', () => walkRatingsAndReviews(context)));
     rows.push(await timedRow('work-to-review', () => walkWorkToReview(context)));
-    rows.push(await timedRow('media', () => walkMedia(context)));
     rows.push(await timedRow('moderation-reports-appeals', () => walkReports(context)));
     rows.push(await timedRow('notices', () => walkNotices(context)));
     rows.push(await timedRow('home-discovery', () => walkHomeDiscovery(context)));
+    rows.push(await timedRow('independent-queues', () => walkIndependentQueues(context)));
     rows.push(await timedRow('persona-matrix', () => walkPersonaMatrix(context)));
     const browser = await walkBrowser(context, rows);
     const summary = summarizeWalk(rows);
@@ -1558,6 +1960,7 @@ async function main(): Promise<void> {
       sourceRevision: revision,
       seedExit: seedCode,
       installedRoot: process.env.REZICS_INSTALLED_ROOT ?? null,
+      runtime: publicRuntime(),
       stack,
       personas: [
         'anonymous',

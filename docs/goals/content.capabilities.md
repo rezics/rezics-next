@@ -88,8 +88,12 @@ The second command uses the bound native driver. Existing board-sort tests do no
 page outcomes.
 
 Decision: the Content Goal seeded walk uses the existing thread-board driver, seed-journal cleanup and Performance
-`waitUntilWalkReady` hydration recovery. First-scope rows are walked as named journeys on one admitted stack; no extra
-stories. Suspended bearers keep 401/403 on taken-down thread GET; ranking JWT lifetime follows wall time; each mounted
+`waitUntilWalkReady` hydration recovery. The first-scope table walked on one admitted stack is the 18 named journeys
+in `FIRST_SCOPE_ROWS`: threads-and-boards, exact-revisions, board-paging, container-disclosure, late-revocation,
+edit-history-return, watches-and-reactions, takedown-erasure, author-erasure, media, realms-and-spaces,
+ratings-and-reviews, work-to-review, moderation-reports-appeals, notices, home-discovery, independent-queues and
+persona-matrix. Hourly passing/total uses that table. The walk records live issuer/JWKS origins and does not write
+`AUTH_JWKS_URL`; ce33 remains the canonical producer. No extra stories. Suspended bearers keep 401/403 on taken-down thread GET; ranking JWT lifetime follows wall time; each mounted
 HTTP request starts its envelope from wall time so a held late-revocation request cannot shrink the next command;
 author-item
 growth captures stay on a one-item page after bootstrapping the bundled release, and large other-author

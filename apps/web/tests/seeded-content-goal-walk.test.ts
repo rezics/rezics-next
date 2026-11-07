@@ -15,15 +15,25 @@ import {
 
 test('the Content Goal walk names every first-scope row and summarises passing, total and slowest failure', () => {
   expect(walkWorkingDirectory()).toBe(resolve(import.meta.dir, '..'));
+  expect(firstScopeRows()).toHaveLength(18);
   expect(firstScopeRows()).toEqual([
     'threads-and-boards',
+    'exact-revisions',
+    'board-paging',
+    'container-disclosure',
+    'late-revocation',
+    'edit-history-return',
+    'watches-and-reactions',
+    'takedown-erasure',
+    'author-erasure',
+    'media',
     'realms-and-spaces',
     'ratings-and-reviews',
     'work-to-review',
-    'media',
     'moderation-reports-appeals',
     'notices',
     'home-discovery',
+    'independent-queues',
     'persona-matrix',
   ]);
   const summary = summarizeWalk([
@@ -49,6 +59,8 @@ test('the Content Goal walk names every first-scope row and summarises passing, 
   expect(source).toContain('notifications:markSeen');
   expect(source).toContain('mention');
   expect(source).toContain('independent');
+  expect(source).toContain('boards/${boardId}:takeDown');
+  expect(source).not.toMatch(/AUTH_JWKS_URL\s*=/);
 });
 
 test('mention documents and ordinary grant receipts match the Accounts producer contract', () => {
