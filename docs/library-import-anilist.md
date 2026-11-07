@@ -71,6 +71,10 @@ drops coverage. Unique-typed extra grants (`definitions:publish`, `definitions:a
 the existing `deadline_live` operand as `deadlineLive`; without that fact the policy core treats a live governance
 role as unknown and denies grant administration.
 
+Decision: the shared native profile fixture still accepts `databaseUrl` so an isolated identity-epoch database is
+the writer and reader connection string. Typecheck fixtures for generated Zone subject lists use the installed
+summary card rather than null. Existing import assertions stay; no extra behaviour tests.
+
 Decision: compose Rating's complete native review observation and exact guarded command for the selected
 same-logical-home target in the existing AniList row; foreign-home support remains deferred. Apply commits
 selected scores and Progress before independent state so Entry writes cannot dirty the vote or occurrence target. Confirmation
