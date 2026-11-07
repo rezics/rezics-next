@@ -35,13 +35,14 @@ export function sharedViteChildEnvironment(
 }
 
 const testFileArgument = /\.test\.[cm]?[jt]sx?$/u;
-const tableShapeTest = /(?:^|\/)accounts-goal-journeys\.test\.[cm]?[jt]sx?$/u;
+const skipSharedServer =
+  /(?:^|\/)(?:accounts-goal-journeys|with-dev-server)\.test\.[cm]?[jt]sx?$/u;
 
-/** Table-shape Accounts Goal rows do not mount pages; Storybook is not their acceptance. */
+/** Table-shape Accounts Goal rows and the shared-server helper unit tests do not mount pages. */
 export function commandNeedsSharedDevServer(command: string[]): boolean {
   if (command[0] !== 'bun' || command[1] !== 'test') return false;
   const files = command.filter((argument) => testFileArgument.test(argument));
-  return files.length === 0 || files.some((file) => !tableShapeTest.test(file.replaceAll('\\', '/')));
+  return files.length === 0 || files.some((file) => !skipSharedServer.test(file.replaceAll('\\', '/')));
 }
 
 export function privateNetworkCommand(command: string[]): string[] {

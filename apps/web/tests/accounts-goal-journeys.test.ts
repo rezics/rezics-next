@@ -61,8 +61,12 @@ test('a website-bearer Kernel 401 fails only dependent Kernel journeys and keeps
 
 test('the table-shape check does not boot Storybook, and follow writes the public agent subject without a body', () => {
   expect(commandNeedsSharedDevServer(['bun', 'test', 'tests/accounts-goal-journeys.test.ts'])).toBe(false);
+  expect(
+    commandNeedsSharedDevServer(['bun', 'test', 'tests/accounts-goal-journeys.test.ts', 'tests/with-dev-server.test.ts']),
+  ).toBe(false);
   expect(commandNeedsSharedDevServer(['bun', 'test', 'tests/session.test.ts'])).toBe(true);
   const source = readFileSync(walk, 'utf8');
+  expect(source).toContain("const session = await signIn(stack, person, 'login', []);");
   expect(source).toContain("followTargetId = agentSubjectId(publicTarget, 'follow target')");
   expect(source).toContain("kernel(stack, 'PUT', `/v1/follows/${followTargetId}`, { bearer: token.bearer })");
   expect(source).not.toMatch(/follows\/\$\{followTargetId\}.*body:/);

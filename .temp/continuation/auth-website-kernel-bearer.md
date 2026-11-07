@@ -18,7 +18,9 @@ J16 not reached), preference open (J17) and gate open (J19, 20490ms). Signup, au
 exchange already succeeded.
 
 Repair: Kernel on this walk stack must accept the website client's access token for resource
-`https://api.rezics.test` using native JWKS at `http://127.0.0.1:20012/.well-known/jwks.json`.
-Keep issuer, audience and JWKS bindings that `dev-stack` already writes. Do not add a walk stub or
-a new refusal. After the bearer is accepted, Identity, Preferences and Authority continue those
-operations on the same walk handle.
+`https://api.rezics.test` using the ce33 canonical issuer JWKS document. `AUTH_ISSUER` and
+`AUTH_JWKS_URL` keep the same issuer origin and port (slot 1 native `http://127.0.0.1:20012`,
+issuer `http://127.0.0.1:20011`, Kernel `http://127.0.0.1:20013`). Transport only that exact JWKS
+through `AuthenticationConfig.fetch`; do not add a loopback JWKS exception, blanket fetch override,
+substitute credential or a second Auth writer. After the bearer is accepted, Identity, Preferences
+and Authority continue those operations on the same walk handle.

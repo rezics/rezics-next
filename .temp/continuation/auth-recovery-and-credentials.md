@@ -12,7 +12,8 @@ has no external mail. Repair: put a deterministic recovery token in that start a
 the local stack so `POST /recovery/complete`, new-password sign-in, and old-password/old-session
 refusal can run.
 
-J04: `POST /credential-effects/stage` with the management client and `account:update` returned HTTP
-403 `{error:credential_effect_denied, effect_status:not_applied}`. Repair: password replace through
-the installed credential-effect path after fresh step-up for that client, then session review of
-the new credential. Do not add a walk-side bypass.
+J04: `POST /credential-effects/stage` with a fresh login-client session (Security's human proof)
+returned HTTP 403 `{error:credential_effect_denied, effect_status:not_applied}` on the previous
+management-client attempt. The next round stages password replace through that login session as
+the fresh step-up, then reviews and revokes sessions. Do not add a walk-side bypass. Human proof
+rejects automated and operator callers.

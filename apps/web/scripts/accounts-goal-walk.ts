@@ -885,7 +885,8 @@ if (import.meta.main) {
 
   await runJourney('J04', 'POST /credential-effects → GET /sessions → POST /sessions/revoke', async () => {
     const person = await signup(stack, 'j04');
-    const session = await signIn(stack, person, AUTH_MANAGEMENT_CLIENT_ID, AUTH_MANAGEMENT_SCOPES.rename);
+    // Security uses the login client; a just-established session is the fresh step-up for this HTTP walk.
+    const session = await signIn(stack, person, 'login', []);
     const changed = await credentialEffect(stack, session, session.accountId, {
       kind: 'password',
       password: nextPassword,
