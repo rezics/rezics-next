@@ -24,10 +24,14 @@ import { createKernel } from '../../src/http/kernel.ts';
 import { actionCatalogue } from '../../src/http/request.ts';
 import { readBatch, EVENT_TYPES } from '../../src/events/log.ts';
 import { dropTestDatabase } from '../support/drop-test-database.ts';
+import { configureTestReceiptKeys, testReceiptKeys } from '../support/receipt-keys.ts';
+import { workerTestEnv } from '../support/worker-env.ts';
 
 const root = new URL('../../../../', import.meta.url).pathname;
 const script = 'services/kernel/scripts/bootstrap-governance.ts';
 const url = process.env.DATABASE_URL!;
+const receiptKeys = workerTestEnv().KERNEL_RECEIPT_KEYS;
+process.env.KERNEL_RECEIPT_KEYS = receiptKeys;
 if (!url) throw new Error('DATABASE_URL must name the migrated test database');
 const pool = createPool(url);
 pool.options.max = 1;
@@ -67,10 +71,33 @@ const password = 'correct horse battery staple';
 function cli(id: string) {
   return Bun.spawn(['bun', script, '--account', id], {
     cwd: root,
-    env: { ...process.env, DATABASE_URL: url },
+    env: { ...process.env, DATABASE_URL: url, KERNEL_RECEIPT_KEYS: receiptKeys },
     stdout: 'pipe',
     stderr: 'pipe',
   });
+}
+function mountedKernel() {
+  return createKernel({ pool, routeKey: new Uint8Array(32), receiptKeys: testReceiptKeys() });
+}
+async function withoutGlobalRow(kind: 'missing' | 'community') {
+  const client = await reader.connect();
+  try {
+    await client.query('BEGIN');
+    await client.query("SET LOCAL session_replication_role='replica'");
+    if (kind === 'missing') {
+      await client.query('DELETE FROM semantic.context WHERE route=0 AND context_id=$1', [PLATFORM_RESOURCE.id]);
+    } else {
+      await client.query("UPDATE semantic.context SET kind='community' WHERE route=0 AND context_id=$1", [
+        PLATFORM_RESOURCE.id,
+      ]);
+    }
+    await client.query('COMMIT');
+  } catch (error) {
+    await client.query('ROLLBACK');
+    throw error;
+  } finally {
+    client.release();
+  }
 }
 async function invoke(id: string, success = true) {
   const child = cli(id);
@@ -143,7 +170,7 @@ async function context(id: string, scopes = actions, using = access) {
   );
   expect(issued.status).toBe(200);
   const body = (await issued.json()) as { access_token: string };
-  const boundary = { pool, deadline: Date.now() + 10_000 };
+  const boundary = { pool, deadline: Date.now() + 30_000 };
   const actor = await using.authenticate(body.access_token, boundary);
   expect(actor.kind).toBe('account');
   return { ...boundary, actor: actor as AccountActor };
@@ -171,6 +198,7 @@ function fixtureAccess(entries: ReturnType<typeof actionCatalogue> = catalogue) 
 }
 
 beforeAll(async () => {
+  configureTestReceiptKeys(pool);
   authDatabase = `bootstrap_auth_${process.pid}`;
   const authUrl = new URL(url);
   authUrl.pathname = `/${authDatabase}`;
@@ -229,9 +257,7 @@ beforeAll(async () => {
     scopes: [
       ...new Set([
         ...actions,
-        ...[...actionCatalogue(createKernel({ pool, routeKey: new Uint8Array(32) })).keys()].filter(
-          (scope) => scope !== 'media:complete',
-        ),
+        ...[...actionCatalogue(mountedKernel()).keys()].filter((scope) => scope !== 'media:complete'),
         'gate:any',
       ]),
     ],
@@ -273,7 +299,7 @@ afterAll(async () => {
   await reader.end();
 });
 
-test('exact root CLI installs one durable normal Global role and one registered audit atomically', async () => {
+test.serial('exact root CLI installs one durable normal Global role and one registered audit atomically', async () => {
   await invoke(person);
   const first = await snapshot();
   expect(first.marker).toHaveLength(1);
@@ -305,6 +331,10 @@ test('exact root CLI installs one durable normal Global role and one registered 
   await invoke(person);
   await invoke(other, false);
   expect(await snapshot()).toEqual(first);
+  // Read through ordinary Access after both CLI processes have exited; the
+  // deployment bootstrap is not the authority for later requests.
+  expect(await allowed(person, 'subject:create')).toBe(true);
+  expect(await allowed(other, 'subject:create')).toBe(false);
   const result = await readBatch(pool, {
     consumer: 'bootstrap_audit',
     partition: 0,
@@ -315,101 +345,108 @@ test('exact root CLI installs one durable normal Global role and one registered 
   expect(result.status).toBe('read');
 });
 
-test('Auth-issued scopes and installed formula govern delegation, revocation and unrelated resources', async () => {
-  const semanticActions = actionCatalogue(createKernel({ pool, routeKey: new Uint8Array(32) }));
-  const semantic = fixtureAccess(semanticActions);
-  const semanticContext = await context(person, actions, semantic);
-  expect(
-    await (
-      await accessCheck(semantic, semanticContext.actor, 'subject:create', PLATFORM_RESOURCE, semanticContext)
-    )(pool),
-  ).toBe(true);
-  // Mounted governance actions are conferred; gate:any stays off the route catalogue.
-  expect(semanticActions.has('media:import_from_url')).toBe(true);
-  expect(semanticActions.has('gate:any')).toBe(false);
-  expect(
-    await (
-      await accessCheck(semantic, semanticContext.actor, 'media:import_from_url', PLATFORM_RESOURCE, semanticContext)
-    )(pool),
-  ).toBe(true);
-  expect(
-    await (
-      await accessCheck(semantic, semanticContext.actor, 'gate:any', PLATFORM_RESOURCE, semanticContext)
-    )(pool),
-  ).toBe(false);
-  expect(await allowed(person, 'subject:create')).toBe(true);
-  expect(await allowed(person, 'absent:action')).toBe(false);
-  expect(await allowed(person, 'subject:create', PLATFORM_RESOURCE, ['access:grant'])).toBe(false);
-  expect(await allowed(person, 'subject:create', { route: routeOf(person)!, id: person })).toBe(false);
-  expect(await allowed(person, 'subject:create', { route: 0, id: newId(0) })).toBe(false);
-  const grants = createGrantCommands({ pool, access, managementAction: 'access:grant' });
-  const input = {
-    resource: PLATFORM_RESOURCE,
-    subject: { kind: 'account' as const, id: automated },
-    actions: imports,
-    valid: '(,)',
-    key: 'delegate-imports',
-  };
-  await expect(
-    grants.create(await context(person, imports), { ...input, key: 'missing-management-scope' }),
-  ).rejects.toThrow();
-  await grants.create(await context(person), input);
-  const rows = await reader.query(
-    'SELECT action FROM access.resource_grant WHERE route=0 AND resource_id=$1 AND subject_id=$2 ORDER BY action',
-    [PLATFORM_RESOURCE.id, automated],
-  );
-  expect(rows.rows.map((r) => r.action)).toEqual([...imports].sort());
-  for (const action of imports) expect(await allowed(automated, action)).toBe(true);
-  expect(await allowed(automated, imports[0]!, PLATFORM_RESOURCE, ['access:grant'])).toBe(false);
-  expect(await allowed(automated, 'subject:create')).toBe(false);
-  // The human can revoke delegated rights through the same formula.
-  await grants.revoke(await context(person), { ...input, key: 'revoke-imports' });
-  expect(
-    (
-      await reader.query('SELECT 1 FROM access.resource_grant WHERE route=0 AND resource_id=$1 AND subject_id=$2', [
-        PLATFORM_RESOURCE.id,
-        automated,
-      ])
-    ).rows,
-  ).toHaveLength(0);
-  for (const action of imports) expect(await allowed(automated, action)).toBe(false);
-  await grants.revokeRole(await context(person, [...actions, 'gate:any']), {
-    resource: PLATFORM_RESOURCE,
-    subject: { kind: 'account', id: person },
-    role: PLATFORM_GOVERNANCE_ROLE,
-    valid: '(,)',
-    key: 'revoke-governance',
-  });
-  expect(await allowed(person, 'subject:create')).toBe(false);
-  await expect(grants.create(await context(person), { ...input, key: 'denied' })).rejects.toThrow();
-  await invoke(person);
-  await invoke(other, false);
-  const state = await snapshot();
-  expect(state.marker).toHaveLength(1);
-  expect(state.grants).toHaveLength(0);
-  expect(state.events).toHaveLength(1);
-});
+test.serial(
+  'Auth-issued scopes and installed formula govern delegation, revocation and unrelated resources',
+  async () => {
+    await invoke(person);
+    const semanticActions = actionCatalogue(mountedKernel());
+    const semantic = fixtureAccess(semanticActions);
+    const semanticContext = await context(person, actions, semantic);
+    expect(
+      await (
+        await accessCheck(semantic, semanticContext.actor, 'subject:create', PLATFORM_RESOURCE, semanticContext)
+      )(pool),
+    ).toBe(true);
+    // Mounted governance actions are conferred; gate:any stays off the route catalogue.
+    expect(semanticActions.has('media:import_from_url')).toBe(true);
+    expect(semanticActions.has('gate:any')).toBe(false);
+    expect(
+      await (
+        await accessCheck(semantic, semanticContext.actor, 'media:import_from_url', PLATFORM_RESOURCE, semanticContext)
+      )(pool),
+    ).toBe(true);
+    expect(
+      await (
+        await accessCheck(semantic, semanticContext.actor, 'gate:any', PLATFORM_RESOURCE, semanticContext)
+      )(pool),
+    ).toBe(false);
+    expect(await allowed(person, 'subject:create')).toBe(true);
+    expect(await allowed(person, 'absent:action')).toBe(false);
+    expect(await allowed(person, 'subject:create', PLATFORM_RESOURCE, ['access:grant'])).toBe(false);
+    expect(await allowed(person, 'subject:create', { route: routeOf(person)!, id: person })).toBe(false);
+    expect(await allowed(person, 'subject:create', { route: 0, id: newId(0) })).toBe(false);
+    const grants = createGrantCommands({ pool, access, managementAction: 'access:grant' });
+    const input = {
+      resource: PLATFORM_RESOURCE,
+      subject: { kind: 'account' as const, id: automated },
+      actions: imports,
+      valid: '(,)',
+      key: 'delegate-imports',
+    };
+    await expect(
+      grants.create(await context(person, imports), { ...input, key: 'missing-management-scope' }),
+    ).rejects.toThrow();
+    await grants.create(await context(person), input);
+    const rows = await reader.query(
+      'SELECT action FROM access.resource_grant WHERE route=0 AND resource_id=$1 AND subject_id=$2 ORDER BY action',
+      [PLATFORM_RESOURCE.id, automated],
+    );
+    expect(rows.rows.map((r) => r.action)).toEqual([...imports].sort());
+    for (const action of imports) expect(await allowed(automated, action)).toBe(true);
+    expect(await allowed(automated, imports[0]!, PLATFORM_RESOURCE, ['access:grant'])).toBe(false);
+    expect(await allowed(automated, 'subject:create')).toBe(false);
+    // The human can revoke delegated rights through the same formula.
+    await grants.revoke(await context(person), { ...input, key: 'revoke-imports' });
+    expect(
+      (
+        await reader.query('SELECT 1 FROM access.resource_grant WHERE route=0 AND resource_id=$1 AND subject_id=$2', [
+          PLATFORM_RESOURCE.id,
+          automated,
+        ])
+      ).rows,
+    ).toHaveLength(0);
+    for (const action of imports) expect(await allowed(automated, action)).toBe(false);
+    await grants.revokeRole(await context(person, [...actions, 'gate:any']), {
+      resource: PLATFORM_RESOURCE,
+      subject: { kind: 'account', id: person },
+      role: PLATFORM_GOVERNANCE_ROLE,
+      valid: '(,)',
+      key: 'revoke-governance',
+    });
+    expect(await allowed(person, 'subject:create')).toBe(false);
+    await expect(grants.create(await context(person), { ...input, key: 'denied' })).rejects.toThrow();
+    await invoke(person);
+    await invoke(other, false);
+    const state = await snapshot();
+    expect(state.marker).toHaveLength(1);
+    expect(state.grants).toHaveLength(0);
+    expect(state.events).toHaveLength(1);
+  },
+);
 
-test('reserved governance expansion intersects mounted actions while arbitrary roles retain strict validation', () => {
-  const resolved = resolveResourceRoles(new Map([['subject:create', { anonymous: false }]]), {
-    roles: { 'custom.invalid': ['subject:create', 'absent:action'] },
-    types: {},
-  });
-  expect(resolved.roles.get(PLATFORM_GOVERNANCE_ROLE)).toEqual(['subject:create']);
-  expect(resolved.roles.has('custom.invalid')).toBe(false);
-  const semantic = actionCatalogue(createKernel({ pool, routeKey: new Uint8Array(32) }));
-  const governance = resolveResourceRoles(semantic).roles.get(PLATFORM_GOVERNANCE_ROLE);
-  expect(semantic.has('media:import_from_url')).toBe(true);
-  expect(semantic.has('gate:any')).toBe(false);
-  expect(governance).toContain('subject:create');
-  expect(governance).toContain('media:import_from_url');
-  expect(governance).not.toContain('gate:any');
-  expect(() =>
-    resolveResourceRoles(catalogue, { roles: { [PLATFORM_GOVERNANCE_ROLE]: ['access:grant'] }, types: {} }),
-  ).toThrow();
-});
+test.serial(
+  'reserved governance expansion intersects mounted actions while arbitrary roles retain strict validation',
+  () => {
+    const resolved = resolveResourceRoles(new Map([['subject:create', { anonymous: false }]]), {
+      roles: { 'custom.invalid': ['subject:create', 'absent:action'] },
+      types: {},
+    });
+    expect(resolved.roles.get(PLATFORM_GOVERNANCE_ROLE)).toEqual(['subject:create']);
+    expect(resolved.roles.has('custom.invalid')).toBe(false);
+    const semantic = actionCatalogue(mountedKernel());
+    const governance = resolveResourceRoles(semantic).roles.get(PLATFORM_GOVERNANCE_ROLE);
+    expect(semantic.has('media:import_from_url')).toBe(true);
+    expect(semantic.has('gate:any')).toBe(false);
+    expect(governance).toContain('subject:create');
+    expect(governance).toContain('media:import_from_url');
+    expect(governance).not.toContain('gate:any');
+    expect(() =>
+      resolveResourceRoles(catalogue, { roles: { [PLATFORM_GOVERNANCE_ROLE]: ['access:grant'] }, types: {} }),
+    ).toThrow();
+  },
+);
 
-test('missing or nonhuman, inactive or fenced accounts refuse without marker, grant or audit', async () => {
+test.serial('missing or nonhuman, inactive or fenced accounts refuse without marker, grant or audit', async () => {
   await reset();
   await invoke(newId(0x7777), false);
   await invoke(automated, false);
@@ -435,31 +472,30 @@ test('missing or nonhuman, inactive or fenced accounts refuse without marker, gr
   expect(await snapshot()).toEqual({ marker: [], grants: [], events: [], standing: [], standingGrants: [] });
 });
 
-test('only the seeded real Global row admits installation and native failure rolls everything back', async () => {
-  for (const failure of ['missing-global', 'wrong-kind', 'audit']) {
-    if (failure === 'missing-global')
-      await reader.query('DELETE FROM semantic.context WHERE route=0 AND context_id=$1', [PLATFORM_RESOURCE.id]);
-    if (failure === 'wrong-kind')
-      await reader.query("UPDATE semantic.context SET kind='community' WHERE route=0 AND context_id=$1", [
-        PLATFORM_RESOURCE.id,
-      ]);
-    if (failure === 'audit')
-      await reader.query(`ALTER TABLE core.outbox ADD CONSTRAINT bootstrap_failure CHECK (type <> '${audit}')`);
-    try {
-      await invoke(person, false);
-      expect(await snapshot()).toEqual({ marker: [], grants: [], events: [], standing: [], standingGrants: [] });
-    } finally {
-      if (failure === 'audit') await reader.query('ALTER TABLE core.outbox DROP CONSTRAINT bootstrap_failure');
-      else
-        await reader.query(
-          "INSERT INTO semantic.context(route,context_id,kind,labels) VALUES(0,$1,'global','{\"en\":\"Global\"}') ON CONFLICT(route,context_id) DO UPDATE SET kind='global'",
-          [PLATFORM_RESOURCE.id],
-        );
+test.serial(
+  'only the seeded real Global row admits installation and native failure rolls everything back',
+  async () => {
+    for (const failure of ['missing-global', 'wrong-kind', 'audit']) {
+      if (failure === 'missing-global') await withoutGlobalRow('missing');
+      if (failure === 'wrong-kind') await withoutGlobalRow('community');
+      if (failure === 'audit')
+        await reader.query(`ALTER TABLE core.outbox ADD CONSTRAINT bootstrap_failure CHECK (type <> '${audit}')`);
+      try {
+        await invoke(person, false);
+        expect(await snapshot()).toEqual({ marker: [], grants: [], events: [], standing: [], standingGrants: [] });
+      } finally {
+        if (failure === 'audit') await reader.query('ALTER TABLE core.outbox DROP CONSTRAINT bootstrap_failure');
+        else
+          await reader.query(
+            "INSERT INTO semantic.context(route,context_id,kind,labels) VALUES(0,$1,'global','{\"en\":\"Global\"}') ON CONFLICT(route,context_id) DO UPDATE SET kind='global'",
+            [PLATFORM_RESOURCE.id],
+          );
+      }
     }
-  }
-});
+  },
+);
 
-test('organization standing setup has its own marker and resumes an interrupted deployment', async () => {
+test.serial('organization standing setup has its own marker and resumes an interrupted deployment', async () => {
   await reset();
   // The existing Semantic standing setup already occupies the Global parent.
   await reader.query(
@@ -496,7 +532,7 @@ test('organization standing setup has its own marker and resumes an interrupted 
   ).toHaveLength(2);
 });
 
-test('concurrent same and different named CLI calls linearize to one durable winner', async () => {
+test.serial('concurrent same and different named CLI calls linearize to one durable winner', async () => {
   for (const ids of [
     [person, person],
     [person, other],
@@ -548,141 +584,143 @@ async function resetShowcase() {
   );
 }
 
-test('local showcase uses one native identity grant, authoritative validity and durable non-restoring replay', async () => {
-  await reset();
-  await resetShowcase();
-  await invoke(person);
-  const governance = await snapshot();
-  expect(await showcaseSnapshot()).toEqual({ grants: [], receipts: [], events: [] });
-  const position = (await reader.query('SELECT position FROM core.partition WHERE partition_no=0')).rows[0].position;
-  expect(await bootstrapLocalShowcaseBoardCreation(pool, person)).toEqual({
-    resource: PLATFORM_RESOURCE,
-    subjectId: person,
-    actions: ['board:create'],
-  });
-  const installed = await showcaseSnapshot();
-  expect(installed.grants).toHaveLength(1);
-  expect(installed.receipts).toHaveLength(1);
-  expect(installed.events).toHaveLength(1);
-  const grant = installed.grants[0];
-  const receipt = installed.receipts[0];
-  const event = installed.events[0];
-  expect(BigInt(receipt.position)).toBe(BigInt(position) + 1n);
-  expect(grant).toMatchObject({
-    subject_kind: 'identity',
-    subject_id: person,
-    subject_role: '',
-    route: 0,
-    resource_id: PLATFORM_RESOURCE.id,
-    action: 'board:create',
-    transaction_id: receipt.transaction_id,
-  });
-  expect(receipt).toMatchObject({ principal_kind: 'account', principal_id: person, partition_no: 0 });
-  expect(receipt.response).toEqual({
-    resource: PLATFORM_RESOURCE,
-    subjectId: person,
-    subjectRole: '',
-    actions: ['board:create'],
-    valid: event.data.valid,
-  });
-  expect(event).toMatchObject({ epoch: receipt.epoch, position: receipt.position, event_count: 1, event_seq: 0 });
-  expect(event.data).toEqual(receipt.response);
-  expect(
-    (
-      await reader.query(
-        `SELECT lower(g.valid)=o.recorded_at AND lower_inc(g.valid) AND upper_inf(g.valid)
+test.serial(
+  'local showcase uses one native identity grant, authoritative validity and durable non-restoring replay',
+  async () => {
+    await reset();
+    await resetShowcase();
+    await invoke(person);
+    const governance = await snapshot();
+    expect(await showcaseSnapshot()).toEqual({ grants: [], receipts: [], events: [] });
+    const position = (await reader.query('SELECT position FROM core.partition WHERE partition_no=0')).rows[0].position;
+    expect(await bootstrapLocalShowcaseBoardCreation(pool, person)).toEqual({
+      resource: PLATFORM_RESOURCE,
+      subjectId: person,
+      actions: ['board:create'],
+    });
+    const installed = await showcaseSnapshot();
+    expect(installed.grants).toHaveLength(1);
+    expect(installed.receipts).toHaveLength(1);
+    expect(installed.events).toHaveLength(1);
+    const grant = installed.grants[0];
+    const receipt = installed.receipts[0];
+    const event = installed.events[0];
+    expect(BigInt(receipt.position)).toBe(BigInt(position) + 1n);
+    expect(grant).toMatchObject({
+      subject_kind: 'identity',
+      subject_id: person,
+      subject_role: '',
+      route: 0,
+      resource_id: PLATFORM_RESOURCE.id,
+      action: 'board:create',
+      transaction_id: receipt.transaction_id,
+    });
+    expect(receipt).toMatchObject({ principal_kind: 'account', principal_id: person, partition_no: 0 });
+    expect(receipt.response).toEqual({
+      resource: PLATFORM_RESOURCE,
+      subjectId: person,
+      subjectRole: '',
+      actions: ['board:create'],
+      valid: event.data.valid,
+    });
+    expect(event).toMatchObject({ epoch: receipt.epoch, position: receipt.position, event_count: 1, event_seq: 0 });
+    expect(event.data).toEqual(receipt.response);
+    expect(
+      (
+        await reader.query(
+          `SELECT lower(g.valid)=o.recorded_at AND lower_inc(g.valid) AND upper_inf(g.valid)
        AND g.valid=(r.response->>'valid')::tstzrange AS authoritative
      FROM access.resource_grant g JOIN core.receipt r ON r.transaction_id=g.transaction_id
      JOIN core.outbox o ON o.partition_no=r.partition_no AND o.epoch=r.epoch AND o.position=r.position
      WHERE r.command_kind=$1`,
-        [showcaseKind],
-      )
-    ).rows,
-  ).toEqual([{ authoritative: true }]);
-  await bootstrapLocalShowcaseBoardCreation(pool, person);
-  expect(await showcaseSnapshot()).toEqual(installed);
-  const mounted = actionCatalogue(createKernel({ pool, routeKey: new Uint8Array(32) }));
-  const using = fixtureAccess(mounted);
-  // Self-renunciation uses the existing native grant command and a genuine Auth-issued actor.
-  const ctx = await context(
-    person,
-    [...mounted.keys()].filter((scope) => scope !== 'media:complete'),
-    using,
-  );
-  expect(await (await accessCheck(using, ctx.actor, 'board:create', PLATFORM_RESOURCE, ctx))(pool)).toBe(true);
-  expect(await (await accessCheck(using, ctx.actor, 'thread:create', PLATFORM_RESOURCE, ctx))(pool)).toBe(false);
-  expect(
-    await (
-      await accessCheck(using, ctx.actor, 'board:create', { route: routeOf(person)!, id: person }, ctx)
-    )(pool),
-  ).toBe(false);
-  const unrelated = await context(other, [...ctx.actor.scopes], using);
-  expect(await (await accessCheck(using, unrelated.actor, 'board:create', PLATFORM_RESOURCE, unrelated))(pool)).toBe(
-    false,
-  );
-  await createGrantCommands({ pool, access: using, managementAction: 'access:grant' }).revoke(ctx, {
-    resource: PLATFORM_RESOURCE,
-    subject: { kind: 'account', id: person },
-    actions: ['board:create'],
-    valid: grant.valid,
-    key: 'showcase-renounce',
-  });
-  await bootstrapLocalShowcaseBoardCreation(pool, person);
-  expect(await showcaseSnapshot()).toEqual({ ...installed, grants: [] });
-  expect(await snapshot()).toEqual(governance);
-});
+          [showcaseKind],
+        )
+      ).rows,
+    ).toEqual([{ authoritative: true }]);
+    await bootstrapLocalShowcaseBoardCreation(pool, person);
+    expect(await showcaseSnapshot()).toEqual(installed);
+    const mounted = actionCatalogue(mountedKernel());
+    const using = fixtureAccess(mounted);
+    // Self-renunciation uses the existing native grant command and a genuine Auth-issued actor.
+    const ctx = await context(
+      person,
+      [...mounted.keys()].filter((scope) => scope !== 'media:complete'),
+      using,
+    );
+    expect(await (await accessCheck(using, ctx.actor, 'board:create', PLATFORM_RESOURCE, ctx))(pool)).toBe(true);
+    expect(await (await accessCheck(using, ctx.actor, 'thread:create', PLATFORM_RESOURCE, ctx))(pool)).toBe(false);
+    expect(
+      await (
+        await accessCheck(using, ctx.actor, 'board:create', { route: routeOf(person)!, id: person }, ctx)
+      )(pool),
+    ).toBe(false);
+    const unrelated = await context(other, [...ctx.actor.scopes], using);
+    expect(await (await accessCheck(using, unrelated.actor, 'board:create', PLATFORM_RESOURCE, unrelated))(pool)).toBe(
+      false,
+    );
+    await createGrantCommands({ pool, access: using, managementAction: 'access:grant' }).revoke(ctx, {
+      resource: PLATFORM_RESOURCE,
+      subject: { kind: 'account', id: person },
+      actions: ['board:create'],
+      valid: grant.valid,
+      key: 'showcase-renounce',
+    });
+    await bootstrapLocalShowcaseBoardCreation(pool, person);
+    expect(await showcaseSnapshot()).toEqual({ ...installed, grants: [] });
+    expect(await snapshot()).toEqual(governance);
+  },
+);
 
-test('local showcase refuses current Global/operator-marker mismatches before replay and rolls back native failure', async () => {
-  await reset();
-  await invoke(person);
-  for (const installed of [false, true]) {
-    await resetShowcase();
-    if (installed) await bootstrapLocalShowcaseBoardCreation(pool, person);
-    for (const failure of ['missing-global', 'wrong-kind', 'missing-marker', 'wrong-operator', 'other-account']) {
-      const marker = (await snapshot()).marker[0];
-      if (failure === 'missing-global')
-        await reader.query('DELETE FROM semantic.context WHERE route=0 AND context_id=$1', [PLATFORM_RESOURCE.id]);
-      if (failure === 'wrong-kind')
-        await reader.query("UPDATE semantic.context SET kind='community' WHERE route=0 AND context_id=$1", [
-          PLATFORM_RESOURCE.id,
-        ]);
-      if (failure === 'missing-marker') await reader.query('DELETE FROM access.governance_bootstrap');
-      if (failure === 'wrong-operator')
-        await reader.query('UPDATE access.governance_bootstrap SET account_id=$1', [other]);
-      const before = await showcaseSnapshot();
-      try {
-        await expect(
-          bootstrapLocalShowcaseBoardCreation(pool, failure === 'other-account' ? other : person),
-        ).rejects.toBeInstanceOf(BootstrapGovernanceUnavailableError);
-        expect(await showcaseSnapshot()).toEqual(before);
-      } finally {
-        await reader.query(
-          `INSERT INTO semantic.context(route,context_id,kind,labels)
+test.serial(
+  'local showcase refuses current Global/operator-marker mismatches before replay and rolls back native failure',
+  async () => {
+    await reset();
+    await invoke(person);
+    for (const installed of [false, true]) {
+      await resetShowcase();
+      if (installed) await bootstrapLocalShowcaseBoardCreation(pool, person);
+      for (const failure of ['missing-global', 'wrong-kind', 'missing-marker', 'wrong-operator', 'other-account']) {
+        const marker = (await snapshot()).marker[0];
+        if (failure === 'missing-global') await withoutGlobalRow('missing');
+        if (failure === 'wrong-kind') await withoutGlobalRow('community');
+        if (failure === 'missing-marker') await reader.query('DELETE FROM access.governance_bootstrap');
+        if (failure === 'wrong-operator')
+          await reader.query('UPDATE access.governance_bootstrap SET account_id=$1', [other]);
+        const before = await showcaseSnapshot();
+        try {
+          await expect(
+            bootstrapLocalShowcaseBoardCreation(pool, failure === 'other-account' ? other : person),
+          ).rejects.toBeInstanceOf(BootstrapGovernanceUnavailableError);
+          expect(await showcaseSnapshot()).toEqual(before);
+        } finally {
+          await reader.query(
+            `INSERT INTO semantic.context(route,context_id,kind,labels)
           VALUES(0,$1,'global','{"en":"Global"}') ON CONFLICT(route,context_id) DO UPDATE SET kind='global'`,
-          [PLATFORM_RESOURCE.id],
-        );
-        await reader.query(
-          `INSERT INTO access.governance_bootstrap(route,resource_id,account_id,transaction_id)
+            [PLATFORM_RESOURCE.id],
+          );
+          await reader.query(
+            `INSERT INTO access.governance_bootstrap(route,resource_id,account_id,transaction_id)
           VALUES(0,$1,$2,$3) ON CONFLICT(route,resource_id) DO UPDATE SET account_id=EXCLUDED.account_id`,
-          [PLATFORM_RESOURCE.id, marker.account_id, marker.transaction_id],
-        );
+            [PLATFORM_RESOURCE.id, marker.account_id, marker.transaction_id],
+          );
+        }
       }
     }
-  }
-  await resetShowcase();
-  const before = await showcaseSnapshot();
-  await reader.query(
-    `ALTER TABLE core.outbox ADD CONSTRAINT showcase_failure CHECK (type <> '${grantEvent}') NOT VALID`,
-  );
-  try {
-    await expect(bootstrapLocalShowcaseBoardCreation(pool, person)).rejects.toThrow();
-    expect(await showcaseSnapshot()).toEqual(before);
-  } finally {
-    await reader.query('ALTER TABLE core.outbox DROP CONSTRAINT showcase_failure');
-  }
-  await bootstrapLocalShowcaseBoardCreation(pool, person);
-  const recovered = await showcaseSnapshot();
-  expect(recovered.grants).toHaveLength(1);
-  expect(recovered.receipts).toHaveLength(1);
-  expect(recovered.events).toHaveLength(before.events.length + 1);
-});
+    await resetShowcase();
+    const before = await showcaseSnapshot();
+    await reader.query(
+      `ALTER TABLE core.outbox ADD CONSTRAINT showcase_failure CHECK (type <> '${grantEvent}') NOT VALID`,
+    );
+    try {
+      await expect(bootstrapLocalShowcaseBoardCreation(pool, person)).rejects.toThrow();
+      expect(await showcaseSnapshot()).toEqual(before);
+    } finally {
+      await reader.query('ALTER TABLE core.outbox DROP CONSTRAINT showcase_failure');
+    }
+    await bootstrapLocalShowcaseBoardCreation(pool, person);
+    const recovered = await showcaseSnapshot();
+    expect(recovered.grants).toHaveLength(1);
+    expect(recovered.receipts).toHaveLength(1);
+    expect(recovered.events).toHaveLength(before.events.length + 1);
+  },
+);

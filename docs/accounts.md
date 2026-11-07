@@ -402,9 +402,9 @@ when present and the native operator marking for automation. Delegation does not
 
 `effective permission = actor grants ∩ current client-consented scopes ∩ principal grants (if delegated)`.
 
-Decision: native policy consumes the declared `deadlineLive` fact, while `live` fences read freshness. Grant
-acceptance uses Auth-issued assignment tokens and checks grant/revoke with the same bearer. Own-account authority
-remains explicit advice.
+Decision: native policy consumes the declared deadline fact defined in [section 9](#9-time), while `live` fences read
+freshness. Grant acceptance uses Auth-issued assignment tokens and checks grant/revoke with the same bearer.
+Own-account authority remains explicit advice.
 
 Each operand can deny independently. Unknown actions and missing evidence deny; native resource, time,
 suspension, revocation and fence floors remain. Signed-in identity, a role label, page advice or review link
@@ -439,6 +439,20 @@ Unavailability stays distinct from denial: exhausted deadlines, pool waits, conn
 retain their retryable 503 domain answers and cannot become a permitting branch. Revoked callers cannot read a
 stored result or repeat an effect. The native contracts retain authorization before receipt lookup, fixed request
 deadlines, exact client/delegation digests, self-authority-removal replay restrictions and bounded cleanup continuations.
+
+Composed native grant clients register scopes from the installed action catalogue that Access uses, including the
+internal actions a delegated role needs. Mounted HTTP actions alone do not define that scope ceiling.
+
+Decision: the mounted resource-access route imports only declared public entries: Accounts' resource data and recovery
+visits, and the content-owned post-command session source. It keeps no second session observer.
+The route owns recovery navigation; the session source owns the retained command. A grant or profile readback shows
+current state but never acknowledges an unknown write. Only the exact original command response settles that write;
+an acknowledged write with failed readback recovers its read without repeating the effect. Scope registration,
+current consent, resource grants and recovery of an earlier command remain separate checks.
+
+Decision: a 2xx grant response saves a write only when its body exactly acknowledges the submitted resource, subject,
+actions or role, and validity. Preparation is the `preparing` problem code or type; `dependency_unavailable` is the only
+other problem form, and it stays unavailable.
 
 ## 5. Organizations and memberships
 
@@ -712,6 +726,14 @@ The original workflows now require native identity publication, including both f
 success stages. A missing coordinator or original historical custody retains the same retryable work and receipt;
 it does not establish verification. The [Semantic source boundary](../services/kernel/src/semantic/identity-epoch-contract.md#accounts-source-intent-and-workflow-boundary)
 records the delivered verifier and the remaining native delivery, historical recovery and erasure-custody gaps.
+Each success stage (page write, completion, finish, and the reversal's page removal and finish) follows one bounded
+publication of the exact original job, redriven while unavailable. Accounts owns the original-home reader
+(`ACCOUNT_IDENTITY_SOURCE_DECLARATION`) and admits it at Source original/prepare/checkpoint/finish multiplicities;
+runtime debits that body once. Source's reached-body declaration stays Source-owned. History selectedCommandCalls and Library's original
+declaration compose as reached children. Whole original-work admission still names Core's
+event-callback prepare/checkpoint/finish and History's Recovery/SDKPhysical operands; Accounts
+does not substitute a partial declaration for that whole. Independent publication and readback
+continue without waiting for those remaining owner operands.
 
 ## 8. Platform gates
 
@@ -752,9 +774,11 @@ One trusted [kernel clock][clock] supplies authoritative T for command attempts 
 production uses the system clock, without request overrides. Grants, role assignments, memberships and denials
 use native `tstzrange` validity at T, with `WITHOUT OVERLAPS`; cleanup is not an expiry correctness barrier.
 See [permission-time.sql][permission-time], [permission-check.sql][permission-sql], [schema][schema] and
-[Evaluator time][access-time]. Decision: `permission-check.sql` returns that deadline operand as one
-`deadlineLive` column plus statement-level `live`; the policy adapter reads `deadlineLive`, while the transport
-checks `live` independently. The native projection byte bound reserves both returned fields.
+[Evaluator time][access-time]. Decision: `permission-check.sql` returns that deadline operand as one `deadlineLive`
+column plus statement-level `live`. Native policy, scalar, explicit and batch deadline decisions read only
+`deadlineLive`; statement freshness (`live`) stays separate, and the transport checks `live` independently. Native
+receiving keeps the compiled SQL `deadlineLive` projection as the Access deadline fact. The native projection byte
+bound reserves both returned fields.
 
 Bearer credentials originate outside the kernel: `iat`, `exp` and every bearer-expiry comparison use wall time.
 Kernel-issued approvals, operator openings, registration proofs, capabilities and cursors use kernel T. An
@@ -927,13 +951,3 @@ external or backup erasure. No provider, retention schedule or deleted-account r
 [auth-boundary]: ../services/auth/README.md#application-boundary-and-configuration
 [auth-host]: ../services/auth/README.md#ordinary-native-host-assembly
 [auth-workflows]: ../services/auth/README.md#durable-account-workflow-host
-
-Native receiving keeps the compiled SQL `deadlineLive` projection as the Access deadline fact. The check
-fixtures invoke the current erasure producer-list function and define each Search service method once;
-these repairs align trusted producers without adding authorization rules or changing account custody.
-
-Composed native grant clients register scopes from the installed action catalogue that Access uses, including the internal actions a delegated role needs. Mounted HTTP actions alone do not define that scope ceiling. Native deadline decisions use the SQL `deadlineLive` operand in scalar, explicit and batch checks; statement freshness (`live`) stays separate. Source original-work admission stays unavailable until its owner publishes the complete declaration; Accounts does not synthesize that ownership.
-
-Decision: the mounted resource-access route imports only declared public entries: Accounts' resource data and recovery visits, and the content-owned post-command session source. It keeps no second session observer.
-
-Decision: a 2xx grant response saves a write only when its body exactly acknowledges the submitted resource, subject, actions or role, and validity. Preparation is the `preparing` problem code or type; `dependency_unavailable` is the only other problem form, and it stays unavailable.

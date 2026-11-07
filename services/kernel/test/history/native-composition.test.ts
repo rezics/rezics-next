@@ -12,6 +12,7 @@ import {
   declareCommandHistory as nativeDeclareCommandHistory,
   recordDurableWorkLocator as nativeRecordDurableWorkLocator,
 } from '../../src/history/adapters/record.ts';
+import { nativeRecordSourceSetProducer } from '../../src/history/adapters/record-source-set-native.ts';
 import { admitSharedHistory as nativeAdmitSharedHistory } from '../../src/history/adapters/shared-history.ts';
 import { sharedHistoryWorkModule as nativeLocalSharedHistoryWorkModule } from '../../src/history/adapters/shared-history-work.ts';
 import {
@@ -41,4 +42,8 @@ test('ordinary native composition binds the production adapters themselves', () 
       (count) => Number.isSafeInteger(count) && count >= 1,
     ),
   ).toBeTrue();
+  expect(installed.sharedHistoryWorkModule).toBe(nativeSharedHistoryWorkModule);
+  expect(installed.localSharedHistoryWorkModule).toBe(nativeLocalSharedHistoryWorkModule);
+  expect(installed.sharedHistoryWorkModule).not.toBe(installed.localSharedHistoryWorkModule);
+  expect(typeof nativeRecordSourceSetProducer().beginSemanticRecordSourceSet).toBe('function');
 });

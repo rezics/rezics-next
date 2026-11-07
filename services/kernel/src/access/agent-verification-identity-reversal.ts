@@ -35,6 +35,15 @@ import {
   readAccountIdentitySource,
   type AccountIdentitySource,
 } from './agent-verification-identity.ts';
+import {
+  ACCOUNT_IDENTITY_REVERSAL_READ_DECLARATION,
+  ACCOUNT_IDENTITY_REVERSAL_VERIFY_DECLARATION,
+  accountIdentityNativeStep,
+} from './agent-verification-identity-work.ts';
+export {
+  ACCOUNT_IDENTITY_REVERSAL_SETTLEMENT_DECLARATION,
+  ACCOUNT_IDENTITY_REVERSAL_VERIFY_DECLARATION,
+} from './agent-verification-identity-work.ts';
 import { readAccountIdentityTechnicalSource } from './agent-verification-identity-retention.ts';
 import type { AgentVerificationReversal } from './agent-verification.ts';
 import insertTechnical from './agent-verification-identity-technical-insert.sql';
@@ -481,20 +490,14 @@ export async function readAccountIdentityReversalSettlement(
   reference: IdentitySourceConsumerReference,
   context: IdentitySourceConsumerContext,
 ): Promise<AccountIdentityReversalSettlement | null> {
-  const settlement = ACCOUNT_IDENTITY_REVERSAL_SETTLEMENT_DECLARATION();
+  const read = ACCOUNT_IDENTITY_REVERSAL_READ_DECLARATION();
   if (
     !isLiveIdentitySourceConsumerMaintenance(pool, context.identityConsumerWork, context.deadline) ||
     !reserveIdentitySourceConsumerNativeWork(
       pool,
       context.identityConsumerWork,
-      {
-        rows: settlement.work.nativeRows,
-        points: settlement.work.nativePoints,
-        statements: settlement.work.statements,
-        bytes: settlement.work.bytes,
-        engineRequests: 0,
-      },
-      settlement.work,
+      accountIdentityNativeStep(read.work),
+      read.work,
     )
   )
     return null;
@@ -528,58 +531,14 @@ export async function verifyAccountIdentityReversalSettlement(
   if (!live(tx, reference)) return false;
   const resources = currentCommandResources(tx);
   const work = currentIdentitySourceConsumerMaintenance(resources.pool, resources.deadline);
-  const declared = ACCOUNT_IDENTITY_REVERSAL_VERIFY_DECLARATION();
+  const verify = ACCOUNT_IDENTITY_REVERSAL_VERIFY_DECLARATION();
   if (
     !work ||
-    !reserveIdentitySourceConsumerNativeWork(
-      resources.pool,
-      work,
-      {
-        rows: declared.work.nativeRows,
-        points: declared.work.nativePoints,
-        statements: declared.work.statements,
-        bytes: declared.work.bytes,
-        engineRequests: 0,
-      },
-      declared.work,
-    )
+    !reserveIdentitySourceConsumerNativeWork(resources.pool, work, accountIdentityNativeStep(verify.work), verify.work)
   )
     return false;
   const data = (proof as Proof | null)?.[locator];
   if (!data || data.reference !== normalized(reference)) return false;
   const result = await settlementFor(tx, reference);
   return !!result && sameNative(result.terminal, data.terminal) && result.snapshot === data.snapshot;
-}
-
-/** Same-home settlement read: 64/64/20/65536 plus explicit remaining axes. Verify is the 15-statement prefix. */
-export function ACCOUNT_IDENTITY_REVERSAL_SETTLEMENT_DECLARATION() {
-  return Object.freeze({
-    engineRequests: 0 as const,
-    work: Object.freeze({
-      candidateKeys: 0,
-      nativeRows: 64,
-      identityMetadataRows: 0,
-      nativePoints: 64,
-      witnessKeys: 0,
-      statements: 20,
-      bytes: 65536,
-      emptySeeks: 20,
-    }),
-  });
-}
-
-export function ACCOUNT_IDENTITY_REVERSAL_VERIFY_DECLARATION() {
-  return Object.freeze({
-    engineRequests: 0 as const,
-    work: Object.freeze({
-      candidateKeys: 0,
-      nativeRows: 64,
-      identityMetadataRows: 0,
-      nativePoints: 64,
-      witnessKeys: 0,
-      statements: 15,
-      bytes: 65536,
-      emptySeeks: 15,
-    }),
-  });
 }

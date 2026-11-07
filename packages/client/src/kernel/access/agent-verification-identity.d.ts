@@ -66,23 +66,50 @@ export declare function originalAccountIdentitySource(tx: CommandTransaction, ke
 export declare function accountIdentityUnavailable(detail: string): IdentityEpochStoreError;
 /** Record the immutable source and its SDK handoff in the ORIGINAL eventful account-home command. */
 export declare function recordAccountIdentitySource(tx: CommandTransaction, source: Source): Promise<void>;
+/** Closed eight-axis body for one original-home source read: account fence, intent+partition,
+ * and the bounded technical fallback (receiver, accepted binding, role inventory). Command
+ * controls stay with the Core no-effect envelope.
+ */
+export declare function ACCOUNT_IDENTITY_SOURCE_DECLARATION(): Readonly<{
+    work: import("./contract/bounds.ts").AccessWorkDimensions;
+    engineRequests: 0;
+}>;
+export declare function ACCOUNT_IDENTITY_TECHNICAL_FALLBACK_DECLARATION(): Readonly<{
+    work: import("./contract/bounds.ts").AccessWorkDimensions;
+    engineRequests: 0;
+}>;
+export declare function ACCOUNT_IDENTITY_SOURCE_ADMISSION_DECLARATION(): Readonly<{
+    work: import("./contract/bounds.ts").AccessWorkDimensions;
+    engineRequests: 0;
+}>;
+export declare function ACCOUNT_IDENTITY_REVERSAL_READ_DECLARATION(): Readonly<{
+    work: import("./contract/bounds.ts").AccessWorkDimensions;
+    engineRequests: 0;
+}>;
+export declare function ACCOUNT_IDENTITY_REVERSAL_VERIFY_DECLARATION(): Readonly<{
+    work: import("./contract/bounds.ts").AccessWorkDimensions;
+    engineRequests: 0;
+}>;
+export declare const ACCOUNT_IDENTITY_ORIGINAL_SOURCE_DECLARATION: typeof ACCOUNT_IDENTITY_SOURCE_DECLARATION;
+export declare const ACCOUNT_IDENTITY_REVERSAL_SETTLEMENT_DECLARATION: typeof ACCOUNT_IDENTITY_REVERSAL_VERIFY_DECLARATION;
+export declare function ACCOUNT_IDENTITY_FENCE_DECLARATION(): Readonly<{
+    work: import("./contract/bounds.ts").AccessWorkDimensions;
+    engineRequests: 0;
+}>;
+export declare function ACCOUNT_IDENTITY_INTENT_DECLARATION(): Readonly<{
+    work: import("./contract/bounds.ts").AccessWorkDimensions;
+    engineRequests: 0;
+}>;
+export declare function ACCOUNT_IDENTITY_ACCEPTED_BINDING_DECLARATION(): Readonly<{
+    work: import("./contract/bounds.ts").AccessWorkDimensions;
+    engineRequests: 0;
+}>;
+export declare function ACCOUNT_IDENTITY_ROLE_INVENTORY_DECLARATION(): Readonly<{
+    work: import("./contract/bounds.ts").AccessWorkDimensions;
+    engineRequests: 0;
+}>;
 /** Current native T and account terminal fence precede the immutable receipt lookup and any disclosure. */
 export declare function readAccountIdentitySource(tx: CommandTransaction, receipt: AccountReceipt, intent?: IdentityIntent, undoOnly?: boolean): Promise<AccountIdentitySource>;
-/** In-command undo-only original source: account SHARE, intent, technical fallback.
- * Command controls are composed by the caller. Released History wrapping is a separate term. */
-export declare function ACCOUNT_IDENTITY_ORIGINAL_SOURCE_DECLARATION(): Readonly<{
-    engineRequests: 0;
-    work: Readonly<{
-        candidateKeys: 0;
-        nativeRows: 7;
-        identityMetadataRows: 0;
-        nativePoints: 7;
-        witnessKeys: 0;
-        statements: 3;
-        bytes: number;
-        emptySeeks: 3;
-    }>;
-}>;
 /** Opaque source custody from a released native read; JSON or a raw CommandAuthorization cannot mint it. */
 export declare function assertAccountIdentitySource(source: AccountIdentitySource, receipt: AccountReceipt, intent?: IdentityIntent): void;
 export declare function loadAccountIdentitySource(pool: Pool, receipt: AccountReceipt): Promise<AccountIdentitySource>;

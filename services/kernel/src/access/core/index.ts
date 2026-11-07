@@ -17,6 +17,7 @@ export {
   composeOriginalWorkAdmission,
   originalControlWork,
   originalWorkVector,
+  scaleOriginalControl,
   sumOriginalControl,
 } from './original-work.ts';
 export { authorizationAllows, decideResourceAuthorization } from './authorization-decision.ts';

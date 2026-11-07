@@ -247,6 +247,7 @@ beforeAll(async () => {
     routeKey: routeKeyText,
     openSearchUrl: process.env.OPENSEARCH_URL,
     searchPrefix,
+    executorId: `reversal-${randomUUID()}`,
   });
   staff = await seedAccount('reversal_staff');
   manager = await seedAccount('reversal_manager');

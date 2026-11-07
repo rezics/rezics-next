@@ -30,17 +30,32 @@ import type {
   IdentityReceipt,
 } from '../semantic/identity-epoch-contract.ts';
 import { IdentityEpochStoreError } from '../semantic/identity-adapters/index.ts';
-import { memoizedValue } from '../memoized.ts';
-import { statementBytes } from '../database/statement-bytes.ts';
 import insert from './agent-verification-identity-insert.sql';
 import read from './agent-verification-identity-read.sql';
-import technicalRead from './agent-verification-identity-technical-read.sql';
 import {
   recoverMissingAccountIdentitySource,
   originalRecoveredAccountIdentitySource,
 } from './agent-verification-identity-recovery.ts';
 import { declareAgentIdentitySource, recordAgentIdentityWorkSource } from '../history/application/index.ts';
-import { ACCOUNT_ROLE_BITS, type AgentIdentitySourceKey, unionHistoryScope } from '../history/contract/index.ts';
+import { type AgentIdentitySourceKey } from '../history/contract/index.ts';
+import {
+  ACCOUNT_IDENTITY_FENCE_SQL,
+  ACCOUNT_IDENTITY_SOURCE_DECLARATION,
+  accountIdentityNativeStep,
+} from './agent-verification-identity-work.ts';
+export {
+  ACCOUNT_IDENTITY_ACCEPTED_BINDING_DECLARATION,
+  ACCOUNT_IDENTITY_FENCE_DECLARATION,
+  ACCOUNT_IDENTITY_INTENT_DECLARATION,
+  ACCOUNT_IDENTITY_ORIGINAL_SOURCE_DECLARATION,
+  ACCOUNT_IDENTITY_REVERSAL_READ_DECLARATION,
+  ACCOUNT_IDENTITY_REVERSAL_SETTLEMENT_DECLARATION,
+  ACCOUNT_IDENTITY_REVERSAL_VERIFY_DECLARATION,
+  ACCOUNT_IDENTITY_ROLE_INVENTORY_DECLARATION,
+  ACCOUNT_IDENTITY_SOURCE_ADMISSION_DECLARATION,
+  ACCOUNT_IDENTITY_SOURCE_DECLARATION,
+  ACCOUNT_IDENTITY_TECHNICAL_FALLBACK_DECLARATION,
+} from './agent-verification-identity-work.ts';
 
 type AccountReceipt = Exclude<IdentityReceipt, { kind: 'subject.merge' }>;
 type Source = {
@@ -74,6 +89,7 @@ const nativeSources = new WeakMap<
   AccountIdentitySource,
   { time: string; key: string; deadline: number; undoOnly: boolean }
 >();
+const ACCOUNT_FENCE_SQL = ACCOUNT_IDENTITY_FENCE_SQL;
 const json = (value: unknown): string =>
   JSON.stringify(value, (_key, entry: unknown) => (typeof entry === 'bigint' ? entry.toString() : entry));
 const normalized = (value: unknown) => canonicalize(JSON.parse(json(value)))!;
@@ -309,6 +325,24 @@ export async function recordAccountIdentitySource(tx: CommandTransaction, source
   await recordAgentIdentityWorkSource(tx, source.receipt, source.decision?.custody_id ?? null);
 }
 
+async function reserveAccountIdentitySourceWork(tx: CommandTransaction): Promise<void> {
+  const resources = currentCommandResources(tx);
+  const maintenance = await import('../semantic/identity-source-consumer-maintenance.ts');
+  if (!maintenance.isPrepaidIdentitySourceConsumerMaintenance(resources.pool)) return;
+  const declaration = ACCOUNT_IDENTITY_SOURCE_DECLARATION();
+  const token = maintenance.currentIdentitySourceConsumerMaintenance(resources.pool, resources.deadline);
+  if (
+    !token ||
+    !maintenance.reserveIdentitySourceConsumerNativeWork(
+      resources.pool,
+      token,
+      accountIdentityNativeStep(declaration.work),
+      declaration.work,
+    )
+  )
+    throw new maintenance.IdentitySourceOriginalUnavailable('identity-source-original-Account-reader-exhausted');
+}
+
 /** Current native T and account terminal fence precede the immutable receipt lookup and any disclosure. */
 export async function readAccountIdentitySource(
   tx: CommandTransaction,
@@ -320,9 +354,10 @@ export async function readAccountIdentitySource(
   const route = accountRoute(receipt);
   if (command.basis !== null || command.partition !== partitionOf(route))
     throw new TypeError('Accounts source verification requires its native platform home');
+  await reserveAccountIdentitySourceWork(tx);
   const time = authoritativeTimeValue(command.time);
   const account = await tx.query<{ kind: 'actor' | 'organization'; state: string; authn_fenced: boolean }>(
-    `SELECT kind,state,authn_fenced FROM access.account WHERE route=$1 AND account_id=$2 FOR SHARE`,
+    ACCOUNT_FENCE_SQL,
     [route, receipt.account],
   );
   const current = account.rows[0];
@@ -400,33 +435,6 @@ export async function readAccountIdentitySource(
   });
   nativeSources.set(source, { time, key: keyOf(receipt), deadline: currentCommandResources(tx).deadline, undoOnly });
   return source;
-}
-
-const accountShareSql = `SELECT kind,state,authn_fenced FROM access.account WHERE route=$1 AND account_id=$2 FOR SHARE`;
-
-/** In-command undo-only original source: account SHARE, intent, technical fallback.
- * Command controls are composed by the caller. Released History wrapping is a separate term. */
-export function ACCOUNT_IDENTITY_ORIGINAL_SOURCE_DECLARATION() {
-  return memoizedValue(ACCOUNT_IDENTITY_ORIGINAL_SOURCE_DECLARATION, () =>
-    Object.freeze({
-      engineRequests: 0 as const,
-      work: Object.freeze({
-        candidateKeys: 0,
-        nativeRows: 7,
-        identityMetadataRows: 0,
-        nativePoints: 7,
-        witnessKeys: 0,
-        statements: 3,
-        bytes:
-          statementBytes(accountShareSql) +
-          statementBytes(read) +
-          statementBytes(technicalRead) +
-          6 * (8 + 36 * 4 + 9) +
-          16384,
-        emptySeeks: 3,
-      }),
-    }),
-  );
 }
 
 /** Opaque source custody from a released native read; JSON or a raw CommandAuthorization cannot mint it. */
@@ -660,7 +668,6 @@ export async function verifyAccountIdentityTechnicalSource(
 }
 
 export {
-  ACCOUNT_IDENTITY_REVERSAL_SETTLEMENT_DECLARATION,
   readAccountIdentityReversalSettlement,
   verifyAccountIdentityReversalSettlement,
   type AccountIdentityReversalSettlement,

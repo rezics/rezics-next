@@ -167,9 +167,31 @@ desktop/phone review remain integration verification; no promoted execution is e
 
 **Native acceptance:** `bun run --cwd services/kernel check test/access/account-lifecycle-outcome.test.ts test/access/account-agent-effect.test.ts test/presentation/agent-page-address.test.ts test/access/agent-profile-outcomes.test.ts`.
 
-**Worker fixture evidence:** the canonical-target and agent-page-address fixtures register named actors through the
-lifecycle registration commands and run the work executor in a child process. Their publication step needs Semantic52's
-verify and unverify mapping, so these suites are not accepted until that delivery lands.
+**Fixture composition:** the canonical-target and agent-page-address fixtures register human actors through the
+lifecycle registration commands and run the work executor in a child process with its own executor identity. The
+parent registers Work queues on a dedicated WorkClient and never calls `composeWork` or `setConfig`, so it cannot
+hold the system-database lease or share the command pool with DBOS. Publication-waiting cases in those suites run
+serially. Organization and operated-actor page
+fixtures retain explicit starting rows. Direct publication fixtures join the live identity executor's original SDK
+workflow after approval (enqueue only when that effect has not admitted it) and do not duplicate record-pending,
+associate, merge or page write beside it. Each success stage of that workflow publishes the original job, then the
+fixture reads independently; a pending original is not success. Bootstrap-governance tests that share one Global
+installation run serially. The delivered producer
+supplies account-source mapping, eight-axis original-source receiving and same-pool Search receiving.
+Native execution, mounted HTTP, browser and promoted evidence remain separate; source composition alone establishes none of them.
+Fewest tests: the named native publication, recovery, follow, shared-history and bootstrap suites, plus
+`test/access/account-identity-source-work.test.ts` for composed original-home/reversal costs; pins distinct work modules and Source path.
+Decision: Client root exports `identityOperationLocation`/`identityOperationId` and additive `operationAt` HTTP 202 Location admission; Web/Semantic own reviewed-Person polling. Accounts adds no extra fixture, writer or credential rule. Source getter names `ACCOUNT_IDENTITY_ORIGINAL_SOURCE_DECLARATION` and `ACCOUNT_IDENTITY_REVERSAL_SETTLEMENT_DECLARATION` alias the same reader and settlementFor bodies.
+
+**Native acceptance retained:** `bun run --cwd services/kernel check test/access/account-canonical-targets.test.ts
+test/presentation/agent-page-address.test.ts test/access/account-agent-effect.test.ts
+test/access/agent-profile-outcomes.test.ts test/access/agent-identity-recovery-retention.test.ts
+test/access/account-profile-http.test.ts test/library/follow-counts-outcomes.test.ts
+test/access/shared-history-context.test.ts test/access/shared-history-context-prepaid.test.ts
+test/access/shared-history-context-prepaid-foreign.test.ts test/access/shared-history-context-prepaid-command.test.ts
+test/access/shared-history-context-delivery.test.ts
+test/access/bootstrap-governance.test.ts test/access/bootstrap-governance-contract.test.ts
+test/access/bootstrap-governance-diagnostics.test.ts`.
 
 ## self-profile
 

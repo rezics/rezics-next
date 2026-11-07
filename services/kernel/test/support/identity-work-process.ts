@@ -1,13 +1,18 @@
+import { randomUUID } from 'node:crypto';
 import { fileURLToPath } from 'node:url';
+import { createWorkClient, type WorkClient } from '../../src/work/client.ts';
+import { WORK_QUEUES } from '../../src/work/queues.ts';
+import { workerTestEnv } from './worker-env.ts';
 
 const READY = 'IDENTITY_WORK_READY';
 // The child loads the whole kernel module graph before it can launch; the suites' beforeAll budget covers this wait.
-const READY_TIMEOUT_MS = 150_000;
+const READY_TIMEOUT_MS = 180_000;
 
 export type IdentityWorkProcessConfig = {
   databaseUrl: string;
   routeKey: string;
   searchPrefix: string;
+  executorId: string;
   openSearchUrl?: string | undefined;
 };
 
@@ -18,7 +23,16 @@ export async function startIdentityWorkProcess(config: IdentityWorkProcessConfig
     stdin: 'pipe',
     stdout: 'pipe',
     stderr: 'inherit',
-    env: process.env,
+    env: {
+      ...process.env,
+      ...workerTestEnv({
+        KERNEL_ROUTE_KEY: config.routeKey,
+        KERNEL_SEARCH_PREFIX: config.searchPrefix,
+        KERNEL_EXECUTOR_ID: config.executorId,
+        KERNEL_POOL_ACQUIRE_TIMEOUT_MS: '10000',
+        ...(config.openSearchUrl === undefined ? {} : { OPENSEARCH_URL: config.openSearchUrl }),
+      }),
+    },
   });
   child.stdin.write(JSON.stringify(config));
   await child.stdin.end();
@@ -56,6 +70,39 @@ export async function startIdentityWorkProcess(config: IdentityWorkProcessConfig
     async stop() {
       child.kill('SIGTERM');
       await child.exited;
+    },
+  };
+}
+
+export type AccountIdentityPublicationRuntime = {
+  workClient: WorkClient;
+  stop(): Promise<void>;
+};
+
+/** Parent fixtures register queues on a dedicated WorkClient and never call composeWork/setConfig.
+ * Only the child executor launches, so the parent cannot hold the system-database lease or share the
+ * command pool with DBOS system queries.
+ */
+export async function startAccountIdentityPublication(config: {
+  databaseUrl: string;
+  routeKey: string;
+  searchPrefix: string;
+  openSearchUrl?: string | undefined;
+}): Promise<AccountIdentityPublicationRuntime> {
+  const workClient = await createWorkClient(config.databaseUrl);
+  for (const [name, parameters] of Object.entries(WORK_QUEUES)) await workClient.registerQueue(name, parameters);
+  const identityWork = await startIdentityWorkProcess({
+    databaseUrl: config.databaseUrl,
+    routeKey: config.routeKey,
+    searchPrefix: config.searchPrefix,
+    executorId: `identity-publication-${randomUUID()}`,
+    ...(config.openSearchUrl === undefined ? {} : { openSearchUrl: config.openSearchUrl }),
+  });
+  return {
+    workClient,
+    async stop() {
+      await identityWork.stop();
+      await workClient.close();
     },
   };
 }

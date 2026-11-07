@@ -1,4 +1,4 @@
-import { afterAll, beforeAll, expect, test } from 'bun:test';
+import { afterAll, beforeAll, expect, setDefaultTimeout, test } from 'bun:test';
 import { createHash, randomUUID } from 'node:crypto';
 import { bundledDigest, bundledRelease } from '@rezics/definitions/bundled';
 import { PROFILE_FORMAT, type PresentationProfile } from '@rezics/composition';
@@ -13,21 +13,10 @@ import { bootstrapRelease, GLOBAL_CONTEXT } from '../../src/semantic/definitions
 import { linkProjection } from '../../src/semantic/links.ts';
 import { createSubject } from '../../src/semantic/subject.ts';
 import { bootstrapProfile } from '../../src/presentation/profiles.ts';
-import { createWorkClient, type WorkClient } from '../../src/work/client.ts';
-import { composeWork } from '../../src/work/registry.ts';
-import { KERNEL_WORK_MODULES } from '../support/default-work-modules.ts';
-import { workerTestEnv } from '../support/worker-env.ts';
+import type { WorkClient } from '../../src/work/client.ts';
 import type { Resource } from '../../src/request/access.ts';
 import {
-  completeAgentVerification,
-  finishAgentVerification,
-  mergeVerifiedAgent,
   readAgentVerificationWorkflowRequest,
-  recordPendingAgentVerification,
-  writeAgentVerificationPage,
-  unmergeVerifiedAgent,
-  removeAgentVerificationPage,
-  finishAgentVerificationReversal,
   type AgentVerificationReversal,
 } from '../../src/access/agent-verification.ts';
 import { applyAccountAgentEffect } from '../../src/access/account-agent-effect.ts';
@@ -37,10 +26,15 @@ import { newId, routeOf, partitionOf } from '../../src/route/route.ts';
 import { createKernel } from '../../src/http/kernel.ts';
 import { actionCatalogue, IDEMPOTENCY_HEADER } from '../../src/http/request.ts';
 import { accountToken, admittedAccess, authenticateAccount } from '../support/admitted-access.ts';
+import { runAccountIdentityReversal, runAccountIdentityVerification } from '../support/account-identity-publication.ts';
 import { createIdentityRegistrar } from '../support/identity-registration.ts';
-import { startIdentityWorkProcess } from '../support/identity-work-process.ts';
+import { startAccountIdentityPublication } from '../support/identity-work-process.ts';
 import { configureTestReceiptKeys, testReceiptKeys } from '../support/receipt-keys.ts';
 import { checkGrowth, openGrowthDatabase, seed, type GrowthDatabase, type Population } from '../support/growth.ts';
+
+// Each verification stage waits for the real identity publication of its original job, so one test can take longer
+// than the default budget.
+setDefaultTimeout(180_000);
 
 const accountRoute = 0x5274;
 const catalogueRoute = 0x6573;
@@ -59,8 +53,7 @@ let manager: Seeded;
 let registrar: ReturnType<typeof createIdentityRegistrar>;
 // The production work modules publish identity epochs; verified-subject addresses depend on that publication.
 let workClient: WorkClient;
-let registration: Awaited<ReturnType<typeof composeWork>> | undefined;
-let identityWork: Awaited<ReturnType<typeof startIdentityWorkProcess>> | undefined;
+let publication: Awaited<ReturnType<typeof startAccountIdentityPublication>> | undefined;
 const node = (type: string, id: string) => ({ type, props: { id } });
 const document = {
   root: { props: {} },
@@ -283,6 +276,7 @@ async function ensureAgent(account: Seeded, kind: 'person' | 'organization'): Pr
 beforeAll(async () => {
   db = await openGrowthDatabase();
   pool = db.pool;
+  pool.options.max = 24;
   configureTestReceiptKeys(pool);
   await bootstrapRelease(pool, bundledRelease);
   await bootstrapProfile(pool, profile);
@@ -304,30 +298,19 @@ beforeAll(async () => {
       },
     },
   });
-  workClient = await createWorkClient(db.url, pool);
-  // Identity publication indexes through the Search participant, which the check runner configures per run. This
-  // process composes the registration that the coordinator enqueues through; the production executor is launched only
-  // by the child process.
+  // Identity publication indexes through the Search participant, which the check runner configures per run. The
+  // parent registers queues on a dedicated WorkClient and never composes or launches; the child holds the lease.
   const routeKeyText = Buffer.from(routeKey).toString('base64url');
   // A check run and its load reruns share one OpenSearch; each composition owns fresh index names.
   const searchPrefix = `page-address-${randomUUID().slice(0, 8)}-`;
-  registration = await composeWork(KERNEL_WORK_MODULES, {
-    databaseUrl: db.url,
-    pool,
-    client: workClient,
-    env: workerTestEnv({
-      KERNEL_ROUTE_KEY: routeKeyText,
-      OPENSEARCH_URL: process.env.OPENSEARCH_URL,
-      KERNEL_SEARCH_PREFIX: searchPrefix,
-    }),
-    receiptKeys: testReceiptKeys(),
-  });
-  identityWork = await startIdentityWorkProcess({
+  const openSearchUrl = process.env.OPENSEARCH_URL;
+  publication = await startAccountIdentityPublication({
     databaseUrl: db.url,
     routeKey: routeKeyText,
-    openSearchUrl: process.env.OPENSEARCH_URL,
     searchPrefix,
+    ...(openSearchUrl === undefined ? {} : { openSearchUrl }),
   });
+  workClient = publication.workClient;
   registrar = createIdentityRegistrar(pool, routeKey);
   staff = await seedAccount('page_staff');
   manager = await seedAccount('page_manager');
@@ -339,12 +322,10 @@ beforeAll(async () => {
     [GLOBAL_CONTEXT, staff.id],
   );
   expect((await post('/v1/platform/exposure/agent_verification:open', await bearer(staff))).response.status).toBe(200);
-}, 180_000);
+}, 240_000);
 
 afterAll(async () => {
-  await identityWork?.stop();
-  await registration?.shutdown();
-  await workClient?.close();
+  await publication?.stop();
   await db?.close();
 });
 
@@ -368,21 +349,20 @@ async function verified(kind: 'actor' | 'organization' = 'actor') {
   );
   expect(approved.response.status).toBe(200);
   const decision = (await readAgentVerificationWorkflowRequest(pool, applied.body.verificationRequest.id))!;
-  const workflow = { ...decision, receiptId: decision.decisionReceiptId! };
-  await recordPendingAgentVerification(pool, workflow, clock);
-  await mergeVerifiedAgent(pool, workflow);
-  await writeAgentVerificationPage(pool, workflow);
-  await completeAgentVerification(pool, workflow, clock);
-  await finishAgentVerification(pool, workflow, clock);
+  // Production: approval enqueues the SDK receiver; the live identity executor finishes publication.
+  await runAccountIdentityVerification(
+    pool,
+    workClient,
+    applied.body.verificationRequest.id,
+    decision.decisionReceiptId!,
+  );
   expect((await get(`/v1/accounts?agent=${subject}`)).body.accounts).toHaveLength(1);
   await drain();
   return { account, subject, token };
 }
 
 async function finish(decision: AgentVerificationReversal) {
-  await unmergeVerifiedAgent(pool, decision);
-  await removeAgentVerificationPage(pool, decision);
-  await finishAgentVerificationReversal(pool, decision, clock);
+  await runAccountIdentityReversal(pool, workClient, decision);
   await drain();
 }
 
@@ -425,42 +405,48 @@ async function expectRedirect(subject: string, handle: string, view?: string) {
   return followed;
 }
 
-test('a verified person has one handle page; subject reads are unchanged and merged addresses redirect in one step', async () => {
-  const { account, subject } = await verified();
-  const subjectRead = await get(`/v1/subjects/${subject}?language=en`);
-  expect(subjectRead.response.status, JSON.stringify(subjectRead.body)).toBe(200);
-  expect(subjectRead.response.headers.get('location')).toBeNull();
-  expect(subjectRead.body.subject).toMatchObject({ id: subject, type: 'schema:Person' });
-  for (const view of [undefined, 'details']) {
-    const followed = await expectRedirect(subject, account.handle, view);
-    expect(followed.body).toMatchObject({ subject, account: account.id, template: { key: 'schema:Person' } });
-  }
-  await expectRedirect(accountAgentId(account.id), account.handle, 'details');
-  expect((await get(`/v1/subjects/${subject}?language=en`)).body).toEqual(subjectRead.body);
-  const mergedRead = await get(`/v1/subjects/${accountAgentId(account.id)}`);
-  expect(mergedRead.response.status).toBe(308);
-  expect(mergedRead.body).toEqual({ redirect: { from: accountAgentId(account.id), to: subject } });
-});
+test.serial(
+  'a verified person has one handle page; subject reads are unchanged and merged addresses redirect in one step',
+  async () => {
+    const { account, subject } = await verified();
+    const subjectRead = await get(`/v1/subjects/${subject}?language=en`);
+    expect(subjectRead.response.status, JSON.stringify(subjectRead.body)).toBe(200);
+    expect(subjectRead.response.headers.get('location')).toBeNull();
+    expect(subjectRead.body.subject).toMatchObject({ id: subject, type: 'schema:Person' });
+    for (const view of [undefined, 'details']) {
+      const followed = await expectRedirect(subject, account.handle, view);
+      expect(followed.body).toMatchObject({ subject, account: account.id, template: { key: 'schema:Person' } });
+    }
+    await expectRedirect(accountAgentId(account.id), account.handle, 'details');
+    expect((await get(`/v1/subjects/${subject}?language=en`)).body).toEqual(subjectRead.body);
+    const mergedRead = await get(`/v1/subjects/${accountAgentId(account.id)}`);
+    expect(mergedRead.response.status).toBe(308);
+    expect(mergedRead.body).toEqual({ redirect: { from: accountAgentId(account.id), to: subject } });
+  },
+);
 
-test("never verified, another account's subject, and pending verification disclose no account page", async () => {
-  const account = await seedAccount('page_pending');
-  const other = await verified();
-  const subject = await catalogueSubject('schema:Person', 'Unverified catalogue person');
-  await ensureAgent(account, 'person');
-  await expectSubjectPage(subject);
-  await drain();
-  await expectSubjectPage(accountAgentId(account.id));
-  const applied = await request(account, subject, await bearer(account));
-  expect(applied.response.status).toBe(201);
-  await expectSubjectPage(subject);
-  const unrelated = await catalogueSubject('schema:Person', 'Other catalogue person');
-  const pageRead = await expectSubjectPage(unrelated);
-  expect(JSON.stringify(pageRead.body)).not.toContain(other.account.handle);
-  expect(JSON.stringify(pageRead.body)).not.toContain(account.id);
-});
+test.serial(
+  "never verified, another account's subject, and pending verification disclose no account page",
+  async () => {
+    const account = await seedAccount('page_pending');
+    const other = await verified();
+    const subject = await catalogueSubject('schema:Person', 'Unverified catalogue person');
+    await ensureAgent(account, 'person');
+    await expectSubjectPage(subject);
+    await drain();
+    await expectSubjectPage(accountAgentId(account.id));
+    const applied = await request(account, subject, await bearer(account));
+    expect(applied.response.status).toBe(201);
+    await expectSubjectPage(subject);
+    const unrelated = await catalogueSubject('schema:Person', 'Other catalogue person');
+    const pageRead = await expectSubjectPage(unrelated);
+    expect(JSON.stringify(pageRead.body)).not.toContain(other.account.handle);
+    expect(JSON.stringify(pageRead.body)).not.toContain(account.id);
+  },
+);
 
 for (const reversal of ['releaseVerification', 'revokeVerification'] as const) {
-  test(`${reversal} restores the subject page before and after the reversal workflow`, async () => {
+  test.serial(`${reversal} restores the subject page before and after the reversal workflow`, async () => {
     const { account, subject, token } = await verified();
     await expectRedirect(subject, account.handle);
     const reversed = await post(
@@ -477,101 +463,126 @@ for (const reversal of ['releaseVerification', 'revokeVerification'] as const) {
   });
 }
 
-test('deletion never redirects or names the old handle, including while the committed reversal runs', async () => {
-  const { account, subject } = await verified();
-  await pool.query(
-    `INSERT INTO access.resource_grant(route,resource_id,subject_id,action,valid,transaction_id)
+test.serial(
+  'deletion never redirects or names the old handle, including while the committed reversal runs',
+  async () => {
+    const { account, subject } = await verified();
+    await pool.query(
+      `INSERT INTO access.resource_grant(route,resource_id,subject_id,action,valid,transaction_id)
      VALUES($1,$2,$2,'account:delete','(,)',$2)`,
-    [accountRoute, account.id],
-  );
-  const actor = await authenticateAccount(
-    access,
-    { pool, deadline: Date.now() + 10_000 },
-    {
-      accountId: account.id,
-      clientId: 'page-delete',
-      scopes: ['account:delete'],
-    },
-  );
-  await createLifecycleCommands({ pool, access, clock }).tombstone(
-    { actor, deadline: Date.now() + 10_000 },
-    { accountId: account.id, key: key() },
-  );
-  const immediate = await expectSubjectPage(subject);
-  expect(JSON.stringify(immediate.body)).not.toContain(account.handle);
-  const events: CloudEvent[] = [];
-  for (
-    let page = 0;
-    page < 20 && !events.some((e) => e.subject === account.id && e.type === 'com.rezics.access.account-tombstoned.v1');
-    page++
-  ) {
-    await readBatch(pool, {
-      consumer: 'page_address_deletion',
-      partition: partitionOf(accountRoute),
-      envelopes: 64,
-      async apply(envelopes) {
-        events.push(...envelopes.flatMap((e) => e.events));
+      [accountRoute, account.id],
+    );
+    const actor = await authenticateAccount(
+      access,
+      { pool, deadline: Date.now() + 10_000 },
+      {
+        accountId: account.id,
+        clientId: 'page-delete',
+        scopes: ['account:delete'],
       },
-    });
-  }
-  const event = events.find((e) => e.subject === account.id && e.type === 'com.rezics.access.account-tombstoned.v1');
-  expect(event).toBeDefined();
-  await applyAccountAgentEffect(pool, event!);
-  const decision = await pool.query<{ data: AgentVerificationReversal }>(
-    'SELECT data FROM core.outbox WHERE type=$1 AND subject=$2',
-    ['com.rezics.access.agent-verification.reversing.v1', account.id],
-  );
-  expect(decision.rows[0]!.data).toMatchObject({ kind: 'revoked', reason: 'Account deleted' });
-  await finish(decision.rows[0]!.data);
-  const answer = await expectSubjectPage(subject);
-  expect(JSON.stringify(answer.body)).not.toContain(account.handle);
-  expect((await page({ account: account.handle })).response.status).toBe(404);
-});
-
-test('a suspended verified person serves the subject page until reinstatement restores the handle redirect', async () => {
-  const { account, subject } = await verified();
-  const suspended = await post(`/v1/accounts/${account.id}:suspend`, await bearer(staff), { reason: 'Page test' });
-  expect(suspended.response.status).toBe(200);
-  for (const view of [undefined, 'details']) {
-    const answer = await expectSubjectPage(subject, view);
-    expect(JSON.stringify(answer.body)).not.toContain(account.id);
+    );
+    await createLifecycleCommands({ pool, access, clock }).tombstone(
+      { actor, deadline: Date.now() + 10_000 },
+      { accountId: account.id, key: key() },
+    );
+    const immediate = await expectSubjectPage(subject);
+    expect(JSON.stringify(immediate.body)).not.toContain(account.handle);
+    const events: CloudEvent[] = [];
+    for (
+      let page = 0;
+      page < 20 &&
+      !events.some((e) => e.subject === account.id && e.type === 'com.rezics.access.account-tombstoned.v1');
+      page++
+    ) {
+      await readBatch(pool, {
+        consumer: 'page_address_deletion',
+        partition: partitionOf(accountRoute),
+        envelopes: 64,
+        async apply(envelopes) {
+          events.push(...envelopes.flatMap((e) => e.events));
+        },
+      });
+    }
+    const event = events.find((e) => e.subject === account.id && e.type === 'com.rezics.access.account-tombstoned.v1');
+    expect(event).toBeDefined();
+    await applyAccountAgentEffect(pool, event!);
+    const decision = await pool.query<{ data: AgentVerificationReversal }>(
+      'SELECT data FROM core.outbox WHERE type=$1 AND subject=$2',
+      ['com.rezics.access.agent-verification.reversing.v1', account.id],
+    );
+    expect(decision.rows[0]!.data).toMatchObject({ kind: 'revoked', reason: 'Account deleted' });
+    await finish(decision.rows[0]!.data);
+    const answer = await expectSubjectPage(subject);
     expect(JSON.stringify(answer.body)).not.toContain(account.handle);
-  }
-  expect((await get(`/v1/accounts?agent=${subject}`)).body).toEqual({ accounts: [], next: null });
-  expect((await get(`/v1/accounts?handle=${account.handle}`)).body.accounts[0]).toMatchObject({
-    id: account.id,
-    state: 'active',
-  });
-  const reinstated = await post(`/v1/accounts/${account.id}:reinstate`, await bearer(staff), {});
-  expect(reinstated.response.status, JSON.stringify(reinstated.body)).toBe(200);
-  for (const view of [undefined, 'details']) {
-    const followed = await expectRedirect(subject, account.handle, view);
-    expect(followed.body.account).toBe(account.id);
-  }
-  expect((await get(`/v1/accounts?agent=${subject}`)).body.accounts).toEqual([
-    expect.objectContaining({ id: account.id, handle: account.handle, state: 'active' }),
-  ]);
-});
+    expect((await page({ account: account.handle })).response.status).toBe(404);
+  },
+);
 
-test('unnamed software, person and organization accounts use their agent templates and public identity fields', async () => {
-  const operator = await seedAccount('page_operator');
-  const software = await seedAccount('page_software', { automatedBy: operator.id });
-  const person = await seedAccount('page_person');
-  const organization = await seedAccount('page_organization', { kind: 'organization' });
-  for (const [account, type, automated, operatorId] of [
-    [software, 'schema:SoftwareApplication', true, operator.id],
-    [person, 'schema:Person', false, null],
-    [organization, 'schema:Organization', false, null],
-  ] as const) {
-    const answer = await page({ account: account.handle });
-    expect(answer.response.status, JSON.stringify(answer.body)).toBe(200);
-    expect(answer.body).not.toHaveProperty('subject');
-    expect(answer.body.template).toEqual({ scope: 'type', key: type });
-    const identity = (await get(`/v1/accounts?ids=${account.id}`)).body.accounts[0];
-    expect(identity).toMatchObject({ id: account.id, automated, operatorId });
-    expect(answer.body.reads.r0.body.accounts[0]).toMatchObject(identity);
-  }
-});
+test.serial(
+  'a suspended verified person serves the subject page until reinstatement restores the handle redirect',
+  async () => {
+    const { account, subject } = await verified();
+    const suspended = await post(`/v1/accounts/${account.id}:suspend`, await bearer(staff), { reason: 'Page test' });
+    expect(suspended.response.status).toBe(200);
+    for (const view of [undefined, 'details']) {
+      const answer = await expectSubjectPage(subject, view);
+      expect(JSON.stringify(answer.body)).not.toContain(account.id);
+      expect(JSON.stringify(answer.body)).not.toContain(account.handle);
+    }
+    expect((await get(`/v1/accounts?agent=${subject}`)).body).toEqual({ accounts: [], next: null });
+    expect((await get(`/v1/accounts?handle=${account.handle}`)).body.accounts[0]).toMatchObject({
+      id: account.id,
+      state: 'active',
+    });
+    const reinstated = await post(`/v1/accounts/${account.id}:reinstate`, await bearer(staff), {});
+    expect(reinstated.response.status, JSON.stringify(reinstated.body)).toBe(200);
+    for (const view of [undefined, 'details']) {
+      const followed = await expectRedirect(subject, account.handle, view);
+      expect(followed.body.account).toBe(account.id);
+    }
+    expect((await get(`/v1/accounts?agent=${subject}`)).body.accounts).toEqual([
+      expect.objectContaining({ id: account.id, handle: account.handle, state: 'active' }),
+    ]);
+  },
+);
+
+test.serial(
+  'a verified organization publishes both address directions; software agents keep handle and derived-agent pages',
+  async () => {
+    const { account, subject } = await verified('organization');
+    await expectRedirect(subject, account.handle);
+    await expectRedirect(accountAgentId(account.id), account.handle);
+    const operator = await seedAccount(`page_sw_op_${randomUUID().slice(0, 8)}`);
+    const software = await seedAccount(`page_sw_${randomUUID().slice(0, 8)}`, { automatedBy: operator.id });
+    const handlePage = await page({ account: software.handle });
+    expect(handlePage.response.status, JSON.stringify(handlePage.body)).toBe(200);
+    expect(handlePage.body.template).toEqual({ scope: 'type', key: 'schema:SoftwareApplication' });
+    await expectSubjectPage(accountAgentId(software.id));
+  },
+);
+
+test.serial(
+  'unnamed software, person and organization accounts use their agent templates and public identity fields',
+  async () => {
+    const operator = await seedAccount('page_operator');
+    const software = await seedAccount('page_software', { automatedBy: operator.id });
+    const person = await seedAccount('page_person');
+    const organization = await seedAccount('page_organization', { kind: 'organization' });
+    for (const [account, type, automated, operatorId] of [
+      [software, 'schema:SoftwareApplication', true, operator.id],
+      [person, 'schema:Person', false, null],
+      [organization, 'schema:Organization', false, null],
+    ] as const) {
+      const answer = await page({ account: account.handle });
+      expect(answer.response.status, JSON.stringify(answer.body)).toBe(200);
+      expect(answer.body).not.toHaveProperty('subject');
+      expect(answer.body.template).toEqual({ scope: 'type', key: type });
+      const identity = (await get(`/v1/accounts?ids=${account.id}`)).body.accounts[0];
+      expect(identity).toMatchObject({ id: account.id, automated, operatorId });
+      expect(answer.body.reads.r0.body.accounts[0]).toMatchObject(identity);
+    }
+  },
+);
 
 function population(hotPartition: number): Population {
   return {
@@ -620,23 +631,27 @@ function population(hotPartition: number): Population {
   };
 }
 
-test('subject and handle page reads stay bounded as verified agents and unrelated subjects grow at three scales', async () => {
-  const { account, subject } = await verified();
-  const unrelated = await catalogueSubject('schema:Person', 'Growth subject without an account');
-  const growing = population(partitionOf(routeOf(subject)!));
-  for (const target of [{ subject }, { subject: unrelated }, { account: account.handle }]) {
-    const report = await checkGrowth(db, {
-      name: `Agent page address ${JSON.stringify(target)}`,
-      scales: [128, 512, 2048],
-      bounds: { statements: 'constant', rows: 'constant', blocks: 'logarithmic' },
-      grow: (database, scale, previous) => seed(database, growing, { from: previous, to: scale }),
-      async operation() {
-        const answer = await page(target);
-        expect(answer.response.status).toBe('subject' in target && target.subject === subject ? 308 : 200);
-        return answer.body;
-      },
-    });
-    expect(report.samples.map(({ scale }) => scale)).toEqual([128, 512, 2048]);
-    expect(new Set(report.samples.map(({ cost }) => cost.statements)).size).toBe(1);
-  }
-}, 180_000);
+test.serial(
+  'subject and handle page reads stay bounded as verified agents and unrelated subjects grow at three scales',
+  async () => {
+    const { account, subject } = await verified();
+    const unrelated = await catalogueSubject('schema:Person', 'Growth subject without an account');
+    const growing = population(partitionOf(routeOf(subject)!));
+    for (const target of [{ subject }, { subject: unrelated }, { account: account.handle }]) {
+      const report = await checkGrowth(db, {
+        name: `Agent page address ${JSON.stringify(target)}`,
+        scales: [128, 512, 2048],
+        bounds: { statements: 'constant', rows: 'constant', blocks: 'logarithmic' },
+        grow: (database, scale, previous) => seed(database, growing, { from: previous, to: scale }),
+        async operation() {
+          const answer = await page(target);
+          expect(answer.response.status).toBe('subject' in target && target.subject === subject ? 308 : 200);
+          return answer.body;
+        },
+      });
+      expect(report.samples.map(({ scale }) => scale)).toEqual([128, 512, 2048]);
+      expect(new Set(report.samples.map(({ cost }) => cost.statements)).size).toBe(1);
+    }
+  },
+  180_000,
+);
