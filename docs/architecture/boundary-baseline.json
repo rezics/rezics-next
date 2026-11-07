@@ -27823,11 +27823,6 @@
         },
         {
           "rule": "rule 2",
-          "file": "apps/web/src/settings/verification-actions.ts",
-          "edge": "value import \"../search/suggestions\" #1 => apps/web/src/search/suggestions.ts"
-        },
-        {
-          "rule": "rule 2",
           "file": "apps/web/src/settings/watch-native.ts",
           "edge": "value import \"../media/kernel\" #1 => apps/web/src/media/kernel.ts"
         },
@@ -27855,11 +27850,6 @@
           "rule": "rule 3",
           "file": "<module:web-performance>",
           "edge": "web-performance => web-library (module dependency cycle)"
-        },
-        {
-          "rule": "rule 3",
-          "file": "<module:web-performance>",
-          "edge": "web-performance => web-search (module dependency cycle)"
         }
       ]
     },

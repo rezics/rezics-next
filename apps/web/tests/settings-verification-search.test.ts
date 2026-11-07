@@ -33,6 +33,17 @@ mock.module('../src/kernel/client', () => ({
         },
       }),
     },
+    subjects: {
+      $suggest: {
+        get: async ({ query, headers, fetch }: { query: { q: string }; headers: { authorization: string }; fetch: { signal: AbortSignal } }) => {
+          expect(headers.authorization).toBe('Bearer private-viewer');
+          expect(fetch.signal.aborted).toBe(false);
+          queries.push(query.q);
+          if (suggestionFailure !== undefined) throw suggestionFailure;
+          return { data: { subjects }, error: undefined, status: 200 };
+        },
+      },
+    },
   }),
   requestLocale: () => 'en',
 }));
@@ -40,16 +51,6 @@ mock.module('../src/session/request', () => ({
   prepareSession: async () => {},
   sessionSubject: () => 'alice',
   viewerCredential: () => 'Bearer private-viewer',
-}));
-mock.module('../src/search/suggestions', () => ({
-  SUGGESTION_LIMIT: 8,
-  readSubjectSuggestions: async (_client: unknown, query: { q: string }, credential: string, signal: AbortSignal) => {
-    expect(credential).toBe('Bearer private-viewer');
-    expect(signal.aborted).toBe(false);
-    queries.push(query.q);
-    if (suggestionFailure !== undefined) throw suggestionFailure;
-    return { subjects };
-  },
 }));
 const { searchVerificationSubjects } = await import('../src/settings/verification-actions');
 const { m } = await import('../src/paraglide/messages.js');

@@ -6,10 +6,10 @@ import { performanceAmbientTree } from './performance-ambient';
 
 const settingsAmbient = createBrowserSettingsAmbient();
 
-const { VerificationSubjectSearch, VerificationSubjectChooserView } =
-  await import('../src/settings/verification-subject-chooser');
-type Subject = import('../src/settings/verification-subject-chooser').VerificationSubject;
-type SearchResult = import('../src/settings/verification-core').VerificationSearchResult<Subject[]>;
+const { VerificationSubjectSearch } = await import('../src/settings/application/verification');
+const { VerificationSubjectChooserView } = await import('../src/settings/adapters/verification-view.tsx');
+type Subject = import('../src/settings/contract/verification').VerificationSubject;
+type SearchResult = import('../src/settings/contract/verification').VerificationSearchResult<Subject[]>;
 const person: Subject = { id: 'native-person-id', title: 'Avery', type: 'Person' };
 const organization: Subject = { id: 'native-organization-id', title: 'Avery Studio', type: 'Organization' };
 const success = (subjects: Subject[]): SearchResult => ({ ok: true, value: subjects });

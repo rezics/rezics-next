@@ -94,9 +94,7 @@ Applicant verification requests use the same ten-second account budget, includin
 
 **Decision:** Pin the combined Settings safety→subject request→revisit→withdraw→safety walk in the existing named suites. Keep current-status, recovery and safety stories. Native, browser and root acceptance stay deferred until that seeded walk passes under existing Auth-app login and admission.
 
-**Decision:** Applicant verification is proven by the existing recovery, chooser and journey checks plus one setup-envelope and receipt-without-retry assertion; named current-status and recovery stories stay, with no extra stories.
-
-**Decision:** The subject chooser receives its native search transport from the verification card, so no Settings test replaces the verification actions module; the recovery cases run the real installed action exports in the same `bun test` process as the chooser.
+**Decision:** Applicant verification is a typed application over supplied status, request, withdrawal, eligibility, title and suggestion operations. Contract/core own draft, identity, recovery and current-term selection; adapters own native faults. Recovery and subject search require SettingsAmbient (`now`, `id`, `timer`) with no constructor fallback. React mounts it via an explicit Settings-bound capability; Search retry is Settings-owned vocabulary, not a private Search import. Native transport stays in `adapters/verification.ts`; React capability binding and the subject chooser live in `adapters/verification-view.tsx` so landing transpile cannot emit both to the same `.js` path. The chooser still receives search from the card; recovery still runs real action exports. Existing suites plus one composition pin; named stories stay.
 
 ### Cost: session preparation
 
