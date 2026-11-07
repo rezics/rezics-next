@@ -11,6 +11,7 @@ import {
   summarizeWalk,
   waitForNotices,
   walkWorkingDirectory,
+  withIssuerSeedProxy,
 } from '../scripts/seeded-content-goal-walk.ts';
 
 test('the Content Goal walk names every first-scope row and summarises passing, total and slowest failure', () => {
@@ -62,7 +63,49 @@ test('the Content Goal walk names every first-scope row and summarises passing, 
   expect(source).toContain('boards/${boardId}:takeDown');
   expect(source).toContain('html[data-hydrated]');
   expect(source).toContain("getByRole('button', { name: 'Sign in', exact: true })");
+  expect(source).toContain('withIssuerSeedProxy');
+  expect(source).toContain('AUTH_ORIGIN: process.env.REZICS_LOCAL_STACK_ISSUER_ORIGIN');
   expect(source).not.toMatch(/AUTH_JWKS_URL\s*=/);
+});
+
+test('the deferred issuer origin forwards seed credential POSTs to native Auth', async () => {
+  let received = '';
+  const native = Bun.serve({
+    hostname: '127.0.0.1',
+    port: 0,
+    fetch: async (request) => {
+      received = await request.text();
+      return Response.json({ ok: true, path: new URL(request.url).pathname });
+    },
+  });
+  const reservation = Bun.serve({ hostname: '127.0.0.1', port: 0, fetch: () => new Response() });
+  const issuerPort = reservation.port;
+  await reservation.stop(true);
+  const previousIssuer = process.env.REZICS_LOCAL_STACK_ISSUER_ORIGIN;
+  const previousNative = process.env.REZICS_LOCAL_STACK_NATIVE_ORIGIN;
+  process.env.REZICS_LOCAL_STACK_ISSUER_ORIGIN = `http://127.0.0.1:${issuerPort}`;
+  process.env.REZICS_LOCAL_STACK_NATIVE_ORIGIN = `http://127.0.0.1:${native.port}`;
+  try {
+    const observed = await withIssuerSeedProxy(async () => {
+      const response = await fetch(`http://127.0.0.1:${issuerPort}/signin/key`, {
+        method: 'POST',
+        headers: {
+          'content-type': 'application/json',
+          origin: `http://127.0.0.1:${issuerPort}`,
+        },
+        body: '{"account_id":"a"}',
+      });
+      return (await response.json()) as { ok: boolean; path: string };
+    });
+    expect(observed).toEqual({ ok: true, path: '/signin/key' });
+    expect(received).toBe('{"account_id":"a"}');
+  } finally {
+    await native.stop(true);
+    if (previousIssuer === undefined) delete process.env.REZICS_LOCAL_STACK_ISSUER_ORIGIN;
+    else process.env.REZICS_LOCAL_STACK_ISSUER_ORIGIN = previousIssuer;
+    if (previousNative === undefined) delete process.env.REZICS_LOCAL_STACK_NATIVE_ORIGIN;
+    else process.env.REZICS_LOCAL_STACK_NATIVE_ORIGIN = previousNative;
+  }
 });
 
 test('mention documents and ordinary grant receipts match the Accounts producer contract', () => {

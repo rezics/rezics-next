@@ -1,8 +1,10 @@
 /**
  * Content Goal seeded walk. Runs inside `dev-stack.ts walk` for a worker whose brief lists native and browser
- * acceptance. Persona, journal cleanup and the cross-media seed run before Auth pages and Web start. Frontend
- * readiness uses Performance's `waitUntilWalkReady` hydration recovery through `startSeededFrontends`. Evidence
- * stays under `.temp/content-walk/`. A wrong result becomes a repair brief naming trigger, defect and correct result.
+ * acceptance. Persona, journal cleanup and the cross-media seed run before Auth pages and Web start. Seed token
+ * minting keeps issuer `AUTH_ORIGIN` and reaches native Auth through `withIssuerSeedProxy` until pages bind that
+ * port. Frontend readiness uses Performance's `waitUntilWalkReady` hydration recovery through `startSeededFrontends`.
+ * Evidence stays under `.temp/content-walk/`. A wrong result becomes a repair brief naming trigger, defect and correct
+ * result.
  */
 import { createRequire } from 'node:module';
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
@@ -181,6 +183,27 @@ async function parseEnvFile(path: string): Promise<Record<string, string>> {
 async function runCommand(command: string[], env: NodeJS.ProcessEnv = process.env): Promise<number> {
   const child = Bun.spawn(command, { cwd: root, env, stdin: 'ignore', stdout: 'inherit', stderr: 'inherit' });
   return await child.exited;
+}
+
+/** Walk stacks defer Auth pages until after seed, so the issuer port is free. Own-key assertions still
+ * target `${issuer}/token`; this forwards that origin to native Auth for the seed subprocess only. */
+export async function withIssuerSeedProxy<T>(run: () => Promise<T>): Promise<T> {
+  const issuer = loopback('REZICS_LOCAL_STACK_ISSUER_ORIGIN');
+  const native = loopback('REZICS_LOCAL_STACK_NATIVE_ORIGIN');
+  const server = Bun.serve({
+    hostname: '127.0.0.1',
+    port: Number(new URL(issuer).port || '80'),
+    fetch(request) {
+      const target = new URL(request.url);
+      target.host = new URL(native).host;
+      return fetch(new Request(target, request), { redirect: 'manual' });
+    },
+  });
+  try {
+    return await run();
+  } finally {
+    await server.stop(true);
+  }
 }
 
 async function kernel(
@@ -1924,7 +1947,9 @@ async function main(): Promise<void> {
     AUTH_ORIGIN: process.env.REZICS_LOCAL_STACK_ISSUER_ORIGIN,
     KERNEL_ORIGIN: process.env.REZICS_LOCAL_STACK_KERNEL_ORIGIN,
   };
-  const seedCode = await runCommand(['bun', 'scripts/datasets/cross-media-seed.ts', '--dev'], seedEnv);
+  const seedCode = await withIssuerSeedProxy(() =>
+    runCommand(['bun', 'scripts/datasets/cross-media-seed.ts', '--dev'], seedEnv),
+  );
   if (!(await Bun.file(seedResultPath).exists()))
     throw new Error(`Content Goal walk has no seed result after exit ${seedCode}`);
   const frontends = await startSeededFrontends();
