@@ -2,7 +2,7 @@ import type { Meta, StoryObj } from '@storybook/react-vite';
 import { expect, userEvent, waitFor, within } from 'storybook/test';
 import { useState } from 'react';
 import { cn } from '../utils.ts';
-import { withSurface } from '../stories/support.tsx';
+import { dismissed, settled, withSurface } from '../stories/support.tsx';
 import { Cover, sharedRatio, type CoverRatio, type CoverSize, type CoverSubject, type CoverSummary } from './cover.tsx';
 import { CoverViewer } from './cover-viewer.tsx';
 
@@ -432,13 +432,22 @@ export const CreditViewer: Story = {
     </div>
   ),
   play: async ({ canvasElement }) => {
-    const open = async (id: string) => {
-      await userEvent.click(
-        within(canvasElement.querySelector<HTMLElement>(`[data-case="${id}"]`)!).getByRole('button', {
-          name: `Open cover: ${book.title}`,
-        }),
-      );
-      return within(await within(document.body).findByRole('dialog', { name: book.title }));
+    const open = async (id: string, keyboard = false) => {
+      const example = within(canvasElement.querySelector<HTMLElement>(`[data-case="${id}"]`)!);
+      const trigger = example.getByRole('button', { name: `Open cover: ${book.title}` });
+      if (keyboard) {
+        trigger.focus();
+        await expect(trigger).toHaveFocus();
+        await userEvent.keyboard('{Enter}');
+      } else {
+        await userEvent.click(trigger);
+      }
+      const dialog = await within(document.body).findByRole('dialog', { name: book.title });
+      return within(await settled(dialog));
+    };
+    const close = async () => {
+      await userEvent.keyboard('{Escape}');
+      await dismissed('dialog');
     };
     const linked = await open('linked');
     await expect(linked.getByText(/© Shinchosha/)).toBeVisible();
@@ -446,13 +455,13 @@ export const CreditViewer: Story = {
       'href',
       'https://openlibrary.org/',
     );
-    await userEvent.keyboard('{Escape}');
-    const licensed = await open('licensed');
+    await close();
+    const licensed = await open('licensed', true);
     await expect(licensed.getByText(/CC0-1.0/)).toBeVisible();
-    await userEvent.keyboard('{Escape}');
+    await close();
     const long = await open('long-rights-holder');
     await expect(long.getByText(/Society of Illustrators/)).toBeVisible();
-    await userEvent.keyboard('{Escape}');
+    await close();
   },
 };
 
