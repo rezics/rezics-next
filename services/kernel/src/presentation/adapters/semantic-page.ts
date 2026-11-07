@@ -1,20 +1,10 @@
 import { characterDocumentProperties } from '../../semantic/character-public-reading-documents.ts';
 import { activeRelease } from '../../semantic/definitions.ts';
-import {
-  readItemDetails,
-  readItemTypes,
-  readSubjectPageStates,
-} from '../../semantic/public-subject-facts.ts';
+import { readItemDetails, readItemTypes, readSubjectPageStates } from '../../semantic/public-subject-facts.ts';
 import { globalReadEligibility, relatedReadEligibility } from '../../semantic/character-public-reading-documents.ts';
 import { withReadTransaction } from '../../semantic/read.ts';
 import { selectPage as selectNativePage, guardSelectedPage as guardNativePage } from '../selected-page.ts';
-import {
-  activateProfile,
-  activeProfile,
-  bootstrapProfile,
-  publishProfile,
-  readProfile,
-} from '../profiles.ts';
+import { activateProfile, activeProfile, bootstrapProfile, publishProfile, readProfile } from '../profiles.ts';
 import { PageReadBudget, readPage } from '../reads.ts';
 import type { PageApplicationPorts, PageSemanticPort } from '../page-semantic-port.ts';
 import type { PageExecution, SelectedPageSnapshot } from '../page-contract.ts';

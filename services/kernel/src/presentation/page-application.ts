@@ -433,7 +433,10 @@ export type PageApplication = Readonly<{
     deps: { access: Access; pool: Pool },
     actor: Actor,
     deadline: number,
-  ): Promise<{ viewer: { kind: 'anonymous' | 'account' }; actions: { action: string; operationId: string; state: PeopleProducerActionState }[] }>;
+  ): Promise<{
+    viewer: { kind: 'anonymous' | 'account' };
+    actions: { action: string; operationId: string; state: PeopleProducerActionState }[];
+  }>;
   preparePublicSemanticPageMetadata(
     deps: {
       pool: Pool;
@@ -452,9 +455,12 @@ export type PageApplication = Readonly<{
   readConfiguredPage(request: ConfiguredPageRequest): Promise<PageWireResult>;
 }>;
 
-async function readQuotationPageAuthority(
-  deps: { pool: Pool; access: Access; actor: Actor; deadline: number },
-): Promise<{ viewer: PageViewer; actions: PageAction[] }> {
+async function readQuotationPageAuthority(deps: {
+  pool: Pool;
+  access: Access;
+  actor: Actor;
+  deadline: number;
+}): Promise<{ viewer: PageViewer; actions: PageAction[] }> {
   const viewer: PageViewer = { kind: deps.actor.kind === 'account' ? 'account' : 'anonymous' };
   const [propose] = quotationCorrectionActions;
   const unavailable = [{ action: propose.action, operationId: propose.operationId, state: 'unavailable' as const }];
@@ -584,7 +590,12 @@ async function preparePublicSemanticPageMetadata(
     const release = await ports.semantic.activeRelease(deps.pool);
     const rows = new Map<
       string,
-      { state: Awaited<ReturnType<PageSemanticPort['readSubjectPageStates']>>[number]; detail: Awaited<ReturnType<PageSemanticPort['readItemDetails']>> extends Map<string, infer T> ? T : never; epoch: number; allowed: boolean }
+      {
+        state: Awaited<ReturnType<PageSemanticPort['readSubjectPageStates']>>[number];
+        detail: Awaited<ReturnType<PageSemanticPort['readItemDetails']>> extends Map<string, infer T> ? T : never;
+        epoch: number;
+        allowed: boolean;
+      }
     >();
     if (global.allowed && profile && release) {
       for (const [home, group] of groups) {
@@ -821,10 +832,17 @@ async function answerPage(
     page = await ports.pageRead.readPage({
       dispatch: input.execution.dispatch,
       resolveBuiltin: async (key) => {
-        if (input.execution.actor.kind !== 'account' || (input.account !== null && input.account.id !== input.execution.actor.accountId))
+        if (
+          input.execution.actor.kind !== 'account' ||
+          (input.account !== null && input.account.id !== input.execution.actor.accountId)
+        )
           return null;
         return input.execution.run(() =>
-          createBuiltinRuntime({ pool: input.execution.pool }).resolve(input.execution.actor as Extract<Actor, { kind: 'account' }>, key, input.execution.deadline),
+          createBuiltinRuntime({ pool: input.execution.pool }).resolve(
+            input.execution.actor as Extract<Actor, { kind: 'account' }>,
+            key,
+            input.execution.deadline,
+          ),
         );
       },
       incoming,
@@ -1088,7 +1106,8 @@ async function readConfiguredPage(
     }
     if (subjectTarget !== null) {
       const probed = await subjectProbe(subjectTarget);
-      if ('failed' in probed) return wire(probed.failed.status, probed.failed.body, probeSession, probed.failed.headers);
+      if ('failed' in probed)
+        return wire(probed.failed.status, probed.failed.body, probeSession, probed.failed.headers);
       subject = probed.subject;
       if ('subject' in target) {
         const [agent] = await execution.run(() => readPublicAccountByAgent(pool, probed.subject.id));
@@ -1104,11 +1123,7 @@ async function readConfiguredPage(
     }
     const type =
       subject?.type ??
-      (kind === 'organization'
-        ? 'schema:Organization'
-        : automated
-          ? 'schema:SoftwareApplication'
-          : 'schema:Person');
+      (kind === 'organization' ? 'schema:Organization' : automated ? 'schema:SoftwareApplication' : 'schema:Person');
     const page = application.semanticPageView(active.profile, release?.release, type, target.view ?? 'overview');
     if (page === null) throw new ProblemError('not_found');
     resolved = page.resolved;
@@ -1248,11 +1263,8 @@ export function createPageApplication(ports: PageApplicationPorts): PageApplicat
     semanticPageView,
     pageViewerActions,
     readQuotationPageAuthority,
-    readPeopleProducerPageAuthority: (
-      deps: { access: Access; pool: Pool },
-      actor: Actor,
-      deadline: number,
-    ) => readPeopleProducerPageAuthority(ports, deps, actor, deadline),
+    readPeopleProducerPageAuthority: (deps: { access: Access; pool: Pool }, actor: Actor, deadline: number) =>
+      readPeopleProducerPageAuthority(ports, deps, actor, deadline),
     preparePublicSemanticPageMetadata: (
       deps: { pool: Pool; access: Access; deadline: number },
       ids: readonly string[],

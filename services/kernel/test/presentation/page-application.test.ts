@@ -67,12 +67,17 @@ test('constructed instance supplies Character document properties from its Seman
   const application = createPageApplication(fakePorts());
   const subject = '0192f3a0-6c1e-7b2a-9d4e-1a2b3c4d5e01';
   expect(
-    application.characterPageDocuments(null, { types: { 'wd:Q95074': { properties: ['schema:description'] } } }, 'wd:Q95074', subject, [
-      'schema:description',
-      'schema:name',
-    ]),
+    application.characterPageDocuments(
+      null,
+      { types: { 'wd:Q95074': { properties: ['schema:description'] } } },
+      'wd:Q95074',
+      subject,
+      ['schema:description', 'schema:name'],
+    ),
   ).toEqual({ kind: 'documents', id: subject, properties: ['schema:description'] });
-  expect(application.characterPageDocuments(null, undefined, 'schema:Book', subject, ['schema:description'])).toBeNull();
+  expect(
+    application.characterPageDocuments(null, undefined, 'schema:Book', subject, ['schema:description']),
+  ).toBeNull();
   expect(application.semanticPageView).toBe(createPageApplication(fakePorts()).semanticPageView);
 });
 

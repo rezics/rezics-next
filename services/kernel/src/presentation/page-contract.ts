@@ -19,7 +19,11 @@ export type PageAction = { action: string; operationId: string; state: PageActio
 export type PeopleProducerActionState = PageActionState;
 
 export type PageAccount = { id: string; handle: string; automated: boolean; operatorId: string | null };
-export type PageTarget = ({ subject: string; realm?: string; board?: string } | { route: string } | { account: string }) & {
+export type PageTarget = (
+  | { subject: string; realm?: string; board?: string }
+  | { route: string }
+  | { account: string }
+) & {
   view?: View;
 };
 
