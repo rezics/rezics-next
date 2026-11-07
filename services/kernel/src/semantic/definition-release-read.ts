@@ -8,6 +8,7 @@ import { GLOBAL_SUBJECT_CONTEXT as GLOBAL_CONTEXT } from './contract/subject-val
 import { DefinitionInputError, DefinitionNotFoundError } from './contract/definition-values.ts';
 import { freeze } from './core/freeze.ts';
 import releaseExists from './definitions-exists.sql';
+import { nativeSourceQuery } from './native-source-query.ts';
 import releaseRead from './definitions-read.sql';
 import releasePointer from './definitions-active.sql';
 import composite from './composite-read.sql';
@@ -33,8 +34,8 @@ export async function readRelease(
 ): Promise<Release | null> {
   if (DIGEST.exec(digest)?.[0] !== digest) return null;
   const cached = releases.get(digest);
-  if (cached) return (await releaseExists.run(pool, { route: 0, digest })) ? cached : null;
-  const row = await releaseRead.run(pool, { route: 0, digest });
+  if (cached) return (await nativeSourceQuery(pool, releaseExists, { route: 0, digest })) ? cached : null;
+  const row = await nativeSourceQuery(pool, releaseRead, { route: 0, digest });
   if (!row) return options.composed === false ? null : readComposedRelease(pool, digest);
   const release = validated(row.body);
   if (releaseDigest(release) !== digest) throw new Error('Stored definition release digest mismatch');

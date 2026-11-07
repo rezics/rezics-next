@@ -3,6 +3,7 @@ import { afterAll, beforeAll, expect, test } from 'bun:test';
 import { randomUUID } from 'node:crypto';
 import type { Pool, PoolClient, QueryConfig } from 'pg';
 import { GrantDeniedError } from '../../src/access/grant-commands.ts';
+import { INTERNAL_ACTIONS } from '../../src/access/index.ts';
 import { createLifecycleCommands } from '../../src/access/lifecycle.ts';
 import { createCollectionCommands } from '../../src/library/collections.ts';
 import { createCollectionReads } from '../../src/library/collection-reads.ts';
@@ -26,7 +27,7 @@ async function fixture() {
     actions: new Map(
       actions.map((action) => [
         action,
-        {
+        INTERNAL_ACTIONS.get(action) ?? {
           anonymous: action === 'collection:read' || action === 'subject:read',
           ...(action === 'collection:create' ? { 'x-resource-types': ['library.collection'] } : {}),
         },

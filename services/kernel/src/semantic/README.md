@@ -12,6 +12,13 @@ Source query metering uses the existing database query-accounting scope with the
 It charges SQL strings and PostgreSQL query configurations without replacing pg callbacks or Reylo decoders. Restoring
 a checked-out client's query method cannot leave a promise-only wrapper on the pooled connection. Source availability
 failures retain their dependency reason during public-output acceptance; only a resolved definition change is `changed`.
+Bounded Source binding and immutable release queries execute the declared SQL through Reylo's Standard Query
+encoder and text decoder. Runtime catalog freshness probes and source comments cannot add undeclared statements to
+an accepted native work plan. Unknown SQL, including additions to transaction controls, remains refused.
+Native receiving fixtures finish all 4,096 homes through the existing bounded preparation continuation and retain
+the original bootstrap; their full-domain timeout covers those native steps. Unexpected SQL errors propagate.
+The shelf deletion race fixture takes internal action metadata from Access's public catalogue; its account deletion
+authority and native race assertions are unchanged.
 
 Public-filter Collection reduction exposes `adapters/collection-reduction.ts` contract statement declarations
 without command-work implementation. Native reduction executes that exact SQL/bind plan; Library composes complete
