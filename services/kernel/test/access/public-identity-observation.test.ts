@@ -1,5 +1,5 @@
 import { afterAll, expect, spyOn, test } from 'bun:test';
-import { deadlineClient } from '../../src/access/authenticate.ts';
+import { deadlineClient } from '../../src/access/deadline.ts';
 import { readPublicIdentityObservations } from '../../src/access/account-data.ts';
 import { createPool } from '../../src/database/pool.ts';
 import { newId } from '../../src/route/route.ts';

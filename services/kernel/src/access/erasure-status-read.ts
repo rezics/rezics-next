@@ -1,11 +1,11 @@
 import type { Pool } from 'pg';
 import { mintReadTime, releaseOperationalTime } from '../command/command.ts';
 import { discardConnection, withConnection } from '../database/pool.ts';
-import { ProblemError } from '../http/problem.ts';
+import { ProblemError } from '../http/problem-error.ts';
 import { readPartition } from '../partition/partition.ts';
-import { accessCheck, type Access, type Actor } from '../request/access.ts';
+import { accessCheck, type Access, type Actor } from './check.ts';
 import { partitionOf, routeOf } from '../route/route.ts';
-import { deadlineClient, within } from './authenticate.ts';
+import { deadlineClient, within } from './deadline.ts';
 import { readAccount } from './account-data.ts';
 import { ERASURE_PARTICIPANTS, readErasureStatus } from './erasure.ts';
 import { GLOBAL_CONTEXT } from './gates/catalogue.ts';

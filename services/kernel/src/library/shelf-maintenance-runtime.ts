@@ -1152,7 +1152,7 @@ export async function registerShelfMaintenanceWork(
 ): Promise<ShelfMaintenanceOps> {
   const { DBOS } = await import('@dbos-inc/dbos-sdk');
   const { COMMAND_STEP_RETRIES } = await import('../work/retries.ts');
-  const { createAccess } = await import('../access/index.ts');
+  const { createAccess } = await import('../access/factory.ts');
   const shelfTypeDigest = shelfTypeDigestFromEnvironment(context.env);
   const ops = createShelfMaintenanceOps({
     ...context,

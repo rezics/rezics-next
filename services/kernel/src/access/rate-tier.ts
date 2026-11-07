@@ -6,7 +6,7 @@ import type { Access, AccessContext, Actor } from '../request/access.ts';
 import { derivedId, partitionOf, routeOf } from '../route/route.ts';
 import { PLATFORM_RESOURCE } from './bootstrap-governance.ts';
 import globalRead from './bootstrap-governance-read.sql';
-import { GrantDeniedError } from './grant-commands.ts';
+import { GrantDeniedError } from './resource-access-errors.ts';
 import { resourceAuthorization } from './resource-authorization.ts';
 import accountLock from './rate-tier-account.sql';
 import operatorRead from './rate-tier-operator.sql';

@@ -3,8 +3,8 @@ import type { AccessWorkAccounting } from './work.ts';
 import type { Pool } from 'pg';
 import { Compile } from 'typebox/compile';
 import type { Static, TSchema } from 'typebox';
-import { deadlineClient } from './authenticate.ts';
-import { authorizePlatformGate, viewerActionReadTime } from './index.ts';
+import { deadlineClient } from './deadline.ts';
+import { authorizePlatformGate, viewerActionReadTime } from './read-bindings.ts';
 import { GLOBAL_CONTEXT } from './gates/catalogue.ts';
 import { PLATFORM_RESOURCE } from './bootstrap-governance.ts';
 import { parseExposure, type Exposure } from './gates/declaration.ts';
@@ -20,7 +20,7 @@ import {
   type AccessClient,
   type Actor,
   type AccountAuthorityKind,
-} from '../request/access.ts';
+} from './check.ts';
 import { routeOf } from '../route/route.ts';
 
 /** Trusted owner read, shared with its ordinary resource reader. Absence and the

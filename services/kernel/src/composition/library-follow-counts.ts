@@ -1,7 +1,8 @@
 /** Default Follow composition: owners supply account, Space and identity behavior. */
 import type { Pool } from 'pg';
 import { Value } from 'typebox/value';
-import { readAccount, classifyUnavailability } from '../access/adapters/index.ts';
+import { readAccount } from '../access/account-data.ts';
+import { classifyUnavailability } from '../access/unavailable.ts';
 import { deadlineClient, within } from '../access/authenticate.ts';
 import { ACCESS_EVENTS } from '../access/events.ts';
 import { readPublicAccountByAgent } from '../access/public-identity.ts';

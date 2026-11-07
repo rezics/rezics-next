@@ -9,7 +9,7 @@ import { currentCommandWorkAssociation } from '../command/work-context.ts';
 import readReceipt from '../command/read-receipt.sql';
 import eventFence from '../command/fence.sql';
 import timeRead from '../command/time.sql';
-import { nativeCopyAccountWork } from '../access/adapters/index.ts';
+import { nativeCopyAccountWork } from '../access/adapters/copy-account.ts';
 import { partitionOf } from '../route/route.ts';
 import {
   sessionPartitionWork,

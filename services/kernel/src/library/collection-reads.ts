@@ -17,7 +17,7 @@ import {
   readContributionAttributions,
   type ContributionAttribution,
 } from '../access/public-identity.ts';
-import { readPublicViews } from '../access/index.ts';
+import { readPublicViews } from '../access/public-views.ts';
 import publicGeneration from './collection-public-generation.sql';
 import { createResourcePublicEligibility } from '../access/public-eligibility.ts';
 import { withConnection } from '../database/pool.ts';

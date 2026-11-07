@@ -1,3 +1,6 @@
+export { readNativeAccessTime } from './native-time.ts';
+import { deadlineClient, within, remaining } from './deadline.ts';
+export { deadlineClient, within } from './deadline.ts';
 import {
   accessNativeWork,
   accessCheckout,
@@ -7,8 +10,7 @@ import {
   type AccessWorkAccounting,
 } from './work.ts';
 import { readNativePermissionAccount } from './account-authority.ts';
-import { mintReadTime, authoritativeTimeValue } from '../command/command.ts';
-import timeRead from './permission-time.sql';
+import { authoritativeTimeValue } from '../command/command.ts';
 import { MAX_CONSENTED_SCOPES, MAX_CONSENTED_SCOPE_OCTETS } from '@rezics/auth-contract';
 import { identityExpired, type IdentityExpiry } from './identity-expiry.ts';
 import { systemClock, type KernelClock } from '../clock.ts';
@@ -16,21 +18,14 @@ import { AccessUnavailableError, requireAccessDeadline, throwAccessUnavailable }
 import { AsyncLocalStorage } from 'node:async_hooks';
 import { createRemoteJWKSet, customFetch, errors, jwtVerify, type FetchImplementation, type JWTPayload } from 'jose';
 import { withConnection } from '../database/pool.ts';
-import type { QueryConfig } from 'pg';
-import {
-  AuthenticationError,
-  type Access,
-  type AccessClient,
-  type AccessContext,
-  type AccountActor,
-} from '../request/access.ts';
+import { AuthenticationError, type Access, type AccessClient, type AccessContext, type AccountActor } from './check.ts';
 import { consumeDurableIdentity, type DurableIdentity } from './durable-identity.ts';
 import type { AuthoritativeTime } from '../command/command.ts';
 import { approvedIdentityClaims, type ApprovedIdentity } from './approved-identity.ts';
 import { readAccount, type Account } from './account-data.ts';
-import { readAssignment } from './delegation-commands.ts';
+import { readAssignment } from './delegation-read.ts';
 import { bindAccountRateIdentity, stageDurableRateIdentity } from './write-rate-identity.ts';
-import { ProblemError } from '../http/problem.ts';
+import { ProblemError } from '../http/problem-error.ts';
 import {
   AUTHENTICATION_JWKS_LIMITS,
   authenticationVerificationWorkBound,
@@ -138,46 +133,6 @@ async function boundedJwksResponse(
     bytes: size,
     keys,
   };
-}
-
-function remaining(deadline: number): number {
-  if (!Number.isFinite(deadline)) throw invalid();
-  if (Date.now() >= deadline) throw new AccessUnavailableError('deadline');
-  return Math.max(1, Math.floor(deadline - Date.now()));
-}
-
-/** Also bounds pool queueing and transports that do not honor AbortSignal. */
-export async function within<T>(deadline: number, work: () => Promise<T>): Promise<T> {
-  const ms = remaining(deadline);
-  let timer: ReturnType<typeof setTimeout> | undefined;
-  try {
-    const result = await Promise.race([
-      Promise.resolve().then(work),
-      new Promise<never>((_resolve, reject) => {
-        timer = setTimeout(() => reject(new AccessUnavailableError('deadline')), ms);
-      }),
-    ]);
-    remaining(deadline);
-    return result;
-  } catch (error) {
-    throwAccessUnavailable(error, deadline);
-    throw error;
-  } finally {
-    clearTimeout(timer);
-  }
-}
-
-/** Preserve pg's decoding capabilities when wrapping reylo's query transport. */
-export function deadlineClient(client: AccessClient, deadline: number): AccessClient {
-  const bounded = Object.create(client) as AccessClient;
-  bounded.query = ((query: QueryConfig | string, values?: unknown[]) => {
-    const config = {
-      ...(typeof query === 'string' ? { text: query, values: values ?? [] } : query),
-      query_timeout: remaining(deadline),
-    };
-    return within(deadline, () => client.query(config));
-  }) as AccessClient['query'];
-  return bounded;
 }
 
 function settings(config?: AuthenticationConfig): AuthenticationConfig {
@@ -663,35 +618,4 @@ export function createAuthenticator(configuration?: AuthenticationConfig, clock:
       return identities.get(actor);
     },
   };
-}
-
-/** Native read time minted from this exact admitted SQL observation. Caller releases it. */
-export async function readNativeAccessTime(
-  context: AccessContext,
-  clock?: KernelClock,
-  instant?: string,
-): Promise<AuthoritativeTime> {
-  const input = { at: instant ?? clock?.().toISOString() ?? '' };
-  const row = await within(context.deadline, () =>
-    accessCheckout(context.work, () =>
-      withConnection(context.pool, (client) =>
-        accessNativeWork(context.work, 'time', input, {}, () =>
-          timeRead.run(deadlineClient(client, context.deadline), input),
-        ),
-      ),
-    ),
-  ).catch((error: unknown) => {
-    context.work?.fail(error);
-    throw error;
-  });
-  if (!row) throw new AccessUnavailableError('overloaded');
-  return mintReadTime({
-    query: (async () => ({
-      rows: [{ at: row.at }],
-      rowCount: 1,
-      command: 'SELECT',
-      oid: 0,
-      fields: [],
-    })) as AccessClient['query'],
-  });
 }

@@ -17,7 +17,7 @@ import {
 import type { AccountDiscoverySource, AccountDiscoverySummary } from '../search/index.ts';
 import { readSubjectSummaries, type SubjectSummary, type SummaryReaderDependencies } from '../semantic/summaries.ts';
 import { accountBiography, ACCOUNT_CONTEXT_LIMITS, type AccountContext } from '../search/account-context.ts';
-import { readAccountContextBindings } from '../search/index.ts';
+import { readAccountContextBindings } from '../search/account-context-native.ts';
 
 type AccountRow = {
   route: number;

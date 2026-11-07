@@ -2,6 +2,18 @@
 
 ## Policy boundary
 
+Authentication failure vocabulary has one constructor in `contract/authentication.ts`. Request's
+`authentication-error.ts` and `access.ts`, Access's `check.ts` and the contract barrel re-export that identity.
+The HTTP mapper imports the request compatibility leaf. Platform depends on the Access contract for this vocabulary;
+no native evaluator is loaded by the error leaf. One focused HTTP test pins constructor identity and the existing
+400/401 challenge mappings; worker typing remains acceptance and runtime tests run after integration.
+
+Decision: `adapters/collection-rule-authority.ts` supplies Library's existing `CollectionRuleAuthorityCapability.readAccount`
+from Access's bounded `readAccountCommandState` producer. It keeps the original transaction, route, account key,
+bigint authentication floor and missing-row result, using the current command's Access work ledger when present.
+Library retains its current-authority decision. Focused producer tests pin forwarding, current states and accounting;
+existing Collection rule/preparation assertions remain unchanged. Worker typing is acceptance; runtime walks run after integration.
+
 [Architecture](../../../../docs/architecture.md): catalogue, closed-operand `decide`, bounded explanations,
 conformance and residuals live in `packages/access/src/index.ts`; imports point inward.
 Kernel owns facts, qualified completeness, proofs, time, floors/fences, admission, audit and execution. Exposure is independent. Core/Collection residuals are integrated; remaining profiles add no

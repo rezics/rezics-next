@@ -123,3 +123,4 @@ export {
   DurableInitiatorUnavailableError,
   PlatformClosedError,
 } from './errors.ts';
+export { AuthenticationError } from './authentication.ts';

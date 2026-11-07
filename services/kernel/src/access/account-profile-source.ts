@@ -6,11 +6,11 @@ import {
   type SessionProof,
 } from '@rezics/auth-contract';
 import type { Access } from '../request/access.ts';
-import { viewerActionReadTime } from './index.ts';
+import { viewerActionReadTime } from './read-bindings.ts';
 import { readEditableAccountProfile } from './account-edit-profile.ts';
 import { readManagedAuthActions } from './account-management-auth-actions.ts';
 import { withConnection } from '../database/pool.ts';
-import { deadlineClient } from './authenticate.ts';
+import { deadlineClient } from './deadline.ts';
 import { routeOf } from '../route/route.ts';
 import { readAccount } from './account-data.ts';
 import { AuthBindingDeniedError } from './auth-bindings.ts';

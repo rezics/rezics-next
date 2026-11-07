@@ -5,6 +5,31 @@ import { RealmLastOwnerError } from '../../src/access/realm-ownership.ts';
 import { ResourceAccessWriteDeniedError } from '../../src/access/resource-denials.ts';
 import { AccessUnavailableError } from '../../src/access/unavailable.ts';
 import { ProblemError, problemResponse, problemSchema } from '../../src/http/problem.ts';
+import { AuthenticationError } from '../../src/access/contract/authentication.ts';
+import { AuthenticationError as AccessAuthenticationError } from '../../src/access/check.ts';
+import { AuthenticationError as RequestAuthenticationError } from '../../src/request/authentication-error.ts';
+import { AuthenticationError as CompatibilityAuthenticationError } from '../../src/request/access.ts';
+
+test('authentication compatibility entries share one constructor and preserve HTTP challenge mapping', async () => {
+  for (const Constructor of [
+    AuthenticationError,
+    AccessAuthenticationError,
+    RequestAuthenticationError,
+    CompatibilityAuthenticationError,
+  ]) {
+    expect(Constructor).toBe(AuthenticationError);
+    for (const [status, challenge, code] of [
+      [400, 'Bearer error="invalid_request"', 'invalid_request'],
+      [401, 'Bearer', 'authentication_required'],
+      [401, 'Bearer error="invalid_token"', 'invalid_credentials'],
+    ] as const) {
+      const response = problemResponse(new Constructor(status, challenge), { method: 'GET', id: 'authentication' });
+      expect(response.status).toBe(status);
+      expect(response.headers.get('www-authenticate')).toBe(challenge);
+      expect(await response.json()).toMatchObject({ code, status, request_id: 'authentication' });
+    }
+  }
+});
 
 test('RealmLastOwnerError has an exact evidence-free nonretryable409 response and schema', async () => {
   const error = Object.assign(new RealmLastOwnerError(), {

@@ -1,5 +1,5 @@
-import { ProblemError, PROBLEMS } from '../http/problem.ts';
-import { GrantDeniedError } from './grant-commands.ts';
+import { ProblemError, PROBLEMS } from '../http/problem-error.ts';
+import { GrantDeniedError } from './resource-access-errors.ts';
 import { throwAccessUnavailable } from './unavailable.ts';
 
 // Existing owning-module denial contracts have no common base class. Keep their

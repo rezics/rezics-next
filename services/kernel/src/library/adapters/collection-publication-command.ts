@@ -5,7 +5,7 @@ import type { Pool, PoolClient } from 'pg';
 import { captureDurableInitiator, durableInitiatorCommitment } from '../../access/durable-initiator-capture.ts';
 import type { DurableInitiatorRecord } from '../../access/durable-initiator.ts';
 import { shareAccount } from '../../access/account-share.ts';
-import { resourceAuthorization } from '../../access/index.ts';
+import { resourceAuthorization } from '../../access/resource-authorization.ts';
 import type { KernelClock } from '../../clock.ts';
 import {
   authoritativeTimeValue,
