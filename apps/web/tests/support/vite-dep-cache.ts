@@ -1,7 +1,19 @@
 import { createHash } from 'node:crypto';
-import { cpSync, existsSync, mkdirSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
+import {
+  cpSync,
+  existsSync,
+  mkdirSync,
+  readdirSync,
+  readFileSync,
+  realpathSync,
+  rmSync,
+  statSync,
+  writeFileSync,
+} from 'node:fs';
+import { createRequire } from 'node:module';
 import { homedir } from 'node:os';
-import { dirname, join, relative, resolve } from 'node:path';
+import { dirname, join, relative, resolve, sep } from 'node:path';
+import { fileURLToPath } from 'node:url';
 
 export const viteDepCacheReadyName = '_ready';
 export const viteDepCacheLockName = '_lock';
@@ -10,6 +22,187 @@ export const viteDepCacheSsrMetadataName = join('deps_ssr', '_metadata.json');
 export const viteDepCacheMetadataFiles = [viteDepCacheMetadataName, viteDepCacheSsrMetadataName] as const;
 
 export const webViteCalendarOptimizeDeps = ['react-day-picker', 'date-fns', '@date-fns/tz'] as const;
+
+const webAppPackageJson = join(dirname(fileURLToPath(import.meta.url)), '../../package.json');
+const typeboxBareSpecifier = /^typebox(?:\/|$)/;
+
+export type ViteWorkerResolveAlias = { find: string; replacement: string };
+
+export type InstalledTypeboxWorkerImport = {
+  specifier: string;
+  importer: string;
+  resolved: string;
+};
+
+export type InstalledElysiaTypeboxWorkerGraph = {
+  elysiaRoot: string;
+  elysiaEsm: string;
+  typeboxRoot: string;
+  first: InstalledTypeboxWorkerImport;
+  imports: InstalledTypeboxWorkerImport[];
+  aliases: ViteWorkerResolveAlias[];
+  include: string[];
+};
+
+type PackageExports = Record<string, string | { import?: string; default?: string; require?: string }>;
+
+function namedPackageRoot(resolved: string, name: string): string {
+  const needle = `${sep}node_modules${sep}${name.replaceAll('/', sep)}`;
+  const index = resolved.lastIndexOf(needle);
+  if (index !== -1) return resolved.slice(0, index + needle.length);
+  let current = resolved;
+  for (;;) {
+    try {
+      const listed = JSON.parse(readFileSync(join(current, 'package.json'), 'utf8')) as { name?: string };
+      if (listed.name === name) return current;
+    } catch {
+      // Walk toward the filesystem root until the named package directory is found.
+    }
+    const parent = dirname(current);
+    if (parent === current) return dirname(resolved);
+    current = parent;
+  }
+}
+
+function readPackageExports(root: string): PackageExports {
+  const listed = JSON.parse(readFileSync(join(root, 'package.json'), 'utf8')) as { exports?: PackageExports };
+  return listed.exports ?? {};
+}
+
+function exportFile(
+  root: string,
+  entry: PackageExports[string] | undefined,
+  field: 'import' | 'default' | 'require',
+): string | undefined {
+  if (!entry) return undefined;
+  const relativePath = typeof entry === 'string' ? entry : (entry[field] ?? entry.import ?? entry.default);
+  if (!relativePath) return undefined;
+  return join(root, relativePath);
+}
+
+function specifierForExportKey(name: string, key: string): string | undefined {
+  if (key === '.') return name;
+  if (key === './package.json' || !key.startsWith('./')) return undefined;
+  return `${name}/${key.slice(2)}`;
+}
+
+function existingFile(path: string): string | undefined {
+  try {
+    return statSync(path).isFile() ? realpathSync(path) : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+function resolveElysiaRelative(fromFile: string, specifier: string): string | undefined {
+  const base = resolve(dirname(fromFile), specifier);
+  return (
+    existingFile(base) ??
+    existingFile(`${base}.mjs`) ??
+    existingFile(`${base}.js`) ??
+    existingFile(join(base, 'index.mjs')) ??
+    existingFile(join(base, 'index.js'))
+  );
+}
+
+function walkElysiaTypeboxImporters(elysiaRoot: string, elysiaEsm: string): Map<string, string> {
+  const root = `${elysiaRoot}${sep}`;
+  const queue = [elysiaEsm];
+  const seenFiles = new Set<string>();
+  const firstImporter = new Map<string, string>();
+  while (queue.length > 0) {
+    const file = queue.shift()!;
+    if (seenFiles.has(file) || !file.startsWith(root)) continue;
+    seenFiles.add(file);
+    let source: string;
+    try {
+      source = readFileSync(file, 'utf8');
+    } catch {
+      continue;
+    }
+    for (const match of source.matchAll(/(?:from\s+|import\s*\(\s*|require\s*\(\s*)['"]([^'"]+)['"]/g)) {
+      const specifier = match[1]!;
+      if (typeboxBareSpecifier.test(specifier)) {
+        if (!firstImporter.has(specifier)) firstImporter.set(specifier, file);
+        continue;
+      }
+      if (!specifier.startsWith('.')) continue;
+      const next = resolveElysiaRelative(file, specifier);
+      if (next) queue.push(next);
+    }
+  }
+  return firstImporter;
+}
+
+function resolveInstalledSpecifier(require: NodeJS.Require, specifier: string): string | undefined {
+  try {
+    return realpathSync(require.resolve(specifier));
+  } catch {
+    return undefined;
+  }
+}
+
+/** Installed Elysia ESM graph of `typebox` / `typebox/*` plus TypeBox package exports, resolved from that importer. */
+export function installedElysiaTypeboxWorkerGraph(fromFile: string): InstalledElysiaTypeboxWorkerGraph {
+  const fromRequire = createRequire(fromFile);
+  const clientRequire = createRequire(fromRequire.resolve('@rezics/client'));
+  const elysiaResolved = clientRequire.resolve('elysia');
+  const elysiaRoot = namedPackageRoot(elysiaResolved, 'elysia');
+  const elysiaEsm =
+    existingFile(exportFile(elysiaRoot, readPackageExports(elysiaRoot)['.'], 'import') ?? '') ?? elysiaResolved;
+  const importers = walkElysiaTypeboxImporters(elysiaRoot, elysiaEsm);
+  const firstSpecifier = importers.keys().next().value;
+  if (!firstSpecifier) throw new Error(`Elysia ESM at ${elysiaEsm} imports no typebox specifiers`);
+  const firstImporter = importers.get(firstSpecifier)!;
+  const typeboxRequire = createRequire(firstImporter);
+  const typeboxRoot = namedPackageRoot(typeboxRequire.resolve('typebox'), 'typebox');
+  const bySpecifier = new Map<string, InstalledTypeboxWorkerImport>();
+  const admit = (specifier: string, importer: string) => {
+    if (bySpecifier.has(specifier)) return;
+    const resolved = resolveInstalledSpecifier(createRequire(importer), specifier);
+    if (!resolved) return;
+    bySpecifier.set(specifier, { specifier, importer, resolved });
+  };
+  for (const [specifier, importer] of importers) admit(specifier, importer);
+  for (const key of Object.keys(readPackageExports(typeboxRoot))) {
+    const specifier = specifierForExportKey('typebox', key);
+    if (specifier) admit(specifier, firstImporter);
+  }
+  const imports = [...bySpecifier.values()];
+  const first = bySpecifier.get(firstSpecifier);
+  if (!first) throw new Error(`Installed TypeBox exports do not resolve ${firstSpecifier} from ${firstImporter}`);
+  const aliases = [...imports]
+    .map(({ specifier, resolved }) => ({ find: specifier, replacement: resolved }))
+    .sort((left, right) => right.find.length - left.find.length || left.find.localeCompare(right.find));
+  return {
+    elysiaRoot,
+    elysiaEsm,
+    typeboxRoot,
+    first,
+    imports,
+    aliases,
+    include: aliases.map((alias) => alias.find).sort((left, right) => left.localeCompare(right)),
+  };
+}
+
+export const webViteTypeboxWorkerGraph = installedElysiaTypeboxWorkerGraph(webAppPackageJson);
+
+const elysiaTypeboxLivePath = /^(.*\/elysia\/(?:dist|src)\/type\/)(typebox-type|typebox-value)\.(?:mjs|js|cjs|ts)$/;
+
+/** Elysia's default TypeBox stubs `require()` subpaths. Workerd has no sync loader, so load the sibling live ESM. */
+export function elysiaTypeboxLiveModule(id: string): string | undefined {
+  const path = (id.split('?')[0] ?? id).replace(/\\/g, '/');
+  const match = elysiaTypeboxLivePath.exec(path);
+  if (!match) return undefined;
+  const live = `${match[1]}${match[2]}-live.mjs`;
+  return existsSync(live) ? live : undefined;
+}
+
+export function elysiaTypeboxLiveModuleCode(id: string): string | undefined {
+  const live = elysiaTypeboxLiveModule(id);
+  if (!live) return undefined;
+  return `export * from ${JSON.stringify(live)};\n`;
+}
 
 /** Scan the complete route graph up front so a local Worker browser check never discovers a route dependency
  * after the first page has loaded.
@@ -37,6 +230,9 @@ export const webViteWorkerSsrOptimizeDeps = {
     'satori/standalone',
     '@puckeditor/core > flat',
     '@puckeditor/core > object-hash',
+    // TypeBox subpaths Elysia imports. Worker conditions omit `import`, so the optimizer and workerd otherwise
+    // treat `typebox/type` as `elysia/dist/type/typebox/type`.
+    ...webViteTypeboxWorkerGraph.include,
   ],
   exclude: [...webViteCalendarOptimizeDeps],
 };

@@ -1,7 +1,7 @@
 import { afterAll, expect, test } from 'bun:test';
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { join, sep } from 'node:path';
 import {
   alignViteDepCacheToOptimizer,
   alignViteLockfileHashes,
@@ -21,6 +21,7 @@ import {
   viteEnvironmentDepHashes,
   viteLockfileHash,
   webViteOptimizerIdentity,
+  webViteTypeboxWorkerGraph,
   webViteWarmSsrEnvName,
   webViteWorkerSsrEnvironment,
   webViteWorkerSsrOptimizeDeps,
@@ -49,8 +50,31 @@ test('the default pre-bundle is vite optimize --force, not a second HTTP server'
   // App source imports the generic entry, which resolves to CommonJS server.edge.js under Worker conditions.
   expect(webViteWorkerSsrOptimizeDeps.include).toContain('react-dom/server');
   expect(webViteWorkerSsrOptimizeDeps.include).toContain('react-dom/server.edge');
+  expect(webViteWorkerSsrOptimizeDeps.include).toContain('typebox/type');
   expect(webViteWorkerSsrEnvironment.resolve.conditions).toContain('workerd');
   expect(webViteWorkerSsrEnvironment.optimizeDeps.noDiscovery).toBe(true);
+});
+
+test('the installed Elysia graph fails first on typebox/type and resolves it through TypeBox exports', () => {
+  const { first, typeboxRoot, elysiaRoot, include } = webViteTypeboxWorkerGraph;
+  expect(first.specifier).toBe('typebox/type');
+  expect(first.importer.startsWith(elysiaRoot)).toBe(true);
+  expect(first.importer).toContain(`${sep}elysia${sep}dist${sep}type${sep}`);
+  expect(first.resolved.startsWith(typeboxRoot)).toBe(true);
+  expect(first.resolved).toBe(join(typeboxRoot, 'build', 'type', 'index.mjs'));
+  expect(first.resolved.includes(`${sep}elysia${sep}dist${sep}type${sep}typebox${sep}`)).toBe(false);
+  expect(include).toContain('typebox/type');
+  expect(webViteOptimizerIdentity.ssr.include).toContain('typebox/type');
+  const withoutTypebox = {
+    ...webViteOptimizerIdentity,
+    ssr: {
+      ...webViteOptimizerIdentity.ssr,
+      include: webViteOptimizerIdentity.ssr.include.filter((specifier) => specifier !== 'typebox/type'),
+    },
+  };
+  expect(hashViteDepCacheIdentity({ lockBytes: 'lock', optimizer: webViteOptimizerIdentity })).not.toBe(
+    hashViteDepCacheIdentity({ lockBytes: 'lock', optimizer: withoutTypebox }),
+  );
 });
 
 test('a lock hash reuses one published cache and a changed lock builds its own directory', async () => {

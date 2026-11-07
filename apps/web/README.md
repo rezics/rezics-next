@@ -188,7 +188,8 @@ reuses the shared run server's Vite cache directory when one is advertised. The 
 header and imports no test runtime, so no request header can inject origin, API or Auth bindings. The Worker SSR
 pre-bundle lists every CommonJS package a graph walk of the Worker entry reaches (`react-dom/server`, `satori/standalone`,
 and Puck's `flat` and `object-hash`), or the selector plugin replaces it at load (TipTap's `use-sync-external-store`
-shims). The Worker runner cannot evaluate CommonJS unbundled.
+shims). Decision: Worker Vite aliases Elysia's installed `typebox/*` imports to TypeBox package exports and loads the
+live ESM TypeBox stubs, so workerd never resolves `typebox/type` as `elysia/dist/type/typebox/type`. The Worker runner cannot evaluate CommonJS unbundled.
 
 Browser tests wait for `html[data-hydrated]` before interacting with a page.
 Browser tests start the dev server through `tests/support/dev-server.ts`, whose errors name the phase that failed; a test never imports another test file.

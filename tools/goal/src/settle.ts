@@ -7,7 +7,10 @@ import { makeRecord, readLogTail, readMeasurement, reportedApproaches, reportsSu
 import { agentAdapter } from './agents.ts';
 import {
   isTransportFailure,
+  isCursorResumeStopped,
   lastNonemptyLine,
+  CURSOR_FRESH_SESSION_EVENT,
+  CURSOR_FRESH_SESSION_RETRY_LIMIT,
   TRANSPORT_FAILURE_EVENT,
   TRANSPORT_RETRY_LIMIT,
   transportFailureLine,
@@ -297,6 +300,32 @@ export async function settle(
         store.event(ref, FINAL_REPORT_REQUESTED, {
           result: measurement.result.slice(-policy.worker.reportResultCharacters),
         });
+        return;
+      }
+      const cursorResumeStops = store
+        .events(ref.taskId, ref.attempt)
+        .filter((event) => event.kind === CURSOR_FRESH_SESSION_EVENT).length;
+      if (
+        adapter.cli === 'cursor' &&
+        isCursorResumeStopped(stderr) &&
+        cursorResumeStops < CURSOR_FRESH_SESSION_RETRY_LIMIT &&
+        !measurement.failureKind &&
+        !measurement.blocker &&
+        !reportsSuccess(measurement.result, adapter)
+      ) {
+        // Cursor cannot resume through Goal; one immediate fresh launch keeps this provider message out of outages.
+        const line = lastNonemptyLine(stderr).slice(0, policy.worker.summaryCharacters);
+        store.updateAttempt(ref, (attempt) => {
+          attempt.state = 'waiting';
+          attempt.process = null;
+          attempt.driver = null;
+          attempt.exitCode = code;
+          attempt.session = null;
+          attempt.result = line;
+          attempt.failureKind = null;
+          attempt.blocker = null;
+        });
+        store.event(ref, CURSOR_FRESH_SESSION_EVENT, { count: cursorResumeStops + 1, line });
         return;
       }
       const transport = isTransportFailure(stderr, code);
