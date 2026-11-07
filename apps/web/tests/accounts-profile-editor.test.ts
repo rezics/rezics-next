@@ -77,7 +77,8 @@ function boundary() {
       return Response.json({ accountId });
     }) as typeof fetch,
   });
-  const editor = new AccountProfileEditor({ ambient: settingsAmbient, 
+  const editor = new AccountProfileEditor({
+    ambient: settingsAmbient,
     read: async () => {
       const page = await readTarget(client, 'Bearer current-viewer', target);
       if (page.state !== 'ready') throw profilePageReadError(page);
@@ -198,7 +199,8 @@ test('Closed input and wrong-target native output never create a replacement tar
     parseSubmission({ ...input, patch: { links: [{ label: 'A', url: 'https://user:pass@example.test' }] } }),
   ).toThrow();
   expect(api.writes).toHaveLength(0);
-  const otherEditor = new AccountProfileEditor({ ambient: settingsAmbient, 
+  const otherEditor = new AccountProfileEditor({
+    ambient: settingsAmbient,
     read: async () => ({ ...profile(), accountId: otherId }),
     save: async () => {
       throw new Error('Unexpected write');

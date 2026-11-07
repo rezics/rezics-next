@@ -76,7 +76,11 @@ async function pageMarkup(client: QueryClient, requestSession?: Session, path = 
       createElement(
         QueryClientProvider,
         { client },
-        createElement(SettingsShellProvider, { port: boundSettingsShellPort }, createElement(RouterProvider, { router })),
+        createElement(
+          SettingsShellProvider,
+          { port: boundSettingsShellPort },
+          createElement(RouterProvider, { router }),
+        ),
       ),
     ),
   );
