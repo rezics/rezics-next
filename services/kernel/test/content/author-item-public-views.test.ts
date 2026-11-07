@@ -1,10 +1,12 @@
 import { testReceiptKeys } from '../support/receipt-keys.ts';
 import { afterAll, beforeAll, expect, test } from 'bun:test';
+import { bundledRelease } from '@rezics/definitions/bundled';
 import { fromPlainText } from '@rezics/document';
 import { exportJWK, generateKeyPair, SignJWT } from 'jose';
 import { createAccess } from '../../src/access/index.ts';
 import { createKernel } from '../../src/http/kernel.ts';
 import { newId, routeOf } from '../../src/route/route.ts';
+import { bootstrapRelease } from '../../src/semantic/definitions.ts';
 import { capture, costOf, openGrowthDatabase, seed } from '../support/growth.ts';
 
 const authorRoute = 0x9abc;
@@ -44,6 +46,7 @@ beforeAll(async () => {
   const fetchGetter = Object.getOwnPropertyDescriptor(Object.getPrototypeOf(app), 'fetch')?.get;
   if (!fetchGetter) throw new Error('Elysia fetch getter is unavailable');
   fetchGetter.call(app);
+  await bootstrapRelease(db.pool, bundledRelease);
   viewer = newId(authorRoute);
   await account(viewer);
 });
@@ -219,9 +222,15 @@ async function token(accountId: string, scopes = 'thread:read post:read board:re
     .sign(signingKeys.privateKey);
 }
 
-function path(author: string, list: 'threads' | 'posts', kind?: 'discussion' | 'review') {
-  const query = kind ? `?kind=${kind}` : '';
-  return `/v1/accounts/${author}/${list}${query}`;
+function path(
+  author: string,
+  list: 'threads' | 'posts',
+  kind?: 'discussion' | 'review',
+  extra: Record<string, string> = {},
+) {
+  const query = new URLSearchParams({ ...(kind ? { kind } : {}), ...extra });
+  const encoded = query.toString();
+  return `/v1/accounts/${author}/${list}${encoded ? `?${encoded}` : ''}`;
 }
 
 async function get(url: string, bearer?: string) {
@@ -350,7 +359,7 @@ test('two public view observations fence each author page at any item count', as
   }
 
   async function reads() {
-    const result = await capture(db, () => get(path(author, 'threads')));
+    const result = await capture(db, () => get(path(author, 'threads', undefined, { limit: '1' })));
     expect(result.value.status).toBe(200);
     expect(result.capture.statements.filter((statement) => statement.includes('public_views'))).toHaveLength(2);
     const statement = result.capture.statements.find((statement) => statement.includes('public_views'));

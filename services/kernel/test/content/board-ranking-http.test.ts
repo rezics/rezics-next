@@ -89,7 +89,8 @@ beforeAll(async () => {
   const issuer = 'https://ranking.auth.test';
   const audience = 'https://content.test';
   bearer = async ({ actor }) => {
-    const iat = Math.floor(instant / 1000) - 2;
+    // Access checks iat/exp against wall time. Ranking formulas keep `instant` as the kernel clock.
+    const iat = Math.floor(Date.now() / 1000) - 2;
     return new SignJWT({
       client_id: actor.clientId,
       scope: actor.scopes.join(' '),

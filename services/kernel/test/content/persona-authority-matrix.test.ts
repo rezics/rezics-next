@@ -61,6 +61,9 @@ test('board takedown conceals the thread from every later reader', async () => {
   await system.drain(board);
   expect((await system.get(`/v1/threads/${thread.id}`)).status).toBe(200);
   await system.takedown(board);
-  for (const actor of [null, system.author, system.member, system.outsider, system.moderator, system.suspended])
+  for (const actor of [null, system.author, system.member, system.outsider, system.moderator])
     expect((await system.get(`/v1/threads/${thread.id}`, actor)).status).toBe(404);
+  // A suspended bearer fails authentication before the resource is named, so it cannot
+  // distinguish a taken-down thread from any other GET.
+  expect([401, 403]).toContain((await system.get(`/v1/threads/${thread.id}`, system.suspended)).status);
 }, 60_000);

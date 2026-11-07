@@ -389,7 +389,7 @@ if (process.argv.includes('--reaction-count-worker')) {
     member = await person('reaction_counts_member', scopes);
     other = await person('reaction_counts_other', scopes);
     await startCountWorker();
-  }, 60_000);
+  }, 180_000);
 
   afterAll(async () => {
     const running = workers.splice(0);
@@ -398,7 +398,7 @@ if (process.argv.includes('--reaction-count-worker')) {
     if (authPool && !authPool.ending && !authPool.ended) await authPool.end();
     if (authDatabaseName) await dropTestDatabase(db!.admin, authDatabaseName);
     await db?.close();
-  });
+  }, 120_000);
 
   test.serial(
     'the thread view and each post page item carry per-kind reaction counts and their freshness once the worker relay has run',

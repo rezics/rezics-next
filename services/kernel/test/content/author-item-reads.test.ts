@@ -1,6 +1,7 @@
 import { testReceiptKeys } from '../support/receipt-keys.ts';
 import { afterAll, beforeAll, expect, test } from 'bun:test';
 import { randomUUID } from 'node:crypto';
+import { bundledRelease } from '@rezics/definitions/bundled';
 import { fromPlainText } from '@rezics/document';
 import { exportJWK, generateKeyPair, SignJWT } from 'jose';
 import { decodeCursor, encodeCursor } from '../../src/tokens/cursor.ts';
@@ -8,6 +9,7 @@ import { createAccess } from '../../src/access/index.ts';
 import { createKernel } from '../../src/http/kernel.ts';
 import { openApiDocument } from '../../src/http/openapi.ts';
 import { newId, routeOf } from '../../src/route/route.ts';
+import { bootstrapRelease } from '../../src/semantic/definitions.ts';
 import { checkGrowth, capture, costOf, openGrowthDatabase, seed, type Population } from '../support/growth.ts';
 
 const authorRoute = 0x9abc;
@@ -46,6 +48,7 @@ beforeAll(async () => {
   const fetchGetter = Object.getOwnPropertyDescriptor(Object.getPrototypeOf(app), 'fetch')?.get;
   if (!fetchGetter) throw new Error('Elysia fetch getter is unavailable');
   fetchGetter.call(app);
+  await bootstrapRelease(db.pool, bundledRelease);
   const viewer = newId(authorRoute);
   await db.admin.query(
     `INSERT INTO access.account(route,account_id,kind,state,transaction_id)
@@ -477,12 +480,13 @@ for (const reply of [false, true])
       bounds: { rows: 'constant', statements: 'constant', blocks: 'logarithmic' },
       grow: (database, scale, previous) => seed(database, population, { from: previous * 500, to: scale * 500 }),
       async operation() {
-        const page = await get(path(author, reply ? 'posts' : 'threads', { limit: '2' }));
+        const list = reply ? 'posts' : 'threads';
+        const page = await get(path(author, list, { limit: '1' }));
         expect(page.status).toBe(200);
-        expect(page.body[reply ? 'posts' : 'threads']).toHaveLength(2);
-        const next = await get(path(author, reply ? 'posts' : 'threads', { limit: '2', cursor: page.body.next }));
+        expect(page.body[list]).toHaveLength(1);
+        const next = await get(path(author, list, { limit: '1', cursor: page.body.next }));
         expect(next.status).toBe(200);
-        expect(next.body[reply ? 'posts' : 'threads']).toHaveLength(2);
+        expect(next.body[list]).toHaveLength(1);
       },
     });
     expect(report.samples.map((s) => s.scale)).toEqual([64, 512, 4096]);

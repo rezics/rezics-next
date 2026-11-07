@@ -90,7 +90,11 @@ Native tests create identities, Boards, threads, replies and revisions through H
 They cover anonymous takedown and protected read-grant revocation for heads, exact revisions, Subject discussions,
 author activity, all three Board orders and thread posts, including first/continuing pages and eligible controls.
 Decision: those two native files plus the frozen composed page cases are the fewest tests for the named families;
-no extra stories. The Goal walk on an admitted seeded stack reuses that driver, seed-journal cleanup and Performance
+no extra stories. A suspended bearer fails authentication (401/403) before a taken-down thread is named; concealment
+404 is for authenticable readers. Ranking HTTP personas sign JWT iat/exp on wall time because Access validates
+credentials on wall time while the kernel clock drives ranking formulas. Author-item growth captures keep a one-item
+page so Access permission-check plan notices stay inside the 32MiB telemetry cap; they bootstrap the bundled
+definitions release so review subject observation is a current source. The Goal walk on an admitted seeded stack reuses that driver, seed-journal cleanup and Performance
 `waitUntilWalkReady` recovery; it does not add stories.
 
 ### Cost: native directory assembly

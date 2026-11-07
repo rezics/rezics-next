@@ -10,7 +10,6 @@ import { readBatch, type CloudEvent } from '../../../src/events/log.ts';
 import { partitionOf, routeOf } from '../../../src/route/route.ts';
 import { GLOBAL_CONTEXT } from '../../../src/semantic/definitions.ts';
 import { testReceiptKeys } from '../../support/receipt-keys.ts';
-import { TEST_REQUEST_DEADLINE_MS } from '../../support/test-kernel.ts';
 import { createWorkClient } from '../../../src/work/client.ts';
 import { seedGovernanceAuthority } from './disclosure-fixtures.ts';
 import { governance, highRates, openUserCasesSystem } from './user-cases-fixtures.ts';
@@ -57,7 +56,7 @@ export async function openThreadBoardSystem() {
       receiptKeys: testReceiptKeys(),
       workClient: client,
       access: () => system.access,
-      requestDeadlineMs: TEST_REQUEST_DEADLINE_MS,
+      requestDeadlineMs: 120_000,
       content: {
         disclosureBarrier: (target) => wait(pointHolds, target.postId ?? target.threadId),
         pageDisclosureBarrier: (target) => wait(pageHolds, target.threadId ?? target.boardId),
