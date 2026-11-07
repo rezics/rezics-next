@@ -17,7 +17,7 @@ import {
   useReaderResponseOrigin,
 } from './reader';
 
-/** Bind the existing producers. This adapter owns no session, query cache or admission state. */
+/** Bind existing producers for Library's root-mounted consumer boundary; own no session or admission state. */
 export const libraryApplication: LibraryApplication = {
   recoveryObservation,
   useSession,

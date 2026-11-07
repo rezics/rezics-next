@@ -434,10 +434,18 @@ Decision: check b33b1673 is the landing gate; type errors it printed sit outside
 ## Application reading boundary
 
 Library declares its session, operation-admission, workspace and current-reader capabilities in `application.tsx`.
-The ordinary route boundary binds the existing Session and reader producers through `session/library-application.tsx`;
-it owns no account store, fetch, cache or alternative admission authority. Default isolated readers bind the same
-adapter. Presentation and query contracts retain their existing owners, including Continue's exposure presentation.
-Consumer fixtures install that adapter explicitly and retain their existing outcome assertions.
+The ordinary root boundary binds the existing Session and reader producers through
+`session/library-application.tsx`. Root mounts it under the installed Router and QueryClient around the reader host,
+AppShell and route outlet, so shell consumers, route errors and closed states receive the same real capabilities.
+The adapter owns no account store, fetch, cache or alternative admission authority. Its one root lifetime keeps Search
+bindings and completed archive custody alive across route changes; each archive reader still retires its own route and
+locale scope. Default isolated readers bind the same adapter. Presentation and query contracts retain their existing
+owners, including Continue's exposure presentation. Consumer fixtures install that adapter explicitly and retain
+their existing outcome assertions.
+
+Decision: mount one Library application boundary around the ordinary root shell and route content, under the existing
+Router and QueryClient. Library owns this consumer composition; Performance retains the existing Session and shell
+producer policy.
 
 Each archive section keeps an independent controller. Recovery observes actual session and exposure query
 incarnations, update counts and the browser reader observation rather than serialized session values. Replacement,

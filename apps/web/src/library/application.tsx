@@ -18,7 +18,7 @@ export type RecoveryObserver = {
   subscribe: (notify: () => void) => () => void;
 };
 
-/** Consumer capabilities, supplied by the application composition, never by a Library account store. */
+/** Consumer capabilities, supplied by the root application composition, never by a Library account store. */
 export type LibraryApplication = {
   useSession: () => LibrarySession;
   recoveryObservation: (client: QueryClient | undefined) => RecoveryObserver;
