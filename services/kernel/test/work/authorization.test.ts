@@ -59,7 +59,7 @@ test('default worker authorization mounts native edition/post actions and real r
     const sorted = (actions: readonly string[] | undefined) => [...(actions ?? [])].sort();
     expect(sorted(catalogue.roles.get('content.edition.owner'))).toEqual(sorted(roles.roles['content.edition.owner']));
     expect(sorted(catalogue.roles.get('content.post.owner'))).toEqual(sorted(roles.roles['content.post.owner']));
-    expect(catalogue.roles.get('community.realm.owner')).toEqual(roles.roles['community.realm.owner']);
+    expect(sorted(catalogue.roles.get('community.realm.owner'))).toEqual(sorted(roles.roles['community.realm.owner']));
     expect(accessClock(access)()).toEqual(deps.clock());
     expect(receiptKeysFor(deps.pool)).toEqual(deps.receiptKeys);
     expect(readConsent).toBeTypeOf('function');
