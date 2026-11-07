@@ -14,7 +14,7 @@ import { readRelease } from './definition-release-read.ts';
 import { freeze } from './core/freeze.ts';
 import { withRequestDeadline } from '../request/deadline.ts';
 import { CommandUnavailableError, requireAccessDeadline } from '../access/unavailable.ts';
-import { withConnection, discardConnection } from '../database/pool.ts';
+import { withConnection, discardConnection, withQueryAccounting } from '../database/pool.ts';
 import registerSource from './public-filter-source-binding-register.sql';
 import defineSource from './public-filter-source-binding-define.sql';
 import readDefinition from './public-filter-source-binding-definition.sql';
@@ -48,7 +48,7 @@ import repairKeys from './public-filter-source-binding-repair-keys.sql';
 import repairAdvance from './public-filter-source-binding-repair-advance.sql';
 import repairVersion from './public-filter-source-binding-repair-version.sql';
 import repairCurrent from './public-filter-source-binding-repair-current.sql';
-import type { Pool, QueryConfig } from 'pg';
+import type { Pool, QueryResult } from 'pg';
 import type { Access } from '../access/index.ts';
 import type { AccountDiscoveryRepairObservation } from '../access/account-discovery-source.ts';
 import type {
@@ -802,43 +802,37 @@ function checkDeadline(context: PublicFilterConsumerContext): void {
   if (!Number.isFinite(context.deadline) || context.deadline <= Date.now()) throw new BindingError('deadline');
 }
 /** Charge native release lookups as well as Source SQL, including failed submissions. */
-function measuredPool(pool: Pool, cost: BindingCost): Pool {
-  function wrap<T extends object>(target: T): T {
-    return new Proxy(target, {
-      get(object, key) {
-        const value: unknown = Reflect.get(object, key, object);
-        if (key === 'query' && typeof value === 'function')
-          return async (statement: string | QueryConfig, values?: unknown[]) => {
-            const text = typeof statement === 'string' ? statement : statement.text;
-            const parameters = typeof statement === 'string' ? values : statement.values;
-            // Authored native point queries declare their complete keyed relation
-            // footprint. Reserve it before submission, including misses, CAS loss
-            // and thrown attempts. A joined result is not another native row.
-            const native = /^\s*\/\* semantic\.native-keyed:(\d+):(\d+) \*\//.exec(text);
-            const writes = native !== null && /^\s*(?:\/\*[\s\S]*?\*\/\s*)*(?:INSERT|UPDATE|DELETE)\b/.test(text);
-            cost.statements++;
-            cost.inputKeys += native ? Number(native[2]) : (parameters?.length ?? 0);
-            cost.bytes += Buffer.byteLength(text) + Buffer.byteLength(encode(parameters));
-            if (native) {
-              cost.rows += Number(native[1]);
-              cost.dependencyPoints += Number(native[1]);
-              if (writes) cost.resultWrites++;
-            }
-            const result = await value.call(object, statement, values);
-            if (!native) {
-              cost.rows += result.rowCount ?? 0;
-              cost.dependencyPoints += result.rowCount ?? 0;
-            }
-            cost.bytes += Buffer.byteLength(encode(result.rows));
-            if (!native && /\b(INSERT|UPDATE|DELETE)\b/.test(text)) cost.resultWrites += result.rowCount ?? 0;
-            return result;
-          };
-        if (key === 'connect' && typeof value === 'function') return async () => wrap(await value.call(object));
-        return typeof value === 'function' ? value.bind(object) : value;
+function measuredQueries<T>(cost: BindingCost, body: () => Promise<T>): Promise<T> {
+  return withQueryAccounting(
+    {
+      async query(text, parameters, dispatch) {
+        // Authored native point queries declare their complete keyed relation
+        // footprint. Reserve it before submission, including misses, CAS loss
+        // and thrown attempts. A joined result is not another native row.
+        const native = /^\s*\/\* semantic\.native-keyed:(\d+):(\d+) \*\//.exec(text);
+        const writes = native !== null && /^\s*(?:\/\*[\s\S]*?\*\/\s*)*(?:INSERT|UPDATE|DELETE)\b/.test(text);
+        cost.statements++;
+        cost.inputKeys += native ? Number(native[2]) : parameters.length;
+        cost.bytes += Buffer.byteLength(text) + Buffer.byteLength(encode(parameters));
+        if (native) {
+          cost.rows += Number(native[1]);
+          cost.dependencyPoints += Number(native[1]);
+          if (writes) cost.resultWrites++;
+        }
+        const result = await dispatch();
+        const { rowCount, rows } = result as QueryResult;
+        if (!native) {
+          cost.rows += rowCount ?? 0;
+          cost.dependencyPoints += rowCount ?? 0;
+        }
+        cost.bytes += Buffer.byteLength(encode(rows));
+        if (!native && /\b(INSERT|UPDATE|DELETE)\b/.test(text)) cost.resultWrites += rowCount ?? 0;
+        return result;
       },
-    });
-  }
-  return wrap(pool);
+      connection: (dispatch) => dispatch(),
+    },
+    body,
+  );
 }
 /** Shared constructor validation; routing is the existing native routeKey, never a callback. */
 function validatePublicFilterBindingConfiguration(pool: Pool, routing: Uint8Array, access: Access): void {
@@ -876,7 +870,7 @@ export function createNativePublicFilterSourceBinding(
     const deadline = context.deadline;
     try {
       checkDeadline({ deadline });
-      const result = await withRequestDeadline(deadline, () => work(cost, measuredPool(pool, cost)));
+      const result = await withRequestDeadline(deadline, () => measuredQueries(cost, () => work(cost, pool)));
       checkDeadline({ deadline });
       return result;
     } catch (error) {
@@ -1046,7 +1040,7 @@ export function createNativePublicFilterSourceBinding(
     if (state.resumeBridge || state.subject !== null || state.projection !== null)
       throw new BindingError('binding_mismatch');
     if (state.phase === 'window') {
-      // measuredPool charges the projected row. The original enrollment, native
+      // Query accounting charges the projected row. The original enrollment, native
       // owner and retention checkpoint are three separately keyed inputs.
       cost.rows += 2;
       cost.dependencyPoints += 2;

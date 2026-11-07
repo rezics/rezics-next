@@ -387,7 +387,9 @@ export function createPublicIdentityOutputCapture(
       { source, meaning: definition.meaning, capture: definition.capture },
       { deadline },
     );
-    if (resolved.status !== 'resolved' || !equal(resolved.definition, definition)) return refuse('binding', 'changed');
+    if (resolved.status !== 'resolved')
+      return refuse('binding', 'unavailable', `semantic.public-source.${resolved.reason}`);
+    if (!equal(resolved.definition, definition)) return refuse('binding', 'changed');
   }
   async function captureAcceptance(request: T.PublicIdentityOutputAcceptance, options: T.PublicIdentityOutputWork) {
     // Snapshot all input before any asynchronous release. Never accept an identity/effect from a caller.

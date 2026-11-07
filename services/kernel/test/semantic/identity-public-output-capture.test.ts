@@ -110,7 +110,7 @@ async function setup(ids: readonly string[], visibility: 'public' | 'private' = 
   const request = { captureId: randomUUID(), definition: resolved.definition, publication };
   const producer = composePublicIdentityOutputCapture(c);
   const accepted = await producer.accept(request, work());
-  expect(accepted.status).toBe('accepted');
+  expect(accepted.status, JSON.stringify(accepted)).toBe('accepted');
   if (accepted.status !== 'accepted') throw new Error('Real native public output binding did not commit');
   return { producer, request, capture: accepted.capture, ref };
 }
