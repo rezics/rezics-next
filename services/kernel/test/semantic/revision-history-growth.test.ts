@@ -3,7 +3,8 @@ import { randomUUID } from 'node:crypto';
 import { accessCheck } from '../../src/request/access.ts';
 import { newId, partitionOf, routeOf } from '../../src/route/route.ts';
 import { ensureAccountAgent } from '../../src/semantic/account-agents.ts';
-import { listRevisions, proposeStatement } from '../../src/semantic/candidates.ts';
+import { listRevisions } from '../../src/semantic/candidate-read.ts';
+import { proposeStatement } from '../../src/semantic/candidate-proposal.ts';
 import { subjectReadEligibility } from '../../src/semantic/eligibility.ts';
 import { changeStatementDisclosure } from '../../src/semantic/statement-disclosure.ts';
 import { encodeCursor } from '../../src/tokens/cursor.ts';
@@ -191,7 +192,7 @@ test('statement disclosure change stays bounded with one affected candidate as u
             release: initial.release,
             revision,
             origin: 'proposal',
-            view_order: ordinal + 1,
+            view_order: (ordinal % 32) + 1,
           },
         ],
       };

@@ -6,7 +6,7 @@ import {
   asUniqueContention,
   BULK_UNIQUE_CONTENTION_CONSTRAINTS,
   PROPOSAL_UNIQUE_CONTENTION_CONSTRAINTS,
-} from '../../src/semantic/candidates.ts';
+} from '../../src/semantic/candidate-command.ts';
 import {
   bulkWriteAction,
   bulkWriteCommandProblem,
