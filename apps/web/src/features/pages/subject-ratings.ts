@@ -4,9 +4,9 @@ import { prepareSession, sessionSubject, viewerCredential } from '../../session/
 import { admitRatingRetryAfter, ratingRetryAt } from './rating-retry-admission';
 import { decodeOwnRatingValue } from './subject-own-rating-value';
 import { admitRatingAggregate } from './rating-population-value';
+import { GLOBAL, QUESTION } from './subject-ratings-ids.ts';
 
-export const GLOBAL = '00000000-0000-8000-8000-000000000000';
-export const QUESTION = '00000000-0000-7000-8000-000000000001';
+export { GLOBAL, QUESTION };
 export type Realm = { id: string; name: string };
 export type Figure = {
   population: string;

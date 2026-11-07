@@ -10,7 +10,6 @@ import {
 import { DocumentSnapshotSchema, type DocumentSnapshot } from '@rezics/document';
 import { t } from 'elysia';
 import type { Static, TSchema, TProperties } from 'typebox';
-import { ContributionAttributionSchema } from '../access/public-identity.ts';
 import type { ContributedPostEntry } from './contribution-present.ts';
 import { Compile } from 'typebox/compile';
 import { CommunityPresentationSchema } from './community-presentation-model.ts';

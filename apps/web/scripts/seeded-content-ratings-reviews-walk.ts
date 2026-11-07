@@ -7,6 +7,7 @@
 import assert from 'node:assert/strict';
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { join, resolve } from 'node:path';
+import { GLOBAL, QUESTION } from '../src/features/pages/subject-ratings-ids.ts';
 
 const webRoot = resolve(import.meta.dir, '..');
 const root = resolve(webRoot, '../..');
@@ -14,17 +15,13 @@ const seedResult = join(root, '.temp/cross-media-seed/result.json');
 const evidenceDir = join(root, '.temp/ratings-walk');
 const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
-/** Standard question and Global population from `src/features/pages/subject-ratings.ts`. */
-const INSTALLED_QUESTION = '00000000-0000-7000-8000-000000000001';
-const INSTALLED_POPULATION = '00000000-0000-8000-8000-000000000000';
-
 export function walkWorkingDirectory(): string {
   return webRoot;
 }
 
 /** Installed Subject page types: the standard question and Global population. */
-export function installedRatingsPage(questionId = INSTALLED_QUESTION): { questionId: string; population: string } {
-  return { questionId, population: INSTALLED_POPULATION };
+export function installedRatingsPage(questionId = QUESTION): { questionId: string; population: string } {
+  return { questionId, population: GLOBAL };
 }
 
 async function parseEnv(path: string): Promise<Record<string, string>> {
@@ -73,7 +70,6 @@ async function run(): Promise<void> {
     process.exit(await child.exited);
   }
 
-  const { GLOBAL, QUESTION } = await import('../src/features/pages/subject-ratings.ts');
   const pageTypes = installedRatingsPage();
   assert.equal(pageTypes.questionId, QUESTION);
   assert.equal(pageTypes.population, GLOBAL);

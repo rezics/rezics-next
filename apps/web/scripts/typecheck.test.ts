@@ -50,6 +50,12 @@ test('Web typecheck declares Reylo in this workspace and does not compile Kernel
   expect(source).not.toContain('services/kernel/node_modules/reylo');
 });
 
+test('the ratings walk imports rating IDs without Worker session modules', () => {
+  const source = readFileSync(join(import.meta.dir, 'seeded-content-ratings-reviews-walk.ts'), 'utf8');
+  expect(source).not.toContain('features/pages/subject-ratings.ts');
+  expect(source).toContain('subject-ratings-ids');
+});
+
 test('the owning compiler includes executable scripts without Worker ambient types', () => {
   const cwd = resolve(import.meta.dir, '..');
   const result = Bun.spawnSync(

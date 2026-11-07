@@ -29,9 +29,10 @@ comparison, types, current, reconciliation, operations, document). Fewest tests 
 route and typed readback of those admitted fields. Runtime schemas and SQL declarations stay on
 the generated kernel client; this package does not re-declare them.
 
-The Zone subject-list route type is the emitted `kernel/zones/subjects` declaration. The publisher
-records the importing public declaration and specifier when that file is absent from emit output.
-A SubjectRoutes alias is not a substitute for that emission.
+The Zone subject-list route type is the emitted `kernel/zones/subjects` declaration, including the
+installed subject summary (English label language, types, cover). The publisher records the importing
+public declaration and specifier when that file is absent from emit output. A SubjectRoutes alias is
+not a substitute for that emission.
 
 Decision: until whole-Kernel declaration emission succeeds, the personal VNDB binding mirrors the mounted
 Progress selection/result and conditional-vote additions in `services/kernel/src/library/list-import-vndb-routes.ts`.

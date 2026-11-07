@@ -36,7 +36,8 @@ Decision: `bun run typecheck` compiles both `tsconfig.json` (product with Worker
 `tsconfig.scripts.json` (all executable scripts with Bun/Node globals), after localization and route generation.
 The scripts program clears the product program's exclusions and sets `types` to `bun`, so `scripts/check.ts`,
 `scripts/record.ts` and `scripts/seeded-content-ratings-reviews-walk.ts` remain compiler roots without Worker
-ambients. Both programs retain the Reylo mapper and use the same prepared compiler database. Each program's
+ambients. The ratings walk imports standard question IDs from `subject-ratings-ids.ts`, not the Worker session
+module. Both programs retain the Reylo mapper and use the same prepared compiler database. Each program's
 numeric status is kept; both programs run. Diagnostics in either program fail the check.
 The full Web check invokes this same workspace entry. Browser consumers use installed Client contracts;
 tooling may use the owning services' native interfaces without imposing Worker globals on those services.
