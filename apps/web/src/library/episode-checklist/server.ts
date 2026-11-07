@@ -120,5 +120,5 @@ export const recordCanonicalEpisodes = createServerFn({ method: 'POST' })
     setResponseHeader('cache-control', 'private, no-store');
     const token = await authorization();
     if (!token) return { ok: false, kind: 'denied' };
-    return recordEpisodes(kernelClient(), data.sessionId, token, data.key, data.revision, data.intent);
+    return recordEpisodes(kernelClient(undefined, token), data.sessionId, data.key, data.revision, data.intent);
   });

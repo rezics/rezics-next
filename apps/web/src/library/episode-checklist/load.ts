@@ -15,7 +15,7 @@ import {
   type ChecklistVisit,
 } from './contract';
 import { labelledRows, projectMembership, type MembershipPage } from './membership';
-import { episodeCommandsAvailable, episodeChecklistMethods, inspectEpisodes } from './native';
+import { inspectEpisodes } from './native';
 import { emptyChecklistWork, finishChecklistWork, observeChecklistWork, type ChecklistWork } from './cost';
 import { preparingVisit, readyVisit, unavailableVisit } from './controller';
 
@@ -69,10 +69,6 @@ export function bindFromDetail(input: {
   };
 }
 
-function completenessOf(value: { completeness?: number } | undefined): number | 'unavailable' {
-  return typeof value?.completeness === 'number' ? value.completeness : 'unavailable';
-}
-
 export async function loadEpisodeChecklist(
   client: KernelClient,
   request: Request,
@@ -88,11 +84,6 @@ export async function loadEpisodeChecklist(
     visit: { ...preparingVisit(null), kind: 'denied' },
   });
   if (!binding) return unsigned();
-  if (!episodeCommandsAvailable(observed)) {
-    const methods = episodeChecklistMethods(client);
-    const visit = unavailableVisit(binding, methods.seam);
-    return { state: 'unavailable', work: emptyChecklistWork(), visit };
-  }
   const authorization = await bearer(request, env);
   if (!authorization) return unsigned();
   try {
@@ -158,7 +149,7 @@ export async function loadEpisodeChecklist(
       visit: readyVisit(binding, rows, {
         membership: 'admitted',
         inspectRevision: inspected.view.revision,
-        completeness: completenessOf(inspected.view),
+        completeness: 'unavailable',
       }),
     };
   } catch (error) {
