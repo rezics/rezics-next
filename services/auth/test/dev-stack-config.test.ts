@@ -86,6 +86,15 @@ test('seeded frontends wait for useful /en HTML through waitUntilWalkReady', asy
   expect(source).toContain('startFakeStripe');
   expect(source).toContain('walkCommerceProviderEnvironment');
   expect(source).toContain("process.env.STRIPE_SECRET_KEY === 'sk_test_walk_commerce'");
+  const deferredPages = source.slice(
+    source.indexOf('if (plan.deferPages)'),
+    source.indexOf('const kernel = launch(plan.kernel)'),
+  );
+  expect(deferredPages).toContain('issuerJwksUrl(origins.issuer)], [pages, identity]');
+  expect(deferredPages).not.toMatch(/\bworker\b/);
+  const kernelReady = source.indexOf("await phase('kernel', untilReady(plan.kernelReady, [kernel, identity]))");
+  expect(source.indexOf('const worker = launch(', kernelReady)).toBeGreaterThan(kernelReady);
+  expect(source).toContain("await phase('worker', untilOutput(worker, 'Worker ready'))");
 });
 
 test('isolated Kernel bindings verify the selected Auth issuer and bind the selected API port', () => {
