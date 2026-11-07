@@ -3,6 +3,9 @@
  * Seeded first-public Commerce and Library walk. Run under `dev-stack.ts walk`.
  * Native commands and served pages are recorded per finishing-register row.
  * Evidence stays under `.temp/commerce-walk/`.
+ *
+ * Kernel /v1/definitions must answer before seed. A 404 or sign-in mismatch is a
+ * page failure except anonymous private pages, which must leave the member shell.
  */
 import { execFileSync, spawn } from 'node:child_process';
 import { randomBytes } from 'node:crypto';
@@ -26,9 +29,18 @@ import {
 const root = resolve(import.meta.dir, '../../../..');
 const evidenceDir = join(root, '.temp/commerce-walk');
 const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+const COMMERCE_JOURNEYS = new Set([
+  'offer-management',
+  'purchase',
+  'owned-use',
+  'payment-repair',
+  'creator-money',
+  'financial-lifecycle',
+]);
 
 type Stack = { web: string; issuer: string; kernel: string };
 type Json = Record<string, unknown>;
+type Viewer = 'owner' | 'other' | 'anonymous';
 
 function loopback(variable: string): string {
   const value = process.env[variable];
@@ -55,7 +67,32 @@ async function child(command: string[], name: string, env: NodeJS.ProcessEnv = p
   proc.stderr.on('data', (chunk: Buffer) => handle.write(chunk));
   const code = await new Promise<number | null>((done) => proc.on('close', done));
   await handle.end();
-  if (code !== 0) throw new Error(`${name} exited ${code}; see .temp/commerce-walk/${name}.log`);
+  if (code !== 0) throw new Error(`${name} exited ${code}: ${await logTail(name)}`);
+}
+
+async function logTail(name: string): Promise<string> {
+  try {
+    const lines = (await readFile(join(evidenceDir, `${name}.log`), 'utf8')).trim().split('\n').filter(Boolean);
+    return lines.slice(-8).join(' | ').slice(0, 400) || '(empty log)';
+  } catch {
+    return '(missing log)';
+  }
+}
+
+async function waitUntilOk(url: string, label: string, ms = 1_200_000): Promise<void> {
+  const deadline = Date.now() + ms;
+  let last = 'no response';
+  while (Date.now() < deadline) {
+    try {
+      const response = await fetch(url, { signal: AbortSignal.timeout(10_000), cache: 'no-store' });
+      if (response.ok) return;
+      last = `HTTP ${response.status}`;
+    } catch (error) {
+      last = error instanceof Error ? error.message : String(error);
+    }
+    await Bun.sleep(1_000);
+  }
+  throw new Error(`${label} not ready: ${last}`);
 }
 
 async function parseEnv(path: string): Promise<Record<string, string>> {
@@ -102,11 +139,12 @@ function sourceRevision(): string {
   return execFileSync('git', ['rev-parse', 'HEAD'], { cwd: root, encoding: 'utf8' }).trim();
 }
 
-async function readShowcase(): Promise<{ workId: string; collectionId?: string }> {
+async function readShowcase(): Promise<{ workId: string; collectionId?: string; offerId?: string }> {
   const result = JSON.parse(await readFile(join(root, '.temp/cross-media-seed/result.json'), 'utf8')) as {
     developmentShowcase?: {
       community?: { state?: string; source?: { subjectId?: unknown } };
       collections?: { status?: string; public?: { id?: unknown } }[];
+      offer?: { state?: string; offerId?: unknown };
     };
   };
   const community = result.developmentShowcase?.community;
@@ -114,9 +152,11 @@ async function readShowcase(): Promise<{ workId: string; collectionId?: string }
   const collection = (result.developmentShowcase?.collections ?? []).find(
     (row) => row.status === 'current' && row.public?.id !== undefined,
   );
+  const offer = result.developmentShowcase?.offer;
   return {
     workId: requireId(community.source?.subjectId, 'seeded work'),
     ...(collection?.public?.id ? { collectionId: requireId(collection.public.id, 'seeded Collection') } : {}),
+    ...(offer?.state === 'created' && offer.offerId ? { offerId: requireId(offer.offerId, 'seeded offer') } : {}),
   };
 }
 
@@ -168,6 +208,16 @@ function localize(path: string): string {
   return path.startsWith('/en/') ? path : `/en${path.startsWith('/') ? path : `/${path}`}`;
 }
 
+function privatePath(path: string): boolean {
+  return (
+    path.startsWith('/library') ||
+    path.startsWith('/creator') ||
+    path.startsWith('/orders') ||
+    path.startsWith('/entitlements') ||
+    path.startsWith('/settings')
+  );
+}
+
 function expandPath(path: string, identities: WalkIdentities): string | undefined {
   if (path.includes(':id')) {
     const id =
@@ -194,20 +244,49 @@ async function openPage(
   page: Page,
   stack: Stack,
   path: string,
-): Promise<{ url: string; status: number | null; main: boolean; title: string }> {
+): Promise<{ url: string; status: number | null; main: boolean; title: string; heading: string }> {
   const href = `${stack.web}${localize(path)}`;
   const response = await page.goto(href, { waitUntil: 'domcontentloaded', timeout: 120_000 });
   await page.locator('main').waitFor({ state: 'visible', timeout: 120_000 }).catch(() => undefined);
-  const main = (await page.locator('main').count()) > 0;
+  const heading = ((await page.locator('main h1, main h2').first().textContent().catch(() => '')) ?? '').trim();
   return {
     url: page.url(),
     status: response?.status() ?? null,
-    main,
+    main: (await page.locator('main').count()) > 0,
     title: await page.title(),
+    heading,
   };
 }
 
-function failSetup(revision: string, utc: string, stage: string, error: unknown): JourneyWalkRow[] {
+function pageMismatch(
+  opened: { url: string; status: number | null; main: boolean; title: string; heading: string },
+  path: string,
+  viewer: Viewer,
+  stack: Stack,
+): string | undefined {
+  const url = new URL(opened.url);
+  const expected = localize(path).split('?')[0]!;
+  const missing = /not found|404/i.test(`${opened.title} ${opened.heading}`);
+  if (viewer === 'anonymous' && privatePath(path)) {
+    const signedOut =
+      url.origin === stack.issuer ||
+      url.pathname.includes('/auth/sign-in') ||
+      opened.status === 401 ||
+      opened.status === 403;
+    if (signedOut) return undefined;
+    return `anonymous reached ${opened.status} ${opened.url}`;
+  }
+  if (opened.status === 404 || (opened.status !== null && opened.status >= 400))
+    return `HTTP ${opened.status} ${opened.url}`;
+  if (url.origin !== stack.web) return `left web origin: ${opened.url}`;
+  if (url.origin === stack.issuer || url.pathname.includes('/auth/sign-in')) return `sign-in redirect ${opened.url}`;
+  if (!url.pathname.startsWith(expected)) return `path ${url.pathname} not ${expected}`;
+  if (!opened.main) return 'main landmark missing';
+  if (missing) return `missing page ${opened.title || opened.heading}`;
+  return undefined;
+}
+
+function failSetup(revision: string, utc: string, elapsedSeconds: number, stage: string, error: unknown): JourneyWalkRow[] {
   const observed = error instanceof Error ? error.message : String(error);
   return FIRST_PUBLIC_JOURNEYS.map((journey) => ({
     journey: journey.id,
@@ -215,7 +294,7 @@ function failSetup(revision: string, utc: string, stage: string, error: unknown)
     result: 'FAIL' as const,
     revision,
     utc,
-    elapsedSeconds: 1,
+    elapsedSeconds: Math.max(1, elapsedSeconds),
     persona: 'setup',
     firstDiffering: { command: stage, expected: 'admitted seeded walk setup', observed },
     evidence: `.temp/commerce-walk/results.json`,
@@ -224,9 +303,87 @@ function failSetup(revision: string, utc: string, stage: string, error: unknown)
   }));
 }
 
+async function seedCatalog(): Promise<void> {
+  const command = ['bun', '--env-file=.temp/local-stack/seed.env', 'scripts/datasets/cross-media-seed.ts', '--dev'];
+  try {
+    await child(command, 'seed');
+  } catch (first) {
+    const observed = first instanceof Error ? first.message : String(first);
+    if (!/Import transport request failed/i.test(observed)) throw first;
+    await child(command, 'seed-retry');
+  }
+}
+
+async function reviewJourneyPages(
+  spec: (typeof FIRST_PUBLIC_JOURNEYS)[number],
+  native: Pick<JourneyWalkRow, 'pages'>,
+  identities: WalkIdentities,
+  stack: Stack,
+  viewers: Record<Viewer, BrowserContext>,
+  phone: BrowserContext,
+): Promise<{ pages: { path: string; viewer: Viewer; observed: unknown }[]; failure?: JourneyWalkRow['firstDiffering'] }> {
+  const pages: { path: string; viewer: Viewer; observed: unknown }[] = [];
+  const templates = native.pages.length ? native.pages : spec.pages;
+  const roles: Viewer[] = spec.personas.includes('anonymous')
+    ? ['owner', 'anonymous']
+    : spec.personas.includes('other')
+      ? ['owner', 'other']
+      : ['owner'];
+  for (const viewer of roles) {
+    const page = await viewers[viewer].newPage();
+    try {
+      for (const template of templates) {
+        const path = expandPath(template, identities);
+        if (!path) continue;
+        const opened = await openPage(page, stack, path);
+        pages.push({ path, viewer, observed: opened });
+        const mismatch = pageMismatch(opened, path, viewer, stack);
+        if (mismatch) {
+          return {
+            pages,
+            failure: { command: `GET ${localize(path)} as ${viewer}`, expected: 'intended served page', observed: mismatch },
+          };
+        }
+      }
+    } catch (error) {
+      return {
+        pages,
+        failure: {
+          command: `served page as ${viewer}`,
+          expected: 'page opens',
+          observed: error instanceof Error ? error.message : String(error),
+        },
+      };
+    } finally {
+      await page.close();
+    }
+  }
+  if (spec.id === 'everything-and-filters' || spec.id === 'offer-management') {
+    const phonePage = await phone.newPage();
+    try {
+      const path = expandPath(templates[0] ?? spec.pages[0]!, identities);
+      if (path) {
+        const opened = await openPage(phonePage, stack, path);
+        pages.push({ path: `${path}#phone-390`, viewer: 'owner', observed: opened });
+        const mismatch = pageMismatch(opened, path, 'owner', stack);
+        if (mismatch) {
+          return {
+            pages,
+            failure: { command: `GET ${localize(path)} phone-390`, expected: 'intended served page', observed: mismatch },
+          };
+        }
+      }
+    } finally {
+      await phonePage.close();
+    }
+  }
+  return { pages };
+}
+
 async function main() {
   const stack = stackOrigins();
   const revision = sourceRevision();
+  const started = Date.now();
   const utc = new Date().toISOString();
   await mkdir(evidenceDir, { recursive: true, mode: 0o700 });
   await mkdir('/tmp/rw', { recursive: true, mode: 0o700 });
@@ -235,12 +392,37 @@ async function main() {
   let frontends: Awaited<ReturnType<typeof startSeededFrontends>> | undefined;
   let browser: Browser | undefined;
   try {
+    await waitUntilOk(`${stack.kernel}/v1/definitions`, 'Kernel /v1/definitions');
     await child(['bun', 'services/auth/scripts/dev-stack.ts', 'persona'], 'persona');
-    const seedEnv = { ...process.env, ...(await parseEnv(join(root, '.temp/local-stack/seed.env'))) };
-    await child(['bun', 'scripts/datasets/cross-media-seed.ts', '--dev'], 'seed', seedEnv);
+    await seedCatalog();
     frontends = await startSeededFrontends();
     const showcase = await readShowcase();
     const keys = JSON.parse(await readFile(join(root, '.temp/local-stack/keys.json'), 'utf8')) as { password: string };
+    browser = await chromium.launch({ headless: true, env: { ...process.env, TMPDIR: '/tmp/rw' } });
+    const anonymousContext = await browser.newContext({ locale: 'en-US', viewport: { width: 1280, height: 900 } });
+    const identities: WalkIdentities = {
+      workId: showcase.workId,
+      collectionId: showcase.collectionId,
+      offerId: showcase.offerId,
+    };
+
+    // Public/anonymous pages run before any website sign-in.
+    const anonymousPage = await anonymousContext.newPage();
+    try {
+      const publicPaths = [
+        `/subjects/${showcase.workId}`,
+        ...(showcase.collectionId ? [`/collections/${showcase.collectionId}`] : []),
+        ...(showcase.offerId ? [`/offers/${showcase.offerId}`] : []),
+      ];
+      for (const path of publicPaths) {
+        const opened = await openPage(anonymousPage, stack, path);
+        const mismatch = pageMismatch(opened, path, 'anonymous', stack);
+        if (mismatch) throw new Error(`anonymous ${path}: ${mismatch}`);
+      }
+    } finally {
+      await anonymousPage.close();
+    }
+
     const ownerToken = await accessToken(stack, 'developer@rezics.test', keys.password);
     const kernel = createWalkKernel(stack.kernel);
     const owner: WalkAccount = {
@@ -258,31 +440,21 @@ async function main() {
       email: `walk.other.${randomBytes(4).toString('hex')}@rezics.test`,
       password: randomBytes(18).toString('base64url'),
     };
-    browser = await chromium.launch({ headless: true, env: { ...process.env, TMPDIR: '/tmp/rw' } });
-    const memberContext: BrowserContext = await browser.newContext({
-      locale: 'en-US',
-      viewport: { width: 1280, height: 900 },
-    });
-    const otherContext: BrowserContext = await browser.newContext({
-      locale: 'en-US',
-      viewport: { width: 1280, height: 900 },
-    });
-    const phoneContext: BrowserContext = await browser.newContext({
-      locale: 'en-US',
-      viewport: { width: 390, height: 844 },
-    });
-    const anonymousContext: BrowserContext = await browser.newContext({
-      locale: 'en-US',
-      viewport: { width: 1280, height: 900 },
-    });
+    const developerContext = await browser.newContext({ locale: 'en-US', viewport: { width: 1280, height: 900 } });
+    const memberContext = await browser.newContext({ locale: 'en-US', viewport: { width: 1280, height: 900 } });
+    const otherContext = await browser.newContext({ locale: 'en-US', viewport: { width: 1280, height: 900 } });
+    const phoneContext = await browser.newContext({ locale: 'en-US', viewport: { width: 390, height: 844 } });
+    const developerPage = await developerContext.newPage();
     const memberPage = await memberContext.newPage();
     const otherPage = await otherContext.newPage();
+    await signIn(developerPage, stack, { email: 'developer@rezics.test', password: keys.password });
     await signUp(memberPage, stack, member);
     await signUp(otherPage, stack, otherAccount);
     await signIn(memberPage, stack, member);
+    await signIn(otherPage, stack, otherAccount);
+    await developerPage.close();
     const memberToken = await accessToken(stack, member.email, member.password);
     const otherToken = await accessToken(stack, otherAccount.email, otherAccount.password);
-    const identities: WalkIdentities = { workId: showcase.workId, collectionId: showcase.collectionId };
     const ctx = {
       kernel,
       revision,
@@ -290,76 +462,40 @@ async function main() {
       other: { bearer: otherToken, accountId: accountFromBearer(otherToken), handle: otherAccount.handle },
       identities,
     };
-    // Library writes use the signed-up member; Commerce offer writes use the seeded developer.
     const memberCtx = {
       ...ctx,
       owner: { bearer: memberToken, accountId: accountFromBearer(memberToken), handle: member.handle },
       other: { bearer: otherToken, accountId: accountFromBearer(otherToken), handle: otherAccount.handle },
     };
+    const viewers: Record<Viewer, BrowserContext> = {
+      owner: memberContext,
+      other: otherContext,
+      anonymous: anonymousContext,
+    };
 
     for (const spec of FIRST_PUBLIC_JOURNEYS) {
-      const commerce = [
-        'offer-management',
-        'purchase',
-        'owned-use',
-        'payment-repair',
-        'creator-money',
-        'financial-lifecycle',
-      ].includes(spec.id);
-      const native = await runJourney(commerce ? ctx : memberCtx, spec.id);
-      const pages: { path: string; observed: unknown }[] = [];
-      let pageFailure: JourneyWalkRow['firstDiffering'] | undefined;
-      const viewer = spec.id === 'collection-reading' || spec.personas.includes('anonymous') ? anonymousContext : memberContext;
-      const page = await viewer.newPage();
-      try {
-        for (const template of native.pages.length ? native.pages : spec.pages) {
-          const path = expandPath(template, identities);
-          if (!path) continue;
-          const opened = await openPage(page, stack, path);
-          pages.push({ path, observed: opened });
-          if (opened.status !== null && opened.status >= 500) {
-            pageFailure = {
-              command: `GET ${localize(path)}`,
-              expected: 'served page',
-              observed: `HTTP ${opened.status} ${opened.url}`,
-            };
-            break;
-          }
-        }
-        if (!pageFailure && (spec.id === 'everything-and-filters' || spec.id === 'offer-management')) {
-          const phone = await phoneContext.newPage();
-          const path = expandPath(native.pages[0] ?? spec.pages[0]!, identities);
-          if (path) {
-            const opened = await openPage(phone, stack, path);
-            pages.push({ path: `${path}#phone-390`, observed: opened });
-          }
-          await phone.close();
-        }
-      } catch (error) {
-        pageFailure = {
-          command: 'served page',
-          expected: 'page opens',
-          observed: error instanceof Error ? error.message : String(error),
-        };
-      } finally {
-        await page.close();
-      }
+      const native = await runJourney(COMMERCE_JOURNEYS.has(spec.id) ? ctx : memberCtx, spec.id);
+      const pageViewers: Record<Viewer, BrowserContext> = {
+        ...viewers,
+        owner: COMMERCE_JOURNEYS.has(spec.id) ? developerContext : memberContext,
+      };
+      const reviewed = await reviewJourneyPages(spec, native, identities, stack, pageViewers, phoneContext);
       const row: JourneyWalkRow = {
         ...native,
         evidence: `.temp/commerce-walk/${spec.id}.json`,
-        firstDiffering: native.firstDiffering ?? pageFailure,
-        result: native.result === 'PASS' && !pageFailure ? 'PASS' : 'FAIL',
+        firstDiffering: native.firstDiffering ?? reviewed.failure,
+        result: native.result === 'PASS' && !reviewed.failure ? 'PASS' : 'FAIL',
       };
-      if (pageFailure && native.result === 'PASS') row.result = 'FAIL';
       rows.push(row);
       await writeFile(
         join(evidenceDir, `${spec.id}.json`),
-        `${JSON.stringify({ row: { ...row, steps: publicFields(row.steps) }, pages }, null, 2)}\n`,
+        `${JSON.stringify({ row: { ...row, steps: publicFields(row.steps) }, pages: reviewed.pages }, null, 2)}\n`,
         { mode: 0o600 },
       );
     }
   } catch (error) {
-    if (rows.length === 0) rows = failSetup(revision, utc, 'seeded walk setup', error);
+    if (rows.length === 0)
+      rows = failSetup(revision, utc, Math.round((Date.now() - started) / 1000), 'seeded walk setup', error);
   } finally {
     await browser?.close();
     await frontends?.stop();

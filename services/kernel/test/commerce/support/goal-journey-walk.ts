@@ -338,6 +338,7 @@ class JourneyFailure extends Error {
     readonly command: string,
     readonly expected: string,
     readonly observed: string,
+    readonly steps: NativeStep[] = [],
   ) {
     super(`${command}: expected ${expected}, observed ${observed}`);
     this.name = 'JourneyFailure';
@@ -373,6 +374,7 @@ class Recorder {
         call.command,
         `HTTP ${allowed.join('|')}`,
         `HTTP ${call.status} ${JSON.stringify(publicFields(call.value)).slice(0, 400)}`,
+        this.steps,
       );
     return call;
   }
@@ -474,7 +476,12 @@ const offerManagement: Runner = async (ctx) => {
   const offer = asRecord(publicRead.value.offer);
   const revision = offer.revision;
   if (typeof revision !== 'number' || revision < 1)
-    throw new JourneyFailure('GET /v1/offers/:id', 'public revision >= 1', JSON.stringify(publicFields(offer)));
+    throw new JourneyFailure(
+      'GET /v1/offers/:id',
+      'public revision >= 1',
+      JSON.stringify(publicFields(offer)),
+      rec.steps,
+    );
   ctx.identities.offerId = created.id;
   ctx.identities.offerRevision = revision;
   ctx.identities.editionId = edition.contentEditionId;
@@ -524,7 +531,7 @@ const offerManagement: Runner = async (ctx) => {
 const purchase: Runner = async (ctx) => {
   const rec = new Recorder(ctx.kernel, ctx.owner.bearer);
   if (!ctx.identities.offerId || ctx.identities.offerRevision === undefined)
-    throw new JourneyFailure('POST /v1/orders', 'live offer from Offer management', 'offer identity missing');
+    throw new JourneyFailure('POST /v1/orders', 'live offer from Offer management', 'offer identity missing', rec.steps);
   const subject = ctx.identities.editionSubjectId;
   if (subject) await rec.expect('subject offers', 'GET', `/v1/subjects/${subject}/offers`, [200], { bearer: undefined });
   await rec.expect('public offer page data', 'GET', `/v1/offers/${ctx.identities.offerId}`, [200], { bearer: undefined });
@@ -554,10 +561,15 @@ const ownedUse: Runner = async (ctx) => {
     typeof nested(order.value, 'order.entitlementId') === 'string'
       ? requireId(nested(order.value, 'order.entitlementId'), 'entitlement')
       : undefined;
-  if (entitlementId) {
-    ctx.identities.entitlementId = entitlementId;
-    await rec.expect('owner entitlement', 'GET', `/v1/entitlements/${entitlementId}`, [200, 404]);
-  }
+  if (!entitlementId)
+    throw new JourneyFailure(
+      `GET /v1/orders/${ctx.identities.orderId}`,
+      'current entitlement after purchase',
+      JSON.stringify(publicFields(order.value)),
+      rec.steps,
+    );
+  ctx.identities.entitlementId = entitlementId;
+  await rec.expect('owner entitlement', 'GET', `/v1/entitlements/${entitlementId}`, [200]);
   await rec.expect('order list', 'GET', '/v1/orders', [200]);
   await rec.expect('anonymous order', 'GET', `/v1/orders/${ctx.identities.orderId}`, [401, 403, 404], {
     bearer: undefined,
@@ -657,7 +669,7 @@ const entryFacts: Runner = async (ctx) => {
 
 const profiles: Runner = async (ctx) => {
   const rec = new Recorder(ctx.kernel, ctx.owner.bearer);
-  const listed = await rec.expect('active profile', 'GET', '/v1/presentation/active', [200, 401, 403, 404]);
+  const listed = await rec.expect('active profile', 'GET', '/v1/presentation/active', [200, 404]);
   const digest = typeof listed.value.digest === 'string' ? listed.value.digest : undefined;
   if (digest) await rec.expect('read profile', 'GET', `/v1/presentation/profiles/${digest}`, [200, 403, 404]);
   return { persona: 'owner', steps: rec.steps, pages: ['/settings'] };
@@ -791,7 +803,7 @@ const likedAndScore: Runner = async (ctx) => {
 
 const continueJourney: Runner = async (ctx) => {
   const rec = new Recorder(ctx.kernel, ctx.owner.bearer);
-  await rec.expect('continue', 'GET', '/v1/libraryContinue', [200, 404]);
+  await rec.expect('continue', 'GET', '/v1/libraryContinue', [200]);
   await rec.expect('anonymous continue', 'GET', '/v1/libraryContinue', [401, 403], { bearer: undefined });
   return { persona: 'owner', steps: rec.steps, pages: ['/library/continue'] };
 };
@@ -825,9 +837,14 @@ const collectionReading: Runner = async (ctx) => {
   if (!id) throw new JourneyFailure('GET /v1/collections/:id', 'collection identity', 'missing');
   await rec.expect('owner collection', 'GET', `/v1/collections/${id}`, [200]);
   await rec.expect('owner members', 'GET', `/v1/collections/${id}/members`, [200]);
-  await rec.expect('anonymous collection', 'GET', `/v1/collections/${id}`, [200, 401, 403, 404], { bearer: undefined });
+  const publicSeed = id === ctx.identities.collectionId && id !== ctx.identities.ownedCollectionId;
+  await rec.expect('anonymous collection', 'GET', `/v1/collections/${id}`, publicSeed ? [200] : [401, 403, 404], {
+    bearer: undefined,
+  });
   if (ctx.other.bearer)
-    await rec.expect('other collection', 'GET', `/v1/collections/${id}`, [200, 403, 404], { bearer: ctx.other.bearer });
+    await rec.expect('other collection', 'GET', `/v1/collections/${id}`, publicSeed ? [200] : [403, 404], {
+      bearer: ctx.other.bearer,
+    });
   return { persona: 'owner', steps: rec.steps, pages: [`/collections/${id}`] };
 };
 
@@ -1010,7 +1027,7 @@ export async function runJourney(ctx: JourneyContext, id: JourneyId): Promise<Om
       elapsedSeconds: Math.max(1, Math.round((Date.now() - started) / 1000)),
       persona: spec.personas[0],
       firstDiffering: { command, expected, observed },
-      steps: [],
+      steps: failure?.steps ?? [],
       pages: [...spec.pages],
     };
   }
@@ -1049,5 +1066,11 @@ export function applyWalkResults(markdown: string, rows: JourneyWalkRow[]): stri
     );
     next = next.replace(pattern, `$1${cells.latest} $2${cells.evidence} $3`);
   }
-  return next;
+  const report = summarizeWalk(rows[0]?.revision ?? '', rows);
+  const slowest = report.slowestFailing;
+  const observed = (slowest?.firstDiffering?.observed ?? '').replace(/`/g, "'").slice(0, 180);
+  const summary = slowest
+    ? `Latest measured result: **${report.passing}/26**. Slowest failing path: ${slowest.title} (${slowest.persona}, ${slowest.elapsedSeconds}s); first differing command \`${slowest.firstDiffering?.command ?? 'unknown'}\` / result \`${observed}\`.`
+    : `Latest measured result: **${report.passing}/26**.`;
+  return next.replace(/Latest measured result: \*\*\d+\/26\*\*\.[^\n]*/, summary);
 }
