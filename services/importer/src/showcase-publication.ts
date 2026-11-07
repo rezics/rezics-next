@@ -804,8 +804,7 @@ function safeCandidatePage(value: unknown): CandidatePage {
         (candidate.deleted !== true &&
           (!candidate.statement ||
             typeof candidate.statement !== 'object' ||
-            (candidate.rank !== null &&
-              !['normal', 'preferred', 'deprecated'].includes(candidate.rank as string)))),
+            (candidate.rank !== null && !['normal', 'preferred', 'deprecated'].includes(candidate.rank as string)))),
     ) ||
     (page.adoption !== null &&
       (!page.adoption ||

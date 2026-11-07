@@ -280,7 +280,11 @@ function isReleaseClassificationCommand(command: BatchCommand): boolean {
   );
 }
 
-function classificationBatchFailure(result: { key: string; status: number; problem?: { type?: unknown; code?: unknown } }) {
+function classificationBatchFailure(result: {
+  key: string;
+  status: number;
+  problem?: { type?: unknown; code?: unknown };
+}) {
   const type = result.problem && typeof result.problem.type === 'string' ? result.problem.type : undefined;
   const code = result.problem && typeof result.problem.code === 'string' ? result.problem.code : undefined;
   const safeType =
