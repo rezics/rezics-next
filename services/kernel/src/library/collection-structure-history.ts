@@ -1,5 +1,5 @@
 import type { Pool } from 'pg';
-import { deadlineClient } from '../access/authenticate.ts';
+import { deadlineClient } from './access-port.ts';
 import { withConnection } from '../database/pool.ts';
 import { ProblemError } from '../http/problem-error.ts';
 import type { AccountActor, Actor } from '../request/access.ts';

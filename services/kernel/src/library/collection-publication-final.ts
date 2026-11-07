@@ -3,11 +3,16 @@ import { createHash, randomUUID } from 'node:crypto';
 import { isDeepStrictEqual } from 'node:util';
 import canonicalize from 'canonicalize';
 import type { PoolClient } from 'pg';
-import { durableInitiatorCommitment } from '../access/durable-initiator-capture.ts';
-import { createInitiatorRestorer, DurableInitiatorUnavailableError } from '../access/durable-initiator.ts';
-import { resourceAuthorization } from '../access/resource-authorization.ts';
-import { readAccount } from '../access/account-data.ts';
-import { admitGroup } from '../access/gates/admission.ts';
+import {
+  durableInitiatorCommitment,
+  resourceAuthorization,
+  readAccount,
+  admitGroup,
+  deadlineClient,
+  commandAccessContext,
+} from './access-port.ts';
+import { createInitiatorRestorer } from './access-port.ts';
+import { DurableInitiatorUnavailableError } from '../access/contract/errors.ts';
 import {
   authoritativeTimeValue,
   currentCommand,
@@ -40,10 +45,8 @@ import {
 } from './collection-publication-episodes.ts';
 import type { CollectionPublicationLocator } from './collection-publication-work-admission.ts';
 import type { WorkDimensions } from './contract/work-dimensions.ts';
-import { deadlineClient } from '../access/authenticate.ts';
-import { commandAccessContext } from '../access/command-admission.ts';
 import { accessCheck } from '../request/access-check.ts';
-import { type AccessCheck } from '../request/access.ts';
+import type { AccessCheck } from '../request/access.ts';
 import { readBuiltinPublicationRule } from './builtin-materialization.ts';
 import { authorizeCollectionRule, collectionRuleActions, readSavedCollectionRule } from './collection-rules.ts';
 import { admitSavedCollectionMemberQuery, collectionMemberPrivateReads } from './owner-filter.ts';

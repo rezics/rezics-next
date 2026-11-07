@@ -30,23 +30,8 @@ import resolveLate from './erasure-late-resolve.sql';
 import snapshotFrontier from './erasure-frontier-snapshot.sql';
 import deliverFrontier from './erasure-frontier-delivered.sql';
 import pendingLocator from './erasure-frontier-work.sql';
-
-/** Append versions; never change a list used by a recorded erasure. */
-export const ERASURE_PARTICIPANTS = Object.freeze({
-  1: Object.freeze([
-    'access',
-    'auth',
-    'library',
-    'commerce',
-    'content',
-    'community',
-    'semantic',
-    'search',
-    'imports',
-    'shared-history',
-    'delivery',
-  ] as const),
-});
+import { ERASURE_PARTICIPANTS } from './contract/erasure.ts';
+export { ERASURE_PARTICIPANTS } from './contract/erasure.ts';
 export const ERASURE_PARTICIPANT_VERSION = 1;
 /** Owners register every effect that writes cross-partition erasure locators here. */
 export const ERASURE_LOCATOR_EFFECTS: ReadonlySet<string> = new Set<string>([

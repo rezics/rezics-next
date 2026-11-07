@@ -2,7 +2,7 @@ import { setFixtureAccountState } from '../support/native-suspension-driver.ts';
 import { afterAll, beforeAll, expect, test } from 'bun:test';
 import { randomUUID } from 'node:crypto';
 import type { Pool, PoolClient, QueryConfig } from 'pg';
-import { GrantDeniedError } from '../../src/access/grant-commands.ts';
+import { GrantDeniedError } from '../../src/access/contract/errors.ts';
 import { createLifecycleCommands } from '../../src/access/lifecycle.ts';
 import { createCollectionCommands } from '../../src/library/collections.ts';
 import { createCollectionReads } from '../../src/library/collection-reads.ts';

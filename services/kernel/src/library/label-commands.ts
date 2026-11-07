@@ -1,7 +1,7 @@
 import type { Pool, PoolClient } from 'pg';
 import type { LabelCommandAdmission } from './label-command-admission.ts';
-import { readAccountCommandState } from '../access/account-data.ts';
-import { GrantDeniedError } from '../access/resource-access-errors.ts';
+import { readAccountCommandState } from './access-port.ts';
+import { GrantDeniedError } from '../access/contract/errors.ts';
 import { systemClock, type KernelClock } from '../clock.ts';
 import { authoritativeTimeValue, noEffect } from '../command/command.ts';
 import { withConnection } from '../database/pool.ts';

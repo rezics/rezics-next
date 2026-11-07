@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import type { PoolClient } from 'pg';
 import type { CommandOutcome, CommandTransaction } from '../command/command.ts';
-import { GrantDeniedError } from '../access/resource-access-errors.ts';
+import { GrantDeniedError } from '../access/contract/errors.ts';
 import { ProblemError } from '../http/problem-error.ts';
 import type { AccountActor, Actor } from '../request/access.ts';
 import { createLibraryCommandRunner } from './command-support.ts';

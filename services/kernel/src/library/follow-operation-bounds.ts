@@ -32,7 +32,7 @@ import addressClaims from '../community/space-address-batch-active.sql';
 import coverReferences from '../content/read-cover-reference.sql';
 import sourceFences from '../content/read-source-fences.sql';
 import { RELEASE_LIMITS } from '@rezics/definitions';
-import { isAccessWorkDispatch } from '../access/work.ts';
+import { isAccessWorkDispatch } from './access-port.ts';
 import openGroups from '../access/gates/open-groups.sql';
 
 type Client = Pick<PoolClient, 'query'>;

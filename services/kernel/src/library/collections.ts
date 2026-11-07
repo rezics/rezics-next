@@ -10,15 +10,17 @@ import { createShelfCounters } from './shelf-counters.ts';
 import { createHash } from 'node:crypto';
 import canonicalize from 'canonicalize';
 import pg, { type Pool, type PoolConfig } from 'pg';
-import { readAccount } from '../access/account-data.ts';
-import { shareAccount } from '../access/account-share.ts';
-import { deriveAccess } from '../access/derived-access.ts';
-import { GrantDeniedError } from '../access/resource-access-errors.ts';
-import { LifecycleDeniedError } from '../access/lifecycle-20261025094010-command.ts';
-import { parentCreationAuthorization } from '../access/parent-creation.ts';
-import { initializeResourceGrants } from '../access/resource-initialization.ts';
-import { resourceAuthorization, resourceAuthorizationPage } from '../access/resource-authorization.ts';
-import { installResourceRoleCatalogue, resourceRoleCatalogue } from '../access/resource-roles.ts';
+import {
+  readAccount,
+  parentCreationAuthorization,
+  initializeResourceGrants,
+  resourceAuthorization,
+  resourceAuthorizationPage,
+} from './access-port.ts';
+import { shareAccount } from './access-port.ts';
+import { deriveAccess } from './access-port.ts';
+import { GrantDeniedError, LifecycleDeniedError } from '../access/contract/errors.ts';
+import { installResourceRoleCatalogue, resourceRoleCatalogue } from './access-port.ts';
 import type { KernelClock } from '../clock.ts';
 import { configureReceiptKeys, receiptKeysFor } from '../command/receipt-key.ts';
 import {

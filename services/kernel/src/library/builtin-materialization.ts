@@ -1,11 +1,9 @@
 /** Native first owner write. Logical descriptors never initialize grants or certify Source completion. */
 import type { Pool, PoolClient } from 'pg';
-import { readAccount } from '../access/account-data.ts';
-import { shareAccount } from '../access/account-share.ts';
-import { deriveAccess } from '../access/derived-access.ts';
-import { parentCreationAuthorization } from '../access/parent-creation.ts';
-import { initializeResourceGrants } from '../access/resource-initialization.ts';
-import { installResourceRoleCatalogue, resourceRoleCatalogue } from '../access/resource-roles.ts';
+import { readAccount, parentCreationAuthorization, initializeResourceGrants } from './access-port.ts';
+import { shareAccount } from './access-port.ts';
+import { deriveAccess } from './access-port.ts';
+import { installResourceRoleCatalogue, resourceRoleCatalogue } from './access-port.ts';
 import {
   authoritativeTimeValue,
   currentCommand,

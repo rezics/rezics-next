@@ -1,5 +1,6 @@
 import type { Pool } from 'pg';
-import { agentContributionAttribution, type ContributionAttribution } from '../access/public-identity.ts';
+import type { ContributionAttribution } from '../access/public-identity.ts';
+import { agentContributionAttribution } from './access-port.ts';
 
 type FollowWithContribution<T extends object> = 'target' extends keyof T
   ? T extends { target: infer Target }

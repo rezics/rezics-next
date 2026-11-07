@@ -1,8 +1,8 @@
 import { memoizedValue } from '../memoized.ts';
 import type { Pool } from 'pg';
 import { Compile } from 'typebox/compile';
-import { commandAccessContext } from '../access/command-admission.ts';
-import { GrantDeniedError } from '../access/resource-access-errors.ts';
+import { commandAccessContext } from './access-port.ts';
+import { GrantDeniedError } from '../access/contract/errors.ts';
 import type { CommandAttempt } from '../command/command.ts';
 import { withConnection } from '../database/pool.ts';
 import { ProblemError } from '../http/problem-error.ts';

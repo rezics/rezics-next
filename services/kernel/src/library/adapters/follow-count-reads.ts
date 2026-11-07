@@ -3,7 +3,7 @@ import { authoritativeTimeValue, mintReadTime, type AuthoritativeTime } from '..
 import { withConnection } from '../../database/pool.ts';
 import { ProblemError } from '../../http/problem-error.ts';
 import { accessCheck } from '../../request/access-check.ts';
-import { type Access, type AccessClient } from '../../request/access.ts';
+import type { Access, AccessClient } from '../../request/access.ts';
 import { partitionOf, routeOf } from '../../route/route.ts';
 import partitionRead from '../../partition/read.sql';
 import { createFollowCountReadApplication } from '../application/index.ts';

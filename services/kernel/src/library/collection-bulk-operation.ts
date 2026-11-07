@@ -3,13 +3,16 @@ import canonicalize from 'canonicalize';
 import { createHash } from 'node:crypto';
 import type { Pool } from 'pg';
 import { Compile } from 'typebox/compile';
-import { admitGroup } from '../access/gates/admission.ts';
+import {
+  admitGroup,
+  readAccount,
+  commandAccessContext,
+  captureDurableInitiator,
+  durableInitiatorCommitment,
+} from './access-port.ts';
 import { admitEntryAttempt } from './entry-lifecycle.ts';
-import { readAccount } from '../access/account-data.ts';
-import { commandAccessContext } from '../access/command-admission.ts';
-import { captureDurableInitiator, durableInitiatorCommitment } from '../access/durable-initiator-capture.ts';
 import type { DurableInitiatorReader, DurableInitiatorRecord } from '../access/durable-initiator.ts';
-import { GrantDeniedError } from '../access/resource-access-errors.ts';
+import { GrantDeniedError } from '../access/contract/errors.ts';
 import {
   authoritativeTimeValue,
   currentCommandReceipt,
@@ -24,7 +27,7 @@ import type { KernelClock } from '../clock.ts';
 import { withConnection } from '../database/pool.ts';
 import { ProblemError } from '../http/problem-error.ts';
 import { accessCheck } from '../request/access-check.ts';
-import { type Access, type AccountActor, type Actor } from '../request/access.ts';
+import type { Access, AccountActor, Actor } from '../request/access.ts';
 import { deadlineFor } from '../request/deadline.ts';
 import { newId, partitionOf, routeOf } from '../route/route.ts';
 import { decodeCursor, encodeCursor } from '../tokens/cursor.ts';

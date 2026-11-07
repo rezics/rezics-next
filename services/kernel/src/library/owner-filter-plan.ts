@@ -2,7 +2,7 @@ import type { Release } from '@rezics/definitions';
 import canonicalize from 'canonicalize';
 import { createHash } from 'node:crypto';
 import type { Pool, PoolClient } from 'pg';
-import { deadlineClient } from '../access/authenticate.ts';
+import { deadlineClient } from './access-port.ts';
 import { requireAccessDeadline } from '../access/unavailable.ts';
 import { systemClock, type KernelClock } from '../clock.ts';
 import type { CommandAttempt } from '../command/command.ts';

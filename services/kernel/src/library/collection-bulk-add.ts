@@ -1,9 +1,8 @@
 import canonicalize from 'canonicalize';
 import { isDeepStrictEqual } from 'node:util';
-import { DurableInitiatorUnavailableError } from '../access/durable-initiator.ts';
-import { GrantDeniedError } from '../access/resource-access-errors.ts';
-import { PlatformClosedError } from '../access/gates/admission.ts';
-import { resourceAuthorization } from '../access/resource-authorization.ts';
+import { DurableInitiatorUnavailableError } from '../access/contract/errors.ts';
+import { GrantDeniedError, PlatformClosedError } from '../access/contract/errors.ts';
+import { resourceAuthorization } from './access-port.ts';
 import { withConnection } from '../database/pool.ts';
 import {
   authoritativeTimeValue,

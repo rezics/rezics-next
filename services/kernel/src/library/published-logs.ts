@@ -1,7 +1,7 @@
 import canonicalize from 'canonicalize';
 import type { Pool } from 'pg';
-import { readAccountCommandState } from '../access/account-data.ts';
-import { GrantDeniedError } from '../access/resource-access-errors.ts';
+import { readAccountCommandState } from './access-port.ts';
+import { GrantDeniedError } from '../access/contract/errors.ts';
 import {
   authoritativeTimeValue,
   commandAttemptDeadline,

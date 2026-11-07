@@ -1,9 +1,8 @@
-import { readAccount } from '../access/account-data.ts';
-import { deadlineClient } from '../access/authenticate.ts';
+import { readAccount, deadlineClient } from './access-port.ts';
 import { withConnection } from '../database/pool.ts';
 import { ProblemError } from '../http/problem-error.ts';
 import { AuthenticationError } from '../request/authentication-error.ts';
-import { type Actor } from '../request/access.ts';
+import type { Actor } from '../request/access.ts';
 import { routeOf } from '../route/route.ts';
 import { decodeListCursor } from '../tokens/list-cursor.ts';
 import { systemClock } from '../clock.ts';

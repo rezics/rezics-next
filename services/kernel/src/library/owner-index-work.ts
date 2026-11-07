@@ -1,5 +1,5 @@
 import { DBOS } from '@dbos-inc/dbos-sdk';
-import { LifecycleDeniedError } from '../access/lifecycle-20261025094010-command.ts';
+import { LifecycleDeniedError } from '../access/contract/errors.ts';
 import { enqueueIntent, runOperationalTransaction, type OperationalTransaction } from '../command/operational.ts';
 import { withConnection } from '../database/pool.ts';
 import { partitionOf, routeOf } from '../route/route.ts';

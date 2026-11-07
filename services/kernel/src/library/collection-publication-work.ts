@@ -7,7 +7,7 @@ import {
 import { COLLECTION_PUBLICATION_WORKFLOW } from './contract/index.ts';
 import { enqueueIntent, runOperationalTransaction } from '../command/operational.ts';
 import { ProblemError } from '../http/problem-error.ts';
-import { readMembershipWorkConfig } from '../access/membership-work-config.ts';
+import { readMembershipWorkConfig } from './access-port.ts';
 import { routeOf, partitionOf } from '../route/route.ts';
 import { advanceCollectionSourceWork } from './collection-source-work.ts';
 import { stageCollectionPublicationStep } from './collection-publication-staging.ts';

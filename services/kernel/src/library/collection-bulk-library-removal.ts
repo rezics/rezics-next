@@ -1,13 +1,11 @@
 import canonicalize from 'canonicalize';
 import type { AccountActor, AccessClient } from '../request/access.ts';
-import { readAccount } from '../access/account-data.ts';
-import { shareAccount } from '../access/account-share.ts';
-import { deadlineClient, within } from '../access/authenticate.ts';
-import { DurableInitiatorUnavailableError, type DurableInitiatorRecord } from '../access/durable-initiator.ts';
-import { LifecycleDeniedError } from '../access/lifecycle-20261025094010-command.ts';
-import { GrantDeniedError } from '../access/resource-access-errors.ts';
-import { PlatformClosedError } from '../access/gates/admission.ts';
-import { resourceAuthorization, type AuthorizationAnchor } from '../access/resource-authorization.ts';
+import { readAccount, deadlineClient, within, resourceAuthorization } from './access-port.ts';
+import { shareAccount } from './access-port.ts';
+import type { DurableInitiatorRecord } from '../access/durable-initiator.ts';
+import { DurableInitiatorUnavailableError } from '../access/contract/errors.ts';
+import { LifecycleDeniedError, GrantDeniedError, PlatformClosedError } from '../access/contract/errors.ts';
+import type { AuthorizationAnchor } from '../access/resource-authorization.ts';
 import { classifyUnavailability } from '../access/unavailable.ts';
 import {
   authoritativeTimeValue,

@@ -1,5 +1,11 @@
 # Library
 
+Decision: Library consumes native Access behaviour through `access-port.ts`; the existing domain binding holds that
+consumer-owned port and `composition/library.ts` installs Access's native adapter. Shared refusal constructors,
+erasure participant lists and work/policy vocabulary belong to Access contract leaves; compatibility entries re-export
+those same identities. SQL descriptors stay on their defining Access leaves. Acceptance remains typing only; focused
+composition, forwarding and constructor-identity tests preserve existing behaviour assertions and run after landing.
+
 Decision: Collection directory/list/order authorization consumes Library `AuthorizationCapability.specializeCollectionList` and Access's funded collection-update preparation bound. Access adapters own the catalogue residual, permission SQL and inverse membership limit (1000); Library directory SQL binds only the admitted curator/public parameter map. Collection mutation and Progress descriptors stay independent. Fewest tests: owner/public/unavailable list outcomes, preparation memberships, directory public-floor bytes, unchanged order/read assertions.
 
 Decision: native Collection preparation consumes Library's `PreparationWorkCapability` and `ScopeWorkCapability`.

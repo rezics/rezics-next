@@ -1,9 +1,12 @@
 import type { Pool } from 'pg';
-import { readAccount } from '../access/account-data.ts';
-import { deadlineClient } from '../access/authenticate.ts';
-import { commandAccessContext, requireCommandAdmission } from '../access/command-admission.ts';
-import { admitGroup } from '../access/gates/admission.ts';
-import { GrantDeniedError } from '../access/resource-access-errors.ts';
+import {
+  readAccount,
+  deadlineClient,
+  commandAccessContext,
+  requireCommandAdmission,
+  admitGroup,
+} from './access-port.ts';
+import { GrantDeniedError } from '../access/contract/errors.ts';
 import { throwAccessUnavailable } from '../access/unavailable.ts';
 import type { KernelClock } from '../clock.ts';
 import {
@@ -16,7 +19,7 @@ import {
 import { withConnection } from '../database/pool.ts';
 import { ProblemError } from '../http/problem-error.ts';
 import { AuthenticationError } from '../request/authentication-error.ts';
-import { type Access, type AccountActor, type Actor } from '../request/access.ts';
+import type { Access, AccountActor, Actor } from '../request/access.ts';
 import { deadlineFor } from '../request/deadline.ts';
 import { routeOf } from '../route/route.ts';
 import { decodeCursor, encodeCursor } from '../tokens/cursor.ts';

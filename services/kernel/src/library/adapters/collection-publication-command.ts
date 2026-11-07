@@ -2,10 +2,9 @@
 import { createHash } from 'node:crypto';
 import { isDeepStrictEqual } from 'node:util';
 import type { Pool, PoolClient } from 'pg';
-import { captureDurableInitiator, durableInitiatorCommitment } from '../../access/durable-initiator-capture.ts';
+import { captureDurableInitiator, durableInitiatorCommitment, resourceAuthorization } from '../access-port.ts';
 import type { DurableInitiatorRecord } from '../../access/durable-initiator.ts';
-import { shareAccount } from '../../access/account-share.ts';
-import { resourceAuthorization } from '../../access/index.ts';
+import { shareAccount } from '../access-port.ts';
 import type { KernelClock } from '../../clock.ts';
 import {
   authoritativeTimeValue,
@@ -19,7 +18,7 @@ import {
 } from '../../command/command.ts';
 import { ProblemError } from '../../http/problem-error.ts';
 import { accessCheck } from '../../request/access-check.ts';
-import { type Access, type AccessContext, type AccessClient, type AccountActor } from '../../request/access.ts';
+import type { Access, AccessContext, AccessClient, AccountActor } from '../../request/access.ts';
 import { deadlineFor } from '../../request/deadline.ts';
 import { newId, partitionOf, routeOf } from '../../route/route.ts';
 import { stageHistoryWork } from '../../work/history-enqueue.ts';

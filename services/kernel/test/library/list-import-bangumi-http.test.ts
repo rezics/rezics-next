@@ -1,7 +1,7 @@
 import { createProfileEntryFixture, type NativeProfileFixture } from './support/profile-entry-fixture.ts';
 import { afterAll, beforeAll, expect, test } from 'bun:test';
 import { randomUUID } from 'node:crypto';
-import { GrantDeniedError } from '../../src/access/grant-commands.ts';
+import { GrantDeniedError } from '../../src/access/contract/errors.ts';
 import { routeOf } from '../../src/route/route.ts';
 import { createVoteCommands, STANDARD_QUESTION_ID } from '../../src/rating/votes.ts';
 import { createBangumiImport } from '../../src/library/list-import-bangumi.ts';

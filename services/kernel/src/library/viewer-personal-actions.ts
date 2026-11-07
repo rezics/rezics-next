@@ -1,13 +1,9 @@
 import type { Pool } from 'pg';
 import type { Access, Actor } from '../request/access.ts';
 import { withReadTransaction } from '../semantic/read.ts';
-import {
-  readViewerActions,
-  type ViewerActionBindings,
-  type ViewerActionResource,
-  type ViewerActionResources,
-} from '../access/viewer-actions.ts';
-import { GrantDeniedError } from '../access/resource-access-errors.ts';
+import type { ViewerActionBindings, ViewerActionResource, ViewerActionResources } from '../access/viewer-actions.ts';
+import { readViewerActions } from './access-port.ts';
+import { GrantDeniedError } from '../access/contract/errors.ts';
 import { STANDARD_QUESTION_ID } from '../rating/votes.ts';
 import { routeOf } from '../route/route.ts';
 import {

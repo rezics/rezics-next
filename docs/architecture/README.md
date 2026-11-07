@@ -1,5 +1,7 @@
 # Architecture check
 
+Decision: Library value-imports of Access go through Library `access-port.ts` or Access contract leaves (`contract/errors.ts`, `contract/erasure.ts`, `contract/bounds.ts`, `contract/collection-policy.ts`, `contract/contribution-attribution.ts`). Access `adapters/library.ts` is the native producer bound at `composition/library.ts`. SQL descriptors remain on their defining Access leaves. Typing is the acceptance for this import migration.
+
 Decision: Rating owns its foreign runtime capabilities in `rating/dependencies.ts`. The shared native runtime
 (`createKernelRuntimeDefaults`), server, worker, preload and OpenAPI composition bind the exact native functions
 and constructors at that owning composition boundary before Rating use; live bindings preserve error identity,

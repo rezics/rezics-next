@@ -1,6 +1,6 @@
 import type { Pool } from 'pg';
-import { deadlineClient } from '../access/authenticate.ts';
-import { admitGroup, PlatformClosedError } from '../access/gates/admission.ts';
+import { deadlineClient, admitGroup } from './access-port.ts';
+import { PlatformClosedError } from '../access/contract/errors.ts';
 import type { KernelClock } from '../clock.ts';
 import { withConnection } from '../database/pool.ts';
 import { ProblemError } from '../http/problem-error.ts';

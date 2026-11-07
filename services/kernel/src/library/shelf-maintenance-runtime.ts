@@ -33,8 +33,8 @@ import { createHash } from 'node:crypto';
 import { AsyncLocalStorage } from 'node:async_hooks';
 import canonicalize from 'canonicalize';
 
-import { GrantDeniedError } from '../access/resource-access-errors.ts';
-import { resourceAuthorization } from '../access/resource-authorization.ts';
+import { GrantDeniedError } from '../access/contract/errors.ts';
+import { resourceAuthorization } from './access-port.ts';
 import {
   noEffect,
   normalizeCommandKey,
