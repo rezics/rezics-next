@@ -69,8 +69,9 @@ using `services/kernel/test/commerce/support/goal-journey-walk.ts`. Genuine-orde
 `test/commerce/erasure-participant.test.ts`. No extra outcome suites.
 Decision: that one native case still pins paid minimization, expiry, restricted readback and late paid/refund;
 catch-up after late-pay/deletion holds and before SIGKILL is part of that case, not a second story.
-Decision: the walker waits for Kernel `/v1/definitions` before seed, retries seed once on import transport, keeps
-failing native steps, and treats 404 or a sign-in mismatch as a page failure except anonymous private pages.
+Decision: the walker waits for Kernel `/v1/definitions/active` with a digest before seed, retries seed once on import
+transport, keeps failing native steps, and treats 404 or a sign-in mismatch as a page failure except anonymous private
+pages. Stack `/v1/definitions` answering below HTTP 500 is not an active release.
 
 ## Evidence and stages
 

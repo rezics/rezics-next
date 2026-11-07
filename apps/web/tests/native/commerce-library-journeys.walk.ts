@@ -4,8 +4,9 @@
  * Native commands and served pages are recorded per finishing-register row.
  * Evidence stays under `.temp/commerce-walk/`.
  *
- * Kernel /v1/definitions must answer before seed. A 404 or sign-in mismatch is a
- * page failure except anonymous private pages, which must leave the member shell.
+ * Kernel /v1/definitions/active must return a digest before seed. A 404 or
+ * sign-in mismatch is a page failure except anonymous private pages, which must
+ * leave the member shell.
  */
 import { execFileSync, spawn } from 'node:child_process';
 import { randomBytes } from 'node:crypto';
@@ -79,20 +80,26 @@ async function logTail(name: string): Promise<string> {
   }
 }
 
-async function waitUntilOk(url: string, label: string, ms = 1_200_000): Promise<void> {
+async function waitUntilActiveRelease(origin: string, ms = 1_200_000): Promise<void> {
+  const url = `${origin}/v1/definitions/active`;
   const deadline = Date.now() + ms;
   let last = 'no response';
   while (Date.now() < deadline) {
     try {
       const response = await fetch(url, { signal: AbortSignal.timeout(10_000), cache: 'no-store' });
-      if (response.ok) return;
-      last = `HTTP ${response.status}`;
+      if (response.ok) {
+        const body = (await response.json()) as { digest?: unknown };
+        if (typeof body.digest === 'string' && body.digest.length > 0) return;
+        last = `HTTP ${response.status} without digest`;
+      } else {
+        last = `HTTP ${response.status}`;
+      }
     } catch (error) {
       last = error instanceof Error ? error.message : String(error);
     }
     await Bun.sleep(1_000);
   }
-  throw new Error(`${label} not ready: ${last}`);
+  throw new Error(`Kernel /v1/definitions/active not ready: ${last}`);
 }
 
 async function parseEnv(path: string): Promise<Record<string, string>> {
@@ -392,7 +399,7 @@ async function main() {
   let frontends: Awaited<ReturnType<typeof startSeededFrontends>> | undefined;
   let browser: Browser | undefined;
   try {
-    await waitUntilOk(`${stack.kernel}/v1/definitions`, 'Kernel /v1/definitions');
+    await waitUntilActiveRelease(stack.kernel);
     await child(['bun', 'services/auth/scripts/dev-stack.ts', 'persona'], 'persona');
     await seedCatalog();
     frontends = await startSeededFrontends();
