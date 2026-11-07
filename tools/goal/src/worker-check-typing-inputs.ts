@@ -233,6 +233,34 @@ function stableSource(started: TypingInputs, completed: TypingInputs): boolean {
   );
 }
 
+/** Capture every admitted physical command, including workspace runners predating compiler receipt support. */
+export function typingInputCommand(command: readonly string[]): string[] {
+  // Carry the current standalone capture implementation through argv: old frozen worktrees need no source rewrite.
+  const captureModule = `data:text/typescript;base64,${Buffer.from(readFileSync(import.meta.path)).toString('base64')}`;
+  return [
+    'bun',
+    '-e',
+    `
+let complete;
+let readReceipt;
+try {
+  const inputs = await import(${JSON.stringify(captureModule)});
+  readReceipt = inputs.readTypingInputReceipt;
+  complete = inputs.beginTypingInputReceipt(process.cwd(), process.env, ${JSON.stringify(command)});
+} catch (error) { console.error('typing inputs unavailable before compilation: ' + error); }
+const child = Bun.spawn(${JSON.stringify(command)}, { stdin: 'inherit', stdout: 'inherit', stderr: 'inherit' });
+for (const signal of ['SIGINT', 'SIGTERM', 'SIGHUP']) process.on(signal, () => child.kill(signal));
+const code = await child.exited;
+try {
+  // An owning compiler can finish successfully before a later money/test command fails. Retain its exact verdict.
+  const request = JSON.parse(Buffer.from(process.env.REZICS_TYPING_INPUTS_COMMAND ?? '', 'base64').toString());
+  if (!readReceipt?.(process.cwd(), process.env.REZICS_TYPING_INPUTS_PHYSICAL, request)) complete?.(code);
+} catch (error) { console.error('typing inputs unavailable after compilation: ' + error); }
+process.exit(code);
+`,
+  ];
+}
+
 /** Invoked by the owning compiler, in the actual frozen/prepared checkout, not at controller settlement time. */
 export function beginTypingInputReceipt(
   root: string,

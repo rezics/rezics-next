@@ -11,6 +11,11 @@ test('Reject invalid worker commands before recovery', async () => {
     { argv: ['retry', 'task-1', '--expected-attempt', '-1'], usage: 'Error: invalid retry option: --expected-attempt' },
     { argv: ['retry', 'task-1', '--proof-start'], usage: 'Error: --proof-start requires --expected-attempt' },
     { argv: ['amend', 'task-1'], usage: 'Error: usage: amend <task> --expected-attempt 0 --brief <file>' },
+    { argv: ['typing-recover', 'task-1'], usage: 'Error: usage: typing-recover <task> --expected-attempt <n>' },
+    {
+      argv: ['typing-recover', 'task-1', '--expected-attempt', '0'],
+      usage: 'Error: usage: typing-recover <task> --expected-attempt <n>',
+    },
     {
       argv: ['amend', 'task-1', '--expected-attempt', '1', '--brief', 'input.md'],
       usage: 'Error: usage: amend <task> --expected-attempt 0 --brief <file>',

@@ -58,7 +58,7 @@ import {
   settleWorkerCheckHostBudget,
   workerCheckHostCommandReached,
 } from '../tools/goal/src/worker-check-budget.ts';
-import { typingInputsReceiptPath } from '../tools/goal/src/worker-check-typing-inputs.ts';
+import { typingInputCommand, typingInputsReceiptPath } from '../tools/goal/src/worker-check-typing-inputs.ts';
 import { acquireStackSlot } from './stack-lease.ts';
 import {
   CHECK_RECORD_CUSTODY_VERSION,
@@ -1533,7 +1533,7 @@ export async function runWorkerCheck(
           'env',
           `REZICS_TYPING_INPUTS_PHYSICAL=${physicalRunId}`,
           `REZICS_TYPING_INPUTS_COMMAND=${env.REZICS_TYPING_INPUTS_COMMAND}`,
-          ...selectedRemoteCommand,
+          ...typingInputCommand(selectedRemoteCommand),
         ]
       : selectedRemoteCommand;
     const handedOffCommand = withOriginalContext(
@@ -1873,7 +1873,9 @@ export async function runWorkerCheck(
     env.REZICS_CHECK_MEMORY_LEASE = lease.env.REZICS_STACK_SLOT ?? env.REZICS_CHECK_MEMORY_LEASE ?? 'inherited';
   let scoped = false;
   const peakFile = join(directory, `peak.${process.pid}.${randomUUID()}.tmp`);
-  const ownedCommand = ownedLocalCommand(command);
+  const ownedCommand = ownedLocalCommand(
+    typingInvocation ? resolveRepositoryBun(typingInputCommand(command), root) : command,
+  );
   let temporary: ReturnType<typeof ownedTemporaryDirectory> | undefined;
   try {
     temporary = ownedTemporaryDirectory(join(root, '.temp'), 'check-tmp-');

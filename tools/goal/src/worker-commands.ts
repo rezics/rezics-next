@@ -1,3 +1,4 @@
+import { recoverWorkerTyping } from './typing-recovery.ts';
 import { agentAdapter } from './agents.ts';
 import { mkdirSync } from 'node:fs';
 import { join } from 'node:path';
@@ -180,6 +181,18 @@ export async function runWorkerCommand(
               ...(parsedArguments.active ? { active: true } : {}),
             },
             authenticatedManager(store.db, env) ?? null,
+          ),
+        ),
+      );
+    } else if (parsedArguments.command === 'typing-recover') {
+      print(
+        JSON.stringify(
+          await recoverWorkerTyping(
+            tasks,
+            job.landing,
+            { taskId: parsedArguments.taskId, attempt: parsedArguments.expectedAttempt },
+            authenticatedManager(store.db, env) ?? null,
+            job.afterSettle,
           ),
         ),
       );
