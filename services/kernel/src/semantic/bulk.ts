@@ -1,5 +1,5 @@
 import { jsonParameter } from '../database/json.ts';
-import { admitIdentityTerminalCapture, runIdentityTerminalCommand } from './identity-terminal-closure-command.ts';
+import { runIdentityTerminalCommand } from './identity-terminal-closure-command.ts';
 import { beginSemanticRecordSourceSet, sealSemanticRecordSourceSet } from './record-source-set.ts';
 import { collectSemanticCandidateSource, recordSemanticDocumentSource } from './record-source-set.ts';
 import locatePublicationCandidate from './moderation-read-live-candidate.sql';
@@ -13,6 +13,7 @@ import type { Release } from '@rezics/definitions';
 import type { Pool } from 'pg';
 import {
   noEffect,
+  principalCommandIdentity,
   runCommand,
   type CommandAttempt,
   type CommandAuthorization,
@@ -25,7 +26,7 @@ import { requestDigest } from '../http/request.ts';
 import type { AccountActor } from '../request/access.ts';
 import { newId, partitionOf, routeOf } from '../route/route.ts';
 import { EditorialConflictError, SubjectNotFoundError } from './contract/subject-errors.ts';
-import { writeProposal } from './candidates.ts';
+import { asUniqueContention, BULK_UNIQUE_CONTENTION_CONSTRAINTS, writeProposal } from './candidates.ts';
 import { SUBJECT_REVISED } from './events.ts';
 import { SubjectInputError } from './item.ts';
 import { redirectOf } from './subject-redirect.ts';
@@ -162,191 +163,235 @@ export async function batchCommand(
   const partition = partitionOf(route);
   const kind = `subject.batch_${command.op}`;
   const digest = requestDigest(kind, actor, command);
-  const outcome = await runIdentityTerminalCommand<Value>(
-    pool,
-    {
-      partition,
-      deadline: options.deadline,
-      clock: options.clock,
-      authorization: options.authorization,
-      basis: { actorAccountId: actor.accountId, clientId: actor.clientId, requestedBy: actor.requestedBy },
-      receipt: { actorAccountId: actor.accountId, kind, key: command.key, digest },
-    },
-    async (tx, { transactionId }) => {
-      try {
-        const resolve = async (value: BulkValue) => {
-          await declareCommandHistory(tx, kind, {
-            response: { artifactType: 'command-receipt/v1', accounts: [] },
-            events: [],
-          });
-          return noEffect<Value>({ status: 200, value });
-        };
-        const source = command.source;
-        if (command.op === 'create') {
-          const claim = await readClaim.run(tx, {
-            route,
-            source: source.source,
-            external_id: source.external_id,
-          });
-          const id = claim?.subject_id;
-          if (id) {
-            const subject = await visibleSubject(tx, route, id);
-            if (subject.type !== command.subject.type) throw new EditorialConflictError();
-            return resolve({ id, revision: subject.revision });
-          }
-          const target = { route, id: newId(route) };
-          const written = await writeSubject(tx, transactionId, {
-            target,
-            item: command.subject,
-            release: options.release,
-            ...(options.routeKey ? { routeKey: options.routeKey } : {}),
-            source,
-          });
-          await insertClaim.run(tx, {
-            route,
-            source: source.source,
-            external_id: source.external_id,
-            subject_id: target.id,
-            transaction_id: transactionId,
-          });
-          await declareCommandHistory(tx, kind, {
-            response: { artifactType: 'command-receipt/v1', accounts: [] },
-            events: written.events.map(() => ({ artifactType: 'outbox-event/v1', accounts: [] })),
-          });
-          return { value: { status: 201, value: { id: written.value.id, revision: 1 } }, events: written.events };
+  const identity = principalCommandIdentity(actor);
+  const commandOptions = {
+    partition,
+    deadline: options.deadline,
+    clock: options.clock,
+    authorization: options.authorization,
+    ...identity,
+    receipt: { kind, key: command.key, digest },
+  };
+  const body = async (tx: CommandTransaction, { transactionId }: { transactionId: string }) => {
+    try {
+      const resolve = async (value: BulkValue) => {
+        await declareCommandHistory(tx, kind, {
+          response: { artifactType: 'command-receipt/v1', accounts: [] },
+          events: [],
+        });
+        return noEffect<Value>({ status: 200, value });
+      };
+      const source = command.source;
+      if (command.op === 'create') {
+        const claim = await readClaim.run(tx, {
+          route,
+          source: source.source,
+          external_id: source.external_id,
+        });
+        const id = claim?.subject_id;
+        if (id) {
+          const subject = await visibleSubject(tx, route, id);
+          if (subject.type !== command.subject.type) throw new EditorialConflictError();
+          return resolve({ id, revision: subject.revision });
         }
-        const subject = await visibleSubject(tx, route, command.subject);
-        if (command.op === 'propose') {
-          const imported = source.field_group === 'summary' || source.field_group === 'cover';
-          const hash = importedStatementDigest(command.statement, source.field_group);
-          const key = {
-            route,
-            subject_id: command.subject,
-            source: source.source,
-            external_id: source.external_id,
-            field_group: source.field_group,
-            statement_digest: hash,
-          };
-          const existing = await readSourceCandidate.run(tx, key);
-          if (existing) return resolve({ candidate: existing.candidate_id, revision: subject.revision });
-          let written: Awaited<ReturnType<typeof writeProposal>>;
-          const proposal = {
-            subject: command.subject,
-            // Content installation rewrites the candidate body. Keep the
-            // original snapshot available to a transaction retry.
-            statement: imported ? structuredClone(command.statement) : command.statement,
-            release: options.release,
-            ...(options.routeKey ? { routeKey: options.routeKey } : {}),
-            source,
-            allowContent: imported,
-          };
-          try {
-            written = await writeProposal(
-              tx,
-              transactionId,
-              imported
-                ? {
-                    ...proposal,
-                    install: async ({ candidate, revision, body }) => {
-                      if (!record(body) || !record(body.value)) throw new TypeError('Invalid imported statement');
-                      if (source.field_group === 'summary') {
-                        const content = body.value.content;
-                        if (!command.rights || !record(content) || typeof content.language !== 'string')
-                          throw new TypeError('Invalid imported summary');
-                        const stored = await appendImportedField(tx, {
-                          subject: command.subject,
-                          candidate,
-                          revision,
-                          language: content.language,
-                          document: content.document,
-                          source: {
-                            source: source.source,
-                            external_id: source.external_id,
-                            record_revision: source.record_revision,
-                            digest: source.digest,
-                            converter_revision: source.converter_revision,
-                            field_group: 'summary',
-                            references: command.statement.references,
-                          },
-                          rights: {
-                            license: command.rights.license,
-                            obligations: command.rights.obligations,
-                            attribution: command.rights.attribution,
-                          },
-                        });
-                        await recordSemanticDocumentSource(tx, {
-                          kind: 'contribution',
-                          subjectId: command.subject,
-                          candidateId: candidate,
-                          revision,
-                          documentId: stored.id,
-                        });
-                        return {
-                          language: content.language,
-                          document: stored.id,
-                          digest: stored.digest,
-                        };
-                      }
-                      if (typeof body.value.content !== 'string') throw new TypeError('Invalid cover media');
-                      await claimMedia(tx, {
-                        mediaIds: [body.value.content],
-                        containerId: command.subject,
-                        author: actor,
-                        reference: {
-                          kind: 'semantic_candidate',
-                          subjectId: command.subject,
-                          candidateId: candidate,
-                          revision,
+        const target = { route, id: newId(route) };
+        const written = await writeSubject(tx, transactionId, {
+          target,
+          item: command.subject,
+          release: options.release,
+          ...(options.routeKey ? { routeKey: options.routeKey } : {}),
+          source,
+        });
+        await insertClaim.run(tx, {
+          route,
+          source: source.source,
+          external_id: source.external_id,
+          subject_id: target.id,
+          transaction_id: transactionId,
+        });
+        await declareCommandHistory(tx, kind, {
+          response: { artifactType: 'command-receipt/v1', accounts: [] },
+          events: written.events.map(() => ({ artifactType: 'outbox-event/v1', accounts: [] })),
+        });
+        return { value: { status: 201, value: { id: written.value.id, revision: 1 } }, events: written.events };
+      }
+      const subject = await visibleSubject(tx, route, command.subject);
+      if (command.op === 'propose') {
+        const imported = source.field_group === 'summary' || source.field_group === 'cover';
+        const hash = importedStatementDigest(command.statement, source.field_group);
+        const key = {
+          route,
+          subject_id: command.subject,
+          source: source.source,
+          external_id: source.external_id,
+          field_group: source.field_group,
+          statement_digest: hash,
+        };
+        const existing = await readSourceCandidate.run(tx, key);
+        if (existing) return resolve({ candidate: existing.candidate_id, revision: subject.revision });
+        let written: Awaited<ReturnType<typeof writeProposal>>;
+        const proposal = {
+          subject: command.subject,
+          // Content installation rewrites the candidate body. Keep the
+          // original snapshot available to a transaction retry.
+          statement: imported ? structuredClone(command.statement) : command.statement,
+          release: options.release,
+          ...(options.routeKey ? { routeKey: options.routeKey } : {}),
+          source,
+          allowContent: imported,
+        };
+        try {
+          written = await writeProposal(
+            tx,
+            transactionId,
+            imported
+              ? {
+                  ...proposal,
+                  install: async ({ candidate, revision, body }) => {
+                    if (!record(body) || !record(body.value)) throw new TypeError('Invalid imported statement');
+                    if (source.field_group === 'summary') {
+                      const content = body.value.content;
+                      if (!command.rights || !record(content) || typeof content.language !== 'string')
+                        throw new TypeError('Invalid imported summary');
+                      const stored = await appendImportedField(tx, {
+                        subject: command.subject,
+                        candidate,
+                        revision,
+                        language: content.language,
+                        document: content.document,
+                        source: {
+                          source: source.source,
+                          external_id: source.external_id,
+                          record_revision: source.record_revision,
+                          digest: source.digest,
+                          converter_revision: source.converter_revision,
+                          field_group: 'summary',
+                          references: command.statement.references,
+                        },
+                        rights: {
+                          license: command.rights.license,
+                          obligations: command.rights.obligations,
+                          attribution: command.rights.attribution,
                         },
                       });
-                    },
-                  }
-                : proposal,
-            );
-          } catch (error) {
-            if (imported && (error instanceof TypeError || error instanceof RangeError))
-              throw new SubjectInputError([{ pointer: '/statement/value/content', code: 'out_of_range' }]);
-            throw error;
-          }
-          await insertSourceCandidate.run(tx, { ...key, candidate_id: written.value.candidate });
-          await declareCommandHistory(tx, kind, {
-            response: { artifactType: 'command-receipt/v1', accounts: [] },
-            events: written.events.map(() => ({ artifactType: 'outbox-event/v1', accounts: [] })),
-          });
-          return { value: { status: 201, value: written.value }, events: written.events };
+                      await recordSemanticDocumentSource(tx, {
+                        kind: 'contribution',
+                        subjectId: command.subject,
+                        candidateId: candidate,
+                        revision,
+                        documentId: stored.id,
+                      });
+                      return {
+                        language: content.language,
+                        document: stored.id,
+                        digest: stored.digest,
+                      };
+                    }
+                    if (typeof body.value.content !== 'string') throw new TypeError('Invalid cover media');
+                    await claimMedia(tx, {
+                      mediaIds: [body.value.content],
+                      containerId: command.subject,
+                      author: actor,
+                      reference: {
+                        kind: 'semantic_candidate',
+                        subjectId: command.subject,
+                        candidateId: candidate,
+                        revision,
+                      },
+                    });
+                  },
+                }
+              : proposal,
+          );
+        } catch (error) {
+          if (imported && (error instanceof TypeError || error instanceof RangeError))
+            throw new SubjectInputError([{ pointer: '/statement/value/content', code: 'out_of_range' }]);
+          throw error;
         }
-        const proposed = await readProposedSource.run(tx, {
+        await insertSourceCandidate.run(tx, { ...key, candidate_id: written.value.candidate });
+        await declareCommandHistory(tx, kind, {
+          response: { artifactType: 'command-receipt/v1', accounts: [] },
+          events: written.events.map(() => ({ artifactType: 'outbox-event/v1', accounts: [] })),
+        });
+        return { value: { status: 201, value: written.value }, events: written.events };
+      }
+      const proposed = await readProposedSource.run(tx, {
+        route,
+        subject_id: command.subject,
+        candidate_id: command.candidate,
+      });
+      if (!proposed) {
+        // Compact single-route candidates exist virtually before slot expansion.
+        // Their proposing revision has no imported source, so they cannot be retracted here.
+        const compact = await readCompactCandidate.run(tx, {
           route,
           subject_id: command.subject,
           candidate_id: command.candidate,
         });
-        if (!proposed) {
-          // Compact single-route candidates exist virtually before slot expansion.
-          // Their proposing revision has no imported source, so they cannot be retracted here.
-          const compact = await readCompactCandidate.run(tx, {
-            route,
-            subject_id: command.subject,
-            candidate_id: command.candidate,
-          });
-          if (compact) throw new EditorialConflictError();
-          throw new SubjectNotFoundError();
-        }
-        const origin = proposed.source as Source | null;
-        if (
-          !origin ||
-          origin.source !== source.source ||
-          origin.external_id !== source.external_id ||
-          origin.field_group !== source.field_group
-        )
-          throw new EditorialConflictError();
-        const sourceSet = await beginSemanticRecordSourceSet(tx);
-        await collectSemanticCandidateSource(tx, command.subject, command.candidate);
-        const publicationLocated = await locatePublicationCandidate.run(tx, {
-          route,
-          subject_id: command.subject,
-          candidate_id: command.candidate,
-        });
-        const publicationBefore = publicationLocated?.property
+        if (compact) throw new EditorialConflictError();
+        throw new SubjectNotFoundError();
+      }
+      const origin = proposed.source as Source | null;
+      if (
+        !origin ||
+        origin.source !== source.source ||
+        origin.external_id !== source.external_id ||
+        origin.field_group !== source.field_group
+      )
+        throw new EditorialConflictError();
+      const sourceSet = await beginSemanticRecordSourceSet(tx);
+      await collectSemanticCandidateSource(tx, command.subject, command.candidate);
+      const publicationLocated = await locatePublicationCandidate.run(tx, {
+        route,
+        subject_id: command.subject,
+        candidate_id: command.candidate,
+      });
+      const publicationBefore = publicationLocated?.property
+        ? await subjectPageSlot(
+            tx,
+            command.subject,
+            publicationLocated.property,
+            publicationLocated.slot_id,
+            options.release.release,
+            options.routeKey,
+          )
+        : new Map();
+      const revision = subject.revision + 1;
+      await insertRetractRevision.run(tx, {
+        route,
+        subject_id: command.subject,
+        revision,
+        release: options.release.digest,
+        transaction_id: transactionId,
+        source,
+      });
+      await updateSubjectRelease.run(tx, {
+        route,
+        subject_id: command.subject,
+        release: options.release.digest,
+      });
+      await insertRetraction.run(tx, {
+        route,
+        subject_id: command.subject,
+        candidate_id: command.candidate,
+        revision,
+        references: jsonParameter(command.references),
+      });
+      await deleteSourceCandidate.run(tx, {
+        route,
+        subject_id: command.subject,
+        source: source.source,
+        external_id: source.external_id,
+        field_group: source.field_group,
+        candidate_id: command.candidate,
+      });
+      const publicationEvents: { type: string; subject: string; data: unknown }[] = [];
+      await recordSubjectPageDiff(
+        tx,
+        command.subject,
+        transactionId,
+        publicationBefore,
+        publicationLocated?.property
           ? await subjectPageSlot(
               tx,
               command.subject,
@@ -355,89 +400,38 @@ export async function batchCommand(
               options.release.release,
               options.routeKey,
             )
-          : new Map();
-        const revision = subject.revision + 1;
-        await insertRetractRevision.run(tx, {
-          route,
-          subject_id: command.subject,
-          revision,
-          release: options.release.digest,
-          transaction_id: transactionId,
-          source,
-        });
-        await updateSubjectRelease.run(tx, {
-          route,
-          subject_id: command.subject,
-          release: options.release.digest,
-        });
-        await insertRetraction.run(tx, {
-          route,
-          subject_id: command.subject,
-          candidate_id: command.candidate,
-          revision,
-          references: jsonParameter(command.references),
-        });
-        await deleteSourceCandidate.run(tx, {
-          route,
-          subject_id: command.subject,
-          source: source.source,
-          external_id: source.external_id,
-          field_group: source.field_group,
-          candidate_id: command.candidate,
-        });
-        const publicationEvents: { type: string; subject: string; data: unknown }[] = [];
-        await recordSubjectPageDiff(
-          tx,
-          command.subject,
-          transactionId,
-          publicationBefore,
-          publicationLocated?.property
-            ? await subjectPageSlot(
-                tx,
-                command.subject,
-                publicationLocated.property,
-                publicationLocated.slot_id,
-                options.release.release,
-                options.routeKey,
-              )
-            : new Map(),
-          publicationEvents,
-        );
-        await sealSemanticRecordSourceSet(tx, sourceSet);
-        const events = [
-          ...publicationEvents,
-          {
-            type: SUBJECT_REVISED,
-            subject: command.subject,
-            data: { id: command.subject, revision, kind: 'retract' },
-          },
-          {
-            type: 'com.rezics.statement.retracted.v1',
-            subject: command.subject,
-            data: { candidate: command.candidate, revision },
-          },
-        ];
-        await declareCommandHistory(tx, kind, {
-          response: { artifactType: 'command-receipt/v1', accounts: [] },
-          events: events.map(() => ({ artifactType: 'outbox-event/v1', accounts: [] })),
-        });
-        return { value: { status: 200, value: { revision } }, events };
-      } catch (error) {
-        if (
-          typeof error === 'object' &&
-          error !== null &&
-          'code' in error &&
-          error.code === '23505' &&
-          'constraint' in error &&
-          ['external_claim_pkey', 'source_candidate_pkey', 'receipt_pkey', 'revision_pkey', 'candidate_pkey'].includes(
-            String(error.constraint),
-          )
-        )
-          error.code = '40001';
-        throw error;
-      }
-    },
-  );
+          : new Map(),
+        publicationEvents,
+      );
+      await sealSemanticRecordSourceSet(tx, sourceSet);
+      const events = [
+        ...publicationEvents,
+        {
+          type: SUBJECT_REVISED,
+          subject: command.subject,
+          data: { id: command.subject, revision, kind: 'retract' },
+        },
+        {
+          type: 'com.rezics.statement.retracted.v1',
+          subject: command.subject,
+          data: { candidate: command.candidate, revision },
+        },
+      ];
+      await declareCommandHistory(tx, kind, {
+        response: { artifactType: 'command-receipt/v1', accounts: [] },
+        events: events.map(() => ({ artifactType: 'outbox-event/v1', accounts: [] })),
+      });
+      return { value: { status: 200, value: { revision } }, events };
+    } catch (error) {
+      throw asUniqueContention(error, BULK_UNIQUE_CONTENTION_CONSTRAINTS);
+    }
+  };
+  // Create admits identity-terminal capture inside writeSubject. Propose and retract
+  // keep Core contention retry until the original deadline, actor, capabilities and key.
+  const outcome =
+    command.op === 'create'
+      ? await runIdentityTerminalCommand<Value>(pool, commandOptions, body)
+      : await runCommand<Value>(pool, commandOptions, body);
   return {
     ...outcome.value,
     component: { partition: outcome.partition, epoch: outcome.epoch, position: outcome.position },
