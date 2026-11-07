@@ -10,10 +10,7 @@ import { ImportSession } from '../src/import-session.ts';
 import { createReviewedCatalogueApplication } from '../src/reviewed-catalogue-application.ts';
 import { sameStatementProvenance } from '../src/statement-provenance.ts';
 import { releasedReviewedVocabulary } from '../src/reviewed-vocabulary-port.ts';
-import {
-  seedReviewedCatalogue,
-  type ReviewedCataloguePort,
-} from '../src/reviewed-catalogue.ts';
+import { seedReviewedCatalogue, type ReviewedCataloguePort } from '../src/reviewed-catalogue.ts';
 
 const context = '00000000-0000-8000-8000-000000000000';
 test('statement provenance admits data descriptors before projecting semantic fields', () => {

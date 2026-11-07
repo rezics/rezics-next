@@ -1,8 +1,5 @@
 import { createReviewedCatalogueApplication } from './reviewed-catalogue-application.ts';
-import {
-  releasedReviewedVocabulary,
-  type ReviewedVocabularyPort,
-} from './reviewed-vocabulary-port.ts';
+import { releasedReviewedVocabulary, type ReviewedVocabularyPort } from './reviewed-vocabulary-port.ts';
 import type { RecordBindings } from './record-bindings.ts';
 import type {
   ReviewedBangumiBindingStatus,
