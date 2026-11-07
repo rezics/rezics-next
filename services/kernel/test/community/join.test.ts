@@ -10,7 +10,7 @@ import { migrate as migrateAuth } from '../../../auth/scripts/database.ts';
 import { createAuthBindings } from '../../src/access/auth-bindings.ts';
 import { bootstrapGovernance, PLATFORM_RESOURCE } from '../../src/access/bootstrap-governance.ts';
 import { AccessUnavailableError, createAccess } from '../../src/access/index.ts';
-import * as initiatorCapture from '../../src/access/durable-initiator-capture.ts';
+import * as initiatorCapture from '../../src/community/domain-ports.ts';
 import { GrantDeniedError } from '../../src/access/grant-commands.ts';
 import { enqueueRealmJoin } from '../../src/community/join.ts';
 import { realmMembershipWorkflowId } from '../../src/community/work.ts';
