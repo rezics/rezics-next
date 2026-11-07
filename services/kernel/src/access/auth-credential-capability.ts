@@ -1,3 +1,9 @@
+import { floorIdentities, floorBridges, type CredentialFloorIdentity } from './credential-floor-identity.ts';
+export {
+  installCredentialFloorBridge,
+  credentialFloorIdentityClaims,
+  type CredentialFloorIdentity,
+} from './credential-floor-identity.ts';
 import { accessClock } from './access-clock.ts';
 import { commandAccessContext } from './command-admission.ts';
 import { authoritativeTimeValue, type CommandAttempt } from '../command/command.ts';
@@ -704,24 +710,3 @@ type NativeConsumed = {
   reservation_id: string;
   operator_epoch_floor: number;
 };
-
-declare const floorIdentity: unique symbol;
-export type CredentialFloorIdentity = { readonly [floorIdentity]: true };
-const floorIdentities = new WeakMap<CredentialFloorIdentity, { actor: AccountActor; account: Account; pool: Pool }>();
-const floorBridges = new WeakMap<
-  Access,
-  (proof: CredentialFloorIdentity, resource: Resource, context: AccessContext) => Promise<boolean>
->();
-/** Installed once by the ordinary Access factory; no actor JSON registration. */
-export function installCredentialFloorBridge(
-  access: Access,
-  bridge: (proof: CredentialFloorIdentity, resource: Resource, context: AccessContext) => Promise<boolean>,
-) {
-  if (floorBridges.has(access)) throw new Error('Credential floor bridge already installed');
-  floorBridges.set(access, bridge);
-}
-/** Opaque evidence exists only after exact native consumed-row verification. */
-export function credentialFloorIdentityClaims(proof: CredentialFloorIdentity, pool: Pool) {
-  const claims = floorIdentities.get(proof);
-  return claims?.pool === pool ? claims : undefined;
-}

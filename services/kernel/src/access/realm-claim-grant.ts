@@ -3,7 +3,7 @@ import type { Access, Resource } from '../request/access.ts';
 import { partitionOf, routeOf } from '../route/route.ts';
 import { shareAccount } from './account-share.ts';
 import { PLATFORM_RESOURCE } from './bootstrap-governance.ts';
-import { GrantDeniedError } from './grant-commands.ts';
+import { GrantDeniedError } from './resource-access-errors.ts';
 import { REALM_OWNER_ROLE } from './realm-ownership.ts';
 import { resourceRoleCatalogue } from './resource-roles.ts';
 import { AccessUnavailableError } from './unavailable.ts';

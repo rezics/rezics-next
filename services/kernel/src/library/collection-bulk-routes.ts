@@ -2,7 +2,7 @@ import { memoizedValue } from '../memoized.ts';
 import { t } from 'elysia';
 import { bundledRelease } from '@rezics/definitions/bundled';
 import { IdempotencyConflictError } from '../command/command.ts';
-import { GrantDeniedError } from '../access/resource-access-errors.ts';
+import { GrantDeniedError } from '../access/contract/errors.ts';
 import { customMethod } from '../http/custom-method.ts';
 import { ProblemError } from '../http/problem-error.ts';
 import { problemSchema } from '../http/problem-schema.ts';

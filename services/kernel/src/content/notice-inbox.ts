@@ -1,6 +1,6 @@
 import type { Pool } from 'pg';
-import { readAccount, deadlineClient, within } from './access-port.ts';
-import { accessCheck, type Access, type Actor } from '../request/access.ts';
+import { readAccount, accessCheck, deadlineClient, within } from './access-port.ts';
+import type { Access, Actor } from '../request/access.ts';
 import { withConnection } from '../database/pool.ts';
 import { routeOf } from '../route/route.ts';
 import { decodeListCursor, encodeListCursor } from '../tokens/list-cursor.ts';

@@ -11,12 +11,8 @@ import type { AccountActor } from '../request/access.ts';
 import { partitionOf } from '../route/route.ts';
 
 const SERVICE_ID = '00000000-0000-8000-8000-000000000001';
-export class LifecycleDeniedError extends Error {
-  constructor() {
-    super('Account lifecycle command denied');
-    this.name = 'LifecycleDeniedError';
-  }
-}
+import { LifecycleDeniedError } from './contract/errors.ts';
+export { LifecycleDeniedError } from './contract/errors.ts';
 function requireAllowed(value: unknown): asserts value {
   if (!value) throw new LifecycleDeniedError();
 }

@@ -3,7 +3,7 @@ import { within, deadlineClient } from './access-port.ts';
 import { withConnection, discardConnection } from '../database/pool.ts';
 import { readPartition } from '../partition/partition.ts';
 import { partitionOf, routeOf } from '../route/route.ts';
-import { ProblemError } from '../http/problem.ts';
+import { ProblemError } from '../http/problem-error.ts';
 
 export const REALM_SUBJECT_RAW_LIMIT = 32;
 export type CandidateVersion = Readonly<{ epoch: number; position: string }>;

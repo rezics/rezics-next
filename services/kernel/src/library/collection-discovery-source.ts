@@ -1,7 +1,7 @@
 /** Native indexing hints only. Current viewer hydration is a separate Commerce boundary. */
 import type { Pool } from 'pg';
 import type { AccessClient } from '../request/access.ts';
-import { deadlineClient } from '../access/authenticate.ts';
+import { deadlineClient } from './access-port.ts';
 import { FollowCountUnavailableError } from './follow-count-target.ts';
 import { readFollowCountHealthObservation, type FollowCountHealthObservation } from './follow-count-health.ts';
 import { readCollectionDiscoveryFollowCounts } from './adapters/follow-count-discovery.ts';

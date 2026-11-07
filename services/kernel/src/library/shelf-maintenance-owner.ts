@@ -1,7 +1,7 @@
 /** Native shelf owner admission and gate initialization, independent of maintenance execution. */
 import { memoizedValue } from '../memoized.ts';
-import { shareAccount, fenceOperationalAccount } from '../access/account-share.ts';
-import { GrantDeniedError } from '../access/resource-access-errors.ts';
+import { shareAccount, fenceOperationalAccount } from './access-port.ts';
+import { GrantDeniedError } from '../access/contract/errors.ts';
 import { hasLiveOperationalTransaction, type OperationalTransaction } from '../command/operational.ts';
 import {
   currentCommand,

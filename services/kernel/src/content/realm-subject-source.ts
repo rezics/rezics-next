@@ -4,7 +4,7 @@ import type { NativeScopeReader } from '../semantic/adapters/index.ts';
 import type { WorkDimensions } from '../library/contract/work-dimensions.ts';
 import type { ScopeWork } from '../search/adapters/index.ts';
 import { zeroScopeWork } from '../search/contract/index.ts';
-import { ProblemError } from '../http/problem.ts';
+import { ProblemError } from '../http/problem-error.ts';
 import {
   createRealmSubjectCandidates,
   REALM_SUBJECT_RAW_LIMIT,

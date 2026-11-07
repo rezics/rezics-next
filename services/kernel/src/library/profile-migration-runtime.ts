@@ -1,8 +1,8 @@
 import { fenceShelfTechnicalWrite } from './shelf-maintenance-owner.ts';
 import { DBOS } from '@dbos-inc/dbos-sdk';
 import type { Pool } from 'pg';
-import { readAccount } from '../access/account-data.ts';
-import { LifecycleDeniedError } from '../access/lifecycle-20261025094010-command.ts';
+import { readAccount } from './access-port.ts';
+import { LifecycleDeniedError } from '../access/contract/errors.ts';
 import type { KernelClock } from '../clock.ts';
 import { enqueueIntent, runOperationalTransaction, type OperationalTransaction } from '../command/operational.ts';
 import { withConnection } from '../database/pool.ts';

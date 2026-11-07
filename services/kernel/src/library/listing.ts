@@ -24,8 +24,8 @@ import {
 } from './listing-source-observer.ts';
 import type { ListingObservation } from './listing-freshness-contract.ts';
 
+import type { LiveCopyLocator } from '../access/live-copy.ts';
 import {
-  LiveCopyPendingError,
   liveCopyLocator,
   readLiveCopy,
   readLiveCopyResult,
@@ -35,8 +35,8 @@ import {
   finishLiveCopyGate,
   cancelLiveCopy,
   consumeLiveCopy,
-  type LiveCopyLocator,
-} from '../access/live-copy.ts';
+} from './access-port.ts';
+import { LiveCopyPendingError } from '../access/contract/errors.ts';
 
 class Unchanged extends Error {}
 class StampOnly extends Error {}

@@ -3,8 +3,8 @@ import { libraryIdentitySQL } from './identity-native-planner-statements.ts';
 import { createHash, randomUUID } from 'node:crypto';
 import canonicalize from 'canonicalize';
 import type { Pool, QueryResultRow } from 'pg';
-import { shareAccount } from '../access/account-share.ts';
-import { deadlineClient } from '../access/authenticate.ts';
+import { shareAccount } from './access-port.ts';
+import { deadlineClient } from './access-port.ts';
 import { withRequestDeadline } from '../request/deadline.ts';
 import {
   currentCommand,

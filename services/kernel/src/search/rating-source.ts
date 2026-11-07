@@ -1,5 +1,5 @@
 import { isCalendarDate } from '@rezics/filter';
-import { GLOBAL_CONTEXT } from '../access/gates/catalogue.ts';
+import { SEARCH_GLOBAL_CONTEXT as GLOBAL_CONTEXT } from './global-context.ts';
 import { routeOf } from '../route/route.ts';
 
 export type PublicRatingFigure = {

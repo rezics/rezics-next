@@ -1,8 +1,8 @@
 import { afterAll, beforeAll, beforeEach, expect, test } from 'bun:test';
 import { decodeJwt } from 'jose';
 import pg from 'pg';
-import { GrantDeniedError } from '../../src/access/grant-commands.ts';
-import { PlatformClosedError } from '../../src/access/gates/admission.ts';
+import { GrantDeniedError } from '../../src/access/contract/errors.ts';
+import { PlatformClosedError } from '../../src/access/contract/errors.ts';
 import { IdempotencyConflictError, type CommandOutcome } from '../../src/command/command.ts';
 import { LibraryNotFoundError } from '../../src/library/command-support.ts';
 import type { Actor } from '../../src/request/access.ts';

@@ -2,7 +2,7 @@ import { afterAll, beforeAll, expect, test } from 'bun:test';
 import { bundledRelease } from '@rezics/definitions/bundled';
 import { createWriteRateLimiter } from '../../src/access/write-rate.ts';
 import { readErasureStatus } from '../../src/access/erasure.ts';
-import { GrantDeniedError } from '../../src/access/grant-commands.ts';
+import { GrantDeniedError } from '../../src/access/contract/errors.ts';
 import { createEntryCommands } from '../../src/library/entries.ts';
 import { libraryErasureWorkflowId } from '../../src/library/erasure-participant.ts';
 import { partitionOf, routeOf } from '../../src/route/route.ts';

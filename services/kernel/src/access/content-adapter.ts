@@ -1,3 +1,17 @@
+import {
+  accessCheck,
+  accessExplicitCheck,
+  accessCommandAuthorization,
+  actorOf,
+  prepareReadDecisions,
+} from '../request/access.ts';
+export type {
+  accessCheck,
+  accessExplicitCheck,
+  accessCommandAuthorization,
+  actorOf,
+  prepareReadDecisions,
+} from '../request/access.ts';
 /** Native Access producer for Content's chosen operations. Composition installs it before use. */
 import type { ContentAccessPort } from '../content/access-port.ts';
 import { readAccount, readPublicIdentities, readPublicIdentityObservations } from './account-data.ts';
@@ -63,6 +77,11 @@ export type { ViewerActionBindings } from './viewer-actions.ts';
 
 export function createNativeContentAccess(): ContentAccessPort {
   return {
+    accessCheck,
+    accessExplicitCheck,
+    accessCommandAuthorization,
+    actorOf,
+    prepareReadDecisions,
     accessCommandAttempt,
     accountStandingCheck,
     acknowledgeErasure,

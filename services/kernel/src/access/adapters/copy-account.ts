@@ -4,7 +4,7 @@ import type { AuthoritativeTime, CommandTransaction } from '../../command/comman
 import { readAccount } from '../account-data.ts';
 import { GrantDeniedError } from '../resource-access-errors.ts';
 import { routeOf } from '../../route/route.ts';
-import { accessCheck, type Access } from '../../request/access.ts';
+import { accessCheck, type Access } from '../check.ts';
 import type { CopyAccountAdmission, CopyAccountStatementWork, CopyAccountWork } from '../contract/index.ts';
 import accountRead from '../account-read.sql';
 import accountState from '../account-command-state.sql';

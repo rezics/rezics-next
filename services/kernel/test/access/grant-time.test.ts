@@ -1,6 +1,6 @@
 import { afterAll, beforeAll, beforeEach, expect, test } from 'bun:test';
-import { accessCheck } from '../../src/request/access.ts';
-import { AccessUnavailableError } from '../../src/access/index.ts';
+import { accessCheck } from '../../src/access/check.ts';
+import { AccessUnavailableError } from '../../src/access/unavailable.ts';
 import { runCommand } from '../../src/command/command.ts';
 import { partitionOf } from '../../src/route/route.ts';
 import permission from '../../src/access/permission-check.sql';

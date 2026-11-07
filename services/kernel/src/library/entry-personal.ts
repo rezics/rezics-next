@@ -1,8 +1,8 @@
 import { createHash } from 'node:crypto';
 import type { Pool, PoolClient } from 'pg';
 import canonicalize from 'canonicalize';
-import { readAccount } from '../access/account-data.ts';
-import { GrantDeniedError } from '../access/resource-access-errors.ts';
+import { readAccount } from './access-port.ts';
+import { GrantDeniedError } from '../access/contract/errors.ts';
 import type { KernelClock } from '../clock.ts';
 import {
   authoritativeTimeValue,

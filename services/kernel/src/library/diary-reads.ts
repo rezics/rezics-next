@@ -1,15 +1,13 @@
 import { createHash } from 'node:crypto';
 import type { Pool, PoolClient } from 'pg';
-import { readAccount } from '../access/account-data.ts';
-import { deadlineClient, within } from '../access/authenticate.ts';
-import { admitGroup } from '../access/gates/admission.ts';
+import { readAccount, deadlineClient, within, admitGroup } from './access-port.ts';
 import type { KernelClock } from '../clock.ts';
 import { authoritativeTimeValue, mintReadTime, releaseOperationalTime } from '../command/command.ts';
 import { withConnection } from '../database/pool.ts';
 import { ProblemError } from '../http/problem-error.ts';
 import { readPartition } from '../partition/partition.ts';
 import { AuthenticationError } from '../request/authentication-error.ts';
-import { type Access, type AccountActor, type Actor } from '../request/access.ts';
+import type { Access, AccountActor, Actor } from '../request/access.ts';
 import { withRequestDeadline } from '../request/deadline.ts';
 import { partitionOf, routeOf } from '../route/route.ts';
 import { readSubjectSummaries, type SubjectSummary } from '../semantic/summaries.ts';

@@ -65,7 +65,7 @@ import {
   registerPositionedOperationalHistoryWork,
   reserveOperationalWorkTransfer,
 } from '../history/application/index.ts';
-import { type OperationalWorkRegistration, type OperationalWorkTransfer } from '../history/contract/index.ts';
+import type { OperationalWorkRegistration, OperationalWorkTransfer } from '../history/contract/index.ts';
 
 function libraryCapabilities() {
   const domain = peekLibraryDomain();

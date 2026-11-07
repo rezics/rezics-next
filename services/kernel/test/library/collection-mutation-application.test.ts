@@ -288,6 +288,14 @@ test('ordinary composition installs native mutation effects and preserves an exp
     const native = composeLibraryDomain();
     expect(typeof native.collectionMutations?.create).toBe('function');
     expect(typeof native.collectionRuleAuthority?.readAccount).toBe('function');
+    const originalClient = {
+      async query(text: string, values: unknown[]) {
+        expect(text).toContain('authn_fenced AS fenced');
+        expect(values).toEqual([0x1234, 'owner']);
+        return { rows: [], fields: [] };
+      },
+    };
+    expect(await native.collectionRuleAuthority!.readAccount(originalClient, 0x1234, 'owner')).toBeNull();
     expect(typeof native.collectionRetentionNative?.retireCapture).toBe('function');
     expect(typeof native.collectionPublicationNative?.createCommands).toBe('function');
     const override = createCollectionMutationApplication<unknown>({

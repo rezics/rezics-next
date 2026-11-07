@@ -1,12 +1,12 @@
 import { withConnection } from '../database/pool.ts';
 import { partitionOf, routeOf } from '../route/route.ts';
-import { spaceDiscoveryInvalidation, SPACE_DISCOVERY_NATIVE_EVENTS } from '../community/space-discovery.ts';
+import { SPACE_DISCOVERY_NATIVE_EVENTS, spaceDiscoveryInvalidation } from './native-bindings.ts';
 import type { DiscoveryKey } from './discovery.ts';
 import type { DiscoveryProjection } from './account-discovery.ts';
 import type { Pool } from 'pg';
 import { projectBatch, type Envelope } from '../events/log.ts';
 import { lookupEventType } from '../events/catalogue.ts';
-import { GLOBAL_CONTEXT } from '../access/gates/catalogue.ts';
+import { SEARCH_GLOBAL_CONTEXT as GLOBAL_CONTEXT } from './global-context.ts';
 import { STANDARD_QUESTION_ID } from '../rating/standard-question.ts';
 import type { Relay } from '../events/relays.ts';
 import { prepareBoundedSortKeys } from './bounded-sort-keys.ts';

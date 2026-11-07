@@ -1,6 +1,6 @@
 import type { Pool } from 'pg';
-import { GrantDeniedError } from '../access/resource-access-errors.ts';
-import { readAccount } from '../access/account-data.ts';
+import { GrantDeniedError } from '../access/contract/errors.ts';
+import { readAccount } from './access-port.ts';
 import type { KernelClock } from '../clock.ts';
 import {
   authoritativeTimeValue,

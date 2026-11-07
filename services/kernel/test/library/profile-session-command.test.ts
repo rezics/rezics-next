@@ -7,7 +7,7 @@ import {
   libraryProfile,
   unitData,
 } from '../../../../packages/definitions/test/support/library-profiles.ts';
-import { GrantDeniedError } from '../../src/access/grant-commands.ts';
+import { GrantDeniedError } from '../../src/access/contract/errors.ts';
 import { LibraryNotFoundError } from '../../src/library/command-support.ts';
 import changePage from '../../src/library/progress-store-change-page.sql';
 import unitPage from '../../src/library/progress-store-unit-page.sql';

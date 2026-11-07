@@ -3,7 +3,7 @@ import { FeedViewerPersonalActionsSchema } from './feed-viewer-schema.ts';
 import { t } from 'elysia';
 import type { Static } from 'typebox';
 import { FilterError, parseDiscoveryFilter } from '@rezics/filter';
-import { ProblemError } from '../http/problem.ts';
+import { ProblemError } from '../http/problem-error.ts';
 import { SubjectSummarySchema } from '../semantic/adapters/public-summary-schema.ts';
 import type { ThreadView } from './reads.ts';
 import type { ItemView } from './model.ts';

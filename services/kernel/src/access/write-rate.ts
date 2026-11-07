@@ -6,7 +6,7 @@ import chunkStatement from './write-rate-chunk.sql';
 import { throwAccessUnavailable } from './unavailable.ts';
 import type { Pool } from 'pg';
 import type { Actor } from '../request/access.ts';
-import { deadlineClient } from './authenticate.ts';
+import { deadlineClient } from './deadline.ts';
 import { families, rateLimitBudgets } from './write-rate-budgets.ts';
 import { spendWriteRateCounter } from './write-rate-counter.ts';
 import { rateIdentity } from './write-rate-identity.ts';

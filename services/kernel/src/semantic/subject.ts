@@ -54,7 +54,7 @@ import {
 } from './agents.ts';
 import { initializeIdentitySubject } from './identity-adapters/subject-creation.ts';
 import { initializeRevisionAuthorship, revisionResource } from './authorship.ts';
-import { creationDeclares } from '../access/index.ts';
+import { creationDeclares } from '../access/parent-creation.ts';
 import { declareCommandHistory } from '../history/application/index.ts';
 import { nativeSubjectReadingApplication } from './adapters/subject-reading.ts';
 

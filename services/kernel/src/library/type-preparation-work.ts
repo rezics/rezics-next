@@ -6,7 +6,7 @@ import {
 } from './type-preparation-schema.ts';
 import { DBOS } from '@dbos-inc/dbos-sdk';
 import { routeOf } from '../route/route.ts';
-import { GrantDeniedError } from '../access/resource-access-errors.ts';
+import { GrantDeniedError } from '../access/contract/errors.ts';
 import { withConnection } from '../database/pool.ts';
 import type { WorkContext } from '../work/registry.ts';
 import { COMMAND_STEP_RETRIES } from '../work/retries.ts';

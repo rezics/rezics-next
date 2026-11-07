@@ -1,7 +1,7 @@
 import { afterAll, beforeAll, expect, test } from 'bun:test';
 import { createHash } from 'node:crypto';
 import canonicalize from 'canonicalize';
-import { GrantDeniedError } from '../../src/access/grant-commands.ts';
+import { GrantDeniedError } from '../../src/access/contract/errors.ts';
 import { principalCommandIdentity } from '../../src/command/command.ts';
 import { createLibraryCommandRunner } from '../../src/library/command-support.ts';
 import { admitEntryAttempt } from '../../src/library/entry-lifecycle.ts';

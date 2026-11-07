@@ -17,7 +17,7 @@ import { isDeepStrictEqual } from 'node:util';
 import canonicalize from 'canonicalize';
 import type { Pool } from 'pg';
 import { systemClock, type KernelClock } from '../clock.ts';
-import { GLOBAL_CONTEXT } from '../access/gates/catalogue.ts';
+import { SEARCH_GLOBAL_CONTEXT as GLOBAL_CONTEXT } from './global-context.ts';
 import { STANDARD_QUESTION_ID } from '../rating/standard-question.ts';
 import { ProblemError, type FieldErrorCode } from '../http/problem-error.ts';
 import { compileKinds, kindDigest, retainCurrent, type KindSnapshot } from './query.ts';

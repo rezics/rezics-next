@@ -2,7 +2,7 @@ import { memoizedValue } from '../memoized.ts';
 import { readAccountDiscoverySummaries, readViewerActions } from './access-port.ts';
 import type { ViewerActionBindings } from '../access/content-adapter.ts';
 import { classifyUnavailability } from '../access/unavailable.ts';
-import { ProblemError } from '../http/problem.ts';
+import { ProblemError } from '../http/problem-error.ts';
 import type { Access, Actor } from '../request/access.ts';
 import { t } from 'elysia';
 import type { Static } from 'typebox';

@@ -1,6 +1,6 @@
 import type { Pool } from 'pg';
 import { readPublicIdentities } from '../account-data.ts';
-import { deadlineClient, within } from '../authenticate.ts';
+import { deadlineClient, within } from '../deadline.ts';
 import { classifyUnavailability } from '../unavailable.ts';
 import { ProblemError } from '../../http/problem-error.ts';
 import { routeOf } from '../../route/route.ts';

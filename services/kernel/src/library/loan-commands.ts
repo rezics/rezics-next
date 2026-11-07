@@ -1,6 +1,6 @@
 import type { Pool, PoolClient } from 'pg';
-import { readAccount } from '../access/account-data.ts';
-import { GrantDeniedError } from '../access/resource-access-errors.ts';
+import { readAccount } from './access-port.ts';
+import { GrantDeniedError } from '../access/contract/errors.ts';
 import {
   authoritativeTimeValue,
   commandAttemptDeadline,
@@ -10,7 +10,7 @@ import {
 import { systemClock, type KernelClock } from '../clock.ts';
 import { withConnection } from '../database/pool.ts';
 import { ProblemError } from '../http/problem-error.ts';
-import { type AccountActor, type Access, type Actor } from '../request/access.ts';
+import type { AccountActor, Access, Actor } from '../request/access.ts';
 import { deadlineFor, withRequestDeadline } from '../request/deadline.ts';
 import { newId, partitionOf, routeOf } from '../route/route.ts';
 import { decodeCursor, encodeCursor, type CursorBinding } from '../tokens/cursor.ts';
@@ -39,7 +39,6 @@ import { hasCopyStatus } from './profile.ts';
 import { readIdentityMappings } from '../semantic/identity-adapters/read.ts';
 import { readSubjectSummaries } from '../semantic/summaries.ts';
 import type { LibraryProfileSource } from './profile-source.ts';
-
 import {
   executeLoanNative,
   loanAdvanceGenerationPlan,

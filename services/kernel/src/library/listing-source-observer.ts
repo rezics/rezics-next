@@ -5,7 +5,8 @@ import { partitionOf, routeOf } from '../route/route.ts';
 import { withReadTransaction } from '../semantic/read.ts';
 import type { ListingKey, ListingObservation } from './listing-freshness-contract.ts';
 import observation from './listing-source-observation.sql';
-import { LiveCopyPendingError, readLiveCopyDomain } from '../access/live-copy.ts';
+import { readLiveCopyDomain } from './access-port.ts';
+import { LiveCopyPendingError } from '../access/contract/errors.ts';
 
 type Client = { query(text: string, values?: unknown[]): Promise<{ rows: unknown[] }> };
 type Truth = Pick<ListingObservation, 'multiplicity' | 'currentlyPublic' | 'everPublic'>;

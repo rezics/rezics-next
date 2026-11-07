@@ -8,7 +8,7 @@ import type { Access, Actor } from '../request/access.ts';
 import { routeOf } from '../route/route.ts';
 import { readCanonicalSourceGroup, readCanonicalSourceState, type CanonicalWork } from './canonical-source-store.ts';
 import { createCollectionSource, createOrdinaryCollectionPageSource } from './collection-source.ts';
-import { type WorkAllowance, type WorkDimensions, type WorkReceipt } from './contract/work-dimensions.ts';
+import type { WorkAllowance, WorkDimensions, WorkReceipt } from './contract/work-dimensions.ts';
 import { libraryActorOf, type SearchPreparationCapability } from './contract/index.ts';
 import { readNativeCollectionScopeIdentity } from './collection-source-native.ts';
 import {

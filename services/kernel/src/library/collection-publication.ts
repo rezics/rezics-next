@@ -2,12 +2,9 @@
 import { createHash, randomUUID } from 'node:crypto';
 import canonicalize from 'canonicalize';
 import type { Pool, PoolClient } from 'pg';
-import { deadlineClient } from '../access/authenticate.ts';
-import { commandAccessContext } from '../access/command-admission.ts';
-import { shareAccount } from '../access/account-share.ts';
-import { GrantDeniedError } from '../access/resource-access-errors.ts';
-import { LifecycleDeniedError } from '../access/lifecycle-20261025094010-command.ts';
-import { resourceAuthorization } from '../access/resource-authorization.ts';
+import { deadlineClient, commandAccessContext, resourceAuthorization } from './access-port.ts';
+import { shareAccount } from './access-port.ts';
+import { GrantDeniedError, LifecycleDeniedError } from '../access/contract/errors.ts';
 import type { KernelClock } from '../clock.ts';
 import {
   authoritativeTimeValue,
@@ -34,7 +31,7 @@ import {
 import { readCollection } from './collection-store.ts';
 import { captureCollectionMetadataHistory } from './collection-metadata-history.ts';
 import { createCollectionSource } from './collection-source.ts';
-import { type WorkDimensions } from './contract/work-dimensions.ts';
+import type { WorkDimensions } from './contract/work-dimensions.ts';
 import {
   appendCollectionSourceOutput,
   beginCollectionSourceOutput,

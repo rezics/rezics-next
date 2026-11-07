@@ -1,7 +1,7 @@
 import { createHash } from 'node:crypto';
 import type { FeedSelection } from './feed-contract.ts';
 import type { Actor } from '../request/access.ts';
-import { ProblemError } from '../http/problem.ts';
+import { ProblemError } from '../http/problem-error.ts';
 import { decodeListCursor, encodeListCursor, type ListCursorBinding } from '../tokens/list-cursor.ts';
 import type { KeyRing } from '../tokens/seal.ts';
 

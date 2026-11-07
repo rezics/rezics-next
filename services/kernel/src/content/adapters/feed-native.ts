@@ -1,7 +1,7 @@
 import type { Actor } from '../../request/access.ts';
 import { admitGroup, PlatformClosedError } from '../../access/gates/admission.ts';
-import { AuthenticationError } from '../../request/access.ts';
-import { ProblemError } from '../../http/problem.ts';
+import { AuthenticationError } from '../../access/contract/authentication.ts';
+import { ProblemError } from '../../http/problem-error.ts';
 import { classifyUnavailability } from '../../access/unavailable.ts';
 import { createFollowActivitySource } from '../../library/follow-activity.ts';
 import { createCollectionReads } from '../../library/collection-reads.ts';

@@ -97,7 +97,7 @@ export type {
   SearchScopeOrder,
   SearchScopeWorkOptions,
 } from './library-scope-port.ts';
-export { createSearchLibraryScopePort, createNativeLibraryScopeWork } from './adapters/index.ts';
+export { createNativeLibraryScopeWork } from './adapters/index.ts';
 
 /** Complete native application: one installed instance owns matching, owner hydration, concept admission and final disclosure. */
 export function createNativeSearchDisclosure(search: OpenSearch) {

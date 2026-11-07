@@ -1,11 +1,8 @@
 import { createHash, randomUUID } from 'node:crypto';
 import type { Pool, PoolClient } from 'pg';
-import { readAccount } from '../access/account-data.ts';
-import { shareAccount } from '../access/account-share.ts';
-import { deadlineClient } from '../access/authenticate.ts';
-import { admitGroup } from '../access/gates/admission.ts';
-import { GrantDeniedError } from '../access/resource-access-errors.ts';
-import { LifecycleDeniedError } from '../access/lifecycle-20261025094010-command.ts';
+import { readAccount, deadlineClient, admitGroup } from './access-port.ts';
+import { shareAccount } from './access-port.ts';
+import { GrantDeniedError, LifecycleDeniedError } from '../access/contract/errors.ts';
 import { systemClock, type KernelClock } from '../clock.ts';
 import {
   authoritativeTimeValue,

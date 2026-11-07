@@ -4,7 +4,7 @@ import type { OperationCatalogue } from '@rezics/operations';
 import { createEpisodeProgressCommands, MAX_EPISODE_IDS } from './episode-progress.ts';
 import { bundledRelease } from '@rezics/definitions/bundled';
 import type { Pool } from 'pg';
-import { GrantDeniedError } from '../access/resource-access-errors.ts';
+import { GrantDeniedError } from '../access/contract/errors.ts';
 import type { KernelClock } from '../clock.ts';
 import { customMethod } from '../http/custom-method.ts';
 import { bindOperation } from '../http/operation-adapter.ts';
@@ -14,7 +14,7 @@ import { defineRateLimit } from '../http/rate-limit.ts';
 import { IDEMPOTENCY_HEADER } from '@rezics/operations/protocol';
 import { idempotencyKeyOf } from '../http/idempotency-key.ts';
 import { AuthenticationError } from '../request/authentication-error.ts';
-import { type Access, type Actor } from '../request/access.ts';
+import type { Access, Actor } from '../request/access.ts';
 import type { definitionRoutes } from '../semantic/http/definitions.ts';
 import type { KeyRing } from '../tokens/seal.ts';
 import type { ProgressIntent, ProgressPresentation, ProgressScalarMeasure, ProgressSession } from './progress-model.ts';
@@ -73,7 +73,6 @@ const reportedYearResponse = t.Unsafe<ReportedYearSummary>(
 );
 
 const MAX_JOURNAL_PATCH_BODY_BYTES = 16_384;
-
 import { basicQuery, embedded, fullView, logFields, sessionFields, viewQuery } from './views.ts';
 
 type Dependencies = {

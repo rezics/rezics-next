@@ -5,7 +5,7 @@ import {
   libraryLabels,
   LIBRARY_LOCALES,
 } from '../../../../packages/definitions/test/support/library-profiles.ts';
-import { GrantDeniedError } from '../../src/access/grant-commands.ts';
+import { GrantDeniedError } from '../../src/access/contract/errors.ts';
 import { IdempotencyConflictError } from '../../src/command/command.ts';
 import { LibraryNotFoundError } from '../../src/library/command-support.ts';
 import { CopyConflictError, createCopyCommands } from '../../src/library/copies.ts';

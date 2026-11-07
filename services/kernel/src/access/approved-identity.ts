@@ -5,7 +5,7 @@ import { nativeReceiptKeyCandidates } from '../command/receipt-key.ts';
 import { carryExpiry, identityExpired, type IdentityExpiry } from './identity-expiry.ts';
 import { createHash } from 'node:crypto';
 import canonicalize from 'canonicalize';
-import { AuthenticationError, type Access, type AccessContext, type AccountActor } from '../request/access.ts';
+import { AuthenticationError, type Access, type AccessContext, type AccountActor } from './check.ts';
 import { partitionOf, routeOf } from '../route/route.ts';
 import { unseal, type KeyRing } from '../tokens/seal.ts';
 import receiptRead from '../command/read-receipt.sql';

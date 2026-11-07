@@ -1,5 +1,5 @@
 import { calendarInterval, isCalendarDate } from '@rezics/filter';
-import { GLOBAL_CONTEXT } from '../access/gates/catalogue.ts';
+import { SEARCH_GLOBAL_CONTEXT as GLOBAL_CONTEXT } from './global-context.ts';
 import { normalizePublicRatingFigure } from './rating-source.ts';
 import { subjectPartition, type IndexedStatement, type IndexedSubject, type SubjectSnapshot } from './source.ts';
 import { discoveryIdentity, type AccountSnapshot } from './discovery.ts';

@@ -1,14 +1,14 @@
 /** Private bounded follow preparation shared by Search and Space entry. The writer remains follows.ts. */
 import type { Pool } from 'pg';
 import { isDeepStrictEqual } from 'node:util';
-import { deadlineClient } from '../access/authenticate.ts';
-import { readAccount } from '../access/account-data.ts';
-import { classifyUnavailability, requireAccessDeadline, CommandUnavailableError } from '../access/unavailable.ts';
+import { deadlineClient, readAccount } from './access-port.ts';
+import { classifyUnavailability, requireAccessDeadline } from '../access/unavailable.ts';
+import { CommandUnavailableError } from '../access/contract/errors.ts';
 import { mintReadTime, releaseOperationalTime } from '../command/command.ts';
 import { withConnection, discardConnection } from '../database/pool.ts';
 import { readPartition } from '../partition/partition.ts';
 import { accessCheck } from '../request/access-check.ts';
-import { type Access, type Actor } from '../request/access.ts';
+import type { Access, Actor } from '../request/access.ts';
 import { partitionOf, routeOf } from '../route/route.ts';
 import type { KernelClock } from '../clock.ts';
 

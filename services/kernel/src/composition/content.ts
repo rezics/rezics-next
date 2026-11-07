@@ -12,7 +12,7 @@ import {
   bindFeedCapabilities,
   createNativeFeedCapabilities,
 } from '../content/adapters/index.ts';
-import { createNativeAccessReadingPorts } from '../access/adapters/index.ts';
+import { createNativeAccessReadingPorts } from '../access/adapters/reading.ts';
 import { createRealmScopeEvidence } from '../community/adapters/index.ts';
 import { createSubjectScopeEvidence } from '../semantic/adapters/index.ts';
 import { withRealmDisclosureWork } from '../search/adapters/index.ts';

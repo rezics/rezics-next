@@ -1,13 +1,13 @@
 import { randomUUID } from 'node:crypto';
 import type { SessionComponent } from '../tokens/session.ts';
-import { readAccount } from '../access/account-data.ts';
-import { GrantDeniedError } from '../access/resource-access-errors.ts';
+import { readAccount } from './access-port.ts';
+import { GrantDeniedError } from '../access/contract/errors.ts';
 import { mintReadTime, type AuthoritativeTime, type CommandOutcome } from '../command/command.ts';
 import { tupleRoute } from '../content/imported-contract.ts';
 import { ProblemError } from '../http/problem-error.ts';
 import { readPartition } from '../partition/partition.ts';
 import { accessCheck } from '../request/access-check.ts';
-import { type AccountActor, type Actor } from '../request/access.ts';
+import type { AccountActor, Actor } from '../request/access.ts';
 import { deadlineFor } from '../request/deadline.ts';
 import { partitionOf } from '../route/route.ts';
 import {

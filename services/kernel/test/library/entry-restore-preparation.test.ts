@@ -1,6 +1,6 @@
 import { afterAll, beforeAll, expect, test } from 'bun:test';
-import { GrantDeniedError } from '../../src/access/grant-commands.ts';
-import { PlatformClosedError } from '../../src/access/gates/admission.ts';
+import { GrantDeniedError } from '../../src/access/contract/errors.ts';
+import { PlatformClosedError } from '../../src/access/contract/errors.ts';
 import { noEffect } from '../../src/command/command.ts';
 import { createLibraryCommandRunner, LibraryNotFoundError } from '../../src/library/command-support.ts';
 import { prepareEntryRestoration } from '../../src/library/entry-restore-preparation.ts';

@@ -11,9 +11,9 @@ import {
   hasLiveOperationalTransaction,
   type OperationalTransaction,
 } from '../command/operational.ts';
-import { accessRoot } from '../access/derived-access.ts';
-import { createResourcePublicEligibility } from '../access/public-eligibility.ts';
-import { admitGroup, PlatformClosedError } from '../access/gates/admission.ts';
+import { accessRoot } from './access-port.ts';
+import { createResourcePublicEligibility, admitGroup } from './access-port.ts';
+import { PlatformClosedError } from '../access/contract/errors.ts';
 import {
   authoritativeTimeValue,
   currentCommandResources,
@@ -24,7 +24,7 @@ import {
 import { discardConnection, withConnection } from '../database/pool.ts';
 import { ProblemError } from '../http/problem-error.ts';
 import { accessCheck } from '../request/access-check.ts';
-import { type Access, type Actor } from '../request/access.ts';
+import type { Access, Actor } from '../request/access.ts';
 import { partitionOf, routeOf } from '../route/route.ts';
 import type { CanonicalRawKey } from './canonical-source-store.ts';
 import { nativeSourceFence } from './native-source-fence.ts';

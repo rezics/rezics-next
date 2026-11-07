@@ -1,6 +1,7 @@
 import { readNativeAccessTime } from './access-port.ts';
 import { authoritativeTimeValue, releaseOperationalTime } from '../command/command.ts';
-import { accessCheck, type AccountActor } from '../request/access.ts';
+import { accessCheck } from './access-port.ts';
+import type { AccountActor } from '../request/access.ts';
 import { routeOf } from '../route/route.ts';
 import readEndpoints from './read-first-erasure-post.sql';
 import { snapshot, type ContentReadDependencies } from './reads.ts';

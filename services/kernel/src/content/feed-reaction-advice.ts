@@ -1,6 +1,7 @@
 import { classifyUnavailability } from '../access/unavailable.ts';
 import { readViewerActions } from './access-port.ts';
-import { AuthenticationError, type Actor } from '../request/access.ts';
+import { AuthenticationError } from '../access/contract/authentication.ts';
+import type { Actor } from '../request/access.ts';
 import type { FeedItem, FeedReactionAdvice, FeedReactionTarget } from './feed-contract.ts';
 import { REACTION_KINDS } from './events.ts';
 import { feedReactionTargetFor } from './feed-reactions.ts';

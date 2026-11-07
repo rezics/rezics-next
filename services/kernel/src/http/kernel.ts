@@ -41,7 +41,7 @@ import type { Elysia } from 'elysia';
 import { ProblemError } from './problem.ts';
 import { parseExposure } from '../access/gates/declaration.ts';
 import { deadlineClient, within } from '../access/authenticate.ts';
-import { accessActionCatalogue, assertInternalActionDeclarations, createAccess } from '../access/index.ts';
+import { accessActionCatalogue, assertInternalActionDeclarations, createAccess } from '../access/factory.ts';
 import { deriveAccess } from '../access/derived-access.ts';
 import { assertDeclaredResourceTypes } from '../access/resource-roles.ts';
 import { installResourceRoleCatalogue, resourceRoleCatalogue } from '../access/resource-roles.ts';

@@ -1,6 +1,6 @@
 import { declareBound, sumBounds, type Bound } from '@rezics/bounds';
 import type { Pool } from 'pg';
-import { isAccessWorkDispatch } from '../access/work.ts';
+import { isAccessWorkDispatch } from './access-port.ts';
 import {
   currentCommandWorkAssociation,
   currentLibraryOperationAccounting,

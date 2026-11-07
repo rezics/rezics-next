@@ -24,4 +24,6 @@ export function createSemanticCopyWorkEvidencePort(): CopyWorkSearchEvidencePort
 
 /** Composition-only entry for binding Search-owned application ports. */
 export { bindSearchSemanticSourcePort } from './source-publication-application.ts';
+export { bindSearchNativePorts } from './native-bindings.ts';
 export type { SearchSemanticSourcePort } from './semantic-source-port.ts';
+export type { SearchNativePorts } from './native-ports.ts';

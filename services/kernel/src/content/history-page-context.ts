@@ -1,6 +1,6 @@
 import { readAccountDiscoverySummaries, readViewerActions } from './access-port.ts';
 import { classifyUnavailability } from '../access/unavailable.ts';
-import { ProblemError } from '../http/problem.ts';
+import { ProblemError } from '../http/problem-error.ts';
 import type { Actor } from '../request/access.ts';
 import { GLOBAL_CONTEXT } from '../semantic/definitions.ts';
 import { readSubjectSummaryObservation, type SubjectSummary } from '../semantic/summaries.ts';

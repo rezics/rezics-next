@@ -12,7 +12,7 @@ import {
 } from '../../command/command.ts';
 import { readPartition } from '../../partition/partition.ts';
 import { withConnection, discardConnection } from '../../database/pool.ts';
-import { deadlineClient, within } from '../authenticate.ts';
+import { deadlineClient, within } from '../deadline.ts';
 import type { AccountActor, AccessContext, Resource } from '../../request/access.ts';
 import { partitionOf } from '../../route/route.ts';
 import { isExposureGroup } from '@rezics/access';

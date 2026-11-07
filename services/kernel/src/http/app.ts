@@ -7,7 +7,7 @@ import type { Pool } from 'pg';
 import type { TSchema } from 'typebox';
 import { Compile } from 'typebox/compile';
 import { deriveAccess } from '../access/derived-access.ts';
-import { createAccess } from '../access/index.ts';
+import { createAccess } from '../access/factory.ts';
 import { admitExposure, PlatformClosedError } from '../access/gates/admission.ts';
 import { withConnection } from '../database/pool.ts';
 import {

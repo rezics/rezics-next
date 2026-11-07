@@ -1,9 +1,7 @@
 import { createHash } from 'node:crypto';
 import type { Pool, PoolClient } from 'pg';
-import { readAccount } from '../access/account-data.ts';
-import { deadlineClient } from '../access/authenticate.ts';
-import { admitGroup } from '../access/gates/admission.ts';
-import { GrantDeniedError } from '../access/resource-access-errors.ts';
+import { readAccount, deadlineClient, admitGroup } from './access-port.ts';
+import { GrantDeniedError } from '../access/contract/errors.ts';
 import { systemClock, type KernelClock } from '../clock.ts';
 import { mintReadTime, releaseOperationalTime } from '../command/command.ts';
 import { withConnection } from '../database/pool.ts';

@@ -4,8 +4,8 @@ import { purgeCollectionPublicationEpisodes } from './collection-publication-epi
 import { admitFollowCountErasure, purgeFollowCountsPage } from './erasure-follow-counts.ts';
 import { DBOS } from '@dbos-inc/dbos-sdk';
 import { Value } from 'typebox/value';
-import { ERASURE_PARTICIPANTS } from '../access/erasure.ts';
-import { ACCESS_EVENTS } from '../access/events.ts';
+import { ERASURE_PARTICIPANTS } from '../access/contract/erasure.ts';
+import { ACCESS_EVENTS } from './access-port.ts';
 import { noEffect, runCommand } from '../command/command.ts';
 import { partitionOf } from '../route/route.ts';
 import type { WorkContext } from '../work/registry.ts';

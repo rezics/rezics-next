@@ -33,8 +33,8 @@ import { createHash } from 'node:crypto';
 import { AsyncLocalStorage } from 'node:async_hooks';
 import canonicalize from 'canonicalize';
 
-import { GrantDeniedError } from '../access/resource-access-errors.ts';
-import { resourceAuthorization } from '../access/resource-authorization.ts';
+import { GrantDeniedError } from '../access/contract/errors.ts';
+import { resourceAuthorization } from './access-port.ts';
 import {
   noEffect,
   normalizeCommandKey,
@@ -1152,7 +1152,7 @@ export async function registerShelfMaintenanceWork(
 ): Promise<ShelfMaintenanceOps> {
   const { DBOS } = await import('@dbos-inc/dbos-sdk');
   const { COMMAND_STEP_RETRIES } = await import('../work/retries.ts');
-  const { createAccess } = await import('../access/index.ts');
+  const { createAccess } = await import('../access/factory.ts');
   const shelfTypeDigest = shelfTypeDigestFromEnvironment(context.env);
   const ops = createShelfMaintenanceOps({
     ...context,

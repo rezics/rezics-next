@@ -2,7 +2,7 @@ import { suspendAccount } from '../support/native-suspension-driver.ts';
 import { afterAll, beforeAll, expect, test } from 'bun:test';
 import pg from 'pg';
 import '../support/fixture-event-types.ts';
-import { GrantDeniedError } from '../../src/access/grant-commands.ts';
+import { GrantDeniedError } from '../../src/access/contract/errors.ts';
 import type { AuthoritativeTime } from '../../src/command/command.ts';
 import { createLibraryCommandRunner } from '../../src/library/command-support.ts';
 import { newId, partitionOf } from '../../src/route/route.ts';

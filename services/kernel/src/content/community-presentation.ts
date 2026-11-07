@@ -3,7 +3,7 @@ import { deadlineClient, within } from './access-port.ts';
 import { mintReadTime, authoritativeTimeValue } from '../command/command.ts';
 import { discardConnection, withConnection } from '../database/pool.ts';
 import { readPartitions } from '../partition/partition.ts';
-import { prepareReadDecisions } from '../request/access.ts';
+import { prepareReadDecisions } from './access-port.ts';
 import type { Access } from '../request/access.ts';
 import { partitionOf, routeOf } from '../route/route.ts';
 import { realmPresentation } from '../community/presentation.ts';

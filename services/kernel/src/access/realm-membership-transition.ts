@@ -1,7 +1,7 @@
 import type { Pool } from 'pg';
 import type { AccessClient } from '../request/access.ts';
 import { deadlineFor } from '../request/deadline.ts';
-import { deadlineClient } from './authenticate.ts';
+import { deadlineClient } from './deadline.ts';
 import { routeOf } from '../route/route.ts';
 import { LifecycleDeniedError, lifecycleExecutor } from './lifecycle-20261025094010-command.ts';
 import type { MembershipReservation } from './membership-inverse.ts';

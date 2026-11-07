@@ -1,4 +1,4 @@
-import { ProblemError } from '../http/problem.ts';
+import { ProblemError } from '../http/problem-error.ts';
 import type { FeedItem, FeedReactionCounts } from './feed-contract.ts';
 import { projectFeedReactions } from './feed-reactions.ts';
 import type { AnchoredPosition, FeedReviewContext, ReadContext } from './model.ts';

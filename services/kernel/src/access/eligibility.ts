@@ -1,7 +1,7 @@
 import { accessOwnerWork, type AccessWorkAccounting, type AccessWorkProducer } from './work.ts';
 import { accessEvidence } from './evidence.ts';
 import { requireAccessDeadline } from './unavailable.ts';
-import { within } from './authenticate.ts';
+import { within } from './deadline.ts';
 import type { AccessClient, AccessContext, Actor, Resource } from '../request/access.ts';
 import { authoritativeTimeValue, type AuthoritativeTime } from '../command/command.ts';
 import type { PreparedAccessCheckInvocation } from '../request/access.ts';

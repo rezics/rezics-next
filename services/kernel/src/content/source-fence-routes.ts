@@ -5,17 +5,13 @@ import { deadlineClient, readNativeAccessTime, within } from './access-port.ts';
 import { releaseOperationalTime } from '../command/command.ts';
 import { discardConnection, withConnection } from '../database/pool.ts';
 import { customMethod } from '../http/custom-method.ts';
-import { ProblemError, problemSchema } from '../http/problem.ts';
-import { SESSION_HEADER } from '../http/request.ts';
+import { ProblemError } from '../http/problem-error.ts';
+import { problemSchema } from '../http/problem-schema.ts';
+import { SESSION_HEADER } from '@rezics/operations/protocol';
 import { readPartition } from '../partition/partition.ts';
-import {
-  accessCheck,
-  actorOf,
-  AuthenticationError,
-  type Access,
-  type AccessClient,
-  type Actor,
-} from '../request/access.ts';
+import { accessCheck, actorOf } from './access-port.ts';
+import { AuthenticationError } from '../access/contract/authentication.ts';
+import type { Access, AccessClient, Actor } from '../request/access.ts';
 import { partitionOf } from '../route/route.ts';
 import { GLOBAL_CONTEXT } from '../semantic/definitions.ts';
 import type { definitionRoutes } from '../semantic/http/definitions.ts';

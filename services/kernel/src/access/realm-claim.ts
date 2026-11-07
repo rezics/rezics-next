@@ -13,7 +13,7 @@ import {
   type RealmClaimApprovalResult,
   type RealmCommandTransaction,
 } from './contract/index.ts';
-import { GrantDeniedError } from './grant-commands.ts';
+import { GrantDeniedError } from './resource-access-errors.ts';
 import { resourceAuthorization } from './resource-authorization.ts';
 import { grantRealmClaimOwner } from './realm-claim-grant.ts';
 

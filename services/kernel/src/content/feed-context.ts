@@ -6,7 +6,7 @@ import type { AnchoredPosition, FeedParentAuthor, FeedParentContext, FeedReviewC
 import type { AccountDiscoverySummary } from '../search/index.ts';
 import { readAccountDiscoverySummaries } from './access-port.ts';
 import { readSubjectSummaries, readSubjectSummaryObservation } from '../semantic/summaries.ts';
-import { ProblemError } from '../http/problem.ts';
+import { ProblemError } from '../http/problem-error.ts';
 import { readVisibleRatingQuestion } from '../rating/question-directory.ts';
 import { partitionOf, routeOf } from '../route/route.ts';
 

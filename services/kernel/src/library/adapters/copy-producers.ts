@@ -1,5 +1,5 @@
 /** Standalone factory compatibility uses the same native producers that ordinary composition binds. */
-import { createNativeCopyAccountAdmission } from '../../access/adapters/index.ts';
+import { createNativeCopyAccountAdmission } from '../access-port.ts';
 import { nativeReleasedDefinitions } from '../../semantic/adapters/index.ts';
 import type { NativeCopyConfig, NativeCopyProducers } from './copies.ts';
 

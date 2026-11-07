@@ -14,7 +14,7 @@ import {
   validateContinuationBinding,
 } from './committed-continuations.ts';
 import type { ContinuationBinding } from './committed-continuations.ts';
-import { GrantDeniedError } from './grant-commands.ts';
+import { GrantDeniedError } from './resource-access-errors.ts';
 import { resourceAuthorization } from './resource-authorization.ts';
 import revokeStatement from './session-revocation-update.sql';
 

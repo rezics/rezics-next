@@ -1,11 +1,10 @@
 import { isDeepStrictEqual } from 'node:util';
 import type { DurableInitiatorRecord } from '../access/durable-initiator.ts';
-import { DurableInitiatorUnavailableError } from '../access/durable-initiator.ts';
-import { deadlineClient } from '../access/authenticate.ts';
-import { shareAccount } from '../access/account-share.ts';
-import { GrantDeniedError } from '../access/resource-access-errors.ts';
-import { LifecycleDeniedError } from '../access/lifecycle-20261025094010-command.ts';
-import { resourceAuthorization, type AuthorizationAnchor } from '../access/resource-authorization.ts';
+import { DurableInitiatorUnavailableError } from '../access/contract/errors.ts';
+import { deadlineClient, resourceAuthorization } from './access-port.ts';
+import { shareAccount } from './access-port.ts';
+import { GrantDeniedError, LifecycleDeniedError } from '../access/contract/errors.ts';
+import type { AuthorizationAnchor } from '../access/resource-authorization.ts';
 import {
   authoritativeTimeValue,
   CommandUnavailableError,
