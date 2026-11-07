@@ -27,9 +27,15 @@ export type RatingIdentityProducer = Readonly<{
   ): Promise<boolean>;
 }>;
 
+export const UNAVAILABLE_IDENTITY_REPAIR_REASON = 'semantic-exact-currentness-and-held-repair-obligation-unavailable';
+export const IDENTITY_REPAIR_HANDOFF_PENDING_REASON = 'semantic-repair-obligation-handoff-pending';
+export const IDENTITY_REPAIR_LATER_VOTE_REASON = 'identity-repair-later-vote';
+export const IDENTITY_REPAIR_LATER_CHANGE_REASON = 'identity-repair-later-change';
+export const IDENTITY_REPAIR_CROSS_HOME_REASON = 'semantic-cross-home-repair-preparing';
+
 export const unavailableRatingIdentityProducer: RatingIdentityProducer = {
   async hold() {
-    return { status: 'pending', reason: 'semantic-exact-currentness-and-held-repair-obligation-unavailable' };
+    return { status: 'pending', reason: UNAVAILABLE_IDENTITY_REPAIR_REASON };
   },
   async complete() {
     return false;

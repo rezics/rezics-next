@@ -1,12 +1,17 @@
 import { expect } from 'bun:test';
 import { randomUUID } from 'node:crypto';
-import { currentCommand, type CommandTransaction } from '../../src/command/command.ts';
+import { currentCommand, type CommandEvent, type CommandTransaction } from '../../src/command/command.ts';
+import { IDENTITY_REPAIR_MEMBERSHIP_CAP } from '../../src/rating/identity-repair-bounds.ts';
 import { createRatingIdentityRepairCommands } from '../../src/rating/identity-repair.ts';
 import type { IdentityRepairPage, IdentityWorkRef } from '../../src/rating/identity-work-frame.ts';
-import type { RatingIdentityProducer } from '../../src/rating/segment-identity-guard.ts';
+import {
+  IDENTITY_REPAIR_CROSS_HOME_REASON,
+  type RatingIdentityProducer,
+} from '../../src/rating/segment-identity-guard.ts';
 import { STANDARD_QUESTION_ID } from '../../src/rating/votes.ts';
 import type { AccountActor } from '../../src/request/access.ts';
-import { newId } from '../../src/route/route.ts';
+import { newId, partitionOf } from '../../src/route/route.ts';
+import { IDENTITY_RATING_REPAIR_CONTINUATION } from '../../src/semantic/events.ts';
 import { type GrowthDatabase } from '../support/growth.ts';
 
 export const route = 0x3a07;
@@ -41,15 +46,46 @@ export function ratingIdentityFixture(getDatabase: () => GrowthDatabase) {
       [route, actor.accountId, STANDARD_QUESTION_ID, targetId, units, at, newId(route)],
     );
   }
+  async function seedMemberships(actor: AccountActor, count = IDENTITY_REPAIR_MEMBERSHIP_CAP) {
+    const ids = Array.from({ length: count }, () => newId(route));
+    await getDatabase().admin.query(
+      `INSERT INTO rating.voter_realm (route, voter_id, realm_id, joined_at, state)
+       SELECT $1, $2, id, $3::timestamptz, 'counted' FROM unnest($4::uuid[]) id`,
+      [route, actor.accountId, at, ids],
+    );
+    return ids;
+  }
+  function continuation(page: IdentityRepairPage, obligationId: string): CommandEvent {
+    return {
+      type: IDENTITY_RATING_REPAIR_CONTINUATION,
+      data: {
+        partition: partitionOf(route),
+        voterPartition: partitionOf(route),
+        obligationId,
+        kind: 'prepare',
+        originals: page.votes.map((vote) => vote.targetId),
+      },
+    };
+  }
   function producer(destination: (original: string) => string = (id) => id) {
     let handoff = true;
     let pending = '';
+    let pendingEvents = false;
     const held = new WeakSet<CommandTransaction>();
     const port: RatingIdentityProducer = {
       async hold(tx, page) {
         expect(currentCommand(tx).transactionId).toBeTruthy();
         held.add(tx);
-        if (pending) return { status: 'pending', reason: pending };
+        if (pending) {
+          if (!pendingEvents) return { status: 'pending', reason: pending };
+          const obligationId = newId(route);
+          return {
+            status: 'pending',
+            reason: pending === '' ? IDENTITY_REPAIR_CROSS_HOME_REASON : pending,
+            obligationId,
+            events: [continuation(page, obligationId)],
+          };
+        }
         return {
           status: 'current',
           obligationId: 'fixture-retained-obligation',
@@ -76,8 +112,9 @@ export function ratingIdentityFixture(getDatabase: () => GrowthDatabase) {
       setHandoff: (value: boolean) => {
         handoff = value;
       },
-      setPending: (value: string) => {
+      setPending: (value: string, events = false) => {
         pending = value;
+        pendingEvents = events;
       },
     };
   }
@@ -116,6 +153,13 @@ export function ratingIdentityFixture(getDatabase: () => GrowthDatabase) {
       )
     ).rows.map((row) => row.data);
   }
+  async function continuations() {
+    return (
+      await getDatabase().admin.query(`SELECT data FROM core.outbox WHERE type = $1 ORDER BY position, event_seq`, [
+        IDENTITY_RATING_REPAIR_CONTINUATION,
+      ])
+    ).rows.map((row) => row.data);
+  }
 
-  return { key, voter, seed, producer, admit, select, binding, rows, effects };
+  return { key, voter, seed, seedMemberships, producer, admit, select, binding, rows, effects, continuations };
 }

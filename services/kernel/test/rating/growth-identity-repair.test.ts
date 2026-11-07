@@ -1,13 +1,25 @@
 import { expect, test } from 'bun:test';
+import {
+  IDENTITY_REPAIR_GROWTH_ANCHORS,
+  IDENTITY_REPAIR_MEMBERSHIP_CAP,
+} from '../../src/rating/identity-repair-bounds.ts';
+import { createInstalledIdentityRepairCommands } from '../../src/rating/module.ts';
 import { createRatingIdentityRepairCommands } from '../../src/rating/identity-repair.ts';
 import { unavailableRatingIdentityProducer } from '../../src/rating/segment-identity-guard.ts';
 import { RATING_IDENTITY_PAGE_SIZE, type IdentityRepairPage } from '../../src/rating/identity-work-frame.ts';
 import { STANDARD_QUESTION_ID } from '../../src/rating/votes.ts';
+import type { AccountActor } from '../../src/request/access.ts';
 import { newId } from '../../src/route/route.ts';
 import { checkGrowth, openGrowthDatabase, seed, type GrowthDatabase, type Population } from '../support/growth.ts';
 import { at, ratingIdentityFixture, route } from './identity-repair-fixture.ts';
+import {
+  IDENTITY_REPAIR_NATIVE_AT,
+  IDENTITY_REPAIR_NATIVE_ROUTE,
+  openInstalledIdentityRepairGrowth,
+  type InstalledIdentityRepairGrowth,
+} from './support/growth-identity-repair-installed.ts';
 
-const scales = [256, 1024, 4096] as const;
+const scales = IDENTITY_REPAIR_GROWTH_ANCHORS.scales;
 const id = (ordinal: number) => `00000000-0000-7000-8000-3a07${ordinal.toString(16).padStart(8, '0')}`;
 const destination = (original: string) => id(100000 + Number.parseInt(original.slice(-8), 16));
 const scenarios = ['commit', 'replay', 'rollback', 'cancel', 'withdrawal', 'empty', 'pending'] as const;
@@ -100,7 +112,7 @@ for (const axis of ['voters', 'receipts', 'input'] as const) {
       } finally {
         try {
           // Remove only this scenario's fixtures so the independent axes start at the same baseline.
-          for (const table of ['vote', 'identity_repair_receipt', 'identity_work_frame', 'voter_state'])
+          for (const table of ['vote', 'identity_repair_receipt', 'identity_work_frame', 'voter_state', 'voter_realm'])
             await db.admin.query(`DELETE FROM rating.${table} WHERE route = $1 AND voter_id = ANY($2::uuid[])`, [
               route,
               voterIds,
@@ -121,7 +133,7 @@ async function series(
 ) {
   const background = unrelated(voterIds);
   const fixture = ratingIdentityFixture(() => db);
-  const { voter, producer, admit, select, binding, key, effects } = fixture;
+  const { voter, producer, admit, select, binding, key, effects, seedMemberships } = fixture;
   async function snapshot(voterId: string) {
     return (
       await db.admin.query(
@@ -174,6 +186,7 @@ async function series(
       to: axis === 'receipts' ? scale : 256,
     });
     const ref = await admit(commands, actor);
+    if (scenario !== 'pending') await seedMemberships(actor, IDENTITY_REPAIR_MEMBERSHIP_CAP);
     if (scenario === 'empty') {
       const first = await select(commands, actor, ref);
       expect((await commands.commit(actor, binding(first), key())).value.status).toBe('committed');
@@ -328,5 +341,214 @@ async function series(
       expect(await receiptCount(s.actor.accountId)).toBe(s.receipts + 1);
       expect(await effects(s.actor)).toHaveLength(s.effects.length + 128);
     }
+  }
+}
+
+function installedUnrelated(): Population {
+  return {
+    name: 'rating installed unrelated voters',
+    hotPartition: IDENTITY_REPAIR_NATIVE_ROUTE >>> 4,
+    hotShare: 1,
+    rows: () => {
+      const voterId = newId(IDENTITY_REPAIR_NATIVE_ROUTE);
+      return {
+        'rating.vote': [
+          {
+            route: IDENTITY_REPAIR_NATIVE_ROUTE,
+            voter_id: voterId,
+            question_id: STANDARD_QUESTION_ID,
+            target_id: newId(IDENTITY_REPAIR_NATIVE_ROUTE),
+            units: 7,
+            revision: 1,
+            changed_at: IDENTITY_REPAIR_NATIVE_AT,
+            transaction_id: newId(IDENTITY_REPAIR_NATIVE_ROUTE),
+          },
+        ],
+      };
+    },
+  };
+}
+
+function installedReceipts(voterId: string): Population {
+  return {
+    name: `rating installed retained receipts ${voterId}`,
+    hotPartition: IDENTITY_REPAIR_NATIVE_ROUTE >>> 4,
+    hotShare: 1,
+    rows: ({ ordinal }) => ({
+      'rating.identity_repair_receipt': [
+        {
+          route: IDENTITY_REPAIR_NATIVE_ROUTE,
+          voter_id: voterId,
+          page_id: newId(IDENTITY_REPAIR_NATIVE_ROUTE),
+          work_id: newId(IDENTITY_REPAIR_NATIVE_ROUTE),
+          generation: 1,
+          digest: 'a'.repeat(64),
+          transaction_id: newId(IDENTITY_REPAIR_NATIVE_ROUTE),
+          checkpoint: null,
+          terminal: true,
+          mode: 'withdrawal',
+          obligation_id: null,
+          mapping_digest: null,
+        },
+      ],
+    }),
+  };
+}
+
+// Installed Semantic hold/complete: 64 mapped originals, 100 memberships, later votes past the
+// captured upper key. Injected seam series above cannot reprice this native producer work.
+for (const axis of IDENTITY_REPAIR_GROWTH_ANCHORS.axes) {
+  test(`Rating installed repair: commit stays bounded as ${axis} grow`, async () => {
+    const installed = await openInstalledIdentityRepairGrowth({ identities: IDENTITY_REPAIR_GROWTH_ANCHORS.pageSize });
+    try {
+      await installedSeries(installed, axis, 'commit');
+    } finally {
+      await installed.close();
+    }
+  });
+}
+
+test('Rating installed repair: empty completion stays bounded as later input grows beyond the captured upper key', async () => {
+  const installed = await openInstalledIdentityRepairGrowth({ identities: IDENTITY_REPAIR_GROWTH_ANCHORS.pageSize });
+  try {
+    await installedSeries(installed, 'input', 'empty');
+  } finally {
+    await installed.close();
+  }
+});
+
+async function installedSeries(
+  installed: InstalledIdentityRepairGrowth,
+  axis: 'voters' | 'receipts' | 'input',
+  scenario: 'commit' | 'empty',
+) {
+  const { db, host, later } = installed;
+  const background = installedUnrelated();
+  const commands = createInstalledIdentityRepairCommands({ pool: db.pool });
+  async function mint(): Promise<AccountActor> {
+    const accountId = newId(host.route);
+    await db.admin.query(
+      "INSERT INTO access.account(route,account_id,kind,state,transaction_id) VALUES ($1,$2,'actor','active',$2)",
+      [host.route, accountId],
+    );
+    return {
+      kind: 'account',
+      accountId,
+      scopes: ['rating:vote'],
+      clientId: 'identity-repair-installed-growth',
+      requestedBy: null,
+      authnEpoch: 1,
+    };
+  }
+  async function prepare(scale: number) {
+    const actor = await mint();
+    for (const original of host.originals) await host.seedVote(actor, original);
+    await host.seedMemberships(actor, IDENTITY_REPAIR_MEMBERSHIP_CAP);
+    await seed({ pool: db.pool, admin: db.admin }, installedReceipts(actor.accountId), {
+      from: 0,
+      to: axis === 'receipts' ? scale : 256,
+    });
+    const extras = axis === 'input' && scenario === 'commit' ? Math.max(0, scale - host.originals.length) : 0;
+    for (const target of later(extras)) await host.seedVote(actor, target);
+    const admitted = (await commands.admit(actor, { workId: newId(host.route), expectedGeneration: null }, host.key()))
+      .value;
+    if (admitted.status !== 'admitted') throw new Error(admitted.reason);
+    const ref = { workId: admitted.frame.workId, generation: admitted.frame.generation };
+    async function select() {
+      const selected = (await commands.select(actor, ref, host.key())).value;
+      if (selected.status !== 'selected') throw new Error(selected.reason);
+      return selected.page;
+    }
+    if (scenario === 'empty') {
+      const first = await select();
+      expect(first.votes).toHaveLength(IDENTITY_REPAIR_GROWTH_ANCHORS.pageSize);
+      expect((await commands.commit(actor, host.binding(first), host.key())).value.status).toBe('committed');
+      for (const target of later(scale)) await host.seedVote(actor, target);
+    }
+    const page = await select();
+    return {
+      actor,
+      ref,
+      page,
+      receipts: (await host.read.receipts(actor.accountId)).length,
+      effects: (await host.read.voteEffects(actor.accountId)).length,
+    };
+  }
+  type State = Awaited<ReturnType<typeof prepare>>;
+  const states: State[] = [];
+  let state: State;
+  async function operation() {
+    const result = (await commands.commit(state.actor, host.binding(state.page), host.key())).value;
+    expect(result.status).toBe('committed');
+    if (result.status === 'committed') {
+      expect(result.receipt.terminal).toBe(scenario === 'empty');
+      expect(result.receipt.obligationId).toBeTruthy();
+      expect(result.receipt.mappingDigest).toMatch(/^[0-9a-f]{64}$/);
+    }
+    states.push(state);
+  }
+  const report = await checkGrowth(db, {
+    name: `rating installed repair ${scenario} / ${axis}`,
+    scales,
+    bounds: { rows: 'constant', blocks: 'logarithmic', statements: 'constant' },
+    repetitions: 1,
+    warmups: 1,
+    grow: async (_, scale, previous) => {
+      const to = axis === 'voters' ? scale : 256;
+      await seed({ pool: db.pool, admin: db.admin }, background, {
+        from: axis === 'voters' ? previous : previous === 0 ? 0 : to,
+        to,
+      });
+    },
+    warmup: async (_, scale) => {
+      state = await prepare(scale);
+      await operation();
+    },
+    prepare: async (_, scale) => {
+      state = await prepare(scale);
+    },
+    operation,
+  });
+  expect(report.samples.map((sample) => sample.scale)).toEqual([...scales]);
+  for (const { cost } of report.samples) {
+    expect(cost.rows).toBeGreaterThan(0);
+    expect(cost.blocks).toBeGreaterThan(0);
+    expect(cost.statements).toBeGreaterThan(0);
+  }
+  for (const s of states) {
+    const votes = await host.read.countedVotes(s.actor.accountId);
+    const selected = new Set(s.page.votes.map((vote) => vote.targetId));
+    if (scenario === 'commit') {
+      expect(s.page.votes).toHaveLength(IDENTITY_REPAIR_GROWTH_ANCHORS.pageSize);
+      for (const original of host.originals) {
+        expect(votes.find((vote) => vote.targetId === original)).toMatchObject({
+          countedTargetId: host.terminal(original),
+          units: 7,
+          revision: 1,
+        });
+      }
+      const extras = votes.filter((vote) => !selected.has(vote.targetId));
+      expect(extras.every((vote) => vote.countedTargetId === null)).toBe(true);
+    } else {
+      expect(s.page.votes).toHaveLength(0);
+      expect(s.page.terminal).toBe(true);
+      const mapped = new Set(host.originals);
+      expect(votes.filter((vote) => !mapped.has(vote.targetId)).every((vote) => vote.countedTargetId === null)).toBe(
+        true,
+      );
+      expect((await host.read.obligations(s.actor.accountId)).some((row) => row.laterVote)).toBe(true);
+    }
+    expect((await host.read.receipts(s.actor.accountId)).length).toBe(s.receipts + 1);
+    expect((await host.read.voteEffects(s.actor.accountId)).length).toBeGreaterThanOrEqual(s.effects);
+    const obligation = await host.read.boundObligation(s.actor.accountId, s.page.pageId);
+    expect(obligation).toMatchObject({
+      state: 'bound',
+      pageId: s.page.pageId,
+    });
+    expect(await host.read.checkpoint(s.actor.accountId)).toMatchObject({
+      state: scenario === 'empty' ? 'complete' : 'active',
+      selectedPageId: null,
+      generation: s.ref.generation,
+    });
   }
 }

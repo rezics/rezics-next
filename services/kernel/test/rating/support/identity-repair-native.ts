@@ -1,6 +1,8 @@
 import { randomUUID } from 'node:crypto';
+import type { Pool } from 'pg';
 import { expect } from 'bun:test';
 import { installIdentityRatingRepairProducer } from '../../../src/composition/identity-rating-repair.ts';
+import { IDENTITY_REPAIR_MEMBERSHIP_CAP } from '../../../src/rating/identity-repair-bounds.ts';
 import { createNativeRatingCapabilities, createRatingModule } from '../../../src/rating/module.ts';
 import { STANDARD_QUESTION_ID } from '../../../src/rating/votes.ts';
 import type { IdentityRepairPage, IdentityWorkRef } from '../../../src/rating/identity-work-frame.ts';
@@ -19,6 +21,7 @@ import { createRealAccess, type RealAccessFixture } from '../../semantic/real-ac
 import { configureTestReceiptKeys } from '../../support/receipt-keys.ts';
 
 export const IDENTITY_REPAIR_NATIVE_ROUTE = 0x7230;
+export const IDENTITY_REPAIR_FOREIGN_ROUTE = 0x1110;
 export const IDENTITY_REPAIR_NATIVE_AT = '2026-11-07T08:00:00.000000Z';
 
 const tokens = {
@@ -28,9 +31,10 @@ const tokens = {
 const routeKey = new Uint8Array(32).fill(31);
 const actions = ['rating:vote', 'subject:read'] as const;
 
+export type IdentityRepairNativePools = Readonly<{ pool: Pool; admin: Pool }>;
 export type IdentityRepairNativeHost = Awaited<ReturnType<typeof openIdentityRepairNative>>;
 
-export async function settleMapped(db: Deployment, ids: readonly string[], rounds = 128) {
+export async function settleMapped(db: IdentityRepairNativePools, ids: readonly string[], rounds = 128) {
   const homes = [...new Set(ids.map(home))];
   let mappings = await readIdentityMappings(db.pool, [...ids]);
   for (let round = 0; round < rounds && mappings.some((mapping) => mapping.state !== 'mapped'); round++) {
@@ -48,31 +52,61 @@ export async function settleMapped(db: Deployment, ids: readonly string[], round
   });
 }
 
+export function laterIdentity(after: string, route = IDENTITY_REPAIR_NATIVE_ROUTE): string {
+  for (let attempt = 0; attempt < 64; attempt++) {
+    const id = newId(route);
+    if (id > after) return id;
+  }
+  throw new Error('could not allocate a later identity key');
+}
+
+export function laterIdentities(after: string, count: number, route = IDENTITY_REPAIR_NATIVE_ROUTE): string[] {
+  const ids: string[] = [];
+  let cursor = after;
+  for (let index = 0; index < count; index++) {
+    const id = laterIdentity(cursor, route);
+    ids.push(id);
+    cursor = id;
+  }
+  return ids;
+}
+
 export async function openIdentityRepairNative(
-  options: { identities?: number; redirectIndexes?: readonly number[] } = {},
+  options: {
+    identities?: number;
+    redirectIndexes?: readonly number[];
+    foreignIndexes?: readonly number[];
+    memberships?: number;
+    database?: IdentityRepairNativePools & { close?: () => Promise<void> };
+  } = {},
 ) {
   installIdentityRatingRepairProducer();
-  const db = await isolatedDeployment();
+  const owned = options.database ? null : await isolatedDeployment();
+  const db = options.database ?? owned!;
   configureTestReceiptKeys(db.pool);
   const route = IDENTITY_REPAIR_NATIVE_ROUTE;
   const count = Math.max(1, options.identities ?? 4);
   const originals: string[] = [];
-  for (let index = 0; index < count; index++) originals.push(await seedLegacyRoot(db, route));
-  const root = originals[0]!;
+  const foreign = new Set(options.foreignIndexes ?? []);
+  for (let index = 0; index < count; index++) {
+    originals.push(await seedLegacyRoot(db, foreign.has(index) ? IDENTITY_REPAIR_FOREIGN_ROUTE : route));
+  }
+  const root = originals.find((id, index) => !foreign.has(index)) ?? originals[0]!;
   for (const index of options.redirectIndexes ?? []) {
     const original = originals[index];
     if (!original || original === root) continue;
     await historicalEdge(db, original, root);
   }
-  await db.install();
-  const settled = await settle(db, originals, root);
+  if (owned) await owned.install();
+  const local = originals.filter((id, index) => !foreign.has(index));
+  const settled = await settle(db as Deployment, local, root);
   expect(settled.observed).toMatchObject({ state: 'mapped', original: root });
   const mappings = await settleMapped(db, originals);
   const byOriginal = new Map(mappings.map((mapping) => [mapping.original, mapping] as const));
   const accounts = {
     voter: newId(route),
     stranger: newId(route),
-    outsider: newId(0x1110),
+    outsider: newId(IDENTITY_REPAIR_FOREIGN_ROUTE),
   };
   const access = await createRealAccess(db.admin, accounts, [...actions]);
   const applicationAccess = access.access({
@@ -106,6 +140,15 @@ export async function openIdentityRepairNative(
       [route, voter.accountId, STANDARD_QUESTION_ID, targetId, units, at, newId(route)],
     );
   }
+  async function seedMemberships(voter: AccountActor, count = IDENTITY_REPAIR_MEMBERSHIP_CAP) {
+    const ids = Array.from({ length: count }, () => newId(route));
+    await db.admin.query(
+      `INSERT INTO rating.voter_realm (route, voter_id, realm_id, joined_at, state)
+       SELECT $1, $2, id, $3::timestamptz, 'counted' FROM unnest($4::uuid[]) id`,
+      [route, voter.accountId, IDENTITY_REPAIR_NATIVE_AT, ids],
+    );
+    return ids;
+  }
   const commands = application.identityRepair;
   const read = application.identityRepairRead;
   const key = () => randomUUID();
@@ -125,12 +168,15 @@ export async function openIdentityRepairNative(
     pageId: page.pageId,
     digest: page.digest,
   });
+  const memberships = options.memberships;
   return {
     db,
     route,
     partition: partitionOf(route),
+    foreignPartition: partitionOf(IDENTITY_REPAIR_FOREIGN_ROUTE),
     root,
     originals,
+    foreignOriginals: originals.filter((_, index) => foreign.has(index)),
     mappings: byOriginal,
     terminal: (original: string) => {
       const mapping = byOriginal.get(original);
@@ -149,12 +195,18 @@ export async function openIdentityRepairNative(
     read,
     actor,
     seedVote,
+    seedMemberships,
     admit,
     select,
     binding,
     key,
     async close() {
-      await db.close();
+      if (owned) await owned.close();
+      else await options.database?.close?.();
+    },
+    async withMemberships(voter: AccountActor) {
+      if (memberships === 0) return [];
+      return seedMemberships(voter, memberships ?? IDENTITY_REPAIR_MEMBERSHIP_CAP);
     },
   };
 }
