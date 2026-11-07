@@ -2173,6 +2173,8 @@ def directory_entries(namespace, cookie):
 def tree_nodes(root):
     # Postorder without Python recursion or a wide in-memory list. Parent directory streams stay open while
     # descending: telldir cookies are valid only on that stream, so a reopen cannot resume. No symlink is followed.
+    # Empty names and a child equal to the current path are skipped: a misread dirent would otherwise reopen the
+    # same directory until the sweep deadline.
     stack = []
     path = root
     iterator = directory_entries(path, 0)
@@ -2188,10 +2190,15 @@ def tree_nodes(root):
                     return
                 if name is None:
                     break
-                if name in ('.', '..'):
+                if not name or name in ('.', '..') or '/' in name or chr(0) in name:
                     continue
                 child = path / name
-                info = child.lstat()
+                if child == path or any(child == parent for parent, _ in stack):
+                    continue
+                try:
+                    info = child.lstat()
+                except OSError:
+                    continue
                 if stat.S_ISDIR(info.st_mode):
                     stack.append((path, iterator))
                     path = child
@@ -4343,16 +4350,15 @@ async function within<T>(ms: number, promise: Promise<T>): Promise<T | null> {
 }
 
 async function sleep(ms: number, signal: AbortSignal): Promise<void> {
+  if (signal.aborted) throw new Aborted();
   await new Promise<void>((done) => {
     const timer = setTimeout(done, ms);
-    signal.addEventListener(
-      'abort',
-      () => {
-        clearTimeout(timer);
-        done();
-      },
-      { once: true },
-    );
+    const onAbort = () => {
+      clearTimeout(timer);
+      done();
+    };
+    signal.addEventListener('abort', onAbort, { once: true });
+    if (signal.aborted) onAbort();
   });
   if (signal.aborted) throw new Aborted();
 }

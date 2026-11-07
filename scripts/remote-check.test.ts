@@ -517,6 +517,20 @@ const refusedControlSession = Boolean(config.refuseControlSession && controlPath
 const transport = refusedControlSession ? 'standalone-fallback' : controlPath && controlPath !== 'ControlPath=none' ? 'control-master' : 'standalone';
 const log = (event: Record<string, unknown>) => appendFileSync(dir + '/log.jsonl', JSON.stringify({ address, argv: args, options, transport, observedAt: Date.now(), ...event }) + '\\n');
 const slotHeld = () => readdirSync(dir).some((name) => name.startsWith(hostKey + '.slot.'));
+const holdUntilRelease = (release: (reason: string) => void) => {
+  let done = false;
+  const once = (reason: string) => {
+    if (done) return;
+    done = true;
+    release(reason);
+  };
+  process.stdin.on('end', () => once('stdin-end'));
+  process.stdin.on('close', () => once('stdin-close'));
+  process.stdin.on('data', () => {});
+  process.on('SIGTERM', () => once('SIGTERM'));
+  process.on('SIGHUP', () => once('SIGHUP'));
+  process.stdin.resume();
+};
 if (controlOperation === 'exit') {
   log({ kind: 'control-close' });
   process.exit(0);
@@ -677,11 +691,7 @@ if (script.includes('/proc/loadavg')) {
     log({ kind: 'gate-marker-release', reason });
     process.exit(0);
   };
-  process.stdin.on('end', () => release('stdin-end'));
-  process.stdin.on('data', () => {});
-  process.on('SIGTERM', () => release('SIGTERM'));
-  process.on('SIGHUP', () => release('SIGHUP'));
-  process.stdin.resume();
+  holdUntilRelease(release);
   setInterval(() => {}, 1000);
 } else if (script.includes('REMOTE_CHECK_MULTI_SLOT_MARKER')) {
   const id = script.match(/# REMOTE_CHECK_MULTI_SLOT_ID ([a-zA-Z0-9-]+)/)?.[1] ?? 'unknown';
@@ -700,11 +710,7 @@ if (script.includes('/proc/loadavg')) {
     log({ kind: 'multi-marker-release', id, reason });
     process.exit(0);
   };
-  process.stdin.on('end', () => release('stdin-end'));
-  process.stdin.on('data', () => {});
-  process.on('SIGTERM', () => release('SIGTERM'));
-  process.on('SIGHUP', () => release('SIGHUP'));
-  process.stdin.resume();
+  holdUntilRelease(release);
   setInterval(() => {}, 1000);
 } else if (script.includes('REMOTE_CHECK_LANDING_MARKER')) {
   const id = script.match(/# REMOTE_CHECK_LANDING_ID ([a-zA-Z0-9-]+)/)?.[1] ?? 'unknown';
@@ -728,11 +734,7 @@ if (script.includes('/proc/loadavg')) {
     log({ kind: 'landing-marker-release', id, reason });
     process.exit(0);
   };
-  process.stdin.on('end', () => release('stdin-end'));
-  process.stdin.on('data', () => {});
-  process.on('SIGTERM', () => release('SIGTERM'));
-  process.on('SIGHUP', () => release('SIGHUP'));
-  process.stdin.resume();
+  holdUntilRelease(release);
   setInterval(() => {}, 1000);
 } else if (script.includes('REMOTE_CHECK_SLOT_TAKE')) {
   const requested = Number(script.match(/# REMOTE_CHECK_SLOT_COUNT (\\d+)/)?.[1] ?? 1);
@@ -871,11 +873,7 @@ if (script.includes('/proc/loadavg')) {
     }
     process.exit(0);
   };
-  process.stdin.on('end', () => release('stdin-end'));
-  process.stdin.on('data', () => {});
-  process.on('SIGTERM', release);
-  process.on('SIGHUP', release);
-  process.stdin.resume();
+  holdUntilRelease(() => release());
 } else if (script.includes("printf 'STOPPED")) {
   log({ kind: 'stop', slotHeld: slotHeld(), script });
   console.log('STOPPED');
@@ -4554,7 +4552,7 @@ test('a multi-slot waiter that stops waiting releases its reservation', async ()
     expect(waiting.filter((event) => event.kind === 'multi-marker')).toHaveLength(1);
     multi.child.kill('SIGTERM');
     expect(await multi.child.exited).toBe(143);
-    await waitFor(() => events().some((event) => event.kind === 'multi-marker-release'), 15_000);
+    await waitFor(() => events().some((event) => event.kind === 'multi-marker-release'));
     expect(events().filter((event) => event.kind === 'slot' && event.granted)).toHaveLength(1);
     expect(readdirSync(env.FAKE_DIR!).filter((name) => name.includes('.multi-marker.'))).toHaveLength(0);
     first.child.kill('SIGTERM');
