@@ -1,9 +1,11 @@
 import { expect, test } from 'bun:test';
+import { readFileSync, readdirSync, statSync } from 'node:fs';
 import { mkdtemp, rm } from 'node:fs/promises';
 import { createServer } from 'node:net';
 import { join } from 'node:path';
 import { acquireStackSlot } from './stack-lease.ts';
 import {
+  admitWalkStack,
   dropFileCache,
   withWalkResources,
   firstRedactedDiagnostic,
@@ -179,16 +181,21 @@ test('walk admission preserves an occupied slot and reuses it after its listener
   };
   const available = (index: number) =>
     walkStackPortsAvailable({ web: 0, issuer: 0, native: 0, kernel: 0, database: 0, search: index === 1 ? port : 0 });
+  const acquire = () =>
+    acquireStackSlot('walk recovery', env, 1, undefined, 60_000, undefined, available, join(directory, 'tickets'));
   try {
-    const second = await acquireStackSlot('walk recovery', env, 1, undefined, 60_000, undefined, available);
+    const second = await acquire();
     try {
       expect(second.index).toBe(2);
+      expect(statSync(join(directory, 'tickets')).mode & 0o777).toBe(0o777);
+      for (const name of ['queue.lock', 'sequence', 'slot-2.lock'])
+        expect(statSync(join(directory, name)).mode & 0o777).toBe(0o666);
       expect(listener.listening).toBe(true);
     } finally {
       await second.release();
     }
     await new Promise<void>((resolve, reject) => listener.close((error) => (error ? reject(error) : resolve())));
-    const first = await acquireStackSlot('walk recovery', env, 1, undefined, 60_000, undefined, available);
+    const first = await acquire();
     try {
       expect(first.index).toBe(1);
     } finally {
@@ -199,6 +206,38 @@ test('walk admission preserves an occupied slot and reuses it after its listener
     await rm(directory, { recursive: true, force: true });
   }
 });
+
+if (process.getuid && process.getuid() !== 0) {
+  test('the non-root walk caller repeatedly acquires and releases a real available host slot', async () => {
+    const directory = await mkdtemp(join(import.meta.dir, '../.temp/walk-caller-'));
+    const capacity = 6;
+    const env = { REZICS_WALK_STACK_DIR: directory, REZICS_WALK_STACKS: String(capacity) };
+    try {
+      for (let attempt = 1; attempt <= 2; attempt++) {
+        const slot = await admitWalkStack(`caller-${attempt}`, env, import.meta.dir, AbortSignal.timeout(15_000));
+        try {
+          const index = slot.index;
+          if (index === null) throw new Error('walk admission returned no slot');
+          expect(slot.capacity).toBe(capacity);
+          expect(index).toBeGreaterThanOrEqual(1);
+          expect(index).toBeLessThanOrEqual(slot.capacity);
+          expect(statSync(directory).mode & 0o7777).toBe(0o1777);
+          expect(statSync(join(directory, 'tickets')).mode & 0o777).toBe(0o777);
+          for (const name of ['queue.lock', 'sequence', `slot-${index}.lock`])
+            expect(statSync(join(directory, name)).mode & 0o777).toBe(0o666);
+        } finally {
+          await slot.release();
+        }
+        expect(readdirSync(join(directory, 'tickets'))).toEqual([]);
+        expect(BigInt(readFileSync(join(directory, 'sequence'), 'utf8'))).toBe(BigInt(attempt));
+      }
+    } finally {
+      await rm(directory, { recursive: true, force: true });
+    }
+  }, 30_000);
+} else {
+  test.skip('the non-root walk caller repeatedly acquires and releases a real available host slot', () => {});
+}
 
 test('admitted stacks launch Kernel without watch, fetch JWKS from native Auth, and defer pages', () => {
   const origins = {

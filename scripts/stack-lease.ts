@@ -14,20 +14,32 @@
  * death, including SIGKILL, closes the pipe and frees the lock without cleanup. Directory changes wake waiters,
  * with a recheck at least every two seconds for deaths that emit no event. There is no timeout. Stderr records
  * waiting (held/capacity and tickets ahead), repeats it every 60 seconds, and records every take with elapsed ms.
+ * Shared lock files are mode 0666 and sequence updates keep their inode. The walk caller stores removable tickets in
+ * a mode 0777 child directory so the sticky host namespace can reclaim another identity's dead ticket.
  * The CLI holds its slot for the command's life, forwards signals, and returns the command's exit code.
  */
 import {
   appendFileSync,
+  chmodSync,
+  closeSync,
+  constants,
+  existsSync,
+  fchmodSync,
+  fsyncSync,
+  linkSync,
   mkdirSync,
+  openSync,
   readFileSync,
   readdirSync,
-  renameSync,
+  lstatSync,
   unlinkSync,
   watch,
   writeFileSync,
+  writeSync,
 } from 'node:fs';
+import { randomUUID } from 'node:crypto';
 import { cpus, totalmem } from 'node:os';
-import { basename, join } from 'node:path';
+import { basename, dirname, join } from 'node:path';
 
 export interface StackSlot {
   readonly index: number | null;
@@ -52,6 +64,54 @@ export function stackCapacity(env: Record<string, string | undefined> = process.
 type Lock = { release(): Promise<void> };
 const BUSY = 75;
 const MAX_WAIT_RECORD_MS = 60_000;
+const SHARED_FILE_MODE = 0o666;
+const SHARED_TICKET_DIRECTORY_MODE = 0o777;
+
+/** Create shared entries fully open before publishing their names to another host identity. */
+function ensureSharedFile(file: string): void {
+  if (!existsSync(file)) {
+    const temporary = join(dirname(file), `.stack-lease-${process.pid}-${randomUUID()}`);
+    let descriptor: number | undefined;
+    try {
+      descriptor = openSync(temporary, constants.O_CREAT | constants.O_EXCL | constants.O_WRONLY, SHARED_FILE_MODE);
+      fchmodSync(descriptor, SHARED_FILE_MODE);
+      closeSync(descriptor);
+      descriptor = undefined;
+      try {
+        linkSync(temporary, file);
+      } catch (error) {
+        if ((error as NodeJS.ErrnoException).code !== 'EEXIST') throw error;
+      }
+    } finally {
+      if (descriptor !== undefined) closeSync(descriptor);
+      try {
+        unlinkSync(temporary);
+      } catch (error) {
+        if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error;
+      }
+    }
+  }
+  const metadata = lstatSync(file);
+  if (!metadata.isFile()) throw new Error(`stack-lease lock must be a regular file: ${file}`);
+  if ((metadata.mode & 0o777) !== SHARED_FILE_MODE) chmodSync(file, SHARED_FILE_MODE);
+}
+
+/** Create directories with their shared mode despite the caller's umask. */
+function ensureDirectoryMode(directory: string, mode: number): void {
+  const previousUmask = process.umask(0);
+  try {
+    try {
+      mkdirSync(directory, { mode });
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code !== 'EEXIST') throw error;
+    }
+  } finally {
+    process.umask(previousUmask);
+  }
+  const metadata = lstatSync(directory);
+  if (!metadata.isDirectory()) throw new Error(`stack-lease ticket directory must be a real directory: ${directory}`);
+  if ((metadata.mode & 0o7777) !== mode) chmodSync(directory, mode);
+}
 
 export class StackLeaseAborted extends Error {
   constructor() {
@@ -106,6 +166,7 @@ function waitRecorder(file?: string): { begin(): void; record(): void; stop(): v
 
 /** The pipe is owned only by this process: even SIGKILL releases every lock it owns. */
 async function lock(file: string, blocking = false): Promise<Lock | null> {
+  ensureSharedFile(file);
   const child = Bun.spawn(
     [
       'flock',
@@ -140,6 +201,8 @@ async function lock(file: string, blocking = false): Promise<Lock | null> {
 }
 
 export function busy(file: string): boolean {
+  if (!existsSync(dirname(file))) return false;
+  ensureSharedFile(file);
   const result = Bun.spawnSync(['flock', '-n', '-E', String(BUSY), file, 'true'], {
     stdin: 'ignore',
     stdout: 'ignore',
@@ -158,6 +221,7 @@ export async function acquireStackSlot(
   repeatMs = 60_000,
   signal?: AbortSignal,
   available?: (index: number) => Promise<boolean>,
+  ticketDirectoryOverride?: string,
 ): Promise<StackSlot> {
   const capacity = stackCapacity(env);
   if (!Number.isSafeInteger(weight) || weight < 1 || weight > capacity)
@@ -177,12 +241,17 @@ export async function acquireStackSlot(
   const directory = env.REZICS_STACK_LEASE_DIR ?? '/tmp/rezics-stack-lease';
   const wait = waitRecorder(env.GOAL_CHECK_WAIT_FILE);
   mkdirSync(directory, { recursive: true });
+  const ticketDirectory = ticketDirectoryOverride ?? directory;
+  if (ticketDirectory !== directory) ensureDirectoryMode(ticketDirectory, SHARED_TICKET_DIRECTORY_MODE);
   let wake: (() => void) | undefined;
   let generation = 0;
-  const watcher = watch(directory, () => {
-    generation++;
-    wake?.();
-  });
+  const watchedDirectories = ticketDirectory === directory ? [directory] : [directory, ticketDirectory];
+  const wakeWatchers = watchedDirectories.map((watched) =>
+    watch(watched, () => {
+      generation++;
+      wake?.();
+    }),
+  );
   const changed = (observed: number) =>
     new Promise<void>((done) => {
       let timer: ReturnType<typeof setTimeout> | undefined;
@@ -199,22 +268,25 @@ export async function acquireStackSlot(
       if (signal?.aborted) finish();
     });
   const mutexFile = join(directory, 'queue.lock');
+  ensureSharedFile(mutexFile);
   let ticket: string | undefined;
   let ticketLock: Lock | undefined;
   try {
     const mutex = (await lock(mutexFile, true))!;
     try {
       const sequenceFile = join(directory, 'sequence');
-      let sequence = 0n;
-      try {
-        sequence = BigInt(readFileSync(sequenceFile, 'utf8'));
-      } catch (error) {
-        if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error;
-      }
+      ensureSharedFile(sequenceFile);
+      const priorSequence = readFileSync(sequenceFile, 'utf8').trim();
+      let sequence = priorSequence === '' ? 0n : BigInt(priorSequence);
       sequence++;
-      writeFileSync(`${sequenceFile}.next`, String(sequence));
-      renameSync(`${sequenceFile}.next`, sequenceFile);
-      ticket = join(directory, `ticket-${sequence}`);
+      const sequenceDescriptor = openSync(sequenceFile, 'r+');
+      try {
+        writeSync(sequenceDescriptor, sequence.toString().padStart(Math.max(20, priorSequence.length), '0'), 0, 'utf8');
+        fsyncSync(sequenceDescriptor);
+      } finally {
+        closeSync(sequenceDescriptor);
+      }
+      ticket = join(ticketDirectory, `ticket-${sequence}`);
       ticketLock = (await lock(ticket, true))!;
     } finally {
       await mutex.release();
@@ -228,10 +300,10 @@ export async function acquireStackSlot(
       try {
         if (signal?.aborted) throw new StackLeaseAborted();
         // Only the queue mutex may delete dead tickets, so their lock inode cannot be replaced under an enqueuer.
-        const tickets = readdirSync(directory).filter((name) => /^ticket-\d+$/.test(name));
+        const tickets = readdirSync(ticketDirectory).filter((name) => /^ticket-\d+$/.test(name));
         const live = tickets
           .filter((name) => {
-            const file = join(directory, name);
+            const file = join(ticketDirectory, name);
             if (file === ticket || busy(file)) return true;
             unlinkSync(file);
             return false;
@@ -280,7 +352,9 @@ export async function acquireStackSlot(
               release() {
                 return (released ??= (async () => {
                   await Promise.all(acquired.map((entry) => entry.lock.release()));
-                  writeFileSync(join(directory, 'wake'), '');
+                  const wakeFile = join(directory, 'wake');
+                  ensureSharedFile(wakeFile);
+                  writeFileSync(wakeFile, '');
                 })());
               },
             };
@@ -304,7 +378,7 @@ export async function acquireStackSlot(
     }
   } finally {
     wait.stop();
-    watcher.close();
+    for (const watcher of wakeWatchers) watcher.close();
     await ticketLock?.release();
     // Dead tickets are left for the next mutex owner, just as they are after SIGKILL.
   }

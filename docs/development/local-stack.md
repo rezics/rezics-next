@@ -259,7 +259,7 @@ bun services/auth/scripts/dev-stack.ts walk -- <command...>
 `walk` runs in this order:
 
 1. Waits for a walk slot. At most `REZICS_WALK_STACKS` stacks (default 6; an integer from 1 to 1000) run on the host
-   at once, counted across worktrees under the main checkout's `.temp/walk-stacks`. A further start waits in arrival
+   at once, counted across worktrees in `/tmp/rezics-walk-stacks`. A further start waits in arrival
    order and prints its position, `walk <task> waiting (<held>/<limit> held, <n> ahead)`. It is never refused.
 2. Names the stack's containers and volumes `rezics-walk-<task>-<slot>-database` and
    `rezics-walk-<task>-<slot>-search`, and gives it its slot's loopback ports: `20000 + 10 × slot` plus 0 for Web, 1
@@ -300,6 +300,13 @@ select review; native current authority and explicit confirmation still own ever
 Decision: walk stacks are a bounded, queued replacement for the local-container refusal, granted only to workers whose
 brief lists native or browser acceptance. Local stack-lease and walk-admission tests set `KERNEL_CHECK_REMOTE` to a
 missing hosts file before spawn so they exercise the local lease rather than falling back to shared check hosts.
+Decision: the walk creator makes `/tmp/rezics-walk-stacks` mode `01777`; [privileged host provisioning](../../scripts/provision-check-host.sh)
+repairs existing directories and records. All worktrees and supported host identities keep one FIFO: `queue.lock`, the in-place
+`sequence`, and slot lock inodes stay in the sticky directory with mode `0666` files, while removable tickets live in
+its mode `0777` `tickets` child. Provisioning migrates idle legacy tickets without replacing their inodes; active
+legacy wait tickets make provisioning stop before migration. If creator-side
+repair cannot change ownership-controlled modes, its filesystem error is preserved and provisioning must succeed
+before admission can recover.
 Admission skips slots whose application or infrastructure ports are already listening, including containers left by
 another interrupted task after its lease was released. It leaves those processes and containers running and queues
 when no slot has free ports; port collisions do not authorize stopping another task's stack. A slot is usable only
