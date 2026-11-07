@@ -1,11 +1,19 @@
 import { useEffect, useRef, useState } from 'react';
 import { useEditorLifetime } from '../../catalogue/editor-lifetime';
 import type { ProducerHistoryRead, ProducerHistoryStream } from '../../catalogue/producer-history';
-import type { RelationSlot } from '../../../subject/relation-candidates';
 import type { ProducerHistoryTransport } from '../producer-history';
 
 type Admitted = Extract<ProducerHistoryRead, { ok: true }>;
 type Failure = Extract<ProducerHistoryRead, { ok: false }>;
+
+/** Local retained navigation coordinates; no editor capability crosses the history reader boundary. */
+export type HistoryRelationSlot = Readonly<{
+  property: string;
+  target?: string;
+  sameAs?: string;
+  key?: string;
+  context?: string;
+}>;
 
 /** Only native coordinates survive a window replacement; never row or editor state. */
 export type HistoryCoordinate = Readonly<{
@@ -20,7 +28,7 @@ type HistoryPath = { previous: HistoryCoordinate[]; current?: HistoryCoordinate 
 export type HistoryIntent = HistoryCoordinate &
   Readonly<{
     movement: Movement;
-    selection?: Readonly<{ index: number; holder: string; statement: string; slot?: RelationSlot }>;
+    selection?: Readonly<{ index: number; holder: string; statement: string; slot?: HistoryRelationSlot }>;
   }>;
 export type HistorySlice =
   | { phase: 'loading'; revision: number; intent: HistoryIntent; streams: ProducerHistoryStream[] }

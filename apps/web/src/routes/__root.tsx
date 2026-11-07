@@ -34,6 +34,7 @@ import { communityNavigation } from '../community/navigation';
 import { libraryNavigation } from '../library/navigation';
 import { LocaleNavigationProvider } from '../shell/locale-navigation/context';
 import { LibraryApplicationBoundary } from '../session/library-application';
+import { PageVisitBinding } from '../subject/page-visit-binding';
 import { OwnVotesReturnProvider } from '../ratings/own-votes/return';
 
 export const commerceNavigation = createNavigation([
@@ -142,9 +143,11 @@ export const Route = createRootRouteWithContext<{
 function RootRoutes() {
   return (
     <LibraryApplicationBoundary>
-      <OwnVotesReturnProvider>
-        <CurrentReadingOutlet />
-      </OwnVotesReturnProvider>
+      <PageVisitBinding>
+        <OwnVotesReturnProvider>
+          <CurrentReadingOutlet />
+        </OwnVotesReturnProvider>
+      </PageVisitBinding>
     </LibraryApplicationBoundary>
   );
 }

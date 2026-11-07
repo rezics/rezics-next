@@ -6,7 +6,7 @@ import {
   workFranchiseFragment,
   type WorkFranchiseReturn,
 } from '../catalogue/work-franchise-reading/navigation';
-import { subjectHref } from '../../subject/subject-href';
+import { subjectHref } from '../../subject/load-subject';
 import { realmCatalogueReturnHref } from '../../search/realm-catalogue-handoff';
 import { isView } from '@rezics/composition';
 import { copiesSubjectId } from '../../library/copies-query';

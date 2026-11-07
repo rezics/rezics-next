@@ -1,5 +1,18 @@
 # Subject page composition
 
+Decision: Search owns candidate-reading and page-visit identity behind `PageVisitHost`; Web installs the host at the
+route root with session-observation and address-lease adapters, while each reader retains its native disclosure,
+continuation, receipt and work-budget rules.
+
+`candidate-reading-application.ts` owns visit identity, retirement and accepted-result binding to candidate, locale and
+address. `visit-host-port.ts` defines its session, browser-observation, exposure-observation and address-lease
+capabilities. `subject/page-visit-binding.tsx` installs the Web adapters at `routes/__root.tsx`; legacy Web readers
+still enter through the subject compatibility wrapper until their own Goal moves them. Graph, producer history,
+quotation and source-concept readers use the Search application directly, and keep their existing native outcome,
+disclosure, continuation, return-receipt and work-budget behavior. Their return grammar stays page-owned; canonical
+Subject base addresses use the already public `subject/load-subject` entry, and language labels use the local
+`locale-presentation.ts` helper.
+
 ## Session preparation and retained readings
 
 Decision: session preparation preserves an admitted public body; private controls bind to the first matching
