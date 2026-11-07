@@ -180,3 +180,5 @@ export { OWNER_FILTER_CLOSURE_REFERENCE_LIMIT, OWNER_FILTER_CLOSURE_ORIGINAL_LIM
 export * from './copy-values.ts';
 export * from './copy-application.ts';
 export * from './copy-operations.ts';
+export * from './presentation.ts';
+export type { BuiltinMemberCapability, BuiltinMemberOptions } from './builtin-presentation.ts';

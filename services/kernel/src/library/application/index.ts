@@ -41,3 +41,7 @@ export {
 export { createCollectionMutationApplication } from './collection-mutation.ts';
 
 export { createCopyApplication } from './copies.ts';
+export { createSubjectAnchorApplication, createSubjectPresentationApplication } from './subject-anchor.ts';
+export { createBuiltinOwnerAdmission } from './builtin-admission.ts';
+export { createLibraryPresentationApplication } from './presentation.ts';
+export { createBuiltinMembersApplication } from './builtin-members.ts';

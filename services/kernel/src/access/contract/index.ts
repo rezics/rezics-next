@@ -89,3 +89,10 @@ export type {
 } from './account-statements.ts';
 
 export type { CopyAccountAdmission, CopyAccountWork, CopyAccountStatementWork } from './copy-account.ts';
+
+export { ContributionAttributionSchema } from './contribution-attribution.ts';
+export type {
+  ContributionAttribution,
+  LiveContributionAttribution,
+  DeletedContributionAttribution,
+} from './contribution-attribution.ts';

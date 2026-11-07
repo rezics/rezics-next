@@ -80,3 +80,7 @@ export type {
   SemanticProgressIdentityStatement,
 } from './progress-identity.ts';
 export type { ReleasedDefinitions } from './released-definitions.ts';
+
+export { CoverSummarySchema, SubjectSummarySchema, RelatedSubjectSummarySchema } from './summaries.ts';
+export type { CoverSummary, SubjectSummary, RelatedSubjectSummary } from './summaries.ts';
+export type { SummarySources, SummaryCoverState, SubjectSummaryObservation } from './summaries.ts';

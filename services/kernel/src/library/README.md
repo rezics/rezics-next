@@ -122,7 +122,8 @@ publication admission, Collection history plans, retention disposition and Progr
 capture, owner-query, member preparation, publication admission, Collection mutations, identity-native,
 Entry/progress and funded Progress-operation planning/admission; they load without Access, Search, Semantic or Content and run with fake capabilities. Native SQL catalogs and foreign Access/Search/Semantic/Content adapters live
 in `library/adapters/**` and are bound only from `composition/library.ts`. `createKernelRuntimeDefaults`, the HTTP
-server and the worker call `composeLibraryDomain`. Compatibility entries (`identity-native-bounds.ts`,
+server and the worker call `composeLibraryDomain`. The native preload also installs the same presentation slice through
+`composeLibraryPresentation` in the Library binding without a placeholder Source. Compatibility entries (`identity-native-bounds.ts`,
 `account-grant.ts`, `ordinary-read-bounds.ts`, `builtin-runtime-query.ts`, `members-preparation.ts`,
 `collection-publication-work-admission.ts`, `collection-publication-staging.ts`, `collection-presentation.ts`, `collection-source.ts`,
 `command-support.ts`, `entries.ts`, `sessions.ts`, `session-operation-bounds.ts`) reach the composed implementation.
@@ -171,6 +172,41 @@ before the owner transaction and does not admit a session id as a Collection.
 Architecture counters for this composition are recorded with the architecture check in
 [docs/architecture/README.md](../../../../docs/architecture/README.md); the Library rule 2/3, edge and cycle figures there
 are measured against integrated base `a0c2a25650`.
+
+Decision: bounded FULL presentation, subject anchoring and logical built-in member orchestration use Library-owned
+capabilities and applications. Semantic's real adapter supplies current Identity mappings, separately prepared original
+and terminal reference authorization, and the existing summary observation. Access supplies current account eligibility,
+public account projection and immutable contribution attribution. Community supplies current Space/Realm disclosure.
+`views.ts` and `transport-contract.ts` consume disclosed schemas from producer contracts; HTTP owns no application
+policy. Missing/pending identity stays absent, unavailable identity keeps its reason, and only an explicit Access
+tombstone produces an id-free deletion label. Attribution remains keyed by the immutable original account.
+
+FULL keeps ordered related-key deduplication, at most 100 subject IDs, four settled workers and one summary batch.
+Original and terminal references retain native checks. Final summary disclosure checks both mapping terminal and exact
+epoch after related reads; a same-terminal epoch change is unavailable. Follow and published-log views withhold a
+changed summary while retaining their private edge or public snapshot; ordinary FULL refuses. BASIC preserves object
+identity and performs no reads. Current account, contribution and Space/Realm observations are checked again before
+embedding; equality cannot grant authority. Follow-space projections retain Community's existing native callback.
+
+Built-in descriptors and membership remain maintained native truth. The native adapter retains the original private
+account/scopes/authentication fence, state reference and index readiness checks, one canonical Source page and opaque
+sparse continuation. Only a native empty proof admits an empty first page; no directory miss or unavailable mapping
+is an empty result. Original-input capture releases the owner home before the producer's batched mapping read.
+No mapping, index, writer, scan, browser inference or availability fallback is introduced. Collection policy/mutations,
+Progress and Performance shelf/index writers retain ownership.
+
+Presentation cost includes initial/final owner observations: two public-account points per distinct account, two
+attribution batches over the same ordered IDs (chunks of at most 100), and two native target reads/checks per distinct
+Collection or ordinary Space target. The single Semantic summary observation and its final fences, two bounded
+original/terminal resolution rounds, existing Source page, lookahead and private facts are additional. Four workers
+bound concurrent native reads, not their summed cost. Performance receives these runtime paths; its declaration walk
+is not an alternate implementation or new native proof.
+
+Acceptance choice: preserve native built-in, FULL/private attribution, redirected identity and current-authority
+assertions; use the focused capability suite for ordered batches, concurrency, exact epoch changes, final authority,
+unavailable/absent distinctions and opaque continuation. The withholding suite uses consumer capabilities instead of
+global implementation mocks. Worker acceptance is workspace typing; the Financial and Web walks retain native,
+browser, currentness and growth acceptance.
 
 ## Scope and implementation boundary
 

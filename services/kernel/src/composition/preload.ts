@@ -1,3 +1,4 @@
+import { composeLibraryPresentation } from './library.ts';
 import { installNativeHistory } from './history.ts';
 import { composeContentReading } from './content.ts';
 import { composeAccessApplication } from './access.ts';
@@ -16,4 +17,5 @@ export function installNativeHistoryPreload(): void {
   composeZones();
   composeSemanticAdapters();
   composePresentationApplication();
+  composeLibraryPresentation();
 }

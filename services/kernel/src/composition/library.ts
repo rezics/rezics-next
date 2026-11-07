@@ -1,5 +1,17 @@
 import { createNativeCopyAccountAdmission } from '../access/adapters/index.ts';
 import { nativeReleasedDefinitions, nativeCopyListContext } from '../semantic/adapters/index.ts';
+import {
+  createLibrarySubjectIdentityAdapter,
+  observeLibrarySubjectSummaries,
+  readLibraryIdentityMappings,
+} from '../semantic/adapters/index.ts';
+import {
+  createLibraryAccountEligibilityAdapter,
+  observeLibraryPublicAccount,
+  observeLibraryAttributions,
+  createResourcePublicEligibility,
+} from '../access/adapters/index.ts';
+import { observeLibrarySpaceSummary } from '../community/adapters/index.ts';
 import { nativeFollowCountRuntime } from './library-follow-counts.ts';
 import { createLibraryPreparationWork, nativeLibraryScopeWork } from '../search/adapters/index.ts';
 /** Library process composition. Binds native SQL and foreign Access/Search/Semantic/Content adapters. */
@@ -48,11 +60,13 @@ import {
   createIdentityNativeCatalog,
   createProgressOperationCatalog,
   createNativeSourceCaptureAdapter,
+  createNativeLibraryPresentation,
   createSearchPreparationAdapter,
   type SearchPreparationAdapterPorts,
 } from '../library/adapters/index.ts';
 import {
   bindLibraryDomain,
+  bindLibraryPresentation,
   peekLibraryDomain,
   requireLibraryDomain,
   unbindLibraryDomain,
@@ -227,7 +241,25 @@ function stubSource(): PreparedCollectionSource {
   };
 }
 
-export function composeLibraryDomain(options: LibraryComposeOptions = {}): LibraryDomain {
+function nativeLibraryPresentation() {
+  return createNativeLibraryPresentation({
+    identity: createLibrarySubjectIdentityAdapter(),
+    readMappings: readLibraryIdentityMappings,
+    accountEligibility: createLibraryAccountEligibilityAdapter(),
+    createResourcePublicEligibility,
+    observeSubjects: observeLibrarySubjectSummaries,
+    observeAccount: observeLibraryPublicAccount,
+    observeAttributions: observeLibraryAttributions,
+    observeSpace: observeLibrarySpaceSummary,
+  });
+}
+
+/** Preloads install the same native presentation as server/worker without a placeholder Collection Source. */
+export function composeLibraryPresentation(): void {
+  bindLibraryPresentation(nativeLibraryPresentation());
+}
+
+export function composeLibraryDomain(options: LibraryComposeOptions = {}): ReturnType<typeof bindLibraryDomain> {
   const identityNative =
     options.capabilities?.identityNative ?? createIdentityNativeApplication(createIdentityNativeCatalog());
   const sourceCapture =
@@ -347,6 +379,7 @@ export function composeLibraryDomain(options: LibraryComposeOptions = {}): Libra
         account: createNativeCopyAccountAdmission(config),
         definitions: nativeReleasedDefinitions(),
       }),
+    presentation: nativeLibraryPresentation(),
     followCounts: nativeFollowCountRuntime(),
     preparationWork: options.preparationWork ?? previous?.preparationWork ?? createLibraryPreparationWork,
     scopeWork: options.scopeWork ?? previous?.scopeWork ?? nativeLibraryScopeWork,

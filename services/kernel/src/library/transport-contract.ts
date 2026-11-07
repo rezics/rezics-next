@@ -3,7 +3,7 @@ import { t } from 'elysia';
 import type { ProgressPresentation } from './progress-model.ts';
 import { MAX_PROGRESS_MEASURES } from './progress.ts';
 import { libraryStoredVocabularySchema } from './profile-schemas.ts';
-import { SubjectSummarySchema } from '../semantic/http/summaries.ts';
+import { SubjectSummarySchema } from '../semantic/contract/index.ts';
 
 const closed = { additionalProperties: false } as const;
 const id = t.String({ format: 'uuid' });

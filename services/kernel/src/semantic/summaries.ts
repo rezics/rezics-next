@@ -1,6 +1,5 @@
 import type { AccessWorkAccounting } from '../access/work.ts';
 import type { Release } from '@rezics/definitions';
-import type { MediaImportRequest } from '@rezics/definitions/media-import';
 import type { Pool, PoolClient } from 'pg';
 import type { ContentCoverRef } from './contract/domain-ports.ts';
 import { contentLifecycleOf } from './adapters/ports.ts';
@@ -22,25 +21,14 @@ import readSummaries from './summaries-read.sql';
 import readRepresentativeEditions from './summaries-representative-editions.sql';
 import { currentReadSnapshot, withReadTransaction } from './read.ts';
 
-export type CoverSummary = {
-  media: string;
-  width: number;
-  height: number;
-  placeholder: { thumbhash: string; color: string };
-  variants: { format: 'avif' | 'webp'; width: number }[];
-  focalPoint: { x: number; y: number } | null;
-  credit: MediaImportRequest['credit'];
-};
-export type SubjectSummary = {
-  id: string;
-  type: string;
-  types: string[];
-  label: { value: string; language: string } | null;
-  creativeWork: boolean;
-  cover: CoverSummary | null;
-};
-/** A merged original keeps its id; its summary is the survivor's and `redirect` names that survivor. */
-export type RelatedSubjectSummary = SubjectSummary & { redirect?: string };
+import type {
+  CoverSummary,
+  SubjectSummary,
+  SummarySources,
+  SummaryCoverState,
+  SubjectSummaryObservation,
+} from './contract/index.ts';
+export type { CoverSummary, SubjectSummary, RelatedSubjectSummary } from './contract/index.ts';
 export type SummaryDependencies = {
   /** Compatibility input; the executor binds the live same-pool snapshot, never a pool.query facade. */
   client: Pick<PoolClient, 'query'>;
@@ -65,8 +53,7 @@ export type SummaryReaderDependencies = {
 };
 type SummaryAuthorize = SummaryDependencies['authorize'];
 type Batches = readonly (readonly string[])[];
-type SummarySources = readonly Readonly<{ partition: number; epoch: number; position: bigint }>[];
-export type SummaryCoverState = 'available' | 'absent' | 'concealed';
+export type { SummarySources, SummaryCoverState, SubjectSummaryObservation } from './contract/index.ts';
 type ObserveSummaries = (
   sources: SummarySources,
   batches: Batches,
@@ -74,15 +61,6 @@ type ObserveSummaries = (
   covers: ReadonlyMap<string, SummaryCoverState>,
 ) => void;
 
-/** Internal composition, never a browser-supplied witness or a cached allow.
- * Each component is an independent native home position, as in Subject reads.
- */
-export type SubjectSummaryObservation = Readonly<{
-  summaries: ReadonlyMap<string, SubjectSummary | null>;
-  covers: ReadonlyMap<string, SummaryCoverState>;
-  components: SummarySources;
-  current: () => Promise<boolean>;
-}>;
 const preparations = new WeakMap<SummaryAuthorize, (batches: Batches) => Promise<SummaryAuthorize>>();
 
 /** Preserve the callable related-read adapter, and expose preparation to the batch owner.
