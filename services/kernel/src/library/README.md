@@ -12,11 +12,12 @@ one live same-owner entry per unique subject. Seed the Semantic source subjects 
 import window before native identity installation, then let native bootstrap map them; retain all Library entry
 mutations as native commands. Keep fresh-account entries on one shared subject, refresh fixture actors every 16 units,
 refresh those actors immediately after the supported 4096-subject fixture bootstrap, reuse the fixture's already
-accepted baseline Subject, give every direct fixture command, including setup and measured commands, its own configured
-30-second HTTP request context, and omit redundant refills. The bootstrap can exceed Access's 180-second identity
-observation freshness window, so the first native command must reauthenticate the fixture actors. Native command
-admission, authorization, SQL work and growth bounds remain unchanged; this context supplies the per-request deadline
-that the HTTP layer normally establishes before invoking the command.
+accepted baseline Subject and live entry as the initial incarnation, give every direct fixture command, including setup
+and measured commands, its own configured 30-second HTTP request context, and omit redundant refills. The bootstrap can
+exceed Access's 180-second identity observation freshness window, so the first native command must reauthenticate the
+fixture actors. The fixture has already created its baseline entry; the growth test reads it instead of attempting a
+duplicate insert. Native command admission, authorization, SQL work and growth bounds remain unchanged; this context
+supplies the per-request deadline that the HTTP layer normally establishes before invoking the command.
 
 Decision: apply the shared measured-page path rule to those growth samples: reject sequential scans only when a guarded
 relation exceeds eight pages. A scan count without its measured relation footprint cannot establish a growth-path

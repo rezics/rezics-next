@@ -467,9 +467,7 @@ test('fresh guard work remains bounded across 64 512 and 4096 unrelated live ret
     // 180-second observation window before the first measured command begins.
     await refreshFixtureActors();
     const target = f.baselineSubject;
-    let current = (
-      await fixtureRequest(() => f.commands.putEntry(f.owner.actor, target, { state: 'planned' }, entryKey()))
-    ).value.entry;
+    let current = await fixtureRequest(() => f.commands.readEntry(f.owner.actor, target));
     const original = current;
     await fixtureRequest(() =>
       f.commands.deleteEntry(f.owner.actor, target, current.revision, entryKey(), current.incarnationId!),
