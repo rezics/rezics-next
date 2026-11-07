@@ -1,5 +1,5 @@
 import * as v from 'valibot';
-import type { ProfileValues } from './profile-data';
+import type { ProfileValues } from './profile-model';
 import { profileFieldErrors } from './profile-write';
 
 const profile = v.strictObject({

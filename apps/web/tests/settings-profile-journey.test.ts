@@ -1,7 +1,8 @@
 import { editableProfile, profileAvatar, profileValues } from './factories/profile';
 import { expect, test } from 'bun:test';
 import { createKernelClient } from '@rezics/client';
-import { loadProfileRecord, saveProfileRecord, type ProfileValues } from '../src/settings/profile-data';
+import { loadProfileRecord, saveProfileRecord } from '../src/settings/profile-data';
+import type { ProfileValues } from '../src/settings/profile-model';
 import { EditableProfileReadError, officialProfileRead } from '../src/settings/editable-profile-source';
 import {
   ProfileEditor,

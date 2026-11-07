@@ -5,7 +5,7 @@ import { Field, FieldContent, FieldTitle } from '@rezics/ui/shadcn/field';
 import { Switch } from '@rezics/ui/shadcn/switch';
 import { m } from '../paraglide/messages.js';
 import { ProfileFeedback } from './profile';
-import { profileChanges, profilePatchAdmitted, profileFieldAdmitted } from './profile-data';
+import { profileChanges, profilePatchAdmitted, profileFieldAdmitted } from './profile-model';
 import type { ProfileEditor } from './profile-write';
 import { useProfileEditor } from './profile-write-query';
 import type { SettingsContentFailureReader } from './ports/content';
