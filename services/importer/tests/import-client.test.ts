@@ -605,7 +605,7 @@ test('transport fetch throws retain the cause', async () => {
     maxAttempts: 1,
     fetch: (async () => {
       throw new TypeError('connect ECONNREFUSED');
-    }) as typeof fetch,
+    }) as unknown as typeof fetch,
   });
   try {
     await transport.fence({

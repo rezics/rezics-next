@@ -13,20 +13,6 @@ export type {
   prepareReadDecisions,
 } from '../request/access.ts';
 /** Native Access producer for Content's chosen operations. Composition installs it before use. */
-import {
-  accessCheck,
-  accessExplicitCheck,
-  accessCommandAuthorization,
-  actorOf,
-  prepareReadDecisions,
-} from '../request/access.ts';
-export type {
-  accessCheck,
-  accessExplicitCheck,
-  accessCommandAuthorization,
-  actorOf,
-  prepareReadDecisions,
-} from '../request/access.ts';
 import type { ContentAccessPort } from '../content/access-port.ts';
 import { readAccount, readPublicIdentities, readPublicIdentityObservations } from './account-data.ts';
 export type { readAccount, readPublicIdentities, readPublicIdentityObservations } from './account-data.ts';
