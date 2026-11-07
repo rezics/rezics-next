@@ -30,10 +30,11 @@ import {
   type CanonicalAllowance,
 } from './canonical-source-store.ts';
 import { CANONICAL_SOURCE_REPAIR_STEP, canonicalSourceCallAllowance } from './canonical-source-bounds.ts';
+import { librarySemanticObservations } from './semantic-observation.ts';
 
-const sourceStepAllowance = (): CanonicalAllowance => ({
+const sourceStepAllowance = (observations = librarySemanticObservations()): CanonicalAllowance => ({
   reservationId: randomUUID(),
-  ...canonicalSourceCallAllowance(CANONICAL_SOURCE_REPAIR_STEP()),
+  ...canonicalSourceCallAllowance(CANONICAL_SOURCE_REPAIR_STEP(observations)),
 });
 type SourceLocator = { accounts: [string]; collectionId: string };
 type SourceSweep = {
@@ -68,11 +69,13 @@ async function advanceSourceStep(
     Buffer.byteLength(JSON.stringify(input)) > 4096
   )
     throw new TypeError('Invalid native Source work locator');
+  const semanticObservations = librarySemanticObservations();
   const call = {
     route,
     collectionId: input.collectionId,
     deadline,
-    allowance: sourceStepAllowance(),
+    semanticObservations,
+    allowance: sourceStepAllowance(semanticObservations),
   };
   const observed = await advanceCanonicalSourceCapture(context.pool, call);
   if (observed.state !== 'admitted') {

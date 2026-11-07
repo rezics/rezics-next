@@ -21,6 +21,8 @@ import {
 } from './collection-source-work-native.ts';
 
 import { peekLibraryDomain } from './domain-binding.ts';
+import { librarySemanticObservations } from './semantic-observation.ts';
+import type { LibrarySemanticObservationCapability } from './contract/semantic-observation.ts';
 import type { WorkAllowance, WorkReceipt } from './contract/work-dimensions.ts';
 export type { WorkAllowance, WorkDimensions, WorkReceipt } from './contract/work-dimensions.ts';
 import {
@@ -202,6 +204,7 @@ export function createCollectionSource(dependencies: {
   pool: Pool;
   access: Access;
   clock?: KernelClock;
+  semanticObservations?: LibrarySemanticObservationCapability;
 }): CollectionSource {
   return createCollectionSourceRuntime(dependencies, false);
 }
@@ -211,14 +214,22 @@ export function createOrdinaryCollectionPageSource(dependencies: {
   pool: Pool;
   access: Access;
   clock?: KernelClock;
+  semanticObservations?: LibrarySemanticObservationCapability;
 }): CollectionSource {
   return createCollectionSourceRuntime(dependencies, true);
 }
 
 function createCollectionSourceRuntime(
-  dependencies: { pool: Pool; access: Access; clock?: KernelClock },
+  dependencies: {
+    pool: Pool;
+    access: Access;
+    clock?: KernelClock;
+    semanticObservations?: LibrarySemanticObservationCapability;
+  },
   fixedPageWork: boolean,
 ): CollectionSource {
+  let observations = dependencies.semanticObservations;
+  const semanticObservations = () => (observations ??= librarySemanticObservations());
   const prepared = new WeakMap<PreparedCollectionSource, Prepared>();
   async function authorize(
     input: Extract<CollectionSourceContext, { actor: Actor }>,
@@ -243,6 +254,7 @@ function createCollectionSourceRuntime(
         route: metadata.route,
         collectionId: metadata.collectionId,
         deadline: input.deadline,
+        semanticObservations: semanticObservations(),
         allowance: canonicalAllowance(l.allowance(), 100, fixedPageWork),
       }),
     );
@@ -357,6 +369,7 @@ function createCollectionSourceRuntime(
               route: obs.route,
               collectionId: obs.collectionId,
               deadline: input.deadline,
+              semanticObservations: semanticObservations(),
               allowance: canonicalAllowance(l.allowance(), raw, fixedPageWork),
               basis: saved.basis,
               progress: { pendingSubjectId: input.subjectId, after, generation: saved.generation, basis: saved.basis },

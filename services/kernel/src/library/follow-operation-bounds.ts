@@ -6,6 +6,7 @@ import { MAX_FOLLOW_PAGE_SIZE } from './follow-model.ts';
 import apply from './follow-store-apply.sql';
 import read from './follow-store-read.sql';
 import page from './follow-store-page.sql';
+import { librarySemanticObservations } from './semantic-observation.ts';
 import account from '../access/account-command-state.sql';
 import accountShare from '../access/account-share.sql';
 import partition from '../partition/read.sql';
@@ -15,23 +16,10 @@ import fence from '../command/fence.sql';
 import { routeOf } from '../route/route.ts';
 import { collectionDirectoryRowPlan } from './collection-directory-bounds.ts';
 import collection from './collection-reads-collection.sql';
-import mappingOwners from '../semantic/identity-epoch-read-owners.sql';
-import mappingSources from '../semantic/identity-epoch-read-sources.sql';
-import mappingPending from '../semantic/identity-epoch-read-pending.sql';
-import mappingCurrent from '../semantic/identity-terminal-closure-current.sql';
-import reference from '../semantic/read-subject-reference.sql';
 import space from '../community/space-read.sql';
 import partitions from '../partition/read-batch.sql';
-import summaries from '../semantic/summaries-read.sql';
-import representatives from '../semantic/summaries-representative-editions.sql';
-import release from '../semantic/definitions-read.sql';
-import releaseActive from '../semantic/definitions-active.sql';
-import releaseExists from '../semantic/definitions-exists.sql';
 import followingTargets from '../community/following-space-targets-page.sql';
 import addressClaims from '../community/space-address-batch-active.sql';
-import coverReferences from '../content/read-cover-reference.sql';
-import sourceFences from '../content/read-source-fences.sql';
-import { RELEASE_LIMITS } from '@rezics/definitions';
 import { isAccessWorkDispatch } from './access-port.ts';
 import openGroups from '../access/gates/open-groups.sql';
 
@@ -45,8 +33,6 @@ const arrayValues = (value: unknown): readonly unknown[] =>
   typeof value === 'string'
     ? (pg.types.getTypeParser(1009 as Parameters<typeof pg.types.getTypeParser>[0], 'text')(value) as unknown[])
     : (value as readonly unknown[]);
-const recordValues = (value: unknown): readonly unknown[] =>
-  typeof value === 'string' ? (JSON.parse(value) as unknown[]) : (value as readonly unknown[]);
 const uuid = 'f'.repeat(36);
 const int8 = '-9223372036854775808';
 const timestamp = 'x'.repeat(64);
@@ -276,9 +262,7 @@ export function followPagePlan(input: Input<typeof page> & { limit: number }) {
 export function followAccountWork(accountId: string): Bound {
   return sqlWork(account.sql, [routeOf(accountId)!, accountId], point(size(accountProjection)));
 }
-/** Each literal dispatch retains the original positional binds. A failed
- * Collection/subject probe and both identity observations have the same leaf
- * price as a successful probe; the resolver does not invent a stored type. */
+/** Each Library-owned literal dispatch retains its original positional binds. */
 function targetStatement(sql: string, operands: readonly unknown[]): Bound | undefined {
   if (sql === collection.sql) {
     const input = Object.fromEntries(collection.params.map((key, index) => [key, operands[index]]));
@@ -310,123 +294,11 @@ function targetStatement(sql: string, operands: readonly unknown[]): Bound | und
         // The address is the only unconstrained Space revision field projected.
         6 * (2 ** 30 - 1),
     });
-  if (sql === reference.sql)
-    return sqlWork(sql, operands, {
-      ...point(size({ id: uuid, redirect: uuid })),
-      rows: 6,
-      points: 2,
-      seeks: 2,
-    });
-  if (sql === mappingOwners.sql) {
-    const count = arrayValues(operands[0]).length;
-    return sqlWork(sql, operands, {
-      keys: count,
-      rows: 4 * count,
-      points: count,
-      seeks: count,
-      output: count,
-      width: size({ partition_no: 4095, epoch: -2147483648, position: int8, write_state: 'draining' }),
-      metadata: count,
-    });
-  }
-  if (sql === mappingSources.sql) {
-    const count = arrayValues(operands[0]).length;
-    return sqlWork(sql, operands, {
-      keys: count,
-      rows: 16 * count,
-      points: 4 * count,
-      seeks: 4 * count,
-      output: count,
-      width: size({
-        subject_id: uuid,
-        route: 65535,
-        original: uuid,
-        terminal: uuid,
-        epoch: int8,
-        origin: 'published',
-        recorded_transaction_id: uuid,
-        control_partition: 4095,
-        control_group: uuid,
-        source_revision: int8,
-        owner_epoch: -2147483648,
-        erasure_key: int8,
-        closure_state: 'withdrawn',
-        closure_enrollment: uuid,
-        closure_generation: uuid,
-        closure_incarnation: uuid,
-        closure_immediate: uuid,
-        closure_export_transaction: uuid,
-        closure_hold_transaction: uuid,
-        closure_hold_xid: int8,
-        closure_registration_transaction: uuid,
-        closure_install_transaction: uuid,
-        closure_install_xid: int8,
-        closure_ack_transaction: uuid,
-        closure_ack_xid: int8,
-        closure_source_reservation: uuid,
-        closure_claim: uuid,
-        closure_withdraw_transaction: uuid,
-        closure_withdraw_xid: int8,
-        closure_successor_ticket: uuid,
-        closure_successor_original: uuid,
-        closure_ticket_reservation: uuid,
-        closure_mutation_xid: int8,
-        closure_cancelled_successor: false,
-        dirty_revision: int8,
-        captured_revision: int8,
-        current_target: uuid,
-      }),
-      metadata: 4 * count,
-    });
-  }
-  if (sql === mappingPending.sql) {
-    const count = arrayValues(operands[0]).length;
-    return sqlWork(sql, operands, {
-      keys: count,
-      rows: 4 * count,
-      points: count,
-      seeks: count,
-      output: count,
-      width: size({ partition_no: 4095, terminal: uuid, pending_job: uuid, pending_epoch: int8 }),
-      metadata: count,
-    });
-  }
-  if (sql === mappingCurrent.sql) {
-    const count = arrayValues(operands[0]).length;
-    return sqlWork(sql, operands, {
-      keys: count,
-      rows: 16 * count,
-      points: 4 * count,
-      seeks: 4 * count,
-      output: count,
-      width: size({
-        partition_no: 4095,
-        terminal: uuid,
-        published_epoch: int8,
-        owner_epoch: -2147483648,
-        generation: int8,
-        closure_state: 'receiving',
-        closure_incarnation: uuid,
-        requested_original: uuid,
-        directory_state: 'receiving',
-        directory_enrollment: int8,
-        directory_incarnation: uuid,
-        directory_install: uuid,
-        directory_export: uuid,
-        directory_revision: int8,
-        directory_owner: -2147483648,
-        registration_transaction: uuid,
-        redirected: true,
-      }),
-      metadata: 4 * count,
-    });
-  }
   return undefined;
 }
 
-/** FULL uses the admitted Semantic summary slots, not Subject's complete fact
- * and source-member view. Each literal query is priced on its original batch,
- * including representative planning attempts and terminal currentness reads. */
+/** Community target hydration remains a Library-composed native plan. Semantic
+ * summary and identity SQL are declared by their owner capability below. */
 function viewStatement(sql: string, operands: readonly unknown[]): Bound | undefined {
   const values = (query: { params: readonly string[] }, name: string) => operands[query.params.indexOf(name)];
   if (sql === openGroups.sql) {
@@ -450,50 +322,6 @@ function viewStatement(sql: string, operands: readonly unknown[]): Bound | undef
       output: count,
       width: partitionBytes,
       metadata: count,
-    });
-  }
-  if (sql === releaseActive.sql)
-    return sqlWork(sql, operands, point(size({ digest: `sha256:${'f'.repeat(64)}`, head: int8 })));
-  if (sql === releaseExists.sql) return sqlWork(sql, operands, point(size({ digest: `sha256:${'f'.repeat(64)}` })));
-  if (sql === release.sql) return sqlWork(sql, operands, point(size({ body: null }) + 6 * RELEASE_LIMITS.bytes));
-  if (sql === representatives.sql) {
-    const count = recordValues(values(representatives, 'subjects')).length;
-    // Requested originals, the indexed 12-row range and Limit, window order,
-    // row_number and final join. These are raw occurrences before selection.
-    return sqlWork(sql, operands, {
-      keys: 12 * count,
-      rows: (1 + 5 * 12) * count,
-      points: count,
-      seeks: count,
-      output: 12 * count,
-      width: size({ id: uuid, slot_id: uuid, ordinal: 12 }),
-    });
-  }
-  if (sql === summaries.sql) {
-    const subjects = recordValues(values(summaries, 'subjects'));
-    const selected = recordValues(values(summaries, 'representatives'));
-    const languages = arrayValues(values(summaries, 'label_languages'));
-    const count = subjects.length;
-    // Native compact creation and expanded selection each admit 32 entries.
-    // Image + original-language slots, and the actually selected <=12 edition
-    // slots. Each selected candidate probes hidden/lifecycle/disclosure/retraction.
-    const slots = 2 * count + selected.length;
-    const candidates = 32 * slots;
-    const fallback = values(summaries, 'display_fallback') === true ? count : 0;
-    const labels = (languages.length + 1) * count + fallback;
-    return sqlWork(sql, operands, {
-      keys: count + candidates + labels + fallback,
-      rows: 5 * count + 6 * labels + 9 * slots + 12 * candidates + 3 * fallback,
-      points: count + labels + 3 * slots + 5 * candidates + fallback,
-      seeks: count + labels + 3 * slots + 5 * candidates + fallback,
-      output: count,
-      // The projection contains unconstrained stored JSONB statement bodies and
-      // term bodies. PostgreSQL's per-field maximum covers those fields only;
-      // it is not a blanket width for UUIDs, counters, enums or every SQL row.
-      width:
-        size({ id: uuid, type: '', labels: {}, original: '', choices: [] }) +
-        6 * RELEASE_LIMITS.bytes +
-        2 * 6 * (2 ** 30 - 1),
     });
   }
   if (sql === followingTargets.sql) {
@@ -528,59 +356,6 @@ function viewStatement(sql: string, operands: readonly unknown[]): Bound | undef
       seeks: count,
       output: count,
       width: size({ requested_space_id: uuid, address: '', claimed_space_id: uuid }) + addresses,
-    });
-  }
-  if (sql === coverReferences.sql) {
-    const count = arrayValues(values(coverReferences, 'media_ids')).length;
-    // Available variants are the two formats and six unique native width slots (including the sub-320 slot).
-    const variants = 2 * 6;
-    return sqlWork(sql, operands, {
-      keys: (1 + variants) * count,
-      rows: (5 + 3 * variants) * count,
-      points: 2 * count,
-      seeks: 2 * count,
-      output: count,
-      width:
-        size({
-          mediaId: uuid,
-          containerId: uuid,
-          sha256: 'f'.repeat(64),
-          sourceUrl: '',
-          credit: null,
-          provenance: null,
-          width: -2147483648,
-          height: -2147483648,
-          thumbhash: 'f'.repeat(44),
-          color: '#ffffff',
-          variantsJson: '',
-          focalX: -1,
-          focalY: -1,
-        }) +
-        6 * 2048 +
-        6 * 8192 +
-        6 * 65536 +
-        2 * variants * size({ format: 'webp', width: 2560 }),
-    });
-  }
-  if (sql === sourceFences.sql) {
-    const tuples = recordValues(values(sourceFences, 'tuples'));
-    return sqlWork(sql, operands, {
-      keys: tuples.length,
-      rows: 5 * tuples.length,
-      points: tuples.length,
-      seeks: tuples.length,
-      output: tuples.length,
-      width:
-        size({
-          route: 65535,
-          source: '',
-          external_id: '',
-          field_group: '',
-          takenDown: false,
-          securityRevision: int8,
-          takenDownAt: timestamp,
-          takedownId: uuid,
-        }) + size(tuples),
     });
   }
   return undefined;
@@ -666,57 +441,22 @@ export function followAccountAuthorizationWork(accountId: string): Bound {
   );
 }
 
-function queryOperands(query: { params: readonly string[] }, values: Record<string, unknown>): unknown[] {
-  return query.params.map((name) => values[name]);
-}
-
-/** Semantic summary/observation SQL already priced for FULL Follow, reused by Label tiles. */
+/** Owner declarations for the complete Follow subject hydration path, reused by Label tiles. */
 export function followSubjectSummaryObservationWork(count: number): Bound {
   const n = Math.max(0, count);
   if (n === 0) return followBytes(0);
-  const subjects = Array.from({ length: n }, () => uuid);
-  const subjectRecords = subjects.map((id) => ({ route: 65535, id }));
-  const summarySubjects = subjects.map((id) => ({ route: 65535, id, image: uuid, original: uuid }));
-  const selected = subjects.map((id) => ({ id, slot_id: uuid }));
-  const tuples = subjects.map((id) => ({ route: 65535, source: id, external_id: id, field_group: 'image' }));
-  const requireBound = (sql: string, operands: readonly unknown[], view: boolean): Bound => {
-    const bound = view ? viewStatement(sql, operands) : targetStatement(sql, operands);
-    if (!bound) throw new TypeError(`Missing Follow bound for ${sql.slice(0, 48)}`);
-    return bound;
-  };
+  const observations = librarySemanticObservations().follow;
+  const subjects = Array.from({ length: n }, () => 'ffffffff-ffff-8fff-bfff-ffffffffffff');
+  const asBound = (work: WorkDimensions): Bound => declareBound({ ...work, engineRequests: 0 });
+  const mappings = asBound(observations.mappingWork(subjects));
+  const references = sumBounds(
+    ...subjects.map((id) => repeatBound(asBound(observations.subjectReferenceWork(id)), 4)),
+  );
   return sumBounds(
-    repeatBound(requireBound(reference.sql, [65535, uuid], false), 4 * n),
-    requireBound(mappingOwners.sql, [subjects], false),
-    requireBound(mappingSources.sql, [subjects], false),
-    requireBound(mappingPending.sql, [subjects], false),
-    requireBound(mappingCurrent.sql, [subjects], false),
-    requireBound(
-      representatives.sql,
-      queryOperands(representatives, { partition_no: 4095, subjects: subjectRecords }),
-      true,
-    ),
-    requireBound(
-      summaries.sql,
-      queryOperands(summaries, {
-        partition_no: 4095,
-        context_id: uuid,
-        subjects: summarySubjects,
-        representatives: selected,
-        label_languages: ['en'],
-        display_fallback: true,
-      }),
-      true,
-    ),
-    requireBound(
-      coverReferences.sql,
-      queryOperands(coverReferences, {
-        partition: 4095,
-        routes: Array.from({ length: n }, () => 65535),
-        media_ids: subjects,
-      }),
-      true,
-    ),
-    requireBound(sourceFences.sql, queryOperands(sourceFences, { partition: 4095, tuples }), true),
+    repeatBound(mappings, 2),
+    references,
+    asBound(observations.subjectSummaryWork(subjects)),
+    asBound(observations.subjectSummaryCurrentWork(subjects)),
   );
 }
 

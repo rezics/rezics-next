@@ -3795,3 +3795,11 @@ native recovery consumers still refuse it. Focused HTTP cases cover actual lost 
 interrupted dispatch, corrected target/independent consent and source spelling. The inclusive caller derivation counts
 whole retained-document decoding, each repeated source observation/dispatch, SQL work and cleanup. Frozen, independent
 all-pool 64/512/4096, V4 composition and terminal acceptance remain integration work.
+
+## Semantic observation capability
+
+Decision: Library consumes one supplied `LibrarySemanticObservationCapability` for canonical identity, Follow
+hydration and shelf identity/type reads; Semantic owns their SQL, projections, decoding and finite work declarations.
+Library composes those declarations into its existing reservations and charges reached work to the original caller
+frame. A declaration funds no work and grants no authority. Production composition installs one instance and passes it
+through presentation, canonical repair, Follow activity and shelf maintenance.

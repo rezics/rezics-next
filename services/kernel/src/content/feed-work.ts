@@ -12,6 +12,7 @@ import { partitionOf } from '../route/route.ts';
 import { authoritativeTimeValue, noEffect, runCommand } from '../command/command.ts';
 import { deadlineFor } from '../request/deadline.ts';
 import { createFollowActivitySource } from '../library/follow-activity.ts';
+import { librarySemanticObservations } from '../library/semantic-observation.ts';
 import { feedSnapshot } from './feed-snapshot.ts';
 import {
   createFeedActivityStore,
@@ -181,7 +182,13 @@ async function eventActivities(context: WorkContext, event: CloudEvent): Promise
 export async function registerFeedWork(context: WorkContext): Promise<void> {
   const tokens = readMembershipWorkConfig(context.env).referenceKeys;
   const activityStore = createFeedActivityStore({ ...context, tokens });
-  const followSource = createFollowActivitySource({ ...context, tokens, workClient: context.client, activityStore });
+  const followSource = createFollowActivitySource({
+    ...context,
+    tokens,
+    workClient: context.client,
+    activityStore,
+    semanticObservations: librarySemanticObservations(),
+  });
   const enqueue = async (activity: ActivityRef, cursor?: string) => {
     const suffix = cursor ? createHash('sha256').update(cursor).digest('hex') : 'start';
     await context.client.enqueue(
