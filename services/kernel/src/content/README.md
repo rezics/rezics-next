@@ -1,5 +1,9 @@
 # Content
 
+Decision: strict Content schema adapters expose their declared shape during catalogue composition and compile a
+TypeBox validator only on the first HTTP validation. A supplied custom validator owns validation directly. This
+keeps worker authorization free of transport compilation while preserving closed input and response contracts.
+
 Decision: Content consumes cyclic Access behavior through its own `ContentAccessPort`; server, worker and test composition bind the native Access producer before use. Forwarders retain the exact native generic and opaque-evidence signatures through type-only imports, resolve the current binding per call, and preserve returned values and thrown errors. Shared refusal constructors live in the Access contract with identity-preserving compatibility exports. Architecture and type checking are acceptance for this behavior-preserving migration; focused port tests run after integration.
 
 Feed's mounted list operation consumes the shared immutable declaration catalogue through the

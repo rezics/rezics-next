@@ -8,6 +8,7 @@ import { defineRateLimit } from '../../src/http/rate-limit.ts';
 import { MountedRouteCatalogue } from '../../src/http/request.ts';
 import { declareKernelWriteRates } from '../../src/http/write-rate-routes.ts';
 import type { WriteRateFamily } from '../../src/access/write-rate.ts';
+import { testReceiptKeys } from '../support/receipt-keys.ts';
 
 const pool = new Pool({ connectionString: process.env.DATABASE_URL });
 afterAll(() => pool.end());
@@ -111,6 +112,7 @@ test('createKernel custom writes use post-mount composition declarations before 
   await openSelling();
   const spends: unknown[] = [];
   const app = createKernel({
+    receiptKeys: testReceiptKeys(),
     pool,
     routeKey: new Uint8Array(32),
     writeRate: {
@@ -163,6 +165,7 @@ test('no missing route or metadata write bypass and invalid whole body spends ze
   const spends: unknown[] = [];
   const missingDetail = { operationId: 'item.missing', 'x-exposure': 'public' };
   const app = createKernel({
+    receiptKeys: testReceiptKeys(),
     pool,
     routeKey: new Uint8Array(32),
     writeRate: {
@@ -218,6 +221,7 @@ test('loopback custom writes retain native method/template selection and reject 
   await openSelling();
   const spends: unknown[] = [];
   const app = createKernel({
+    receiptKeys: testReceiptKeys(),
     pool,
     routeKey: new Uint8Array(32),
     writeRate: {
