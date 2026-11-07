@@ -2,9 +2,9 @@ import { viteNonceMarker } from './src/security/headers.ts';
 import { testWorkerBindingsEnvName } from './src/test-runtime-binding-config.ts';
 import { readFileSync, realpathSync } from 'node:fs';
 import { createRequire } from 'node:module';
-import { dirname, isAbsolute, join, relative, resolve, sep } from 'node:path';
+import { basename, dirname, isAbsolute, join, relative, resolve, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { defineConfig, type Plugin } from 'vite';
+import { defineConfig, type Plugin, type PluginOption } from 'vite';
 import react from '@vitejs/plugin-react';
 import { tanstackStart } from '@tanstack/react-start/plugin/vite';
 import { cloudflare } from '@cloudflare/vite-plugin';
@@ -12,6 +12,7 @@ import tailwindcss from '@tailwindcss/vite';
 import { paraglideVitePlugin } from '@inlang/paraglide-js';
 import { createWorkerPersistence } from '../../scripts/worker-persistence.ts';
 import { ensureMessagesReady } from './scripts/messages-ready.ts';
+import { traceWebVitePlugins, webStartupLog, webStartupMode, webStartupTraceId } from './scripts/web-startup.ts';
 import {
   alignViteLockfileHashes,
   bindViteDepCacheAlign,
@@ -156,6 +157,13 @@ const dependencyRoots = resolvedInstallRoots();
  * Calendar packages stay excluded.
  */
 const webRequire = createRequire(import.meta.url);
+const viteEntry = realpathSync(webRequire.resolve('vite'));
+const viteRoot = packageRootOf(viteEntry, 'vite');
+const vitePackage = JSON.parse(readFileSync(join(viteRoot, 'package.json'), 'utf8')) as {
+  name?: string;
+  version?: string;
+};
+const viteIdentity = `${vitePackage.name ?? 'vite'}@${vitePackage.version ?? 'unknown'}`;
 const paraglideRequire = createRequire(webRequire.resolve('@inlang/paraglide-js'));
 const urlpatternPolyfillCjs = paraglideRequire.resolve('urlpattern-polyfill');
 const urlpatternPolyfillDir = dirname(urlpatternPolyfillCjs);
@@ -302,6 +310,38 @@ function workerDeniedDependencies(): Plugin {
   };
 }
 
+function webStartupEvidencePlugin(): Plugin {
+  return {
+    name: 'web-startup-evidence',
+    configResolved(config) {
+      const workerIncludes = config.environments?.ssr?.optimizeDeps?.include?.length ?? 0;
+      webStartupLog('config-resolved', {
+        command: config.command,
+        runtime: `${process.release.name}@${process.version}`,
+        executable: basename(process.execPath),
+        vite: viteIdentity,
+        viteEntry: relative(viteRoot, viteEntry),
+        clientHold: config.optimizeDeps.holdUntilCrawlEnd ? 'enabled' : 'disabled',
+        clientEntries: config.optimizeDeps.entries?.length ?? 0,
+        workerIncludes,
+      });
+      webStartupLog('server-initialization-start', { stage: 'optimizer-and-listen' });
+    },
+    configureServer(server) {
+      webStartupLog('server-initialization-configured', { stage: 'listen-next' });
+      server.httpServer?.once('listening', () => {
+        const address = server.httpServer?.address();
+        webStartupLog('listen', {
+          outcome: 'ready',
+          host: typeof address === 'object' && address ? address.address : 'pipe',
+          port: typeof address === 'object' && address ? address.port : 'unknown',
+        });
+      });
+      server.httpServer?.once('close', () => webStartupLog('listen', { outcome: 'closed' }));
+    },
+  };
+}
+
 export default defineConfig((context) => {
   const viteCacheDir = process.env.WEB_VITE_CACHE_DIR;
   if (viteCacheDir) alignViteLockfileHashes(viteCacheDir, appRoot);
@@ -326,7 +366,21 @@ export default defineConfig((context) => {
     ? resolve(workspaceRoot, '.temp/web-vite', process.env.REZICS_WALK_STACK_SLOT)
     : undefined;
   const selectedCacheDir = viteCacheDir ?? walkCacheDir;
-  const clientOptimizeDeps = webViteClientOptimizeDepsFor();
+  const clientOptimizeDeps = webViteClientOptimizeDepsFor(process.env, context.command);
+  const optimizer = testRuntime ? 'test-bounded' : clientOptimizeDeps.entries.length > 0 ? 'route-scan' : 'on-demand';
+  webStartupLog('config-selected', {
+    command: context.command,
+    mode: webStartupMode(context.mode),
+    runtime: `${process.release.name}@${process.version}`,
+    executable: basename(process.execPath),
+    vite: viteIdentity,
+    optimizer,
+    clientHold: testRuntime ? 'disabled' : clientOptimizeDeps.holdUntilCrawlEnd ? 'enabled' : 'disabled',
+    workerOptimizer: 'pinned-include-no-discovery',
+    paraglide: testRuntime ? 'prepared-only' : 'live',
+    cloudflareLocal: process.env.CLOUDFLARE_VITE_FORCE_LOCAL === 'true' ? 'enabled' : 'unset',
+    trace: webStartupTraceId() ? 'enabled' : 'disabled',
+  });
   return {
     ...(selectedCacheDir ? { cacheDir: selectedCacheDir } : {}),
     server: {
@@ -343,9 +397,8 @@ export default defineConfig((context) => {
     // Fonts must stay on the site origin; the page policy does not allow data: fonts.
     build: { assetsInlineLimit: 0 },
     optimizeDeps: {
-      // Scan the complete route graph up front so a local Worker browser check never discovers a route dependency
-      // after the first page load. Focused browser files compile the journey route on demand; crawling Home
-      // during Vite startup holds the ready line until the process dies.
+      // Interactive serve discovers client dependencies as pages are visited so a route catalogue crawl does not
+      // hold Vite's listener. The test cache still prebuilds its full optimizer identity before checks start.
       entries: testRuntime ? ['src/server.ts', 'src/session/routes.ts'] : [...clientOptimizeDeps.entries],
       holdUntilCrawlEnd: testRuntime ? false : clientOptimizeDeps.holdUntilCrawlEnd,
       exclude: [...clientOptimizeDeps.exclude],
@@ -357,7 +410,7 @@ export default defineConfig((context) => {
         exclude: [...workerSsrOptimizeDeps.exclude],
       },
     },
-    plugins: [
+    plugins: traceWebVitePlugins([
       ...(viteCacheDir
         ? [
             {
@@ -437,7 +490,8 @@ export default defineConfig((context) => {
         async config(_config, { command }) {
           // Isolated tests already prepared messages. Other serve callers share the same freshness lock as startup.
           if (command !== 'serve' || !shouldGenerateLocalization()) return;
-          const code = await ensureMessagesReady(appRoot);
+          const traceId = webStartupTraceId();
+          const code = await ensureMessagesReady(appRoot, process.env, traceId ? { traceId } : {});
           if (code !== 0) throw new Error(`Paraglide generation exited ${code} before Vite started`);
         },
       },
@@ -532,6 +586,7 @@ export default defineConfig((context) => {
         },
       },
       workerDeniedDependencies(),
-    ],
+      webStartupEvidencePlugin(),
+    ] as PluginOption[]),
   };
 });

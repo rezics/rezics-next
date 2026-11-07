@@ -104,17 +104,28 @@ test('private-network wrapping keeps the original command after the namespace se
   expect(webTestPrivateNetworkEnvName).toBe('WEB_TEST_PRIVATE_NETWORK');
 });
 
-test('cancellation settles the wrapper child and its compiler-like descendant', async () => {
+test('cancellation settles the Web startup child and descendants through the existing wrapper owner', async () => {
   if (process.platform !== 'linux') return;
   const directory = mkdtempSync(join(tmpdir(), 'web-dev-server-cancel-'));
   const pidFile = join(directory, 'descendant.pid');
   const abort = new AbortController();
-  const script = `
+  const startupRunner = new URL('../scripts/web-startup.ts', import.meta.url).href;
+  const childScript = `
     import { spawn } from 'node:child_process';
     import { writeFileSync } from 'node:fs';
-    const descendant = spawn(process.execPath, ['-e', 'setInterval(() => {}, 1000)'], { stdio: 'ignore' });
+    const descendant = spawn(process.execPath, ['-e', 'process.on("SIGTERM", () => {}); setInterval(() => {}, 1000)'], { stdio: 'ignore' });
     writeFileSync(${JSON.stringify(pidFile)}, String(descendant.pid));
+    process.on('SIGTERM', () => {});
     setInterval(() => {}, 1000);
+  `;
+  const script = `
+    import { runWebStartupChild } from ${JSON.stringify(startupRunner)};
+    const interruption = new AbortController();
+    process.on('SIGTERM', () => interruption.abort('SIGTERM'));
+    await runWebStartupChild(process.execPath, ['-e', ${JSON.stringify(childScript)}], process.cwd(), {
+      env: process.env,
+      signal: interruption.signal,
+    });
   `;
   let running: Promise<number> | undefined;
   try {

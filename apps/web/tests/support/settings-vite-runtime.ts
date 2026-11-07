@@ -19,6 +19,7 @@ type SettingsViteRuntime = {
 export async function createSettingsViteRuntime(
   bindings: Readonly<Record<string, string>>,
   plugins: Plugin[] = [],
+  options: { omitCloudflarePlugins?: boolean } = {},
 ): Promise<SettingsViteRuntime> {
   const previous = new Map<string, string | undefined>(
     ['REZICS_TEST_RUNTIME', testWorkerBindingsEnvName, 'WEB_TEST_STATE_INSTANCE_DIR', 'WEB_VITE_CACHE_DIR'].map(
@@ -59,7 +60,15 @@ export async function createSettingsViteRuntime(
 
   try {
     const config = await resolveWebViteConfig({ command: 'serve', mode: 'test' }, appRoot);
-    const configuredPlugins = (config.plugins ?? []).flatMap((plugin) => (Array.isArray(plugin) ? plugin : [plugin]));
+    const configuredPlugins = (config.plugins ?? [])
+      .flatMap((plugin) => (Array.isArray(plugin) ? plugin : [plugin]))
+      .filter((plugin) => {
+        if (!options.omitCloudflarePlugins || !plugin || typeof plugin !== 'object' || !('name' in plugin))
+          return true;
+        // The installed Cloudflare config loader explicitly rejects Bun. This browser-only graph test does not
+        // exercise Worker config loading, so keep the real Web plugins and omit only that Node-bound integration.
+        return !String(plugin.name).includes('cloudflare');
+      });
     vite = await createViteServer({
       ...config,
       configFile: false,

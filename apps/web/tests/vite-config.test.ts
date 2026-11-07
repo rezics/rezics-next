@@ -146,7 +146,11 @@ test('test Worker bindings are startup-only and production has no fixture header
 });
 
 test('the real Settings browser graph transforms without loading the Worker fixture module', async () => {
-  const runtime = await createSettingsViteRuntime({ KERNEL_ORIGIN: 'https://settings-browser.test' });
+  const runtime = await createSettingsViteRuntime(
+    { KERNEL_ORIGIN: 'https://settings-browser.test' },
+    [],
+    { omitCloudflarePlugins: true },
+  );
   try {
     const graph = await settingsClientModuleGraph(runtime, '/src/routes/settings.tsx');
     expect(graph.get('/src/routes/settings.tsx')?.status).toBe(200);
@@ -331,6 +335,31 @@ test('WEB_VITE_CACHE_DIR selects the host-local optimizeDeps cache and allows re
     await rm(cacheDir, { recursive: true, force: true });
   }
 }, 30_000);
+
+test('native interactive serve does not hold listening on a full route dependency crawl', async () => {
+  const previousRuntime = process.env.REZICS_TEST_RUNTIME;
+  const previousSlot = process.env.REZICS_WALK_STACK_SLOT;
+  const previousCache = process.env.WEB_VITE_CACHE_DIR;
+  delete process.env.REZICS_TEST_RUNTIME;
+  delete process.env.REZICS_WALK_STACK_SLOT;
+  delete process.env.WEB_VITE_CACHE_DIR;
+  try {
+    const config = await resolveWebViteConfig({ command: 'serve', mode: 'development' }, appRoot);
+    expect(webViteClientOptimizeDepsFor({}, 'serve')).toEqual(webViteWalkClientOptimizeDeps);
+    expect(config.optimizeDeps?.entries).toEqual([]);
+    expect(config.optimizeDeps?.holdUntilCrawlEnd).toBe(false);
+    expect(pluginNames(config).some((name) => name.includes('paraglide'))).toBe(true);
+    expect(pluginNames(config)).not.toContain('rezics-test-env-bindings');
+    expect(pluginNames(config)).toContain('web-startup-evidence');
+  } finally {
+    if (previousRuntime === undefined) delete process.env.REZICS_TEST_RUNTIME;
+    else process.env.REZICS_TEST_RUNTIME = previousRuntime;
+    if (previousSlot === undefined) delete process.env.REZICS_WALK_STACK_SLOT;
+    else process.env.REZICS_WALK_STACK_SLOT = previousSlot;
+    if (previousCache === undefined) delete process.env.WEB_VITE_CACHE_DIR;
+    else process.env.WEB_VITE_CACHE_DIR = previousCache;
+  }
+});
 
 test('a walk stack compiles the visited client page on demand instead of crawling every route', async () => {
   const previousSlot = process.env.REZICS_WALK_STACK_SLOT;

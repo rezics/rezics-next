@@ -1,6 +1,15 @@
 import { isIP } from 'node:net';
 import { resolve } from 'node:path';
 import { ensureMessagesReady } from './messages-ready.ts';
+import {
+  createWebStartupTraceId,
+  listenForWebStartupSignals,
+  runWebStartupChild,
+  webStartupLog,
+  webStartupSelection,
+  webStartupSignalExitCode,
+  webStartupTraceIdEnvName,
+} from './web-startup.ts';
 
 const webRoot = resolve(import.meta.dir, '..');
 const repoRoot = resolve(webRoot, '../..');
@@ -96,59 +105,61 @@ export function webServeNeedsGeneratedMessages(kind: LaunchPlan['kind']): boolea
   return kind === 'app' || kind === 'vite';
 }
 
-async function runChild(command: string, args: string[], cwd: string): Promise<void> {
-  const child = Bun.spawn([command, ...args], {
-    cwd,
-    env: process.env,
-    stdin: 'inherit',
-    stdout: 'inherit',
-    stderr: 'inherit',
-  });
-  const forwarders = (['SIGINT', 'SIGTERM', 'SIGHUP'] as const).map((signal) => {
-    const forward = () => child.kill(signal);
-    process.on(signal, forward);
-    return [signal, forward] as const;
-  });
-  try {
-    process.exitCode = await child.exited;
-  } finally {
-    for (const [signal, forward] of forwarders) process.off(signal, forward);
-  }
-}
-
 if (import.meta.main) {
+  const traceId = createWebStartupTraceId();
+  const startupEnv: NodeJS.ProcessEnv = { ...process.env, [webStartupTraceIdEnvName]: traceId };
+  const interruptions = listenForWebStartupSignals();
   try {
-    process.stderr.write('[web-startup] stage=entry start\n');
+    webStartupLog('entry-start', {}, startupEnv);
     let args = process.argv.slice(2);
     if (args.includes('--operator')) {
       const { operatorEntry } = await import('./operator-entry.ts');
       args = operatorEntry(args).args;
     }
-    const plan = storybookLaunchPlan(args);
-    process.stderr.write('[web-startup] stage=entry exit=0\n');
+    const plan = storybookLaunchPlan(args, startupEnv);
+    webStartupLog('binding-selection', webStartupSelection(plan.kind, startupEnv), startupEnv);
     if (plan.kind === 'vite') {
-      process.stderr.write('[web-startup] stage=check-custody start\n');
+      webStartupLog('check-custody-start', {}, startupEnv);
       const { requireWebCheckCustody } = await import('./web-check-custody.ts');
       requireWebCheckCustody(repoRoot, webRoot);
-      process.stderr.write('[web-startup] stage=check-custody exit=0\n');
+      webStartupLog('check-custody-complete', {}, startupEnv);
     }
+
     let generated = 0;
     if (webServeNeedsGeneratedMessages(plan.kind)) {
       const startedAt = performance.now();
-      process.stderr.write('[web-startup] stage=messages-preparation start\n');
-      generated = await ensureMessagesReady(webRoot);
-      process.stderr.write(
-        `[web-startup] stage=messages-preparation exit=${generated} elapsed-ms=${Math.round(performance.now() - startedAt)}\n`,
+      webStartupLog('messages-preparation-start', {}, startupEnv);
+      generated = await ensureMessagesReady(webRoot, startupEnv, {
+        signal: interruptions.signal,
+        traceId,
+      });
+      webStartupLog(
+        'messages-preparation-complete',
+        { exit: generated, elapsedMs: Math.round(performance.now() - startedAt) },
+        startupEnv,
       );
     }
-    if (generated !== 0) {
+
+    if (generated !== 0 && !interruptions.signal.aborted) {
       console.error(`Paraglide generation exited ${generated} before Vite started`);
       process.exitCode = generated;
     } else {
-      await runChild(plan.command, plan.args, plan.cwd);
+      process.exitCode = await runWebStartupChild(plan.command, plan.args, plan.cwd, {
+        env: startupEnv,
+        signal: interruptions.signal,
+        traceId,
+      });
     }
   } catch (error) {
-    console.error(error instanceof Error ? (error.stack ?? error.message) : error);
-    process.exitCode = 75;
+    if (interruptions.signal.aborted) {
+      process.exitCode = webStartupSignalExitCode(interruptions.signal);
+      webStartupLog('startup-interrupted', { signal: process.exitCode }, startupEnv);
+    } else {
+      console.error(error instanceof Error ? (error.stack ?? error.message) : error);
+      process.exitCode = 75;
+    }
+  } finally {
+    interruptions.dispose();
+    webStartupLog('entry-exit', { exit: process.exitCode ?? 0 }, startupEnv);
   }
 }
