@@ -19,7 +19,6 @@ The fixture suite is `scripts/workspace-imports.test.ts`.
 Its repository-wide assertion has a 60-second deadline because it parses every workspace and generated declaration;
 the small syntax and dependency fixtures retain the default test deadline.
 
-
 The fixture suite is `scripts/workspace-imports.test.ts`. Its repository-wide assertion has a 60-second deadline
 because it parses every workspace and generated declaration; the small syntax and dependency fixtures retain the
 default test deadline.

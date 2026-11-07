@@ -55,14 +55,7 @@
       "native": [],
       "pages": [],
       "completedSteps": [],
-      "unreachedSteps": [
-        "submit",
-        "open-result",
-        "return-query",
-        "phone-results",
-        "continue",
-        "current-visibility"
-      ]
+      "unreachedSteps": ["submit", "open-result", "return-query", "phone-results", "continue", "current-visibility"]
     },
     {
       "name": "Refine and continue",
@@ -73,14 +66,7 @@
       "native": [],
       "pages": [],
       "completedSteps": [],
-      "unreachedSteps": [
-        "typed-search",
-        "facets",
-        "continue",
-        "restart",
-        "mounted-facets",
-        "reader-retirement"
-      ]
+      "unreachedSteps": ["typed-search", "facets", "continue", "restart", "mounted-facets", "reader-retirement"]
     },
     {
       "name": "Multilingual names",
@@ -91,13 +77,7 @@
       "native": [],
       "pages": [],
       "completedSteps": [],
-      "unreachedSteps": [
-        "original-name",
-        "alias",
-        "suggestion",
-        "open-subject",
-        "locale-query-language-order"
-      ]
+      "unreachedSteps": ["original-name", "alias", "suggestion", "open-subject", "locale-query-language-order"]
     },
     {
       "name": "Search recovery",
@@ -108,13 +88,7 @@
       "native": [],
       "pages": [],
       "completedSteps": [],
-      "unreachedSteps": [
-        "invalid-input",
-        "corrected-native",
-        "mounted-correction",
-        "lost-generation",
-        "useful-restart"
-      ]
+      "unreachedSteps": ["invalid-input", "corrected-native", "mounted-correction", "lost-generation", "useful-restart"]
     },
     {
       "name": "Configured reading",
@@ -159,19 +133,9 @@
     "originalName": "シュタインズ・ゲート",
     "alias": "CLANNAD",
     "invalidText": "\"unclosed",
-    "types": [
-      "wd:Q689445",
-      "schema:Book"
-    ],
-    "viewports": [
-      1280,
-      390
-    ],
-    "locales": [
-      "en",
-      "zh-Hant",
-      "ja"
-    ],
+    "types": ["wd:Q689445", "schema:Book"],
+    "viewports": [1280, 390],
+    "locales": ["en", "zh-Hant", "ja"],
     "execution": "planned only; no journey began"
   },
   "summary": {
