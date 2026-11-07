@@ -56,7 +56,36 @@ function dispatchOwnedRepair(
 }
 
 function dispatchTestFailureRepair(dependencies: RuntimeRepairRoutingDependencies, repair: TestFailureRepair): void {
-  const tests = repair.failures.map((failure) => failure.test);
+  if (repair.failures.length && repair.failures.every(({ cause }) => cause === 'compiler')) {
+    const byOwner = new Map<string, typeof repair.failures>();
+    for (const failure of repair.failures) {
+      byOwner.set(failure.owner.id, [...(byOwner.get(failure.owner.id) ?? []), failure]);
+    }
+    for (const failures of byOwner.values()) {
+      const owner = failures[0]!.owner;
+      dependencies.inbox.deliver({
+        managerId: owner.brief.manager,
+        taskId: owner.id,
+        kind: 'instruction',
+        summary: failures
+          .map((failure) => {
+            const location = failure.diagnostic?.location;
+            const command = failure.command;
+            const message = failure.diagnostic?.message ?? failure.assertions.join('\n');
+            const raw = failure.error.slice(-600);
+            return [
+              `Verifier compiler diagnostic ${failure.diagnostic?.code ?? ''} ${location ? `${location.file}:${location.line ?? '?'}:${location.column ?? '?'}` : ''}: ${message}`.trim(),
+              `Captured revision ${failure.sourceRevision ?? repair.commit}; command ${JSON.stringify(command?.argv ?? [])}; cwd ${command?.cwd ?? '.'}; result ${failure.evidenceLogPath ?? 'unavailable'}.`,
+              `Original compiler output: ${raw}`,
+            ].join(' ');
+          })
+          .join('\n'),
+      });
+    }
+    return;
+  }
+
+  const tests = repair.failures.flatMap((failure) => (failure.test ? [failure.test] : []));
   dispatchOwnedRepair(
     dependencies,
     repair,
