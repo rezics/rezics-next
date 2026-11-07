@@ -24,7 +24,7 @@ export async function openInstalledIdentityRepairGrowth(
     db = await openGrowthDatabase(isolated.url);
     const host = await openIdentityRepairNative({
       identities: options.identities ?? 64,
-      foreignIndexes: options.foreignIndexes,
+      ...(options.foreignIndexes === undefined ? {} : { foreignIndexes: options.foreignIndexes }),
       database: { pool: db.pool, admin: db.admin },
     });
     const last = host.originals.slice().sort().at(-1) ?? host.root;

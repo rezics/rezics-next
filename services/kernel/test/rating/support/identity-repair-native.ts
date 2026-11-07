@@ -73,11 +73,11 @@ export function laterIdentities(after: string, count: number, route = IDENTITY_R
 
 export async function openIdentityRepairNative(
   options: {
-    identities?: number;
-    redirectIndexes?: readonly number[];
-    foreignIndexes?: readonly number[];
-    memberships?: number;
-    database?: IdentityRepairNativePools & { close?: () => Promise<void> };
+    identities?: number | undefined;
+    redirectIndexes?: readonly number[] | undefined;
+    foreignIndexes?: readonly number[] | undefined;
+    memberships?: number | undefined;
+    database?: (IdentityRepairNativePools & { close?: () => Promise<void> }) | undefined;
   } = {},
 ) {
   installIdentityRatingRepairProducer();
@@ -95,7 +95,7 @@ export async function openIdentityRepairNative(
   for (const index of options.redirectIndexes ?? []) {
     const original = originals[index];
     if (!original || original === root) continue;
-    await historicalEdge(db, original, root);
+    await historicalEdge(db as Deployment, original, root);
   }
   if (owned) await owned.install();
   const local = originals.filter((id, index) => !foreign.has(index));
