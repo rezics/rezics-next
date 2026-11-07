@@ -152,15 +152,11 @@ export const Route = createRootRouteWithContext<{
 
 function RootRoutes() {
   return (
-    <LibraryApplicationBoundary>
-      <PageVisitBinding>
-        <RecentSearchBinding>
-          <OwnVotesReturnProvider>
-            <CurrentReadingOutlet />
-          </OwnVotesReturnProvider>
-        </RecentSearchBinding>
-      </PageVisitBinding>
-    </LibraryApplicationBoundary>
+    <PageVisitBinding>
+      <OwnVotesReturnProvider>
+        <CurrentReadingOutlet />
+      </OwnVotesReturnProvider>
+    </PageVisitBinding>
   );
 }
 
@@ -252,17 +248,21 @@ function Root({ children }: { children: ReactNode }) {
             {m.shell_client_reload({}, options)}
           </a>
         </div>
-        <ReaderNavigationContext value={readerNavigation}>
-          <SettingsAmbientProvider ambient={performanceAmbient.settings}>
-            <InboxAmbientProvider ambient={performanceAmbient.inbox}>
-              <LocaleNavigationProvider>
-                <AppShell navigation={commerceNavigation} subjectPurchase={subjectPurchaseRegions}>
-                  {platformClosed ? <ClosedPage /> : children}
-                </AppShell>
-              </LocaleNavigationProvider>
-            </InboxAmbientProvider>
-          </SettingsAmbientProvider>
-        </ReaderNavigationContext>
+        <LibraryApplicationBoundary>
+          <ReaderNavigationContext value={readerNavigation}>
+            <SettingsAmbientProvider ambient={performanceAmbient.settings}>
+              <InboxAmbientProvider ambient={performanceAmbient.inbox}>
+                <LocaleNavigationProvider>
+                  <RecentSearchBinding>
+                    <AppShell navigation={commerceNavigation} subjectPurchase={subjectPurchaseRegions}>
+                      {platformClosed ? <ClosedPage /> : children}
+                    </AppShell>
+                  </RecentSearchBinding>
+                </LocaleNavigationProvider>
+              </InboxAmbientProvider>
+            </SettingsAmbientProvider>
+          </ReaderNavigationContext>
+        </LibraryApplicationBoundary>
         <Scripts />
       </body>
     </html>
