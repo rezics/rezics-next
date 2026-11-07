@@ -100,7 +100,8 @@ keeps POST bodies so seed sign-in reaches native Auth. The walk `start` waiter r
 signal, reprinting the stack log on start death and on a failed journey; Playwright and the Kernel client are imported only after seed.
 
 Decision: existing summary-family, current-visit, entry-return and contribution-actions host tests pin this journey;
-no extra stories. The seeded walk's VNDB release scan must fit the pinned dump; importer fidelity tests pin those
+no extra stories. Region unit tests live in `subject-community-entry-region.test.ts` so Bun transpile does not share
+an output path with the render test. The seeded walk's VNDB release scan must fit the pinned dump; importer fidelity tests pin those
 table budgets and the contract overflow error. The live ESM source-set owner binds itself into History so catalogue
 create shares the command maps that Subject writes began.
 
