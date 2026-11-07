@@ -292,6 +292,8 @@ async function gitRevision(args: string[]): Promise<string> {
 
 async function writeCapabilitiesTable(
   source: string,
+  devRevision: string,
+  base: string,
   results: PathResult[],
   extras: {
     stack?: Stack;
@@ -303,13 +305,12 @@ async function writeCapabilitiesTable(
     hydration?: { ok: boolean; detail: string; elapsedMs: number };
   } = {},
 ): Promise<void> {
-  const base = (await gitRevision(['merge-base', 'HEAD', 'dev']).catch(() => '')) || source;
   const text = await readFile(capabilitiesPath, 'utf8');
   const begin = text.indexOf(CAPABILITIES_BEGIN);
   const end = text.indexOf(CAPABILITIES_END);
   if (begin < 0 || end < 0 || end < begin)
     throw new Error('docs/goals/performance.capabilities.md is missing first-public-journeys markers');
-  const section = capabilitiesTableMarkdown(source, base, results, extras);
+  const section = capabilitiesTableMarkdown(source, base, results, { ...extras, devRevision });
   await writeFile(
     capabilitiesPath,
     `${text.slice(0, begin)}${CAPABILITIES_BEGIN}\n\n${section}${text.slice(end)}`,
@@ -676,6 +677,11 @@ export async function run(): Promise<PathResult[]> {
   await mkdir(evidenceDir, { recursive: true, mode: 0o700 });
   await mkdir('/tmp/rw', { recursive: true, mode: 0o700 });
   const source = await sourceRevision();
+  const [devRevision, base] = await Promise.all([
+    gitRevision(['rev-parse', 'dev']).catch(() => ''),
+    gitRevision(['merge-base', 'HEAD', 'dev']).catch(() => ''),
+  ]);
+  const sourceIsCurrentDev = source !== '' && devRevision !== '' && base !== '' && source === base;
   const results: PathResult[] = [];
   const began = performance.now();
   const failRest = (cause: string, persona = 'setup') => {
@@ -713,7 +719,7 @@ export async function run(): Promise<PathResult[]> {
   const personaCode = await child(['bun', 'services/auth/scripts/dev-stack.ts', 'persona'], 'persona');
   if (personaCode !== 0) {
     failRest(`persona exited ${personaCode}; see .temp/goal/performance/persona.log`);
-    await writeEvidence(source, results, stackIfAdmitted());
+    await writeEvidence(source, devRevision, base, results, stackIfAdmitted());
     hourly(results);
     return results;
   }
@@ -796,11 +802,20 @@ export async function run(): Promise<PathResult[]> {
           job: path.job,
           auth: path.auth,
           owner: path.owner,
-          status: 'PASS',
+          status: sourceIsCurrentDev ? 'PASS' : 'FAIL',
           persona: path.auth === 'signed-in' ? 'signed-in' : 'anonymous',
           elapsedMs: Math.round(performance.now() - started),
           source,
-          evidence: { desktop: evidence, phone: phoneEvidence },
+          evidence: {
+            desktop: evidence,
+            phone: phoneEvidence,
+            ...(sourceIsCurrentDev ? {} : { currentDevGate: { devRevision, base } }),
+          },
+          ...(sourceIsCurrentDev
+            ? {}
+            : {
+                firstWrong: `candidate source ${source.slice(0, 10)} cannot pass current-dev rows; integrated dev is ${(devRevision || base).slice(0, 10) || 'unavailable'}`,
+              }),
         });
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error);
@@ -826,13 +841,21 @@ export async function run(): Promise<PathResult[]> {
     await browser?.close();
     await frontends?.stop();
   }
-  await writeEvidence(source, results, stack, seed, { kernel: kernelReady, signIn, seedCause, seedElapsedMs, hydration });
+  await writeEvidence(source, devRevision, base, results, stack, seed, {
+    kernel: kernelReady,
+    signIn,
+    seedCause,
+    seedElapsedMs,
+    hydration,
+  });
   hourly(results);
   return results;
 }
 
 async function writeEvidence(
   source: string,
+  devRevision: string,
+  base: string,
   results: PathResult[],
   stack?: Stack,
   seed?: Seed,
@@ -852,6 +875,8 @@ async function writeEvidence(
     `${JSON.stringify(
       {
         source,
+        devRevision,
+        base,
         observedAt: new Date().toISOString(),
         passing: `${passing}/17`,
         slowestFailing: slowest
@@ -870,7 +895,7 @@ async function writeEvidence(
       2,
     )}\n`,
   );
-  await writeCapabilitiesTable(source, results, { stack, seed, ...extras });
+  await writeCapabilitiesTable(source, devRevision, base, results, { stack, seed, ...extras });
 }
 
 if (import.meta.main) {

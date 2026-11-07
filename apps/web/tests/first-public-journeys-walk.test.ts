@@ -55,6 +55,27 @@ test('the walk table writer names every path once with the observed result', () 
   for (const path of FIRST_PUBLIC_JOURNEY_PATHS) expect(markdown).toContain(`| ${path.id} |`);
 });
 
+test('candidate source results cannot pass current-dev rows', () => {
+  const candidate = capabilitiesTableMarkdown(
+    'candidate-commit',
+    'integrated-commit',
+    [{ id: 'P01', status: 'PASS', persona: 'signed-in', elapsedMs: 400 }],
+    { devRevision: 'integrated-commit' },
+  );
+  expect(candidate).toContain('Hourly: **0/17**');
+  expect(candidate).toContain('| FAIL |');
+  expect(candidate).toContain('candidate source candidate- cannot pass current-dev rows');
+
+  const integrated = capabilitiesTableMarkdown(
+    'integrated-commit',
+    'integrated-commit',
+    [{ id: 'P01', status: 'PASS', persona: 'signed-in', elapsedMs: 400 }],
+    { devRevision: 'integrated-commit' },
+  );
+  expect(integrated).toContain('Hourly: **1/17**');
+  expect(integrated).toContain('| PASS |');
+});
+
 test('the walk continues mixed anonymous paths when seed writes no result.json', () => {
   const source = readFileSync(resolve(import.meta.dir, '../scripts/first-public-journeys-walk.ts'), 'utf8');
   const seed = source.indexOf("child(['bun', 'scripts/datasets/cross-media-seed.ts'");

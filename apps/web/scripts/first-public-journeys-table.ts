@@ -13,6 +13,7 @@ export type JourneyTableRow = {
 };
 
 export type JourneyTableExtras = {
+  devRevision?: string;
   stack?: { web: string; issuer: string; native: string; kernel: string };
   kernel?: { ok: boolean; detail: string };
   signIn?: { ok: boolean; detail: string };
@@ -35,16 +36,26 @@ export function capabilitiesTableMarkdown(
   results: readonly JourneyTableRow[],
   extras: JourneyTableExtras = {},
 ): string {
-  const passing = results.filter((row) => row.status === 'PASS').length;
-  const failing = results.filter((row) => row.status !== 'PASS');
+  const currentDev = source !== '' && base !== '' && source === base;
+  const observed = results.map((row) =>
+    row.status !== 'PASS' || currentDev
+      ? row
+      : {
+          ...row,
+          status: 'FAIL' as const,
+          firstWrong: `candidate source ${source.slice(0, 10)} cannot pass current-dev rows; integrated dev is ${(extras.devRevision || base).slice(0, 10) || 'unavailable'}`,
+        },
+  );
+  const passing = observed.filter((row) => row.status === 'PASS').length;
+  const failing = observed.filter((row) => row.status !== 'PASS');
   const slowest = failing.slice().sort((a, b) => b.elapsedMs - a.elapsedMs)[0];
   const shared =
-    results.length > 0 && results.every((row) => row.firstWrong && row.firstWrong === results[0]?.firstWrong);
+    observed.length > 0 && observed.every((row) => row.firstWrong && row.firstWrong === observed[0]?.firstWrong);
   const cause = slowest?.firstWrong ?? 'none';
   const lines = [
     '## Current-dev first-public journeys',
     '',
-    `Observed source \`${source.slice(0, 10)}\` on base \`${base.slice(0, 10)}\`. Walk command`,
+    `Observed source \`${source || 'unavailable'}\`; integrated dev \`${extras.devRevision || 'unavailable'}\`; common ancestor \`${base || 'unavailable'}\`. Walk command`,
     '`bun services/auth/scripts/dev-stack.ts walk -- bun apps/web/scripts/first-public-journeys-walk.ts`.',
     extras.stack
       ? `Operands: Web \`${extras.stack.web}\`, issuer \`${extras.stack.issuer}\`, native Auth \`${extras.stack.native}\`, Kernel \`${extras.stack.kernel}\`.`
@@ -71,17 +82,19 @@ export function capabilitiesTableMarkdown(
       ? 'No other reached product failure was observed under that shared launcher or sign-in cause.'
       : '',
     '',
-    '| Path | User-visible journey | Persona | Elapsed | Result | First wrong result | Owner |',
-    '| ---- | -------------------- | ------- | ------: | ------ | ------------------ | ----- |',
+    '| Path | User-visible journey | Persona | Elapsed | Result | First wrong result | Owner | Evidence |',
+    '| ---- | -------------------- | ------- | ------: | ------ | ------------------ | ----- | -------- |',
   ];
-  const byId = new Map(results.map((row) => [row.id, row]));
+  const byId = new Map(observed.map((row) => [row.id, row]));
   for (const path of FIRST_PUBLIC_JOURNEY_PATHS) {
     const row = byId.get(path.id);
     const elapsed = row ? formatElapsed(row.elapsedMs) : '0.000 s';
     const status = row?.status ?? 'FAIL-unreached';
     const persona = row?.persona ?? 'setup';
     const wrong = row?.firstWrong ? escapeTableCell(row.firstWrong) : status === 'PASS' ? '—' : 'not executed';
-    lines.push(`| ${path.id} | ${path.title} | ${persona} | ${elapsed} | ${status} | ${wrong} | ${path.owner} |`);
+    lines.push(
+      `| ${path.id} | ${path.title} | ${persona} | ${elapsed} | ${status} | ${wrong} | ${path.owner} | ${row ? `evidence.json row ${path.id}` : 'not recorded'} |`,
+    );
   }
   return `${lines.filter((line, index) => line !== '' || lines[index - 1] !== '').join('\n')}\n`;
 }

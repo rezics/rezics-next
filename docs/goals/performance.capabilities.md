@@ -40,8 +40,9 @@ hash-join unnest into a Seq Scan or Bitmap Heap Scan of `library.entry` or `prog
 not copy the host-scope `catalogue_only` URL into `process.env`, so Reylo keeps cached analysis when a real
 `DATABASE_URL` is already present. Seeded frontends wait until `/auth/sign-in` redirects before signed-in probes.
 
-Decision: pin the 17 first-public journey path IDs in one focused walk-source test; add no extra stories. Native,
-browser and growth evidence is the sole Goal walk
+Decision: pin the 17 first-public journey path IDs in one focused walk-source test; add no extra stories. A row can
+pass only when its source is integrated into current dev; candidate runs remain failures. Record full source/dev
+revisions and a per-row evidence JSON reference. Native, browser and growth evidence is the sole Goal walk
 `bun services/auth/scripts/dev-stack.ts walk -- bun apps/web/scripts/first-public-journeys-walk.ts`.
 The walk records actual integrated-dev results in this file; typing, local units and source integration alone cannot
 pass a row. Content ce33 integrated `ea7dc5fe59`: signed-in paths resume on a stack that contains it. Issuer, JWKS
