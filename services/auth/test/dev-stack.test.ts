@@ -255,7 +255,8 @@ test('fresh checkout starts native loopback Auth and signs a person into and out
     failure ??= error;
   } finally {
     await settle(() => lifetime.close());
-    if (slot) await settle(() => slot.release());
+    const admittedSlot = slot;
+    if (admittedSlot) await settle(() => admittedSlot.release());
   }
   if (failure !== undefined && cleanupFailures.length)
     throw new AggregateError([failure, ...cleanupFailures], 'Local stack fixture failed and cleanup failed', {
