@@ -7,7 +7,7 @@ import { mergeSubjects } from '../../src/semantic/merges.ts';
 import { GLOBAL_CONTEXT } from '../../src/semantic/definitions.ts';
 import { readReactionCounts } from '../../src/content/reaction-projection.ts';
 import { setReaction } from '../../src/content/reactions.ts';
-import { GrantDeniedError } from '../../src/access/grant-commands.ts';
+import { GrantDeniedError } from '../../src/access/contract/index.ts';
 import { accessCommandAuthorization, type AccountActor } from '../../src/request/access.ts';
 import { newId, partitionOf, routeOf } from '../../src/route/route.ts';
 import { effectWorkflowId } from '../../src/events/effects.ts';

@@ -1,5 +1,5 @@
 import type { Pool } from 'pg';
-import { deadlineClient, within } from '../access/authenticate.ts';
+import { deadlineClient, within } from './access-port.ts';
 import { withConnection } from '../database/pool.ts';
 import { clearErasedPostRevisions, type PostPurgeDeadline, type PostPurgeStep } from './erased-post-cleanup.ts';
 import page from './page-deleted-posts.sql';

@@ -14,12 +14,16 @@ import {
   type CommandOutcome,
   type CommandTransaction,
 } from '../command/command.ts';
-import { initializeResourceGrants, parentCreationAuthorization } from '../access/index.ts';
-import { commandAccessContext } from '../access/command-admission.ts';
-import { readAccount as readAccountHome } from '../access/account-data.ts';
-import { GrantDeniedError } from '../access/grant-commands.ts';
+import {
+  initializeResourceGrants,
+  parentCreationAuthorization,
+  commandAccessContext,
+  readAccount as readAccountHome,
+  deadlineClient,
+  within,
+} from './access-port.ts';
+import { GrantDeniedError } from '../access/contract/index.ts';
 import { AccessUnavailableError } from '../access/unavailable.ts';
-import { deadlineClient, within } from '../access/authenticate.ts';
 import { withConnection, discardConnection } from '../database/pool.ts';
 import { ProblemError } from '../http/problem.ts';
 import { accessCheck, accessCommandAuthorization, AuthenticationError, type AccessCheck } from '../request/access.ts';

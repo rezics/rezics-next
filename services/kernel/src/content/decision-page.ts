@@ -1,9 +1,7 @@
 import { memoizedValue } from '../memoized.ts';
 import { t } from 'elysia';
-import { readAccount } from '../access/account-data.ts';
-import { ApprovalIdentityDeniedError, verifiedBearerExpiry } from '../access/approved-identity.ts';
-import { deadlineClient } from '../access/authenticate.ts';
-import { readAssignment } from '../access/delegation-commands.ts';
+import { readAccount, verifiedBearerExpiry, deadlineClient, readAssignment } from './access-port.ts';
+import { ApprovalIdentityDeniedError } from '../access/contract/index.ts';
 import { AccessUnavailableError } from '../access/unavailable.ts';
 import { CommandUnavailableError } from '../command/command.ts';
 import { ProblemError } from '../http/problem.ts';

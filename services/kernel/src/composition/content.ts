@@ -1,3 +1,5 @@
+import { bindContentAccess } from '../content/access-port.ts';
+import { createNativeContentAccess } from '../access/content-adapter.ts';
 import {
   ensureContentApplication,
   bindReadingPageCapabilities,
@@ -18,6 +20,7 @@ import type { ContentAmbient, ContentApplication } from '../content/contract/ind
 
 /** The ordinary server, worker and native preload install real Access reading operands. */
 export function composeContentReading(): void {
+  bindContentAccess(createNativeContentAccess());
   bindReadingPageCapabilities(createNativeReadingPageCapabilities(createNativeAccessReadingPorts()));
 }
 

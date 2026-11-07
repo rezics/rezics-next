@@ -1,7 +1,11 @@
 import type { Pool } from 'pg';
-import { initializeResourceGrants, parentCreationAuthorization } from '../access/index.ts';
-import { commandAccessContext } from '../access/command-admission.ts';
-import { captureDurableInitiator, durableInitiatorCommitment } from '../access/durable-initiator-capture.ts';
+import {
+  initializeResourceGrants,
+  parentCreationAuthorization,
+  commandAccessContext,
+  captureDurableInitiator,
+  durableInitiatorCommitment,
+} from './access-port.ts';
 import type { DurableInitiatorRecord } from '../access/durable-initiator.ts';
 import { accessCommandAuthorization, accessCheck, type Access, type Actor } from '../request/access.ts';
 import {

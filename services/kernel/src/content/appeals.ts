@@ -7,10 +7,7 @@ import {
 } from './discovery-mutation.ts';
 import type { Pool } from 'pg';
 import { Value } from 'typebox/value';
-import { deadlineClient, within } from '../access/authenticate.ts';
-import { readAccount } from '../access/account-data.ts';
-import { notificationAllowed } from '../access/preferences.ts';
-import { resourceAuthorization } from '../access/resource-authorization.ts';
+import { deadlineClient, within, readAccount, notificationAllowed, resourceAuthorization } from './access-port.ts';
 import {
   CommandUnavailableError,
   authoritativeTimeValue,
@@ -20,7 +17,7 @@ import {
   type CommandEvent,
 } from '../command/command.ts';
 import { discardConnection, withConnection } from '../database/pool.ts';
-import { GrantDeniedError } from '../access/grant-commands.ts';
+import { GrantDeniedError } from '../access/contract/index.ts';
 import type { Effect } from '../events/effects.ts';
 import { ProblemError } from '../http/problem.ts';
 import { requestDigest } from '../http/request.ts';

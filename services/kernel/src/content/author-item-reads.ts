@@ -1,5 +1,5 @@
 import { createCipheriv, createDecipheriv, createHmac, randomBytes } from 'node:crypto';
-import { deadlineClient, within } from '../access/authenticate.ts';
+import { deadlineClient, within } from './access-port.ts';
 import { readPublicViews } from '../access/public-views.ts';
 import { accessCheck, type AccessCheck, type Actor } from '../request/access.ts';
 import { CommandUnavailableError } from '../command/command.ts';

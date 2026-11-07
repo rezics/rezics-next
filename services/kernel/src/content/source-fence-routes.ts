@@ -1,7 +1,7 @@
 import { memoizedValue } from '../memoized.ts';
 import { withHeaders } from '@elysia/openapi';
 import { t } from 'elysia';
-import { deadlineClient, readNativeAccessTime, within } from '../access/authenticate.ts';
+import { deadlineClient, readNativeAccessTime, within } from './access-port.ts';
 import { releaseOperationalTime } from '../command/command.ts';
 import { discardConnection, withConnection } from '../database/pool.ts';
 import { customMethod } from '../http/custom-method.ts';

@@ -1,6 +1,6 @@
 import { isDeepStrictEqual } from 'node:util';
 import type { PoolClient } from 'pg';
-import { deadlineClient, within } from '../access/authenticate.ts';
+import { deadlineClient, within } from './access-port.ts';
 import { CommandUnavailableError } from '../access/unavailable.ts';
 import { withConnection } from '../database/pool.ts';
 import { ProblemError } from '../http/problem.ts';

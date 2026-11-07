@@ -252,7 +252,8 @@
         "services/kernel/src/access/resource-access-errors.ts",
         "services/kernel/src/access/zone-resource-adapter.ts",
         "services/kernel/src/access/account-data.ts",
-        "services/kernel/src/access/grant-commands.ts"
+        "services/kernel/src/access/grant-commands.ts",
+        "services/kernel/src/access/content-adapter.ts"
       ],
       "allowedDependencies": [
         "access-policy",
@@ -341,6 +342,7 @@
         "services/kernel/src/content/document-public.ts",
         "services/kernel/src/content/realm-board-home.ts",
         "services/kernel/src/content/index.ts",
+        "services/kernel/src/content/access-port.ts",
         "services/kernel/src/content/events.ts",
         "services/kernel/src/content/declared-catalogue.ts",
         "services/kernel/src/content/http.ts",
@@ -365,6 +367,7 @@
         "document",
         "filter",
         "kernel-access",
+        "kernel-access-contract",
         "kernel-commerce",
         "kernel-community",
         "kernel-content-application",

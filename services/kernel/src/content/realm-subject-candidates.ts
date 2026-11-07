@@ -1,5 +1,5 @@
 import type { Pool, PoolClient } from 'pg';
-import { within, deadlineClient } from '../access/authenticate.ts';
+import { within, deadlineClient } from './access-port.ts';
 import { withConnection, discardConnection } from '../database/pool.ts';
 import { readPartition } from '../partition/partition.ts';
 import { partitionOf, routeOf } from '../route/route.ts';

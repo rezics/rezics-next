@@ -1,6 +1,6 @@
 import type { Pool } from 'pg';
 import { deadlineFor } from '../request/deadline.ts';
-import { installStandingParentGrant } from '../access/index.ts';
+import { installStandingParentGrant } from './access-port.ts';
 import type { Access, AccountActor } from '../request/access.ts';
 import { GLOBAL_CONTEXT } from '../semantic/definitions.ts';
 import readGlobalContext from '../semantic/setup-read-global.sql';

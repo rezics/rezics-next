@@ -1,7 +1,7 @@
 import { memoizedValue } from '../memoized.ts';
 import { CoverCreditSchema, type MediaImportRequest } from '@rezics/definitions/media-import';
 import { Compile } from 'typebox/compile';
-import { GrantDeniedError } from '../access/grant-commands.ts';
+import { GrantDeniedError } from '../access/contract/index.ts';
 import type { Actor } from '../request/access.ts';
 import { routeOf } from '../route/route.ts';
 import { authorizeMediaDerivative, type DownloadContext } from './media-download.ts';

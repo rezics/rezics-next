@@ -1,7 +1,7 @@
 import { parseDocument, serializeDocument, type DocumentSnapshot } from '@rezics/document';
 import type { Pool } from 'pg';
-import { deadlineClient, within } from '../access/authenticate.ts';
-import { GrantDeniedError } from '../access/grant-commands.ts';
+import { deadlineClient, within } from './access-port.ts';
+import { GrantDeniedError } from '../access/contract/index.ts';
 import { discardConnection, withConnection } from '../database/pool.ts';
 import { readPartition } from '../partition/partition.ts';
 import { accessCheck, type Access, type AccessClient } from '../request/access.ts';
