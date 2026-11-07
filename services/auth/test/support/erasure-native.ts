@@ -274,3 +274,91 @@ export async function nativeFixture(options: { openPool?: (url: string) => Promi
     },
   };
 }
+
+/** Execute the registered retention workflow with an explicit foreground identity.
+ * Polling uses the uncaptured assertion pool; the SDK result is read exactly once.
+ * The host's own workflow and step SQL remain in the original growth context.
+ */
+export async function runNativeRetentionTick(admin: Pool, id: string): Promise<void> {
+  const { DBOS } = await import('@dbos-inc/dbos-sdk');
+  const { WORKFLOW_RETENTION_SCHEDULE } = await import('../../src/retention.ts');
+  const schedule = (await DBOS.getSchedule(WORKFLOW_RETENTION_SCHEDULE))!;
+  const handle = await DBOS.enqueueWorkflowWithOptions(
+    { workflowName: schedule.workflowName, queueName: schedule.queueName!, workflowID: id },
+    new Date(0),
+    schedule.context,
+  );
+  for (;;) {
+    const status = (await admin.query('SELECT status FROM auth_dbos.workflow_status WHERE workflow_uuid=$1', [id]))
+      .rows[0]?.status;
+    if (['SUCCESS', 'ERROR', 'CANCELLED', 'MAX_RECOVERY_ATTEMPTS_EXCEEDED'].includes(status)) break;
+    await Bun.sleep(10);
+  }
+  await handle.getResult();
+}
+
+/** Lose the caller's readiness write after a genuine registration committed its return.
+ * Recovery must read that actual SDK result; no ready bit or commitment is fabricated.
+ */
+export async function unconsumedRegistration(f: Awaited<ReturnType<typeof nativeFixture>>, key: string) {
+  let interrupted = false;
+  const restore = failNativeQueries(f.pool, (sql) => {
+    if (interrupted || !sql.includes('UPDATE auth_copy_work SET ready=true')) return false;
+    interrupted = true;
+    return true;
+  });
+  try {
+    await expect(
+      f.host.workflows.register({
+        key,
+        handle: `retained_${randomUUID().replaceAll('-', '')}`,
+        email: `${key}@retention.test`,
+        password,
+      }),
+    ).rejects.toThrow('Injected native consumer interruption');
+  } finally {
+    restore();
+  }
+  expect(interrupted).toBe(true);
+  const work = (
+    await f.pool.query<{ workflow_id: string; ready: boolean; result_finished_at: Date }>(
+      `SELECT w.workflow_id,w.ready,w.result_finished_at FROM auth_copy_work w
+     JOIN auth_registration_stage s ON s.registration_id=w.source_key WHERE s.request_key=$1`,
+      [key],
+    )
+  ).rows[0]!;
+  expect(work).toMatchObject({ ready: false, result_finished_at: expect.any(Date) });
+  return work.workflow_id;
+}
+
+/** Produce an actual versioned request and its native terminal consumer through HTTP. */
+export async function consumedRetentionRequest(f: Awaited<ReturnType<typeof nativeFixture>>, key: string) {
+  const person = await f.person(key);
+  const operation = { kind: 'revoke', accountId: person.accountId };
+  const approval = await f.call('/account-operations/approve', { operationKey: key, operation }, person.cookie);
+  expect(approval.status).toBe(200);
+  const { reference } = (await approval.json()) as { reference: string };
+  const response = await f.call(
+    '/account-operations/execute',
+    { operationKey: key, operation, reference },
+    person.cookie,
+  );
+  expect(response.status).toBe(200);
+  const rows = (
+    await f.pool.query<{ workflow_id: string; name: string }>(
+      `SELECT DISTINCT w.workflow_id,w.name FROM auth_copy_work w JOIN auth_copy_role r USING(workflow_id)
+     WHERE r.account_id=$1 AND w.name IN ('accounts.registration','accounts.operation')`,
+      [person.accountId],
+    )
+  ).rows;
+  const request = rows.find((row) => row.name === 'accounts.operation')!.workflow_id;
+  expect(
+    (
+      await f.pool.query(
+        'SELECT request_party_version,request_context_version,terminal_at FROM auth_workflow_request WHERE workflow_id=$1',
+        [request],
+      )
+    ).rows[0],
+  ).toMatchObject({ request_party_version: 1, request_context_version: 1, terminal_at: expect.any(Date) });
+  return { request, copies: rows.map((row) => row.workflow_id) };
+}

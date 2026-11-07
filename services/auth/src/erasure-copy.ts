@@ -4,7 +4,9 @@ import type { Pool, PoolClient } from 'pg';
 import { retireNativeWorkflowRequest } from './request-retention.ts';
 import {
   AUTH_SDK_RETIREMENT,
+  authSdkFundedReadiness,
   closeAuthSdkWriters,
+  deleteAuthSdkPayload,
   nativeFence,
   readAuthSdkFence,
   sameNativeFence,
@@ -419,6 +421,8 @@ export async function eraseCopy(database: Pool, id: string): Promise<boolean> {
     return (await retirementPreconditions(client, work)) ? work : null;
   });
   if (!before) return false;
+  const funded = authSdkFundedReadiness();
+  if (!funded.ready) return pending(database, id, funded.gap);
   const saved = storedFence(before);
   const receipt = saved ? await readAuthSdkFence(id) : await closeAuthSdkWriters(id);
   if (!receipt) return pending(database, id, AUTH_SDK_RETIREMENT.gap);
@@ -455,7 +459,7 @@ export async function eraseCopy(database: Pool, id: string): Promise<boolean> {
   if (!retired) return false;
   // Retirement revoked native writers already. Cancellation would itself be a
   // forbidden post-fence SDK write, and supplies no original consumer authority.
-  await DBOS.deleteWorkflows([id], false);
+  await deleteAuthSdkPayload(id, receipt);
   const after = await readAuthSdkFence(id);
   if (!after || !sameNativeFence(receipt, after))
     return pending(database, id, 'auth-sdk-native-fence-receipt-mismatch');

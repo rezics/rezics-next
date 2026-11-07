@@ -337,6 +337,54 @@ worker validation policy.
 
 Cost assertions exclude database-engine invisible MVCC versions; ordinary design-visible traversal still counts.
 
+### Auth workflow retention
+
+The [Auth owner derivation](../../services/auth/README.md#workflow-history-retention)
+admits at most 1000 raw workflow keys through the supported SDK
+`openWorkflowStatusScan` / `readWorkflowStatusScanPage` producer and persists that
+continuation across native maintenance ticks. This permits O(H) complete sweeps while
+bounding every page, including all rejected candidates and pending consumers.
+Fewest tests: extend the two existing growth suites, retention causal cases and SDK
+binding cases; use the existing genuine erasure fixture and consumable target helper.
+Do not substitute returned counts or a callback stub for retirement-body work.
+Pin one-arg funded close, `deleteWorkflows` payload deletion, unavailable funded
+admission and same-identity replay on the existing binding suite. Auth does not
+query `auth_dbos.workflow_status`; producer inclusive `completed_at <= createdBefore`
+eligibility is received as-is.
+
+Frozen full/short, zero-eligible and drain/repeated-empty titles remain in the Auth
+inventory. Each independently grows workflow rows, old-created/recent-completed
+terminal history, request bindings and irrelevant accounts/custody roles at 256/1024/4096. The
+full/short registered maintenance path consumes actual registration results and an
+HTTP revoke request, closes native writers, deletes payload/FK families and verifies
+raw absence. Missing consumer custody stays pending. Timestamp ties, late inserts
+inside the captured upper key, 60-page continuation, original-cut recovery,
+interruption and replay stay causal cases; old synthetic technical bindings have no
+source proof and must be retained. Personal closure is Auth's one-argument
+`closeAuthSdkWriters`, which funds Accounts' `retireWorkflow(id, invocation)` from
+the original finite operation (`maxAttempts=1`, ceiling 8) and receives
+`{fence, attempts, failedWork}` as `readonly {attempt,dispatch}[]`. Aggregate
+counters are ignored. Work `SDK_RETIREMENT_DISPATCH` prices the envelope and retire
+body; maintain/delete identities are not used. Failed funded work remains charged.
+Scan-page connection retry stays an explicit unbounded producer bound.
+Decision: fewest tests extend those existing suites only; no new suite.
+
+Run through the Auth owning runner:
+
+```sh
+bun run --cwd services/auth check test/retention.test.ts test/growth-retention.test.ts test/growth-empty-retention.test.ts test/sdk-retirement-binding.test.ts test/sdk-retirement-fence.test.ts
+```
+
+Acceptance remains open until integrated native execution records its source revision,
+exact command, independently seeded axes, foreground and background statements/plans,
+examined rows, hits/reads and request/response bytes, including every consumer, closure,
+FK and request trigger in the original operation context. Raw pages, not deletion
+counts, price empty work. Test existence and clean typing provide no native pass.
+Personal closure accounts failed funded attempts and resumes the original writer
+identity after uncertain COMMIT; timeout never proves absence. Scan-page connection
+retry still has no finite attempt limit. Selection uses the received scan producer;
+no Auth-owned SDK SQL or synthetic fence is supplied here.
+
 ### Control-plane operation coverage
 
 [Delivery](../../tools/goal/README.md) retains implementation and process/container cleanup authority. Its current
