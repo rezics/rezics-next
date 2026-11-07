@@ -166,14 +166,17 @@ export function developmentMediaBindings(
 
 /** Build the same mounted Kernel declarations used by the host; no request-time discovery. */
 export async function developmentWebsiteConfiguration(env?: Record<string, string>) {
-  await import('reylo/register');
-  const [{ createKernel }, { readConfig }, { actionCatalogue }, { accessActionCatalogue }] = await Promise.all([
-    import('../../kernel/src/http/kernel.ts'),
-    import('../../kernel/src/server.ts'),
-    import('../../kernel/src/http/request.ts'),
-    import('../../kernel/src/access/index.ts'),
-  ]);
-  const config = readConfig(env ?? (await kernelEnvironment()));
+  const environment = env ?? (await kernelEnvironment());
+  const [{ createKernel }, { readConfig }, { actionCatalogue }, { accessActionCatalogue }] =
+    await withDevelopmentDatabase(environment, () =>
+      Promise.all([
+        import('../../kernel/src/http/kernel.ts'),
+        import('../../kernel/src/server.ts'),
+        import('../../kernel/src/http/request.ts'),
+        import('../../kernel/src/access/index.ts'),
+      ]),
+    );
+  const config = readConfig(environment);
   const pool = new Pool({ connectionString: config.databaseUrl });
   try {
     const catalogue = actionCatalogue(
@@ -422,6 +425,27 @@ export function localDatabase(url: string): URL {
     throw new Error('Local stack requires a PostgreSQL database on 127.0.0.1');
   return parsed;
 }
+
+/**
+ * Reylo's first SQL import creates a worker with a snapshot of process.env. Native
+ * Kernel imports reach SQL before readConfig can consume the supplied environment.
+ * Admit that exact local database before registration and native loading. Runtime
+ * pools still use explicit configuration; restore the caller's ambient environment
+ * after loading, including when an import fails.
+ */
+async function withDevelopmentDatabase<T>(environment: Record<string, string>, load: () => Promise<T>): Promise<T> {
+  const databaseUrl = localDatabase(environment.DATABASE_URL!).href;
+  const previous = process.env.DATABASE_URL;
+  process.env.DATABASE_URL = databaseUrl;
+  try {
+    await import('reylo/register');
+    return await load();
+  } finally {
+    if (previous === undefined) delete process.env.DATABASE_URL;
+    else process.env.DATABASE_URL = previous;
+  }
+}
+
 async function authDatabaseUrl() {
   const kernel = await kernelEnvironment();
   const url = localDatabase(kernel.DATABASE_URL!);
@@ -474,7 +498,7 @@ export async function assemble(options?: {
   recoveryDelivery?: import('../src/index.ts').AuthServiceOptions['recoveryDelivery'];
 }) {
   if (process.env.NODE_ENV === 'production') throw new Error('Local stack is development only');
-  await import('reylo/register');
+  const env = options?.env ?? (await kernelEnvironment());
   const [
     auth,
     { createKernel },
@@ -482,17 +506,17 @@ export async function assemble(options?: {
     { createAccess, accessActionCatalogue },
     { createNativeAccountBindings },
     { readConfig },
-  ] = await Promise.all([
-    import('../src/index.ts'),
-    import('../../kernel/src/http/kernel.ts'),
-    import('../../kernel/src/http/request.ts'),
-    import('../../kernel/src/access/index.ts'),
-    import('../../kernel/src/access/native-account-bindings.ts'),
-    import('../../kernel/src/server.ts'),
-  ]);
-  const env = options?.env ?? (await kernelEnvironment());
+  ] = await withDevelopmentDatabase(env, () =>
+    Promise.all([
+      import('../src/index.ts'),
+      import('../../kernel/src/http/kernel.ts'),
+      import('../../kernel/src/http/request.ts'),
+      import('../../kernel/src/access/index.ts'),
+      import('../../kernel/src/access/native-account-bindings.ts'),
+      import('../../kernel/src/server.ts'),
+    ]),
+  );
   const config = readConfig(env);
-  localDatabase(config.databaseUrl);
   const kernelPool = new Pool({ connectionString: config.databaseUrl });
   const database = new Pool({ connectionString: options?.authDatabaseUrl ?? (await authDatabaseUrl()) });
   const keys = options?.keys ?? (await developmentKeys());

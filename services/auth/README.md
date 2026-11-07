@@ -2368,6 +2368,20 @@ plus Auth's `organization:create`, `account:manage`, `account:delete`. Never use
 scopes. Local setup, host and launch share this composition. Auth's Access-supplied `siteActions` refuses
 unmounted names.
 
+Development database admission resolves the supplied environment (or Kernel's local `.env`) before registering
+Reylo and importing native Kernel modules in either `developmentWebsiteConfiguration` or `assemble`. The first SQL
+load starts Reylo's worker with a process-environment snapshot: `http/kernel.ts` reaches
+`commerce/content-edition-buyer-fact.sql`, while Access's native factory reaches `permission-time.sql`, before
+`readConfig` can run. Both entries temporarily install the original supplied local `DATABASE_URL` for those imports
+and restore the previous ambient value afterward, including on failure. Runtime pools still receive that original
+database explicitly; mounted scopes, native Auth/Access and workflow registration use the ordinary composition.
+
+Acceptance choice: preserve all existing mounted-catalogue and fresh browser assertions; replace the placeholder
+catalogue URL with a migrated throwaway database and cold-process admission against a conflicting ambient URL.
+Fresh setup starts without an inherited database or Reylo cache and checks the original database identity,
+website registration and connection retirement. Changed-workspace typing is worker acceptance; the controller runs
+the original three-file native/browser selection after integration without increasing its timeout.
+
 Trusted `registerWebsiteDeployment(auth, actionCatalogue(kernel), registration, websiteConfigurationFile)`
 registers first, then emits Web's public `WEBSITE_CONFIGURATION_FILE` operand. Deployment supplies the actual
 composition, public JWK and callbacks; Web refuses a scope override mismatch. Importer grants stay separate.

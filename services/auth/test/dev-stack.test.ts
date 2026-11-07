@@ -5,6 +5,7 @@ import { randomUUID } from 'node:crypto';
 import { existsSync } from 'node:fs';
 import { cp, mkdir, mkdtemp, readdir, symlink, rm } from 'node:fs/promises';
 import { dirname, resolve } from 'node:path';
+import { Pool } from 'pg';
 import { root } from '../scripts/dev-stack.ts';
 
 // Exercise the documented commands in a fresh retained-source copy. Never reset a developer's stack.
@@ -31,6 +32,9 @@ test('fresh checkout starts native loopback Auth and signs a person into and out
   const search = `rezics-dev-stack-search-${suffix}`;
   const env = {
     ...process.env,
+    // Fresh setup must read the database it just provisioned, without an inherited compiler URL or SQL cache.
+    DATABASE_URL: undefined,
+    REYLO_CONFIG: undefined,
     // The Taskfile prepends the checkout's dependency binaries to PATH; the Bun fallback needs the same lookup.
     PATH: [resolve(checkout, 'node_modules/.bin'), process.env.PATH].filter(Boolean).join(':'),
     KERNEL_DATABASE_CONTAINER: database,
@@ -78,7 +82,15 @@ test('fresh checkout starts native loopback Auth and signs a person into and out
       if (existsSync(store)) await symlink(store, resolve(checkout, workspace, 'node_modules'));
     }
     for (const command of infra) await commands(command);
+    const kernelEnv = await Bun.file(resolve(checkout, 'services/kernel/.env')).text();
+    const kernelDatabaseUrl = kernelEnv
+      .split('\n')
+      .find((line) => line.startsWith('DATABASE_URL='))!
+      .slice(13);
+    const port = (await commands(['docker', 'port', database, '5432/tcp'])).trim().split(':').at(-1);
+    expect(new URL(kernelDatabaseUrl).port).toBe(port);
     for (const command of infra) await commands(command); // Existing, migrated development DB is a no-op.
+    expect(await Bun.file(resolve(checkout, 'services/kernel/.env')).text()).toBe(kernelEnv);
     stack = Bun.spawn(devCommand, {
       cwd: checkout,
       env,
@@ -152,6 +164,35 @@ test('fresh checkout starts native loopback Auth and signs a person into and out
     ).toBe(false);
     const discovery = await fetch('http://127.0.0.1:3100/.well-known/openid-configuration');
     expect(((await discovery.json()) as { issuer: string }).issuer).toBe('http://127.0.0.1:4200');
+    const authUrl = new URL(kernelDatabaseUrl);
+    authUrl.pathname = '/rezics_auth';
+    const originalDatabase = new Pool({ connectionString: authUrl.href });
+    try {
+      const registered = await originalDatabase.query('SELECT scopes FROM auth_client WHERE client_id=$1', [
+        'rezics-website',
+      ]);
+      const vars = await Bun.file(resolve(checkout, 'apps/web/.dev.vars')).text();
+      const scopes = JSON.parse(
+        vars
+          .split('\n')
+          .find((line) => line.startsWith('WEBSITE_SCOPES='))!
+          .slice(15),
+      );
+      expect(registered.rows[0].scopes).toEqual(scopes.split(' '));
+      await browser.close();
+      browser = undefined;
+      stack.kill('SIGTERM');
+      await stack.exited;
+      stack = undefined;
+      const remaining = await originalDatabase.query(
+        `SELECT pid FROM pg_stat_activity WHERE datname = ANY($1) AND backend_type='client backend'
+         AND pid <> pg_backend_pid()`,
+        [[new URL(kernelDatabaseUrl).pathname.slice(1), 'rezics_auth']],
+      );
+      expect(remaining.rows).toEqual([]);
+    } finally {
+      await originalDatabase.end();
+    }
   } finally {
     await browser?.close();
     if (stack) {
