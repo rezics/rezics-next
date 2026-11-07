@@ -4,33 +4,35 @@ import { ChevronRight, Search, X } from 'lucide-react';
 import { m } from '../paraglide/messages.js';
 import { getLocale, locales } from '../paraglide/runtime.js';
 import { coverSrc } from '../media/cover-src';
-import { useSession } from '../session/query';
 import { useCallback, useState } from 'react';
-import {
-  recentBucket,
-  type RecentEntry as HistoryEntry,
-  type RecentHistory,
-  type RecentHistoryOwner,
-} from './recent-history';
-import { useRecentHistory } from './recent-history-hook';
+import type { RecentHistory, RecentHistoryOwner, RecentEntry as HistoryEntry } from './recent-history';
+import { useRecentHistory, useRecentSearches } from './recent-history-hook';
 import { useHistoryRemovalFocus } from './history-removal-focus';
 import { useHistoryRetryFocus } from './history-retry-focus';
 import { admitRecentRetryHeaders, type RecentRetryAdmission } from './recent-retry-admission';
-import type { KernelClient } from '@rezics/client';
 import { createServerFn } from '@tanstack/react-start';
 import { getRequest, setResponseHeader } from '@tanstack/react-start/server';
 import { recentHistoryDestination, recentHistoryReference, recentReplayDestination } from './recent-replay';
 import { recentItemAction } from './recent-response';
 import { admitRecentCursor, admitRecentEntry, admitRecentWrite } from './recent-request';
-export type RecentEntry = Parameters<KernelClient['recentSearches']['post']>[0]['entry'];
-export type RecentPage = NonNullable<Awaited<ReturnType<KernelClient['recentSearches']['get']>>['data']>;
-export type RecentItem = RecentPage['recentSearches'][number];
-export type Change = { kind: 'use'; entry: RecentEntry } | { kind: 'remove'; id: string } | { kind: 'clear' };
-export type Pending = { key: string; change: Change; queuedAt: string };
+import {
+  RECENT_LIFETIME_MS,
+  type RecentChange,
+  type RecentNativeEntry,
+  type RecentNativeItem,
+  type RecentNativePage,
+  type RecentPending,
+} from './recent-contract';
+
+export type RecentEntry = RecentNativeEntry;
+export type RecentPage = RecentNativePage;
+export type RecentItem = RecentNativeItem;
+export type Change = RecentChange;
+export type Pending = RecentPending;
+export { useRecentSearches, useRecentHistory };
 export type LocalRecent = { revision: number; entries: RecentItem[]; pending: Pending[] };
 /** Compatibility helpers for existing pure fixtures; production persists only recent-history.ts. */
 export const RECENT_STORAGE = 'rezics.search-history.v1:';
-const lifetime = 90 * 86400000;
 export const emptyRecent = (): LocalRecent => ({ revision: 0, entries: [], pending: [] });
 export const entryKey = (entry: RecentEntry) => JSON.stringify(entry);
 const queryDisplay = (entry: Extract<RecentEntry, { kind: 'query' }>) => {
@@ -44,7 +46,7 @@ export function localChange(
   now = new Date(),
   inFlight?: string,
 ): LocalRecent {
-  let entries = state.entries.filter((item) => Date.parse(item.lastUsed) > now.getTime() - lifetime);
+  let entries = state.entries.filter((item) => Date.parse(item.lastUsed) > now.getTime() - RECENT_LIFETIME_MS);
   let pending = [...state.pending];
   if (change.kind === 'use') {
     const entry = change.entry;
@@ -120,9 +122,9 @@ export function restoreRecent(value: string | null, now = Date.now()): LocalRece
       return emptyRecent();
     return {
       ...state,
-      pending: state.pending.filter((p) => Date.parse(p.queuedAt) > now - lifetime),
+      pending: state.pending.filter((p) => Date.parse(p.queuedAt) > now - RECENT_LIFETIME_MS),
       entries: state.entries
-        .filter((i) => Date.parse(i.lastUsed) > now - lifetime)
+        .filter((i) => Date.parse(i.lastUsed) > now - RECENT_LIFETIME_MS)
         .map((i) => ({
           ...i,
           display: i.entry.kind === 'query' && !i.entry.scope ? queryDisplay(i.entry) : null,
@@ -151,7 +153,7 @@ function nativeRecentFailure(result: {
   headers?: HeadersInit | undefined;
 }): { code: string } & RecentRetryAdmission {
   const failure = result.error?.value;
-  const retryAt = admitRecentRetryHeaders(result.headers);
+  const retryAt = admitRecentRetryHeaders(result.headers, Date.now());
   return {
     code:
       failure && typeof failure === 'object' && 'code' in failure && typeof failure.code === 'string'
@@ -200,11 +202,6 @@ export const writeRecent = createServerFn({ method: 'POST' })
     return { ok: true as const, value: result.data };
   });
 export type RecentState = 'loading' | 'local' | 'ready' | 'unavailable' | 'conflict';
-/** Both consumers use the delivered bucketed local helper and its own-account adapter. */
-export function useRecentSearches(): RecentHistory {
-  const session = useSession();
-  return useRecentHistory(recentBucket(session.state, session.subject));
-}
 /** Render local entries without inventing an available scoped destination. */
 function historyItem(entry: HistoryEntry): RecentItem {
   const ref = entry.scope;

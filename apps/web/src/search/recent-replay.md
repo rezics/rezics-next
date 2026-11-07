@@ -1,5 +1,7 @@
 # Repeating a Recent search
 
+Decision: Recent Search history, journal replay and native synchronization are one application constructed per mounted host. Session observation, storage events, clock and the native BFF transport come from `session/recent-search-binding`; nested history and sync calls use that instance. There is no fallback adapter or mutable singleton.
+
 Query history stores text, up to eight ordered languages and an optional native scope reference. A query repeats
 on `/search` with `q`, repeated `language` and the installed `filter` resource leaf (`realm` or `collection`, with
 one UUID `id`), or exactly `{"owner":{"presence":true}}` for Library. A scope-only record still browses its resource. No arbitrary predicates, rating order or cursor are

@@ -1188,6 +1188,8 @@
         "apps/web/src/features/pages/subject-page-application.tsx",
         "apps/web/src/search/public-collection-directory/index.ts",
         "apps/web/src/search/saved-query-condition-input.tsx",
+        "apps/web/src/search/recent.tsx",
+        "apps/web/src/search/recent-host.tsx",
         "apps/web/src/features/pages/account-profile-port.ts",
         "apps/web/src/features/pages/account-page-application.tsx",
         "apps/web/src/features/pages/page-model.ts"
@@ -1440,6 +1442,7 @@
         "apps/web/src/session/reading-policy.ts",
         "apps/web/src/session/reader.ts",
         "apps/web/src/session/library-application.tsx",
+        "apps/web/src/session/recent-search-binding.ts",
         "apps/web/src/session/client.ts",
         "apps/web/src/session/request.ts",
         "apps/web/src/subject/reader.ts",
