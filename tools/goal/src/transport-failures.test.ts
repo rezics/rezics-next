@@ -322,7 +322,12 @@ test('Cursor resume-stop starts fresh on the existing worktree without a transpo
     pool.cli = 'cursor';
     pool.classes = ['cursor'];
     const routing = JSON.parse(readFileSync(h.settings.routingFile, 'utf8'));
-    routing.classes.implementation.first = { cli: 'cursor', model: 'cursor-fixture', effort: 'high', poolClass: 'cursor' };
+    routing.classes.implementation.first = {
+      cli: 'cursor',
+      model: 'cursor-fixture',
+      effort: 'high',
+      poolClass: 'cursor',
+    };
     routing.classes.implementation.fallbacks = [];
     h.settings.routingFile = join(h.settings.stateDirectory, 'cursor-routing.json');
     writeFileSync(h.settings.routingFile, JSON.stringify(routing));
@@ -334,8 +339,12 @@ test('Cursor resume-stop starts fresh on the existing worktree without a transpo
     await job.drain();
     const ref = { taskId: task.id, attempt: 1 };
     expect(h.store.attempt(ref)).toMatchObject({ state: 'waiting', session: null, failureKind: null });
-    expect(h.store.events(ref.taskId, ref.attempt).filter((event) => event.kind === TRANSPORT_FAILURE_EVENT)).toHaveLength(0);
-    expect(h.store.events(ref.taskId, ref.attempt).filter((event) => event.kind === CURSOR_FRESH_SESSION_EVENT)).toHaveLength(1);
+    expect(
+      h.store.events(ref.taskId, ref.attempt).filter((event) => event.kind === TRANSPORT_FAILURE_EVENT),
+    ).toHaveLength(0);
+    expect(
+      h.store.events(ref.taskId, ref.attempt).filter((event) => event.kind === CURSOR_FRESH_SESSION_EVENT),
+    ).toHaveLength(1);
 
     await job.recoverOrphans();
     await job.drain();
