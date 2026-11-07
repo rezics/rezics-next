@@ -184,47 +184,28 @@ async function accessToken(stack: Stack, email: string, password: string): Promi
     client_id: bindings.WEBSITE_CLIENT_ID ?? 'rezics-website',
     scope: bindings.WEBSITE_SCOPES,
   });
-  let last = 'website sign-in failed';
-  for (const origin of [stack.issuer, stack.native]) {
-    const signin = await fetch(`${origin}/signin`, {
-      method: 'POST',
-      headers: { origin, 'content-type': 'application/json' },
-      body,
-    }).catch((error: unknown) => error);
-    if (signin instanceof Error || !('ok' in signin)) {
-      const code =
-        signin && typeof signin === 'object' && 'code' in signin ? String((signin as { code: unknown }).code) : '';
-      last = `website sign-in for ${email} at ${origin} ${code || (signin instanceof Error ? signin.name : 'failed')}`;
-      continue;
-    }
-    if (!signin.ok) {
-      last = `website sign-in for ${email} at ${origin} HTTP ${signin.status}`;
-      continue;
-    }
-    const issued = await fetch(`${origin}/token`, {
-      method: 'POST',
-      headers: {
-        origin,
-        'content-type': 'application/json',
-        cookie: signin.headers
-          .getSetCookie()
-          .map((cookie) => cookie.split(';')[0])
-          .join('; '),
-      },
-      body: '{}',
-    });
-    if (!issued.ok) {
-      last = `token for ${email} at ${origin} HTTP ${issued.status}`;
-      continue;
-    }
-    const token = (await issued.json()) as { access_token?: string };
-    if (!token.access_token) {
-      last = `token for ${email} at ${origin} omitted access_token`;
-      continue;
-    }
-    return token.access_token;
-  }
-  throw new Error(last);
+  const signin = await fetch(`${stack.native}/signin`, {
+    method: 'POST',
+    headers: { origin: stack.issuer, 'content-type': 'application/json' },
+    body,
+  });
+  if (!signin.ok) throw new Error(`website sign-in for ${email} at ${stack.native} HTTP ${signin.status}`);
+  const issued = await fetch(`${stack.native}/token`, {
+    method: 'POST',
+    headers: {
+      origin: stack.issuer,
+      'content-type': 'application/json',
+      cookie: signin.headers
+        .getSetCookie()
+        .map((cookie) => cookie.split(';')[0])
+        .join('; '),
+    },
+    body: '{}',
+  });
+  if (!issued.ok) throw new Error(`token for ${email} at ${stack.native} HTTP ${issued.status}`);
+  const token = (await issued.json()) as { access_token?: string };
+  if (!token.access_token) throw new Error(`token for ${email} at ${stack.native} omitted access_token`);
+  return token.access_token;
 }
 
 async function hydrated(page: Page): Promise<void> {
@@ -251,11 +232,11 @@ async function openPage(
 }
 
 function ownerOf(error: string): string {
-  if (/playwright|hydrat|locator|main|document/i.test(error)) return 'web';
+  if (/playwright|hydrat|locator|html\[data-hydrated\]|heap out of memory/i.test(error)) return 'web';
   if (/search|opensearch|index/i.test(error)) return 'search';
-  if (/document|licence|authored/i.test(error)) return 'content';
+  if (/licence|authored/i.test(error)) return 'content';
   if (/import|provider/i.test(error)) return 'imports';
-  if (/auth|401|invalid_credentials|suspended/i.test(error)) return 'accounts';
+  if (/auth|sign-in|401|403|invalid_credentials|suspended/i.test(error)) return 'accounts';
   return 'semantic';
 }
 

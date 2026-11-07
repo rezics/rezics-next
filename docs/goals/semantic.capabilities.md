@@ -20,37 +20,40 @@ failure marks every dependent row Failing with that cause; it supplies no downst
 
 | Journey | User-visible path | Dev result |
 | --- | --- | --- |
-| Released definitions | `/{locale}/catalogue/definitions` → choose released Type → inspect its actual fields, targets and accepting profile | Pending first walk |
-| Catalogue browsing | `/{locale}/catalogue/{profile}` → page actual released subjects → open the selected canonical reader | Pending first walk |
-| Generic creation | `/{locale}/catalogue/new` → choose released Type/data language → discover existing matches → create → independent returned-subject read | Pending first walk |
-| Book and series editing | `/{locale}/catalogue/literary` → create/correct Book or series → cite a work/edition relation → review → current reader | Pending first walk |
-| Recipe editing | `/{locale}/catalogue/recipe` → original ingredients/method/licence and diet/time facts → propose → separate editorial selection → public recipe | Pending first walk |
-| Game and visual-novel editing | `/{locale}/catalogue/game` → choose released work/release grain → enter supported facts → submit → current distinct identity | Pending first walk |
-| Add-on editing | `/{locale}/catalogue/addon` → choose exact base work → create/correct add-on → current add-on and base relationship | Pending first walk |
-| Manga editing | `/{locale}/catalogue/manga` → create/correct series or volume at its own grain → submit → current reader | Pending first walk |
-| Screen editing | `/{locale}/catalogue/screen` → choose film/series/episode and classification → submit → current reader with correct work relations | Pending first walk |
-| Album editing | `/{locale}/catalogue/album` → released album facts and credits → review → submit → current reader | Pending first walk |
-| Publication editing | `/{locale}/catalogue/publication` → independently identified publication → review → submit → current publication reader | Pending first walk |
-| Music-context editing | `/{locale}/catalogue/music-context` → current released context and exact related work → submit → current reader | Pending first walk |
-| File and release-group editing | `/{locale}/catalogue/file` → catalogue identity and supported relations → submit → current reader without hosted-file publication | Pending first walk |
-| Work-part editing | Subject → work-parts editor → create/correct exact story arc or part → submit → current ordered work relationship | Pending first walk |
-| Character identity and credit | `/{locale}/catalogue/character?work={id}` → distinct fictional character → qualified work credit → submit → current Character and work readback | Pending first walk |
-| Person and organization editing | `/{locale}/catalogue/people` → choose person/organization grain → names and qualified credits → submit → current catalogue identity | Pending first walk |
-| Concept and scheme editing | `/{locale}/catalogue/concept` → choose existing released classification meaning → create/correct Concept or scheme → current reader | Pending first walk |
-| Multilingual terms | Subject → Contribute → names/descriptions → edit explicit language fields → resolve a stale comparison → confirm → current canonical reader | Pending first walk |
-| Cited fact correction | Subject → Contribute → fact editor → cite exact value/qualifiers/references → propose → compare exact candidate and current public selection | Pending first walk |
-| Original authored text | Subject → authored editor → compose original licensed text → preview → propose → read exact candidate independently from selected public text | Pending first walk |
-| Relationship correction | Subject → relation editor → choose exact related identity and qualified statement → propose → review → current relationship | Pending first walk |
-| Missing related work | Subject relationship editor → missing-work handoff → create actual released identity → return → propose intended relationship | Pending first walk |
-| Identifier evidence | Subject → identifiers → propose cited identifier → exact candidate comparison → separate current selected identifier read | Pending first walk |
-| Why this value and history | Subject selected value → Why this value → exact candidate/provenance → Sources/Changes → current reader with captured return | Pending first walk |
-| Context creation | `/{locale}/my/contexts/new` → choose current released settings → review → create → independent exact Context/defaults read | Pending first walk |
-| Context editorial decisions | Subject → context-review for exact Context → competing cited candidates → accept/reject/abstain → separately adopt/rank → compare Context and Global | Pending first walk |
-| Statement consent | Subject → statement-consent → review exact affected statement and current authority → disclose/withdraw → independent current public read | Pending first walk |
-| Subject lifecycle | Owned Subject → available delete/restore controls → confirmed native transition → progress/current reader with owner and public disclosure | Pending first walk |
-| Zone creation and configuration | `/{locale}/my/zones/new` → create → `/my/zones/{id}/edit` → configure static routes/documents without source reads → save → native saved preview | Pending first walk |
-| Zone publication and navigation | Configured static Zone → publish → anonymous `/zones/{id}/{route}` → configured navigation → same-tab return with current Access | Pending first walk |
-| Zone lifecycle and moderation | Owned static Zone → delete → unavailable public route → restore → current route; authorized exact-pointer takedown/release → current owner/public readback | Pending first walk |
+| Released definitions | `/{locale}/catalogue/definitions` → choose released Type → inspect its actual fields, targets and accepting profile | Failing web waitFor: Timeout 180000ms exceeded.
+Call log:
+  - waiting for locator('html[data-hydrated]')
+ |
+| Catalogue browsing | `/{locale}/catalogue/{profile}` → page actual released subjects → open the selected canonical reader | Failing search catalogue search HTTP 503: {"type":"https://rezics.com/problems/index_not_ready","title":"Search Index Not Ready","statu |
+| Generic creation | `/{locale}/catalogue/new` → choose released Type/data language → discover existing matches → create → independent returned-subject read | Failing semantic website sign-in for developer@rezics.test at http://127.0.0.1:20022 HTTP 403 |
+| Book and series editing | `/{locale}/catalogue/literary` → create/correct Book or series → cite a work/edition relation → review → current reader | Failing semantic website sign-in for developer@rezics.test at http://127.0.0.1:20022 HTTP 403 |
+| Recipe editing | `/{locale}/catalogue/recipe` → original ingredients/method/licence and diet/time facts → propose → separate editorial selection → public recipe | Failing semantic website sign-in for developer@rezics.test at http://127.0.0.1:20022 HTTP 403 |
+| Game and visual-novel editing | `/{locale}/catalogue/game` → choose released work/release grain → enter supported facts → submit → current distinct identity | Failing semantic website sign-in for developer@rezics.test at http://127.0.0.1:20022 HTTP 403 |
+| Add-on editing | `/{locale}/catalogue/addon` → choose exact base work → create/correct add-on → current add-on and base relationship | Failing semantic website sign-in for developer@rezics.test at http://127.0.0.1:20022 HTTP 403 |
+| Manga editing | `/{locale}/catalogue/manga` → create/correct series or volume at its own grain → submit → current reader | Failing semantic website sign-in for developer@rezics.test at http://127.0.0.1:20022 HTTP 403 |
+| Screen editing | `/{locale}/catalogue/screen` → choose film/series/episode and classification → submit → current reader with correct work relations | Failing semantic website sign-in for developer@rezics.test at http://127.0.0.1:20022 HTTP 403 |
+| Album editing | `/{locale}/catalogue/album` → released album facts and credits → review → submit → current reader | Failing semantic website sign-in for developer@rezics.test at http://127.0.0.1:20022 HTTP 403 |
+| Publication editing | `/{locale}/catalogue/publication` → independently identified publication → review → submit → current publication reader | Failing semantic website sign-in for developer@rezics.test at http://127.0.0.1:20022 HTTP 403 |
+| Music-context editing | `/{locale}/catalogue/music-context` → current released context and exact related work → submit → current reader | Failing semantic website sign-in for developer@rezics.test at http://127.0.0.1:20022 HTTP 403 |
+| File and release-group editing | `/{locale}/catalogue/file` → catalogue identity and supported relations → submit → current reader without hosted-file publication | Failing semantic website sign-in for developer@rezics.test at http://127.0.0.1:20022 HTTP 403 |
+| Work-part editing | Subject → work-parts editor → create/correct exact story arc or part → submit → current ordered work relationship | Failing semantic website sign-in for developer@rezics.test at http://127.0.0.1:20022 HTTP 403 |
+| Character identity and credit | `/{locale}/catalogue/character?work={id}` → distinct fictional character → qualified work credit → submit → current Character and work readback | Failing semantic website sign-in for developer@rezics.test at http://127.0.0.1:20022 HTTP 403 |
+| Person and organization editing | `/{locale}/catalogue/people` → choose person/organization grain → names and qualified credits → submit → current catalogue identity | Failing semantic website sign-in for developer@rezics.test at http://127.0.0.1:20022 HTTP 403 |
+| Concept and scheme editing | `/{locale}/catalogue/concept` → choose existing released classification meaning → create/correct Concept or scheme → current reader | Failing semantic website sign-in for developer@rezics.test at http://127.0.0.1:20022 HTTP 403 |
+| Multilingual terms | Subject → Contribute → names/descriptions → edit explicit language fields → resolve a stale comparison → confirm → current canonical reader | Failing semantic website sign-in for developer@rezics.test at http://127.0.0.1:20022 HTTP 403 |
+| Cited fact correction | Subject → Contribute → fact editor → cite exact value/qualifiers/references → propose → compare exact candidate and current public selection | Failing semantic website sign-in for developer@rezics.test at http://127.0.0.1:20022 HTTP 403 |
+| Original authored text | Subject → authored editor → compose original licensed text → preview → propose → read exact candidate independently from selected public text | Failing semantic website sign-in for developer@rezics.test at http://127.0.0.1:20022 HTTP 403 |
+| Relationship correction | Subject → relation editor → choose exact related identity and qualified statement → propose → review → current relationship | Failing semantic website sign-in for developer@rezics.test at http://127.0.0.1:20022 HTTP 403 |
+| Missing related work | Subject relationship editor → missing-work handoff → create actual released identity → return → propose intended relationship | Failing semantic website sign-in for developer@rezics.test at http://127.0.0.1:20022 HTTP 403 |
+| Identifier evidence | Subject → identifiers → propose cited identifier → exact candidate comparison → separate current selected identifier read | Failing semantic website sign-in for developer@rezics.test at http://127.0.0.1:20022 HTTP 403 |
+| Why this value and history | Subject selected value → Why this value → exact candidate/provenance → Sources/Changes → current reader with captured return | Failing semantic website sign-in for developer@rezics.test at http://127.0.0.1:20022 HTTP 403 |
+| Context creation | `/{locale}/my/contexts/new` → choose current released settings → review → create → independent exact Context/defaults read | Failing semantic website sign-in for developer@rezics.test at http://127.0.0.1:20022 HTTP 403 |
+| Context editorial decisions | Subject → context-review for exact Context → competing cited candidates → accept/reject/abstain → separately adopt/rank → compare Context and Global | Failing semantic website sign-in for developer@rezics.test at http://127.0.0.1:20022 HTTP 403 |
+| Statement consent | Subject → statement-consent → review exact affected statement and current authority → disclose/withdraw → independent current public read | Failing semantic website sign-in for developer@rezics.test at http://127.0.0.1:20022 HTTP 403 |
+| Subject lifecycle | Owned Subject → available delete/restore controls → confirmed native transition → progress/current reader with owner and public disclosure | Failing semantic website sign-in for developer@rezics.test at http://127.0.0.1:20022 HTTP 403 |
+| Zone creation and configuration | `/{locale}/my/zones/new` → create → `/my/zones/{id}/edit` → configure static routes/documents without source reads → save → native saved preview | Failing semantic website sign-in for developer@rezics.test at http://127.0.0.1:20022 HTTP 403 |
+| Zone publication and navigation | Configured static Zone → publish → anonymous `/zones/{id}/{route}` → configured navigation → same-tab return with current Access | Failing semantic website sign-in for developer@rezics.test at http://127.0.0.1:20022 HTTP 403 |
+| Zone lifecycle and moderation | Owned static Zone → delete → unavailable public route → restore → current route; authorized exact-pointer takedown/release → current owner/public readback | Failing semantic website sign-in for developer@rezics.test at http://127.0.0.1:20022 HTTP 403 |
 
 Catalogue rows use existing released profiles and common editors. Walk anonymous reader, editor, Context acceptor,
 owner, outsider and suspended personas where applicable, through actual Auth/Access, native writes and independent
@@ -67,7 +70,8 @@ repairs continue). Hourly reporting is one line: passing/31 and slowest failing 
 
 Decision: fewest tests pin the 31 user-visible first-public paths: one kernel native suite over bundled Types, proposals,
 Contexts and static Zones, plus one admitted seeded walk that executes every row with independent native readback and
-mounted pages. Walk `dev-stack.ts walk` stays on the worker host so `GOAL_ACCEPTANCE_REQUIRES` is not stripped. Walk Kernel GET `/v1/definitions` is the supported active-release producer (HTTP 200 digest, same as
+mounted pages. Walk `dev-stack.ts walk` stays on the worker host so `GOAL_ACCEPTANCE_REQUIRES` is not stripped.
+Walk-stack seed and website sign-in post to native Auth with the issuer Origin and assertion audience. Walk Kernel GET `/v1/definitions` is the supported active-release producer (HTTP 200 digest, same as
 `/v1/definitions/active`); a missing-route 404 is not readiness. Start runs Kernel before the worker so bootstrap
 finishes before discovery. Walk-stack seed uses native Auth (`REZICS_LOCAL_STACK_NATIVE_ORIGIN`) because Auth pages
 start after seed; import transport diagnostics keep HTTP status, problem code or connection classifier without

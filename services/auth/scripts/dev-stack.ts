@@ -835,6 +835,7 @@ async function launch(action: 'pages' | 'web', args: string[]) {
       cwd: root,
       env: {
         ...process.env,
+        NODE_OPTIONS: [process.env.NODE_OPTIONS, '--max-old-space-size=8192'].filter(Boolean).join(' '),
         AUTH_ORIGIN: origins.native,
         ...developmentWebsiteBindings(keys, website),
         ...developmentMediaBindings(await kernelEnvironment(), keys),
