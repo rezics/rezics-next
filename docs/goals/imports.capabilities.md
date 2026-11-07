@@ -103,7 +103,7 @@ These are authored native scenarios, not proof of current execution, upstream ob
 
 Decision: The anime visit shows currently selected TVAnime facts with their citations; archive aliases remain exact und names, and Episode, staff, cast and Character links follow current native relation IDs and return to the originating work.
 
-The focused `bun services/importer/src/showcase-bangumi-journey.ts` driver launches the existing development stack and seed on an approved check host; public native reads and mounted-page screenshots stay private under `.temp/anime-journey/`. The retained first-public walk is `bun services/auth/scripts/dev-stack.ts walk -- bun services/importer/src/imports-public-journey.ts`. Decision: `worker-check --local` keeps that walk on this host because remote placement drops `GOAL_*` and the walk gate then refuses. Decision: Access admits loopback native JWKS on `/.well-known/jwks.json` when AUTH_ISSUER is the pages origin, matching the walk stack split; other JWKS origin splits stay refused.
+The focused `bun services/importer/src/showcase-bangumi-journey.ts` driver launches the existing development stack and seed on an approved check host; public native reads and mounted-page screenshots stay private under `.temp/anime-journey/`. The retained first-public walk is `bun services/auth/scripts/dev-stack.ts walk -- bun services/importer/src/imports-public-journey.ts`. Decision: `worker-check --local` keeps that walk on this host because remote placement drops `GOAL_*` and the walk gate then refuses. Decision: Access admits loopback native JWKS on `/.well-known/jwks.json` when AUTH_ISSUER is the pages origin, matching the walk stack split; other JWKS origin splits stay refused. Decision: ordinary CLI `--auth` admits `http://127.0.0.1` because the walk issuer is HTTP; `--api` still uses the existing loopback `testOrigin` pin. Seed dump scan-limit errors use the shared showcase-contract class so a bounded VNDB `entry_meta` scan stays a release gap instead of aborting `--dev`.
 
 Decision: concurrent Sources erasure and identity contention stay with Semantic. This walk records Tags' independent property continuation on the same handle and does not duplicate that repair. Native selected-slot erasure remains sequential Content DELETE through the same kernel caller.
 
@@ -113,18 +113,18 @@ This is Imports' receiving matrix for the twelve first-public paths. The one Imp
 
 | Path | Scope row and assigned user-visible journey                                                                                                        | Current dev result and evidence |
 | ---- | -------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------- |
-| I01  | Bangumi operator: licensed fixture through ordinary proposals, separate accept/adopt, independent current facts, refresh/reopen.                   | failing; 0ms; Credential service request failed |
-| I02  | VNDB operator: licensed fixture through ordinary proposals, separate accept/adopt, independent current facts, refresh/reopen.                      | failing; 0ms; Credential service request failed |
-| I03  | Open Library Work/Edition operator: licensed fixture through ordinary proposals, separate accept/adopt, independent current facts, refresh/reopen. | failing; 0ms; Credential service request failed |
-| I04  | Wikidata operator: licensed fixture through ordinary proposals, separate accept/adopt, independent current facts, refresh/reopen.                  | failing; 0ms; Credential service request failed |
-| I05  | Selected anime with episodes, staff, cast and Characters: current public reads and phone/desktop routes.                                           | failing; 0ms; Credential service request failed |
-| I06  | Game, Release and counterpart: current identities, typed links and provenance.                                                                     | failing; 0ms; Credential service request failed |
-| I07  | Reviewed Person identity and credits: both provider identifiers on one canonical Person, original credit endpoints.                                | failing; 0ms; Credential service request failed |
-| I08  | Typed franchise: current franchise relations and independent provider identities.                                                                  | failing; 0ms; Credential service request failed |
-| I09  | Reviewed tags with independent property continuation on the same handle.                                                                           | failing; 0ms; Credential service request failed |
-| I10  | Sources/selected synopsis: independent selected-slot current read.                                                                                 | failing; 0ms; Credential service request failed |
-| I11  | BookSeries 499 and volume 26: current tuple, id/type, publisher and volume membership.                                                             | failing; 0ms; Credential service request failed |
-| I12  | BookSeries 2815 and volumes 5329/10862: current tuple, id/type, publisher, volumes and anime counterpart.                                          | failing; 0ms; Credential service request failed |
+| I01  | Bangumi operator: licensed fixture through ordinary proposals, separate accept/adopt, independent current facts, refresh/reopen.                   | failing; 9ms; bangumi CLI Invalid importer arguments. |
+| I02  | VNDB operator: licensed fixture through ordinary proposals, separate accept/adopt, independent current facts, refresh/reopen.                      | failing; 1ms; vndb CLI Invalid importer arguments. |
+| I03  | Open Library Work/Edition operator: licensed fixture through ordinary proposals, separate accept/adopt, independent current facts, refresh/reopen. | failing; 0ms; openlibrary CLI Invalid importer arguments. |
+| I04  | Wikidata operator: licensed fixture through ordinary proposals, separate accept/adopt, independent current facts, refresh/reopen.                  | failing; 0ms; wikidata CLI Invalid importer arguments. |
+| I05  | Selected anime with episodes, staff, cast and Characters: current public reads and phone/desktop routes.                                           | failing; 0ms; seed exited 1 |
+| I06  | Game, Release and counterpart: current identities, typed links and provenance.                                                                     | failing; 0ms; seed exited 1 |
+| I07  | Reviewed Person identity and credits: both provider identifiers on one canonical Person, original credit endpoints.                                | failing; 0ms; seed exited 1 |
+| I08  | Typed franchise: current franchise relations and independent provider identities.                                                                  | failing; 0ms; seed exited 1 |
+| I09  | Reviewed tags with independent property continuation on the same handle.                                                                           | failing; 0ms; seed exited 1 |
+| I10  | Sources/selected synopsis: independent selected-slot current read.                                                                                 | failing; 0ms; seed exited 1 |
+| I11  | BookSeries 499 and volume 26: current tuple, id/type, publisher and volume membership.                                                             | failing; 0ms; seed exited 1 |
+| I12  | BookSeries 2815 and volumes 5329/10862: current tuple, id/type, publisher, volumes and anime counterpart.                                          | failing; 0ms; seed exited 1 |
 
 ### Observed walk
 

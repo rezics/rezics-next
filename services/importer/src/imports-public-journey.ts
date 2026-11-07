@@ -202,7 +202,7 @@ export function applyWalkInventoryToCapabilities(markdown: string, inventory: Wa
     '',
   ].join('\n');
   if (text.includes(OBSERVED_WALK_HEADING)) {
-    text = text.replace(/### Observed walk\n(?:.*\n)*?(?=\nBooks owner-grant)/, `${record}`);
+    text = text.replace(/### Observed walk\n(?:.*\n)*?(?=Books owner-grant)/, `${record}`);
   } else {
     text = text.replace('\nBooks owner-grant', `\n${record}Books owner-grant`);
   }
@@ -291,7 +291,9 @@ async function command(name: string, args: string[], env: NodeJS.ProcessEnv = pr
   const code = await child.exited;
   if (code !== 0) {
     const lines = (await log.text()).split('\n');
-    const error = lines.find((line) => /^(?:error:|Error:|remote-check:.*failed|task: Failed)/.test(line));
+    const error =
+      lines.find((line) => /^(?:error:|Error:|remote-check:.*failed|task: Failed)/.test(line)) ??
+      lines.findLast((line) => line.trim().length > 0);
     throw new Error(`${name} exited ${code}${error ? `: ${error}` : ''}`);
   }
 }
@@ -486,7 +488,11 @@ async function runOperator(id: 'I01' | 'I02' | 'I03' | 'I04', persona: SeedEnv):
     '--client',
     persona.client,
   ];
-  const first = await runImportCli(argv, spec.stdin ? { stdin: spec.stdin() } : {});
+  const cliOptions = {
+    testOrigin: persona.kernel,
+    ...(spec.stdin ? { stdin: spec.stdin() } : {}),
+  };
+  const first = await runImportCli(argv, cliOptions);
   assert.equal(first.code, 0, `${spec.source} CLI ${first.stderr || first.stdout}`);
   const session = new ImportSession(state);
   const subjects = new Map<string, string>();
@@ -546,7 +552,10 @@ async function runOperator(id: 'I01' | 'I02' | 'I03' | 'I04', persona: SeedEnv):
     assert.equal(read.subject.id, id);
     adopted.push({ key, id, type: read.subject.type, candidate: candidate.id });
   }
-  const again = await runImportCli(argv, spec.stdin ? { stdin: spec.stdin() } : {});
+  const again = await runImportCli(argv, {
+    testOrigin: persona.kernel,
+    ...(spec.stdin ? { stdin: spec.stdin() } : {}),
+  });
   assert.equal(again.code, 0, `${spec.source} reopen ${again.stderr || again.stdout}`);
   const reread = new ImportSession(state);
   try {

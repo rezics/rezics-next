@@ -481,6 +481,14 @@ function validateOrigin(api: string, testOrigin?: string): string {
   return url.origin;
 }
 
+/** HTTPS everywhere except the admitted local-stack issuer on loopback HTTP. */
+function validateAuthOrigin(auth: string): string {
+  const url = parseOrigin(auth);
+  if (url.protocol === 'https:') return url.origin;
+  if (url.protocol === 'http:' && url.hostname === '127.0.0.1') return url.origin;
+  throw new InputFailure();
+}
+
 async function clockSleep(
   clock: NonNullable<ImportCliOptions['clock']>,
   ms: number,
@@ -643,9 +651,7 @@ export async function runImportCli(argv: readonly string[], options: ImportCliOp
     if (parsed === 'help') return { code: 0, stdout: `${usage()}\n`, stderr: '', openHandles: 0 };
     config = parsed;
     config.api = validateOrigin(config.api, options.testOrigin);
-    const auth = parseOrigin(config.auth);
-    if (auth.protocol !== 'https:') throw new InputFailure();
-    config.auth = auth.origin;
+    config.auth = validateAuthOrigin(config.auth);
   } catch (error) {
     return {
       code: 2,
