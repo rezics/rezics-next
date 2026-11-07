@@ -1,11 +1,16 @@
-# Follow a public person from the website bearer
+# Public person row includes the agent Subject
 
 goal: accounts
 manager: accounts
 owner: Accounts
+reuse: Identity 4ff
 
-Walk revision `301e67097ba1d64de62172fed70f318ba65791df` at 2026-11-07T01:42Z. J13 now PUTs the
-public agent Subject from GET /v1/accounts with no body (`t.Optional(t.Never())`). The previous
-HTTP 400 `invalid_request` was that empty JSON body. After the next round, accept follow of that
-subject, list it on Following, unfollow, then unfollow after the target is stored as unavailable.
-Do not reject the eligible public agent Subject. Website-bearer Kernel 401 remains Auth c883.
+Walk revision `c20a775de46c4920f7480490f313eab40c43e37a` at 2026-11-07T04:18Z. J12
+passed public person/organization/agent reads without private fields. Follow writes
+the public agent Subject with no body.
+
+J13 and J14: `GET /v1/accounts?handle=` for a just-created public person omitted
+`subject.id`, so follow and outgoing counts could not name the target. After signup
+201, that handle's public row must include the agent Subject so `PUT /v1/follows/{id}`,
+Following, unfollow, unavailable-target unfollow, and own `followingCount` can run.
+Do not reject the eligible public agent Subject.

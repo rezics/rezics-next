@@ -180,7 +180,7 @@ export function renderJourneyTable(rows: JourneyRow[]): string {
 }
 
 const CENSUS_REPAIRS =
-  '`.temp/continuation/auth-website-kernel-bearer.md`, `auth-recovery-and-credentials.md`, `accounts-operations-e18.md`, `accounts-follow.md`, `accounts-walk-browser.md`';
+  '`.temp/continuation/auth-website-kernel-bearer.md`, `auth-recovery-and-credentials.md`, `accounts-operations-e18.md`, `accounts-follow.md`, `accounts-walk-browser.md`, `accounts-realm.md`';
 const CENSUS_MARKER = ' The table-shape check does not start Storybook.';
 
 export function renderWalkCensus(
@@ -201,7 +201,9 @@ export function renderWalkCensus(
 
 export function replaceWalkCensus(markdown: string, sentence: string): string {
   const heading = markdown.indexOf(JOURNEY_HEADING);
-  const roundAt = markdown.indexOf('Round ', heading < 0 ? 0 : heading);
+  const from = heading < 0 ? 0 : heading;
+  const relative = markdown.slice(from).search(/Round \d{4}-\d{2}-\d{2}T/);
+  const roundAt = relative < 0 ? -1 : from + relative;
   const markerAt = markdown.indexOf(CENSUS_MARKER, roundAt);
   if (roundAt < 0 || markerAt < 0) throw new Error('Walk census sentence is missing');
   return `${markdown.slice(0, roundAt)}${sentence}${markdown.slice(markerAt)}`;
@@ -1107,7 +1109,7 @@ if (import.meta.main) {
     });
     requireStatus(before, 'consented profile', 200);
     if (!granted.refresh) throw new Error('website token omitted refresh_token');
-    const revoked = await fetch(`${stack.native}/revoke`, {
+    const revoked = await fetch(`${stack.issuer}/revoke`, {
       method: 'POST',
       headers: { origin: stack.issuer, 'content-type': 'application/x-www-form-urlencoded' },
       body: new URLSearchParams({

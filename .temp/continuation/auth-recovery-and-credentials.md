@@ -1,19 +1,19 @@
-# Recovery token and credential replace on the walk stack
+# Recovery delivery and credential replace on the walk stack
 
 goal: accounts
 manager: accounts
 owner: Auth c883
 
-Walk revision `5b3cf6755af0d3058f41eb7577624d22d304507b` at 2026-11-07T00:25Z. J02 already passed
-native sign-in, session review and revoke.
+Walk revision `c20a775de46c4920f7480490f313eab40c43e37a` at 2026-11-07T04:18Z. J02
+passed native sign-in, session review and revoke. HTTP recovery start must stay
+`{"success":true}` with no token in the body.
 
-J03: `POST /recovery/start` returned HTTP 200 with no token and no delivery handle. The walk stack
-has no external mail. Repair: put a deterministic recovery token in that start acknowledgement on
-the local stack so `POST /recovery/complete`, new-password sign-in, and old-password/old-session
-refusal can run.
+J03: `POST /recovery/start` answered 200 with no token. Bind the local stack's
+`recoveryDelivery.deliver` so it writes the issued `{accountId,token,url}` under
+`.temp/local-stack/` for this walk to complete `POST /recovery/complete`, new-password
+sign-in, and old-password/old-session refusal. Do not return the proof over HTTP.
 
-J04: `POST /credential-effects/stage` with a fresh login-client session (Security's human proof)
-returned HTTP 403 `{error:credential_effect_denied, effect_status:not_applied}` on the previous
-management-client attempt. The next round stages password replace through that login session as
-the fresh step-up, then reviews and revokes sessions. Do not add a walk-side bypass. Human proof
-rejects automated and operator callers.
+J04: `POST /credential-effects/stage` with a fresh login-client session (Security's
+human proof) returned HTTP 403 `{error:credential_effect_denied, effect_status:not_applied}`.
+Stage and apply password replace through that login session, then review and revoke
+sessions. Human proof still rejects automated and operator callers.
