@@ -535,7 +535,7 @@ test('walk stacks fetch the public issuer JWKS URL from native Auth only', async
     const admitted = await config.auth.fetch!(env.AUTH_JWKS_URL, {});
     expect(await admitted.json()).toEqual({ keys: [{ kty: 'EC', kid: 'walk-native' }] });
     await expect(config.auth.fetch!('https://example.test/.well-known/jwks.json', {})).rejects.toThrow(
-      'JWKS fetch is limited to the configured public JWKS URL',
+      'Local JWKS transport serves only the configured issuer JWKS URL',
     );
     expect(readMembershipWorkConfig(env).auth.fetch).toBeUndefined();
   } finally {
