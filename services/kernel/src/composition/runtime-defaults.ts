@@ -104,7 +104,8 @@ export function createKernelRuntimeDefaults(overrides: KernelRuntimeOverrides = 
   composeContentApplication();
   composeCommunityApplication();
   installNativeHistory();
-  // Install the shared native Source binding before Search constructs any consumer factories.
+  // Semantic registration binds Search native ports before its receiving participant is built;
+  // runtime defaults repeat that install for server and Search service consumers.
   composeSemanticAdapters();
   composeSearchSemanticSource();
   composePresentationApplication();

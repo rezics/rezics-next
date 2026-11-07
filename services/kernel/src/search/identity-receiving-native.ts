@@ -7,11 +7,11 @@ import { requireAccessDeadline } from '../access/unavailable.ts';
 import { withRequestDeadline } from '../request/deadline.ts';
 import {
   PublicFilterSourceDefinitionError,
-  createIdentitySourceSupportReader,
   publicFilterSource,
   readIdentitySourceProjection,
   readPublicFilterSourceDefinition,
 } from './native-bindings.ts';
+import type { IdentitySourceSupportReaderFactory } from '../semantic/index.ts';
 import { searchIdentityWriterChanged } from './identity-epoch-participant-events.ts';
 import type { OpenSearch } from './opensearch.ts';
 import type {
@@ -29,11 +29,12 @@ import type { SearchNativeReceivingPlan, SearchNativeReceivingStored } from './i
 import { SearchNativeReceivingError, SearchNativeReceivingWork } from './identity-receiving-native-work.ts';
 
 /** Derive the installed Source dependencies rather than maintaining a second configuration contract. */
-export type SearchReceivingConfiguration = Parameters<typeof createIdentitySourceSupportReader>[0] &
+export type SearchReceivingConfiguration = Parameters<IdentitySourceSupportReaderFactory>[0] &
   Readonly<{
     search: OpenSearch;
     consumer: string;
     index: string;
+    identitySourceSupportReaderFactory: IdentitySourceSupportReaderFactory;
   }>;
 type Invocation = {
   active: boolean;
@@ -133,7 +134,12 @@ export function createSearchIdentityReceivingNative(
   configuration: SearchReceivingConfiguration,
 ): SearchIdentityReceivingNative {
   const config = Object.freeze({ ...configuration, routeKey: new Uint8Array(configuration.routeKey) });
-  const sourceSupport = createIdentitySourceSupportReader(config);
+  const sourceSupport = config.identitySourceSupportReaderFactory({
+    pool: config.pool,
+    routeKey: config.routeKey,
+    access: config.access,
+    clock: config.clock,
+  });
   if (!config.search || typeof config.search.request !== 'function') throw new TypeError('Search is not configured');
   const store = createSearchIdentityReceivingNativeStore(config);
   const source = publicFilterSource(config);

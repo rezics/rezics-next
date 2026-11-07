@@ -1,7 +1,14 @@
 import { afterAll, beforeAll, expect, test } from 'bun:test';
 import { createHash, randomUUID } from 'node:crypto';
+import { systemClock } from '../../src/clock.ts';
+import { composeSemanticAdapters } from '../../src/composition/semantic.ts';
+import { composeSearchNativePorts } from '../../src/composition/search-native.ts';
 import { subjectListingSource } from '../../src/library/listing-counts.ts';
-import { PublicFilterSourceDefinitionError, readNativePublicFilterSourceDefinition } from '../../src/semantic/index.ts';
+import {
+  PublicFilterSourceDefinitionError,
+  readNativePublicFilterSourceDefinition,
+  type IdentitySourceSupportReaderFactory,
+} from '../../src/semantic/index.ts';
 import { createSearchSourceBindingAdapter } from '../../src/search/source-binding-adapter.ts';
 import { subjectSource } from '../../src/semantic/search-source.ts';
 import { stepIdentityEpochAdmission } from '../../src/semantic/identity-epoch-admission.ts';
@@ -12,6 +19,7 @@ import { createSubjectIndex, subjectAlias, subjectIndexName } from '../../src/se
 import { createOpenSearch, type OpenSearch } from '../../src/search/opensearch.ts';
 import { subjectConsumer } from '../../src/search/runner.ts';
 import { subjectPartition } from '../../src/search/source.ts';
+import { createSearchIdentityReceivingNative } from '../../src/search/identity-receiving-native.ts';
 import { createSearchWriterGuard } from '../../src/search/writer-guard.ts';
 import { digest, epochFixture, release, type EpochFixture } from '../semantic/support/identity-epoch.ts';
 import { interruptNativeStatement, libraryCutoverInput } from '../semantic/support/identity-epoch-cutover.ts';
@@ -43,6 +51,41 @@ afterAll(async () => {
   } finally {
     await f?.close();
   }
+});
+
+test('each Search native instance builds its Source reader from its supplied application tuple', () => {
+  composeSemanticAdapters();
+  composeSearchNativePorts();
+  const configured: Parameters<IdentitySourceSupportReaderFactory>[0][] = [];
+  const factory: IdentitySourceSupportReaderFactory = (input) => {
+    configured.push(input);
+    return {
+      readPage: async () => {
+        throw new Error('Reader invocation is outside this construction case');
+      },
+    };
+  };
+  const create = (key: Uint8Array, access: typeof f.access) =>
+    createSearchIdentityReceivingNative({
+      pool: f.pool,
+      routeKey: key,
+      access,
+      clock: systemClock,
+      search,
+      consumer: subjectConsumer(prefix, 1),
+      index,
+      identitySourceSupportReaderFactory: factory,
+    });
+  const firstKey = crypto.getRandomValues(new Uint8Array(32));
+  const secondKey = crypto.getRandomValues(new Uint8Array(32));
+  const secondAccess = new Proxy(f.access, {});
+  const first = create(firstKey, f.access);
+  const second = create(secondKey, secondAccess);
+  expect(first).not.toBe(second);
+  expect(configured).toHaveLength(2);
+  expect(Object.keys(configured[0]!).sort()).toEqual(['access', 'clock', 'pool', 'routeKey']);
+  expect(configured[0]).toMatchObject({ pool: f.pool, routeKey: firstKey, access: f.access, clock: systemClock });
+  expect(configured[1]).toMatchObject({ pool: f.pool, routeKey: secondKey, access: secondAccess, clock: systemClock });
 });
 
 function writer(engine = search) {

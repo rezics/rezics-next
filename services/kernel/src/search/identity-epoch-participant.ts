@@ -5,6 +5,7 @@ import { currentCommand, noEffect, registerCommandCallback, runCommand } from '.
 import type { KernelClock } from '../clock.ts';
 import { deadlineFor } from '../request/deadline.ts';
 import type { Access } from '../request/access.ts';
+import type { IdentitySourceSupportReaderFactory } from '../semantic/index.ts';
 import type {
   IdentityEpochStep,
   IdentityStepProgress,
@@ -94,6 +95,7 @@ export function searchIdentityReceivingComposition(options: {
   routeKey: Uint8Array;
   access: Access;
   clock: KernelClock;
+  identitySourceSupportReaderFactory: IdentitySourceSupportReaderFactory;
   work: SearchReceivingWorkDeclaration;
 }): {
   configuration: SearchReceivingConfiguration;
@@ -108,6 +110,7 @@ export function searchIdentityReceivingComposition(options: {
       routeKey: Uint8Array.from(options.routeKey),
       access: options.access,
       clock: options.clock,
+      identitySourceSupportReaderFactory: options.identitySourceSupportReaderFactory,
       search: options.search,
       consumer: subjectConsumer(options.prefix, 1),
       index: subjectIndexName(options.prefix, 1),

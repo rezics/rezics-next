@@ -119,6 +119,15 @@ test('ordinary configured server returns current mixed discovery through its def
     });
     worker = startOutcomeWorkerProcess(env);
     await worker.ready; // Ordinary default module registration includes native Source work.
+    const registrations = await worker.rpc.request<{
+      registeredModules: string[];
+      startedServices: Record<string, number>;
+    }>('stats');
+    expect(registrations.registeredModules.indexOf('semantic')).toBeGreaterThanOrEqual(0);
+    expect(registrations.registeredModules.indexOf('search')).toBeGreaterThan(
+      registrations.registeredModules.indexOf('semantic'),
+    );
+    expect(registrations.startedServices.semantic).toBeGreaterThan(0);
     server = await startServer(readConfig(env));
     const origin = server.url;
     const request = {
