@@ -82,6 +82,7 @@ export {
   MANIFEST_PATH,
   MAX_MODULE_MAP_CHARACTERS,
   MODULE_MAP_POINTER,
+  MODULE_MAP_TRUNCATION,
   formatModuleMap,
   loadManifest,
   modulesForBriefPaths,

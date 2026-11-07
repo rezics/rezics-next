@@ -1666,8 +1666,8 @@ Semantic adapters and kernel test preload). HTTP `createKernel` consumes the bou
 `createRatingModule` and does not import the composition installer. Ordinary `application().identityRepair`
 uses the bound producer and `createIdentityRepairRead` for independent counted-vote, ordered-outbox, receipt
 obligation/mapping-digest and checkpoint observations. Native installed-composition acceptance is
-`test/rating/identity-repair-native.test.ts`. Performance Cost vectors live in `identity-repair-bounds.ts` and the
-Cost subsections below. `test/rating/growth-identity-repair.test.ts` keeps injected seam series distinct from
+`test/rating/identity-repair-native.test.ts`. Cost vectors in `identity-repair-bounds.ts`; page size
+`identity-work-frame-limits.ts`. `test/rating/growth-identity-repair.test.ts` keeps injected seam series distinct from
 installed native growth of the bound producer.
 
 Decision: ordinary installed Rating identity repair uses the Semantic producer bound by host composition; omitting
@@ -1676,7 +1676,8 @@ captured upper key stay on the retained obligation and converge through another 
 
 Decision: fewest tests for this Cost close: extend identity-repair, identity-repair-native, growth-identity-repair
 and realm-rank-repair; pin later-vote and pending-event handoff in those suites; keep injected seam `checkGrowth`
-distinct from installed native growth; no new stories. Native/growth execution stays with the dev verifier.
+distinct from installed native growth; no new stories. Native, browser and growth execution stay on the sole
+Performance walk; this repair lands on focused architecture checks and changed-workspace typing.
 
 Decision: composition binds `createIdentityRatingRepairProducer` through Rating's public `bindRatingIdentityProducer`
 and Semantic's public producer/continuation contract; server, default-worker and test preload install before commands
