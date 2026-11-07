@@ -1,4 +1,4 @@
-import { recordIdentityEpochNativeCommit } from '../semantic/identity-adapters/index.ts';
+import { currentReadSnapshot, recordIdentityEpochNativeCommit, withReadTransaction } from './native-bindings.ts';
 import { memoizedValue } from '../memoized.ts';
 import { createHash } from 'node:crypto';
 import { isDeepStrictEqual } from 'node:util';
@@ -13,7 +13,6 @@ import {
 import type { IdentityFrontier, IdentityNativeReceipt } from '../semantic/identity-epoch-contract.ts';
 import { identityJobPartition } from '../semantic/identity-adapters/identity-epoch-contract.ts';
 import { serializeIdentityValue as json } from '../semantic/identity-core/encoding.ts';
-import { currentReadSnapshot, withReadTransaction } from '../semantic/read.ts';
 import { subjectPartition } from './source.ts';
 import { decodeSearchRepairWriterReceipt, validateSearchRepairWriterEvidence } from './writer-guard.ts';
 import type {

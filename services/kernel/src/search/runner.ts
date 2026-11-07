@@ -1,7 +1,7 @@
 import { createReviewDiscoveryReceiving } from './review-discovery-receiving.ts';
 import type { ReviewDiscoverySource } from '../content/index.ts';
 import { withConnection } from '../database/pool.ts';
-import { readErasureStatus, resolveLateErasureItem } from '../access/erasure.ts';
+import { readErasureStatus, resolveLateErasureItem } from './native-bindings.ts';
 import {
   nativeDiscoveryRegistry,
   createDiscoveryProjection,

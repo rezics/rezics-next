@@ -4,9 +4,12 @@ import { createOrderedScopePreparation } from './scope-preparation-ordered.ts';
 import { createFacetPopulationSource } from '../semantic/copy-work-application.ts';
 import { ProblemError } from '../http/problem-error.ts';
 import type { PublicFilterSourceFactory } from '../semantic/public-filter-source-contract.ts';
-import { createPublicIdentitySourceCapture } from '../semantic/identity-scoped-public-source.ts';
-import { createIdentityScopedObservations } from '../semantic/identity-scoped-observations.ts';
-import { createNativeLibrarySourceCustody } from '../library/native-source-custody.ts';
+import {
+  createIdentityScopedObservations,
+  createNativeLibrarySourceCustody,
+  createPublicIdentitySourceCapture,
+  relationSource,
+} from './native-bindings.ts';
 import { readRelease } from '../semantic/definitions.ts';
 import type { IdentityScopeRegistration, IdentityScopeObservation } from '../semantic/identity-scope-types.ts';
 import { createScopePreparationStore, type ScopePreparationRecord } from './scope-preparation-store.ts';
@@ -19,7 +22,6 @@ import {
   type ConceptBrowseState,
 } from './concept-browse.ts';
 import { createConceptBrowseStore } from './concept-browse-store.ts';
-import { relationSource } from '../semantic/search-relations.ts';
 
 /** One bounded structural step under the existing Search WorkModule. No native receiving receipts
  * are constructed here. Expiry stops scheduling but retains unknown native custody for its owner.

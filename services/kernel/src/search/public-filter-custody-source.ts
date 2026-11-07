@@ -1,7 +1,7 @@
 import { isDeepStrictEqual } from 'node:util';
-import type { PublicSourceRepair } from '../semantic/index.ts';
-import { readNativePublicFilterAccountRepair } from '../semantic/index.ts';
-import type { PublicFilterCost } from '../semantic/index.ts';
+import type { PublicSourceRepair } from '../semantic/public-filter-source-binding.ts';
+import { readNativePublicFilterAccountRepair } from './native-bindings.ts';
+import type { PublicFilterCost } from '../semantic/public-filter-source-contract.ts';
 import type { PublicFilterConsumerContext } from './public-filter-consumer-contract.ts';
 import type {
   CustodyFailure,

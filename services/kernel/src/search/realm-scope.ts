@@ -22,14 +22,14 @@ import { ScopeWork, zeroScopeWork } from './scope-work.ts';
 import type { RelationFacetMatch } from './source.ts';
 import { routeOf } from '../route/route.ts';
 
-import {
-  createRealmSubjectSource,
-  type RealmSubjectObservation,
-  type RealmSubjectMembership,
-  type RealmSubjectSource,
-  type RealmSubjectDisclosure,
-  type RealmSubjectMaintenance,
+import type {
+  RealmSubjectObservation,
+  RealmSubjectMembership,
+  RealmSubjectSource,
+  RealmSubjectDisclosure,
+  RealmSubjectMaintenance,
 } from '../content/realm-subject-source.ts';
+import { createRealmSubjectSource } from './native-bindings.ts';
 export type {
   RealmSubjectObservation,
   RealmSubjectResolution,

@@ -1,5 +1,5 @@
 import { relationFacetProperty, type FilterDocument, type FilterRelease } from '@rezics/filter';
-import { GLOBAL_CONTEXT } from '../access/gates/catalogue.ts';
+import { SEARCH_GLOBAL_CONTEXT as GLOBAL_CONTEXT } from './global-context.ts';
 import { ProblemError } from '../http/problem-error.ts';
 import { STANDARD_QUESTION_ID } from '../rating/standard-question.ts';
 import type { KeyRing } from '../tokens/seal.ts';

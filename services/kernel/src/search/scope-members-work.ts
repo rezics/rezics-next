@@ -10,12 +10,17 @@ import { routeOf } from '../route/route.ts';
 import type { CollectionPublicationWorkDefinition } from '../library/collection-publication-work-admission.ts';
 import type { NativeOrdinalKey } from '../library/contract/index.ts';
 import type { WorkDimensions } from '../library/contract/work-dimensions.ts';
-import { leafProvider, type CollectionMemberAdmission, type OwnerFilterFactLocator } from '../library/owner-filter.ts';
-import { readOwnerFilterCandidate, type OwnerFilterCandidateClosure } from '../library/owner-filter-plan.ts';
+import type { CollectionMemberAdmission, OwnerFilterFactLocator } from '../library/owner-filter.ts';
+import type { OwnerFilterCandidateClosure } from '../library/owner-filter-plan.ts';
 import factsQuery from '../library/owner-filter-native-closure-facts.sql';
 import fenceQuery from '../library/owner-filter-native-binding-fence.sql';
 import { readRelease } from '../semantic/definitions.ts';
-import { createIdentityScopedObservations, identityScopeAddress } from '../semantic/identity-scoped-observations.ts';
+import {
+  createIdentityScopedObservations,
+  identityScopeAddress,
+  leafProvider,
+  readOwnerFilterCandidate,
+} from './native-bindings.ts';
 import type { IdentityScopeObservation } from '../semantic/identity-scope-types.ts';
 import type { CurrentOwnerFilterPlan } from './current-filter-plan.ts';
 import {
