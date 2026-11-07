@@ -10,7 +10,7 @@ import {
   type CollectionListPolicyOutcome,
   type CollectionListPolicyRequest,
   type CollectionListResourceOperand,
-} from '../contract/index.ts';
+} from '../contract/collection-policy.ts';
 import type { AccessWorkDimensions } from '../contract/bounds.ts';
 import { sumOriginalControl } from './original-work.ts';
 

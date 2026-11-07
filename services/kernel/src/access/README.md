@@ -9,7 +9,7 @@ completeness, opaque proofs, authoritative time, floors/fences, command admissio
 is a distinct consumer. The first core and Collection directory residual use are integrated; this remaining-profile migration
 adds no baseline allowance and no old/new allow-OR. Source compatibility is no native acceptance.
 
-Decision: Collection directory, list, order-bounds and current reads consume Library `AuthorizationCapability.specializeCollectionList` and the Access-funded `collectionAuthorizationPreparation` bound. Access adapters keep `specializePolicy`, residual lowering, native permission SQL and the inverse membership limit; Library does not import private policy-core/filter or reconstruct permission statements. Wire shapes, independent deny operands and final authority before disclosure stay the same.
+Decision: Collection directory, list, order-bounds and current reads consume Library `AuthorizationCapability.specializeCollectionList` and the Access-funded `collectionAuthorizationPreparation` bound. Access adapters keep `specializePolicy`, residual lowering, native permission SQL and the inverse membership limit; Library does not import private policy-core/filter or reconstruct permission statements. Wire shapes, independent deny operands and final authority before disclosure stay the same. Collection authorization memberships, residual operands and action names live in the Access contract literal leaf; adapters re-export them and do not evaluate membership-inverse at import. Fewest tests: owner/public/unavailable list outcomes and the funded inverse membership limit 1000.
 
 [Accounts](../../../../docs/accounts.md) owns product identity, delegation, consent and preferences;
 [Deletion](../../../../docs/deletion.md) owns erasure/restore policy;

@@ -16,7 +16,7 @@ export type CollectionListFilter = Readonly<{
 export type CollectionAuthorizationPreparation = WorkDimensions & {
     readonly engineRequests: 0;
 };
-export const EMPTY_COLLECTION_AUTHORIZATION_PREPARATION: CollectionAuthorizationPreparation;
+export declare const EMPTY_COLLECTION_AUTHORIZATION_PREPARATION: CollectionAuthorizationPreparation;
 export type SpecializeCollectionListInput = Readonly<{
     access: unknown;
     fullView: boolean;

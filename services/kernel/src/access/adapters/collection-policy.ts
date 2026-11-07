@@ -8,10 +8,11 @@ import type { AccessWorkDimensions } from '../contract/bounds.ts';
 import {
   COLLECTION_AUTHORIZATION_ACTOR_MEMBERS,
   COLLECTION_AUTHORIZATION_GRANT_ROLES,
+  COLLECTION_AUTHORIZATION_MEMBERSHIPS,
   COLLECTION_UPDATE_ACTION,
   type CollectionListPolicyOutcome,
   type CollectionPolicyPort,
-} from '../contract/index.ts';
+} from '../contract/collection-policy.ts';
 import {
   admitCollectionListOutcome,
   collectionListPolicyFacts,
@@ -21,7 +22,6 @@ import {
   interpretCollectionListResidual,
   sumCollectionAuthorizationWork,
 } from '../core/index.ts';
-import { MEMBERSHIP_LIMIT } from '../membership-inverse.ts';
 import { nativePolicyCatalogueForAccess } from '../policy-core.ts';
 import { bindCollectionListFilter } from '../policy-filter.ts';
 import type { Access } from '../../request/access.ts';
@@ -39,9 +39,7 @@ import type {
   SpecializeCollectionListInput,
 } from '../../library/contract/index.ts';
 
-export { bindCollectionListFilter };
-
-export const COLLECTION_AUTHORIZATION_MEMBERSHIPS = MEMBERSHIP_LIMIT;
+export { bindCollectionListFilter, COLLECTION_AUTHORIZATION_MEMBERSHIPS };
 
 export function specializeCollectionListFromCatalogue(
   catalogue: PolicyCatalogue | undefined,
@@ -69,7 +67,7 @@ const uuid = '0'.repeat(uuidBytes);
 const timestamp = '\0'.repeat(64);
 const actorAccount = { route: 65535, account_id: uuid };
 const accessMembers = COLLECTION_AUTHORIZATION_ACTOR_MEMBERS;
-const accessGroups = accessMembers * MEMBERSHIP_LIMIT;
+const accessGroups = accessMembers * COLLECTION_AUTHORIZATION_MEMBERSHIPS;
 const accessRoles = accessGroups * 2;
 const accessFormulaInput = {
   route: 65535,
@@ -117,7 +115,7 @@ function collectionAuthorizationPreparationDimensions(): AccessWorkDimensions {
         'inverse',
         permissionInverse.sql,
         { ...actorAccount, members: Array.from({ length: accessMembers }, () => actorAccount) },
-        { members: accessMembers, groups: MEMBERSHIP_LIMIT },
+        { members: accessMembers, groups: COLLECTION_AUTHORIZATION_MEMBERSHIPS },
         accessMembers,
       ),
       leafDimensions(
@@ -135,23 +133,26 @@ function collectionAuthorizationPreparationDimensions(): AccessWorkDimensions {
           organization_id: uuid,
           member_id: uuid,
           at: timestamp,
-          pairs: Array.from({ length: MEMBERSHIP_LIMIT }, () => ({
+          pairs: Array.from({ length: COLLECTION_AUTHORIZATION_MEMBERSHIPS }, () => ({
             route: 65535,
             organization_id: uuid,
             member_id: uuid,
           })),
         },
-        { groups: MEMBERSHIP_LIMIT },
+        { groups: COLLECTION_AUTHORIZATION_MEMBERSHIPS },
         1,
       ),
       leafDimensions(
         'membership',
         permissionMembership.sql,
         {
-          pairs: Array.from({ length: MEMBERSHIP_LIMIT }, () => ({ realmId: uuid, accountId: uuid })),
+          pairs: Array.from({ length: COLLECTION_AUTHORIZATION_MEMBERSHIPS }, () => ({
+            realmId: uuid,
+            accountId: uuid,
+          })),
           at: timestamp,
         },
-        { groups: MEMBERSHIP_LIMIT },
+        { groups: COLLECTION_AUTHORIZATION_MEMBERSHIPS },
         1,
       ),
       leafDimensions(

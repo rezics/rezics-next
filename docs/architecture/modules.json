@@ -281,7 +281,8 @@
       "paths": ["services/kernel/src/access/contract/**"],
       "publicEntries": [
         "services/kernel/src/access/contract/index.ts",
-        "services/kernel/src/access/contract/bounds.ts"
+        "services/kernel/src/access/contract/bounds.ts",
+        "services/kernel/src/access/contract/collection-policy.ts"
       ],
       "allowedDependencies": [],
       "capabilities": ["access-vocabulary"]
@@ -524,7 +525,8 @@
       "paths": ["services/kernel/src/library/contract/**"],
       "publicEntries": [
         "services/kernel/src/library/contract/work-dimensions.ts",
-        "services/kernel/src/library/contract/index.ts"
+        "services/kernel/src/library/contract/index.ts",
+        "services/kernel/src/library/contract/collection-policy.ts"
       ],
       "allowedDependencies": [],
       "capabilities": []

@@ -7,6 +7,8 @@ export const COLLECTION_UPDATE_ACTION = 'collection:update';
 export const COLLECTION_RESOURCE_TYPE = 'library.collection';
 export const COLLECTION_AUTHORIZATION_ACTOR_MEMBERS = 2;
 export const COLLECTION_AUTHORIZATION_GRANT_ROLES = 1;
+/** Inclusive inverse-writer slots in the funded collection-update preparation bound. */
+export const COLLECTION_AUTHORIZATION_MEMBERSHIPS = 1000;
 export const COLLECTION_PUBLIC_FLOOR_OPERAND = 'public.floor' as const;
 export type CollectionListResourceOperand = typeof COLLECTION_PUBLIC_FLOOR_OPERAND;
 
