@@ -61,6 +61,7 @@ import {
   createProgressOperationCatalog,
   createNativeSourceCaptureAdapter,
   createNativeLibraryPresentation,
+  createMembersPreparationAdapter,
   createSearchPreparationAdapter,
   type SearchPreparationAdapterPorts,
 } from '../library/adapters/index.ts';
@@ -379,8 +380,10 @@ export function composeLibraryDomain(options: LibraryComposeOptions = {}): Retur
     ...extras,
   };
   const previous = peekLibraryDomain();
+  const applications = createLibraryApplications(capabilities);
   return bindLibraryDomain({
-    ...createLibraryApplications(capabilities),
+    ...applications,
+    membersPreparation: createMembersPreparationAdapter(applications),
     copyContext: nativeCopyListContext(),
     copyPorts: (config) =>
       createNativeCopyPorts(config, {

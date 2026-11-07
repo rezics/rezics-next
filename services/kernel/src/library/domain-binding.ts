@@ -6,6 +6,7 @@ import type { NativeCopyConfig, NativeCopyTypes } from './adapters/copies.ts';
 import type { NativeLibraryPresentation } from './adapters/presentation.ts';
 import type { LibraryDomain } from './contract/index.ts';
 import type { NativePreparationWorkFactory, NativeScopeWork } from './adapters/preparation-work.ts';
+import type { LibraryMembersPreparationRuntime } from './domain.ts';
 
 export type NativeLibraryDomain = LibraryDomain &
   Readonly<{
@@ -14,6 +15,7 @@ export type NativeLibraryDomain = LibraryDomain &
     copyContext?: NativeCopyListContext;
     copyPorts?: (config: NativeCopyConfig) => CopyApplicationPorts<NativeCopyTypes>;
     presentation?: NativeLibraryPresentation;
+    membersPreparation?: LibraryMembersPreparationRuntime;
   }>;
 
 let binding: { domain?: NativeLibraryDomain; presentation?: NativeLibraryPresentation } = {};
@@ -30,6 +32,12 @@ export function peekLibraryDomain(): NativeLibraryDomain | undefined {
 export function requireLibraryDomain(): NativeLibraryDomain {
   if (!binding.domain) throw new TypeError('Library domain is not composed');
   return binding.domain;
+}
+
+export function requireLibraryMembersPreparation(): LibraryMembersPreparationRuntime {
+  const runtime = binding.domain?.membersPreparation;
+  if (!runtime) throw new TypeError('Library members preparation is not composed');
+  return runtime;
 }
 
 /** Tests restore the process binding; createKernel/server/worker rebind native adapters. */

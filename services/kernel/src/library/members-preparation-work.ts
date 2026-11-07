@@ -17,16 +17,14 @@ import {
   type PreparationIntent,
   type PreparationLocator,
   type PreparationStepState,
-  createMembersPreparation,
   readPreparationScope,
   readPreparationSource,
-  readPreparationOwnerFence,
 } from './members-preparation.ts';
 import type { CollectionSourceObservation } from './collection-source.ts';
 import type { WorkReceipt } from './contract/work-dimensions.ts';
 import type { IdentityScopeObservation } from '../semantic/identity-scope-types.ts';
 import type { MembersPreparationWorkContext, NativePreparationWork } from './adapters/preparation-work.ts';
-import { requireLibraryDomain } from './domain-binding.ts';
+import { requireLibraryDomain, requireLibraryMembersPreparation } from './domain-binding.ts';
 import ownerLock from './members-preparation-owner-lock.sql';
 import cleanup from './members-preparation-cleanup.sql';
 import idle from './members-preparation-idle.sql';
@@ -161,7 +159,8 @@ async function advancePreparation(
 ): Promise<PreparationAdvance | Readonly<{ status: 'unavailable' }> | Readonly<{ status: 'restart' }>> {
   const authorization = deps.authorization?.();
   if (!authorization || !deps.routeKey) return { status: 'unavailable' };
-  const service = createMembersPreparation({
+  const members = requireLibraryMembersPreparation();
+  const service = members.createPreparation({
     pool: deps.pool,
     workClient: deps.client,
     access: authorization.access,
@@ -173,7 +172,7 @@ async function advancePreparation(
   );
   const scope = await readPreparationScope(input.work.tx, input.work.locator);
   if (!native || !scope) return { status: 'unavailable' };
-  const ownerFence = await readPreparationOwnerFence(input.work.tx, input.work.locator, input.definition);
+  const ownerFence = await members.readOwnerFence(input.work.tx, input.work.locator, input.definition);
   const prefix = await deps.source.prefix({
     work: input.work,
     budget: work,
@@ -194,7 +193,7 @@ async function advancePreparation(
     !isDeepStrictEqual(native, final) ||
     !isDeepStrictEqual(scope, finalScope) ||
     !isDeepStrictEqual(observation, native.observation) ||
-    ownerFence !== (await readPreparationOwnerFence(input.work.tx, input.work.locator, input.definition))
+    ownerFence !== (await members.readOwnerFence(input.work.tx, input.work.locator, input.definition))
   )
     return { status: 'restart' };
   return {
@@ -296,7 +295,7 @@ async function readReleasedPreparationSource(
         return { state, definition: null, advance: { status: 'restart' } };
       const authorization = deps.authorization?.();
       if (!authorization) throw new ProblemError('dependency_unavailable');
-      const service = createMembersPreparation({
+      const service = requireLibraryMembersPreparation().createPreparation({
         pool: deps.pool,
         workClient: deps.client,
         access: authorization.access,
@@ -367,7 +366,7 @@ async function applyPreparationAdvance(
     !current ||
     !isDeepStrictEqual(current.source, result.source) ||
     !isDeepStrictEqual(current.scope, result.scope) ||
-    result.ownerFence !== (await readPreparationOwnerFence(tx, locator, source.definition))
+    result.ownerFence !== (await requireLibraryMembersPreparation().readOwnerFence(tx, locator, source.definition))
   )
     return restartPreparation(tx, locator, state);
   const observation = preparationObservation(result.source, result.scope, result.ownerFence);

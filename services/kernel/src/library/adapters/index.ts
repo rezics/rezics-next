@@ -31,6 +31,8 @@ export { nativeCollectionOrdinalPageBound } from '../collection-source-native.ts
 export type { NativeCollectionOrdinalPageBound } from '../collection-source-native.ts';
 export { createMembersPreparation } from '../members-preparation.ts';
 export type { MembersPreparationWorkDefinition, PreparationLocator } from '../members-preparation.ts';
+export { createMembersPreparationAdapter } from './members-preparation.ts';
+export type { LibraryMembersPreparationRuntime, MembersPreparationStoreDependencies } from '../domain.ts';
 export { NativeCollectionWork } from '../collection-native-work.ts';
 export type { NativeSourceIdentity } from '../native-source-custody.ts';
 export { CANONICAL_SOURCE_RECEIVING_COST } from '../canonical-source-bounds.ts';
