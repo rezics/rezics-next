@@ -163,7 +163,10 @@ async function openPage(
   await page.emulateMedia({ colorScheme: theme });
   const response = await page.goto(href, { waitUntil: 'domcontentloaded', timeout: 180_000 });
   await hydrated(page);
-  await page.locator('main').waitFor({ state: 'visible', timeout: 120_000 }).catch(() => undefined);
+  await page
+    .locator('main')
+    .waitFor({ state: 'visible', timeout: 120_000 })
+    .catch(() => undefined);
   return { page, status: response?.status() ?? 0, url: page.url() };
 }
 
@@ -196,14 +199,13 @@ async function visit(
   options: { width?: number; theme?: 'light' | 'dark'; persona?: 'anonymous' | 'member' } = {},
 ) {
   const context = options.persona === 'member' ? session.member : session.anonymous;
-  const opened = await openPage(
-    context,
-    href,
-    { width: options.width ?? 1280, height: 900 },
-    options.theme ?? 'light',
-  );
+  const opened = await openPage(context, href, { width: options.width ?? 1280, height: 900 }, options.theme ?? 'light');
   const title = await opened.page.title();
-  const heading = await opened.page.locator('h1, h2').first().textContent().catch(() => null);
+  const heading = await opened.page
+    .locator('h1, h2')
+    .first()
+    .textContent()
+    .catch(() => null);
   await opened.page.close();
   if (opened.status >= 500) throw new Error(`${href} returned HTTP ${opened.status}`);
   return { url: opened.url, status: opened.status, title, heading };
@@ -246,8 +248,9 @@ async function releasedDefinitions(session: Session): Promise<{ native: unknown;
   const digest = String(active.body.digest);
   const release = await session.call('GET', `/v1/definitions/releases/${encodeURIComponent(digest)}`);
   requireStatus(release, 200, 'release');
-  const book = (release.body.release as { types: Record<string, { labels: Record<string, string>; properties: string[] }> })
-    .types['schema:Book'];
+  const book = (
+    release.body.release as { types: Record<string, { labels: Record<string, string>; properties: string[] }> }
+  ).types['schema:Book'];
   if (!book?.properties.includes('schema:author')) throw new Error('schema:Book omitted schema:author');
   for (const locale of ['en', 'zh-Hant', 'zh-Hans', 'ja', 'ko', 'de', 'fr', 'es']) {
     if (!book.labels[locale]) throw new Error(`schema:Book omitted ${locale} label`);
@@ -258,10 +261,14 @@ async function releasedDefinitions(session: Session): Promise<{ native: unknown;
     const width = locale === 'ja' ? 390 : 1280;
     const theme = locale === 'zh-Hant' ? 'dark' : 'light';
     browser.push(
-      await visit(session, `${session.stack.web}/${locale}/catalogue/definitions?type=${encodeURIComponent('schema:Book')}`, {
-        width,
-        theme,
-      }),
+      await visit(
+        session,
+        `${session.stack.web}/${locale}/catalogue/definitions?type=${encodeURIComponent('schema:Book')}`,
+        {
+          width,
+          theme,
+        },
+      ),
     );
   }
   return { native: { digest, typeStatus: types.status, author: true }, browser };
@@ -326,7 +333,8 @@ async function main() {
     results.push(
       await journey(session, 'catalogue-browsing', async () => {
         const searched = await searchType(call, 'schema:Book', 8);
-        if (searched.status !== 200) throw new Error(`catalogue search HTTP ${searched.status}: ${JSON.stringify(searched.body).slice(0, 400)}`);
+        if (searched.status !== 200)
+          throw new Error(`catalogue search HTTP ${searched.status}: ${JSON.stringify(searched.body).slice(0, 400)}`);
         const subjects = (searched.body.subjects as { id?: string; labels?: Record<string, string> }[]) ?? [];
         if (subjects.length === 0) throw new Error('catalogue search returned no Books');
         const first = subjects[0]!;
@@ -351,7 +359,10 @@ async function main() {
         const proposal = await propose(call, editor, book.id, cited('wdt:P179', series.id));
         const browser = await visit(session, `${stack.web}/en/catalogue/literary`, { persona: 'member' });
         const reader = await visit(session, `${stack.web}${subjectHref(book.id, `Walk literary ${token}`)}`);
-        return { native: { book: book.id, series: series.id, candidate: proposal.candidate }, browser: { browser, reader } };
+        return {
+          native: { book: book.id, series: series.id, candidate: proposal.candidate },
+          browser: { browser, reader },
+        };
       }),
     );
     results.push(
@@ -443,9 +454,13 @@ async function main() {
         const proposal = await propose(call, editor, work.id, cited('rezics:storyArc', arc.id));
         return {
           native: { work: work.id, arc: arc.id, candidate: proposal.candidate },
-          browser: await visit(session, `${stack.web}${subjectHref(work.id, `Walk arc work ${token}`, 'en', 'work-parts')}`, {
-            persona: 'member',
-          }),
+          browser: await visit(
+            session,
+            `${stack.web}${subjectHref(work.id, `Walk arc work ${token}`, 'en', 'work-parts')}`,
+            {
+              persona: 'member',
+            },
+          ),
         };
       }),
     );
@@ -747,7 +762,9 @@ async function main() {
     stack,
     passing: passing.length,
     total: FIRST_PUBLIC_JOURNEYS.length,
-    slowestFailing: slowest ? { id: slowest.id, ms: slowest.ms, owner: slowest.failure?.owner, detail: slowest.failure } : null,
+    slowestFailing: slowest
+      ? { id: slowest.id, ms: slowest.ms, owner: slowest.failure?.owner, detail: slowest.failure }
+      : null,
     results,
   };
   await writeFile(join(evidenceDir, 'evidence.json'), `${JSON.stringify(summary, null, 2)}\n`, { mode: 0o600 });

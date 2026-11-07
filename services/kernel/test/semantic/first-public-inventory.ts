@@ -255,7 +255,7 @@ export const FIRST_PUBLIC_JOURNEYS: readonly FirstPublicJourney[] = [
     name: 'Subject lifecycle',
     path: 'Owned Subject → delete/restore',
     native: 'DELETE then restoreDeleted on the owned candidate; owner vs public disclosure',
-    browser: owned contribution controls on the current reader',
+    browser: 'owned contribution controls on the current reader',
   },
   {
     id: 'zone-creation-and-configuration',
