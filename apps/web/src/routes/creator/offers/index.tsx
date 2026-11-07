@@ -1,5 +1,5 @@
 import { createFileRoute, useLocation } from '@tanstack/react-router';
-import { readCreatorOffersCurrent } from '../../../checkout/creator-offers';
+import { creatorOfferReaders, readCreatorOffersCurrent } from '../../-creator-offer-read';
 import { CreatorOffersCurrent } from '../../../checkout/creator-offers-current';
 import { creatorOffersSearch } from '../../../checkout/creator-offer-address';
 import { CreatorOfferAddressPage } from '../../../checkout/creator-offer-address-page';
@@ -29,6 +29,13 @@ export const Route = createFileRoute('/creator/offers/')({
     const initial = Route.useLoaderData();
     if (addressIssue || !initial)
       return <CreatorOfferAddressPage kind="list" locale={getLocale()} issue={addressIssue} requested={cursor} />;
-    return <CreatorOffersCurrent initial={initial} locale={getLocale()} {...(cursor ? { cursor } : {})} />;
+    return (
+      <CreatorOffersCurrent
+        readers={creatorOfferReaders}
+        initial={initial}
+        locale={getLocale()}
+        {...(cursor ? { cursor } : {})}
+      />
+    );
   },
 });

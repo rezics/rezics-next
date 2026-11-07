@@ -23,7 +23,7 @@ import { isSignedInPath } from '../session/guard';
 import { createNavigation } from '../shell/navigation';
 import { m } from '../paraglide/messages.js';
 import { Tags, ChartNoAxesCombined, FileText } from 'lucide-react';
-import { subjectPurchaseRegions } from '../checkout/subject-purchase';
+import { subjectPurchaseRegions } from './-subject-purchase';
 import { contextsNavigation } from '../features/contexts/navigation';
 import { myLogsNavigation } from '../library/my-logs';
 import { threadsNavigation } from '../threads/navigation';

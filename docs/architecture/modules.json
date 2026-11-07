@@ -195,6 +195,15 @@
   ],
   "modules": [
     {
+      "id": "content-edition-contract",
+      "kind": "contract",
+      "owner": "content",
+      "paths": ["apps/web/src/content-editions/contract.ts"],
+      "publicEntries": ["apps/web/src/content-editions/contract.ts"],
+      "allowedDependencies": ["document"],
+      "capabilities": []
+    },
+    {
       "id": "kernel-access",
       "kind": "adapter",
       "owner": "accounts",
@@ -1165,6 +1174,7 @@
         "apps/web/src/search/contracts/**"
       ],
       "publicEntries": [
+        "apps/web/src/features/pages/subject-slots.tsx",
         "apps/web/src/search/search.tsx",
         "apps/web/src/search/query-text-limit.ts",
         "apps/web/src/search/search-window/index.ts",
@@ -1258,8 +1268,21 @@
       "kind": "UI/transport library",
       "owner": "commerce",
       "paths": ["apps/web/src/checkout/**"],
-      "publicEntries": ["apps/web/src/checkout/reader-origin.ts"],
-      "allowedDependencies": ["client", "money", "ui", "web-app", "web-content", "web-search"],
+      "publicEntries": [
+        "apps/web/src/checkout/reader-origin.ts",
+        "apps/web/src/checkout/creator-offers.ts",
+        "apps/web/src/checkout/money-schema.ts",
+        "apps/web/src/checkout/subject-purchase.ts"
+      ],
+      "allowedDependencies": [
+        "client",
+        "money",
+        "ui",
+        "web-app",
+        "web-content",
+        "web-search",
+        "content-edition-contract"
+      ],
       "capabilities": ["checkout-pages"]
     },
     {
@@ -1382,6 +1405,7 @@
       "owner": "web",
       "paths": ["apps/web/src/**"],
       "excludes": [
+        "apps/web/src/content-editions/contract.ts",
         "apps/web/src/library/**",
         "apps/web/src/search/**",
         "apps/web/src/features/pages/**",
@@ -1405,6 +1429,8 @@
         "apps/web/src/reader/lifetime/**"
       ],
       "publicEntries": [
+        "apps/web/src/content-editions/sale-review.tsx",
+        "apps/web/src/session/state.ts",
         "apps/web/src/kernel/client.ts",
         "apps/web/src/kernel/exposure.ts",
         "apps/web/src/session/index.ts",
@@ -1440,6 +1466,7 @@
         "apps/web/src/features/count.ts"
       ],
       "allowedDependencies": [
+        "content-edition-contract",
         "client",
         "composition",
         "definitions",

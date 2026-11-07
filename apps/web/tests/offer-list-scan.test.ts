@@ -38,7 +38,7 @@ mock.module('cloudflare:workers', () => ({
     SESSIONS: { idFromName: (id: string) => id, get: () => session },
   },
 }));
-const { readCreatorOffers } = await import('../src/checkout/creator-offers');
+const { readCreatorOffers } = await import('../src/routes/-creator-offer-read');
 const { CreatorOffersPage } = await import('../src/checkout/creator-offers-page');
 const { readSubjectOffers } = await import('../src/checkout/subject-offers');
 const { SubjectOffersView } = await import('../src/checkout/subject-offers-region');
