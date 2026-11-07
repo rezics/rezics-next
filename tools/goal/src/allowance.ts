@@ -239,8 +239,23 @@ function selectPool(
   return ranked[0]?.pool;
 }
 
-function noAllowedPool(profile: Profile): Error {
-  return new Error(`no allowed pool available for ${profile.cli}/${profile.poolClass}`);
+export class PoolUnavailableError extends Error {
+  constructor(profile: Profile) {
+    super(`no allowed pool available for ${profile.cli}/${profile.poolClass}`);
+  }
+}
+
+function poolMatches(profile: Profile, pools: readonly Pool[]): boolean {
+  return pools.some((pool) => pool.cli === profile.cli && pool.classes.includes(profile.poolClass));
+}
+
+function noAllowedPool(profile: Profile, pools: readonly Pool[], fallbacks: readonly Profile[] = []): Error {
+  const message = `no allowed pool available for ${profile.cli}/${profile.poolClass}`;
+  // Missing configured routes remain configuration errors. A typed refusal only means a compatible configured pool
+  // existed but current allowance, burn or concurrency rules admitted none of the requested profiles.
+  return [profile, ...fallbacks].some((candidate) => poolMatches(candidate, pools))
+    ? new PoolUnavailableError(profile)
+    : new Error(message);
 }
 
 export function choosePool(
@@ -253,7 +268,7 @@ export function choosePool(
   const spanMs = options.spanMs ?? defaultPolicy.pacing.burnSpanMs;
   const indexedReadings = indexAllowanceReadings(readings, options.history ?? []);
   const selected = selectPool(profile, pools, indexedReadings, options, now, spanMs, new Map());
-  if (!selected) throw noAllowedPool(profile);
+  if (!selected) throw noAllowedPool(profile, pools);
   return selected;
 }
 
@@ -304,7 +319,7 @@ export function choosePoolWithFallback(
   urgency?: (pool: Pool) => number | undefined,
 ): { profile: Profile; pool: Pool } {
   const selected = findAllowedPool(profile, fallbacks, pools, readings, options, urgency);
-  if (!selected) throw noAllowedPool(profile);
+  if (!selected) throw noAllowedPool(profile, pools, fallbacks);
   return selected;
 }
 

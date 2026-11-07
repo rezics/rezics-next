@@ -6,6 +6,7 @@ import {
   countAllowanceWaiting,
   countRunningByPool,
   countWaitingByPool,
+  PoolUnavailableError,
   poolBurnStatus,
 } from './allowance.ts';
 import { fixturePool, reading } from './test-support.ts';
@@ -16,6 +17,28 @@ const span = 90 * 60 * 1000;
 const now = Date.parse('2026-11-05T12:00:00.000Z');
 const profile: Profile = { cli: 'codex', model: 'gpt-6-luna', effort: 'high', poolClass: 'codex' };
 const cursorProfile: Profile = { cli: 'cursor', model: 'gpt-5.6-luna', effort: 'high', poolClass: 'cursor' };
+
+test('only a configured but currently refused pool is a typed admission wait', () => {
+  const pool = { ...fixturePool(), policy: { ...fixturePool().policy, allowUnknown: false } };
+  let refused: unknown;
+  try {
+    choosePool(profile, [pool], [observed(pool, 100, now)], { now });
+  } catch (error) {
+    refused = error;
+  }
+  expect(refused).toBeInstanceOf(PoolUnavailableError);
+  expect((refused as Error).message).toBe('no allowed pool available for codex/codex');
+
+  let misconfigured: unknown;
+  try {
+    choosePool(profile, [{ ...pool, cli: 'cursor' as const, classes: ['cursor'] }], [], { now });
+  } catch (error) {
+    misconfigured = error;
+  }
+  expect(misconfigured).toBeInstanceOf(Error);
+  expect(misconfigured).not.toBeInstanceOf(PoolUnavailableError);
+  expect((misconfigured as Error).message).toBe('no allowed pool available for codex/codex');
+});
 
 function observed(pool: Pool, usedPercent: number, at: number, resetsAt = now + 8 * hour): PoolReading {
   const result = reading(pool, usedPercent);
