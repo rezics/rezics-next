@@ -363,7 +363,10 @@ export function releasedDiscoveryRuntime(
           instrumentedWorker = createOutcomeWorker({ kernelPool, clock: config?.clock ?? systemClock });
           await instrumentedWorker.request<WorkerStats>('init', { env });
         } else {
-          worker = startOutcomeWorkerProcess(env, initialInstant === undefined ? {} : { frozenInstant: initialInstant });
+          worker = startOutcomeWorkerProcess(
+            env,
+            initialInstant === undefined ? {} : { frozenInstant: initialInstant },
+          );
           await worker.ready;
         }
         started = true;
