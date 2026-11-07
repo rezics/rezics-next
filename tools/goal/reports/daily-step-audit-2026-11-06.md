@@ -36,27 +36,27 @@ resumes and midnight. Token counts are not quota percentages. Elapsed times belo
 billable time or exclusive costs; nested rows overlap. Catch counts mean recorded refusals/handbacks, not unique
 defects or verified prevention of a production incident. Unknown does not mean zero.
 
-| Pipeline step                                                       | Failure it prevents                                              | Recorded daily catches / activity                                                                                         | Recorded elapsed cost                                                                                          | Disposition                                                    |
-| ------------------------------------------------------------------- | ---------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------- |
-| Dispatch: brief, contract and path validation                       | Invalid or ownerless work enters the queue                       | Catches unknown; 166 dispatch events                                                                                      | Unknown; no matched dispatch→start interval                                                                    | Keep validation at dispatch                                    |
-| Admission, allowance routing and protected launch                   | Host overload, exhausted providers, unprotected workers          | Preventive admission catches unknown; 4 `launch-failed` events (generated module map 7655 > 7000)                         | 540 start-request→receipt pairs: 69.942 s total, p90 175 ms; dependency/routing overhead otherwise unknown     | Keep; merge timing with actual launch identity                 |
-| Source/dependency preparation and freshness                         | Worker runs against stale contracts or broken dependencies       | Catch count unknown; 52 prelaunch contract amendments are actions, not defects                                            | Unknown                                                                                                        | Keep preparation before launch                                 |
-| Worker implementation, continuation and final-result interpretation | Partial work is accepted as complete                             | 2,003 starts, 1,927 finishes; 158 environment and 2 spec-conflict exit classifications                                    | 1,908 complete worker pairs: 364.599 h, p90 22.448 min                                                         | Keep                                                           |
-| Worker acceptance and check-slot admission                          | Broken task outcome or uncontrolled check concurrency            | Catch count unknown; no check-stage events                                                                                | Slot wait, execution and allowance unknown                                                                     | Keep focused worker checks; retain broad checks after dev      |
-| Attempt/source fencing and unchanged-result handling                | Stale attempt publishes, or unchanged work claims a new delivery | Unknown                                                                                                                   | Unknown                                                                                                        | Keep at state mutation/publication                             |
-| Landing enqueue and terminal settlement                             | Lost requests, replay duplication and incorrect queue state      | Catch count unknown; 470 enqueue events for 235 task/attempt identities                                                   | 17 matched landing pairs: 1.102 h, p90 512.673 s; all 17 are refused outcomes; successful dev intervals absent | Merge state and telemetry writers                              |
-| Candidate checkout, replay and formatting                           | Invalid candidate or malformed source is published               | Three setup refusals, all formatter failures                                                                              | 19.377 s across these three entire refused outcomes; formatter-only cost unknown                               | Keep; repair in the same session                               |
-| Declared scope and protected risk checks                            | Unreviewed protected production changes enter integration        | Ten scope refusals, all `undeclared-risk-area`                                                                            | 35.894 s for those whole refused outcomes; isolated guard cost unknown                                         | Keep at candidate publication                                  |
-| Dev transpile                                                       | Invalid changed executable TypeScript reaches dev                | Five repair handbacks; 159 passes, zero recorded unavailable                                                              | 164 measured runs: 273.450 s                                                                                   | Keep before publication                                        |
-| Dev architecture delta                                              | Newly introduced module-boundary violations reach dev            | 45 repair handbacks; 145 passes; 17 diagnostics (boundary lines that land); zero recorded unavailable                     | 207 measured runs: 4,316.985 s                                                                                 | Keep before publication                                        |
-| Migration schema regeneration                                       | Migrations publish stale derived schema                          | Unknown; no dedicated daily schema sample                                                                                 | Unknown                                                                                                        | Keep conditional regeneration                                  |
-| Dev Kernel import smoke                                             | Import cycles or SQL/query-key mismatches break boot             | Unknown; no `dev-kernel-import` events in this day                                                                        | Unknown                                                                                                        | Keep conditional check; do not infer it ran                    |
-| Optional prelanding typecheck and boot                              | Compiler/boot regressions reach dev                              | Unknown; daily events do not prove which optional checks ran                                                              | Unknown separately                                                                                             | Keep configured placement; do not infer disabled checks passed |
-| Conflict resolution and retry                                       | Conflicting source silently overwrites target work               | Four terminal rebase refusals; dev-conflict events: 94 starts, 4 returns, 62 landings                                     | 25.176 s across whole refused outcomes; resolver-only cost unknown                                             | Keep resolution with the existing source/session               |
-| Dev update and integration publication                              | Unvalidated or stale source advances the target ref              | Catch count unknown; 168 passing merge outcomes, 168 dev updates, 168 integration receipts                                | Passing outcomes report 7,619.252 s `hostMs`; publication-only cost unknown                                    | Keep atomic/fenced publication; merge its history settlement   |
-| Independent verifier: root/task/sibling/native/browser checks       | Integrated regressions remain undetected                         | 574 stored command rows: 216 pass, 358 fail; 0 finding rows created this day                                              | Unknown; evidence rows have no duration field                                                                  | Keep after dev; failures require classification                |
-| Page-data verification                                              | Broken boot or missing persona data escapes API/page coverage    | Unknown; no page-data flow events                                                                                         | Unknown                                                                                                        | Keep after dev                                                 |
-| Promotion: root gate and task acceptance                            | Incorrect integrated work reaches main                           | Unknown; no promotion flow events                                                                                         | Unknown                                                                                                        | Keep correctness gates; capture-time `stabilize-blocked` is not a daily catch count |
+| Pipeline step                                                       | Failure it prevents                                              | Recorded daily catches / activity                                                                     | Recorded elapsed cost                                                                                          | Disposition                                                                         |
+| ------------------------------------------------------------------- | ---------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------- |
+| Dispatch: brief, contract and path validation                       | Invalid or ownerless work enters the queue                       | Catches unknown; 166 dispatch events                                                                  | Unknown; no matched dispatch→start interval                                                                    | Keep validation at dispatch                                                         |
+| Admission, allowance routing and protected launch                   | Host overload, exhausted providers, unprotected workers          | Preventive admission catches unknown; 4 `launch-failed` events (generated module map 7655 > 7000)     | 540 start-request→receipt pairs: 69.942 s total, p90 175 ms; dependency/routing overhead otherwise unknown     | Keep; merge timing with actual launch identity                                      |
+| Source/dependency preparation and freshness                         | Worker runs against stale contracts or broken dependencies       | Catch count unknown; 52 prelaunch contract amendments are actions, not defects                        | Unknown                                                                                                        | Keep preparation before launch                                                      |
+| Worker implementation, continuation and final-result interpretation | Partial work is accepted as complete                             | 2,003 starts, 1,927 finishes; 158 environment and 2 spec-conflict exit classifications                | 1,908 complete worker pairs: 364.599 h, p90 22.448 min                                                         | Keep                                                                                |
+| Worker acceptance and check-slot admission                          | Broken task outcome or uncontrolled check concurrency            | Catch count unknown; no check-stage events                                                            | Slot wait, execution and allowance unknown                                                                     | Keep focused worker checks; retain broad checks after dev                           |
+| Attempt/source fencing and unchanged-result handling                | Stale attempt publishes, or unchanged work claims a new delivery | Unknown                                                                                               | Unknown                                                                                                        | Keep at state mutation/publication                                                  |
+| Landing enqueue and terminal settlement                             | Lost requests, replay duplication and incorrect queue state      | Catch count unknown; 470 enqueue events for 235 task/attempt identities                               | 17 matched landing pairs: 1.102 h, p90 512.673 s; all 17 are refused outcomes; successful dev intervals absent | Merge state and telemetry writers                                                   |
+| Candidate checkout, replay and formatting                           | Invalid candidate or malformed source is published               | Three setup refusals, all formatter failures                                                          | 19.377 s across these three entire refused outcomes; formatter-only cost unknown                               | Keep; repair in the same session                                                    |
+| Declared scope and protected risk checks                            | Unreviewed protected production changes enter integration        | Ten scope refusals, all `undeclared-risk-area`                                                        | 35.894 s for those whole refused outcomes; isolated guard cost unknown                                         | Keep at candidate publication                                                       |
+| Dev transpile                                                       | Invalid changed executable TypeScript reaches dev                | Five repair handbacks; 159 passes, zero recorded unavailable                                          | 164 measured runs: 273.450 s                                                                                   | Keep before publication                                                             |
+| Dev architecture delta                                              | Newly introduced module-boundary violations reach dev            | 45 repair handbacks; 145 passes; 17 diagnostics (boundary lines that land); zero recorded unavailable | 207 measured runs: 4,316.985 s                                                                                 | Keep before publication                                                             |
+| Migration schema regeneration                                       | Migrations publish stale derived schema                          | Unknown; no dedicated daily schema sample                                                             | Unknown                                                                                                        | Keep conditional regeneration                                                       |
+| Dev Kernel import smoke                                             | Import cycles or SQL/query-key mismatches break boot             | Unknown; no `dev-kernel-import` events in this day                                                    | Unknown                                                                                                        | Keep conditional check; do not infer it ran                                         |
+| Optional prelanding typecheck and boot                              | Compiler/boot regressions reach dev                              | Unknown; daily events do not prove which optional checks ran                                          | Unknown separately                                                                                             | Keep configured placement; do not infer disabled checks passed                      |
+| Conflict resolution and retry                                       | Conflicting source silently overwrites target work               | Four terminal rebase refusals; dev-conflict events: 94 starts, 4 returns, 62 landings                 | 25.176 s across whole refused outcomes; resolver-only cost unknown                                             | Keep resolution with the existing source/session                                    |
+| Dev update and integration publication                              | Unvalidated or stale source advances the target ref              | Catch count unknown; 168 passing merge outcomes, 168 dev updates, 168 integration receipts            | Passing outcomes report 7,619.252 s `hostMs`; publication-only cost unknown                                    | Keep atomic/fenced publication; merge its history settlement                        |
+| Independent verifier: root/task/sibling/native/browser checks       | Integrated regressions remain undetected                         | 574 stored command rows: 216 pass, 358 fail; 0 finding rows created this day                          | Unknown; evidence rows have no duration field                                                                  | Keep after dev; failures require classification                                     |
+| Page-data verification                                              | Broken boot or missing persona data escapes API/page coverage    | Unknown; no page-data flow events                                                                     | Unknown                                                                                                        | Keep after dev                                                                      |
+| Promotion: root gate and task acceptance                            | Incorrect integrated work reaches main                           | Unknown; no promotion flow events                                                                     | Unknown                                                                                                        | Keep correctness gates; capture-time `stabilize-blocked` is not a daily catch count |
 
 The 17 refused landing outcomes are 4 rebase + 10 scope + 3 setup; 168 passed. Their combined recorded
 `hostMs` is **7,699,699 ms**, an outcome-level total that overlaps guard costs and is not train occupancy.
@@ -58404,10 +58404,7 @@ SHA-256: `7c50926f8fc9b5bc9ce60fb2d01675606e34bf0b183ec71753f86d86e6c1348a`.
       "stage": "landing",
       "length": 2,
       "oldestAgeMs": 4265022,
-      "tasks": [
-        "660535a9-f5ec-4dcd-8b14-e0db1332df89",
-        "660535a9-f5ec-4dcd-8b14-e0db1332df89"
-      ]
+      "tasks": ["660535a9-f5ec-4dcd-8b14-e0db1332df89", "660535a9-f5ec-4dcd-8b14-e0db1332df89"]
     },
     {
       "stage": "verification",
@@ -59080,326 +59077,252 @@ SHA-256: `7c50926f8fc9b5bc9ce60fb2d01675606e34bf0b183ec71753f86d86e6c1348a`.
         {
           "taskId": "0218c1c2-50a3-4b0f-babd-d9fa9b8fba15",
           "launches": 1,
-          "attempts": [
-            1
-          ],
+          "attempts": [1],
           "sameAttemptResumes": 0,
           "launchesPerHour": 1
         },
         {
           "taskId": "0c9024bc-857b-4b45-be5d-026b85070e0a",
           "launches": 3,
-          "attempts": [
-            2
-          ],
+          "attempts": [2],
           "sameAttemptResumes": 2,
           "launchesPerHour": 3
         },
         {
           "taskId": "0cfdf39f-1200-4040-bddc-2a893583274c",
           "launches": 1,
-          "attempts": [
-            1
-          ],
+          "attempts": [1],
           "sameAttemptResumes": 0,
           "launchesPerHour": 1
         },
         {
           "taskId": "0dc02157-92e7-4a95-9f04-3927405b876d",
           "launches": 2,
-          "attempts": [
-            6
-          ],
+          "attempts": [6],
           "sameAttemptResumes": 1,
           "launchesPerHour": 2
         },
         {
           "taskId": "20c6e4d7-6de2-45fa-9ea6-b7f2dcd465db",
           "launches": 1,
-          "attempts": [
-            7
-          ],
+          "attempts": [7],
           "sameAttemptResumes": 0,
           "launchesPerHour": 1
         },
         {
           "taskId": "24256f23-7a74-4949-881c-7dbaea6b0207",
           "launches": 1,
-          "attempts": [
-            5
-          ],
+          "attempts": [5],
           "sameAttemptResumes": 0,
           "launchesPerHour": 1
         },
         {
           "taskId": "24dda1bc-7e21-4a87-a691-b8dc1a27b198",
           "launches": 1,
-          "attempts": [
-            1
-          ],
+          "attempts": [1],
           "sameAttemptResumes": 0,
           "launchesPerHour": 1
         },
         {
           "taskId": "3ec27c6f-740c-4d8d-b114-c12d814333b0",
           "launches": 1,
-          "attempts": [
-            2
-          ],
+          "attempts": [2],
           "sameAttemptResumes": 1,
           "launchesPerHour": 1
         },
         {
           "taskId": "4776c137-48a3-43ab-b31d-b0ab217edc76",
           "launches": 1,
-          "attempts": [
-            4
-          ],
+          "attempts": [4],
           "sameAttemptResumes": 1,
           "launchesPerHour": 1
         },
         {
           "taskId": "4ae4212c-c2c4-43d5-8a74-d3d51969977f",
           "launches": 2,
-          "attempts": [
-            3
-          ],
+          "attempts": [3],
           "sameAttemptResumes": 1,
           "launchesPerHour": 2
         },
         {
           "taskId": "4e37336b-1161-431d-a263-7e3d08dff593",
           "launches": 2,
-          "attempts": [
-            8
-          ],
+          "attempts": [8],
           "sameAttemptResumes": 1,
           "launchesPerHour": 2
         },
         {
           "taskId": "4ff4c032-712c-4740-9086-b3a1c1650834",
           "launches": 3,
-          "attempts": [
-            5
-          ],
+          "attempts": [5],
           "sameAttemptResumes": 2,
           "launchesPerHour": 3
         },
         {
           "taskId": "6429a4cb-2c13-49d5-8332-cc47ee0dd1b8",
           "launches": 1,
-          "attempts": [
-            1
-          ],
+          "attempts": [1],
           "sameAttemptResumes": 0,
           "launchesPerHour": 1
         },
         {
           "taskId": "660535a9-f5ec-4dcd-8b14-e0db1332df89",
           "launches": 4,
-          "attempts": [
-            9
-          ],
+          "attempts": [9],
           "sameAttemptResumes": 3,
           "launchesPerHour": 4
         },
         {
           "taskId": "680346dc-3c26-45d3-8e4b-b27c77497eed",
           "launches": 1,
-          "attempts": [
-            3
-          ],
+          "attempts": [3],
           "sameAttemptResumes": 1,
           "launchesPerHour": 1
         },
         {
           "taskId": "6ea2f4a9-afd3-409a-8118-f46756e39b52",
           "launches": 2,
-          "attempts": [
-            2
-          ],
+          "attempts": [2],
           "sameAttemptResumes": 1,
           "launchesPerHour": 2
         },
         {
           "taskId": "7b69abc6-76d8-4e0a-ab9f-f369faac5b66",
           "launches": 2,
-          "attempts": [
-            2
-          ],
+          "attempts": [2],
           "sameAttemptResumes": 2,
           "launchesPerHour": 2
         },
         {
           "taskId": "82c7bc75-eb36-4c00-849a-305aa2a9573e",
           "launches": 3,
-          "attempts": [
-            1
-          ],
+          "attempts": [1],
           "sameAttemptResumes": 3,
           "launchesPerHour": 3
         },
         {
           "taskId": "848b6b01-6894-42d5-93e3-0aae6032072f",
           "launches": 3,
-          "attempts": [
-            1,
-            2
-          ],
+          "attempts": [1, 2],
           "sameAttemptResumes": 2,
           "launchesPerHour": 3
         },
         {
           "taskId": "8793f1ef-a156-4173-b10a-7c3342c02661",
           "launches": 1,
-          "attempts": [
-            1
-          ],
+          "attempts": [1],
           "sameAttemptResumes": 0,
           "launchesPerHour": 1
         },
         {
           "taskId": "8d058944-090a-41dc-bd8a-393c085a926a",
           "launches": 2,
-          "attempts": [
-            2
-          ],
+          "attempts": [2],
           "sameAttemptResumes": 1,
           "launchesPerHour": 2
         },
         {
           "taskId": "9e86e12f-25e4-4d7b-9670-bc522a632429",
           "launches": 1,
-          "attempts": [
-            1
-          ],
+          "attempts": [1],
           "sameAttemptResumes": 0,
           "launchesPerHour": 1
         },
         {
           "taskId": "a25fba0a-61be-445b-acd4-82139f25ab89",
           "launches": 1,
-          "attempts": [
-            8
-          ],
+          "attempts": [8],
           "sameAttemptResumes": 1,
           "launchesPerHour": 1
         },
         {
           "taskId": "a692d436-46e4-4063-a8ea-9ec3840259f3",
           "launches": 1,
-          "attempts": [
-            1
-          ],
+          "attempts": [1],
           "sameAttemptResumes": 0,
           "launchesPerHour": 1
         },
         {
           "taskId": "ace52099-74a8-4a1f-8e51-6c17f3151aa7",
           "launches": 1,
-          "attempts": [
-            1
-          ],
+          "attempts": [1],
           "sameAttemptResumes": 0,
           "launchesPerHour": 1
         },
         {
           "taskId": "ad0f0d79-320b-4644-881c-a3043261d899",
           "launches": 1,
-          "attempts": [
-            1
-          ],
+          "attempts": [1],
           "sameAttemptResumes": 0,
           "launchesPerHour": 1
         },
         {
           "taskId": "b70568db-4e8d-4140-8b9b-4d5c7467227e",
           "launches": 2,
-          "attempts": [
-            1
-          ],
+          "attempts": [1],
           "sameAttemptResumes": 2,
           "launchesPerHour": 2
         },
         {
           "taskId": "c55dbd0e-7b17-4ce3-bae0-26109443c680",
           "launches": 1,
-          "attempts": [
-            1
-          ],
+          "attempts": [1],
           "sameAttemptResumes": 0,
           "launchesPerHour": 1
         },
         {
           "taskId": "c8830a66-ff7d-42ae-9278-1bfe19b39856",
           "launches": 2,
-          "attempts": [
-            3
-          ],
+          "attempts": [3],
           "sameAttemptResumes": 2,
           "launchesPerHour": 2
         },
         {
           "taskId": "d0c83bb1-ae07-4cfe-b0a8-a407054f6dce",
           "launches": 1,
-          "attempts": [
-            1
-          ],
+          "attempts": [1],
           "sameAttemptResumes": 0,
           "launchesPerHour": 1
         },
         {
           "taskId": "dda8d476-0389-4c70-894e-2558c738ff2d",
           "launches": 2,
-          "attempts": [
-            6
-          ],
+          "attempts": [6],
           "sameAttemptResumes": 2,
           "launchesPerHour": 2
         },
         {
           "taskId": "e18b2326-e7a4-47c8-805a-525a57426823",
           "launches": 3,
-          "attempts": [
-            2,
-            3
-          ],
+          "attempts": [2, 3],
           "sameAttemptResumes": 2,
           "launchesPerHour": 3
         },
         {
           "taskId": "e249c4cc-302e-4529-8b4a-d7453450a8fa",
           "launches": 2,
-          "attempts": [
-            1
-          ],
+          "attempts": [1],
           "sameAttemptResumes": 1,
           "launchesPerHour": 2
         },
         {
           "taskId": "e6b9b416-40e2-4535-a5da-596aa2cbbe80",
           "launches": 6,
-          "attempts": [
-            1
-          ],
+          "attempts": [1],
           "sameAttemptResumes": 6,
           "launchesPerHour": 6
         },
         {
           "taskId": "ef8e0218-52fe-473c-90d0-f0455ff51d91",
           "launches": 2,
-          "attempts": [
-            3
-          ],
+          "attempts": [3],
           "sameAttemptResumes": 1,
           "launchesPerHour": 2
         },
         {
           "taskId": "f762f63e-e179-42dc-b56a-94d202b50b97",
           "launches": 1,
-          "attempts": [
-            1
-          ],
+          "attempts": [1],
           "sameAttemptResumes": 0,
           "launchesPerHour": 1
         }
