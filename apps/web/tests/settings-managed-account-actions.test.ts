@@ -149,7 +149,12 @@ test('one selected viewer/target owns one capability read; stale and late other-
   expect(await first).toEqual(result);
   expect(await read.load()).toEqual(result);
   expect(calls).toBe(1);
-  const next = new ManagedAccountActionsRead({ accountId: viewerId, viewerId }, async () => result, settingsAmbient, noMediaFailure);
+  const next = new ManagedAccountActionsRead(
+    { accountId: viewerId, viewerId },
+    async () => result,
+    settingsAmbient,
+    noMediaFailure,
+  );
   expect((await next.load()).state).toBe('unavailable');
   if (result.state !== 'ready') throw new Error('Expected native capabilities');
   const anotherViewer = new ManagedAccountActionsRead(

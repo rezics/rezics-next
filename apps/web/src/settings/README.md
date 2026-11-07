@@ -427,14 +427,14 @@ Accounts and Kernel retain their current reads and commands. Content supplies av
 recognition, plus shared identity formatting, sign-in prompt presentation and canonical thread URL construction. Native
 result envelopes, owner labels, media admission and upload lifecycle retain their current meaning.
 
-| Surface | Settings-owned work | Nested owner work |
-| --- | --- | --- |
-| Avatar | Crop choice, local preview, target ownership, retry and Profile draft/save | Content reserves, uploads, resumes and reads advice through Media; Content projects `MediaProblem` at the boundary |
-| Editable Profile | Current Profile projection, section draft, admission and original write/readback | Accounts and Kernel retain Profile and viewer-action endpoints; Content composes admitted avatar summaries and recognizes its media failures |
-| Preferences and privacy | Preferences, Collection privacy, current-page recovery and writes | Existing Accounts/Kernel native reads and commands stay in their readers; Content contributes media-failure recognition |
-| Managed accounts | Directory/detail reads, action admission, rename handoff and viewer retirement | Accounts and Auth retain management and issuer-owned safety behavior; Content supplies shared identity formatting and failure projection |
-| Verification | Status, suggestions, Request/Withdraw admission and recovery | Existing Accounts/Kernel read and command contracts stay installed; Content contributes media-failure recognition |
-| Watches | Cursor pages, removal identity/revision and current native row | Content formats thread destinations with `threadLocation`; board paths remain Settings-localized |
+| Surface                 | Settings-owned work                                                              | Nested owner work                                                                                                                            |
+| ----------------------- | -------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------- |
+| Avatar                  | Crop choice, local preview, target ownership, retry and Profile draft/save       | Content reserves, uploads, resumes and reads advice through Media; Content projects `MediaProblem` at the boundary                           |
+| Editable Profile        | Current Profile projection, section draft, admission and original write/readback | Accounts and Kernel retain Profile and viewer-action endpoints; Content composes admitted avatar summaries and recognizes its media failures |
+| Preferences and privacy | Preferences, Collection privacy, current-page recovery and writes                | Existing Accounts/Kernel native reads and commands stay in their readers; Content contributes media-failure recognition                      |
+| Managed accounts        | Directory/detail reads, action admission, rename handoff and viewer retirement   | Accounts and Auth retain management and issuer-owned safety behavior; Content supplies shared identity formatting and failure projection     |
+| Verification            | Status, suggestions, Request/Withdraw admission and recovery                     | Existing Accounts/Kernel read and command contracts stay installed; Content contributes media-failure recognition                            |
+| Watches                 | Cursor pages, removal identity/revision and current native row                   | Content formats thread destinations with `threadLocation`; board paths remain Settings-localized                                             |
 
 **Decision:** Settings and Inbox own the Content ports; route composition binds Content adapters; only pure upload
 lifecycle and identity vocabulary is shared.

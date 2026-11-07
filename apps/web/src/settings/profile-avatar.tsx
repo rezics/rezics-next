@@ -8,20 +8,12 @@ import type { UploadRefusalReason } from '../threads/upload-vocabulary';
 import type { SettingsAvatarMedia } from './ports/content';
 import type { ProfileValues } from './profile-data';
 import type { ProfileEditor } from './profile-write';
-import {
-  avatarMedia,
-  ProfileAvatarUpload,
-  type AvatarAdviceState,
-} from './profile-avatar-upload';
+import { avatarMedia, ProfileAvatarUpload, type AvatarAdviceState } from './profile-avatar-upload';
 import { ProfileAvatarCrop } from './profile-avatar-crop.tsx';
 import { useSettingsAmbient } from './adapters/ambient-view.tsx';
 import { usePreferenceRetry } from './preferences';
 
-export function useProfileAvatarUpload(
-  editor: ProfileEditor,
-  closed: boolean,
-  content: SettingsAvatarMedia,
-) {
+export function useProfileAvatarUpload(editor: ProfileEditor, closed: boolean, content: SettingsAvatarMedia) {
   const controller = useMemo(() => new ProfileAvatarUpload(editor, content), [editor, content]);
   const state = useSyncExternalStore(controller.subscribe, controller.snapshot, controller.snapshot);
   useLayoutEffect(() => {

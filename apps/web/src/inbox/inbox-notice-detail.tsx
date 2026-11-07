@@ -40,12 +40,15 @@ export function InboxNoticeDetailView({
 }) {
   const destination = inboxOpenHref(notice, content.threadHref);
   const actor = notice.actor;
-  const actorPresentation = inboxNoticeActorPresentation({
-    actor,
-    actorId: actor.state === 'available' ? actor.accountId : null,
-    kind: notice.kind,
-    reportId: notice.reportId,
-  }, content.initials);
+  const actorPresentation = inboxNoticeActorPresentation(
+    {
+      actor,
+      actorId: actor.state === 'available' ? actor.accountId : null,
+      kind: notice.kind,
+      reportId: notice.reportId,
+    },
+    content.initials,
+  );
   const context = inboxTargetContext(notice.target);
 
   return (

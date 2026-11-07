@@ -289,11 +289,14 @@ export async function runReadProfile(
   }
 }
 
-export async function runSaveProfile(data: {
-  before: ProfileValues;
-  after: ProfileValues;
-  idempotencyKey: string;
-}, mediaFailure: SettingsContentFailureReader = () => undefined): Promise<ProfileSaveResult> {
+export async function runSaveProfile(
+  data: {
+    before: ProfileValues;
+    after: ProfileValues;
+    idempotencyKey: string;
+  },
+  mediaFailure: SettingsContentFailureReader = () => undefined,
+): Promise<ProfileSaveResult> {
   try {
     const { getRequest, setResponseHeader } = await import('@tanstack/react-start/server');
     setResponseHeader('cache-control', 'private, no-store');

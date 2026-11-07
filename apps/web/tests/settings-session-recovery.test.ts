@@ -358,7 +358,8 @@ test('the current authorized closed reading recording reaches the guarded page a
     });
     expect(page).not.toHaveProperty('preferences');
     const root = createRootRoute({
-      component: () => createElement(SettingsPageView, { page, csrfToken: null, requestSession, content: settingsContent }),
+      component: () =>
+        createElement(SettingsPageView, { page, csrfToken: null, requestSession, content: settingsContent }),
     });
     const router = createRouter({
       routeTree: root,

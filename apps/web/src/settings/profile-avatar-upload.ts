@@ -377,8 +377,7 @@ export class ProfileAvatarUpload {
     try {
       const result = reservation
         ? await withProfileDeadline(
-            (signal) =>
-              resume(reservation, selection.file, signal, onStage, intent, onResponseWait),
+            (signal) => resume(reservation, selection.file, signal, onStage, intent, onResponseWait),
             request.signal,
             this.editor.ambient.timer,
           )

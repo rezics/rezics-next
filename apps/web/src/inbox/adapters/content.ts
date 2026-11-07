@@ -14,10 +14,7 @@ export const inboxMediaFailure: InboxContentFailureReader = (error) => {
 };
 
 /** Keep Inbox-owned notice identity and delegate only canonical thread URL construction to Content. */
-export function inboxThreadDestination(
-  locale: string,
-  destination: InboxThreadDestination,
-): string {
+export function inboxThreadDestination(locale: string, destination: InboxThreadDestination): string {
   return threadLocation(
     locale,
     { id: destination.id, ...(destination.title === undefined ? {} : { title: destination.title }) },

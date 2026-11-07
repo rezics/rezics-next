@@ -303,7 +303,12 @@ test('mounted independent inventories retain native controls, long and unavailab
 test('mounted preparing and sparse responsibilities remain distinct from empty and failures, with no invented authority or extra reads', async () => {
   const source = controlled();
   const view = await mount(
-    <ManagedAccounts viewerId={viewer} settingsHref={settingsHref} io={source.io} initials={settingsContent.initials} />,
+    <ManagedAccounts
+      viewerId={viewer}
+      settingsHref={settingsHref}
+      io={source.io}
+      initials={settingsContent.initials}
+    />,
   );
   try {
     const preparing = page();
@@ -338,7 +343,12 @@ for (const outcome of ['wait', 'denied', 'unavailable'] as const) {
   test(`mounted initial ${outcome} retains exact metadata and deliberate recovery without private rows`, async () => {
     const source = controlled();
     const view = await mount(
-      <ManagedAccounts viewerId={viewer} settingsHref={settingsHref} io={source.io} initials={settingsContent.initials} />,
+      <ManagedAccounts
+        viewerId={viewer}
+        settingsHref={settingsHref}
+        io={source.io}
+        initials={settingsContent.initials}
+      />,
     );
     try {
       await settle(() =>
@@ -453,7 +463,12 @@ for (const selected of ['organizations', 'responsibilities'] as const) {
   test(`mounted ${selected} first-page recovery preserves a pending sibling and retained rows through retry wait`, async () => {
     const source = controlled();
     const view = await mount(
-      <ManagedAccounts viewerId={viewer} settingsHref={settingsHref} io={source.io} initials={settingsContent.initials} />,
+      <ManagedAccounts
+        viewerId={viewer}
+        settingsHref={settingsHref}
+        io={source.io}
+        initials={settingsContent.initials}
+      />,
     );
     try {
       await settle(() => source.replies[0]!.resolve(ready()));
@@ -515,7 +530,12 @@ for (const [locale, direction, width] of [
     const source = controlled();
     const view = await mount(
       <div dir={direction} style={{ width }}>
-        <ManagedAccounts viewerId={viewer} settingsHref={settingsHref} io={source.io} initials={settingsContent.initials} />
+        <ManagedAccounts
+          viewerId={viewer}
+          settingsHref={settingsHref}
+          io={source.io}
+          initials={settingsContent.initials}
+        />
       </div>,
     );
     try {
@@ -536,9 +556,14 @@ for (const [locale, direction, width] of [
 for (const size of [1, 8, 20]) {
   test(`mounted supplied ${size}-row page adds no IO per identity`, async () => {
     const source = controlled();
-  const view = await mount(
-    <ManagedAccounts viewerId={viewer} settingsHref={settingsHref} io={source.io} initials={settingsContent.initials} />,
-  );
+    const view = await mount(
+      <ManagedAccounts
+        viewerId={viewer}
+        settingsHref={settingsHref}
+        io={source.io}
+        initials={settingsContent.initials}
+      />,
+    );
     try {
       await settle(() => source.replies[0]!.resolve(ready(page(size))));
       expect(feed(view.host, m.managed_organizations_title()).querySelectorAll('li')).toHaveLength(size);

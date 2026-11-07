@@ -106,7 +106,10 @@ async function readyPage(
   next: string | null,
   selection: InboxPageQuery['selection'] = 'all',
 ): Promise<InboxPage> {
-  const resolved = await resolveInboxItems(nativeInboxEnvelope(notices, next, 'alice', selection), inboxContent.threadHref);
+  const resolved = await resolveInboxItems(
+    nativeInboxEnvelope(notices, next, 'alice', selection),
+    inboxContent.threadHref,
+  );
   return { signedIn: true, state: 'ready', ...resolved };
 }
 

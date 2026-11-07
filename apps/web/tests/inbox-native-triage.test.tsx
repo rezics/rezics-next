@@ -149,15 +149,23 @@ test('Inbox uses one composed page for current disclosure, installed kinds and a
 
 test('list and detail share available actor identity while withheld and system labels stay distinct', async () => {
   const resolved = await resolveInboxItems(nativeInboxEnvelope(composed, null, 'alice'));
-  const list = renderToStaticMarkup(performanceAmbientTree(createElement(InboxRows, { content: inboxContent, page: resolved })));
+  const list = renderToStaticMarkup(
+    performanceAmbientTree(createElement(InboxRows, { content: inboxContent, page: resolved })),
+  );
   const availableDetail = renderToStaticMarkup(
-    performanceAmbientTree(createElement(InboxNoticeDetailView, { content: inboxContent, notice: composed[0]!, selection: 'all' })),
+    performanceAmbientTree(
+      createElement(InboxNoticeDetailView, { content: inboxContent, notice: composed[0]!, selection: 'all' }),
+    ),
   );
   const withheldDetail = renderToStaticMarkup(
-    performanceAmbientTree(createElement(InboxNoticeDetailView, { content: inboxContent, notice: composed[1]!, selection: 'all' })),
+    performanceAmbientTree(
+      createElement(InboxNoticeDetailView, { content: inboxContent, notice: composed[1]!, selection: 'all' }),
+    ),
   );
   const systemDetail = renderToStaticMarkup(
-    performanceAmbientTree(createElement(InboxNoticeDetailView, { content: inboxContent, notice: composed[4]!, selection: 'all' })),
+    performanceAmbientTree(
+      createElement(InboxNoticeDetailView, { content: inboxContent, notice: composed[4]!, selection: 'all' }),
+    ),
   );
 
   expect(list).toContain('Momo');
@@ -172,11 +180,14 @@ test('list and detail share available actor identity while withheld and system l
   expect(list).not.toContain('src="https://');
   const { inboxNoticeActorPresentation } = await import('../src/inbox/inbox-notice-actor');
   expect(
-    inboxNoticeActorPresentation({
-      actor: composed[0]!.actor,
-      actorId: composed[0]!.actorId,
-      actorName: 'Momo',
-    }, inboxContent.initials).avatarUrl,
+    inboxNoticeActorPresentation(
+      {
+        actor: composed[0]!.actor,
+        actorId: composed[0]!.actorId,
+        actorName: 'Momo',
+      },
+      inboxContent.initials,
+    ).avatarUrl,
   ).toBeNull();
 });
 

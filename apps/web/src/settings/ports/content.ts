@@ -12,7 +12,10 @@ export type AvatarUploadAdvice = {
   viewerState: 'signed_in';
   viewer: { accountId: string };
   target: { containerId: string; purpose: 'avatar' };
-  constraints: { mediaTypes: readonly ['image/avif', 'image/gif', 'image/jpeg', 'image/png', 'image/webp']; maxByteCount: 20971520 };
+  constraints: {
+    mediaTypes: readonly ['image/avif', 'image/gif', 'image/jpeg', 'image/png', 'image/webp'];
+    maxByteCount: 20971520;
+  };
   allowedActions: ['upload'] | [];
 };
 export type AvatarAdviceReadResult = {

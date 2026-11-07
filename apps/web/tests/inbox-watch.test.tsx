@@ -13,8 +13,12 @@ import { performanceAmbientTree } from './performance-ambient';
 
 const settingsAmbient = createBrowserSettingsAmbient();
 mock.module('cloudflare:workers', () => ({ env: {} }));
-const { decodeInboxPage, loadInboxPage: readInboxPage, nativeInboxEnvelope, resolveInboxItems: readInboxItems } =
-  await import('../src/inbox/inbox-read');
+const {
+  decodeInboxPage,
+  loadInboxPage: readInboxPage,
+  nativeInboxEnvelope,
+  resolveInboxItems: readInboxItems,
+} = await import('../src/inbox/inbox-read');
 const { inboxContent } = await import('../src/inbox/adapters/presentation');
 const { InboxRows, InboxPreferencesLink } = await import('../src/inbox/inbox-page');
 type InboxNotice = import('../src/inbox/inbox-read').InboxNotice;
@@ -25,8 +29,7 @@ const loadInboxPage = (
   authorization: string,
   query?: Parameters<typeof readInboxPage>[3],
 ) => readInboxPage(client, accountId, authorization, query, inboxContent);
-const resolveInboxItems = (page: Parameters<typeof readInboxItems>[0]) =>
-  readInboxItems(page, inboxContent.threadHref);
+const resolveInboxItems = (page: Parameters<typeof readInboxItems>[0]) => readInboxItems(page, inboxContent.threadHref);
 
 function wireNotice(overrides: Partial<InboxNotice> = {}, accountId = 'viewer'): InboxNotice {
   const base = {

@@ -142,13 +142,25 @@ test('loadInboxPage sends All or Unread with the page size and retries the same 
     }) as typeof fetch,
   });
   const { loadInboxPage } = await import('../src/inbox/inbox-read');
-  const page = await loadInboxPage(client, 'alice', 'Bearer alice', {
-    selection: 'unread',
-    cursor: 'opaque/+input==',
-  }, inboxContent);
+  const page = await loadInboxPage(
+    client,
+    'alice',
+    'Bearer alice',
+    {
+      selection: 'unread',
+      cursor: 'opaque/+input==',
+    },
+    inboxContent,
+  );
   expect(page.selection).toBe('unread');
   expect(page.actions.markSeen).toBeNull();
-  await loadInboxPage(client, 'alice', 'Bearer alice', { selection: 'unread', cursor: 'opaque/+input==' }, inboxContent);
+  await loadInboxPage(
+    client,
+    'alice',
+    'Bearer alice',
+    { selection: 'unread', cursor: 'opaque/+input==' },
+    inboxContent,
+  );
   expect(queries).toEqual([
     'limit=20&selection=unread&cursor=opaque%2F%2Binput%3D%3D',
     'limit=20&selection=unread&cursor=opaque%2F%2Binput%3D%3D',

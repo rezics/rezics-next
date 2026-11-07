@@ -26,8 +26,7 @@ const {
   readyInboxPage,
   resolveInboxItems: resolveWithDestination,
   loadInboxPage: readInboxPage,
-} =
-  await import('../src/inbox/inbox-read');
+} = await import('../src/inbox/inbox-read');
 const { inboxContent } = await import('../src/inbox/adapters/presentation');
 const resolveInboxItems = (page: Parameters<typeof resolveWithDestination>[0]) =>
   resolveWithDestination(page, inboxContent.threadHref);

@@ -262,7 +262,12 @@ test('A new or unready actor never receives a prior private profile and an expli
     expect(editor.snapshot().attempt).toBe(before.attempt);
     const html = renderToStaticMarkup(
       performanceAmbientTree(
-        createElement('div', null, createElement(ProfileCard, { content: settingsContent, editor }), createElement(PublicViewsCard, { editor })),
+        createElement(
+          'div',
+          null,
+          createElement(ProfileCard, { content: settingsContent, editor }),
+          createElement(PublicViewsCard, { editor }),
+        ),
       ),
     );
     for (const privateValue of ['Private editable source', 'Retained unsent words', 'example.test/notes', mediaId])

@@ -163,14 +163,17 @@ export function InboxRows({
           const hasComposedDisclosure = !!item.actor && !!item.target && !!item.actions;
           const hiddenLegacyItem = item.unavailable && !hasComposedDisclosure;
           const href = hiddenLegacyItem ? undefined : item.href || undefined;
-          const actor = inboxNoticeActorPresentation({
-            ...(item.actor ? { actor: item.actor } : {}),
-            actorId: item.actorId,
-            ...(item.actorName !== undefined ? { actorName: item.actorName } : {}),
-            kind: item.kind,
-            reportId: item.reportId,
-            hideLegacy: hiddenLegacyItem,
-          }, content.initials);
+          const actor = inboxNoticeActorPresentation(
+            {
+              ...(item.actor ? { actor: item.actor } : {}),
+              actorId: item.actorId,
+              ...(item.actorName !== undefined ? { actorName: item.actorName } : {}),
+              kind: item.kind,
+              reportId: item.reportId,
+              hideLegacy: hiddenLegacyItem,
+            },
+            content.initials,
+          );
           const kind = kindLabel(item);
           const text =
             item.summary ?? (hiddenLegacyItem ? m.inbox_unavailable_item() : item.text) ?? m.inbox_unavailable_item();

@@ -123,12 +123,12 @@ native page envelope, actor and destination identity checks, owner labels, mark-
 initial presenter and sign-in prompt remain Content-owned. Native response shapes and admitted media behavior are
 preserved.
 
-| Concern | Inbox-owned work | Nested owner work |
-| --- | --- | --- |
-| Actor and notice | Decode current native actor/target disclosure, apply owner labels, keep item and acknowledgement identity | Content supplies initials and prompt presentation; stored profile media never becomes admitted media |
-| Destination | Validate native open identity against current target disclosure and choose the supported route family | Content `threadLocation` formats admitted thread/post identity; the Inbox adapter never consumes a response URL |
-| Failure | Keep the serializable Inbox unavailable/read envelope and retry deadline | Content recognizes `MediaProblem` and projects status, problem and headers |
-| Native growth | Own one bounded current page, read state and acknowledgement lifecycle | Kernel/Content own native disclosure and command examined-work in the linked producer documents |
+| Concern          | Inbox-owned work                                                                                          | Nested owner work                                                                                               |
+| ---------------- | --------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------- |
+| Actor and notice | Decode current native actor/target disclosure, apply owner labels, keep item and acknowledgement identity | Content supplies initials and prompt presentation; stored profile media never becomes admitted media            |
+| Destination      | Validate native open identity against current target disclosure and choose the supported route family     | Content `threadLocation` formats admitted thread/post identity; the Inbox adapter never consumes a response URL |
+| Failure          | Keep the serializable Inbox unavailable/read envelope and retry deadline                                  | Content recognizes `MediaProblem` and projects status, problem and headers                                      |
+| Native growth    | Own one bounded current page, read state and acknowledgement lifecycle                                    | Kernel/Content own native disclosure and command examined-work in the linked producer documents                 |
 
 **Decision:** Settings and Inbox own the Content ports; route composition binds Content adapters; only pure upload
 lifecycle and identity vocabulary is shared.

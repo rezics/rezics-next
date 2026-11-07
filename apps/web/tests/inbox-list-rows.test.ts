@@ -47,7 +47,9 @@ const unavailable: Item = {
 };
 
 function markup(items: Item[]) {
-  return renderToStaticMarkup(performanceAmbientTree(createElement(InboxRows, { content: inboxContent, page: { items, next: null } })));
+  return renderToStaticMarkup(
+    performanceAmbientTree(createElement(InboxRows, { content: inboxContent, page: { items, next: null } })),
+  );
 }
 
 function continuationButton(tree: ReactNode) {

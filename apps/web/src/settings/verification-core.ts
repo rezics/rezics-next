@@ -178,7 +178,9 @@ export function verificationSafeFailure(
   fallbackMessage = m.settings_verification_request_failed(),
   mediaFailure: SettingsContentFailureReader = () => undefined,
 ): VerificationFailure {
-  return verificationFailureFromException(error, fallbackMessage, mediaFailure) ?? { status: 0, message: fallbackMessage };
+  return (
+    verificationFailureFromException(error, fallbackMessage, mediaFailure) ?? { status: 0, message: fallbackMessage }
+  );
 }
 
 function asReadError(

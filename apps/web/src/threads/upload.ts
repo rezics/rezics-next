@@ -5,12 +5,7 @@ import type { UploadedImage } from '@rezics/ui';
 import type { Media, ReservationInput } from '../media/kernel';
 import { isPlatformClosedProblem } from '../kernel/platform-closed.ts';
 import { UploadRefusal } from './upload-vocabulary';
-import type {
-  MediaReservationIntent,
-  UploadResponseWait,
-  UploadStage,
-  UploadStageUpdate,
-} from './upload-vocabulary';
+import type { MediaReservationIntent, UploadResponseWait, UploadStage, UploadStageUpdate } from './upload-vocabulary';
 
 export { UploadRefusal } from './upload-vocabulary';
 export type {

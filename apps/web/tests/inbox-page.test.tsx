@@ -175,7 +175,11 @@ async function mount(
               Fragment,
               null,
               badge ? createElement(UnreadBadge) : null,
-              createElement(InboxPageView, { content: inboxContent, loadPage, ...(acknowledgeNotice ? { acknowledgeNotice } : {}) }),
+              createElement(InboxPageView, {
+                content: inboxContent,
+                loadPage,
+                ...(acknowledgeNotice ? { acknowledgeNotice } : {}),
+              }),
             ),
           ),
         ),

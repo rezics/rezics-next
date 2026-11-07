@@ -12,8 +12,10 @@ const {
   removeWatchNative,
 } = await import('../src/settings/watch-native');
 const { settingsThreadHref } = await import('../src/settings/adapters/content');
-const decodeWatchPage = (value: Parameters<typeof decodeWatchPageWithHref>[0], kind: Parameters<typeof decodeWatchPageWithHref>[1]) =>
-  decodeWatchPageWithHref(value, kind, settingsThreadHref);
+const decodeWatchPage = (
+  value: Parameters<typeof decodeWatchPageWithHref>[0],
+  kind: Parameters<typeof decodeWatchPageWithHref>[1],
+) => decodeWatchPageWithHref(value, kind, settingsThreadHref);
 const readWatchInventoryNative = (
   client: Parameters<typeof readWatchInventoryWithHref>[0],
   accountId: string,

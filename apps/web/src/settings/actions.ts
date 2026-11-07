@@ -47,8 +47,8 @@ export const readOwnedCollectionsPage = createServerFn({ method: 'GET' })
   })
   .handler(async ({ data }): Promise<CollectionPrivacyRead<OwnedCollectionsPage>> => {
     setResponseHeader('cache-control', 'private, no-store');
-    return collectionPrivacyRead(() =>
-      readOwnedCollections(kernelClient(), getRequest(), env as Partial<SessionEnv>, data, settingsMediaFailure),
+    return collectionPrivacyRead(
+      () => readOwnedCollections(kernelClient(), getRequest(), env as Partial<SessionEnv>, data, settingsMediaFailure),
       settingsMediaFailure,
     );
   });
@@ -75,7 +75,13 @@ export const saveCollectionVisibility = createServerFn({ method: 'POST' })
   })
   .handler(async ({ data }): Promise<CollectionVisibilityWrite> => {
     setResponseHeader('cache-control', 'private, no-store');
-    return changeCollectionVisibility(kernelClient(), getRequest(), env as Partial<SessionEnv>, data, settingsMediaFailure);
+    return changeCollectionVisibility(
+      kernelClient(),
+      getRequest(),
+      env as Partial<SessionEnv>,
+      data,
+      settingsMediaFailure,
+    );
   });
 
 export const readOwnedCollection = createServerFn({ method: 'GET' })
@@ -85,8 +91,8 @@ export const readOwnedCollection = createServerFn({ method: 'GET' })
   })
   .handler(async ({ data }): Promise<CollectionPrivacyRead<OwnedCollection>> => {
     setResponseHeader('cache-control', 'private, no-store');
-    return collectionPrivacyRead(() =>
-      reloadOwnedCollection(kernelClient(), getRequest(), env as Partial<SessionEnv>, data, settingsMediaFailure),
+    return collectionPrivacyRead(
+      () => reloadOwnedCollection(kernelClient(), getRequest(), env as Partial<SessionEnv>, data, settingsMediaFailure),
       settingsMediaFailure,
     );
   });

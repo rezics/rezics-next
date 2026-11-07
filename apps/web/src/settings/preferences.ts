@@ -858,8 +858,7 @@ export async function changeNotifications(
     return page ? { ...refused, page } : refused;
   } catch (error) {
     const failure = failureDetails(error, undefined, undefined, mediaFailure);
-    if (mediaFailure(error)?.problem.code === 'forbidden')
-      return { ok: false, reason: 'forbidden', failure };
+    if (mediaFailure(error)?.problem.code === 'forbidden') return { ok: false, reason: 'forbidden', failure };
     if (isPlatformClosedError(error) || failure.code === 'platform_closed')
       return { ok: false, reason: 'closed', failure };
     return writeFailure(failure);

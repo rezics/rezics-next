@@ -136,7 +136,9 @@ test('Sign out remains a CSRF-protected POST and unavailable Auth configuration 
 
 test('signed-out entry uses the existing sign-in and return-to flow without exposing account actions', () => {
   const html = renderToStaticMarkup(
-    performanceAmbientTree(createElement(AccountSafetyCard, { state: 'signed-out', SignInPrompt, returnTo: '/fr/settings#account' })),
+    performanceAmbientTree(
+      createElement(AccountSafetyCard, { state: 'signed-out', SignInPrompt, returnTo: '/fr/settings#account' }),
+    ),
   );
   expect(hrefs(html)).toEqual(['/auth/sign-in?return_to=%2Ffr%2Fsettings%23account']);
   expect(html).not.toContain('<form');
@@ -156,7 +158,11 @@ test('the signed-out Settings account journey renders its real main content and 
   const root = createRootRoute({
     component: () =>
       createElement(AppShell, {
-        children: createElement(SettingsPageView, { page: { signedIn: false }, csrfToken: null, content: settingsContent }),
+        children: createElement(SettingsPageView, {
+          page: { signedIn: false },
+          csrfToken: null,
+          content: settingsContent,
+        }),
       }),
   });
   const router = createRouter({

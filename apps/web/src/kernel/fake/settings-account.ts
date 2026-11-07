@@ -9,7 +9,10 @@ export type SettingsAccountExampleProps =
   | Extract<AccountSafetyProps, { state: 'signed-in' }>
   | Omit<Extract<AccountSafetyProps, { state: 'signed-out' }>, 'SignInPrompt'>;
 
-export function settingsAccountExample(example: AccountSafetyExample, onReload: () => void): SettingsAccountExampleProps {
+export function settingsAccountExample(
+  example: AccountSafetyExample,
+  onReload: () => void,
+): SettingsAccountExampleProps {
   if (example === 'signed-out') return { state: 'signed-out', returnTo: '/settings#account' };
   return {
     state: 'signed-in',

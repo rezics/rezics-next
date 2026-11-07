@@ -148,7 +148,9 @@ test('matching current fields do not mark the local preview as saved while the o
   expect(snapshot.attempt).not.toBeNull();
   expect(profileDraft?.displayName).toBe(initial.displayName);
   const changed =
-    snapshot.known != null && profileDraft != null && Object.keys(profileChanges(snapshot.known, profileDraft)).length > 0;
+    snapshot.known != null &&
+    profileDraft != null &&
+    Object.keys(profileChanges(snapshot.known, profileDraft)).length > 0;
   expect(changed).toBe(false);
   expect(profileHasLocalPreview(changed, false, snapshot.attempt, snapshot.acknowledged)).toBe(true);
   const html = renderToStaticMarkup(

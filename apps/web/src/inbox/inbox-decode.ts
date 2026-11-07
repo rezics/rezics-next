@@ -467,10 +467,7 @@ export function decodeInboxPage(value: unknown, accountId?: string): NoticePage 
 }
 
 /** Convert only native action identities to existing localized routes; never consume a supplied URL. */
-export function inboxOpenHref(
-  item: InboxNotice,
-  threadHref: InboxContentPort['threadHref'],
-): string | undefined {
+export function inboxOpenHref(item: InboxNotice, threadHref: InboxContentPort['threadHref']): string | undefined {
   const open = item.actions?.open;
   if (
     !open ||

@@ -85,11 +85,12 @@ function avatarContent(
     createIntent: (accountId, selected) =>
       createMediaReservationIntent({ containerId: accountId }, selected, 'avatar', accountId),
     upload,
-    resume: resume ?? (async () => {
-      throw new UploadRefusal('unavailable');
-    }),
-    readAdvice:
-      readAdvice ?? (async () => adviceResult(advice(editor.snapshot().draft?.accountId ?? ''))),
+    resume:
+      resume ??
+      (async () => {
+        throw new UploadRefusal('unavailable');
+      }),
+    readAdvice: readAdvice ?? (async () => adviceResult(advice(editor.snapshot().draft?.accountId ?? ''))),
   };
 }
 async function submit(controller: ProfileAvatarUpload, selected = file()) {
@@ -118,20 +119,16 @@ function uploads(editor: ProfileEditor, readAdvice?: AvatarAdviceRead) {
     // Intentionally ignore abort: ownership must also guard an already completed provider response.
     return result.promise;
   };
-  const controller = new ProfileAvatarUpload(
-    editor,
-    avatarContent(editor, upload, readAdvice),
-    {
-      createObjectURL: () => {
-        const url = `blob:owned-${created.length}`;
-        created.push(url);
-        return url;
-      },
-      revokeObjectURL: (url) => {
-        revoked.push(url);
-      },
+  const controller = new ProfileAvatarUpload(editor, avatarContent(editor, upload, readAdvice), {
+    createObjectURL: () => {
+      const url = `blob:owned-${created.length}`;
+      created.push(url);
+      return url;
     },
-  );
+    revokeObjectURL: (url) => {
+      revoked.push(url);
+    },
+  });
   return { controller, requests, created, revoked, disconnect: controller.connect() };
 }
 async function mounted(editor: ProfileEditor, readAdvice?: AvatarAdviceRead) {
@@ -369,12 +366,7 @@ function recovery(
   const resume: AvatarResume = (mediaId, file, signal) => request('resume', mediaId, file, signal);
   const controller = new ProfileAvatarUpload(
     editor,
-    avatarContent(
-      editor,
-      uploadOverride ?? defaultUpload,
-      readAdvice,
-      resumeAvailable ? resume : undefined,
-    ),
+    avatarContent(editor, uploadOverride ?? defaultUpload, readAdvice, resumeAvailable ? resume : undefined),
     {
       createObjectURL: () => {
         const url = `blob:recovery-${created.length}`;

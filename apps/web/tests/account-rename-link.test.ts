@@ -138,7 +138,9 @@ test('missing, denied, malformed and foreign native capability cannot enable ren
   expect(await transport(null, undefined, 'someone-else').read()).toBeNull();
   expect(render(null)).not.toContain('/account/rename');
   const signedOut = renderToStaticMarkup(
-    performanceAmbientTree(createElement(AccountSafetyCard, { state: 'signed-out', SignInPrompt, returnTo: '/settings' })),
+    performanceAmbientTree(
+      createElement(AccountSafetyCard, { state: 'signed-out', SignInPrompt, returnTo: '/settings' }),
+    ),
   );
   expect(signedOut).not.toContain('/account/rename');
 });

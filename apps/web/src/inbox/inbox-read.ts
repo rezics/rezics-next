@@ -292,7 +292,8 @@ export function inboxSeenFailure(
   mediaFailure: InboxContentPort['mediaFailure'] = () => undefined,
 ): Extract<InboxSeenResult, { failure: NativeInboxFailure }> {
   rethrowFrameworkControlFlow(error);
-  const native = error instanceof InboxSeenError ? error.failure : transportFailure(error, undefined, undefined, mediaFailure);
+  const native =
+    error instanceof InboxSeenError ? error.failure : transportFailure(error, undefined, undefined, mediaFailure);
   const bounded = (value: string | undefined) =>
     value && value.length <= 128 && !/[\u0000-\u001f\u007f]/.test(value) ? value : undefined;
   const code = bounded(native.code);
@@ -385,7 +386,13 @@ export const markInboxSeen = createServerFn({ method: 'POST' })
   .handler(async ({ data }): Promise<InboxSeenResult> => {
     setResponseHeader('cache-control', 'private, no-store');
     const { inboxMediaFailure } = await import('./adapters/content');
-    return loadInboxSeen((await inboxKernelClient()).client, getRequest(), await inboxSessionEnv(), data, inboxMediaFailure);
+    return loadInboxSeen(
+      (await inboxKernelClient()).client,
+      getRequest(),
+      await inboxSessionEnv(),
+      data,
+      inboxMediaFailure,
+    );
   });
 
 export async function loadInboxNoticeSeen(
@@ -422,5 +429,11 @@ export const markInboxItemSeen = createServerFn({ method: 'POST' })
   .handler(async ({ data }): Promise<InboxSeenResult> => {
     setResponseHeader('cache-control', 'private, no-store');
     const { inboxMediaFailure } = await import('./adapters/content');
-    return loadInboxNoticeSeen((await inboxKernelClient()).client, getRequest(), await inboxSessionEnv(), data, inboxMediaFailure);
+    return loadInboxNoticeSeen(
+      (await inboxKernelClient()).client,
+      getRequest(),
+      await inboxSessionEnv(),
+      data,
+      inboxMediaFailure,
+    );
   });
