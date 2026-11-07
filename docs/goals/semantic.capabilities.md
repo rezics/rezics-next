@@ -90,6 +90,10 @@ the seeded native proposal, separate adoption and current fact readback establis
 Receipt fixture queries resolve the configured keyed receipt identity for both finalization and replay. Installed
 Library public-output custody is received through its application export and composed Semantic observations; its
 owning native suites must establish publication, transfer, cancellation, rollback and ordinary-scope behavior.
+Native profile fixtures install the full Library application with their current Pool, Access, route key and clock,
+matching the server's Access-ready composition before Collection creation. A presentation-only preload cannot
+satisfy those native producers. Installed Members preparation retains its original authorization, duplicate intent,
+retired-owner and 64/512/4096 growth assertions; fixture or composition checks do not establish a first-public pass.
 
 ## Evidence stages
 

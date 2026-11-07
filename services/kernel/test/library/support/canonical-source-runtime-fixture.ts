@@ -38,7 +38,7 @@ export async function sourceRuntimeFixture() {
         title: 'Explicit source runtime',
         visibility,
       });
-      expect(response.status).toBe(201);
+      expect(response.status, await response.clone().text()).toBe(201);
       const id = (await response.json()).collection.id as string;
       return { route: routeOf(id)!, collectionId: id };
     }

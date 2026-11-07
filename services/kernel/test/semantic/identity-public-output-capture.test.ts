@@ -75,7 +75,7 @@ async function setup(ids: readonly string[], visibility: 'public' | 'private' = 
     visibility,
     rule: { filter: { owner: { presence: true } } },
   });
-  expect(response.status).toBe(201);
+  expect(response.status, await response.clone().text()).toBe(201);
   const collectionId = (await response.json()).collection.id as string;
   const ref = { route: routeOf(collectionId)!, collectionId, generation: randomUUID() };
   await f.command(collectionId, { begin: ref }, (tx) =>
