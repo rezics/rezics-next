@@ -1,7 +1,8 @@
 import { memoizedValue } from '../memoized.ts';
 import { withHeaders } from '@elysia/openapi';
 import { t } from 'elysia';
-import { deadlineClient, within } from '../access/authenticate.ts';
+import { deadlineClient, readNativeAccessTime, within } from '../access/authenticate.ts';
+import { releaseOperationalTime } from '../command/command.ts';
 import { discardConnection, withConnection } from '../database/pool.ts';
 import { customMethod } from '../http/custom-method.ts';
 import { ProblemError, problemSchema } from '../http/problem.ts';
@@ -64,15 +65,19 @@ async function snapshot<T>(
 async function authorizeRoot(dependencies: Dependencies, actor: Actor, deadline: number) {
   // No anonymous eligibility or synthetic tuple UUID: the sole seeded Context
   // supplies authority, using the mounted protected action and normal formula.
-  const check = await accessCheck(dependencies.access, actor, 'source_fence:read', root(), {
-    pool: dependencies.pool,
-    deadline,
-  });
-  return snapshot(dependencies.pool, 0, deadline, async (client) => {
-    const current = await readContext.run(client, { route: root().route, context_id: root().id });
-    // Access obtains authoritative database time on this root's own client.
-    if (current?.kind !== 'global' || !(await check(client))) throw new ProblemError('forbidden');
-  });
+  const context = { pool: dependencies.pool, deadline };
+  const time = await readNativeAccessTime(context);
+  try {
+    const check = await accessCheck(dependencies.access, actor, 'source_fence:read', root(), { ...context, time });
+    return await snapshot(dependencies.pool, 0, deadline, async (client) => {
+      const current = await readContext.run(client, { route: root().route, context_id: root().id });
+      // Preparation and the current formula share one live native instant. The
+      // final root authorization owns a fresh instant after tuple release.
+      if (current?.kind !== 'global' || !(await check(client, time))) throw new ProblemError('forbidden');
+    });
+  } finally {
+    releaseOperationalTime(time);
+  }
 }
 
 export function sourceFenceRoutes(app: ReturnType<typeof definitionRoutes>, dependencies: Dependencies) {

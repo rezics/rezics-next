@@ -10,6 +10,7 @@ import { createAccess } from '../../src/access/index.ts';
 import { tupleRoute } from '../../src/content/imported-contract.ts';
 import fenceRead from '../../src/content/read-source-fences.sql';
 import permissionRead from '../../src/access/permission-check.sql';
+import timeRead from '../../src/access/permission-time.sql';
 import contextRead from '../../src/semantic/read-context.sql';
 import { createKernel } from '../../src/http/kernel.ts';
 import { isProblemSchema, openApiDocument } from '../../src/http/openapi.ts';
@@ -217,6 +218,13 @@ test('actual generated sourceFences custom check route requires protected read g
     const checks = rows.filter((row) => row.statement === permissionRead.sql);
     expect(checks.length).toBeGreaterThanOrEqual(2);
     for (const check of checks) {
+      // A root snapshot consumes the prepared native time; it must not acquire
+      // another time under the borrowed resource checkout.
+      const index = rows.indexOf(check);
+      const begin = rows.slice(0, index).findLastIndex((row) => row.statement.startsWith('BEGIN'));
+      expect(begin).toBeGreaterThanOrEqual(0);
+      expect(rows.slice(begin, index).some((row) => row.statement === timeRead.sql)).toBe(false);
+      expect(rows.slice(0, begin).some((row) => row.statement === timeRead.sql)).toBe(true);
       const parameters = Object.fromEntries(permissionRead.params.map((key, index) => [key, check.parameters[index]]));
       expect({ ...parameters, resource_ids: [permissionResourceId(check, permissionRead.params)] }).toMatchObject({
         route: 0,

@@ -2783,6 +2783,18 @@ rows with null read advice when current download authority is denied.
 
 ## Source fences
 
+The mounted `GET /v1/sourceFences:check` first prepares `source_fence:read` on the sole Global Context, then
+authorizes in an independent root snapshot before reading the exact tuple in its own partition snapshot. Each
+root check obtains a native read time on a released connection, passes that same live time to Access preparation
+and final evaluation, and releases it in `finally`. After tuple checkout is released, the route resolves the current
+actor and repeats root preparation and authorization with a fresh native time. It keeps the original Pool and
+deadline throughout. No Access preparation or time acquisition occurs under a root or tuple checkout.
+Missing tuples produce `fenced: false` and `securityRevision: null` only after the native exact read succeeds;
+dependency failures propagate without facts or a session header. Successful responses are private, no-store and
+record the tuple and final root anchors in the ordinary session header. Commands recheck fences independently.
+The focused HTTP assertions cover released native time acquisition alongside the existing admitted, denied,
+revoked and exact-key controls; native, browser, seed and growth acceptance run after integration.
+
 `content.source_fences` retains one stable `(route, source, external_id, field_group)` tuple independently of
 subject identity. `takedownSourceFence` authorizes platform governance at the command's authoritative time before
 writing only the tuple's partition. The first takedown stores that command time in `taken_down_at` and a new
