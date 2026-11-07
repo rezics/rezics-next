@@ -101,6 +101,8 @@ import { createContentShelfTitleSource, type ContentShelfTitleInputs } from '../
 import type { ShelfTypeDigest } from '../library/shelf-type-keys.ts';
 import { createShelfMaintenanceOps } from '../library/shelf-maintenance-runtime.ts';
 import { readViewerPersonalActionsPage, type ViewerPersonalActionsReader } from '../library/viewer-personal-actions.ts';
+import { createNativePagePorts } from '../presentation/adapters/semantic-page.ts';
+import { bindPageApplication, createPageApplication } from '../presentation/page-application.ts';
 import { profileRoutes } from '../presentation/http/profiles.ts';
 import type { Access, AccessConfig, AccessFactory, AccessRealmRoleReader, Actor, Resource } from '../request/access.ts';
 import { withConnection } from '../database/pool.ts';
@@ -420,6 +422,7 @@ export function createKernelAccessResolver(options: {
 export function createKernel(dependencies: KernelDependencies): Kernel {
   bindOrdinaryContentLifecycle(nativeContentLifecycle());
   bindContextAccess(nativeContextAccess());
+  bindPageApplication(createPageApplication(createNativePagePorts()));
   const declared = contentHttpDeclaration();
   const contentRuntime = ensureContentApplication({
     ...(dependencies.clock ? { clock: dependencies.clock } : {}),

@@ -640,7 +640,11 @@
         "services/kernel/src/search/account-erasure-source.ts",
         "services/kernel/src/search/service-scope.ts",
         "services/kernel/src/search/current-filter-plan.ts",
-        "services/kernel/src/search/adapters/index.ts"
+        "services/kernel/src/search/adapters/index.ts",
+        "services/kernel/src/presentation/page-contract.ts",
+        "services/kernel/src/presentation/page-semantic-port.ts",
+        "services/kernel/src/presentation/page-application.ts",
+        "services/kernel/src/presentation/adapters/semantic-page.ts"
       ],
       "allowedDependencies": [
         "bounds",
@@ -715,7 +719,8 @@
         "services/kernel/src/semantic/search-source.ts",
         "services/kernel/src/semantic/identity-receiving-effects.ts",
         "services/kernel/src/semantic/identity-receiving-effects-types.ts",
-        "services/kernel/src/semantic/identity-search-receiving-statements.ts"
+        "services/kernel/src/semantic/identity-search-receiving-statements.ts",
+        "services/kernel/src/semantic/character-public-reading-documents.ts"
       ],
       "allowedDependencies": [
         "composition",
