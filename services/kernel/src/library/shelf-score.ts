@@ -2,15 +2,16 @@ import type { Pool, PoolClient } from 'pg';
 import type { KernelClock } from '../clock.ts';
 import type { Access, Actor } from '../request/access.ts';
 import { routeOf } from '../route/route.ts';
-import { ProblemError } from '../http/problem.ts';
+import { ProblemError } from '../http/problem-error.ts';
 import {
   readPersonalScoreQuestion,
   unavailablePersonalScoreCurrentness,
   type PersonalScoreCurrentness,
 } from '../rating/personal-score.ts';
-import { createLibraryCommandRunner, requireRoute } from './command-support.ts';
+import { createLibraryCommandRunner } from './command-support.ts';
+import { requireRoute } from './collection-command-work.ts';
 import type { ShelfCursorBinding, ShelfDateReader, ShelfEntry } from './shelf-contract.ts';
-import { MAX_SHELF_PAGE_SIZE, isShelfEntryState } from './shelf-contract.ts';
+import { MAX_SHELF_PAGE_SIZE, isShelfEntryState } from './contract/index.ts';
 import { ShelfReadUnavailableError } from './shelf-reader-unavailable.ts';
 
 type Client = Pick<PoolClient, 'query'>;

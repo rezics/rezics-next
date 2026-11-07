@@ -13,7 +13,7 @@ import pg, { type Pool, type PoolConfig } from 'pg';
 import { readAccount } from '../access/account-data.ts';
 import { shareAccount } from '../access/account-share.ts';
 import { deriveAccess } from '../access/derived-access.ts';
-import { GrantDeniedError } from '../access/grant-commands.ts';
+import { GrantDeniedError } from '../access/resource-access-errors.ts';
 import { LifecycleDeniedError } from '../access/lifecycle-20261025094010-command.ts';
 import { parentCreationAuthorization } from '../access/parent-creation.ts';
 import { initializeResourceGrants } from '../access/resource-initialization.ts';
@@ -32,8 +32,8 @@ import {
   type CommandOutcome,
   type CommandTransaction,
 } from '../command/command.ts';
-import { ProblemError } from '../http/problem.ts';
-import type { Access, AccessCheck, AccessClient, AccountActor, Actor } from '../request/access.ts';
+import { ProblemError } from '../http/problem-error.ts';
+import type { Access, AccessClient, AccountActor, Actor } from '../request/access.ts';
 import { deadlineFor } from '../request/deadline.ts';
 import { newId, partitionOf, routeOf } from '../route/route.ts';
 import type {
@@ -71,7 +71,9 @@ import {
   updateCollection as updateCollectionRow,
   updateMemberNote as updateMemberNoteRow,
 } from './collection-store.ts';
-import { createLibraryCommandRunner, runLibraryCommand, WORK_STEP_DEADLINE_MS } from './command-support.ts';
+import { createLibraryCommandRunner } from './command-support.ts';
+import { runLibraryCommand } from './library-command-execution.ts';
+import { WORK_STEP_DEADLINE_MS } from './work-step-deadline.ts';
 import { createCollectionBatchCommands } from './collection-batch.ts';
 import batchParents from './collection-batch-parents.sql';
 import authorizationCollection from './collection-store-collection-authorization.sql';

@@ -3,7 +3,7 @@ import { t } from 'elysia';
 import { bundledRelease } from '@rezics/definitions/bundled';
 import type { Pool } from 'pg';
 import type { KernelClock } from '../clock.ts';
-import { GrantDeniedError } from '../access/grant-commands.ts';
+import { GrantDeniedError } from '../access/resource-access-errors.ts';
 import { customMethod } from '../http/custom-method.ts';
 import { ProblemError, problemSchema } from '../http/problem.ts';
 import { IDEMPOTENCY_HEADER, idempotencyKeyOf } from '../http/request.ts';
@@ -12,7 +12,7 @@ import { createVoteCommands } from '../rating/votes.ts';
 import { AuthenticationError, type Access, type Actor } from '../request/access.ts';
 import type { definitionRoutes } from '../semantic/http/definitions.ts';
 import type { KeyRing } from '../tokens/seal.ts';
-import { LibraryNotFoundError } from './command-support.ts';
+import { LibraryNotFoundError } from './collection-command-work.ts';
 import { createBangumiImport } from './list-import-bangumi.ts';
 import {
   BANGUMI_LIMITS,

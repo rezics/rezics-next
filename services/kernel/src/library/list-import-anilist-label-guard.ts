@@ -4,8 +4,8 @@ import type { Pool, PoolClient } from 'pg';
 import type { AuthoritativeTime } from '../command/command.ts';
 import type { Access, AccountActor } from '../request/access.ts';
 import { deadlineFor } from '../request/deadline.ts';
-import { requireRoute } from './command-support.ts';
-import { LibraryConflictError } from './entries.ts';
+import { requireRoute } from './collection-command-work.ts';
+import { LibraryConflictError } from './entry-errors.ts';
 import { readLibraryProfileAnchor } from './profile-source.ts';
 
 export const aniListDigest = (value: unknown) => createHash('sha256').update(canonicalize(value)!).digest('hex');

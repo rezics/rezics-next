@@ -2,7 +2,7 @@ import { memoizedValue } from '../memoized.ts';
 import { t } from 'elysia';
 import { bundledRelease } from '@rezics/definitions/bundled';
 import type { Pool } from 'pg';
-import { GrantDeniedError } from '../access/grant-commands.ts';
+import { GrantDeniedError } from '../access/resource-access-errors.ts';
 import type { KernelClock } from '../clock.ts';
 import { ProblemError, problemSchema } from '../http/problem.ts';
 import { defineRateLimit } from '../http/rate-limit.ts';

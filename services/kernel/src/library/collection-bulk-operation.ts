@@ -9,7 +9,7 @@ import { readAccount } from '../access/account-data.ts';
 import { commandAccessContext } from '../access/command-admission.ts';
 import { captureDurableInitiator, durableInitiatorCommitment } from '../access/durable-initiator-capture.ts';
 import type { DurableInitiatorReader, DurableInitiatorRecord } from '../access/durable-initiator.ts';
-import { GrantDeniedError } from '../access/grant-commands.ts';
+import { GrantDeniedError } from '../access/resource-access-errors.ts';
 import {
   authoritativeTimeValue,
   currentCommandReceipt,
@@ -22,7 +22,7 @@ import {
 import { nativeReceiptKeyCandidates } from '../command/receipt-key.ts';
 import type { KernelClock } from '../clock.ts';
 import { withConnection } from '../database/pool.ts';
-import { ProblemError } from '../http/problem.ts';
+import { ProblemError } from '../http/problem-error.ts';
 import { accessCheck, type Access, type AccountActor, type Actor } from '../request/access.ts';
 import { deadlineFor } from '../request/deadline.ts';
 import { newId, partitionOf, routeOf } from '../route/route.ts';
@@ -53,7 +53,8 @@ import {
   explicitCollectionBulkAdd,
   prepareCollectionBulkAddAdmission,
 } from './collection-bulk-add-admission.ts';
-import { createLibraryCommandRunner, LibraryNotFoundError, requireRoute } from './command-support.ts';
+import { createLibraryCommandRunner } from './command-support.ts';
+import { LibraryNotFoundError, requireRoute } from './collection-command-work.ts';
 import {
   confirmCollectionBulk,
   previewCollectionBulk,

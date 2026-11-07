@@ -1,16 +1,19 @@
+export { executeStatusTarget, executeCollectionRemoveTarget, reconcileBulkTarget } from './bulk-target-dispatch.ts';
+
+export {
+  BULK_PAGE_LIMIT,
+  BULK_SEGMENT_PAGES,
+  BULK_EXECUTION_HOURS,
+  BULK_RESULTS_HOURS,
+  BULK_COMMAND_DEADLINE_MS,
+} from './contract/index.ts';
 /** Common bulk wire and executor contracts; native composition lives in collection-bulk-* modules. */
-import {
-  executeCollectionRemoveTarget as removeCapturedOccurrence,
-  reconcileCollectionRemoveTarget,
-} from './collection-bulk-remove.ts';
-import { reconcileCollectionAddTarget } from './collection-bulk-add.ts';
-import { reconcileLibraryRemovalTarget } from './collection-bulk-library-removal.ts';
+
 import type { Pool } from 'pg';
 import { createCollectionBulkOperations } from './collection-bulk-operation.ts';
-import { executeCollectionBulkStatus, reconcileCollectionBulkStatus } from './collection-bulk-status.ts';
+
 import { acknowledgeCollectionBulkOutcome, registerCollectionBulkWork } from './collection-bulk-work.ts';
-import { withConnection } from '../database/pool.ts';
-import { isDeepStrictEqual } from 'node:util';
+
 import type { KernelClock } from '../clock.ts';
 import type { AuthoritativeTime, CommandOutcome, CommandTransaction } from '../command/command.ts';
 import type {
@@ -24,13 +27,7 @@ import type { Access, AccountActor, Actor } from '../request/access.ts';
 import type { KeyRing } from '../tokens/seal.ts';
 import type { WorkContext } from '../work/registry.ts';
 import type { EntryDeletion, EntryState } from './entry-model.ts';
-import { readCollectionBulk } from './collection-bulk-store.ts';
 
-export const BULK_PAGE_LIMIT = 100;
-export const BULK_SEGMENT_PAGES = 100;
-export const BULK_EXECUTION_HOURS = 24;
-export const BULK_RESULTS_HOURS = 48;
-export const BULK_COMMAND_DEADLINE_MS = 5_000;
 export { BULK_ADMISSION_BODY_BYTES, BULK_MAX_SELECTION_IDS } from './bulk-limits.ts';
 export type DecimalSequence = string; // canonical nonnegative bigint decimal, compared numerically
 export type SubjectSelection =
@@ -387,53 +384,10 @@ export async function acknowledgeOccurrencePage(
 ): Promise<Checkpoint> {
   throw new Error('Library bulk occurrence transfer is not implemented');
 }
-export async function executeStatusTarget(
-  _dependencies: BulkDependencies,
-  _command: TargetCommand,
-): Promise<AttemptResult> {
-  return executeCollectionBulkStatus(_dependencies, _command);
-}
+
 export { executeLibraryRemovalTarget } from './collection-bulk-library-removal.ts';
 export { executeCollectionAddTarget } from './collection-bulk-add.ts';
-export async function executeCollectionRemoveTarget(
-  dependencies: BulkDependencies,
-  command: TargetCommand,
-): Promise<AttemptResult> {
-  return removeCapturedOccurrence(dependencies, command);
-}
-/** Private source-bound accounting; can recover prior commits after revocation,
- * cannot restore an initiator, issue personal effects or disclose target data.
- */
-export async function reconcileBulkTarget(
-  dependencies: BulkDependencies,
-  command: TargetCommand,
-): Promise<AttemptResult | null> {
-  const key = {
-    route: command.source.route,
-    accountId: command.receipt.principalId,
-    operationId: command.source.id,
-  };
-  const operation = await withConnection(dependencies.pool, (client) =>
-    readCollectionBulk(client as CommandTransaction, key),
-  );
-  if (
-    !operation ||
-    operation.phase === 'preview' ||
-    operation.sourceDigest !== command.sourceDigest ||
-    !isDeepStrictEqual(operation.initiator.operation, command.source)
-  )
-    return { kind: 'stop', reason: 'evidence_missing' };
-  switch (operation.request.action) {
-    case 'set_status':
-      return reconcileCollectionBulkStatus(dependencies, command);
-    case 'add_to_collection':
-      return reconcileCollectionAddTarget(dependencies, command);
-    case 'remove_from_collection':
-      return reconcileCollectionRemoveTarget(dependencies, command);
-    case 'remove_from_library':
-      return reconcileLibraryRemovalTarget(dependencies, command);
-  }
-}
+
 export async function acknowledgeBulkOutcome(
   dependencies: BulkDependencies,
   evidence: TargetEvidence,

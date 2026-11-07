@@ -1,3 +1,4 @@
+export { typePreparationBinding } from './type-preparation-binding.ts';
 import type {
   TypePreparationBinding,
   TypePreparationOrigin,
@@ -23,21 +24,6 @@ export interface TypePreparationInput {
   readonly sourceId: string;
   readonly source: Readonly<ShelfSourceStamp>;
   readonly ownerEpoch: bigint;
-}
-
-export function typePreparationBinding(input: TypePreparationInput): TypePreparationBinding {
-  if (input.source.position < 0n || input.ownerEpoch < 0n)
-    throw new RangeError('Preparation positions and owner epochs must be nonnegative');
-  return Object.freeze({
-    accountId: input.accountId,
-    subjectId: input.subjectId,
-    requestKey: input.requestKey,
-    sourceId: input.sourceId,
-    sourcePartition: input.source.partition,
-    sourceEpoch: input.source.epoch,
-    sourcePosition: input.source.position.toString(10),
-    ownerEpoch: input.ownerEpoch.toString(10),
-  });
 }
 
 /** Immutable native row header. Exact input text/bytes and their equality evidence stay native. */

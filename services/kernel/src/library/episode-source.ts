@@ -1,6 +1,6 @@
 import type { Pool } from 'pg';
 import type { AuthoritativeTime } from '../command/command.ts';
-import { ProblemError } from '../http/problem.ts';
+import { ProblemError } from '../http/problem-error.ts';
 import { accessCheck, type Access, type Actor } from '../request/access.ts';
 import { routeOf } from '../route/route.ts';
 import { activeRelease, GLOBAL_CONTEXT } from '../semantic/definitions.ts';

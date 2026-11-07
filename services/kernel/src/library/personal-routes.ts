@@ -9,7 +9,7 @@ import { bundledRelease } from '@rezics/definitions/bundled';
 import { customMethod } from '../http/custom-method.ts';
 import type { Pool } from 'pg';
 import { deadlineClient } from '../access/authenticate.ts';
-import { GrantDeniedError } from '../access/grant-commands.ts';
+import { GrantDeniedError } from '../access/resource-access-errors.ts';
 import { systemClock, type KernelClock } from '../clock.ts';
 import { withConnection } from '../database/pool.ts';
 import { ProblemError, problemSchema } from '../http/problem.ts';
@@ -22,7 +22,7 @@ import type { definitionRoutes } from '../semantic/http/definitions.ts';
 import { languageRanges } from '../semantic/language.ts';
 import { decodeCursor, encodeCursor } from '../tokens/cursor.ts';
 import type { KeyRing } from '../tokens/seal.ts';
-import { LibraryNotFoundError } from './command-support.ts';
+import { LibraryNotFoundError } from './collection-command-work.ts';
 import { FactSchema } from '../search/http/routes.ts';
 import {
   createEntryAnnotationCorrectionCommands,
@@ -30,23 +30,24 @@ import {
   EntryAnnotationCorrectionConflictError,
   EntryAnnotationCorrectionLimitError,
 } from './entry-annotation-correction.ts';
-import { CopyConflictError, CopyInvalidError, createCopyCommands } from './copies.ts';
+import { CopyConflictError, CopyInvalidError, COPY_CONDITION_CHOICES } from './contract/index.ts';
+import { createCopyCommands } from './copies.ts';
 import { createLoanCommands, loanPeopleDisplay } from './loan-commands.ts';
-import { loanDueBoundary, type LoanDueBoundary } from './loan-date.ts';
+import { loanDueBoundary, type LoanDueBoundary, LoanInvalidError } from './loan-date.ts';
 import { withLoanHttpWork, type LoanHttpOperation, type LoanHttpWorkOwner } from './loan-operation-bounds.ts';
-import { LoanConflictError, LoanInvalidError, LoanNotFoundError, loanState, type Loan } from './loan-model.ts';
-import { COPY_CONDITION_CHOICES } from './copy-condition.ts';
+import { LoanConflictError, LoanNotFoundError, loanState, type Loan } from './loan-model.ts';
+
 import { attachCopyListContext } from './copy-list-context.ts';
 import type { CopyListContext } from './copy-list-context.ts';
 import type { CopyInventory } from './copy-inventory.ts';
 import type { CopyPresentation } from './copy-model.ts';
+import { createEntryCommands } from './entries.ts';
 import {
-  createEntryCommands,
-  LibraryConflictError,
   LibraryEntryInvalidError,
   LibraryEntryLifecycleConflictError,
   LibraryEntryStateRestoreConflictError,
-} from './entries.ts';
+} from './entry-lifecycle-errors.ts';
+import { LibraryConflictError } from './entry-errors.ts';
 import type { Copy, Entry } from './entry-model.ts';
 import {
   MAX_PERSONAL_NOTE_BYTES,
@@ -88,7 +89,8 @@ import {
   shelfTypesSchema,
 } from './shelf-schemas.ts';
 import { STANDARD_QUESTION_ID } from '../rating/votes.ts';
-import { readViewerFactsPage, viewerFactsResponseSchema } from './viewer-facts.ts';
+import { readViewerFactsPage } from './viewer-facts.ts';
+import { viewerFactsResponseSchema } from './viewer-facts-schema.ts';
 import { attachCollectionListFacts } from './collection-list-facts.ts';
 import { assertShelfPageCurrent } from './shelf-viewer-currentness.ts';
 

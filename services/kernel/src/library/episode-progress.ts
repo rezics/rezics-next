@@ -1,5 +1,5 @@
 import type { Pool } from 'pg';
-import { GrantDeniedError } from '../access/grant-commands.ts';
+import { GrantDeniedError } from '../access/resource-access-errors.ts';
 import { readAccount } from '../access/account-data.ts';
 import type { KernelClock } from '../clock.ts';
 import {
@@ -9,7 +9,7 @@ import {
   type CommandTransaction,
 } from '../command/command.ts';
 import { withConnection } from '../database/pool.ts';
-import { ProblemError } from '../http/problem.ts';
+import { ProblemError } from '../http/problem-error.ts';
 import type { Access, Actor, AccountActor } from '../request/access.ts';
 import { deadlineFor, withRequestDeadline } from '../request/deadline.ts';
 import { partitionOf, routeOf } from '../route/route.ts';
@@ -17,12 +17,9 @@ import { readPartition } from '../partition/partition.ts';
 import { readRelease } from '../semantic/definitions.ts';
 import { decodeCursor, encodeCursor, type CursorBinding } from '../tokens/cursor.ts';
 import type { KeyRing } from '../tokens/seal.ts';
-import {
-  createLibraryCommandRunner,
-  LibraryNotFoundError,
-  sameAccountRoute,
-  WORK_STEP_DEADLINE_MS,
-} from './command-support.ts';
+import { createLibraryCommandRunner } from './command-support.ts';
+import { LibraryNotFoundError, sameAccountRoute } from './collection-command-work.ts';
+import { WORK_STEP_DEADLINE_MS } from './work-step-deadline.ts';
 import { readEpisodeSources, type EpisodeSourceDependencies } from './episode-source.ts';
 import { compatibleProgressUnits, nativeProgressUnit, resolveLibraryProfilePin } from './profile.ts';
 import { readLibraryProfileSource, readLibraryProfileSourceObservation } from './profile-source.ts';

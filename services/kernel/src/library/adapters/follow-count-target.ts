@@ -1,12 +1,10 @@
 import type { CommandTransaction } from '../../command/command.ts';
 import { noEffect, runCommand } from '../../command/command.ts';
 import { partitionOf } from '../../route/route.ts';
-import { followCountRuntime, workStepDeadline } from './follow-count-runtime.ts';
+import { followCountRuntime, workStepDeadline, countRoute, countTransaction } from './follow-count-runtime.ts';
 import { deliverFollowCountApplication } from '../application/index.ts';
 import {
   acknowledgeFollowCount,
-  countRoute,
-  countTransaction,
   lockCountOwner,
   reconcileFollowCountSource,
   type CountKey,

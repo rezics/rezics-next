@@ -1,5 +1,5 @@
 import { deadlineClient } from '../access/authenticate.ts';
-import { ProblemError } from '../http/problem.ts';
+import { ProblemError } from '../http/problem-error.ts';
 import type { Actor } from '../request/access.ts';
 import { routeOf } from '../route/route.ts';
 import { readCurrentSubjectSummaries } from '../semantic/current-subject-summaries.ts';

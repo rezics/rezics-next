@@ -7,7 +7,7 @@ import { LifecycleDeniedError } from '../access/lifecycle-20261025094010-command
 import { authoritativeTimeValue, commandTime, principalCommandIdentity } from '../command/command.ts';
 import { runOperationalTransaction, type OperationalTransaction } from '../command/operational.ts';
 import { systemClock, type KernelClock } from '../clock.ts';
-import { ProblemError } from '../http/problem.ts';
+import { ProblemError } from '../http/problem-error.ts';
 import { accessCommandAuthorization, AuthenticationError, type Access, type Actor } from '../request/access.ts';
 import { deadlineFor } from '../request/deadline.ts';
 import { derivedId, partitionOf, routeOf } from '../route/route.ts';

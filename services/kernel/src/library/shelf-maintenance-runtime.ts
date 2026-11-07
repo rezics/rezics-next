@@ -1,15 +1,41 @@
+import {
+  gateEnsure,
+  gateLock,
+  inputs,
+  runRead,
+  stepSave,
+  uuid,
+  type Run,
+  type Gate,
+  ownerArgs,
+  runArgs,
+  unavailable,
+  ownerCheck,
+  closed,
+  validateShelfMaintenanceCursor,
+  validateShelfMaintenanceBinding,
+  bindingFor,
+  live,
+  shareShelfAccount,
+  saveGate,
+  createRun,
+  initialize,
+} from './shelf-maintenance-owner.ts';
+export {
+  enterShelfWrite,
+  fenceShelfTechnicalWrite,
+  validateShelfMaintenanceCursor,
+  validateShelfMaintenanceBinding,
+} from './shelf-maintenance-owner.ts';
 import { memoizedValue } from '../memoized.ts';
 import { cleanupShelfTitleKeys } from './shelf-title-maintenance-store.ts';
 import { createHash } from 'node:crypto';
 import { AsyncLocalStorage } from 'node:async_hooks';
 import canonicalize from 'canonicalize';
-import { shareAccount, fenceOperationalAccount } from '../access/account-share.ts';
-import { hasLiveOperationalTransaction, type OperationalTransaction } from '../command/operational.ts';
-import { GrantDeniedError } from '../access/grant-commands.ts';
+
+import { GrantDeniedError } from '../access/resource-access-errors.ts';
 import { resourceAuthorization } from '../access/resource-authorization.ts';
 import {
-  currentCommand,
-  hasLiveCommandTransaction,
   noEffect,
   normalizeCommandKey,
   principalCommandIdentity,
@@ -18,7 +44,6 @@ import {
   type LegacyCommandOptions,
   type PrincipalCommandOptions,
   type CommandResult,
-  CommandUnavailableError,
   IdempotencyConflictError,
   type CommandTransaction,
 } from '../command/command.ts';
@@ -31,7 +56,7 @@ import {
   createShelfTypeKeys,
   shelfTypeDigestFromEnvironment,
   withShelfDerivedTypePreparation,
-} from './shelf-type-keys.ts';
+} from './shelf-type-dictionary.ts';
 import { observePreparationSource, observePreparationIdentity } from './preparation-source.ts';
 import type { TypePreparationIdentity } from './type-preparation-contract.ts';
 import {
@@ -39,54 +64,49 @@ import {
   SHELF_BACKFILL_PHASES,
   SHELF_COUNTER_PHASES,
   SHELF_PURGE_PHASES,
-  initialShelfReadiness,
+} from './contract/index.ts';
+import {
   type ShelfDerivedPage,
   type ShelfMaintenanceBinding,
   type ShelfMaintenanceCursor,
   type ShelfMaintenanceDependencies,
   type ShelfMaintenanceDerivedPorts,
-  type ShelfMaintenanceKind,
   type ShelfMaintenanceOps,
   type ShelfMaintenancePhase,
   type ShelfMaintenanceReceipt,
   type ShelfMaintenanceTypeObservation,
   type ShelfOwner,
 } from './shelf-maintenance-ops-contract.ts';
-import { runLibraryCommand, workStepDeadline } from './command-support.ts';
+import { runLibraryCommand } from './library-command-execution.ts';
+import { workStepDeadline } from './collection-command-work.ts';
 import {
   consumeShelfMaintenance,
   shelfMaintenanceQuery,
   withShelfMaintenanceAllocator,
-  shelfMaintenanceStatementPlan,
   shelfMaintenanceEnqueuePlan,
   shelfMaintenanceCommandPlan,
   shelfMaintenanceSourceExecution,
   SHELF_MAINTENANCE_OPERATIONS,
 } from './shelf-maintenance-bounds.ts';
+
 import accountShareQuery from '../access/account-share.sql';
 import { readMaintenanceSessions } from './maintenance-session-page.ts';
 import { readMaintenanceHistoryPage } from './maintenance-history-page.ts';
 import erasureProbe from './erasure-probe.sql';
-import { libraryErasureWorkflowId } from './erasure-participant.ts';
+import { libraryErasureWorkflowId } from './erasure-workflow-id.ts';
 import scope from './erasure-scope.sql';
-import gateEnsureQuery from './shelf-maintenance-gate-ensure.sql';
-import gateReadQuery from './shelf-maintenance-gate-read.sql';
-import gateLockQuery from './shelf-maintenance-gate-lock.sql';
-import gateShareQuery from './shelf-maintenance-gate-share.sql';
-import gateSaveQuery from './shelf-maintenance-gate-save.sql';
-import inputsQuery from './shelf-maintenance-inputs.sql';
-import runReadQuery from './shelf-maintenance-run-read.sql';
+
 import runLockQuery from './shelf-maintenance-run-lock.sql';
-import runCreateQuery from './shelf-maintenance-run-create.sql';
+
 import stepReadQuery from './shelf-maintenance-step-read.sql';
-import stepSaveQuery from './shelf-maintenance-step-save.sql';
+
 import stepBindQuery from './shelf-maintenance-step-bind.sql';
 import advanceQuery from './shelf-maintenance-advance.sql';
 import cancelQuery from './shelf-maintenance-cancel.sql';
 import runnableQuery from './shelf-maintenance-runnable.sql';
 import ackQuery from './shelf-maintenance-ack.sql';
 import tombstone from './shelf-maintenance-tombstone.sql';
-import authorizedCollectionQuery from './shelf-maintenance-authorized-collection.sql';
+
 import entriesQuery from './shelf-maintenance-entries.sql';
 import entryBackfillQuery from './shelf-maintenance-entry-backfill.sql';
 import stampIncarnationQuery from './entry-legacy-incarnation-stamp.sql';
@@ -112,39 +132,14 @@ import reservationBindQuery from './shelf-maintenance-reservation-bind.sql';
 import reservationCheckQuery from './shelf-maintenance-reservation-check.sql';
 import bulkPending from './shelf-maintenance-bulk-pending.sql';
 
-function gateEnsure() {
-  return memoizedValue(gateEnsure, () => shelfMaintenanceQuery(gateEnsureQuery));
-}
-function gateRead() {
-  return memoizedValue(gateRead, () => shelfMaintenanceQuery(gateReadQuery));
-}
-function gateLock() {
-  return memoizedValue(gateLock, () => shelfMaintenanceQuery(gateLockQuery));
-}
-function gateShare() {
-  return memoizedValue(gateShare, () => shelfMaintenanceQuery(gateShareQuery));
-}
-function gateSave() {
-  return memoizedValue(gateSave, () => shelfMaintenanceQuery(gateSaveQuery));
-}
-function inputs() {
-  return memoizedValue(inputs, () => shelfMaintenanceQuery(inputsQuery));
-}
-function runRead() {
-  return memoizedValue(runRead, () => shelfMaintenanceQuery(runReadQuery));
-}
 function runLock() {
   return memoizedValue(runLock, () => shelfMaintenanceQuery(runLockQuery));
 }
-function runCreate() {
-  return memoizedValue(runCreate, () => shelfMaintenanceQuery(runCreateQuery));
-}
+
 function stepRead() {
   return memoizedValue(stepRead, () => shelfMaintenanceQuery(stepReadQuery));
 }
-function stepSave() {
-  return memoizedValue(stepSave, () => shelfMaintenanceQuery(stepSaveQuery));
-}
+
 function stepBind() {
   return memoizedValue(stepBind, () => shelfMaintenanceQuery(stepBindQuery));
 }
@@ -160,9 +155,7 @@ function runnable() {
 function ack() {
   return memoizedValue(ack, () => shelfMaintenanceQuery(ackQuery));
 }
-function authorizedCollection() {
-  return memoizedValue(authorizedCollection, () => shelfMaintenanceQuery(authorizedCollectionQuery));
-}
+
 function entries() {
   return memoizedValue(entries, () => shelfMaintenanceQuery(entriesQuery));
 }
@@ -240,73 +233,10 @@ const pageDeadlines = new AsyncLocalStorage<number>();
 
 export const SHELF_MAINTENANCE_WORKFLOW = 'library.shelfMaintenance';
 export const SHELF_MAINTENANCE_EVENT = 'com.rezics.library.shelf-maintenance.advanced.v1';
-const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
-const decimal = /^(0|[1-9][0-9]*)$/;
-type Run = NonNullable<Awaited<ReturnType<ReturnType<typeof runRead>['run']>>>;
-type Gate = NonNullable<Awaited<ReturnType<ReturnType<typeof gateRead>['run']>>>;
+
 type Step = NonNullable<Awaited<ReturnType<ReturnType<typeof stepRead>['run']>>>;
 type SourceRow = NonNullable<Awaited<ReturnType<ReturnType<typeof sourceRead>['run']>>>;
-const ownerArgs = (owner: ShelfOwner) => ({ route: owner.route, account_id: owner.accountId });
-const runArgs = (owner: ShelfOwner, runId: string) => ({ ...ownerArgs(owner), run_id: runId });
-function unavailable(owner: ShelfOwner): never {
-  throw new CommandUnavailableError('contention', partitionOf(owner.route));
-}
-function ownerCheck(owner: ShelfOwner) {
-  if (!owner || !uuid.test(owner.accountId) || routeOf(owner.accountId) !== owner.route)
-    throw new TypeError('Invalid shelf maintenance owner');
-  partitionOf(owner.route);
-}
-function closed(input: object, keys: readonly string[]) {
-  if (
-    !input ||
-    typeof input !== 'object' ||
-    Array.isArray(input) ||
-    Object.keys(input).length !== keys.length ||
-    keys.some((k) => !Object.hasOwn(input, k))
-  )
-    throw new TypeError('Invalid shelf maintenance locator');
-}
-export function validateShelfMaintenanceCursor(cursor: ShelfMaintenanceCursor): void {
-  if (
-    !Array.isArray(cursor) ||
-    cursor.length > 8 ||
-    cursor.some(
-      (v) =>
-        v !== null &&
-        typeof v !== 'string' &&
-        typeof v !== 'boolean' &&
-        (typeof v !== 'number' || !Number.isSafeInteger(v)),
-    ) ||
-    Buffer.byteLength(JSON.stringify(cursor)) > 2048
-  )
-    throw new TypeError('Invalid shelf maintenance checkpoint');
-}
-export function validateShelfMaintenanceBinding(binding: ShelfMaintenanceBinding): void {
-  closed(binding, ['route', 'accountId', 'runId', 'epoch', 'sequence', 'segment']);
-  ownerCheck(binding);
-  if (
-    !uuid.test(binding.runId) ||
-    !decimal.test(binding.epoch) ||
-    !decimal.test(binding.sequence) ||
-    !Number.isSafeInteger(binding.segment) ||
-    binding.segment < 0 ||
-    Buffer.byteLength(JSON.stringify(binding)) > 4096
-  )
-    throw new TypeError('Invalid shelf maintenance locator');
-  if (BigInt(binding.sequence) / 100n !== BigInt(binding.segment))
-    throw new TypeError('Invalid shelf maintenance segment');
-}
-function bindingFor(owner: ShelfOwner, run: Run): ShelfMaintenanceBinding {
-  const value = {
-    ...owner,
-    runId: run.runId,
-    epoch: BigInt(run.epoch).toString(),
-    sequence: BigInt(run.sequence).toString(),
-    segment: run.segment,
-  };
-  validateShelfMaintenanceBinding(value);
-  return value;
-}
+
 function cursorOf(step: { cursor: unknown }): ShelfMaintenanceCursor {
   const cursor = step.cursor as ShelfMaintenanceCursor;
   validateShelfMaintenanceCursor(cursor);
@@ -322,114 +252,6 @@ const event = (owner: ShelfOwner) => ({
   subject: owner.accountId,
   data: { accountId: owner.accountId },
 });
-function live(tx: CommandTransaction, owner: ShelfOwner) {
-  ownerCheck(owner);
-  const command = currentCommand(tx);
-  if (
-    !hasLiveCommandTransaction(tx) ||
-    command.partition !== partitionOf(owner.route) ||
-    command.authorization?.mode !== 'execute'
-  )
-    throw new TypeError('Shelf maintenance requires a live authorized owner command');
-  return command;
-}
-async function shareShelfAccount(tx: CommandTransaction, accountId: string) {
-  const plan = shelfMaintenanceStatementPlan(
-    accountShareQuery.sql,
-    accountShareQuery.params.map((name) => (name === 'route' ? routeOf(accountId)! : accountId)),
-  )!;
-  return consumeShelfMaintenance('account', plan.total, () => shareAccount(tx, accountId));
-}
-async function ownerAuthority(tx: CommandTransaction, owner: ShelfOwner) {
-  const command = live(tx, owner);
-  if (command.authorization!.resource.id === owner.accountId && command.authorization!.resource.route === owner.route)
-    return;
-  // A Collection writer has already admitted its actual resource. Resolve its immutable curator natively.
-  if (
-    command.authorization!.resource.route !== owner.route ||
-    !(await authorizedCollection().run(tx, { ...ownerArgs(owner), collection_id: command.authorization!.resource.id }))
-  )
-    throw new GrantDeniedError();
-}
-async function saveGate(tx: CommandTransaction, owner: ShelfOwner, gate: Gate) {
-  await gateSave().run(tx, {
-    ...ownerArgs(owner),
-    mode: gate.mode,
-    ready: gate.ready,
-    epoch: BigInt(gate.epoch),
-    active_generation: gate.activeGeneration,
-    run_id: gate.runId,
-  });
-}
-async function createRun(tx: CommandTransaction, owner: ShelfOwner, gate: Gate, kind: ShelfMaintenanceKind) {
-  const runId = newId(owner.route);
-  await runCreate().run(tx, {
-    ...runArgs(owner, runId),
-    epoch: BigInt(gate.epoch),
-    kind,
-    phase: kind === 'purge' ? 'cancel-work' : 'drain',
-    build_generation: null,
-  });
-  gate.runId = runId;
-  await saveGate(tx, owner, gate);
-  await stepSave().run(tx, runArgs(owner, runId));
-  const run = await runRead().run(tx, runArgs(owner, runId));
-  if (!run) throw new Error('Missing newly committed shelf run');
-  return bindingFor(owner, run);
-}
-/** Called only in an already admitted live owner command. No absent-row empty inference. */
-async function initialize(tx: CommandTransaction, owner: ShelfOwner) {
-  await ownerAuthority(tx, owner);
-  await shareShelfAccount(tx, owner.accountId);
-  let gate = await gateRead().run(tx, ownerArgs(owner));
-  if (!gate) {
-    await gateEnsure().run(tx, ownerArgs(owner));
-    gate = await gateLock().run(tx, ownerArgs(owner));
-  } else if (!gate.initialized) gate = await gateLock().run(tx, ownerArgs(owner));
-  if (!gate) throw new Error('Shelf gate disappeared');
-  const initializedNow = !gate.initialized;
-  if (!gate.initialized) {
-    const facts = await inputs().run(tx, ownerArgs(owner));
-    const readiness = initialShelfReadiness({
-      hasEntries: facts.entries,
-      hasCollections: facts.collections,
-      hasSessions: facts.sessions,
-    });
-    gate.initialized = true;
-    gate.ready = readiness === 'ready';
-    gate.activeGeneration = gate.ready ? EMPTY_SHELF_GENERATION : null;
-    if (!gate.ready) {
-      await createRun(tx, owner, gate, 'backfill');
-    } else await saveGate(tx, owner, gate);
-  }
-  gate = await gateShare().run(tx, ownerArgs(owner));
-  if (!gate) throw new Error('Shelf gate disappeared');
-  const run = gate.runId ? await runRead().run(tx, runArgs(owner, gate.runId)) : null;
-  return {
-    initializedNow,
-    readiness: gate.ready ? ('ready' as const) : ('backfill' as const),
-    generationId: gate.activeGeneration,
-    requested: run && run.phase !== 'complete' && !run.cancelled ? bindingFor(owner, run) : null,
-  };
-}
-/** Every ordinary input writer holds this lock through its own commit, including all late writers. */
-export async function enterShelfWrite(tx: CommandTransaction, owner: ShelfOwner) {
-  await initialize(tx, owner);
-  const gate = await gateShare().run(tx, ownerArgs(owner));
-  if (!gate || gate.mode !== 'open') unavailable(owner);
-  return { ready: gate.ready, epoch: BigInt(gate.epoch), generationId: gate.activeGeneration };
-}
-
-/** Technical input repairs retain their existing operational authority. They can
- * create an uninitialized gate, but cannot declare readiness or mint derived pages. */
-export async function fenceShelfTechnicalWrite(tx: OperationalTransaction, owner: ShelfOwner): Promise<void> {
-  ownerCheck(owner);
-  if (!hasLiveOperationalTransaction(tx)) throw new TypeError('No live shelf technical transaction');
-  await fenceOperationalAccount(tx, owner.accountId);
-  await gateEnsure().run(tx, ownerArgs(owner));
-  const gate = await gateShare().run(tx, ownerArgs(owner));
-  if (!gate || gate.mode !== 'open') unavailable(owner);
-}
 
 type DerivedAuthority = {
   tx: CommandTransaction;
@@ -480,10 +302,15 @@ export function createShelfMaintenanceDerivedPorts(): ShelfMaintenanceDerivedPor
     async reserve(tx, page, source) {
       const proof = await derivedAuthority(tx, page);
       if (proof.source !== source) throw new TypeError('Shelf source is not bound to this live page');
-      const result = await withShelfDerivedTypePreparation(tx, page, null, () =>
-        withShelfMaintenanceAllocator(tx, source.fullType, () =>
-          proof.keys.reserve({ client: tx, ...proof.owner }, source.fullType),
-        ),
+      const result = await withShelfDerivedTypePreparation(
+        tx,
+        page,
+        null,
+        () =>
+          withShelfMaintenanceAllocator(tx, source.fullType, () =>
+            proof.keys.reserve({ client: tx, ...proof.owner }, source.fullType),
+          ),
+        readShelfDerivedAllocation,
       );
       if (!result.done) {
         const rows = await reservationBind().run(tx, {
@@ -510,10 +337,15 @@ export function createShelfMaintenanceDerivedPorts(): ShelfMaintenanceDerivedPor
         }))
       )
         throw new TypeError('Reservation is not bound to this live shelf page');
-      return withShelfDerivedTypePreparation(tx, page, reservationId, () =>
-        withShelfMaintenanceAllocator(tx, undefined, () =>
-          proof.keys.continue({ client: tx, ...proof.owner }, { reservationId }),
-        ),
+      return withShelfDerivedTypePreparation(
+        tx,
+        page,
+        reservationId,
+        () =>
+          withShelfMaintenanceAllocator(tx, undefined, () =>
+            proof.keys.continue({ client: tx, ...proof.owner }, { reservationId }),
+          ),
+        readShelfDerivedAllocation,
       );
     },
   };

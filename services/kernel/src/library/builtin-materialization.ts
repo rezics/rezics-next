@@ -12,7 +12,7 @@ import {
   type CommandAuthorization,
   type CommandTransaction,
 } from '../command/command.ts';
-import { ProblemError } from '../http/problem.ts';
+import { ProblemError } from '../http/problem-error.ts';
 import type { Access, AccountActor } from '../request/access.ts';
 import { routeOf } from '../route/route.ts';
 import { activeRelease } from '../semantic/definitions.ts';

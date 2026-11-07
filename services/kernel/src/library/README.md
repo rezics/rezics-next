@@ -125,10 +125,10 @@ capture, owner-query, member preparation, publication admission, Collection muta
 Entry/progress and funded Progress-operation planning/admission; they load without Access, Search, Semantic or Content and run with fake capabilities. Native SQL catalogs and foreign Access/Search/Semantic/Content adapters live
 in `library/adapters/**` and are bound only from `composition/library.ts`. `createKernelRuntimeDefaults`, the HTTP
 server and the worker call `composeLibraryDomain`. The native preload also installs the same presentation slice through
-`composeLibraryPresentation` in the Library binding without a placeholder Source. Compatibility entries (`identity-native-bounds.ts`,
-`account-grant.ts`, `ordinary-read-bounds.ts`, `builtin-runtime-query.ts`, `members-preparation.ts`,
-`collection-publication-work-admission.ts`, `collection-publication-staging.ts`, `collection-presentation.ts`, `collection-source.ts`,
-`command-support.ts`, `entries.ts`, `sessions.ts`, `session-operation-bounds.ts`) reach the composed implementation.
+`composeLibraryPresentation` in the Library binding without a placeholder Source. Facades use composition. Consumers import defining value leaves; shelf and bulk vocabulary
+lives in `contract/index.ts`. Gate admission and type dictionaries load independently of maintenance execution,
+which supplies the live allocation reader. Progress SQL catalogs are factory-created. Typing and the architecture
+delta accept these structural refactors; behaviour assertions stay unchanged.
 
 Installed capabilities, bound by ordinary process composition: `authorization` (Access command, fence, deadline and
 lifecycle), `progressCatalog` (Access account and Semantic definition/identity SQL descriptors plus shelf-maintenance statement plans), `identityDisclosure` (Semantic original/terminal, active release and committed initiator), `searchPreparation` (Search scope,

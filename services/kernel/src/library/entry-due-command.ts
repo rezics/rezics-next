@@ -11,7 +11,7 @@ import {
   type CommandOutcome,
 } from '../command/command.ts';
 import { partitionOf } from '../route/route.ts';
-import { requireRoute, workStepDeadline } from './command-support.ts';
+import { requireRoute, workStepDeadline } from './collection-command-work.ts';
 import { purgeDueEntryDeletion, type DueEntryDeletionKey } from './entry-due-store.ts';
 import eligibility from './entry-due-eligibility.sql';
 import { bindCommandHistoryEvidence, declareCommandHistory } from '../history/application/index.ts';

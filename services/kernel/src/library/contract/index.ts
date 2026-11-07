@@ -188,3 +188,50 @@ export * from './copy-application.ts';
 export * from './copy-operations.ts';
 export * from './presentation.ts';
 export type { BuiltinMemberCapability, BuiltinMemberOptions } from './builtin-presentation.ts';
+
+export {
+  ENTRY_STATES,
+  type LegacyEntryState,
+  isLegacyEntryState,
+  isShelfEntryState,
+  SHELF_ORDERS,
+  SHELF_DIRECTIONS,
+  type ShelfOrder,
+  type ShelfDirection,
+  SHELF_DEFAULT_ORDER,
+  MAX_SHELF_PAGE_SIZE,
+  DEFAULT_SHELF_PAGE_SIZE,
+  type ShelfQuery,
+  type ShelfCursorBinding,
+  normalizeShelfQuery,
+  shelfCursorBinding,
+  shelfTypeCursorBinding,
+  SHELF_TYPE_CHUNK_BYTES,
+  SHELF_TYPE_EDGE_BATCH,
+  SHELF_TYPE_RESPONSE_BYTES,
+  SHELF_LIST_ACTION,
+  SHELF_PROGRESS_ACTION,
+  SHELF_PROGRESS_GATE,
+} from './shelf-query.ts';
+
+export {
+  type InitialShelfInputs,
+  initialShelfReadiness,
+  counterWriteMode,
+  EMPTY_SHELF_GENERATION,
+  SHELF_BACKFILL_PHASES,
+  SHELF_COUNTER_PHASES,
+  SHELF_PURGE_PHASES,
+  type ShelfMaintenancePhase,
+  type ShelfMaintenanceKind,
+  type ShelfOwner,
+  type ShelfMaintenanceCursor,
+} from './shelf-maintenance.ts';
+
+export {
+  BULK_PAGE_LIMIT,
+  BULK_SEGMENT_PAGES,
+  BULK_EXECUTION_HOURS,
+  BULK_RESULTS_HOURS,
+  BULK_COMMAND_DEADLINE_MS,
+} from './bulk-limits.ts';

@@ -1,3 +1,5 @@
+import { libraryErasureWorkflowId } from './erasure-workflow-id.ts';
+export { libraryErasureWorkflowId } from './erasure-workflow-id.ts';
 import { purgeCollectionPublicationEpisodes } from './collection-publication-episodes.ts';
 import { admitFollowCountErasure, purgeFollowCountsPage } from './erasure-follow-counts.ts';
 import { DBOS } from '@dbos-inc/dbos-sdk';
@@ -9,7 +11,7 @@ import { partitionOf } from '../route/route.ts';
 import type { WorkContext } from '../work/registry.ts';
 import { COMMAND_STEP_RETRIES } from '../work/retries.ts';
 import { purgeAccountFactsPage } from './account-fact-purge.ts';
-import { requireRoute, workStepDeadline } from './command-support.ts';
+import { requireRoute, workStepDeadline } from './collection-command-work.ts';
 import scope from './erasure-scope.sql';
 import probe from './erasure-probe.sql';
 import { purgeOwnedGraphPage } from './erasure-owned-graph.ts';
@@ -34,12 +36,6 @@ const BLOCKERS = Object.freeze([
   'members_preparation: native headers/results/original associations drain locally; later Source currentness, SDK restoration/retirement and independent physical closure have no completion authority',
   'logs/caches/exports/replicas/backups: no complete Library custody inventory',
 ]);
-
-export const libraryErasureWorkflowId = (accountId: string) => {
-  requireRoute(accountId);
-  // Access creates exactly one immutable terminal obligation per never-reused account.
-  return `library:erasure:${accountId}`;
-};
 
 /** Default terminal cleanup of indexed local stores.
  * Shared/foreign custody still has no complete-proof path; this module cannot ACK.

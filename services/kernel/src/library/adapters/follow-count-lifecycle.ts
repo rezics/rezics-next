@@ -1,15 +1,10 @@
 import type { PoolClient } from 'pg';
 import type { CloudEvent } from '../../events/log.ts';
-import { followCountRuntime } from './follow-count-runtime.ts';
+import { followCountRuntime, countRoute, countTransaction, ZERO_COUNT_KEY } from './follow-count-runtime.ts';
 import { FOLLOW_COUNT_ACCOUNT_EVENTS } from '../contract/index.ts';
 export { FOLLOW_COUNT_ACCOUNT_EVENTS } from '../contract/index.ts';
-import {
-  countRoute,
-  countTransaction,
-  lockCountOwner,
-  ZERO_COUNT_KEY,
-  type CountRuntime,
-} from './follow-count-source.ts';
+
+import { lockCountOwner, type CountRuntime } from './follow-count-source.ts';
 
 /** The real Effect.admit client commits owner admission before enqueue and relay checkpoint.
  * Event ID deduplicates keyed replay; event time, never workflow time, ages the item. */

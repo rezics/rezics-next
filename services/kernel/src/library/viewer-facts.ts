@@ -1,7 +1,7 @@
 import type { Pool, PoolClient } from 'pg';
 import { deadlineClient } from '../access/authenticate.ts';
 import { readAccount } from '../access/account-data.ts';
-import { GrantDeniedError } from '../access/grant-commands.ts';
+import { GrantDeniedError } from '../access/resource-access-errors.ts';
 import { withConnection } from '../database/pool.ts';
 import { partitionReadClient } from '../database/read-snapshot.ts';
 import type { Access, AccountActor, Actor } from '../request/access.ts';

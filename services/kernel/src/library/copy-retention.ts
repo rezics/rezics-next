@@ -4,7 +4,7 @@ import { withConnection } from '../database/pool.ts';
 import { PARTITIONS, partitionOf } from '../route/route.ts';
 import { COMMAND_STEP_RETRIES } from '../work/retries.ts';
 import type { WorkContext } from '../work/registry.ts';
-import { workStepDeadline } from './command-support.ts';
+import { workStepDeadline } from './collection-command-work.ts';
 import duePage from './copy-retention-page.sql';
 import purge from './copy-retention-purge.sql';
 

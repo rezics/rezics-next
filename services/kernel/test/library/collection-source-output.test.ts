@@ -9,11 +9,13 @@ import {
 import { currentCommand, currentCommandResources } from '../../src/command/command.ts';
 import {
   bindAndHoldNativePublicCollectionOutput,
-  readNativeCollectionMetadata,
-  readNativeCollectionRawPage,
   readNativePublicCollectionOutput,
   revalidateNativePublicCollectionOutputHold,
   transferNativePublicCollectionOutputHold,
+} from '../../src/library/native-public-output-custody.ts';
+import {
+  readNativeCollectionMetadata,
+  readNativeCollectionRawPage,
 } from '../../src/library/collection-source-native.ts';
 import { NativeCollectionWork } from '../../src/library/collection-source-work.ts';
 import { declareLibraryIdentityStatement } from '../../src/library/identity-original-work.ts';

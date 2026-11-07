@@ -5,14 +5,14 @@ import { noEffect, principalCommandIdentity, runCommand } from '../command/comma
 import { readAccount } from '../access/account-data.ts';
 import { deadlineClient } from '../access/authenticate.ts';
 import { CommandUnavailableError } from '../access/unavailable.ts';
-import { ProblemError } from '../http/problem.ts';
+import { ProblemError } from '../http/problem-error.ts';
 import { readPartition } from '../partition/partition.ts';
 import { AuthenticationError, type AccountActor, type Actor } from '../request/access.ts';
 import { deadlineFor, withRequestDeadline } from '../request/deadline.ts';
 import { partitionOf, routeOf } from '../route/route.ts';
 import { withReadTransaction } from '../semantic/read.ts';
 import { admitShelfRead } from './shelf-admission.ts';
-import { WORK_STEP_DEADLINE_MS } from './command-support.ts';
+import { WORK_STEP_DEADLINE_MS } from './work-step-deadline.ts';
 import { shelfNeedsInitialization } from './shelf-reader-generation.ts';
 import {
   DEFAULT_SHELF_PAGE_SIZE,
@@ -24,6 +24,8 @@ import {
   normalizeShelfQuery,
   shelfCursorBinding,
   shelfTypeCursorBinding,
+} from './contract/index.ts';
+import {
   type ShelfCursorBinding,
   type ShelfOrder,
   type ShelfReadDependencies,

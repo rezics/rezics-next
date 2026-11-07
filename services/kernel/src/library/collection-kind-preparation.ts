@@ -11,17 +11,17 @@ import {
   runOperationalTransaction,
 } from '../command/operational.ts';
 import { withConnection } from '../database/pool.ts';
-import { ProblemError } from '../http/problem.ts';
+import { ProblemError } from '../http/problem-error.ts';
 import type { Actor } from '../request/access.ts';
 import { partitionOf, routeOf } from '../route/route.ts';
 import type { IdentityScopeObservation } from '../semantic/identity-scope-types.ts';
-import { nativeSourceFence } from './canonical-source-store.ts';
+import { nativeSourceFence } from './native-source-fence.ts';
 import {
   authorizeNativeCollectionMetadata,
   readNativeCollectionMetadata,
   type NativeCollectionMetadata,
 } from './collection-source-native.ts';
-import { CollectionSourceLedger, NativeCollectionWork } from './collection-source-work.ts';
+import { CollectionSourceLedger, NativeCollectionWork } from './collection-native-work.ts';
 import type { WorkAllowance, WorkReceipt } from './contract/work-dimensions.ts';
 import {
   COLLECTION_KIND_PREPARATION_OBSERVATION,

@@ -1,5 +1,5 @@
 import type { Pool } from 'pg';
-import { ProblemError } from '../http/problem.ts';
+import { ProblemError } from '../http/problem-error.ts';
 import { currentCommandResources, type CommandTransaction } from '../command/command.ts';
 import {
   activeIdentitySourceConsumerMaintenance,
@@ -8,7 +8,7 @@ import {
   isPrepaidIdentitySourceConsumerMaintenance,
   identitySourceConsumerScheduleReceipt,
 } from '../semantic/identity-source-consumer-maintenance.ts';
-import { NativeCollectionWork, instrumentNativeCollectionWork } from './collection-source-work.ts';
+import { NativeCollectionWork, instrumentNativeCollectionWork } from './collection-native-work.ts';
 import type { WorkAllowance, WorkDimensions } from './contract/work-dimensions.ts';
 import { peekLibraryDomain } from './domain-binding.ts';
 import {

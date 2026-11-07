@@ -3,7 +3,7 @@ import type { DurableInitiatorRecord } from '../access/durable-initiator.ts';
 import { DurableInitiatorUnavailableError } from '../access/durable-initiator.ts';
 import { deadlineClient } from '../access/authenticate.ts';
 import { shareAccount } from '../access/account-share.ts';
-import { GrantDeniedError } from '../access/grant-commands.ts';
+import { GrantDeniedError } from '../access/resource-access-errors.ts';
 import { LifecycleDeniedError } from '../access/lifecycle-20261025094010-command.ts';
 import { resourceAuthorization, type AuthorizationAnchor } from '../access/resource-authorization.ts';
 import {
@@ -16,7 +16,7 @@ import {
   type CommandTransaction,
 } from '../command/command.ts';
 import { nativeReceiptKeyCandidates } from '../command/receipt-key.ts';
-import { ProblemError } from '../http/problem.ts';
+import { ProblemError } from '../http/problem-error.ts';
 import { newId, partitionOf, routeOf } from '../route/route.ts';
 import type {
   BulkDependencies,
@@ -25,7 +25,7 @@ import type {
   AttemptResult,
   OccurrenceTarget,
 } from './bulk-contract.ts';
-import { BULK_COMMAND_DEADLINE_MS } from './bulk-contract.ts';
+import { BULK_COMMAND_DEADLINE_MS } from './contract/index.ts';
 import { deleteMembers, readCollection, readMemberDeletion } from './collection-store.ts';
 import { assertCollectionOrderWritable } from './collection-order.ts';
 import { recordPublicCollectionReduction } from './collections.ts';

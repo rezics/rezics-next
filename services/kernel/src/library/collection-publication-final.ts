@@ -18,11 +18,11 @@ import {
   type CommandAuthorization,
   type CommandOutcome,
 } from '../command/command.ts';
-import { ProblemError } from '../http/problem.ts';
-import { NativeCollectionWork } from './collection-source-work.ts';
+import { ProblemError } from '../http/problem-error.ts';
+import { NativeCollectionWork } from './collection-native-work.ts';
 import { scopeAllowance, zeroScopeWork } from '../search/scope-execution.ts';
 import { deadlineFor } from '../request/deadline.ts';
-import { WORK_STEP_DEADLINE_MS } from './command-support.ts';
+import { WORK_STEP_DEADLINE_MS } from './work-step-deadline.ts';
 import { partitionOf, routeOf } from '../route/route.ts';
 import type {
   CollectionPublicationEpisode,

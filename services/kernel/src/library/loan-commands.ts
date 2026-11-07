@@ -1,6 +1,6 @@
 import type { Pool, PoolClient } from 'pg';
 import { readAccount } from '../access/account-data.ts';
-import { GrantDeniedError } from '../access/grant-commands.ts';
+import { GrantDeniedError } from '../access/resource-access-errors.ts';
 import {
   authoritativeTimeValue,
   commandAttemptDeadline,
@@ -9,19 +9,16 @@ import {
 } from '../command/command.ts';
 import { systemClock, type KernelClock } from '../clock.ts';
 import { withConnection } from '../database/pool.ts';
-import { ProblemError } from '../http/problem.ts';
+import { ProblemError } from '../http/problem-error.ts';
 import { type AccountActor, type Access, type Actor } from '../request/access.ts';
 import { deadlineFor, withRequestDeadline } from '../request/deadline.ts';
 import { newId, partitionOf, routeOf } from '../route/route.ts';
 import { decodeCursor, encodeCursor, type CursorBinding } from '../tokens/cursor.ts';
 import type { KeyRing } from '../tokens/seal.ts';
 import { admitEntryAttempt } from './entry-lifecycle.ts';
-import {
-  createLibraryCommandRunner,
-  LibraryNotFoundError,
-  sameAccountRoute,
-  WORK_STEP_DEADLINE_MS,
-} from './command-support.ts';
+import { createLibraryCommandRunner } from './command-support.ts';
+import { LibraryNotFoundError, sameAccountRoute } from './collection-command-work.ts';
+import { WORK_STEP_DEADLINE_MS } from './work-step-deadline.ts';
 import {
   assertLoanCopyOperand,
   createLoanRecord,

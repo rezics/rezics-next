@@ -28,12 +28,14 @@ import {
 } from '../semantic/identity-receiving-effects.ts';
 import { withReadTransaction } from '../semantic/read.ts';
 import { IDENTITY_EPOCH_ADMITTED } from '../semantic/events.ts';
-import { WORK_STEP_DEADLINE_MS, workStepDeadline } from './command-support.ts';
+import { WORK_STEP_DEADLINE_MS } from './work-step-deadline.ts';
+import { workStepDeadline } from './collection-command-work.ts';
 import {
   libraryIdentityInvalidationRole,
   libraryIdentityRoles,
   registerLibraryOwnerIdentityScope,
   type LibraryIdentityRole,
+  applyLibraryIdentityCandidate,
 } from './owner-identity.ts';
 import {
   libraryIdentityCommand,
@@ -48,7 +50,7 @@ import {
 } from './identity-scope-effects.ts';
 import type { NativeSourceIdentity } from './native-source-custody.ts';
 import type { NativeCollectionWork } from './collection-source-work.ts';
-import { applyLibraryIdentityCandidate } from './owner-identity.ts';
+
 import { applyFollowIdentityPage, type FollowIdentityCursor, type FollowIdentityHandoff } from './follow-identity.ts';
 import {
   beginCanonicalSourceRepair,

@@ -3,7 +3,7 @@ import type { AuthoritativeTime } from '../command/command.ts';
 import { deadlineClient } from '../access/authenticate.ts';
 import type { Access, AccountActor } from '../request/access.ts';
 import { routeOf } from '../route/route.ts';
-import { LibraryConflictError } from './entries.ts';
+import { LibraryConflictError } from './entry-errors.ts';
 import { readLibraryProfileSourceObservation } from './profile-source.ts';
 import { malDigest } from './list-import-mal-tags.ts';
 import type { MalRow } from './list-import-mal-parser.ts';

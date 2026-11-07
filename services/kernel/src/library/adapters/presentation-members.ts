@@ -2,7 +2,7 @@ import { createBuiltinRuntime } from '../builtin-runtime.ts';
 import { attachCollectionListFacts } from '../collection-list-facts.ts';
 import { deadlineClient } from '../../access/authenticate.ts';
 import { withConnection } from '../../database/pool.ts';
-import { ProblemError } from '../../http/problem.ts';
+import { ProblemError } from '../../http/problem-error.ts';
 import { accessCheck, type Actor } from '../../request/access.ts';
 import { deadlineFor } from '../../request/deadline.ts';
 import { routeOf } from '../../route/route.ts';
@@ -11,7 +11,7 @@ import { createCollectionReads } from '../collection-reads.ts';
 import collectionRead from '../collection-reads-collection.sql';
 import memberPage from '../collection-reads-members.sql';
 import { isOrdinalKey } from '../ordinal.ts';
-import { WORK_STEP_DEADLINE_MS } from '../command-support.ts';
+import { WORK_STEP_DEADLINE_MS } from '../work-step-deadline.ts';
 import type { LibraryPresentationDependencies, NativeLibraryPresentationPorts } from './presentation.ts';
 
 /** FULL members use the same cursor and anchored checks, retaining the readability result's label. */

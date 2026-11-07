@@ -37,13 +37,13 @@ import copyDetailRead from './copy-store-read.sql';
 import copyRetentionRead from './copy-retention-read.sql';
 import copyRetentionRestore from './copy-retention-restore.sql';
 import { MAX_LIBRARY_PAGE_SIZE } from './entry-model.ts';
-import { COPY_CONDITION_CHOICES } from './copy-condition.ts';
-
 import {
+  COPY_CONDITION_CHOICES,
   MAX_COPY_FILTER_OPTIONS,
   COPY_FILTER_OPTION_QUERY_LIMIT,
   MAX_COPY_FILTER_OPTIONS_BYTES,
 } from './contract/index.ts';
+
 import type {
   CopyOperationComponent,
   CopyOperationPlan,

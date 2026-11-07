@@ -2,15 +2,15 @@ import type { Actor } from '../request/access.ts';
 import { createHash } from 'node:crypto';
 import { GrantDeniedError } from '../access/resource-access-errors.ts';
 import { AccessUnavailableError } from '../access/unavailable.ts';
-import { ProblemError } from '../http/problem.ts';
+import { ProblemError } from '../http/problem-error.ts';
 import { nativeProgressUnit, type LibraryProfileDescriptor, type LibraryProfilePin } from './profile.ts';
 import { parseProgressMeasureCreate, parseRecord, parseSessionCreate, type ProgressSessionCreate } from './progress.ts';
 import type { ProgressSession } from './progress-model.ts';
 import type { createSessionCommands } from './sessions.ts';
 import { ProgressConflictError, ProgressInvalidError } from './sessions.ts';
-import { LibraryConflictError } from './entries.ts';
-import { LibraryNotFoundError } from './command-support.ts';
-import { SubjectIdentityUnavailableError } from './subject-anchor.ts';
+import { LibraryConflictError } from './entry-errors.ts';
+import { LibraryNotFoundError } from './collection-command-work.ts';
+import { SubjectIdentityUnavailableError } from './contract/index.ts';
 
 export type ProgressSourceValue = {
   field: string;

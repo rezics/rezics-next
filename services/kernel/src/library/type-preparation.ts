@@ -18,14 +18,16 @@ import { withRequestDeadline, deadlineFor } from '../request/deadline.ts';
 import type { Actor } from '../request/access.ts';
 import { newId, partitionOf, routeOf } from '../route/route.ts';
 import { withReadTransaction } from '../semantic/read.ts';
-import { createLibraryCommandRunner, LibraryNotFoundError, WORK_STEP_DEADLINE_MS } from './command-support.ts';
+import { createLibraryCommandRunner } from './command-support.ts';
+import { LibraryNotFoundError } from './collection-command-work.ts';
+import { WORK_STEP_DEADLINE_MS } from './work-step-deadline.ts';
 import { admitEntryAttempt } from './entry-lifecycle.ts';
 import { resolveSubject } from './subject-anchor.ts';
 import { enterShelfWrite } from './shelf-counter-owner.ts';
 import { preparationHeaderCommitment, type PreparationHeaderCommitment } from './preparation-bindings.ts';
 import { readPreparationNativeHeader, type NativePreparationHeader } from './preparation-native-reader.ts';
+import { typePreparationBinding } from './type-preparation-binding.ts';
 import {
-  typePreparationBinding,
   type PreparedType,
   type TypePreparationContinuationDependencies,
   type TypePreparationDependencies,

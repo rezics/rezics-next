@@ -1,7 +1,7 @@
 import canonicalize from 'canonicalize';
 import type { Pool } from 'pg';
 import { readAccountCommandState } from '../access/account-data.ts';
-import { GrantDeniedError } from '../access/grant-commands.ts';
+import { GrantDeniedError } from '../access/resource-access-errors.ts';
 import {
   authoritativeTimeValue,
   commandAttemptDeadline,
@@ -11,21 +11,21 @@ import {
 } from '../command/command.ts';
 import type { KernelClock } from '../clock.ts';
 import { withConnection } from '../database/pool.ts';
-import { ProblemError } from '../http/problem.ts';
+import { ProblemError } from '../http/problem-error.ts';
 import { readPartition } from '../partition/partition.ts';
 import type { Access, Actor } from '../request/access.ts';
 import { deadlineFor, withRequestDeadline } from '../request/deadline.ts';
 import { newId, partitionOf, routeOf } from '../route/route.ts';
 import { decodeCursor, encodeCursor, type CursorBinding } from '../tokens/cursor.ts';
 import type { KeyRing } from '../tokens/seal.ts';
+import { createLibraryCommandRunner } from './command-support.ts';
 import {
-  createLibraryCommandRunner,
   LibraryNotFoundError,
   requireRoute,
   runLibraryBoundedOperation,
   sameAccountRoute,
-  WORK_STEP_DEADLINE_MS,
-} from './command-support.ts';
+} from './collection-command-work.ts';
+import { WORK_STEP_DEADLINE_MS } from './work-step-deadline.ts';
 import type { ProgressState } from './progress.ts';
 import { readSession } from './progress-store.ts';
 import { receiptKeysFor } from '../command/receipt-key.ts';

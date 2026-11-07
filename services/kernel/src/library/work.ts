@@ -2,7 +2,7 @@ import { DBOS } from '@dbos-inc/dbos-sdk';
 import { withConnection } from '../database/pool.ts';
 import type { WorkContext } from '../work/registry.ts';
 import { COMMAND_STEP_RETRIES } from '../work/retries.ts';
-import { requireRoute } from './command-support.ts';
+import { requireRoute } from './collection-command-work.ts';
 import { syncSubjectListing } from './listing.ts';
 import memberSubjects from './work-member-subjects.sql';
 import type { ShelfMaintenanceOps } from './shelf-maintenance-ops-contract.ts';

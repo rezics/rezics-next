@@ -7,7 +7,7 @@ import { authoritativeTimeValue, type AuthoritativeTime } from '../command/comma
 import { accessCheck, type Access, type Actor } from '../request/access.ts';
 import { withRequestDeadline } from '../request/deadline.ts';
 import { routeOf } from '../route/route.ts';
-import { ProblemError } from '../http/problem.ts';
+import { ProblemError } from '../http/problem-error.ts';
 import { activeRelease } from '../semantic/definitions.ts';
 import { subjectReadEligibility } from '../semantic/eligibility.ts';
 import { SubjectRedirectError } from '../semantic/merges.ts';

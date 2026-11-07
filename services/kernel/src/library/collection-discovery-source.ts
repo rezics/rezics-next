@@ -4,7 +4,7 @@ import type { AccessClient } from '../request/access.ts';
 import { deadlineClient } from '../access/authenticate.ts';
 import { FollowCountUnavailableError } from './follow-count-target.ts';
 import { readFollowCountHealthObservation, type FollowCountHealthObservation } from './follow-count-health.ts';
-import { readCollectionDiscoveryFollowCounts } from './follow-count-reads.ts';
+import { readCollectionDiscoveryFollowCounts } from './adapters/follow-count-discovery.ts';
 import { readDiscoverySubjectMembership } from './collection-discovery-context.ts';
 import { readPartition } from '../partition/partition.ts';
 import { PARTITIONS, partitionOf, routeOf } from '../route/route.ts';

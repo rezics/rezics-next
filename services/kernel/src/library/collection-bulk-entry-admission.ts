@@ -1,12 +1,12 @@
 import { memoizedValue } from '../memoized.ts';
 import { Compile } from 'typebox/compile';
-import { ProblemError } from '../http/problem.ts';
+import { ProblemError } from '../http/problem-error.ts';
 import type { CommandTransaction, AuthoritativeTime } from '../command/command.ts';
 import type { AccessContext, AccountActor } from '../request/access.ts';
 import { routeOf } from '../route/route.ts';
 import { bulkAdmissionSchema } from './bulk-schemas.ts';
 import { BULK_ADMISSION_BODY_BYTES, BULK_MAX_SELECTION_IDS } from './bulk-limits.ts';
-import { LibraryNotFoundError } from './command-support.ts';
+import { LibraryNotFoundError } from './collection-command-work.ts';
 import { resolveSubject, type ResolvedSubject, type SubjectAnchorDependencies } from './subject-anchor.ts';
 import type { BulkAdmission } from './bulk-contract.ts';
 import type { CollectionBulkTarget } from './collection-bulk-store.ts';

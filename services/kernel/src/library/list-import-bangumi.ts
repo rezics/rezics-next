@@ -4,11 +4,11 @@ import type { BangumiLabelState } from './list-import-bangumi-label-model.ts';
 import canonicalize from 'canonicalize';
 import type { Pool } from 'pg';
 import { readAccount } from '../access/account-data.ts';
-import { GrantDeniedError } from '../access/grant-commands.ts';
+import { GrantDeniedError } from '../access/resource-access-errors.ts';
 import { mintReadTime, type CommandTransaction } from '../command/command.ts';
 import type { KernelClock } from '../clock.ts';
 import { tupleRoute } from '../content/imported-contract.ts';
-import { ProblemError } from '../http/problem.ts';
+import { ProblemError } from '../http/problem-error.ts';
 import {
   RatingQuestionNotFoundError,
   RatingQuestionRetiredError,
@@ -31,8 +31,10 @@ import { newId, routeOf } from '../route/route.ts';
 import readClaim from '../semantic/bulk-read-claim.sql';
 import { withReadTransaction } from '../semantic/read.ts';
 import type { KeyRing } from '../tokens/seal.ts';
-import { createLibraryCommandRunner, LibraryNotFoundError, requireRoute } from './command-support.ts';
-import { createEntryCommands, LibraryConflictError } from './entries.ts';
+import { createLibraryCommandRunner } from './command-support.ts';
+import { LibraryNotFoundError, requireRoute } from './collection-command-work.ts';
+import { createEntryCommands } from './entries.ts';
+import { LibraryConflictError } from './entry-errors.ts';
 import { createEntryPersonalCommands } from './entry-personal.ts';
 import { parseSourceTimestamp } from './entry-personal-model.ts';
 import {

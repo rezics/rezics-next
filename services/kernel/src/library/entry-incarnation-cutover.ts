@@ -7,11 +7,11 @@ import { withConnection } from '../database/pool.ts';
 import { readPartition } from '../partition/partition.ts';
 import { newId, PARTITIONS, routeOf } from '../route/route.ts';
 import { createWorkClient, type WorkClient } from '../work/client.ts';
-import { workStepDeadline } from './command-support.ts';
+import { workStepDeadline } from './collection-command-work.ts';
 import page from './entry-incarnation-cutover-page.sql';
 import lock from './entry-incarnation-cutover-lock.sql';
 import stamp from './entry-legacy-incarnation-stamp.sql';
-import { fenceShelfTechnicalWrite } from './shelf-maintenance-runtime.ts';
+import { fenceShelfTechnicalWrite } from './shelf-maintenance-owner.ts';
 
 type Key = { route: number; accountId: string; subjectId: string };
 type Cursor = Key & { v: 1; partition: number };

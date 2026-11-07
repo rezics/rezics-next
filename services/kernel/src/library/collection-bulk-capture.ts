@@ -1,7 +1,7 @@
 import canonicalize from 'canonicalize';
 import { createHash } from 'node:crypto';
 import type { Actor } from '../request/access.ts';
-import { ProblemError } from '../http/problem.ts';
+import { ProblemError } from '../http/problem-error.ts';
 import type { createCollectionReads } from './collection-reads.ts';
 import { CollectionBulkSelectionTooLarge } from './collection-bulk-store.ts';
 import type { BulkSelectionSource, BulkAdmission } from './bulk-contract.ts';

@@ -1,8 +1,18 @@
+import {
+  type LibraryCommandExecutionPlan,
+  type LibraryCommandExecutionBinding,
+  runLibraryCommand,
+} from './library-command-execution.ts';
+export {
+  type LibraryCommandExecutionPlan,
+  type LibraryCommandExecutionBinding,
+  runLibraryCommand,
+} from './library-command-execution.ts';
 import { createHash } from 'node:crypto';
 import canonicalize from 'canonicalize';
 import type { Pool } from 'pg';
-import type { Bound } from '@rezics/bounds';
-import { GrantDeniedError } from '../access/grant-commands.ts';
+
+import { GrantDeniedError } from '../access/resource-access-errors.ts';
 import { readAccount, readAccountCommandState } from '../access/account-data.ts';
 import { shareAccount } from '../access/account-share.ts';
 import { LifecycleDeniedError } from '../access/lifecycle-20261025094010-command.ts';
@@ -33,7 +43,7 @@ import {
 
 import { libraryActorOf } from './contract/index.ts';
 import { peekLibraryDomain } from './domain-binding.ts';
-import { enterShelfWrite } from './shelf-maintenance-runtime.ts';
+import { enterShelfWrite } from './shelf-maintenance-owner.ts';
 import {
   consumeFollowWork,
   followAccountAuthorizationWork,
@@ -46,7 +56,7 @@ import { withPublishedLogNativeWork } from './published-log-native.ts';
 
 export { WORK_STEP_DEADLINE_MS } from './work-step-deadline.ts';
 import { WORK_STEP_DEADLINE_MS } from './work-step-deadline.ts';
-import { runLibraryBoundedOperation, workStepDeadline } from './collection-command-work.ts';
+import { workStepDeadline } from './collection-command-work.ts';
 export {
   runLibraryBoundedStep,
   runLibraryBoundedOperation,
@@ -128,16 +138,6 @@ export type TrustedAccountCommand = {
   deadline?: number;
 };
 
-/** Wrap an existing Library command without changing its identity, authorization,
- * deadline, attempts, transaction, or result handling. This is a local cost
- * binding seam, not another admission or funding protocol.
- */
-export type LibraryCommandExecutionPlan = Readonly<{ operation: string; total: Bound }>;
-export type LibraryCommandExecutionBinding = <T>(
-  dispatch: () => Promise<T>,
-  plan?: LibraryCommandExecutionPlan,
-) => Promise<T>;
-
 /** Published Log commands bind the native interceptor when a caller has not supplied its own execution wrap. */
 function publishedLogCommandExecution(
   kind: string,
@@ -147,15 +147,6 @@ function publishedLogCommandExecution(
   if (bind) return bind;
   if (!kind.startsWith('published_log.')) return;
   return (dispatch) => withPublishedLogNativeWork(deadline, dispatch);
-}
-
-export function runLibraryCommand<T>(
-  dispatch: () => Promise<T>,
-  bind?: LibraryCommandExecutionBinding,
-  plan?: LibraryCommandExecutionPlan,
-): Promise<T> {
-  const execute = () => (bind ? bind(dispatch, plan) : dispatch());
-  return plan ? runLibraryBoundedOperation(plan.operation, plan.total, execute) : execute();
 }
 
 function digest(identity: unknown, kind: string, input: unknown): Buffer {

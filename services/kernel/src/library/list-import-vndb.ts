@@ -1,10 +1,10 @@
 import { randomUUID } from 'node:crypto';
 import type { SessionComponent } from '../tokens/session.ts';
 import { readAccount } from '../access/account-data.ts';
-import { GrantDeniedError } from '../access/grant-commands.ts';
+import { GrantDeniedError } from '../access/resource-access-errors.ts';
 import { mintReadTime, type AuthoritativeTime, type CommandOutcome } from '../command/command.ts';
 import { tupleRoute } from '../content/imported-contract.ts';
-import { ProblemError } from '../http/problem.ts';
+import { ProblemError } from '../http/problem-error.ts';
 import { readPartition } from '../partition/partition.ts';
 import { accessCheck, type AccountActor, type Actor } from '../request/access.ts';
 import { deadlineFor } from '../request/deadline.ts';
@@ -23,8 +23,11 @@ import {
   type PreparedPutVote,
 } from '../rating/votes.ts';
 import { withReadTransaction } from '../semantic/read.ts';
-import { createLibraryCommandRunner, LibraryNotFoundError, requireRoute } from './command-support.ts';
-import { createEntryCommands, LibraryConflictError, LibraryEntryInvalidError } from './entries.ts';
+import { createLibraryCommandRunner } from './command-support.ts';
+import { LibraryNotFoundError, requireRoute } from './collection-command-work.ts';
+import { createEntryCommands } from './entries.ts';
+import { LibraryEntryInvalidError } from './entry-lifecycle-errors.ts';
+import { LibraryConflictError } from './entry-errors.ts';
 import { createEntryPersonalCommands } from './entry-personal.ts';
 import type { LabelCommandAdmission } from './label-command-admission.ts';
 import {

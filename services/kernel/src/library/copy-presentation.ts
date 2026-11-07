@@ -1,15 +1,11 @@
 import type { Release } from '@rezics/definitions';
 import type { AuthoritativeTime } from '../command/command.ts';
-import { ProblemError } from '../http/problem.ts';
+import { ProblemError } from '../http/problem-error.ts';
 import { copyReleasedDefinitions } from './adapters/copy-producers.ts';
 import type { NativeCopyProducers } from './adapters/copies.ts';
 import { chooseLabel } from '@rezics/definitions';
-import {
-  COPY_CONDITION_CHOICES,
-  copyConditionAdmission,
-  presentCopyCondition,
-  type CopyConditionDisplay,
-} from './copy-condition.ts';
+import { COPY_CONDITION_CHOICES } from './contract/index.ts';
+import { copyConditionAdmission, presentCopyCondition, type CopyConditionDisplay } from './copy-condition.ts';
 import type { CopyPresentation } from './copy-model.ts';
 import type { Copy } from './entry-model.ts';
 import { hasCopyStatus, resolveLibraryProfilePin, type LibraryProfilePin } from './profile.ts';
