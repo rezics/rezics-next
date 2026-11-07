@@ -16,6 +16,7 @@ export { createPublicationAdmissionApplication } from './publication.ts';
 export { createIdentityNativeApplication } from './identity-native.ts';
 export { createEntryProgressApplication } from './entry-progress.ts';
 export { createProgressOperationApplication } from './progress-operations.ts';
+export { createNativePublicOutputApplication } from './native-public-output.ts';
 
 export function createLibraryApplications(
   capabilities: LibraryCapabilities & { search?: unknown; access?: unknown; routeKey?: Uint8Array },

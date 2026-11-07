@@ -12,6 +12,7 @@ import {
   runCommand,
   withSingleCommandAttempt,
   type CommandTransaction,
+  type AuthoritativeTime,
 } from '../command/command.ts';
 import {
   createNativeLibrarySourceCustody,
@@ -29,6 +30,8 @@ import {
   type LibraryScopeEffectsKey,
 } from '../library/identity-scope-effects.ts';
 import type { WorkAllowance, WorkDimensions, WorkReceipt } from '../library/contract/work-dimensions.ts';
+import type { NativePublicOutputApplication } from '../library/contract/native-public-output.ts';
+import { requireLibraryDomain } from '../library/domain-binding.ts';
 import { partitionOf, routeOf } from '../route/route.ts';
 import { readPartition } from '../partition/partition.ts';
 import type * as S from './identity-scope-types.ts';
@@ -88,6 +91,8 @@ import type {
   IdentitySourceConsumerContext,
   IdentitySourceScopeConsumerWork,
 } from './identity-source-consumer-custody.ts';
+
+type NativePublicOutputPort = NativePublicOutputApplication<CommandTransaction, Pool, AuthoritativeTime>;
 
 /** Resolve the retained registration/capture using the existing Source frame.
  * The historical capture allowance is never consulted as a remaining balance.
@@ -521,11 +526,12 @@ async function proofCurrent(
   measured: Work,
   retained = false,
   budget?: NativeCollectionWork,
+  nativeOutput?: NativePublicOutputPort,
 ): Promise<boolean> {
   if (!same(key.source, row.source) || !(await ownerCurrent(tx, key))) return false;
   if (row.capture.kind === 'public-locator') return verifyPublicIdentitySourceCaptureLocator(tx, row.capture);
   if (row.capture.kind === 'public-output-locator') {
-    if (!budget) return false;
+    if (!budget || !nativeOutput) return false;
     const capture = row.capture.capture;
     const result = await budget.compose((allowance) =>
       lockPublicIdentityOutputCaptureCurrent(
@@ -537,6 +543,7 @@ async function proofCurrent(
           deadline: currentCommandResources(tx).deadline,
           allowance,
         },
+        nativeOutput,
         retained,
       ),
     );
@@ -1143,7 +1150,11 @@ async function releaseDirectory(
   );
 }
 
-export function createIdentityScopedObservations(pool: Pool): S.IdentityScopedObservations {
+export function createIdentityScopedObservations(
+  pool: Pool,
+  suppliedNativePublicOutput?: NativePublicOutputPort,
+): S.IdentityScopedObservations {
+  const nativePublicOutput = () => suppliedNativePublicOutput ?? requireLibraryDomain().nativePublicOutput!;
   async function advance(
     key: S.IdentityScopeKey,
     deadline: number,
@@ -1153,7 +1164,7 @@ export function createIdentityScopedObservations(pool: Pool): S.IdentityScopedOb
     const k = identityScopeAddress(key);
     if (key.source.kind === 'library' && key.source.identity.scope === 'public_output') {
       if (!allowance) return fail('custody_missing', measured);
-      const result = await readPublicIdentityOutputCaptureCurrent(pool, key, { deadline, allowance });
+      const result = await readPublicIdentityOutputCaptureCurrent(pool, key, { deadline, allowance }, nativePublicOutput());
       charge(measured, result.work);
       measured.outputWork = result.work;
       if (result.status !== 'current' || !same(result.key, key)) return fail('source_unready', measured);
@@ -1362,7 +1373,7 @@ export function createIdentityScopedObservations(pool: Pool): S.IdentityScopedOb
               locked.state === 'retired' ||
               locked.registration !== row!.registration ||
               !locked.scan_complete ||
-              !(await proofCurrent(tx, key, locked, measured, true))
+              !(await proofCurrent(tx, key, locked, measured, true, undefined, nativePublicOutput()))
             )
               return noEffect(fail('source_unready', measured));
             if (locked.active !== 0) return noEffect(fail('pending_claim', measured));
@@ -1619,7 +1630,7 @@ export function createIdentityScopedObservations(pool: Pool): S.IdentityScopedOb
             ).rows[0];
             if ((saved?.version ?? null) !== (progress?.version ?? null)) return noEffect(pending());
             // Revalidate retained custody, not a newly manufactured capture or effect receipt.
-            if (!(await proofCurrent(tx, input.key, locked, measured, true, budget)))
+            if (!(await proofCurrent(tx, input.key, locked, measured, true, budget, nativePublicOutput())))
               return noEffect(fail('source_unready', measured));
             if (page.exhausted && !(await verifyLibraryScopeEffectsSeal(tx, nativeKey, page.seal))) {
               const invalidated = await query(
@@ -1825,7 +1836,7 @@ export function createIdentityScopedObservations(pool: Pool): S.IdentityScopedOb
         const result = await readPublicIdentityOutputCaptureCurrent(pool, input.capture.capture, {
           deadline: input.deadline,
           allowance: input.capture.allowance,
-        });
+        }, nativePublicOutput());
         charge(measured, result.work);
         measured.outputWork = result.work;
         if (result.status !== 'current' || !same(result.key, input.key)) return fail('capture_incomplete', measured);
@@ -1924,7 +1935,11 @@ export function createIdentityScopedObservations(pool: Pool): S.IdentityScopedOb
           },
           async (tx) => {
             const row = await head(tx, input.key, measured, true);
-            if (!row || row.state === 'retired' || !(await proofCurrent(tx, input.key, row, measured, true)))
+            if (
+              !row ||
+              row.state === 'retired' ||
+              !(await proofCurrent(tx, input.key, row, measured, true, undefined, nativePublicOutput()))
+            )
               return { value: fail('source_unready', measured), events: [] };
             // Post-admission delivery reconciles the native pre-arm obligation; it never creates one late.
             const active = await attemptAt(tx, input.key, row, input.job, measured);
@@ -1948,8 +1963,8 @@ export function createIdentityScopedObservations(pool: Pool): S.IdentityScopedOb
               ...options,
               pool,
               at: currentCommand(input.tx).time,
-            })
-          : await readPublicIdentityOutputCaptureCurrent(pool, input.key, options);
+            }, nativePublicOutput())
+          : await readPublicIdentityOutputCaptureCurrent(pool, input.key, options, nativePublicOutput());
         charge(measured, result.work);
         measured.outputWork = result.work;
         if (

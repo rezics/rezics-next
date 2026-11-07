@@ -8,28 +8,31 @@ import {
   hasLiveCommandTransaction,
   registerCommandCallback,
   type CommandTransaction,
+  type AuthoritativeTime,
 } from '../command/command.ts';
 import { withConnection, discardConnection } from '../database/pool.ts';
 import { ProblemError } from '../http/problem-error.ts';
 import { partitionOf, routeOf } from '../route/route.ts';
-import type { IdentityNativeReceipt } from '../semantic/identity-epoch-contract.ts';
-import * as semanticPublicCapture from '../semantic/identity-scoped-public-source.ts';
-import { observeNativePublicCollectionOutput, type CanonicalRangeKey } from './collection-source-native.ts';
-import type { CollectionOutputPublication } from './collection-source-output.ts';
-import { NativeCollectionWork, instrumentNativeCollectionWork } from './collection-native-work.ts';
-import type { NativePublicOutputIdentity } from './native-source-output-types.ts';
 import type {
   LockPublicOutputDisposition,
   LockedPublicOutputDisposition,
+  NativePublicOutputApplication,
   NativePublicOutputBinding,
+  NativePublicOutputMetadata,
+  NativePublicOutputReceipt,
+  ObserveNativePublicOutput,
   PublicOutputBindingSelection,
   PublicOutputCommandContext,
   PublicOutputDispositionSelection,
   PublicOutputPage,
+  PublicOutputReadOptions,
   PublicOutputRefusal,
   PublicOutputTuple,
   PublicOutputWork,
-} from './native-public-output-contract.ts';
+} from './contract/native-public-output.ts';
+import type { CollectionOutputPublication } from './collection-source-output.ts';
+import { NativeCollectionWork, instrumentNativeCollectionWork } from './collection-native-work.ts';
+import type { NativePublicOutputIdentity } from './native-source-output-types.ts';
 import {
   nativePublicOutputClient,
   nativePublicOutputFootprint,
@@ -54,6 +57,14 @@ import fenceSQL from './native-public-output-fence.sql';
 import retainedSQL from './native-public-output-retained.sql';
 
 type Client = Pick<PoolClient, 'query'>;
+type OutputContext = PublicOutputCommandContext<Pool, AuthoritativeTime>;
+type PublicOutputObserver = ObserveNativePublicOutput<Client, NativeCollectionWork>;
+type PublicOutputDispositionLock = LockPublicOutputDisposition<CommandTransaction, Pool, AuthoritativeTime>;
+type NativePublicOutputOperations = NativePublicOutputApplication<CommandTransaction, Pool, AuthoritativeTime>;
+type NativePublicOutputCapabilities = Readonly<{
+  observe: PublicOutputObserver;
+  lockDisposition: PublicOutputDispositionLock;
+}>;
 type Owner = { accountId: string; incarnation: string; epoch: number; position: string };
 type BindingRow = {
   payload: unknown;
@@ -70,7 +81,6 @@ type Stored = { binding: NativePublicOutputBinding; row: BindingRow };
 const digestPattern = /^[0-9a-f]{64}$/;
 const uuidPattern = /^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$/;
 const decimal = /^(?:0|[1-9][0-9]*)$/;
-const missingDisposition = 'semantic/identity-scoped-public-source.ts:lockPublicIdentityOutputCaptureDisposition';
 const unavailable = () => new ProblemError('dependency_unavailable');
 const json = (value: unknown): unknown =>
   JSON.parse(JSON.stringify(value, (_k, v: unknown) => (typeof v === 'bigint' ? v.toString() : v)));
@@ -81,7 +91,7 @@ const digest = (value: unknown) =>
 function bindingDigest(binding: Omit<NativePublicOutputBinding, 'bindingDigest'>): string {
   return digest(binding);
 }
-function validReceipt(receipt: IdentityNativeReceipt) {
+function validReceipt(receipt: NativePublicOutputReceipt) {
   return (
     receipt &&
     Number.isSafeInteger(receipt.partition) &&
@@ -161,7 +171,7 @@ async function frame<T>(options: PublicOutputWork, operation: (work: NativeColle
     throw error;
   }
 }
-function command(tx: CommandTransaction, context: PublicOutputCommandContext, home?: number) {
+function command(tx: CommandTransaction, context: OutputContext, home?: number) {
   if (!hasLiveCommandTransaction(tx)) throw unavailable();
   const current = currentCommand(tx),
     resources = currentCommandResources(tx);
@@ -234,11 +244,16 @@ async function currentTuple(
   stored: Stored,
   work: NativeCollectionWork,
   lock: boolean,
+  observe: PublicOutputObserver,
 ): Promise<PublicOutputTuple | null> {
   if (!open(stored)) return null;
   const expected = stored.binding.tuple,
     id = expected.identity;
-  const metadata = await observeNativePublicCollectionOutput(client, id, work);
+  const metadata: NativePublicOutputMetadata | null = await observe(
+    client,
+    { route: id.route, collectionId: id.collectionId },
+    work,
+  );
   if (
     !metadata ||
     metadata.incarnation !== id.incarnation ||
@@ -262,10 +277,11 @@ async function currentTuple(
 }
 
 /** One public RR snapshot contains observation, committed native binding and the entire raw page. */
-export async function readNativePublicCollectionOutput(
+async function readNativePublicCollectionOutput(
   pool: Pool,
   identity: NativePublicOutputIdentity,
-  options: PublicOutputWork & Readonly<{ after: CanonicalRangeKey | null; limit: number }>,
+  options: PublicOutputReadOptions,
+  observe: PublicOutputObserver,
 ): Promise<PublicOutputPage> {
   return frame(options, (work) => {
     validateIdentity(identity);
@@ -290,7 +306,7 @@ export async function readNativePublicCollectionOutput(
             let result: PublicOutputPage;
             if (!stored || !(await committed(metered, stored))) result = refusal(work);
             else {
-              const tuple = await currentTuple(metered, stored, work, false);
+              const tuple = await currentTuple(metered, stored, work, false, observe);
               if (!tuple) result = refusal(work, 'changed');
               else {
                 const rows = (
@@ -330,10 +346,11 @@ export async function readNativePublicCollectionOutput(
   });
 }
 
-export async function lockNativePublicCollectionOutput(
+async function lockNativePublicCollectionOutput(
   tx: CommandTransaction,
   identity: NativePublicOutputIdentity,
-  context: PublicOutputCommandContext,
+  context: OutputContext,
+  observe: PublicOutputObserver,
 ): Promise<
   | PublicOutputRefusal
   | Readonly<{ status: 'locked'; tuple: PublicOutputTuple; work: import('./contract/work-dimensions.ts').WorkReceipt }>
@@ -347,15 +364,16 @@ export async function lockNativePublicCollectionOutput(
       return refusal(work, 'changed');
     const stored = await byIdentity(client, identity, true);
     if (!stored || !(await committed(client, stored))) return refusal(work);
-    const tuple = await currentTuple(client, stored, work, true);
+    const tuple = await currentTuple(client, stored, work, true, observe);
     return tuple ? { status: 'locked', tuple, work: work.receipt() } : refusal(work, 'changed');
   });
 }
 
-export async function bindAndHoldNativePublicCollectionOutput(
+async function bindAndHoldNativePublicCollectionOutput(
   tx: CommandTransaction,
   selection: PublicOutputBindingSelection,
-  context: PublicOutputCommandContext,
+  context: OutputContext,
+  observe: PublicOutputObserver,
 ): Promise<
   | PublicOutputRefusal
   | Readonly<{
@@ -396,12 +414,12 @@ export async function bindAndHoldNativePublicCollectionOutput(
       const xid = (await client.query<{ xid: string }>(publicOutputXidSQL())).rows[0]!.xid;
       const stagedHere = b.accepted.transactionId === current.transactionId && existing.row.nativeXid === xid;
       if (!stagedHere && !(await committed(client, existing))) return refusal(work);
-      if (!(await currentTuple(client, existing, work, true))) return refusal(work, 'changed');
+      if (!(await currentTuple(client, existing, work, true, observe))) return refusal(work, 'changed');
       return { status: 'bound', binding: b, work: work.receipt() };
     }
     if (!(await client.query(lifecycleSQL.sql, [ref.route, original.accountId])).rows.length)
       return refusal(work, 'changed');
-    const metadata = await observeNativePublicCollectionOutput(client, ref, work);
+    const metadata = await observe(client, ref, work);
     if (
       !metadata ||
       metadata.incarnation !== original.incarnation ||
@@ -425,7 +443,7 @@ export async function bindAndHoldNativePublicCollectionOutput(
       publication.sourceGeneration !== ref.activation.sourceGeneration
     )
       return refusal(work, 'changed');
-    const accepted: IdentityNativeReceipt = {
+    const accepted: NativePublicOutputReceipt = {
       partition: current.partition,
       epoch: original.epoch,
       position: BigInt(original.position) + 1n,
@@ -488,10 +506,11 @@ export async function bindAndHoldNativePublicCollectionOutput(
   });
 }
 
-export async function revalidateNativePublicCollectionOutputHold(
+async function revalidateNativePublicCollectionOutputHold(
   tx: CommandTransaction,
   binding: NativePublicOutputBinding,
-  context: PublicOutputCommandContext,
+  context: OutputContext,
+  observe: PublicOutputObserver,
 ): Promise<
   | PublicOutputRefusal
   | Readonly<{
@@ -511,22 +530,21 @@ export async function revalidateNativePublicCollectionOutputHold(
     const stored = await load(client, selected.accepted.partition, selected.captureId, true);
     if (!stored || !isDeepStrictEqual(stored.binding, selected) || !(await committed(client, stored)))
       return refusal(work);
-    return (await currentTuple(client, stored, work, true))
+    return (await currentTuple(client, stored, work, true, observe))
       ? { status: 'locked', binding: stored.binding, work: work.receipt() }
       : refusal(work, 'changed');
   });
 }
 
-/** Resolve the ACTUAL Semantic owner export. There is no stand-in implementation or proof callback. */
+/** Semantic supplies the real persisted-record lock; the caller evidence is still revalidated here. */
 async function disposition(
   tx: CommandTransaction,
   selection: PublicOutputDispositionSelection,
-  context: PublicOutputCommandContext,
+  context: OutputContext,
   work: NativeCollectionWork,
+  lockDisposition: PublicOutputDispositionLock,
 ): Promise<PublicOutputRefusal | LockedPublicOutputDisposition> {
-  const native: unknown = Reflect.get(semanticPublicCapture, 'lockPublicIdentityOutputCaptureDisposition');
-  if (typeof native !== 'function') return refusal(work, 'unavailable', missingDisposition);
-  return work.compose((allowance) => (native as LockPublicOutputDisposition)(tx, selection, { ...context, allowance }));
+  return work.compose((allowance) => lockDisposition(tx, selection, { ...context, allowance }));
 }
 function selectedDisposition(
   selection: PublicOutputDispositionSelection,
@@ -566,8 +584,9 @@ type TransitionRow = {
 async function transition(
   tx: CommandTransaction,
   selection: PublicOutputDispositionSelection,
-  context: PublicOutputCommandContext,
+  context: OutputContext,
   kind: 'applied' | 'cancelled',
+  lockDisposition: PublicOutputDispositionLock,
 ) {
   return frame(context, async (work) => {
     if (
@@ -578,8 +597,6 @@ async function transition(
     )
       throw new TypeError('Invalid public output disposition selection');
     const current = command(tx, context, selection.disposition.partition);
-    if (typeof Reflect.get(semanticPublicCapture, 'lockPublicIdentityOutputCaptureDisposition') !== 'function')
-      return refusal(work, 'unavailable', missingDisposition);
     const client = nativePublicOutputClient(tx, work, context.deadline);
     // Locate first, then lock the original owner BEFORE locking or consuming custody.
     const located = await load(client, current.partition, selection.captureId, false);
@@ -596,7 +613,7 @@ async function transition(
       !(await committed(client, stored))
     )
       return refusal(work);
-    const resolved = await disposition(tx, selection, context, work);
+    const resolved = await disposition(tx, selection, context, work, lockDisposition);
     if (resolved.status !== 'locked') return { ...resolved, work: work.receipt() };
     if (!selectedDisposition(selection, resolved, stored.binding) || resolved.kind !== kind) return refusal(work);
     const previous = (await client.query<TransitionRow>(transitionReadSQL.sql, [current.partition, selection.holdId]))
@@ -638,7 +655,7 @@ async function transition(
     if (!(await client.query(retainedSQL.sql, [current.partition, selection.captureId])).rows.length)
       return refusal(work);
     // A different uncommitted command, a released pre-transfer disposition, or merely a seal cannot consume custody.
-    const receipt: IdentityNativeReceipt = {
+    const receipt: NativePublicOutputReceipt = {
       partition: current.partition,
       epoch: original.epoch,
       position: BigInt(original.position) + 1n,
@@ -691,21 +708,43 @@ async function transition(
       : { status: 'released' as const, release: receipt, work: work.receipt() };
   });
 }
-export async function transferNativePublicCollectionOutputHold(
+async function transferNativePublicCollectionOutputHold(
   tx: CommandTransaction,
   selection: PublicOutputDispositionSelection,
-  context: PublicOutputCommandContext,
+  context: OutputContext,
+  lockDisposition: PublicOutputDispositionLock,
 ) {
-  const result = await transition(tx, selection, context, 'applied');
+  const result = await transition(tx, selection, context, 'applied', lockDisposition);
   if (result.status === 'released') throw unavailable();
   return result;
 }
-export async function releaseNativePublicCollectionOutputHold(
+async function releaseNativePublicCollectionOutputHold(
   tx: CommandTransaction,
   selection: PublicOutputDispositionSelection,
-  context: PublicOutputCommandContext,
+  context: OutputContext,
+  lockDisposition: PublicOutputDispositionLock,
 ) {
-  const result = await transition(tx, selection, context, 'cancelled');
+  const result = await transition(tx, selection, context, 'cancelled', lockDisposition);
   if (result.status === 'transferred') throw unavailable();
   return result;
+}
+
+/** Build the complete Library custody operation from the observation and disposition owners. */
+export function createNativePublicOutputCustody(
+  capabilities: NativePublicOutputCapabilities,
+): NativePublicOutputOperations {
+  return Object.freeze({
+    readNativePublicCollectionOutput: (pool, identity, options) =>
+      readNativePublicCollectionOutput(pool, identity, options, capabilities.observe),
+    lockNativePublicCollectionOutput: (tx, identity, context) =>
+      lockNativePublicCollectionOutput(tx, identity, context, capabilities.observe),
+    bindAndHoldNativePublicCollectionOutput: (tx, selection, context) =>
+      bindAndHoldNativePublicCollectionOutput(tx, selection, context, capabilities.observe),
+    revalidateNativePublicCollectionOutputHold: (tx, binding, context) =>
+      revalidateNativePublicCollectionOutputHold(tx, binding, context, capabilities.observe),
+    transferNativePublicCollectionOutputHold: (tx, selection, context) =>
+      transferNativePublicCollectionOutputHold(tx, selection, context, capabilities.lockDisposition),
+    releaseNativePublicCollectionOutputHold: (tx, selection, context) =>
+      releaseNativePublicCollectionOutputHold(tx, selection, context, capabilities.lockDisposition),
+  });
 }

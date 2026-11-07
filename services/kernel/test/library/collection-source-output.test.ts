@@ -12,8 +12,6 @@ import {
   readNativePublicCollectionOutput,
   revalidateNativePublicCollectionOutputHold,
   transferNativePublicCollectionOutputHold,
-} from '../../src/library/native-public-output-custody.ts';
-import {
   readNativeCollectionMetadata,
   readNativeCollectionRawPage,
 } from '../../src/library/collection-source-native.ts';

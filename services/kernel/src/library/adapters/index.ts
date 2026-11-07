@@ -18,6 +18,8 @@ export {
 } from './identity-statements.ts';
 export { createSearchPreparationAdapter, type SearchPreparationAdapterPorts } from './search-scope.ts';
 export { createContentPublicationAdapter, type ContentPublicationAdapterPorts } from './publication-foreign.ts';
+export { createNativePublicOutputAdapter, type NativePublicOutputAdapterPorts } from './native-public-output.ts';
+export { observeNativePublicCollectionOutput } from '../collection-source-native.ts';
 export { createNativeSourceCaptureAdapter } from './native-source.ts';
 export {
   createScopedSearchLibraryOperations,
