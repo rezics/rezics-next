@@ -162,8 +162,7 @@ export function startServer(config: ServerConfig): Promise<RunningServer> & Runn
   const boot = (async () => {
     await fillPool(pool);
     const searchNativePorts =
-      config.searchNativePorts ??
-      (await import('./composition/search-native.ts')).composeSearchNativePorts();
+      config.searchNativePorts ?? (await import('./composition/search-native.ts')).composeSearchNativePorts();
     defaults = createKernelRuntimeDefaults({
       searchNativePorts,
       tokens: config.tokens,
