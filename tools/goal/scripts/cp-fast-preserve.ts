@@ -91,7 +91,8 @@ export async function preserveMainHotfixes(options: PreservationOptions): Promis
       'commit-tree', mergedTree, '-p', dev, '-p', main,
       '-m', 'control-plane: preserve main hotfixes on dev before fast publication');
     const transaction = run(checkout, ['update-ref', '-m', 'cp-fast preserve main hotfixes', '--stdin'],
-      `verify refs/heads/main ${main}\nupdate refs/heads/dev ${next} ${dev}\n`);
+      // A no-op update keeps the main CAS while its history hook can distinguish it from deletion.
+      `update refs/heads/main ${main} ${main}\nupdate refs/heads/dev ${next} ${dev}\n`);
     if (transaction.status !== 0) continue;
     // Repeating after a crash before this write produces the same tree and no duplicate adoption commit.
     writeState(options.stateFile, { publication: state.publication, adoptedMain: main });

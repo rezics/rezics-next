@@ -78,6 +78,29 @@ test('a main-only hotfix survives the next full snapshot alongside concurrent di
   } finally { f.dispose(); }
 });
 
+test('adoption works with a main history hook without permitting main deletion', async () => {
+  const f = fixture();
+  try {
+    writeFileSync(join(f.checkout, '.git/hooks/reference-transaction'), `#!/bin/sh
+[ "$1" = prepared ] || exit 0
+while read -r old new ref; do
+  [ "$ref" = refs/heads/main ] || continue
+  [ "$old" = "$new" ] && continue
+  git merge-base --is-ancestor "$old" "$new" || exit 1
+done
+`, { mode: 0o755 });
+    f.commit('main', 'resident.ts', 'const resident = "retained";\n');
+    const main = git(f.checkout, 'rev-parse', 'main');
+    const result = await preserveMainHotfixes(f.options);
+    expect(result.status).toBe('ready');
+    expect(result.main).toBe(main);
+    expect(git(f.checkout, 'show', 'dev:resident.ts')).toContain('retained');
+    const deletion = spawnSync('git', ['update-ref', '-d', 'refs/heads/main', main], { cwd: f.checkout });
+    expect(deletion.status).not.toBe(0);
+    expect(git(f.checkout, 'rev-parse', 'main')).toBe(main);
+  } finally { f.dispose(); }
+});
+
 test('a genuine overlap holds only publication, leaves current main/dev intact, and asks the owner once until reconciled', async () => {
   const f = fixture();
   try {
