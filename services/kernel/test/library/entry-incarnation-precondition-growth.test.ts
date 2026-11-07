@@ -519,6 +519,8 @@ test('fresh guard work remains bounded across 64 512 and 4096 unrelated live ret
           const first = (await f.commands.putEntry(who.actor, target, { state: 'planned' }, entryKey())).value.entry;
           await f.commands.deleteEntry(who.actor, target, first.revision, entryKey(), first.incarnationId!);
           await f.commands.putEntry(f.owner.actor, f.growthSubjects[n]!, { state: 'planned' }, entryKey());
+          if ((n + 1) % 128 === 0)
+            process.stderr.write(`Library entry growth scale ${scale}: seeded ${n + 1}/${scale}\n`);
         }
         await refreshFixtureActors();
       },

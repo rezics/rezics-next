@@ -304,7 +304,7 @@ export async function createProfileEntryFixture(
       ).rows[0];
       return Boolean(control?.pending_job || control?.prepare_job || (await heldPrearmJobs(home)).length);
     }
-    async function catchUpIdentity(home: number) {
+    async function catchUpIdentity(home: number, onStep?: (step: number) => void) {
       const drained = new Set<string>();
       const keyOf = (job: IdentityJobRef) => `${job.jobId}:${job.epoch.toString()}`;
       for (let n = 0; n < 1000; n++) {
@@ -320,6 +320,7 @@ export async function createProfileEntryFixture(
         if (!(await identityDirty(home)) && !(await homeCapacityOccupied(home))) return;
         try {
           const progress = await stepIdentityEpochBootstrap(pool, home);
+          onStep?.(n + 1);
           if (progress.state === 'caught-up' && !(await identityDirty(home)) && !(await homeCapacityOccupied(home)))
             return;
         } catch (error) {
@@ -564,6 +565,7 @@ export async function createProfileEntryFixture(
          SELECT route,subject_id,1,'create',$3::text,recorded_transaction_id FROM created`,
         [routeOf(owner.actor.accountId), source, originalDigest],
       );
+      process.stderr.write(`Library growth fixture: seeded ${growthSubjects.length} historical Semantic subjects\n`);
     }
     await installIdentityEpochBootstrap(pool);
     identityHomesReady = true;
@@ -872,7 +874,13 @@ export async function createProfileEntryFixture(
     if (growthSubjects.length > 0) {
       const home = partitionOf(routeOf(growthSubjects[0]!)!);
       mappedHomes.add(home);
-      await catchUpIdentity(home);
+      let reported = 0;
+      await catchUpIdentity(home, (step) => {
+        if (step >= reported + 4) {
+          reported = step;
+          process.stderr.write(`Library growth fixture: identity bootstrap step ${step}\n`);
+        }
+      });
     }
     expect((await commands.readEntry(owner.actor, baseline)).state).toBe('planned');
     expect((await send('owner', 'GET', `/v1/libraryEntries/${baseline}`)).status).toBe(200);
