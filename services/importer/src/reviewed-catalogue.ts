@@ -57,3 +57,4 @@ export function createReviewedCatalogueLookup(
 ) {
   return application(options.vocabulary).lookup(bindings, port, options);
 }
+

@@ -268,6 +268,7 @@ test('selected dump candidates publish exact intent, resume retryable steps, and
       },
       async reviewedCandidates(id, query) {
         expect(query.context).toBe(globalContext);
+        const adoption = adopted.get(`${id}\0${query.property}`);
         return {
           candidates: [...candidates.values()]
             .filter(
@@ -279,9 +280,11 @@ test('selected dump candidates publish exact intent, resume retryable steps, and
             .map((candidate) => ({
               ...candidate,
               decision: accepted.has(candidate.id) ? 'accepted' : null,
-            })),
+              rank: adoption?.selection.find((selection) => selection.candidate === candidate.id)?.rank ?? null,
+            }))
+            .concat([{ id: randomUUID(), deleted: true }] as never),
           next: null,
-          adoption: adopted.get(`${id}\0${query.property}`) ?? null,
+          adoption: adoption ? { head: adoption.head, mode: 'replace' } : null,
         } as never;
       },
       async acceptReviewedCandidate(_id, candidateId, body, idempotencyKey) {

@@ -972,6 +972,8 @@ async function workerHost(): Promise<RpcHost> {
   const { KERNEL_WORK_MODULES } = await import('../support/default-work-modules.ts');
   mediaStart('open-database');
   const database = await openGrowthDatabase();
+  const { composeLibraryDomain } = await import('../../src/composition/library.ts');
+  composeLibraryDomain({ pool: database.pool });
   const observer = await observeMediaPool(database.pool);
   const client = await createWorkClient(database.url, database.pool);
   const originalFetch = globalThis.fetch;

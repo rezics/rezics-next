@@ -12,6 +12,7 @@ import {
   type CommandAttempt,
   type CommandAuthorization,
 } from '../../src/command/command.ts';
+import { encodeReceiptKey } from '../../src/command/receipt-key.ts';
 import { createPool } from '../../src/database/pool.ts';
 import { createKernel } from '../../src/http/kernel.ts';
 import { requestDigest } from '../../src/http/request.ts';
@@ -29,6 +30,7 @@ import {
   sourceTuple,
 } from '../../src/semantic/fences.ts';
 import { createRealAccess } from './real-access.ts';
+import { testReceiptKeys } from '../support/receipt-keys.ts';
 
 const databaseUrl = process.env.DATABASE_URL;
 if (!databaseUrl) throw new Error('DATABASE_URL must name the migrated test database');
@@ -41,6 +43,7 @@ const routeKey = new Uint8Array(32).fill(4);
 let access: Access;
 const kernel = createKernel({
   pool,
+  receiptKeys: testReceiptKeys(),
   access(config) {
     return (access = real.access(config));
   },
@@ -167,7 +170,17 @@ async function receipt(partition: number, command: BatchCommand) {
     await admin.query(
       `SELECT epoch, position, transaction_id, response, request_digest FROM core.receipt
      WHERE partition_no=$1 AND principal_kind='account' AND principal_id=$2 AND command_kind=$3 AND idempotency_key=$4`,
-      [partition, accounts.importer, `subject.batch_${command.op}`, command.key],
+      [
+        partition,
+        accounts.importer,
+        `subject.batch_${command.op}`,
+        encodeReceiptKey(
+          testReceiptKeys(),
+          `subject.batch_${command.op}`,
+          { kind: 'account', id: accounts.importer },
+          command.key,
+        ),
+      ],
     )
   ).rows;
 }

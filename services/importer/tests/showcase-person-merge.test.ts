@@ -90,13 +90,13 @@ function transport(options: { doneAfter?: number; mergeError?: unknown; withhold
     async mergeReviewedPersons(body, key) {
       calls.merges.push({ body: structuredClone(body), key });
       if (options.mergeError !== undefined) throw options.mergeError;
-      return { operation: { id: operation } };
+      return { operation: { id: operation }, location: `/v1/subjectIdentityOperations/${operation}` };
     },
-    async readReviewedPersonOperation(id) {
+    async readReviewedPersonOperation(location) {
       calls.polls += 1;
       return calls.polls >= (options.doneAfter ?? 1)
-        ? { id, done: true, result: { survivor, redirected: vndbOriginal, revision: 4 } }
-        : { id, done: false };
+        ? { id: operation, done: true, result: { survivor, redirected: vndbOriginal, revision: 4 } }
+        : { id: operation, done: false };
     },
   };
   return { calls, native };

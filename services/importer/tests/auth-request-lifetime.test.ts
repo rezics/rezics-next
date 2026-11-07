@@ -2,7 +2,12 @@ import { expect, test } from 'bun:test';
 import { mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { createAccountTokenProvider, CredentialDeniedError, CredentialServiceError } from '../src/credentials.ts';
+import {
+  accountKeyIssuerOrigin,
+  createAccountTokenProvider,
+  CredentialDeniedError,
+  CredentialServiceError,
+} from '../src/credentials.ts';
 
 async function credentials() {
   const dir = await mkdtemp(join(tmpdir(), 'imports-auth-lifetime-'));
@@ -80,6 +85,48 @@ for (const path of ['/signin/key', '/token']) {
   });
 }
 
+test('account-key sign-in posts native Auth and keeps issuer Origin plus assertion audience', async () => {
+  const f = await credentials();
+  const native = 'http://127.0.0.1:20062';
+  const issuer = 'http://127.0.0.1:20061';
+  expect(accountKeyIssuerOrigin(native, { REZICS_LOCAL_STACK_NATIVE_ORIGIN: native, REZICS_LOCAL_STACK_ISSUER_ORIGIN: issuer })).toBe(
+    issuer,
+  );
+  expect(accountKeyIssuerOrigin('https://auth.rezics.test')).toBe('https://auth.rezics.test');
+  const seen: { url: string; origin: string; aud?: string }[] = [];
+  try {
+    const token = await createAccountTokenProvider({
+      ...f.options,
+      authOrigin: native,
+      issuerOrigin: issuer,
+      fetch: (async (input: RequestInfo | URL, init?: RequestInit) => {
+        const request = input instanceof Request ? input : new Request(input, init);
+        const body = request.method === 'POST' ? await request.clone().text() : '';
+        const assertion = body.includes('assertion')
+          ? (JSON.parse(body) as { assertion: string }).assertion.split('.')[1]
+          : undefined;
+        seen.push({
+          url: request.url,
+          origin: request.headers.get('origin') ?? '',
+          ...(assertion
+            ? { aud: (JSON.parse(Buffer.from(assertion, 'base64url').toString()) as { aud: string }).aud }
+            : {}),
+        });
+        if (new URL(request.url).pathname === '/signin/key')
+          return new Response('{}', { headers: { 'set-cookie': 'fixture=session; Secure; HttpOnly' } });
+        return Response.json({ access_token: 'walk-token', token_type: 'Bearer', expires_in: 3600 });
+      }) as typeof fetch,
+    });
+    expect(await token()).toBe('walk-token');
+    expect(seen).toEqual([
+      { url: `${native}/signin/key`, origin: issuer, aud: `${issuer}/token` },
+      { url: `${native}/token`, origin: issuer },
+    ]);
+  } finally {
+    await rm(f.dir, { recursive: true, force: true });
+  }
+});
+
 test('coalesced cancelled renewal disposes a late fetch body and leaves another provider independent', async () => {
   const f = await credentials();
   const controller = new AbortController();
@@ -146,8 +193,10 @@ test('walk-stack account-key sign-in reads issuer Origin from the local-stack en
   const native = 'http://127.0.0.1:20022';
   const issuer = 'http://127.0.0.1:20021';
   const previous = process.env.REZICS_LOCAL_STACK_ISSUER_ORIGIN;
+  const previousNative = process.env.REZICS_LOCAL_STACK_NATIVE_ORIGIN;
   const seen: string[] = [];
   process.env.REZICS_LOCAL_STACK_ISSUER_ORIGIN = issuer;
+  process.env.REZICS_LOCAL_STACK_NATIVE_ORIGIN = native;
   try {
     const token = await createAccountTokenProvider({
       ...f.options,
@@ -169,6 +218,8 @@ test('walk-stack account-key sign-in reads issuer Origin from the local-stack en
     expect(await token()).toBe('env-token');
     expect(seen).toEqual(['/signin/key:http://127.0.0.1:20021', '/token:http://127.0.0.1:20021']);
   } finally {
+    if (previousNative === undefined) delete process.env.REZICS_LOCAL_STACK_NATIVE_ORIGIN;
+    else process.env.REZICS_LOCAL_STACK_NATIVE_ORIGIN = previousNative;
     if (previous === undefined) delete process.env.REZICS_LOCAL_STACK_ISSUER_ORIGIN;
     else process.env.REZICS_LOCAL_STACK_ISSUER_ORIGIN = previous;
     await rm(f.dir, { recursive: true, force: true });

@@ -463,6 +463,7 @@ export function parseImportCliConfig(argv: readonly string[]): ImportCliConfig |
 export function admitImportCliConfig(config: ImportCliConfig, testOrigin?: string): ImportCliConfig {
   const api = validateImportCliApiOrigin(config.api, testOrigin);
   const auth = parseImportCliOrigin(config.auth);
-  if (auth.protocol !== 'https:') throw new ImportCliInputFailure();
+  if (auth.protocol !== 'https:' && !(auth.protocol === 'http:' && auth.hostname === '127.0.0.1'))
+    throw new ImportCliInputFailure();
   return { ...config, api, auth: auth.origin };
 }

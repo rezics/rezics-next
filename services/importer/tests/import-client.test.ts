@@ -93,6 +93,83 @@ for (const status of [429, 503]) {
   }
 }
 
+test('candidate listing keeps the kernel status when the Treaty reply has no Response', async () => {
+  const transport = createImportTransport({
+    origin: 'https://api.importer.test',
+    tokenProvider: async () => 'test-token',
+    client: {
+      subjects: () => ({
+        candidates: {
+          get: async () => ({
+            status: 403,
+            data: null,
+            error: { value: { type: 'about:blank', code: 'forbidden' } },
+          }),
+        },
+      }),
+    } as never,
+  });
+  try {
+    await transport.reviewedCandidates(subjectId, {
+      property: 'schema:name',
+      context: '00000000-0000-8000-8000-000000000000',
+      limit: 100,
+    });
+    throw new Error('expected denial');
+  } catch (error) {
+    expect(error).toBeInstanceOf(ImportTransportError);
+    expect((error as ImportTransportError).status).toBe(403);
+    expect((error as ImportTransportError).code).toBe('forbidden');
+  }
+});
+
+test('fence retries HTTP 503 then returns current evidence', async () => {
+  let requests = 0;
+  const transport = createImportTransport({
+    origin: 'https://api.importer.test',
+    tokenProvider: async () => 'test-token',
+    sleep: async () => {},
+    fetch: (async (_request: Request) => {
+      requests++;
+      if (requests === 1)
+        return Response.json(
+          { type: 'https://rezics.com/problems/overloaded', title: 'Overloaded', status: 503, retryable: true },
+          { status: 503 },
+        );
+      return Response.json({ fenced: false, securityRevision: null });
+    }) as typeof fetch,
+  });
+  await expect(transport.fence({ source: 'bangumi', externalId: '1', fieldGroup: 'facts' })).resolves.toEqual({
+    fenced: false,
+    securityRevision: null,
+  });
+  expect(requests).toBe(2);
+});
+
+test('a thrown fetch keeps the remaining request method and path', async () => {
+  const transport = createImportTransport({
+    origin: 'https://api.importer.test',
+    tokenProvider: async () => 'test-token',
+    maxAttempts: 1,
+    sleep: async () => {},
+    fetch: (async (_request: Request): Promise<Response> => {
+      throw new TypeError('ECONNREFUSED');
+    }) as typeof fetch,
+  });
+  try {
+    await transport.reviewedCandidates(subjectId, {
+      property: 'schema:name',
+      context: '00000000-0000-4000-8000-000000000000',
+      limit: 100,
+    });
+    throw new Error('expected transport failure');
+  } catch (error) {
+    expect(error).toBeInstanceOf(ImportTransportError);
+    expect((error as ImportTransportError).method).toBe('GET');
+    expect((error as ImportTransportError).path).toBe(`/v1/subjects/${subjectId}/candidates`);
+  }
+});
+
 test('one batch deadline cancels a pending member retry and releases its timer', async () => {
   let expire!: () => void;
   let clears = 0;
@@ -449,7 +526,10 @@ test('review transport retains coherent query, nullable evidence, exact admissio
   const requests: Request[] = [];
   const answers = [
     Response.json({ subject: { id: first, type: 'schema:Person' }, reviewedIdentity: null }),
-    Response.json({ operation: { id: first } }, { status: 202 }),
+    Response.json(
+      { operation: { id: first } },
+      { status: 202, headers: { location: `/v1/subjectIdentityOperations/${first}` } },
+    ),
     Response.json({ survivor: first, redirected: second, revision: 3 }),
   ];
   const transport = createImportTransport({
@@ -467,11 +547,22 @@ test('review transport retains coherent query, nullable evidence, exact admissio
     query.get('reviewIdentityExternalId'),
     query.get('includeViewerActions'),
   ]).toEqual(['bangumi', 'person:123', 'true']);
-  expect(await transport.mergeReviewedPersons(body, 'review-key')).toEqual({ operation: { id: first } });
+  expect(await transport.mergeReviewedPersons(body, 'review-key')).toEqual({
+    operation: { id: first },
+    location: `/v1/subjectIdentityOperations/${first}`,
+  });
   expect(await requests[1]!.json()).toEqual(body);
   expect(requests[1]!.headers.get('authorization')).toBe('Bearer review-token');
   expect(requests[1]!.headers.get('idempotency-key')).toBe('"review-key"');
   await expect(transport.mergeReviewedPersons(body, 'review-key')).rejects.toMatchObject({ status: 200 });
+  const missingLocation = createImportTransport({
+    origin: 'https://api.importer.test',
+    tokenProvider: async () => 'review-token',
+    fetch: (async (_request: Request) => Response.json({ operation: { id: first } }, { status: 202 })) as typeof fetch,
+  });
+  await expect(missingLocation.mergeReviewedPersons(body, 'review-key')).rejects.toThrow(
+    'Invalid native identity admission',
+  );
 });
 
 test('served-variant reads accept only the admitted image decision for the requested derivative', async () => {
