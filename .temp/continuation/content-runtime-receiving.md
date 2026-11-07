@@ -6,8 +6,29 @@ manager: content
 
 The Threads/Boards implementation, current-authority fixes, supplied RetainContentRead forwarding in
 contribution-present.ts and Rating execution ownership remain retained. Source is committed; the controller owns
-integration and promotion. This continuation is only for existing owners' undelivered runtime repairs. It is not a
+integration and promotion. This continuation retains existing owners' remaining runtime receiving and independent startup repairs. It is not a
 second walk, a change in acceptance, or permission to skip disclosure, native growth or receiving assertions.
+
+## Current source reconciliation
+
+The controller-started rebase onto90fe89330061ab1a331b7a7cfb844b0262685632 is complete. The integrated Search
+native-port landing91c91989eb9b81063a719cd25f3861a1833ccf18 and Accounts root1b0a5e366af0d51f7e16142f8012c3e09a1ec8ea
+are ancestors, including the shared native-port composition and one Recent Search host around AppShell inside
+Library. Settings90fe8933 supplies the browser model/server-function split and SSR-only fixture binding overlay.
+Auth31f519929c/9fc8c4745a catalogue/lifetime source and Boot receipt-key binding remain retained. The exact Auth
+scope receive includes deployment.ts, website-scopes.ts and dev-stack-config.test.ts; the helper preserves the
+existing scope algorithm without importing the workflow host. RetainContentRead forwarding and Rating's sole
+Goal-walk execution policy remain unchanged.
+
+Decision: preserve every original journey assertion, add only the merged selector regression to the existing
+runner test, and finish worker closure with one sequential Web/Auth/Kernel/Importer/UI typing invocation.
+All92 accepted owner references below remain retained. No acceptance tests, native/browser/root or growth
+commands run during this reconciliation. Dev verification receives the original reaction-count and six Editing
+cases, prepared session/body/key/readback and full-cost obligations on their original Pool, actor, Access and
+deadline. Installed callable/root, native command/effect/relay/default-worker, browser, nested growth, cleanup
+and promoted-commit evidence stay separate. The independent identity-readiness failure is not inferred fixed.
+Accounts e249 alone owns leader settlement with actual143/nonzero/group absence; no custody writer is added.
+The failure descriptions below are prior observations, not results on this integrated revision.
 
 ## Exact editing failure and whole repair handback
 
@@ -86,7 +107,7 @@ The three required groups ran once on94e2e55d24 before these inputs and all fail
   explicitly checks both server entries. The other assertions are unchanged.
 - The same Web run failed the retained wrapper cancellation case with `ECHILD: unknown error, waitpid` at
   with-dev-server.ts:205 after abort. Shared custody calls libc waitpid from observeLeaderExit and zombie reaping
-  while runOwnedCommand awaits Bun child.exited. Semantic's existing startup-custody owner must settle the native
+  while runOwnedCommand awaits Bun child.exited. Accounts e249, the sole custody owner, must settle the native
   child exactly once without competing Bun/FFI reapers, retain its actual exit/signal and descendant cleanup, and
   preserve the cancellation assertion143. Do not swallow ECHILD or infer a successful native exit.
 - Rootb5a26592-2e49-4a82-858f-aafc03114bcf exited1 with28 failing cases and two errors. Existing Performance,
@@ -122,12 +143,10 @@ the actual document shell with its declared router context and bound DOM scroll 
 assertions remain. This repairs the fixture rather than introducing a product fallback for an invalid internal
 caller. Its focused rerun is recorded below; no browser or native acceptance is inferred.
 
-The selector receiving packet names1cfb9ccec1cbf3afb5032dbca273cef0d4e1083f. That commit is formatting over
-selector implementation absent from this handle; cherry-picking its formatting alone would not deliver selector
-routing. The controller and existing selector owner retain that integrated source input for the original walks.
-No second selector or custody implementation is introduced. Accounts retains ECHILD leader settlement with the
-original cancellation143, native nonzero status and descendant absence assertions. Search/root receives the paid
-Recent Search host around AppShell inside LibraryApplicationBoundary.
+The received selector uses the complete installed test-selection policy and retains the private issuer-bound
+editing journey. The merged root fixture has its declared router context, document mount and bound scroll API.
+The mixed root-fixture/self-hosted-editor selection is pinned in with-dev-server.test.ts; page selections retain
+their shared server. No second selector, custody implementation or browser runtime shim is introduced.
 
 Latest owner reconciliation: single-custody-and-minimal-receiving-20261107-1420.md explicitly removes the renewed
 Vite/root fixture pair from intermediate acceptance. Worker completion is changed-workspace typing; all original
@@ -245,3 +264,7 @@ Every prior owner reference remains in force; later observations do not erase in
 - .temp/goal/content/shell-recent-and-custody-receiving-20261107-1410.md
 - .temp/goal/content/single-custody-and-minimal-receiving-20261107-1420.md
 - .temp/goal/backlog/performance/decisions/container-764-and-single-leader-custody.md
+- .temp/goal/content/search91-and-accounts-root-receiving-20261107.md
+- .temp/goal/content/settings90-and-library-growth-receiving-20261107.md
+- .temp/goal/backlog/performance/decisions/settings-browser-worker-composition-receiving.md
+- .temp/goal/content/content11-auth-scope-reconciliation-20261107.md

@@ -155,6 +155,13 @@ The renewed Vite/root fixture pair belongs to the original dev verification, not
 worker completion uses changed-workspace typing. The existing Accounts custody owner alone settles Bun leader
 completion and adopted descendants, preserving interrupted status, nonzero results and process-group absence.
 
+Decision: retain the coherent Auth deployment scope helper and catalogue/lifetime fixtures with the received
+Search native ports, Library/Recent Search root and Settings browser separation. Worker closure checks the changed
+Web, Auth, Kernel, Importer and UI workspaces sequentially in one typing invocation. The existing runner selection
+test also pins a mixed root-fixture/self-hosted-editor selection; all other assertions and stories stay unchanged.
+The sole eighteen-path dev verification retains native/browser/default-worker, growth, cleanup, installed root and
+promoted-revision proof; source integration and typing establish none of those runtime outcomes.
+
 ## realms-and-spaces
 
 Scope row: **Realms and Spaces**. Stage: **specified red** for the complete capability.

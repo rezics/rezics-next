@@ -130,6 +130,9 @@ test('the self-hosted post editing journey keeps its own Worker bindings without
   expect(commandNeedsSharedDevServer(['bun', 'test', 'tests/post-editing.test.ts'])).toBe(false);
   expect(commandNeedsSharedDevServer(['bun', 'test', '--max-concurrency=1', 'tests/post-editing.test.ts'])).toBe(false);
   expect(
+    commandNeedsSharedDevServer(['bun', 'test', 'tests/root-application-shell.test.tsx', 'tests/post-editing.test.ts']),
+  ).toBe(false);
+  expect(
     commandNeedsSharedDevServer(['bun', 'test', 'tests/post-editing.test.ts', 'tests/thread-reading.test.ts']),
   ).toBe(true);
   expect(commandNeedsSharedDevServer(['bun', 'test', 'tests'])).toBe(true);
