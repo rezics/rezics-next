@@ -162,6 +162,11 @@ async function boot(env: NodeJS.ProcessEnv) {
   // The root acceptance command does not inherit the Kernel workspace's Reylo preload.
   // Match dev-stack's loader before any entry or SQL-loading support import.
   await import('reylo/register');
+  const { installNativeTestComposition } = await import('../support/native-history-composition.ts');
+  await installNativeTestComposition();
+  const { historyComposition } = await import('../../src/history/application/composition.ts');
+  const { nativeHistoryComposition } = await import('../../src/composition/history.ts');
+  expect(historyComposition().declareCommandHistory).toBe(nativeHistoryComposition().declareCommandHistory);
   // DBOS is process-global; production runs these entries in separate processes.
   const personaId = await startPersonaSeed(databaseUrl);
   await startKernelApi(databaseUrl);
