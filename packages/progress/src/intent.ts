@@ -1,4 +1,4 @@
-import { MAX_PROGRESS_MEASURES } from './limits.ts';
+import { MAX_COMPLETED_UNITS, MAX_PROGRESS_MEASURES } from './limits.ts';
 import type { ProgressUnitRules } from './values.ts';
 import { acceptsProfileDecimal } from './decimal.ts';
 
@@ -6,8 +6,7 @@ import { acceptsProfileDecimal } from './decimal.ts';
  * Pure rules for progress sessions. Commands own the account and the stored rows.
  * A reread is a new session; nothing here rewrites another one.
  */
-export const MAX_COMPLETED_UNITS = 20_000;
-export { MAX_PROGRESS_MEASURES } from './limits.ts';
+export { MAX_COMPLETED_UNITS, MAX_PROGRESS_MEASURES } from './limits.ts';
 
 const MAX_UNIT_IDS = 100;
 const MAX_LOCATOR_LENGTH = 256;

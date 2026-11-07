@@ -654,7 +654,8 @@ installed factory. Continue/session schemas are pure Library contracts; Semantic
 contract schema. Content's inward vocabulary references those producer contracts, with no adapter dependency. HTTP operation and problem mapping stay
 on `feed-routes.ts`. Missing continuation, summary or discovery authority is unavailable, not an empty page or
 an all-candidate fallback. Focused application/composition tests pin missing authority, exact kind conjunction,
-sparse Continue resume, the 20/160/6 bounds and retained real binding/forwarding; runtime proof stays with the existing Content walk. No extra
+sparse Continue resume, the 20/160/6 bounds, retained real binding/forwarding, native producer refusals before I/O
+and the mounted Continue schema's identity with Library's schema; runtime proof stays with the existing Content walk. No extra
 stories. Destination kinds stay distinct union members; public summary and Continue schemas stay TypeBox objects.
 The mounted Feed page schemas stamp the Content contract page types so GET /v1/feedItems stays a closed route.
 `feed-discovery.ts` maps Search's delivered Subject/Account and public Collection/review/Space summaries with

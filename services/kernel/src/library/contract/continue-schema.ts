@@ -1,6 +1,6 @@
 import { Type as t, type TSchema } from 'typebox';
 import type { ContinueProgressPresentation } from './continue.ts';
-import { MAX_PROGRESS_MEASURES } from '@rezics/progress/limits';
+import { MAX_COMPLETED_UNITS, MAX_PROGRESS_MEASURES } from '@rezics/progress/limits';
 
 const closed = { additionalProperties: false } as const;
 const id = t.String({ format: 'uuid' });
@@ -66,7 +66,7 @@ export function sessionSchema() {
       amount: nullableString,
       locator: nullableString,
       position: nullableString,
-      completedUnitCount: t.Integer({ minimum: 0, maximum: 20_000 }),
+      completedUnitCount: t.Integer({ minimum: 0, maximum: MAX_COMPLETED_UNITS }),
       state: t.Union([state, t.Literal('retired')]),
       revision,
       startedAt: t.String(),

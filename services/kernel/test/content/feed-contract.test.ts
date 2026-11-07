@@ -23,6 +23,9 @@ test('the mounted Kernel publishes closed review and immediate-parent context wi
     expect(card.properties.curator.anyOf[0].properties).toHaveProperty('destination');
     expect(card.properties.preview.anyOf[0].properties).toHaveProperty('partial');
   }
+  const continued = variants.find((variant: any) => variant.source.const === 'continue').continue;
+  const libraryContinue = paths['/v1/libraryContinue'].get.responses['200'].content['application/json'].schema;
+  expect(continued).toEqual(libraryContinue.properties.subjects.items);
   const subject = variants.filter((variant: any) => variant.summary.properties.subjectReactions);
   expect(subject).toHaveLength(3);
   for (const { summary } of subject) {

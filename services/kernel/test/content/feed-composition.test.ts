@@ -1,4 +1,5 @@
 import { expect, test } from 'bun:test';
+import type { Pool } from 'pg';
 import { composeContentApplication, composeContentFeed } from '../../src/composition/content.ts';
 import {
   bindFeedCapabilities,
@@ -13,23 +14,27 @@ import {
 import { bindContentApplication, tryContentApplication } from '../../src/content/adapters/bind.ts';
 import { AuthenticationError } from '../../src/access/contract/authentication.ts';
 import { createFeedReads } from '../../src/content/feed.ts';
+import { createFeedActivityStore } from '../../src/content/feed-activity.ts';
 import { SubjectSummarySchema } from '../../src/semantic/contract/index.ts';
 import { SubjectSummarySchema as transportSummary } from '../../src/semantic/adapters/public-summary-schema.ts';
 
-// Construction must not acquire a connection, WorkClient, or an Access capability.
-const dependencies = {
-  pool: {},
-  routeKey: new Uint8Array(16),
-  tokens: {},
+let io = 0;
+const unexpectedIO = () => {
+  io++;
+  throw new Error('Unexpected supplier IO');
+};
+// Construction and owner input refusals must not acquire native resources.
+const dependencies: FeedDependencies = {
+  pool: { query: unexpectedIO, connect: unexpectedIO } as unknown as Pool,
+  routeKey: new Uint8Array(32),
+  tokens: { current: 1, keys: new Map([[1, new Uint8Array(32)]]) },
   clock: () => new Date('2026-01-01T00:00:00.000Z'),
-  deadlineNow: () => 0,
-  access: {},
-  contentAccess: {},
-  workClient: () => {
-    throw new Error('Unexpected WorkClient acquisition');
-  },
-  viewerPersonalActions: {},
-} as unknown as FeedDependencies;
+  deadlineNow: () => performance.now(),
+  access: { authenticate: unexpectedIO, prepare: unexpectedIO, authorize: unexpectedIO },
+  contentAccess: { authenticate: unexpectedIO, prepare: unexpectedIO, authorize: unexpectedIO },
+  workClient: unexpectedIO,
+  viewerPersonalActions: unexpectedIO,
+};
 
 function restore(previous: ReturnType<typeof tryContentApplication>, feed: ReturnType<typeof tryFeedCapabilities>) {
   unbindContentApplication();
@@ -41,6 +46,7 @@ test('default composition installs and retains real suppliers once before IO', a
   const previous = tryContentApplication();
   const feed = tryFeedCapabilities();
   try {
+    io = 0;
     unbindContentApplication();
     expect(tryFeedCapabilities()).toBeUndefined();
     composeContentApplication();
@@ -48,7 +54,7 @@ test('default composition installs and retains real suppliers once before IO', a
     composeContentApplication();
     expect(tryFeedCapabilities()).toBe(bound);
     expect(composeContentFeed()).toBe(bound);
-    const suppliers = bound.create(dependencies, {} as Parameters<typeof bound.create>[1]);
+    const suppliers = bound.create(dependencies, createFeedActivityStore(dependencies));
     expect(suppliers.publicSummary.read).toBeFunction();
     expect(suppliers.readCollection).toBeFunction();
     expect(suppliers.readPublication).toBeFunction();
@@ -57,9 +63,18 @@ test('default composition installs and retains real suppliers once before IO', a
     expect(suppliers.admit).toBeFunction();
     const row = { subjectId: 'x', state: null, lastActivityAt: 't', activeProgressSession: null };
     expect(suppliers.present(row)).toBe(row);
+    const actor = { kind: 'anonymous' } as const;
+    const deadline = performance.now() + 30_000;
     await expect(
-      suppliers.continuation.list({ kind: 'anonymous' }, { limit: 6, view: 'FULL' }, 1, []),
+      suppliers.continuation.list(actor, { limit: 6, view: 'FULL' }, deadline, ['en']),
     ).rejects.toBeInstanceOf(AuthenticationError);
+    await expect(
+      suppliers.publicSummary.read(actor, { ids: Array(257).fill('x'), languages: ['en'], deadline }),
+    ).rejects.toThrow('Subject summaries accept at most 256 ids');
+    await expect(suppliers.readAccounts(actor, Array(101).fill('x'), ['en'], deadline)).rejects.toThrow(
+      'Account discovery accepts at most 100 ids',
+    );
+    expect(io).toBe(0);
     expect(transportSummary).toBe(SubjectSummarySchema);
   } finally {
     restore(previous, feed);
