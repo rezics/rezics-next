@@ -82,7 +82,11 @@ Keep credential preparation and reached-work assertions on the real producers. R
 through the focused runner's fresh runtime for each file, in the original selection order.
 
 Decision: mapper-enabled workspaces (Kernel, Auth, Web) typecheck one at a time inside an admitted slice so their
-tsc/Reylo runs cannot stack past the 6 GiB per-run memory cap; leaf packages may run in parallel.
+tsc/Reylo runs cannot stack past the per-run memory cap. Independent checks may run concurrently in separately
+admitted slices; leaf packages may run in parallel within their admitted resources. Check producers before their
+consumers. When a prerequisite check fails, return that failure for repair before running checks that depend on it.
+Unreached checks remain unverified, and success still requires every changed workspace and required money-path test
+to pass. Reuse unchanged valid passing evidence rather than rerunning it to complete a batch.
 
 Acceptance names the narrowest command that proves the change. Managers name a full web or kernel check only for a
 workspace-wide change; the train and promotion own whole-workspace checks.
