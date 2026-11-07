@@ -651,7 +651,7 @@ test('Owner session detail exposes exact resolved historic display and advisory 
   await json(await send('POST', `${path(s.id)}:complete`, { revision: 2 }), 200);
 });
 
-test('opt-in owner presentation conceals foreign anonymous reduced-scope suspended and revoked readers without effects', async () => {
+test('opt-in owner presentation conceals private reads while preserving scope and revoked-reader denials', async () => {
   const subject = await native.createSubject('game');
   const s = await start(subject);
   const url = `${path(s.id)}?presentation=FULL&view=FULL`;
@@ -670,7 +670,9 @@ test('opt-in owner presentation conceals foreign anonymous reduced-scope suspend
     scopes: ['subject:read'],
   });
   await noSessionEffects(s.id)(async () => {
-    await problem(await send('GET', url, undefined, entryKey(), limited), 404, 'not_found', 'not_applicable');
+    const response = await send('GET', url, undefined, entryKey(), limited);
+    await problem(response, 403, 'forbidden', 'not_applicable');
+    expect(response.headers.get('www-authenticate')).toContain('insufficient_scope');
   });
   for (const fence of ['suspension', 'authn'] as const) {
     const identity = await native.identity(scopes);
