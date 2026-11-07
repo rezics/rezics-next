@@ -1075,6 +1075,7 @@ test('A queued product dev landing advances through its ordinary lane while a sl
     expect(ownerPaths.map((path) => readFileSync(join(path, readdirSync(path)[0]!), 'utf8'))).toEqual(owners);
     const product = h.dispatch('arrived-during-main.txt');
     await h.start(product);
+    expect(h.queue.nextBatch(10, [], 'dev').some((queued) => queued.request.taskId === product.id)).toBe(true);
     await train(h, undefined, undefined, {}, 'pump');
     await schedulingUntil(() => h.head('dev') !== main);
     expect(existsSync(gateRelease)).toBe(false);
