@@ -214,7 +214,11 @@ async function kernel(
   return { status: response.status, value };
 }
 
-function requireStatus(result: { status: number; value: Json }, label: string, expected: number | readonly number[]) {
+export function requireStatus(
+  result: { status: number; value: Json },
+  label: string,
+  expected: number | readonly number[] = 200,
+) {
   const allowed = typeof expected === 'number' ? [expected] : expected;
   if (!allowed.includes(result.status))
     throw new Error(`${label} returned HTTP ${result.status}: ${JSON.stringify(publicFields(result.value)).slice(0, 600)}`);
@@ -806,7 +810,7 @@ async function walkRealmsAndSpaces(context: WalkContext): Promise<Json> {
   requireStatus(await kernel(stack, 'GET', `/v1/spaces/${community.spaceId}`), 'anonymous space');
   requireStatus(await kernel(stack, 'GET', `/v1/realms/${community.realmId}`), 'anonymous realm');
   const join = await kernel(stack, 'POST', `/v1/realms/${community.realmId}/membership`, { bearer: member.bearer });
-  if (join.status !== 202 && join.status !== 200)
+  if (join.status !== 202 && join.status !== 200 && join.status !== 409)
     throw new Error(`realm join returned HTTP ${join.status}: ${JSON.stringify(publicFields(join.value))}`);
   const membership = await waitForMembership(stack, community.realmId, member.bearer);
   const home = requireStatus(

@@ -7,6 +7,7 @@ import {
   jwtAccountId,
   mentionBody,
   publicFields,
+  requireStatus,
   summarizeWalk,
   waitForNotices,
   walkWorkingDirectory,
@@ -58,6 +59,7 @@ test('mention documents and ordinary grant receipts match the Accounts producer 
   expect(grantReceiptKey({ route: 18, id: 'board-1' }, accountId, 'moderation:takedown')).toBe(
     `accounts.grant:18:board-1:${accountId}:moderation:takedown`,
   );
+  expect(requireStatus({ status: 200, value: { ok: true } }, 'anonymous space')).toEqual({ ok: true });
 });
 
 test('waitForNotices returns the delivered item once the default worker has written it', async () => {

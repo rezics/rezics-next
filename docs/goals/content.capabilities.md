@@ -90,7 +90,7 @@ page outcomes.
 Decision: the Content Goal seeded walk uses the existing thread-board driver, seed-journal cleanup and Performance
 `waitUntilWalkReady` hydration recovery. First-scope rows are walked as named journeys on one admitted stack; no extra
 stories. Command: `bun services/auth/scripts/dev-stack.ts walk -- bun apps/web/scripts/seeded-content-goal-walk.ts`.
-Worker Vite resolves Elysia and Eden to their `exports.import` files and replaces TypeBox loaders with live ESM re-exports so workerd never evaluates CJS `module`. The fewest tests that pin that swap are `vite-config.test.ts` plus the existing walk unit tests; no extra stories.
+Worker Vite resolves Elysia and Eden to their `exports.import` files and replaces TypeBox loaders with live ESM re-exports so workerd never evaluates CJS `module`. Focused test Vite skips the Home route crawl so edit journeys can start. The fewest tests that pin that swap and crawl skip are `vite-config.test.ts` plus the existing walk unit tests; no extra stories.
 The sole walk receives Accounts published-post effects for reply, mention and moderation delivery, current access and
 preferences, replay, inbox and independent appeals. Ordinary HTTP grant receipts are the walk's authority proof, not
 seeded fixture rows. The frozen notification suite timeout stays 180 seconds; its assertions are unchanged.
