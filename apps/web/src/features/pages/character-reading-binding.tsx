@@ -112,13 +112,7 @@ export function createCharacterReadingSlots(): CharacterReadingSlots {
 const defaultSlots = createCharacterReadingSlots();
 
 /** Installed beside OverviewContext so Character reading never value-imports page implementations. */
-export function CharacterReadingBinding({
-  slots,
-  children,
-}: {
-  slots?: CharacterReadingSlots;
-  children: ReactNode;
-}) {
+export function CharacterReadingBinding({ slots, children }: { slots?: CharacterReadingSlots; children: ReactNode }) {
   const parent = useContext(CharacterReadingSlotsContext);
   const installed = slots ?? parent ?? defaultSlots;
   const bound = useMemo(() => installed, [installed]);
