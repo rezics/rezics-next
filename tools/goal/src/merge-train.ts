@@ -3868,7 +3868,7 @@ export class MergeTrain {
         );
         result.passed = true;
         result.stage = 'merge';
-        result.mergedCommit = entry.candidate;
+        result.mergedCommit = release.mainCommit;
         return true;
       }
       result.passed = true;
@@ -6120,7 +6120,7 @@ export class MergeTrain {
                     base: task.base,
                     frozen: frozenFilesForTask(o.stateDirectory, task.id),
                   })) ||
-              (!previous.identities && !isDeepStrictEqual(JSON.parse(historicalIdentity).brief, task.brief))
+              (!previous.identities && JSON.parse(historicalIdentity).brief.markdown !== task.brief.markdown)
             )
               throw new Error('Deferred request/contract generation changed');
             if (!previous.identities)
@@ -6342,7 +6342,7 @@ export class MergeTrain {
                   base: task.base,
                   frozen: frozenFilesForTask(o.stateDirectory, task.id),
                 })) ||
-            (!receipt.previous.identities && !isDeepStrictEqual(JSON.parse(identity).brief, task.brief))
+            (!receipt.previous.identities && JSON.parse(identity).brief.markdown !== task.brief.markdown)
           )
             throw new Error('Deferred current request/contract identity changed before migration');
           if (!receipt.previous.identities)
@@ -7281,19 +7281,22 @@ export class MergeTrain {
               this.options.policy?.merge,
             );
             this.formatControlPlaneCandidate(tree, changed, node.logPath);
-            const allowed = preparedMembers.flatMap((member) => [
-              ...member.request.declaredPaths,
-              ...(journal.scopeApprovals![member.request.taskId]?.additionalPaths.map((addition) => addition.path) ??
-                []),
-            ]);
-            const outside = outsideScope(
-              changedPathsBetween(
-                tree,
-                snapshot.mainHead,
-                this.git(tree, 'rev-parse', 'HEAD'),
-                this.options.policy?.merge,
+            const changed = changedPathsBetween(
+              tree,
+              snapshot.mainHead,
+              this.git(tree, 'rev-parse', 'HEAD'),
+              this.options.policy?.merge,
+            );
+            const declared = preparedMembers.flatMap((member) => member.request.declaredPaths);
+            const approved = new Set(
+              preparedMembers.flatMap(
+                (member) =>
+                  journal.scopeApprovals![member.request.taskId]?.additionalPaths.map((addition) => addition.path) ??
+                  [],
               ),
-              allowed,
+            );
+            const outside = changed.filter(
+              (path) => !approved.has(path) && outsideScope([path], declared).length > 0,
             );
             if (outside.length) throw new Error(`Combined candidate changed unapproved files: ${outside.join(', ')}`);
             const frozenChanges = changedFrozenFiles(tree, frozen);

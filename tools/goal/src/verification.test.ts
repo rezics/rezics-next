@@ -1732,11 +1732,12 @@ export function readWorkerCheckHistory(id, physical, cwd) { return read(cwd, 'hi
     );
     git(directory.path, ['add', '.']);
     const tree = git(directory.path, ['write-tree']);
+    const producer = git(directory.path, ['rev-parse', 'HEAD']);
     const commit = git(directory.path, [
       'commit-tree',
       tree,
       '-p',
-      PROOF_PRODUCER_COMMIT,
+      producer,
       '-m',
       'Readonly reader fixture',
     ]);
@@ -1749,7 +1750,8 @@ export function readWorkerCheckHistory(id, physical, cwd) { return read(cwd, 'hi
     await expect(validateHistoricalProofReaderSource({ ...source, root: `${directory.path}/.` })).rejects.toThrow(
       'canonical Git',
     );
-    git(directory.path, ['update-ref', 'refs/heads/fixture-integration', PROOF_PRODUCER_COMMIT]);
+    const unrelated = git(directory.path, ['commit-tree', tree, '-m', 'Unrelated integration history']);
+    git(directory.path, ['update-ref', 'refs/heads/fixture-integration', unrelated]);
     await expect(loadHistoricalProofReader(join(directory.path, '.temp/registry'), source)).rejects.toThrow(
       'integration ancestor',
     );

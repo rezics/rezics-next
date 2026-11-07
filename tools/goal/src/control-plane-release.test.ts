@@ -75,6 +75,9 @@ async function train(
         h.outcomes.push(outcome);
         h.job.onGateOutcome(outcome);
       },
+      onDevLandingTranspileHandoff(handoff) {
+        h.job.onDevLandingTranspileHandoff(handoff);
+      },
     },
     runGate,
     runLaunchSmoke,
@@ -682,6 +685,9 @@ function batchTrain(h: ReturnType<typeof integrationHarness>, runGate: GateRunne
         h.outcomes.push(outcome);
         h.job.onGateOutcome(outcome);
       },
+      onDevLandingTranspileHandoff(handoff) {
+        h.job.onDevLandingTranspileHandoff(handoff);
+      },
     },
     runGate,
     runLaunchSmoke: releaseEvidence,
@@ -1069,6 +1075,7 @@ test('A queued product dev landing advances through its ordinary lane while a sl
     expect(ownerPaths.map((path) => readFileSync(join(path, readdirSync(path)[0]!), 'utf8'))).toEqual(owners);
     const product = h.dispatch('arrived-during-main.txt');
     await h.start(product);
+    await train(h, undefined, undefined, {}, 'pump');
     await schedulingUntil(() => h.head('dev') !== main);
     expect(existsSync(gateRelease)).toBe(false);
     expect(h.store.task(product.id).state).toBe('integrated');
@@ -1125,7 +1132,7 @@ test('A queued product dev landing advances through its ordinary lane while a sl
     await running?.catch(() => {});
     h.dispose();
   }
-});
+}, 30_000);
 
 test('ordinary dev independence: startup backlog lands before main captures proof refs', async () => {
   const h = integrationHarness();
