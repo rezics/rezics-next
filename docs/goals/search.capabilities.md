@@ -136,12 +136,14 @@ cleaned. Evidence:
 `.temp/goal/checks/worker-check-04f6654a-c194-4b41-8543-fc353b394d27-2026-11-07T17-22-34.730Z-d595ddba.log`.
 That pass covers the source snapshot before the later evidence-document edit; settlement requires a fresh check
 of the final committed content. The retry keeps the completed integration and original evidence, then checks Kernel
-before Web with a fail-fast chain and the declared documentation control-plane acceptance. All documentation is
-committed before submission; the returned check result is reported without changing the checked content.
-Ordinary native, browser, root and six-path acceptance remain deferred to the integrated-dev verifier.
+before Web with a fail-fast chain. Including the declared documentation test was refused before execution with
+`Tests run after landing in the dev verifier.` The permitted chain therefore contains workspace typing only.
+All documentation is committed before submission; the returned check result is reported without changing the
+checked content. Documentation tests and ordinary native, browser, root and six-path acceptance remain deferred
+to the integrated-dev verifier.
 
 ```sh
-bun scripts/worker-check.ts -- sh -c 'bun run --cwd services/kernel typecheck && bun run --cwd apps/web typecheck && bun test scripts/docs-check.test.ts'
+bun scripts/worker-check.ts -- sh -c 'bun run --cwd services/kernel typecheck && bun run --cwd apps/web typecheck'
 ```
 
 The retained seventeen-file Kernel command at `cea61c8e7dbf418048ea308a87b37031cb7d08ad` returned exit 1 on host b
