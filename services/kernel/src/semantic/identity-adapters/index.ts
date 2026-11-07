@@ -1,8 +1,7 @@
 import { memoizedValue } from '../../memoized.ts';
-import { classifyIdentityRemainder, type IdentityTransformSource } from '../identity-core/index.ts';
 import { assertIdentityTerminalGroupsOpen } from '../identity-terminal-closure.ts';
-import { IdentityEpochStoreError } from '../identity-terminal-closure-errors.ts';
-export { IdentityEpochStoreError } from '../identity-terminal-closure-errors.ts';
+import { IdentityEpochStoreError } from '../contract/identity-errors.ts';
+export { IdentityEpochStoreError } from '../contract/identity-errors.ts';
 import { recordPreparedIdentityPrearm, sealColocatedEmptyIdentityPrearm } from '../identity-epoch-prearm.ts';
 import admissionInsertJob from '../identity-epoch-admission-insert-job.sql';
 import admissionInsertBases from '../identity-epoch-admission-insert-bases.sql';
@@ -16,20 +15,18 @@ import admissionCustodyAcquire from '../identity-epoch-admission-custody-acquire
 import admissionPromote from '../identity-epoch-admission-promote.sql';
 import { bindSemanticProducerRoles, identityErasureRoles } from '../erasure-producer.ts';
 export { bindSemanticProducerRoles, identityErasureRoles };
-import { readAccountIdentitySource } from '../../access/agent-verification-identity.ts';
 import { admitIdentityReceivingEffect } from '../identity-receiving-effects.ts';
 import {
   admittedAccountMappingSource,
+  authorizeIdentityAdmission,
   identityBindingData,
-  assertIdentityBindingSource,
   identityBindingDigest,
   identityReceiptPartition,
   readIdentityBinding,
+  recordIdentityEpochNativeCommit,
 } from './identity-epoch-binding.ts';
 import bindingInsert from '../identity-epoch-binding-insert.sql';
 import bindingAccept from '../identity-epoch-binding-accept.sql';
-import selectRemainder from '../identity-epoch-mapping-remainder.sql';
-import storeInsertNativeCommit from '../identity-epoch-store-insert-native-commit.sql';
 import storeSelectJob from '../identity-epoch-store-select-job.sql';
 import storeSelectAck from '../identity-epoch-store-select-ack.sql';
 import storeSelectControl from '../identity-epoch-store-select-control.sql';
@@ -65,43 +62,43 @@ import storeUpdateGroup2 from '../identity-epoch-store-update-group-2.sql';
 import type { Pool } from 'pg';
 import { createHash } from 'node:crypto';
 import canonicalize from 'canonicalize';
-import {
-  currentCommand,
-  registerCommandCallback,
-  noEffect,
-  IdempotencyConflictError,
-  type CommandTransaction,
-} from '../../command/command.ts';
-import {
-  identityHomeAvailable,
-  prepareIdentityEpochAdmission,
-  bindIdentityEpochReceipt,
-  admitBoundIdentityEpoch,
-  guardIdentityAdmissionReviewedPerson,
-} from '../identity-epoch-admission.ts';
+import type { CommandTransaction } from '../../command/command.ts';
 import { withConnection } from '../../database/pool.ts';
 import { readPartition } from '../../partition/partition.ts';
-import { readIdentityMappings, readIdentityRatingReview } from './read.ts';
+import { nativeIdentityCapabilities } from '../identity-adapter-bind.ts';
+import { readIdentityMappings, readIdentityRatingReview, selectIdentityEpochRemainder } from './identity-epoch-read.ts';
 import { identityEpochLibraryInputsSQL } from '../identity-epoch-library-inputs.ts';
 import { newId, partitionOf, routeOf } from '../../route/route.ts';
-import { GLOBAL_CONTEXT } from '../definitions.ts';
 import { IDENTITY_EPOCH_ADMITTED } from '../events.ts';
 import { readIdentityEpochCutover } from '../identity-epoch-bootstrap.ts';
-import type {
-  IdentityEpochStore,
-  IdentityJob,
-  IdentityJobRef,
-  IdentityReceipt,
-  IdentityStepProgress,
-  IdentityStepReceipt,
-  IdentityIntent,
-  IdentityChange,
+import {
+  identityEpochRemainderTerminal,
+  identityHomeAvailable,
+  identityJobPartition,
+  identityReceiptKey,
+  identityReceiptValue,
+  type IdentityEpochStore,
+  type IdentityJob,
+  type IdentityJobRef,
+  type IdentityReceipt,
+  type IdentityStepProgress,
+  type IdentityStepReceipt,
+  type IdentityIntent,
+  type IdentityChange,
 } from './identity-epoch-contract.ts';
 
 export const IDENTITY_EPOCH_CONTROL_PARTITION = 0;
 /** Fixed initial production capacity, charged once per native (home,job). */
 export const IDENTITY_EPOCH_HOME_CAPACITY = 1;
-export const identityJobPartition = (job: IdentityJobRef) => partitionOf(route(job.jobId));
+export { authorizeIdentityAdmission, recordIdentityEpochNativeCommit } from './identity-epoch-binding.ts';
+export {
+  identityEpochRemainderTerminal,
+  identityHomeAvailable,
+  identityJobPartition,
+  identityReceiptKey,
+  identityReceiptValue,
+} from './identity-epoch-contract.ts';
+export { selectIdentityEpochRemainder } from './identity-epoch-read.ts';
 
 const unavailable = () =>
   new IdentityEpochStoreError(
@@ -121,48 +118,21 @@ function route(id: string): number {
   if (value === null) throw new TypeError('Identity original must be a native routed ID');
   return value;
 }
+function cmd() {
+  return nativeIdentityCapabilities().command;
+}
+function admission() {
+  return nativeIdentityCapabilities().admission;
+}
 function control(tx: CommandTransaction, platform = false) {
-  const command = currentCommand(tx);
+  const command = cmd().currentCommand(tx);
   if (platform && command.basis !== null)
     throw new TypeError('Identity maintenance requires native admitted platform work');
   return command;
 }
 
-/** Use the real executor-minted transaction ID and the component its event fence will commit.
- * The row and the outbox share the same database transaction. This is not a noEffect receipt producer.
- */
-const nativeCommitPurposes = new WeakMap<CommandTransaction, string>();
-export function recordIdentityEpochNativeCommit(tx: CommandTransaction, purpose: string): void {
-  const command = currentCommand(tx);
-  // A participant frontier and its scope effects share ONE executor-native commit.
-  // This only coalesces callback registration on the live transaction; it grants no admission.
-  const prior = nativeCommitPurposes.get(tx);
-  if (prior) {
-    if (prior !== purpose) throw new TypeError('Conflicting identity native commit purposes');
-    return;
-  }
-  nativeCommitPurposes.set(tx, purpose);
-  registerCommandCallback(tx, async (transactionId) => {
-    const result = await tx.query(storeInsertNativeCommit.sql, [command.partition, transactionId, purpose]);
-    if (result.rowCount !== 1) throw unavailable();
-  });
-}
-
 export { serializeIdentityValue } from '../identity-core/index.ts';
 import { serializeIdentityValue } from '../identity-core/index.ts';
-export function identityReceiptValue(receipt: IdentityReceipt) {
-  return receipt.kind === 'subject.merge'
-    ? {
-        kind: receipt.kind,
-        command: { ...receipt.command, digest: Buffer.from(receipt.command.digest).toString('base64') },
-      }
-    : receipt;
-}
-export function identityReceiptKey(receipt: IdentityReceipt): string {
-  return receipt.kind === 'subject.merge'
-    ? json()([receipt.kind, receipt.command.actorAccountId, receipt.command.kind, receipt.command.key])
-    : json()([receipt.kind, receipt.account, receipt.receipt]);
-}
 function json() {
   return memoizedValue(json, () => serializeIdentityValue);
 }
@@ -172,36 +142,6 @@ function decodeReceipt(value: ReturnType<typeof identityReceiptValue> | { kind: 
   return value.kind === 'subject.merge'
     ? { ...value, command: { ...value.command, digest: Buffer.from(value.command.digest, 'base64') } }
     : value;
-}
-
-export async function authorizeIdentityAdmission(
-  tx: CommandTransaction,
-  receipt: IdentityReceipt,
-  binding?: import('./identity-epoch-binding.ts').IdentityReceiptBinding,
-  intent?: IdentityIntent,
-) {
-  const command = currentCommand(tx);
-  if (receipt.kind !== 'subject.merge') {
-    if (command.basis !== null) throw new TypeError('Accounts identity admission requires native platform intent');
-    if (binding) {
-      assertIdentityBindingSource(binding, receipt);
-      // The native bridge proof was read under current source-home T before releasing that home.
-      // Raw platform work alone never reaches this branch.
-      return;
-    }
-    return readAccountIdentitySource(tx, receipt, intent);
-  }
-  const authorization = command.authorization;
-  if (
-    !command.basis ||
-    command.basis.actorAccountId !== receipt.command.actorAccountId ||
-    !authorization ||
-    authorization.mode !== 'execute' ||
-    authorization.action !== 'subject:merge' ||
-    authorization.resource.route !== 0 ||
-    authorization.resource.id !== GLOBAL_CONTEXT
-  )
-    throw new TypeError('Identity admission requires current native Global subject:merge authorization');
 }
 function decodeProgress(value: IdentityStepProgress): IdentityStepProgress {
   return {
@@ -241,35 +181,6 @@ async function readJob(tx: CommandTransaction, job: IdentityJobRef): Promise<Ide
       'library-private-follow-counts': progress('library-private-follow-counts'),
     },
   };
-}
-
-/** One keyed selection in the captured generation, independent of presentation visibility. */
-export async function selectIdentityEpochRemainder(
-  tx: CommandTransaction,
-  intent: IdentityIntent,
-  input: { partition_no: number; terminal: string; generation: string },
-): Promise<string | null> {
-  if (intent.kind === 'merge' || input.terminal !== intent.original) return null;
-  return (
-    (await tx.query(selectRemainder.sql, [input.partition_no, input.generation, intent.original])).rows[0]?.original ??
-    null
-  );
-}
-
-/** Validate pure captured values before binding or allocating an attempt. */
-export function identityEpochRemainderTerminal(
-  intent: IdentityIntent,
-  sources: readonly IdentityTransformSource[],
-): string | null {
-  const result = classifyIdentityRemainder(intent, sources);
-  if (result.state === 'unavailable') throw unavailable();
-  if (result.state === 'stale') throw stale();
-  if (result.state === 'overflow')
-    throw new IdentityEpochStoreError(
-      'identity_group_overflow',
-      'Resulting identity group exceeds 4096 complete originals',
-    );
-  return result.terminal;
 }
 
 export { identityEpochChangeTerminal, type IdentityEpochLibraryTransform } from '../identity-core/index.ts';
@@ -381,8 +292,8 @@ export function identityEpochStore(): IdentityEpochStore {
   return memoizedValue(identityEpochStore, () => ({
     // Compatibility for topology observations only; actual job homes are encoded by their native routed IDs.
     controlPartition: IDENTITY_EPOCH_CONTROL_PARTITION,
-    prepareAdmission: prepareIdentityEpochAdmission,
-    bindReceipt: bindIdentityEpochReceipt,
+    prepareAdmission: (pool, authority, input) => admission().prepareAdmission(pool, authority, input),
+    bindReceipt: (pool, authority, input) => admission().bindReceipt(pool, authority, input),
     async readEpoch(tx, partition = 0) {
       const owner = await readPartition(tx, partition);
       if (!owner) return { state: 'unavailable', reason: 'missing-owner' };
@@ -401,12 +312,12 @@ export function identityEpochStore(): IdentityEpochStore {
     },
     readJob,
     async findJob(tx, receipt, binding) {
-      const command = currentCommand(tx);
+      const command = cmd().currentCommand(tx);
       await authorizeIdentityAdmission(tx, receipt, binding);
       if (binding) {
         const data = identityBindingData(binding);
         if (data.key !== receiptKey(receipt) || canonicalize(data.receipt) !== canonicalize(receiptValue(receipt)))
-          throw new IdempotencyConflictError(command.partition);
+          throw new (cmd().IdempotencyConflictError)(command.partition);
         if (command.partition !== data.home) throw new TypeError('Job lookup requires the explicit native job home');
         return readJob(tx, data.job);
       }
@@ -421,28 +332,28 @@ export function identityEpochStore(): IdentityEpochStore {
     async readMapping(pool, original) {
       return (await readIdentityMappings(pool, [original]))[0]!;
     },
-    async admit(tx, admission) {
-      const { intent, receipt, binding } = admission;
-      if (binding) return admitBoundIdentityEpoch(tx, { ...admission, binding }, true);
-      if (currentCommand(tx).partition !== identityReceiptPartition(receipt)) {
+    async admit(tx, admissionInput) {
+      const { intent, receipt, binding } = admissionInput;
+      if (binding) return admission().admitBound(tx, { ...admissionInput, binding }, true);
+      if (cmd().currentCommand(tx).partition !== identityReceiptPartition(receipt)) {
         await authorizeIdentityAdmission(tx, receipt);
         throw new TypeError('Cross-home receipt admission requires a released native binding proof');
       }
       const command = control(tx);
       const accountSource = await authorizeIdentityAdmission(tx, receipt, undefined, intent);
-      const claimed = await readIdentityBinding(tx, admission);
-      if (claimed) return admitBoundIdentityEpoch(tx, { ...admission, binding: claimed }, true);
+      const claimed = await readIdentityBinding(tx, admissionInput);
+      if (claimed) return admission().admitBound(tx, { ...admissionInput, binding: claimed }, true);
       const prior = (await tx.query(storeSelectJob3.sql, [receiptKey(receipt), command.partition])).rows[0];
       if (prior) {
         if (
           canonicalize(prior.intent) !== canonicalize(JSON.parse(json()(intent))) ||
           canonicalize(prior.receipt) !== canonicalize(receiptValue(receipt))
         )
-          throw new IdempotencyConflictError(command.partition);
+          throw new (cmd().IdempotencyConflictError)(command.partition);
         if (prior.state !== 'pending' && prior.state !== 'published') throw unavailable();
-        return noEffect({ jobId: prior.job_id, epoch: BigInt(prior.epoch) });
+        return cmd().noEffect({ jobId: prior.job_id, epoch: BigInt(prior.epoch) });
       }
-      await guardIdentityAdmissionReviewedPerson(tx, admission);
+      await admission().guardReviewedPerson(tx, admissionInput);
       const ids =
         intent.kind === 'merge'
           ? [intent.redirected, intent.survivor]
@@ -527,7 +438,7 @@ export function identityEpochStore(): IdentityEpochStore {
         .digest('hex');
       if (accountSource) bindSemanticProducerRoles(tx, accountSource.roles);
       recordIdentityEpochNativeCommit(tx, 'admission');
-      registerCommandCallback(tx, async (transactionId) => {
+      cmd().registerCommandCallback(tx, async (transactionId) => {
         await tx.query(bindingInsert.sql, [
           command.partition,
           receiptKey(receipt),
@@ -619,7 +530,7 @@ export function identityEpochStore(): IdentityEpochStore {
       };
     },
     async initializeSubject(tx, original) {
-      const command = currentCommand(tx);
+      const command = cmd().currentCommand(tx);
       const originalRoute = route(original);
       if (command.partition !== partitionOf(originalRoute)) throw new TypeError('Wrong subject creation home');
       if (
@@ -668,7 +579,7 @@ export function identityEpochStore(): IdentityEpochStore {
       ]);
       await tx.query(storeInsertOriginal.sql, [command.partition, header.generation, original]);
       await tx.query(storeUpdateDirty.sql, [originalRoute, original]);
-      registerCommandCallback(tx, async (transactionId) => {
+      cmd().registerCommandCallback(tx, async (transactionId) => {
         if (transactionId !== source.recorded_transaction_id)
           throw new TypeError('initializeSubject requires the executor native creation transaction');
       });
@@ -712,7 +623,7 @@ export function identityEpochStore(): IdentityEpochStore {
       return { changes, next: frontier ? changes.at(-1)!.original : null };
     },
     async admitHomeEffect(tx, effect) {
-      const command = currentCommand(tx);
+      const command = cmd().currentCommand(tx);
       if (effect.kind === 'receiving') return admitIdentityReceivingEffect(tx, effect);
       if (effect.kind === 'structural' && effect.controlGroup) {
         if (command.basis !== null || effect.destination !== undefined) throw stale();
@@ -787,8 +698,7 @@ export function identityEpochStore(): IdentityEpochStore {
         return row;
       });
       // Source home is released. No caller-supplied completion or frontier enters the control transaction.
-      const { runCommand } = await import('../../command/command.ts');
-      const result = await runCommand<IdentityStepProgress>(
+      const result = await cmd().runCommand<IdentityStepProgress>(
         pool,
         { partition: identityJobPartition(receipt.job) },
         async (tx) => {
@@ -822,7 +732,7 @@ export function identityEpochStore(): IdentityEpochStore {
           ).rows[0];
           if (previous) {
             if (canonicalize(previous.progress) !== canonicalize(JSON.parse(json()(progress)))) throw invalidReceipt();
-            return noEffect(decodeProgress(previous.progress));
+            return cmd().noEffect(decodeProgress(previous.progress));
           }
           await tx.query(storeInsertAck.sql, [
             identityJobPartition(receipt.job),
@@ -865,9 +775,9 @@ export function identityEpochStore(): IdentityEpochStore {
           'identity_participants_incomplete',
           'Actual mapping, Search and Library ACK custody is incomplete',
         );
-      if (saved.state === 'published') return noEffect(job);
+      if (saved.state === 'published') return cmd().noEffect(job);
       const partition = identityJobPartition(job);
-      if (currentCommand(tx).partition !== partition) throw new TypeError('Wrong identity publication home');
+      if (cmd().currentCommand(tx).partition !== partition) throw new TypeError('Wrong identity publication home');
       const state = (await tx.query(storeSelectControl3.sql, [partition])).rows[0];
       if (state?.pending_job !== job.jobId || BigInt(state.pending_epoch) !== job.epoch) throw stale();
       const outstanding = (await tx.query(storeSelectEffectReceipt2.sql, [partition, job.jobId])).rowCount;
@@ -909,6 +819,6 @@ export type {
   IdentityRatingReviewOperand,
   IdentityRatingReviewResult,
   IdentityRatingReviewUnavailableReason,
-} from './read.ts';
+} from './identity-epoch-read.ts';
 export type * from './identity-epoch-contract.ts';
 export { admittedAccountMappingSource };
