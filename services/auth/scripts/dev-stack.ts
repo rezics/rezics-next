@@ -237,6 +237,21 @@ export async function privateFile(path: string, value: string) {
   await chmod(path, 0o600);
 }
 
+async function snapshotPrivateFile(path: string): Promise<string | undefined> {
+  try {
+    return await readFile(path, 'utf8');
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === 'ENOENT') return undefined;
+    throw error;
+  }
+}
+
+/** Walk setup rewrites Kernel/Web local files onto slot ports; restore the caller's copies when the slot ends. */
+async function restorePrivateFile(path: string, snapshot: string | undefined) {
+  if (snapshot === undefined) return;
+  await privateFile(path, snapshot);
+}
+
 /** Dotenv retains backslash-escaped quotes inside double quotes; JWK JSON must stay literal. */
 export function developmentBindings(values: Record<string, string>): string {
   return (
@@ -1095,6 +1110,10 @@ async function walk(command: string[]): Promise<number> {
   });
   let slot: StackSlot | undefined;
   let code = 0;
+  const kernelEnvFile = resolve(root, 'services/kernel/.env');
+  const webVarsFile = resolve(root, 'apps/web/.dev.vars');
+  const kernelEnvSnapshot = await snapshotPrivateFile(kernelEnvFile);
+  const webVarsSnapshot = await snapshotPrivateFile(webVarsFile);
   try {
     slot = await admitWalkStack(task, process.env, root, controller.signal);
     const names = walkStackNames(task, slot.index!);
@@ -1167,6 +1186,8 @@ async function walk(command: string[]): Promise<number> {
     console.error(firstRedactedDiagnostic(error instanceof Error ? error.message : String(error)));
   } finally {
     for (const [signal, handler] of handlers) process.off(signal, handler);
+    await restorePrivateFile(kernelEnvFile, kernelEnvSnapshot);
+    await restorePrivateFile(webVarsFile, webVarsSnapshot);
     await slot?.release();
   }
   return interrupted === undefined ? code : 128 + SIGNAL_NUMBERS[interrupted];
