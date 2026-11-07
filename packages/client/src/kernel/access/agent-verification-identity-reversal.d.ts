@@ -2,6 +2,7 @@ import type { Pool } from 'pg';
 import { type CommandTransaction } from '../command/command.ts';
 import type { IdentitySourceConsumerReference, IdentitySourceConsumerContext } from '../semantic/identity-source-consumer-custody.ts';
 import { type AccountIdentitySource } from './agent-verification-identity.ts';
+export { ACCOUNT_IDENTITY_REVERSAL_SETTLEMENT_DECLARATION, ACCOUNT_IDENTITY_REVERSAL_VERIFY_DECLARATION, } from './agent-verification-identity-work.ts';
 import type { AgentVerificationReversal } from './agent-verification.ts';
 type Bound = Readonly<{
     source: AccountIdentitySource;
@@ -37,10 +38,3 @@ export type AccountIdentityReversalSettlement = Readonly<{
 export declare function readAccountIdentityReversalSettlement(pool: Pool, reference: IdentitySourceConsumerReference, context: IdentitySourceConsumerContext): Promise<AccountIdentityReversalSettlement | null>;
 /** A brand/observation alone never proves currentness: lock the durable native rows again. */
 export declare function verifyAccountIdentityReversalSettlement(tx: CommandTransaction, reference: IdentitySourceConsumerReference, proof: AccountIdentityReversalSettlement): Promise<boolean>;
-/** Verify re-locks settlementFor; Source names this same body as the settlement getter. */
-export declare function ACCOUNT_IDENTITY_REVERSAL_VERIFY_DECLARATION(): Readonly<{
-    work: import("./contract/bounds.ts").AccessWorkDimensions;
-    engineRequests: 0;
-}>;
-export declare const ACCOUNT_IDENTITY_REVERSAL_SETTLEMENT_DECLARATION: typeof ACCOUNT_IDENTITY_REVERSAL_VERIFY_DECLARATION;
-export {};

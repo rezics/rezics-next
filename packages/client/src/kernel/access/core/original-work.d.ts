@@ -4,6 +4,8 @@ export { ORIGINAL_WORK_AXES };
 export declare function originalControlWork(rows: number, points: number, statements: number, bytes: number, emptySeeks?: number): AccessWorkDimensions;
 export declare function originalWorkVector(work: AccessWorkDimensions): readonly number[];
 export declare function sumOriginalControl(...parts: readonly AccessWorkDimensions[]): AccessWorkDimensions;
+/** Repeat one closed body at a positive reached-call count. Zero is a missing child, never a free pass. */
+export declare function scaleOriginalControl(work: AccessWorkDimensions, calls: number): AccessWorkDimensions;
 export declare function admitOriginalWorkDeclaration(declaration: AccessWorkDeclaration | null): AccessWorkDimensions | null;
 export declare const ORIGINAL_NATIVE_CONTROL: AccessWorkDimensions;
 export declare const HISTORY_ORIGINAL_CONTROL: Readonly<{
