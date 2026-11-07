@@ -1,5 +1,5 @@
 import { classifySeries, type GrowthModelBound, type SeriesPoint } from './growth-model.ts';
-import { GROWTH_REPETITION_CAPACITY, numericExtent } from './growth-numeric.ts';
+import { GROWTH_REPETITION_CAPACITY, GrowthModelArithmeticError, numericExtent } from './growth-numeric.ts';
 
 /** One scale's measured values. Profile CTE limitation strings stay on the source record and are not fitting inputs. */
 export type CalibrationRunPoint = Readonly<{
@@ -352,7 +352,7 @@ export function detectableSlope(
       try {
         return classifySeries(direct, bound).outcome;
       } catch (error) {
-        if (!(error instanceof TypeError)) throw error;
+        if (!(error instanceof GrowthModelArithmeticError)) throw error;
       }
     }
 
@@ -389,7 +389,7 @@ export function detectableSlope(
     try {
       return classifySeries(scaled, bound).outcome;
     } catch (error) {
-      if (!(error instanceof TypeError)) throw error;
+      if (!(error instanceof GrowthModelArithmeticError)) throw error;
       throw new TypeError(`Cannot classify slope ${slope} under the ${bound} growth bound: ${error.message}`, {
         cause: error,
       });
