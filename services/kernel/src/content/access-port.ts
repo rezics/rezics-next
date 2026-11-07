@@ -2,6 +2,7 @@
  * Native function signatures are imported only as types, preserving their generic and opaque evidence contracts.
  * No Access implementation is loaded when Content imports these forwarding functions. */
 import type * as NativeAccess from '../access/content-adapter.ts';
+export { accessCheck } from '../request/access.ts';
 
 export interface ContentAccessPort {
   readonly accessCommandAttempt: typeof NativeAccess.accessCommandAttempt;

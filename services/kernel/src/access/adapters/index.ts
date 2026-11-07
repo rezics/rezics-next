@@ -20,6 +20,7 @@ export { agentIdentityMaintenance, bindAgentIdentityMaintenance } from './bind.t
 export type { AgentIdentityMaintenancePort } from './identity-maintenance.ts';
 export { createNativeAccessReadingPorts } from './reading.ts';
 export { createNativeCopyAccountAdmission, nativeCopyAccountWork } from './copy-account.ts';
+export { createNativeCollectionRuleAccountAuthority } from './collection-rule-authority.ts';
 
 export {
   createLibraryAccountEligibilityAdapter,

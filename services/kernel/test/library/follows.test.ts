@@ -4,8 +4,6 @@ import { createHash, randomUUID } from 'node:crypto';
 import { bundledDigest, bundledRelease } from '@rezics/definitions/bundled';
 import { Value } from 'typebox/value';
 import type pg from 'pg';
-import { readAccount, type Account } from '../../src/access/account-data.ts';
-import { createAccess } from '../../src/access/permission.ts';
 import { GrantDeniedError } from '../../src/access/contract/errors.ts';
 import { EVENT_TYPES, readBatch } from '../../src/events/log.ts';
 import type { CollectionVisibility } from '../../src/library/collection-model.ts';
