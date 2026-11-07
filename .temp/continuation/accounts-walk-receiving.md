@@ -12,7 +12,7 @@ This is receiving work on the sole existing walk. All nineteen original personas
 
 The authenticated scope-isolated packet accepts Auth custody of the exact recovery-delivery patch. Reverse-application matched both current hunks before mutation: the helper/default binding in services/auth/scripts/dev-stack.ts and its single configuration assertion in services/auth/test/dev-stack-config.test.ts. The resulting files match integrated base 016cc7320e6e0b7ab0690e6f1e7fa3bbb1e12f05. Driver, focused assertions and with-dev-server selection are retained unchanged. Recovery still requires the supported private delivery after real HTTP recovery/start and proves new sign-in plus old password/session rejection. Receive the actual Auth producer before asserting J03; no fake token or skipped recovery.
 
-Choice: reuse six journey and three server-selection checks, required Auth selection and final Web workspace typing. The existing checks pin the nineteen-row census, causal admission failure, preservation of finished/independent paths and explicit unit-only server exemption. No acceptance assertion changed; no extra test is justified by this exact ownership reversal. No screenshots under the current manager instruction.
+Choice: reuse six journey and four server-selection checks, required Auth selection and final Web workspace typing. The existing checks pin the nineteen-row census, causal admission failure, preservation of finished/independent paths and explicit unit-only server exemption. No acceptance assertion changed; no extra test is justified by this exact ownership reversal. No screenshots under the current manager instruction.
 
 ## Candidate and first safe evidence
 
@@ -41,6 +41,24 @@ After each executed round report full tested source, UTC, passing/19, slowest fa
 - .temp/check-logs/eafe7372-33cf-4f9d-b2ea-45fb6f24e07b.log: present.
 - .temp/check-logs/651e5fb7-a2fd-426a-b5c8-5823d02fb1ae.log: present.
 - .temp/check-logs/24f21cc7-3f9a-4da3-84a3-1510f8468281.log: present.
+
+## Post-correction check and source receive
+
+Check e2e62721-c664-46c1-85d9-d6318cd60ed5 tested source 069969f4fcfdf5604609cfb4aec6adb799bce4ff; submission UTC 2026-11-07T11:18:41.457Z (individual observation UTC unretained), host c. Full log .temp/check-logs/e2e62721-c664-46c1-85d9-d6318cd60ed5.log was read. Combined exit 1 is not a pass.
+
+Commands, in original order:
+
+- `bun run --cwd apps/web typecheck`: PASS; one affected Web workspace, 89.62s total, 74.75s compiler workspace. This is final changed-workspace typing after the last code edit; no root regression suite was requested.
+- `bun apps/web/scripts/focused.ts --private-network -- bun test tests/accounts-goal-journeys.test.ts tests/with-dev-server.test.ts`: PASS, six journey and four server tests in separate fresh runtimes. This current base contains an additional cancellation test; earlier nine-test observations remain historical.
+- `bun test services/auth/scripts/dev-stack.test.ts services/auth/test/dev-stack-config.test.ts services/auth/test/dev-stack.test.ts`: 28 pass/2 fail, 121 assertions, 15.08s. Both affected Auth files match integrated base after the exact transferred-hunk reversal.
+
+First mounted operation: Reylo compilation of services/kernel/src/commerce/content-edition-buyer-fact.sql before actual DATABASE_URL admission, 1334.36ms. Phase: native mounted host composition; no persona/HTTP frontier reached. The full safe error is retained in the log. Existing Auth914 owns the supplied-database-before-import repair; no fake URL or reduced catalogue is authorized.
+
+Independent fresh-fixture operation: Taskfile dev:infra → Kernel database up → docker run publishing 127.0.0.1:54329. Exact diagnostic: Bind for 127.0.0.1:54329 failed: port is already allocated. Failed after 12824.25ms, before setup/start/worker/persona/browser. UUID container names did not reserve the fixed host port. This result does not reproduce or explain the previous 300-second worker stall. Existing Auth914 retains selected-port fixture construction through the supported allocator, probes and original browser/cleanup acceptance. Do not inspect or stop another attempt's listener. Check-host run cleanup belongs to its controller custody; no local stack was started here.
+
+Authenticated decision .temp/owner-decisions/60796.md says not to rerun affected admission before actual allocator/Auth bindings. Therefore the new required landing selection is focused Web only, and the original Auth failures are returned to their existing producer rather than retried on unchanged admission. All nineteen journey rows remain the last historical 0/19 census; this check is not an ordinary walk or a newly reached persona. Native/API/browser/growth and promotion remain unqualified.
+
+Reviewed source 452da6ea5f43e26967726283ed2fec7c04d3e8ca: Auth declares @rezics/operations as a consuming test dependency; installed fixtures retain their public exports/lifetimes and original assertions. That revision is not yet an ancestor of this candidate. Receive through controller integration on this same handle; no manifest/lock edit or parallel harness is made by this walk. Keep actual credential preparation, current credentials, uncertainty and native cleanup assertions. Neither the dependency review nor source integration implies runtime or root-gate success.
 
 ## Accepted reference union
 
@@ -183,6 +201,9 @@ References preserve receiving obligations; their presence is not an assertion th
 - services/auth/README.md
 - services/kernel/src/access/README.md
 - services/kernel/src/work/README.md
+- .temp/goal/content/accounts-walk-scope-recovery-retry-20261107.md
+- .temp/goal/content/auth-recovery-and-sale-owner-receiving-20261107.md
+- .temp/goal/content/verification-dependency-lifetime-receiving-20261107.md
 
 ## Complete archived folded briefs
 
