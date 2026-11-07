@@ -13,7 +13,7 @@ import { ContentNotFoundError } from '../../src/content/commands.ts';
 import { newId, partitionOf, routeOf } from '../../src/route/route.ts';
 import { bootstrapRelease } from '../../src/semantic/definitions.ts';
 import { createSubject } from '../../src/semantic/subject.ts';
-import { writeProposal } from '../../src/semantic/candidates.ts';
+import { writeProposal } from '../../src/semantic/candidate-proposal.ts';
 import { admittedAccess, authenticateAccount } from '../support/admitted-access.ts';
 import { checkGrowth, openGrowthDatabase, seed, type Population } from '../support/growth.ts';
 import { configureTestReceiptKeys } from '../support/receipt-keys.ts';
