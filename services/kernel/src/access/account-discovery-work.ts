@@ -6,6 +6,7 @@ import { noEffect, runCommand } from '../command/command.ts';
 import { withConnection } from '../database/pool.ts';
 import { partitionOf, routeOf } from '../route/route.ts';
 import type { WorkContext } from '../work/registry.ts';
+import { classifyUnavailability } from './unavailable.ts';
 
 const basis = {
   actorAccountId: '00000000-0000-8000-8000-000000000001',
@@ -154,11 +155,40 @@ export async function redriveAccountDiscovery(
   return { delivered, more: foreign.length === limit || local.length === limit || coverage.more };
 }
 
-/** Default production service, plus source-event wakeups for normal mutations.
- * The sweep catches installation, direct native writers and missed wakeups. Each
- * step is bounded and does not hold any connection across foreign commands.
+/** A missed wakeup is recovered within this interval plus one bounded pass. */
+export const ACCOUNT_DISCOVERY_IDLE_MS = 15 * 60_000;
+export const ACCOUNT_DISCOVERY_START_DELAY_MS = 1_000;
+export const ACCOUNT_DISCOVERY_STEP_MS = 10;
+export const ACCOUNT_DISCOVERY_RETRY_MS = 1_000;
+export const ACCOUNT_DISCOVERY_MAX_RETRY_MS = 60_000;
+const PARTITIONS = 4096;
+
+/** Timer port keeps scheduling tests independent of wall time and global timers. */
+export type AccountDiscoveryTimers = {
+  now(): number;
+  schedule(run: () => Promise<void>, delay: number): () => void;
+};
+const timers: AccountDiscoveryTimers = {
+  now: Date.now,
+  schedule(run, delay) {
+    const timer = setTimeout(() => void run(), delay);
+    return () => clearTimeout(timer);
+  },
+};
+
+/** Recovery shares one serial worker with source-event wakeups, so it holds at
+ * most one pool connection, leaving the rest for boot and foreground requests.
+ * It starts after SDK launch with a one-second grace and yields if the pool has
+ * waiters or only one free slot. Empty steady state: zero queries during the
+ * 15-minute idle interval; an empty 4096-home pass costs 36,864 SQL statements
+ * (two intent reads plus seven coverage statements per home), about 39 SQL/s
+ * averaged over pass + idle at the minimum 10 ms step, versus about 900 SQL/s
+ * continuously before backoff. Events wake only their home without restarting
+ * that idle scan. Durable intents make coalesced in-memory wakeups disposable.
  */
-export function registerAccountDiscoveryWork(context: WorkContext): void {
+export function registerAccountDiscoveryWork(context: WorkContext, time: AccountDiscoveryTimers = timers): void {
+  const wakeups = new Set<number>();
+  let wake = () => {};
   context.addEffects([
     {
       name: 'account_discovery_redrive',
@@ -166,32 +196,90 @@ export function registerAccountDiscoveryWork(context: WorkContext): void {
       async run(event) {
         const data = event.data as { accountId?: string };
         const route = data.accountId ? routeOf(data.accountId) : null;
-        if (route !== null)
-          await redriveAccountDiscovery({ pool: context.pool, clock: context.clock }, partitionOf(route));
+        if (route !== null) {
+          wakeups.add(partitionOf(route));
+          wake();
+        }
       },
     },
   ]);
   context.addService(() => {
     let stopped = false;
+    let running = false;
     let partition = 0;
-    let timer: ReturnType<typeof setTimeout> | undefined;
+    let passWorked = false;
+    let preferSweep = false;
+    let sweepAt = time.now() + ACCOUNT_DISCOVERY_START_DELAY_MS;
+    let availableAt = sweepAt;
+    let retry = ACCOUNT_DISCOVERY_RETRY_MS;
+    let failed: { home: number; sweep: boolean } | undefined;
+    let cancel: (() => void) | undefined;
     let pending: Promise<void> = Promise.resolve();
-    const tick = () => {
-      pending = (async () => {
-        try {
-          const result = await redriveAccountDiscovery({ pool: context.pool, clock: context.clock }, partition);
-          if (!result.more) partition = (partition + 1) % 4096;
-        } catch (error) {
-          console.error('Account discovery redrive failed', error);
-        }
-        if (!stopped) timer = setTimeout(tick, 10);
-      })();
+
+    const schedule = () => {
+      if (stopped || running) return;
+      cancel?.();
+      const next = wakeups.size ? time.now() : sweepAt;
+      cancel = time.schedule(tick, Math.max(0, Math.max(availableAt, next) - time.now()));
     };
-    timer = setTimeout(tick, 0);
+    const step = async () => {
+      // Do not join a boot/foreground checkout queue or consume its last slot.
+      const pool = context.pool;
+      if (pool.waitingCount || pool.totalCount - pool.idleCount >= (pool.options.max ?? 10) - 1) {
+        availableAt = time.now() + ACCOUNT_DISCOVERY_RETRY_MS;
+        return;
+      }
+      const sweep = failed?.sweep ?? (time.now() >= sweepAt && (preferSweep || !wakeups.size));
+      const home = failed?.home ?? (sweep ? partition : wakeups.values().next().value!);
+      // Delete before awaiting: an event during delivery must survive this step.
+      if (!sweep) wakeups.delete(home);
+      try {
+        const result = await redriveAccountDiscovery({ pool, clock: context.clock }, home);
+        failed = undefined;
+        retry = ACCOUNT_DISCOVERY_RETRY_MS;
+        availableAt = time.now() + ACCOUNT_DISCOVERY_STEP_MS;
+        preferSweep = !sweep;
+        if (!sweep) {
+          if (result.more) wakeups.add(home);
+          return;
+        }
+        passWorked ||= result.delivered > 0 || result.more;
+        if (!result.more) {
+          partition = (partition + 1) % PARTITIONS;
+          if (partition === 0) {
+            sweepAt = time.now() + (passWorked ? ACCOUNT_DISCOVERY_STEP_MS : ACCOUNT_DISCOVERY_IDLE_MS);
+            passWorked = false;
+          }
+        }
+      } catch (error) {
+        if (!sweep) wakeups.add(home);
+        if (classifyUnavailability(error) === undefined) throw error;
+        failed = { home, sweep };
+        console.error('Account discovery redrive failed', error);
+        // Wakeups never bypass pressure backoff; retry the same failed home.
+        availableAt = time.now() + retry;
+        retry = Math.min(retry * 2, ACCOUNT_DISCOVERY_MAX_RETRY_MS);
+      }
+    };
+    const tick = async () => {
+      if (stopped) return;
+      cancel = undefined;
+      running = true;
+      pending = step();
+      try {
+        await pending;
+      } finally {
+        running = false;
+      }
+      schedule();
+    };
+    wake = schedule;
+    schedule();
     return {
       async stop() {
         stopped = true;
-        clearTimeout(timer);
+        wake = () => {};
+        cancel?.();
         await pending;
       },
     };
