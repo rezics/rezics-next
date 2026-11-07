@@ -26,7 +26,6 @@ import { DefinitionGuideLink } from './definition-guide-view';
 import { DefinitionMeaning } from './definition-meaning';
 import { CandidateReview, type CandidateTransport } from '../../subject/candidate-review';
 import { subjectHref } from '../../subject/load-subject';
-import type { Related } from '../../subject/types';
 import { ContributionLifecycle } from './contribution-lifecycle-view';
 import type { ContributionAddress, ContributionTransport } from './contribution-lifecycle';
 import {
@@ -1179,7 +1178,7 @@ export const StatementEditor = catalogueEditor(StatementEditorWorkspace);
 function liveStatementReadingPort(): StatementReadingPort {
   return {
     renderValue: ({ snak, related, locale, link }) => (
-      <CandidateValue snak={snak} related={related as Related} locale={locale} link={link} />
+      <CandidateValue snak={snak} related={related} locale={locale} link={link} />
     ),
   };
 }

@@ -1,5 +1,4 @@
 import { useMemo, type ReactNode } from 'react';
-import type { Related } from '../../subject/types';
 import {
   WorkReadingProvider,
   workReadingSectionClass,
@@ -12,7 +11,7 @@ import { CandidateValue } from './data';
 import type { PageLink } from './shared';
 
 function PageWorkValue({ snak, related, locale, link }: WorkReadingValueProps) {
-  return <CandidateValue snak={snak} related={related as Related} locale={locale} link={link as PageLink} />;
+  return <CandidateValue snak={snak} related={related} locale={locale} link={link as PageLink} />;
 }
 
 /** Pages adapter: the live CandidateValue surface and the work readers' section rhythm. */

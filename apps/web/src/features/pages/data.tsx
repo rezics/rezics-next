@@ -206,7 +206,7 @@ function timeText(value: unknown, locale: string): string {
   return timePresentation(value, locale).text;
 }
 
-function inlineValue(snak: Snak, related: Related, options: Options): ReactNode {
+function inlineValue(snak: Snak, related: StatementReadingValueProps['related'], options: Options): ReactNode {
   const { value, property } = snak;
   if (value.type === 'somevalue' || value.type === 'novalue') {
     return (
@@ -262,7 +262,7 @@ export function CandidateValue({
   link = PlainLink,
 }: {
   snak: Snak & { id?: string };
-  related: Related;
+  related: StatementReadingValueProps['related'];
   locale: string;
   subject?: string;
   /** Authorized responses from this comparison's current read, never draft envelopes or a shared cache. */
@@ -330,7 +330,7 @@ export function CandidateValue({
 }
 
 function PageStatementValue({ snak, related, locale, link }: StatementReadingValueProps) {
-  return <CandidateValue snak={snak} related={related as Related} locale={locale} link={link as PageLink} />;
+  return <CandidateValue snak={snak} related={related} locale={locale} link={link as PageLink} />;
 }
 
 /** Pages adapter: the live CandidateValue surface for statement summaries and editor reads. */
