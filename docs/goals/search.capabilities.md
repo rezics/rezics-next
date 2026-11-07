@@ -133,6 +133,26 @@ dedicated keys. No original output, disclosure, receipt or startup assertions ar
 Installed Members authority, Source process-root installation and Pool-aware relay lifecycle remain repairs of their
 existing owners. This walk receives their delivered integrations rather than creating another producer.
 
+The nine-file native selection at `7d4f8fe601856792cfaeff8e46d2bf5a3f1329d6` returned exit 1 in 180.700 seconds
+on host b. Account discovery passed 7/7, boot 2/2, copy construction 3/3, Members composition 2/2, second-scope
+generations 11/11, batch diagnostics 3/3 and bulk no-effect 3/3. Collection source-output remained 1/10 and canonical
+capture 1/16. Full Library composition removed the previous Collection POST 503: curated output fixtures then
+reached native `not_found`, while dynamic capture setup received HTTP 403. The historical 503 problem code,
+correlation and first native phase were not retained and cannot be reconstructed from the status assertion.
+Owned evidence: `.temp/goal/checks/worker-check-e0d75f33-40dc-4e00-9882-1ea59baae08b-2026-11-07T10-43-54.757Z-17f8be25.log`.
+
+Fixture decision: explicit public output uses dynamic membership with the actual `library_entry:list`,
+`progress_session:list` and `copy:list` scopes and their ordinary exposure gates. Curated authority remains asserted
+on a separate actual curated Collection, including two distinct occurrences of the same Subject; activated output,
+independent metadata readback, original holds, rollback and money guards remain asserted. Collection setup now
+retains only safe phase/endpoint/status/problem/correlation diagnostics on failure. This corrects fixtures to the
+installed contract without adding authorization behavior. The existing Members repair owns
+`Native public output projection exceeds its plan` at `native-public-output-work.ts:68` and the following
+SQLSTATE `25006`, `cannot execute INSERT in a read-only transaction`; no producer repair is duplicated here.
+Bootstrap continuation source `b09b9bb129ae6cdb5f6606612d4a4af3ca28f3ca`, integrated on dev as
+`08ac6bbe43eea4859cdf8ec5ab6534f9f660aae7`, is received. Its work-module assertions remain required; integration
+alone supplies no runtime pass.
+
 ### Last observed dev census
 
 Observed walk revision: `93eb7908d8e983998d4b280ea275b131aaa444a1` (origin/dev `b94d47ff56` including startup

@@ -25,19 +25,43 @@ export const sourceAllowance = (keys = 100): WorkAllowance => ({
 export async function sourceRuntimeFixture() {
   const native = await createProfileEntryFixture();
   try {
-    expect((await native.send('steward', 'POST', '/v1/platform/exposure/collections:open')).status).toBe(200);
+    for (const group of ['collections', 'personal_library', 'reading_progress'])
+      expect((await native.send('steward', 'POST', `/v1/platform/exposure/${group}:open`)).status).toBe(200);
     const owner = await native.identity([
       'subject:read',
       'collection:create',
       'collection:read',
       'collection:update',
       'collection:delete',
+      'library_entry:list',
+      'progress_session:list',
+      'copy:list',
     ]);
-    async function collection(visibility: 'private' | 'public' | 'unlisted' = 'public') {
+    async function collection(
+      visibility: 'private' | 'public' | 'unlisted' = 'public',
+      membershipKind: 'dynamic' | 'curated' = 'dynamic',
+    ) {
       const response = await native.send(owner.bearer, 'POST', '/v1/collections', {
         title: 'Explicit source runtime',
         visibility,
+        membershipKind,
+        ...(membershipKind === 'dynamic' ? { rule: { filter: { owner: { presence: true } } } } : {}),
       });
+      if (response.status !== 201) {
+        const problem = await response.clone().json();
+        expect(
+          response.status,
+          JSON.stringify({
+            phase: 'create-source-collection',
+            method: 'POST',
+            endpoint: '/v1/collections',
+            status: response.status,
+            code: problem.code,
+            type: problem.type,
+            correlation: response.headers.get('x-correlation-id'),
+          }),
+        ).toBe(201);
+      }
       expect(response.status).toBe(201);
       const id = (await response.json()).collection.id as string;
       return { route: routeOf(id)!, collectionId: id };
