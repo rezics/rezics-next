@@ -1709,6 +1709,7 @@ test('historical reader validates the complete captured closure before importing
     git(directory.path, ['clone', '--shared', '--no-checkout', producerRoot, '.']);
     const producerRef = git(producerRoot, ['symbolic-ref', '--short', 'HEAD']);
     git(directory.path, ['fetch', '--no-tags', producerRoot, producerRef]);
+    git(directory.path, ['fetch', '--no-tags', producerRoot, PROOF_PRODUCER_COMMIT]);
     git(directory.path, ['config', 'user.name', 'Fixture']);
     git(directory.path, ['config', 'user.email', 'fixture@example.invalid']);
     mkdirSync(join(directory.path, 'scripts'));
