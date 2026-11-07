@@ -1,6 +1,16 @@
 /** Library pure core. No Elysia, pg, SQL, Search, Access, Semantic or Content imports. */
 
-export { routeOf } from './route.ts';
+export { routeOf, partitionOf } from './route.ts';
+export {
+  SESSION_LIMITS,
+  boundOf,
+  createProgressOperationBounds,
+  retainSessionOperands,
+  sessionBytesWork,
+  sessionWorkOf,
+  statementWork,
+} from './progress-operations.ts';
+export type { ProgressOperationBounds } from './progress-operations.ts';
 export { grantCapable } from './grant.ts';
 export { CollectionWorkLedger, WORK_AXES, workAllowance, zeroWorkDimensions } from './work-ledger.ts';
 export {

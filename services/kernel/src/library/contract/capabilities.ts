@@ -4,6 +4,7 @@ import type { LibraryActor, LibraryAccountActor } from './actors.ts';
 import type { CanonicalCollectionCandidate, CollectionSourceObservation, PreparedCollectionSource } from './source.ts';
 import type { NestedAdmissionAccount } from './membership.ts';
 import type { WorkAllowance, WorkDimensions, WorkReceipt } from './work-dimensions.ts';
+import type { ProgressOperationCatalog } from './progress-operations.ts';
 
 export type IdentityWorkHandle = Readonly<{
   resultByteBound(key: string): number | undefined;
@@ -269,5 +270,6 @@ export type LibraryCapabilities = Readonly<{
   contentPublication: ContentPublicationCapability;
   identityNative: IdentityNativeCapability;
   sourceCapture: SourceCaptureCapability;
+  progressCatalog: ProgressOperationCatalog;
   accountAdmission: NestedAdmissionAccount;
 }>;

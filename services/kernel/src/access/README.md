@@ -66,6 +66,8 @@ Acceptance choice: retain existing verification, reversal, recovery and source-w
 tests pin exact receipt/Pool/deadline forwarding, error identity and scoped reset. Native composition supplies the
 producer declarations. Typing is the worker gate; runtime journeys remain with the integrated Goal walks.
 
+Decision: `adapters/account-statements.ts` is the Access-owned account-read and account-share SQL descriptor for Library progress planning. Account row work stays on Access's native work port; Library charges statement text and original binds. Existing account, grant and unavailability policies remain.
+
 ## Pure policy core consumer
 
 Decision: Kernel derives the compiled policy from its existing mounted actions and resolved resource roles; catalogue

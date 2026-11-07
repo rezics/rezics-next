@@ -45,6 +45,30 @@ export type {
   OccurrenceDraft,
   OrderedOccurrence,
 } from './membership.ts';
+export {
+  SESSION_LIMITS,
+  emptyProgressOperationCatalog,
+  emptySessionWork,
+} from './progress-operations.ts';
+export type {
+  ProgressAccessSqlCatalog,
+  ProgressCommandSqlCatalog,
+  ProgressOperationAdmission,
+  ProgressOperationApplication,
+  ProgressOperationCatalog,
+  ProgressSemanticSqlCatalog,
+  ProgressSessionSqlCatalog,
+  ProgressShelfStatement,
+  ProgressSqlDescriptor,
+  SessionCommandDeclaration,
+  SessionCommandOriginal,
+  SessionOperationKind,
+  SessionReadDeclaration,
+  SessionReadInput,
+  SessionReadKind,
+  SessionSqlKind,
+  SessionWork,
+} from './progress-operations.ts';
 export type {
   CollectionPublicationNativeCapability,
   CollectionRuleAuthorityCapability,

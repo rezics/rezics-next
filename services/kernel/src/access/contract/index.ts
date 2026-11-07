@@ -82,3 +82,8 @@ export type {
 } from './ports.ts';
 export type { AccessFollowCountAccount, AccessFollowCountProducer } from './follow-counts.ts';
 export type { AccessReadingIdentity, AccessReadingObservation, AccessReadingPorts } from './reading.ts';
+export type {
+  AccessAccountStatement,
+  AccessAccountStatementDeclaration,
+  AccessAccountStatementDescriptor,
+} from './account-statements.ts';

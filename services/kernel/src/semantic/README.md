@@ -6,6 +6,8 @@ implementation. Native reduction executes the identical SQL and serialized-bind 
 retention can compose the original complete cost without loading reduction execution. Existing publication,
 currentness and terminal fencing remain authoritative.
 
+Decision: `adapters/progress-identity-statements.ts` owns definition-release and identity-mapping SQL descriptors for Library progress planning, using `contract/progress-identity.ts` statement names. Library composes those producer maxima; it does not import the SQL. Mapping, definition activation and type/reference bounds stay Semantic-owned.
+
 This module owns subject facts and their item projections, partition paging, and immutable definition releases with editorial activation history.
 
 ## Semantic label policy

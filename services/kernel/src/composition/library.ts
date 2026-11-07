@@ -43,6 +43,7 @@ import {
   createIdentityDisclosureAdapter,
   type IdentityDisclosureAdapterPorts,
   createIdentityNativeCatalog,
+  createProgressOperationCatalog,
   createNativeSourceCaptureAdapter,
   createSearchPreparationAdapter,
   type SearchPreparationAdapterPorts,
@@ -271,6 +272,7 @@ export function composeLibraryDomain(options: LibraryComposeOptions = {}): Libra
       options.capabilities?.contentPublication ??
       createContentPublicationAdapter(nativeContentPublicationPorts(options)),
     identityNative,
+    progressCatalog: options.capabilities?.progressCatalog ?? createProgressOperationCatalog(),
     collectionRetentionNative: options.capabilities?.collectionRetentionNative ?? {
       retireCapture(tx, input) {
         return retireNativeCollectionCapturePage(tx as Parameters<typeof retireNativeCollectionCapturePage>[0], input);
