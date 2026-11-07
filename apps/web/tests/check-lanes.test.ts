@@ -101,6 +101,28 @@ test('runs fake files longest first in separate browser and unit pools, then rec
   }
 });
 
+test('a verifier test-name selector reaches each fresh per-file Bun process unchanged', async () => {
+  const file = join(fakeTests, 'filtered.test.ts');
+  const selected = join(events, 'filter-selected');
+  const excluded = join(events, 'filter-excluded');
+  writeFileSync(
+    file,
+    [
+      "import { test } from 'bun:test';",
+      "import { writeFileSync } from 'node:fs';",
+      `test('selected route', () => writeFileSync(${JSON.stringify(selected)}, 'ran'));`,
+      `test('excluded route', () => writeFileSync(${JSON.stringify(excluded)}, 'ran'));`,
+    ].join('\n'),
+  );
+  const run = options('filtered', [relative(app, file).split('\\').join('/')]);
+
+  const result = await runWebTestLanes({ ...run, testArgs: ['--test-name-pattern', 'selected route'] });
+
+  expect(result.failed).toEqual([]);
+  expect(readFileSync(selected, 'utf8')).toBe('ran');
+  expect(() => readFileSync(excluded, 'utf8')).toThrow();
+});
+
 test('bounds browser lanes separately while unit files use a wider pool', async () => {
   const browserOne = addFakeTest('browser-one.test.ts', { browser: true, delay: 500 });
   const browserTwo = addFakeTest('browser-two.test.ts', { browser: true, delay: 500 });
