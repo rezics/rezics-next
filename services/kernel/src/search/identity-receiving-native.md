@@ -14,9 +14,9 @@ digests, not Semantic support bodies or another common receipt ledger. Bigints u
 
 The six-method factory is implemented in [identity-receiving-native.ts](identity-receiving-native.ts). Its trusted
 configuration derives `Parameters<typeof createIdentitySourceSupportReader>[0]` and adds the actual Search client,
-consumer and physical index. Search aliases extract the canonical native unions; the public Library aliases and
-API remain Library-only. Native suites compose the Library domain through `composeLibraryDomain` before Collection
-source setup; Collection create does not invent a Search presentation path. Library cutover
+consumer, physical index and typed `identitySourceSupportReaderFactory`. Search aliases extract the canonical native
+unions; the public Library aliases and API remain Library-only. Native suites compose the Library domain through
+`composeLibraryDomain` before Collection source setup; Collection create does not invent a Search presentation path. Library cutover
 keeps Collection create on the owner account through own-account Collection commands and JWT
 scopes, mounts follow:create/delete as own-account, and keeps the verified Access actor for
 follow writes. access.grant of collection:* onto the owner-account resource is denied because
@@ -151,11 +151,11 @@ exports, dispatching the existing common lookup/admit/record/reconcile/release o
 The Library source, capture, hold and native purposes must remain separate. No foreign declaration is copied here.
 
 `createIdentitySourceSupportReader` is present and uses the exact `PublicFilterSourceFactory` configuration
-`{pool, routeKey, access, clock}`. The adopted participant receives only `{search, prefix, routeKey}` and its
-`IdentityEpochStep` receives `(pool, job)`. There is no installed Source configuration accessor for this participant.
-Trusted Source composition must supply that exact configuration for the same Pool before this participant can
-construct the real support reader. Creating another Access instance or replacing the reader with `subjectSource`
-would change authority. Neither is an implementation of this boundary.
+`{pool, routeKey, access, clock}`. Semantic process-root composition binds Search native ports before constructing
+the participant; this is required because the Semantic worker module registers before Search services start. The
+participant's receiving configuration carries the typed factory and exact same-Pool Source tuple, and each native
+receiving adapter constructs a fresh support reader from them. The fixed `IdentityEpochStep` still receives
+`(pool, job)`. This ordering does not create another Access instance or replace the reader with `subjectSource`.
 
 The existing writer owns enrollment, dispatch, settlement and retained copies. Its `SearchWriterBarrier` reports
 `firstApply: 'unavailable'` and `prepared: 'unavailable'`; no first-apply receiving preparation/dispatch hook is
