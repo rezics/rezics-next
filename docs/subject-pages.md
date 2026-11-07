@@ -12,9 +12,11 @@ This page spans those modules because a reader experiences one page; splitting i
 each owner ship a correct part and the page still fail.
 
 Decision: Configured Subject page composition owns profile selection, slot assembly and visit descriptor orchestration
-through a consumer-owned Semantic render/navigation port. The Semantic catalogue binding installs the current readers
-and descriptors at the Web route composition root; the page application owns the installed operation and its disclosure,
-continuation, receipt and work-budget semantics.
+through the page-owned contract in `features/pages/semantic-render-port.ts` and application in
+`features/pages/subject-page-application.tsx`. The Semantic catalogue binding in
+`features/catalogue/page-render-binding.tsx` installs the current readers and descriptors at the Web route
+composition root; the page application owns the installed operation and its disclosure, continuation, receipt and
+work-budget semantics.
 
 ## Reader Type display
 

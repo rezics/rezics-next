@@ -27,44 +27,7 @@ import { projectShareCardPage } from '../../media/share-card-page';
 import { locales } from '../../paraglide/runtime.js';
 import { assertSubjectPageReadActive } from './subject-page-read-lifetime';
 import type { KernelClient } from '@rezics/client';
-import { DefinitionReadError, fetchGuideRelease } from '../catalogue/definition-guide';
-import { showcaseWorkKind } from './showcase-work/model';
-
-async function includeReleasedWorkCatalogue(
-  client: KernelClient,
-  page: SubjectPageData,
-  authorization: string | undefined,
-  signal: AbortSignal,
-): Promise<SubjectPageData> {
-  if (page.catalogue || page.account) return page;
-  const read = subjectRead(page);
-  if (!read || !showcaseWorkKind(read.subject.type)) return page;
-  try {
-    const release = await fetchGuideRelease(
-      client,
-      read.subject.release,
-      authorization ? { authorization } : {},
-      signal,
-    );
-    assertSubjectPageReadActive(signal);
-    const released = Object.hasOwn(release.types, read.subject.type);
-    return {
-      ...page,
-      catalogue: released
-        ? {
-            state: 'released',
-            type: read.subject.type,
-            digest: release.digest,
-            definitions: { types: release.types, properties: release.properties },
-          }
-        : { state: 'unsupported', type: read.subject.type },
-    };
-  } catch (error) {
-    if (!(error instanceof DefinitionReadError)) throw error;
-    assertSubjectPageReadActive(signal);
-    return { ...page, catalogue: { state: 'unavailable', type: read.subject.type } };
-  }
-}
+import { includeReleasedWorkCatalogue } from './subject-page-application';
 
 export const subjectKernelClient = createServerOnlyFn(
   async (locale: string, realm?: string, expectedReader?: string | null, signal?: AbortSignal, board?: string) => {
@@ -160,7 +123,13 @@ const readSubjectPage = createServerFn({ method: 'GET', strict: false })
       if (loaded.kind === 'page') {
         loaded = {
           kind: 'page',
-          page: await includeReleasedWorkCatalogue(client, loaded.page, authorization, signal),
+          page: await includeReleasedWorkCatalogue(
+            client,
+            loaded.page,
+            subjectRead(loaded.page)?.subject,
+            authorization,
+            signal,
+          ),
         };
         loaded.page.requestedReader = data.reader;
       }
@@ -260,11 +229,23 @@ const readSubjectViewPages = createServerFn({ method: 'GET', strict: false })
       });
       assertSubjectPageReadActive(signal);
       if (loaded.kind !== 'page') return loaded;
-      const page = await includeReleasedWorkCatalogue(client, loaded.page, authorization, signal);
+      const page = await includeReleasedWorkCatalogue(
+        client,
+        loaded.page,
+        subjectRead(loaded.page)?.subject,
+        authorization,
+        signal,
+      );
       const overview =
         page.subject === loaded.overview.subject && page.catalogue
           ? { ...loaded.overview, catalogue: page.catalogue }
-          : await includeReleasedWorkCatalogue(client, loaded.overview, authorization, signal);
+          : await includeReleasedWorkCatalogue(
+              client,
+              loaded.overview,
+              subjectRead(loaded.overview)?.subject,
+              authorization,
+              signal,
+            );
       const enriched = { ...loaded, page, overview };
       const cardLocale = locales.find((locale) => locale === data.locale);
       const shareCard =
