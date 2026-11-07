@@ -7,7 +7,7 @@ import { mapSourceAdmissionPort, type SourceAdmissionCustody } from '../rich-pri
 import { captureAnnotationCredential, originalAnnotationCredential } from '../rich-private-entry/credential';
 import { admitPrivateSourceObservation } from '../rich-private-entry/native';
 import { readOriginalOwnVote } from '../../ratings/own-votes/readback';
-import { readRatingQuestion } from '../../features/pages/subject-ratings';
+import { readRatingQuestion } from '../../ratings/question-read';
 import {
   MAL_FIELD_CAP,
   MAL_PAGE,

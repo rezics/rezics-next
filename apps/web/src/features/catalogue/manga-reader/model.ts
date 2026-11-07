@@ -6,7 +6,7 @@ import { isRecord, pageText, spoilerLevel, type Stmt } from '../../pages/shared'
 import { relationItemRows } from '../../pages/relation-item-identity';
 import { defaultReader, type Reader } from '../../../subject/reader';
 import type { SubjectLinksResponse, SubjectRead } from '@rezics/client';
-import type { Subject } from '../../../subject/types';
+import type { Subject } from '../../../subject/read-contract';
 import { originalLanguage } from '../../../subject/language';
 import { mangaOccurrenceKey, type MangaOccurrence } from './navigation';
 

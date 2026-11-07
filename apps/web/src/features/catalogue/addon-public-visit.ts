@@ -1,4 +1,4 @@
-import { candidateContext } from '../../subject/candidates';
+import { candidateContext } from '../pages/visit-host-port';
 import { subjectHref } from '../../subject/subject-href';
 import { subjectVisitReturn } from '../pages/subject-visit-navigation';
 import { addonType } from './addon-profile';

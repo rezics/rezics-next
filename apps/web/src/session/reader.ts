@@ -9,3 +9,5 @@ export {
 
 /** Ordinary readers consume the installed admission hooks, without another provider. */
 export { useOperation, useOperationAdmission, type GatedOperation, type OperationAdmission } from '../kernel/exposure';
+
+export type { ReadCredentialMode } from '../reader/lifetime/contract';

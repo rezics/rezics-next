@@ -3,7 +3,7 @@ import { buttonVariants } from '@rezics/ui/shadcn/button';
 import { useFeatureSlots } from '../../shell/feature-slots';
 import { useSession } from '../../session/query';
 import { m } from '../../paraglide/messages.js';
-import { candidateContext } from '../../subject/candidates';
+import { candidateContext } from './visit-host-port';
 import { graphPublicSourceReturnHref } from './graph-browser/public-visit';
 import { subjectHref } from '../../subject/subject-href';
 import { subjectVisitReturn } from './subject-visit-navigation';

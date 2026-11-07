@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { pickText } from '@rezics/composition';
 import { Button } from '@rezics/ui/shadcn/button';
 import { m } from '../../../paraglide/messages.js';
-import { candidateContext } from '../../../subject/candidates';
+import { candidateContext } from '../visit-host-port';
 import { useCatalogueLifetime } from '../../../subject/candidate-lifetime';
 import { subjectHref } from '../../../subject/subject-href';
 import { withSubjectVisitReturn } from '../subject-visit-navigation';

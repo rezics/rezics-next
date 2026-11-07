@@ -3,7 +3,7 @@ import type { KernelClient } from '@rezics/client';
 import { readSubjectLabelAssignments } from '../subject-labels.ts';
 import { archiveTransportLost } from '../archive-entry-recovery/native';
 import { isPlatformClosedError } from '../../session/reading-policy';
-import { QUESTION } from '../../features/pages/subject-ratings';
+import { QUESTION } from '../../ratings/question-ids';
 import { readHomeQuestion } from '../../features/pages/home-feed-questions';
 import type { SessionEnv } from '../../session/client';
 import { prepareSession, requestCsrfToken, sessionSubject, viewerCredential } from '../../session/request';

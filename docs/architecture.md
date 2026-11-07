@@ -120,6 +120,12 @@ Identity Rating repair values stay on `identity-rating-repair-producer.ts`; Sour
 
 Decision: `config-check-runtime.ts` constructs check runners and reloads train settings from supplied dependencies; `createRuntime` keeps process, store and lifecycle ownership.
 
+Decision: Web Semantic, Search and Library readers import shared candidate advice from the subject contract leaf and
+page identity from the visit-host port. Page selectors and type inheritance are independent of page rendering and
+graph loading. Reusable read adapters expose their defining leaves explicitly; browser lifetime consumers use the
+public session adapter. These entries add no dependency allowances. This import-only migration uses workspace typing
+as acceptance; product behavior and existing assertions remain unchanged.
+
 **Enforcement.** One static architecture check (manifest validation plus a dependency-graph check) runs on every
 landing's final candidate. It needs no database and runs in seconds. Workers run the same check with `--changed`
 before handoff. Receive changes through that manifest and check using actual public edges; do not add another writer,

@@ -1,10 +1,7 @@
 import type { KernelClient } from '@rezics/client';
 
-type AccountsRead = NonNullable<Awaited<ReturnType<KernelClient['accounts']['get']>>['data']>;
-export type PageAuthor =
-  | AccountsRead['accounts'][number]
-  | (import('../threads/thread-page').ThreadPageAuthor & { state?: never; kind?: never });
-export type PageAuthors = Record<string, PageAuthor> | null;
+import type { PageAuthor, PageAuthors } from './read-contract';
+export type { PageAuthor, PageAuthors } from './read-contract';
 
 /** Reads a page's distinct public identities. A failed optional read has no effect on the page's primary content. */
 export async function readPageAuthors(

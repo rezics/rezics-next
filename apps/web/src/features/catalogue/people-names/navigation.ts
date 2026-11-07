@@ -1,5 +1,5 @@
 import { PAGE_GLOBAL_CONTEXT } from '@rezics/composition';
-import type { Subject } from '../../../subject/types';
+import type { Subject } from '../../../subject/read-contract';
 import { subjectHref } from '../../../subject/subject-href';
 import { contextHref } from '../../pages/context-navigation';
 import { withSubjectVisitReturn } from '../../pages/subject-visit-navigation';

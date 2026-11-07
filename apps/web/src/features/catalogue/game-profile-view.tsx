@@ -1,4 +1,4 @@
-import { candidateContext } from '../../subject/candidates';
+import { candidateContext } from '../pages/visit-host-port';
 import { gameClassificationReturnHref, gameVisitSearch, type GameCurrentVisit } from './game-current-visit';
 import type { GameClassificationLocator } from './game-current-visit-descriptor';
 import { gameClassificationReturnStorageKey } from './game-current-visit-descriptor';

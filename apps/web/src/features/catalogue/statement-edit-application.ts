@@ -1,13 +1,12 @@
 import type { KernelClient, SubjectRead } from '@rezics/client';
 import type { PropertyDefinition, Release } from '@rezics/definitions';
 import { checkStatementInput, type Violation } from '@rezics/definitions/validate';
+import { candidateContext, candidateFailure } from '../pages/visit-host-port';
 import {
-  candidateContext,
-  candidateFailure,
   type CandidateViewerActions,
   type ViewerActionComponent,
   nativeOperationAvailability,
-} from '../../subject/candidates';
+} from '../../subject/candidate-contract';
 import type {
   EditorAddress,
   EditorRead,

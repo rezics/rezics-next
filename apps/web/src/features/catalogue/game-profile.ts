@@ -1,5 +1,5 @@
 import type { KernelClient, SubjectRead, SubjectReadQuery } from '@rezics/client';
-import { candidateContext } from '../../subject/candidates';
+import { candidateContext } from '../pages/visit-host-port';
 import type { GameCurrentVisit } from './game-current-visit';
 import { encodedBytes } from './release-fidelity/model';
 import { pickText } from '@rezics/composition';

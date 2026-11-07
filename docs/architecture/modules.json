@@ -1129,7 +1129,8 @@
         "apps/web/src/library/loans-actions.ts",
         "apps/web/src/library/settings-contract.ts",
         "apps/web/src/library/settings-adapter.ts",
-        "apps/web/src/library/search-action-binding.tsx"
+        "apps/web/src/library/search-action-binding.tsx",
+        "apps/web/src/library/copies-query.ts"
       ],
       "allowedDependencies": [
         "client",
@@ -1243,7 +1244,23 @@
         "apps/web/src/features/pages/account-page-application.tsx",
         "apps/web/src/features/pages/page-model.ts",
         "apps/web/src/search/saved-query-selection.ts",
-        "apps/web/src/search/library-action-port.tsx"
+        "apps/web/src/search/library-action-port.tsx",
+        "apps/web/src/features/pages/type-inheritance.ts",
+        "apps/web/src/features/pages/subject-read.ts",
+        "apps/web/src/features/pages/subject-page-load.ts",
+        "apps/web/src/features/pages/subject-summary-reading/visit.ts",
+        "apps/web/src/features/pages/graph-browser/public-visit.ts",
+        "apps/web/src/features/pages/values.tsx",
+        "apps/web/src/features/pages/subject-community-lifetime.tsx",
+        "apps/web/src/features/pages/source-concept-reading/navigation.ts",
+        "apps/web/src/features/pages/view-heading.tsx",
+        "apps/web/src/features/pages/context-navigation.tsx",
+        "apps/web/src/features/pages/scalar-value.tsx",
+        "apps/web/src/features/pages/producer-history-reading/admission.tsx",
+        "apps/web/src/features/pages/view-cursor.ts",
+        "apps/web/src/features/pages/subject-queries.ts",
+        "apps/web/src/search/search-window/focus.ts",
+        "apps/web/src/features/pages/home-feed-questions.ts"
       ],
       "allowedDependencies": [
         "client",
@@ -1428,7 +1445,12 @@
         "apps/web/src/threads/index.ts",
         "apps/web/src/threads/profile-avatar-upload.ts",
         "apps/web/src/threads/upload-vocabulary.ts",
-        "apps/web/src/threads/write-prompts.tsx"
+        "apps/web/src/threads/write-prompts.tsx",
+        "apps/web/src/ratings/question-contract.ts",
+        "apps/web/src/ratings/question-ids.ts",
+        "apps/web/src/ratings/question-read.ts",
+        "apps/web/src/ratings/own-votes/readback.ts",
+        "apps/web/src/threads/authoring-departure.tsx"
       ],
       "allowedDependencies": [
         "client",
@@ -1480,7 +1502,19 @@
         "apps/web/src/features/catalogue/screen-reading-application.tsx",
         "apps/web/src/features/catalogue/page-render-binding.tsx",
         "apps/web/src/features/catalogue/character-reading-port.ts",
-        "apps/web/src/features/catalogue/character-reading-application.tsx"
+        "apps/web/src/features/catalogue/character-reading-application.tsx",
+        "apps/web/src/features/catalogue/statement-edit-application.ts",
+        "apps/web/src/features/catalogue/definition-meaning.tsx",
+        "apps/web/src/features/catalogue/music-context-profile/navigation.ts",
+        "apps/web/src/features/catalogue/value-explanation-entry.tsx",
+        "apps/web/src/features/catalogue/work-franchise-reading/navigation.ts",
+        "apps/web/src/features/catalogue/catalogue-entry.ts",
+        "apps/web/src/features/catalogue/statement-summary.tsx",
+        "apps/web/src/features/catalogue/work-tag-reading/entry.tsx",
+        "apps/web/src/features/catalogue/person-reader/contract.ts",
+        "apps/web/src/features/catalogue/people-facts/visit.tsx",
+        "apps/web/src/features/catalogue/source-concept-explorer/index.ts",
+        "apps/web/src/features/catalogue/concept-works/contract.ts"
       ],
       "allowedDependencies": [
         "client",
@@ -1601,7 +1635,21 @@
         "apps/web/src/session/csrf.ts",
         "apps/web/src/features/count.ts",
         "apps/web/src/report/contract/contribution-actions.ts",
-        "apps/web/src/report/index.ts"
+        "apps/web/src/report/index.ts",
+        "apps/web/src/subject/candidate-contract.ts",
+        "apps/web/src/subject/read-contract.ts",
+        "apps/web/src/identity/read-contract.ts",
+        "apps/web/src/reader/lease.ts",
+        "apps/web/src/session/observation.ts",
+        "apps/web/src/subject/candidate-lifetime.tsx",
+        "apps/web/src/subject/language.ts",
+        "apps/web/src/features/feed/home-reaction-currentness-recovery.tsx",
+        "apps/web/src/kernel/use-sync-external-store-with-selector.ts",
+        "apps/web/src/session/expected-reader.ts",
+        "apps/web/src/kernel/viewer-exposure.ts",
+        "apps/web/src/session/browser-state.ts",
+        "apps/web/src/kernel/languages.ts",
+        "apps/web/src/shell/route-state.tsx"
       ],
       "allowedDependencies": [
         "content-edition-contract",

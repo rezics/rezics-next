@@ -1,9 +1,9 @@
 import type { Release } from '@rezics/definitions';
 import { facetProperties, readNativeSpoilerLevel } from '@rezics/filter';
-import type { Related, Subject } from '../../../subject/types';
+import type { Related, Subject } from '../../../subject/read-contract';
 import { subjectHref } from '../../../subject/subject-href';
 import { bestRank, pageText, type Stmt } from '../../pages/shared';
-import { typeExtends } from '../../pages/graph-browser';
+import { typeExtends } from '../../pages/type-inheritance';
 
 export const WORK_TAG_PAGE_SIZE = 12;
 

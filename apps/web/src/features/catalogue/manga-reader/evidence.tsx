@@ -1,7 +1,7 @@
 import type { Snak } from '../../pages/shared';
 import { pageText, linkClass, linkColor } from '../../pages/shared';
 import { m } from '../../../paraglide/messages.js';
-import type { RelationDefinition } from '../../../subject/relations';
+import type { RelationDefinition } from '../../../subject/read-contract';
 import { useWorkReading, type WorkReadingLink } from '../work-reading-port';
 import { mangaRelatedLabels, type MangaReaderRow } from './model';
 import { mangaCorrectionAddress } from './navigation';

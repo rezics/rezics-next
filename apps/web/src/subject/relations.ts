@@ -1,20 +1,9 @@
 import { pickText } from '@rezics/composition';
 import { m } from '../paraglide/messages.js';
 
-/** The display groups of the Relations view, in the order the page shows them; `other` holds what has no group yet. */
-export const RELATION_GROUPS = ['order', 'derivation', 'world', 'membership', 'association', 'other'] as const;
-export type RelationGroup = (typeof RELATION_GROUPS)[number];
-
-/** How one relation property reads from the page subject's side of the inverse read. */
-export type RelationDefinition = {
-  label: string;
-  forwardLabel?: string;
-  /** Inert reader presentation; semantic property labels and identities retain their own meaning. */
-  readerLabel?: string;
-  forwardReaderLabel?: string;
-  group: RelationGroup;
-  symmetric: boolean;
-};
+import { RELATION_GROUPS, type RelationGroup, type RelationDefinition } from './read-contract';
+export { RELATION_GROUPS } from './read-contract';
+export type { RelationGroup, RelationDefinition } from './read-contract';
 
 type ReleaseProperty = {
   labels?: Record<string, string>;

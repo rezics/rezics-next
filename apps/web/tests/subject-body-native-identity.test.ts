@@ -1,6 +1,7 @@
 import { expect, test } from 'bun:test';
 import { agentPageHead, type AgentPage } from '../src/features/pages/agent-page';
-import { subjectBody, subjectPageJsonLd, subjectPageTitle } from '../src/features/pages/subject';
+import { subjectPageJsonLd, subjectPageTitle } from '../src/features/pages/subject';
+import { subjectBody } from '../src/features/pages/subject-read';
 import recording from '../src/kernel/recorded/agent-page.json';
 
 const origin = 'https://rezics.test';

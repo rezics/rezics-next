@@ -4,6 +4,15 @@ import type { CandidateFailure } from '../features/pages/visit-host-port';
 
 export { candidateContext, candidateFailure };
 export type { CandidateFailure };
+import type { CandidateSlot, CandidateViewerActions, ViewerActionComponent } from './candidate-contract';
+export type {
+  CandidateSlot,
+  ViewerActionEntry,
+  ViewerActionComponent,
+  CandidateViewerActions,
+  NativeOperationAvailability,
+} from './candidate-contract';
+export { nativeOperationAvailability } from './candidate-contract';
 
 type Endpoint = ReturnType<KernelClient['subjects']>;
 type NativeCandidatePage = NonNullable<Awaited<ReturnType<Endpoint['candidates']['get']>>['data']>;
@@ -15,7 +24,6 @@ export function candidateHasPayload(candidate: NativeCandidatePage['candidates']
   return !('deleted' in candidate && candidate.deleted === true);
 }
 export type CandidateField = { id: string; label: string; multivalued?: boolean };
-export type CandidateSlot = { target?: string; sameAs?: string; key?: string };
 export type CandidateSelection = { candidate: string; rank: 'normal' | 'preferred' };
 export type ReviewContext = NonNullable<
   Awaited<ReturnType<ReturnType<KernelClient['contexts']>['get']>>['data']
@@ -28,25 +36,6 @@ export type ContextComparison = {
   inherited: SubjectRead['subject']['statements'][string];
   adoption: CandidatePage['adoption'];
 };
-export type ViewerActionEntry = { action: string; operations: string[] };
-export type ViewerActionComponent =
-  | { state: 'not-requested' }
-  | { state: 'unavailable'; reason: 'not-found' | 'unavailable' }
-  | { state: 'available'; actions: ViewerActionEntry[] };
-export type CandidateViewerActions = { subject: ViewerActionComponent; context: ViewerActionComponent };
-export type NativeOperationAvailability = 'allowed' | 'denied' | 'unavailable';
-
-export function nativeOperationAvailability(
-  component: ViewerActionComponent | undefined,
-  action: string,
-  operation: string,
-): NativeOperationAvailability {
-  if (!component || component.state !== 'available') return 'unavailable';
-  return component.actions.some((entry) => entry.action === action && entry.operations.includes(operation))
-    ? 'allowed'
-    : 'denied';
-}
-
 export type CandidateRead =
   | CandidateFailure
   | {

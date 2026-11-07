@@ -1,7 +1,7 @@
 import { QueryClientContext } from '@tanstack/react-query';
 import { useCallback, useContext, useLayoutEffect, useReducer, useRef, useSyncExternalStore } from 'react';
 import { addressLease } from '../../../../reader/lease';
-import { browserObservation, type BrowserObservationSnapshot } from '../../../../session/observation';
+import { browserObservation, type BrowserObservationSnapshot } from '../../../../reader/lease';
 
 const noSubscribe = () => () => {};
 const unobserved = () => 'unobserved';

@@ -1,6 +1,6 @@
 import type { ReactNode } from 'react';
 import { m } from '../../paraglide/messages.js';
-import { candidateContext } from '../../subject/candidates';
+import { candidateContext } from '../pages/visit-host-port';
 import { ViewHeading } from '../pages/view-heading';
 import type { LiteraryVisitInput } from './literary-current-visit';
 

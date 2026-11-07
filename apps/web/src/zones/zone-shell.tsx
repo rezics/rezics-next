@@ -21,7 +21,7 @@ import { loadSubjectLibrarySlot } from '../library/subject-slot';
 import type { SubjectReactions } from '../features/pages/subject-reactions';
 import type { SubjectLibrarySlotData } from '../library/subject-slot';
 import type { SessionEnv } from '../session/client';
-import type { ReadCredentialMode } from '../kernel/credential';
+import type { ReadCredentialMode } from '../session/reader';
 import { defaultReader, type Reader } from '../subject/reader';
 import { loadReader } from '../subject/load-reader';
 import { useEffect, useMemo, useRef, useState, type ComponentProps, type ReactNode } from 'react';

@@ -1,6 +1,6 @@
 import { useMemo, useRef } from 'react';
 import type { Release } from '@rezics/definitions';
-import type { Related, Subject } from '../../../subject/types';
+import type { Related, Subject } from '../../../subject/read-contract';
 import { contextHref } from '../../pages/context-navigation';
 import { subjectVisitReturn, workTagReturn, workTagReturnHref } from '../../pages/subject-visit-navigation';
 import { projectWorkTags } from './model';

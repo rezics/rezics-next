@@ -2,8 +2,8 @@ import type { KernelClient, SubjectRead } from '@rezics/client';
 import type { Release } from '@rezics/definitions';
 import { pickText } from '@rezics/composition';
 import { checkStatementInput, checkSubjectInput, type Violation } from '@rezics/definitions/validate';
-import type { CandidateViewerActions } from '../../subject/candidates';
-import { candidateContext } from '../../subject/candidates';
+import type { CandidateViewerActions } from '../../subject/candidate-contract';
+import { candidateContext } from '../pages/visit-host-port';
 import type { SessionEnv } from '../../session/client';
 import {
   initialTerms,

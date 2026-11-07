@@ -7,7 +7,7 @@ import { EditorFailure, PartValue } from './statement-editor-view';
 import type { FactsCurrent } from './subject-facts';
 import { literaryFields } from './literary-profile';
 import type { LiteraryCurrentVisit } from './literary-current-visit';
-import { pageText } from '../pages/data';
+import { pageText } from '../pages/shared';
 
 type Assertion = FactsCurrent['public']['subject']['statements'][string][number];
 type Locator = { property: string; statement: string };

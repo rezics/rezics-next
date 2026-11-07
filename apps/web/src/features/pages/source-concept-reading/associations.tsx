@@ -7,7 +7,7 @@ import { pageLanguageName } from '../locale-presentation';
 import { subjectHref } from '../../../subject/load-subject';
 import { catalogueEntries } from '../../catalogue/catalogue-entry';
 import { FactInspectionEntry } from '../../catalogue/people-facts/visit';
-import type { ProfileReading } from '../../catalogue/person-reader/reader';
+import type { ProfileReading } from '../../catalogue/person-reader/contract';
 import { conceptRequested, type ConceptStatement, type ConceptRead } from '../../catalogue/source-concept-explorer';
 import { CandidateValue } from '../data';
 import { spoilerLevel } from '../shared';

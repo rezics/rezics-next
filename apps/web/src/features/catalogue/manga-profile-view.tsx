@@ -1,4 +1,4 @@
-import { candidateContext } from '../../subject/candidates';
+import { candidateContext } from '../pages/visit-host-port';
 import { subjectHref } from '../../subject/subject-href';
 import { mangaGlobalVisitHref, type MangaPublicVisit } from './manga-public-visit';
 import { catalogueEditor, useEditorLifetime } from './editor-lifetime';

@@ -8,7 +8,7 @@ import type { SessionEnv } from '../../session/client';
 import { creationStatement, type StatementInput, type EditorRead } from './statement-editor';
 import type { RelationRead } from '../../subject/relation-candidates';
 import { readTypeDescriptor, type CurrentTypeDescriptor, type CurrentTypeRead } from './type-directory-client';
-import { candidateContext } from '../../subject/candidates';
+import { candidateContext } from '../pages/visit-host-port';
 
 export const characterType = 'wd:Q95074';
 export const characterUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
