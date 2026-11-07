@@ -9,7 +9,13 @@ import { kernelClient } from '../kernel/client';
 import { isPlatformClosedError, isPlatformClosedProblem } from '../kernel/platform-closed';
 import type { SessionEnv } from '../session/client';
 import { prepareSession, viewerCredential } from '../session/request';
-import { recordedMoneyUnit, recordedTaxBehavior, type CommerceMoneySchema, type MoneySchemaApi } from './money-schema';
+import {
+  parseMoneySchema,
+  recordedMoneyUnit,
+  recordedTaxBehavior,
+  type CommerceMoneySchema,
+  type MoneySchemaApi,
+} from './money-schema';
 import { UUID } from './price';
 import { creatorEditionSearch, creatorOffersSearch, type CreatorOffersSearch } from './creator-offer-address';
 export { creatorEditionSearch, creatorOffersSearch } from './creator-offer-address';
