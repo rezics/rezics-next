@@ -254,6 +254,7 @@ test('Bun custody preserves the runtime-owned direct child exit status', async (
     await custody.close();
   }
   expect(custody.settled).toBe(true);
+  expect(await child.exited).toBe(7);
 });
 
 test('Bun process custody preserves an AbortError captured before stop starts', async () => {
