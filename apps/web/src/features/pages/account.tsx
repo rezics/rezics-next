@@ -1,41 +1,23 @@
-import {
-  CollectionWindowControls,
-  CollectionWindowsContext,
-} from '../../accounts/public-profile/collection-windows/host';
-import { PublicAccountState } from '../../accounts/public-profile/view';
-import { readFailure } from '../../accounts/public-profile/read';
 import { useOperation } from '../../kernel/exposure';
 import { Cover } from '@rezics/ui/cover';
 import { ContentItem } from '@rezics/ui/content-item';
-import { Empty, EmptyDescription, EmptyHeader, EmptyTitle } from '@rezics/ui/shadcn/empty';
-import { useContext, useId, useRef, useSyncExternalStore, type ReactNode, type SyntheticEvent } from 'react';
+import { useId, useSyncExternalStore, type SyntheticEvent } from 'react';
 import { coverSrc } from '../../media/cover-src';
 import { m } from '../../paraglide/messages.js';
-import { accountOf, viewIsPublic, accountOperationAllowed, readAccountViewerActions } from './account-read';
+import { accountOf } from './account-profile-reading';
+import { accountOperationAllowed, readAccountViewerActions } from './account-read';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { personalRead } from '../../kernel/query';
 import { browserObservation } from '../../session/observation';
 import { useSession } from '../../session/query';
-import { Failed, Preview, sectionClass, useOverview, viewHref, type OverviewValue } from './overview';
-import { isRecord, linkClass, linkColor, webUrl } from './shared';
+import type { OverviewValue } from './overview';
+import { useOverview } from './overview-section';
+import { PublicAccountState } from '../../accounts/public-profile/view';
+import { AccountList } from './account-page-application';
+import { linkClass, linkColor, webUrl } from './shared';
 import { ContributionReturnRecovery, ContributionRow } from '../../accounts/public-profile/contributions/row';
-import {
-  ContributionActionsHost,
-  contributionPublicationSource,
-  useContributionActionsPageScope,
-} from '../../accounts/public-profile/contribution-actions/host';
-import { contributionActionsWire } from '../../accounts/public-profile/contribution-actions/actions';
-import { subjectHref } from '../../subject/subject-href';
+import { subjectHref } from '../../subject/load-subject';
 import { AccountFollow } from '../../accounts/public-profile/follow';
-import { ContributionWindowControls } from '../../accounts/public-profile/contribution-windows/controls';
-import { useContributionWindowRoute } from '../../accounts/public-profile/contribution-windows/route';
-import {
-  contributionCoordinateIsBounded,
-  retireContributionWindow,
-  type ContributionWindowOwner,
-  type ContributionWindowOutcome,
-} from '../../accounts/public-profile/contribution-windows/state';
-
 /** Private controls start after hydration and disappear throughout every refresh. */
 function AccountManagementLinks({ id, value }: { id: string; value: OverviewValue }) {
   const session = useSession();
@@ -253,250 +235,16 @@ export function AccountIdentity(props: Record<string, unknown>) {
   );
 }
 
-type ListSpec = {
-  slot: string;
-  view: 'posts' | 'reviews' | 'discussion' | 'collections';
-  kind: 'accountPosts' | 'accountThreads' | 'accountCollections';
-  title: (locale: string) => string;
-  items: (body: Record<string, unknown>) => unknown;
-  row: (item: Record<string, unknown>, value: OverviewValue, index: number) => ReactNode;
-};
-
-/** The first page of one of the account's lists. A preview links to the view; a view links to the next page. */
-function AccountList({ props, spec }: { props: Record<string, unknown>; spec: ListSpec }) {
-  const collectionPagesAdmitted = useOperation('account.collections');
-  const collectionWindows = useContext(CollectionWindowsContext);
-  const windowed = spec.kind === 'accountCollections' && props.paged === true && collectionWindows !== null;
-  const state = useOverview(props.id);
-  const actionPage = useContributionActionsPageScope();
-  const windowRoute = useContributionWindowRoute();
-  const sectionRef = useRef<HTMLElement | null>(null);
-  if (!state) return null;
-  const { value, section } = state;
-  if (!value.account) return null;
-  const actionView =
-    spec.view === 'posts' || spec.view === 'reviews' || spec.view === 'discussion' ? spec.view : undefined;
-  if (!viewIsPublic(value.profile, spec.view)) {
-    if (windowRoute && typeof window !== 'undefined') retireContributionWindow(window);
-    return null;
-  }
-  if (!section) return null;
-  const id = String(props.id);
-  const title = spec.title(value.locale);
-  const options = { locale: value.locale as never };
-  const view = viewHref(value, spec.view);
-  const canOpenView = spec.kind !== 'accountCollections' || collectionPagesAdmitted;
-  const actionProfile = value.profile;
-  const windowOwner: ContributionWindowOwner | null =
-    windowRoute && actionView && actionProfile
-      ? { accountId: actionProfile.id, view: actionView, locale: value.locale, published: true }
-      : null;
-  const windowCursor = actionPage && actionPage.view === actionView ? actionPage.cursor : null;
-  const windowControls = (
-    outcome: ContributionWindowOutcome,
-    next: string | null,
-    failure?: 'denied' | 'preparing' | 'unavailable' | 'invalid-cursor',
-  ) =>
-    windowRoute && windowOwner && actionView ? (
-      <ContributionWindowControls
-        owner={windowOwner}
-        cursor={windowCursor}
-        next={next}
-        outcome={outcome}
-        {...(failure ? { failure } : {})}
-        title={title}
-        region={sectionRef}
-      />
-    ) : null;
-  const failedList = () =>
-    windowRoute && windowOwner ? (
-      <section
-        ref={sectionRef}
-        data-slot={spec.slot}
-        data-state="failed"
-        aria-labelledby={`${id}-title`}
-        className={sectionClass}
-        tabIndex={-1}
-      >
-        <h2 id={`${id}-title`} className="text-2xl font-semibold">
-          {title}
-        </h2>
-        <p role="status" className="text-sm text-muted-foreground [overflow-wrap:anywhere]">
-          {m.subject_section_failed({}, options)}
-        </p>
-        {windowControls('failed', null, 'unavailable')}
-      </section>
-    ) : (
-      <Failed slot={spec.slot} id={id} title={title} locale={value.locale} />
-    );
-  if (!section.ok) {
-    const failure = readFailure(section.status ?? 503);
-    return (
-      <section
-        ref={windowRoute ? sectionRef : undefined}
-        data-slot={spec.slot}
-        aria-labelledby={`${id}-title`}
-        className={sectionClass}
-        tabIndex={windowRoute ? -1 : undefined}
-      >
-        <h2 id={`${id}-title`} className="text-2xl font-semibold">
-          {title}
-        </h2>
-        <PublicAccountState state={failure} />
-        {windowRoute && actionView ? (
-          windowControls('failed', null, failure)
-        ) : windowed && failure !== 'denied' ? (
-          <CollectionWindowControls locale={value.locale} failed invalid={failure === 'invalid-cursor'} />
-        ) : failure === 'invalid-cursor' ? (
-          canOpenView && view ? (
-            <a data-slot="restart" href={view} className={`${linkClass} inline-flex min-h-11 items-center`}>
-              {m.public_account_start_again({}, options)}
-            </a>
-          ) : null
-        ) : failure !== 'denied' ? (
-          <a data-slot="retry" href="" className={`${linkClass} inline-flex min-h-11 items-center`}>
-            {m.public_account_retry({}, options)}
-          </a>
-        ) : null}
-      </section>
-    );
-  }
-  if (section.read.kind !== spec.kind) return failedList();
-  const listed = spec.items(section.body);
-  if (!Array.isArray(listed)) return failedList();
-  const limit = typeof props.limit === 'number' ? props.limit : listed.length;
-  const rows = listed.filter(isRecord);
-  if (spec.kind !== 'accountCollections' && rows.length > 20) return failedList();
-  const items = rows.slice(0, limit);
-  const rawNext = section.body.next;
-  if (
-    actionView &&
-    windowRoute &&
-    rawNext !== undefined &&
-    rawNext !== null &&
-    !contributionCoordinateIsBounded(rawNext)
-  )
-    return failedList();
-  const next = typeof rawNext === 'string' && rawNext ? rawNext : null;
-  const paged = props.paged === true;
-  const list = (
-    <ul data-slot={`${spec.slot}-items`} className="space-y-4 break-words">
-      {items.map((item, index) => spec.row(item, value, index))}
-    </ul>
-  );
-  const actionPublication =
-    actionPage && actionProfile ? contributionPublicationSource(actionPage.page, actionProfile.id) : null;
-  const actionList =
-    paged &&
-    actionView &&
-    actionProfile &&
-    actionPublication &&
-    actionPage &&
-    actionPage.view === actionView &&
-    actionPage.page.account?.id === actionProfile.id &&
-    value.account?.id === actionProfile.id ? (
-      <ContributionActionsHost
-        accountId={actionProfile.id}
-        view={actionView}
-        cursor={actionPage.cursor}
-        locale={value.locale}
-        page={actionPage.page}
-        read={section.read}
-        source={section.body}
-        selection={section.body.actionSelection}
-        publication={actionPublication}
-        postsPublished={actionProfile.publicViews.posts}
-        reviewsPublished={actionProfile.publicViews.reviews}
-        rows={items}
-        wire={contributionActionsWire}
-      >
-        {list}
-      </ContributionActionsHost>
-    ) : (
-      list
-    );
-  if (paged) {
-    if (items.length === 0 && !next)
-      return (
-        <section
-          ref={windowRoute ? sectionRef : undefined}
-          data-slot={spec.slot}
-          aria-labelledby={`${id}-title`}
-          className={sectionClass}
-          tabIndex={windowRoute ? -1 : undefined}
-        >
-          <h2 id={`${id}-title`} className="sr-only" tabIndex={-1}>
-            {title}
-          </h2>
-          {actionView ? <ContributionReturnRecovery rows={items} locale={value.locale} /> : null}
-          <Empty className="border p-6">
-            <EmptyHeader>
-              <EmptyTitle className="sr-only">{title}</EmptyTitle>
-              <EmptyDescription>{m.agent_empty({}, { locale: value.locale as never })}</EmptyDescription>
-            </EmptyHeader>
-          </Empty>
-          {windowRoute && actionView && windowOwner ? windowControls('admitted', next) : null}
-          {windowed && <CollectionWindowControls locale={value.locale} />}
-        </section>
-      );
-    return (
-      <section
-        ref={windowRoute ? sectionRef : undefined}
-        data-slot={spec.slot}
-        aria-labelledby={`${id}-title`}
-        className={sectionClass}
-        tabIndex={windowRoute ? -1 : undefined}
-      >
-        <h2 id={`${id}-title`} className="sr-only" tabIndex={-1}>
-          {title}
-        </h2>
-        {actionView ? <ContributionReturnRecovery rows={items} locale={value.locale} /> : null}
-        {actionList}
-        {windowRoute && actionView && windowOwner ? (
-          windowControls('admitted', next)
-        ) : windowed ? (
-          <CollectionWindowControls next={next} locale={value.locale} />
-        ) : (
-          (!windowRoute || !actionView) &&
-          next &&
-          (spec.kind !== 'accountCollections' || collectionPagesAdmitted) && (
-            <a
-              data-slot="continuation"
-              rel="next"
-              href={`?cursor=${encodeURIComponent(next)}`}
-              className={`${linkClass} ${linkColor} inline-flex min-h-11 items-center text-sm font-medium hover:underline`}
-            >
-              {m.threads_next_page({}, { locale: value.locale as never })}
-            </a>
-          )
-        )}
-      </section>
-    );
-  }
-  if (items.length === 0 && (!next || !canOpenView)) return null;
-  return (
-    <Preview
-      slot={spec.slot}
-      id={id}
-      title={title}
-      count={next === null ? { value: rows.length, relation: 'exact' } : undefined}
-      more={next !== null || rows.length > items.length}
-      href={canOpenView ? view : null}
-      locale={value.locale}
-    >
-      {list}
-    </Preview>
-  );
-}
-
 export function AccountPosts(props: Record<string, unknown>) {
   return (
     <AccountList
       props={props}
       spec={{
+        failure: (state) => <PublicAccountState state={state} />,
         slot: 'account-posts',
         view: 'posts',
         kind: 'accountPosts',
+        recovery: (rows, locale) => <ContributionReturnRecovery rows={rows} locale={locale} />,
         title: (locale) => m.subject_posts({}, { locale: locale as never }),
         items: (body) => body.posts,
         row: (post, value, index) => (
@@ -512,9 +260,11 @@ export function AccountThreads(props: Record<string, unknown>) {
     <AccountList
       props={props}
       spec={{
+        failure: (state) => <PublicAccountState state={state} />,
         slot: props.threadKind === 'review' ? 'account-reviews' : 'account-threads',
         view: props.threadKind === 'review' ? 'reviews' : 'discussion',
         kind: 'accountThreads',
+        recovery: (rows, locale) => <ContributionReturnRecovery rows={rows} locale={locale} />,
         title: (locale) =>
           props.threadKind === 'review'
             ? m.subject_reviews({}, { locale: locale as never })
@@ -539,6 +289,7 @@ export function AccountCollections(props: Record<string, unknown>) {
     <AccountList
       props={props}
       spec={{
+        failure: (state) => <PublicAccountState state={state} />,
         slot: 'account-collections',
         view: 'collections',
         kind: 'accountCollections',

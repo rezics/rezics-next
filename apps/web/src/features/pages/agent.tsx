@@ -1,9 +1,10 @@
 import type { KernelClient } from '@rezics/client';
 import { planReads, platformRegistry, type CompositionDocument, type PageRead, type View } from '@rezics/composition';
 import { requestLanguages } from '../../kernel/languages.ts';
-import { accountHref, canonicalRedirect } from '../../subject/subject-href';
-import { accountOf } from './account-read';
-import { pageContext, type SubjectPageData } from './subject';
+import { accountHref, canonicalRedirect } from '../../subject/load-subject';
+import { accountOf, pageProfile } from './account-profile-reading';
+export { pageProfile } from './account-profile-reading';
+import { pageContext, type SubjectPageData } from './page-model';
 import { isRecord } from './shared';
 
 export class AgentReadError extends Error {
@@ -135,16 +136,6 @@ export async function continueAgentList(
     ...page,
     reads: { ...page.reads, [key]: { status: outcome.status, body: outcome.data ?? outcome.error?.value ?? null } },
   };
-}
-
-/** The successful public projection of the resolved page account, regardless of descriptor order. */
-export function pageProfile(page: SubjectPageData) {
-  const plan = planReads(platformRegistry, page.document as CompositionDocument, pageContext(page));
-  for (const [key, read] of Object.entries(plan.reads)) {
-    if (read.kind !== 'account' || page.reads[key]?.status !== 200) continue;
-    const profile = accountOf(page.reads[key]?.body);
-    if (profile?.id === page.account?.id) return profile;
-  }
 }
 
 /** The agent's name: its display name, else its handle. */

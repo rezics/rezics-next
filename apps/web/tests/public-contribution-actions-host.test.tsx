@@ -121,6 +121,8 @@ mock.module('../src/threads/actions', () => ({
   startThread: async () => ({ ok: false, reason: 'unavailable' }),
 }));
 
+const { AccountPageApplication } = await import('../src/features/pages/account-page-application');
+const { accountProfilePageBinding } = await import('../src/accounts/public-profile/page-binding');
 const { AccountPosts } = await import('../src/features/pages/account');
 const { OverviewContext } = await import('../src/features/pages/overview');
 const {
@@ -355,7 +357,9 @@ test('an admitted posts page mounts one bounded host and never derives a selecti
       <QueryClientProvider client={client}>
         <OverviewContext.Provider value={value}>
           <ContributionActionsPageScope page={page} cursor="original+/=cursor" view="posts">
-            <AccountPosts id="posts" paged limit={20} />
+            <AccountPageApplication profile={accountProfilePageBinding}>
+              <AccountPosts id="posts" paged limit={20} />
+            </AccountPageApplication>
           </ContributionActionsPageScope>
         </OverviewContext.Provider>
       </QueryClientProvider>

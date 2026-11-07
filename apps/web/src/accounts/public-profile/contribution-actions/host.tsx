@@ -64,17 +64,6 @@ export function useContributionActionsPageScope() {
   return useContext(ContributionActionsPageScopeContext);
 }
 
-export function contributionPublicationSource(page: SubjectPageData, accountId: string): object | null {
-  for (const result of Object.values(page.reads)) {
-    if (result.status !== 200 || !isRecord(result.body)) continue;
-    const accounts = result.body.accounts;
-    if (!Array.isArray(accounts)) continue;
-    const source = accounts.find((account) => isRecord(account) && account.id === accountId);
-    if (source) return source;
-  }
-  return null;
-}
-
 type RowObservation = readonly unknown[];
 
 export function observeContributionActionsRows(rows: readonly Record<string, unknown>[]): RowObservation[] {

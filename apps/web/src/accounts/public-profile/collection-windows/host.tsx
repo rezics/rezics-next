@@ -1,10 +1,8 @@
 import { createContext, useContext, useEffect, useLayoutEffect, useRef, useState, type MouseEvent } from 'react';
-import { planReads, platformRegistry, type CompositionDocument } from '@rezics/composition';
-import { pageContext, type SubjectPageData } from '../../../features/pages/subject';
-import { pageProfile } from '../page-read';
+import type { CollectionWindowReading } from '../../../features/pages/account-profile-port';
 import { useOperation } from '../../../kernel/exposure';
 import { m } from '../../../paraglide/messages.js';
-import { isRecord, linkClass } from '../../../features/pages/shared';
+import { linkClass } from '../../../features/pages/shared';
 import { CollectionVisit, collectionWindowHref, type Coordinate, type Movement } from './visit';
 
 type Navigation = {
@@ -18,7 +16,7 @@ export const CollectionWindowsContext = createContext<Navigation | null>(null);
 
 /** Owned by the named route, above the replacing cursor-keyed page. */
 export function useCollectionWindows(input: {
-  page?: SubjectPageData;
+  reading?: CollectionWindowReading | null | undefined;
   owner: string;
   revision: number;
   failure?: string | undefined;
@@ -31,28 +29,22 @@ export function useCollectionWindows(input: {
   retry: () => void;
 }) {
   const exposed = useOperation('account.collections');
-  const profile = input.page ? pageProfile(input.page) : undefined;
-  const publication = profile ? JSON.stringify(profile) : null;
+  const reading = input.reading;
   const slot = useRef<{ scope: string | null; owner: string; visit: CollectionVisit }>({
     scope: null,
     owner: JSON.stringify([input.owner, input.view, input.locale]),
     visit: new CollectionVisit(),
   });
   const owner = JSON.stringify([input.owner, input.view, input.locale]);
-  let admitted = false;
-  let denied = false;
-  if (input.page) {
-    const plan = planReads(platformRegistry, input.page.document as CompositionDocument, pageContext(input.page));
-    const entry = Object.entries(plan.reads).find(([, read]) => read.kind === 'accountCollections');
-    const response = entry ? input.page.reads[entry[0]] : undefined;
-    admitted = response?.status === 200 && isRecord(response.body) && Array.isArray(response.body.collections);
-    denied = response?.status === 401 || response?.status === 403;
-  }
   const scope =
-    slot.current.owner === owner && !input.page && input.failure !== 'denied' && input.view === 'collections' && exposed
+    slot.current.owner === owner &&
+    reading === undefined &&
+    input.failure !== 'denied' &&
+    input.view === 'collections' &&
+    exposed
       ? slot.current.scope
-      : profile && input.view === 'collections' && exposed && profile.publicViews.collections && !denied
-        ? JSON.stringify([profile.id, input.view, input.locale, publication])
+      : reading && input.view === 'collections' && exposed && reading.published && !reading.denied
+        ? JSON.stringify([reading.accountId, input.view, input.locale, reading.publication])
         : null;
   const [, render] = useState(0);
   if (slot.current.scope !== scope || slot.current.owner !== owner) {
@@ -61,9 +53,9 @@ export function useCollectionWindows(input: {
   }
   const { visit } = slot.current;
   useLayoutEffect(() => {
-    visit.receive(input.cursor, admitted);
+    visit.receive(input.cursor, reading?.admitted ?? false);
     render((revision) => revision + 1);
-  }, [visit, input.page, input.cursor, admitted, input.revision]);
+  }, [visit, reading, input.cursor, input.revision]);
   useEffect(() => () => visit.retire(), [visit]);
   if (!scope) return null;
   return {

@@ -1,3 +1,5 @@
+import { AccountPageApplication } from '../../features/pages/account-page-application';
+import { accountProfilePageBinding } from './page-binding';
 import type { QueryKey } from '@tanstack/react-query';
 import type { ComponentProps } from 'react';
 import { SubjectPage } from '../../features/pages/subject';
@@ -36,29 +38,35 @@ export function PublicProfilePage({
       })
     : null;
   return (
-    <ContributionWindowRouteScope route={windowRoute}>
-      <ContributionActionsPageScope
-        page={props.page}
-        cursor={cursor}
-        view={props.view ?? 'overview'}
-        verification={props.verification}
-        sourceQueryKey={sourceQueryKey}
-      >
-        <ProfileReadingResponse value={reading?.response ?? 'public'}>
-          <SubjectPage
-            {...props}
-            {...(reading ? { reader: reading.reader } : {})}
-            curation={
-              <>
-                {reading && <ProfileReadingStatus reading={reading} locale={props.locale} />}
-                {props.page.account && (
-                  <PublicAccountLinks handle={props.page.account.handle} locale={props.locale} realms={publicRealms} />
-                )}
-              </>
-            }
-          />
-        </ProfileReadingResponse>
-      </ContributionActionsPageScope>
-    </ContributionWindowRouteScope>
+    <AccountPageApplication profile={accountProfilePageBinding}>
+      <ContributionWindowRouteScope route={windowRoute}>
+        <ContributionActionsPageScope
+          page={props.page}
+          cursor={cursor}
+          view={props.view ?? 'overview'}
+          verification={props.verification}
+          sourceQueryKey={sourceQueryKey}
+        >
+          <ProfileReadingResponse value={reading?.response ?? 'public'}>
+            <SubjectPage
+              {...props}
+              {...(reading ? { reader: reading.reader } : {})}
+              curation={
+                <>
+                  {reading && <ProfileReadingStatus reading={reading} locale={props.locale} />}
+                  {props.page.account && (
+                    <PublicAccountLinks
+                      handle={props.page.account.handle}
+                      locale={props.locale}
+                      realms={publicRealms}
+                    />
+                  )}
+                </>
+              }
+            />
+          </ProfileReadingResponse>
+        </ContributionActionsPageScope>
+      </ContributionWindowRouteScope>
+    </AccountPageApplication>
   );
 }

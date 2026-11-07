@@ -1,5 +1,12 @@
 # Subject page composition
 
+Decision: Account and Agent list assembly uses the consumer-owned `AccountProfilePort`, installed by
+`PublicProfilePage` through `AccountPageApplication` and the concrete Accounts `page-binding` adapter. The application
+owns profile selection, planned response admission and window/action composition; Accounts retains native reader,
+receipt and cursor/focus lifetimes. The [binding contract](../../accounts/public-profile/README.md) describes the seam.
+`page-model.ts` and `overview-section.tsx` keep Agent reading and Account assembly out of the Subject renderer's value
+dependency graph. The native outcomes, publication gates and work bounds are unchanged.
+
 ## Session preparation and retained readings
 
 Decision: session preparation preserves an admitted public body; private controls bind to the first matching

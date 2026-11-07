@@ -1175,7 +1175,10 @@
         "apps/web/src/features/pages/showcase-work/index.ts",
         "apps/web/src/features/pages/shared.tsx",
         "apps/web/src/search/public-collection-directory/index.ts",
-        "apps/web/src/search/saved-query-condition-input.tsx"
+        "apps/web/src/search/saved-query-condition-input.tsx",
+        "apps/web/src/features/pages/account-profile-port.ts",
+        "apps/web/src/features/pages/account-page-application.tsx",
+        "apps/web/src/features/pages/page-model.ts"
       ],
       "allowedDependencies": [
         "client",
@@ -1212,7 +1215,8 @@
         "apps/web/src/accounts/resource-access/visits.ts",
         "apps/web/src/accounts/profile-editor/address.ts",
         "apps/web/src/accounts/profile-editor/page.tsx",
-        "apps/web/src/accounts/profile-editor/adapters.ts"
+        "apps/web/src/accounts/profile-editor/adapters.ts",
+        "apps/web/src/accounts/public-profile/page-binding.tsx"
       ],
       "allowedDependencies": [
         "client",
@@ -1430,7 +1434,8 @@
         "apps/web/src/subject/collection-return.ts",
         "apps/web/src/shell/collection-presentation.tsx",
         "apps/web/src/session/auth-page-routes.ts",
-        "apps/web/src/session/csrf.ts"
+        "apps/web/src/session/csrf.ts",
+        "apps/web/src/features/count.ts"
       ],
       "allowedDependencies": [
         "client",

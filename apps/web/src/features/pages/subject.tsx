@@ -96,7 +96,7 @@ import {
 } from 'react';
 import { requestLanguages } from '../../kernel/languages.ts';
 import { originalLanguage } from '../../subject/language';
-import { accountOf } from './account-read';
+import { accountOf } from './account-profile-reading';
 import { defaultReader, type Reader } from '../../subject/reader';
 import type { RelationDefinition } from '../../subject/relations';
 import type { Related, Subject, Summary } from '../../subject/types';
@@ -163,45 +163,13 @@ function pageComponents(framed: boolean) {
   return framed ? componentSets.framed : componentSets.page;
 }
 
-export type SubjectPageData = {
-  /** The subject the page is for; an agent page always has one, a route page none. */
-  subject: string | null;
-  /** The account an agent page is for, as the page read named it. */
-  account?: { id: string; handle: string };
-  context?: SelectedContext | undefined;
-  /** The requested selector survives a native Global fallback without inventing Realm metadata. */
-  requestedRealm?: string | undefined;
-  /** Exact supplied Board operand; it selects Subject-thread entry and grants nothing. */
-  board?: string | undefined;
-  /** Requested Board operand retained for reader-cache identity; it grants nothing. */
-  requestedBoard?: string | undefined;
-  /** BFF cache identity of this reading; never native read authority. */
-  requestedReader?: string | null | undefined;
-  continuation?: PageContinuation | undefined;
-  streams?: SubjectStreams | undefined;
-  community?: SubjectCommunity;
-  profile: string;
-  template: { scope: 'base' | 'generic' | 'route' | 'type'; key: string | null };
-  document: PageDocument;
-  /** The views the subject's templates define; absent when the kernel did not say. */
-  views?: string[];
-  /** Bounded active file/group vocabulary carried by the native page response. */
-  catalogue?: {
-    state: 'released' | 'unsupported' | 'unavailable';
-    type: string;
-    digest?: string;
-    definitions?: Pick<Release, 'types' | 'properties'>;
-    directions?: ReleasedRelationDirectionResult[];
-  };
-  /** Caller-bound native action state; page responses containing it are private and no-store. */
-  viewer?: NativePageBody['viewer'];
-  /** Native Access envelope for the selected subject; private and no-store with viewer. */
-  actions?: NativePageBody['actions'];
+import type { SubjectPageData as PageModel } from './page-model';
+export type SubjectPageData = PageModel & {
   /** Optional current Terms operation advice, independent of public names and subject-level actions. */
   termsAuthority?: import('../catalogue/subject-terms').TermsPageAuthority;
-  reads: Record<string, { status: number; body: unknown; retryAt?: number; headers?: Record<string, string> }>;
 };
-
+import { pageContext } from './page-model';
+export { pageContext } from './page-model';
 export type SubjectPageLoad =
   | { kind: 'missing' }
   | { kind: 'redirect'; id: string; target?: 'account' }
@@ -229,17 +197,6 @@ function placesType(content: readonly unknown[], type: string): boolean {
         (isRecord(node.props) &&
           Object.values(node.props).some((value) => Array.isArray(value) && placesType(value, type)))),
   );
-}
-
-/** The context the page's reads are planned in. */
-export function pageContext(page: Pick<SubjectPageData, 'subject' | 'account' | 'context' | 'continuation' | 'board'>) {
-  return {
-    subject: page.subject,
-    account: page.account ?? null,
-    ...(page.context ? { context: page.context } : {}),
-    ...(page.board ? { board: page.board } : {}),
-    ...(page.continuation ? { continuation: page.continuation } : {}),
-  };
 }
 
 /** A successful planned projection must name the page's already admitted Subject. */
