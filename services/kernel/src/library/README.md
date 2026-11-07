@@ -122,8 +122,9 @@ occurrences, nested admission, original/terminal disclosure, active release, wit
 identity-native declaration equality, ordinary `composeLibraryDomain` adapter install, and unbound collection-read deferral.
 Selected identity seal cases keep the selected bind vector; transform fixtures use routable job IDs. Existing native
 identity, Source/member/publication, assignment-growth and lifecycle-growth cases keep their unchanged assertions.
-Label assignment and parent SQL use LATERAL LIMIT-1 primary-key points and the reserved-source 32-row seek so
-owner-catalogue size cannot appear as Seq Scan or `personal_label` touches above 33. Set, unassign, restore and
+Label catalogue, assignment, parent and point SQL use typed input CTEs and LATERAL LIMIT-1 primary-key points
+(and the reserved-source 32-row seek) so generic prepared plans cannot Seq Scan an owner catalogue. Folded FULL
+warmup sees 34 `personal_label` parent observations and zero sequential scans. Set, unassign, restore and
 rename select each named operand once in the one-row request and read those columns in the mutation WHERE.
 
 Decision: Source capture, member preparation, owner-query preparation, publication, presentation and Entry/progress admission use

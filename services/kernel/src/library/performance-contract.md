@@ -17,9 +17,10 @@ domain-composition suite covering fake capabilities, independent contract/core/a
 declaration equality, ordinary native adapter install, Search filter-leaf ports, and unbound collection-read deferral; native identity,
 Source/member/publication, assignment-growth and lifecycle-growth cases keep their existing assertions.
 The Source adapter ABI keeps Search `ScopeWorkContext`; contract `work` stays unknown. Label
-admission SQL drives from the one-row request through LATERAL LIMIT-1 primary-key points and the 32-row reserved
-source; restore and rename lock the exact parent rather than scanning the owner catalogue. Those growth suites
-remain the oracles; this landing adds no parallel Label suite.
+admission SQL drives from the one-row request through typed input CTEs and LATERAL LIMIT-1 primary-key points and
+the 32-row reserved source, so generic prepared plans keep those indexes; restore, rename and point reads lock or
+seek the exact parent rather than scanning the owner catalogue. Those growth suites remain the oracles; this
+landing adds no parallel Label suite.
 Decision: native Label fixtures create the steward's Global `definitions:publish` / `definitions:activate` grants
 through the ordinary command after Access bootstrap; Access keeps Global point checks on the SQL evaluator so
 `platform.governance` is the first holder. No test-only grant rows. The operator bootstrap CLI installs native
@@ -45,8 +46,9 @@ request deadline and one Semantic `prepareReadDecisions` page, not per-subject A
 A concealed or moved Source on FULL by-label withholds (`subject: null`) through `withholdChangedSource`;
 it does not 503 the assignment page or shrink the raw cursor.
 The folded FULL warmup still sees 34 `personal_label` parent
-observations and zero sequential scans. Existing Label command, HTTP and growth suites pin this; no extra
-tests or stories.
+observations and zero sequential scans. Point, catalogue and assignment pages bind typed input CTEs the same
+way prefix already does, so generic prepared plans keep those indexes. Existing Label command, HTTP and growth
+suites pin this; no extra tests or stories.
 
 ## Collection operation costs
 
