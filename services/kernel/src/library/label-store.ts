@@ -135,7 +135,6 @@ export async function readPersonalLabel(
     route,
     account_id: accountId,
     label_id: labelId,
-    include_deleted: includeDeleted,
   };
   const plan = labelSqlPlan('label.read', readLabel.sql, input, {
     candidateKeys: 1,
@@ -155,7 +154,8 @@ export async function readPersonalLabel(
   });
   const result = await executeLabelSql(plan, (operands) => readLabel.run(queryClient(client), operands));
   const row = firstRow(result);
-  return row ? asRecord(row) : null;
+  if (!row || (!includeDeleted && row.deletedAt !== null)) return null;
+  return asRecord(row);
 }
 
 export async function renamePersonalLabel(
