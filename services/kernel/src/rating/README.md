@@ -1661,8 +1661,9 @@ never advance work. The port is service configuration, not caller input, and sup
 obligation handoff rolls back the entire page. Withdrawal uses local counted identities and requires no mapping
 observation. Repair has finite page, selection-byte, membership and event bounds, with no runtime funding, prepaid
 quotes, no-refill rule or foreign-price availability gate. Production composition binds the Semantic producer onto
-Rating's port through `installIdentityRatingRepairProducer` (runtime defaults, `createKernel`, Semantic adapters and
-kernel test preload); `createRatingModule` does not import that factory. Ordinary `application().identityRepair`
+Rating's port through `installIdentityRatingRepairProducer` (runtime defaults, default-worker work-module composition,
+Semantic adapters and kernel test preload). HTTP `createKernel` consumes the bound Rating port through
+`createRatingModule` and does not import the composition installer. Ordinary `application().identityRepair`
 uses the bound producer and `createIdentityRepairRead` for independent counted-vote, ordered-outbox, receipt
 obligation/mapping-digest and checkpoint observations. Native installed-composition acceptance is
 `test/rating/identity-repair-native.test.ts`. Performance owns nested-cost review and 256/1024/4096 growth of the
@@ -1671,6 +1672,10 @@ page seam.
 Decision: ordinary installed Rating identity repair uses the Semantic producer bound by host composition; omitting
 the producer on the command factory remains the unavailable seam; later identity changes and votes beyond the
 captured upper key stay on the retained obligation and converge through another admitted generation.
+
+Decision: composition binds `createIdentityRatingRepairProducer` through Rating's public `bindRatingIdentityProducer`
+and Semantic's public producer/continuation contract; server, default-worker and test preload install before commands
+are exposed; HTTP consumes the bound port via `createRatingModule` and does not import the composition installer.
 
 ## Voter Realm membership
 

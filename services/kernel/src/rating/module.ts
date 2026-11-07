@@ -38,7 +38,16 @@ export {
   runIdentityRepairGeneration,
 } from './identity-repair-run.ts';
 export type { RatingCapabilities, RatingAmbient } from './contract/capabilities.ts';
-export { bindRatingIdentityProducer, ratingIdentityProducer } from './segment-identity-guard.ts';
+export type {
+  RatingIdentityAuthority,
+  RatingIdentityMapping,
+  RatingIdentityProducer,
+} from './segment-identity-guard.ts';
+export {
+  bindRatingIdentityProducer,
+  ratingIdentityProducer,
+  unavailableRatingIdentityProducer,
+} from './segment-identity-guard.ts';
 
 export type RatingHttpApp = ReturnType<typeof ratingRoutes> & ReturnType<typeof sourceStatisticRoutes>;
 
@@ -68,7 +77,9 @@ export function createRatingDefinition() {
 }
 export type RatingDefinition = ReturnType<typeof createRatingDefinition>;
 
-/** The host lends its resources. Construction opens no connection and starts no process or service. */
+/** The host lends its resources. Construction opens no connection and starts no process or service.
+ * Omitting `producer` uses the composition-bound Semantic instance; passing one is the command-factory seam.
+ */
 export function createRatingModule(options: {
   pool: Pool;
   capabilities: RatingCapabilities;
