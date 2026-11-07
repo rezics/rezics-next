@@ -326,7 +326,8 @@ belongs in a token. See [signing.ts][signing], [website.ts][website] and [Kernel
 
 The kernel verifies issuer, audience, signature, methods and lifetime locally against Auth's cached public JWKS,
 then reads the actor's anchored account row once for authentication, rejecting inactive, fenced or below-floor
-identities. There is no request-path Auth introspection or consent lookup. Additional principal and command
+identities. Local walk stacks keep that JWKS URL on the issuer origin; native Auth is only the loopback transport
+for that exact document. There is no request-path Auth introspection or consent lookup. Additional principal and command
 freshness checks are authorization evidence, not a second authentication service. See
 [authenticate.ts][authenticate] and [command-admission.ts][command-admission].
 

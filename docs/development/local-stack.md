@@ -259,7 +259,8 @@ bun services/auth/scripts/dev-stack.ts walk -- <command...>
    Admission skips slots whose ports still have listeners, including containers surviving an interrupted launcher.
    Those listeners remain untouched; when all slots are occupied, the launch keeps its queue position.
 3. Runs `db up`, `search up` and `setup`, retires seed journals that name another database, then starts native Auth,
-   the worker and Kernel. Kernel fetches issuer JWKS from native Auth. An admitted stack runs Kernel without `--watch`
+   the worker and Kernel. Kernel verifies issuer-origin JWKS and fetches that exact public document from native Auth.
+   An admitted stack runs Kernel without `--watch`
    and does not start Auth pages or Web: its journey seeds first and then starts them.
    `REZICS_WALK_DEFER_FRONTENDS=1` also omits OpenSearch, the Kernel worker and a second Kernel process, serves
    Kernel HTTP from the Auth host, and waits for native JWKS and Kernel health instead; the child starts issuer then
@@ -318,7 +319,8 @@ loopback Auth issuer, audience, JWKS URL, Kernel host and API port in `services/
 tuple after reading that file, overriding a previous stack's identity. Native Library growth and browser qualification
 remain separate acceptance outcomes.
 
-Decision: admitted stacks fetch issuer JWKS from native Auth, start Kernel without watch, and defer Auth pages and Web
+Decision: admitted stacks set `AUTH_JWKS_URL` on the issuer origin and fetch that exact public JWKS from native Auth
+through the trusted local composition seam, start Kernel without watch, and defer Auth pages and Web
 until seeding finishes; Web installs the declared Reylo mapper so local and remote typing share one identity. Cleanup
 keeps the original failure and the exact cleanup diagnostic. Mapper-enabled workspace typechecks run one at a time
 inside an admitted 6GiB slice. Admitted runs reclaim inactive file pages in the run slice after install and before each

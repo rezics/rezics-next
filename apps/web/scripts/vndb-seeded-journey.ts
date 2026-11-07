@@ -98,7 +98,7 @@ try {
     kernelEnvFile,
     (await readFile(kernelEnvFile, 'utf8'))
       .replace(/^AUTH_ISSUER=.*$/m, `AUTH_ISSUER=${issuerOrigin}`)
-      .replace(/^AUTH_JWKS_URL=.*$/m, `AUTH_JWKS_URL=${nativeJwksUrl(`http://127.0.0.1:${nativePort}`)}`),
+      .replace(/^AUTH_JWKS_URL=.*$/m, `AUTH_JWKS_URL=${issuerOrigin}/.well-known/jwks.json`),
     { mode: 0o600 },
   );
   await command('setup', ['bun', 'services/auth/scripts/dev-stack.ts', 'setup']);
