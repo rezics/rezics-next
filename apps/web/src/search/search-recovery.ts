@@ -3,7 +3,7 @@ import type { KernelClient } from '@rezics/client';
 import { isPlatformClosedError } from '../kernel/platform-closed';
 import { parseDiscoveryPage, parseLegacySearchPage, type DiscoveryState, type LegacySearchPage } from './discovery';
 import { facetProblem, type FacetState } from './refinement/request';
-import type { SearchPageData } from './search';
+import type { SearchPageData } from './search-query-contract';
 import type { SearchLoaderDeps } from './search-params';
 import { narrowSearchRetryAt, searchRetryAt } from './search-recovery-retry';
 

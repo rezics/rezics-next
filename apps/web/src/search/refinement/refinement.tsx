@@ -11,7 +11,7 @@ import { m } from '../../paraglide/messages.js';
 import { localizedLabel } from '../results';
 import { useSearchRetryWait } from '../search-recovery-retry';
 import { FacetContinuationLedger, MAX_CACHED_FACET_PROPERTIES } from './facet-continuation';
-import { refinementHref, type RefinementConditions, type RefinementProperty } from './model';
+import { refinementHref, type RefinementConditions, type RefinementData, type RefinementProperty } from './model';
 import { PropertyPicker } from './property-picker';
 import { quantityUnitChangeNeedsConfirmation, searchQuantityUnitText } from '../condition-quantity';
 import {
@@ -24,6 +24,8 @@ import {
 import { type FacetPage, type FacetState, type RequestedFacet } from './request';
 import { RESOURCE_LANGUAGE_PROPERTY } from '../language-refinement';
 
+export type { RefinementData } from './model';
+
 /** Native refusal, restart and Retry-After block every entry; expiry only admits an explicit recovery. */
 function admitFacetRead(state: FacetState | undefined, recovery: boolean, now = Date.now()): boolean {
   if (!state || state.status === 'ready') return true;
@@ -33,11 +35,6 @@ function admitFacetRead(state: FacetState | undefined, recovery: boolean, now = 
   return recovery;
 }
 
-export type RefinementData = {
-  key: string;
-  properties: RefinementProperty[];
-  initial?: FacetState;
-};
 type Load = (facets: RequestedFacet[], signal: AbortSignal) => Promise<FacetState>;
 type BoundFocus = {
   id: number;

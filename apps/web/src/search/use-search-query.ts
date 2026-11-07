@@ -2,8 +2,7 @@ import { useEffect, useRef } from 'react';
 import { useRouter } from '@tanstack/react-router';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useReaderAddress, useWorkspaceAdmission } from '../session/reader';
-import { searchQueryOptions } from './search-queries';
-import { searchPageForRecovery, searchUnavailablePage } from './search-recovery';
+import { searchApplication, searchQueryOptions } from './search-query-options';
 import {
   discoverySearchHref,
   realmCatalogueSearchLoaderDeps,
@@ -36,6 +35,7 @@ export function useSearchQuery(
   const router = useRouter({ warn: false });
   const admission = useWorkspaceAdmission(operations);
   const address = useReaderAddress(null, undefined, locale);
+  const queryKey = searchApplication.queryKey(locale, params, reader);
   const options = searchQueryOptions(locale, params, reader);
   // The route loader has already re-read this address. An immediately stale observer would
   // dispatch a second request when it changes keys after that loader has completed.
@@ -55,8 +55,8 @@ export function useSearchQuery(
         searchLocationHref(locale, actual.search, routeOwner) === discoverySearchHref(locale, params, routeOwner)
       : actual.pathname.replace(/\/$/, '').endsWith('/search') &&
         discoverySearchHref(locale, searchLoaderDeps(actual.search)) === discoverySearchHref(locale, params));
-  const key = JSON.stringify(options.queryKey);
-  const readCount = () => client.getQueryState(options.queryKey)?.dataUpdateCount ?? 0;
+  const key = JSON.stringify(queryKey);
+  const readCount = () => client.getQueryState(queryKey)?.dataUpdateCount ?? 0;
   const lifetime = useRef({ owner, key, minimum: 0, refresh: false });
   if (lifetime.current.key !== key) lifetime.current = { owner, key, minimum: 0, refresh: false };
   else if (lifetime.current.owner !== owner) lifetime.current = { owner, key, minimum: readCount() + 1, refresh: true };
@@ -78,7 +78,7 @@ export function useSearchQuery(
           ? searchLoaderDeps(toLocation.search)
           : undefined;
       const target =
-        next && !next.invalidInput ? JSON.stringify(searchQueryOptions(locale, next, reader).queryKey) : null;
+        next && !next.invalidInput ? JSON.stringify(searchApplication.queryKey(locale, next, reader)) : null;
       // The previous match can still be mounted while its successor loads. Retire even a loader read
       // that has not gained a component observer; a late native reply cannot enroll that abandoned window.
       void client.cancelQueries({
@@ -96,12 +96,14 @@ export function useSearchQuery(
   }, [locale, JSON.stringify(params), owner, enabled]);
   const waiting = !matches || query.isFetching || readCount() < current.minimum || !address.isCurrent();
   const data = waiting
-    ? searchPageForRecovery(searchUnavailablePage(params), { status: 'loading' })
+    ? searchApplication.loadingPage(params)
     : query.isError
-      ? searchUnavailablePage(params)
+      ? searchApplication.unavailablePage(params)
       : query.data
         ? query.data
-        : searchPageForRecovery(searchUnavailablePage(params), { status: query.isPending ? 'loading' : 'unavailable' });
+        : query.isPending
+          ? searchApplication.loadingPage(params)
+          : searchApplication.unavailablePage(params);
   return {
     data,
     readerOwner: owner,

@@ -8,7 +8,7 @@ import { discoveryExample } from '../src/kernel/fake/search-discovery';
 import type { SearchPageData } from '../src/search/search';
 import type { SearchLoaderDeps } from '../src/search/search-params';
 import { searchSessionLifetime } from '../src/search/scoped-search-lifetime';
-import { searchUnavailablePage } from '../src/search/search-recovery';
+import { searchPageForRecovery, searchUnavailablePage } from '../src/search/search-recovery';
 import type { BrowserSession } from '../src/session/browser-state';
 
 mock.module('cloudflare:workers', () => ({ env: {} }));
@@ -16,7 +16,17 @@ mock.module('@tanstack/react-start', () => start);
 mock.module('@tanstack/react-start/server', () => start);
 
 const reads: { resolve: (value: SearchPageData) => void }[] = [];
-mock.module('../src/search/search-queries', () => ({
+mock.module('../src/search/search-query-options', () => ({
+  validateSearchInput: (input: unknown) => input,
+  searchApplication: {
+    queryKey: (locale: string, params: SearchLoaderDeps, reader?: string) => [
+      'search',
+      'discovery-v1',
+      searchSessionLifetime(locale, params, reader),
+    ],
+    loadingPage: (params: SearchLoaderDeps) => searchPageForRecovery(searchUnavailablePage(params), { status: 'loading' }),
+    unavailablePage: (params: SearchLoaderDeps) => searchUnavailablePage(params),
+  },
   searchQueryOptions: (locale: string, params: SearchLoaderDeps, reader?: string) =>
     queryOptions({
       queryKey: ['search', 'discovery-v1', searchSessionLifetime(locale, params, reader)],

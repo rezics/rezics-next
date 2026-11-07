@@ -18,7 +18,7 @@ import type { SearchWindowNavigation } from '../search-window';
 import { SaveQueryLink } from '../../library/save-query';
 import { searchSavedQuerySelection } from '../saved-query-selection';
 
-import type { SearchPageData } from '../search';
+import type { SearchPageData } from '../search-query-contract';
 import type { useSearchRetryFocus } from '../search-retry-focus';
 import type { useDiscoveryPersonalResults } from '../discovery-personal-host';
 type ResultData = Pick<

@@ -4,18 +4,45 @@ import { act, useId } from 'react';
 import type { SearchPageData } from '../src/search/search';
 import type { SpacePageData } from '../src/community/space';
 import { realmCataloguePageSearch } from '../src/community/realm-catalogue-entry';
+import type { SearchLoaderDeps } from '../src/search/search-params';
 import { realmCatalogueSearchLoaderDeps } from '../src/search/search-params';
 import { realmCatalogueWindow } from '../src/search/realm-catalogue-window';
-import { searchRecoveryFromResponse, searchUnavailablePage } from '../src/search/search-recovery';
+import { searchSessionLifetime } from '../src/search/scoped-search-lifetime';
+import { searchPageForRecovery, searchUnavailablePage } from '../src/search/search-recovery';
 
 const realm = '11111111-1111-4111-8111-111111111111';
 const reads: { data: Record<string, unknown>; finish: () => void }[] = [];
+mock.module('../src/search/search-query-options', () => ({
+  searchApplication: {
+    queryKey: (locale: string, params: SearchLoaderDeps, reader?: string) => [
+      'search',
+      'discovery-v1',
+      searchSessionLifetime(locale, params, reader),
+    ],
+    loadingPage: (params: SearchLoaderDeps) => searchPageForRecovery(searchUnavailablePage(params), { status: 'loading' }),
+    unavailablePage: (params: SearchLoaderDeps) => searchUnavailablePage(params),
+  },
+  searchQueryOptions: (locale: string, params: SearchLoaderDeps, reader?: string) => ({
+    queryKey: ['search', 'discovery-v1', searchSessionLifetime(locale, params, reader)],
+    queryFn: () =>
+      new Promise<SearchPageData>((resolve) => {
+        const data = {
+          query: params.query,
+          cursor: params.cursor,
+          ratingPopulation: params.ratingPopulation,
+          facetValues: params.facets,
+        };
+        reads.push({
+          data,
+          finish: () => {
+            const queryState = realmCatalogueSearchLoaderDeps({ q: data.query, searchCursor: data.cursor }, realm);
+            resolve({ ...searchUnavailablePage(queryState), recovery: { status: 'ready' } });
+          },
+        });
+      }),
+  }),
+}));
 mock.module('../src/search/search', () => ({
-  readSearch: ({ data }: { data: Record<string, unknown> }) =>
-    new Promise<SearchPageData>((resolve) => {
-      const params = realmCatalogueSearchLoaderDeps({ q: data.query, searchCursor: data.cursor }, realm);
-      reads.push({ data, finish: () => resolve({ ...searchUnavailablePage(params), recovery: { status: 'ready' } }) });
-    }),
   RealmCatalogueSearch: () => {
     const location = useLocation();
     const identity = useId();
