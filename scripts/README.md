@@ -1,5 +1,17 @@
 # Scripts
 
+## Workspace imports
+
+`bun scripts/workspace-imports.ts` checks each workspace's source and declaration files against its own manifest,
+and root `specs/` against the root manifest. Diagnostics retain the workspace, source path and undeclared package;
+an unrelated package's declaration failure remains attributed to that package.
+
+Decision: extract module specifiers from TypeScript/TSX syntax with the root's pinned `oxc-parser`, including static
+imports, re-exports, literal dynamic imports, import types, import-equals and literal CommonJS `require` calls.
+Titles, comments, strings, regular expressions and JSX text are not imports; executable expressions inside JSX and
+template substitutions are visited. A parse failure names its source file and throws rather than certifying an
+incomplete scan. Existing builtin, relative path, alias and manifest dependency rules remain unchanged.
+
 ## Page data check
 
 Run `bun scripts/page-data-check.ts --base-url <web> --kernel <kernel> [--auth-origin <auth>] [--database-url <seed-db>]`.
