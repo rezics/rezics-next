@@ -1,11 +1,10 @@
-import { candidateSession } from '../../../subject/candidate-lifetime';
+import { candidateSession, useCandidateReading } from '../../pages/candidate-reading-application';
 import { editorRequest } from '../editor-request';
-import { useCatalogueLifetime } from '../../../subject/candidate-lifetime';
 import { useCallback } from 'react';
 import { useSession } from '../../../session/query';
 import { csrfHeaders } from '../../../threads/composer';
 import { m } from '../../../paraglide/messages.js';
-import { candidateContext } from '../../../subject/candidates';
+import { candidateContext } from '../../pages/visit-host-port';
 import { relationTargetSearch } from '../relation-editor-search';
 import { readSubjectRelationEditor, proposeSubjectRelation, confirmSubjectRelation } from '../relation-editor-actions';
 import { readSubjectProducerHistory } from './actions';
@@ -59,7 +58,7 @@ function ProducerHistorySessionLive({
   realm?: string | undefined;
   via?: string | undefined;
 }) {
-  const editorWork = useCatalogueLifetime('transport');
+  const editorWork = useCandidateReading({ candidate: 'producer-history-transport', locale, address: [id, context, realm, via] });
   const observed = useSession();
   const { state } = observed;
   const search = useCallback(
@@ -70,7 +69,7 @@ function ProducerHistorySessionLive({
     return <ProducerHistoryOriginChoice id={id} locale={locale} returnTo={via} />;
   if (state !== 'signed-in') return <p>{state === 'signed-out' ? m.relation_sign_in() : m.candidate_loading()}</p>;
   return (
-    <ProducerHistoryAdmission observed={observed} address={`${id}:${locale}`}>
+    <ProducerHistoryAdmission observed={observed} address={`${id}:${locale}`} locale={locale}>
       <ProducerHistoryPage
         id={id}
         locale={locale}

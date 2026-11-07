@@ -1,5 +1,5 @@
 import { useLayoutEffect, useRef, type ReactNode } from 'react';
-import { languageName } from '../../subject/language';
+import { pageLanguageName } from './locale-presentation';
 import { correctionProposalAvailability } from '../catalogue/statement-editor';
 import { ValueExplanationEntry } from '../catalogue/value-explanation-entry';
 import { useQuotationVisit } from './quotation-reading/visit';
@@ -7,9 +7,9 @@ import { pickText } from '@rezics/composition';
 import { Button } from '@rezics/ui/shadcn/button';
 import { DocumentBody } from '../../document-body';
 import { m } from '../../paraglide/messages.js';
-import { subjectHref } from '../../subject/subject-href';
+import { subjectHref } from '../../subject/load-subject';
 import { catalogueEntries } from '../catalogue/catalogue-entry';
-import { candidateContext } from '../../subject/candidates';
+import { candidateContext } from './visit-host-port';
 import { withSubjectVisitReturn } from './subject-visit-navigation';
 import type {
   QuotationAssertion,
@@ -449,7 +449,7 @@ function SelectedText({
                   {
                     number: index + 1,
                     language: statement.language
-                      ? (languageName(statement.language, locale) ?? statement.language)
+                      ? (pageLanguageName(statement.language, locale) ?? statement.language)
                       : m.quotation_unknown_context({}, o),
                   },
                   o,

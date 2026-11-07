@@ -1,11 +1,8 @@
 import { useEffect, useId, useLayoutEffect, useRef, useState, type MouseEvent } from 'react';
-import { useQueryClient } from '@tanstack/react-query';
 import { useRouter } from '@tanstack/react-router';
-import { useCatalogueLifetime } from '../../../subject/candidate-lifetime';
-import { browserObservation } from '../../../session/observation';
-import { sessionQueryKey } from '../../../session/browser-state';
-import { subjectHref } from '../../../subject/subject-href';
-import { candidateContext } from '../../../subject/candidates';
+import { acceptCandidateReading, candidateContext, useCandidateReading } from '../candidate-reading-application';
+import { usePageVisitHost } from '../visit-host-port';
+import { subjectHref } from '../../../subject/load-subject';
 import type { QuotationRead } from '../../catalogue/quotation';
 import type { QuotationTransport } from '../quotation-view';
 
@@ -133,7 +130,7 @@ export function useQuotationVisit(props: {
   initial?: QuotationRead | undefined;
 }) {
   const { id, locale, quote, initial } = props;
-  const client = useQueryClient();
+  const host = usePageVisitHost();
   const router = useRouter({ warn: false });
   const localToken = useId();
   const selectedRef = useRef<HTMLHeadingElement>(null);
@@ -167,7 +164,8 @@ export function useQuotationVisit(props: {
   // Context is a public native address. The bounded marker can recover that address after a lost receipt;
   // it carries no admission, session, cursor, or authorized reading authority.
   const token = `${localToken}~${context}`;
-  const work = useCatalogueLifetime(JSON.stringify(['quotation-visit', id, locale, context]));
+  const readingAddress = { candidate: 'quotation-visit', locale, address: [id, context] } as const;
+  const work = useCandidateReading(readingAddress);
   const address = `${id}:${locale}:${context}`;
   const safeOrigin = safePath(props.returnTo) ?? restoration?.origin;
   const [text, setText] = useState<string | undefined>(restoration?.selection?.statementId);
@@ -234,7 +232,9 @@ export function useQuotationVisit(props: {
     } catch {
       result = { ok: false, reason: 'unavailable' };
     }
-    if (!mounted.current || !work.active() || owner !== sequence.current || source.current !== address) return;
+    const accepted = acceptCandidateReading(work, readingAddress, result);
+    if (!mounted.current || accepted.kind !== 'accepted' || owner !== sequence.current || source.current !== address) return;
+    result = accepted.value;
     if (result.ok && !readingMatchesContext(result, context)) result = { ok: false, reason: 'stale' };
     if (expected && result.ok) {
       restorePending.current = false;
@@ -322,10 +322,8 @@ export function useQuotationVisit(props: {
   function depart(event: MouseEvent<HTMLElement>) {
     const link = (event.target as Element).closest('a');
     if (!read?.selected || !link?.getAttribute('href')?.startsWith('/') || !work.active()) return;
-    const store = browserObservation(client);
-    const observed = store.getSnapshot();
-    const sessionState = client.getQueryState(sessionQueryKey);
-    const readerGeneration = observed.state === 'signed-in' ? observed.observation.id : 0;
+    const observed = host.captureBrowserObservation();
+    const readerGeneration = observed.generation;
     const reader = work.reader;
     receipt = {
       token,
@@ -338,15 +336,7 @@ export function useQuotationVisit(props: {
       selection: selectionOf(read, chosenText.current, locale),
       previous: current.current.previous,
       origin: safeOrigin,
-      current: () => {
-        const currentObservation = store.getSnapshot();
-        return (
-          reader === (currentObservation.state === 'signed-in' ? currentObservation.observation.subject : '') &&
-          readerGeneration === (currentObservation.state === 'signed-in' ? currentObservation.observation.id : 0) &&
-          currentObservation === observed &&
-          client.getQueryState(sessionQueryKey) === sessionState
-        );
-      },
+      current: () => reader === observed.reader && readerGeneration === observed.generation && observed.current(),
     };
     // Departure retires every pending focus ticket without changing the admitted page.
     focus.current = undefined;
