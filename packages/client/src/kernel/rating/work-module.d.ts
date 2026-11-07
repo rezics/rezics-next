@@ -3,6 +3,9 @@ import type { WorkContext, WorkModule } from '../work/registry.ts';
 import type { Effect } from '../events/effects.ts';
 import type { RatingCapabilities } from './contract/capabilities.ts';
 export { createRatingIdentityRepairCommands } from './identity-repair.ts';
+export { createIdentityRepairRead } from './identity-repair-read.ts';
+export { admitIdentityRepairGeneration, continueIdentityRepairGeneration, runIdentityRepairGeneration, } from './identity-repair-run.ts';
+export { createInstalledIdentityRepairCommands, createNativeIdentityRepairHost } from './adapters/identity-repair.ts';
 export declare const RATING_COUNTER_SECRET_ENV = "KERNEL_RATING_COUNTER_SECRET";
 type Runtime = Readonly<{
     context: WorkContext;

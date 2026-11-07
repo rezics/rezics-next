@@ -5,13 +5,16 @@ import type { RatingCapabilities } from './contract/capabilities.ts';
 import { ratingRoutes } from './routes.ts';
 import { sourceStatisticRoutes } from './source-statistics.ts';
 import { createRatingWorkModule } from './work-module.ts';
-import { type RatingIdentityProducer } from './segment-identity-guard.ts';
+import type { RatingIdentityProducer } from './segment-identity-guard.ts';
 import { createRealmRatingQuestion } from './question-authoring.ts';
 import { updateQuestionLabel } from './question-label.ts';
 import { retireRealmRatingQuestion, restoreRealmRatingQuestion } from './question-lifecycle.ts';
 import { readQuestionManagementPage } from './question-management.ts';
 import { readAggregateFigure, readRatingPopulationPage } from './aggregate-read.ts';
 export { createNativeRatingCapabilities } from './adapters/native.ts';
+export { createInstalledIdentityRepairCommands, createNativeIdentityRepairHost } from './adapters/identity-repair.ts';
+export { createIdentityRepairRead } from './identity-repair-read.ts';
+export { admitIdentityRepairGeneration, continueIdentityRepairGeneration, runIdentityRepairGeneration, } from './identity-repair-run.ts';
 export type { RatingCapabilities, RatingAmbient } from './contract/capabilities.ts';
 export { bindRatingIdentityProducer, ratingIdentityProducer } from './segment-identity-guard.ts';
 export type RatingHttpApp = ReturnType<typeof ratingRoutes> & ReturnType<typeof sourceStatisticRoutes>;
@@ -18739,6 +18742,17 @@ export declare function createRatingModule(options: {
                 frame: import("./identity-work-frame.ts").IdentityWorkFrame;
             }>>;
         };
+        identityRepairRead: Readonly<{
+            countedVotes(voterId: string): Promise<readonly import("./identity-repair-read.ts").IdentityRepairCountedVote[]>;
+            orderedEffects(voterId: string): Promise<readonly import("./identity-repair-read.ts").IdentityRepairOutboxEffect[]>;
+            voteEffects(voterId: string): Promise<readonly import("./identity-repair-read.ts").IdentityRepairVoteChangeEffect[]>;
+            pageEffects(voterId: string): Promise<readonly import("./identity-repair-read.ts").IdentityRepairPageEffect[]>;
+            receipts(voterId: string): Promise<readonly import("./identity-repair.ts").RatingRepairReceipt[]>;
+            receipt(voterId: string, pageId: string): Promise<import("./identity-repair.ts").RatingRepairReceipt | null>;
+            checkpoint(voterId: string): Promise<import("./identity-repair-read.ts").IdentityRepairCheckpoint | null>;
+            obligations(voterId: string): Promise<readonly import("./identity-repair-read.ts").IdentityRepairObligationRecord[]>;
+            boundObligation(voterId: string, pageId: string): Promise<import("./identity-repair-read.ts").IdentityRepairObligationRecord | null>;
+        }>;
         classifications: {
             set: (actor: import("../request/access.ts").Actor, input: import("./classification-ballot.ts").SetClassificationBallotInput, idempotencyKey: string) => Promise<{
                 associationId: string;
