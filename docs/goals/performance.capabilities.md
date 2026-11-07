@@ -47,40 +47,35 @@ stack, and each signed-in row records its own first unreached cause. Semantic ow
 
 ## Current-dev first-public journeys
 
-Observed source `93fa0fb702` on base `fd920c9cdb`. Walk command
+Observed source `6d2f788cfe` on base `fd920c9cdb`. Walk command
 `bun services/auth/scripts/dev-stack.ts walk -- bun apps/web/scripts/first-public-journeys-walk.ts`.
-Cherry-picked ce33 `5156e56d49`..`ea7dc5fe59` so Worker/Kernel admit issuer-origin JWKS. Slot 1 operands: Web
-`http://127.0.0.1:20010`, issuer `http://127.0.0.1:20011`, native Auth `http://127.0.0.1:20012`, Kernel
-`http://127.0.0.1:20013`. Native JWKS became reachable; identity then Kernel `/v1/definitions` admitted.
-Persona `developer@rezics.test` provisioned. Cross-media seed then exited 1. Phone/desktop pages were not
-mounted. Secret-free evidence is `.temp/goal/performance/evidence.json` and `seed.log` in this attempt.
+Operands: Web `http://127.0.0.1:20050`, issuer `http://127.0.0.1:20051`, native Auth `http://127.0.0.1:20052`, Kernel `http://127.0.0.1:20053`.
+Kernel/JWKS probe: kernel /v1/definitions HTTP 404; native JWKS HTTP 200; kernel /v1/health HTTP 404.
+Sign-in probe: sign-in surfaces unavailable: login HTTP 200; web sign-in HTTP 404; issuer JWKS HTTP 200; native JWKS HTTP 200.
+Cross-media seed: seed exited 1: Import transport request failed. Mixed anonymous paths still ran; Semantic owns importer transport.
+Secret-free evidence is `.temp/goal/performance/evidence.json` in this attempt. Phone and desktop viewports ran for each reached path.
 
-First causal error: **`Import transport request failed`**. Seed wrote no `result.json`. Worker later logged
-`Connection terminated unexpectedly` during teardown; that is not the first product failure. Imports owns the
-seed transport. Public P02/P17 snapshots did not run. Signed-in paths remain unreached for the same seed.
-
-Hourly: **0/17**. Slowest failing path: **P01** (shared 757.837 s setup). No other reached product failure was
-observed, so no additional repair brief is opened here.
+Hourly: **0/17**. Slowest failing path: **P02** (181.891 s FAIL). First causal error: **`waitFor: Timeout 180000ms exceeded. Call log:   - waiting for locator('html[data-hydrated]') `**.
 
 | Path | User-visible journey | Persona | Elapsed | Result | First wrong result | Owner |
 | ---- | -------------------- | ------- | ------: | ------ | ------------------ | ----- |
-| P01 | Settings Profile edit, Save, private readback, leave/return with draft and focus | setup | 757.837 s | FAIL-unreached | seed exited 1: Import transport request failed | Settings |
-| P02 | Public profile save fields/view flags; read as owner, member and anonymous | setup | 757.837 s | FAIL-unreached | Same seed; anonymous `@developer` not executed | Accounts |
-| P03 | Safety managed-account directory, detail/profile, exact frontier/focus return | setup | 757.837 s | FAIL-unreached | Same seed; sign-in not reached | Accounts |
-| P04 | Settings security into native Auth security page and current-session return | setup | 757.837 s | FAIL-unreached | Same seed; sign-in not reached | Accounts |
-| P05 | Settings rename into native Auth, complete rename, return to current identity | setup | 757.837 s | FAIL-unreached | Same seed; sign-in not reached | Accounts |
-| P06 | Settings deletion into native Auth deletion/recovery | setup | 757.837 s | FAIL-unreached | Same seed; sign-in not reached | Accounts |
-| P07 | Sign out, signed-out destination, uncertain-response session read | setup | 757.837 s | FAIL-unreached | Same seed; sign-in not reached | Accounts |
-| P08 | Safety verification select, submit, revisit, withdraw, return | setup | 757.837 s | FAIL-unreached | Same seed; sign-in not reached | Accounts |
-| P09 | Notification preferences Save/readback and Reset | setup | 757.837 s | FAIL-unreached | Same seed; sign-in not reached | Inbox |
-| P10 | Reading spoiler/suitability Save/readback, Reset/native defaults | setup | 757.837 s | FAIL-unreached | Same seed; sign-in not reached | Settings |
-| P11 | Layout type override Save/readback, remove, resulting default | setup | 757.837 s | FAIL-unreached | Same seed; sign-in not reached | Settings |
-| P12 | Private Collections inventory/privacy Save/readback and version-conflict recovery | setup | 757.837 s | FAIL-unreached | Same seed; sign-in not reached | Settings |
-| P13 | Inbox page reply/mention/moderation, destination, same-range return, acknowledge/badge | setup | 757.837 s | FAIL-unreached | Same seed; sign-in not reached | Inbox |
-| P14 | Follow edge, page Following, target, original-frontier return, remove/replay | setup | 757.837 s | FAIL-unreached | Same seed; sign-in not reached | Accounts |
-| P15 | Labels create/select, assign, FULL assignment/shelf, exact removal/readback | setup | 757.837 s | FAIL-unreached | Same seed; sign-in not reached | Library |
-| P16 | Active shelf page/session/target/return, complete or retire, updated shelf | setup | 757.837 s | FAIL-unreached | Same seed; sign-in not reached | Library |
-| P17 | Published Log publish, owner/member/anonymous snapshot, retract/Undo, My Logs return | setup | 757.837 s | FAIL-unreached | Same seed; anonymous snapshot not executed | Library |
+| P01 | Settings Profile edit, Save, private readback, leave/return with draft and focus | signed-in | 0.000 s | FAIL-unreached | sign-in surfaces unavailable: login HTTP 200; web sign-in HTTP 404; issuer JWKS HTTP 200; native JWKS HTTP 200 | Settings |
+| P02 | Public profile save fields/view flags; read as owner, member and anonymous | anonymous | 181.891 s | FAIL | waitFor: Timeout 180000ms exceeded. Call log:   - waiting for locator('html[data-hydrated]')  | Accounts |
+| P03 | Safety managed-account directory, detail/profile, exact frontier/focus return | signed-in | 0.000 s | FAIL-unreached | sign-in surfaces unavailable: login HTTP 200; web sign-in HTTP 404; issuer JWKS HTTP 200; native JWKS HTTP 200 | Accounts |
+| P04 | Settings security into native Auth security page and current-session return | signed-in | 0.000 s | FAIL-unreached | sign-in surfaces unavailable: login HTTP 200; web sign-in HTTP 404; issuer JWKS HTTP 200; native JWKS HTTP 200 | Accounts |
+| P05 | Settings rename into native Auth, complete rename, return to current identity | signed-in | 0.000 s | FAIL-unreached | sign-in surfaces unavailable: login HTTP 200; web sign-in HTTP 404; issuer JWKS HTTP 200; native JWKS HTTP 200 | Accounts |
+| P06 | Settings deletion into native Auth deletion/recovery | signed-in | 0.000 s | FAIL-unreached | sign-in surfaces unavailable: login HTTP 200; web sign-in HTTP 404; issuer JWKS HTTP 200; native JWKS HTTP 200 | Accounts |
+| P07 | Sign out, signed-out destination, uncertain-response session read | signed-in | 0.000 s | FAIL-unreached | sign-in surfaces unavailable: login HTTP 200; web sign-in HTTP 404; issuer JWKS HTTP 200; native JWKS HTTP 200 | Accounts |
+| P08 | Safety verification select, submit, revisit, withdraw, return | signed-in | 0.000 s | FAIL-unreached | sign-in surfaces unavailable: login HTTP 200; web sign-in HTTP 404; issuer JWKS HTTP 200; native JWKS HTTP 200 | Accounts |
+| P09 | Notification preferences Save/readback and Reset | signed-in | 0.000 s | FAIL-unreached | sign-in surfaces unavailable: login HTTP 200; web sign-in HTTP 404; issuer JWKS HTTP 200; native JWKS HTTP 200 | Inbox |
+| P10 | Reading spoiler/suitability Save/readback, Reset/native defaults | signed-in | 0.000 s | FAIL-unreached | sign-in surfaces unavailable: login HTTP 200; web sign-in HTTP 404; issuer JWKS HTTP 200; native JWKS HTTP 200 | Settings |
+| P11 | Layout type override Save/readback, remove, resulting default | signed-in | 0.000 s | FAIL-unreached | sign-in surfaces unavailable: login HTTP 200; web sign-in HTTP 404; issuer JWKS HTTP 200; native JWKS HTTP 200 | Settings |
+| P12 | Private Collections inventory/privacy Save/readback and version-conflict recovery | signed-in | 0.000 s | FAIL-unreached | sign-in surfaces unavailable: login HTTP 200; web sign-in HTTP 404; issuer JWKS HTTP 200; native JWKS HTTP 200 | Settings |
+| P13 | Inbox page reply/mention/moderation, destination, same-range return, acknowledge/badge | signed-in | 0.000 s | FAIL-unreached | sign-in surfaces unavailable: login HTTP 200; web sign-in HTTP 404; issuer JWKS HTTP 200; native JWKS HTTP 200 | Inbox |
+| P14 | Follow edge, page Following, target, original-frontier return, remove/replay | signed-in | 0.000 s | FAIL-unreached | sign-in surfaces unavailable: login HTTP 200; web sign-in HTTP 404; issuer JWKS HTTP 200; native JWKS HTTP 200 | Accounts |
+| P15 | Labels create/select, assign, FULL assignment/shelf, exact removal/readback | signed-in | 0.000 s | FAIL-unreached | sign-in surfaces unavailable: login HTTP 200; web sign-in HTTP 404; issuer JWKS HTTP 200; native JWKS HTTP 200 | Library |
+| P16 | Active shelf page/session/target/return, complete or retire, updated shelf | signed-in | 0.000 s | FAIL-unreached | sign-in surfaces unavailable: login HTTP 200; web sign-in HTTP 404; issuer JWKS HTTP 200; native JWKS HTTP 200 | Library |
+| P17 | Published Log publish, owner/member/anonymous snapshot, retract/Undo, My Logs return | anonymous | 0.207 s | FAIL-unreached | anonymous published-log list HTTP 400 (empty); publish unreached: sign-in surfaces unavailable: login HTTP 200; web sign-in HTTP 404; issuer JWKS HTTP 200; native JWKS HTTP 200 | Library |
 <!-- first-public-journeys:end -->
 
 ## composed-discovery-cost
