@@ -37,8 +37,7 @@ export const COMMUNITY_ROUTED_UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[78][0-9a
 export const COMMUNITY_LOG_POSITION_PATTERN = /^(0|[1-9][0-9]{0,18})$/;
 
 export const COMMUNITY_UUID = '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$';
-export const COMMUNITY_ROUTED_UUID =
-  '^[0-9a-f]{8}-[0-9a-f]{4}-[78][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$';
+export const COMMUNITY_ROUTED_UUID = '^[0-9a-f]{8}-[0-9a-f]{4}-[78][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$';
 export const COMMUNITY_LOG_POSITION = '^(0|[1-9][0-9]{0,18})$';
 
 export function isCommunityUuid(value: unknown): value is string {

@@ -4,8 +4,7 @@ import { COMMUNITY_LOG_POSITION, COMMUNITY_ROUTED_UUID, COMMUNITY_UUID } from '.
 const logId = Type.String({ pattern: COMMUNITY_UUID });
 const routedId = Type.String({ pattern: COMMUNITY_ROUTED_UUID });
 const closed = { additionalProperties: false };
-const key = (kind: 'space' | 'context' | 'media') =>
-  Type.Object({ kind: Type.Literal(kind), id: routedId }, closed);
+const key = (kind: 'space' | 'context' | 'media') => Type.Object({ kind: Type.Literal(kind), id: routedId }, closed);
 
 /** An invalidation is not an eligible document or permission to disclose one. */
 export const SpaceDiscoveryInvalidation = Type.Object(
