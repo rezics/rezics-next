@@ -342,3 +342,39 @@ The Account card reads the current identity from the managed session and keeps r
 - Touches: one rename region keeps one loading snapshot, the current context or bounded failures, and one absolute Retry-After. Directory selection remains the existing 20-row feeds with eight predecessor coordinates.
 - Bound: sequential visits replace that snapshot; retired viewers drop destination hrefs and ignore late module loads. Verification status, suggestions and commands are independent endpoints and independent deadlines.
 - Growth check: focused region, link and card suites pin call counts, retained identity and released callbacks. Native SQL growth stays with Accounts and Auth.
+
+## Composed account capabilities
+
+**Decision:** Settings owns `ports/accounts.ts`: exact-account Profile destination, managed action/detail reads,
+rename navigation, current session observation and deliberate session recovery. `adapters/accounts.ts` owns the native
+management/viewer-actions requests, cookie-viewer binding and server-function envelopes. `adapters/accounts-browser.tsx`
+binds those operations and a query-backed session source. Ordinary Settings route composition supplies Accounts'
+`profile-editor/address.ts` destination. Settings and Inbox have no dependency on Accounts page or request implementations;
+web-performance no longer declares web-accounts as a dependency.
+
+`managed-account-vocabulary.ts` owns action names and availability; `managed-account-contract.ts` owns detail wire
+validation; `managed-account-projection.ts` projects native management advice through a supplied destination resolver;
+`managed-account-failure.ts` classifies failure values. Neither action nor detail reader imports the other. This removes
+both recorded value-cycle edges and splits their two-file SCC into individual files. Native management GET remains the
+only source of Auth action admission/navigation. Profile entry still requires its independent exact-resource operation
+observation; identity, role, selection and a deployed destination never manufacture authority.
+
+The session source supplies stable snapshots and removal events, without credentials. Viewer, immutable target, token
+or client replacement permanently retires the original observation before retained callbacks or late responses can
+restore action advice. Retry preserves the original request and the longest observed endpoint deadline. Expiry enables
+deliberate recovery only. Rename and Safety consume the composed lazy read and refresh capabilities; their current-viewer
+checks fence module loading, dispatch and completion. Security/deletion remain fixed trusted-issuer handoffs.
+
+The shared Profile owner contract is `ports/profile-editor.ts`; presentation is `ports/profile-editor-view.ts`. Accounts'
+delegated journey consumes that narrow command/read contract and receives the actual cards and navigation from its route.
+Confirmation, immutable command custody, original retry, private advice preflight and current readback retain their
+existing owner semantics. Profile address construction is a separate leaf and does not load an editor.
+
+**Verification choice:** Extend the existing managed-session, managed-action/detail, rename and delegated Profile suites
+with composed-capability coverage, retain their behavior assertions and existing named stories, and add no story states.
+Worker landing runs the Web workspace typecheck, including both official programs, through the check wrapper. Integration
+owns runtime, native/browser walks, architecture counters and growth evidence; none is inferred from a fixture.
+
+Design sources: this README, Inbox and account-specific Profile editor READMEs, development verification, architecture,
+and the Web and migration-under-a-ratchet sections of the adopted architecture research. The shared reference index was
+consulted; this behavior-preserving migration needs no new external product decision.

@@ -1,7 +1,7 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import { expect, within } from 'storybook/test';
 import { AccountSafetyCard, type AccountSafetyProps } from '../settings/account-safety';
-import { accountRenameNavigation } from '../settings/account-rename-actions';
+import { accountRenameNavigation } from '../settings/adapters/accounts';
 import { m } from '../paraglide/messages.js';
 
 function SignedInSafety(props: Extract<AccountSafetyProps, { state: 'signed-in' }>) {

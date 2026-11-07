@@ -8,12 +8,9 @@ import {
   accountRenameSetupFailure,
   runAccountRenameHandler,
   serializeAccountRenameResult,
-} from '../src/settings/account-rename-actions';
-import {
-  accountRenamePresentedFailure,
-  readAccountRenameContext,
-  readAccountRenameContextResult,
-} from '../src/settings/account-rename-data';
+} from '../src/settings/adapters/accounts';
+import { accountRenamePresentedFailure } from '../src/settings/account-rename-data';
+import { readAccountRenameContext, readAccountRenameContextResult } from '../src/settings/adapters/accounts';
 import { AccountSafetyCard } from '../src/settings/account-safety';
 import { accountRenameHref, securityHrefFromIssuer } from '../src/settings/account-safety-links';
 import { m } from '../src/paraglide/messages.js';

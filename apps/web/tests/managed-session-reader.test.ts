@@ -1,7 +1,7 @@
 import { afterAll, beforeAll, expect, mock, test } from 'bun:test';
 import { dirname } from 'node:path';
 import { act, createElement as h, StrictMode, useState } from 'react';
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { QueryClient } from '@tanstack/react-query';
 import { createMemoryHistory, createRootRoute, createRouter, RouterProvider } from '@tanstack/react-router';
 import { createKernelClient } from '@rezics/client';
 import { boundaries, env as sharedEnv, installManagedModuleMocks, requests } from './fixtures/managed-module-mocks';
@@ -105,9 +105,11 @@ beforeAll(() => {
   installKernelMock();
 });
 const { createRoot } = await import('react-dom/client');
+const { AccountsQueryProvider: QueryClientProvider } = await import('./fixtures/accounts-composition');
 const { sessionQuery } = await import('../src/session/query');
 const { ManagedSessionReader } = await import('../src/settings/managed-session-reader');
 const { ManagedAccountsInventory } = await import('../src/settings/managed-accounts-read');
+const { accountSessionSource } = await import('../src/settings/adapters/accounts-browser');
 const { ManagedAccountReader } = await import('../src/settings/managed-account-detail-read');
 const { ManagedAccountActionsRead } = await import('../src/settings/managed-account-actions-read');
 const { AccountRenameRegion, AccountSafetySection, readCurrentAccountRename } =
@@ -207,7 +209,7 @@ for (const kind of ['error', 'remove', 'loss', 'subject'] as const) {
   test(`all four actual readers retire synchronously on ${kind}, ignore late outcomes and refuse retained callbacks after recovery`, async () => {
     const client = new QueryClient();
     client.setQueryData(sessionQuery.queryKey, session());
-    const owner = new ManagedSessionReader(client, viewerId, targetId);
+    const owner = new ManagedSessionReader(accountSessionSource(client), viewerId, targetId);
     const release = owner.attach();
     const invResult = deferred<ManagedAccountsResult>();
     const detResult = deferred<DetailResult>();
@@ -282,7 +284,7 @@ for (const kind of ['error', 'remove', 'loss', 'subject'] as const) {
     expect(det.snapshot().authNavigation).toBeUndefined();
     expect(actions.snapshot().result).toBeNull();
     expect(rename.snapshot().failures).toBeUndefined();
-    const fresh = new ManagedSessionReader(client, viewerId, targetId);
+    const fresh = new ManagedSessionReader(accountSessionSource(client), viewerId, targetId);
     const leaveFresh = fresh.attach();
     const recovered = new ManagedAccountsInventory(
       viewerId,
@@ -301,8 +303,8 @@ for (const kind of ['error', 'remove', 'loss', 'subject'] as const) {
 test('read custody ignores CSRF while token-bound navigation retires across an away/back transition and subscription replay', async () => {
   const client = new QueryClient();
   client.setQueryData(sessionQuery.queryKey, session());
-  const read = new ManagedSessionReader(client, viewerId, targetId);
-  const navigation = new ManagedSessionReader(client, viewerId, targetId, token);
+  const read = new ManagedSessionReader(accountSessionSource(client), viewerId, targetId);
+  const navigation = new ManagedSessionReader(accountSessionSource(client), viewerId, targetId, token);
   let leave = read.attach();
   const leaveNavigation = navigation.attach();
   leave();
@@ -325,13 +327,13 @@ test('rename checks the actual asynchronous import boundary and original token, 
   for (const at of ['before-import', 'during-import', 'during-read'] as const) {
     const client = new QueryClient();
     client.setQueryData(sessionQuery.queryKey, session());
-    const owner = new ManagedSessionReader(client, viewerId, viewerId, token);
+    const owner = new ManagedSessionReader(accountSessionSource(client), viewerId, viewerId, token);
     const leave = owner.attach();
-    const module = deferred<typeof import('../src/settings/account-rename-actions')>();
+    const module = deferred<typeof import('../src/settings/adapters/accounts')>();
     const outcome = deferred<AccountRenameResult>();
     let imports = 0;
     const headers: Headers[] = [];
-    const original = await import('../src/settings/account-rename-actions');
+    const original = await import('../src/settings/adapters/accounts');
     const loaded = {
       ...original,
       readAccountRename: ((input: { headers: HeadersInit }) => {
@@ -368,7 +370,7 @@ for (const late of ['success', 'failure'] as const) {
   test(`both inventory and detail feed requests discard delayed ${late} after session retirement, preserving independent original cursors`, async () => {
     const client = new QueryClient();
     client.setQueryData(sessionQuery.queryKey, session());
-    const owner = new ManagedSessionReader(client, viewerId, targetId);
+    const owner = new ManagedSessionReader(accountSessionSource(client), viewerId, targetId);
     const leave = owner.attach();
     const inventoryReplies = [deferred<ManagedAccountsResult>(), deferred<ManagedAccountsResult>()];
     const detailReplies = [deferred<DetailResult>(), deferred<DetailResult>()];
@@ -455,7 +457,7 @@ test('synchronous loss and recovery during pending publication refuses actual IO
   for (const surface of ['inventory', 'detail', 'actions', 'safety'] as const) {
     const client = new QueryClient();
     client.setQueryData(sessionQuery.queryKey, session());
-    const owner = new ManagedSessionReader(client, viewerId, targetId, token);
+    const owner = new ManagedSessionReader(accountSessionSource(client), viewerId, targetId, token);
     const leave = owner.attach();
     let calls = 0;
     let lost = false;
@@ -876,4 +878,84 @@ afterAll(() => {
     else Reflect.deleteProperty(globalThis, key);
   }
   window.happyDOM.abort();
+});
+
+test('composed fake account capabilities keep exact Profile selection and synchronously retire navigation', async () => {
+  const { AccountsProvider } = await import('../src/settings/managed-account-capabilities');
+  type Capability = import('../src/settings/ports/accounts').AccountsCapability;
+  type Observation = import('../src/settings/ports/accounts').AccountSessionObservation;
+  let observation: Observation = { status: 'success', data: session() };
+  const listeners = new Set<(removed: boolean) => void>();
+  const reads: { viewerId: string; accountId: string }[] = [];
+  const destinations: string[] = [];
+  const capability: Capability = {
+    session: session(),
+    sessionSource: {
+      snapshot: () => observation,
+      subscribe: (listener) => {
+        listeners.add(listener);
+        return () => {
+          listeners.delete(listener);
+        };
+      },
+    },
+    profileHref: (accountId) => {
+      destinations.push(accountId);
+      return `/private/${accountId}/profile`;
+    },
+    readActions: async (selection) => {
+      reads.push(selection);
+      return actionResult();
+    },
+    readDetail: async () => {
+      throw new Error('Actions must not read detail');
+    },
+    loadRename: async () => {
+      throw new Error('Actions must not read rename');
+    },
+    refreshSession: async () => {
+      throw new Error('Actions must not refresh session');
+    },
+  };
+  const host = document.createElement('main');
+  document.body.append(host);
+  const root = createRoot(host);
+  try {
+    await act(async () => {
+      root.render(
+        h(AccountsProvider, {
+          value: capability,
+          children: h(ManagedAccountActions, {
+            accountId: targetId,
+            nativeAccountKind: 'organization',
+            operated: false,
+            self: false,
+          }),
+        }),
+      );
+      await tick();
+    });
+    expect(reads).toEqual([{ accountId: targetId, viewerId }]);
+    expect(destinations.length).toBeGreaterThan(0);
+    expect(new Set(destinations)).toEqual(new Set([targetId]));
+    const link = host.querySelector<HTMLAnchorElement>(`a[href="/private/${targetId}/profile"]`)!;
+    expect(link).not.toBeNull();
+    await act(async () => {
+      observation = { status: 'success', data: { state: 'signed-out', csrfToken: null } };
+      for (const listener of [...listeners]) listener(false);
+      const click = new window.MouseEvent('click', { bubbles: true, cancelable: true });
+      link.dispatchEvent(click);
+      expect(click.defaultPrevented).toBe(true);
+      await tick();
+    });
+    expect(host.querySelector('a')).toBeNull();
+    expect(reads).toHaveLength(1);
+  } finally {
+    await act(async () => {
+      root.unmount();
+      await tick();
+    });
+    host.remove();
+  }
+  expect(listeners.size).toBe(0);
 });

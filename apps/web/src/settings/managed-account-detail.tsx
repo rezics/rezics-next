@@ -6,13 +6,12 @@ import { Button } from '@rezics/ui/shadcn/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@rezics/ui/shadcn/card';
 import { m } from '../paraglide/messages.js';
 import { initials } from '../threads/initials';
-import { useSession } from '../session/query';
+import { useAccounts } from './managed-account-capabilities';
 import { useManagedReaderLifetime, useManagedSessionReader } from './managed-session-reader';
 import { usePreferenceRetry } from './preference-failure-retry';
 import { ManagedAccountActions } from './managed-account-actions';
 import {
   ManagedAccountReader,
-  readManagedAccountDetail,
   type DetailFailure,
   type DetailSection,
   type DetailSnapshot,
@@ -410,21 +409,15 @@ export function ManagedAccountDetail({
   backHref: string;
   onBack?: MouseEventHandler<HTMLAnchorElement> | undefined;
 }) {
-  const session = useSession();
+  const { session, readDetail } = useAccounts();
   const viewerId = session.state === 'signed-in' ? session.subject : null;
   const owner = useManagedSessionReader(viewerId, accountId, session.csrfToken);
   const reader = useMemo(
     () =>
       viewerId && accountId
-        ? new ManagedAccountReader(
-            viewerId,
-            accountId,
-            (data, signal) => readManagedAccountDetail({ data, ...(signal ? { signal } : {}) }),
-            session.csrfToken,
-            owner.isCurrent,
-          )
+        ? new ManagedAccountReader(viewerId, accountId, readDetail, session.csrfToken, owner.isCurrent)
         : null,
-    [viewerId, accountId, session.csrfToken, owner],
+    [viewerId, accountId, session.csrfToken, owner, readDetail],
   );
   useManagedReaderLifetime(reader?.clear ?? noDispose, owner);
   useEffect(() => {

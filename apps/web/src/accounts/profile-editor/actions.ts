@@ -9,7 +9,7 @@ import {
   profileSaveSetupFailure,
   serializeProfileResult,
   withProfileDeadline,
-} from '../../settings/preferences';
+} from '../../settings/ports/profile-editor';
 import { parseSubmission, readTarget, selection, writeTarget, type Selection, type ProfilePage } from './data';
 import { boundViewer } from './request';
 
