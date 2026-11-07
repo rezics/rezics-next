@@ -549,7 +549,7 @@ export const platformRegistry = defineRegistry({
               kind: 'accountThreads',
               id: page.account.id,
               threadKind: props.threadKind as 'discussion' | 'review',
-              limit: props.paged === true ? Math.min(12, props.limit as number) : (props.limit as number),
+              limit: props.limit as number,
             },
     },
     {
