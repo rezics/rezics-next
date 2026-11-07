@@ -5,12 +5,8 @@ manager: accounts
 owner: Accounts
 reuse: SDK e18, Auth c883
 
-Walk revision `50d6ddce544ba428e2f64de731703520790f5d9c` at 2026-11-07T06:40Z.
-Organization create, owner transfer, rename and personal delete passed
-(J06–J08, J18). Website Kernel bearer is accepted.
-
-J09: `POST /account-operations` `{kind:automated}` then
-`POST /operator-sessions/open` timed out at 18431ms (`The operation timed out.`).
-A previous round on this handle completed the same opening in 7127ms with
-outsider open HTTP 403. Finish automated create and outsider-denied operator
-open on this walk Auth host. Do not add a new denial envelope.
+Walk revision `0c4c52c14eb51ff21d901d69060b1fc08d83a341` at 2026-11-07T07:56Z.
+J09 passed: automated create, operator opening and outsider-denied open completed
+in 2056ms (`software 29dfdb50-e1dd-8417-a388-545a26d83a2e; outsider open HTTP 403`).
+Organization create, owner transfer, rename and personal delete also passed
+(J06–J08, J18). No remaining SDK e18 repair from this round.
