@@ -46,15 +46,19 @@ export function remainingRequestFromPreparedCommand(command: {
   source: { source: string; external_id: string; converter_revision: string };
   subject: string | { type?: string };
 }): SeedRemainingRequest {
-  const nativeType = typeof command.subject === 'object' ? command.subject.type : undefined;
+  const nativeType = admit(typeof command.subject === 'object' ? command.subject.type : undefined, NATIVE_TYPE);
+  const op = admit(command.op, OP);
+  const source = admit(command.source.source, SOURCE_ID);
+  const externalId = admit(command.source.external_id, EXTERNAL_ID);
+  const converter = admit(command.source.converter_revision, CONVERTER);
   return {
     method: 'POST',
     path: '/v1/subjects:batchWrite',
-    op: admit(command.op, OP),
-    source: admit(command.source.source, SOURCE_ID),
-    externalId: admit(command.source.external_id, EXTERNAL_ID),
-    nativeType: admit(nativeType, NATIVE_TYPE),
-    converter: admit(command.source.converter_revision, CONVERTER),
+    ...(op !== undefined ? { op } : {}),
+    ...(source !== undefined ? { source } : {}),
+    ...(externalId !== undefined ? { externalId } : {}),
+    ...(nativeType !== undefined ? { nativeType } : {}),
+    ...(converter !== undefined ? { converter } : {}),
     journalState: 'prepared',
   };
 }
@@ -165,15 +169,20 @@ export async function readSeedRemainingRequest(directory: string): Promise<SeedR
     if (typeof record.method !== 'string' || typeof record.path !== 'string') return undefined;
     const method = /^(GET|POST|PUT|DELETE)$/.test(record.method) ? record.method : 'POST';
     const path = admit(record.path, PATH) ?? '/v1/subjects:batchWrite';
+    const op = admit(record.op, OP);
+    const source = admit(record.source, SOURCE_ID);
+    const externalId = admit(record.externalId, EXTERNAL_ID);
+    const nativeType = admit(record.nativeType, NATIVE_TYPE);
+    const converter = admit(record.converter, CONVERTER);
     return mergeRemainingRequest(
       {
         method,
         path,
-        ...(admit(record.op, OP) ? { op: admit(record.op, OP) } : {}),
-        ...(admit(record.source, SOURCE_ID) ? { source: admit(record.source, SOURCE_ID) } : {}),
-        ...(admit(record.externalId, EXTERNAL_ID) ? { externalId: admit(record.externalId, EXTERNAL_ID) } : {}),
-        ...(admit(record.nativeType, NATIVE_TYPE) ? { nativeType: admit(record.nativeType, NATIVE_TYPE) } : {}),
-        ...(admit(record.converter, CONVERTER) ? { converter: admit(record.converter, CONVERTER) } : {}),
+        ...(op !== undefined ? { op } : {}),
+        ...(source !== undefined ? { source } : {}),
+        ...(externalId !== undefined ? { externalId } : {}),
+        ...(nativeType !== undefined ? { nativeType } : {}),
+        ...(converter !== undefined ? { converter } : {}),
         ...(record.journalState === 'prepared' ? { journalState: 'prepared' } : {}),
       },
       {

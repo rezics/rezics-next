@@ -289,10 +289,10 @@ function classificationBatchFailure(result: { key: string; status: number; probl
       ? type
       : undefined;
   const safeCode = typeof code === 'string' && /^[a-z0-9_-]{1,80}$/.test(code) ? code : undefined;
-  const failure = new ImportTransportError(result.status, safeType, safeCode);
-  failure.method = 'POST';
-  failure.path = '/v1/subjects:batchWrite';
-  return failure;
+  return new ImportTransportError(result.status, safeType, safeCode, false, undefined, undefined, {
+    method: 'POST',
+    path: '/v1/subjects:batchWrite',
+  });
 }
 
 async function sendReleaseClassificationPages(

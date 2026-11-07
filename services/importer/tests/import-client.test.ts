@@ -129,7 +129,7 @@ test('fence retries HTTP 503 then returns current evidence', async () => {
     origin: 'https://api.importer.test',
     tokenProvider: async () => 'test-token',
     sleep: async () => {},
-    fetch: (async () => {
+    fetch: (async (_request: Request) => {
       requests++;
       if (requests === 1)
         return Response.json(
@@ -152,7 +152,7 @@ test('a thrown fetch keeps the remaining request method and path', async () => {
     tokenProvider: async () => 'test-token',
     maxAttempts: 1,
     sleep: async () => {},
-    fetch: (async () => {
+    fetch: (async (_request: Request) => {
       throw new TypeError('ECONNREFUSED');
     }) as typeof fetch,
   });
@@ -549,7 +549,7 @@ test('review transport retains coherent query, nullable evidence, exact admissio
   const missingLocation = createImportTransport({
     origin: 'https://api.importer.test',
     tokenProvider: async () => 'review-token',
-    fetch: (async () => Response.json({ operation: { id: first } }, { status: 202 })) as typeof fetch,
+    fetch: (async (_request: Request) => Response.json({ operation: { id: first } }, { status: 202 })) as typeof fetch,
   });
   await expect(missingLocation.mergeReviewedPersons(body, 'review-key')).rejects.toThrow(
     'Invalid native identity admission',

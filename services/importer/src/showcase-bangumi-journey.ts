@@ -646,7 +646,7 @@ export async function runBangumiJourney(options: BangumiJourneyOptions = {}) {
         : await startWalkFrontends(web, issuer);
   const require = createRequire(resolve(root, 'apps/web/package.json'));
   const { chromium } = require('playwright') as {
-    chromium: { launch(options: { headless: boolean }): Promise<any> };
+    chromium: { launch(options: { headless: boolean; env?: NodeJS.ProcessEnv }): Promise<any> };
   };
   await mkdir('/tmp/rw', { recursive: true, mode: 0o700 });
   const browser = await chromium.launch({ headless: true, env: { ...process.env, TMPDIR: '/tmp/rw' } });
