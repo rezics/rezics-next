@@ -1,7 +1,7 @@
 import { afterAll, expect, test } from 'bun:test';
 import { mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { join, relative, resolve } from 'node:path';
-import { runBrowserWorker, runWebTestLanes } from '../scripts/check.ts';
+import { browserWorkerCommand, browserWorkerRequest, runBrowserWorker, runWebTestLanes } from '../scripts/check.ts';
 
 const app = resolve(import.meta.dir, '..');
 const root = resolve(app, '../..');
@@ -121,6 +121,39 @@ test('a verifier test-name selector reaches each fresh per-file Bun process unch
   expect(readFileSync(selected, 'utf8')).toBe('ran');
   expect(() => readFileSync(excluded, 'utf8')).toThrow();
 });
+
+test('a placed browser worker keeps the selected Bun filter through per-file execution', async () => {
+  const selected = join(events, 'browser-filter-selected');
+  const excluded = join(events, 'browser-filter-excluded');
+  const file = join(fakeTests, 'browser-filtered.test.ts');
+  writeFileSync(
+    file,
+    [
+      "import { test } from 'bun:test';",
+      "import { writeFileSync } from 'node:fs';",
+      "// Browser test marker: import { chromium } from 'playwright';",
+      `test('selected server route', () => writeFileSync(${JSON.stringify(selected)}, 'ran'));`,
+      `test('excluded server route', () => writeFileSync(${JSON.stringify(excluded)}, 'ran'));`,
+    ].join('\n'),
+  );
+  const selectedFile = relative(app, file).split('\\').join('/');
+  const report = relative(root, join(temporary, 'browser-filter-report')).split('\\').join('/');
+  const testArgs = ['--timeout', '15000', '--reporter=dot', '--test-name-pattern', 'selected server route'];
+  const command = browserWorkerCommand({ files: [selectedFile], report, testScript: 'bun run test', testArgs });
+  expect(command.slice(-(testArgs.length + 2))).toEqual([selectedFile, '--', ...testArgs]);
+
+  const worker = browserWorkerRequest(command.slice(2));
+  expect(worker).toEqual({ files: [selectedFile], report, testScript: 'bun run test', testArgs });
+  if (!worker) throw new Error('placed browser command was not recognized by its receiving route');
+  try {
+    const result = await runBrowserWorker({ ...worker, env: options('browser-filter', []).env });
+    expect(result).toBe(0);
+    expect(readFileSync(selected, 'utf8')).toBe('ran');
+    expect(() => readFileSync(excluded, 'utf8')).toThrow();
+  } finally {
+    rmSync(resolve(root, report), { recursive: true, force: true });
+  }
+}, 15_000);
 
 test('bounds browser lanes separately while unit files use a wider pool', async () => {
   const browserOne = addFakeTest('browser-one.test.ts', { browser: true, delay: 500 });

@@ -241,6 +241,27 @@ export type BrowserPlacement = {
   timings: Record<string, FileTiming>;
 };
 
+export type BrowserWorkerCommandOptions = {
+  files: string[];
+  report: string;
+  testScript?: string;
+  testArgs?: string[];
+};
+
+/** Serialize the complete selected Bun invocation for the check-host worker. */
+export function browserWorkerCommand(input: BrowserWorkerCommandOptions): string[] {
+  return [
+    'bun',
+    'scripts/check.ts',
+    '--browser',
+    '--report',
+    input.report,
+    ...(input.testScript === undefined ? [] : ['--test-command', input.testScript]),
+    ...input.files,
+    ...(input.testArgs?.length ? ['--', ...input.testArgs] : []),
+  ];
+}
+
 function readReportFragment(directory: string): { failed: string[]; timings: Record<string, FileTiming> } {
   let timings: Record<string, FileTiming> = {};
   const timingsPath = join(directory, 'timings.json');
@@ -330,16 +351,12 @@ export async function placeBrowserCheck(
         label: 'web browser check',
         root,
         cwd: app,
-        command: [
-          'bun',
-          'scripts/check.ts',
-          '--browser',
-          '--report',
+        command: browserWorkerCommand({
+          files,
           report,
-          ...(testScript === undefined ? [] : ['--test-command', testScript]),
-          ...files,
-          ...(options.testArgs?.length ? ['--', ...options.testArgs] : []),
-        ],
+          ...(testScript === undefined ? {} : { testScript }),
+          ...(options.testArgs === undefined ? {} : { testArgs: options.testArgs }),
+        }),
         returns: [report],
       },
       async (slotEnv) => {
