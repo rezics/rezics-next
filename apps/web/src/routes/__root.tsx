@@ -35,6 +35,10 @@ import { libraryNavigation } from '../library/navigation';
 import { LocaleNavigationProvider } from '../shell/locale-navigation/context';
 import { LibraryApplicationBoundary } from '../session/library-application';
 import { OwnVotesReturnProvider } from '../ratings/own-votes/return';
+import { pageRenderBinding } from '../features/catalogue/page-render-binding';
+import { installSemanticRenderPort } from '../features/pages/subject-page-application';
+
+installSemanticRenderPort(pageRenderBinding);
 
 export const commerceNavigation = createNavigation([
   ...contextsNavigation,
