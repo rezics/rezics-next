@@ -1,5 +1,6 @@
 import { afterAll, beforeAll, expect, test } from 'bun:test';
 import { randomUUID } from 'node:crypto';
+import type { Pool, PoolClient, QueryConfig, QueryResult } from 'pg';
 import {
   beginCollectionSourceOutput as begin,
   appendCollectionSourceOutput as append,
@@ -115,7 +116,7 @@ test('private sources cannot publish and visibility reduction prevents a late ap
     b = { ...publicSource, generation: randomUUID() };
   await f.command(publicSource.collectionId, { b }, (tx) => begin(tx, { ...b, expectedMembers: 0 }));
   const response = await f.send(f.owner.bearer, 'PATCH', '/v1/collections/' + publicSource.collectionId, {
-    revision: 1,
+    revision: 2,
     visibility: 'private',
   });
   expect(response.status).toBe(200);
@@ -308,6 +309,81 @@ test('a well-formed public output identity without a retained original hold is u
   expect(page.status).toBe('unavailable');
   expect('rows' in page).toBe(false);
   expect(page.work.used.nativeRows).toBeGreaterThan(0);
+});
+
+test('public output admits empty PostgreSQL command results and rolls back a rejected BEGIN before connection reuse', async () => {
+  const source = await f.collection();
+  const identity: NativePublicOutputIdentity = {
+    scope: 'public_output',
+    route: source.route,
+    collectionId: source.collectionId,
+    incarnation: `${source.collectionId}:1`,
+    generation: '1',
+    ownerEpoch: 0,
+    receivingEpoch: '1',
+    effectKey: 'a'.repeat(64),
+    outputGeneration: randomUUID(),
+    activation: { transactionId: randomUUID(), position: '1', sourceGeneration: '1' },
+  };
+  const statements: string[] = [];
+  let transactionOpen = false,
+    injectUnexpectedBeginRow = true,
+    releases = 0,
+    acquire: ((client: PoolClient) => void) | undefined;
+  const result = (command: string, rows: Record<string, unknown>[] = []): QueryResult => ({
+    command,
+    rowCount: rows.length || (command === 'BEGIN' || command === 'COMMIT' || command === 'ROLLBACK' ? null : 0),
+    oid: 0,
+    rows,
+    fields: [],
+  });
+  const client = {
+    async query(config: string | QueryConfig) {
+      const sql = typeof config === 'string' ? config : config.text;
+      statements.push(sql);
+      if (sql.startsWith('BEGIN')) {
+        if (transactionOpen) throw new Error('Native output reused an open transaction');
+        transactionOpen = true;
+        if (injectUnexpectedBeginRow) {
+          injectUnexpectedBeginRow = false;
+          return result('BEGIN', [{ unexpected: true }]);
+        }
+        return result('BEGIN');
+      }
+      if (sql === 'ROLLBACK' || sql === 'COMMIT') {
+        if (!transactionOpen) throw new Error('Native output transaction already closed');
+        transactionOpen = false;
+        return result(sql);
+      }
+      if (!transactionOpen) throw new Error('Native output query escaped its transaction');
+      return result('SELECT');
+    },
+    release() {
+      releases++;
+    },
+  } as unknown as PoolClient;
+  const pool = {
+    async connect() {
+      acquire?.(client);
+      return client;
+    },
+    on(event: string, listener: (client: PoolClient) => void) {
+      if (event === 'acquire') acquire = listener;
+    },
+  } as unknown as Pool;
+  const options = { deadline: Date.now() + 30000, allowance: sourceAllowance(), after: null, limit: 1 } as const;
+
+  await expect(readNativePublicCollectionOutput(pool, identity, options)).rejects.toThrow(
+    'Native public output result exceeds its plan',
+  );
+  expect(statements).toEqual(['BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY', 'ROLLBACK']);
+  expect(transactionOpen).toBe(false);
+  const reused = await readNativePublicCollectionOutput(pool, identity, options);
+  expect(reused.status).toBe('unavailable');
+  expect(statements.slice(2)).toHaveLength(3);
+  expect(statements.at(-1)).toBe('COMMIT');
+  expect(transactionOpen).toBe(false);
+  expect(releases).toBe(2);
 });
 
 test('changed publication and fabricated successor transfer refuse without creating or consuming a hold', async () => {

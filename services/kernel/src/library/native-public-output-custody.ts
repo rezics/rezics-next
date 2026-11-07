@@ -300,8 +300,10 @@ async function readNativePublicCollectionOutput(
       () =>
         withConnection(pool, async (client) => {
           const metered = nativePublicOutputClient(client, work, options.deadline);
-          await metered.query('BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY');
           try {
+            // BEGIN is inside the cleanup scope because result admission can reject after PostgreSQL
+            // has already opened the snapshot and dispatched its separately reserved rollback.
+            await metered.query('BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY');
             const stored = await byIdentity(metered, identity, false);
             let result: PublicOutputPage;
             if (!stored || !(await committed(metered, stored))) result = refusal(work);

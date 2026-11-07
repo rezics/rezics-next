@@ -516,6 +516,7 @@ update event. These hooks do not implement query evaluation, another command run
 selected-set HTTP consumer is `collection-publication.ts`, described below.
 The native output test calls them through real Access-authorized Core commands. The production native source
 reader consumes their selected COMPLETE facts; no private-query producer or test inserts ready output.
+Decision: native output byte admission measures returned row projections (empty PostgreSQL command results cost zero projection bytes), the read snapshot rolls back any dispatched BEGIN rejected during result admission, and the runtime fixture composes Library before creating and exposing saved-dynamic Collections through the owner API.
 
 Append admits at most 100 strictly ordered subject UUIDs and a 4096-byte checkpoint/input, checks the exact prior
 frontier and source fence, and commits rows with its checkpoint. Native member insert/update/delete hooks independently maintain actual row counts and tuple writer fences.

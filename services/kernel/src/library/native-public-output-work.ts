@@ -62,9 +62,13 @@ function requestOf(config: string | QueryConfig, params: unknown[] = []) {
 function admitResult(entry: NativePublicOutputStatement, result: QueryResult | undefined) {
   if (!result) return;
   if (result.rows.length > entry.resultRows) throw new TypeError('Native public output result exceeds its plan');
-  const encoded = Buffer.byteLength(
-    JSON.stringify(result.rows, (_key, value: unknown) => (typeof value === 'bigint' ? value.toString() : value)),
-  );
+  // PostgreSQL command results still carry command, rowCount, and fields metadata when rows is empty.
+  // The descriptor budgets projected row data, so an empty result has zero bytes (not JSON's two-byte `[]`).
+  const encoded = result.rows.length
+    ? Buffer.byteLength(
+        JSON.stringify(result.rows, (_key, value: unknown) => (typeof value === 'bigint' ? value.toString() : value)),
+      )
+    : 0;
   if (encoded > entry.resultBytes) throw new TypeError('Native public output projection exceeds its plan');
 }
 
