@@ -76,12 +76,7 @@ export async function readNativeContextMetadata(
   return rows;
 }
 
-async function activeOwners(
-  pool: Pool,
-  rows: NativeContextMetadata[],
-  deadline: number,
-  port: ContextAccessPort,
-) {
+async function activeOwners(pool: Pool, rows: NativeContextMetadata[], deadline: number, port: ContextAccessPort) {
   const groups = new Map<number, string[]>();
   for (const id of new Set(rows.flatMap((row) => row.owners))) {
     const home = partitionOf(routeOf(id)!);

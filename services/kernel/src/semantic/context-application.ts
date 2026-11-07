@@ -81,14 +81,22 @@ export type ContextApplication = Readonly<{
     pool: Parameters<typeof changeContextLifecycle>[0],
     options: Parameters<typeof changeContextLifecycle>[1],
   ): ReturnType<typeof changeContextLifecycle>;
-  create(pool: Parameters<typeof createContext>[0], options: Parameters<typeof createContext>[1]): ReturnType<typeof createContext>;
+  create(
+    pool: Parameters<typeof createContext>[0],
+    options: Parameters<typeof createContext>[1],
+  ): ReturnType<typeof createContext>;
   read(
     pool: Parameters<typeof readContext>[0],
     id: Parameters<typeof readContext>[1],
     authorize: Parameters<typeof readContext>[2],
   ): ReturnType<typeof readContext>;
-  snapshot(pool: Parameters<typeof contextSnapshot>[0], id: Parameters<typeof contextSnapshot>[1]): ReturnType<typeof contextSnapshot>;
-  publicEligibility(resource: Parameters<typeof publicContextEligibility>[0]): ReturnType<typeof publicContextEligibility>;
+  snapshot(
+    pool: Parameters<typeof contextSnapshot>[0],
+    id: Parameters<typeof contextSnapshot>[1],
+  ): ReturnType<typeof contextSnapshot>;
+  publicEligibility(
+    resource: Parameters<typeof publicContextEligibility>[0],
+  ): ReturnType<typeof publicContextEligibility>;
   enrollRoleProvenance(
     tx: Parameters<typeof enrollContextRoleProvenance>[0],
     input: Parameters<typeof enrollContextRoleProvenance>[1],
@@ -107,7 +115,9 @@ export type ContextApplication = Readonly<{
     pool: Parameters<typeof contextDirectoryEffect>[0],
     clock?: Parameters<typeof contextDirectoryEffect>[1],
   ): ReturnType<typeof contextDirectoryEffect>;
-  registerDirectoryWork(context: Parameters<typeof registerContextDirectoryWork>[0]): ReturnType<typeof registerContextDirectoryWork>;
+  registerDirectoryWork(
+    context: Parameters<typeof registerContextDirectoryWork>[0],
+  ): ReturnType<typeof registerContextDirectoryWork>;
 }>;
 
 let bound: ContextApplication | undefined;

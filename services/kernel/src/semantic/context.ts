@@ -211,7 +211,11 @@ export async function readContext(
   });
 }
 
-export async function contextSnapshot(pool: Pool, id: string, accessPort?: ContextAccessPort): Promise<ContextRecord | null> {
+export async function contextSnapshot(
+  pool: Pool,
+  id: string,
+  accessPort?: ContextAccessPort,
+): Promise<ContextRecord | null> {
   return (await readContext(pool, id, async () => true, accessPort))?.context ?? null;
 }
 

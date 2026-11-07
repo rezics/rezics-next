@@ -121,12 +121,16 @@ export function createContextDirectory(dependencies: {
           : await rawCandidates.run(tx, { state, after_id: after[1]! });
         return { rows, epoch: owner.epoch };
       });
-      const authorized = await authorizedContextMetadata(dependencies, {
-        ids: [...new Set(snapshot.rows.map((row) => row.id))],
-        expected: new Map(snapshot.rows.map((row) => [row.id, { version: row.version, epoch: row.source_epoch }])),
-        actor: input.actor,
-        deadline: input.deadline,
-      }, port);
+      const authorized = await authorizedContextMetadata(
+        dependencies,
+        {
+          ids: [...new Set(snapshot.rows.map((row) => row.id))],
+          expected: new Map(snapshot.rows.map((row) => [row.id, { version: row.version, epoch: row.source_epoch }])),
+          actor: input.actor,
+          deadline: input.deadline,
+        },
+        port,
+      );
       const entries = new Map(authorized.map((entry) => [entry.id, entry]));
       const contexts: ContextDirectoryEntry[] = [];
       const emitted = new Set<string>();
@@ -281,7 +285,11 @@ export async function stepContextDirectory(
   if (source.complete && !source.rows.length) return true;
   // A bounded account-role capture is itself actual private Source data. Fence every role before receiving it.
   if (Buffer.byteLength(JSON.stringify(source.rows)) > 65536) throw new ContextDirectoryPreparingError();
-  const fenced = await fencedDirectoryAccounts(pool, source.rows.flatMap((row) => row.roles), port);
+  const fenced = await fencedDirectoryAccounts(
+    pool,
+    source.rows.flatMap((row) => row.roles),
+    port,
+  );
   for (const row of source.rows) {
     if (row.state === 'purged') continue;
     if (row.roles.some((role) => fenced.has(role.account_id))) {
@@ -392,11 +400,7 @@ export async function stepContextDirectory(
 }
 
 /** Existing effect delivery bridges changes; retained maintenance frontiers populate old native Contexts. */
-export function contextDirectoryEffect(
-  pool: Pool,
-  clock?: () => Date,
-  accessPort?: ContextAccessPort,
-): Effect {
+export function contextDirectoryEffect(pool: Pool, clock?: () => Date, accessPort?: ContextAccessPort): Effect {
   return {
     name: 'semantic_context_directory',
     types: [
