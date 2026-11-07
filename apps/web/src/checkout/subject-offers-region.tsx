@@ -5,7 +5,7 @@ import { Button } from '@rezics/ui/shadcn/button';
 import type { SubjectPurchaseContext } from '../features/pages/subject-slots';
 import { m } from '../paraglide/messages.js';
 import { localizeHref, locales } from '../paraglide/runtime.js';
-import { useSession } from '../session/query';
+import type { BrowserSession } from '../session/index';
 import { SubjectOfferChoice } from './subject-offer-review';
 import { readSubjectOffers, type SubjectOffersData, type SubjectOffersInput } from './subject-offers';
 
@@ -271,8 +271,10 @@ function PreparedSubjectOffersRegion({
 }
 
 /** Public presentation waits for session preparation so a denied actor never gets an anonymous fallback. */
-export function SubjectOffersRegion(context: SubjectPurchaseContext) {
-  const session = useSession();
+export function SubjectOffersRegion({
+  session = { state: 'unknown', csrfToken: null },
+  ...context
+}: SubjectPurchaseContext & { session?: BrowserSession | undefined }) {
   const { scope, epoch, current } = useSubjectOffersReadBoundary();
   const viewer = useMemo(
     () => ({

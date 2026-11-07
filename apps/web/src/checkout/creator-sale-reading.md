@@ -98,3 +98,26 @@ movement; focus changes, failed admission, replacement and disposal cancel that 
 Decision: a staged movement is admitted only by the exact read returned for its initiating router location. A
 cancelled movement keeps its target retryable through the existing reader; a different route or read observation
 retires the pending path and focus.
+
+## Application capability boundary
+
+Decision: checkout declares current-visit retirement and exact Edition-origin review capabilities; the existing
+session and Content producers implement them, and ordinary routes and the existing purchase slot bind them.
+`CheckoutCurrentVisit` exposes synchronous retirement and scheduled publication, with no cache-key vocabulary.
+The session adapter reuses BrowserObservation, including equal-response, exposure and A/B/A retirement. Buyer
+history retains only its independent coordinate paths; detail return still makes a fresh private admitted read.
+
+Content owns the closed Edition wire contract, metadata transport and tab-local origin receipt. The review region
+checks the same account, locale, Edition and credential lifetime, and checkout routes its return/restart through
+the existing draft departure decision. Creator route readers bind metadata and money producers explicitly; standalone
+readers without a binding show unavailable. The editor continues to capture the original Edition, revision and hash,
+and retains its original uncertain command and key. Historical offer identity grants no current sale authority.
+Recorded money, units, tax, currency, exponent, signs and strict money assertions remain unchanged.
+
+Focused adapter and review tests supplement the existing paired buyer-return and creator command tests. Their
+assertions are preserved while transport spies move to the explicit capability. Worker acceptance is workspace
+typing; native, browser, growth and runtime acceptance remain with integration.
+
+The named base edges do not belong to the largest Web value SCC. This migration removes seven checkout-to-session/
+Edition implementation behavior imports and adds one pure Edition-contract import; the largest Web SCC stays at
+82 files. Unrelated cyclic readers remain with their owners rather than expanding this migration into them.

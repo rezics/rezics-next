@@ -32,6 +32,10 @@ retain local amount or clear choices by measure unit.
   owns the source lifetime and bounded reading contract, replacing the audit's deferred navigation finding.
   Decision: every replacement observation retires selection; browser return uses a fresh admitted reading, never a
   stored private inspection snapshot. Source and story delivery do not claim runtime acceptance.
+- Checkout's current-visit retirement and exact Edition-origin review are explicit capabilities, supplied by the
+  existing session and Content producers. Ordinary routes bind private creator readers and review; the existing
+  purchase slot supplies the prepared session snapshot. The [reading guide](../../apps/web/src/checkout/creator-sale-reading.md#application-capability-boundary)
+  owns the boundary and unchanged money/command semantics. Worker typing and integration runtime acceptance stay separate.
 - A buyer reading a captured fixed Edition from an order or entitlement returns to that exact detail and both
   independent list positions after a same-tab visit. Decision: keep these navigation coordinates in route state,
   re-admit the private detail for the current viewer on return, and leave canonical reader addresses free of private data.

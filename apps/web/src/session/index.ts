@@ -15,3 +15,5 @@ export {
   type OperationLease,
 } from '../reader/lease';
 export { SessionRecoveryPage } from './recovery';
+
+export { checkoutCurrentVisit } from './checkout-visit';

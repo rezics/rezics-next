@@ -70,6 +70,7 @@ mock.module('cloudflare:workers', () => ({
 }));
 afterAll(() => mock.restore());
 const readers = await import('../src/checkout/creator-offers');
+const readBindings = await import('../src/routes/-creator-offer-read');
 const { viewerExposureLifetime, viewerExposureQuery } = await import('../src/kernel/viewer-exposure');
 const { sessionQuery } = await import('../src/session/query');
 
@@ -170,12 +171,12 @@ async function mounted() {
     work: ReturnType<typeof deferred<CreatorOfferResult>>;
   }[] = [];
   const spies = [
-    spyOn(readers, 'readCreatorOffersCurrent').mockImplementation((input) => {
+    spyOn(readBindings.creatorOfferReaders, 'list').mockImplementation((input) => {
       const work = deferred<CreatorOffersCurrentRead>();
       lists.push({ data: input.data, work });
       return work.promise;
     }),
-    spyOn(readers, 'readCreatorOfferEditorCurrent').mockImplementation((input) => {
+    spyOn(readBindings.creatorOfferReaders, 'editor').mockImplementation((input) => {
       const work = deferred<CreatorEditorCurrentRead>();
       editions.push({ data: input.data, work });
       return work.promise;
@@ -237,9 +238,15 @@ async function mounted() {
         <StrictMode>
           <QueryClientProvider client={client}>
             {'page' in initial.data ? (
-              <CreatorOffersCurrent initial={initial as CreatorOffersCurrentRead} locale={locale} cursor={cursor} />
+              <CreatorOffersCurrent
+                readers={readBindings.creatorOfferReaders}
+                initial={initial as CreatorOffersCurrentRead}
+                locale={locale}
+                cursor={cursor}
+              />
             ) : (
               <CreatorOfferEditorCurrent
+                readers={readBindings.creatorOfferReaders}
                 initial={initial as CreatorEditorCurrentRead}
                 locale={locale}
                 contentEditionId={contentEditionId}
@@ -350,7 +357,7 @@ describe('Creator offer list creation reprice and delist accept only their actua
       }
     });
     try {
-      const empty = await readers.readCreatorOffersCurrent({ data: { cursor: '' } });
+      const empty = await readBindings.readCreatorOffersCurrent({ data: { cursor: '' } });
       expect(empty.sessionSubject).toBe(A);
       expect(empty.requested).toEqual({ kind: 'list', cursor: null });
       expect(empty.data.page).toEqual({ kind: 'ready', offers: [], next: null });
@@ -365,7 +372,7 @@ describe('Creator offer list creation reprice and delist accept only their actua
         ),
       ).toBe(true);
       expect(new URL(calls[1]!.url).search).toBe('?limit=20');
-      const selected = await readers.readCreatorOfferEditorCurrent({ data: { editionId: edition.editionId } });
+      const selected = await readBindings.readCreatorOfferEditorCurrent({ data: { editionId: edition.editionId } });
       expect(selected.sessionSubject).toBe(A);
       expect(selected.requested).toEqual({ kind: 'editor', contentEditionId: edition.editionId });
       expect(selected.data.editor.kind).toBe('ready');
@@ -373,37 +380,37 @@ describe('Creator offer list creation reprice and delist accept only their actua
       expect(calls.slice(3).every((call) => call.headers.get('authorization') === 'Bearer seller-2')).toBe(true);
       returnedEdition = { ...edition, creatorAccountId: B };
       expect(
-        (await readers.readCreatorOfferEditorCurrent({ data: { contentEditionId: edition.editionId } })).data.editor
-          .kind,
+        (await readBindings.readCreatorOfferEditorCurrent({ data: { contentEditionId: edition.editionId } })).data
+          .editor.kind,
       ).toBe('denied');
       returnedEdition = { ...edition, editionId: id(80) };
       expect(
-        (await readers.readCreatorOfferEditorCurrent({ data: { contentEditionId: edition.editionId } })).data.editor
-          .kind,
+        (await readBindings.readCreatorOfferEditorCurrent({ data: { contentEditionId: edition.editionId } })).data
+          .editor.kind,
       ).toBe('unavailable');
       offers = [
         { ...creatorOfferFixture, contentEdition: { ...creatorOfferFixture.contentEdition!, creatorAccountId: B } },
       ];
-      expect((await readers.readCreatorOffersCurrent({ data: {} })).data.page.kind).toBe('unavailable');
+      expect((await readBindings.readCreatorOffersCurrent({ data: {} })).data.page.kind).toBe('unavailable');
       calls.length = 0;
       preparedSubject = undefined;
-      expect((await readers.readCreatorOffersCurrent({ data: {} })).sessionSubject).toBeNull();
+      expect((await readBindings.readCreatorOffersCurrent({ data: {} })).sessionSubject).toBeNull();
       expect(
-        (await readers.readCreatorOfferEditorCurrent({ data: { contentEditionId: edition.editionId } })).data.editor
-          .kind,
+        (await readBindings.readCreatorOfferEditorCurrent({ data: { contentEditionId: edition.editionId } })).data
+          .editor.kind,
       ).toBe('denied');
       expect(calls).toHaveLength(0);
       preparedSubject = A;
       preparation = 'absent';
-      expect((await readers.readCreatorOffersCurrent({ data: {} })).data.page.kind).toBe('denied');
+      expect((await readBindings.readCreatorOffersCurrent({ data: {} })).data.page.kind).toBe('denied');
       expect(calls).toHaveLength(0);
       actualRequest = new Request('https://site.test', { headers: { authorization: 'Bearer explicit' } });
-      expect((await readers.readCreatorOffersCurrent({ data: {} })).sessionSubject).toBeNull();
+      expect((await readBindings.readCreatorOffersCurrent({ data: {} })).sessionSubject).toBeNull();
       expect(calls).toHaveLength(0);
       actualRequest = cookieRequest();
       preparation = 'active';
       admitted = false;
-      expect((await readers.readCreatorOffersCurrent({ data: {} })).data.page.kind).toBe('closed');
+      expect((await readBindings.readCreatorOffersCurrent({ data: {} })).data.page.kind).toBe('closed');
       expect(calls.map((call) => new URL(call.url).pathname)).toEqual(['/v1/platform/exposure']);
       expect(headers.get('cache-control')).toBe('private, no-store');
       expect(headers.get('x-robots-tag')).toBe('noindex, nofollow');
