@@ -1,9 +1,9 @@
 import type { PropertyDefinition, Release } from '@rezics/definitions';
 import type { Violation } from '@rezics/definitions/validate';
+import { pickText } from '@rezics/composition';
 import { m } from '../../paraglide/messages.js';
-import { pageText } from '../pages/data';
-import { isRecord } from '../pages/shared';
-import { editableScalar, type SnakInput, type StatementInput } from './statement-editor';
+import { editableScalar } from './statement-edit-application';
+import { isStatementRecord, type SnakInput, type StatementInput } from './statement-editor-contract';
 
 export type ScalarField =
   | 'state'
@@ -32,10 +32,10 @@ function editableField(
   path: string,
 ): ScalarField | undefined {
   if (!editableScalar(definition)) return;
-  const schema = isRecord(definition.value) ? definition.value : {};
-  const properties = isRecord(schema.properties) ? schema.properties : {};
+  const schema = isStatementRecord(definition.value) ? definition.value : {};
+  const properties = isStatementRecord(schema.properties) ? schema.properties : {};
   if (definition.datatype === 'time') {
-    const calendars = isRecord(properties.calendarmodel)
+    const calendars = isStatementRecord(properties.calendarmodel)
       ? Array.isArray(properties.calendarmodel.enum)
         ? properties.calendarmodel.enum
         : [properties.calendarmodel.const]
@@ -59,7 +59,7 @@ function editableField(
     if (path === '/value/content/amount') return 'amount';
     if (path === '/value/content/unit') return 'unit';
     if (
-      (isRecord(properties.lowerBound) || isRecord(properties.upperBound)) &&
+      (isStatementRecord(properties.lowerBound) || isStatementRecord(properties.upperBound)) &&
       ['/value/content/lowerBound', '/value/content/upperBound'].includes(path)
     )
       return path.endsWith('/lowerBound') ? 'lowerBound' : 'upperBound';
@@ -141,7 +141,7 @@ export function presentStatementViolations(
     }
     const definition = part && release.properties[part.property.id];
     const field = part && editableField(part, definition, path);
-    const property = pageText(definition?.labels, locale).text;
+    const property = pickText(definition?.labels ?? {}, locale).text;
     const fieldLabel =
       field === 'value' && definition?.datatype === 'url' ? m.correction_url({}, o) : field && labels[field];
     let hint = m.correction_error_uneditable({}, o);

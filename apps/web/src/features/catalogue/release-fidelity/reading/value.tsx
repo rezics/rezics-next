@@ -30,7 +30,7 @@ export function ReleasePartValue({ part, read, locale }: Parameters<typeof PartV
     typeof part.value.content === 'string'
   ) {
     const related = read.public.related[part.value.content];
-    if (!related || !Object.values(related.labels).some((label) => label.trim()))
+    if (!related || !Object.values(related.labels ?? {}).some((label) => label.trim()))
       return <span>{m.release_fidelity_related_unreadable({}, { locale: locale as never })}</span>;
   }
   return (

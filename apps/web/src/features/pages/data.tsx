@@ -16,7 +16,7 @@ import { type CoverRatio } from '@rezics/ui/cover';
 import { MetaLine } from '@rezics/ui/meta-line';
 import { TypeList, TypeListContext } from './type-list';
 import type { TypeListTarget } from './type-list-model';
-import { createContext, useContext, type ReactNode } from 'react';
+import { createContext, useContext, useMemo, type ReactNode } from 'react';
 import { coverSrc } from '../../media/cover-src';
 import { coverOf, coverSubject } from '../../media/summary';
 import { m } from '../../paraglide/messages.js';
@@ -38,6 +38,11 @@ import { SubjectPageCover } from './subject-page-cover';
 import { SubjectArtwork, SubjectArtworkBoundary } from '../catalogue/subject-artwork/view';
 import { CharacterRelationshipsSlot, SubjectPurchaseSlot } from './subject-slots';
 import { StatementCorrectionLink } from '../catalogue/statement-editor-link';
+import {
+  StatementReadingProvider,
+  type StatementReadingPort,
+  type StatementReadingValueProps,
+} from '../catalogue/statement-reading';
 import { ValueExplanationEntry } from '../catalogue/value-explanation-entry';
 import { SourceTagWeight } from '../catalogue/source-tag-weight';
 import {
@@ -202,7 +207,7 @@ function timeText(value: unknown, locale: string): string {
   return timePresentation(value, locale).text;
 }
 
-function inlineValue(snak: Snak, related: Related, options: Options): ReactNode {
+function inlineValue(snak: Snak, related: StatementReadingValueProps['related'], options: Options): ReactNode {
   const { value, property } = snak;
   if (value.type === 'somevalue' || value.type === 'novalue') {
     return (
@@ -258,7 +263,7 @@ export function CandidateValue({
   link = PlainLink,
 }: {
   snak: Snak & { id?: string };
-  related: Related;
+  related: StatementReadingValueProps['related'];
   locale: string;
   subject?: string;
   /** Authorized responses from this comparison's current read, never draft envelopes or a shared cache. */
@@ -328,6 +333,20 @@ export function CandidateValue({
 /** Fully bound Screen reading adapter for correction routes and isolated readers. */
 export function ScreenReadingBoundary({ children }: { children: ReactNode }) {
   return <ScreenReadingBinding PageValue={CandidateValue}>{children}</ScreenReadingBinding>;
+}
+
+function PageStatementValue({ snak, related, locale, link }: StatementReadingValueProps) {
+  return <CandidateValue snak={snak} related={related} locale={locale} link={link as PageLink} />;
+}
+
+/** Pages adapter: the live CandidateValue surface for statement summaries and editor reads. */
+export function createPageStatementReadingPort(): StatementReadingPort {
+  return { renderValue: (props) => <PageStatementValue {...props} /> };
+}
+
+export function StatementReadingBinding({ children }: { children: ReactNode }) {
+  const port = useMemo(createPageStatementReadingPort, []);
+  return <StatementReadingProvider port={port}>{children}</StatementReadingProvider>;
 }
 
 export function PublicationOverlayView({
@@ -1120,48 +1139,50 @@ export function PageData({
     ...(memberHref ? { memberHref } : {}),
   };
   return (
-    <SubjectArtworkBoundary
-      source={artworkSource ?? reads}
-      identity={JSON.stringify([
-        subject,
-        context,
-        artworkContext,
-        continuation,
-        artworkRelease,
-        cacheReader,
-        reader,
-        locale,
-        readingView,
-      ])}
-      label={overviewSubjectLabel || resolved.unlabelled}
-    >
-      <overview.OverviewRoot value={overviewValue} PageValue={CandidateValue}>
-        <TypeListContext.Provider
-          value={{
-            ...(listTarget ? { target: listTarget } : {}),
-            ...(fullList ? { full: fullList } : {}),
-            ...(listCursor !== undefined ? { cursor: listCursor } : {}),
-            ...(listHref ? { listHref } : {}),
-            ...(memberHref ? { memberHref } : {}),
-          }}
-        >
-          <PageContext.Provider
+    <StatementReadingBinding>
+      <SubjectArtworkBoundary
+        source={artworkSource ?? reads}
+        identity={JSON.stringify([
+          subject,
+          context,
+          artworkContext,
+          continuation,
+          artworkRelease,
+          cacheReader,
+          reader,
+          locale,
+          readingView,
+        ])}
+        label={overviewSubjectLabel || resolved.unlabelled}
+      >
+        <overview.OverviewRoot value={overviewValue} PageValue={CandidateValue}>
+          <TypeListContext.Provider
             value={{
-              locale,
-              messages: resolved,
-              nodes,
-              subject,
-              agentHeader: profile !== undefined,
-              sources,
-              link,
-              ...(zoneRatio ? { ratio: zoneRatio } : {}),
+              ...(listTarget ? { target: listTarget } : {}),
+              ...(fullList ? { full: fullList } : {}),
+              ...(listCursor !== undefined ? { cursor: listCursor } : {}),
+              ...(listHref ? { listHref } : {}),
+              ...(memberHref ? { memberHref } : {}),
             }}
           >
-            {children}
-          </PageContext.Provider>
-        </TypeListContext.Provider>
-      </overview.OverviewRoot>
-    </SubjectArtworkBoundary>
+            <PageContext.Provider
+              value={{
+                locale,
+                messages: resolved,
+                nodes,
+                subject,
+                agentHeader: profile !== undefined,
+                sources,
+                link,
+                ...(zoneRatio ? { ratio: zoneRatio } : {}),
+              }}
+            >
+              {children}
+            </PageContext.Provider>
+          </TypeListContext.Provider>
+        </overview.OverviewRoot>
+      </SubjectArtworkBoundary>
+    </StatementReadingBinding>
   );
 }
 
