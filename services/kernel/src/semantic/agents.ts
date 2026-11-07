@@ -1,3 +1,4 @@
+/** Public Account/agent mapping for Access reads and native ports. */
 import type { Pool, PoolClient } from 'pg';
 import { derivedId, partitionOf, routeOf } from '../route/route.ts';
 import readAgentsBySubject from './account-agent-subjects-read.sql';

@@ -73,6 +73,7 @@ export type AccountIdentityOriginal = Readonly<{
   redirected?: string;
 }>;
 
+/** Native composition binds mapping from semantic/agents.ts, original recovery, read snapshots, Source custody and maintenance from those public entries. */
 export type IdentitySemanticPort = {
   accountAgentId(accountId: string): string;
   readOriginalAccountAgentIdentity(

@@ -98,6 +98,9 @@ production declaration as public entries; Search and composition import those po
 `identity-epoch-coordinator.ts` so the Semantic barrel does not close a coordinator value cycle. Search and Library
 import Source maintenance from `identity-source-consumer-maintenance.ts`; identity-adapters does not re-export those
 values, because that edge closed a maintenance cycle.
+Access public account identity and native Access ports import Semantic mapping from `semantic/agents.ts`. Original
+recovery, read snapshots, Source custody and maintenance stay on those public entries; Semantic `access-capabilities.ts`
+re-exports only mapping, so Access reads do not close a value-import cycle through recovery or Source maintenance.
 
 Decision: `config-check-runtime.ts` constructs check runners and reloads train settings from supplied dependencies; `createRuntime` keeps process, store and lifecycle ownership.
 

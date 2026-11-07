@@ -36,11 +36,14 @@ They do not import Access internals, Platform pool helpers or Semantic agent tab
 Decision: Kernel Access is split into `contract`, `core`, `application` and adapter modules. Vocabulary and finite
 bounds live in `access/contract`. Pure authorization, original-work and Kind-audience rules live in `access/core`.
 Use cases consume Access-owned ports in `access/application`. Native adapters in `access/adapters/native.ts` implement
-those ports by calling Content, Community, Semantic, Library and Search public capability facades, and
-`createKernel`/`server`/`worker` bind them through `composition/access.ts`. Contract, core and application import no
-downstream domain behaviour. Tests pin allow/deny, identity recovery with the original actor/request/deadline, and
-original-work admission against fake ports without loading native adapters; growth membership remains the native
-bounded-work check.
+those ports by calling Content, Community, Library and Search public capability facades and the focused Semantic
+entries for Account/agent mapping (`semantic/agents.ts`), original recovery, read snapshots, Source custody and
+maintenance. Public account reads import mapping from `semantic/agents.ts` so recovery and Source-maintenance
+implementations stay out of that value graph. `createKernel`/`server`/`worker` bind the ports through
+`composition/access.ts`. Contract, core and application import no downstream domain behaviour. Tests pin allow/deny,
+identity recovery with the original actor/request/deadline, and original-work admission against fake ports without
+loading native adapters; growth membership remains the native bounded-work check. Contribution attribution remains
+nullable for missing, pending and unavailable identity; only an anchored Account tombstone is deletion.
 
 Public entries: `access/contract/index.ts`, `access/core/index.ts`, `access/application/index.ts`,
 `access/adapters/index.ts`, `access/contribution-attribution.ts`, `access/public-identity.ts`, plus the

@@ -17,7 +17,7 @@ import publicIdentityObservationRead from './public-identity-observation.sql';
 import publicRead from './account-public-read.sql';
 import agentPageRead from './agent-verification-page-read.sql';
 import organizationRoleRead from './account-organization-role.sql';
-import { accountAgentId, accountAgentsForSubjects } from '../semantic/access-capabilities.ts';
+import { accountAgentId, accountAgentsForSubjects } from '../semantic/agents.ts';
 import {
   contributionAttribution,
   contributionFromPublicIdentity,

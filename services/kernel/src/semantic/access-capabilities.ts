@@ -1,13 +1,8 @@
-/** Access-owned Semantic capabilities. Imported only through this public entry. */
+/** Access-owned Semantic mapping. Recovery, read snapshots, Source custody and maintenance stay on their public entries. */
 export { accountAgentId, accountAgentsForSubjects } from './agents.ts';
-export {
-  readOriginalAccountAgentIdentity,
-  verifyOriginalAccountAgentIdentity,
-  type OriginalAccountAgentIdentity,
-  type OriginalAccountAgentIdentitySelection,
+export type { AccountAgentLink } from './agents.ts';
+export type {
+  OriginalAccountAgentIdentity,
+  OriginalAccountAgentIdentitySelection,
 } from './account-agent-identity-recovery.ts';
-export { withReadTransaction } from './read.ts';
-export { activeIdentitySourceConsumerMaintenance } from './identity-source-consumer-maintenance.ts';
 export type { IdentitySourceConsumerMaintenanceContext } from './identity-source-consumer-maintenance.ts';
-export { IDENTITY_HISTORY_ORIGINAL_SOURCE_DECLARATION } from './identity-source-consumer-custody.ts';
-export { IdentityEpochStoreError } from './identity-adapters/index.ts';
