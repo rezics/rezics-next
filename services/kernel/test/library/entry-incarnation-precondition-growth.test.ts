@@ -589,10 +589,18 @@ test('fresh guard work remains bounded across 64 512 and 4096 unrelated live ret
     const libraryWrites = rejected.capture.statements.filter((sql) =>
       /(?:INSERT|UPDATE|DELETE)\s+(?:INTO\s+|FROM\s+)?library\./i.test(sql),
     );
-    expect(libraryWrites).toHaveLength(1);
-    expect(libraryWrites[0]).toMatch(
-      /INSERT\s+INTO\s+library\.shelf_writer_owner\b[\s\S]*ON\s+CONFLICT[\s\S]*DO\s+NOTHING/i,
-    );
+    expect(libraryWrites).toHaveLength(2);
+    expect(
+      libraryWrites.filter((sql) =>
+        /INSERT\s+INTO\s+library\.shelf_writer_owner\b[\s\S]*ON\s+CONFLICT[\s\S]*DO\s+NOTHING/i.test(sql),
+      ),
+    ).toHaveLength(1);
+    expect(
+      libraryWrites.filter((sql) =>
+        /INSERT\s+INTO\s+library\.progress_head\b[\s\S]*ON\s+CONFLICT[\s\S]*DO\s+UPDATE/i.test(sql),
+      ),
+    ).toHaveLength(1);
+    expect(libraryWrites.every((sql) => !/INSERT\s+INTO\s+library\.entry(?:_deleted)?\b/i.test(sql))).toBe(true);
   } finally {
     await native?.close();
     await growth?.close();
