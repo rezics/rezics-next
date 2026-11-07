@@ -155,11 +155,7 @@ export type VerificationSearchCopy = {
 export type VerificationOperations = {
   status: (accountId: string, signal?: AbortSignal) => Promise<VerificationStatus>;
   request: (accountId: string, input: VerificationInput, signal?: AbortSignal) => Promise<VerificationCommandResult>;
-  withdraw: (
-    accountId: string,
-    idempotencyKey: string,
-    signal?: AbortSignal,
-  ) => Promise<VerificationCommandResult>;
+  withdraw: (accountId: string, idempotencyKey: string, signal?: AbortSignal) => Promise<VerificationCommandResult>;
   eligibility: (signal?: AbortSignal) => Promise<VerificationRelease>;
   title: (subjectId: string, languages: string[], signal?: AbortSignal) => Promise<string | null>;
   suggest: (query: string, languages: string[], signal?: AbortSignal) => Promise<VerificationSuggestionHit[]>;

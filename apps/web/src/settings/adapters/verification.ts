@@ -114,7 +114,9 @@ function nativeFailure(result: {
   };
 }
 
-function mediaTransportFault(error: unknown): { status: number; problem: Record<string, unknown>; headers?: HeadersInit } | undefined {
+function mediaTransportFault(
+  error: unknown,
+): { status: number; problem: Record<string, unknown>; headers?: HeadersInit } | undefined {
   if (!record(error) || !record(error.problem)) return;
   const status = error.problem.status;
   if (typeof status !== 'number' || !Number.isInteger(status) || status < 100 || status > 599) return;
@@ -328,24 +330,33 @@ export async function readVerificationEligibility(
   authorization: string,
   caller?: AbortSignal,
 ): Promise<VerificationRelease> {
-  return withVerificationDeadline(async (signal) => {
-    const options = { headers: { authorization }, fetch: { signal } };
-    const active = await client.definitions.active.get(options);
-    const digest = active.data?.digest;
-    if (active.error || !digest) throw new Error('Eligibility unavailable');
-    signal.throwIfAborted();
-    const released = await client.definitions.releases({ digest }).get(options);
-    const release = released.data?.release;
-    if (released.error || released.data?.digest !== digest || !record(release) || !record(release.types))
-      throw new Error('Eligibility unavailable');
-    return { types: release.types as VerificationRelease['types'] };
-  }, caller, serverSettingsTimer());
+  return withVerificationDeadline(
+    async (signal) => {
+      const options = { headers: { authorization }, fetch: { signal } };
+      const active = await client.definitions.active.get(options);
+      const digest = active.data?.digest;
+      if (active.error || !digest) throw new Error('Eligibility unavailable');
+      signal.throwIfAborted();
+      const released = await client.definitions.releases({ digest }).get(options);
+      const release = released.data?.release;
+      if (released.error || released.data?.digest !== digest || !record(release) || !record(release.types))
+        throw new Error('Eligibility unavailable');
+      return { types: release.types as VerificationRelease['types'] };
+    },
+    caller,
+    serverSettingsTimer(),
+  );
 }
 
 function admittedSuggestionHits(value: unknown): VerificationSuggestionHit[] {
   if (!record(value) || !Array.isArray(value.subjects)) throw new TypeError('Malformed suggestion page');
   return value.subjects.map((subject) => {
-    if (!record(subject) || typeof subject.id !== 'string' || typeof subject.type !== 'string' || !record(subject.labels))
+    if (
+      !record(subject) ||
+      typeof subject.id !== 'string' ||
+      typeof subject.type !== 'string' ||
+      !record(subject.labels)
+    )
       throw new TypeError('Malformed suggestion page');
     const labels: Record<string, string> = {};
     for (const [language, label] of Object.entries(subject.labels)) {
@@ -385,7 +396,11 @@ export async function suggestVerificationSubjects(
   });
   if (result.error) {
     const failure = nativeFailure(result);
-    const error = new Error(failure.message) as Error & { status?: number; problem?: Record<string, unknown>; headers?: HeadersInit };
+    const error = new Error(failure.message) as Error & {
+      status?: number;
+      problem?: Record<string, unknown>;
+      headers?: HeadersInit;
+    };
     error.status = failure.status;
     if (failure.code) error.problem = { status: failure.status, code: failure.code };
     if (failure.retryAfter) error.headers = { 'retry-after': failure.retryAfter };

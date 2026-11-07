@@ -133,15 +133,8 @@ export function verificationCommandRetryAt(retryAfter: string | undefined, now: 
   return Number.isFinite(deadline) && deadline > now ? deadline : 0;
 }
 
-export function commandResultIsUncertain(
-  recovering: boolean,
-  outcome: 'refused' | undefined,
-  status: number,
-): boolean {
-  return (
-    recovering ||
-    (outcome !== 'refused' && (status === 0 || status === 408 || status >= 500 || status < 400))
-  );
+export function commandResultIsUncertain(recovering: boolean, outcome: 'refused' | undefined, status: number): boolean {
+  return recovering || (outcome !== 'refused' && (status === 0 || status === 408 || status >= 500 || status < 400));
 }
 
 export function portableVerificationFailure(error: unknown, fallbackMessage?: string): VerificationFailure | undefined {

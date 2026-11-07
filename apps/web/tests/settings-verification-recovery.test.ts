@@ -17,7 +17,11 @@ import {
   type AgentVerificationRequest,
   type VerificationSnapshot,
 } from '../src/settings/contract/verification';
-import { VerificationRecovery, canRequestVerification, verificationQueryKey } from '../src/settings/application/verification';
+import {
+  VerificationRecovery,
+  canRequestVerification,
+  verificationQueryKey,
+} from '../src/settings/application/verification';
 import { observeVerificationRead } from '../src/settings/verification-recovery';
 
 const settingsAmbient = createBrowserSettingsAmbient();

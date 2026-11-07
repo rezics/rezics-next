@@ -43,8 +43,7 @@ export function useVerificationRetryWait(retryAt?: number): boolean {
     const update = () => {
       const current = ambient.now();
       setNow(current);
-      if (retryAt > current)
-        handle = ambient.timer.schedule(update, Math.min(retryAt - current, 2_147_483_647));
+      if (retryAt > current) handle = ambient.timer.schedule(update, Math.min(retryAt - current, 2_147_483_647));
     };
     update();
     return () => handle?.cancel();
@@ -280,9 +279,7 @@ function nativeOperations(): VerificationOperations {
   };
 }
 
-function verificationCapability(
-  ambient: ReturnType<typeof createBrowserSettingsAmbient>,
-): VerificationCapability {
+function verificationCapability(ambient: ReturnType<typeof createBrowserSettingsAmbient>): VerificationCapability {
   return {
     application: createVerificationApplication(nativeOperations(), nativeEligibleCopy(), ambient),
     search: nativeSearch,
@@ -297,7 +294,9 @@ function nativeEligibleCopy() {
   };
 }
 
-const VerificationContext = createContext<VerificationCapability>(verificationCapability(createBrowserSettingsAmbient()));
+const VerificationContext = createContext<VerificationCapability>(
+  verificationCapability(createBrowserSettingsAmbient()),
+);
 export function VerificationProvider({ value, children }: { value: VerificationCapability; children: ReactNode }) {
   return <VerificationContext.Provider value={value}>{children}</VerificationContext.Provider>;
 }

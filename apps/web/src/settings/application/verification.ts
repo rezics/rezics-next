@@ -236,7 +236,9 @@ export class VerificationRecovery {
       if (this.live(epoch))
         this.update({
           phase: 'uncertain',
-          ...(failure === undefined ? {} : { failure, commandRetryAt: verificationCommandRetryAt(failure.retryAfter, this.ambient.now()) }),
+          ...(failure === undefined
+            ? {}
+            : { failure, commandRetryAt: verificationCommandRetryAt(failure.retryAfter, this.ambient.now()) }),
         });
       return;
     }

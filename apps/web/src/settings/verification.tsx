@@ -26,11 +26,7 @@ import { useSettingsNavigationDraft } from './reading-navigation';
 import { verificationNeedsNavigationDecision } from './settings-draft-state';
 import { VerificationSubjectChooser, useVerification } from './adapters/verification-view.tsx';
 import { VerificationLinks, verificationIssueMessage, type VerificationLinkRow } from './verification-links';
-import {
-  validateVerificationDraft,
-  verificationCharacterCount,
-  type VerificationIssue,
-} from './core/verification';
+import { validateVerificationDraft, verificationCharacterCount, type VerificationIssue } from './core/verification';
 import {
   canRequestVerification,
   canRetryVerification,

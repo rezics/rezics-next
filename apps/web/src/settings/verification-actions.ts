@@ -7,7 +7,11 @@ import { requestLanguages } from './ports/vocabulary';
 import { m } from '../paraglide/messages.js';
 import type { SessionEnv } from '../session/client';
 import { prepareSession, sessionSubject, viewerCredential } from '../session/request';
-import { createVerificationApplication, searchEligibleVerificationSubjects, withVerificationDeadline } from './application/verification';
+import {
+  createVerificationApplication,
+  searchEligibleVerificationSubjects,
+  withVerificationDeadline,
+} from './application/verification';
 import {
   nativeVerificationCopy,
   nativeVerificationOperations,
@@ -43,9 +47,7 @@ function bindVerificationApplication(
 function verificationSubjectSearchFailure(error: unknown) {
   const content = settingsMediaFailure(error);
   return nativeVerificationSubjectSearchFailure(
-    content
-      ? { problem: { ...content.problem, status: content.status }, headers: content.headers }
-      : error,
+    content ? { problem: { ...content.problem, status: content.status }, headers: content.headers } : error,
   );
 }
 

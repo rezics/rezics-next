@@ -5,11 +5,7 @@ import type { SessionEnv } from '../src/session/client';
 import type { SessionStore } from '../src/session/store';
 import { loadSettingsPage } from '../src/settings/preferences';
 import { validateVerificationDraft, verificationCharacterCount } from '../src/settings/core/verification';
-import {
-  readVerification,
-  requestVerification,
-  withdrawVerification,
-} from '../src/settings/adapters/verification';
+import { readVerification, requestVerification, withdrawVerification } from '../src/settings/adapters/verification';
 import type { VerificationInput } from '../src/settings/contract/verification';
 
 const request = {

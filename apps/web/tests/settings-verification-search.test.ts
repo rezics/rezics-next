@@ -35,7 +35,15 @@ mock.module('../src/kernel/client', () => ({
     },
     subjects: {
       $suggest: {
-        get: async ({ query, headers, fetch }: { query: { q: string }; headers: { authorization: string }; fetch: { signal: AbortSignal } }) => {
+        get: async ({
+          query,
+          headers,
+          fetch,
+        }: {
+          query: { q: string };
+          headers: { authorization: string };
+          fetch: { signal: AbortSignal };
+        }) => {
           expect(headers.authorization).toBe('Bearer private-viewer');
           expect(fetch.signal.aborted).toBe(false);
           queries.push(query.q);
