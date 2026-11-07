@@ -2,6 +2,7 @@ import { expect, test } from 'bun:test';
 import {
   privateNetworkCommand,
   sharedViteChildEnvironment,
+  walkViteChildEnvironment,
   webTestPrivateNetworkEnvName,
 } from '../scripts/with-dev-server.ts';
 import { readExampleWorkerVars } from '../scripts/dev-vars.ts';
@@ -25,6 +26,24 @@ test('the shared Vite child fills example Worker bindings without replacing a ca
   expect(caller.WEB_VITE_CACHE_DIR).toBe('/tmp/vite-cache');
   expect(caller.CLOUDFLARE_VITE_FORCE_LOCAL).toBe('true');
   expect(caller.CLOUDFLARE_CF_FETCH_ENABLED).toBe('false');
+});
+
+test('walk Vite keeps Cloudflare local without test runtime, fixture bindings or a heap override', () => {
+  const child = walkViteChildEnvironment(
+    {
+      PATH: '/bin',
+      REZICS_TEST_RUNTIME: '1',
+      NODE_OPTIONS: '--max-old-space-size=8192',
+      WEBSITE_CLIENT_KEY: 'from-caller',
+    },
+    { cacheDirectory: '/tmp/walk-vite' },
+  );
+  expect(child.REZICS_TEST_RUNTIME).toBeUndefined();
+  expect(child.CLOUDFLARE_VITE_FORCE_LOCAL).toBe('true');
+  expect(child.CLOUDFLARE_CF_FETCH_ENABLED).toBe('false');
+  expect(child.WEB_VITE_CACHE_DIR).toBe('/tmp/walk-vite');
+  expect(child.WEBSITE_CLIENT_KEY).toBe('from-caller');
+  expect(child.NODE_OPTIONS).toBe('--max-old-space-size=8192');
 });
 
 test('private-network wrapping keeps the original command after the namespace setup', () => {

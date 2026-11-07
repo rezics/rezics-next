@@ -213,6 +213,20 @@ export const webViteClientOptimizeDeps = {
   exclude: [...webViteCalendarOptimizeDeps],
 } as const;
 
+/**
+ * Walk stacks compile the visited page on demand. Crawling every catalogue route with holdUntilCrawlEnd
+ * exhausted Node's 2 GiB heap after `/en` SSR on ad0f0d79 attempt 3.
+ */
+export const webViteWalkClientOptimizeDeps = {
+  holdUntilCrawlEnd: false,
+  entries: [] as string[],
+  exclude: [...webViteCalendarOptimizeDeps],
+} as const;
+
+export function webViteClientOptimizeDepsFor(env: NodeJS.ProcessEnv = process.env) {
+  return env.REZICS_WALK_STACK_SLOT ? webViteWalkClientOptimizeDeps : webViteClientOptimizeDeps;
+}
+
 export const webViteWorkerSsrOptimizeDeps = {
   noDiscovery: true,
   holdUntilCrawlEnd: true,

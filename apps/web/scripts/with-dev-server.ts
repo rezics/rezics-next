@@ -34,6 +34,24 @@ export function sharedViteChildEnvironment(
   return child;
 }
 
+/**
+ * Product walk Web is not the test runtime. Force local Cloudflare Vite without fixture Worker bindings
+ * or a Node heap override; walk optimizeDeps then compiles the visited page on demand.
+ */
+export function walkViteChildEnvironment(
+  env: NodeJS.ProcessEnv,
+  extras: { cacheDirectory?: string } = {},
+): NodeJS.ProcessEnv {
+  const child: NodeJS.ProcessEnv = {
+    ...env,
+    CLOUDFLARE_VITE_FORCE_LOCAL: 'true',
+    CLOUDFLARE_CF_FETCH_ENABLED: 'false',
+  };
+  delete child.REZICS_TEST_RUNTIME;
+  if (extras.cacheDirectory) child.WEB_VITE_CACHE_DIR = extras.cacheDirectory;
+  return child;
+}
+
 export function commandNeedsSharedDevServer(command: string[]): boolean {
   return command[0] === 'bun' && command[1] === 'test';
 }

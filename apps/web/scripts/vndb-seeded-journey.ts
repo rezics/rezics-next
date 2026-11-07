@@ -6,6 +6,7 @@ import type { Browser, Page } from 'playwright';
 import type { CrossMediaSeedResult } from '../../../services/importer/src/cross-media-seed.ts';
 import type { DevelopmentShowcaseReport } from '../../../scripts/datasets/cross-media-seed.ts';
 import { releaseWalkFileCache, walkIssuerForward } from '../../../scripts/walk-stack.ts';
+import { issuerPublicJwksUrl } from '../../../services/auth/scripts/dev-stack.ts';
 
 const root = resolve(import.meta.dir, '../../..');
 const evidence = resolve(root, '.temp/vndb-journey');
@@ -234,12 +235,13 @@ try {
   assert(jwks.ok, `Native Auth JWKS must answer before seed: HTTP ${jwks.status}`);
   const proxy = issuerProxy();
   try {
-    const issuerJwks = await fetch(`${stack.issuer}/.well-known/jwks.json`, { signal: AbortSignal.timeout(5_000) });
+    const issuerJwks = await fetch(issuerPublicJwksUrl(stack.issuer), { signal: AbortSignal.timeout(5_000) });
     assert(issuerJwks.ok, `Issuer JWKS through native Auth must answer before seed: HTTP ${issuerJwks.status}`);
     await run([...bun, 'scripts/datasets/cross-media-seed.ts', '--dev'], {
       ...process.env,
       ...(await envFile(resolve(root, '.temp/local-stack/seed.env'))),
-      AUTH_ORIGIN: stack.issuer,
+      AUTH_ORIGIN: stack.native,
+      REZICS_LOCAL_STACK_ISSUER_ORIGIN: stack.issuer,
       KERNEL_ORIGIN: stack.kernel,
     });
   } finally {

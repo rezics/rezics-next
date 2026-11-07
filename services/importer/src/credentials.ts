@@ -341,12 +341,18 @@ export type AccountCredentialsOptions = {
   account: string;
   client: string;
   authOrigin: string;
+  /** CSRF Origin and assertion audience; walk stacks keep this on the issuer while posting to native Auth. */
+  issuerOrigin?: string;
   scopes?: readonly string[];
   fetch?: typeof fetch;
   now?: () => number;
   observer?: CredentialsObserver;
   signal?: AbortSignal;
 };
+
+function credentialIssuerOrigin(options: AccountCredentialsOptions): string {
+  return options.issuerOrigin ?? process.env.REZICS_LOCAL_STACK_ISSUER_ORIGIN ?? options.authOrigin;
+}
 
 export type AccountTokenProvider = (fresh?: boolean) => Promise<string>;
 
@@ -368,11 +374,12 @@ export async function createAccountTokenProvider(options: AccountCredentialsOpti
 
   const renew = async (): Promise<string> => {
     ensureActive();
-    const signed = await assertion(options.account, options.authOrigin, accountKey, now());
+    const issuer = credentialIssuerOrigin(options);
+    const signed = await assertion(options.account, issuer, accountKey, now());
     const signin = await authRequest({
       fetch: upstream,
       url: `${options.authOrigin}/signin/key`,
-      origin: options.authOrigin,
+      origin: issuer,
       signal: options.signal,
       body: JSON.stringify({
         account_id: options.account,
@@ -393,7 +400,7 @@ export async function createAccountTokenProvider(options: AccountCredentialsOpti
     const token = await authRequest({
       fetch: upstream,
       url: `${options.authOrigin}/token`,
-      origin: options.authOrigin,
+      origin: issuer,
       signal: options.signal,
       body: '{}',
       cookie: session,

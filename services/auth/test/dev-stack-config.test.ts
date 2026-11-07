@@ -471,6 +471,15 @@ test('parallel local startup has a configured connection allowance while the ord
   );
 });
 
+test('walk Web launch uses the product Vite child and does not raise Node heap', async () => {
+  const source = await readFile(resolve(import.meta.dir, '../scripts/dev-stack.ts'), 'utf8');
+  expect(source).toContain('webLaunchEnvironment(process.env)');
+  expect(source).toContain("CLOUDFLARE_VITE_FORCE_LOCAL: 'true'");
+  expect(source).toContain('delete child.REZICS_TEST_RUNTIME');
+  expect(source).not.toContain('max-old-space-size');
+  expect(source).toContain('AUTH_ORIGIN: origins.native');
+});
+
 test('walk stacks start Kernel without a watcher and can omit Vite until mounted pages', () => {
   expect(stackProcessCommands({}).some((command) => command.includes('dev'))).toBe(true);
   expect(stackProcessCommands({ REZICS_WALK_STACK_SLOT: '1' }).some((command) => command.at(-1) === 'start')).toBe(
