@@ -16,11 +16,11 @@ import type {
   WorkAllowance,
   WorkReceipt,
 } from '../library/contract/index.ts';
-import type { NativeCollectionWork } from '../library/collection-native-work.ts';
 import type {
   CollectionSourceWorkState,
   MembersPreparationWorkContext,
   MembersPreparationWorkDefinition,
+  NativeCollectionWork,
   PreparationLocator,
   ScopeWorkContext,
 } from '../library/adapters/index.ts';

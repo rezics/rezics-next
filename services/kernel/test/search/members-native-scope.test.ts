@@ -12,7 +12,7 @@ import { newId, partitionOf } from '../../src/route/route.ts';
 import { bootstrapRelease, GLOBAL_CONTEXT } from '../../src/semantic/definitions.ts';
 import { scopeWorkAxes } from '../../src/search/scope-execution.ts';
 import { membersBounded } from '../../src/search/scope-members-work-cost.ts';
-import { createSearchLibraryScopePort } from '../../src/search/adapters/library-scope.ts';
+import { createSearchLibraryScopePort } from '../../src/composition/search-library.ts';
 import { createSearchScopeSource, type ScopeEvaluationProgress } from '../../src/search/scope-source.ts';
 import {
   readMembersPreparationWorkDefinition,

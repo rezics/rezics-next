@@ -7,12 +7,12 @@ import {
   type OperationalTransaction,
 } from '../../src/command/operational.ts';
 import type {
-  CollectionSourceContext,
   CollectionSourceCall,
+  CollectionSourceContext,
   ContainsCollectionSubject,
   PrepareCollectionSource,
 } from '../../src/library/collection-source.ts';
-import type { PreparationLocator } from '../../src/library/members-preparation.ts';
+import type { PreparationLocator } from '../../src/library/contract/index.ts';
 import type { Actor } from '../../src/request/access.ts';
 import { partitionOf } from '../../src/route/route.ts';
 import {
@@ -59,7 +59,7 @@ test('Implement the sole4b native MembersPreparation work-context handoff', asyn
       pool: native.db.pool,
       access: native.kernel.testAccess,
       deadline: Date.now() + 10_000,
-      library: (await import('../../src/search/adapters/library-scope.ts')).createSearchLibraryScopePort(),
+      library: (await import('../../src/composition/search-library.ts')).createSearchLibraryScopePort(),
     };
     let completed: MembersPreparationWorkContext | undefined;
     await runOperationalTransaction(

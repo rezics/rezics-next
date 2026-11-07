@@ -31,7 +31,6 @@ import { isAdmittedSearchPrefix } from './consumer-name.ts';
 import type { SubjectSource } from './source.ts';
 import type { CreditSearchSource } from './credit-search.ts';
 import type { FacetAccessObservationPort } from './facet-access-port.ts';
-import { createSearchLibraryScopePort } from './adapters/library-scope.ts';
 
 export type SearchConfig = { url: string; prefix: string };
 
@@ -316,14 +315,12 @@ export function createSearchWorkModule(
       const creditSearch = composeCreditSearch?.(context.pool, routeKey);
       const search = createOpenSearch(config.url);
       const source = createRatedSubjectSource(context.pool, routeKey, creditSearch).source;
-      const library = createSearchLibraryScopePort();
       collectionPublicationScopeRuntimes.set(context, {
         pool: context.pool,
         client: search,
         prefix: config.prefix,
         source,
         clock: context.clock,
-        library,
       });
       const listing = subjectListingSource(context.pool);
       context.addEffects([
@@ -370,6 +367,9 @@ export function createSearchWorkModule(
       );
       context.addService(async () => {
         const defaults = composeRuntimeDefaults({ env: { ...context.env }, clock: context.clock });
+        const published = collectionPublicationScopeRuntimes.get(context);
+        if (published)
+          collectionPublicationScopeRuntimes.set(context, { ...published, library: defaults.libraryScope });
         let runtime: ReturnType<typeof createDefaultPublicFilterRuntime> | undefined;
         let discoveryProducers: DiscoveryProducerEntry | undefined;
         let searchAccess: Access | undefined;
