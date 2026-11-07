@@ -125,7 +125,10 @@ beforeAll(async () => {
     await access.grant(global, 'editor', action);
     await access.grant(global, 'operator', action);
   }
-  call = handleCall((request) => app.handle(request), (token) => access.bearer(token as keyof typeof accounts));
+  call = handleCall(
+    (request) => app.handle(request),
+    (token) => access.bearer(token as keyof typeof accounts),
+  );
   close = async () => {
     await db.close();
   };
@@ -152,8 +155,11 @@ test('released definitions expose bundled Book fields, targets and eight locale 
   expect(active.body.digest).toBe(bundledDigest);
   const release = await call('GET', `/v1/definitions/releases/${encodeURIComponent(bundledDigest)}`);
   requireStatus(release, 200, 'bundled release');
-  const types = (release.body.release as { types: Record<string, { labels: Record<string, string>; properties: string[]; facets: string[] }> })
-    .types;
+  const types = (
+    release.body.release as {
+      types: Record<string, { labels: Record<string, string>; properties: string[]; facets: string[] }>;
+    }
+  ).types;
   const book = types['schema:Book'];
   expect(book).toBeDefined();
   expect(book.properties).toContain('schema:author');
@@ -201,7 +207,12 @@ test('terms, cited facts, relations, missing-work handoff and identifiers use on
   expect(patched.body).toHaveProperty('subject');
 
   const language = await propose(call, 'editor', book.id, cited('schema:inLanguage', 'ja'));
-  const identifier = await propose(call, 'editor', book.id, cited('schema:sameAs', `https://example.test/id/${randomUUID()}`));
+  const identifier = await propose(
+    call,
+    'editor',
+    book.id,
+    cited('schema:sameAs', `https://example.test/id/${randomUUID()}`),
+  );
   const author = await propose(call, 'editor', book.id, cited('schema:author', person.id));
   const seriesLink = await propose(call, 'editor', book.id, cited('wdt:P179', series.id));
   for (const row of [language, identifier, author, seriesLink]) {
@@ -266,7 +277,12 @@ test('static Zone create, configure without source reads, publish, anonymous nav
   const deleted = await deleteZone(call, 'editor', zone.id, published);
   requireStatus(deleted, 200, 'delete Zone');
   expect((await readZonePage(call, zone.id, '')).status).toBe(404);
-  const restored = await restoreZone(call, 'editor', zone.id, String((deleted.body.zone as { revision: string }).revision));
+  const restored = await restoreZone(
+    call,
+    'editor',
+    zone.id,
+    String((deleted.body.zone as { revision: string }).revision),
+  );
   requireStatus(restored, 200, 'restore Zone');
   requireStatus(await readZonePage(call, zone.id, ''), 200, 'restored anonymous home');
   const withheld = await takedownZone(
