@@ -101,6 +101,20 @@ test('pure root and web typechecks, compiler tools, and explicit small unit sele
     classifyCheck(['env', 'PATH=/tmp/untrusted', 'bun', 'test', 'packages/util/test/unit.test.ts'], root).placement,
   ).toBe('remote');
   expect(workerCheckNeedsStack(['bun', 'test'], root)).toBe(true);
+  expect(
+    classifyCheck(
+      [
+        'bun',
+        'services/auth/scripts/dev-stack.ts',
+        'walk',
+        '--',
+        'bun',
+        'apps/web/tests/native/commerce-library-journeys.walk.ts',
+      ],
+      repository,
+    ),
+  ).toEqual({ placement: 'local', reason: 'admitted walk stack stays on the worker host' });
+  expect(workerCheckNeedsStack(['bun', 'services/auth/scripts/dev-stack.ts', 'walk'], repository)).toBe(false);
 });
 
 test('discovery, preload, shell, native-stack, browser, server, database, and unknown commands stay remote', () => {

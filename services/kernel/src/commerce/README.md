@@ -1001,6 +1001,9 @@ history stays on the shared Auth/persona fixture; Accounts consumes `prepareNati
 Decision: first-public user-visible acceptance is the 26-row seeded walk
 `bun services/auth/scripts/dev-stack.ts walk -- bun apps/web/tests/native/commerce-library-journeys.walk.ts`;
 this genuine-order suite remains the financial retention proof. No extra outcome suites.
+Decision: Content's canonical issuer owns JWKS: `AUTH_ISSUER` and `AUTH_JWKS_URL` share the issuer origin and port;
+membership admission does not allow a distinct native JWKS port. The walk command stays on the worker host so
+`GOAL_ACCEPTANCE_REQUIRES` is not stripped; Auth pages start before Kernel so issuer JWKS is reachable for seed.
 Decision: one native purchase/retention/expiry journey uses two quantity-one editions so refund and late paid stay on distinct genuine orders; unused-actor operator history stays the second case. The composed kernel uses the 30-second native test request deadline; the production two-second default is not this fixture's Access admission budget. Reylo page and locator statements are normalized to a list so a single entitlement or order is purged. Board and offer
 grants, edition publication and Commerce HTTP share one composed kernel. That kernel reuses Content's native Access,
 which is already compiled from the full mounted catalogue (including Commerce) and Score `nativeAuth.handler`; Auth

@@ -21,12 +21,13 @@ import {
 import {
   admitWalkStack,
   firstRedactedDiagnostic,
-  nativeJwksUrl,
+  issuerJwksUrl,
   SEED_JOURNAL_IDENTITY_FILE,
   seedJournalDatabaseIdentity,
   seedJournalsNameDifferentDatabase,
   stackPhaseLine,
   stackStartPlan,
+  walkOriginListening,
   walkProcessEnvironment,
   SEEDED_WEB_READY_PATH,
   walkStackNames,
@@ -83,7 +84,7 @@ export function developmentKernelBindings(
   return {
     AUTH_ISSUER: selected.issuer,
     AUTH_AUDIENCE: selected.audience,
-    AUTH_JWKS_URL: nativeJwksUrl(selected.native),
+    AUTH_JWKS_URL: issuerJwksUrl(selected.issuer),
     KERNEL_HOSTNAME: '127.0.0.1',
     KERNEL_PORT: String(localPort(selected.kernel)),
   };
@@ -850,8 +851,8 @@ export function walkSetupScripts(env: Record<string, string | undefined> = proce
 }
 
 /**
- * Starts native Auth, the worker and Kernel first. Kernel reads issuer JWKS from native Auth, so Auth pages and Web
- * can wait until seeding finishes on an admitted walk. Local `task dev` still starts pages after Kernel.
+ * Starts native Auth, then Auth pages so issuer JWKS is reachable, then the worker and Kernel. Web still waits until
+ * seeding finishes on an admitted walk. Local `task dev` still starts pages after Kernel.
  * Explicit deferred account walks serve Kernel HTTP from the Auth host and omit the worker and OpenSearch.
  */
 async function start() {
@@ -911,6 +912,11 @@ async function start() {
         Promise.all([untilOutput(worker, 'Worker ready'), untilReady(plan.nativeReady, [identity, worker])]),
       );
       if (stopping) return;
+      if (plan.deferPages) {
+        const pages = launch(['bun', 'services/auth/scripts/dev-stack.ts', 'pages']);
+        await phase('pages', untilReady([issuerJwksUrl(origins.issuer)], [pages, identity, worker]));
+        if (stopping) return;
+      }
       const kernel = launch(plan.kernel);
       await phase('kernel', untilReady(plan.kernelReady, [kernel, worker, identity]));
       if (stopping) return;
@@ -1041,7 +1047,9 @@ async function untilReady(
  * slot's ports listening; `stop` is the normal teardown.
  */
 export async function startSeededFrontends(): Promise<{ stop(): Promise<void> }> {
-  const children = ['pages', 'web'].map((action) =>
+  const pagesUp = await walkOriginListening(origins.issuer);
+  const actions = pagesUp ? (['web'] as const) : (['pages', 'web'] as const);
+  const children = actions.map((action) =>
     Bun.spawn(['bun', 'services/auth/scripts/dev-stack.ts', action], {
       cwd: root,
       env: process.env,
@@ -1056,7 +1064,10 @@ export async function startSeededFrontends(): Promise<{ stop(): Promise<void> }>
   process.once('exit', killOnExit);
   try {
     await untilReady(
-      [`${origins.issuer}/.well-known/openid-configuration`, `${origins.web}${SEEDED_WEB_READY_PATH}`],
+      [
+        ...(pagesUp ? [] : [`${origins.issuer}/.well-known/openid-configuration`]),
+        `${origins.web}${SEEDED_WEB_READY_PATH}`,
+      ],
       children,
     );
   } catch (error) {

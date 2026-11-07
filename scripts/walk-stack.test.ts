@@ -7,6 +7,7 @@ import {
   firstRedactedDiagnostic,
   hydrationMonitorMessage,
   isStartupTransportError,
+  issuerJwksUrl,
   kernelLaunchCommand,
   nativeJwksUrl,
   SEEDED_WEB_READY_PATH,
@@ -56,7 +57,7 @@ test('walk admission preserves an occupied slot and reuses it after its listener
   }
 });
 
-test('admitted stacks launch Kernel without watch, fetch JWKS from native Auth, and defer pages', () => {
+test('admitted stacks launch Kernel without watch, fetch JWKS from native Auth, and defer Web', () => {
   const origins = {
     web: 'http://127.0.0.1:20000',
     issuer: 'http://127.0.0.1:20001',
@@ -67,6 +68,7 @@ test('admitted stacks launch Kernel without watch, fetch JWKS from native Auth, 
   expect(admitted.deferPages).toBe(true);
   expect(admitted.kernel).toEqual([process.execPath, 'run', '--cwd', 'services/kernel', 'start']);
   expect(admitted.nativeReady).toEqual([nativeJwksUrl(origins.native)]);
+  expect(issuerJwksUrl(origins.issuer)).toBe('http://127.0.0.1:20001/.well-known/jwks.json');
   expect(admitted.kernelReady).toEqual(['http://127.0.0.1:20003/v1/definitions']);
   expect(kernelLaunchCommand({})).toEqual([process.execPath, 'run', '--cwd', 'services/kernel', 'dev']);
   expect(stackStartPlan({}, origins).deferPages).toBe(false);

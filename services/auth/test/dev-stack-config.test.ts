@@ -38,6 +38,8 @@ test('seeded frontends wait for useful /en HTML through waitUntilWalkReady', asy
   expect(source).toContain('waitUntilWalkReady');
   expect(source).not.toContain("code: 'ECONNREFUSED'");
   expect(source).toContain('${origins.web}${SEEDED_WEB_READY_PATH}');
+  expect(source).toContain('issuerJwksUrl(origins.issuer)');
+  expect(source).toContain('walkOriginListening(origins.issuer)');
 });
 
 test('isolated Kernel bindings verify the selected Auth issuer and bind the selected API port', () => {
@@ -51,7 +53,7 @@ test('isolated Kernel bindings verify the selected Auth issuer and bind the sele
   ).toEqual({
     AUTH_ISSUER: 'http://127.0.0.1:20021',
     AUTH_AUDIENCE: 'https://api.rezics.test',
-    AUTH_JWKS_URL: 'http://127.0.0.1:20022/.well-known/jwks.json',
+    AUTH_JWKS_URL: 'http://127.0.0.1:20021/.well-known/jwks.json',
     KERNEL_HOSTNAME: '127.0.0.1',
     KERNEL_PORT: '20023',
   });

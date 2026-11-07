@@ -432,6 +432,11 @@ export function nativeJwksUrl(nativeOrigin: string): string {
   return `${nativeOrigin.replace(/\/$/, '')}/.well-known/jwks.json`;
 }
 
+/** Kernel and Access fetch this document; Auth pages proxy it from native Auth on the issuer origin. */
+export function issuerJwksUrl(issuerOrigin: string): string {
+  return `${issuerOrigin.replace(/\/$/, '')}/.well-known/jwks.json`;
+}
+
 export type StackStartPlan = {
   kernel: string[];
   nativeReady: string[];

@@ -105,16 +105,9 @@ export function readMembershipWorkConfig(env: Environment): MembershipWorkConfig
   if (audience.protocol !== 'https:' || audience.username || audience.password || audience.hash)
     throw new ConfigError('AUTH_AUDIENCE');
   const jwks = url(env, 'AUTH_JWKS_URL');
-  // Walk stacks serve JWKS from native Auth while AUTH_ISSUER is the Auth-pages origin.
-  const localNativeJwks =
-    local &&
-    jwks.protocol === issuer.protocol &&
-    jwks.hostname === issuer.hostname &&
-    ['127.0.0.1', 'localhost', '[::1]'].includes(jwks.hostname) &&
-    jwks.pathname === '/.well-known/jwks.json';
   if (
     jwks.protocol !== issuer.protocol ||
-    (jwks.origin !== issuer.origin && !localNativeJwks) ||
+    jwks.origin !== issuer.origin ||
     jwks.href !== env.AUTH_JWKS_URL ||
     jwks.username ||
     jwks.password ||
