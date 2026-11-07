@@ -11,6 +11,11 @@ views are organised. Mechanisms live with their owners: covers in [Cover](../pac
 This page spans those modules because a reader experiences one page; splitting its rules across owners would let
 each owner ship a correct part and the page still fail.
 
+Decision: Configured Subject page composition owns profile selection, slot assembly and visit descriptor orchestration
+through a consumer-owned Semantic render/navigation port. The Semantic catalogue binding installs the current readers
+and descriptors at the Web route composition root; the page application owns the installed operation and its disclosure,
+continuation, receipt and work-budget semantics.
+
 ## Reader Type display
 
 Reader labels, cover proportions and explicit Schema.org hints come from the shared Web Type-directory
