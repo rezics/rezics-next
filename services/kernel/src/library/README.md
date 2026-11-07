@@ -12,6 +12,11 @@ import window before native identity installation, then let native bootstrap map
 mutations as native commands. Keep fresh-account entries on one shared subject, refresh fixture actors every 16 units,
 and omit redundant refills.
 
+Decision: apply the shared measured-page path rule to those growth samples: reject sequential scans only when a guarded
+relation exceeds eight pages. A scan count without its measured relation footprint cannot establish a growth-path
+regression, so replace the unconditional zero-scan assertion with `assertGrowthAccessPaths`; retain the same four
+guarded relations, 64/512/4096 population and fixed-work bounds.
+
 Decision: Library consumes native Access behaviour through `access-port.ts`; the existing domain binding holds that
 consumer-owned port and `composition/library.ts` installs Access's native adapter. Shared refusal constructors,
 erasure participant lists and work/policy vocabulary belong to Access contract leaves; compatibility entries re-export
