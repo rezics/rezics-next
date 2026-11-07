@@ -23,10 +23,7 @@ import { gameGroups, gameType } from './game-profile';
 import { gameReaderEntry } from './game-reader/model';
 import { storyArcPublicOrigin } from './story-arc-public-visit';
 import { readTermsPageAuthority } from './subject-terms-request';
-import {
-  albumCurrentVisitSourceAddress,
-  createAlbumCurrentVisitLink,
-} from './album-current-visit-model';
+import { albumCurrentVisitSourceAddress, createAlbumCurrentVisitLink } from './album-current-visit-model';
 import {
   parseRecipeCurrentReturn,
   recipeCorrectionHref,

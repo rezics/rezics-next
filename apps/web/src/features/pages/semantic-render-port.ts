@@ -3,8 +3,7 @@ import type { Release } from '@rezics/definitions';
 import type { ReactNode } from 'react';
 
 type Subject = SubjectRead['subject'];
-type Related = SubjectRead['related'] &
-  Record<string, SubjectRead['related'][string] & { redirect?: string }>;
+type Related = SubjectRead['related'] & Record<string, SubjectRead['related'][string] & { redirect?: string }>;
 
 /** The page-owned vocabulary for the current Semantic profile and visit capabilities. */
 export type SemanticPageComponent<Props extends object> = (props: Props) => ReactNode;
@@ -18,12 +17,7 @@ export type WorkTagReadingProps = {
   currentHref?: string | undefined;
   realm?: string | undefined;
   returnToFor?:
-    | ((selection: {
-        property: string;
-        statement: string;
-        spoiler: 0 | 1 | 2;
-        focus: 'browse' | 'evidence';
-      }) => string)
+    | ((selection: { property: string; statement: string; spoiler: 0 | 1 | 2; focus: 'browse' | 'evidence' }) => string)
     | undefined;
 };
 
@@ -105,9 +99,7 @@ export type AuthoredPublicOrigin = {
 export type SubjectTermsViewer = 'signed-in' | 'signed-out' | 'unavailable';
 export type TermsPageAuthority = {
   viewer: 'signed-in' | 'signed-out' | 'unavailable';
-  actions:
-    | { state: 'ready'; actions: { action: string; operations: string[] }[] }
-    | { state: 'unavailable' };
+  actions: { state: 'ready'; actions: { action: string; operations: string[] }[] } | { state: 'unavailable' };
 };
 export type RecipeOccurrence = { property: string; statement: string; holder: string };
 export type RecipeCurrentReturn = {
@@ -174,7 +166,12 @@ export type SemanticRenderPort = {
     gameReaderEntry(type: string, bases?: readonly string[]): boolean;
     gameGroups(release: Pick<Release, 'types' | 'properties'>, type: string): Record<GameGroup, string[]>;
     gameType(release: Pick<Release, 'types' | 'properties'>, type: string): boolean;
-    storyArcPublicOrigin(input: { currentHref?: string; id: string; locale: string; realm?: string }): string | undefined;
+    storyArcPublicOrigin(input: {
+      currentHref?: string;
+      id: string;
+      locale: string;
+      realm?: string;
+    }): string | undefined;
     readTermsPageAuthority(
       client: KernelClient,
       viewer: SubjectTermsViewer,

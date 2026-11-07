@@ -684,8 +684,7 @@ export function gamePageInitial(
     summaryTypes: summary?.types,
     definitions,
   });
-  if (!profiles.gameReader && publicationOverlayKind(subject.type, definitions) !== 'game')
-    return;
+  if (!profiles.gameReader && publicationOverlayKind(subject.type, definitions) !== 'game') return;
   const admitted =
     profiles.gameType &&
     !catalogueTypeIsA(definitions, subject.type, 'wd:Q20631656') &&
@@ -1689,11 +1688,7 @@ export function SubjectPage({
                   {...(gameInitial ? { initial: gameInitial } : {})}
                 />
               ) : null}
-              {overview &&
-              read &&
-              !page.account &&
-              !semanticProfiles?.gameReader &&
-              gameReading ? (
+              {overview && read && !page.account && !semanticProfiles?.gameReader && gameReading ? (
                 <PublicationOverlayView
                   reading={{ kind: 'game', fields: gameReading.fields }}
                   subject={read.subject}

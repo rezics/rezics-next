@@ -101,9 +101,7 @@ export function selectSubjectPageProfiles(input: {
 
 export function gameClassificationDescriptor(address: string): GameClassificationReturn | undefined {
   if (!address) return;
-  return semanticRenderPort().navigation.gameClassificationReturn(
-    new URL(address, 'https://rezics.invalid').hash,
-  );
+  return semanticRenderPort().navigation.gameClassificationReturn(new URL(address, 'https://rezics.invalid').hash);
 }
 
 export function consumeGameClassificationReceipt(
@@ -1119,8 +1117,10 @@ function subjectVisitReturnAt(value: unknown, locale: string | undefined, nested
       (personBiography !== undefined && selectedContext !== personBiography.context) ||
       (gameReturn !== undefined &&
         (gameReturnAddress.length > semanticRenderPort().navigation.gameClassificationReturnLimit ||
-          new TextEncoder().encode(gameReturnAddress).byteLength > semanticRenderPort().navigation.gameClassificationReturnLimit ||
-          encodeURIComponent(gameReturnAddress).length > semanticRenderPort().navigation.gameClassificationReturnLimit ||
+          new TextEncoder().encode(gameReturnAddress).byteLength >
+            semanticRenderPort().navigation.gameClassificationReturnLimit ||
+          encodeURIComponent(gameReturnAddress).length >
+            semanticRenderPort().navigation.gameClassificationReturnLimit ||
           !subject ||
           nested ||
           subject[2] !== undefined ||
@@ -1202,7 +1202,11 @@ function subjectVisitReturnAt(value: unknown, locale: string | undefined, nested
     if (
       !(subject?.[2] === 'works' && semanticRenderPort().navigation.creditReturn(fragment)) &&
       fragment !== '#literary-reader' &&
-      !(subject && !subject[2] && (fragment === '#work-franchise' || semanticRenderPort().navigation.workFranchiseReturn(fragment))) &&
+      !(
+        subject &&
+        !subject[2] &&
+        (fragment === '#work-franchise' || semanticRenderPort().navigation.workFranchiseReturn(fragment))
+      ) &&
       !(subject?.[2] && (fragment === '#work-franchise' || franchiseReturn !== undefined) && finiteWorkRegion) &&
       !(subject && !subject[2] && organizationHistoryVisitReturn(fragment)) &&
       fragment !== '#connections' &&
