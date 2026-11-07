@@ -14,7 +14,7 @@ import { createWorkClient } from './work/client.ts';
 import { readContentConfig } from './content/config.ts';
 import type { ContentRuntime } from './content/runtime.ts';
 import type { NativeAuthorErasureWorkflows } from './content/operation-contract.ts';
-import { configureReceiptKeys } from './command/receipt-key.ts';
+import { configureReceiptKeys, configuredReceiptKeys, readReceiptKeyRing } from './command/receipt-key.ts';
 import {
   createKernelCreditSearchSource,
   createKernelRuntimeDefaults,
@@ -131,7 +131,8 @@ export function startServer(config: ServerConfig): Promise<RunningServer> & Runn
     min: KERNEL_POOL_MAX,
     ...(config.poolIdleTimeoutMillis === undefined ? {} : { idleTimeoutMillis: config.poolIdleTimeoutMillis }),
   });
-  if (config.receiptKeys) configureReceiptKeys(pool, config.receiptKeys);
+  const receiptKeys = readReceiptKeyRing(process.env, config.receiptKeys ?? configuredReceiptKeys(pool));
+  configureReceiptKeys(pool, receiptKeys);
   const peers = new WeakMap<Request, string>();
   const searchConfig = config.search;
   const commerce = config.commerce;
@@ -166,7 +167,7 @@ export function startServer(config: ServerConfig): Promise<RunningServer> & Runn
     defaults = createKernelRuntimeDefaults({
       searchNativePorts,
       tokens: config.tokens,
-      ...(config.receiptKeys === undefined ? {} : { receiptKeys: config.receiptKeys }),
+      receiptKeys,
       ...(config.writeRate === undefined ? {} : { writeRate: config.writeRate }),
       ...(config.rateAttribution === undefined ? {} : { rateAttribution: config.rateAttribution }),
       ...(config.auth === undefined ? {} : { auth: config.auth }),

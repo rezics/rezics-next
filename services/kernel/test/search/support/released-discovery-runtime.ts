@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import type { Pool } from 'pg';
 import type { Access } from '../../../src/request/access.ts';
-import { composeSearchSemanticSource } from '../../../src/composition/search-semantic.ts';
+import { composeSearchNativePorts } from '../../../src/composition/search-native.ts';
 import {
   createDefaultPublicFilterRuntime,
   type DefaultPublicFilterRuntime,
@@ -27,6 +27,7 @@ import { workerTestEnv } from '../../support/worker-env.ts';
 import { outcomeClockInstant, startOutcomeWorkerProcess } from './outcome-rpc.ts';
 import { searchProxy } from './outcome-supervisor.ts';
 import { searchWorkerOwnership, type SearchWorkerKind } from './runner-slot.ts';
+import type { SearchNativePorts } from '../../../src/search/composition.ts';
 
 type Request = (path: string, body?: unknown) => Promise<HttpResponse>;
 /** The production factories and their returned operations retain all native admission and custody. */
@@ -117,6 +118,7 @@ export function releasedDiscoveryRuntime(
   let instrumentedWorker: ReturnType<typeof createOutcomeWorker> | undefined;
   let env: Record<string, string | undefined> | undefined;
   let config: Parameters<typeof createKernel>[0] | undefined;
+  let nativePorts: SearchNativePorts | undefined;
   let publicFilters: DefaultPublicFilterRuntime | undefined;
   let preparationClient: Promise<WorkClient> | undefined;
   let databaseUrl: string | undefined;
@@ -130,6 +132,7 @@ export function releasedDiscoveryRuntime(
   let clockPending = Promise.resolve();
   let clockFailure: unknown;
   let clockUpdates = 0;
+  const searchPorts = () => (nativePorts ??= composeSearchNativePorts());
   const operations = new Set<Promise<unknown>>();
   function track<T>(pending: Promise<T>): Promise<T> {
     operations.add(pending);
@@ -312,7 +315,7 @@ export function releasedDiscoveryRuntime(
     },
     onAccessReady(access: Access): void {
       if (sealed || !config || publicFilters) throw new Error('Released discovery Access composition is not available');
-      composeSearchSemanticSource();
+      searchPorts();
       publicFilters = createDefaultPublicFilterRuntime({
         pool: config.pool,
         routeKey: config.routeKey,
@@ -326,7 +329,7 @@ export function releasedDiscoveryRuntime(
       if (sealed || config) throw new Error('Released discovery service composition already attempted or closed');
       config = installed;
       if (!config.tokens) throw new Error('Shared fixture must supply its actual session keys');
-      const { source, ratings } = createRatedSubjectSource(config.pool, config.routeKey);
+      const { source, ratings } = createRatedSubjectSource(config.pool, config.routeKey, undefined, searchPorts());
       return createSearchService({
         pool: config.pool,
         client: search,

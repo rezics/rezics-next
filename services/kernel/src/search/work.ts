@@ -7,7 +7,6 @@ import { readErasureStatus } from '../access/erasure.ts';
 import { routeOf, partitionOf, PARTITIONS } from '../route/route.ts';
 import './recent-searches.ts';
 import { trendingSearchStore } from './trending-searches.ts';
-import { createKernel } from '../http/kernel.ts';
 import { createDefaultPublicFilterRuntime } from './public-runtime.ts';
 import { createPublicPreparation, type PublicPreparation } from './public-preparation.ts';
 import { createScopePreparation } from './scope-preparation.ts';
@@ -17,7 +16,10 @@ import { subjectListingSource } from '../library/listing-counts.ts';
 import { readMembershipRouteKey } from '../access/membership-work-config.ts';
 import type { WorkContext, WorkModule } from '../work/registry.ts';
 import { createOpenSearch, SearchUnavailableError } from './opensearch.ts';
-import type { Access } from '../request/access.ts';
+import type { Access, AccessFactory } from '../request/access.ts';
+import type { AuthenticationConfig } from '../access/authenticate.ts';
+import type { WriteRateLimiter } from '../access/write-rate.ts';
+import type { WriteRateStageOptions } from '../access/write-rate-stage.ts';
 import type { KernelClock } from '../clock.ts';
 import type { KeyRing } from '../tokens/seal.ts';
 import type { Pool } from 'pg';
@@ -30,6 +32,8 @@ import { registerSearchErasure, markSearchPersonalErasure, stepSearchErasure } f
 import type { SubjectSource } from './source.ts';
 import type { CreditSearchSource } from './credit-search.ts';
 import type { FacetAccessObservationPort } from './facet-access-port.ts';
+import type { SearchLibraryScopePort } from './library-scope-port.ts';
+import type { SubjectReadingApplication } from '../semantic/index.ts';
 import { bindSearchNativeCapabilities } from './composition.ts';
 import type { SearchNativePorts } from './native-ports.ts';
 
@@ -80,20 +84,31 @@ type SearchDiscoveryComposer = (input: {
   subjects: SubjectSource;
 }) => DiscoveryProducerEntry;
 
-type SearchRuntimeDefaults = Required<
-  Pick<
-    Parameters<typeof createKernel>[0],
-    'tokens' | 'receiptKeys' | 'writeRate' | 'rateAttribution' | 'clock' | 'access' | 'subjectReading'
-  >
-> & {
+export type SearchRuntimeDefaults = {
+  tokens: KeyRing;
+  receiptKeys: KeyRing;
+  writeRate: WriteRateLimiter;
+  rateAttribution: WriteRateStageOptions;
+  clock: KernelClock;
+  deadlineNow: () => number;
+  access: AccessFactory;
+  auth?: AuthenticationConfig;
+  subjectReading: SubjectReadingApplication;
   facetAccess: FacetAccessObservationPort;
-  libraryScope: import('./library-scope-port.ts').SearchLibraryScopePort;
+  libraryScope: SearchLibraryScopePort;
 };
-type SearchRuntimeDefaultsComposer = (input: {
+export type SearchRuntimeDefaultsComposer = (input: {
   env: NodeJS.ProcessEnv;
   clock: KernelClock;
   searchNativePorts: SearchNativePorts;
 }) => SearchRuntimeDefaults;
+export type SearchNativeAccessInput = {
+  pool: Pool;
+  routeKey: Uint8Array;
+  defaults: SearchRuntimeDefaults;
+  workClient: WorkContext['client'];
+};
+export type SearchNativeAccessComposer = (input: SearchNativeAccessInput) => Access | Promise<Access>;
 type CreditSearchSourceComposer = (pool: Pool, routeKey: Uint8Array) => CreditSearchSource;
 type SearchNativePortsComposer = () => SearchNativePorts | Promise<SearchNativePorts>;
 
@@ -102,10 +117,14 @@ export function createSearchWorkModule(
   composeRuntimeDefaults: SearchRuntimeDefaultsComposer,
   composeCreditSearch: CreditSearchSourceComposer | undefined,
   composeNativePorts: SearchNativePortsComposer,
+  composeNativeAccess: SearchNativeAccessComposer,
 ): WorkModule {
   return {
     name: 'search',
     async register(context) {
+      const config = readSearchConfig(context.env);
+      const preparedSearch =
+        config === undefined ? undefined : { config, routeKey: readMembershipRouteKey(context.env) };
       const nativePorts = await composeNativePorts();
       bindSearchNativeCapabilities(nativePorts);
       const trends = trendingSearchStore(context.pool, context.clock);
@@ -296,17 +315,16 @@ export function createSearchWorkModule(
           },
         };
       });
-      const config = readSearchConfig(context.env);
       const bindErasureAccess = registerSearchErasure(context, config, composeCreditSearch, nativePorts);
-      if (!config) return;
-      const routeKey = readMembershipRouteKey(context.env);
+      if (!preparedSearch) return;
+      const { config: searchConfig, routeKey } = preparedSearch;
       const creditSearch = composeCreditSearch?.(context.pool, routeKey);
-      const search = createOpenSearch(config.url);
+      const search = createOpenSearch(searchConfig.url);
       const source = createRatedSubjectSource(context.pool, routeKey, creditSearch, nativePorts).source;
       collectionPublicationScopeRuntimes.set(context, {
         pool: context.pool,
         client: search,
-        prefix: config.prefix,
+        prefix: searchConfig.prefix,
         source,
         clock: context.clock,
       });
@@ -316,7 +334,7 @@ export function createSearchWorkModule(
           name: 'search_review_discovery_receiving',
           types: [REVIEW_DISCOVERY_CHANGED],
           async run(event) {
-            await requestReviewDiscoveryReceiving(context.pool, config.prefix, event.data);
+            await requestReviewDiscoveryReceiving(context.pool, searchConfig.prefix, event.data);
           },
         },
       ]);
@@ -326,7 +344,7 @@ export function createSearchWorkModule(
       const scopeGate = createSearchServiceGate<ReturnType<typeof createScopePreparation>>(
         () => new SearchUnavailableError('Search scope preparation service is not running'),
       );
-      const scopeStore = createScopePreparationStore(context.pool, config.prefix, context.client);
+      const scopeStore = createScopePreparationStore(context.pool, searchConfig.prefix, context.client);
       const scopeStep = DBOS.registerStep(
         async (scopeId: string, revision: string) => {
           await (await scopeGate.ready()).run(scopeId, revision);
@@ -364,52 +382,48 @@ export function createSearchWorkModule(
           collectionPublicationScopeRuntimes.set(context, { ...published, library: defaults.libraryScope });
         let runtime: ReturnType<typeof createDefaultPublicFilterRuntime> | undefined;
         let discoveryProducers: DiscoveryProducerEntry | undefined;
-        let searchAccess: Access | undefined;
         try {
-          createKernel({
+          const access = await composeNativeAccess({
             pool: context.pool,
             routeKey,
-            ...defaults,
+            defaults,
             workClient: context.client,
-            onAccessReady(access) {
-              searchAccess = access;
-              bindErasureAccess(access);
-              discoveryProducers = composeDiscovery({
-                pool: context.pool,
-                routeKey,
-                access,
-                tokens: defaults.tokens,
-                clock: context.clock,
-                subjects: source,
-              });
-              scopeGate.offer(
-                createScopePreparation({
-                  search,
-                  pool: context.pool,
-                  prefix: config.prefix,
-                  routeKey,
-                  access,
-                  clock: context.clock,
-                }),
-              );
-              runtime = createDefaultPublicFilterRuntime({
-                pool: context.pool,
-                routeKey,
-                access,
-                search,
-                prefix: config.prefix,
-                clock: context.clock,
-                facetAccess: defaults.facetAccess,
-                ...(creditSearch === undefined ? {} : { creditSearch }),
-              });
-            },
+          });
+          bindErasureAccess(access);
+          discoveryProducers = composeDiscovery({
+            pool: context.pool,
+            routeKey,
+            access,
+            tokens: defaults.tokens,
+            clock: context.clock,
+            subjects: source,
+          });
+          scopeGate.offer(
+            createScopePreparation({
+              search,
+              pool: context.pool,
+              prefix: searchConfig.prefix,
+              routeKey,
+              access,
+              clock: context.clock,
+            }),
+          );
+          runtime = createDefaultPublicFilterRuntime({
+            pool: context.pool,
+            routeKey,
+            access,
+            search,
+            prefix: searchConfig.prefix,
+            clock: context.clock,
+            facetAccess: defaults.facetAccess,
+            ...(creditSearch === undefined ? {} : { creditSearch }),
           });
         } catch (error) {
           preparationGate.stop();
           scopeGate.stop();
           throw error;
         }
-        if (!runtime || !discoveryProducers || !searchAccess) {
+        if (!runtime || !discoveryProducers) {
           preparationGate.stop();
           scopeGate.stop();
           throw new Error('Search worker Access composition is incomplete');
@@ -442,7 +456,7 @@ export function createSearchWorkModule(
           source,
           listing,
           runtime,
-          prefix: config.prefix,
+          prefix: searchConfig.prefix,
         });
         try {
           preparationGate.offer(preparation);
@@ -458,7 +472,7 @@ export function createSearchWorkModule(
             search,
             source,
             listing,
-            prefix: config.prefix,
+            prefix: searchConfig.prefix,
             concurrency: 2,
             discovery: { routeKey, producers: discoveryProducers },
             publicPreparation: preparation,
