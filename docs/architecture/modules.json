@@ -503,7 +503,9 @@
         "services/kernel/src/library/domain-binding.ts",
         "services/kernel/src/library/identity-original-work.ts",
         "services/kernel/src/library/identity-scope-effects.ts",
-        "services/kernel/src/library/collection-source-work.ts"
+        "services/kernel/src/library/collection-source-work.ts",
+        "services/kernel/src/library/collection-native-work.ts",
+        "services/kernel/src/library/collection-kind-input.ts"
       ],
       "allowedDependencies": [
         "access-policy",

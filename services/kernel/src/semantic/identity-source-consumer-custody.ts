@@ -19,7 +19,7 @@ import type {
   LibraryScopeEffectsPage,
   LibraryScopeEffectsKey,
 } from '../library/identity-scope-effects.ts';
-import { instrumentNativeCollectionWork, requireNativeCollectionFootprint } from '../library/access-capabilities.ts';
+import { instrumentNativeCollectionWork, requireNativeCollectionFootprint } from '../library/collection-native-work.ts';
 import { readIdentityPrearmCustodyPage, verifyIdentityPrearmCustodyCut } from './identity-epoch-prearm-custody.ts';
 import { identityScopeAddress, scopeConsumerFootprint } from './identity-scoped-observations.ts';
 import { readIdentityReceivingSelection, reconcileIdentityReceivingEffect } from './identity-receiving-effects.ts';

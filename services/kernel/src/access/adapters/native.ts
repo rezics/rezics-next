@@ -9,11 +9,7 @@ import {
   verifyOriginalAccountAgentIdentity,
   withReadTransaction,
 } from '../../semantic/access-capabilities.ts';
-import {
-  IDENTITY_HISTORY_ORIGINAL_LIBRARY_DECLARATION,
-  collectionKindInputWork,
-  resolveCollectionKindRawInput,
-} from '../../library/access-capabilities.ts';
+import { collectionKindInputWork } from '../../library/access-capabilities.ts';
 import { collectionKindPreparationNativeWork, observeAccountErasureSearch } from '../../search/access-capabilities.ts';
 import type {
   AccessApplicationPorts,
@@ -24,9 +20,15 @@ import type {
   IdentityRecoveryStorePort,
   IdentityRetentionPort,
   IdentitySemanticPort,
+  KindAudienceLibraryPort,
   RealmCommandTransaction,
 } from '../contract/index.ts';
 import { EMPTY_ACCESS_WORK_DIMENSIONS } from '../contract/index.ts';
+
+export type NativeAccessLibraryBindings = Readonly<{
+  resolveCollectionKindRawNative: NonNullable<KindAudienceLibraryPort['resolveCollectionKindRawNative']>;
+  historyOriginalLibraryDeclaration: () => unknown;
+}>;
 
 function asPool(pool: AccessPool): Pool {
   return pool as Pool;
@@ -49,6 +51,12 @@ export function createNativeAccessPorts(
     deps: { pool: Pool },
     input: { accountId: string; participant: 'access'; outcome: 'erased' },
   ) => Promise<unknown>,
+  library: NativeAccessLibraryBindings = {
+    async resolveCollectionKindRawNative() {
+      return { status: 'unavailable' as const, work: EMPTY_ACCESS_WORK_DIMENSIONS };
+    },
+    historyOriginalLibraryDeclaration: () => null,
+  },
 ): AccessApplicationPorts {
   const identity: IdentitySemanticPort = {
     accountAgentId: (accountId) => accountAgentId(accountId),
@@ -145,12 +153,7 @@ export function createNativeAccessPorts(
         return { status: 'unavailable' as const, work: EMPTY_ACCESS_WORK_DIMENSIONS };
       },
       resolveCollectionKindRawNative(tx, locator, originId, native) {
-        return resolveCollectionKindRawInput(
-          tx as Parameters<typeof resolveCollectionKindRawInput>[0],
-          locator as Parameters<typeof resolveCollectionKindRawInput>[1],
-          originId,
-          native as Parameters<typeof resolveCollectionKindRawInput>[3],
-        );
+        return library.resolveCollectionKindRawNative(tx, locator, originId, native);
       },
     },
     originalWork: {
@@ -158,7 +161,7 @@ export function createNativeAccessPorts(
         return declarationOf(IDENTITY_HISTORY_ORIGINAL_SOURCE_DECLARATION);
       },
       async readHistoryOriginalLibraryDeclaration() {
-        return declarationOf(IDENTITY_HISTORY_ORIGINAL_LIBRARY_DECLARATION);
+        return declarationOf(library.historyOriginalLibraryDeclaration());
       },
     },
     searchErasure: {

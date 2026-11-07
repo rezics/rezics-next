@@ -98,6 +98,8 @@ production declaration as public entries; Search and composition import those po
 `identity-epoch-coordinator.ts` so the Semantic barrel does not close a coordinator value cycle. Search and Library
 import Source maintenance from `identity-source-consumer-maintenance.ts`; identity-adapters does not re-export those
 values, because that edge closed a maintenance cycle.
+Identity Rating repair values stay on `identity-rating-repair-producer.ts`; Source custody imports Library
+`collection-native-work.ts`; composition binds Kind raw input so Access `access-capabilities.ts` is not a Kind/Source hub.
 
 Decision: `config-check-runtime.ts` constructs check runners and reloads train settings from supplied dependencies; `createRuntime` keeps process, store and lifecycle ownership.
 
