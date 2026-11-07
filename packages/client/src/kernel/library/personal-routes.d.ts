@@ -11818,6 +11818,12 @@ export declare function personalLibraryRoutes(app: ReturnType<typeof definitionR
                             follow: {
                                 target?: {
                                     id: string;
+                                    kind: "actor" | "organization";
+                                    displayName: string | null;
+                                } | {
+                                    displayName: "Deleted account" | "Deleted organization";
+                                } | {
+                                    id: string;
                                     type: string;
                                     types: string[];
                                     label: {
@@ -11851,12 +11857,6 @@ export declare function personalLibraryRoutes(app: ReturnType<typeof definitionR
                                             obligations: string[];
                                         };
                                     } | null;
-                                } | {
-                                    id: string;
-                                    kind: "actor" | "organization";
-                                    displayName: string | null;
-                                } | {
-                                    displayName: "Deleted account" | "Deleted organization";
                                 } | {
                                     id: string;
                                     type: string;

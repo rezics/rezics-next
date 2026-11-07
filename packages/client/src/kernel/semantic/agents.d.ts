@@ -1,3 +1,4 @@
+/** Public Account/agent mapping for Access reads and native ports. */
 import type { Pool, PoolClient } from 'pg';
 export type AccountAgentLink = {
     account: string;
