@@ -214,7 +214,8 @@ export function reapExitedProcessGroupMembers(pgid: number): void {
   const table = readProcessTable();
   for (const pid of relatedProcessIds(pgid, table)) {
     const identity = table.get(pid);
-    if (!identity || identity.state !== 'Z' || identity.ppid !== process.pid) continue;
+    // The runtime owns the directly spawned leader's wait status; only adopted descendants belong to this reaper.
+    if (pid === pgid || !identity || identity.state !== 'Z' || identity.ppid !== process.pid) continue;
     waitpidNoHang(pid);
   }
 }
@@ -223,29 +224,6 @@ export function reapExitedProcessGroupMembers(pgid: number): void {
 export function processHasExited(pid: number): boolean {
   const identity = processIdentity(pid);
   return identity === undefined || identity.state === 'Z';
-}
-
-function observeLeaderExit(pid: number | undefined, observed: Promise<void>, pollIntervalMs: number): Promise<void> {
-  if (pid === undefined) return observed;
-  return new Promise((resolve) => {
-    let settled = false;
-    const finish = () => {
-      if (settled) return;
-      settled = true;
-      resolve();
-    };
-    void observed.then(finish, finish);
-    const tick = () => {
-      if (settled) return;
-      if (processHasExited(pid)) {
-        directChildExitCode(pid);
-        finish();
-        return;
-      }
-      setTimeout(tick, pollIntervalMs);
-    };
-    tick();
-  });
 }
 
 async function completedWithin(promise: Promise<void>, timeoutMs: number): Promise<boolean> {
@@ -421,12 +399,14 @@ function createOwnedTree(rootPid: number, pollIntervalMs: number, launched?: Own
     for (const member of members.values()) {
       const identity = processIdentity(member.pid);
       if (
+        member.pid === rootPid ||
         !identity ||
         identity.startTicks !== member.startTicks ||
         identity.state !== 'Z' ||
         identity.ppid !== process.pid
       )
         continue;
+      // Bun/Node reap the root; custody reaps only recorded descendants adopted by this process.
       waitpidNoHang(member.pid);
     }
   };
@@ -538,13 +518,11 @@ function makeProcessCustody(
       const graceDeadline = Date.now() + termGraceMs;
       tree.signal('SIGTERM', cleanupErrors);
       childSettled = await completedWithin(childCompletion, termGraceMs);
-      if (!childSettled) directChildExitCode(pid);
       const remainingGrace = graceDeadline - Date.now();
       if (remainingGrace > 0) await awaitOwnedExit(remainingGrace);
       if (tree.live().length > 0) {
         tree.signal('SIGKILL', cleanupErrors);
         if (!childSettled) childSettled = await completedWithin(childCompletion, settleTimeoutMs);
-        directChildExitCode(pid);
         await awaitOwnedExit(settleTimeoutMs);
       }
       tree.sample(true);
@@ -625,19 +603,16 @@ export function ownBunProcess(child: Bun.Subprocess, options: ProcessCustodyOpti
   const outputCompletion = Promise.all([drain(streams.stdout, 'stdout'), drain(streams.stderr, 'stderr')]).then(
     () => undefined,
   );
-  const childCompletion = observeLeaderExit(
-    child.pid,
-    Promise.resolve(child.exited).then(
-      () => undefined,
-      (error) => {
-        errors.push(
-          new Error(`${options.label ?? 'Child process group'} exit observation failed: ${errorText(error)}`, {
-            cause: error,
-          }),
-        );
-      },
-    ),
-    options.pollIntervalMs ?? 25,
+  // Only Bun can complete and reap its direct child. A /proc zombie is not a settled runtime exit.
+  const childCompletion = Promise.resolve(child.exited).then(
+    () => undefined,
+    (error) => {
+      errors.push(
+        new Error(`${options.label ?? 'Child process group'} exit observation failed: ${errorText(error)}`, {
+          cause: error,
+        }),
+      );
+    },
   );
   void outputCompletion.catch(() => {});
   void childCompletion.catch(() => {});
