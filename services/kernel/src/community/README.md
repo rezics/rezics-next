@@ -121,10 +121,11 @@ never apply an old event body or interpret its type as current permission. Searc
 replacement/removal and query behavior. Current native Space/Realm/Content hydration remains the final disclosure
 authority while delivery lags. This producer does not establish index convergence or whole-query privacy proof.
 
-Decision: `space_discovery_tuple_reference` stores tuple identity only. Witness refresh copies those rows into
-remove-work with `producer_epoch` and `source_position` 0, and copies existing work rows with their stored epoch.
-The `INSERT … SELECT` aliases both sources so PostgreSQL does not bind `producer_epoch` to the INSERT target.
-A later Realm on an already-committed Space is the production path that takes this copy.
+Decision: `space_discovery_tuple_reference` stores tuple identity only. Witness refresh locks the committed witness before advancing its generation and copies reference removals with
+that witness's `producer_epoch` and `source_position`; pending work retains its own provenance. Qualified Space
+and Realm revision joins require the intended heads to exist. The final forward migration and schema dump
+share this function. The populated revision/replay test covers both fresh installation and replacement of the
+preceding migration on populated storage. A later Realm on an already-committed Space also takes this copy.
 Access grant and account-Realm reads consume `realmReadEligibility` through `access-capabilities.ts`.
 
 **Space-source seam.** The population/bootstrap producer below uses current native positions alongside these existing native events
