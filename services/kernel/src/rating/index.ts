@@ -1,2 +1,13 @@
 /** Rating presentation contract consumed by Search; the native read stays owner-owned. */
 export type { PublicFigureView } from './public-figure-http.ts';
+/** Host composition binds the Semantic producer through this port; HTTP consumes the bound instance. */
+export type {
+  RatingIdentityAuthority,
+  RatingIdentityMapping,
+  RatingIdentityProducer,
+} from './segment-identity-guard.ts';
+export {
+  bindRatingIdentityProducer,
+  ratingIdentityProducer,
+  unavailableRatingIdentityProducer,
+} from './segment-identity-guard.ts';
