@@ -3,6 +3,7 @@ import { composeLibraryDomain } from './library.ts';
 import { createWriteRateLimiter, type WriteRateLimiter } from '../access/write-rate.ts';
 import { createAccess, type AccessConfig } from '../access/index.ts';
 import type { AuthenticationConfig } from '../access/authenticate.ts';
+import { localJwksTransport } from '../access/membership-work-config.ts';
 import { composeAccessApplication } from './access.ts';
 import { composeCommunityApplication } from './community.ts';
 import { composeContentApplication } from './content.ts';
@@ -65,7 +66,7 @@ function readAuthConfig(env: NodeJS.ProcessEnv): AuthenticationConfig | undefine
   const audience = env.AUTH_AUDIENCE;
   const jwksUrl = env.AUTH_JWKS_URL;
   if (issuer === undefined && audience === undefined && jwksUrl === undefined) return undefined;
-  return { issuer: issuer ?? '', audience: audience ?? '', jwksUrl: jwksUrl ?? '' };
+  return localJwksTransport(env, { issuer: issuer ?? '', audience: audience ?? '', jwksUrl: jwksUrl ?? '' });
 }
 
 /** Production CreditSearchSource for the installed Search consumer. */

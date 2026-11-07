@@ -67,7 +67,7 @@ repairs continue). Hourly reporting is one line: passing/31 and slowest failing 
 
 Decision: fewest tests pin the 31 user-visible first-public paths: one kernel native suite over bundled Types, proposals,
 Contexts and static Zones, plus one admitted seeded walk that executes every row with independent native readback and
-mounted pages. Walk Kernel GET `/v1/definitions` is the supported active-release producer (HTTP 200 digest, same as
+mounted pages. Walk `dev-stack.ts walk` stays on the worker host so `GOAL_ACCEPTANCE_REQUIRES` is not stripped. Walk Kernel GET `/v1/definitions` is the supported active-release producer (HTTP 200 digest, same as
 `/v1/definitions/active`); a missing-route 404 is not readiness. Start runs Kernel before the worker so bootstrap
 finishes before discovery. Walk-stack seed uses native Auth (`REZICS_LOCAL_STACK_NATIVE_ORIGIN`) because Auth pages
 start after seed; import transport diagnostics keep HTTP status, problem code or connection classifier without

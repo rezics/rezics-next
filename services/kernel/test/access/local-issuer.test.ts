@@ -7,6 +7,7 @@ import { createAccess } from '../../src/access/index.ts';
 import { readAccount } from '../../src/access/account-data.ts';
 import { AuthenticationError } from '../../src/request/access.ts';
 import type { AuthenticationConfig } from '../../src/access/authenticate.ts';
+import { localJwksTransport } from '../../src/access/membership-work-config.ts';
 import { trustedAccessPorts } from '../support/trusted-access.ts';
 import { dropTestDatabase } from '../support/drop-test-database.ts';
 
@@ -123,17 +124,21 @@ for (const [index, host] of ['127.0.0.1', 'localhost', '[::1]'].entries()) {
       const native = Bun.serve({
         hostname: host === '[::1]' ? '::1' : '127.0.0.1',
         port: 0,
-        fetch: () => service!.handler(new Request(`${issuer}/.well-known/jwks.json`)),
+        fetch: () => {
+          if (!service) throw new Error('Auth not started');
+          return service.handler(new Request(`${issuer}/.well-known/jwks.json`));
+        },
       });
       try {
-        const nativeAccess = createAccess({
+        const nativeOrigin = `http://${host === '[::1]' ? '[::1]' : host}:${native.port}`;
+        const walked = createAccess({
           actions: new Map(),
-          auth: {
-            ...service.verifier,
-            jwksUrl: `http://${host}:${native.port}/.well-known/jwks.json`,
-          },
+          auth: localJwksTransport(
+            { REZICS_LOCAL_STACK_NATIVE_ORIGIN: nativeOrigin },
+            { issuer, audience, jwksUrl: `${issuer}/.well-known/jwks.json` },
+          ),
         });
-        expect(await nativeAccess.authenticate(token, context())).toMatchObject({ accountId: person });
+        expect(await walked.authenticate(token, context())).toMatchObject({ accountId: person, clientId: 'web' });
       } finally {
         await native.stop(true);
       }
@@ -230,6 +235,8 @@ for (const [index, host] of ['127.0.0.1', 'localhost', '[::1]'].entries()) {
         await deny({ issuer: origin, jwksUrl: `${origin}/.well-known/jwks.json` });
       }
       for (const jwksUrl of [
+        `http://127.0.0.1:${port + 1}/jwks`,
+        `http://${host === '[::1]' ? '[::1]' : host}:${port + 1}/.well-known/jwks.json`,
         `https://${host}:${port}/jwks`,
         'http://localhost.example/jwks',
         `${issuer}/jwks?query=1`,

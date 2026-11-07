@@ -1,10 +1,8 @@
 import { ConfigError } from '../commerce/config.ts';
 import type { KeyRing } from '../tokens/seal.ts';
-import {
-  isApprovedLocalHttpOrigin,
-  publicJwksMatchesIssuer,
-  type AuthenticationConfig,
-} from './authenticate.ts';
+import type { AuthenticationConfig } from './authenticate.ts';
+
+const LOOPBACK_HOSTS = new Set(['127.0.0.1', 'localhost', '[::1]']);
 
 type Environment = Readonly<Record<string, string | undefined>>;
 export const MEMBERSHIP_WORK_DEADLINE_MS = 30_000;
@@ -97,21 +95,88 @@ function url(env: Environment, variable: string): URL {
   }
 }
 
+function loopbackHttpOrigin(value: string, variable: string): string {
+  let parsed: URL;
+  try {
+    parsed = new URL(value);
+  } catch {
+    throw new ConfigError(variable);
+  }
+  if (
+    parsed.protocol !== 'http:' ||
+    !LOOPBACK_HOSTS.has(parsed.hostname) ||
+    parsed.username !== '' ||
+    parsed.password !== '' ||
+    parsed.pathname !== '/' ||
+    parsed.search !== '' ||
+    parsed.hash !== '' ||
+    parsed.origin !== value
+  )
+    throw new ConfigError(variable);
+  return parsed.origin;
+}
+
+function requestedHref(url: string | URL): string {
+  return typeof url === 'string' ? url : url.href;
+}
+
+/**
+ * Local stacks keep AUTH_JWKS_URL on the issuer origin. Native Auth is only the
+ * loopback transport for that exact public document; other URLs are not forwarded.
+ * A different loopback port is not an allowed JWKS identity.
+ */
+export function localJwksTransport(env: Environment, auth: AuthenticationConfig): AuthenticationConfig {
+  const native = env.REZICS_LOCAL_STACK_NATIVE_ORIGIN;
+  if (native === undefined || native === '') return auth;
+  let issuer: URL;
+  try {
+    issuer = new URL(auth.issuer);
+  } catch {
+    return auth;
+  }
+  if (issuer.protocol !== 'http:' || !LOOPBACK_HOSTS.has(issuer.hostname)) return auth;
+  const origin = loopbackHttpOrigin(native, 'REZICS_LOCAL_STACK_NATIVE_ORIGIN');
+  const target = `${origin}/.well-known/jwks.json`;
+  if (target === auth.jwksUrl) return auth;
+  const transport = auth.fetch ?? globalThis.fetch;
+  return {
+    ...auth,
+    fetch: async (url, init) => {
+      if (requestedHref(url) !== auth.jwksUrl)
+        throw new TypeError('Local JWKS transport serves only the configured issuer JWKS URL');
+      return transport(target, init);
+    },
+  };
+}
+
 /** Registration reads only the supplied deployment environment, once. */
 export function readMembershipWorkConfig(env: Environment): MembershipWorkConfig {
   const routeKey = readMembershipRouteKey(env);
   const keys = referenceKeys(env);
   const issuer = url(env, 'AUTH_ISSUER');
-  if ((issuer.protocol !== 'https:' && !isApprovedLocalHttpOrigin(issuer)) || issuer.origin !== env.AUTH_ISSUER)
+  const local = issuer.protocol === 'http:' && LOOPBACK_HOSTS.has(issuer.hostname);
+  if ((issuer.protocol !== 'https:' && !local) || issuer.origin !== env.AUTH_ISSUER)
     throw new ConfigError('AUTH_ISSUER');
   const audience = url(env, 'AUTH_AUDIENCE');
   if (audience.protocol !== 'https:' || audience.username || audience.password || audience.hash)
     throw new ConfigError('AUTH_AUDIENCE');
   const jwks = url(env, 'AUTH_JWKS_URL');
-  if (!publicJwksMatchesIssuer(issuer, jwks, env.AUTH_JWKS_URL!)) throw new ConfigError('AUTH_JWKS_URL');
+  if (
+    jwks.protocol !== issuer.protocol ||
+    jwks.origin !== issuer.origin ||
+    jwks.href !== env.AUTH_JWKS_URL ||
+    jwks.username ||
+    jwks.password ||
+    /[?#]/.test(env.AUTH_JWKS_URL!)
+  )
+    throw new ConfigError('AUTH_JWKS_URL');
   return {
     routeKey,
     referenceKeys: keys,
-    auth: { issuer: env.AUTH_ISSUER!, audience: env.AUTH_AUDIENCE!, jwksUrl: env.AUTH_JWKS_URL! },
+    auth: localJwksTransport(env, {
+      issuer: env.AUTH_ISSUER!,
+      audience: env.AUTH_AUDIENCE!,
+      jwksUrl: env.AUTH_JWKS_URL!,
+    }),
   };
 }
