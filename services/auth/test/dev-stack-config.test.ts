@@ -371,3 +371,17 @@ test('an authorized password rotation retains the original registration input', 
     await rm(directory, { recursive: true, force: true });
   }
 });
+
+test('installed host receives management operations and independent reads from its native account binding', async () => {
+  const source = await readFile(resolve(import.meta.dir, '../scripts/dev-stack.ts'), 'utf8');
+  const assembly = source.slice(
+    source.indexOf('export async function assemble('),
+    source.indexOf('export async function provisionPersona('),
+  );
+  expect(assembly).toContain('accountOperations: bindings.accountOperations');
+  expect(assembly).toContain('accountManagementReads: bindings.accountManagementReads');
+  expect(assembly).toContain('workflow: proofs');
+  expect(assembly).toContain('referenceKeys: config.tokens');
+  expect(assembly).toContain('await host.stop()');
+  expect(assembly).toContain('await kernelPool.end()');
+});

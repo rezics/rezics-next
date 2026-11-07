@@ -14,7 +14,7 @@ import { createRequire } from 'node:module';
 import { fileURLToPath } from 'node:url';
 import { exportJWK, generateKeyPair } from 'jose';
 import { Pool } from 'pg';
-import { bindAuthDeletionHandleRead, createAuthHost, type AccountOperationAccess } from '../src/index.ts';
+import { createAuthHost, type AccountOperationAccess } from '../src/index.ts';
 import { parseAccountOperationApprovalResponse, parseOrganizationExecutionResponse } from '@rezics/auth-contract';
 import { accountOperationTransport } from '../src/account-operations-transport.ts';
 import { createBarrierProofVerifier } from '../src/barrier-proofs.ts';
@@ -71,6 +71,7 @@ function ownDatabase() {
 type Native = {
   routeOf(id: string): number | null;
   PLATFORM_RESOURCE: { route: number; id: string };
+  readPublicAccountByHandle: typeof import('../../kernel/src/access/public-identity.ts').readPublicAccountByHandle;
 };
 let database: ReturnType<typeof ownDatabase>;
 let kernelPool: Pool;
@@ -190,7 +191,7 @@ beforeAll(async () => {
       ...(await import('../../kernel/src/access/workflow-approvals.ts')),
       ...(await import('../../kernel/src/access/lifecycle.ts')),
       ...(await import('../../kernel/src/access/bootstrap-governance.ts')),
-      ...(await import('../../kernel/src/access/gates/admission.ts')),
+      ...(await import('../../kernel/src/access/public-identity.ts')),
       ...(await import('../../kernel/src/route/route.ts')),
     };
   } finally {
@@ -225,42 +226,9 @@ beforeAll(async () => {
       barriers: createBarrierProofVerifier({ database: authPool }),
     },
   });
-  const workflowApprovals = modules.createWorkflowApprovals({
-    pool: kernelPool,
-    access,
-    actions,
-    referenceKeys,
-    creationBinding: proofs.creationBinding,
-  });
-  const context = () => ({ pool: kernelPool, deadline: Date.now() + 10000 });
-  const deletionHandle = modules.createAuthDeletionHandleRead({ pool: kernelPool, access });
-  const accountOperations: AccountOperationAccess = {
-    context,
-    readDeletionHandle: (token, accountId, ctx) => deletionHandle.readDeletionHandle(token, accountId, ctx),
-    approve: (token, input, ctx) => workflowApprovals.approve(token, input as never, ctx as never),
-    resolveForCaller: (token, reference, operation, ctx) =>
-      workflowApprovals.resolveForCaller(token, reference, operation as never, ctx as never),
-    async admitGroup(token, group, ctx) {
-      const bounded = ctx as ReturnType<typeof context>;
-      const actor = await access.authenticate(token, bounded);
-      try {
-        await modules.admitGroup({
-          pool: kernelPool,
-          access: () => access,
-          actor,
-          group,
-          clientAction: 'organization:create',
-          deadline: bounded.deadline,
-          clock: () => new Date(),
-        });
-        return true;
-      } catch (error) {
-        if (error instanceof modules.PlatformClosedError) return false;
-        throw error;
-      }
-    },
-  };
-  bindAuthDeletionHandleRead(accountOperations, deletionHandle);
+  const accountOperations = bindings.accountOperations;
+  const workflowApprovals = accountOperations;
+  const context = bindings.accountManagementReads.context;
   installedAccess = accountOperations;
   const key = { ...(await exportJWK((await generateKeyPair('ES256', { extractable: true })).privateKey)), kid: 'ops' };
   host = await createAuthHost({
@@ -273,6 +241,7 @@ beforeAll(async () => {
     trustedAccess: trustedAccessPorts(bindings.trustedAccess),
     access: bindings.workflowPorts,
     accountOperations,
+    accountManagementReads: bindings.accountManagementReads,
     stagingKey: randomBytes(32),
     maintenanceSchedule: '0 0 1 1 *',
     executorId: `account-operations-${randomUUID()}`,
@@ -378,6 +347,24 @@ test('a signed-in person approves and executes organization creation rename and 
   expect(Buffer.byteLength(memberText)).toBeLessThanOrEqual(MEMBERSHIP_EXECUTION_MAX_RESPONSE_BYTES);
   expect(parseMembershipExecutionResponse(JSON.parse(memberText))).toEqual({ accountId: ordinary.accountId });
 
+  for (const role of ['owner', 'member'] as const) {
+    const operation = { ...membership, role };
+    const operationKey = `change-member-${role}`;
+    const approval = await ok(await approve(creator, operationKey, operation));
+    expect(await done(await execute(creator, { operationKey, operation, reference: approval.reference }))).toEqual({
+      accountId: ordinary.accountId,
+    });
+    expect(
+      (
+        await kernelPool.query(
+          `SELECT role FROM access.organization_member
+       WHERE route=$1 AND organization_id=$2 AND member_account_id=$3 AND valid @> statement_timestamp()`,
+          [native.routeOf(organizationId), organizationId, ordinary.accountId],
+        )
+      ).rows,
+    ).toEqual([{ role }]);
+  }
+
   const removeOrganization = { kind: 'delete', accountId: organizationId };
   const organizationApproval = await ok(await approve(creator, 'delete-created-organization', removeOrganization));
   const deletionBody = {
@@ -386,6 +373,11 @@ test('a signed-in person approves and executes organization creation rename and 
     reference: organizationApproval.reference,
     confirmation: handle,
   };
+  const beforeConfirmation = await counts();
+  await refused(await execute(creator, { ...deletionBody, confirmation: creator.handle }), 403);
+  await refused(await execute(creator, { ...deletionBody, confirmation: undefined }), 403);
+  expect(await counts()).toEqual(beforeConfirmation);
+  expect(await stateOf(organizationId)).toBe('active');
   const deletedOrganization = await done(await execute(creator, deletionBody));
   expect(deletedOrganization).toEqual({ accountId: organizationId });
   const afterDeletion = await counts();
@@ -409,6 +401,13 @@ test('a signed-in person approves and executes organization creation rename and 
       ])
     ).rows,
   ).toEqual([{ handle: renamed }]);
+
+  expect(await native.readPublicAccountByHandle(kernelPool, renamed)).toEqual(
+    expect.arrayContaining([expect.objectContaining({ id: creator.accountId, handle: renamed, state: 'active' })]),
+  );
+  expect(await native.readPublicAccountByHandle(kernelPool, creator.handle)).toEqual(
+    expect.arrayContaining([expect.objectContaining({ id: creator.accountId, handle: renamed, movedTo: renamed })]),
+  );
 
   // Own deletion returns the workflow outcome without re-authorizing against the standing it removes.
   // The person's authority ends for subsequent requests, even while the organization gate remains closed.
@@ -804,3 +803,38 @@ test('incompatible organization producer output never fabricates a not-applied g
     { error: 'unavailable' },
   );
 });
+
+test('an uncertain completed organization command replays its durable result with independent native readback', async () => {
+  const operation = { kind: 'organization', handle: orgHandle() };
+  const operationKey = `lost-response-${randomUUID()}`;
+  const approval = await ok(await approve(creator, operationKey, operation));
+  const body = { operationKey, operation, reference: approval.reference };
+  const interrupted = accountOperationTransport(
+    host.service,
+    {
+      ...host.workflows,
+      async createOrganization(input) {
+        await host.workflows.createOrganization(input);
+        throw new Error('Response lost after durable native completion');
+      },
+    },
+    host.handler,
+    installedAccess,
+  );
+  const response = await interrupted(
+    new Request(`${issuer}/account-operations/execute`, {
+      method: 'POST',
+      headers: { origin: issuer, 'content-type': 'application/json', cookie: creator.cookie },
+      body: JSON.stringify(body),
+    }),
+  );
+  await refused(response, 503, { error: 'unavailable' });
+  const completed = await counts();
+  const identities = await native.readPublicAccountByHandle(kernelPool, operation.handle);
+  expect(identities).toHaveLength(1);
+  const identity = identities[0]!;
+  expect(identity).toMatchObject({ kind: 'organization', state: 'active', handle: operation.handle });
+  expect(await done(await execute(creator, body))).toEqual({ accountId: identity.id });
+  expect(await counts()).toEqual(completed);
+  expect(await native.readPublicAccountByHandle(kernelPool, operation.handle)).toEqual(identities);
+}, 120000);

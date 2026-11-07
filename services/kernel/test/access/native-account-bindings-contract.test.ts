@@ -1,6 +1,7 @@
 import type { OperatorTransferPageAccess } from '../../src/access/operator-transfer-page-source.ts';
 import { expect, expectTypeOf, test } from 'bun:test';
 import type { AccountWorkflowOptions } from '@rezics/auth';
+import type { createAuthHostManagement } from '../../src/access/auth-host-management.ts';
 import type { AutomatedOperatorAccess } from '../../src/access/automated-operator-source.ts';
 import type {
   AccountWorkflowPorts,
@@ -56,6 +57,8 @@ test('ordinary durable composition requires actual native factories and Auth-hos
     proofs: NativeAccountBindingProofs;
   }>();
   expectTypeOf<NativeAccountBindings>().toEqualTypeOf<{
+    accountOperations: ReturnType<typeof createAuthHostManagement>['accountOperations'];
+    accountManagementReads: ReturnType<typeof createAuthHostManagement>['accountManagementReads'];
     trustedAccess: TrustedAccessPorts & AutomatedOperatorAccess & OperatorTransferPageAccess;
     workflowPorts: AccountWorkflowPorts<LifecycleRequest>;
     continuations: CommittedContinuations;
@@ -100,6 +103,8 @@ test('pure construction never invokes Auth, proof capabilities or database I/O',
   const bindings = createNativeAccountBindings(config);
   expect(typeof bindings.trustedAccess.readAutomatedCreationPage).toBe('function');
   expect(Object.keys(bindings).sort()).toEqual([
+    'accountManagementReads',
+    'accountOperations',
     'continuations',
     'delegations',
     'grants',
@@ -120,12 +125,13 @@ test('the production seam imports native capabilities without an Auth host, DBOS
   expect(imports).toContain('./auth-barriers.ts');
   expect(imports).toContain('./auth-session-capability.ts');
   expect(imports).toContain('./workflow-approvals.ts');
-  expect(imports).not.toContain('@rezics/auth');
+  expect(imports).toContain('./auth-host-management.ts');
   expect(imports).not.toContain('pg');
-  expect(imports.some((path) => /dbos|host|website|provider/.test(path))).toBe(false);
+  expect(imports.some((path) => /dbos|(?:^|\/)host\.ts$|website|provider/.test(path))).toBe(false);
   const compiled = transpiler.transformSync(source);
   expect(transpiler.scan(compiled).exports.sort()).toEqual([
     'NativeAccountBindingsUnavailableError',
+    'createAuthDeletionHandleRead',
     'createNativeAccountBindings',
   ]);
 });

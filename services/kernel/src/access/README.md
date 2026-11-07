@@ -11,7 +11,9 @@ adds no baseline allowance and no old/new allow-OR. Source compatibility is no n
 
 [Accounts](../../../../docs/accounts.md) owns product identity, delegation, consent and preferences;
 [Deletion](../../../../docs/deletion.md) owns erasure/restore policy;
-[Auth](../../../auth/README.md#ordinary-native-host-assembly) owns trusted Auth/Access composition.
+[Auth](../../../auth/README.md#ordinary-native-host-assembly) owns trusted composition.
+`createNativeAccountBindings` returns `accountOperations` and `accountManagementReads` through
+`auth-host-management.ts`, sharing workflow approval authority and the caller-owned pool.
 
 Decision: resource-role identifier helpers are functions so circular Access composition can resolve during module load.
 
@@ -541,9 +543,6 @@ member-ID and validity-range ordering described above.
 
 Resources owned by the organization in other modules, including Realm roles and content, remain those modules'
 responsibility. They learn of deletion from `account-updated`; organization close changes no such resources.
-
-No organization exists in any deployment yet, so these creation defaults need no upgrade path.
-Organization creation writes two additional grant rows; request paths and their costs are unchanged.
 
 Suspension is never blocked by coordination. Platform governance can suspend an active account that operates
 automation or has a pending responsibility reservation or other lifecycle coordination row. Suspension locks that

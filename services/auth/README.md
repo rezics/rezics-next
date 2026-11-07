@@ -1315,11 +1315,9 @@ does not authorize disclosure.
 
 The default host mounts this read through the optional
 `AccountOperationAccess.readOperatorTransferState` binding, or the independent
-`AuthHostOptions.accountManagementReads` port. Supply the production
-`createAccountManagementReadAccess({ pool, access })` from Kernel
-`access/management-source.ts` as `accountManagementReads`, or copy its exact
-`readOperatorTransferState` method into existing approval/gate ports. This leaves
-the frozen native account-workflow composition shape and required callers intact.
+`AuthHostOptions.accountManagementReads` port. Ordinary composition supplies
+`bindings.accountManagementReads` and `bindings.accountOperations` from
+`createNativeAccountBindings`; both use the same native relation reader.
 Existing callers may omit the additive binding; the endpoint then answers 503
 `account_management_read_unavailable`, never an empty successful result. The host
 retains its management-client registration. It uses the real fresh-human proof and
@@ -2061,19 +2059,27 @@ Native fixtures take their kernel schema from `kernelTestDatabase()`. Under the 
 check, `rezics_kernel_test` is migrated once per run beside `rezics_auth_test`, and each
 fixture copies it; outside the check the helper migrates a fresh database instead.
 
-One trusted binding factory composes Auth and native Access, with deferred Auth construction where needed.
-Consumers use public inward imports; canonical identity extraction changes imports, never erasure, verification,
-reversal or durable fences. Lightweight public-read and narrow binding entries preserve store entry, canonical
-error identity and deferred loading; they add neither a resolver nor a widened grant. Source compatibility proves
-no native or cold-load pass. Pure policy placement follows the [adopted architecture](../../docs/architecture.md).
+Trusted composition defers Auth construction and uses public inward imports, preserving store entry,
+canonical errors, erasure, verification and durable fences. Source compatibility proves no native or cold-load pass;
+pure policy placement follows the [architecture](../../docs/architecture.md).
 
 Automated and organization creation must verify the actual Auth session before and after released I/O. A
 fresh-human precheck, unchanged Access proof or token floor alone is no post-callback live-session proof. Native
 acknowledgement and browser private-result disclosure are separately owned by the [page contract](../../apps/auth/README.md#mounted-operation-lifetime).
 
-This minimal assembly uses the production factories directly. Import paths are
-relative to an application at the repository root. `actions` is the application's
-existing action catalogue, including the actions its ordinary client requests.
+Decision: ordinary hosts install both management ports returned by `createNativeAccountBindings`.
+Its `auth-host-management.ts` adapter shares one approval producer with workflows, the same Kernel Pool,
+Access, action catalogue, Auth proof ports and persistent reference keys. One 10-second context bounds each
+HTTP request. Only organization approval invokes native `organizations` admission; closed refusal is false,
+dependency failure throws. Deletion confirmation reads the actual target's current handle, including managed
+organizations and automation; it supplies no authority. Caller-bound resolution and native commands remain
+mandatory. Construction starts no resources; stop the host before closing its borrowed Kernel pool.
+
+Test choice: retain existing management assertions and use the native composition fixtures, adding actual-target
+confirmation, membership role changes, canonical identity readback and uncertain completed-command replay;
+[Kernel binding tests](../kernel/test/access/auth-host-management.test.ts) pin bounded target reads; composition tests retain resource-free construction.
+
+Import paths below start at the repository root; `actions` is the installed catalogue.
 
 ```ts
 import {
@@ -2087,8 +2093,6 @@ import {
 import type { Pool } from 'pg';
 import { createAccess } from './services/kernel/src/access/index.ts';
 import { createNativeAccountBindings } from './services/kernel/src/access/native-account-bindings.ts';
-import { createAccountManagementReadAccess } from './services/kernel/src/access/management-source.ts';
-import { createWorkflowApprovals } from './services/kernel/src/access/workflow-approvals.ts';
 import type { LifecycleRequest } from './services/kernel/src/access/lifecycle.ts';
 import type { ActionCatalogue } from './services/kernel/src/request/access.ts';
 import type { KeyRing } from './services/kernel/src/tokens/seal.ts';
@@ -2113,13 +2117,6 @@ export async function ordinaryHost(options: Options) {
     },
   });
   const proofs = createNativeWorkflowProofPorts({ database: authPool });
-  const approvals = createWorkflowApprovals({
-    pool: kernelPool,
-    access,
-    actions,
-    referenceKeys,
-    creationBinding: proofs.creationBinding,
-  });
   const bindings = createNativeAccountBindings({
     pool: kernelPool,
     access,
@@ -2138,7 +2135,8 @@ export async function ordinaryHost(options: Options) {
     database: authPool,
     trustedAccess: bindings.trustedAccess,
     access: bindings.workflowPorts,
-    accountManagementReads: createAccountManagementReadAccess({ pool: kernelPool, access }),
+    accountOperations: bindings.accountOperations,
+    accountManagementReads: bindings.accountManagementReads,
   });
   service = host.service;
   const COMMANDS = {
@@ -2161,7 +2159,7 @@ export async function ordinaryHost(options: Options) {
     ],
   });
   await host.start();
-  return { host, access, approvals, COMMANDS };
+  return { host, access, approvals: bindings.accountOperations, COMMANDS };
 }
 ```
 
@@ -2208,20 +2206,14 @@ the caller's kernel pool. Reuse the executor identity and persistent keys when
 restarting the same host. An optional injected `systemDatabasePool` must belong to
 the same Auth database and is also closed by the host.
 
-The native suites use separate migrated databases, actual Auth routes and native
-Access verification. Process-death tests interrupt pending-reference persistence,
-credential provisioning, activation and operator-reference persistence. Growth
-checks capture Auth, DBOS and kernel statements at 1x/8x/64x, including the bounded
-receipt chain. Registration uses a fixed number of indexed independently anchored
-steps, O(log R) per point operation, plus the existing bounded authorization formula
-O((1+K)log G), K<=1000. No history search or cross-anchor held connection locates
-proofs.
+Native suites use separate migrated databases, real Auth routes and Access. Process-death cases interrupt
+pending-reference persistence, provisioning, activation and operator-reference persistence. Growth checks capture
+Auth, DBOS and Kernel at 1x/8x/64x: fixed indexed steps O(log R), plus O((1+K)log G), K<=1000.
+No history scan or cross-anchor held connection locates proofs.
 
-Recovery/credential workflow approvals, organization creation, responsibility
-transfer, session revocation, operator fencing, consent and client management
-remain separate adapter work and fail closed in the native approval adapter.
-Ordinary native issuance does not establish the remaining whole-lifecycle,
-permission or website/provider outcomes.
+The installed binding supports organization creation, membership, rename, automated creation/opening,
+two-party operator transfer and deletion through the existing native workflows. Integrated acceptance,
+including terminal erasure participants, remains separately verified.
 
 ### Native current consent: usage, security and cost
 

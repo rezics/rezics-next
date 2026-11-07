@@ -24,7 +24,7 @@ test('Auth funds retirement attempts, waits, backoff and reconciliation before d
   expect(invocation.maxAttempts).toBeLessThanOrEqual(8);
   const tracking = {
     ...invocation,
-    async reserve(dispatch: string) {
+    async reserve(dispatch: Parameters<typeof invocation.reserve>[0]) {
       reserved.push(dispatch);
       return invocation.reserve(dispatch);
     },

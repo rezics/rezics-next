@@ -874,12 +874,20 @@ if (script.includes('/proc/loadavg')) {
   log({ kind: 'stop', slotHeld: slotHeld(), script });
   console.log('STOPPED');
 } else if (script.includes('REMOTE_CHECK_STATUS')) {
-  log({ kind: 'status' });
+  const attempt = count('status') + 1;
+  log({ kind: 'status', attempt });
+  if (config.statusWarning) console.error(config.statusWarning);
+  if (config.statusAlwaysFails || config.statusFailureProbes?.includes(attempt)) process.exit(255);
   const statusFile = dir + '/' + hostKey + '.status';
   if (existsSync(statusFile)) console.log(readFileSync(statusFile, 'utf8'));
   else {
     const runCount = Number(existsSync(dir + '/' + hostKey + '.run') ? readFileSync(dir + '/' + hostKey + '.run', 'utf8') : '0');
-    console.log(runCount > 0 && runCount <= (config.preCommandFailures ?? 0) ? 'NOT_STARTED' : 'STARTED');
+    if (runCount > 0 && runCount <= (config.preCommandFailures ?? 0)) console.log('NOT_STARTED');
+    else if (config.statusCompleteAfter !== undefined && attempt >= config.statusCompleteAfter) {
+      const result = config.exit ?? 0;
+      writeFileSync(statusFile, String(result));
+      console.log(result);
+    } else console.log('STARTED');
   }
 } else if (script.includes('REMOTE_CHECK_RUN_LIFETIME_STATUS')) {
   log({ kind: 'lifetime-status', slotHeld: slotHeld() });
@@ -1188,6 +1196,10 @@ type HostConfig = {
   exit?: number;
   lifetimeFailure?: boolean;
   transportFailures?: number;
+  statusAlwaysFails?: boolean;
+  statusFailureProbes?: number[];
+  statusCompleteAfter?: number;
+  statusWarning?: string;
   rsyncExit?: number;
   rsyncBackExit?: number;
   slowUploadMs?: number;
@@ -3228,6 +3240,9 @@ test('remote admission stops stale liveness slices but preserves fresh runs and 
   expect(admission).toContain('[ "$age" -gt 600 ]');
   expect(admission).toContain('systemctl stop "$run_slice"');
   expect(admission).toContain('remote-check: stopped stale run');
+  expect(admission).toContain('if [ -e "$run_directory/command-started" ]; then');
+  expect(admission).toContain('preserving started run $run_id for stale-run cleanup');
+  expect(admission).toContain('if [ -e "$run/command-started" ] && python3 -c');
   expect(admission).toContain('TasksCurrent');
   expect(admission).toContain('[ "$tasks" = 0 ]');
   const run = events().find((event) => event.kind === 'run')!.script as string;
@@ -3276,8 +3291,10 @@ test('deadline, command failure and transport failure keep distinct exit codes',
   const commandFailure = scenario({ a: { available: 8e9, exit: 7 } });
   expect((await remote(commandFailure.env, workspace(), ['true'])).code).toBe(7);
 
-  const transportFailure = scenario({ a: { available: 8e9, transportFailures: 1 } });
-  expect((await remote(transportFailure.env, workspace(), ['true'])).code).toBe(75);
+  const transportFailure = scenario({
+    a: { available: 8e9, transportFailures: 1, statusAlwaysFails: true },
+  });
+  expect((await remote(transportFailure.env, workspace(), ['true'], ['--max-ms', '25'])).code).toBe(75);
 
   const deadline = scenario({ a: { available: 8e9, hang: true } });
   expect((await remote(deadline.env, workspace(), ['true'], ['--max-ms', '25'])).code).toBe(124);
@@ -3311,13 +3328,49 @@ test("the remote run's output streams back and its exit code becomes the local e
   expect(cleanup).toMatch(/\/srv\/rezics-check\/runs\/[a-z0-9-]+/);
 });
 
-test("a remote run whose connection drops before the command's exit status arrives ends with the transport failure code", async () => {
-  const { env, events } = scenario({ a: { available: 8e9, transportFailures: 1 } });
-  const result = await remote(env, workspace());
+test('a dropped run reconnects through repeated status losses, then returns its results from the same run', async () => {
+  const { env, events } = scenario({
+    a: {
+      available: 8e9,
+      transportFailures: 1,
+      statusFailureProbes: [1, 2, 4],
+      statusCompleteAfter: 5,
+      statusWarning: 'ControlPath stale; disabling multiplexing',
+      present: ['.temp/output'],
+      returnedContent: 'completed output\n',
+    },
+  });
+  env.REMOTE_CHECK_RETRY_BACKOFF_MS = '1';
+  const result = await remote(env, workspace(), ['true'], ['--returns', '.temp/output']);
+
+  expect(result.code).toBe(0);
+  expect(result.stderr).toMatch(/reconnected to a in [0-9.]+ s/);
+  expect(result.stderr.match(/reconnected to a in [0-9.]+ s/g)).toHaveLength(2);
+  expect(
+    events()
+      .filter((event) => event.kind === 'status')
+      .map((event) => event.attempt),
+  ).toEqual([1, 2, 3, 4, 5]);
+  expect(events().filter((event) => event.kind === 'run')).toHaveLength(1);
+  expect(events().filter((event) => event.kind === 'rsync' && event.step === 'returns copy')).toHaveLength(1);
+  expect(events().filter((event) => event.kind === 'stop')).toHaveLength(0);
+});
+
+test('a run unreachable through its deadline is retained for stale cleanup without a stop or results cleanup', async () => {
+  const { env, events } = scenario({
+    a: { available: 8e9, transportFailures: 1, statusAlwaysFails: true },
+  });
+  env.REMOTE_CHECK_RETRY_BACKOFF_MS = '1';
+  const result = await remote(env, workspace(), ['true'], ['--max-ms', '25']);
 
   expect(result.code).toBe(75);
   expect(result.stderr).toContain('connection to a failed during remote command before a result');
-  expect(events().filter((event) => event.kind === 'status')).toHaveLength(1);
+  expect(events().filter((event) => event.kind === 'status').length).toBeGreaterThan(1);
+  expect(events().filter((event) => event.kind === 'run')).toHaveLength(1);
+  expect(events().filter((event) => event.kind === 'stop' || event.kind === 'cleanup')).toHaveLength(0);
+  expect(events().find((event) => event.kind === 'slot')!.script).toContain(
+    'preserving started run $run_id for stale-run cleanup',
+  );
 });
 
 test('a remote command that itself exits 255 keeps its exit code', async () => {
@@ -5661,8 +5714,10 @@ test("a run that passes its deadline is stopped and the client exits with the de
   expect(releaseAt).toBeGreaterThan(stopAt);
   const failure = scenario({ a: { available: 8e9, exit: 7 } });
   expect((await remote(failure.env, workspace(), ['true'])).code).toBe(7);
-  const transport = scenario({ a: { available: 8e9, transportFailures: 1 } });
-  expect((await remote(transport.env, workspace(), ['true'])).code).toBe(75);
+  const transport = scenario({
+    a: { available: 8e9, transportFailures: 1, statusAlwaysFails: true },
+  });
+  expect((await remote(transport.env, workspace(), ['true'], ['--max-ms', '25'])).code).toBe(75);
 });
 
 test('every container a check host run starts is in its run slice', () => {
@@ -5950,11 +6005,11 @@ test('transfer progress cancellation racing active output and the deadline reaps
   }
 });
 
-test('success, command failure, verified transport loss and abort release the remote slot in terminal order', async () => {
+test('success, command failure, reconnect and abort release the remote slot in terminal order', async () => {
   for (const [label, config, expectedCode] of [
     ['success', { available: 8e9, present: ['.temp/output'] }, 0],
     ['command failure', { available: 8e9, exit: 7, present: ['.temp/output'] }, 7],
-    ['transport loss', { available: 8e9, transportFailures: 1 }, 75],
+    ['connection resumes', { available: 8e9, transportFailures: 1, statusCompleteAfter: 2 }, 0],
   ] as const) {
     const { env, events } = scenario({ a: config });
     const result = await remote(env, workspace(), ['true'], ['--returns', '.temp/output']);
@@ -5966,20 +6021,9 @@ test('success, command failure, verified transport loss and abort release the re
     expect(seen[runAt]!.slotHeld, label).toBe(true);
     expect(releaseAt, label).toBeGreaterThan(runAt);
     expect(seen[releaseAt]!.slotHeld, label).toBe(false);
-    if (label === 'transport loss') {
-      const stopAt = seen.findIndex((event) => event.kind === 'stop');
-      expect(stopAt, label).toBeGreaterThan(runAt);
-      expect(stopAt, label).toBeLessThan(releaseAt);
-      expect(seen[stopAt]!.slotHeld, label).toBe(true);
-      expect(
-        seen.some((event) => event.kind === 'returns'),
-        label,
-      ).toBe(false);
-    } else {
-      const returnAt = seen.findIndex((event) => event.kind === 'returns');
-      expect(returnAt, label).toBeGreaterThan(releaseAt);
-      expect(seen[returnAt]!.slotHeld, label).toBe(false);
-    }
+    const returnAt = seen.findIndex((event) => event.kind === 'returns');
+    expect(returnAt, label).toBeGreaterThan(releaseAt);
+    expect(seen[returnAt]!.slotHeld, label).toBe(false);
     expect(seen.find((event) => event.kind === 'cleanup')!.slotHeld, label).toBe(false);
     expect(slotMarkers(env, 'a'), label).toEqual([]);
   }
