@@ -5,8 +5,7 @@ import { runBrowserWorker, runWebTestLanes } from '../scripts/check.ts';
 
 const app = resolve(import.meta.dir, '..');
 const root = resolve(app, '../..');
-mkdirSync(join(app, '.temp'), { recursive: true });
-const temporary = mkdtempSync(join(app, '.temp/check-lanes-'));
+const temporary = mkdtempSync(join(app, 'tests/check-lanes-'));
 const fakeTests = join(temporary, 'tests');
 const events = join(temporary, 'events');
 mkdirSync(fakeTests, { recursive: true });
