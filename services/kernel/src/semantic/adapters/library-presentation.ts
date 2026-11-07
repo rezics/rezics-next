@@ -24,8 +24,14 @@ export type LibrarySubjectIdentityContext = Readonly<{
 
 /** Uses the single Identity producer. Mapping never supplies authorization or native disclosure. */
 export type LibrarySubjectReferenceResult = SubjectReferenceObservation & Readonly<{ work: WorkDimensions }>;
-export type LibrarySubjectIdentityAdapter = SubjectIdentityCapability<LibrarySubjectIdentityContext, IdentityMapping> & {
-  prepareReference(context: LibrarySubjectIdentityContext, id: string): Promise<() => Promise<LibrarySubjectReferenceResult>>;
+export type LibrarySubjectIdentityAdapter = Omit<
+  SubjectIdentityCapability<LibrarySubjectIdentityContext, IdentityMapping>,
+  'prepareReference'
+> & {
+  prepareReference(
+    context: LibrarySubjectIdentityContext,
+    id: string,
+  ): Promise<() => Promise<LibrarySubjectReferenceResult>>;
 };
 
 export function createLibrarySubjectIdentityAdapter(

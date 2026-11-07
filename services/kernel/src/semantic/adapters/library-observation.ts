@@ -54,12 +54,15 @@ export type SemanticObservationNativeAdapter = Readonly<{
     readMappings(pool: Pool, originals: readonly string[]): Promise<readonly LibrarySemanticMapping[]>;
     registerScope(pool: Pool, input: LibrarySemanticScopeRegistration): Promise<LibrarySemanticScopeResult>;
     revalidateScope(pool: Pool, input: LibrarySemanticScopeRevalidation): Promise<LibrarySemanticScopeResult>;
-    commitScopeCapture(client: Pick<PoolClient, 'query'>, input: {
-      route: number;
-      collectionId: string;
-      sourceFence: string;
-      observation: LibrarySemanticScopeObservation;
-    }): Promise<void>;
+    commitScopeCapture(
+      client: Pick<PoolClient, 'query'>,
+      input: {
+        route: number;
+        collectionId: string;
+        sourceFence: string;
+        observation: LibrarySemanticScopeObservation;
+      },
+    ): Promise<void>;
   }>;
   follow: Readonly<{
     mappingWork(originals: readonly string[]): WorkDimensions;
@@ -81,12 +84,18 @@ export type SemanticObservationNativeAdapter = Readonly<{
   shelf: Readonly<{
     identityVersionWork(subjectId: string): WorkDimensions;
     itemTypesWork(subjectIds: readonly string[], maxTypeBytes?: number): WorkDimensions;
-    readIdentityVersion(client: Pick<PoolClient, 'query'>, subjectId: string): Promise<{
+    readIdentityVersion(
+      client: Pick<PoolClient, 'query'>,
+      subjectId: string,
+    ): Promise<{
       revision: number;
       transactionId: string;
       redirect: string | null;
     } | null>;
-    readItemTypes(client: Pick<PoolClient, 'query'>, subjectIds: readonly string[]): Promise<ReadonlyMap<string, string>>;
+    readItemTypes(
+      client: Pick<PoolClient, 'query'>,
+      subjectIds: readonly string[],
+    ): Promise<ReadonlyMap<string, string>>;
   }>;
 }>;
 
@@ -120,6 +129,7 @@ const dimensions = (bound: Bound): WorkDimensions =>
     statements: bound.statements,
     bytes: bound.bytes,
   });
+const asBound = (work: WorkDimensions): Bound => declareBound({ ...work, engineRequests: 0 });
 const zeroWork = (): WorkDimensions => dimensions(zero());
 const jsonBytes = (value: unknown) => size(value);
 const maxRowBytes = (row: unknown, count = 1) => (size(row) + 1) * count;
@@ -395,27 +405,23 @@ function summaryReferenceWork(subjectId: string): WorkDimensions {
   const route = routeOf(subjectId);
   if (route === null) throw new TypeError('Semantic reference observations require routed subjects');
   const partition = partitionOf(route);
-  const partitionMetadata = sqlWork(
-    partitionRead.sql,
-    operandsOf(partitionRead, { partition_no: partition }),
-    {
-      keys: 1,
-      rows: 2,
-      points: 1,
-      seeks: 1,
-      output: 1,
-      width:
-        size({
-          partitionNo: 4095,
-          node: '',
-          writeState: 'draining',
-          movedTo: '',
-          epoch: -2147483648,
-          position: int8,
-        }) +
-        2 * 6 * (2 ** 30 - 1),
-    },
-  );
+  const partitionMetadata = sqlWork(partitionRead.sql, operandsOf(partitionRead, { partition_no: partition }), {
+    keys: 1,
+    rows: 2,
+    points: 1,
+    seeks: 1,
+    output: 1,
+    width:
+      size({
+        partitionNo: 4095,
+        node: '',
+        writeState: 'draining',
+        movedTo: '',
+        epoch: -2147483648,
+        position: int8,
+      }) +
+      2 * 6 * (2 ** 30 - 1),
+  });
   return dimensions(
     sumBounds(
       partitionMetadata,
@@ -512,18 +518,14 @@ function summarySqlWork(subjectIds: readonly string[]): WorkDimensions {
   // actual homes cannot hide SQL text or wire operands behind one assumed home.
   const cover = sumBounds(
     ...coverIds.map((id) =>
-      sqlWork(
-        coverReferences.sql,
-        operandsOf(coverReferences, { partition: 4095, routes: [65535], media_ids: [id] }),
-        {
-          keys: 1 + variants,
-          rows: 5 + 3 * variants,
-          points: 2,
-          seeks: 2,
-          output: 1,
-          width: coverWidth,
-        },
-      ),
+      sqlWork(coverReferences.sql, operandsOf(coverReferences, { partition: 4095, routes: [65535], media_ids: [id] }), {
+        keys: 1 + variants,
+        rows: 5 + 3 * variants,
+        points: 2,
+        seeks: 2,
+        output: 1,
+        width: coverWidth,
+      }),
     ),
   );
   const source = 'x'.repeat(32);
@@ -540,11 +542,14 @@ function summarySqlWork(subjectIds: readonly string[]): WorkDimensions {
     takedownId: uuid,
   });
   const fences = repeatBound(
-    sqlWork(
-      sourceFences.sql,
-      operandsOf(sourceFences, { partition: 4095, tuples: [tuple] }),
-      { keys: 1, rows: 5, points: 1, seeks: 1, output: 1, width: fenceWidth },
-    ),
+    sqlWork(sourceFences.sql, operandsOf(sourceFences, { partition: 4095, tuples: [tuple] }), {
+      keys: 1,
+      rows: 5,
+      points: 1,
+      seeks: 1,
+      output: 1,
+      width: fenceWidth,
+    }),
     subjectIds.length,
   );
   // A successful summary may read original, representative-edition, media and
@@ -592,8 +597,8 @@ function summarySqlWork(subjectIds: readonly string[]): WorkDimensions {
 
 function summaryCurrentSqlWork(subjectIds: readonly string[]): WorkDimensions {
   if (!subjectIds.length) return zeroWork();
-  for (const id of subjectIds) if (routeOf(id) === null)
-    throw new TypeError('Semantic summary currentness requires routed subjects');
+  for (const id of subjectIds)
+    if (routeOf(id) === null) throw new TypeError('Semantic summary currentness requires routed subjects');
   const homeCount = Math.min(4096, 1 + 4 * subjectIds.length);
   const homes = Array.from({ length: homeCount }, (_, index) => 4095 - index);
   const current = sqlWork(partitions.sql, operandsOf(partitions, { partitions: homes }), {
@@ -623,6 +628,12 @@ const scopeDimensions = (work: IdentityScopeWork): WorkDimensions =>
       });
 function semanticScopeKey(key: LibrarySemanticScopeKey): IdentityScopeKey {
   return key as IdentityScopeKey;
+}
+function libraryScopeObservation(observation: IdentityScopeObservation): LibrarySemanticScopeObservation {
+  return Object.freeze({
+    ...observation,
+    key: observation.key as LibrarySemanticScopeKey,
+  });
 }
 function publicMapping(mapping: IdentityMapping): LibrarySemanticMapping {
   return mapping;
@@ -660,9 +671,8 @@ function itemTypesWork(subjectIds: readonly string[], maxTypeBytes = 0): WorkDim
     group.push(id);
     groups.set(home, group);
   }
-  const outputBytes = size({ id: uuid, type: '', agent_account_id: uuid, agent_verified: true }) +
-    6 * Math.max(0, maxTypeBytes) +
-    1;
+  const outputBytes =
+    size({ id: uuid, type: '', agent_account_id: uuid, agent_verified: true }) + 6 * Math.max(0, maxTypeBytes) + 1;
   const costs = [...groups].map(([partition, ids]) => {
     const values = operandsOf(itemTypes, {
       partition_no: partition,
@@ -686,14 +696,15 @@ function itemTypesWork(subjectIds: readonly string[], maxTypeBytes = 0): WorkDim
 
 export function createNativeLibraryObservationAdapter(): SemanticObservationNativeAdapter {
   function canonicalMappingWork(originals: readonly string[]): WorkDimensions {
-    if (originals.length > 100) throw new RangeError('Canonical Source mapping page must contain at most 100 originals');
+    if (originals.length > 100)
+      throw new RangeError('Canonical Source mapping page must contain at most 100 originals');
     if (!originals.length) return zeroWork();
     const costs = originals.map((subjectId) => {
       const route = routeOf(subjectId);
       if (route === null) throw new TypeError('Canonical Source mapping requires routed originals');
       return mappingIdentityWork(subjectId, false);
     });
-    return dimensions(sumBounds(...costs));
+    return dimensions(sumBounds(...costs.map(asBound)));
   }
   function scopeCommitWork(input: {
     route: number;
@@ -732,18 +743,24 @@ export function createNativeLibraryObservationAdapter(): SemanticObservationNati
   function subjectReferenceWork(subjectId: string): WorkDimensions {
     return summaryReferenceWork(subjectId);
   }
-  return Object.freeze({
-    canonical: Object.freeze({
+  const adapter: SemanticObservationNativeAdapter = {
+    canonical: {
       mappingWork: canonicalMappingWork,
       scopeCommitWork,
       async readMappings(pool, originals) {
         return (await readIdentityMappings(pool, originals)).map(publicMapping);
       },
       async registerScope(pool, input) {
-        const registration = input as unknown as Parameters<ReturnType<typeof createIdentityScopedObservations>['register']>[0];
+        const registration = input as unknown as Parameters<
+          ReturnType<typeof createIdentityScopedObservations>['register']
+        >[0];
         const registered = await createIdentityScopedObservations(pool).register(registration);
         if (registered.status === 'registered')
-          return { status: 'registered', observation: registered.observation, work: scopeDimensions(registered.work) };
+          return {
+            status: 'registered',
+            observation: libraryScopeObservation(registered.observation),
+            work: scopeDimensions(registered.work),
+          };
         if (registered.status === 'pending') return { status: 'pending', work: scopeDimensions(registered.work) };
         return { status: 'unavailable', work: scopeDimensions(registered.work) };
       },
@@ -754,7 +771,11 @@ export function createNativeLibraryObservationAdapter(): SemanticObservationNati
           deadline: input.deadline,
         });
         if (revalidated.status === 'current')
-          return { status: 'current', observation: revalidated.observation, work: scopeDimensions(revalidated.work) };
+          return {
+            status: 'current',
+            observation: libraryScopeObservation(revalidated.observation),
+            work: scopeDimensions(revalidated.work),
+          };
         return {
           status: revalidated.status === 'stale' ? 'stale' : 'unavailable',
           work: scopeDimensions(revalidated.work),
@@ -773,14 +794,14 @@ export function createNativeLibraryObservationAdapter(): SemanticObservationNati
           scope_id: address.scope,
         });
       },
-    }),
-    follow: Object.freeze({
+    },
+    follow: {
       mappingWork: followMappingWork,
       subjectReferenceWork,
       subjectSummaryWork(subjectIds) {
         return summarySqlWork(subjectIds);
       },
-      subjectSummaryCurrentWork,
+      subjectSummaryCurrentWork: summaryCurrentSqlWork,
       async readMapping(pool, original) {
         return publicMapping(await readIdentityMapping(pool, original));
       },
@@ -799,8 +820,8 @@ export function createNativeLibraryObservationAdapter(): SemanticObservationNati
       observeSubjects(input) {
         return readSubjectSummaryObservation(input.context, input.ids, { displayFallback: true });
       },
-    }),
-    shelf: Object.freeze({
+    },
+    shelf: {
       identityVersionWork,
       itemTypesWork,
       readIdentityVersion(client, subjectId) {
@@ -809,7 +830,11 @@ export function createNativeLibraryObservationAdapter(): SemanticObservationNati
       readItemTypes(client, subjectIds) {
         return readItemTypes(client, subjectIds);
       },
-    }),
+    },
+  };
+  return Object.freeze({
+    canonical: Object.freeze(adapter.canonical),
+    follow: Object.freeze(adapter.follow),
+    shelf: Object.freeze(adapter.shelf),
   });
 }
-

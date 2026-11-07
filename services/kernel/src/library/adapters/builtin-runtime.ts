@@ -18,6 +18,8 @@ import { WORK_STEP_DEADLINE_MS } from '../work-step-deadline.ts';
 import type { CollectionKind } from '../collection-kind.ts';
 import type { OwnerQueryDependencies } from '../builtin-runtime-query.ts';
 import type { FilterDocument } from '@rezics/filter';
+import { consumeFollowWork } from '../follow-operation-bounds.ts';
+import { semanticObservationBound } from '../semantic-observation.ts';
 
 export type BuiltinCollectionView = {
   id: string;
@@ -327,9 +329,12 @@ export async function readNativeBuiltinOriginalInputs(
     }
   });
   // Actual declared batched API, after releasing the owner home. No self/default-zero mapping fallback.
-  const mapping = await ports.readMappings(
-    pool,
-    facts.map((fact) => fact.original),
+  const originals = facts.map((fact) => fact.original);
+  const observed = await consumeFollowWork(
+    'identity.mapping',
+    semanticObservationBound(ports.semanticObservations.follow.mappingWork(originals)),
+    () => ports.readMappings(pool, originals),
+    (result) => semanticObservationBound(result.work),
   );
-  return facts.map((fact, index) => ({ fact, mapping: mapping[index]! }));
+  return facts.map((fact, index) => ({ fact, mapping: observed.value[index]! }));
 }

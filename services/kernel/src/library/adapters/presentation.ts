@@ -63,13 +63,17 @@ export type NativeLibraryPresentationPorts = {
   readMappings(
     pool: Pool,
     ids: readonly string[],
-  ): Promise<import('../contract/semantic-observation.ts').LibrarySemanticObservationResult<readonly IdentityMapping[]>>;
+  ): Promise<
+    import('../contract/semantic-observation.ts').LibrarySemanticObservationResult<readonly IdentityMapping[]>
+  >;
   accountEligibility: CurrentAccountEligibilityCapability<Pick<PoolClient, 'query'>>;
   createResourcePublicEligibility: typeof createResourcePublicEligibility;
   observeSubjects(
     context: SummaryContext,
     ids: readonly string[],
-  ): Promise<import('../contract/semantic-observation.ts').LibrarySemanticObservationResult<LibrarySemanticSummaryObservation>>;
+  ): Promise<
+    import('../contract/semantic-observation.ts').LibrarySemanticObservationResult<LibrarySemanticSummaryObservation>
+  >;
   observeAccount(pool: Pool, id: string, deadline: number): Promise<CurrentObservation<LibraryAccountSummary | null>>;
   observeAttributions(
     pool: Pool,
@@ -107,8 +111,7 @@ export function createNativeLibraryPresentation(ports: NativeLibraryPresentation
           read,
           (result) => semanticObservationBound(result.work),
         );
-        const { work: _work, ...value } = observed;
-        return value;
+        return observed;
       };
     },
   };

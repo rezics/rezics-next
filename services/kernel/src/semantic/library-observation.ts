@@ -13,8 +13,8 @@ import {
 export function createLibraryObservationApplication(
   native: SemanticObservationNativeAdapter = createNativeLibraryObservationAdapter(),
 ): LibrarySemanticObservationCapability {
-  return Object.freeze({
-    canonical: Object.freeze({
+  const capability: LibrarySemanticObservationCapability = {
+    canonical: {
       ...native.canonical,
       async readMappings(pool, originals) {
         const value = await native.canonical.readMappings(pool, originals);
@@ -24,8 +24,8 @@ export function createLibraryObservationApplication(
         await native.canonical.commitScopeCapture(client, input);
         return Object.freeze({ value: undefined, work: native.canonical.scopeCommitWork(input) });
       },
-    }),
-    follow: Object.freeze({
+    },
+    follow: {
       ...native.follow,
       async readMapping(pool, original) {
         const value = await native.follow.readMapping(pool, original);
@@ -40,7 +40,10 @@ export function createLibraryObservationApplication(
         return Object.freeze({ value, work: native.follow.subjectReferenceWork(input.subjectId) });
       },
       async observeSubjects(input) {
-        const observed = await native.follow.observeSubjects(input);
+        const observed = await native.follow.observeSubjects({
+          context: input.context as import('./summaries.ts').SummaryReaderDependencies,
+          ids: input.ids,
+        });
         const value: LibrarySemanticSummaryObservation = Object.freeze({
           summaries: observed.summaries,
           async current() {
@@ -50,8 +53,8 @@ export function createLibraryObservationApplication(
         });
         return Object.freeze({ value, work: native.follow.subjectSummaryWork(input.ids) });
       },
-    }),
-    shelf: Object.freeze({
+    },
+    shelf: {
       ...native.shelf,
       async readIdentityVersion(client, subjectId) {
         const value = await native.shelf.readIdentityVersion(client, subjectId);
@@ -61,6 +64,11 @@ export function createLibraryObservationApplication(
         const value = await native.shelf.readItemTypes(client, subjectIds);
         return Object.freeze({ value, work: native.shelf.itemTypesWork(subjectIds, maxTypeBytes) });
       },
-    }),
+    },
+  };
+  return Object.freeze({
+    canonical: Object.freeze(capability.canonical),
+    follow: Object.freeze(capability.follow),
+    shelf: Object.freeze(capability.shelf),
   });
 }

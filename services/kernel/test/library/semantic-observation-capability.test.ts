@@ -61,9 +61,10 @@ test('Semantic observations attach owner work to mapping, reference, and shelf r
 
   expect(await observations.follow.readMapping(pool, id)).toEqual({ value: { state: 'absent' }, work });
   expect(await observations.follow.readMappings(pool, [id])).toEqual({ value: [{ state: 'absent' }], work });
-  expect(
-    await observations.follow.readSubjectReference({ pool, subjectId: id, check: async () => true }),
-  ).toEqual({ value: { state: 'present' }, work });
+  expect(await observations.follow.readSubjectReference({ pool, subjectId: id, check: async () => true })).toEqual({
+    value: { state: 'present' },
+    work,
+  });
   expect(await observations.shelf.readIdentityVersion(client, id)).toEqual({ value: null, work });
   expect(await observations.shelf.readItemTypes(client, [id], 128)).toEqual({
     value: new Map([[id, 'schema:CreativeWork']]),
