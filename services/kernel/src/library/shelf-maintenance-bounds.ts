@@ -395,7 +395,9 @@ export const shelfMaintenanceSourceExecution: PreparationSourceExecution = Objec
       row({ partitionNo: 4095, node: '', writeState: 'active', movedTo: '', epoch: I(), position: D() }) +
       6 * (sizes.partition_bytes ?? 0) +
       row({ revision: I(), transactionId: U(), redirect: U() }) +
-      (full ? row({ id: U(), type: '', agent_account_id: U(), agent_verified: false }) + 6 * (sizes.type_bytes ?? 0) : 0);
+      (full
+        ? row({ id: U(), type: '', agent_account_id: U(), agent_verified: false }) + 6 * (sizes.type_bytes ?? 0)
+        : 0);
     // Identity: exact subject, latest create/identity revision, latest redirect; full projection adds
     // one subject and its unique agent link. Every absent lateral/left join still pays its EOF point.
     const total = shelfCost({

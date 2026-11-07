@@ -50,9 +50,7 @@ function collectionPrefix() {
     repeatBound(
       sumBounds(
         CANONICAL_SOURCE_RECEIVING_COST().seek,
-        CANONICAL_SOURCE_RECEIVING_COST().group(
-          MEMBERS_PREPARATION_SOURCE_PATHS().id.sourceGroupRowsPerQueryMaximum,
-        ),
+        CANONICAL_SOURCE_RECEIVING_COST().group(MEMBERS_PREPARATION_SOURCE_PATHS().id.sourceGroupRowsPerQueryMaximum),
       ),
       MEMBERS_PREPARATION_SOURCE_PATHS().id.candidatePrefixMaximum,
     ),
