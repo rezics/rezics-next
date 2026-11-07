@@ -180,7 +180,8 @@ async function rebuild(): Promise<void> {
   if (!config) throw new ConfigError('OPENSEARCH_URL');
   const { createPool } = await import('../src/database/pool.ts');
   const { createOpenSearch } = await import('../src/search/opensearch.ts');
-  const { RebuildError, rebuildSubjects, rebuildDiscovery } = await import('../src/search/generations.ts');
+  const { RebuildError, rebuildSubjects } = await import('../src/search/generations.ts');
+  const { rebuildDiscovery } = await import('../src/search/discovery-rebuild.ts');
   const { createRatedSubjectSource } = await import('../src/search/rated-source.ts');
   const pool = createPool(databaseUrl);
   try {

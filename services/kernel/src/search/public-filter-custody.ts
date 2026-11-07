@@ -1,3 +1,4 @@
+import { tree, encode, decode, requireValue } from './public-filter-codec.ts';
 import { canonicalDiscoveryCatalogue, publicFilterCatalogue } from './discovery-catalogue.ts';
 import { verifyPublicFilterRepairSourcePage, PublicFilterRepairSourceError } from './public-filter-custody-source.ts';
 import repairTransaction from './public-filter-custody-repair-transaction.sql';
@@ -103,53 +104,12 @@ function drainSignal(observation: string) {
     },
   };
 }
-// A tagged canonical tree preserves bigint/undefined without collisions with user JSON objects.
-type Tree = [string, unknown?];
-function tree(value: unknown, scalarTag: 'scalar' | 'value' = 'scalar'): Tree {
-  if (value === undefined) return ['undefined'];
-  if (typeof value === 'bigint') return ['bigint', value.toString()];
-  if (Array.isArray(value)) return ['array', value.map((child) => tree(child, scalarTag))];
-  if (value !== null && typeof value === 'object')
-    return [
-      'object',
-      Object.keys(value)
-        .sort()
-        .map((key) => [key, tree((value as Record<string, unknown>)[key], scalarTag)]),
-    ];
-  requireValue(
-    value === null ||
-      typeof value === 'string' ||
-      typeof value === 'boolean' ||
-      (typeof value === 'number' && Number.isFinite(value)),
-  );
-  return [scalarTag, value];
-}
-function untree(value: Tree): unknown {
-  switch (value[0]) {
-    case 'undefined':
-      return undefined;
-    case 'bigint':
-      return BigInt(value[1] as string);
-    case 'array':
-      return (value[1] as Tree[]).map(untree);
-    case 'object':
-      return Object.fromEntries((value[1] as [string, Tree][]).map(([key, entry]) => [key, untree(entry)]));
-    case 'value': // Existing consumer_work encoding.
-    case 'scalar':
-      return value[1];
-    default:
-      throw new TypeError('Invalid custody encoding');
-  }
-}
-const encode = (value: unknown) => JSON.stringify(tree(value));
-const decode = <T>(value: string): T => untree(JSON.parse(value) as Tree) as T;
 /** Internal durable native encoding; never constructs a settlement or Source proof. */
-export const encodePublicFilterNativeState = encode;
-export const decodePublicFilterNativeState = decode;
+export {
+  encode as encodePublicFilterNativeState,
+  decode as decodePublicFilterNativeState,
+} from './public-filter-codec.ts';
 const digest = (value: unknown) => createHash('sha256').update(encode(value)).digest('hex');
-function requireValue(value: unknown): asserts value {
-  if (!value) throw new TypeError('Invalid public filter custody input');
-}
 function text(value: unknown): asserts value is string {
   requireValue(typeof value === 'string' && value.length > 0 && value.length <= 65536 && !value.includes('\0'));
 }
@@ -1858,75 +1818,4 @@ export async function readGenerationPublicationCustody(
   }
 }
 
-/** Empty the original generation proof payload only after its actual readers release.
- * Its immutable Source/dispatch metadata remains available for completion replay.
- */
-export async function drainGenerationPublicationProofCopy(
-  tx: Pick<import('pg').PoolClient, 'query'>,
-  partition: number,
-  physicalTarget: string,
-  job: string,
-): Promise<boolean> {
-  if (partition !== 0) return false;
-  const retained = await tx.query<{
-    observation: string;
-    registration: string;
-    bootstrap: string;
-    consumer_work: string;
-  }>(
-    `SELECT o.observation,o.registration,b.bootstrap::text,o.consumer_work
-     FROM semantic.public_filter_bootstrap b
-     JOIN search.public_filter_observation o
-       ON (o.partition_no,o.consumer_bootstrap,o.observation)=(0,'0:'||b.bootstrap::text,b.publication_observation)
-     JOIN search.public_filter_registration r ON (r.partition_no,r.id)=(o.partition_no,o.registration)
-     WHERE (b.partition_no,b.publication_job)=(0,$1::uuid) AND r.physical_target=$2
-       AND b.publication_execution IS NOT NULL AND o.state='open'
-       AND NOT EXISTS (SELECT 1 FROM search.public_filter_reference f
-         WHERE (f.partition_no,f.observation)=(0,o.observation) AND f.expires_at>$3)
-     FOR UPDATE OF o`,
-    [job, physicalTarget, Date.now()],
-  );
-  if (!retained.rowCount) return false;
-  const row = retained.rows[0]!;
-  const work = decode<Record<string, unknown>>(row.consumer_work);
-  const proofWork = JSON.stringify(tree({ ...work, prepared: [], preparedRows: [], after: undefined }, 'value'));
-  const prepared = await tx.query(
-    `UPDATE search.public_filter_prepared SET rows=$3,state='erasing'
-     WHERE partition_no=0 AND registration=$1 AND build=$2 AND (state<>'erasing' OR rows<>$3)`,
-    [row.registration, '0:' + row.bootstrap, encode([])],
-  );
-  const observation = await tx.query(
-    `UPDATE search.public_filter_observation SET prepared_rows=$2,consumer_work=$3
-     WHERE partition_no=0 AND observation=$1
-       AND (prepared_rows IS DISTINCT FROM $2 OR consumer_work IS DISTINCT FROM $3)`,
-    [row.observation, encode([]), proofWork],
-  );
-  return !!(prepared.rowCount || observation.rowCount);
-}
-
-/** Every other observation, prepared payload and original reader must drain normally. */
-export async function hasRetainedWriterPublicationCopies(
-  tx: Pick<import('pg').PoolClient, 'query'>,
-  partition: number,
-  physicalTarget: string,
-  publicationJob: string | null = null,
-): Promise<boolean> {
-  const retained = await tx.query(
-    `SELECT 1 FROM search.public_filter_observation o
-    JOIN search.public_filter_registration r ON (r.partition_no,r.id)=(o.partition_no,o.registration)
-    WHERE r.partition_no=$1 AND r.physical_target=$2 AND NOT (
-      o.prepared_rows=$3 AND EXISTS (
-        SELECT 1 FROM semantic.public_filter_bootstrap b
-        WHERE (b.partition_no,b.publication_job)=(0,$4::uuid)
-          AND (o.partition_no,o.observation,o.consumer_bootstrap)=(0,b.publication_observation,'0:'||b.bootstrap::text)
-      ) AND NOT EXISTS (SELECT 1 FROM search.public_filter_reference f
-        WHERE (f.partition_no,f.observation)=(o.partition_no,o.observation) AND f.expires_at>$5))
-    UNION ALL
-    SELECT 1 FROM search.public_filter_prepared p
-    JOIN search.public_filter_registration r ON (r.partition_no,r.id)=(p.partition_no,p.registration)
-    WHERE r.partition_no=$1 AND r.physical_target=$2 AND (p.state<>'erasing' OR p.rows<>$3)
-    LIMIT 1`,
-    [partition, physicalTarget, encode([]), publicationJob, Date.now()],
-  );
-  return retained.rowCount !== 0;
-}
+export { drainGenerationPublicationProofCopy, hasRetainedWriterPublicationCopies } from './publication-proof-copy.ts';

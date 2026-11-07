@@ -7,7 +7,11 @@ progress. Search contract owns path multiplicities; Library declares the complet
 composition binds both capabilities before registration; absent Search runtime remains unavailable. Search retains
 Source settlement, public discovery and its existing native/growth outcomes.
 
-Decision: Search's native scope bindings and Library work-definition read defer imported values behind memoized factories and typed forwarding functions. Outcome subclasses keep their bases in the same module; `discovery-errors.ts` remains a compatibility re-export.
+Decision: Search imports errors, query-template identifiers, writer limits, scope arithmetic, configuration and
+native-state encoding from defining leaves. Identity serialization and failures retain their core and contract owners.
+Runtime lookup and discovery rebuild are separate from worker registration and generation reads. Native scope bindings
+and Library definition reads retain memoized factories and typed forwarding. Outcome bases stay with subclasses;
+compatibility exports preserve value identity. Acceptance is typing.
 
 [Rejected text query repair](text-query-repair.md) owns bounded parser diagnostics and deliberate in-place correction.
 
@@ -44,11 +48,9 @@ per matcher; `current-text-adapter.ts` supplies the physical analyzer for isolat
 importing adapter implementations or evaluating foreign inheritance. Compatibility entries re-export those exact
 constructors. Only `searchHttpExecute` and `http/operation-problems.ts` construct HTTP problems from native refusals.
 
-Search, suggest and facets retain `invalid`, `invalid-cursor`, `session`, `closed`, `denied`, `restart`,
-`index-not-ready`, `source-not-ready`, `unavailable` and `ready`. Source preparation is `503 semantic_not_ready`;
-identity/generation changes restart. Current-text concurrency stays 16. Projection precedes CURRENT final; useful-page
-continuations, receipts and all existing native/replay reservations retain their owners. Query privacy heads consume
-Semantic's public `PrivacyReductionHead` and `PrivacyReductionObservation`.
+Current-text concurrency stays 16. Projection precedes CURRENT final; useful-page continuations, receipts and
+native/replay reservations retain their owners. Query privacy heads consume Semantic's public `PrivacyReductionHead`
+and `PrivacyReductionObservation`.
 Decision: canonical Search admits self only from a published mapped-self row supplied by revision-1 creation or bounded original recovery;
 absent mappings use the existing preparation path. Four native HTTP cases pin executed-request recovery.
 

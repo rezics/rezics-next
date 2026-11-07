@@ -5,9 +5,9 @@ export {
   MEMBERS_PREPARATION_SOURCE_COST,
   MEMBERS_PREPARATION_SOURCE_DECLARATION,
   type MembersPreparationSourceCost,
-} from '../library/adapters/index.ts';
+} from '../library/members-preparation-source-declaration.ts';
 
-import { MEMBERS_PREPARATION_SOURCE_PATHS as preparationSourcePaths } from '../library/adapters/index.ts';
+import { MEMBERS_PREPARATION_SOURCE_PATHS as preparationSourcePaths } from '../library/members-preparation-source-declaration.ts';
 
 /** Preserve Search's callable entry over the single Library-owned schedule. */
 export function MEMBERS_PREPARATION_SOURCE_PATHS() {

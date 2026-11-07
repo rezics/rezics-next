@@ -6,7 +6,7 @@ import {
   type FilterDocument,
   type FilterRelease,
 } from '@rezics/filter';
-import { ProblemError, type FieldErrorCode } from '../http/problem.ts';
+import { ProblemError, type FieldErrorCode } from '../http/problem-error.ts';
 import { LIST_CURSOR_BOUNDS } from '../tokens/list-cursor.ts';
 import type { FacetDiscoveryRequest, FacetDiscoveryScope } from './facet-discovery-contract.ts';
 import type { CreditQualifierOperand } from './credit-search-query.ts';

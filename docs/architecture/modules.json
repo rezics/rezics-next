@@ -501,7 +501,8 @@
         "services/kernel/src/rating/events.ts",
         "services/kernel/src/rating/own-votes-review.ts",
         "services/kernel/src/rating/identity-work-frame-limits.ts",
-        "services/kernel/src/rating/vote-observation.ts"
+        "services/kernel/src/rating/vote-observation.ts",
+        "services/kernel/src/rating/standard-question.ts"
       ],
       "allowedDependencies": [
         "kernel-access",
@@ -653,7 +654,8 @@
         "services/kernel/src/presentation/page-contract.ts",
         "services/kernel/src/presentation/page-semantic-port.ts",
         "services/kernel/src/presentation/page-application.ts",
-        "services/kernel/src/presentation/adapters/semantic-page.ts"
+        "services/kernel/src/presentation/adapters/semantic-page.ts",
+        "services/kernel/src/search/config.ts"
       ],
       "allowedDependencies": [
         "bounds",
@@ -677,7 +679,9 @@
         "kernel-rating",
         "kernel-semantic",
         "search-text",
-        "kernel-search-contract"
+        "kernel-search-contract",
+        "kernel-identity-core",
+        "kernel-semantic-contract"
       ],
       "capabilities": ["search", "presentation"],
       "postgresPaths": ["services/kernel/src/search/**", "services/kernel/src/presentation/**"]
@@ -733,7 +737,13 @@
         "services/kernel/src/semantic/identity-receiving-effects.ts",
         "services/kernel/src/semantic/identity-receiving-effects-types.ts",
         "services/kernel/src/semantic/identity-search-receiving-statements.ts",
-        "services/kernel/src/semantic/character-public-reading-documents.ts"
+        "services/kernel/src/semantic/character-public-reading-documents.ts",
+        "services/kernel/src/semantic/copy-work-application.ts",
+        "services/kernel/src/semantic/identity-adapters/identity-epoch-contract.ts",
+        "services/kernel/src/semantic/identity-adapters/identity-epoch-read.ts",
+        "services/kernel/src/semantic/erasure-producer.ts",
+        "services/kernel/src/semantic/public-filter-source-binding.ts",
+        "services/kernel/src/semantic/public-filter-source.ts"
       ],
       "allowedDependencies": [
         "composition",
@@ -1887,7 +1897,8 @@
       "paths": ["services/kernel/src/semantic/identity-core/**"],
       "publicEntries": [
         "services/kernel/src/semantic/identity-core/index.ts",
-        "services/kernel/src/semantic/identity-core/rating-review-bounds.ts"
+        "services/kernel/src/semantic/identity-core/rating-review-bounds.ts",
+        "services/kernel/src/semantic/identity-core/encoding.ts"
       ],
       "allowedDependencies": ["kernel-semantic-contract"],
       "capabilities": ["canonical-identity-rules"]

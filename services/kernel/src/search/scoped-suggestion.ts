@@ -1,6 +1,6 @@
 import { isDeepStrictEqual } from 'node:util';
 import { relationFacetProperty, type FilterDocument, type FilterRelease } from '@rezics/filter';
-import { ProblemError } from '../http/problem.ts';
+import { ProblemError } from '../http/problem-error.ts';
 import { checkHits, type FactClause } from './disclosure/check.ts';
 import { compileFilter } from './filter.ts';
 import type { PublicFilterConsumerContext, PublicFilterQueriedObservation } from './public-filter-consumer-contract.ts';
@@ -8,7 +8,7 @@ import { collectRetainedUsefulPage } from './useful-page.ts';
 import type { PublicSuggestionOperations } from './public-suggestion.ts';
 import type { SearchHit as NativeSearchHit } from './query.ts';
 import type { IndexedSubject, SubjectSource } from './source.ts';
-import { ScopeWork } from './scope-execution.ts';
+import { ScopeWork } from './scope-work.ts';
 import type { PreparedSearchScope } from './scope-source.ts';
 import type { createSearchScopeForService } from './service-scope.ts';
 

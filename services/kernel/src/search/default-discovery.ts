@@ -5,14 +5,14 @@ import { readFollowDiscovery } from '../library/follow-discovery.ts';
 import { readSpaceDiscoveryEntryBatch, type SpaceEntryActionRuntime } from '../community/space-discovery-entry.ts';
 import { observeSearchSpaceEntries, spaceEntryFollowing, type SpaceEntryFollowProducer } from './space-entry.ts';
 import type { KeyRing } from '../tokens/seal.ts';
-import { ProblemError } from '../http/problem.ts';
+import { ProblemError } from '../http/problem-error.ts';
 import { isDeepStrictEqual } from 'node:util';
 import { activeRelease } from '../semantic/definitions.ts';
 import { searchSourcePublicationApplication } from './source-publication-application.ts';
 import { createWorkClient } from '../work/client.ts';
 import { deadlineClient } from '../access/authenticate.ts';
 import { discardConnection, withConnection } from '../database/pool.ts';
-import { readListPresentationFacts } from '../semantic/index.ts';
+import { readListPresentationFacts } from '../semantic/copy-work-application.ts';
 import {
   prepareViewerFacts,
   readViewerFacts,
@@ -22,7 +22,7 @@ import {
   type PreparedViewerFacts,
 } from '../library/viewer-facts.ts';
 import { readPublicFigureViews } from '../rating/public-figure-http.ts';
-import { STANDARD_QUESTION_ID } from '../rating/votes.ts';
+import { STANDARD_QUESTION_ID } from '../rating/standard-question.ts';
 import type { AccountActor } from '../request/access.ts';
 import { SearchUnavailableError } from './opensearch.ts';
 import { nativeDiscoveryRegistry } from './account-discovery.ts';

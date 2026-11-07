@@ -7,7 +7,7 @@ import type {
 import type { CollectionSourceObservation } from '../../library/contract/index.ts';
 import { MEMBERS_PREPARATION_SOURCE_PATHS } from '../scope-members-source-declaration.ts';
 import { createSearchScopeSource } from '../scope-source.ts';
-import { collectionPublicationScopeRuntime } from '../work.ts';
+import { collectionPublicationScopeRuntime } from '../scope-runtime.ts';
 import { meterMembersDefinition, withMembersWorkBudget } from '../scope-members-work-cost.ts';
 
 import { readScopeWorkDefinition } from '../scope-work-context.ts';

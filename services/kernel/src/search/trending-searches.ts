@@ -8,7 +8,7 @@ import {
   runCommand,
   type CommandTransaction,
 } from '../command/command.ts';
-import { ProblemError } from '../http/problem.ts';
+import { ProblemError } from '../http/problem-error.ts';
 import type { Actor } from '../request/access.ts';
 import { parseText } from './text.ts';
 import type { SearchRequest } from './service.ts';

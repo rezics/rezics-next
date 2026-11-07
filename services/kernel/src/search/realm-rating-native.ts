@@ -1,5 +1,5 @@
 import type { Pool } from 'pg';
-import { ProblemError } from '../http/problem.ts';
+import { ProblemError } from '../http/problem-error.ts';
 import type { KeyRing } from '../tokens/seal.ts';
 import type { OpenSearch } from './opensearch.ts';
 import type { RealmRatingSource } from './realm-rating-order.ts';

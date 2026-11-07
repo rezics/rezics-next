@@ -4,17 +4,18 @@ import { noEffect, runCommand } from '../command/command.ts';
 import { subjectListingSource } from '../library/listing-counts.ts';
 import { partitionOf, routeOf } from '../route/route.ts';
 import { readRelease } from '../semantic/definitions.ts';
-import { createPublicFilterSourceBinding, publicFilterSource } from '../semantic/index.ts';
+import { createPublicFilterSourceBinding } from '../semantic/public-filter-source-binding.ts';
+import { publicFilterSource } from '../semantic/public-filter-source.ts';
 import { subjectSource } from '../semantic/search-source.ts';
 import {
   identityEpochStore,
-  identityJobPartition,
-  IdentityEpochStoreError,
-  serializeIdentityValue as json,
   type IdentityChange,
   type IdentityJobRef,
   type NativeStepWork,
 } from '../semantic/identity-adapters/index.ts';
+import { identityJobPartition } from '../semantic/identity-adapters/identity-epoch-contract.ts';
+import { IdentityEpochStoreError } from '../semantic/contract/identity-errors.ts';
+import { serializeIdentityValue as json } from '../semantic/identity-core/encoding.ts';
 import { withReadTransaction } from '../semantic/read.ts';
 import {
   prepareSearchIdentityReceivingEffect,

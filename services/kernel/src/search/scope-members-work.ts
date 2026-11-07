@@ -36,7 +36,7 @@ import {
   meterMembersDefinition,
   withMembersWorkBudget,
 } from './scope-members-work-cost.ts';
-import { zeroScopeWork, type ScopeWork } from './scope-execution.ts';
+import { zeroScopeWork, type ScopeWork } from './scope-work.ts';
 import type { ScopeEvaluationProgress } from './scope-source.ts';
 import type {
   MembersPreparationWorkDefinition,
