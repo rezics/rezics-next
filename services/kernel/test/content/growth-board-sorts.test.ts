@@ -30,8 +30,6 @@ const text = 'A fixed board page growth body';
 const document = fromPlainText(text);
 const body = Buffer.from(serializeDocument(document));
 const bodyHash = createHash('sha256').update(body).digest();
-const title =
-  'board pages under newest, oldest, active and hot, with their disclosure passes, stay within the written bound as threads, boards and hidden candidates grow';
 // seed() spreads the threads across all sixteen routes in their anchor partition. Access also
 // reads the board route and the fixed Global Context, so populate every one of those routes.
 const accessRoutes = [
@@ -64,7 +62,7 @@ const accessPopulation: Population = {
 };
 
 test(
-  title,
+  'board pages under newest, oldest, active and hot, with their disclosure passes, stay within the written bound as threads, boards and hidden candidates grow',
   async () => {
     // HTTP calls use the production "newest" spelling for the contract's "new" sort.
     for (const sort of ['newest', 'oldest', 'active', 'hot'] as const) {
@@ -191,6 +189,7 @@ test(
         name: `Board page ${sort}, including candidate and final disclosure`,
         scales,
         bounds: { rows: 'constant', blocks: 'logarithmic', statements: 'constant' },
+        byteBounds: { requestBytes: 'constant', responseBytes: 'constant' },
         repetitions: 1,
         grow: async (growthDb, scale, previous) => {
           await seed({ pool: growthDb.pool, admin: growthDb.admin }, population, { from: previous, to: scale });
@@ -225,6 +224,8 @@ test(
       const statementCounts = report.samples.map(({ cost }) => cost.statements);
       expect(statementCounts.every((count) => count <= 43)).toBe(true);
       expect(new Set(statementCounts).size).toBe(1);
+      expect(new Set(report.samples.map(({ cost }) => cost.controlStatements)).size).toBe(1);
+      expect(new Set(report.samples.map(({ cost }) => cost.catalogStatements)).size).toBe(1);
       const assertedRelations = [
         ...new Set(
           report.samples.flatMap(({ cost }) =>
@@ -244,6 +245,9 @@ test(
         expect(cost.rows).toBeGreaterThan(0);
         expect(cost.blocks).toBeGreaterThan(0);
         expect(cost.statements).toBeGreaterThan(0);
+        expect(cost.controlStatements).toBeGreaterThan(0);
+        expect(cost.requestBytes).toBeGreaterThan(0);
+        expect(cost.responseBytes).toBeGreaterThan(0);
         const candidates = cost.relations['content.board_thread']!;
         const measurement = JSON.stringify({ sort, scale, ...candidates });
         // A small board can use a bitmap heap scan and sort; larger boards seek the ordered index.

@@ -323,6 +323,7 @@ test('checkGrowth proves the declared three-scale machine-independent bound', as
     scales: [32, 256, 2048],
     grow,
     bounds: { rows: 'constant', statements: 'constant', blocks: 'logarithmic' },
+    byteBounds: { requestBytes: 'constant', responseBytes: 'constant' },
     operation: async (database, _scale, repetition) => {
       // A fresh source position changes every write's identity, so a receipt cannot replace the effect.
       await applyBoardCandidate(database.pool, {
@@ -337,6 +338,13 @@ test('checkGrowth proves the declared three-scale machine-independent bound', as
     },
   });
   expect(report.samples.map((sample) => sample.scale)).toEqual([32, 256, 2048]);
-  expect(report.samples.every((sample) => (sample.cost.relations?.['content.board_thread']?.rows ?? 0) > 0)).toBe(true);
+  for (const { cost } of report.samples) {
+    expect(cost.rows).toBeGreaterThan(0);
+    expect(cost.statements).toBeGreaterThan(0);
+    expect(cost.controlStatements).toBeGreaterThan(0);
+    expect(cost.requestBytes).toBeGreaterThan(0);
+    expect(cost.responseBytes).toBeGreaterThan(0);
+    expect(cost.relations?.['content.board_thread']?.rows ?? 0).toBeGreaterThan(0);
+  }
   console.info('Board projection GrowthReport', JSON.stringify(report));
 }, 60_000);

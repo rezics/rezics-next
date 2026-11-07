@@ -534,6 +534,7 @@ test('Board projection stays within its bound as T grows', async () => {
   const report = await checkGrowth(db, {
     name: 'Board projection',
     bounds: { rows: 'constant', blocks: 'logarithmic', statements: 'constant' },
+    byteBounds: { requestBytes: 'constant', responseBytes: 'constant' },
     grow: async (growthDb, scale, previous) => {
       await seed({ pool: growthDb.pool, admin: growthDb.admin }, threads, {
         from: previous * populationSize,
@@ -547,6 +548,13 @@ test('Board projection stays within its bound as T grows', async () => {
     operation: async (growthDb) => createBoardEffect(growthDb.pool).run(event),
   });
   expect(report.samples.map(({ scale }) => scale)).toEqual([...scales]);
+  for (const { cost } of report.samples) {
+    expect(cost.rows).toBeGreaterThan(0);
+    expect(cost.statements).toBeGreaterThan(0);
+    expect(cost.controlStatements).toBeGreaterThan(0);
+    expect(cost.requestBytes).toBeGreaterThan(0);
+    expect(cost.responseBytes).toBeGreaterThan(0);
+  }
 }, 90_000);
 
 test('Board candidate page stays within its bound as d grows', async () => {
@@ -647,6 +655,7 @@ test('Board candidate page stays within its bound as d grows', async () => {
   const report = await checkGrowth(db, {
     name: 'Board candidate page',
     bounds: { rows: 'constant', blocks: 'logarithmic', statements: 'constant' },
+    byteBounds: { requestBytes: 'constant', responseBytes: 'constant' },
     grow: async (growthDb, scale, previous) => {
       await seed({ pool: growthDb.pool, admin: growthDb.admin }, onBoard, {
         from: previous * populationSize,
@@ -664,6 +673,13 @@ test('Board candidate page stays within its bound as d grows', async () => {
     },
   });
   expect(report.samples.map(({ scale }) => scale)).toEqual([...scales]);
+  for (const { cost } of report.samples) {
+    expect(cost.rows).toBeGreaterThan(0);
+    expect(cost.statements).toBeGreaterThan(0);
+    expect(cost.controlStatements).toBeGreaterThan(0);
+    expect(cost.requestBytes).toBeGreaterThan(0);
+    expect(cost.responseBytes).toBeGreaterThan(0);
+  }
 }, 90_000);
 
 test.serial(
@@ -700,6 +716,7 @@ test.serial(
         repetitions: 1,
         warmups: 1,
         bounds: { rows: 'constant', blocks: 'logarithmic', statements: 'constant' },
+        byteBounds: { requestBytes: 'constant', responseBytes: 'constant' },
         grow: async (growthDb, scale, previous) => {
           await seed(growthDb, history, {
             from: checkPopulationSize * previous,
@@ -720,6 +737,13 @@ test.serial(
       },
     );
     expect(report.samples.map(({ scale }) => scale)).toEqual([...checkScales]);
+    for (const { cost } of report.samples) {
+      expect(cost.rows).toBeGreaterThan(0);
+      expect(cost.statements).toBeGreaterThan(0);
+      expect(cost.controlStatements).toBeGreaterThan(0);
+      expect(cost.requestBytes).toBeGreaterThan(0);
+      expect(cost.responseBytes).toBeGreaterThan(0);
+    }
     expect(creationStatuses).toEqual(Array.from({ length: 6 }, () => 201));
   },
   240_000,
@@ -755,6 +779,7 @@ test.serial(
         scales: checkScales,
         repetitions: 1,
         bounds: { rows: 'constant', blocks: 'logarithmic', statements: 'constant' },
+        byteBounds: { requestBytes: 'constant', responseBytes: 'constant' },
         grow: async (growthDb, scale, previous) => {
           await seed(growthDb, history, {
             from: checkPopulationSize * previous,
@@ -766,6 +791,13 @@ test.serial(
       diagnostic,
     );
     expect(report.samples.map(({ scale }) => scale)).toEqual([...checkScales]);
+    for (const { cost } of report.samples) {
+      expect(cost.rows).toBeGreaterThan(0);
+      expect(cost.statements).toBeGreaterThan(0);
+      expect(cost.controlStatements).toBeGreaterThan(0);
+      expect(cost.requestBytes).toBeGreaterThan(0);
+      expect(cost.responseBytes).toBeGreaterThan(0);
+    }
   },
   240_000,
 );
@@ -797,13 +829,17 @@ test.serial(
         scales: checkScales,
         repetitions: 1,
         bounds: { rows: 'constant', blocks: 'logarithmic', statements: 'constant' },
+        byteBounds: { requestBytes: 'constant', responseBytes: 'constant' },
         grow: async (growthDb, scale, previous) => {
           const range = {
             from: checkPopulationSize * previous,
             to: checkPopulationSize * scale,
           };
           await seed(growthDb, history, range);
-          for (const onBoard of onBoards) await seed(growthDb, onBoard.growth, range);
+          for (const onBoard of onBoards) {
+            await seed(growthDb, onBoard.growth, range);
+            await seed(growthDb, onBoard.ascendingTail, range);
+          }
           await seed(growthDb, otherBoards, range);
         },
         async operation(growthDb, _scale, repetition) {
@@ -837,8 +873,129 @@ test.serial(
       },
     );
     expect(report.samples.map(({ scale }) => scale)).toEqual([...checkScales]);
+    for (const { cost } of report.samples) {
+      expect(cost.rows).toBeGreaterThan(0);
+      expect(cost.statements).toBeGreaterThan(0);
+      expect(cost.controlStatements).toBeGreaterThan(0);
+      expect(cost.requestBytes).toBeGreaterThan(0);
+      expect(cost.responseBytes).toBeGreaterThan(0);
+    }
   },
   240_000,
+);
+
+test.serial(
+  'Deep Board pages keep empty, withheld, and selected results bounded as unrelated history grows',
+  async () => {
+    const boardId = candidateBoards[0];
+    if (!boardId) throw new Error('No prepared Board remains for the deep-page growth case');
+    const boardRoute = boardHost.route;
+    const hiddenThreads: string[] = [];
+    let selectedThread = '';
+    const fixedCandidates: Population = {
+      name: `growth-board-page-frontier-${randomUUID()}`,
+      hotPartition: partitionOf(sourceRoute),
+      hotShare: 1,
+      rows: ({ ordinal }) => {
+        const threadId = newId(sourceRoute);
+        const postId = newId(sourceRoute);
+        const revisionId = newId(sourceRoute);
+        const isTarget = ordinal === 200;
+        const isWithheldTarget = ordinal === 198;
+        const createdAt = isTarget
+          ? '2026-10-01T00:00:00.000Z'
+          : new Date(Date.UTC(2026, 9, 20) + ordinal * 1000).toISOString();
+        if (isTarget) selectedThread = threadId;
+        else if (ordinal % 2 === 0) hiddenThreads.push(threadId);
+        const rows = candidateRows(boardId, boardRoute, threadId, postId, revisionId, createdAt, ordinal + 1);
+        rows['content.revision']![0]!.search_text = isTarget
+          ? 'selected growth needle'
+          : isWithheldTarget
+            ? 'withheld growth needle'
+            : 'unrelated candidate';
+        return rows;
+      },
+    };
+    await seed(db, fixedCandidates, { from: 0, to: 201 });
+    await db.admin.query(
+      `UPDATE content.thread
+          SET visibility = 'taken_down', security_revision = security_revision + 1
+        WHERE route = $1 AND thread_id = ANY($2::uuid[])`,
+      [sourceRoute, hiddenThreads],
+    );
+
+    const history = boardHistory(
+      `growth-board-page-disclosure-${randomUUID()}`,
+      boardHost,
+      'realm:read',
+      'community.realm.moderator',
+    );
+    const otherBoards = otherBoardCandidatePopulation(
+      `growth-board-page-unrelated-candidates-${randomUUID()}`,
+      boardRoute,
+      boardHost.id,
+    );
+    const queryPath = (query: string, cursor?: string) => {
+      const parameters = new URLSearchParams({ limit: '1', sort: 'newest', query });
+      if (cursor !== undefined) parameters.set('cursor', cursor);
+      return `/v1/boards/${boardId}/threads?${parameters.toString()}`;
+    };
+
+    const report = await checkWithDiagnostics(
+      {
+        name: 'Deep Board page with empty and withheld candidates',
+        scales: checkScales,
+        repetitions: 1,
+        bounds: { rows: 'constant', blocks: 'logarithmic', statements: 'constant' },
+        byteBounds: { requestBytes: 'constant', responseBytes: 'constant' },
+        grow: async (growthDb, scale, previous) => {
+          const range = {
+            from: checkPopulationSize * previous,
+            to: checkPopulationSize * scale,
+          };
+          await seed(growthDb, history, range);
+          await seed(growthDb, otherBoards, range);
+        },
+        async operation() {
+          const deep = await request('GET', queryPath('selected-growth-needle'), { bearer });
+          expect(deep.response.status).toBe(200);
+          expect(deep.value.threads).toEqual([]);
+          expect(deep.value.next).toEqual(expect.any(String));
+
+          const continued = await request('GET', queryPath('selected-growth-needle', deep.value.next), { bearer });
+          expect(continued.response.status).toBe(200);
+          expect(continued.value.threads.map((thread: { id: string }) => thread.id)).toEqual([selectedThread]);
+          expect(continued.value.next).toBeNull();
+
+          const withheld = await request('GET', queryPath('withheld-growth-needle'), { bearer });
+          expect(withheld.response.status).toBe(200);
+          expect(withheld.value.threads).toEqual([]);
+          expect(withheld.value.next).toEqual(expect.any(String));
+
+          const empty = await request('GET', queryPath('no-such-board-query'), { bearer });
+          expect(empty.response.status).toBe(200);
+          expect(empty.value.threads).toEqual([]);
+          expect(empty.value.next).toEqual(expect.any(String));
+          return { deep, continued, withheld, empty };
+        },
+      },
+      async () => request('GET', queryPath('selected-growth-needle'), { bearer }),
+    );
+
+    expect(report.samples.map(({ scale }) => scale)).toEqual([...checkScales]);
+    for (const { cost } of report.samples) {
+      expect(cost.rows).toBeGreaterThan(0);
+      expect(cost.statements).toBeGreaterThan(0);
+      expect(cost.controlStatements).toBeGreaterThan(0);
+      expect(cost.requestBytes).toBeGreaterThan(0);
+      expect(cost.responseBytes).toBeGreaterThan(0);
+      const rawCandidateRows = Object.entries(cost.relations ?? {})
+        .filter(([name]) => name.endsWith('board_thread'))
+        .reduce((total, [, relation]) => total + relation.rows, 0);
+      expect(rawCandidateRows).toBeGreaterThanOrEqual(601);
+    }
+  },
+  300_000,
 );
 
 async function boardCandidatePopulation(name: string, boardId: string, boardRoute: number) {
@@ -879,10 +1036,23 @@ async function boardCandidatePopulation(name: string, boardId: string, boardRout
       return candidateRows(boardId, boardRoute, threadId, postId, revisionId, createdAt, ordinal + 1000);
     },
   };
+  const ascendingTail: Population = {
+    name: `${name}-ascending-tail`,
+    hotPartition: partitionOf(sourceRoute),
+    hotShare: 1,
+    rows: ({ ordinal }) => {
+      const threadId = newId(sourceRoute);
+      const postId = newId(sourceRoute);
+      const revisionId = newId(sourceRoute);
+      const createdAt = new Date(Date.UTC(2026, 0, 1) + ordinal * 1000).toISOString();
+      return candidateRows(boardId, boardRoute, threadId, postId, revisionId, createdAt, ordinal + 50_000);
+    },
+  };
   return {
     cursor,
     ascendingPage,
     growth,
+    ascendingTail,
   };
 }
 

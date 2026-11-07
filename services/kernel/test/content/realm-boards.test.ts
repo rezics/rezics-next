@@ -1088,6 +1088,7 @@ test.serial(
       scales: [8, 32, 128],
       repetitions: 3,
       bounds: { rows: 'constant', blocks: 'logarithmic', statements: 'constant' },
+      byteBounds: { requestBytes: 'constant', responseBytes: 'constant' },
       async grow(database, scale, previous) {
         await seed({ pool: database.pool, admin: database.admin }, population, {
           from: 500 * previous,

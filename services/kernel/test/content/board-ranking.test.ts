@@ -521,6 +521,7 @@ test.serial(
       name: 'active board page',
       scales,
       bounds: { rows: 'constant', blocks: 'logarithmic', statements: 'constant' },
+      byteBounds: { requestBytes: 'constant', responseBytes: 'constant' },
       repetitions: 1,
       grow: async (growthDb, scale, previous) =>
         seed({ pool: growthDb.pool, admin: growthDb.admin }, pagePopulation, { from: 500 * previous, to: 500 * scale }),

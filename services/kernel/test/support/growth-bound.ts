@@ -10,6 +10,12 @@ import {
 export type Metric = 'rows' | 'blocks' | 'statements';
 export type ByteMetric = 'requestBytes' | 'responseBytes';
 export type GrowthMetric = Metric | ByteMetric;
+export type BackgroundMetric =
+  | 'backgroundStatements'
+  | 'backgroundRows'
+  | 'backgroundBlocks'
+  | 'backgroundRequestBytes'
+  | 'backgroundResponseBytes';
 export type Bound = 'constant' | 'logarithmic' | 'linear';
 export type Slack = { readonly absolute: number; readonly relative: number };
 export const DEFAULT_SLACK: Readonly<Record<Metric, Slack>> = {
@@ -29,6 +35,8 @@ export type Measured = Readonly<Record<Metric, number>> & {
   readonly backgroundStatements?: number;
   readonly backgroundRows?: number;
   readonly backgroundBlocks?: number;
+  readonly backgroundRequestBytes?: number;
+  readonly backgroundResponseBytes?: number;
   readonly relations?: Readonly<
     Record<string, { readonly rows: number; readonly blocks: number; readonly sequentialScans?: number }>
   >;
@@ -106,6 +114,15 @@ function validateSamples(samples: readonly GrowthSample[]): void {
       requireNonNegativeFiniteNumber(sample.cost[metric], `Growth value for ${metric}`);
     }
     for (const metric of ['requestBytes', 'responseBytes'] as const)
+      if (sample.cost[metric] !== undefined)
+        requireNonNegativeFiniteNumber(sample.cost[metric], `Growth value for ${metric}`);
+    for (const metric of [
+      'backgroundStatements',
+      'backgroundRows',
+      'backgroundBlocks',
+      'backgroundRequestBytes',
+      'backgroundResponseBytes',
+    ] as const)
       if (sample.cost[metric] !== undefined)
         requireNonNegativeFiniteNumber(sample.cost[metric], `Growth value for ${metric}`);
     if (sample.cost.relations !== undefined) {
@@ -315,8 +332,32 @@ function planTransitionDiagnostics(samples: readonly GrowthSample[]): string[] {
 
 function backgroundGrew(samples: readonly GrowthSample[]): boolean {
   if (samples.length === 0) return false;
-  const firstStatements = samples[0]!.cost.backgroundStatements ?? 0;
-  return samples.slice(1).some((sample) => (sample.cost.backgroundStatements ?? 0) > firstStatements);
+  const metrics: readonly BackgroundMetric[] = [
+    'backgroundStatements',
+    'backgroundRows',
+    'backgroundBlocks',
+    'backgroundRequestBytes',
+    'backgroundResponseBytes',
+  ];
+  const first = samples[0]!.cost;
+  return samples.slice(1).some(({ cost }) =>
+    metrics.some((metric) => (cost[metric] ?? 0) > (first[metric] ?? 0)),
+  );
+}
+
+function formatBackgroundContext(samples: readonly GrowthSample[]): string[] {
+  const metrics: readonly BackgroundMetric[] = [
+    'backgroundStatements',
+    'backgroundRows',
+    'backgroundBlocks',
+    'backgroundRequestBytes',
+    'backgroundResponseBytes',
+  ];
+  if (!samples.some(({ cost }) => metrics.some((metric) => cost[metric] !== undefined))) return [];
+  return samples.map(({ scale, cost }) => {
+    const values = metrics.flatMap((metric) => (cost[metric] === undefined ? [] : [`${metric} ${cost[metric]}`]));
+    return `Scale ${scale} independent background work: ${values.join(', ') || 'not recorded'}`;
+  });
 }
 
 /**
@@ -534,7 +575,7 @@ function formatMessage(violations: readonly Violation[], samples: readonly Growt
   });
   const omitted = violations.length - visible.length;
   if (omitted > 0) blocks.push(`${omitted} additional growth violations omitted`);
-  return blocks.join('\n\n');
+  return [...blocks, ...formatBackgroundContext(samples)].join('\n\n');
 }
 
 export function assertGrowth(

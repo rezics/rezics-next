@@ -112,6 +112,10 @@ test('growth bounds reject negative measured work and invalid optional evidence'
       allBounds('constant'),
     ),
   ).toThrow(TypeError);
+  expect(() => growthViolations(series([1, 8, 64], [1, 1, 1]).map((sample) => ({
+    ...sample,
+    cost: { ...sample.cost, backgroundRows: -1 },
+  })), allBounds('constant'))).toThrow(/backgroundRows/);
   expect(growthViolations(series([1, 8, 64], [0, 0, 0]), allBounds('constant'))).toEqual([]);
 });
 
@@ -471,4 +475,53 @@ test('background growth is classified separately from the linear family', () => 
   expect(classified.class).toBe('background');
   expect(classified.backgroundGrew).toBe(true);
   expect(growthViolations(samples, { rows: 'constant', blocks: 'linear', statements: 'constant' })).toEqual([]);
+});
+
+test('independent background rows, buffers, and bytes remain visible when statement count is flat', () => {
+  const metrics = [
+    'backgroundRows',
+    'backgroundBlocks',
+    'backgroundRequestBytes',
+    'backgroundResponseBytes',
+  ] as const;
+  for (const metric of metrics) {
+    const samples = series([1, 8, 64], [10, 10, 10]).map((sample, index) => ({
+      ...sample,
+      cost: {
+        ...sample.cost,
+        backgroundStatements: 1,
+        [metric]: [1, 8, 64][index]!,
+      },
+    }));
+    const classified = classifyEngineWork(samples);
+    expect(classified.class, metric).toBe('background');
+    expect(classified.backgroundGrew, metric).toBe(true);
+    expect(growthViolations(samples, allBounds('constant')), metric).toEqual([]);
+  }
+
+  let error: unknown;
+  try {
+    assertGrowth(
+      series([1, 8, 64], [10, 80, 640]).map((sample, index) => ({
+        ...sample,
+        cost: {
+          ...sample.cost,
+          backgroundStatements: 1,
+          backgroundRows: [4, 32, 256][index]!,
+          backgroundBlocks: [2, 16, 128][index]!,
+          backgroundRequestBytes: [64, 512, 4096][index]!,
+          backgroundResponseBytes: [32, 256, 2048][index]!,
+        },
+      })),
+      allBounds('constant'),
+    );
+  } catch (caught) {
+    error = caught;
+  }
+  expect(error).toBeInstanceOf(GrowthBoundError);
+  expect((error as Error).message).toContain('Scale 64 independent background work');
+  expect((error as Error).message).toContain('backgroundRows 256');
+  expect((error as Error).message).toContain('backgroundBlocks 128');
+  expect((error as Error).message).toContain('backgroundRequestBytes 4096');
+  expect((error as Error).message).toContain('backgroundResponseBytes 2048');
 });

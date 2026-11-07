@@ -380,6 +380,7 @@ test('checkGrowth proves the declared three-scale machine-independent bound', as
     name: 'board HTTP current query and disclosure with same-partition distractors',
     scales: [256, 1024, 4096],
     bounds: { rows: 'constant', statements: 'constant', blocks: 'logarithmic' },
+    byteBounds: { requestBytes: 'constant', responseBytes: 'constant' },
     async grow(database, scale, previous) {
       const count = scale - previous;
       const boardIds = Array.from({ length: count }, () => newId(boardRoute));
