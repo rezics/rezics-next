@@ -1,6 +1,7 @@
 import { expect, test } from 'bun:test';
+import { chromium } from 'playwright';
+import { expect as browserExpect } from 'playwright/test';
 import { randomUUID } from 'node:crypto';
-import { createRequire } from 'node:module';
 import { existsSync } from 'node:fs';
 import { cp, mkdir, mkdtemp, readdir, symlink, rm } from 'node:fs/promises';
 import { dirname, resolve } from 'node:path';
@@ -84,9 +85,6 @@ test('fresh checkout starts native loopback Auth and signs a person into and out
       stdout: Bun.file(resolve(checkout, '.temp/stack.log')),
       stderr: 'inherit',
     });
-    const require = createRequire(resolve(root, 'apps/web/package.json'));
-    const { chromium } = require('playwright');
-    const { expect: browserExpect } = require('playwright/test');
     const instance = await chromium.launch({ headless: true });
     browser = instance;
     const page = await instance.newPage({ locale: 'en-US' });

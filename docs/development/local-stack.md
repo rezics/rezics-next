@@ -23,6 +23,9 @@ infrastructure running. A child startup failure ends the other children.
 The dev-stack check prefers `go-task` or `task` on `PATH`, then the repository binary under `node_modules/.bin`.
 When none of those exist it runs the Taskfile's Bun commands, so check hosts without Go Task still exercise the stack.
 
+Decision: Auth owns the dev-stack journey's Playwright dev dependency at the repository's pinned version;
+the test imports `playwright` and `playwright/test` directly from Auth instead of resolving through Web's manifest.
+
 | Service                      | Loopback address       |
 | ---------------------------- | ---------------------- |
 | Web                          | http://127.0.0.1:3000  |
