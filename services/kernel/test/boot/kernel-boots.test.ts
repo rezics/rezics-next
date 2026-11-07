@@ -4,6 +4,7 @@ import { mkdir, mkdtemp, rm } from 'node:fs/promises';
 import { resolve } from 'node:path';
 import { withThrowawayDatabase } from '../../scripts/derived.ts';
 import { ordinaryCollectionPagePlan } from '../../src/library/ordinary-read-bounds.ts';
+import { configureTestReceiptKeys, testReceiptKeysEnv } from '../support/receipt-keys.ts';
 
 setDefaultTimeout(600_000);
 
@@ -32,7 +33,7 @@ function serverKeys(databaseUrl: string) {
     DATABASE_URL: databaseUrl,
     KERNEL_ROUTE_KEY: key(),
     KERNEL_SESSION_KEYS: `1:${key()}`,
-    KERNEL_RECEIPT_KEYS: `1:${key()}`,
+    ...testReceiptKeysEnv(),
     KERNEL_WRITE_RATE_SECRET: key(),
     KERNEL_PORT: '0',
   };
@@ -174,6 +175,7 @@ async function boot(env: NodeJS.ProcessEnv) {
   const { Pool } = await import('pg');
   const pool = new Pool({ connectionString: databaseUrl });
   try {
+    configureTestReceiptKeys(pool);
     await synchronizeAccountAgent(pool, personaId);
     const { accountAgentId } = await import('../../src/semantic/agents.ts');
     const { SUBJECT_REVISED } = await import('../../src/semantic/events.ts');
