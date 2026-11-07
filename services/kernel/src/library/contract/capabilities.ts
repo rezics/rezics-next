@@ -1,7 +1,15 @@
 /** Library-owned ports. Foreign Access, Search, Semantic and Content implement these; Library never imports them. */
 
 import type { LibraryActor, LibraryAccountActor } from './actors.ts';
-import type { CanonicalCollectionCandidate, CollectionSourceObservation, PreparedCollectionSource } from './source.ts';
+import type {
+  CanonicalCollectionCandidate,
+  CanonicalSourceReceivingCost,
+  CollectionSource,
+  CollectionSourceObservation,
+  NativeCollectionOrdinalPageBound,
+  PreparedCollectionSource,
+} from './source.ts';
+import type { MembersWorkDefinition, PreparationLocator } from './preparation-work.ts';
 import type { NestedAdmissionAccount } from './membership.ts';
 import type { WorkAllowance, WorkDimensions, WorkReceipt } from './work-dimensions.ts';
 import type { ProgressOperationCatalog } from './progress-operations.ts';
@@ -221,6 +229,52 @@ export interface SourceCaptureCapability {
     logical?: boolean;
     ordinaryPage?: boolean;
   }): Promise<{ source: PreparedCollectionSource; work: WorkReceipt }>;
+}
+
+/** Constructed Collection Source limits. Composition supplies the native values; applications do not load them. */
+export type CollectionSourceLimits = Readonly<{
+  collectionWorkGroupLimit: number;
+  ordinalPageBound: (limit: number) => NativeCollectionOrdinalPageBound;
+  receivingCost: CanonicalSourceReceivingCost;
+}>;
+
+/** Open a Collection Source for one pool/access/clock. Search holds the returned operations. */
+export interface CollectionSourceFactory {
+  open(input: Readonly<{ pool: unknown; access: unknown; clock?: () => Date }>): CollectionSource;
+}
+
+/** Same-client Source state and group continuation used by scoped Members work. */
+export interface CollectionSourceWorkCapability {
+  readState(input: Readonly<{ pool: unknown; work: unknown; access: unknown; deadline: number }>): Promise<unknown>;
+  readGroup(
+    input: Readonly<{
+      work: unknown;
+      state: unknown;
+      subjectId: string;
+      after: unknown;
+      limit: number;
+      deadline: number;
+    }>,
+  ): Promise<unknown>;
+}
+
+/** Native Members episode getter. Search validates the returned identity and observation. */
+export interface MembersWorkDefinitionCapability {
+  readWorkDefinition(input: {
+    work: Readonly<{ tx: unknown; locator: PreparationLocator }>;
+    pool: unknown;
+    access: unknown;
+    deadline: number;
+  }): Promise<MembersWorkDefinition | null>;
+}
+
+export type NativeCollectionWorkHandle = Readonly<{
+  receipt(): WorkReceipt;
+  available(axis: keyof WorkDimensions): number;
+}>;
+
+export interface NativeCollectionWorkFactory {
+  createWork(allowance: WorkAllowance, deadline: number): NativeCollectionWorkHandle;
 }
 
 /** Composition connects storage to original native command/admission/source effects, never the reverse. */

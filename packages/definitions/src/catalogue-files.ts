@@ -15,7 +15,7 @@ import {
   type CatalogueArtifactStore,
   type KindCataloguePin,
 } from './catalogue.ts';
-import { verifyCatalogue } from './catalogue-artifacts.ts';
+import { nativeCompiler } from './adapters/compiler-host.ts';
 
 function missing(error: unknown): boolean {
   return (error as NodeJS.ErrnoException)?.code === 'ENOENT';
@@ -109,7 +109,7 @@ export function catalogueFileStore(directory: string): CatalogueArtifactStore {
 export async function publishCatalogueRoot(directory: string, pin: KindCataloguePin): Promise<void> {
   const destination = catalogueLocalPath(directory);
   const catalogue = parseCataloguePin(pin);
-  await verifyCatalogue(catalogue, catalogueFileStore(destination));
+  await nativeCompiler().verifyCatalogue(catalogue, catalogueFileStore(destination));
   await syncDirectory(join(destination, 'objects'));
   const temporary = join(destination, `.pending-root-${randomUUID()}`);
   try {

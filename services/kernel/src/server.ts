@@ -195,6 +195,7 @@ export function startServer(config: ServerConfig): Promise<RunningServer> & Runn
             cursors: config.tokens,
             clock: defaults.clock,
             facetAccess: defaults.facetAccess,
+            library: defaults.libraryScope,
             publicFilters: () => {
               if (!publicFilters) throw new Error('Public Search Access composition is incomplete');
               return publicFilters;

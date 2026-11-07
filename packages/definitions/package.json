@@ -8,6 +8,7 @@
       "browser": "./src/browser.ts",
       "default": "./src/index.ts"
     },
+    "./contract": "./src/browser.ts",
     "./schema/release.json": "./schema/release.json",
     "./extension": "./src/extension.ts",
     "./compile": "./src/compile.ts",

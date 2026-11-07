@@ -8,15 +8,15 @@ import {
   hasLiveOperationalTransaction,
   type OperationalTransaction,
 } from '../command/operational.ts';
-import { ProblemError } from '../http/problem.ts';
 import type { Access } from '../request/access.ts';
 import { partitionOf, routeOf } from '../route/route.ts';
 import { isDeepStrictEqual } from 'node:util';
 import { meterMembersDefinition } from './scope-members-work-cost.ts';
-import { searchLibraryScopePort } from './scope-application.ts';
+import { SearchOperationError } from './operation-outcomes.ts';
 import type {
   MembersPreparationWorkDefinition,
   PreparationLocator,
+  SearchLibraryScopePort,
   SearchNativeCollectionWork,
 } from './library-scope-port.ts';
 import {
@@ -91,7 +91,16 @@ export function collectionKindPreparationNativeWork(
     : undefined;
 }
 
-type WorkOptions = Readonly<{ pool: Pool; access: Access; deadline: number }>;
+type WorkOptions = Readonly<{
+  pool: Pool;
+  access: Access;
+  deadline: number;
+  library?: SearchLibraryScopePort;
+}>;
+
+function unready(): never {
+  throw new SearchOperationError('semantic_not_ready');
+}
 
 /** Compare owner data, never manufacture an episode, capture, Actor or final command authority. */
 export async function readCollectionPublicationScopeWorkDefinition(
@@ -99,8 +108,7 @@ export async function readCollectionPublicationScopeWorkDefinition(
   options: WorkOptions,
 ): Promise<CollectionPublicationWorkDefinition> {
   const { tx } = work;
-  if (work.kind !== 'collection-publication' || !hasLiveOperationalTransaction(tx))
-    throw new ProblemError('semantic_not_ready');
+  if (work.kind !== 'collection-publication' || !hasLiveOperationalTransaction(tx)) unready();
   const resources = currentOperationalResources(tx);
   const locator = Object.freeze({
     route: work.locator.route,
@@ -126,9 +134,9 @@ export async function readCollectionPublicationScopeWorkDefinition(
     options.deadline > resources.deadline ||
     Date.now() >= deadline
   )
-    throw new ProblemError('semantic_not_ready');
+    unready();
   const time = commandTime(tx);
-  if (!time) throw new ProblemError('semantic_not_ready');
+  if (!time) unready();
   authoritativeTimeValue(time);
   function current() {
     if (
@@ -137,15 +145,15 @@ export async function readCollectionPublicationScopeWorkDefinition(
       commandTime(tx) !== time ||
       !isDeepStrictEqual(work.locator, locator)
     )
-      throw new ProblemError('semantic_not_ready');
+      unready();
     authoritativeTimeValue(time!);
   }
   // Library alone resolves the original committed episode and current immutable rule/fences.
-  if ((await admitCollectionPublicationStep(tx, locator)) !== true) throw new ProblemError('semantic_not_ready');
+  if ((await admitCollectionPublicationStep(tx, locator)) !== true) unready();
   current();
   const native = await readCollectionPublicationWorkDefinition(tx, locator);
   current();
-  if (!native) throw new ProblemError('semantic_not_ready');
+  if (!native) unready();
   const { input, target, rule, creation, sourceIdentity: source, observation, identityObservation, custody } = native;
   const { repairReceipt, definition, output, selected } = native;
   // These are relationships between the actual native fields. In particular, no output
@@ -227,7 +235,7 @@ export async function readCollectionPublicationScopeWorkDefinition(
         !/^(0|[1-9][0-9]*)$/.test(selected.publication.position) ||
         !/^(0|[1-9][0-9]*)$/.test(selected.publication.members)))
   )
-    throw new ProblemError('semantic_not_ready');
+    unready();
   // Re-admission checks the expanded pinned meaning, not just a copied release scalar.
   // Creation is compared as committed data; its initiator is never restored as an Actor.
   try {
@@ -239,9 +247,9 @@ export async function readCollectionPublicationScopeWorkDefinition(
       creation.initiator.sourceDigest !== createHash('sha256').update(canonicalize(creation.source)!).digest('hex') ||
       creation.durableInitiator !== createHash('sha256').update(canonicalize(creation.initiator)!).digest('hex')
     )
-      throw new ProblemError('semantic_not_ready');
+      unready();
   } catch {
-    throw new ProblemError('semantic_not_ready');
+    unready();
   }
   current();
   return native;
@@ -258,7 +266,7 @@ export async function readCollectionKindPreparationWorkDefinition(
     !isBoundCollectionKindPreparationWorkContext(work) ||
     !hasLiveOperationalTransaction(tx)
   )
-    throw new ProblemError('semantic_not_ready');
+    unready();
   const resources = currentOperationalResources(tx);
   const locator = Object.freeze({ ...work.locator });
   const route = routeOf(locator.collectionId);
@@ -275,19 +283,17 @@ export async function readCollectionKindPreparationWorkDefinition(
     !Number.isFinite(options.deadline) ||
     Date.now() >= Math.min(options.deadline, resources.deadline)
   )
-    throw new ProblemError('semantic_not_ready');
+    unready();
   const time = commandTime(tx);
-  if (!time) throw new ProblemError('semantic_not_ready');
+  if (!time) unready();
   authoritativeTimeValue(time);
   // Library verifies the COMMITTED prepare/repair intent, current audience and exact custody.
   // Neither the Core fence nor the returned definition is a substitute for this admission.
-  if ((await admitCollectionKindPreparationStep(tx, locator, kindContexts.get(work)!.work)) !== true)
-    throw new ProblemError('semantic_not_ready');
+  if ((await admitCollectionKindPreparationStep(tx, locator, kindContexts.get(work)!.work)) !== true) unready();
   const native = await readCollectionKindWorkDefinition(tx, locator, kindContexts.get(work)!.work);
-  if (!hasLiveOperationalTransaction(tx) || Date.now() >= Math.min(options.deadline, resources.deadline))
-    throw new ProblemError('semantic_not_ready');
+  if (!hasLiveOperationalTransaction(tx) || Date.now() >= Math.min(options.deadline, resources.deadline)) unready();
   authoritativeTimeValue(time);
-  if (!native) throw new ProblemError('semantic_not_ready');
+  if (!native) unready();
   const { sourceIdentity: source, observation, identityObservation, custody, repairReceipt } = native;
   if (
     source.route !== locator.route ||
@@ -318,7 +324,7 @@ export async function readCollectionKindPreparationWorkDefinition(
         : observation.authority.kind !== 'private_builtin' ||
           observation.authority.curatorAccountId !== locator.ownerAccountId)
   )
-    throw new ProblemError('semantic_not_ready');
+    unready();
   return native;
 }
 
@@ -335,14 +341,14 @@ export async function readScopeWorkDefinition(
     case 'collection-publication':
       return readCollectionPublicationScopeWorkDefinition(work, options);
     default:
-      throw new ProblemError('semantic_not_ready');
+      unready();
   }
 }
 
 export async function admitScopeWork(work: ScopeWorkContext, options: WorkOptions): Promise<AuthoritativeTime> {
   await readScopeWorkDefinition(work, options);
   const time = commandTime(work.tx);
-  if (!time) throw new ProblemError('semantic_not_ready');
+  if (!time) unready();
   authoritativeTimeValue(time);
   return time;
 }
@@ -350,17 +356,16 @@ export async function admitScopeWork(work: ScopeWorkContext, options: WorkOption
 /** Read the actual immutable producer inputs on each use, with no retained admission verdict. */
 export async function readMembersPreparationWorkDefinition(
   work: MembersPreparationWorkContext,
-  options: Readonly<{ pool: Pool; access: Access; deadline: number }>,
+  options: Readonly<{ pool: Pool; access: Access; deadline: number; library?: SearchLibraryScopePort }>,
 ): Promise<MembersPreparationWorkDefinition> {
   return meterMembersDefinition(work.tx, () => readMembersDefinition(work, options));
 }
 async function readMembersDefinition(
   work: MembersPreparationWorkContext,
-  options: Readonly<{ pool: Pool; access: Access; deadline: number }>,
+  options: Readonly<{ pool: Pool; access: Access; deadline: number; library?: SearchLibraryScopePort }>,
 ): Promise<MembersPreparationWorkDefinition> {
   const { tx } = work;
-  if (work.kind !== 'members-preparation' || !hasLiveOperationalTransaction(tx))
-    throw new ProblemError('semantic_not_ready');
+  if (work.kind !== 'members-preparation' || !hasLiveOperationalTransaction(tx)) unready();
   const resources = currentOperationalResources(tx);
   const locator = Object.freeze({
     route: work.locator.route,
@@ -384,27 +389,23 @@ async function readMembersDefinition(
     options.deadline > resources.deadline ||
     Date.now() >= Math.min(options.deadline, resources.deadline)
   )
-    throw new ProblemError('semantic_not_ready');
+    unready();
   const time = commandTime(tx);
-  if (!time) throw new ProblemError('semantic_not_ready');
+  if (!time) unready();
   authoritativeTimeValue(time);
-  const preparation = searchLibraryScopePort().members.createPreparation({
-    pool: resources.pool,
-    workClient: resources.workClient,
-    access: options.access,
-  });
+  if (!options.library) throw new SearchOperationError('dependency_unavailable');
   // The same-client getter locks and checks the current episode, Collection and Source in this Work phase.
   // No request-side permission or fabricated episode substitutes for that native state.
-  const native = await preparation.readWorkDefinition(tx, locator);
+  const native = await options.library.members.readWorkDefinition(work, options);
   if (
     !hasLiveOperationalTransaction(tx) ||
     Date.now() >= Math.min(options.deadline, resources.deadline) ||
     commandTime(tx) !== time ||
     !isDeepStrictEqual(work.locator, locator)
   )
-    throw new ProblemError('semantic_not_ready');
+    unready();
   authoritativeTimeValue(time);
-  if (!native) throw new ProblemError('semantic_not_ready');
+  if (!native) unready();
   const { sourceIdentity: source, observation } = native;
   if (
     source.scope !== 'curated' ||
@@ -424,19 +425,19 @@ async function readMembersDefinition(
     observation.stamp.partition !== resources.partition ||
     observation.stamp.epoch !== source.ownerEpoch
   )
-    throw new ProblemError('semantic_not_ready');
+    unready();
   return native;
 }
 
 /** Trusted time comes only from the live Core attempt, after native immutable episode admission. */
 export async function admitMembersPreparationWork(
   work: MembersPreparationWorkContext,
-  options: Readonly<{ pool: Pool; access: Access; deadline: number }>,
+  options: Readonly<{ pool: Pool; access: Access; deadline: number; library?: SearchLibraryScopePort }>,
 ): Promise<AuthoritativeTime> {
   const { tx, kind, locator } = work;
   await readMembersPreparationWorkDefinition({ tx, kind, locator }, options);
   const time = commandTime(tx);
-  if (!time) throw new ProblemError('semantic_not_ready');
+  if (!time) unready();
   authoritativeTimeValue(time);
   return time;
 }

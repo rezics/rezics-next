@@ -57,6 +57,15 @@ import { analyzeInstalled } from './engine-analysis.ts';
 import { createSearchDisclosureApplication } from './disclosure-application.ts';
 export type { SearchDisclosureApplication } from './disclosure-application.ts';
 
+export type {
+  SearchCollectionSourceDeps,
+  SearchLibraryScopePort,
+  SearchScopeCollection,
+  SearchScopeOrder,
+  SearchScopeWorkOptions,
+} from './library-scope-port.ts';
+export { createSearchLibraryScopePort, createNativeLibraryScopeWork } from './adapters/index.ts';
+
 /** Complete native application: one installed instance owns matching, owner hydration, concept admission and final disclosure. */
 export function createNativeSearchDisclosure(search: OpenSearch) {
   return createSearchDisclosureApplication({

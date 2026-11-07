@@ -5,7 +5,7 @@ import { deadlineClient } from '../access/authenticate.ts';
 import { withConnection } from '../database/pool.ts';
 import { readOwnerFilterCandidate, readOwnerFilterCandidateClosure } from '../library/owner-filter-plan.ts';
 import { isDeepStrictEqual } from 'node:util';
-import { ProblemError } from '../http/problem.ts';
+import { SearchOperationError } from './operation-outcomes.ts';
 import type { WorkAllowance, WorkDimensions, WorkReceipt } from '../library/contract/work-dimensions.ts';
 import { readScopeLeafEvidence, type LeafOptions, type LeafWork } from '../semantic/scope-leaf-evidence.ts';
 import type { IdentityScopeWork } from '../semantic/identity-scope-types.ts';
@@ -16,8 +16,7 @@ import type { FactClause } from './disclosure/check.ts';
 import type { ScopeEvaluationProgress, ScopeEvaluationReservation } from './scope-source.ts';
 import type { RelationFacetMatch } from './source.ts';
 import { evaluateMembersSubject, membersProgress, type MembersExecution } from './scope-members-work.ts';
-import { searchLibraryScopePort } from './scope-application.ts';
-import type { SearchNativeCollectionWork } from './library-scope-port.ts';
+import type { SearchLibraryScopePort } from './library-scope-port.ts';
 
 export type { WorkAllowance, WorkDimensions, WorkReceipt, IdentityScopeWork, PublicFilterCost, LeafWork };
 
@@ -56,6 +55,7 @@ export async function evaluateScopeSubjects(
     work: ScopeWork;
     resume?: ScopeLeafResume | null;
     members?: MembersExecution;
+    library?: SearchLibraryScopePort;
     owner?:
       | Readonly<{
           admission: Parameters<typeof readOwnerFilterCandidate>[1];
@@ -72,7 +72,7 @@ export async function evaluateScopeSubjects(
   let resume: ScopeLeafResume | null = null;
   for (const subject of subjects) {
     if (input.members) {
-      if (plan.leaves.some((leaf) => leaf.kind !== 'owner')) throw new ProblemError('dependency_unavailable');
+      if (plan.leaves.some((leaf) => leaf.kind !== 'owner')) throw new SearchOperationError('dependency_unavailable');
       const pending = input.reservation.progress ?? input.resume?.progress;
       if (
         pending?.subject === subject &&
@@ -113,7 +113,8 @@ export async function evaluateScopeSubjects(
         continue;
       }
       const { pool, options } = input;
-      const native = searchLibraryScopePort().members.createNativeCollectionWork(work.remaining(), options.deadline);
+      if (!input.library) throw new SearchOperationError('dependency_unavailable');
+      const native = input.library.members.createWork(work.remaining(), options.deadline);
       try {
         const read = async () => {
           const closure = await readOwnerFilterCandidateClosure(owner.binding, owner.source, subject, native);
@@ -186,11 +187,11 @@ export async function evaluateScopeSubjects(
       );
       work.leaf(result.usage);
       if (result.state !== 'current') {
-        if (result.state === 'basis_changed') throw new ProblemError('semantic_not_ready');
+        if (result.state === 'basis_changed') throw new SearchOperationError('semantic_not_ready');
         results.push('not_proven');
         continue;
       }
-      if (after && result.basis !== after.basis) throw new ProblemError('semantic_not_ready');
+      if (after && result.basis !== after.basis) throw new SearchOperationError('semantic_not_ready');
       let value = match(clause, result);
       if (value === 'not_proven' && result.progress && progress === null) {
         progress = { ...result.progress, subject, basis, leafOrdinal };

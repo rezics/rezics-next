@@ -1,4 +1,4 @@
-import type { DataType, RelationDefinition, Release } from '@rezics/definitions';
+import type { DataType, RelationDefinition, Release } from '@rezics/definitions/contract';
 import { type Violation } from '@rezics/definitions/validate';
 import { ITEM_FACT_LIMIT, ITEM_RELATION_GROUPS, ITEM_SLOT_NAMESPACE, ITEM_STATEMENT_NAMESPACE, type Item, type ItemDataType, type ItemFact, type ItemFactRow, type ItemMetadata } from '../contract/item-values.ts';
 import type { HashPort, RoutePort } from '../contract/domain-ports.ts';

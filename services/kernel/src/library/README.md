@@ -142,6 +142,11 @@ port and composition binds it.
 uses the Library `searchPreparation` capability through existing dependency objects; `CollectionWorkLedger` replaces
 Search `ScopeWork` subclassing. The Source adapter ABI keeps Search `ScopeWorkContext` so Search receiving type pins
 stay exact; contract `CollectionSourceContext.work` stays unknown so contract/core/application load without Search.
+Native source identity, ordinal page bounds and receiving-cost shapes live on the Library contract. Composition
+constructs `createScopedSearchLibraryOperations` (limits and receiving costs included) and Search applications
+retain that instance through nested calls; `createOrderedCollectionSourceApplication` and
+`createMembersWorkDefinitionApplication` are the application facades. Fewest tests: Search's construction suite
+pins the installed binding; Library domain-composition keeps its fake-capability coverage.
 
 [Collection mutations](collection-mutation.md) owns mutation layers, effects and focused tests.
 

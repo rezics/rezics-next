@@ -134,15 +134,8 @@ import outputHead from './collection-source-output-head.sql';
 import outputPage from './collection-source-output-page.sql';
 import outputProbe from './collection-source-output-probe.sql';
 
-export type NativeCollectionOrdinalPageBound = Readonly<{
-  limit: number;
-  requestBytes: number;
-  resultBytes: number;
-  /** Complete legacy Source footprint, including request bindings and the result projection ceiling. */
-  work: WorkDimensions;
-  /** Projection-only dimensions used by the shared native SQL dispatcher. */
-  projection: Readonly<Partial<WorkDimensions>>;
-}>;
+export type { NativeCollectionOrdinalPageBound } from './contract/source.ts';
+import type { NativeCollectionOrdinalPageBound } from './contract/source.ts';
 
 /** The single native ordinal statement's literal and schema-width bounds. */
 export function nativeCollectionOrdinalPageBound(limit: number): NativeCollectionOrdinalPageBound {

@@ -1,5 +1,4 @@
-/** Portable, inert catalogue formats. No filesystem, compiler or native admission imports. */
-import { parseFilter, walkFilter, type FilterDocument } from '@rezics/filter';
+/** Portable, inert catalogue formats. No filesystem, compiler or Filter admission imports. */
 import { sha256 } from '@noble/hashes/sha2.js';
 import { bytesToHex } from '@noble/hashes/utils.js';
 import canonicalize from 'canonicalize';
@@ -25,7 +24,7 @@ export type KindConditionV1 =
   | Readonly<{
       op: 'filter';
       language: 'https://rezics.com/filter/1';
-      document: FilterDocument;
+      document: object;
       vocabulary: Readonly<{ types: readonly DefinitionTypePin[]; properties: readonly DefinitionPropertyPin[] }>;
     }>;
 export type KindDeclarationV1 = Readonly<{
@@ -220,10 +219,6 @@ export function parseKindDeclaration(value: unknown): KindDeclarationV1 {
     'Kind declaration',
   );
   if (result.condition.op === 'filter') {
-    parseFilter(result.condition.document); // Original parser and all its existing bounds, never a replacement grammar.
-    for (const node of walkFilter(result.condition.document))
-      if ('owner' in node || 'saved' in node)
-        catalogueFail('unsupported', 'Catalogue filters require public immutable expanded meaning');
     const { types, properties } = result.condition.vocabulary;
     if (types.length + properties.length > CATALOGUE_LIMITS.vocabulary)
       catalogueFail('invalid', 'Vocabulary exceeds 256 references');

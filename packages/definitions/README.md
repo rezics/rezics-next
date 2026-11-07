@@ -20,6 +20,21 @@ does not import the release barrel. Source compilation admits inspected document
 and keeps compiler values off the inspection graph. Extension validation stays native.
 Decision: fewest tests pin user-visible publication behaviour and named-state stories only;
 `compile.test.ts` covers imported-document inspection off the release barrel.
+`compiler-application.test.ts` pins the compiler application with a fake host and native bundled admission.
+
+## Compiler layers
+
+Release vocabulary, digest, catalogue formats and publication helpers are the contract
+(`@rezics/definitions/contract`, browser root). Compilation, release validation and
+catalogue artifact admission are one compiler application (`src/compiler/application.ts`)
+that takes a host: Filter construction, safe-pattern evaluation, POSIX path and YAML parse.
+The native root, `/compile`, catalogue CLI and file store bind that host in
+`src/adapters/compiler-host.ts`. Nested nonempty Filter, pattern and catalogue operations
+close over the supplied application; `nativeCompiler` is a lazy singleton and does not
+replace another compiler. Publication-construction tests remain the causal coverage;
+`compiler-application.test.ts` pins nested host identity. Filter stays a compiler-owned
+capability, not a contract import. Exact release bytes, digests, pins, bounded expansion
+and safe-pattern admission are unchanged.
 
 ## Semantic language selection
 

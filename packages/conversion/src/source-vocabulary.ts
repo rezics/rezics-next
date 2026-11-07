@@ -7,7 +7,7 @@ import {
   type BatchReference,
   type BatchStatement,
 } from '@rezics/definitions/bulk';
-import type { PropertyDefinition, Release } from '@rezics/definitions';
+import type { PropertyDefinition, Release } from '@rezics/definitions/contract';
 import { commandKey, safeSourceUrl, sourceEnvelope } from './support.ts';
 
 export const sourceVocabularyRevision = 'source-vocabulary@3';
