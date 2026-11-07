@@ -12,7 +12,13 @@ import { LibraryConflictError } from '../../src/library/entries.ts';
 import { deadlineFor } from '../../src/request/deadline.ts';
 import { routeOf } from '../../src/route/route.ts';
 import { accountToken, authenticateAccount } from '../support/admitted-access.ts';
-import { capture, catalogStatementBound, checkGrowth, openGrowthDatabase } from '../support/growth.ts';
+import {
+  assertGrowthAccessPaths,
+  capture,
+  catalogStatementBound,
+  checkGrowth,
+  openGrowthDatabase,
+} from '../support/growth.ts';
 import { createProfileEntryFixture, entryKey, type NativeProfileFixture } from './support/profile-entry-fixture.ts';
 
 let f: NativeProfileFixture;
@@ -526,16 +532,24 @@ test('fresh guard work remains bounded across 64 512 and 4096 unrelated live ret
       },
       operation,
     });
+    const guardedRelations = [
+      'library.entry',
+      'library.entry_deleted',
+      'library.owner_write_counter',
+      'library.fact_source_head',
+    ];
+    const observedScans = report.samples.flatMap(({ scale, cost }) =>
+      guardedRelations.flatMap((relation) => {
+        const scans = cost.relations[relation]?.sequentialScans ?? 0;
+        return scans > 0 ? [`${relation} at scale ${scale}: ${scans}`] : [];
+      }),
+    );
+    if (observedScans.length > 0)
+      process.stderr.write(`Library growth scan diagnostics: ${observedScans.join('; ')}\n`);
     for (const sample of report.samples) {
       expect(sample.cost.plans).toBeGreaterThan(0);
-      for (const relation of [
-        'library.entry',
-        'library.entry_deleted',
-        'library.owner_write_counter',
-        'library.fact_source_head',
-      ])
-        expect(sample.cost.relations[relation]?.sequentialScans ?? 0).toBe(0);
     }
+    assertGrowthAccessPaths(report.name, report.samples, guardedRelations);
     const rejected = await capture(
       growth,
       async () => {
