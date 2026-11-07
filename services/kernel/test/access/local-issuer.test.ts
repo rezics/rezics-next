@@ -9,6 +9,7 @@ import { AuthenticationError } from '../../src/request/access.ts';
 import type { AuthenticationConfig } from '../../src/access/authenticate.ts';
 import { trustedAccessPorts } from '../support/trusted-access.ts';
 import { dropTestDatabase } from '../support/drop-test-database.ts';
+import { localJwksTransport } from '../../src/access/membership-work-config.ts';
 
 const url = process.env.DATABASE_URL;
 if (!url) throw new Error('DATABASE_URL must name the migrated test database');
@@ -120,6 +121,27 @@ for (const [index, host] of ['127.0.0.1', 'localhost', '[::1]'].entries()) {
         clientId: 'web',
         authnEpoch: 1,
       });
+      const native = Bun.serve({
+        hostname: host === '[::1]' ? '::1' : '127.0.0.1',
+        port: 0,
+        fetch: () => {
+          if (!service) throw new Error('Auth not started');
+          return service.handler(new Request(`${issuer}/.well-known/jwks.json`));
+        },
+      });
+      try {
+        const nativeOrigin = `http://${host === '[::1]' ? '[::1]' : host}:${native.port}`;
+        const walked = createAccess({
+          actions: new Map(),
+          auth: localJwksTransport(
+            { REZICS_LOCAL_STACK_NATIVE_ORIGIN: nativeOrigin },
+            { issuer, audience, jwksUrl: `${issuer}/.well-known/jwks.json` },
+          ),
+        });
+        expect(await walked.authenticate(token, context())).toMatchObject({ accountId: person, clientId: 'web' });
+      } finally {
+        await native.stop(true);
+      }
       const credential = await generateKeyPair('ES256');
       await authPool.query('INSERT INTO auth_public_key (account_id,kid,public_jwk) VALUES ($1,$2,$3)', [
         person,
@@ -214,6 +236,7 @@ for (const [index, host] of ['127.0.0.1', 'localhost', '[::1]'].entries()) {
       }
       for (const jwksUrl of [
         `http://127.0.0.1:${port + 1}/jwks`,
+        `http://${host === '[::1]' ? '[::1]' : host}:${port + 1}/.well-known/jwks.json`,
         `https://${host}:${port}/jwks`,
         'http://localhost.example/jwks',
         `${issuer}/jwks?query=1`,
