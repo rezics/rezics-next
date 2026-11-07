@@ -164,7 +164,21 @@ import {
   type BangumiCreditRoleBinding,
   type BangumiCreditVocabularyResolution,
 } from './showcase-bangumi-credits.ts';
-import { showcaseLimits, type ShowcaseAcknowledgement, type ShowcaseManifest } from './showcase-contract.ts';
+import {
+  CrossMediaTableScanLimitError,
+  showcaseLimits,
+  type CrossMediaTableScanLimits,
+  type CrossMediaTables,
+  type ShowcaseAcknowledgement,
+  type ShowcaseManifest,
+} from './showcase-contract.ts';
+
+export {
+  CrossMediaTableScanLimitError,
+  isCrossMediaTableScanLimitError,
+  type CrossMediaTables,
+  type CrossMediaTableScanLimits,
+} from './showcase-contract.ts';
 
 type Provider = 'bangumi' | 'vndb';
 type Row = Record<string, unknown>;
@@ -194,23 +208,6 @@ export function crossMediaFranchise(...names: unknown[]): Franchise | undefined 
   );
 }
 
-export interface CrossMediaTables {
-  rows(provider: Provider, table: string, limits?: CrossMediaTableScanLimits): AsyncIterable<Row>;
-}
-export type CrossMediaTableScanLimits = {
-  maxRows: number;
-  maxBytes: number;
-  consumeRow?: (bytes: number) => void;
-};
-export class CrossMediaTableScanLimitError extends Error {
-  constructor(
-    readonly provider: Provider,
-    readonly table: string,
-  ) {
-    super(`Cross-media ${provider}/${table} exceeded its bounded scan`);
-    this.name = 'CrossMediaTableScanLimitError';
-  }
-}
 export type SelectedVndbCharacterNameRows = {
   names: Map<string, Row[]>;
   aliases: Map<string, Row[]>;

@@ -9,6 +9,7 @@ import { developmentShowcaseSelection } from '../../../scripts/datasets/cross-me
 import { ImportTransportError } from '../src/import-client.ts';
 import {
   CrossMediaDumpFiles,
+  CrossMediaTableScanLimitError,
   crossMediaAliases,
   planCrossMediaSeed,
   seedCrossMedia,
@@ -24,6 +25,7 @@ import {
   developmentStatusTaxonomy,
   planVndbReleaseFidelity,
   readVndbReleaseBindings,
+  VNDB_RELEASE_SCAN_LIMITS,
 } from '../src/vndb-release-fidelity.ts';
 
 /** Authored COPY tables. These are not observed public dump evidence. */
@@ -507,3 +509,53 @@ test('default selected-family traversal acquires directed release endpoints and 
     await rm(directory, { recursive: true, force: true });
   }
 }, 60_000);
+
+test('pinned November 4 VNDB dump fits VNDB release scan budgets', () => {
+  const pinned: Record<string, { rows: number; bytes: number }> = {
+    vn: { rows: 67_682, bytes: 29_049_047 },
+    vn_titles: { rows: 78_386, bytes: 4_716_431 },
+    entry_meta: { rows: 495_184, bytes: 17_493_195 },
+    releases_vn: { rows: 171_613, bytes: 3_887_692 },
+    releases: { rows: 160_532, bytes: 15_913_985 },
+    releases_titles: { rows: 206_275, bytes: 14_632_450 },
+    releases_supersedes: { rows: 3_458, bytes: 52_244 },
+    releases_platforms: { rows: 230_374, bytes: 2_630_152 },
+    releases_media: { rows: 155_615, bytes: 1_949_022 },
+  };
+  for (const [table, size] of Object.entries(pinned)) {
+    expect(VNDB_RELEASE_SCAN_LIMITS[table]!.maxRows).toBeGreaterThanOrEqual(size.rows);
+    expect(VNDB_RELEASE_SCAN_LIMITS[table]!.maxBytes).toBeGreaterThanOrEqual(size.bytes);
+  }
+});
+
+test('a dump entry_meta scan limit is a release gap rather than a seed crash', async () => {
+  const duck = new Error('Cross-media vndb/entry_meta exceeded its bounded scan');
+  duck.name = 'CrossMediaTableScanLimitError';
+  const tables: CrossMediaTables = {
+    async *rows(_provider, table) {
+      if (table === 'vn') {
+        yield { id: 'v1', olang: 'ja', devstatus: '0' };
+        return;
+      }
+      if (table === 'entry_meta') throw duck;
+      if (table === 'vn_titles') {
+        yield { id: 'v1', lang: 'ja', official: 't', title: 'Authored work', latin: null };
+        return;
+      }
+    },
+  };
+  const named = await planVndbReleaseFidelity(tables, { selectedWorkIds: ['v1'] });
+  expect(named.gaps.some((gap) => gap.reason.includes('row or byte bound'))).toBe(true);
+
+  const files: CrossMediaTables = {
+    async *rows(_provider, table) {
+      if (table === 'vn') {
+        yield { id: 'v1', olang: 'ja', devstatus: '0' };
+        return;
+      }
+      if (table === 'entry_meta') throw new CrossMediaTableScanLimitError('vndb', table);
+    },
+  };
+  const dumped = await planVndbReleaseFidelity(files, { selectedWorkIds: ['v1'] });
+  expect(dumped.gaps.some((gap) => gap.reason.includes('row or byte bound'))).toBe(true);
+});

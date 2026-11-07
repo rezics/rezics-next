@@ -59,6 +59,14 @@ export class CrossMediaTableScanLimitError extends Error {
   }
 }
 
+/** Dump files and planners share this class; name matching covers a duplicate module instance. */
+export function isCrossMediaTableScanLimitError(error: unknown): error is CrossMediaTableScanLimitError {
+  return (
+    error instanceof CrossMediaTableScanLimitError ||
+    (error instanceof Error && error.name === 'CrossMediaTableScanLimitError')
+  );
+}
+
 export interface CrossMediaTables {
   rows(provider: Provider, table: string, limits?: CrossMediaTableScanLimits): AsyncIterable<Row>;
 }

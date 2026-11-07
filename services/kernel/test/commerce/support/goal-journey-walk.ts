@@ -264,7 +264,7 @@ export function requireId(value: unknown, label: string): string {
 }
 
 export function publicFields(value: unknown): unknown {
-  if (Array.isArray(value)) return value.slice(0, 24).map(publicFields);
+  if (Array.isArray(value)) return value.slice(0, 32).map(publicFields);
   if (!value || typeof value !== 'object') return value;
   const output: Json = {};
   for (const [key, field] of Object.entries(value as Json)) {
