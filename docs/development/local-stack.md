@@ -246,8 +246,9 @@ container and volume names can be isolated with `KERNEL_DATABASE_CONTAINER`, `KE
 
 A walk-and-repair task runs the product on a seeded stack as each persona and repairs what it finds. Its worker starts
 one bounded stack with `walk` below when its brief lists `acceptance.requires` with `native` or `browser`; the control
-plane passes that list to the worker as `GOAL_ACCEPTANCE_REQUIRES`. Every other worker is still refused local stack
-containers, and its checks keep the remote placement in [scripts/README.md](../../scripts/README.md#check-hosts).
+plane passes that list to the worker as `GOAL_ACCEPTANCE_REQUIRES`. The walk command stays on the worker host so that
+list is not stripped. Every other worker is still refused local stack containers, and its checks keep the remote
+placement in [scripts/README.md](../../scripts/README.md#check-hosts).
 
 ```sh
 bun services/auth/scripts/dev-stack.ts walk -- <command...>
@@ -265,12 +266,12 @@ bun services/auth/scripts/dev-stack.ts walk -- <command...>
    Admission skips slots whose ports still have listeners, including containers surviving an interrupted launcher.
    Those listeners remain untouched; when all slots are occupied, the launch keeps its queue position.
 3. Runs `db up`, `search up` and `setup`, retires seed journals that name another database, then starts native Auth,
-   the worker and Kernel. Kernel verifies issuer-origin JWKS and fetches that exact public document from native Auth.
-   An admitted stack runs Kernel without `--watch`
-   and does not start Auth pages or Web: its journey seeds first and then starts them.
+   Auth pages, the worker and Kernel. `AUTH_ISSUER` and `AUTH_JWKS_URL` share the issuer origin; Auth pages proxy that
+   JWKS document from native Auth. An admitted stack runs Kernel without `--watch` and does not start Web: its journey
+   seeds first and then starts Web. Auth pages start before Kernel so issuer JWKS is reachable for seed.
    `REZICS_WALK_DEFER_FRONTENDS=1` also omits OpenSearch, the Kernel worker and a second Kernel process, serves
    Kernel HTTP from the Auth host, and waits for native JWKS and Kernel health instead; the child starts issuer then
-   Web when it needs mounted pages. Otherwise the walk `start` process waits for native JWKS and Kernel
+   Web when it needs mounted pages. Otherwise the walk `start` process waits for native JWKS, issuer JWKS and Kernel
    `/v1/definitions`, for at most twenty minutes. Readiness first checks that the port accepts TCP, then fetches with
    the remaining window so a short abort cannot strand a compile; a hard request budget
    also bounds a listener that never writes. `db up` and `search up` retry once; a failed database bring-up first
@@ -287,8 +288,8 @@ bun services/auth/scripts/dev-stack.ts walk -- <command...>
    starts.
 
 A walk stack is admitted only while the slot lock its launch holds is held: the environment names the slot, but the
-name alone does not admit a container. Walk stacks do not change check placement; the worker's checks still run on
-hosts a and b.
+name alone does not admit a container. The walk command stays on the worker host; the worker's other checks still run
+on hosts a and b.
 
 Local Web bindings advertise the four installed Auth management review pages (rename, membership, transfer and
 organization deletion). An explicit `AUTH_MANAGEMENT_PAGE_ROUTES` deployment value is preserved. These links
@@ -312,9 +313,9 @@ SIGTERM, and bounded docker kill then removal so a Vite SSR abort loop, a stuck 
 cannot replace a seeded product walk. Walk `start` waits for the walk signal rather than the first child exit.
 `stopSpawned` accepts Bun subprocesses whose `signalCode` may be a number or a signal name.
 
-Decision: an admitted stack gates on native JWKS and Kernel only. Its Auth pages and Web start after the journey's seed,
-through `startSeededFrontends`, and are killed on exit; the Home and VN-realm walks use it, and a stack's Vite never
-compiles while the seed runs.
+Decision: an admitted stack gates on native JWKS, issuer JWKS and Kernel. Auth pages start before Kernel; Web starts
+after the journey's seed through `startSeededFrontends`, and owned frontends are stopped on exit. The Home and VN-realm
+walks use it, and Web Vite never compiles while the seed runs.
 Each walk registers frontend and browser cleanup immediately after acquisition. Every registered cleanup is awaited
 on provisioning, seed, locale, persona and browser failures. Independent cleanup failures retain the original cause
 and do not prevent other resources from settling.
@@ -335,16 +336,14 @@ loopback Auth issuer, audience, JWKS URL, Kernel host and API port in `services/
 tuple after reading that file, overriding a previous stack's identity. Native Library growth and browser qualification
 remain separate acceptance outcomes.
 
-Decision: admitted stacks set `AUTH_JWKS_URL` on the issuer origin and fetch that exact public JWKS from native Auth
-through the trusted local composition seam, start Kernel without watch, and defer Auth pages and Web
-until seeding finishes; Web installs the declared Reylo mapper so local and remote typing share one identity. Cleanup
-keeps the original failure and the exact cleanup diagnostic. Mapper-enabled workspace typechecks run one at a time
-inside an admitted 6GiB slice. Admitted runs reclaim inactive file pages in the run slice after install and before each
-mapper compiler. Original native acceptance remains open. Slot 2 is issuer `:20021`, native Auth `:20022` and Kernel
-`:20023`; Worker and Kernel admit that issuer JWKS after fetching the document from native Auth, without substitute
-credentials or a blanket fetch override. Membership admission and bearer verification refuse `AUTH_JWKS_URL` on native
-Auth's port. The same producer is `developmentKernelBindings`, `readMembershipWorkConfig`/`localJwksTransport`,
-Kernel HTTP `createKernelRuntimeDefaults`, assembled Access in `assemble()`, and the default Worker.
+Decision: admitted stacks bind `AUTH_ISSUER` and `AUTH_JWKS_URL` to the issuer origin, start Auth pages before Kernel so
+the issuer JWKS document is reachable through the pages proxy backed by native Auth, start Kernel without watch, and
+defer Web until seeding finishes. Web installs the declared Reylo mapper so local and remote typing share one identity.
+Cleanup keeps the original failure and the exact cleanup diagnostic. Mapper-enabled workspace typechecks run one at a
+time inside an admitted 6GiB slice. Admitted runs reclaim inactive file pages in the run slice after install and before
+each mapper compiler. Original native acceptance remains open. Slot 2 is issuer `:20021`, native Auth `:20022` and
+Kernel `:20023`. Membership admission and bearer verification use the same issuer origin and JWKS URL selected for
+the stack.
 
 ## Seeded journey walks
 

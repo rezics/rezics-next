@@ -14,65 +14,6 @@ It does not validate product completion, execute native cases, or replace the fu
 Product authority remains in the linked owning specifications; the audit's suggested transports are not adopted APIs.
 The existing per-capability Markdown format is used; no manifest schema or validator is introduced.
 
-## First-public journeys on dev
-
-This table is the single finishing register for Commerce and its linked Library Goal, scoped by
-[the public-scope rows](../scope.md). Target: every row passes on dev by 2026-11-07 09:30 UTC.
-The first seeded native-and-served-page walk is due by 00:30 UTC, then once each hour.
-One row is one complete user-visible path; the detailed capability scenarios below remain its acceptance contract.
-Provider personal-list imports, Library archive export/recovery and user-saved dynamic queries are second scope;
-their existing implementation contracts remain separate from this first-public total.
-
-Each measured result records PASS or FAIL, exact dev revision, UTC time, elapsed seconds, persona and evidence link.
-A shared setup failure is recorded as the actual failed stage for every affected path. Source inspection and typing
-do not supply a walk result. Owner, other account, anonymous, refunded/revoked, suspended/terminal and repair
-personas participate wherever the owner contract gives them an outcome. Native storage/readback, current authority,
-bounded execution and served-page review are required; real provider setup stays an explicit external condition.
-
-| Journey | User-visible path | Latest dev walk | Evidence / elapsed |
-| --- | --- | --- | --- |
-| Offer management | Creator opens /creator/offers, authors an exact Content-edition offer, revises price and delists it; historical sales retain accepted terms. | FAIL 6d4a213f8730 2026-11-07T00:41:43.258Z setup | .temp/commerce-walk/results.json 1s; seeded walk setup → seed exited 1; see .temp/commerce-walk/seed.log |
-| Purchase | Buyer opens a Subject and /offers/:id, accepts fixed revision/terms and opens hosted Checkout for one account-bound item. | FAIL 6d4a213f8730 2026-11-07T00:41:43.258Z setup | .temp/commerce-walk/results.json 1s; seeded walk setup → seed exited 1; see .temp/commerce-walk/seed.log |
-| Owned use | Buyer returns through /orders/:id and /entitlements/:id to the exact revision/SHA256 protected bytes; current admission is checked. | FAIL 6d4a213f8730 2026-11-07T00:41:43.258Z setup | .temp/commerce-walk/results.json 1s; seeded walk setup → seed exited 1; see .temp/commerce-walk/seed.log |
-| Payment repair | Buyer revisits an uncertain order while signed webhook replay, reconciliation, refund or dispute converges order and current benefit correctly. | FAIL 6d4a213f8730 2026-11-07T00:41:43.258Z setup | .temp/commerce-walk/results.json 1s; seeded walk setup → seed exited 1; see .temp/commerce-walk/seed.log |
-| Creator money | Creator opens /creator/sales and /creator/statements/:id and distinguishes attributed earnings, reserves, bank payout and attested external payment. | FAIL 6d4a213f8730 2026-11-07T00:41:43.258Z setup | .temp/commerce-walk/results.json 1s; seeded walk setup → seed exited 1; see .temp/commerce-walk/seed.log |
-| Financial lifecycle | Terminated buyer has restricted retained financial records, durable expiry and physical purge followed by separate Access retention resolution. | FAIL 6d4a213f8730 2026-11-07T00:41:43.258Z setup | .temp/commerce-walk/results.json 1s; seeded walk setup → seed exited 1; see .temp/commerce-walk/seed.log |
-| Entry facts | Member opens a Subject, records state, notes and priority, edits or clears one fact and sees independent remaining facts in /library. | FAIL 6d4a213f8730 2026-11-07T00:41:43.258Z setup | .temp/commerce-walk/results.json 1s; seeded walk setup → seed exited 1; see .temp/commerce-walk/seed.log |
-| Profiles | Member adopts a Library profile, edits its fields and reads historical values after a profile revision or retirement. | FAIL 6d4a213f8730 2026-11-07T00:41:43.258Z setup | .temp/commerce-walk/results.json 1s; seeded walk setup → seed exited 1; see .temp/commerce-walk/seed.log |
-| Labels | Member creates, renames, consolidates and applies labels in /library/labels, then filters the same Entries by them. | FAIL 6d4a213f8730 2026-11-07T00:41:43.258Z setup | .temp/commerce-walk/results.json 1s; seeded walk setup → seed exited 1; see .temp/commerce-walk/seed.log |
-| Progress | Member opens /library/progress/:id and records every admitted progress mode, units and sparse or noncontiguous episodes with current pins. | FAIL 6d4a213f8730 2026-11-07T00:41:43.258Z setup | .temp/commerce-walk/results.json 1s; seeded walk setup → seed exited 1; see .temp/commerce-walk/seed.log |
-| Sessions | Member records, edits and undoes a consumption session, including rereads, then sees the original units and time in history. | FAIL 6d4a213f8730 2026-11-07T00:41:43.258Z setup | .temp/commerce-walk/results.json 1s; seeded walk setup → seed exited 1; see .temp/commerce-walk/seed.log |
-| Copies and loans | Member manages copies and applicable status/condition, lends a copy, follows its calendar and records return without losing the Entry. | FAIL 6d4a213f8730 2026-11-07T00:41:43.258Z setup | .temp/commerce-walk/results.json 1s; seeded walk setup → seed exited 1; see .temp/commerce-walk/seed.log |
-| Everything and filters | Member opens /library and pages, sorts and filters Everything and exact-state built-ins across canonical originals with complete exhaustion. | FAIL 6d4a213f8730 2026-11-07T00:41:43.258Z setup | .temp/commerce-walk/results.json 1s; seeded walk setup → seed exited 1; see .temp/commerce-walk/seed.log |
-| Liked and score | Member rates or reacts to a Subject, sees Liked and personal-score ordering, then clears either fact independently. | FAIL 6d4a213f8730 2026-11-07T00:41:43.258Z setup | .temp/commerce-walk/results.json 1s; seeded walk setup → seed exited 1; see .temp/commerce-walk/seed.log |
-| Continue | Member opens /library/continue, resumes a pending item and sees goals and current progress with bounded navigation windows. | FAIL 6d4a213f8730 2026-11-07T00:41:43.258Z setup | .temp/commerce-walk/results.json 1s; seeded walk setup → seed exited 1; see .temp/commerce-walk/seed.log |
-| Curated Collections | Member creates a Collection, adds ordered duplicate occurrences with notes and cover, edits/reorders them and reopens the complete result. | FAIL 6d4a213f8730 2026-11-07T00:41:43.258Z setup | .temp/commerce-walk/results.json 1s; seeded walk setup → seed exited 1; see .temp/commerce-walk/seed.log |
-| Collection reading | Viewer opens /collections/:id, filters and pages its admitted members and sees preparation or exhaustion with current visibility. | FAIL 6d4a213f8730 2026-11-07T00:41:43.258Z setup | .temp/commerce-walk/results.json 1s; seeded walk setup → seed exited 1; see .temp/commerce-walk/seed.log |
-| Collection publication | Owner publishes or retracts a curated Collection; other-account and anonymous readers see only admitted public output and ItemList export. | FAIL 6d4a213f8730 2026-11-07T00:41:43.258Z setup | .temp/commerce-walk/results.json 1s; seeded walk setup → seed exited 1; see .temp/commerce-walk/seed.log |
-| Pins and return | Member pins a Collection, navigates Library and Subject actions and returns to the same current list and focused item. | FAIL 6d4a213f8730 2026-11-07T00:41:43.258Z setup | .temp/commerce-walk/results.json 1s; seeded walk setup → seed exited 1; see .temp/commerce-walk/seed.log |
-| Undo and archive | Member clears an Entry fact or archives a Collection, then restores through exact Undo while independent facts remain correct. | FAIL 6d4a213f8730 2026-11-07T00:41:43.258Z setup | .temp/commerce-walk/results.json 1s; seeded walk setup → seed exited 1; see .temp/commerce-walk/seed.log |
-| Personal history | Member opens /library/history and /library/logs, filters personal consumption and sees diary/statistical summaries from completed occurrences. | FAIL 6d4a213f8730 2026-11-07T00:41:43.258Z setup | .temp/commerce-walk/results.json 1s; seeded walk setup → seed exited 1; see .temp/commerce-walk/seed.log |
-| Published Logs | Member publishes a consumption snapshot at /logs/:id, reads its recorded attribution and history, retracts it and uses exact Undo with current authority. | FAIL 6d4a213f8730 2026-11-07T00:41:43.258Z setup | .temp/commerce-walk/results.json 1s; seeded walk setup → seed exited 1; see .temp/commerce-walk/seed.log |
-| Library lifecycle | Member deletes Library data or terminates the account; private pages close and durable work removes owned copies while retained output has its specified meaning. | FAIL 6d4a213f8730 2026-11-07T00:41:43.258Z setup | .temp/commerce-walk/results.json 1s; seeded walk setup → seed exited 1; see .temp/commerce-walk/seed.log |
-| Follow edges | Member follows or unfollows a canonical Subject or account and sees the correct edge after an exact retry or identity change. | FAIL 6d4a213f8730 2026-11-07T00:41:43.258Z setup | .temp/commerce-walk/results.json 1s; seeded walk setup → seed exited 1; see .temp/commerce-walk/seed.log |
-| Following | Member opens /library/following and reads bounded current Follow/History rows with live identity, id-free deletion or unknown attribution. | FAIL 6d4a213f8730 2026-11-07T00:41:43.258Z setup | .temp/commerce-walk/results.json 1s; seeded walk setup → seed exited 1; see .temp/commerce-walk/seed.log |
-| Follower counts | Member opens /library/follow-counts and sees only their own follower counts; another account and anonymous viewer receive their specified authorization outcome. | FAIL 6d4a213f8730 2026-11-07T00:41:43.258Z setup | .temp/commerce-walk/results.json 1s; seeded walk setup → seed exited 1; see .temp/commerce-walk/seed.log |
-
-Latest measured result: **0/26**. Slowest failing path: Offer management (shared seed, 1s); first differing command `seeded walk setup` / result `seed exited 1: Import transport request failed`. Identity JWKS start succeeded on retry.
-The walk report supplies `passing/26` and the slowest failing path with its first differing command/result.
-After the initial walk, new briefs repair observed failing paths; they do not add outcomes or boundary-baseline
-refactors. Same-day newly introduced boundary violations remain repairable. Existing detailed scenarios and
-promotion obligations remain open until their own evidence is supplied.
-Decision: first-public acceptance is the seeded walk
-`bun services/auth/scripts/dev-stack.ts walk -- bun apps/web/tests/native/commerce-library-journeys.walk.ts`
-using `services/kernel/test/commerce/support/goal-journey-walk.ts`. Genuine-order retention stays
-`test/commerce/erasure-participant.test.ts`. No extra outcome suites.
-Decision: that one native case still pins paid minimization, expiry, restricted readback and late paid/refund;
-catch-up after late-pay/deletion holds and before SIGKILL is part of that case, not a second story.
-Decision: the walker waits for Kernel `/v1/definitions/active` with a digest before seed, retries seed once on import
-transport, keeps failing native steps, and treats 404 or a sign-in mismatch as a page failure except anonymous private
-pages. Stack `/v1/definitions` answering below HTTP 500 is not an active release.
-
 ## Evidence and stages
 
 Each capability has named job, authority, personas, fixture, surface, scenario, binding, gap and stage fields.

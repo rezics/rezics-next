@@ -75,6 +75,8 @@ test('seeded frontends wait for useful /en HTML through waitUntilWalkReady', asy
   expect(source).toContain('waitUntilWalkReady');
   expect(source).not.toContain("code: 'ECONNREFUSED'");
   expect(source).toContain('${origins.web}${SEEDED_WEB_READY_PATH}');
+  expect(source).toContain('issuerJwksUrl(origins.issuer)');
+  expect(source).toContain('walkOriginListening(origins.issuer)');
 });
 
 test('isolated Kernel bindings verify the selected Auth issuer and bind the selected API port', () => {
