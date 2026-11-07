@@ -504,6 +504,19 @@ async function setup() {
   );
 }
 
+/** Development-only recovery output stays private; HTTP recovery never returns the token. */
+export function localStackRecoveryDelivery(
+  directory = resolve(state, 'recovery'),
+): NonNullable<import('../src/index.ts').AuthServiceOptions['recoveryDelivery']> {
+  return {
+    async deliver({ accountId, email, token, url }) {
+      await mkdir(directory, { recursive: true, mode: 0o700 });
+      await chmod(directory, 0o700);
+      await privateFile(resolve(directory, `${email}.json`), `${JSON.stringify({ accountId, token, url })}\n`);
+    },
+  };
+}
+
 export async function assemble(options?: {
   env: Record<string, string>;
   authDatabaseUrl: string;
@@ -572,44 +585,52 @@ export async function assemble(options?: {
       barriers: auth.createBarrierProofVerifier({ database }),
     },
   });
-  const host = await auth.createAuthHost({
-    database,
-    issuer: origins.issuer,
-    audience: origins.audience,
-    secret: keys.secret,
-    signing: { activeKid: keys.signing.kid!, privateKeys: [keys.signing] },
-    stagingKey: Buffer.from(keys.staging, 'base64url'),
-    trustedAccess: bindings.trustedAccess,
-    access: bindings.workflowPorts,
-    siteActions: actions,
-    ...(options?.recoveryDelivery ? { recoveryDelivery: options.recoveryDelivery } : {}),
-    accountOperations: bindings.accountOperations,
-    accountManagementReads: bindings.accountManagementReads,
-    // The local widget and verifier never call Cloudflare. Production composition is unchanged.
-    turnstile: {
-      secret: 'loopback-only',
-      fetch: (async (_url, init) =>
-        Response.json({
-          success: new URLSearchParams(String(init?.body)).get('response') === 'rezics-local-signup',
-          action: 'signup',
-          hostname: '127.0.0.1',
-        })) as typeof fetch,
-    },
-  });
+  const host = await phase(
+    'auth-host',
+    auth.createAuthHost({
+      database,
+      issuer: origins.issuer,
+      audience: origins.audience,
+      secret: keys.secret,
+      signing: { activeKid: keys.signing.kid!, privateKeys: [keys.signing] },
+      stagingKey: Buffer.from(keys.staging, 'base64url'),
+      trustedAccess: bindings.trustedAccess,
+      access: bindings.workflowPorts,
+      siteActions: actions,
+      recoveryDelivery: options?.recoveryDelivery ?? localStackRecoveryDelivery(),
+      accountOperations: bindings.accountOperations,
+      accountManagementReads: bindings.accountManagementReads,
+      // The local widget and verifier never call Cloudflare. Production composition is unchanged.
+      turnstile: {
+        secret: 'loopback-only',
+        fetch: (async (_url, init) =>
+          Response.json({
+            success: new URLSearchParams(String(init?.body)).get('response') === 'rezics-local-signup',
+            action: 'signup',
+            hostname: '127.0.0.1',
+          })) as typeof fetch,
+      },
+    }),
+  );
   service = host.service;
-  await service.internal.registerWebsiteClient({
-    publicJwks: { keys: [publicKey(keys.website)] } as import('../src/index.ts').PublicJwks,
-    redirectUris: [`${origins.web}/auth/callback`],
-    postLogoutRedirectUris: [`${origins.web}/`],
-    scopes: website.scopes,
-  });
-  await service.internal.registerClient({
-    clientId: personaClient,
-    firstParty: true,
-    scopes: [...new Set([...importerScopes, 'account:manage', 'exposure:open'])],
-  });
-  await service.internal.registerClient(localShowcaseClientRegistration());
-  await host.start();
+  await phase(
+    'auth-registration',
+    (async () => {
+      await service.internal.registerWebsiteClient({
+        publicJwks: { keys: [publicKey(keys.website)] } as import('../src/index.ts').PublicJwks,
+        redirectUris: [`${origins.web}/auth/callback`],
+        postLogoutRedirectUris: [`${origins.web}/`],
+        scopes: website.scopes,
+      });
+      await service.internal.registerClient({
+        clientId: personaClient,
+        firstParty: true,
+        scopes: [...new Set([...importerScopes, 'account:manage', 'exposure:open'])],
+      });
+      await service.internal.registerClient(localShowcaseClientRegistration());
+    })(),
+  );
+  await phase('auth-worker', host.start());
   const stop = async () => {
     try {
       await host.stop();
