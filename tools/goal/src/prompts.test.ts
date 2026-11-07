@@ -319,6 +319,91 @@ test('a control-plane worker runs its declared acceptance command even under min
   }
 });
 
+test('minimal dev infrastructure failures remain unverified source success while main and proof paths stay strict', () => {
+  const directory = mkdtempSync(join(tmpdir(), 'prompt-infrastructure-outcome-'));
+  const repositoryRoot = resolve(import.meta.dir, '../../..');
+  writeFileSync(join(directory, 'verification-mode'), 'minimal\n');
+  try {
+    const minimalDev = renderWorkerPrompt({
+      task: worker(contract(), { worktree: repositoryRoot }),
+      mainCheckout: MAIN,
+      stateDirectory: directory,
+    });
+    expect(minimalDev.prompt).toContain('only missing passes are shared transport or infrastructure failures');
+    expect(minimalDev.prompt).toContain('source success is allowed only when every remaining check failure');
+    expect(minimalDev.prompt).toContain('each failed check and its exact error');
+    expect(minimalDev.prompt).toContain('each skipped or unreached check as unverified');
+    expect(minimalDev.prompt).toContain('never label any of them passed');
+    expect(minimalDev.prompt).toContain('Do not retry source solely for infrastructure.');
+    expect(minimalDev.prompt).toContain('Type, test and product failures remain non-success');
+    expect(minimalDev.prompt).toContain('the dev verifier completes deferred checks after merge');
+    expect(minimalDev.prompt).not.toContain('is final: a `tool` blocker');
+
+    const wrappedDev = renderWorkerPrompt({
+      task: worker(contract(), { worktree: repositoryRoot }),
+      mainCheckout: MAIN,
+    });
+    expect(wrappedDev.prompt).toContain('A wrapper-classified shared infrastructure-only failure uses the dev product');
+    expect(wrappedDev.prompt).not.toContain('is final: a `tool` blocker');
+
+    const mainRelease = renderWorkerPrompt({
+      task: worker(contract({ goal: 'control-plane', target: 'main' }), { worktree: repositoryRoot }),
+      mainCheckout: MAIN,
+      stateDirectory: directory,
+    });
+    expect(mainRelease.prompt).toContain('is final: a `tool` blocker');
+    expect(mainRelease.prompt).not.toContain('dev product source-success rule above');
+
+    const localMainRelease = renderWorkerPrompt({
+      task: worker(
+        contract({
+          goal: 'control-plane',
+          target: 'main',
+          acceptance: { command: ['bun', 'test'], tests: ['x'], failing: true, placement: 'local' },
+        }),
+        { worktree: repositoryRoot },
+      ),
+      mainCheckout: MAIN,
+    });
+    expect(localMainRelease.prompt).not.toMatch(/\{\{task\./);
+    expect(localMainRelease.prompt).toContain('is final: a `tool` blocker');
+
+    const proofRun: ProofReservation = {
+      status: 'bound',
+      binding: {
+        version: 1,
+        reservationToken: 'token',
+        checkId: '11111111-1111-4111-8111-111111111111',
+        goal: 'web',
+        taskId: 'task',
+        attempt: 1,
+        sourceCommit: SOURCE,
+        sourceTree: 'bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb',
+        argv: ['bun', 'test'],
+        cwd: repositoryRoot,
+      },
+    };
+    const proof = renderWorkerPrompt({
+      task: worker(
+        contract({
+          kind: 'verification',
+          paths: [],
+          proof: { journey: 'Original', sourceTasks: ['original'], sourceCommit: SOURCE },
+        }),
+        { worktree: repositoryRoot, proofRun, currentAttempt: 1 },
+      ),
+      mainCheckout: MAIN,
+      proofRun,
+    });
+    expect(proof.prompt).toContain('Missing, unknown, timed out or nonzero wrapper results stay non-green.');
+    expect(proof.prompt).not.toContain('dev product source-success rule above');
+    for (const rendered of [minimalDev, wrappedDev, mainRelease, localMainRelease, proof])
+      expect(rendered.manifest.overBudget).toEqual([]);
+  } finally {
+    rmSync(directory, { recursive: true, force: true });
+  }
+});
+
 test('dispatch lints report local state, main checkout and superseded check instructions without refusal', () => {
   expect(assertBriefDispatchable('See `.temp/goal/notes.md`.')[0]).toContain(BRIEF_AUTHORITY_HINT);
   expect(assertBriefDispatchable(`Keep files under ${MAIN}.`, MAIN)[0]).toContain(BRIEF_AUTHORITY_HINT);
