@@ -9,6 +9,7 @@ import { bundledDigest, bundledRelease } from '@rezics/definitions/bundled';
 import { GrantDeniedError } from '../../src/access/contract/errors.ts';
 import { IdempotencyConflictError } from '../../src/command/command.ts';
 import { createPool, withConnection } from '../../src/database/pool.ts';
+import { configureTestReceiptKeys } from '../support/receipt-keys.ts';
 import { EVENT_TYPES } from '../../src/events/log.ts';
 import { ProblemError } from '../../src/http/problem-error.ts';
 import { createCollectionCommands } from '../../src/library/collections.ts';
@@ -16,12 +17,18 @@ import type { Collection, CollectionMember } from '../../src/library/collection-
 import { listMembers, readCollection } from '../../src/library/collection-store.ts';
 import { GENERATED_ORDINAL_KEY_LENGTH, MAX_ORDINAL_KEY_LENGTH, respacedKeys } from '../../src/library/ordinal.ts';
 import { createAccess } from '../../src/access/index.ts';
-import { accessCheck } from '../../src/request/access-check.ts';
-import { type Access, type AccountActor, type Actor } from '../../src/request/access.ts';
+import {
+  accessCheck,
+  accessCommandAuthorization,
+  type Access,
+  type AccountActor,
+  type Actor,
+} from '../../src/request/access.ts';
 import { newId, routeOf } from '../../src/route/route.ts';
-import { bootstrapRelease } from '../../src/semantic/definitions.ts';
-import { createSubject, subjectTarget } from '../../src/semantic/subject.ts';
+import { bootstrapRelease, GLOBAL_CONTEXT } from '../../src/semantic/definitions.ts';
+import { createSubject, SubjectAccessDeniedError, subjectTarget } from '../../src/semantic/subject.ts';
 import { checkGrowth, openGrowthDatabase, type GrowthDatabase } from '../support/growth.ts';
+import { testActionSubset } from '../support/test-kernel.ts';
 import { seedCollectionGrowthPopulation } from './support/collection-growth-population.ts';
 
 const databaseUrl = process.env.DATABASE_URL;
@@ -35,7 +42,9 @@ const curatorScopes = [
   'collection:delete',
   'subject:read',
 ];
+const nativeActions = [...curatorScopes, 'subject:create'];
 const pool = createPool(databaseUrl);
+configureTestReceiptKeys(pool);
 const key = () => randomUUID();
 const anonymous: Actor = { kind: 'anonymous' };
 
@@ -56,13 +65,7 @@ beforeAll(async () => {
   signing = await generateKeyPair('ES256', { extractable: true });
   const jwk = { ...(await exportJWK(signing.publicKey)), kid: 'library', alg: 'ES256' };
   access = createAccess({
-    actions: new Map([
-      ['collection:create', { anonymous: false, 'x-resource-types': ['library.collection'] }],
-      ['collection:read', { anonymous: false }],
-      ['collection:update', { anonymous: false }],
-      ['collection:delete', { anonymous: false }],
-      ['subject:read', { anonymous: true }],
-    ]),
+    actions: testActionSubset(nativeActions),
     auth: {
       issuer: 'https://auth.example.test',
       audience: 'https://api.rezics.test',
@@ -129,15 +132,32 @@ async function authenticate(id: string, scopes: readonly string[], target: Pool 
 }
 
 async function makeSubject(actor: AccountActor, label: string, target: Pool = pool): Promise<string> {
+  const creator = await authenticate(actor.accountId, ['subject:create'], target);
   const idempotencyKey = `collection-subject-${randomUUID()}`;
+  const deadline = Date.now() + 30_000;
+  const global = { route: 0, id: GLOBAL_CONTEXT };
+  await target.query(
+    `INSERT INTO access.resource_grant(route,resource_id,subject_id,action,valid,transaction_id)
+     VALUES ($1,$2,$3,'subject:create','(,)'::tstzrange,$4) ON CONFLICT DO NOTHING`,
+    [global.route, global.id, creator.accountId, randomUUID()],
+  );
+  const authorization = await accessCommandAuthorization(
+    access,
+    creator,
+    'subject:create',
+    global,
+    { pool: target, deadline },
+    () => new SubjectAccessDeniedError(),
+  );
   const created = await createSubject(target, {
-    actor,
-    target: subjectTarget(routeKey, actor.accountId, idempotencyKey),
+    actor: creator,
+    target: subjectTarget(routeKey, creator.accountId, idempotencyKey),
     idempotencyKey,
     digest: createHash('sha256').update(idempotencyKey).digest(),
     item: { type: 'schema:Book', labels: { en: label } },
     release: { digest: bundledDigest, release: bundledRelease },
-    authorize: async () => true,
+    deadline,
+    authorization,
   });
   return created.subject.id;
 }

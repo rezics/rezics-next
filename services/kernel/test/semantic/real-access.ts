@@ -17,6 +17,7 @@ export type RealAccessFixture<Persona extends string> = {
   access(config: AccessConfig): Access;
   writeRate: ReturnType<typeof createWriteRateLimiter>;
   bearer(persona: Persona): string;
+  bearerFor(persona: Persona, scopes: readonly string[]): Promise<string>;
   renew(persona: Persona): Promise<void>;
   refreshBearer(persona: Persona): Promise<string>;
   grant(resource: Resource, persona: Persona, action: string): Promise<void>;
@@ -49,7 +50,7 @@ export async function createRealAccess<const Personas extends Readonly<Record<st
     fetch: async () => Response.json({ keys: [jwk] }),
   };
   const bearers = new Map<Persona, string>();
-  async function mintBearer(persona: Persona): Promise<string> {
+  async function mintBearer(persona: Persona, scopes: readonly string[] = actions): Promise<string> {
     const accountId = accounts[persona];
     if (!accountId) throw new Error(`Unknown fixture persona ${persona}`);
     const issued = options.credentialClock?.() ?? new Date();
@@ -57,7 +58,7 @@ export async function createRealAccess<const Personas extends Readonly<Record<st
     const issuedAt = Math.floor(issued.getTime() / 1000);
     return new SignJWT({
       client_id: 'web',
-      scope: actions.join(' '),
+      scope: scopes.join(' '),
       authn_epoch: 1,
       auth_time: issuedAt,
       amr: ['pwd'],
@@ -128,6 +129,7 @@ WHERE route=$1 AND resource_id=$2 AND subject_id=$3 AND action=$4`,
       if (!bearer) throw new Error(`No bearer token for persona ${persona}`);
       return bearer;
     },
+    bearerFor: (persona, scopes) => mintBearer(persona, scopes),
     grant,
     revoke,
     renew,

@@ -25,6 +25,10 @@ Acceptance choice: retain the existing pure Collection budget and real seeded AP
 assertions, adding a native binding identity assertion after deferred installation. Workspace typing is worker
 acceptance; the existing boot smoke verifies both database paths after integration.
 
+Decision: native Content and Library fixture composition binds the dedicated receipt ring to each command pool before
+setup, supplies History actor evidence through real Access authorization on the original client and finite deadline,
+and derives mounted action subsets from the native catalogue plus lifecycle declarations.
+
 Run `bun run --cwd services/kernel typecheck` through the [compiler placement contract](../../docs/development/compiler-check-placement.md).
 The command runs TypeScript plus construct on an approved check host against one migrated compiler database.
 An explicit `DATABASE_URL` requires an already admitted physical run. Unavailable placement fails closed;

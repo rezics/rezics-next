@@ -2,15 +2,19 @@ import { afterAll, beforeAll, expect, test } from 'bun:test';
 import { createHash, randomUUID } from 'node:crypto';
 import { bundledDigest, bundledRelease } from '@rezics/definitions/bundled';
 import { GrantDeniedError } from '../../src/access/contract/errors.ts';
+import { createExposureCommands, GLOBAL_CONTEXT as GLOBAL_ACCESS_CONTEXT } from '../../src/access/gates/catalogue.ts';
 import { createLifecycleCommands, LIFECYCLE_ACTIONS } from '../../src/access/lifecycle.ts';
 import { createPool } from '../../src/database/pool.ts';
+import { configureTestReceiptKeys } from '../support/receipt-keys.ts';
 import { createCopyCommands } from '../../src/library/copies.ts';
 import { createFollowCommands } from '../../src/library/follows.ts';
 import { newId, routeOf } from '../../src/route/route.ts';
-import { bootstrapRelease } from '../../src/semantic/definitions.ts';
+import { bootstrapRelease, GLOBAL_CONTEXT } from '../../src/semantic/definitions.ts';
 import { createSubject, subjectTarget } from '../../src/semantic/subject.ts';
 import { openGrowthDatabase, type GrowthDatabase } from '../support/growth.ts';
 import { createRealAccess } from '../semantic/real-access.ts';
+import { accessCommandAuthorization } from '../../src/request/access.ts';
+import { testActionSubset } from '../support/test-kernel.ts';
 
 let db: GrowthDatabase;
 // A separate command pool lets deletion reach the database while the Library command is held.
@@ -18,6 +22,7 @@ let deletionPool: ReturnType<typeof createPool>;
 beforeAll(async () => {
   db = await openGrowthDatabase();
   deletionPool = createPool(process.env.DATABASE_URL!);
+  configureTestReceiptKeys(deletionPool);
   await bootstrapRelease(db.pool, bundledRelease);
   // Keep the artificial insert pause independent of the command's normal lock timeout.
   await db.admin.query(`CREATE FUNCTION library.fixture_owner_barrier_pause() RETURNS trigger LANGUAGE plpgsql AS $$
@@ -50,25 +55,57 @@ for (const table of ['copy', 'follow'] as const) {
   test(`a real lifecycle barrier waits for a private ${table} write and denies later writes and replay`, async () => {
     const route = 0x6a20;
     const accountId = newId(route);
-    const scopes = [...LIFECYCLE_ACTIONS.keys(), 'subject:read', 'copy:create', 'follow:create'];
+    const scopes = [...LIFECYCLE_ACTIONS.keys(), 'subject:read', 'copy:create', 'follow:create', 'exposure:open'];
     const fixture = await createRealAccess(db.admin, { owner: accountId }, scopes);
-    const actions = new Map([...scopes.map((action) => [action, { anonymous: false }] as const), ...LIFECYCLE_ACTIONS]);
+    const actions = testActionSubset([...scopes, 'subject:create'], LIFECYCLE_ACTIONS);
     const access = fixture.access({ actions });
     const actor = await access.authenticate(fixture.bearer('owner'), { pool: db.pool, deadline: Date.now() + 10000 });
+    const subjectCreator = await access.authenticate(await fixture.bearerFor('owner', ['subject:create']), {
+      pool: db.pool,
+      deadline: Date.now() + 10000,
+    });
     const deletionActor = await access.authenticate(fixture.bearer('owner'), {
       pool: deletionPool,
       deadline: Date.now() + 10000,
     });
     await fixture.grant({ route, id: accountId }, 'owner', 'account:delete');
-    const key = randomUUID();
-    const subject = await createSubject(db.pool, {
+    await fixture.grant({ route, id: accountId }, 'owner', 'copy:create');
+    await fixture.grant({ route, id: accountId }, 'owner', 'follow:create');
+    await fixture.grant({ route: 0, id: GLOBAL_CONTEXT }, 'owner', 'subject:create');
+    await fixture.grant({ route: 0, id: GLOBAL_ACCESS_CONTEXT.id }, 'owner', 'exposure:open');
+    const exposureDeadline = Date.now() + 10_000;
+    const exposureAuthorization = await accessCommandAuthorization(
+      access,
       actor,
-      target: subjectTarget(new Uint8Array(32), accountId, key),
+      'exposure:open',
+      GLOBAL_ACCESS_CONTEXT,
+      { pool: db.pool, deadline: exposureDeadline },
+      () => new GrantDeniedError(),
+    );
+    await createExposureCommands({ pool: db.pool, clock: () => new Date() }).open(
+      { actor, pool: db.pool, deadline: exposureDeadline },
+      { group: 'personal_library', key: randomUUID(), authorization: exposureAuthorization },
+    );
+    const key = randomUUID();
+    const subjectTargetResource = subjectTarget(new Uint8Array(32), accountId, key);
+    const subjectDeadline = Date.now() + 10_000;
+    const subjectAuthorization = await accessCommandAuthorization(
+      access,
+      subjectCreator,
+      'subject:create',
+      { route: 0, id: GLOBAL_CONTEXT },
+      { pool: db.pool, deadline: subjectDeadline },
+      () => new GrantDeniedError(),
+    );
+    const subject = await createSubject(db.pool, {
+      actor: subjectCreator,
+      target: subjectTargetResource,
       idempotencyKey: key,
       digest: createHash('sha256').update(key).digest(),
       item: { type: 'schema:Book', labels: { en: 'Owner barrier' } },
       release: { digest: bundledDigest, release: bundledRelease },
-      authorize: async () => true,
+      deadline: subjectDeadline,
+      authorization: subjectAuthorization,
     });
     await fixture.grant({ route: routeOf(subject.subject.id)!, id: subject.subject.id }, 'owner', 'subject:read');
     const copies = createCopyCommands({
@@ -80,7 +117,7 @@ for (const table of ['copy', 'follow'] as const) {
     const requestKey = randomUUID();
     const write = (key = requestKey) =>
       table === 'copy'
-        ? copies.createCopy(actor, { subjectId: subject.subject.id, status: 'owned' }, key)
+        ? copies.createCopy(actor, { subjectId: subject.subject.id, kind: 'physical', status: 'owned' }, key)
         : follows.follow(actor, { targetId: subject.subject.id, targetType: 'subject' }, key);
     const commands = createLifecycleCommands({ pool: deletionPool, access });
     const locker = await db.admin.connect();

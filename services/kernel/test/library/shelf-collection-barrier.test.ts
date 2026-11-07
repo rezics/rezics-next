@@ -3,12 +3,13 @@ import { afterAll, beforeAll, expect, test } from 'bun:test';
 import { randomUUID } from 'node:crypto';
 import type { Pool, PoolClient, QueryConfig } from 'pg';
 import { GrantDeniedError } from '../../src/access/contract/errors.ts';
-import { createLifecycleCommands } from '../../src/access/lifecycle.ts';
+import { createLifecycleCommands, LIFECYCLE_ACTIONS } from '../../src/access/lifecycle.ts';
 import { createCollectionCommands } from '../../src/library/collections.ts';
 import { createCollectionReads } from '../../src/library/collection-reads.ts';
 import { newId } from '../../src/route/route.ts';
 import { createRealAccess } from '../semantic/real-access.ts';
 import { openGrowthDatabase, type GrowthDatabase } from '../support/growth.ts';
+import { testActionSubset } from '../support/test-kernel.ts';
 let db: GrowthDatabase;
 beforeAll(async () => {
   db = await openGrowthDatabase();
@@ -23,15 +24,7 @@ async function fixture() {
     .concat('account:delete', 'subject:read');
   const real = await createRealAccess(db.admin, { owner: ownerId, collaborator: collaboratorId }, actions);
   const access = real.access({
-    actions: new Map(
-      actions.map((action) => [
-        action,
-        {
-          anonymous: action === 'collection:read' || action === 'subject:read',
-          ...(action === 'collection:create' ? { 'x-resource-types': ['library.collection'] } : {}),
-        },
-      ]),
-    ),
+    actions: testActionSubset(actions, LIFECYCLE_ACTIONS),
   });
   const auth = (persona: 'owner' | 'collaborator', pool = db.pool) =>
     access.authenticate(real.bearer(persona), { pool, deadline: Date.now() + 5000 });
@@ -190,7 +183,8 @@ test('unavailable curator freezes all member and Collection mutations while publ
   expect(await reads.readCollection({ kind: 'anonymous' }, f.id)).toMatchObject({
     title: 'Retained',
     visibility: 'public',
-    curatorAccountId: f.ownerId,
+    curatorAccountId: null,
+    attribution: { displayName: 'Deleted account' },
     memberCount: 1,
   });
   const notes = await db.admin.query('SELECT note FROM library.collection_member WHERE route=$1 AND collection_id=$2', [
