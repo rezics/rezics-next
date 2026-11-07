@@ -56,6 +56,7 @@ import {
 } from './backlog-shared.ts';
 import { fail, recordGoalDispatch, recoverClaims } from './backlog-claims.ts';
 import { deliverResearchCompletions, dispatchResearchClaim, recoverResearchClaims } from './backlog-research.ts';
+import { ownedGoals, resolveGoalManager } from './manager-ownership.ts';
 import { confirmedBacklogOwner, requireUrgentDispatch, type AuthenticatedManager } from './priority-authority.ts';
 
 export { backlogDirectory };
@@ -354,7 +355,7 @@ function notifyRefusals(runtime: BacklogRuntime, goal: string, refused: { brief:
       ? `; and ${refused.length - (runtime.policy ?? defaultPolicy).backlog.refusalBriefs} more`
       : '';
   runtime.inbox.deliver({
-    managerId: goal,
+    managerId: resolveGoalManager(runtime.db, goal, goal),
     goalId: goal,
     kind: 'instruction',
     summary: oneLine(
@@ -1175,38 +1176,43 @@ function wakeLowBacklogs(runtime: BacklogRuntime, now: number): string[] {
     } catch {
       continue;
     }
-    if (state.kind === 'resident-supermanager' || state.status !== 'running' || !state.goal) continue;
+    if (state.kind === 'resident-supermanager' || state.status !== 'running') continue;
     if (['paused', 'budgetLimited', 'complete'].includes(state.goalState?.status ?? '')) continue;
-    const goal = state.goal;
-    const directory = backlogDirectory(runtime.stateDirectory, goal);
-    const ready = briefs(directory).length;
-    if (ready >= (runtime.policy ?? defaultPolicy).backlog.lowWater) continue;
-    const delivered = db
-      .transaction(() => {
-        const last = db.query('SELECT low_wake_at FROM backlog_goals WHERE goal=?').get(goal) as {
-          low_wake_at: number | null;
-        } | null;
-        if (
-          last?.low_wake_at != null &&
-          now - last.low_wake_at < (runtime.policy ?? defaultPolicy).backlog.wakeIntervalMs
-        )
-          return false;
-        db.query(
-          `INSERT INTO backlog_goals(goal, low_wake_at) VALUES (?, ?)
-          ON CONFLICT(goal) DO UPDATE SET low_wake_at = excluded.low_wake_at`,
-        ).run(goal, now);
-        runtime.inbox.deliver({
-          managerId: row.id,
-          goalId: goal,
-          kind: 'instruction',
-          summary:
-            `Backlog low: ${ready} ready brief(s) in ${directory}. Write ready briefs there to keep about ${(runtime.policy ?? defaultPolicy).backlog.lowWater}, ` +
-            "each a complete outcome from your Goal definition's Done when list not yet accepted; when fewer exist, say so in a handoff instead of writing slivers. " +
-            'The controller dispatches the oldest whenever worker slots are free.',
-        });
-        return true;
-      })
-      .immediate();
+    const goals = ownedGoals(state);
+    if (!goals.length) continue;
+    let delivered = false;
+    for (const goal of goals) {
+      const directory = backlogDirectory(runtime.stateDirectory, goal);
+      const ready = briefs(directory).length;
+      if (ready >= (runtime.policy ?? defaultPolicy).backlog.lowWater) continue;
+      const woke = db
+        .transaction(() => {
+          const last = db.query('SELECT low_wake_at FROM backlog_goals WHERE goal=?').get(goal) as {
+            low_wake_at: number | null;
+          } | null;
+          if (
+            last?.low_wake_at != null &&
+            now - last.low_wake_at < (runtime.policy ?? defaultPolicy).backlog.wakeIntervalMs
+          )
+            return false;
+          db.query(
+            `INSERT INTO backlog_goals(goal, low_wake_at) VALUES (?, ?)
+            ON CONFLICT(goal) DO UPDATE SET low_wake_at = excluded.low_wake_at`,
+          ).run(goal, now);
+          runtime.inbox.deliver({
+            managerId: row.id,
+            goalId: goal,
+            kind: 'instruction',
+            summary:
+              `Backlog low: ${ready} ready brief(s) in ${directory}. Write ready briefs there to keep about ${(runtime.policy ?? defaultPolicy).backlog.lowWater}, ` +
+              "each a complete outcome from your Goal definition's Done when list not yet accepted; when fewer exist, say so in a handoff instead of writing slivers. " +
+              'The controller dispatches the oldest whenever worker slots are free.',
+          });
+          return true;
+        })
+        .immediate();
+      if (woke) delivered = true;
+    }
     if (delivered) woken.push(row.id);
   }
   return woken;

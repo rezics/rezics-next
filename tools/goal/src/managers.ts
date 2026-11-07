@@ -8,17 +8,22 @@ import type { AppServer, CodexPool, Notification } from './app-server.ts';
 import { migrate } from './db.ts';
 import { SqliteManagerInbox } from './inbox.ts';
 import { isPendingContinuationHandshake } from './manager-continuation.ts';
+import { ownedGoals } from './manager-ownership.ts';
 import { ManagerSessionTransport } from './manager-session-transport.ts';
-import { renderManagerOpening } from './prompts.ts';
+import { readGoalDocuments, renderManagerOpening } from './prompts.ts';
 import { recordFlow } from './flow.ts';
 import type { PromptBudgetManifest } from './types.ts';
 import type { ProcessIdentity } from './process.ts';
 import type { ManagerWindows } from './windows.ts';
 
+export { managerOwnership, ownedGoals, readManagerOwnership, resolveGoalManager } from './manager-ownership.ts';
+
 export type ManagerLimits = { turns: number; turnsWithoutDecision: number; wallMs: number };
 export type ManagerSpec = {
   id: string;
   goal: string;
+  /** Goals this session owns. A session without the field owns only `goal`. */
+  goals?: string[];
   objective: string;
   brief: string;
   cwd: string;
@@ -59,6 +64,8 @@ export type ManagerSessionSnapshot = ManagerSpec & {
   /** Automatic renewal attempts; `error` is the failure's first line, omitted when that attempt succeeded. */
   renewalAttempts?: { at: number; error?: string }[];
   nextRenewalRetryAt?: number;
+  /** Goals whose briefs and continuations the next turn must include after ownership changes. */
+  pendingGoalReads?: string[];
 };
 export type ManagedManagerState = ManagerSessionSnapshot & { history?: ManagerSessionSnapshot[] };
 /** An existing Claude session registered for authority only; it is not a managed model session. */
@@ -165,6 +172,7 @@ function managerHasDecision(db: Database, id: string, threadId: string, turnId: 
 export class ManagerSessions {
   private chains = new Map<string, Promise<unknown>>();
   private timers = new Map<string, ReturnType<typeof setTimeout>>();
+  private assigns: Promise<unknown> = Promise.resolve();
   private watcher: Watching;
   private closed = false;
   private readonly policy: ControlPolicy;
@@ -405,14 +413,20 @@ export class ManagerSessions {
   private continuationPath(spec: ManagerSpec): string {
     return join(spec.cwd, '.temp', 'goal', spec.id, 'CONTINUATION.md');
   }
-  private backlogPath(spec: ManagerSpec): string {
-    return join(this.services.backlogDirectory ?? join(spec.cwd, '.temp', 'goal', 'backlog'), spec.goal);
+  private backlogRoot(spec: Pick<ManagerSpec, 'cwd'>): string {
+    return this.services.backlogDirectory ?? join(spec.cwd, '.temp', 'goal', 'backlog');
   }
-  /** Whether a ready brief in the Goal's backlog was written or moved there since `since`, or dispatched from it. */
+  private backlogPath(spec: ManagerSpec, goal = spec.goal): string {
+    return join(this.backlogRoot(spec), goal);
+  }
+  /** Whether a ready brief in any owned Goal's backlog was written or moved there since `since`, or dispatched. */
   private backlogWrittenSince(spec: ManagerSpec, turnStart: number): boolean {
+    return ownedGoals(spec).some((goal) => this.backlogWrittenForGoal(spec, goal, turnStart));
+  }
+  private backlogWrittenForGoal(spec: ManagerSpec, goal: string, turnStart: number): boolean {
     // File times come from the kernel's coarse clock, which can trail the process clock by a few milliseconds.
     const since = turnStart - this.policy.manager.fileClockSlackMs;
-    const directory = this.backlogPath(spec);
+    const directory = this.backlogPath(spec, goal);
     for (const path of [directory, join(directory, '.dispatching')]) {
       let names: string[];
       try {
@@ -435,18 +449,19 @@ export class ManagerSessions {
     // The backlog run may already have dispatched a brief written in this turn; it records the brief's write time.
     if (!this.db.query("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'backlog_goals'").get())
       return false;
-    const row = this.db.query('SELECT last_written_at FROM backlog_goals WHERE goal = ?').get(spec.goal) as {
+    const row = this.db.query('SELECT last_written_at FROM backlog_goals WHERE goal = ?').get(goal) as {
       last_written_at: number | null;
     } | null;
     return (row?.last_written_at ?? -1) >= since;
   }
   private opening(spec: ManagerSpec, continuationFile?: string) {
+    const goals = ownedGoals(spec);
     return renderManagerOpening({
-      spec,
+      spec: { ...spec, goals },
       continuationFile,
       continuationText:
         continuationFile && existsSync(continuationFile) ? readFileSync(continuationFile, 'utf8') : undefined,
-      backlogPath: this.backlogPath(spec),
+      backlogPath: goals.map((goal) => join(this.backlogRoot(spec), goal)).join(', '),
       command: this.services.command.join(' '),
       policy: this.policy,
     });
@@ -490,6 +505,7 @@ export class ManagerSessions {
     const state: ManagedManagerState = {
       kind: 'managed',
       ...spec,
+      goals: ownedGoals(spec).length ? ownedGoals(spec) : [spec.goal],
       threadId: null,
       activeTurnId: null,
       status: 'starting',
@@ -629,6 +645,7 @@ export class ManagerSessions {
       pendingRenewal: _pendingRenewal,
       renewalAttempts: _renewalAttempts,
       nextRenewalRetryAt: _nextRenewalRetryAt,
+      pendingGoalReads: _pendingGoalReads,
       ...spec
     } = state;
     return spec;
@@ -910,21 +927,31 @@ export class ManagerSessions {
     return this.serial(id, () => this.stopInternal(id));
   }
 
+  private consumeGoalReadings(state: ManagedManagerState): string {
+    const goals = state.pendingGoalReads ?? [];
+    if (!goals.length) return '';
+    delete state.pendingGoalReads;
+    this.save(state);
+    return readGoalDocuments(state.cwd, goals).join('\n\n');
+  }
   private async dispatch(id: string): Promise<void> {
     let state = this.get(id);
     if (isResidentSupermanager(state)) return;
     if (state.status !== 'running') return;
     if (state.engine === 'claude') return this.reviveClaude(state);
     const client = await this.transport.client(state.pool);
+    let prefix = this.consumeGoalReadings(state);
     for (const event of this.inbox.notifications(id)) {
       state = this.get(id);
       assertManagedManager(state);
+      const summary = prefix ? [prefix, event.event.summary].filter(Boolean).join('\n\n') : event.event.summary;
+      prefix = '';
       const delivered = await this.transport.deliverToSession(
         client,
         state,
         state.threadId!,
         state.activeTurnId,
-        event.event.summary,
+        summary,
         (turnId) => {
           state.activeTurnId = turnId;
           this.save(state);
@@ -994,6 +1021,91 @@ export class ManagerSessions {
   completeCommand(id: string): Promise<boolean> {
     assertManagedManager(this.get(id));
     return this.serial(id, () => this.completeInternal(id));
+  }
+
+  /**
+   * Move a Goal to another running managed manager. Inbox history, wake-ups, width and landing notices, and
+   * dispatch and retry authority follow; running tasks keep their handles. The old session for that Goal stops.
+   */
+  assign(goal: string, toId: string): Promise<{ goal: string; from: string; to: string; goals: string[] }> {
+    const next = this.assigns.catch(() => {}).then(() => this.assignInternal(goal, toId));
+    this.assigns = next.then(
+      () => undefined,
+      () => undefined,
+    );
+    return next;
+  }
+  private goalOwner(goal: string): ManagedManagerState | undefined {
+    const owners = this.list().filter(
+      (state): state is ManagedManagerState => isManagedManager(state) && ownedGoals(state).includes(goal),
+    );
+    return owners.length === 1 ? owners[0] : undefined;
+  }
+  private reassignGoalTasks(goal: string, from: string, to: string): void {
+    if (!this.db.query("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'worker_tasks'").get()) return;
+    this.db
+      .query(
+        `UPDATE worker_tasks SET body = json_set(body, '$.brief.manager', ?)
+         WHERE json_extract(body, '$.brief.goal') = ? AND json_extract(body, '$.brief.manager') = ?`,
+      )
+      .run(to, goal, from);
+    if (!this.db.query("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'landing_queue'").get()) return;
+    this.db
+      .query(
+        `UPDATE landing_queue SET request = json_set(request, '$.managerLanding.managerId', ?)
+         WHERE json_valid(request)
+           AND json_extract(request, '$.managerLanding.managerId') = ?
+           AND task IN (SELECT id FROM worker_tasks WHERE json_extract(body, '$.brief.goal') = ?)`,
+      )
+      .run(to, from, goal);
+  }
+  private async assignInternal(
+    goal: string,
+    toId: string,
+  ): Promise<{ goal: string; from: string; to: string; goals: string[] }> {
+    if (!goal || goal.trim() !== goal) throw new Error('Goal identity is missing or malformed');
+    if (!toId || toId.trim() !== toId) throw new Error('Manager identity is missing or malformed');
+    let target: ManagerState;
+    try {
+      target = this.get(toId);
+    } catch {
+      throw new Error(`Manager ${toId} is not a running managed manager`);
+    }
+    if (!isManagedManager(target) || target.status !== 'running')
+      throw new Error(`Manager ${toId} is not a running managed manager`);
+    const source = this.goalOwner(goal);
+    if (!source) throw new Error(`No managed manager owns Goal ${goal}`);
+    if (source.id === toId) throw new Error(`Goal ${goal} is already owned by manager ${toId}`);
+    const remaining = ownedGoals(source).filter((owned) => owned !== goal);
+    const nextGoals = [...ownedGoals(target), goal].filter((owned, index, all) => all.indexOf(owned) === index);
+    const lastGoal = remaining.length === 0;
+    this.db
+      .transaction(() => {
+        this.inbox.reassignGoal(goal, source.id, toId, lastGoal);
+        this.reassignGoalTasks(goal, source.id, toId);
+        const currentTarget = this.get(toId);
+        assertManagedManager(currentTarget);
+        currentTarget.goals = nextGoals;
+        currentTarget.pendingGoalReads = nextGoals;
+        this.save(currentTarget);
+        const currentSource = this.get(source.id);
+        assertManagedManager(currentSource);
+        currentSource.goals = remaining;
+        if (remaining.length && currentSource.goal === goal) currentSource.goal = remaining[0]!;
+        this.save(currentSource);
+        this.inbox.deliver({
+          managerId: toId,
+          goalId: goal,
+          kind: 'instruction',
+          summary: `You now own Goals ${nextGoals.join(', ')}. Read each Goal's brief and continuation.`,
+        });
+      })
+      .immediate();
+    if (lastGoal && source.status === 'running') await this.serial(source.id, () => this.stopInternal(source.id));
+    await this.serial(toId, () => this.dispatch(toId));
+    const assigned = this.get(toId);
+    assertManagedManager(assigned);
+    return { goal, from: source.id, to: toId, goals: ownedGoals(assigned) };
   }
 
   /** Rejoin persisted threads on host restart and retry committed, unsignalled inbox deliveries. */

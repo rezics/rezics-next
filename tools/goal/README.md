@@ -2481,6 +2481,8 @@ bun tools/goal/src/cli.ts land <task>
 bun tools/goal/src/cli.ts train
 bun tools/goal/src/cli.ts verify
 bun tools/goal/src/cli.ts manager start <goal> --engine codex --budget 20000
+bun tools/goal/src/cli.ts manager assign <goal> <manager>
+bun tools/goal/src/cli.ts manager status
 bun tools/goal/src/cli.ts manager register-supermanager
 bun tools/goal/src/cli.ts manager renew <manager>
 bun tools/goal/src/cli.ts manager stop <manager>
@@ -2492,16 +2494,17 @@ bun tools/goal/src/cli.ts inbox send <manager> <kind> <summary> [--task <task>] 
 ```
 
 `status`, `attempts` and `report` are read-only: they do not recover orphans, record manager commands or drain queued
-work. For held tasks, `status` keeps `waitingFor` as the blocking dependency IDs and adds `dependencies` entries with
-their state and readiness. Missing or malformed dependencies have state `unknown`; readiness follows the same target
-and integration-commit policy used to release held work. The same `status` object includes `trains`: each main and dev
-lane with `state` `running`, `stopped` or `missing`, and for a recorded owner the captured `codeVersion` of the
-`tools/goal` tree that process loaded. That field is not the current `main` ref and is not the settings revision.
-Decision: status builds an invocation-local projection from its selected task cohort and one incident-history read,
-reusing current attempt, retry intent and probe task state reads only within that response.
+work. `status` lists each manager's owned Goals, held-task `waitingFor` plus `dependencies` (unknown if missing), and
+`trains` (`running`/`stopped`/`missing`, with captured `tools/goal` `codeVersion` for a recorded owner).
+`manager assign <goal> <manager>` moves a Goal to another running managed manager: inbox, wake-ups, width and landing
+notices, and dispatch and retry authority follow; running tasks keep handles and land as before, with `brief.manager`
+set to the current owner; the old session for that Goal stops. Assigning to the current owner or a manager that is not
+running is refused. A manager may own several Goals and reads each brief and continuation at its next turn.
+Decision: Goal ownership is the managed session `goals` list; assign is the transfer; the live owner rewrites
+`brief.manager` without restarting workers. Status still projects one task cohort and one incident-history read.
 
-`retry <task> [--brief <file>]` retries a task, optionally replacing its brief after checking that its Goal and manager stay the same. Brief comparison canonicalizes line endings to LF and ignores trailing end-of-file whitespace. If the supplied brief matches the current contract after that normalization, the command reports that the contract is unchanged and exits without starting another attempt. A changed brief records SHA-256 hashes of the previous and new contract on the new attempt; a stopped task can still be restarted with plain `retry <task>`.
-Decision: `retry --brief` records the accepted replacement as a pending proposal before it takes the task lease. An automatic retry consumes the newest pending proposal with the same Goal, manager and contract validation as `retry --brief`, records both brief hashes on the attempt it starts, and removes the pending set. A proposal written for an earlier attempt still applies unless the current attempt already started on a newer brief, so `retry --brief` against a superseded generation applies to the current attempt instead of failing as stale. Three tests pin that consume, the earlier-attempt rule, and recording plus removal.
+`retry <task> [--brief <file>]` retries a task, optionally replacing its brief after checking that its Goal and manager stay the same. Comparison canonicalizes LF endings and ignores trailing EOF whitespace. An unchanged contract is reported and not restarted; a changed brief records both SHA-256 hashes on the new attempt. A stopped task still restarts with plain `retry <task>`.
+Decision: `retry --brief` records the replacement as a pending proposal before the lease. An automatic retry consumes the newest pending proposal with the same Goal, manager and contract checks, records both hashes, and removes the set. A proposal for an earlier attempt still applies unless the current attempt already started on a newer brief.
 
 For an attempt that has started, `stop` and `cancel` persist the requested disposition before signaling its recorded process groups. A waiting attempt has no worker process; they terminate recorded check runners (`runnerPid`, usual process identity), mark those checks abandoned, and settle even if runners are gone. An unknown waiting request settles on the next call and the sweep. `status` shows `terminationRequest` as requested, unknown or complete; waiting uses identity `waiting`, else missing stays unknown. Host recovery settles unknown identity after recorded run PIDs are gone and no live process remains under the worktree, then records that result. A stop abandons a queued retry; a later retry queues a new one.
 Decision: a setup-failed attempt with no `worker-run-started` event, no process and no current PID file is never-launched. Recovery settles stop or cancel from that evidence and worktree absence without writing a PID, leaves earlier PIDs, checks and landing candidates, then applies the retry fence. A completed cancel stays fenced. Live descendants or unreadable PID evidence keep the request unknown.

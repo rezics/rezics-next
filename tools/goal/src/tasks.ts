@@ -87,6 +87,7 @@ import {
 } from './priority-authority.ts';
 import type { PriorityGrant } from './types.ts';
 import { reapAttemptResources } from './attempt-resources.ts';
+import { resolveGoalManager } from './manager-ownership.ts';
 
 export { git };
 
@@ -414,6 +415,7 @@ export class WorkerTasks {
       readRiskOwnership(this.settings.riskAreasFile, this.settings.policy?.brief),
       this.settings.policy?.brief,
     );
+    brief.manager = resolveGoalManager(this.store.db, brief.goal, brief.manager);
     brief.lintWarnings = assertBriefDispatchable(
       markdown,
       this.settings.mainCheckout,
