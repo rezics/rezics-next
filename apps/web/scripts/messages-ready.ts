@@ -19,7 +19,7 @@ type MessageOutputState = {
   signature: string;
 };
 
-export type MessagePreparationOptions = { signal?: AbortSignal };
+export type MessagePreparationOptions = { signal?: AbortSignal; traceId?: string };
 
 /** Relative `./messages/...` modules that the generated barrel imports. */
 export function generatedMessageModules(source: string): string[] {
@@ -239,6 +239,36 @@ const GENERATOR_TERM_GRACE_MS = 1_000;
 const GENERATOR_SETTLE_TIMEOUT_MS = 5_000;
 
 function processGroupAlive(pid: number): boolean {
+  // `kill(-pid, 0)` also reports a process group containing only unreaped zombies as present.
+  // Those children cannot run or retain the generator lock, so use procfs state when available.
+  try {
+    let observedGroup = false;
+    for (const entry of readdirSync('/proc')) {
+      if (!/^\d+$/u.test(entry)) continue;
+      let stat: string;
+      try {
+        stat = readFileSync(`/proc/${entry}/stat`, 'utf8');
+      } catch (error) {
+        const code = (error as NodeJS.ErrnoException).code;
+        if (code === 'ENOENT' || code === 'ESRCH' || code === 'EACCES') continue;
+        throw error;
+      }
+      // `comm` is parenthesized and may contain spaces or parentheses. Fields after its last `)` begin
+      // with state, parent PID, and process group ID.
+      const fields = stat
+        .slice(stat.lastIndexOf(')') + 1)
+        .trim()
+        .split(/\s+/u);
+      if (Number(fields[2]) !== pid) continue;
+      observedGroup = true;
+      if (fields[0] !== 'Z' && fields[0] !== 'X') return true;
+    }
+    if (observedGroup) return false;
+  } catch (error) {
+    const code = (error as NodeJS.ErrnoException).code;
+    if (code !== 'ENOENT' && code !== 'ENOTDIR') throw error;
+  }
+
   try {
     process.kill(-pid, 0);
     return true;
@@ -332,6 +362,7 @@ export async function ensureMessagesReady(
   env: NodeJS.ProcessEnv = process.env,
   options: MessagePreparationOptions = {},
 ): Promise<number> {
+  const trace = options.traceId && /^[a-zA-Z0-9._-]{1,80}$/.test(options.traceId) ? ` trace=${options.traceId}` : '';
   return withParaglideMessagesLock(
     appDirectory,
     async () => {
@@ -341,7 +372,7 @@ export async function ensureMessagesReady(
         throwIfAborted(options.signal);
         const before = outputState(appDirectory);
         if (before.current) {
-          process.stderr.write(`[paraglide] stage=readiness result=current attempt=${attempt}\n`);
+          process.stderr.write(`[paraglide]${trace} stage=readiness result=current attempt=${attempt}\n`);
           return 0;
         }
         if (before.signature === previousSignature) {
@@ -351,14 +382,14 @@ export async function ensureMessagesReady(
         attempt += 1;
         const startedAt = performance.now();
         let childPid: number | undefined;
-        process.stderr.write(`[paraglide] stage=compile attempt=${attempt} start ${stateSummary(before)}\n`);
+        process.stderr.write(`[paraglide]${trace} stage=compile attempt=${attempt} start ${stateSummary(before)}\n`);
         const code = await runGenerator(appDirectory, env, options.signal, (pid) => {
           childPid = pid;
-          process.stderr.write(`[paraglide] stage=compile attempt=${attempt} pid=${pid ?? 'unknown'}\n`);
+          process.stderr.write(`[paraglide]${trace} stage=compile attempt=${attempt} pid=${pid ?? 'unknown'}\n`);
         });
         const after = outputState(appDirectory);
         process.stderr.write(
-          `[paraglide] stage=compile attempt=${attempt} pid=${childPid ?? 'unknown'} exit=${code} elapsed-ms=${Math.round(performance.now() - startedAt)} ${stateSummary(after)}\n`,
+          `[paraglide]${trace} stage=compile attempt=${attempt} pid=${childPid ?? 'unknown'} exit=${code} elapsed-ms=${Math.round(performance.now() - startedAt)} ${stateSummary(after)}\n`,
         );
         if (code !== 0) return code;
         if (!after.current && before.signature === after.signature)

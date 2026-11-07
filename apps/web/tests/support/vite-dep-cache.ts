@@ -204,9 +204,7 @@ export function elysiaTypeboxLiveModuleCode(id: string): string | undefined {
   return `export * from ${JSON.stringify(live)};\n`;
 }
 
-/** Scan the complete route graph up front so a local Worker browser check never discovers a route dependency
- * after the first page has loaded.
- */
+/** Full-route optimizer identity used to prebuild the shared test cache before private-network checks. */
 export const webViteClientOptimizeDeps = {
   entries: ['src/routes/**/*.tsx', 'src/server.ts', 'src/session/routes.ts'],
   holdUntilCrawlEnd: true,
@@ -214,8 +212,8 @@ export const webViteClientOptimizeDeps = {
 } as const;
 
 /**
- * Walk stacks compile the visited page on demand. Crawling every catalogue route with holdUntilCrawlEnd
- * exhausted Node's 2 GiB heap after `/en` SSR.
+ * Interactive and walk servers compile visited pages on demand. Crawling every catalogue route with
+ * holdUntilCrawlEnd delayed listen and exhausted Node's 2 GiB heap after `/en` SSR.
  */
 export const webViteWalkClientOptimizeDeps = {
   holdUntilCrawlEnd: false,
@@ -223,8 +221,11 @@ export const webViteWalkClientOptimizeDeps = {
   exclude: [...webViteCalendarOptimizeDeps],
 } as const;
 
-export function webViteClientOptimizeDepsFor(env: NodeJS.ProcessEnv = process.env) {
-  return env.REZICS_WALK_STACK_SLOT ? webViteWalkClientOptimizeDeps : webViteClientOptimizeDeps;
+export function webViteClientOptimizeDepsFor(
+  env: NodeJS.ProcessEnv = process.env,
+  command: 'build' | 'serve' = 'build',
+) {
+  return command === 'serve' || env.REZICS_WALK_STACK_SLOT ? webViteWalkClientOptimizeDeps : webViteClientOptimizeDeps;
 }
 
 export const webViteWorkerSsrOptimizeDeps = {

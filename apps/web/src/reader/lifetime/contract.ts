@@ -21,3 +21,53 @@ export function returnTarget(value: string | null, origin: string): string {
     return '/';
   }
 }
+
+/** Pure vocabulary shared by the session cache and mounted browser readers. */
+export const sessionQueryKey = ['session'] as const;
+
+export type BrowserSession = {
+  state: 'unknown' | 'signed-in' | 'signed-out' | 'unavailable';
+  csrfToken: string | null;
+  subject?: string | null;
+};
+
+export type BrowserReader = { subject: string; id: number };
+export type BrowserObservationSnapshot =
+  | { state: 'unknown' | 'inactive' | 'signed-out' }
+  | { state: 'signed-in'; observation: BrowserReader };
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+function nonEmptyString(value: unknown): value is string {
+  return typeof value === 'string' && value.trim() !== '';
+}
+
+export const unknownSession: BrowserSession = { state: 'unknown', csrfToken: null };
+const unavailableSession: BrowserSession = { state: 'unavailable', csrfToken: null, subject: null };
+export const signedOutSession: BrowserSession = { state: 'signed-out', csrfToken: null, subject: null };
+
+/** Convert an untrusted successful response into the session states the browser may observe. */
+export function normalizeSessionObservation(value: unknown): BrowserSession {
+  if (!isRecord(value)) return unavailableSession;
+  const hasOwn = (key: string) => Object.prototype.hasOwnProperty.call(value, key);
+  if (!hasOwn('state')) return unavailableSession;
+
+  if (value.state === 'signed-in') {
+    const subject = value.subject;
+    const csrfToken = value.csrfToken;
+    if (
+      !hasOwn('subject') ||
+      !hasOwn('csrfToken') ||
+      !nonEmptyString(subject) ||
+      !(csrfToken === null || nonEmptyString(csrfToken))
+    )
+      return unavailableSession;
+    return { state: 'signed-in', subject, csrfToken };
+  }
+
+  if (value.state === 'signed-out') return signedOutSession;
+  if (value.state === 'unavailable') return unavailableSession;
+  return unavailableSession;
+}

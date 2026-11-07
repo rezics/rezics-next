@@ -1,6 +1,6 @@
 import type { QueryClient } from '@tanstack/react-query';
 import { browserObservation } from './observation';
-import { normalizeSessionObservation, sessionQueryKey, type BrowserSession } from './session-cache';
+import { normalizeSessionObservation, sessionQueryKey, type BrowserSession } from './contract';
 
 export type ReaderSessionSource = {
   read: () => BrowserSession | undefined;

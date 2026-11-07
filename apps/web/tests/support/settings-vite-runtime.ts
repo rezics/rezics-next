@@ -19,6 +19,7 @@ type SettingsViteRuntime = {
 export async function createSettingsViteRuntime(
   bindings: Readonly<Record<string, string>>,
   plugins: Plugin[] = [],
+  options: { browserGraphOnly?: boolean } = {},
 ): Promise<SettingsViteRuntime> {
   const previous = new Map<string, string | undefined>(
     ['REZICS_TEST_RUNTIME', testWorkerBindingsEnvName, 'WEB_TEST_STATE_INSTANCE_DIR', 'WEB_VITE_CACHE_DIR'].map(
@@ -59,12 +60,40 @@ export async function createSettingsViteRuntime(
 
   try {
     const config = await resolveWebViteConfig({ command: 'serve', mode: 'test' }, appRoot);
-    const configuredPlugins = (config.plugins ?? []).flatMap((plugin) => (Array.isArray(plugin) ? plugin : [plugin]));
+    const configuredPlugins = (config.plugins ?? [])
+      .flatMap((plugin) => (Array.isArray(plugin) ? plugin : [plugin]))
+      .filter((plugin) => {
+        if (!options.browserGraphOnly || !plugin || typeof plugin !== 'object' || !('name' in plugin)) return true;
+        // The installed Cloudflare adapter loads Node-only Worker config. The browser graph fixture exercises the
+        // client plugins alone and must not start the Worker's full dependency optimizer.
+        return !String(plugin.name).includes('cloudflare');
+      });
     vite = await createViteServer({
       ...config,
       configFile: false,
       root: appRoot,
       cacheDir: cacheDirectory,
+      ...(options.browserGraphOnly
+        ? {
+            optimizeDeps: {
+              ...(config.optimizeDeps ?? {}),
+              noDiscovery: true,
+              entries: [],
+              include: [],
+              holdUntilCrawlEnd: false,
+            },
+            ssr: {
+              ...config.ssr,
+              optimizeDeps: {
+                ...(config.ssr?.optimizeDeps ?? {}),
+                noDiscovery: true,
+                entries: [],
+                include: [],
+                holdUntilCrawlEnd: false,
+              },
+            },
+          }
+        : {}),
       plugins: [...configuredPlugins, ...plugins],
       server: { ...config.server, middlewareMode: true, hmr: false, watch: null },
       appType: 'custom',

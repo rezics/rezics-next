@@ -7,16 +7,18 @@ export {
 } from './observation';
 export {
   cachedBrowserSession,
-  normalizeSessionObservation,
   ownedSessionCsrfToken,
   sessionCsrfToken,
   subscribeBrowserSession,
   sessionStateSnapshot,
+} from './session-cache';
+export {
+  normalizeSessionObservation,
   unknownSession,
   signedOutSession,
   sessionQueryKey,
   type BrowserSession,
-} from './session-cache';
+} from './contract';
 export { readerSessionSource, type ReaderSessionSource } from './session-source';
 export {
   addressLease,

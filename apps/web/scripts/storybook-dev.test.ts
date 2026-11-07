@@ -2,6 +2,7 @@ import { expect, test } from 'bun:test';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { storybookLaunchPlan, webServeNeedsGeneratedMessages } from './storybook-dev.ts';
+import { webStartupSelection } from './web-startup.ts';
 import { scripts } from '../package.json';
 
 const roots = { web: '/work/apps/web', ui: '/work/packages/ui' };
@@ -48,6 +49,33 @@ test('starts the ordinary local app without test runtime or check admission', ()
   expect(finite.args).not.toContain('3000');
 });
 
+test('records the inherited native binding without inventing test or walk selections', () => {
+  expect(webStartupSelection('app', { NODE_ENV: 'development' })).toMatchObject({
+    kind: 'app',
+    nodeEnv: 'development',
+    testRuntime: 'disabled',
+    walkSlot: 'unset',
+    cache: 'default',
+    cloudflareLocal: 'unset',
+    nativeTls: 'disabled',
+  });
+  expect(
+    webStartupSelection('vite', {
+      NODE_ENV: 'test',
+      REZICS_TEST_RUNTIME: '1',
+      REZICS_WALK_STACK_SLOT: '2',
+      WEB_VITE_CACHE_DIR: '/private/cache',
+      CLOUDFLARE_VITE_FORCE_LOCAL: 'true',
+    }),
+  ).toMatchObject({
+    kind: 'vite',
+    testRuntime: 'enabled',
+    walkSlot: 'selected',
+    cache: 'provided',
+    cloudflareLocal: 'enabled',
+  });
+});
+
 test('refuses a non-loopback bind address', () => {
   expect(() => storybookLaunchPlan(['--host', '0.0.0.0'], {}, roots)).toThrow('loopback address');
   expect(() => storybookLaunchPlan(['--app', '--host=0.0.0.0'], {}, roots)).toThrow('loopback address');
@@ -59,17 +87,17 @@ test('Vite app and finite test serving generate Paraglide messages before the ch
   expect(webServeNeedsGeneratedMessages('storybook')).toBe(false);
   const source = readFileSync(resolve(import.meta.dir, 'storybook-dev.ts'), 'utf8');
   const viteConfig = readFileSync(resolve(import.meta.dir, '../vite.config.ts'), 'utf8');
-  expect(source.indexOf('ensureMessagesReady(webRoot)')).toBeGreaterThan(
-    source.indexOf('webServeNeedsGeneratedMessages(plan.kind)'),
+  const preparation = source.indexOf('await ensureMessagesReady(webRoot, startupEnv');
+  const child = source.indexOf('await runWebStartupChild(plan.command, plan.args, plan.cwd');
+  expect(preparation).toBeGreaterThan(source.indexOf('webServeNeedsGeneratedMessages(plan.kind)'));
+  expect(child).toBeGreaterThan(preparation);
+  expect(source).toContain('signal: interruptions.signal');
+  expect(source.indexOf("webStartupLog('messages-preparation-start'")).toBeLessThan(
+    source.indexOf('await ensureMessagesReady(webRoot, startupEnv'),
   );
-  expect(source.indexOf('await runChild(plan.command, plan.args, plan.cwd)')).toBeGreaterThan(
-    source.indexOf('ensureMessagesReady(webRoot)'),
-  );
-  expect(source).toContain('generated = await ensureMessagesReady(webRoot)');
-  expect(source.indexOf('stage=messages-preparation start')).toBeLessThan(
-    source.indexOf('generated = await ensureMessagesReady(webRoot)'),
-  );
-  expect(viteConfig).toContain('ensureMessagesReady(appRoot)');
+  expect(viteConfig).toContain('ensureMessagesReady(appRoot, process.env');
+  expect(viteConfig).toContain('traceWebVitePlugins(');
+  expect(viteConfig).toContain("name: 'web-startup-evidence'");
   expect(viteConfig).not.toContain('withParaglideGenerateLock');
 });
 
@@ -78,6 +106,10 @@ test('the app entry logs before loading check custody and defers operator policy
   expect(source).not.toContain("from './check-placement.ts'");
   expect(source).not.toContain("from './operator-entry.ts'");
   expect(source).toContain("if (args.includes('--operator'))");
-  expect(source.indexOf('stage=entry start')).toBeLessThan(source.indexOf("await import('./operator-entry.ts')"));
-  expect(source.indexOf('stage=entry start')).toBeLessThan(source.indexOf("await import('./web-check-custody.ts')"));
+  expect(source.indexOf("webStartupLog('entry-start'")).toBeLessThan(
+    source.indexOf("await import('./operator-entry.ts')"),
+  );
+  expect(source.indexOf("webStartupLog('entry-start'")).toBeLessThan(
+    source.indexOf("await import('./web-check-custody.ts')"),
+  );
 });

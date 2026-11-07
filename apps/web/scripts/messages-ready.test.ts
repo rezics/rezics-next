@@ -257,6 +257,9 @@ test('isolated wrapper checks readiness only for bun test, inside the local or c
   expect(readinessCall).toBeGreaterThan(commandCondition);
   expect(firstRun).toBeGreaterThan(readinessCall);
   expect(spawn).toBeGreaterThan(firstRun);
-  expect(wrapperSource).toContain("command: ['bun', 'scripts/isolated.ts', ...command]");
+  expect(wrapperSource).toMatch(
+    /const routedCommand = selection\s*\?\s*\['bun', 'scripts\/isolated\.ts', '--routed-selection'\]/u,
+  );
+  expect(wrapperSource).toContain('command: routedCommand');
   expect(wrapperSource).toContain("command[0] === 'bun' && command[1] === 'test'");
 });
