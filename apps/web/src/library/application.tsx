@@ -10,6 +10,8 @@ export type LibrarySession = {
   csrfToken: string | null;
 };
 
+export type LibraryOperation = Parameters<WorkspaceAdmission['allowed']>[0];
+
 export type RecoveryObservation = { subject: string | null; csrfToken: string | null; identity: object };
 export type RecoveryObserver = {
   read: () => RecoveryObservation;
@@ -20,9 +22,9 @@ export type RecoveryObserver = {
 export type LibraryApplication = {
   useSession: () => LibrarySession;
   recoveryObservation: (client: QueryClient | undefined) => RecoveryObserver;
-  useOperation: (operation: GatedOperation) => boolean;
-  useOperationAdmission: (operation: GatedOperation) => OperationAdmission;
-  useWorkspaceAdmission: (operations: readonly GatedOperation[]) => {
+  useOperation: (operation: LibraryOperation) => boolean;
+  useOperationAdmission: (operation: LibraryOperation) => OperationAdmission;
+  useWorkspaceAdmission: (operations: readonly LibraryOperation[]) => {
     store: WorkspaceAdmission;
     value: ReturnType<WorkspaceAdmission['read']>;
   };
@@ -42,16 +44,16 @@ export function useLibraryApplication(): LibraryApplication {
 export function useSession() {
   return useLibraryApplication().useSession();
 }
-export function useOperation(operation: GatedOperation) {
+export function useOperation(operation: LibraryOperation) {
   return useLibraryApplication().useOperation(operation);
 }
-export function useOperationAdmission(operation: GatedOperation) {
+export function useOperationAdmission(operation: LibraryOperation) {
   return useLibraryApplication().useOperationAdmission(operation);
 }
-export function Exposure({ operation, children }: { operation: GatedOperation; children: ReactNode }) {
+export function Exposure({ operation, children }: { operation: LibraryOperation; children: ReactNode }) {
   return useOperation(operation) ? children : null;
 }
-export function useLibraryWorkspaceAdmission(operations: readonly GatedOperation[]) {
+export function useLibraryWorkspaceAdmission(operations: readonly LibraryOperation[]) {
   return useLibraryApplication().useWorkspaceAdmission(operations);
 }
 export type LibraryWorkspaceAdmission = WorkspaceAdmission;
