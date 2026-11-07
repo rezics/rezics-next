@@ -1,4 +1,6 @@
 import { composeLibraryDomain } from '../../../src/composition/library.ts';
+import { composeSemanticAdapters } from '../../../src/composition/semantic.ts';
+import { createIdentitySourceSupportReader } from '../../../src/semantic/index.ts';
 import { systemClock } from '../../../src/clock.ts';
 import type { Access } from '../../../src/request/access.ts';
 import {
@@ -16,6 +18,7 @@ import { withIdentitySourceConsumerMaintenance } from '../../../src/semantic/ide
 import type { Pool } from 'pg';
 
 composeLibraryDomain();
+composeSemanticAdapters();
 
 /** Production Search receiving for native identity suites: same-Pool Access, clock, generation-1
  * composition and the live Source maintenance frame. A bare `{search,prefix,routeKey}` constructor
@@ -39,6 +42,7 @@ export function createSearchIdentityReceivingStep(options: {
       routeKey: options.routeKey,
       access: options.access,
       clock: systemClock,
+      identitySourceSupportReaderFactory: createIdentitySourceSupportReader,
       work: searchReceivingProductionDeclaration(),
     }),
   });

@@ -35,6 +35,7 @@ import { requireLibraryDomain } from '../library/domain-binding.ts';
 import { createNativeSubjectReadingPort, installNativeSubjectReadingApplication } from '../semantic/adapters/index.ts';
 import {
   bindSourceBindingApplication,
+  createIdentitySourceSupportReader,
   createSourceBindingApplication,
   createNativePublicFilterSourceBinding,
   createNativePublicFilterSource,
@@ -62,6 +63,7 @@ export function composeSemanticIdentityParticipants(
   const config = readSearchConfig(context.env);
   const routeKey = config && context.env.KERNEL_ROUTE_KEY ? readMembershipRouteKey(context.env) : null;
   if (!config || !routeKey) return null;
+  // Semantic registers before Search services start; supply its real Source reader factory here.
   const search = createOpenSearch(config.url);
   const access = context.getAuthorization?.().access;
   const receiving =
@@ -73,6 +75,7 @@ export function composeSemanticIdentityParticipants(
           routeKey,
           access,
           clock: context.clock,
+          identitySourceSupportReaderFactory: createIdentitySourceSupportReader,
           work: searchReceivingProductionDeclaration(),
         })
       : undefined;
