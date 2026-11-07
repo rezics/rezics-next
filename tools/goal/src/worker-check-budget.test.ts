@@ -477,6 +477,7 @@ test('settlement records a typing failure after a failed or stale host typecheck
     expect(stale.ok).toBe(false);
     if (stale.ok) throw new Error('expected stale typing failure');
     expect(stale.result).toContain('Worktree content changed after the last check-host typecheck.');
+    expect(stale.result).toContain('Legacy evidence has no retained compiler-input closure');
     tests.close();
     passed.close();
   } finally {

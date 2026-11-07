@@ -2533,6 +2533,22 @@ Goal's ready briefs until one overlaps. The chain adds at most the sweep's dispa
 
 ### Check result reuse
 
+Worker typing settlement uses a separate version 1 compiler-input receipt, bound to the original invocation and
+physical run. The owning root compiler captures source before execution and inputs after its preparation and compiler
+programs finish in the frozen checkout. Source changes during execution invalidate the receipt. The receipt includes
+root/workspace configuration, runner and toolchain/dependency identities, generated declarations, SQL and schema
+inputs. Known owning preparation may produce Paraglide and route declarations before compilation; other prepared
+inputs must remain stable throughout the run. Locally unchanged pre-run generated files may differ from the remote
+prepared view; both inventories remain recorded. Changed local prepared inputs must match the compiled view.
+
+Only documents absent from the configured TypeScript import graph and owning generator asset references can be
+excluded. Unknown compiler, mapper or generation commands keep the complete Git-visible inventory. A typing pass
+does not satisfy document validation. Budget accounting, admission, exact candidate custody and command identity
+continue to use the full Git-visible content tree. This receipt grants no additional check or placement permission.
+Unchanged legacy stamps remain valid under their original full-tree comparison. A changed legacy tree with no retained
+compiler closure, or a new invocation without its matching receipt, reports missing evidence with the original check
+status and log; settlement never invents an old closure or labels it a transport failure.
+
 Landing and promotion checks record only clean, successful runs. Each result is keyed by the normalized command, the
 allowlisted environment (`CI`, `DATABASE_URL`, `NODE_ENV`, `PATH`, `PLAYWRIGHT_BROWSERS_PATH`, and `TZ`), the Git tree
 ids for the command workspace and its `workspace:` dependency closure (or the whole tree for a root command), global

@@ -21,6 +21,7 @@ import { keepCompilerStatusAfterCleanup } from './compiler-database.ts';
 import { resolveBunCommand } from './gate.ts';
 import { runOnCheckHost, type StackRun } from './stack-run.ts';
 import { recognizeCheckHostRun } from './check-placement.ts';
+import { beginTypingInputReceipt } from '../tools/goal/src/worker-check-typing-inputs.ts';
 
 const repository = resolve(fileURLToPath(new URL('..', import.meta.url)));
 
@@ -842,7 +843,19 @@ if (import.meta.main) {
     const env = { ...compilerEnvironment(process.env, args) };
     // The descriptor is authoritative over any unrelated destination-side environment selection.
     if (args.some((arg) => arg.startsWith('--selection='))) delete env.TYPECHECK_CHANGED;
-    process.exit(await typecheck({ ...parseTypecheckSelection(args), env }));
+    let complete: ((exitCode: number) => void) | undefined;
+    try {
+      complete = beginTypingInputReceipt(process.cwd(), env, ['bun', 'scripts/typecheck.ts', ...args]);
+    } catch (error) {
+      console.error(`typing inputs unavailable before compilation: ${String(error)}`);
+    }
+    const code = await typecheck({ ...parseTypecheckSelection(args), env });
+    try {
+      complete?.(code);
+    } catch (error) {
+      console.error(`typing inputs unavailable after compilation: ${String(error)}`);
+    }
+    process.exit(code);
   } catch (error) {
     console.error(error);
     process.exit(1);

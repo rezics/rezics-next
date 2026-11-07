@@ -198,11 +198,18 @@ async function parsedMarkdown(
   root: string,
   file: string,
   memory: Map<string, ParsedMarkdown>,
+  stat: typeof lstat = lstat,
 ): Promise<ParsedMarkdown> {
   const present = memory.get(file);
   if (present) return present;
   const fullPath = path.join(root, file);
-  const info = await lstat(fullPath);
+  let info: Awaited<ReturnType<typeof lstat>>;
+  try {
+    info = await stat(fullPath);
+  } catch (error) {
+    if (['ENOENT', 'ENOTDIR'].includes((error as NodeJS.ErrnoException).code ?? '')) return { links: [], anchors: [] };
+    throw new Error(`docs-check: cannot stat ${file}: ${String(error)}`, { cause: error });
+  }
   if (!info.isFile() || info.isSymbolicLink()) return { links: [], anchors: [] };
   const bytes = await readFile(fullPath);
   const hash = gitBlobHash(bytes);
@@ -341,7 +348,11 @@ function safeLine(rule: string, file: string, detail: string, remedy: string): s
   return `${rule} | ${file} | ${detail} | remedy: ${remedy}`;
 }
 
-export async function runDocsCheck(root = process.cwd(), argv = process.argv.slice(2)): Promise<RunResult> {
+export async function runDocsCheck(
+  root = process.cwd(),
+  argv = process.argv.slice(2),
+  io: { markdownStat?: typeof lstat } = {},
+): Promise<RunResult> {
   const mode = argv[0];
   if (mode === '--brief')
     return argv[1] && argv.length === 2
@@ -390,10 +401,12 @@ export async function runDocsCheck(root = process.cwd(), argv = process.argv.sli
     allFiles.map(async (file) => {
       if (file.startsWith('.temp/')) return;
       try {
-        const info = await lstat(path.join(root, file));
+        const info = await (file.endsWith('.md') ? (io.markdownStat ?? lstat) : lstat)(path.join(root, file));
         if (info.isFile()) sizes.set(file, info.size);
-      } catch {
-        // A tracked deletion has no current size.
+      } catch (error) {
+        // A tracked deletion has no current size. Live document failures must retain the path and cause.
+        if (!['ENOENT', 'ENOTDIR'].includes((error as NodeJS.ErrnoException).code ?? ''))
+          throw new Error(`docs-check: cannot stat ${file}: ${String(error)}`, { cause: error });
       }
     }),
   );
@@ -742,8 +755,9 @@ export async function runDocsCheck(root = process.cwd(), argv = process.argv.sli
   const allMarkdown = allFiles.filter((file) => !file.startsWith('.temp/') && file.endsWith('.md') && sizes.has(file));
   const changedMarkdown = new Set<string>();
   if (changedMode) {
-    for (const file of diffPaths) if (file.endsWith('.md') && sizes.has(file)) changedMarkdown.add(file);
-    for (const file of untracked) if (file.endsWith('.md')) changedMarkdown.add(file);
+    for (const file of diffPaths)
+      if (!file.startsWith('.temp/') && file.endsWith('.md') && sizes.has(file)) changedMarkdown.add(file);
+    for (const file of untracked) if (!file.startsWith('.temp/') && file.endsWith('.md')) changedMarkdown.add(file);
   }
   const ownerFiles = changedMode ? [...changedMarkdown].filter(ownerDocument) : allMarkdown.filter(ownerDocument);
   for (const file of ownerFiles) {
@@ -818,7 +832,7 @@ export async function runDocsCheck(root = process.cwd(), argv = process.argv.sli
   const sourceSet = changedMode ? new Set(changedMarkdown) : new Set(allMarkdown);
   if (changedMode && deletedOrRenamed.size) {
     for (const source of allMarkdown) {
-      const parsed = await parsedMarkdown(root, source, markdownMemory);
+      const parsed = await parsedMarkdown(root, source, markdownMemory, io.markdownStat);
       for (const link of parsed.links) {
         const resolved = linkTarget(root, source, link.target);
         if (resolved && deletedOrRenamed.has(resolved.file)) {
@@ -831,7 +845,7 @@ export async function runDocsCheck(root = process.cwd(), argv = process.argv.sli
     }
   }
   for (const source of sourceSet) {
-    const parsed = await parsedMarkdown(root, source, markdownMemory);
+    const parsed = await parsedMarkdown(root, source, markdownMemory, io.markdownStat);
     const inboundOnly = changedMode && !changedMarkdown.has(source) ? linkSources.get(source) : undefined;
     for (const link of parsed.links) {
       if (inboundOnly && !inboundOnly.has(link.target)) continue;
@@ -867,7 +881,7 @@ export async function runDocsCheck(root = process.cwd(), argv = process.argv.sli
         continue;
       }
       if (resolved.anchor && resolved.file.endsWith('.md')) {
-        const targetMarkdown = await parsedMarkdown(root, resolved.file, markdownMemory);
+        const targetMarkdown = await parsedMarkdown(root, resolved.file, markdownMemory, io.markdownStat);
         if (
           !targetMarkdown.anchors.includes(resolved.anchor) &&
           !targetMarkdown.anchors.includes(resolved.anchor.toLocaleLowerCase('en'))
