@@ -4,6 +4,7 @@ import { chooseLabel, languageRanges } from '@rezics/definitions';
 import { partitionOf, routeOf } from '../route/route.ts';
 import readLabelsStatement from './read-labels.sql';
 import readTypesStatement from './read-item-types.sql';
+import readSubjectStatesStatement from './subject-summary-states.sql';
 
 const BATCH_LIMIT = 256;
 
@@ -76,6 +77,31 @@ export async function readItemTypes(client: Queryable, ids: readonly string[]): 
   assertBatch(ids, 'An item type check accepts at most 256 ids');
   const details = await readItemDetails(client, ids);
   return new Map([...details].map(([id, detail]) => [id, detail.type]));
+}
+
+export type SubjectPageState = {
+  id: string;
+  visibility: string;
+  securityRevision: string;
+  redirect: string | null;
+  revision: number;
+};
+
+/** Current native identity and revision fences for one display-home batch. */
+export async function readSubjectPageStates(
+  client: Queryable,
+  home: number,
+  ids: readonly string[],
+): Promise<SubjectPageState[]> {
+  if (!ids.length) return [];
+  assertBatch(ids, 'A page-state batch accepts at most 256 ids');
+  return listed(
+    await readSubjectStatesStatement.run(client, {
+      partition_no: home,
+      routes: ids.map((id) => routeOf(id)!),
+      subject_ids: [...ids],
+    }),
+  ) as SubjectPageState[];
 }
 
 export async function readLabels(

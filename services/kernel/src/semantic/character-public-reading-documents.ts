@@ -8,6 +8,10 @@ import { publicDocument, type PublicDocumentView } from '../content/document-pub
 import type { AnchoredPosition, ReadContext } from '../content/model.ts';
 import type { Item } from './item.ts';
 
+export { globalReadEligibility, relatedReadEligibility } from './eligibility.ts';
+export { readItemDetails, readItemTypes, readSubjectPageStates } from './public-subject-facts.ts';
+export type { ItemTypeDetails, SubjectPageState } from './public-subject-facts.ts';
+
 /** Preview limits apply before body transfer and again to the complete retained DTO. */
 export function characterDocumentBounds() {
   return memoizedValue(
