@@ -1,7 +1,12 @@
 import { expect, test } from 'bun:test';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
-import { JOURNEYS, parseJourneyTable, renderJourneyTable } from '../scripts/accounts-goal-walk.ts';
+import {
+  JOURNEYS,
+  KERNEL_BEARER_JOURNEYS,
+  parseJourneyTable,
+  renderJourneyTable,
+} from '../scripts/accounts-goal-walk.ts';
 
 const capabilities = resolve(import.meta.dir, '../../../docs/goals/accounts.capabilities.md');
 const walk = resolve(import.meta.dir, '../scripts/accounts-goal-walk.ts');
@@ -41,4 +46,13 @@ test('the Goal walk reuses inlined Auth client identities and never imports auth
   expect(source).toContain("signIn(stack, person, 'login', [], secret)");
   expect(source).toContain("grant_type: 'authorization_code'");
   expect(source).toContain("REZICS_WALK_DEFER_FRONTENDS === '1'");
+});
+
+test('a website-bearer Kernel 401 fails only dependent Kernel journeys and keeps anonymous public reads', () => {
+  expect([...KERNEL_BEARER_JOURNEYS]).toEqual(['J05', 'J10', 'J11', 'J15', 'J16', 'J17', 'J19']);
+  const source = readFileSync(walk, 'utf8');
+  expect(source).toContain('failDependents([...KERNEL_BEARER_JOURNEYS], kernelBearerCause, label)');
+  expect(source).toContain('person public HTTP 200 without private fields; not reached:');
+  expect(source).toContain('anonymous outgoing HTTP');
+  expect(source).toContain('exited ${child.exitCode} before becoming ready');
 });
