@@ -597,3 +597,26 @@ test('served-variant reads accept only the admitted image decision for the reque
     `/v1/media/${mediaId}:authorizeDownload?variant=avif-320`,
   ]);
 });
+
+test('transport fetch throws retain the cause', async () => {
+  const transport = createImportTransport({
+    origin: 'https://api.importer.test',
+    tokenProvider: async () => 'test-token',
+    maxAttempts: 1,
+    fetch: (async () => {
+      throw new TypeError('connect ECONNREFUSED');
+    }) as unknown as typeof fetch,
+  });
+  try {
+    await transport.fence({
+      source: 'rezics_reviewed_vocabulary',
+      externalId: 'walk-import-ready',
+      fieldGroup: 'facts',
+    });
+    throw new Error('expected transport failure');
+  } catch (error) {
+    expect(error).toBeInstanceOf(ImportTransportError);
+    expect((error as ImportTransportError).status).toBe(503);
+    expect((error as Error).cause).toBeInstanceOf(Error);
+  }
+});

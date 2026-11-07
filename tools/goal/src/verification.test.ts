@@ -965,6 +965,7 @@ test('stopped same-generation and never-started held proof conversion persists a
     expect(() => h.tasks.queueRetry(legacy.id, { brief: submitted.path, expectedAttempt: 27 }, h.actor)).toThrow(
       'stale',
     );
+    expect(h.store.newestPendingBriefProposal(legacy.id)).toBeUndefined();
     expect(h.store.task(legacy.id).brief.kind).toBe('claim');
     expect(h.store.task(legacy.id).proofAuthorization).toBeUndefined();
     h.tasks.queueRetry(legacy.id, { brief: submitted.path, expectedAttempt: 28 }, h.actor);
@@ -1704,7 +1705,11 @@ test('historical reader validates the complete captured closure before importing
   const directory = temporaryDirectory();
   try {
     // Only structural read APIs are installed. No native product/remote module or execution capability is imported.
-    git(directory.path, ['clone', '--shared', '--no-checkout', resolve(import.meta.dir, '../../..'), '.']);
+    const producerRoot = resolve(import.meta.dir, '../../..');
+    git(directory.path, ['clone', '--shared', '--no-checkout', producerRoot, '.']);
+    const producerRef = git(producerRoot, ['symbolic-ref', '--short', 'HEAD']);
+    git(directory.path, ['fetch', '--no-tags', producerRoot, producerRef]);
+    git(directory.path, ['fetch', '--no-tags', producerRoot, PROOF_PRODUCER_COMMIT]);
     git(directory.path, ['config', 'user.name', 'Fixture']);
     git(directory.path, ['config', 'user.email', 'fixture@example.invalid']);
     mkdirSync(join(directory.path, 'scripts'));
@@ -1731,14 +1736,8 @@ export function readWorkerCheckHistory(id, physical, cwd) { return read(cwd, 'hi
     );
     git(directory.path, ['add', '.']);
     const tree = git(directory.path, ['write-tree']);
-    const commit = git(directory.path, [
-      'commit-tree',
-      tree,
-      '-p',
-      PROOF_PRODUCER_COMMIT,
-      '-m',
-      'Readonly reader fixture',
-    ]);
+    const producer = PROOF_PRODUCER_COMMIT;
+    const commit = git(directory.path, ['commit-tree', tree, '-p', producer, '-m', 'Readonly reader fixture']);
     git(directory.path, ['update-ref', 'refs/heads/reader-fixture', commit]);
     git(directory.path, ['symbolic-ref', 'HEAD', 'refs/heads/reader-fixture']);
     git(directory.path, ['reset', '--hard', commit]);
@@ -1748,7 +1747,8 @@ export function readWorkerCheckHistory(id, physical, cwd) { return read(cwd, 'hi
     await expect(validateHistoricalProofReaderSource({ ...source, root: `${directory.path}/.` })).rejects.toThrow(
       'canonical Git',
     );
-    git(directory.path, ['update-ref', 'refs/heads/fixture-integration', PROOF_PRODUCER_COMMIT]);
+    const unrelated = git(directory.path, ['commit-tree', tree, '-m', 'Unrelated integration history']);
+    git(directory.path, ['update-ref', 'refs/heads/fixture-integration', unrelated]);
     await expect(loadHistoricalProofReader(join(directory.path, '.temp/registry'), source)).rejects.toThrow(
       'integration ancestor',
     );
@@ -1814,7 +1814,7 @@ export function readWorkerCheckHistory(id, physical, cwd) { return read(cwd, 'hi
   } finally {
     directory.close();
   }
-});
+}, 30_000);
 
 test('unavailable optional historical reader records one diagnostic while ordinary admission and orphan/retry recovery continue', async () => {
   const h = registeredFixture();

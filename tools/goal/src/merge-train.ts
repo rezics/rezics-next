@@ -2486,15 +2486,6 @@ export class MergeTrain {
               const context = makeRebaseConflictContext(previous, request.workerCommit ?? tip, conflicts);
               if (context) result.rebaseConflict = context;
             }
-            if (error instanceof WorkerConflictError && previous !== base) {
-              appendFileSync(
-                logPath,
-                `Deferred until a later batch round; conflict with an earlier member: ${error.path}\n`,
-              );
-              deferred.add(entry.id);
-              resetTo(trainTree, previous);
-              continue;
-            }
             if (error instanceof WorkerConflictError) {
               if (o.trainResolver) {
                 result.firstFailure = firstFailure(error.message, this.options.policy?.merge);
@@ -2507,7 +2498,7 @@ export class MergeTrain {
                   resolution,
                 };
               }
-              if (error.detail) refuseRebaseConflict(result, error.path, error.message, logPath);
+              if (error.detail || previous !== base) refuseRebaseConflict(result, error.path, error.message, logPath);
               else acceptAlreadyPresent(result, previous, [error.path], logPath);
               result.conflictResolution = {
                 method: 'worker',
@@ -3251,14 +3242,25 @@ export class MergeTrain {
         continue;
       }
       let yielded = false;
+      let devLeaseReleased = false;
+      const releaseDevLease = () => {
+        if (devLeaseReleased) return;
+        devLeaseReleased = true;
+        lease.release();
+      };
       try {
         o.fence.assertCurrent(entry.request);
         if (o.codeIsCurrent && !o.codeIsCurrent()) return;
-        return await this.runOrdinaryProof(entry, devPending, () => {
-          yielded = true;
-        });
+        return await this.runOrdinaryProof(
+          entry,
+          devPending,
+          () => {
+            yielded = true;
+          },
+          releaseDevLease,
+        );
       } finally {
-        lease.release();
+        releaseDevLease();
         // Cancellation has settled every owned command before this point. Drain actual product requests even when
         // the original idle dev drain has already returned, and even if no other controller was spawned on enqueue.
         if (yielded) await drainDev();
@@ -3270,6 +3272,7 @@ export class MergeTrain {
     entry: LandingEntry,
     devPending: () => boolean,
     onYield: () => void,
+    releaseDevLease: () => void,
   ): Promise<GateOutcome | DevLandingTranspileHandoff | undefined> {
     const o = this.options;
     const path = join(o.stateDirectory, `control-plane-proof-${entry.id}.json`);
@@ -3318,6 +3321,9 @@ export class MergeTrain {
     const attempt: OrdinaryProofAttempt = { source, snapshot, logPath, status: 'running' };
     history.attempts.push(attempt);
     save();
+    // The dev lane protects the captured refs only. Main proof has its own lane and must not hold
+    // product landing custody for the duration of a slow native command.
+    releaseDevLease();
     const controller = new AbortController();
     let failure: (GateResult & { failedCommand: readonly string[] }) | undefined;
     const observe = () => {
@@ -3365,7 +3371,9 @@ export class MergeTrain {
       run: (runner) => async (argv, cwd, log) => {
         checkpoint();
         const result = await runner(argv, cwd, log, { signal: controller.signal });
-        if (!result.passed) failure ??= { ...result, failedCommand: [...argv] };
+        // Preserve an assertion that completed before cancellation. A runner terminated by the
+        // controller's signal is only cancellation evidence and is not retained as a proof failure.
+        if (!result.passed && !controller.signal.aborted) failure ??= { ...result, failedCommand: [...argv] };
         checkpoint();
         return result;
       },
@@ -3806,6 +3814,7 @@ export class MergeTrain {
     };
     let workerCommit: string | undefined;
     let activeTargetHead: string | undefined;
+    let sourceTip = '';
     const runOwnedAffected = (command: readonly string[], cwd: string, log: string, env: NodeJS.ProcessEnv) =>
       runAffectedTest(command, cwd, log, env, custody ? { signal: custody.signal } : undefined, o.policy);
     const runGate = custody
@@ -3851,15 +3860,23 @@ export class MergeTrain {
         throw new Error('Control-plane release refs kept moving during five validation attempts');
     };
     const recoverAlreadyIntegrated = async (): Promise<boolean> => {
-      if (!entry.candidate) return false;
+      const release = controlPlane ? this.readControlPlaneRecord(request) : undefined;
+      const candidate = entry.candidate ?? release?.mainCommit;
+      if (!candidate) return false;
       try {
-        this.git(o.mainCheckout, 'merge-base', '--is-ancestor', entry.candidate, targetBranch);
+        this.git(o.mainCheckout, 'merge-base', '--is-ancestor', candidate, targetBranch);
       } catch {
         return false;
       }
       if (controlPlane) {
-        const release = this.readControlPlaneRecord(request);
-        if (!release || release.mainCommit !== entry.candidate || !this.controlPlaneRecordPublished(release)) {
+        if (
+          !release ||
+          release.mainCommit !== candidate ||
+          release.mainBranch !== mainBranch ||
+          release.source?.branch !== request.branch ||
+          release.source?.commit !== sourceTip ||
+          !this.controlPlaneRecordPublished(release)
+        ) {
           result.stage = 'merge';
           result.firstFailure = firstFailure(
             `Control-plane candidate ${entry.candidate} is on ${mainBranch} without complete verified propagation; refusing to report the landing complete`,
@@ -3876,18 +3893,17 @@ export class MergeTrain {
         );
         result.passed = true;
         result.stage = 'merge';
-        result.mergedCommit = entry.candidate;
+        result.mergedCommit = release.mainCommit;
         return true;
       }
       result.passed = true;
       result.stage = 'merge';
-      result.mergedCommit = entry.candidate;
+      result.mergedCommit = candidate;
       if (workspace) workspace.integrated(recorded.workspace!.module, target());
-      if (controlPlane)
-        await this.propagateControlPlaneCommit(entry.candidate, request.taskId, recorded.manager, logPath);
+      if (controlPlane) await this.propagateControlPlaneCommit(candidate, request.taskId, recorded.manager, logPath);
       else if (stabilize) {
-        candidateWorkspace = this.trainWorkspace(trainTree, entry.candidate, trainCandidateCleanup);
-        await this.mergeStabilizedCommitIntoDev(entry.candidate, trainTree, request.taskId, recorded.manager, logPath);
+        candidateWorkspace = this.trainWorkspace(trainTree, candidate, trainCandidateCleanup);
+        await this.mergeStabilizedCommitIntoDev(candidate, trainTree, request.taskId, recorded.manager, logPath);
       }
       return true;
     };
@@ -3899,7 +3915,7 @@ export class MergeTrain {
       }
       if (this.git(o.mainCheckout, 'symbolic-ref', 'HEAD') !== `refs/heads/${mainBranch}`)
         throw new Error('The main checkout must already have main checked out');
-      let sourceTip = this.git(o.mainCheckout, 'rev-parse', '--verify', `${request.branch}^{commit}`);
+      sourceTip = this.git(o.mainCheckout, 'rev-parse', '--verify', `${request.branch}^{commit}`);
       let tip = request.devResolution?.commit ?? sourceTip;
       workerCommit = request.workerCommit ?? sourceTip;
       if (workspace && sharedStore) {
@@ -3938,9 +3954,18 @@ export class MergeTrain {
       // diff. Only the commits after the main fork are considered for the main landing.
       let controlPlaneFork: string | undefined;
       if (!workspace && controlPlaneReleaseBrief(recorded) && o.integrationBranch !== undefined) {
-        const fork = this.git(o.mainCheckout, 'merge-base', sourceTip, `refs/heads/${mainBranch}`);
+        const published = this.readControlPlaneRecord(request);
+        const exactPublishedSource =
+          published?.mainBranch === mainBranch &&
+          published.source?.branch === request.branch &&
+          published.source?.commit === sourceTip;
+        const fork = exactPublishedSource
+          ? this.git(o.mainCheckout, 'merge-base', sourceTip, published.mainExpected)
+          : this.git(o.mainCheckout, 'merge-base', sourceTip, `refs/heads/${mainBranch}`);
         const taskChanges = changedPathsBetween(o.mainCheckout, fork, sourceTip, this.options.policy?.merge);
-        controlPlane = taskChanges.length > 0 && taskChanges.every((path) => path.startsWith(CONTROL_PLANE_PATH));
+        controlPlane =
+          exactPublishedSource ||
+          (taskChanges.length > 0 && taskChanges.every((path) => path.startsWith(CONTROL_PLANE_PATH)));
         if (controlPlane) controlPlaneFork = fork;
       }
       if (controlPlane) {
@@ -5048,7 +5073,8 @@ export class MergeTrain {
         }
         result.passed = true;
         result.stage = 'merge';
-        result.mergedCommit = candidate;
+        // Surface the durable release identity recorded for this publication.
+        result.mergedCommit = preparedControlPlaneRelease?.record.mainCommit ?? candidate;
         this.notifyOwnersOfOutsideChanges(
           request,
           [
@@ -5561,6 +5587,8 @@ export class MergeTrain {
 
   /** Combined main cohorts need separate exact-source owner authority for every additional file. */
   private checkControlPlaneScope(files: readonly string[], request: LandingRequest, logPath: string): void {
+    const outside = outsideScope(files, request.declaredPaths);
+    if (outside.length) throw new Error(`Changed files require an exact native scope approval: ${outside.join(', ')}`);
     this.checkScope(files, request, logPath);
   }
 
@@ -6128,7 +6156,7 @@ export class MergeTrain {
                     base: task.base,
                     frozen: frozenFilesForTask(o.stateDirectory, task.id),
                   })) ||
-              (!previous.identities && !isDeepStrictEqual(JSON.parse(historicalIdentity).brief, task.brief))
+              (!previous.identities && JSON.parse(historicalIdentity).brief.markdown !== task.brief.markdown)
             )
               throw new Error('Deferred request/contract generation changed');
             if (!previous.identities)
@@ -6350,7 +6378,7 @@ export class MergeTrain {
                   base: task.base,
                   frozen: frozenFilesForTask(o.stateDirectory, task.id),
                 })) ||
-            (!receipt.previous.identities && !isDeepStrictEqual(JSON.parse(identity).brief, task.brief))
+            (!receipt.previous.identities && JSON.parse(identity).brief.markdown !== task.brief.markdown)
           )
             throw new Error('Deferred current request/contract identity changed before migration');
           if (!receipt.previous.identities)
@@ -7282,27 +7310,35 @@ export class MergeTrain {
             const frozen = node.indices.flatMap((index) =>
               frozenFilesForTask(o.stateDirectory, manifest.members[index]!.taskId),
             );
+            const preFormatChanged = changedPathsBetween(
+              tree,
+              snapshot.mainHead,
+              this.git(tree, 'rev-parse', 'HEAD'),
+              this.options.policy?.merge,
+            );
+            this.formatControlPlaneCandidate(tree, preFormatChanged, node.logPath);
             const changed = changedPathsBetween(
               tree,
               snapshot.mainHead,
               this.git(tree, 'rev-parse', 'HEAD'),
               this.options.policy?.merge,
             );
-            this.formatControlPlaneCandidate(tree, changed, node.logPath);
-            const allowed = preparedMembers.flatMap((member) => [
+            const approvedPaths = new Map<string, string[]>();
+            for (const member of preparedMembers) {
+              const source = manifest.members.find((candidate) => candidate.taskId === member.request.taskId)!;
+              const approval = controlPlaneScopeApproval(source, scopeRuntime) ?? null;
+              if (!isDeepStrictEqual(journal.scopeApprovals![member.request.taskId], approval))
+                throw new Error(`Batch member native scope approval changed for ${member.request.taskId}`);
+              approvedPaths.set(
+                member.request.taskId,
+                approval?.additionalPaths.map((addition) => addition.path) ?? [],
+              );
+            }
+            const declared = preparedMembers.flatMap((member) => [
               ...member.request.declaredPaths,
-              ...(journal.scopeApprovals![member.request.taskId]?.additionalPaths.map((addition) => addition.path) ??
-                []),
+              ...(approvedPaths.get(member.request.taskId) ?? []),
             ]);
-            const outside = outsideScope(
-              changedPathsBetween(
-                tree,
-                snapshot.mainHead,
-                this.git(tree, 'rev-parse', 'HEAD'),
-                this.options.policy?.merge,
-              ),
-              allowed,
-            );
+            const outside = changed.filter((path) => outsideScope([path], declared).length > 0);
             if (outside.length) throw new Error(`Combined candidate changed unapproved files: ${outside.join(', ')}`);
             const frozenChanges = changedFrozenFiles(tree, frozen);
             if (frozenChanges.length)

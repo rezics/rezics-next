@@ -477,11 +477,7 @@ export function createCommerceCommands(config: {
     const { parent, authorization } = admission();
     const sale = withSalePreparation(authorization, async (attempt, deadline) => {
       const offer = parent.at(attempt.time);
-      return requireCurrentContentEdition(
-        offer.contentEdition,
-        { pool, access, clock: config.clock },
-        { actor, deadline },
-      );
+      return requireCurrentContentEdition(offer.contentEdition, { pool, access, ...saleConsent }, { actor, deadline });
     });
     try {
       return await runCommand(
@@ -595,7 +591,7 @@ export function createCommerceCommands(config: {
         order: current,
         contentEdition: await requireMechanicalContentEdition(
           current.contentEdition,
-          { pool, access, clock: config.clock },
+          { pool, access, ...saleConsent },
           { deadline },
         ),
       };
@@ -942,7 +938,7 @@ export function createCommerceCommands(config: {
           order: current,
           contentEdition: await requireMechanicalContentEdition(
             current.contentEdition,
-            { pool, access, clock: config.clock },
+            { pool, access, ...saleConsent },
             { deadline },
           ),
         };

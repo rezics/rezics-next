@@ -353,12 +353,60 @@ export function startFakeStripe(rewriteRead?: (path: string, response: Response)
     return session;
   }
 
+  async function signedEvent(type: string, objectId: string) {
+    const object = required(objects, objectId);
+    const bytes = JSON.stringify({
+      id: id('evt'),
+      object: 'event',
+      api_version: Stripe.API_VERSION,
+      created: now(),
+      livemode: false,
+      pending_webhooks: 1,
+      request: { id: null, idempotency_key: null },
+      type,
+      data: { object: serialize(object) },
+    });
+    const signature = await sdk.webhooks.generateTestHeaderStringAsync({
+      payload: bytes,
+      secret: webhookSecret,
+      cryptoProvider: Stripe.createSubtleCryptoProvider(),
+    });
+    return { bytes, signature, headers: { 'Stripe-Signature': signature } };
+  }
+
   const server = Bun.serve({
     hostname: '127.0.0.1',
     port: 0,
     idleTimeout: 0,
     async fetch(req) {
       const url = new URL(req.url);
+      if (url.pathname.startsWith('/walk/')) {
+        if (req.method !== 'POST') return error('invalid_request_error', 404, 'Unknown fake Stripe endpoint or object');
+        let body: unknown;
+        try {
+          body = JSON.parse(await req.text());
+        } catch {
+          return error('invalid_request_error', 400, 'Invalid walk fixture body');
+        }
+        const record =
+          typeof body === 'object' && body !== null && !Array.isArray(body) ? (body as Record<string, unknown>) : {};
+        const sessionId = typeof record.sessionId === 'string' ? record.sessionId : undefined;
+        const objectId = typeof record.objectId === 'string' ? record.objectId : sessionId;
+        const type = typeof record.type === 'string' ? record.type : undefined;
+        try {
+          if (url.pathname === '/walk/pay' && sessionId) {
+            pay(sessionId);
+            return new Response(null, { status: 204 });
+          }
+          if (url.pathname === '/walk/event' && type && objectId) {
+            const signed = await signedEvent(type, objectId);
+            return Response.json({ bytes: signed.bytes, headers: { 'stripe-signature': signed.signature } });
+          }
+        } catch {
+          return error('invalid_request_error', 400, 'Walk fixture could not sign that Checkout');
+        }
+        return error('invalid_request_error', 404, 'Unknown fake Stripe endpoint or object');
+      }
       const params = req.method === 'POST' ? new URLSearchParams(await req.text()) : url.searchParams;
       const rawParams = new URLSearchParams(params);
       // Stripe accepts both expand[]=x and expand[0]=x; expose the decoded array under its unindexed name.
@@ -582,26 +630,6 @@ export function startFakeStripe(rewriteRead?: (path: string, response: Response)
     },
     withdrawDispute,
     reinstateDispute,
-    async event(type: string, objectId: string) {
-      const object = required(objects, objectId);
-      const bytes = JSON.stringify({
-        id: id('evt'),
-        object: 'event',
-        api_version: Stripe.API_VERSION,
-        created: now(),
-        livemode: false,
-        pending_webhooks: 1,
-        request: { id: null, idempotency_key: null },
-        type,
-        data: { object: serialize(object) },
-      });
-      // stripe-node esm/Webhooks.js: sign exactly the bytes delivered to the webhook with SubtleCrypto on Bun.
-      const signature = await sdk.webhooks.generateTestHeaderStringAsync({
-        payload: bytes,
-        secret: webhookSecret,
-        cryptoProvider: Stripe.createSubtleCryptoProvider(),
-      });
-      return { bytes, signature, headers: { 'Stripe-Signature': signature } };
-    },
+    event: signedEvent,
   };
 }

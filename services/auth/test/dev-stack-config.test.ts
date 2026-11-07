@@ -17,12 +17,13 @@ import {
   developmentKernelBindings,
   issuerPublicJwksUrl,
   retireStaleSeedJournals,
+  resetWalkSeedJournals,
+  identityEpochBootstrapRemaining,
   root,
   developmentBindings,
   developmentRegistrationPassword,
   developmentContentBindings,
   issuerRequest,
-  identityEpochBootstrapRemaining,
   localDatabase,
   localStackRecoveryDelivery,
   openLocalShowcase,
@@ -80,6 +81,11 @@ test('seeded frontends wait for useful /en HTML through waitUntilWalkReady', asy
   expect(source).toContain('waitUntilWalkReady');
   expect(source).not.toContain("code: 'ECONNREFUSED'");
   expect(source).toContain('${origins.web}${SEEDED_WEB_READY_PATH}');
+  expect(source).toContain('issuerJwksUrl(origins.issuer)');
+  expect(source).toContain('walkOriginListening(origins.issuer)');
+  expect(source).toContain('startFakeStripe');
+  expect(source).toContain('walkCommerceProviderEnvironment');
+  expect(source).toContain("process.env.STRIPE_SECRET_KEY === 'sk_test_walk_commerce'");
 });
 
 test('isolated Kernel bindings verify the selected Auth issuer and bind the selected API port', () => {
@@ -339,6 +345,24 @@ test('first-run secrets remain private and stable across setup retries', async (
     expect((await stat(file)).mode & 0o777).toBe(0o600);
   } finally {
     await rm(directory, { recursive: true, force: true });
+  }
+});
+
+test('walk stacks retire leftover journals even when the PostgreSQL identity string matches', async () => {
+  const repository = await mkdtemp(resolve(import.meta.dir, '../../../.temp/walk-seed-'));
+  try {
+    await mkdir(resolve(repository, '.temp/cross-media-seed'), { recursive: true });
+    await writeFile(resolve(repository, '.temp/cross-media-seed/database-identity'), '127.0.0.1:20024/rezics\n');
+    await writeFile(resolve(repository, '.temp/cross-media-seed/state.sqlite'), 'previous-attempt-native-ids');
+    const archived = await resetWalkSeedJournals(repository, 'postgres://rezics:rezics@127.0.0.1:20024/rezics');
+    expect(archived).toBeDefined();
+    expect(await readFile(resolve(archived!, 'state.sqlite'), 'utf8')).toBe('previous-attempt-native-ids');
+    expect(await readFile(resolve(repository, '.temp/cross-media-seed/database-identity'), 'utf8')).toBe(
+      '127.0.0.1:20024/rezics\n',
+    );
+    expect(await Bun.file(resolve(repository, '.temp/cross-media-seed/state.sqlite')).exists()).toBe(false);
+  } finally {
+    await rm(repository, { recursive: true, force: true });
   }
 });
 

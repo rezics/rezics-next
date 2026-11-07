@@ -171,6 +171,8 @@ $$;
 CREATE FUNCTION commerce.guard_order() RETURNS trigger
     LANGUAGE plpgsql
     AS $$
+DECLARE
+  retention_copy_allowed boolean := false;
 BEGIN
   IF (NEW.route, NEW.order_id, NEW.buyer_account_id, NEW.offer_id, NEW.offer_revision,
       NEW.creator_account_id, NEW.title, NEW.currency, NEW.unit_amount_minor, NEW.tax_code,
@@ -184,7 +186,30 @@ BEGIN
   IF OLD.checkout_session_id IS NOT NULL AND
      (NEW.checkout_session_id, NEW.checkout_url, NEW.checkout_expires_at)
      IS DISTINCT FROM (OLD.checkout_session_id, OLD.checkout_url, OLD.checkout_expires_at) THEN
-    RAISE EXCEPTION 'Recorded checkout session is immutable' USING ERRCODE = '23514';
+    SELECT EXISTS (
+      SELECT 1
+      FROM access.account a
+      JOIN access.erasure e ON (e.route,e.account_id)=(a.route,a.account_id)
+      WHERE a.route=OLD.route AND a.account_id=OLD.buyer_account_id AND a.state='deleted'
+        AND OLD.checkout_minimized_at IS NULL AND NEW.checkout_minimized_at IS NOT NULL
+        AND e.at=NEW.checkout_minimized_at
+        AND NEW.checkout_session_id=OLD.checkout_session_id
+        AND OLD.checkout_url IS NOT NULL AND OLD.checkout_expires_at IS NOT NULL
+        AND NEW.checkout_url IS NULL AND NEW.checkout_expires_at IS NULL
+        AND EXISTS (SELECT 1 FROM commerce.purchase_order_retention_policy p
+          WHERE (p.route,p.order_id,p.buyer_account_id)=(OLD.route,OLD.order_id,OLD.buyer_account_id))
+        AND EXISTS (SELECT 1 FROM commerce.purchase_order_retained r
+            WHERE (r.route,r.order_id,r.buyer_account_id)=(OLD.route,OLD.order_id,OLD.buyer_account_id)
+              AND r.checkout_url=OLD.checkout_url)
+    ) INTO retention_copy_allowed;
+    IF NOT retention_copy_allowed THEN
+      RAISE EXCEPTION 'Recorded checkout session is immutable' USING ERRCODE = '23514';
+    END IF;
+  ELSIF NEW.checkout_minimized_at IS DISTINCT FROM OLD.checkout_minimized_at THEN
+    RAISE EXCEPTION 'Checkout minimization requires the exact recorded Session' USING ERRCODE = '23514';
+  END IF;
+  IF OLD.checkout_minimized_at IS NOT NULL AND NEW.checkout_minimized_at IS DISTINCT FROM OLD.checkout_minimized_at THEN
+    RAISE EXCEPTION 'Checkout minimization is immutable' USING ERRCODE = '23514';
   END IF;
   IF OLD.settlement = 'paid' AND NEW.settlement <> 'paid' THEN
     RAISE EXCEPTION 'Paid settlement cannot change' USING ERRCODE = '23514';
@@ -569,7 +594,12 @@ CREATE TABLE commerce.erasure_progress (
     cursor_id uuid DEFAULT '00000000-0000-0000-0000-000000000000'::uuid NOT NULL,
     phase text DEFAULT 'entitlements'::text NOT NULL,
     blocker text,
-    CONSTRAINT erasure_progress_phase_check CHECK ((phase = ANY (ARRAY['entitlements'::text, 'pending'::text])))
+    retention_store text,
+    retention_fields text[],
+    retention_purpose text,
+    retention_expires_at timestamp with time zone,
+    CONSTRAINT erasure_progress_phase_check CHECK ((phase = ANY (ARRAY['entitlements'::text, 'acquisitions'::text, 'money-observations'::text, 'orders'::text, 'retained'::text, 'resolve'::text, 'pending'::text, 'none'::text]))),
+    CONSTRAINT erasure_progress_retention_check CHECK ((((retention_store IS NULL) AND (retention_fields IS NULL) AND (retention_purpose IS NULL) AND (retention_expires_at IS NULL)) OR ((retention_store = 'commerce.purchase_order_retained'::text) AND (retention_fields IS NOT NULL) AND (retention_fields = ARRAY['buyer_account_id'::text, 'checkout_url'::text, 'expires_at'::text]) AND (array_position(retention_fields, NULL::text) IS NULL) AND (retention_purpose IS NOT NULL) AND (retention_expires_at IS NOT NULL))))
 );
 
 
@@ -747,12 +777,13 @@ CREATE TABLE commerce.purchase_order (
     money_unit jsonb,
     tax_behavior text,
     acquisition_release text,
+    checkout_minimized_at timestamp with time zone,
     CONSTRAINT purchase_order_acquisition_release_check CHECK ((acquisition_release = ANY (ARRAY['no-creation'::text, 'cancelled-no-charge'::text, 'refunded'::text, 'lost-dispute'::text]))),
     CONSTRAINT purchase_order_amount_tax_minor_check CHECK ((amount_tax_minor >= 0)),
     CONSTRAINT purchase_order_check CHECK ((route = ((get_byte(uuid_send(order_id), 10) * 256) + get_byte(uuid_send(order_id), 11)))),
     CONSTRAINT purchase_order_check1 CHECK ((route = ((get_byte(uuid_send(buyer_account_id), 10) * 256) + get_byte(uuid_send(buyer_account_id), 11)))),
-    CONSTRAINT purchase_order_check2 CHECK ((((checkout_session_id IS NULL) AND (checkout_url IS NULL) AND (checkout_expires_at IS NULL)) OR ((checkout_session_id IS NOT NULL) AND (checkout_url IS NOT NULL) AND (checkout_expires_at IS NOT NULL)))),
     CONSTRAINT purchase_order_checkout_session_id_check CHECK ((checkout_session_id ~ '^cs_(test|live)_[A-Za-z0-9]{1,250}$'::text)),
+    CONSTRAINT purchase_order_checkout_state_check CHECK ((((checkout_session_id IS NULL) AND (checkout_url IS NULL) AND (checkout_expires_at IS NULL) AND (checkout_minimized_at IS NULL)) OR ((checkout_session_id IS NOT NULL) AND (checkout_url IS NOT NULL) AND (checkout_expires_at IS NOT NULL) AND (checkout_minimized_at IS NULL)) OR ((checkout_session_id IS NOT NULL) AND (checkout_url IS NULL) AND (checkout_expires_at IS NULL) AND (checkout_minimized_at IS NOT NULL)))),
     CONSTRAINT purchase_order_content_edition_check CHECK (((content_edition IS NULL) OR commerce.valid_content_edition(content_edition))),
     CONSTRAINT purchase_order_currency_check CHECK ((currency ~ '^[a-z]{3}$'::text)),
     CONSTRAINT purchase_order_edition_creator CHECK (((content_edition IS NULL) OR ((content_edition ->> 'creatorAccountId'::text) = (creator_account_id)::text))),
@@ -768,6 +799,41 @@ CREATE TABLE commerce.purchase_order (
     CONSTRAINT purchase_order_tax_code_check CHECK ((tax_code ~ '^txcd_[0-9]{8}$'::text)),
     CONSTRAINT purchase_order_title_check CHECK (((char_length(title) >= 1) AND (char_length(title) <= 200))),
     CONSTRAINT purchase_order_unit_amount_minor_check CHECK (((unit_amount_minor >= 1) AND (unit_amount_minor <= 99999999)))
+);
+
+
+--
+-- Name: purchase_order_retained; Type: TABLE; Schema: commerce; Owner: -
+--
+
+CREATE TABLE commerce.purchase_order_retained (
+    route integer NOT NULL,
+    order_id uuid NOT NULL,
+    buyer_account_id uuid NOT NULL,
+    checkout_url text NOT NULL,
+    expires_at timestamp with time zone NOT NULL,
+    CONSTRAINT purchase_order_retained_check CHECK ((route = ((get_byte(uuid_send(order_id), 10) * 256) + get_byte(uuid_send(order_id), 11)))),
+    CONSTRAINT purchase_order_retained_check1 CHECK ((route = ((get_byte(uuid_send(buyer_account_id), 10) * 256) + get_byte(uuid_send(buyer_account_id), 11)))),
+    CONSTRAINT purchase_order_retained_expires_at_check CHECK (isfinite(expires_at))
+);
+
+
+--
+-- Name: purchase_order_retention_policy; Type: TABLE; Schema: commerce; Owner: -
+--
+
+CREATE TABLE commerce.purchase_order_retention_policy (
+    route integer NOT NULL,
+    order_id uuid NOT NULL,
+    buyer_account_id uuid NOT NULL,
+    fields text[] NOT NULL,
+    purpose text NOT NULL,
+    expires_at timestamp with time zone NOT NULL,
+    CONSTRAINT purchase_order_retention_policy_check CHECK ((route = ((get_byte(uuid_send(order_id), 10) * 256) + get_byte(uuid_send(order_id), 11)))),
+    CONSTRAINT purchase_order_retention_policy_check1 CHECK ((route = ((get_byte(uuid_send(buyer_account_id), 10) * 256) + get_byte(uuid_send(buyer_account_id), 11)))),
+    CONSTRAINT purchase_order_retention_policy_expires_at_check CHECK (isfinite(expires_at)),
+    CONSTRAINT purchase_order_retention_policy_fields_check CHECK (((fields = ARRAY['buyer_account_id'::text, 'checkout_url'::text, 'expires_at'::text]) AND (array_position(fields, NULL::text) IS NULL))),
+    CONSTRAINT purchase_order_retention_policy_purpose_check CHECK (((char_length(purpose) >= 1) AND (char_length(purpose) <= 200)))
 );
 
 
@@ -969,6 +1035,22 @@ ALTER TABLE ONLY commerce.purchase_order
 
 
 --
+-- Name: purchase_order_retained purchase_order_retained_pkey; Type: CONSTRAINT; Schema: commerce; Owner: -
+--
+
+ALTER TABLE ONLY commerce.purchase_order_retained
+    ADD CONSTRAINT purchase_order_retained_pkey PRIMARY KEY (route, order_id);
+
+
+--
+-- Name: purchase_order_retention_policy purchase_order_retention_policy_pkey; Type: CONSTRAINT; Schema: commerce; Owner: -
+--
+
+ALTER TABLE ONLY commerce.purchase_order_retention_policy
+    ADD CONSTRAINT purchase_order_retention_policy_pkey PRIMARY KEY (route, order_id);
+
+
+--
 -- Name: royalty_line royalty_line_pkey; Type: CONSTRAINT; Schema: commerce; Owner: -
 --
 
@@ -1123,6 +1205,20 @@ CREATE UNIQUE INDEX purchase_order_checkout_session ON commerce.purchase_order U
 --
 
 CREATE INDEX purchase_order_erasure_buyer ON commerce.purchase_order USING btree (route, buyer_account_id, order_id);
+
+
+--
+-- Name: purchase_order_retained_buyer_page; Type: INDEX; Schema: commerce; Owner: -
+--
+
+CREATE INDEX purchase_order_retained_buyer_page ON commerce.purchase_order_retained USING btree (route, buyer_account_id, order_id);
+
+
+--
+-- Name: purchase_order_retention_policy_buyer; Type: INDEX; Schema: commerce; Owner: -
+--
+
+CREATE INDEX purchase_order_retention_policy_buyer ON commerce.purchase_order_retention_policy USING btree (route, buyer_account_id, order_id);
 
 
 --
@@ -1284,6 +1380,22 @@ CREATE TRIGGER purchase_order_tax_guard BEFORE UPDATE ON commerce.purchase_order
 --
 
 CREATE TRIGGER royalty_line_guard BEFORE DELETE OR UPDATE ON commerce.royalty_line FOR EACH ROW EXECUTE FUNCTION commerce.guard_transaction();
+
+
+--
+-- Name: purchase_order_retained purchase_order_retained_route_order_id_fkey; Type: FK CONSTRAINT; Schema: commerce; Owner: -
+--
+
+ALTER TABLE ONLY commerce.purchase_order_retained
+    ADD CONSTRAINT purchase_order_retained_route_order_id_fkey FOREIGN KEY (route, order_id) REFERENCES commerce.purchase_order(route, order_id) ON DELETE CASCADE;
+
+
+--
+-- Name: purchase_order_retention_policy purchase_order_retention_policy_route_order_id_fkey; Type: FK CONSTRAINT; Schema: commerce; Owner: -
+--
+
+ALTER TABLE ONLY commerce.purchase_order_retention_policy
+    ADD CONSTRAINT purchase_order_retention_policy_route_order_id_fkey FOREIGN KEY (route, order_id) REFERENCES commerce.purchase_order(route, order_id) ON DELETE CASCADE;
 
 
 --

@@ -30,9 +30,11 @@ import {
   walkPageBodyIsUseful,
   walkParentInvocation,
   walkPortAllocated,
+  issuerJwksUrl,
   walkProcessEnvironment,
   walkPublishedPortAllocated,
   WalkPublishedPortAllocated,
+  walkCommerceProviderEnvironment,
   walkReadyResponse,
   walkReadyUrls,
   walkReadyWaitingMessage,
@@ -85,6 +87,21 @@ test('walk stacks cap OpenSearch, Postgres and bun heaps inside the host run sli
   expect(() => searchRunArgs('native-policy-test-image', { KERNEL_SEARCH_MEMORY: '1g' })).toThrow(
     'KERNEL_SEARCH_MEMORY',
   );
+});
+
+test('walk Stripe fixture bindings stay loopback HTTP with HTTPS Checkout return URLs', () => {
+  expect(walkCommerceProviderEnvironment(18_765, 'whsec_local_stripe_fixture')).toEqual({
+    STRIPE_SECRET_KEY: 'sk_test_walk_commerce',
+    STRIPE_API_HOST: 'http://127.0.0.1:18765',
+    STRIPE_WEBHOOK_SECRETS: 'whsec_local_stripe_fixture',
+    STRIPE_MANAGED_PAYMENTS: 'false',
+    CHECKOUT_SUCCESS_URL: 'https://example.test/orders/{ORDER_ID}/paid',
+    CHECKOUT_CANCEL_URL: 'https://example.test/orders/{ORDER_ID}/cancel',
+  });
+});
+
+test('issuer JWKS URL keeps the public issuer origin and normalizes one trailing slash', () => {
+  expect(issuerJwksUrl('http://127.0.0.1:4201/')).toBe('http://127.0.0.1:4201/.well-known/jwks.json');
 });
 
 test('full-effect walks retain their worker mode while slot identities remain scoped', () => {

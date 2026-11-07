@@ -1889,6 +1889,7 @@ beyond twice its estimate do not stop it either: the attempt record lists such f
 acceptance change on lanes that retain the refusal, a specification conflict and a stall also reach the owning manager.
 Control-plane releases, stabilize-target and verification work keep
 every limit above.
+Decision: A control-plane release gate failure remains an ordinary gate failure when it changes paths outside its brief; record those paths for review, and reserve `scope-growth` for an actual scope-stage refusal.
 
 A product worker on dev whose outcome does not fit one attempt lands a coherent part and writes the rest of its own
 outcome as a continuation brief at `.temp/continuation/<name>.md` in its worktree. When the attempt ends, settlement
@@ -1945,6 +1946,8 @@ transactions, so it never holds the SQLite lock while a child process runs. A se
 process's lock beyond the busy timeout is retried after 0.5, 1, 2, 4 and 8 seconds; a successful exit then lands once,
 as if there had been no contention. If the lock outlasts every try, the attempt is not classified as a worker failure:
 its driver is released and the host's orphan sweep settles the same exit again.
+Provider-progress incident resolution uses that same bounded retry schedule; if its writes remain contended, the
+driver is released for orphan recovery without changing the worker's result.
 
 Each task's step in a recovery sweep (cancelled-dependency notice, dependency release, proof reservation release,
 orphaned landing, pending or first start, worker adoption) is isolated: its failure is logged, reported once per

@@ -58,6 +58,17 @@ export function isSqliteContention(error: unknown): boolean {
     (error instanceof Error && SQLITE_CONTENTION.test(error.message))
   );
 }
+/** Retry one persistence action with the same bounded schedule used by ordinary worker settlement. */
+export async function retrySettlementPersistence<T>(action: () => T, backoffMs: readonly number[]): Promise<T> {
+  for (let index = 0; ; index++) {
+    try {
+      return action();
+    } catch (error) {
+      if (!isSqliteContention(error) || index >= backoffMs.length) throw error;
+      await Bun.sleep(backoffMs[index]!);
+    }
+  }
+}
 /** The one same-session request for the exit object of a worker that exited 0 without it. */
 export const FINAL_REPORT_REQUESTED = 'final-report-requested';
 export const FINAL_REPORT_PROMPT =
@@ -94,16 +105,8 @@ export async function settle(
     code = -1;
   }
   const store = tasks.store;
-  const write = async (action: () => void): Promise<void> => {
-    for (let index = 0; ; index++) {
-      try {
-        return store.write(ref, action);
-      } catch (error) {
-        if (!isSqliteContention(error) || index >= policy.worker.settlementBackoffMs.length) throw error;
-        await Bun.sleep(policy.worker.settlementBackoffMs[index]!);
-      }
-    }
-  };
+  const write = (action: () => void): Promise<void> =>
+    retrySettlementPersistence(() => store.write(ref, action), policy.worker.settlementBackoffMs);
   const runEvent = store
     .events(ref.taskId, ref.attempt)
     .filter((event) => event.kind === 'worker-run-started')

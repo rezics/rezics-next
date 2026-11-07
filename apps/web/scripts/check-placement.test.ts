@@ -296,8 +296,7 @@ function statusFor(
 }
 
 function fixture() {
-  mkdirSync(join(root, '.temp'), { recursive: true });
-  const fixtureRoot = mkdtempSync(join(root, '.temp', 'web-placement-fixture-'));
+  const fixtureRoot = mkdtempSync(join('/tmp', 'web-placement-fixture-'));
   fixtureRoots.push(fixtureRoot);
   const workspace = join(fixtureRoot, 'candidate');
   const privateRoot = join(fixtureRoot, 'private');
@@ -437,8 +436,7 @@ function commit(directory: string, message: string): string {
 }
 
 function createDriverGitFixture() {
-  mkdirSync(join(root, '.temp'), { recursive: true });
-  const temporaryRoot = mkdtempSync(join(root, '.temp', 'web-driver-git-'));
+  const temporaryRoot = mkdtempSync(join('/tmp', 'web-driver-git-'));
   const repository = join(temporaryRoot, 'repository');
   const candidateRoot = join(temporaryRoot, 'candidate');
   const integratedRoot = join(temporaryRoot, 'integrated-driver');
@@ -447,6 +445,7 @@ function createDriverGitFixture() {
   git(repository, ['init', '--initial-branch=main']);
   git(repository, ['config', 'user.name', 'Web placement fixture']);
   git(repository, ['config', 'user.email', 'web-placement@example.invalid']);
+  writeFileSync(join(repository, '.gitattributes'), '*.ts text eol=lf\n');
 
   const scripts = join(repository, 'scripts');
   mkdirSync(scripts, { recursive: true });

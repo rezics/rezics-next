@@ -1438,3 +1438,49 @@ Driver contract: [specs/viewer-actions-driver.ts](../../specs/viewer-actions-dri
 ## private-entry-source-correction
 
 Source correction starts each field at Preserve; setting or clearing a field requires an explicit per-field choice and review of the complete before/after set.
+
+## first-public-journeys-on-dev
+
+Decision: retain all 26 original journey rows and assertions; move the Library follow/collection fixtures to current
+Access-backed actor inputs, then route any revealed boundary mismatches to their owning Goal.
+
+Walk attempt: **0/26 reached; 26 setup failures (journey runners were not entered)**. At `2026-11-07 12:16:27 UTC`,
+the admitted dev walk process failed while importing the DBOS SDK, before it started the stack, selected a persona,
+served a page or queried a dev revision. The runner reported slot acquisition after 63 ms; per-path duration and
+persona are therefore not applicable. Dev revision: unavailable because stack startup did not complete. Worktree
+revision at this report: `55d6e5e97a`.
+
+Command: `bun services/auth/scripts/dev-stack.ts walk -- bun apps/web/tests/native/commerce-library-journeys.walk.ts`.
+First differing result for every row: `SyntaxError: export 'WORKFLOW_RETIREMENT_DISPATCH' not found in
+'@dbos-inc/dbos-sdk'`. Evidence: `.temp/check-logs/de736263-6dd4-4b5c-b0b9-b2b1ec4e393b.log`.
+
+| Journey                | Result                           |
+| ---------------------- | -------------------------------- |
+| Offer management       | FAIL — shared setup; not reached |
+| Purchase               | FAIL — shared setup; not reached |
+| Owned use              | FAIL — shared setup; not reached |
+| Payment repair         | FAIL — shared setup; not reached |
+| Creator money          | FAIL — shared setup; not reached |
+| Financial lifecycle    | FAIL — shared setup; not reached |
+| Entry facts            | FAIL — shared setup; not reached |
+| Profiles               | FAIL — shared setup; not reached |
+| Labels                 | FAIL — shared setup; not reached |
+| Progress               | FAIL — shared setup; not reached |
+| Sessions               | FAIL — shared setup; not reached |
+| Copies and loans       | FAIL — shared setup; not reached |
+| Everything and filters | FAIL — shared setup; not reached |
+| Liked and score        | FAIL — shared setup; not reached |
+| Continue               | FAIL — shared setup; not reached |
+| Curated Collections    | FAIL — shared setup; not reached |
+| Collection reading     | FAIL — shared setup; not reached |
+| Collection publication | FAIL — shared setup; not reached |
+| Pins and return        | FAIL — shared setup; not reached |
+| Undo and archive       | FAIL — shared setup; not reached |
+| Personal history       | FAIL — shared setup; not reached |
+| Published Logs         | FAIL — shared setup; not reached |
+| Library lifecycle      | FAIL — shared setup; not reached |
+| Follow edges           | FAIL — shared setup; not reached |
+| Following              | FAIL — shared setup; not reached |
+| Follower counts        | FAIL — shared setup; not reached |
+
+The database/served-page walk remains unverified until the shared SDK installation exposes the required export.

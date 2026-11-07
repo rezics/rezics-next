@@ -26,9 +26,9 @@ test('explicit host-local and host-absolute environment overrides are refused', 
 });
 
 function fixture(): string {
-  const parent = join(repository, '.temp');
-  mkdirSync(parent, { recursive: true });
-  const root = mkdtempSync(join(parent, `placement-${randomUUID()}-`));
+  // Remote acceptance runs from /srv/rezics-check/runs/<id>. Keep an off-host
+  // fixture outside that physical run or onCheckHost(root) tests the runner.
+  const root = mkdtempSync(join('/tmp', `placement-${randomUUID()}-`));
   temporary.push(root);
   mkdirSync(join(root, '.git'));
   writeFileSync(
@@ -101,6 +101,20 @@ test('pure root and web typechecks, compiler tools, and explicit small unit sele
     classifyCheck(['env', 'PATH=/tmp/untrusted', 'bun', 'test', 'packages/util/test/unit.test.ts'], root).placement,
   ).toBe('remote');
   expect(workerCheckNeedsStack(['bun', 'test'], root)).toBe(true);
+  expect(
+    classifyCheck(
+      [
+        'bun',
+        'services/auth/scripts/dev-stack.ts',
+        'walk',
+        '--',
+        'bun',
+        'apps/web/tests/native/commerce-library-journeys.walk.ts',
+      ],
+      repository,
+    ),
+  ).toEqual({ placement: 'local', reason: 'admitted walk stack stays on the worker host' });
+  expect(workerCheckNeedsStack(['bun', 'services/auth/scripts/dev-stack.ts', 'walk'], repository)).toBe(false);
 });
 
 test('discovery, preload, shell, native-stack, browser, server, database, and unknown commands stay remote', () => {
@@ -177,9 +191,7 @@ test('caller markers cannot convert heavy placement to local, and only performan
 });
 
 test('worker --local with unflagged host c fails closed and transport failure never replays locally', async () => {
-  const parent = join(repository, '.temp');
-  mkdirSync(parent, { recursive: true });
-  const root = mkdtempSync(join(parent, `worker-placement-${randomUUID()}-`));
+  const root = mkdtempSync(join('/tmp', `worker-placement-${randomUUID()}-`));
   temporary.push(root);
   const gitInit = Bun.spawnSync(['git', 'init', '--quiet', root], { stdin: 'ignore', stdout: 'pipe', stderr: 'pipe' });
   expect(gitInit.exitCode).toBe(0);
@@ -329,7 +341,7 @@ test('stack-heavy work never calls its local callback with absent hosts, unflagg
 test('the fixed held-child operation retains ordinary remote placement and grants no eval or local bypass', async () => {
   const { encodeLifecycleSpec, LIFECYCLE_CHILD } = await import('./check-lifecycle-child.ts');
   const { tmpdir } = await import('node:os');
-  const root = mkdtempSync(join(tmpdir(), 'rezics-placement-lifecycle-'));
+  const root = mkdtempSync(join('/tmp', 'rezics-placement-lifecycle-'));
   try {
     const encoded = encodeLifecycleSpec({
       version: 1,

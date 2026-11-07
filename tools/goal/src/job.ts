@@ -58,7 +58,13 @@ import {
   reportsSuccess,
 } from './records.ts';
 import { readRouting } from './routing.ts';
-import { FINAL_REPORT_PROMPT, finalReportPending, isSqliteContention, settle } from './settle.ts';
+import {
+  FINAL_REPORT_PROMPT,
+  finalReportPending,
+  isSqliteContention,
+  retrySettlementPersistence,
+  settle,
+} from './settle.ts';
 import { CURSOR_FRESH_SESSION_EVENT, CURSOR_FRESH_SESSION_PROMPT } from './agents/shared.ts';
 import { firstFailure } from './merge.ts';
 import {
@@ -728,9 +734,39 @@ export class WorkerJob implements GateOutcomeSink {
     let silenceStopping: Promise<void> | undefined;
     const activity = workerActivityBaseline(store, ref);
     noteToolIncidentProbeStarted(store, ref);
-    const releaseOnProviderProgress = () => {
-      const resolved = resolveToolIncidentsAfterProviderProgress(store, ref, task, store.attempt(ref));
-      if (resolved.length) this.resumePendingRetries();
+    let providerProgress: Promise<void> | undefined;
+    let providerProgressRequested = false;
+    let providerProgressFailed = false;
+    let providerProgressFailure: unknown;
+    const releaseOnProviderProgress = (): void => {
+      providerProgressRequested = true;
+      if (providerProgress || providerProgressFailed) return;
+      providerProgress = (async () => {
+        do {
+          providerProgressRequested = false;
+          const resolved = await retrySettlementPersistence(
+            () => resolveToolIncidentsAfterProviderProgress(store, ref, task, store.attempt(ref)),
+            this.policy.worker.settlementBackoffMs,
+          );
+          if (resolved.length)
+            await retrySettlementPersistence(() => this.resumePendingRetries(), this.policy.worker.settlementBackoffMs);
+        } while (providerProgressRequested);
+      })()
+        .catch((error) => {
+          providerProgressFailed = true;
+          providerProgressFailure = error;
+        })
+        .finally(() => {
+          providerProgress = undefined;
+          if (providerProgressRequested && !providerProgressFailed) releaseOnProviderProgress();
+        });
+    };
+    const waitForProviderProgress = async (): Promise<void> => {
+      while (providerProgress || providerProgressRequested) {
+        if (!providerProgress) releaseOnProviderProgress();
+        await providerProgress;
+      }
+      if (providerProgressFailed) throw providerProgressFailure;
     };
     releaseOnProviderProgress();
     let { lastLogSize, lastLogMtime, lastLogActivityAt, checkWaitAtLastLogActivity } = activity;
@@ -937,6 +973,7 @@ export class WorkerJob implements GateOutcomeSink {
       } catch (error) {
         if (!stopping || !(error instanceof StaleAttemptError)) throw error;
       }
+      await waitForProviderProgress();
       if (stopping) await stopping;
       if (silenceStopping) await silenceStopping;
       if (!stopping) {

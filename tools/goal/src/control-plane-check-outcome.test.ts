@@ -72,21 +72,28 @@ test('a control-plane task refused by its control-plane checks is retried with t
   }
 }, 60_000);
 
-test('a control-plane task with a changed path outside its brief still escalates as scope growth', async () => {
-  const h = harness();
+test('a control-plane gate failure records outside paths and keeps its normal retry classification', async () => {
+  const h = harness(capturePrompt);
   const inbox: ManagerEvent[] = [];
   try {
     writeFileSync(h.briefFile, controlPlaneBrief());
     const task = h.tasks.dispatch(h.briefFile);
     const job = new WorkerJob(h.tasks, { enqueue() {} }, { deliver: (event) => inbox.push(event) });
     await job.start(task.id);
+    h.store.updateAttempt({ taskId: task.id, attempt: 1 }, (attempt) => {
+      attempt.blocker = 'BLOCKER: fixing the declared assertion';
+      attempt.result = attempt.blocker;
+    });
 
     job.onGateOutcome({ ...failedCheck, taskId: task.id, changedFiles: ['tools/goal/src/outside.ts'], diffLines: 1 });
     await job.drain();
 
-    expect(h.store.record({ taskId: task.id, attempt: 1 })?.escalation).toBe('scope-growth');
-    expect(h.store.task(task.id).currentAttempt).toBe(1);
-    expect(inbox.map((event) => event.kind)).toEqual(['scope-growth']);
+    expect(h.store.record({ taskId: task.id, attempt: 1 })).toMatchObject({
+      escalation: 'new-failure',
+      outsidePaths: ['tools/goal/src/outside.ts'],
+    });
+    expect(h.store.task(task.id).currentAttempt).toBe(2);
+    expect(inbox).toEqual([]);
   } finally {
     h.dispose();
   }
