@@ -10,6 +10,7 @@ import { composeAccessApplication } from './access.ts';
 import { composeCommunityApplication } from './community.ts';
 import { composeContentApplication } from './content.ts';
 import { composeWorkApplication } from './work.ts';
+import { installSemanticCopyWork } from './semantic-copy-work.ts';
 import { installNativeHistory } from './history.ts';
 import { composeSemanticAdapters } from './semantic.ts';
 import { ConfigError } from '../commerce/config.ts';
@@ -95,6 +96,7 @@ export function createKernelRuntimeDefaults(overrides: KernelRuntimeOverrides = 
   composeSemanticAdapters();
   composeLibraryDomain();
   composeZoneCollection();
+  installSemanticCopyWork();
   const env = overrides.env ?? process.env;
   const tokens = overrides.tokens ?? readTokenKeys(env);
   const receiptKeys = readReceiptKeyRing(env, overrides.receiptKeys);

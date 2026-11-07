@@ -1,5 +1,6 @@
 import { expect, test } from 'bun:test';
 import { bundledDigest, bundledRelease } from '@rezics/definitions/bundled';
+import { createSemanticCopyWorkEvidencePort } from '../../src/search/composition.ts';
 import { admitDiscoveryPage, discoveryHttpPage } from '../../src/search/discovery-http.ts';
 import {
   boundWorkContexts,
@@ -12,6 +13,7 @@ import { newId, routeOf } from '../../src/route/route.ts';
 
 const id = newId(1000),
   target = newId(2000);
+const evidence = createSemanticCopyWorkEvidencePort();
 const context: CurrentWorkContext = {
   state: 'current',
   subjectId: id,
@@ -135,8 +137,8 @@ test('unrepresentable dates and oversized qualification retain explicit bounded 
       value: { type: 'value', content: { time: '+2020-00-00T00:00:00Z', precision: 9, calendarmodel: 'unsupported' } },
     },
   };
-  const draft = prepareListWorkContext(id, 'schema:Book', bundledRelease, [raw], new Set(), ['en']);
-  expect(finishListWorkContext(id, draft, new Map(), bundledRelease)).toMatchObject({
+  const draft = prepareListWorkContext(id, 'schema:Book', bundledRelease, [raw], new Set(), evidence, ['en']);
+  expect(finishListWorkContext(id, draft, new Map(), bundledRelease, evidence)).toMatchObject({
     dates: { state: 'current', items: [{ value: { state: 'unsupported' } }] },
   });
   const credit = prepareListWorkContext(
@@ -151,11 +153,12 @@ test('unrepresentable dates and oversized qualification retain explicit bounded 
       },
     ],
     new Set(),
+    evidence,
   );
   expect(
-    finishListWorkContext(id, credit, new Map([[target, { state: 'unavailable' as const }]]), bundledRelease),
+    finishListWorkContext(id, credit, new Map([[target, { state: 'unavailable' as const }]]), bundledRelease, evidence),
   ).toMatchObject({ creators: { state: 'unavailable', reason: 'native' } });
-  expect(finishListWorkContext(id, credit, new Map([[target, null]]), bundledRelease)).toMatchObject({
+  expect(finishListWorkContext(id, credit, new Map([[target, null]]), bundledRelease, evidence)).toMatchObject({
     creators: { state: 'withheld' },
   });
   const qualified = prepareListWorkContext(
@@ -177,8 +180,9 @@ test('unrepresentable dates and oversized qualification retain explicit bounded 
       },
     ],
     new Set(),
+    evidence,
   );
-  expect(finishListWorkContext(id, qualified, new Map(), bundledRelease)).toMatchObject({
+  expect(finishListWorkContext(id, qualified, new Map(), bundledRelease, evidence)).toMatchObject({
     creators: { state: 'unavailable', reason: 'native' },
   });
   const contexts = boundWorkContexts(

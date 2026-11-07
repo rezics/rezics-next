@@ -2,7 +2,7 @@ import type { Access } from '../request/access.ts';
 import type { KernelClock } from '../clock.ts';
 import type { Pool } from 'pg';
 import type { PublicFilterCost, PublicFilterSource } from '../semantic/public-filter-source-contract.ts';
-import { createFacetPopulationSource } from '../semantic/facet-population.ts';
+import { createFacetPopulationSource } from '../semantic/index.ts';
 import type { PublicFilterSourceBinding } from '../semantic/public-filter-source-binding.ts';
 import type { PrivacyReductionStart } from '../semantic/public-filter-source-contract.ts';
 import { subjectPartition, type SubjectSource } from './source.ts';

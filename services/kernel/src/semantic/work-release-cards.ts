@@ -1,39 +1,37 @@
 import type { Release } from '@rezics/definitions';
-import type { Pool } from 'pg';
 import { partitionReadClient } from '../database/read-snapshot.ts';
 import type { CommandTransaction } from '../command/command.ts';
 import { partitionOf, routeOf } from '../route/route.ts';
 import { currentRelationFacts, currentRelationKey, type CurrentRelationCandidate } from './current-relations.ts';
-import { readSubjectSummaries, type SubjectSummary, type SummaryDependencies } from './summaries.ts';
+import { readSubjectSummaries, type SubjectSummary } from './summaries.ts';
 import { slotView } from './slots.ts';
 import listOutboundLinks from './list-outbound-links-by-property.sql';
 import { GLOBAL_CONTEXT } from './definitions.ts';
 import { isRelationProperty, type FactRow, type Statement } from './item.ts';
 import { withReadTransaction } from './read.ts';
 import { waitForSubjectLinks } from './link-freshness.ts';
-import type { SessionComponent } from '../tokens/session.ts';
+import type { WorkReleaseCardMembershipLink, WorkReleaseCardsInput } from './copy-work-reader-port.ts';
+import {
+  workReleaseCardFieldLimit,
+  workReleaseCardLimit,
+  workReleaseCardProperties,
+  workReleaseCardQualifierLimit,
+  workReleaseCardReferenceLimit,
+  workReleaseCardReferencePartLimit,
+  workReleaseCardResponseBytes,
+  workReleaseCardStatementBytes,
+} from './copy-work-reader-port.ts';
 
-export const workReleaseCardLimit = 20;
-export const workReleaseCardFieldLimit = 32;
-export const workReleaseCardProperties = [
-  'schema:gamePlatform',
-  'schema:inLanguage',
-  'schema:datePublished',
-  'schema:creativeWorkStatus',
-  'wdt:P5804',
-  'rezics:releaseStatus',
-  'schema:contentRating',
-  'schema:publisher',
-  'schema:producer',
-  'wdt:P178',
-  'wdt:P162',
-  'wdt:P2899',
-] as const;
-export const workReleaseCardQualifierLimit = 64;
-export const workReleaseCardReferenceLimit = 32;
-export const workReleaseCardReferencePartLimit = 64;
-export const workReleaseCardStatementBytes = 64 * 1024;
-export const workReleaseCardResponseBytes = 2 * 1024 * 1024;
+export {
+  workReleaseCardFieldLimit,
+  workReleaseCardLimit,
+  workReleaseCardProperties,
+  workReleaseCardQualifierLimit,
+  workReleaseCardReferenceLimit,
+  workReleaseCardReferencePartLimit,
+  workReleaseCardResponseBytes,
+  workReleaseCardStatementBytes,
+} from './copy-work-reader-port.ts';
 
 export type WorkReleaseCardField =
   | { state: 'unsupported' | 'withheld' | 'missing' | 'unavailable' }
@@ -50,14 +48,7 @@ export type WorkReleaseCard = {
 
 export type WorkReleaseCards = { state: 'unavailable' } | { state: 'available'; cards: WorkReleaseCard[] };
 
-type MembershipLink = {
-  subject: string;
-  property: string;
-  statement: string;
-  assertion?: Statement;
-  related?: Record<string, SubjectSummary>;
-  summary?: SubjectSummary | null;
-};
+type MembershipLink = WorkReleaseCardMembershipLink;
 
 type SelectedField = { facts: FactRow[]; withheld: boolean; unavailable?: boolean };
 type CardSource = {
@@ -101,20 +92,7 @@ function jsonBytes(value: unknown): number {
 }
 
 /** Read only the finite selected facts used by public release comparison cards for the supplied page. */
-export async function readWorkReleaseCards(input: {
-  pool: Pool;
-  routeKey: Uint8Array;
-  subject: string;
-  context?: string;
-  defaults?: Readonly<Record<string, 'inherit' | 'suppress'>>;
-  links: readonly MembershipLink[];
-  caughtUp: boolean;
-  release: Release;
-  languages: readonly string[];
-  deadline: number;
-  seen: readonly SessionComponent[];
-  authorizeSummary?: SummaryDependencies['authorize'];
-}): Promise<WorkReleaseCards> {
+export async function readNativeWorkReleaseCards(input: WorkReleaseCardsInput): Promise<WorkReleaseCards> {
   const context = input.context ?? GLOBAL_CONTEXT;
   const defaults = input.defaults ?? {};
   if (!input.caughtUp || input.links.length > workReleaseCardLimit) return { state: 'unavailable' };
@@ -372,3 +350,5 @@ export async function readWorkReleaseCards(input: {
     return { state: 'unavailable' };
   }
 }
+
+export { readWorkReleaseCards } from './copy-work-application.ts';

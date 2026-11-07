@@ -5,25 +5,26 @@ import {
   type ReleasedRelationDirectionResolver,
 } from '@rezics/definitions';
 import { readNativeCalendarDate } from '@rezics/filter';
-import { chooseTexts } from '../search/hits.ts';
-import {
-  WORK_CONTEXT_LIMITS as limits,
-  workContextBytes,
-  workContextKind,
-  type CurrentWorkContext,
-  type WorkContext,
-  type WorkContextStatement,
-  type WorkContextValue,
-} from '../search/work-context.ts';
+import type {
+  CopyWorkSearchEvidencePort,
+  CopyWorkWorkContext,
+  CopyWorkWorkKind,
+  CopyWorkWorkQualifier,
+  CopyWorkWorkStatement,
+  CopyWorkWorkTerm,
+  CopyWorkWorkValue,
+} from './copy-work-reader-port.ts';
 import type { FactRow } from './item.ts';
 
 export type WorkGroup = 'creators' | 'relations' | 'dates';
-export type WorkPlan = { kind: CurrentWorkContext['kind']; creators: string[]; relations: string[]; dates: string[] };
+type CurrentWorkContext = Extract<CopyWorkWorkContext, { state: 'current' }>;
+export type WorkPlan = { kind: CopyWorkWorkKind; creators: string[]; relations: string[]; dates: string[] };
 const association = new Set(['order', 'derivation', 'world', 'membership', 'association']);
 /** Semantic identities are the released terms, never a label/name heuristic or an inverse inference. */
 export function listWorkPlan(
   release: Release,
   typeId: string,
+  evidence: CopyWorkSearchEvidencePort,
   directionResolver?: ReleasedRelationDirectionResolver,
 ): WorkPlan | undefined {
   const type = release.types[typeId];
@@ -31,7 +32,7 @@ export function listWorkPlan(
   const resolve = directionResolver ?? createReleasedRelationDirectionResolver(release, releaseDigest(release));
   const identities = [typeId, ...type.bases];
   if (!identities.includes('schema:CreativeWork')) return undefined;
-  const kind = workContextKind(identities);
+  const kind = evidence.workContext.kind(identities);
   const properties = type.properties;
   return {
     kind,
@@ -53,44 +54,61 @@ export function listWorkPlan(
 export function workCreditProperties(
   release: Release,
   typeId: string,
+  evidence: CopyWorkSearchEvidencePort,
   directionResolver?: ReleasedRelationDirectionResolver,
 ): readonly string[] {
-  return listWorkPlan(release, typeId, directionResolver)?.creators ?? [];
+  return listWorkPlan(release, typeId, evidence, directionResolver)?.creators ?? [];
 }
 const record = (value: unknown): value is Record<string, unknown> =>
   typeof value === 'object' && value !== null && !Array.isArray(value);
 type PendingValue =
-  | Exclude<WorkContextValue, { state: 'value'; kind: 'item' }>
+  | Exclude<CopyWorkWorkValue, { state: 'value'; kind: 'item' }>
   | { state: 'value'; kind: 'item'; id: string };
-type PendingStatement = Omit<WorkContextStatement, 'value' | 'qualifiers'> & {
+type PendingStatement = Omit<CopyWorkWorkStatement, 'value' | 'qualifiers'> & {
   value: PendingValue;
   qualifiers:
-    | { state: 'empty' | 'unsupported' }
+    | { state: 'empty' }
+    | { state: 'unsupported' }
     | { state: 'unavailable'; reason: 'limit' }
-    | { state: 'current'; items: { property: WorkContextStatement['property']; value: PendingValue }[] };
+    | { state: 'current'; items: { property: CopyWorkWorkStatement['property']; value: PendingValue }[] };
 };
 export type WorkDraft = {
   type: CurrentWorkContext['type'];
   kind: CurrentWorkContext['kind'];
   sections: Record<
     WorkGroup,
-    | { state: 'empty' | 'withheld' | 'unsupported' }
+    | { state: 'empty' }
+    | { state: 'withheld' }
+    | { state: 'unsupported' }
     | { state: 'unavailable'; reason: 'limit' | 'native' }
     | { state: 'current'; items: PendingStatement[] }
   >;
 };
 
-export function workLabels(labels: Record<string, string>, languages: readonly string[] | undefined) {
-  return chooseTexts(
+export function workLabels(
+  labels: Record<string, string>,
+  languages: readonly string[] | undefined,
+  evidence: CopyWorkSearchEvidencePort,
+) {
+  return evidence.chooseTexts(
     Object.entries(labels).map(([language, value]) => ({ language, value })),
     languages ?? ['en'],
     undefined,
   );
 }
-function term(release: Release, id: string, languages: readonly string[] | undefined, type = false) {
-  return { id, labels: workLabels((type ? release.types[id] : release.properties[id])?.labels ?? {}, languages) };
+function term(
+  release: Release,
+  id: string,
+  languages: readonly string[] | undefined,
+  evidence: CopyWorkSearchEvidencePort,
+  type = false,
+) {
+  return {
+    id,
+    labels: workLabels((type ? release.types[id] : release.properties[id])?.labels ?? {}, languages, evidence),
+  };
 }
-function valueOf(raw: unknown, property: string, release: Release): PendingValue {
+function valueOf(raw: unknown, property: string, release: Release, evidence: CopyWorkSearchEvidencePort): PendingValue {
   if (!record(raw)) return { state: 'unsupported' };
   if (raw.type === 'somevalue' || raw.type === 'novalue') return { state: raw.type };
   if (raw.type !== 'value') return { state: 'unsupported' };
@@ -104,7 +122,8 @@ function valueOf(raw: unknown, property: string, release: Release): PendingValue
       return date ? { state: 'value', kind: 'time', calendar: 'gregorian', ...date } : { state: 'unsupported' };
     }
     case 'string':
-      return typeof content === 'string' && new TextEncoder().encode(content).byteLength <= limits.labelBytes
+      return typeof content === 'string' &&
+        new TextEncoder().encode(content).byteLength <= evidence.workContext.limits.labelBytes
         ? { state: 'value', kind: 'text', text: content }
         : { state: 'unsupported' };
     case 'quantity':
@@ -126,6 +145,7 @@ function statementOf(
   id: string,
   fact: FactRow,
   release: Release,
+  evidence: CopyWorkSearchEvidencePort,
   languages?: readonly string[],
 ): PendingStatement | null {
   const body = fact.body;
@@ -141,7 +161,7 @@ function statementOf(
   const definition = release.properties[fact.property];
   const rawQualifiers = Array.isArray(body.qualifiers) ? body.qualifiers : [];
   const qualifiers: PendingStatement['qualifiers'] =
-    rawQualifiers.length > limits.qualifiers
+    rawQualifiers.length > evidence.workContext.limits.qualifiers
       ? { state: 'unavailable', reason: 'limit' }
       : !rawQualifiers.length
         ? { state: 'empty' }
@@ -153,19 +173,19 @@ function statementOf(
           : {
               state: 'current',
               items: rawQualifiers.map((raw) => ({
-                property: term(release, raw.property, languages),
-                value: valueOf(raw.value, raw.property, release),
+                property: term(release, raw.property, languages, evidence),
+                value: valueOf(raw.value, raw.property, release, evidence),
               })),
             };
   return {
     statementId: fact.statement_id,
     sourceId: id,
     direction: 'outgoing',
-    property: term(release, fact.property, languages),
+    property: term(release, fact.property, languages, evidence),
     revision: fact.fact_revision,
     release: fact.fact_release,
     rank: body.rank,
-    value: valueOf(body.value, fact.property, release),
+    value: valueOf(body.value, fact.property, release, evidence),
     qualifiers,
   };
 }
@@ -176,10 +196,11 @@ export function prepareListWorkContext(
   release: Release,
   facts: readonly FactRow[],
   withheld: ReadonlySet<string>,
+  evidence: CopyWorkSearchEvidencePort,
   languages?: readonly string[],
   directionResolver?: ReleasedRelationDirectionResolver,
 ): WorkDraft | undefined {
-  const plan = listWorkPlan(release, type, directionResolver);
+  const plan = listWorkPlan(release, type, evidence, directionResolver);
   if (!plan) return undefined;
   const sections = Object.fromEntries(
     (['creators', 'relations', 'dates'] as const).map((group) => {
@@ -193,15 +214,15 @@ export function prepareListWorkContext(
             record(fact.body) &&
             (fact.body.rank === 'normal' || fact.body.rank === 'preferred'),
         )
-        .slice(0, limits.lookahead);
-      const items = candidates.map((fact) => statementOf(id, fact, release, languages));
+        .slice(0, evidence.workContext.limits.lookahead);
+      const items = candidates.map((fact) => statementOf(id, fact, release, evidence, languages));
       if (items.some((entry) => entry?.qualifiers.state === 'unavailable'))
         return [group, { state: 'unavailable', reason: 'native' }];
       if (items.some((entry) => !entry)) return [group, { state: 'unavailable', reason: 'limit' }];
       return [group, items.length ? { state: 'current', items } : { state: 'empty' }];
     }),
   ) as WorkDraft['sections'];
-  return { type: term(release, type, languages, true), kind: plan.kind, sections };
+  return { type: term(release, type, languages, evidence, true), kind: plan.kind, sections };
 }
 export function listWorkTargets(draft: WorkDraft | undefined): string[] {
   if (!draft) return [];
@@ -226,10 +247,11 @@ export function finishListWorkContext(
   draft: WorkDraft | undefined,
   targets: ReadonlyMap<string, WorkTarget | null>,
   release: Release,
+  evidence: CopyWorkSearchEvidencePort,
   languages?: readonly string[],
-): WorkContext | undefined {
+): CopyWorkWorkContext | undefined {
   if (!draft) return undefined;
-  const fill = (value: PendingValue): WorkContextValue | null | 'unavailable' => {
+  const fill = (value: PendingValue): CopyWorkWorkValue | null | 'unavailable' => {
     if (value.state !== 'value' || value.kind !== 'item') return value;
     const target = targets.get(value.id);
     if (target && 'state' in target) return 'unavailable';
@@ -239,8 +261,8 @@ export function finishListWorkContext(
           kind: 'item',
           id: target.id,
           originalId: value.id,
-          type: term(release, target.type, languages, true),
-          labels: workLabels(target.labels, languages),
+          type: term(release, target.type, languages, evidence, true),
+          labels: workLabels(target.labels, languages, evidence),
         }
       : null;
   };
@@ -248,15 +270,15 @@ export function finishListWorkContext(
     (['creators', 'relations', 'dates'] as const).map((group) => {
       const section = draft.sections[group];
       if (section.state !== 'current') return [group, section];
-      const items: WorkContextStatement[] = [];
+      const items: CopyWorkWorkStatement[] = [];
       for (const entry of section.items) {
         const value = fill(entry.value);
         if (value === 'unavailable') return [group, { state: 'unavailable', reason: 'native' }];
         if (!value) return [group, { state: 'withheld' }];
-        let qualifiers: WorkContextStatement['qualifiers'];
+        let qualifiers: CopyWorkWorkStatement['qualifiers'];
         if (entry.qualifiers.state !== 'current') qualifiers = entry.qualifiers;
         else {
-          const items: Extract<WorkContextStatement['qualifiers'], { state: 'current' }>['items'] = [];
+          const items: CopyWorkWorkQualifier[] = [];
           for (const qualifier of entry.qualifiers.items) {
             const value = fill(qualifier.value);
             if (value === 'unavailable') return [group, { state: 'unavailable', reason: 'native' }];
@@ -269,11 +291,21 @@ export function finishListWorkContext(
       }
       return [
         group,
-        { state: 'current', items: items.slice(0, limits.entries), overflow: items.length > limits.entries },
+        {
+          state: 'current',
+          items: items.slice(0, evidence.workContext.limits.entries),
+          overflow: items.length > evidence.workContext.limits.entries,
+        },
       ];
     }),
   ) as Pick<CurrentWorkContext, WorkGroup>;
-  const context: WorkContext = { state: 'current', subjectId: id, type: draft.type, kind: draft.kind, ...sections };
+  const context: CurrentWorkContext = {
+    state: 'current',
+    subjectId: id,
+    type: draft.type,
+    kind: draft.kind,
+    ...sections,
+  };
   // Bounds apply to actual UTF-8 serialized bytes, including labels and qualifications.
   const strings: string[] = [];
   const collect = (value: unknown): void => {
@@ -282,8 +314,8 @@ export function finishListWorkContext(
     else if (record(value)) Object.values(value).forEach(collect);
   };
   collect(context);
-  return strings.some((value) => new TextEncoder().encode(value).byteLength > limits.labelBytes) ||
-    workContextBytes(context) > limits.hitBytes
+  return strings.some((value) => new TextEncoder().encode(value).byteLength > evidence.workContext.limits.labelBytes) ||
+    evidence.workContext.bytes(context) > evidence.workContext.limits.hitBytes
     ? { state: 'unavailable', reason: 'response_limit' }
     : context;
 }
