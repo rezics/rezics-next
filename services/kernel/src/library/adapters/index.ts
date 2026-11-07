@@ -11,3 +11,15 @@ export {
 export { createSearchPreparationAdapter, type SearchPreparationAdapterPorts } from './search-scope.ts';
 export { createContentPublicationAdapter, type ContentPublicationAdapterPorts } from './publication-foreign.ts';
 export { createNativeSourceCaptureAdapter } from './native-source.ts';
+
+export { createNativeCollectionMutationPorts } from './collection-mutation.ts';
+
+export {
+  createNativeCollectionPublicationEpisodes,
+  type NativeCollectionPublicationCommandPorts,
+} from './collection-publication-command.ts';
+export { readBuiltinPublicationRule } from '../builtin-materialization.ts';
+
+export { retireNativeCollectionCapturePage } from '../native-source-custody.ts';
+export { purgeSavedCollectionPage } from '../saved-collection-retention.ts';
+export { admitCollectionPublicationStep } from '../collection-publication-work-admission.ts';

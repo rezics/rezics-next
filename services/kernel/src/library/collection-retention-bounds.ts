@@ -9,7 +9,7 @@ import commandNoEffectFence from '../command/no-effect-fence.sql';
 import readReceipt from '../command/read-receipt.sql';
 import { COMMAND_STEP_RETRIES } from '../work/retries.ts';
 import { PARTITIONS } from '../route/route.ts';
-import { runLibraryBoundedStep } from './command-support.ts';
+import { runLibraryBoundedStep } from './collection-command-work.ts';
 import { WORK_STEP_DEADLINE_MS } from './work-step-deadline.ts';
 import { NATIVE_SOURCE_CUSTODY_RETIREMENT_PAGE_BOUND } from './native-source-custody-bounds.ts';
 import collectionRead from './collection-store-collection-read.sql';

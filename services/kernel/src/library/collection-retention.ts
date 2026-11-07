@@ -1,4 +1,8 @@
-import { purgeSavedCollectionPage } from './saved-collection-retention.ts';
+import { requireLibraryDomain } from './domain-binding.ts';
+import { collectionMutationApplication } from './collection-mutation.ts';
+import { collectionRetentionDisposition } from './core/index.ts';
+import type { CollectionCleanupPage, CollectionDeletionKey, CollectionRetirementEpisode } from './contract/index.ts';
+export type { CollectionCleanupPage, CollectionDeletionKey } from './contract/index.ts';
 import { DBOS } from '@dbos-inc/dbos-sdk';
 import type { Pool, PoolClient } from 'pg';
 import { shareAccount } from '../access/account-share.ts';
@@ -15,7 +19,7 @@ import { withConnection } from '../database/pool.ts';
 import { PARTITIONS, partitionOf } from '../route/route.ts';
 import type { WorkContext } from '../work/registry.ts';
 import { COMMAND_STEP_RETRIES } from '../work/retries.ts';
-import { requireRoute, workStepDeadline } from './command-support.ts';
+import { requireRoute, workStepDeadline } from './collection-command-work.ts';
 import due from './collection-retention-due.sql';
 import lock from './collection-retention-lock.sql';
 import members from './collection-retention-members.sql';
@@ -28,7 +32,6 @@ import head from './collection-retention-head.sql';
 import retireFence from './native-source-custody-retire-fence.sql';
 import terminalScope from './erasure-scope.sql';
 import retentionPartition from './collection-retention-partition.sql';
-import { retireNativeCollectionCapturePage, type NativeSourceRetirement } from './native-source-custody.ts';
 import {
   executeCollectionRetentionControl,
   executeCollectionRetentionQuery,
@@ -39,14 +42,6 @@ import {
 export const COLLECTION_RETENTION_WORKFLOW = 'library.collectionRetention';
 export const COLLECTION_RETENTION_SCHEDULE = 'library.collectionRetention.every-10-minutes';
 const SEGMENT_WORKFLOW = 'library.collectionRetention.segment';
-export type CollectionDeletionKey = Readonly<{
-  route: number;
-  collectionId: string;
-  accountId: string;
-  deletionId: string;
-  revision: number;
-  purgeAfter: string;
-}>;
 type Cursor = { partition: number; after: { purgeAfter: string; route: number; collectionId: string } | null };
 type Segment = {
   root: string;
@@ -55,12 +50,13 @@ type Segment = {
   cursor: Cursor;
   current: CollectionDeletionKey | null;
 };
-export type CollectionCleanupPage = Readonly<{
-  status: 'progress' | 'purged' | 'stale' | 'not_due' | 'retained';
-  removed: number;
-  custody?: 'collection_source_and_destination_disposition' | 'native_source_capture' | 'account_fence';
-}>;
 type LockedCollection = NonNullable<Awaited<ReturnType<typeof lock.run>>>;
+
+function retentionNative() {
+  const native = requireLibraryDomain().collectionRetentionNative;
+  if (!native) throw new TypeError('Collection retention effects are not composed');
+  return native;
+}
 
 function bounded<T>(value: T): T {
   if (Buffer.byteLength(JSON.stringify(value)) > 4096) throw new RangeError('Collection retention exceeds 4096 bytes');
@@ -118,42 +114,35 @@ async function removeLocalPage(
   collectionId: string,
   accountId: string,
   parent: LockedCollection,
-  episode: NativeSourceRetirement['episode'],
+  episode: CollectionRetirementEpisode,
 ): Promise<CollectionCleanupPage> {
-  if (parent.publicCustody)
-    return { status: 'retained', removed: 0, custody: 'collection_source_and_destination_disposition' };
-  if (parent.sourceCustody) {
-    const retirement = await retireNativeCollectionCapturePage(tx, { accountId, collectionId, episode });
-    if (retirement.status === 'progress' || retirement.status === 'retired') {
-      if (retirement.removed > 0) return { status: 'progress', removed: retirement.removed };
-    } else return { status: 'retained', removed: 0, custody: 'native_source_capture' };
-  }
   const args = { route, collection_id: collectionId };
-  // At most one nonempty child page per transaction; empty seeks are a fixed bound.
-  for (const query of [members, facts]) {
-    const id = query === members ? 'members' : 'facts';
-    const removed = (await executeCollectionRetentionQuery(id, query, tx, args)).length;
-    if (removed > 0) return { status: 'progress', removed };
-  }
-  if (await executeCollectionRetentionQuery('state', state, tx, args)) return { status: 'progress', removed: 1 };
-  const referenceCount = (await executeCollectionRetentionQuery('references', references, tx, args)).length;
-  if (referenceCount > 0) return { status: 'progress', removed: referenceCount };
-  const removed = (await executeCollectionRetentionQuery('metadata', metadata, tx, { ...args, account_id: accountId }))
-    .length;
-  if (removed > 0) return { status: 'progress', removed };
-  const historyRemoved = (await executeCollectionRetentionQuery('metadataHistory', metadataHistory, tx, args)).length;
-  if (historyRemoved > 0) return { status: 'progress', removed: historyRemoved };
-  const [result] = await executeCollectionRetentionQuery('head', head, tx, {
-    ...args,
-    account_id: accountId,
-    revision: parent.revision,
-    source_generation: parent.sourceGeneration,
+  return collectionMutationApplication().removeRetainedPage(tx, parent, {
+    retireCapture: () => retentionNative().retireCapture(tx, { accountId, collectionId, episode }),
+    children: [
+      () => executeCollectionRetentionQuery('members', members, tx, args).then((rows) => rows.length),
+      () => executeCollectionRetentionQuery('facts', facts, tx, args).then((rows) => rows.length),
+      async () => ((await executeCollectionRetentionQuery('state', state, tx, args)) ? 1 : 0),
+      () => executeCollectionRetentionQuery('references', references, tx, args).then((rows) => rows.length),
+      () =>
+        executeCollectionRetentionQuery('metadata', metadata, tx, { ...args, account_id: accountId }).then(
+          (rows) => rows.length,
+        ),
+      () => executeCollectionRetentionQuery('metadataHistory', metadataHistory, tx, args).then((rows) => rows.length),
+    ],
+    async removeHead() {
+      const [result] = await executeCollectionRetentionQuery('head', head, tx, {
+        ...args,
+        account_id: accountId,
+        revision: parent.revision,
+        source_generation: parent.sourceGeneration,
+      });
+      return !!result;
+    },
+    async retireFence() {
+      await executeCollectionRetentionQuery('retireFence', retireFence, tx, { ...args, account_id: accountId });
+    },
   });
-  if (!result) throw new Error('Locked Collection head still has undisposed local children');
-  // The actual locked head above established private disposition. Its final writer hook ran first.
-  // A fixed control point plus two empty-prefix probes; removed counts business graph rows, not writer controls.
-  await executeCollectionRetentionQuery('retireFence', retireFence, tx, { ...args, account_id: accountId });
-  return { status: 'purged', removed: 1 };
 }
 
 /** One ordinary physical transaction. No user Actor, grant or receipt authority is fabricated.
@@ -200,18 +189,12 @@ export async function purgeExpiredCollectionPage(
         },
       },
       async (tx) => {
-        if (!accountLive) return noEffect({ status: 'retained', removed: 0, custody: 'account_fence' });
-        if (
-          !parent ||
-          parent.accountId !== key.accountId ||
-          parent.state !== 'deleted' ||
-          parent.deletionId !== key.deletionId ||
-          parent.revision !== key.revision ||
-          !parent.deadlineMatches
-        )
-          return noEffect({ status: 'stale', removed: 0 });
-        if (!parent.due) return noEffect({ status: 'not_due', removed: 0 });
-        const value = await removeLocalPage(tx, key.route, key.collectionId, key.accountId, parent, {
+        const disposition = collectionRetentionDisposition(accountLive, parent, key);
+        if (disposition === 'account_fence')
+          return noEffect({ status: 'retained', removed: 0, custody: 'account_fence' });
+        if (disposition === 'stale') return noEffect({ status: 'stale', removed: 0 });
+        if (disposition === 'not_due') return noEffect({ status: 'not_due', removed: 0 });
+        const value = await removeLocalPage(tx, key.route, key.collectionId, key.accountId, parent!, {
           kind: 'deleted',
           deletionId: key.deletionId,
           revision: key.revision,
@@ -256,7 +239,7 @@ export async function purgeTerminalCollectionPage(
   });
   if (!parent) return { status: 'stale', removed: 0 };
   if (parent.accountId !== input.accountId) throw new Error('Foreign terminal Collection owner');
-  const saved = await purgeSavedCollectionPage(tx, input);
+  const saved = await retentionNative().purgeSaved(tx, input);
   if (saved) return saved;
   parent = await executeCollectionRetentionQuery('lock', lock, tx, {
     route,

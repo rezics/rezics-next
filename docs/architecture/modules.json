@@ -206,6 +206,8 @@
       ],
       "publicEntries": [
         "services/kernel/src/access/index.ts",
+        "services/kernel/src/access/command-admission.ts",
+        "services/kernel/src/access/resource-access-errors.ts",
         "services/kernel/src/access/account-discovery-source.ts",
         "services/kernel/src/access/handle-policy.ts",
         "services/kernel/src/access/authenticate.ts",
@@ -566,6 +568,7 @@
         "kernel-history-application",
         "kernel-history-contract",
         "kernel-history-core",
+        "kernel-library-application",
         "kernel-library-contract",
         "kernel-memoized",
         "kernel-platform",

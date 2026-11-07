@@ -1,7 +1,7 @@
+import { collectionMutationApplication } from './collection-mutation.ts';
 import type { PoolClient } from 'pg';
 import type { Collection, CollectionDraft, CollectionVisibility } from './collection-model.ts';
-import type { LibraryCoverSummary } from './contract/index.ts';
-import { runLibraryBoundedStep } from './command-support.ts';
+import { runLibraryBoundedStep } from './collection-command-work.ts';
 import {
   COLLECTION_METADATA_HISTORY_LIMIT,
   COLLECTION_METADATA_HISTORY_MAX_PAGE_SIZE,
@@ -11,13 +11,8 @@ import {
   collectionMetadataHistoryInitializePlan,
   collectionMetadataHistoryPagePlan,
   collectionMetadataHistoryStatePlan,
-  executeCollectionMetadataHistoryAppend,
   executeCollectionMetadataHistoryEntry,
-  executeCollectionMetadataHistoryInitialize,
-  executeCollectionMetadataHistoryOwner,
   executeCollectionMetadataHistoryPage,
-  executeCollectionMetadataHistoryPrune,
-  executeCollectionMetadataHistoryPruned,
   executeCollectionMetadataHistoryState,
 } from './collection-history-bounds.ts';
 
@@ -28,64 +23,26 @@ export {
   COLLECTION_METADATA_HISTORY_PAGE_SIZE,
 };
 
-export const COLLECTION_METADATA_FIELDS = [
-  'title',
-  'description',
-  'visibility',
-  'presentationKind',
-  'coverMediaId',
-] as const;
-
-export type CollectionMetadataField = (typeof COLLECTION_METADATA_FIELDS)[number];
-export type CollectionMetadataHistoryCoverage = 'complete' | 'partial' | 'unknown';
-export type CollectionMetadataSnapshot = Pick<
-  Collection,
-  'title' | 'description' | 'visibility' | 'presentationKind' | 'coverMediaId'
->;
-export type CollectionMetadataHistoryEntry = {
-  revision: number;
-  transactionId: string;
-  recordedAt: string;
-  changedFields: CollectionMetadataField[];
-  before: CollectionMetadataSnapshot;
-  after: CollectionMetadataSnapshot;
-};
-export type CollectionMetadataHistoryBasis = {
-  collectionRevision: number;
-  curatorAccountId: string;
-  viewerAccountId: string;
-  authnEpoch: number;
-  minimumAuthnEpoch: string;
-};
-export type CollectionMetadataHistoryPageItem = Pick<
+export { COLLECTION_METADATA_FIELDS } from './contract/index.ts';
+export type {
+  CollectionMetadataField,
+  CollectionMetadataHistoryCoverage,
+  CollectionMetadataSnapshot,
   CollectionMetadataHistoryEntry,
-  'revision' | 'recordedAt' | 'changedFields'
->;
-export type CollectionMetadataHistoryPage = {
-  collectionId: string;
-  basis: CollectionMetadataHistoryBasis;
-  coverage: CollectionMetadataHistoryState;
-  items: CollectionMetadataHistoryPageItem[];
-  next: string | null;
-  actions: { review: true; reapply: false };
-};
-export type CollectionMetadataHistoryCover =
-  | { state: 'none' }
-  | { state: 'unavailable' }
-  | { state: 'available'; mediaId: string; summary: LibraryCoverSummary };
-export type CollectionMetadataHistorySnapshot = Omit<CollectionMetadataSnapshot, 'coverMediaId'> & {
-  cover: CollectionMetadataHistoryCover;
-};
-export type CollectionMetadataHistoryDetail = {
-  collectionId: string;
-  revision: number;
-  recordedAt: string;
-  changedFields: CollectionMetadataField[];
-  before: CollectionMetadataHistorySnapshot;
-  after: CollectionMetadataHistorySnapshot;
-  basis: CollectionMetadataHistoryBasis;
-  actions: { review: true; reapply: false };
-};
+  CollectionMetadataHistoryBasis,
+  CollectionMetadataHistoryPageItem,
+  CollectionMetadataHistoryPage,
+  CollectionMetadataHistoryCover,
+  CollectionMetadataHistorySnapshot,
+  CollectionMetadataHistoryDetail,
+  CollectionMetadataHistoryState,
+} from './contract/index.ts';
+import {
+  COLLECTION_METADATA_FIELDS,
+  type CollectionMetadataField,
+  type CollectionMetadataHistoryEntry,
+  type CollectionMetadataHistoryState,
+} from './contract/index.ts';
 
 export async function initializeCollectionMetadataHistory(
   client: Client,
@@ -97,48 +54,17 @@ export async function initializeCollectionMetadataHistory(
   },
   plan = collectionMetadataHistoryInitializePlan(input),
 ): Promise<void> {
-  await runLibraryBoundedStep(plan.kind, plan.total, () => executeCollectionMetadataHistoryInitialize(client, plan));
+  return collectionMutationApplication().initializeHistory(client, input, plan);
 }
 
 /** Capture one committed metadata transition; replay and no-op metadata commands add no row. */
 export async function captureCollectionMetadataHistory(
   client: Client,
-  input: {
-    route: number;
-    before: Collection;
-    after: Collection;
-    transactionId: string;
-    time: string;
-  },
+  input: { route: number; before: Collection; after: Collection; transactionId: string; time: string },
   plan = collectionMetadataHistoryCapturePlan(input),
 ): Promise<void> {
-  const curatorAccountId = input.after.curatorAccountId;
-  if (curatorAccountId === null) throw new Error('A metadata write needs a current Collection curator');
-  if (plan.changedFields.length === 0) return;
-  const { owner: ownerPlan, append: appendPlan, prune: prunePlan, pruned: prunedPlan } = plan.leaves;
-  if (!ownerPlan || !appendPlan || !prunePlan || !prunedPlan) throw new Error('Metadata transition plan is incomplete');
-  await runLibraryBoundedStep(ownerPlan.kind, ownerPlan.total, () =>
-    executeCollectionMetadataHistoryOwner(client, ownerPlan),
-  );
-  const rows = await runLibraryBoundedStep(appendPlan.kind, appendPlan.total, () =>
-    executeCollectionMetadataHistoryAppend(client, appendPlan),
-  );
-  if (rows.length !== 1) throw new Error('Collection metadata history did not record one native change');
-  const removed = await runLibraryBoundedStep(prunePlan.kind, prunePlan.total, () =>
-    executeCollectionMetadataHistoryPrune(client, prunePlan),
-  );
-  if (removed.length > 1) throw new Error('Collection metadata history exceeded its one-row prune bound');
-  if (removed.length === 1)
-    await runLibraryBoundedStep(prunedPlan.kind, prunedPlan.total, () =>
-      executeCollectionMetadataHistoryPruned(client, prunedPlan),
-    );
+  return collectionMutationApplication().captureHistory(client, input, plan);
 }
-
-export type CollectionMetadataHistoryState = {
-  coverage: CollectionMetadataHistoryCoverage;
-  knownFromRevision: number | null;
-  prunedBeforeRevision: number | null;
-};
 
 export async function readCollectionMetadataHistoryState(
   client: Client,

@@ -28,3 +28,5 @@ export function createLibraryApplications(
     entryProgress: createEntryProgressApplication(capabilities),
   };
 }
+
+export { createCollectionMutationApplication } from './collection-mutation.ts';

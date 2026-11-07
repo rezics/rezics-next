@@ -133,6 +133,13 @@ Applications run against Library-owned ports; `composition/library.ts` binds nat
 adapters during ordinary `createKernelRuntimeDefaults`, server and worker construction. Search filter-leaf
 classification is a composition port, so the Search preparation adapter does not value-import Search.
 
+Collection mutation contracts own metadata/history and cleanup ports. Pure core plans use measured SQL sizes;
+the application orders create, metadata/rule, publication-phase and retention effects. Native adapters preserve the
+original command transaction and existing SQL. Composition binds Access rule admission, publication begin and Source
+retirement, so episode readers and history storage do not import those native command implementations. Mechanical
+work/deadline helpers are a leaf shared with command support. The Library adapter declares its inward application
+dependency, and Access exposes its existing command-admission/error leaves for process composition.
+
 Content's `community-projection/index.ts` is a registered pure core with no dependencies. Board and Realm adapters
 supply selected native activity values and actor identity through that public entry, including its contract types;
 `realm-board-home.ts` is the registered effectful Realm Board entry. DB reads, source selection/confirmation,
