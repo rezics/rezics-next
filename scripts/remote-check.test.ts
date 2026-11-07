@@ -8931,6 +8931,7 @@ test('host lifetime docker rm waits Auth run timeout; a probe timeout cannot abo
   expect(dependencyPreparationProgram).toContain("settle('container')");
   expect(dependencyPreparationProgram).toContain("settle('volume')");
   expect(dependencyPreparationProgram).toContain('if result.returncode:');
+  expect(dependencyPreparationProgram).toContain('settlement observed after Docker request failures');
   expect(dependencyPreparationProgram).toContain('try_clean_run_resources(run)');
   expect(dependencyPreparationProgram).not.toMatch(/timeout=3, text=True/);
 });

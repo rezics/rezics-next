@@ -137,3 +137,93 @@ test('Kernel typecheck reuses SQL analysis, keeps diagnostics, and scopes invali
     rmSync(repository, { recursive: true, force: true });
   }
 });
+
+test('Auth SQL preparation reuses the Kernel snapshot and invalidates either workspace or its schema', async () => {
+  const repository = mkdtempSync(join(tmpdir(), 'auth-typecheck-cache-'));
+  const kernel = join(repository, 'services/kernel');
+  const auth = join(repository, 'services/auth');
+  const cacheRoot = join(repository, 'cache');
+  mkdirSync(join(kernel, 'src'), { recursive: true });
+  mkdirSync(join(auth, 'src'), { recursive: true });
+  writeFileSync(join(kernel, 'src/kernel-query.sql'), 'select 1;\n');
+  writeFileSync(join(auth, 'src/auth-query.sql'), 'select 2;\n');
+
+  const env = {
+    DATABASE_URL: 'postgres://rezics:rezics@127.0.0.1:5432/rezics',
+    KERNEL_DATABASE_CONTAINER: 'compiler-container',
+  };
+  let schema = 'create table auth_query (id integer);';
+  const generated: string[][] = [];
+  const identity = (_repository: string, workspace: string): string =>
+    workspace === kernel ? 'kernel-toolchain' : 'auth-toolchain';
+  const common = {
+    repository,
+    cacheRoot,
+    identity,
+    schemaWorkspace: kernel,
+    schemaDumps: () => ({ 'db/combined.sql': schema }),
+    generate: async (files: readonly string[], config: string) => {
+      generated.push([...files]);
+      const queries = join(dirname(config), '.reylo/queries');
+      mkdirSync(queries, { recursive: true });
+      writeFileSync(join(queries, `entry-${generated.length}.json`), JSON.stringify({ files }));
+      return { status: 0, stdout: '', stderr: '' };
+    },
+  };
+  const prepareKernel = () =>
+    prepareReyloAnalysisCache(env, { ...common, workspace: kernel, sourceWorkspaces: [kernel] });
+  const prepareAuth = () =>
+    prepareReyloAnalysisCache(env, {
+      ...common,
+      workspace: auth,
+      sourceWorkspaces: [auth, kernel],
+      seedWorkspace: kernel,
+    });
+
+  try {
+    const kernelAnalysis = await prepareKernel();
+    expect(kernelAnalysis.analyzedFiles).toBe(1);
+    kernelAnalysis.dispose();
+
+    const coldAuth = await prepareAuth();
+    expect(coldAuth).toMatchObject({ available: true, analyzedFiles: 1, totalFiles: 2 });
+    expect(generated).toEqual([['src/kernel-query.sql'], ['src/auth-query.sql']]);
+    coldAuth.dispose();
+
+    const warmAuth = await prepareAuth();
+    expect(warmAuth).toMatchObject({ available: true, analyzedFiles: 0, totalFiles: 2 });
+    warmAuth.dispose();
+    expect(generated).toHaveLength(2);
+
+    writeFileSync(join(auth, 'src/auth-query.sql'), 'select 20;\n');
+    const changedAuth = await prepareAuth();
+    expect(changedAuth.analyzedFiles).toBe(1);
+    expect(generated.at(-1)).toEqual(['src/auth-query.sql']);
+    changedAuth.dispose();
+
+    writeFileSync(join(kernel, 'src/kernel-query.sql'), 'select 10;\n');
+    const changedKernel = await prepareAuth();
+    expect(changedKernel.analyzedFiles).toBe(1);
+    expect(generated.at(-1)).toEqual(['../kernel/src/kernel-query.sql']);
+    changedKernel.dispose();
+
+    schema = 'create table auth_query (id bigint);';
+    const invalidated = await prepareAuth();
+    expect(invalidated).toMatchObject({ available: true, analyzedFiles: 2, totalFiles: 2 });
+    expect(generated.at(-1)).toEqual(['src/auth-query.sql', '../kernel/src/kernel-query.sql']);
+    invalidated.dispose();
+
+    const explicitOwner = await prepareAuthWithConfig();
+    expect(explicitOwner).toMatchObject({ available: false, environment: { REYLO_CONFIG: '.reylo.yaml' } });
+    explicitOwner.dispose();
+  } finally {
+    rmSync(repository, { recursive: true, force: true });
+  }
+
+  function prepareAuthWithConfig() {
+    return prepareReyloAnalysisCache(
+      { ...env, REYLO_CONFIG: '.reylo.yaml' },
+      { ...common, workspace: auth, sourceWorkspaces: [auth, kernel], seedWorkspace: kernel },
+    );
+  }
+});

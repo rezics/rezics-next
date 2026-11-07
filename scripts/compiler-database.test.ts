@@ -11,6 +11,7 @@ import {
   DOCKER_PROBE_TIMEOUT_MS,
   DOCKER_RUN_TIMEOUT_MS,
   cleanupStaleCompilerDatabases,
+  assertCompilerDatabaseReady,
   compilerDatabaseInspectArgs,
   compilerDatabaseListenUrl,
   compilerDatabaseRemoveArgs,
@@ -33,6 +34,7 @@ import {
   postgresReadyProbe,
   reapCompilerNonce,
   reapLabeledContainers,
+  reportDockerSettlement,
   retainOriginalAndCleanupFailure,
   sharesIsolatedStackNetwork,
   startCompilerContainer,
@@ -252,6 +254,9 @@ test('timeout requests reconcile through exact container and volume evidence', (
   );
   expect(settled).toMatchObject({ status: 'settled', attempts: 1, containers: [], volumes: [] });
   expect(settled.status === 'settled' && settled.requestFailures[0]).toContain('docker rm ETIMEDOUT');
+  const evidence: string[] = [];
+  reportDockerSettlement(settled, 'compiler create nonce nonce-timeout', (message) => evidence.push(message));
+  expect(evidence.join('')).toContain('docker rm ETIMEDOUT');
   expect(calls.filter((args) => args[0] === 'rm')).toHaveLength(1);
   expect(calls.at(-1)).toEqual([
     'volume',
@@ -287,11 +292,17 @@ test('remaining resources recover in the same bounded settlement and unavailable
 });
 
 test('known-container timeout accepts only affirmative absence, retaining unavailable inspection', () => {
-  const absent = settleDockerContainerRemoval('gone', (args) => {
-    if (args[0] === 'rm') throw new Error('docker rm ETIMEDOUT');
-    throw new Error('docker inspect gone failed with status 1: Error: No such object: gone');
-  });
-  expect(absent).toMatchObject({ status: 'settled', attempts: 1 });
+  for (const message of [
+    'docker inspect gone failed with status 1: Error: No such object: gone',
+    'docker inspect gone failed with status 1: error: no such object: gone',
+    'Error response from daemon: No such container: gone',
+  ]) {
+    const absent = settleDockerContainerRemoval('gone', (args) => {
+      if (args[0] === 'rm') throw new Error('docker rm ETIMEDOUT');
+      throw new Error(message);
+    });
+    expect(absent).toMatchObject({ status: 'settled', attempts: 1 });
+  }
 
   const unknown = settleDockerContainerRemoval('owned', (args) => {
     if (args[0] === 'rm') throw new Error('docker rm ETIMEDOUT');
@@ -398,6 +409,43 @@ test('readiness waits for pg_isready in the container and a protocol reply, not 
   } finally {
     await new Promise<void>((resolve) => ready.close(() => resolve()));
   }
+});
+
+test('readiness failures retain the first exact container error and redact database credentials', async () => {
+  let message = '';
+  try {
+    await assertCompilerDatabaseReady(
+      'pg-container-exact',
+      'postgres://rezics:private-password@127.0.0.1:0/rezics',
+      () => {
+        throw new Error('Error: No such container: pg-container-exact');
+      },
+      20,
+    );
+  } catch (error) {
+    message = error instanceof Error ? error.message : String(error);
+  }
+  expect(message).toContain('container pg-container-exact');
+  expect(message).toContain('first in-container probe=Error: No such container: pg-container-exact');
+  expect(message).toContain('endpoint probe=compiler-database: PostgreSQL was not ready at 127.0.0.1:0/rezics');
+  expect(message).not.toContain('private-password');
+
+  let ticks = 0;
+  let startupFailure = '';
+  try {
+    await waitForPostgresContainer(
+      'pg-startup-failed',
+      () => {
+        throw new Error('container removal already in progress');
+      },
+      1,
+      () => (ticks++ < 2 ? 0 : 2),
+    );
+  } catch (error) {
+    startupFailure = error instanceof Error ? error.message : String(error);
+  }
+  expect(startupFailure).toContain('container pg-startup-failed');
+  expect(startupFailure).toContain('first probe=container removal already in progress');
 });
 
 test('stale compiler databases whose owner pid is gone are removed with their volumes', () => {

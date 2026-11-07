@@ -3153,8 +3153,15 @@ def clean_run_resources(run):
             return 'Docker ' + kind + ' ' + identity + ' removal request failed with status ' + str(result.returncode) + (
                 ': ' + detail if detail else '')
         return None
+    def report_settlement(kind, diagnostic_start):
+        if len(diagnostics) <= diagnostic_start:
+            return
+        detail = '; '.join(diagnostics[diagnostic_start:])[:2048]
+        print('remote-check: ' + kind + ' settlement observed after Docker request failures: ' + detail,
+            file=sys.stderr, flush=True)
     def settle(kind):
         remaining = []
+        diagnostic_start = len(diagnostics)
         for attempt in range(1, DOCKER_SETTLEMENT_ATTEMPTS + 1):
             try:
                 identities = docker_list(kind)
@@ -3162,6 +3169,7 @@ def clean_run_resources(run):
                 diagnostics.append(str(error))
                 continue
             if not identities:
+                report_settlement(kind, diagnostic_start)
                 return
             for identity in identities:
                 failure = request_remove(kind, identity)
@@ -3173,6 +3181,7 @@ def clean_run_resources(run):
                 diagnostics.append(str(error))
                 continue
             if not remaining:
+                report_settlement(kind, diagnostic_start)
                 return
         raise RuntimeError('owned Docker ' + kind + ' resources were not observed absent after ' +
             str(DOCKER_SETTLEMENT_ATTEMPTS) + ' attempts; remaining=' + ','.join(remaining) +

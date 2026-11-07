@@ -1,7 +1,7 @@
 import { statSync } from 'node:fs';
 import { dirname, isAbsolute, relative, resolve, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { keepCompilerStatusAfterCleanup } from '../../../scripts/compiler-database.ts';
+import { assertCompilerDatabaseReady, keepCompilerStatusAfterCleanup } from '../../../scripts/compiler-database.ts';
 import { KERNEL_CLIENT_OUTPUT, withKernelClientOutput } from '../../../scripts/check-output-tree.ts';
 import { withThrowawayDatabase } from './derived.ts';
 import {
@@ -183,9 +183,36 @@ export async function runKernelTypecheck(
   const compile = async (databaseEnv: NodeJS.ProcessEnv) => {
     const compilerEnv =
       env.REYLO_CONFIG === undefined ? databaseEnv : { ...databaseEnv, REYLO_CONFIG: env.REYLO_CONFIG };
+    const container = compilerEnv.KERNEL_DATABASE_CONTAINER;
+    if (container && compilerEnv.DATABASE_URL) {
+      process.stdout.write(`${label} database container=${container}\n`);
+      const readiness = await compilerInfrastructurePhase(label, 'database-readiness', () =>
+        withCommandPhase(
+          'database-readiness',
+          () => assertCompilerDatabaseReady(container, compilerEnv.DATABASE_URL!),
+          compilerEnv,
+        ),
+      );
+      if (readiness === 75) {
+        databasePhase = 'database-cleanup';
+        compilerResult = 75;
+        return 75;
+      }
+    }
     const result = await compilerInfrastructurePhase(label, 'compiler', () =>
       runCommands(compilerEnv, emitClient, emitSchema, emitOpenApi, dependencies.prepareSqlAnalysis),
     );
+    if (result !== 0 && container && compilerEnv.DATABASE_URL) {
+      try {
+        await withCommandPhase(
+          'database-readiness',
+          () => assertCompilerDatabaseReady(container, compilerEnv.DATABASE_URL!),
+          compilerEnv,
+        );
+      } catch (error) {
+        console.error(`${label} compiler database failure: ${error instanceof Error ? error.message : String(error)}`);
+      }
+    }
     databasePhase = 'database-cleanup';
     compilerResult = result;
     return result;

@@ -2,20 +2,22 @@
 
 ## Workspace imports
 
-Decision: keep this as the single owner section for Workspace imports behavior.
+`bun scripts/workspace-imports.ts` checks each workspace's source and declaration files against its own manifest,
+and root `specs/` against the root manifest. Diagnostics retain the workspace, source path and undeclared package;
+an unrelated package's declaration failure remains attributed to that package.
 
-`bun scripts/workspace-imports.ts` checks each consuming workspace's source, tests and declaration files against that
-workspace's own manifest. Root `specs/` is checked against the root manifest. Diagnostics retain the workspace,
-source path and undeclared package so a failure in one package stays attributed to its consumer.
-
-The root-owned pinned `oxc-parser` extracts TypeScript and TSX module specifiers from static imports, re-exports,
-literal dynamic imports, import types, import-equals and literal CommonJS `require` calls. Titles, comments, ordinary
-string and template text, regular expressions and JSX text are not imports; executable JSX expressions and template
-substitutions are visited. A parse failure names its source file and throws rather than certifying an incomplete scan.
-
-The fixture suite is `scripts/workspace-imports.test.ts`. Its repository-wide assertion has a 60-second deadline because it parses every workspace and generated declaration; the small syntax and dependency fixtures retain the default test deadline.
-
-Existing builtin, relative path, alias and manifest dependency rules remain unchanged.
+Decision: extract module specifiers from TypeScript/TSX syntax with the root's pinned `oxc-parser`, including static
+imports, re-exports, literal dynamic imports, import types, import-equals and literal CommonJS `require` calls.
+Titles, comments, strings, regular expressions and JSX text are not imports; executable expressions inside JSX and
+template substitutions are visited. A parse failure names its source file and throws rather than certifying an
+incomplete scan. Existing builtin, relative path, alias and manifest dependency rules remain unchanged.
+`bun scripts/workspace-imports.ts` checks each consuming workspace's own manifest, including tests and declaration
+files. The root-owned `oxc-parser` reads TypeScript and TSX syntax: imports, re-exports, literal dynamic imports,
+CommonJS requires and TypeScript import types/requires count; JSX text, comments, regexes and string examples do not.
+Executable template substitutions still count. A syntax error names the file rather than silently skipping its imports.
+The fixture suite is `scripts/workspace-imports.test.ts`.
+Its repository-wide assertion has a 60-second deadline because it parses every workspace and generated declaration;
+the small syntax and dependency fixtures retain the default test deadline.
 
 ## Page data check
 
@@ -118,9 +120,14 @@ then independently reconciles run-labeled volumes in three bounded attempts. A t
 followed by a fresh listing; only an empty listing establishes absence. Failed Docker listings and remaining resources
 keep cleanup unsettled with their actual diagnostics, while native command status remains intact. An unsettled result
 retains the root code and `.owned-resources-incomplete.json`, leaves `exit-status` absent and keeps reconnect at
-`CLEANING`.
+`CLEANING`. A removal request error is still reported when a later listing proves that resource settled.
 Decision: pre-create volumes with owner, nonce and check-run labels, mount by source name, and settle containers and
 volumes independently before publishing terminal cleanup.
+
+Owned compiler databases are checked both inside the exact container and through their host-facing PostgreSQL endpoint
+before each mapper workspace. A failed workspace gets one final readiness probe; its first compiler result and the
+container identity stay visible, and later mapper consumers are skipped if that database is no longer ready. Compiler
+and cleanup results remain separate, so cleanup evidence never replaces the command's original exit.
 
 Declared returns are copied from the same physical host run after execution-slot release and before run-directory
 cleanup. One interrupted return-copy attempt gets one retry using the same host, run directory and declared paths.
@@ -410,7 +417,11 @@ Auth's standalone typecheck reuses its check's compiler database preparation: on
 both the kernel and Auth migrations, since Auth's imports also reach kernel SQL. It removes that database after
 tsc exits or fails to start. An explicit `DATABASE_URL` does not bypass placement: it is accepted only inside an
 already admitted physical check-host run because credentials cannot be relocated. Outside that run, typecheck exits
-75 before placement. Inside an admitted run, the supplied URL is used and the throwaway database is not started.
+75 before placement. Inside an admitted run, the supplied URL is used and the throwaway database is not started. Auth
+prepares one schema/toolchain/content-keyed Reylo view for Auth SQL and the shared Kernel SQL source set it imports,
+seeding from a compatible Kernel snapshot. The private view and database stay owned through tsc settlement, and SQL
+preparation has its own command phase. Explicit owner `REYLO_CONFIG` and workspace `.reylo.yaml` settings bypass this
+shared-cache path and keep their existing semantics.
 
 Root typecheck preserves every compiler diagnostic with its file and line. Database setup or cleanup failure, check-host
 loss, timeout and compiler launch failure without diagnostics are reported as infrastructure or execution results,

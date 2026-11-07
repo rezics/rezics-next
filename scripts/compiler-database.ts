@@ -31,6 +31,7 @@ const CONTAINER_IDENTITY = /^[A-Za-z0-9][A-Za-z0-9_.-]*$/;
 const NETWORK_NAME = /^[A-Za-z0-9][A-Za-z0-9_.-]*$/;
 const POSTGRES_SOCKET_NAME = '.s.PGSQL.5432';
 const READY_TIMEOUT_MS = 60_000;
+const READY_PROBE_TIMEOUT_MS = 1_000;
 /** Matches Auth `DEFAULT_RUN_TIMEOUT`: `docker run` on a busy check host exceeds a 10s spawn cap. */
 export const DOCKER_RUN_TIMEOUT_MS = 120_000;
 /** Inspect/exec/ps/port probes; the 60s readiness loop retries these. */
@@ -79,7 +80,10 @@ function dockerErrorText(error: unknown): string {
 function dockerObjectAbsent(error: unknown, id: string): boolean {
   const text = dockerErrorText(error);
   const escaped = id.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-  return new RegExp(`(?:^|\\n|: )Error: No such object: ${escaped}(?:$|\\n)`).test(text);
+  return new RegExp(
+    `(?:^|\\n|: )(?:Error response from daemon: )?No such (?:object|container): ${escaped}(?:$|\\n)`,
+    'i',
+  ).test(text);
 }
 
 function dockerResourceIds(output: string, kind: string): string[] {
@@ -120,6 +124,18 @@ function settlementError(
     volumes,
     error: new Error(message),
   };
+}
+
+/** A successful fresh observation does not erase an earlier failed cleanup request. */
+export function reportDockerSettlement(
+  settlement: DockerSettlement,
+  context: string,
+  write: (message: string) => void = (message) => console.error(message),
+): void {
+  if (settlement.status !== 'settled' || settlement.requestFailures.length === 0) return;
+  write(
+    `compiler-database: ${context} settled after Docker request failures: ${settlement.requestFailures.join('; ')}`,
+  );
 }
 
 /** Image builds and pulls are bounded; they are not the 5s probe window. */
@@ -397,13 +413,16 @@ export function settleCompilerDatabaseRemoval(
         run,
       );
       if (attempt.status === 'unsettled') throw attempt.error;
+      reportDockerSettlement(attempt, `create nonce ${nonce}`);
     }
     return;
   }
   const container = settleDockerContainerRemoval(id, run);
   if (container.status === 'unsettled') throw container.error;
+  reportDockerSettlement(container, `container ${id}`);
   const volumes = settleDockerVolumes([{ name: COMPILER_PID_LABEL, value: String(pid) }], run);
   if (volumes.status === 'unsettled') throw volumes.error;
+  reportDockerSettlement(volumes, `volumes owned by pid ${pid}`);
 }
 
 /** Cleanup diagnostics stay attached to the original compiler identity; a completed native status is not replaced. */
@@ -518,6 +537,7 @@ export function reapCompilerNonce(nonce: string, pid = process.pid, dockerComman
     dockerCommand,
   );
   if (settlement.status === 'unsettled') throw settlement.error;
+  reportDockerSettlement(settlement, `create nonce ${nonce}`);
   rmSync(isolatedPostgresSocketDir(pid), { recursive: true, force: true });
 }
 
@@ -657,6 +677,7 @@ export async function waitForPostgresContainer(
   now = Date.now,
 ): Promise<void> {
   const deadline = now() + timeoutMs;
+  let first = '';
   let last = 'not probed';
   while (now() < deadline) {
     try {
@@ -664,10 +685,13 @@ export async function waitForPostgresContainer(
       return;
     } catch (error) {
       last = error instanceof Error ? error.message : String(error);
+      if (!first) first = last;
     }
     await delay(50);
   }
-  throw new Error(`compiler-database: PostgreSQL in ${container} was not ready: ${last}`);
+  throw new Error(
+    `compiler-database: PostgreSQL container ${container} was not ready after ${timeoutMs}ms: first probe=${first || last}; last probe=${last}`,
+  );
 }
 
 async function delay(ms: number): Promise<void> {
@@ -712,6 +736,7 @@ export async function waitForPostgresReady(url: string, timeoutMs = READY_TIMEOU
   const parsed = new URL(url);
   const host = parsed.hostname;
   const port = Number(parsed.port || '5432');
+  const endpoint = `${host}:${port}${parsed.pathname}`;
   const deadline = now() + timeoutMs;
   let last = 'not probed';
   while (now() < deadline) {
@@ -721,7 +746,36 @@ export async function waitForPostgresReady(url: string, timeoutMs = READY_TIMEOU
     if (now() >= deadline) break;
     await delay(50);
   }
-  throw new Error(`compiler-database: PostgreSQL was not ready at ${url}: ${last}`);
+  throw new Error(`compiler-database: PostgreSQL was not ready at ${endpoint}: ${last}`);
+}
+
+/** Recheck both the exact container and its host-facing PostgreSQL endpoint before another compiler consumer starts. */
+export async function assertCompilerDatabaseReady(
+  container: string,
+  url: string,
+  dockerCommand: DockerCommand = docker,
+  timeoutMs = READY_PROBE_TIMEOUT_MS,
+): Promise<void> {
+  let containerFailure: string | undefined;
+  let endpointFailure: string | undefined;
+  try {
+    dockerCommand(postgresContainerReadyArgs(container));
+  } catch (error) {
+    containerFailure = dockerErrorText(error);
+  }
+  try {
+    await waitForPostgresReady(url, timeoutMs);
+  } catch (error) {
+    endpointFailure = dockerErrorText(error);
+  }
+  if (containerFailure || endpointFailure) {
+    throw new Error(
+      `compiler-database: PostgreSQL readiness failed for container ${container}; ${[
+        ...(containerFailure ? [`first in-container probe=${containerFailure}`] : []),
+        ...(endpointFailure ? [`endpoint probe=${endpointFailure}`] : []),
+      ].join('; ')}`,
+    );
+  }
 }
 
 /**
@@ -987,8 +1041,10 @@ export async function prepareCompilerDatabase(): Promise<StartedDatabase> {
   process.on('SIGINT', onSigint);
   process.on('SIGTERM', onSigterm);
   try {
+    process.stdout.write(`Compiler database container=${container}\n`);
     listen = await resolvePostgresListenUrl(container);
     const url = listen.url;
+    process.stdout.write(`Compiler database ready: container=${container}\n`);
     await withCommandPhase(
       'migrations',
       () => {
@@ -997,7 +1053,13 @@ export async function prepareCompilerDatabase(): Promise<StartedDatabase> {
       },
       process.env,
     );
-    return { url, container, remove };
+    return {
+      url,
+      container,
+      assertReady: () =>
+        withCommandPhase('database-readiness', () => assertCompilerDatabaseReady(container, url), process.env),
+      remove,
+    };
   } catch (error) {
     try {
       remove();

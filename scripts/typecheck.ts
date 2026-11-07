@@ -296,6 +296,8 @@ export type StartedDatabase = {
   url: string;
   /** The database container lets schema dump helpers use docker exec instead of starting another client image. */
   container?: string;
+  /** Recheck the owned database before each mapper workspace and after a failed compiler result. */
+  assertReady?: () => void | Promise<void>;
   /** Ordinary callers omit `wait` and prove settlement. Signal handlers pass `false` so a 200ms SIGKILL cannot abort removal. */
   remove: (wait?: boolean) => void | Promise<void>;
 };
@@ -560,6 +562,7 @@ async function runWorkspaces(
   env: NodeJS.ProcessEnv,
   write: (chunk: string) => void,
   state?: CompilerState,
+  assertDatabaseReady?: StartedDatabase['assertReady'],
 ): Promise<number> {
   const databaseUrl = env.DATABASE_URL;
   if (!databaseUrl && workspaces.some((workspace) => workspace.needsDatabase))
@@ -569,7 +572,7 @@ async function runWorkspaces(
   if (!databaseUrl) delete childEnv.DATABASE_URL;
   const failures: string[] = [];
   const results: WorkspaceResult[] = [];
-  const runOne = async (workspace: Workspace): Promise<void> => {
+  const runOne = async (workspace: Workspace): Promise<WorkspaceResult> => {
     const workspaceEnv =
       state && relative(root, workspace.directory) === 'services/kernel'
         ? { ...childEnv, TYPECHECK_BUILD_INFO_FILE: state.file }
@@ -578,21 +581,47 @@ async function runWorkspaces(
     if (result.code === 0) write(result.block);
     else failures.push(result.block);
     results.push(result);
+    return result;
   };
   const { parallel, serial } = typecheckRunOrder(workspaces);
   await Promise.all(parallel.map(runOne));
-  for (const workspace of serial) {
+  let readinessFailure: unknown;
+  let skippedDatabaseConsumers = false;
+  for (let index = 0; index < serial.length; index += 1) {
+    const workspace = serial[index]!;
+    if (assertDatabaseReady) {
+      try {
+        await assertDatabaseReady();
+      } catch (error) {
+        readinessFailure = error;
+        skippedDatabaseConsumers = true;
+        break;
+      }
+    }
     reclaimAdmittedFileCache();
-    await runOne(workspace);
+    const result = await runOne(workspace);
+    if (result.code !== 0 && assertDatabaseReady) {
+      try {
+        await assertDatabaseReady();
+      } catch (error) {
+        readinessFailure = error;
+        skippedDatabaseConsumers = index < serial.length - 1;
+        break;
+      }
+    }
   }
   for (const block of failures) write(block);
-  if (failures.length === 0) return 0;
+  if (readinessFailure !== undefined) {
+    const detail = readinessFailure instanceof Error ? readinessFailure.message : String(readinessFailure);
+    write(`root typecheck compiler database failure: ${detail}\n`);
+  }
+  if (failures.length === 0) return skippedDatabaseConsumers ? 75 : 0;
   return results.some((result) => result.outcome === 'infrastructure') ? 75 : 1;
 }
 
 async function withStartedDatabase(
   startDatabase: () => Promise<StartedDatabase>,
-  run: (env: NodeJS.ProcessEnv) => Promise<number>,
+  run: (env: NodeJS.ProcessEnv, assertDatabaseReady?: StartedDatabase['assertReady']) => Promise<number>,
   env: NodeJS.ProcessEnv,
   state?: CompilerState,
 ): Promise<number> {
@@ -612,6 +641,19 @@ async function withStartedDatabase(
     removed = true;
     await database.remove(wait);
   };
+  const assertDatabaseReady: StartedDatabase['assertReady'] = database.assertReady
+    ? async () => {
+        try {
+          await database.assertReady!();
+        } catch (error) {
+          const detail = error instanceof Error ? error.message : String(error);
+          const identity = database.container ?? 'unknown';
+          throw new Error(`root typecheck compiler database container=${identity}: ${detail}`, {
+            cause: error instanceof Error ? error : undefined,
+          });
+        }
+      }
+    : undefined;
   const abortOwnedCleanup = (status: number): void => {
     try {
       void remove(false);
@@ -631,11 +673,14 @@ async function withStartedDatabase(
   let failure: string | undefined;
   let cleanupFailure: string | undefined;
   try {
-    result = await run({
-      ...env,
-      DATABASE_URL: database.url,
-      ...(database.container === undefined ? {} : { KERNEL_DATABASE_CONTAINER: database.container }),
-    });
+    result = await run(
+      {
+        ...env,
+        DATABASE_URL: database.url,
+        ...(database.container === undefined ? {} : { KERNEL_DATABASE_CONTAINER: database.container }),
+      },
+      assertDatabaseReady,
+    );
   } catch (error) {
     failure = error instanceof Error ? error.message : String(error);
   } finally {
@@ -727,7 +772,8 @@ export async function typecheck(options: TypecheckOptions = {}): Promise<number>
     write(
       `Kernel incremental state ${state.reused ? 'reused' : 'not found'} for dev ${state.base}; candidate ${state.candidate}.\n`,
     );
-  const run = (env: NodeJS.ProcessEnv): Promise<number> => runWorkspaces(root, workspaces, env, write, state);
+  const run = (env: NodeJS.ProcessEnv, assertDatabaseReady?: StartedDatabase['assertReady']): Promise<number> =>
+    runWorkspaces(root, workspaces, env, write, state, assertDatabaseReady);
   const completeWithoutDatabase = async (): Promise<number> => {
     const result = await run(env);
     if (result === 0 && state) {

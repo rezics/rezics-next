@@ -47,6 +47,7 @@ import {
   newCompilerNonce,
   ownerProcessIdentity,
   postgresPublishArgs,
+  reportDockerSettlement,
   retainOriginalAndCleanupFailure,
   resolvePostgresListenUrl,
   retryDockerCreateOnce,
@@ -834,6 +835,7 @@ export function reportCheckFailure(
   write: (message: string) => void = (message) => process.stderr.write(message),
   host = hostname(),
 ): 1 | 75 {
+  if (containerId) write(`kernel check database container=${containerId}\n`);
   const serverStorageFull = reportPostgresErrors(containerId, dockerCommand, write);
   const fileStorageFull = failedOutputs.some((output) => output.includes('No space left on device'));
   if (!serverStorageFull && !fileStorageFull) return 1;
@@ -1036,6 +1038,7 @@ export function startPostgresContainer(
       );
       if (settlement.status === 'unsettled')
         throw retainOriginalAndCleanupFailure(error, settlement.error, 'Kernel PostgreSQL create failed');
+      reportDockerSettlement(settlement, `Kernel create nonce ${attemptNonce}`);
       throw error;
     }
   };
@@ -1109,6 +1112,7 @@ export function cleanupStale(kind: 'check' | 'derived' = 'check', dockerCommand:
     if (!alive) {
       const settlement = settleDockerAttempt(ownerLabel, owner, [{ name: ownerLabel, value: owner }], dockerCommand);
       if (settlement.status === 'unsettled') throw settlement.error;
+      reportDockerSettlement(settlement, `Kernel stale owner pid ${owner}`);
       rmSync(isolatedPostgresSocketDir(ownerPid), { recursive: true, force: true });
     }
   }
@@ -1136,6 +1140,7 @@ export function cleanup(
         if (!id) continue;
         const settlement = settleDockerContainerRemoval(id, dockerCommand);
         if (settlement.status === 'unsettled') failures.push(settlement.error);
+        else reportDockerSettlement(settlement, `Kernel container ${id}`);
       }
     }
     for (const nonce of attemptNonces) {
@@ -1149,6 +1154,7 @@ export function cleanup(
         dockerCommand,
       );
       if (settlement.status === 'unsettled') failures.push(settlement.error);
+      else reportDockerSettlement(settlement, `Kernel create nonce ${nonce}`);
     }
   }
   if (reyloDirectory) rmSync(reyloDirectory, { recursive: true, force: true });
@@ -1250,9 +1256,11 @@ async function main(): Promise<void> {
     process.stdout.write(`Kernel check database owner ${ownerProcessIdentity()}\n`);
     container = startPostgresContainer(docker, {
       attemptNonces: currentCheckNonces,
-      runId: process.env.REZICS_CHECK_RUN,
+      ...(process.env.REZICS_CHECK_RUN === undefined ? {} : { runId: process.env.REZICS_CHECK_RUN }),
     });
+    process.stdout.write(`Kernel check database container=${container}\n`);
     postgresListen = await resolvePostgresListenUrl(container, Number(pid));
+    process.stdout.write(`Kernel check database ready: container=${container}\n`);
     url = postgresListen.url;
     process.env.KERNEL_DATABASE_CONTAINER = container;
     env = { ...process.env, DATABASE_URL: url, KERNEL_DATABASE_CONTAINER: container };
@@ -1342,6 +1350,7 @@ async function main(): Promise<void> {
                 );
                 if (settlement.status === 'unsettled')
                   throw retainOriginalAndCleanupFailure(error, settlement.error, 'Kernel search create failed');
+                reportDockerSettlement(settlement, `Kernel search create nonce ${searchNonce}`);
                 throw error;
               }
               const searchPortOutput = docker(['port', searchContainer, '9200/tcp']);

@@ -8,6 +8,7 @@ import {
   cleanup,
   fileEnvironment,
   ownDiagnostics,
+  reportCheckFailure,
   searchCheckRunArgs,
   startPostgresContainer,
 } from '../scripts/check.ts';
@@ -214,6 +215,20 @@ test("the check's PostgreSQL container keeps its logs when it exits early and is
   ).toBe(true);
 });
 
+test('a failed Kernel check reports its exact PostgreSQL container identity', () => {
+  const output: string[] = [];
+  const result = reportCheckFailure(
+    'postgres-container-exact',
+    ['first SQL failure: ECONNREFUSED at 127.0.0.1:39201/rezics'],
+    () => '',
+    (message) => output.push(message),
+    'check-host-a',
+  );
+
+  expect(result).toBe(1);
+  expect(output.join('')).toContain('kernel check database container=postgres-container-exact');
+});
+
 test('a failed postgres create reaps the check nonce', () => {
   const calls: string[][] = [];
   let present = true;
@@ -262,10 +277,11 @@ test('a postgres spawn timeout reaps the nonce, retries once, then keeps the sec
   const runs = calls.filter((args) => args[0] === 'run');
   expect(runs).toHaveLength(2);
   expect(runs[0]).toContain(`${KERNEL_CHECK_NONCE_LABEL}=nonce-check`);
-  const retryNonce = runs[1]!
-    .find((arg, index) => runs[1]![index - 1] === '--label' && arg.startsWith(`${KERNEL_CHECK_NONCE_LABEL}=`))
-    ?.slice(`${KERNEL_CHECK_NONCE_LABEL}=`.length);
-  expect(retryNonce).toBeDefined();
+  const retryNonce =
+    runs[1]!
+      .find((arg, index) => runs[1]![index - 1] === '--label' && arg.startsWith(`${KERNEL_CHECK_NONCE_LABEL}=`))
+      ?.slice(`${KERNEL_CHECK_NONCE_LABEL}=`.length) ?? '';
+  expect(retryNonce).not.toBe('');
   expect(retryNonce).not.toBe('nonce-check');
   expect(calls[2]).toEqual(['ps', '-aq', '--filter', `label=${KERNEL_CHECK_NONCE_LABEL}=nonce-check`]);
   expect(calls).toContainEqual(['rm', '-f', '-v', 'half-nonce-check']);

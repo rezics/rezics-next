@@ -309,7 +309,17 @@ Compiler and Kernel database volumes carry the exact create nonce and physical c
 containers and volumes separately in three bounded attempts; a removal timeout is followed by a fresh listing, and
 failed Docker listings retain their stderr as unsettled cleanup evidence. Run-labeled volumes remain recoverable if
 the container removal completed first. Unsettled cleanup retains the root code in `.owned-resources-incomplete.json`,
-leaves `exit-status` absent and keeps reconnect at `CLEANING`.
+leaves `exit-status` absent and keeps reconnect at `CLEANING`. A removal request error is reported even when a later
+listing proves the resource settled.
+
+Before each mapper workspace, the compiler gate rechecks readiness inside the owned container and at its host-facing
+PostgreSQL endpoint. A failed compiler result is followed by one readiness probe that retains the first failure and
+exact container identity; if the database is unavailable, later mapper workspaces do not run. The compiler exit stays
+the primary result when cleanup or the readiness diagnostic also fails.
+
+Auth's private Reylo view covers its own SQL and the shared Kernel SQL source set imported by Auth. It reuses a
+compatible Kernel snapshot under the same migrated database schema and toolchain identity, then remains alive with
+that database until Auth tsc settles. SQL preparation and tsc are reported as separate command phases.
 
 The declared return files remain in the physical run directory until the controller copies them. A return-copy
 transport interruption gets one retry against that same host and run before directory cleanup. The retry does not
