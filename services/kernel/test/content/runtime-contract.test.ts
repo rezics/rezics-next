@@ -37,6 +37,7 @@ test('trusted optional content runtime types retain exactly the native ports and
   >();
   expectTypeOf<KernelDependencies['content']>().toEqualTypeOf<KernelContent | undefined>();
   expectTypeOf<routes.Dependencies['cursorNow']>().toEqualTypeOf<() => number>();
+  expectTypeOf<routes.Dependencies['deadlineNow']>().toEqualTypeOf<(() => number) | undefined>();
   expectTypeOf<routes.Dependencies['id']>().toEqualTypeOf<() => string>();
   expectTypeOf<routes.Dependencies['now']>().toEqualTypeOf<() => number>();
   expectTypeOf<Pick<routes.Dependencies, keyof ContentRuntime>>().toEqualTypeOf<ContentRuntime>();
@@ -106,11 +107,13 @@ test('kernel forwards native ports unchanged without executing jobs, I/O, access
       expect(received.tokens).toBe(tokens);
       expect(received.routeKey).toBe(base.routeKey);
       expect(typeof received.clock).toBe('function');
+      expect(typeof received.deadlineNow).toBe('function');
       expect(Object.keys(received).sort()).toEqual(
         [
           'pool',
           'routeKey',
           'clock',
+          'deadlineNow',
           'now',
           'id',
           'readConsent',

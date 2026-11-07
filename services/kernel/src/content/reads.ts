@@ -1800,13 +1800,13 @@ export async function withReactionCountsAndCoverage<T extends { readonly id: str
 }
 
 /** Keep the final disclosed source and the reaction fields read before that last check. */
-export function retainCurrentReactions<T extends object, E extends T>(current: T, enriched: E): E {
+export function retainCurrentReactions<T extends object, E extends object>(current: T, enriched: E): T & E {
   return {
     ...enriched,
     ...current,
     ...('reactions' in enriched ? { reactions: enriched.reactions } : {}),
     ...('viewerReaction' in enriched ? { viewerReaction: enriched.viewerReaction } : {}),
-  } as E;
+  } as T & E;
 }
 
 /** Read at most five relayed subject totals per id with one statement per target partition. */

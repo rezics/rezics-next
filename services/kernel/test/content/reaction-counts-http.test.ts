@@ -10,6 +10,9 @@ if (!databaseUrl) throw new Error('DATABASE_URL must name the migrated test data
 if (process.argv.includes('--reaction-count-worker')) {
   const { readWorkerConfig, startWorker } = await import('../../src/worker.ts');
   await startWorker(readWorkerConfig(process.env));
+  // stderr stays line-buffered when stdout is a pipe, so the parent can see readiness
+  // before startWorker's later logs fill the stdout block buffer.
+  process.stderr.write('reaction-count-worker-ready\n');
   console.log('reaction-count-worker-ready');
 } else {
   const { afterAll, beforeAll, expect, test } = await import('bun:test');
@@ -307,8 +310,11 @@ if (process.argv.includes('--reaction-count-worker')) {
   async function startCountWorker() {
     const running = spawnWorker();
     try {
-      const deadline = Date.now() + 20_000;
-      while (!running.handle.output().includes('reaction-count-worker-ready')) {
+      const deadline = Date.now() + 120_000;
+      while (
+        !running.handle.output().includes('reaction-count-worker-ready') &&
+        !running.handle.errors().includes('reaction-count-worker-ready')
+      ) {
         if (running.child.exitCode !== null) {
           await Promise.all([running.readOut, running.readErr]);
           throw new Error(`Worker exited early\n${running.handle.output()}\n${running.handle.errors()}`);

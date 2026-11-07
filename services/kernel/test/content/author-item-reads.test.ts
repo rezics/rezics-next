@@ -14,7 +14,6 @@ import {
   checkGrowth,
   capture,
   captureWithFoldedCost,
-  costOf,
   openGrowthDatabase,
   seed,
   type Population,

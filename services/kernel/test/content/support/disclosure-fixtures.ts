@@ -12,7 +12,6 @@ import type { Pool } from 'pg';
 import { createTurnstileVerifier, type TurnstileVerifier } from '../../../src/content/turnstile.ts';
 import { newId } from '../../../src/route/route.ts';
 import type { Revision } from '../../../../../specs/content-disclosure-driver.ts';
-import { testReceiptKeys } from '../../support/receipt-keys.ts';
 
 export const AUDIENCE = 'https://content.test';
 export const PROJECTION_CONSUMER = 'disclosure_projection';
