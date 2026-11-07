@@ -30,6 +30,7 @@ export function createWorkApplication(ports: WorkApplicationPorts): WorkApplicat
     receiveMappedHistoryWork: history.receiveMappedHistoryWork,
     settleHistoryWork: history.settleHistoryWork,
     retireWriters: retirement.retireWriters,
+    invokeRetirement: retirement.invokeRetirement,
     readRetirement: retirement.readRetirement,
     readWriterState: retirement.readWriterState,
     lockWriterState: retirement.lockWriterState,

@@ -1,4 +1,4 @@
-import type { WorkAuthorization, WorkClock, WorkDispatchCost, WorkEffect, WorkHistoryRegistry, WorkHistoryScope, WorkIntent, WorkPool, WorkQueryClient, WorkQueryResult, WorkQueueName, WorkQueueOptions, WorkRegisteredEffects, WorkRetirementFence, WorkScopedRequest, WorkSdkClient, WorkSelectedIdentity, WorkSelectedLocator, WorkSelectedOutcome, WorkService, WorkWriterState } from './vocabulary.ts';
+import type { WorkAuthorization, WorkClock, WorkDispatchCost, WorkEffect, WorkHistoryRegistry, WorkHistoryScope, WorkIntent, WorkPool, WorkQueryClient, WorkQueryResult, WorkQueueName, WorkQueueOptions, WorkRegisteredEffects, WorkRetirementFence, WorkRetirementInvocation, WorkRetirementOutcome, WorkScopedRequest, WorkSdkClient, WorkSelectedIdentity, WorkSelectedLocator, WorkSelectedOutcome, WorkService, WorkWriterState } from './vocabulary.ts';
 import type { WorkCost } from './cost.ts';
 export type WorkSdkConfig = Readonly<{
     name: string;
@@ -42,6 +42,13 @@ export type SdkRuntimePort = {
 };
 export type SdkRetirementPort = {
     retireWorkflow(actualWorkflowId: string): Promise<WorkRetirementFence>;
+    supportsBoundedRetirement(client: WorkSdkClient): boolean;
+    invokeRetirement(actualWorkflowId: string, client: WorkSdkClient, invocation: Readonly<{
+        deadline: number;
+        maxAttempts: number;
+        reserve: (dispatch: string) => Promise<void>;
+        signal?: AbortSignal;
+    }>): Promise<WorkRetirementOutcome>;
     readFence(actualWorkflowId: string): Promise<WorkRetirementFence | null>;
     readWriterState(actualWorkflowId: string, client: WorkSdkClient): Promise<WorkWriterState | null>;
     lockWriterState(tx: WorkQueryClient, pool: WorkPool, expected: WorkWriterState, client: WorkSdkClient): Promise<WorkWriterState>;
@@ -308,6 +315,7 @@ export type WorkApplication = {
         owner: string;
     }): Promise<void>;
     retireWriters(actualWorkflowId: string): Promise<WorkRetirementFence>;
+    invokeRetirement(actualWorkflowId: string, client: WorkSdkClient, invocation: WorkRetirementInvocation): Promise<WorkRetirementOutcome>;
     readRetirement(actualWorkflowId: string): Promise<WorkRetirementFence | null>;
     readWriterState(actualWorkflowId: string, client: WorkSdkClient): Promise<WorkWriterState | null>;
     lockWriterState(tx: WorkQueryClient, expected: WorkWriterState, client: WorkSdkClient): Promise<WorkWriterState>;

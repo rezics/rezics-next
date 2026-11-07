@@ -44,7 +44,8 @@ never published or imported.
 Decision: compose Content's complete `readVoteReview` result and `putVoteOutcome` conditional writer with the
 existing Library row checkpoint. Review privately retains the exact native guard and the `VoteObservation` captured
 from that same native read, including question revision/meaning/scale, canonical identity, identity epochs and the
-counted/original own-vote witness; it never constructs a partial guard. Confirmation calls `preparePutVote` once with
+counted/original own-vote witness; it never constructs a partial guard. Apply commits the selected score before independent
+state so an Entry write cannot dirty the vote target. Confirmation calls `preparePutVote` once with
 the original admission and captured actor, then persists its normalized input, request key and bounded receipt within
 the existing JSON caps. Older plans without a complete prepared command remain unavailable and require a deliberate
 new review; no stored observation is synthesized or refreshed at dispatch.
@@ -52,7 +53,9 @@ new review; no stored observation is synthesized or refreshed at dispatch.
 `score.native.admission = {status: "reviewed", reason: "native_review_observed"}` means complete native operands were
 observed, not that an effect was admitted. If native review redirects the Library-selected Subject, retain no vote
 guard for that selection and return identity-observation unavailable. The owner must explicitly select the canonical
-Subject and review it again before applying a score. Confirmed set/clear prepares the normalized command once with
+Subject and review it again before applying a score. The mounted Web decoder keeps those identity, observation and
+atomic-guard unavailable reasons, plus reviewed admission, as first-class native score review. Public Bangumi client
+types follow the Kernel model snapshot until the compiler `typecheck --emit-client` emitter republishes them. Confirmed set/clear prepares the normalized command once with
 the exact source, match, review, question and native guard operands. Current native authorization and exposure precede
 receipt replay; fresh native execution admits the current source row and checks all conditional fences. Typed native
 stale and unavailable reasons pass through the score outcome. A selected unperformed score makes the row stale or
@@ -71,7 +74,10 @@ caller through its typed route. Source expiry, cancellation and evidence removal
 upload does not undo native effects.
 
 Decision: receipt-only score recovery denies a current actor without `rating:vote` before any historical receipt is
-read, and reads back only the receipt's question and target.
+read, and reads back only the receipt's question and target. Kernel source-admission retries keep the first captured
+credential envelope, key and body.
+
+Decision: native score, merge and receipt-recovery checks reuse the fixture steward and extra-scoped identities on the same Global bootstrap; a second operator bootstrap is unavailable. Subject merge authenticates that steward onto a token that also carries `subject:merge` and `gate:subject_identity`, grants those actions on Global, then posts the mounted merge. Guarded score and redirect checks place the Library-selected Subject on the voter's identity home and finish identity bootstrap on that partition before Rating review or merge. Native import vote, merge, progress and metadata actors occupy partition 0 with those Subjects so Global merge authorization and Rating's same-home guarded path apply. Partition 0 identity bootstrap waits until the first Library-selected Subject exists on that home so the first scan includes it; sealing the empty question/control home first leaves later creations past the cursor. Native import tests recapture identity dirty after each Subject write, after link drain on each HTTP send once a Subject is mapped on that home, and before direct Rating apply, so Entry, Progress and vote writes cannot leave Mapping pending. A mapped home with no dirty originals and empty control pending/prepare pins stays current; recapture does not start another bootstrap generation or republish an installed epoch. They drain held prearm after mapping completes; unpublished Search/Library acknowledgements do not pin the group against later Progress, Rating or merge. Mapping-complete pending jobs are current once that job's epoch is installed; native import tests then publish that job so later bootstrap can recapture dirty and a later merge or vote job can start. A home is current for later Progress, Rating and merge only after those jobs are published and control pending/prepare pins are empty; mapping-complete pending classification alone does not free home capacity. Apply commits selected scores before independent state so Entry writes cannot dirty the vote target. A preparing identity job may change `prearm_phase`, `prearm_transaction_id` and `cancellation_transaction_id`; intent and receipts stay immutable. Later Subject writes recapture identity dirty before Rating, Progress or merge resolve the mapping. Guarded Rating apply uses the same `rating:vote` token-scope check as HTTP PUT; it does not require an Access account grant. HTTP merge on an active identity terminal admits the job and mapping applies the redirect; it does not persist-command the catalogue redirect against that hold. Closed Bangumi change events carry the intact command kind, at most 32 characters, including `metadata-progress`; writers do not slice it. Frozen vote observations use Content's meaning, or the question label when meaning is absent. Reviewed question DTOs keep Content's optional meaning, including null; they do not copy the display label into meaning. Expired source scrub pages skip already-empty evidence so remaining ordinals advance.
 
 ## Web HTTP contract
 
@@ -203,3 +209,4 @@ The [label adoption contract](library-import-bangumi-labels.md) specifies instal
 `applyLabels` routes and generated methods, separate confirmation epochs, native name/capacity limits, per-item
 outcomes, source-evidence exclusions and continuation boundaries. State review and its original receipt remain
 unchanged. Web324 consumes this typed delivery in the existing complete Bangumi interface.
+Landing `list-import-bangumi-http.test.ts` pins `applyLabels` without a state command on the mounted HTTP path.

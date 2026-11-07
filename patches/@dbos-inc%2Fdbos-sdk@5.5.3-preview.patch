@@ -6,17 +6,27 @@
 # Preserve the fence migration array positions; the SDK records positional versions.
 # Additive selected execution authority: actual registered body only; native owner/domain locks through COMMIT.
 # Reproducer: services/kernel/test/work/selected-runtime-native.test.ts (deferred native execution).
+# GetWorkflowsInput offers inclusive created ranges and OFFSET, with eligibility filters before LIMIT.
+# That cannot bound raw examination or resume stable created_at/workflow_uuid ties.
+# Remove the scan when upstream supplies payload-free keyset paging: exclusive continuation,
+# unique immutable ID tie-breaker, raw LIMIT before terminal/completion eligibility, and an
+# indexed application/created_at/workflow_uuid range. Reproducer: sdk-workflow-selection.test.ts.
+# One-argument retireWorkflow still uses withDbRetry while(true). Caller-funded retirement is
+# retireWorkflow(id, invocation) with a finite maxAttempts, absolute deadline, prepaid reserve
+# and failed-work accounting. Lost COMMIT responses reread the same workflow ID. Reproducer:
+# sdk-retirement-fence.test.ts bounded invocation cases.
 diff --git a/dist/src/client.d.ts b/dist/src/client.d.ts
-index 8a0fee52be..b69659f7e3 100644
+index 8a0fee52be..71a7eb41e6 100644
 --- a/dist/src/client.d.ts
 +++ b/dist/src/client.d.ts
-@@ -1,3 +1,5 @@
+@@ -1,3 +1,6 @@
 +import type { SelectedExecution, SelectedExecutionIdentity } from './selected_execution';
-+import type { WorkflowWriterState, WorkflowWriterFence } from './workflow_retirement';
++import type { WorkflowWriterState, WorkflowWriterFence, WorkflowRetirementInvocation, WorkflowRetirementOutcome } from './workflow_retirement';
++import type { OpenWorkflowStatusScanInput, ReadWorkflowStatusScanPageOptions, WorkflowStatusScanContinuation, WorkflowStatusScanHorizon, WorkflowStatusScanPage } from './workflow_status_scan';
  import { type SystemDatabase, type DuplicationPolicy, type VersionInfo, type ApplicationRowCounts, type DebounceParams, type DebounceResult } from './system_database';
  import { DLogger } from './telemetry/logs';
  import { type GetWorkflowsInput, type StepInfo, type ListWorkflowStepsOptions, type WorkflowHandle, WorkflowSerializationFormat, type WorkflowStatus } from './workflow';
-@@ -221,6 +223,22 @@ export declare class DBOSClient {
+@@ -221,6 +224,23 @@ export declare class DBOSClient {
      }): Promise<WorkflowHandle<Awaited<T>>[]>;
      setWorkflowPriority(workflowID: string, priority: number, options?: ShardKeyOptions): Promise<void>;
      setWorkflowDelay(workflowID: string, options: number | SetWorkflowDelayOptions): Promise<void>;
@@ -28,6 +38,7 @@ index 8a0fee52be..b69659f7e3 100644
 +    maintainWorkflowOnce(pool: Pool, expected: WorkflowWriterState, action: 'retire' | 'delete', deadline: number,
 +        reserve: (dispatch: string) => Promise<void>): Promise<WorkflowWriterFence | null>;
 +    retireWorkflow(workflowID: string): Promise<WorkflowWriterFence>;
++    retireWorkflow(workflowID: string, invocation: WorkflowRetirementInvocation): Promise<WorkflowRetirementOutcome>;
 +    /** Exact native closure read, independent of execution/history existence. */
 +    getWorkflowWriterFence(workflowID: string): Promise<WorkflowWriterFence | null>;
 +    /** Observation only; missing native identity remains null. */
@@ -39,11 +50,22 @@ index 8a0fee52be..b69659f7e3 100644
      deleteWorkflow(workflowID: string, deleteChildren?: boolean, options?: ShardKeyOptions): Promise<void>;
      deleteWorkflows(workflowIDs: string[], deleteChildren?: boolean, options?: ShardKeyOptions): Promise<void>;
      forkWorkflow(workflowID: string, startStep: number, options?: {
+@@ -253,6 +273,10 @@ export declare class DBOSClient {
+     getWorkflow(workflowID: string, options?: ShardKeyOptions): Promise<WorkflowStatus | undefined>;
+     listWorkflows(input: GetWorkflowsInput): Promise<WorkflowStatus[]>;
+     listQueuedWorkflows(input: GetWorkflowsInput): Promise<WorkflowStatus[]>;
++    /** Payload-free status scan: fixes application, createdBefore and the indexed upper key. */
++    openWorkflowStatusScan(input: OpenWorkflowStatusScanInput): Promise<WorkflowStatusScanContinuation>;
++    /** Exclusive keyset page. Raw LIMIT is applied before terminal/completion eligibility. */
++    readWorkflowStatusScanPage(continuation: WorkflowStatusScanHorizon | WorkflowStatusScanContinuation, options?: ReadWorkflowStatusScanPageOptions): Promise<WorkflowStatusScanPage>;
+     listWorkflowSteps(workflowID: string, options?: ListWorkflowStepsOptions & ShardKeyOptions): Promise<StepInfo[] | undefined>;
+     waitFirst(handles: WorkflowHandle<unknown>[], options?: WaitFirstOptions): Promise<WorkflowHandle<unknown>>;
+     waitAll<R>(handles: WorkflowHandle<R>[], options?: WaitAllOptions): Promise<WorkflowHandle<R>[]>;
 diff --git a/dist/src/client.js b/dist/src/client.js
-index 7a6d950117..25798282c5 100644
+index 7a6d950117..535517cb48 100644
 --- a/dist/src/client.js
 +++ b/dist/src/client.js
-@@ -368,6 +368,33 @@ class DBOSClient {
+@@ -368,6 +368,35 @@ class DBOSClient {
          const shardKey = typeof options === 'object' ? options.shardKey : undefined;
          return await (0, shard_keys_1.bindShardKeys)([[workflowID, shardKey]], () => this.systemDatabase.setWorkflowDelay(workflowID, delayUntilEpochMS));
      }
@@ -59,8 +81,10 @@ index 7a6d950117..25798282c5 100644
 +    maintainWorkflowOnce(pool, expected, action, deadline, reserve) {
 +        return this.systemDatabase.maintainWorkflowOnce(pool, expected, action, deadline, reserve);
 +    }
-+    retireWorkflow(workflowID) {
-+        return this.systemDatabase.retireWorkflow(workflowID);
++    retireWorkflow(workflowID, invocation) {
++        return invocation === undefined
++            ? this.systemDatabase.retireWorkflow(workflowID)
++            : this.systemDatabase.invokeRetireWorkflow(workflowID, invocation);
 +    }
 +    getWorkflowWriterState(workflowID) {
 +        return this.systemDatabase.getWorkflowWriterState(workflowID);
@@ -76,6 +100,19 @@ index 7a6d950117..25798282c5 100644
 +    }
      deleteWorkflow(workflowID, deleteChildren = false, options) {
          return this.deleteWorkflows([workflowID], deleteChildren, options);
+     }
+@@ -401,6 +430,12 @@ class DBOSClient {
+     listQueuedWorkflows(input) {
+         return (0, workflow_management_1.listQueuedWorkflows)(this.systemDatabase, input);
+     }
++    openWorkflowStatusScan(input) {
++        return this.systemDatabase.openWorkflowStatusScan(input);
++    }
++    readWorkflowStatusScanPage(continuation, options) {
++        return this.systemDatabase.readWorkflowStatusScanPage(continuation, options);
++    }
+     async listWorkflowSteps(workflowID, options) {
+         return await (0, shard_keys_1.bindShardKeys)([[workflowID, options?.shardKey]], () => (0, workflow_management_1.listWorkflowSteps)(this.systemDatabase, workflowID, true, options));
      }
 diff --git a/dist/src/dbos-executor.js b/dist/src/dbos-executor.js
 index 8355716c2b..1c001646bb 100644
@@ -184,27 +221,40 @@ index 8355716c2b..1c001646bb 100644
              });
              if (timeoutMS === undefined) {
 diff --git a/dist/src/dbos.d.ts b/dist/src/dbos.d.ts
-index dd663ff7a8..56d801b663 100644
+index dd663ff7a8..727a64ce01 100644
 --- a/dist/src/dbos.d.ts
 +++ b/dist/src/dbos.d.ts
-@@ -1,3 +1,5 @@
+@@ -1,3 +1,6 @@
 +import type { SelectedExecution, SelectedExecutionLifecycle } from './selected_execution';
-+import type { WorkflowWriterFence } from './workflow_retirement';
++import type { WorkflowWriterFence, WorkflowRetirementInvocation, WorkflowRetirementOutcome } from './workflow_retirement';
++import type { OpenWorkflowStatusScanInput, ReadWorkflowStatusScanPageOptions, WorkflowStatusScanContinuation, WorkflowStatusScanHorizon, WorkflowStatusScanPage } from './workflow_status_scan';
  import { StepStatus, DBOSLocalCtx } from './context';
  import { DBOSConfig, DBOSExecutor } from './dbos-executor';
  import { DBOSSpan, Tracer } from './telemetry/traces';
-@@ -440,6 +442,10 @@ export declare class DBOS {
+@@ -376,6 +379,10 @@ export declare class DBOS {
+      * @returns `WorkflowStatus` array containing details of the matching workflows
+      */
+     static listQueuedWorkflows(input: GetWorkflowsInput): Promise<WorkflowStatus[]>;
++    /** Payload-free status scan: fixes application, createdBefore and the indexed upper key. */
++    static openWorkflowStatusScan(input: OpenWorkflowStatusScanInput): Promise<WorkflowStatusScanContinuation>;
++    /** Exclusive keyset page. Raw LIMIT is applied before terminal/completion eligibility. */
++    static readWorkflowStatusScanPage(continuation: WorkflowStatusScanHorizon | WorkflowStatusScanContinuation, options?: ReadWorkflowStatusScanPageOptions): Promise<WorkflowStatusScanPage>;
+     /**
+      * Set the priority of a queued workflow.
+      * Only affects workflows with ENQUEUED or DELAYED status.
+@@ -440,6 +447,11 @@ export declare class DBOS {
       * @param workflowID - ID of the workflow to delete
       * @param deleteChildren - If true, also delete all child workflows recursively (default: false)
       */
 +    /** Permanently fence this actual workflow ID. No cancellation or deletion. */
 +    static retireWorkflow(workflowID: string): Promise<WorkflowWriterFence>;
++    static retireWorkflow(workflowID: string, invocation: WorkflowRetirementInvocation): Promise<WorkflowRetirementOutcome>;
 +    /** Exact native closure read, independent of execution/history existence. */
 +    static getWorkflowWriterFence(workflowID: string): Promise<WorkflowWriterFence | null>;
      static deleteWorkflow(workflowID: string, deleteChildren?: boolean, options?: ShardKeyOptions): Promise<void>;
      /**
       * Delete multiple workflows and optionally all their child workflows.
-@@ -714,6 +720,8 @@ export declare class DBOS {
+@@ -714,6 +726,8 @@ export declare class DBOS {
       * @param func - The function to register as a step
       * @param config - Configuration information for the step, particularly the retry policy and name
       */
@@ -214,17 +264,34 @@ index dd663ff7a8..56d801b663 100644
      /**
       * Run the enclosed `callback` as a checkpointed step within a DBOS workflow
 diff --git a/dist/src/dbos.js b/dist/src/dbos.js
-index 370a89e439..daab99e672 100644
+index 370a89e439..fbfd616bf6 100644
 --- a/dist/src/dbos.js
 +++ b/dist/src/dbos.js
-@@ -909,6 +909,15 @@ class DBOS {
+@@ -804,6 +804,14 @@ class DBOS {
+      * @param input - `GetWorkflowsInput` predicate for filtering returned workflows
+      * @returns `WorkflowStatus` array containing details of the matching workflows
+      */
++    static async openWorkflowStatusScan(input) {
++        (0, decorators_1.ensureDBOSIsLaunched)('openWorkflowStatusScan');
++        return dbos_executor_1.DBOSExecutor.globalInstance.systemDatabase.openWorkflowStatusScan(input);
++    }
++    static async readWorkflowStatusScanPage(continuation, options) {
++        (0, decorators_1.ensureDBOSIsLaunched)('readWorkflowStatusScanPage');
++        return dbos_executor_1.DBOSExecutor.globalInstance.systemDatabase.readWorkflowStatusScanPage(continuation, options);
++    }
+     static async listQueuedWorkflows(input) {
+         (0, decorators_1.ensureDBOSIsLaunched)('listQueuedWorkflows');
+         return await runInternalStep(async () => {
+@@ -909,6 +917,17 @@ class DBOS {
       * @param workflowID - ID of the workflow to delete
       * @param deleteChildren - If true, also delete all child workflows recursively (default: false)
       */
-+    static async retireWorkflow(workflowID) {
++    static async retireWorkflow(workflowID, invocation) {
 +        (0, decorators_1.ensureDBOSIsLaunched)('retireWorkflow');
 +        // The native receipt is independent of workflow checkpoints and execution deletion.
-+        return dbos_executor_1.DBOSExecutor.globalInstance.systemDatabase.retireWorkflow(workflowID);
++        return invocation === undefined
++            ? dbos_executor_1.DBOSExecutor.globalInstance.systemDatabase.retireWorkflow(workflowID)
++            : dbos_executor_1.DBOSExecutor.globalInstance.systemDatabase.invokeRetireWorkflow(workflowID, invocation);
 +    }
 +    static async getWorkflowWriterFence(workflowID) {
 +        (0, decorators_1.ensureDBOSIsLaunched)('getWorkflowWriterFence');
@@ -233,7 +300,7 @@ index 370a89e439..daab99e672 100644
      static async deleteWorkflow(workflowID, deleteChildren = false, options) {
          return this.deleteWorkflows([workflowID], deleteChildren, options);
      }
-@@ -1637,6 +1646,16 @@ class DBOS {
+@@ -1637,6 +1656,16 @@ class DBOS {
       * @param func - The function to register as a step
       * @param config - Configuration information for the step, particularly the retry policy and name
       */
@@ -251,15 +318,35 @@ index 370a89e439..daab99e672 100644
          const name = config.name ?? func.name;
          (0, step_1.validateStepConfig)(config, name);
 diff --git a/dist/src/index.d.ts b/dist/src/index.d.ts
-index 5d56b40172..88167541b0 100644
+index 5d56b40172..c8c9541778 100644
 --- a/dist/src/index.d.ts
 +++ b/dist/src/index.d.ts
-@@ -1,3 +1,5 @@
+@@ -1,3 +1,8 @@
 +export type { SelectedExecution, SelectedExecutionIdentity, SelectedExecutionLifecycle } from './selected_execution';
-+export type { WorkflowWriterState, WorkflowWriterFence } from './workflow_retirement';
++export type { WorkflowWriterState, WorkflowWriterFence, WorkflowRetirementDispatch, WorkflowRetirementInvocation, WorkflowRetirementFailedWork, WorkflowRetirementOutcome } from './workflow_retirement';
++export { WORKFLOW_RETIREMENT_MAX_ATTEMPTS, WORKFLOW_RETIREMENT_DISPATCH, WorkflowRetirementBudgetError } from './workflow_retirement';
++export type { WorkflowStatusScanKey, WorkflowStatusScanHorizon, WorkflowStatusScanContinuation, OpenWorkflowStatusScanInput, ReadWorkflowStatusScanPageOptions, WorkflowStatusScanCopy, WorkflowStatusScanPage } from './workflow_status_scan';
++export { WORKFLOW_STATUS_SCAN_INDEX, WORKFLOW_STATUS_SCAN_RAW_LIMIT, WORKFLOW_STATUS_SCAN_TERMINAL_STATUSES } from './workflow_status_scan';
  export { DBOS, RecvOptions, SleepOptions, GetEventOptions, GetResultOptions, PollingOptions, WaitFirstOptions, WaitAllOptions, SetWorkflowDelayOptions, ReadStreamOptions, ReadStreamOffsetOptions, ShardKeyOptions, } from './dbos';
  export type { StepReservation } from './dbos';
  export { DBOSClient } from './client';
+diff --git a/dist/src/index.js b/dist/src/index.js
+index f549f85e59..4d177df971 100644
+--- a/dist/src/index.js
++++ b/dist/src/index.js
+@@ -37,6 +37,12 @@ var system_db_schema_1 = require("../schemas/system_db_schema");
+ Object.defineProperty(exports, "PortableWorkflowError", { enumerable: true, get: function () { return system_db_schema_1.PortableWorkflowError; } });
+ var workflow_1 = require("./workflow");
+ Object.defineProperty(exports, "StatusString", { enumerable: true, get: function () { return workflow_1.StatusString; } });
++Object.defineProperty(exports, "WORKFLOW_STATUS_SCAN_INDEX", { enumerable: true, get: function () { return require("./workflow_status_scan").WORKFLOW_STATUS_SCAN_INDEX; } });
++Object.defineProperty(exports, "WORKFLOW_STATUS_SCAN_RAW_LIMIT", { enumerable: true, get: function () { return require("./workflow_status_scan").WORKFLOW_STATUS_SCAN_RAW_LIMIT; } });
++Object.defineProperty(exports, "WORKFLOW_STATUS_SCAN_TERMINAL_STATUSES", { enumerable: true, get: function () { return require("./workflow_status_scan").WORKFLOW_STATUS_SCAN_TERMINAL_STATUSES; } });
++Object.defineProperty(exports, "WORKFLOW_RETIREMENT_MAX_ATTEMPTS", { enumerable: true, get: function () { return require("./workflow_retirement_invoke").WORKFLOW_RETIREMENT_MAX_ATTEMPTS; } });
++Object.defineProperty(exports, "WORKFLOW_RETIREMENT_DISPATCH", { enumerable: true, get: function () { return require("./workflow_retirement_invoke").WORKFLOW_RETIREMENT_DISPATCH; } });
++Object.defineProperty(exports, "WorkflowRetirementBudgetError", { enumerable: true, get: function () { return require("./workflow_retirement_invoke").WorkflowRetirementBudgetError; } });
+ var debouncer_1 = require("./debouncer");
+ Object.defineProperty(exports, "Debouncer", { enumerable: true, get: function () { return debouncer_1.Debouncer; } });
+ Object.defineProperty(exports, "DebouncerClient", { enumerable: true, get: function () { return debouncer_1.DebouncerClient; } });
 diff --git a/dist/src/selected_execution.d.ts b/dist/src/selected_execution.d.ts
 new file mode 100644
 index 0000000000..9fb11a30c8
@@ -278,7 +365,7 @@ index 0000000000..9fb11a30c8
 + open(): Promise<{ deadline: number; reserve(dispatch: 'issue' | 'release'): Promise<void>; close(): Promise<void>; run<T>(body: () => Promise<T>): Promise<T> }>;
 +}
 diff --git a/dist/src/sysdb_migrations/internal/migrations.js b/dist/src/sysdb_migrations/internal/migrations.js
-index 7f21387b27..86e49bd724 100644
+index 7f21387b27..b11052af42 100644
 --- a/dist/src/sysdb_migrations/internal/migrations.js
 +++ b/dist/src/sysdb_migrations/internal/migrations.js
 @@ -1,6 +1,7 @@
@@ -299,13 +386,14 @@ index 7f21387b27..86e49bd724 100644
          // Topic a SUSPENDED recv waits on.
          {
              name: '126_workflow_status_suspend_key',
-@@ -1232,6 +1236,9 @@ $$ LANGUAGE plpgsql;`,
+@@ -1232,6 +1236,10 @@ $$ LANGUAGE plpgsql;`,
                      ]),
              ],
          },
 +        workflowWriterFenceTransactionMigration(schemaName),
 +        // Append only: never move any applied positional migration.
 +        require('./selected_step_execution').selectedStepExecutionMigration(schemaName),
++        require('./workflow_status_scan').workflowStatusScanMigration(schemaName),
      ];
  }
  //# sourceMappingURL=migrations.js.map
@@ -425,6 +513,26 @@ index 0000000000..188d63ded2
 +    ] };
 +}
 +exports.selectedStepExecutionMigration = selectedStepExecutionMigration;
+diff --git a/dist/src/sysdb_migrations/internal/workflow_status_scan.js b/dist/src/sysdb_migrations/internal/workflow_status_scan.js
+new file mode 100644
+index 0000000000..70247378cc
+--- /dev/null
++++ b/dist/src/sysdb_migrations/internal/workflow_status_scan.js
+@@ -0,0 +1,14 @@
++"use strict";
++Object.defineProperty(exports, "__esModule", { value: true });
++exports.workflowStatusScanMigration = workflowStatusScanMigration;
++function workflowStatusScanMigration(schemaName) {
++    const s = '"' + schemaName.replace(/"/g, '""') + '"';
++    return {
++        name: '20261107000000_workflow_status_scan',
++        pg: [
++            `CREATE INDEX IF NOT EXISTS "idx_workflow_status_scan"
++                ON ${s}.workflow_status (application_name, created_at, workflow_uuid)
++                INCLUDE (name, status, completed_at)`,
++        ],
++    };
++}
 diff --git a/dist/src/sysdb_migrations/internal/workflow_writer_fence.js b/dist/src/sysdb_migrations/internal/workflow_writer_fence.js
 new file mode 100644
 index 0000000000..59a4b3fcd2
@@ -633,15 +741,16 @@ index 0000000000..59a4b3fcd2
 +}
 +exports.workflowWriterFenceTransactionMigration = workflowWriterFenceTransactionMigration;
 diff --git a/dist/src/system_database.d.ts b/dist/src/system_database.d.ts
-index 8f66187dfd..d1be0212c2 100644
+index 8f66187dfd..ea06b82e2f 100644
 --- a/dist/src/system_database.d.ts
 +++ b/dist/src/system_database.d.ts
-@@ -1,3 +1,4 @@
-+import type { WorkflowWriterState, WorkflowWriterFence } from './workflow_retirement';
+@@ -1,3 +1,5 @@
++import type { WorkflowWriterState, WorkflowWriterFence, WorkflowRetirementInvocation, WorkflowRetirementOutcome } from './workflow_retirement';
++import type { OpenWorkflowStatusScanInput, ReadWorkflowStatusScanPageOptions, WorkflowStatusScanContinuation, WorkflowStatusScanHorizon, WorkflowStatusScanPage } from './workflow_status_scan';
  /// <reference types="node" />
  import { Pool, PoolClient, ClientBase } from 'pg';
  import type { DatabaseError } from 'pg';
-@@ -486,6 +487,18 @@ export declare class SystemDatabase {
+@@ -486,6 +488,19 @@ export declare class SystemDatabase {
      private debounceDelayedWorkflowStandalone;
      protected getDirectChildren(workflowIDs: string[]): Promise<string[]>;
      getWorkflowChildren(workflowID: string): Promise<string[]>;
@@ -649,6 +758,7 @@ index 8f66187dfd..d1be0212c2 100644
 +    maintainWorkflowOnce(pool: Pool, expected: WorkflowWriterState, action: 'retire' | 'delete', deadline: number,
 +        reserve: (dispatch: string) => Promise<void>): Promise<WorkflowWriterFence | null>;
 +    retireWorkflow(workflowID: string): Promise<WorkflowWriterFence>;
++    invokeRetireWorkflow(workflowID: string, invocation: WorkflowRetirementInvocation): Promise<WorkflowRetirementOutcome>;
 +    getWorkflowWriterFence(workflowID: string): Promise<WorkflowWriterFence | null>;
 +    /** Observation only; missing native identity remains null. */
 +    getWorkflowWriterState(workflowID: string): Promise<WorkflowWriterState | null>;
@@ -660,8 +770,17 @@ index 8f66187dfd..d1be0212c2 100644
      /** Delete workflows and all associated data, and with deleteChildren every workflow they started, recursively. */
      deleteWorkflows(workflowIDs: string[], deleteChildren?: boolean): Promise<void>;
      protected deleteWorkflowsInternal(allIds: string[]): Promise<void>;
+@@ -613,6 +628,8 @@ export declare class SystemDatabase {
+     /** Dequeue each partition's head-of-line workflow, at most {@link partitionedDequeueSweepCap} per sweep in transactions of {@link partitionedDequeueBatchSize}; only valid for partition-concurrency-1 queues with no queue-wide limit. */
+     findAndMarkStartablePartitionedWorkflows(queue: WorkflowQueue, executorID: string, appVersion: string, maxTasks?: number, ownerXid?: string | null, isLatestVersion?: boolean): Promise<string[]>;
+     /** With `keyedIDs`, the listed workflow IDs are addressed by their shard keys, as a batch read of known workflows. */
++    openWorkflowStatusScan(input: OpenWorkflowStatusScanInput): Promise<WorkflowStatusScanContinuation>;
++    readWorkflowStatusScanPage(continuation: WorkflowStatusScanHorizon | WorkflowStatusScanContinuation, options?: ReadWorkflowStatusScanPageOptions): Promise<WorkflowStatusScanPage>;
+     listWorkflows(input: GetWorkflowsInput, options?: {
+         keyedIDs?: boolean;
+     }): Promise<WorkflowStatusInternal[]>;
 diff --git a/dist/src/system_database.js b/dist/src/system_database.js
-index 79ef5957a3..a03891f111 100644
+index 79ef5957a3..2c92b08a83 100644
 --- a/dist/src/system_database.js
 +++ b/dist/src/system_database.js
 @@ -1835,6 +1835,9 @@ class SystemDatabase {
@@ -674,7 +793,7 @@ index 79ef5957a3..a03891f111 100644
              // Check existence separately: a zero-row update also means "already complete", a legal no-op.
              const existingParams = [];
              const { rows } = await client.query(`SELECT workflow_uuid FROM "${this.schemaName}".workflow_status WHERE ${this.wfIn(undefined, workflowIDs, existingParams)}`, existingParams);
-@@ -2003,6 +2006,123 @@ class SystemDatabase {
+@@ -2003,6 +2006,126 @@ class SystemDatabase {
          }
          return [...descendants];
      }
@@ -733,6 +852,9 @@ index 79ef5957a3..a03891f111 100644
 +                `SELECT * FROM ${schema}.retire_workflow_writers($1)`, [workflowID]);
 +            return this.workflowWriterFenceReceipt(rows[0]);
 +        });
++    }
++    invokeRetireWorkflow(workflowID, invocation) {
++        return require('./workflow_retirement_invoke').invokeRetireWorkflow(this, workflowID, invocation);
 +    }
 +    async getWorkflowWriterFence(workflowID) {
 +        if (typeof workflowID !== 'string' || workflowID.length === 0)
@@ -798,7 +920,7 @@ index 79ef5957a3..a03891f111 100644
      /** Delete workflows and all associated data, and with deleteChildren every workflow they started, recursively. */
      async deleteWorkflows(workflowIDs, deleteChildren = false) {
          const allIds = [...workflowIDs];
-@@ -2063,6 +2183,9 @@ class SystemDatabase {
+@@ -2063,6 +2186,9 @@ class SystemDatabase {
          const client = await this.connect();
          try {
              await client.query('BEGIN ISOLATION LEVEL READ COMMITTED');
@@ -808,7 +930,7 @@ index 79ef5957a3..a03891f111 100644
              const statusParams = [];
              const { rows: statusRows } = await client.query(`SELECT status FROM "${schema}".workflow_status WHERE ${this.wf(undefined, workflowID, statusParams)}`, statusParams);
              if (statusRows.length === 0) {
-@@ -2158,6 +2281,9 @@ class SystemDatabase {
+@@ -2158,6 +2284,9 @@ class SystemDatabase {
          const client = await this.connect();
          try {
              await client.query('BEGIN ISOLATION LEVEL READ COMMITTED');
@@ -818,12 +940,25 @@ index 79ef5957a3..a03891f111 100644
              // Fetch the status of all original workflows inside the transaction.
              const statusParams = [];
              const { rows: statusRows } = await client.query(`SELECT ws.workflow_uuid, ws.name, ws.class_name, ws.config_name, ws.application_id,
+@@ -3672,6 +3801,12 @@ class SystemDatabase {
+     }
+     // ==================== Queries & Maintenance ====================
+     /** With `keyedIDs`, the listed workflow IDs are addressed by their shard keys, as a batch read of known workflows. */
++    openWorkflowStatusScan(input) {
++        return require('./workflow_status_scan').openWorkflowStatusScan(this.pool, this.schemaName, input);
++    }
++    readWorkflowStatusScanPage(continuation, options) {
++        return require('./workflow_status_scan').readWorkflowStatusScanPage(this.pool, this.schemaName, continuation, options);
++    }
+     async listWorkflows(input, options = {}) {
+         return await this.#listWorkflows(input, options);
+     }
 diff --git a/dist/src/workflow_retirement.d.ts b/dist/src/workflow_retirement.d.ts
 new file mode 100644
-index 0000000000..05c7fa3cb6
+index 0000000000..c4b5d0f995
 --- /dev/null
 +++ b/dist/src/workflow_retirement.d.ts
-@@ -0,0 +1,15 @@
+@@ -0,0 +1,47 @@
 +/** Permanent technical writer closure; never an authorization to erase live work. */
 +export interface WorkflowWriterFence {
 +    readonly workflowID: string;
@@ -839,3 +974,498 @@ index 0000000000..05c7fa3cb6
 +    readonly closureID: string | null;
 +    readonly closedAt: number | null;
 +}
++/** Caller-funded attempt. Deadline is absolute epoch ms and is never reset. */
++export type WorkflowRetirementDispatch =
++    | 'connect'
++    | 'rollback'
++    | 'begin'
++    | 'settings'
++    | 'reconcile'
++    | 'retire'
++    | 'commit'
++    | 'backoff';
++export interface WorkflowRetirementInvocation {
++    readonly deadline: number;
++    readonly maxAttempts: number;
++    reserve(dispatch: WorkflowRetirementDispatch): Promise<void>;
++    readonly signal?: AbortSignal;
++}
++export interface WorkflowRetirementFailedWork {
++    readonly attempt: number;
++    readonly dispatch: WorkflowRetirementDispatch;
++}
++export interface WorkflowRetirementOutcome {
++    readonly fence: WorkflowWriterFence;
++    readonly attempts: number;
++    readonly failedWork: readonly WorkflowRetirementFailedWork[];
++}
++export declare const WORKFLOW_RETIREMENT_MAX_ATTEMPTS = 8;
++export declare const WORKFLOW_RETIREMENT_DISPATCH: readonly WorkflowRetirementDispatch[];
++export declare class WorkflowRetirementBudgetError extends Error {
++    readonly attempts: number;
++    readonly failedWork: readonly WorkflowRetirementFailedWork[];
++    constructor(message: string, attempts: number, failedWork: readonly WorkflowRetirementFailedWork[], cause?: unknown);
++}
+diff --git a/dist/src/workflow_retirement.js b/dist/src/workflow_retirement.js
+new file mode 100644
+index 0000000000..993b515a0a
+--- /dev/null
++++ b/dist/src/workflow_retirement.js
+@@ -0,0 +1,6 @@
++"use strict";
++Object.defineProperty(exports, "__esModule", { value: true });
++const invoke = require("./workflow_retirement_invoke");
++exports.WORKFLOW_RETIREMENT_MAX_ATTEMPTS = invoke.WORKFLOW_RETIREMENT_MAX_ATTEMPTS;
++exports.WORKFLOW_RETIREMENT_DISPATCH = invoke.WORKFLOW_RETIREMENT_DISPATCH;
++exports.WorkflowRetirementBudgetError = invoke.WorkflowRetirementBudgetError;
+diff --git a/dist/src/workflow_retirement_invoke.js b/dist/src/workflow_retirement_invoke.js
+new file mode 100644
+index 0000000000..89462830d2
+--- /dev/null
++++ b/dist/src/workflow_retirement_invoke.js
+@@ -0,0 +1,230 @@
++"use strict";
++Object.defineProperty(exports, "__esModule", { value: true });
++exports.invokeRetireWorkflow = exports.WorkflowRetirementBudgetError = exports.WORKFLOW_RETIREMENT_MAX_ATTEMPTS = exports.WORKFLOW_RETIREMENT_DISPATCH = void 0;
++const { sleepms } = require('./utils');
++exports.WORKFLOW_RETIREMENT_DISPATCH = Object.freeze([
++    'connect',
++    'rollback',
++    'begin',
++    'settings',
++    'reconcile',
++    'retire',
++    'commit',
++    'backoff',
++]);
++exports.WORKFLOW_RETIREMENT_MAX_ATTEMPTS = 8;
++const INITIAL_BACKOFF_MS = 50;
++const MAX_BACKOFF_MS = 1000;
++class WorkflowRetirementBudgetError extends Error {
++    constructor(message, attempts, failedWork, cause) {
++        super(message, cause === undefined ? undefined : { cause });
++        this.name = 'WorkflowRetirementBudgetError';
++        this.attempts = attempts;
++        this.failedWork = Object.freeze(failedWork.map((item) => Object.freeze({ ...item })));
++    }
++}
++exports.WorkflowRetirementBudgetError = WorkflowRetirementBudgetError;
++function quoteSchema(schemaName) {
++    return '"' + String(schemaName).replace(/"/g, '""') + '"';
++}
++function requireWorkflowID(workflowID) {
++    if (typeof workflowID !== 'string' || workflowID.length === 0)
++        throw new TypeError('An actual workflow ID is required');
++    return workflowID;
++}
++function requireInvocation(invocation) {
++    if (!invocation || typeof invocation !== 'object' || Array.isArray(invocation))
++        throw new TypeError('Workflow retirement invocation is required');
++    if (!Number.isInteger(invocation.maxAttempts) ||
++        invocation.maxAttempts < 1 ||
++        invocation.maxAttempts > exports.WORKFLOW_RETIREMENT_MAX_ATTEMPTS)
++        throw new TypeError('Workflow retirement maxAttempts must be an integer from 1 through 8');
++    if (typeof invocation.deadline !== 'number' || !Number.isFinite(invocation.deadline))
++        throw new TypeError('Workflow retirement requires a finite absolute deadline');
++    if (typeof invocation.reserve !== 'function')
++        throw new TypeError('Workflow retirement requires a reserve function');
++    if (invocation.signal !== undefined && typeof invocation.signal.aborted !== 'boolean')
++        throw new TypeError('Workflow retirement signal must be an AbortSignal');
++    return invocation;
++}
++function remainingMs(deadline) {
++    return deadline - Date.now();
++}
++function live(deadline, signal) {
++    if (signal?.aborted)
++        return 'aborted';
++    if (remainingMs(deadline) <= 0)
++        return 'deadline';
++    return null;
++}
++function budgetError(kind, attempts, failedWork, cause) {
++    const message = kind === 'aborted' ? 'DBOS retirement was aborted' : kind === 'attempts'
++        ? 'DBOS retirement attempt ceiling exceeded'
++        : 'DBOS retirement deadline exceeded';
++    return new WorkflowRetirementBudgetError(message, attempts, failedWork, cause);
++}
++function isRetryable(error) {
++    return require('./system_database').retriablePostgresException(error);
++}
++async function connectWithDeadline(pool, deadline, signal) {
++    const stopped = live(deadline, signal);
++    if (stopped)
++        throw budgetError(stopped, 0, []);
++    const remaining = Math.max(1, remainingMs(deadline));
++    let settled = false;
++    const pending = Promise.resolve(pool.connect()).then((client) => {
++        if (settled) {
++            client.release();
++            throw budgetError('deadline', 0, []);
++        }
++        return client;
++    });
++    pending.catch(() => undefined);
++    let timer;
++    const timeout = new Promise((_, reject) => {
++        timer = setTimeout(() => {
++            settled = true;
++            reject(budgetError('deadline', 0, []));
++        }, remaining);
++    });
++    try {
++        if (signal) {
++            const abort = new Promise((_, reject) => {
++                const onAbort = () => {
++                    settled = true;
++                    reject(budgetError('aborted', 0, []));
++                };
++                if (signal.aborted)
++                    onAbort();
++                else
++                    signal.addEventListener('abort', onAbort, { once: true });
++            });
++            return await Promise.race([pending, timeout, abort]);
++        }
++        return await Promise.race([pending, timeout]);
++    }
++    finally {
++        clearTimeout(timer);
++    }
++}
++async function retireOnce(db, workflowID, deadline, signal, reserve) {
++    const schema = quoteSchema(db.schemaName);
++    await reserve('connect');
++    const client = await connectWithDeadline(db.pool, deadline, signal);
++    let begun = false;
++    try {
++        const stopped = live(deadline, signal);
++        if (stopped)
++            throw budgetError(stopped, 0, []);
++        await reserve('rollback');
++        await reserve('begin');
++        await client.query('BEGIN ISOLATION LEVEL READ COMMITTED');
++        begun = true;
++        await reserve('settings');
++        const wait = Math.max(1, remainingMs(deadline));
++        await client.query("SELECT set_config('statement_timeout',$1,true),set_config('lock_timeout',$1,true)",
++            [wait + 'ms']);
++        await reserve('reconcile');
++        const existing = await client.query(
++            `SELECT * FROM ${schema}.workflow_writer_fences WHERE workflow_uuid=$1 AND closed_at IS NOT NULL`,
++            [workflowID]);
++        let fence;
++        if (existing.rows[0])
++            fence = db.workflowWriterFenceReceipt(existing.rows[0]);
++        else {
++            await reserve('retire');
++            const retired = await client.query(`SELECT * FROM ${schema}.retire_workflow_writers($1)`, [workflowID]);
++            fence = db.workflowWriterFenceReceipt(retired.rows[0]);
++        }
++        await reserve('commit');
++        try {
++            await client.query('COMMIT');
++        }
++        catch (error) {
++            begun = false;
++            if (error && typeof error === 'object')
++                error.dbosUncertainCommit = true;
++            throw error;
++        }
++        begun = false;
++        return fence;
++    }
++    catch (error) {
++        if (begun)
++            await client.query('ROLLBACK').catch(() => undefined);
++        throw error;
++    }
++    finally {
++        client.release();
++    }
++}
++async function invokeRetireWorkflow(db, workflowID, invocation) {
++    const id = requireWorkflowID(workflowID);
++    const funded = requireInvocation(invocation);
++    const failedWork = [];
++    const originalDeadline = funded.deadline;
++    let attempts = 0;
++    let backoffMs = INITIAL_BACKOFF_MS;
++    let lastError;
++    const stop = () => live(originalDeadline, funded.signal);
++    if (stop())
++        throw budgetError(stop(), 0, []);
++    while (attempts < funded.maxAttempts) {
++        const halted = stop();
++        if (halted)
++            throw budgetError(halted, attempts, failedWork, lastError);
++        attempts += 1;
++        const attemptWork = [];
++        const reserve = async (dispatch) => {
++            const blocked = stop();
++            if (blocked)
++                throw budgetError(blocked, attempts, [...failedWork, ...attemptWork]);
++            await funded.reserve(dispatch);
++            attemptWork.push(Object.freeze({ attempt: attempts, dispatch }));
++        };
++        try {
++            const fence = await retireOnce(db, id, originalDeadline, funded.signal, reserve);
++            return Object.freeze({
++                fence,
++                attempts,
++                failedWork: Object.freeze(failedWork.map((item) => Object.freeze({ ...item }))),
++            });
++        }
++        catch (error) {
++            failedWork.push(...attemptWork);
++            lastError = error;
++            const uncertain = !!(error && typeof error === 'object' && error.dbosUncertainCommit);
++            if (error instanceof WorkflowRetirementBudgetError) {
++                error.attempts = attempts;
++                error.failedWork = Object.freeze(failedWork.map((item) => Object.freeze({ ...item })));
++                throw error;
++            }
++            if (error instanceof TypeError)
++                throw error;
++            if (attempts >= funded.maxAttempts)
++                throw budgetError('attempts', attempts, failedWork, error);
++            const haltedAfter = stop();
++            if (haltedAfter)
++                throw budgetError(haltedAfter, attempts, failedWork, error);
++            if (!uncertain && !isRetryable(error))
++                throw new WorkflowRetirementBudgetError(error instanceof Error ? error.message : String(error), attempts, failedWork, error);
++            if (uncertain)
++                continue;
++            await reserveBackoff(funded, originalDeadline, attempts, failedWork, backoffMs);
++            backoffMs = Math.min(backoffMs * 2, MAX_BACKOFF_MS);
++        }
++    }
++    throw budgetError('attempts', attempts, failedWork, lastError);
++}
++async function reserveBackoff(funded, deadline, attempts, failedWork, backoffMs) {
++    const blocked = live(deadline, funded.signal);
++    if (blocked)
++        throw budgetError(blocked, attempts, failedWork);
++    await funded.reserve('backoff');
++    failedWork.push(Object.freeze({ attempt: attempts, dispatch: 'backoff' }));
++    const wait = Math.min(backoffMs, Math.max(0, remainingMs(deadline)));
++    if (wait <= 0)
++        throw budgetError('deadline', attempts, failedWork);
++    await sleepms(wait);
++}
++exports.invokeRetireWorkflow = invokeRetireWorkflow;
+diff --git a/dist/src/workflow_status_scan.d.ts b/dist/src/workflow_status_scan.d.ts
+new file mode 100644
+index 0000000000..0c434b63d6
+--- /dev/null
++++ b/dist/src/workflow_status_scan.d.ts
+@@ -0,0 +1,45 @@
++import type { WorkflowStatusString } from './workflow';
++/** Immutable created_at + workflow_uuid total order from workflow_status. */
++export interface WorkflowStatusScanKey {
++    readonly createdAt: number;
++    readonly workflowID: string;
++}
++/** Opening snapshot: one application, inclusive creation cutoff, and the indexed upper key at open. */
++export interface WorkflowStatusScanHorizon {
++    readonly applicationName: string;
++    readonly createdBefore: number;
++    readonly upperKey: WorkflowStatusScanKey | null;
++}
++/** Persistable exclusive continuation. Auth owns durable sweep storage; the SDK does not. */
++export interface WorkflowStatusScanContinuation extends WorkflowStatusScanHorizon {
++    readonly lastExaminedKey: WorkflowStatusScanKey | null;
++}
++export interface OpenWorkflowStatusScanInput {
++    readonly applicationName: string;
++    readonly createdBefore: number;
++}
++export interface ReadWorkflowStatusScanPageOptions {
++    /** Raw rows examined before eligibility. Integer 1..1000, default 1000. */
++    readonly rawLimit?: number;
++}
++/** Payload-free status metadata for the Auth consumer. */
++export interface WorkflowStatusScanCopy {
++    readonly workflowID: string;
++    readonly workflowName: string;
++    readonly status: WorkflowStatusString;
++    readonly createdAt: number;
++    readonly completedAt: number | null;
++    readonly applicationName: string;
++}
++export interface WorkflowStatusScanPage {
++    /** Terminal copies with completed_at <= createdBefore among the examined raw rows. */
++    readonly copies: readonly WorkflowStatusScanCopy[];
++    readonly lastExaminedKey: WorkflowStatusScanKey | null;
++    /** Honest raw rows read this page, including pending and ineligible prefixes. */
++    readonly examined: number;
++    readonly exhausted: boolean;
++    readonly continuation: WorkflowStatusScanContinuation;
++}
++export declare const WORKFLOW_STATUS_SCAN_INDEX = "idx_workflow_status_scan";
++export declare const WORKFLOW_STATUS_SCAN_RAW_LIMIT = 1000;
++export declare const WORKFLOW_STATUS_SCAN_TERMINAL_STATUSES: readonly WorkflowStatusString[];
+diff --git a/dist/src/workflow_status_scan.js b/dist/src/workflow_status_scan.js
+new file mode 100644
+index 0000000000..5a191fafce
+--- /dev/null
++++ b/dist/src/workflow_status_scan.js
+@@ -0,0 +1,158 @@
++"use strict";
++Object.defineProperty(exports, "__esModule", { value: true });
++exports.readWorkflowStatusScanPage = exports.openWorkflowStatusScan = exports.WORKFLOW_STATUS_SCAN_TERMINAL_STATUSES = exports.WORKFLOW_STATUS_SCAN_RAW_LIMIT = exports.WORKFLOW_STATUS_SCAN_INDEX = void 0;
++exports.WORKFLOW_STATUS_SCAN_INDEX = 'idx_workflow_status_scan';
++exports.WORKFLOW_STATUS_SCAN_RAW_LIMIT = 1000;
++exports.WORKFLOW_STATUS_SCAN_TERMINAL_STATUSES = Object.freeze([
++    'SUCCESS',
++    'ERROR',
++    'CANCELLED',
++    'MAX_RECOVERY_ATTEMPTS_EXCEEDED',
++]);
++const TERMINAL = new Set(exports.WORKFLOW_STATUS_SCAN_TERMINAL_STATUSES);
++const APPLICATION_MAX_BYTES = 1024;
++const WORKFLOW_ID_MAX_BYTES = 1024;
++function quoteSchema(schemaName) {
++    return '"' + String(schemaName).replace(/"/g, '""') + '"';
++}
++function requireApplicationName(value) {
++    if (typeof value !== 'string' || value.length === 0 || Buffer.byteLength(value, 'utf8') > APPLICATION_MAX_BYTES)
++        throw new TypeError('Workflow status scan requires a bounded application name');
++    return value;
++}
++function requireCreatedBefore(value) {
++    if (typeof value !== 'number' || !Number.isSafeInteger(value))
++        throw new TypeError('Workflow status scan requires a safe-integer createdBefore cutoff');
++    return value;
++}
++function requireRawLimit(value) {
++    const limit = value === undefined ? exports.WORKFLOW_STATUS_SCAN_RAW_LIMIT : value;
++    if (typeof limit !== 'number' || !Number.isInteger(limit) || limit < 1 || limit > exports.WORKFLOW_STATUS_SCAN_RAW_LIMIT)
++        throw new TypeError('Workflow status scan rawLimit must be an integer from 1 through 1000');
++    return limit;
++}
++function requireWorkflowID(value) {
++    if (typeof value !== 'string' || value.length === 0 || Buffer.byteLength(value, 'utf8') > WORKFLOW_ID_MAX_BYTES)
++        throw new TypeError('Workflow status scan key requires a bounded workflow ID');
++    return value;
++}
++function requireCreatedAt(value) {
++    if (typeof value !== 'number' || !Number.isSafeInteger(value))
++        throw new TypeError('Workflow status scan key requires a safe-integer createdAt');
++    return value;
++}
++function freezeKey(createdAt, workflowID) {
++    return Object.freeze({ createdAt, workflowID });
++}
++function readKey(value, label) {
++    if (value === null)
++        return null;
++    if (typeof value !== 'object' || value === null || Array.isArray(value))
++        throw new TypeError(`${label} must be a scan key or null`);
++    return freezeKey(requireCreatedAt(value.createdAt), requireWorkflowID(value.workflowID));
++}
++function sameKey(left, right) {
++    if (left === null || right === null)
++        return left === right;
++    return left.createdAt === right.createdAt && left.workflowID === right.workflowID;
++}
++function freezeHorizon(applicationName, createdBefore, upperKey) {
++    return Object.freeze({ applicationName, createdBefore, upperKey });
++}
++function freezeContinuation(horizon, lastExaminedKey) {
++    return Object.freeze({
++        applicationName: horizon.applicationName,
++        createdBefore: horizon.createdBefore,
++        upperKey: horizon.upperKey,
++        lastExaminedKey,
++    });
++}
++function parseHorizon(input) {
++    if (typeof input !== 'object' || input === null || Array.isArray(input))
++        throw new TypeError('Workflow status scan continuation is required');
++    return freezeHorizon(requireApplicationName(input.applicationName), requireCreatedBefore(input.createdBefore), readKey(input.upperKey ?? null, 'upperKey'));
++}
++function parseContinuation(input) {
++    const horizon = parseHorizon(input);
++    const lastExaminedKey = Object.prototype.hasOwnProperty.call(input, 'lastExaminedKey')
++        ? readKey(input.lastExaminedKey, 'lastExaminedKey')
++        : null;
++    return freezeContinuation(horizon, lastExaminedKey);
++}
++function eligibleCopy(row, createdBefore) {
++    const completedAt = row.completed_at === null || row.completed_at === undefined ? null : Number(row.completed_at);
++    return (TERMINAL.has(row.status) &&
++        completedAt !== null &&
++        Number.isSafeInteger(completedAt) &&
++        completedAt <= createdBefore);
++}
++function mapCopy(row) {
++    return Object.freeze({
++        workflowID: row.workflow_uuid,
++        workflowName: row.name,
++        status: row.status,
++        createdAt: Number(row.created_at),
++        completedAt: row.completed_at === null || row.completed_at === undefined ? null : Number(row.completed_at),
++        applicationName: row.application_name,
++    });
++}
++async function openWorkflowStatusScan(pool, schemaName, input) {
++    const applicationName = requireApplicationName(input?.applicationName);
++    const createdBefore = requireCreatedBefore(input?.createdBefore);
++    const schema = quoteSchema(schemaName);
++    const { rows } = await pool.query(`/* dbos:workflow-status-scan-open */
++         SELECT created_at, workflow_uuid
++           FROM ${schema}.workflow_status
++          WHERE application_name = $1 AND created_at <= $2
++          ORDER BY created_at DESC, workflow_uuid DESC
++          LIMIT 1`, [applicationName, createdBefore]);
++    const upperKey = rows[0] ? freezeKey(Number(rows[0].created_at), rows[0].workflow_uuid) : null;
++    return freezeContinuation(freezeHorizon(applicationName, createdBefore, upperKey), null);
++}
++exports.openWorkflowStatusScan = openWorkflowStatusScan;
++async function readWorkflowStatusScanPage(pool, schemaName, continuation, options) {
++    const parsed = parseContinuation(continuation);
++    const rawLimit = requireRawLimit(options?.rawLimit);
++    if (parsed.upperKey === null)
++        return Object.freeze({
++            copies: Object.freeze([]),
++            lastExaminedKey: parsed.lastExaminedKey,
++            examined: 0,
++            exhausted: true,
++            continuation: parsed,
++        });
++    const schema = quoteSchema(schemaName);
++    const params = [
++        parsed.applicationName,
++        parsed.createdBefore,
++        parsed.upperKey.createdAt,
++        parsed.upperKey.workflowID,
++        rawLimit,
++    ];
++    let afterClause = '';
++    if (parsed.lastExaminedKey) {
++        afterClause = `AND (created_at > $6 OR (created_at = $6 AND workflow_uuid > $7))`;
++        params.push(parsed.lastExaminedKey.createdAt, parsed.lastExaminedKey.workflowID);
++    }
++    const { rows } = await pool.query(`/* dbos:workflow-status-scan-page */
++         SELECT workflow_uuid, name, status, created_at, completed_at, application_name
++           FROM ${schema}.workflow_status
++          WHERE application_name = $1
++            AND created_at <= $2
++            AND (created_at < $3 OR (created_at = $3 AND workflow_uuid <= $4))
++            ${afterClause}
++          ORDER BY created_at ASC, workflow_uuid ASC
++          LIMIT $5`, params);
++    const last = rows.length === 0 ? parsed.lastExaminedKey : freezeKey(Number(rows[rows.length - 1].created_at), rows[rows.length - 1].workflow_uuid);
++    const reachedUpper = last !== null && sameKey(last, parsed.upperKey);
++    const exhausted = rows.length < rawLimit || reachedUpper;
++    const copies = Object.freeze(rows.filter((row) => eligibleCopy(row, parsed.createdBefore)).map(mapCopy));
++    return Object.freeze({
++        copies,
++        lastExaminedKey: last,
++        examined: rows.length,
++        exhausted,
++        continuation: freezeContinuation(parsed, last),
++    });
++}
++exports.readWorkflowStatusScanPage = readWorkflowStatusScanPage;

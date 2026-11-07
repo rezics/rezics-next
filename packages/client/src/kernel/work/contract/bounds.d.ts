@@ -184,3 +184,63 @@ export declare const SDK_MAINTENANCE_DISPATCH: Readonly<{
     };
 }>;
 export type SdkMaintenanceDispatch = keyof typeof SDK_MAINTENANCE_DISPATCH;
+export declare const SDK_RETIREMENT_MAX_ATTEMPTS = 8;
+export declare const SDK_RETIREMENT_DISPATCH: Readonly<{
+    connect: {
+        rows: number;
+        points: number;
+        statements: number;
+        bytes: number;
+        engineRequests: number;
+    };
+    rollback: {
+        rows: number;
+        points: number;
+        statements: number;
+        bytes: number;
+        engineRequests: number;
+    };
+    begin: {
+        rows: number;
+        points: number;
+        statements: number;
+        bytes: number;
+        engineRequests: number;
+    };
+    settings: {
+        rows: number;
+        points: number;
+        statements: number;
+        bytes: number;
+        engineRequests: number;
+    };
+    reconcile: {
+        rows: number;
+        points: number;
+        statements: number;
+        bytes: number;
+        engineRequests: number;
+    };
+    retire: {
+        rows: number;
+        points: number;
+        statements: number;
+        bytes: number;
+        engineRequests: number;
+    };
+    commit: {
+        rows: number;
+        points: number;
+        statements: number;
+        bytes: number;
+        engineRequests: number;
+    };
+    backoff: {
+        rows: number;
+        points: number;
+        statements: number;
+        bytes: number;
+        engineRequests: number;
+    };
+}>;
+export type SdkRetirementDispatch = keyof typeof SDK_RETIREMENT_DISPATCH;

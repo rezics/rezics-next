@@ -5,7 +5,7 @@ import { invalidateSubjectPage } from './subject-page-publication-native.ts';
 import { identityEpochStore, identityJobPartition } from './identity-adapters/index.ts';
 import selectJobById from './identity-epoch-store-select-job-by-id.sql';
 import type { Pool } from 'pg';
-import { type CommandAuthorization, type CommandTransaction } from '../command/command.ts';
+import { noEffect, type CommandAuthorization, type CommandTransaction } from '../command/command.ts';
 import { withConnection } from '../database/pool.ts';
 import type { AccountActor } from '../request/access.ts';
 import { partitionOf, routeOf } from '../route/route.ts';
@@ -113,8 +113,8 @@ export async function mergeSubjects(
 
 export type SubjectMergeAdmission = { operation: { id: string } };
 
-/** Ordinary HTTP admission. Completes the catalogue redirect in the persist command;
- * callers observe publication through GET /v1/subjectIdentityOperations/{id}. */
+/** Ordinary HTTP admission. Retains the identity job; mapping applies the catalogue
+ * redirect. Callers observe publication through GET /v1/subjectIdentityOperations/{id}. */
 export async function admitMergeSubjects(
   pool: Pool,
   options: {
@@ -200,15 +200,11 @@ export async function admitMergeSubjects(
       authorization: options.authorization,
       ...(options.clock === undefined ? {} : { clock: options.clock }),
     },
-    async (tx, { transactionId }) => {
-      // prepareAdmission already compared and locked the paired evidence in its
-      // authorized first-effect transaction. Do not compare it again after admission.
-      const merged = await mergeSubjectsInCommand(tx, transactionId, {
-        survivor,
-        redirected,
-        release: options.release,
-      });
-      return { value: { operation: { id: job.jobId } }, events: merged.events };
+    async () => {
+      // HTTP admission retains the identity job. Mapping applies the catalogue
+      // redirect. A persist-command redirect against the admission hold raises
+      // identity_epoch_unavailable, including for still-legacy birth rows.
+      return noEffect({ operation: { id: job.jobId } });
     },
   );
   return {

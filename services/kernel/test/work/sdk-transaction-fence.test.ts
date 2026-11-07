@@ -4,9 +4,11 @@ import pg from 'pg';
 import { noEffect, runCommand } from '../../src/command/command.ts';
 import { createWorkClient } from '../../src/work/client.ts';
 import {
+  invokeSdkWorkflowRetirement,
   lockSdkWorkflowWriterState,
   readSdkWorkflowWriterState,
   retireSdkWorkflowWriters,
+  SDK_RETIREMENT_DISPATCH,
 } from '../../src/work/sdk-retirement-fence.ts';
 
 const databaseUrl = process.env.DATABASE_URL;
@@ -180,4 +182,30 @@ test('Bounded original SDK maintenance funds each dispatch once, rolls back refu
       async () => {},
     ),
   ).rejects.toThrow('restore generation changed');
+});
+
+test('Caller-funded retirement reserves connect through commit once on the success path', async () => {
+  const workflowID = id();
+  await client.enqueue(options(workflowID), workflowID);
+  const charged: unknown[] = [];
+  const outcome = await invokeSdkWorkflowRetirement(
+    workflowID,
+    {
+      deadline: Date.now() + 5_000,
+      maxAttempts: 1,
+      reserve: async (cost) => {
+        charged.push(cost);
+      },
+    },
+    client,
+  );
+  expect(outcome.attempts).toBe(1);
+  expect(outcome.failedWork).toEqual([]);
+  expect(outcome.fence.generation).toBe('2');
+  expect(charged).toEqual(
+    ['connect', 'rollback', 'begin', 'settings', 'reconcile', 'retire', 'commit'].map(
+      (key) => SDK_RETIREMENT_DISPATCH[key as keyof typeof SDK_RETIREMENT_DISPATCH],
+    ),
+  );
+  expect(await readSdkWorkflowWriterState(workflowID, client)).toMatchObject(outcome.fence);
 });

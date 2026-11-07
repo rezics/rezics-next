@@ -37,7 +37,8 @@ clear choice targets one existing measure and is never inferred from absent or u
 ## Occurrence selection and confirmation
 
 The owner may select a session from the existing subject-filtered `/v1/progressSessions` pages or request an explicit
-new occurrence during row review. Each selected existing session is inspected by its supplied ID only. Review binds
+new occurrence during row review. Each selected existing session is inspected by its supplied ID only, through the native session fact rather than
+presentation labels. Review binds
 owner/upload/row and source fingerprint, subject and current profile identity, session ID and immutable creation
 identity, shared revision, selected units, source amounts and current amounts. The service never searches an owner's
 history to guess a target. A new occurrence is not created by preview or review; the confirmed apply first uses the
@@ -87,8 +88,14 @@ AniList keeps `POST /v1/libraryImports/anilist/:importId:review`, `:apply` and i
 accepts the same occurrence and per-measure choices alongside its existing source-field selection. Apply continues
 to confirm the stored review ID. Both APIs return `stale` for a changed shared revision, current profile or selected
 occurrence; separate start and measure receipts expose an admitted partial occurrence when a later measure fails.
-Failed or uncertain effects retry the original native receipt and operands. The row page adds the private field/unit
+Failed or uncertain effects retry the original native receipt and operands. A definite native invalid, denied or
+unavailable write throws; it is not recorded as an uncertain retry. Native import progress actors occupy partition 0
+with the selected Subject so the same-home identity mapping Rating already uses for guarded votes applies.
+AniList native episode adoption uses the same `fixture.game` episode units and partition-0 home Subject as MAL, because the import fixture's Child type carries that profile.
+Partition 0 identity bootstrap waits until that Subject exists so the first scan includes it. Native import tests recapture identity dirty after each Subject write, after link drain on each HTTP send once a Subject is mapped on that home, and before direct Rating apply, so Entry, Progress and vote writes cannot leave Mapping pending. A mapped home with no dirty originals and empty control pending/prepare pins stays current; recapture does not start another bootstrap generation or republish an installed epoch. They drain held prearm after mapping completes; unpublished Search/Library acknowledgements do not pin the group against later Progress writes. Mapping-complete pending jobs are current once that job's epoch is installed; native import tests then publish that job so later bootstrap can recapture dirty. A home is current for later Progress writes only after those jobs are published and control pending/prepare pins are empty. Apply commits Progress before independent state so Entry writes cannot dirty the occurrence target. A preparing identity job may change `prearm_phase`, `prearm_transaction_id` and `cancellation_transaction_id`; intent and receipts stay immutable. Later Subject writes recapture identity dirty before Progress resolves the mapping. The row page adds the private field/unit
 matrix and per-measure result.
+
+Decision: landing keeps the existing AniList, MAL and Bangumi native tests plus personal-list-source-admission and client type assertions; no extra stories beyond the named label-adoption states.
 
 Both provider methods use the native `GET /v1/progressSessions?subjectId=...` bounded selection pages,
 `GET /v1/progressSessions/:sessionId` inspection, `POST /v1/progressSessions` explicit start, and

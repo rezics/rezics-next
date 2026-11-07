@@ -1,5 +1,11 @@
 import canonicalize from 'canonicalize';
-import { DBOS, DBOSClient, type WorkflowWriterFence, type WorkflowWriterState } from '@dbos-inc/dbos-sdk';
+import {
+  DBOS,
+  DBOSClient,
+  type WorkflowRetirementInvocation,
+  type WorkflowWriterFence,
+  type WorkflowWriterState,
+} from '@dbos-inc/dbos-sdk';
 import { isBound } from '@rezics/bounds';
 import type { Pool, PoolClient, QueryResult } from 'pg';
 import { systemClock } from '../../clock.ts';
@@ -27,6 +33,10 @@ import type {
 } from '../contract/index.ts';
 
 type BoundedSdk = DBOSClient & {
+  retireWorkflow(
+    workflowID: string,
+    invocation: WorkflowRetirementInvocation,
+  ): Promise<import('@dbos-inc/dbos-sdk').WorkflowRetirementOutcome>;
   maintainWorkflowOnce(
     pool: Pool,
     expected: WorkflowWriterState,
@@ -167,6 +177,13 @@ export function createNativeWorkPorts(): WorkApplicationPorts {
     sdkRetirement: {
       retireWorkflow(actualWorkflowId) {
         return DBOS.retireWorkflow(actualWorkflowId);
+      },
+      supportsBoundedRetirement(client) {
+        const target = client === DBOS ? DBOS : asSdk(client);
+        return typeof target.retireWorkflow === 'function' && target.retireWorkflow.length >= 2;
+      },
+      invokeRetirement(actualWorkflowId, client, invocation) {
+        return (client === DBOS ? DBOS : asBounded(client)).retireWorkflow(actualWorkflowId, invocation);
       },
       readFence(actualWorkflowId) {
         return DBOS.getWorkflowWriterFence(actualWorkflowId);

@@ -13,6 +13,8 @@ import type {
   WorkQueueOptions,
   WorkRegisteredEffects,
   WorkRetirementFence,
+  WorkRetirementInvocation,
+  WorkRetirementOutcome,
   WorkScopedRequest,
   WorkSdkClient,
   WorkSelectedIdentity,
@@ -72,6 +74,17 @@ export type SdkRuntimePort = {
 
 export type SdkRetirementPort = {
   retireWorkflow(actualWorkflowId: string): Promise<WorkRetirementFence>;
+  supportsBoundedRetirement(client: WorkSdkClient): boolean;
+  invokeRetirement(
+    actualWorkflowId: string,
+    client: WorkSdkClient,
+    invocation: Readonly<{
+      deadline: number;
+      maxAttempts: number;
+      reserve: (dispatch: string) => Promise<void>;
+      signal?: AbortSignal;
+    }>,
+  ): Promise<WorkRetirementOutcome>;
   readFence(actualWorkflowId: string): Promise<WorkRetirementFence | null>;
   readWriterState(actualWorkflowId: string, client: WorkSdkClient): Promise<WorkWriterState | null>;
   lockWriterState(
@@ -405,6 +418,11 @@ export type WorkApplication = {
     input: { partition: number; workId: string; digest: Uint8Array; owner: string },
   ): Promise<void>;
   retireWriters(actualWorkflowId: string): Promise<WorkRetirementFence>;
+  invokeRetirement(
+    actualWorkflowId: string,
+    client: WorkSdkClient,
+    invocation: WorkRetirementInvocation,
+  ): Promise<WorkRetirementOutcome>;
   readRetirement(actualWorkflowId: string): Promise<WorkRetirementFence | null>;
   readWriterState(actualWorkflowId: string, client: WorkSdkClient): Promise<WorkWriterState | null>;
   lockWriterState(tx: WorkQueryClient, expected: WorkWriterState, client: WorkSdkClient): Promise<WorkWriterState>;

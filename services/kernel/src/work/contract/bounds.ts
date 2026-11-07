@@ -125,3 +125,18 @@ export const SDK_MAINTENANCE_DISPATCH = Object.freeze({
 });
 
 export type SdkMaintenanceDispatch = keyof typeof SDK_MAINTENANCE_DISPATCH;
+
+export const SDK_RETIREMENT_MAX_ATTEMPTS = 8;
+
+export const SDK_RETIREMENT_DISPATCH = Object.freeze({
+  connect: { rows: 0, points: 0, statements: 0, bytes: 0, engineRequests: 1 },
+  rollback: { rows: 0, points: 0, statements: 1, bytes: 0, engineRequests: 0 },
+  begin: { rows: 0, points: 0, statements: 1, bytes: 0, engineRequests: 0 },
+  settings: { rows: 1, points: 0, statements: 1, bytes: 128, engineRequests: 0 },
+  reconcile: { rows: 3, points: 2, statements: 1, bytes: 8192, engineRequests: 0 },
+  retire: { rows: 8, points: 5, statements: 9, bytes: 32768, engineRequests: 0 },
+  commit: { rows: 0, points: 0, statements: 1, bytes: 0, engineRequests: 0 },
+  backoff: { rows: 0, points: 0, statements: 0, bytes: 0, engineRequests: 0 },
+});
+
+export type SdkRetirementDispatch = keyof typeof SDK_RETIREMENT_DISPATCH;

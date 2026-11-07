@@ -88,9 +88,9 @@ This base's generated client route declaration still lags the native score revie
 `KernelClient`, then carries the documented score input, version-one guard, conditional admission, applied score
 outcome and current reading through a narrow typed seam without rebuilding or dropping them. The native owner remains
 responsible for positive guarded admission and its receipt; Web already consumes either a positive result or the exact
-supplied unavailable reason through the same flow. The current producer can return `atomic_guard_unavailable`; this
-is shown verbatim and leaves status and source effects visible. Native, signed-in browser and full importer acceptance
-remain with their existing owners and controller.
+supplied unavailable reason through the same flow. Same-home selected votes complete through the guarded producer;
+foreign-home `atomic_guard_unavailable` is shown verbatim and leaves status and source effects visible. Native, signed-in
+browser and full importer acceptance remain with their existing owners and controller.
 
 The native caller-cost account is in [personal MAL import](../../../docs/library-import-mal.md). Its bounded page,
-guard, conditional vote command, receipt, journal and transaction work are unchanged by the Web composition.
+guard, prepared vote command, receipt, journal and transaction work are unchanged by the Web composition.

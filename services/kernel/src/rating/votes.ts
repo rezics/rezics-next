@@ -344,10 +344,12 @@ export function createVoteCommands(config: Dependencies) {
     pool,
     ...(clock === undefined ? {} : { clock }),
   });
+  // Guarded and unguarded votes share token-scope rating:vote authorization.
+  // Access does not require a live account grant for this action; HTTP PUT votes
+  // already admit on the authenticated account plus personal Library exposure.
   const guardedRunner = createLibraryCommandRunner({
     ...(capabilities.command ? { command: capabilities.command } : {}),
     pool,
-    access: config.access,
     ...(clock === undefined ? {} : { clock }),
   });
   const countedVoteReader = createOwnCountedVoteReader({ pool, access: config.access });

@@ -14,7 +14,11 @@ export type {
   WorkQueueName,
   WorkQueueOptions,
   WorkRegisteredEffects,
+  WorkRetirementDispatch,
+  WorkRetirementFailedWork,
   WorkRetirementFence,
+  WorkRetirementInvocation,
+  WorkRetirementOutcome,
   WorkScopedRequest,
   WorkSdkClient,
   WorkSelectedIdentity,
@@ -29,6 +33,8 @@ export {
   MAX_WORKFLOW_RETENTION_DAYS,
   MIN_WORKFLOW_RETENTION_DAYS,
   SDK_MAINTENANCE_DISPATCH,
+  SDK_RETIREMENT_DISPATCH,
+  SDK_RETIREMENT_MAX_ATTEMPTS,
   SDK_TRANSACTION_FENCE_COST,
   SELECTED_CONTINUATION_PAYLOAD_MAX_BYTES,
   SELECTED_ISSUE_DEADLINE_MS,
@@ -76,7 +82,7 @@ export {
   WORK_STEP_RETRY_INTERVAL_SECONDS,
   WORK_STEP_RETRY_MAX_ATTEMPTS,
 } from './bounds.ts';
-export type { SdkMaintenanceDispatch } from './bounds.ts';
+export type { SdkMaintenanceDispatch, SdkRetirementDispatch } from './bounds.ts';
 export { WORK_COST_AXES } from './cost.ts';
 export type { WorkCost, WorkCostAxis } from './cost.ts';
 export type {

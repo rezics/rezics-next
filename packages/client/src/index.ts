@@ -98,6 +98,17 @@ type AnnotationCorrectionRoute = Routes['libraryEntryAnnotationCorrections'];
 export type EntryAnnotationCorrectionInput = AnnotationCorrectionRoute['post']['body'];
 export type EntryAnnotationCorrectionCancelResult =
   AnnotationCorrectionRoute[':reviewId']['cancel']['post']['response'][200];
+export type {
+  BangumiChoice,
+  BangumiOutcome,
+  BangumiReview,
+  BangumiScoreChoice,
+  BangumiScoreCurrentVote,
+  BangumiScoreOutcome,
+  BangumiScoreReview,
+  BangumiScoreSelection,
+} from './kernel/library/list-import-bangumi-model.ts';
+export type { BangumiTag, BangumiTagPage } from './kernel/library/list-import-bangumi-label-model.ts';
 
 type NativePostHistoryPage = Routes['posts'][':id']['revisions']['get']['response'][200]['page'];
 type Routes = KernelType['~Routes']['v1'];

@@ -89,6 +89,22 @@ export type WorkRetirementFence = Readonly<{
     closureID: string;
     closedAt: number;
 }>;
+export type WorkRetirementDispatch = 'connect' | 'rollback' | 'begin' | 'settings' | 'reconcile' | 'retire' | 'commit' | 'backoff';
+export type WorkRetirementFailedWork = Readonly<{
+    attempt: number;
+    dispatch: WorkRetirementDispatch;
+}>;
+export type WorkRetirementInvocation = Readonly<{
+    deadline: number;
+    maxAttempts: number;
+    reserve: (cost: WorkDispatchCost) => Promise<void>;
+    signal?: AbortSignal;
+}>;
+export type WorkRetirementOutcome = Readonly<{
+    fence: WorkRetirementFence;
+    attempts: number;
+    failedWork: readonly WorkRetirementFailedWork[];
+}>;
 export type WorkDispatchCost = Readonly<{
     rows: number;
     points: number;

@@ -1,10 +1,15 @@
-import type { WorkApplicationPorts, WorkDispatchCost, WorkPool, WorkQueryClient, WorkSdkClient, WorkWriterState } from '../contract/index.ts';
+import type { WorkApplicationPorts, WorkDispatchCost, WorkPool, WorkQueryClient, WorkRetirementInvocation, WorkSdkClient, WorkWriterState } from '../contract/index.ts';
 export declare function createRetirement(ports: Pick<WorkApplicationPorts, 'sdkRetirement' | 'history'>): {
     retireWriters(actualWorkflowId: string): Promise<Readonly<{
         workflowID: string;
         generation: string;
         closureID: string;
         closedAt: number;
+    }>>;
+    invokeRetirement(actualWorkflowId: string, client: WorkSdkClient, invocation: WorkRetirementInvocation): Promise<Readonly<{
+        fence: import("../contract/vocabulary.ts").WorkRetirementFence;
+        attempts: number;
+        failedWork: readonly import("../contract/vocabulary.ts").WorkRetirementFailedWork[];
     }>>;
     readRetirement(actualWorkflowId: string): Promise<Readonly<{
         workflowID: string;

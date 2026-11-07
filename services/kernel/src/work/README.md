@@ -145,6 +145,57 @@ Sources inspected: the indexed `native-scheduler-funded-design/dbos-transact-ts`
 sections of `src/system_database.ts`, and migrations 108–112; installed SDK client/queue declarations, deletion and
 native migration implementation. Payload `retention_timestamp` indexes do not decide workflow eligibility.
 
+## Bounded workflow-status scan
+
+Decision: Auth retention and copy retirement consume a payload-free SDK status scan on the static `DBOS` and
+`DBOSClient` boundaries. `GetWorkflowsInput` keeps inclusive created ranges, OFFSET and eligibility filters before
+LIMIT, so pending and recently completed prefixes can starve later eligible copies and cannot resume a stable tie.
+Remove the scan patch when upstream supplies the same bounded keyset producer. Performance keeps the Auth callback,
+native 256/1024/4096 proof and retirement integration; this producer does not decide custody readiness.
+
+The installed methods are `openWorkflowStatusScan({ applicationName, createdBefore })` and
+`readWorkflowStatusScanPage(continuation, { rawLimit })`. Opening fixes one application, an inclusive `created_at`
+cutoff and the indexed upper key then present in that range. Pages walk `(created_at ASC, workflow_uuid ASC)` with an
+exclusive last-examined key, `rawLimit` at most 1000, and no OFFSET. The persistable continuation repeats the
+application, cutoff and upper key plus the last examined key. Terminal eligibility
+(`SUCCESS`/`ERROR`/`CANCELLED`/`MAX_RECOVERY_ATTEMPTS_EXCEEDED` and `completed_at <= createdBefore`) runs after the
+raw limit. Those statuses are the SDK `StatusString` literals; the scan module does not import `workflow.js`, so
+`dbos schema` can load the package through the existing CJS cycle. Returned copies are status metadata only: id,
+name, status, created/completed timestamps and application. Examined count is the raw rows of that page, including
+pending custody and ineligible recent completion. Exhaustion is explicit.
+
+The key is the SDK `workflow_status` invariant: `created_at` is a bigint assigned at insert and `workflow_uuid` is the
+immutable primary key. The SDK-owned covering index `idx_workflow_status_scan` on
+`(application_name, created_at, workflow_uuid) INCLUDE (name, status, completed_at)` is an append-only migration after
+selected execution; existing positional fence migrations stay put. Fresh schema install and an upgraded
+`dbos_migrations.version` both create that index. Application anchoring and seeks use that range: keys after the
+captured upper bound or behind the last examined key are outside this sweep.
+
+Concurrent visibility is READ COMMITTED under the fixed horizon. Inserts with keys `<= upperKey` and after
+`lastExaminedKey` can appear on a later page of the same open. Inserts after the upper key, and inserts already
+behind the continuation, wait for the next `openWorkflowStatusScan`. Completing or deleting an already examined row
+does not rewind the continuation; a later pending copy becomes eligible on a subsequent open, which Auth owns.
+Timestamp ties split across pages by `workflow_uuid`. Deleting the previous key does not loop or skip later keys
+because continuation is exclusive on the stored key, not on a live row.
+
+Auth must not query private SDK tables. Ordinary resolution receives this producer without a dependency hold.
+
+### Cost: workflow status scan
+
+- Touches: one indexed upper-key seek at open; each page one indexed exclusive range on `workflow_status` with a raw
+  limit of at most 1,000. No input/output/operations joins and no OFFSET.
+- Bound: open examines one row; a page examines at most `rawLimit` status rows and returns only those eligible copies.
+  Unrelated applications, keys after the upper bound and keys already examined stay unvisited. Prefixes of pending or
+  recently completed copies consume the raw budget and advance the continuation, so they cannot hide later eligible
+  copies behind a filtered LIMIT.
+- Growth check: `test/work/sdk-workflow-selection-growth.test.ts` grows pending, old-created/recent-completed and
+  unrelated-application prefixes independently at 256/1024/4096 with selected eligible copies fixed, and captures
+  plans, examined rows, buffers and payload projection for opening and each page.
+
+Pin with `test/work/sdk-workflow-selection.test.ts` (ties, full/short/empty pages, prefixes, unrelated applications,
+serialized restart, previous-key deletion, concurrent insert/completion, later pending recovery, fresh and upgraded
+schema) plus the growth file. Existing `sdk-retirement-fence.test.ts` remains the native retirement producer.
+
 ## Bounded legacy membership child discovery
 
 `WorkClient.discoverLegacyLeaveChild(workflowId)` resolves a strict `realm:leave:<realm-id>:<member-id>` locator to
@@ -169,10 +220,32 @@ The pinned SDK extension declares `DBOSClient.retireWorkflow(actualWorkflowId)` 
 The actual, unchanged workflow ID is the native identity. The receipt contains that ID, its permanent writer
 generation, a native closure UUID and the native closure timestamp. Repeated retirement returns the same receipt.
 
+Decision: caller-funded retirement is `retireWorkflow(id, invocation)` on `DBOS`/`DBOSClient`, returning
+`{ fence, attempts, failedWork }`. `invocation` is `{ deadline, maxAttempts, reserve, signal? }`: `deadline` is
+absolute epoch ms and is never reset; `maxAttempts` is an integer 1 through 8; `reserve` is called before every
+dispatch including failed attempts, recovery reads and backoff; ambient `AbortSignal` only supplements that budget.
+Work maps dispatch names through `SDK_RETIREMENT_DISPATCH` in [bounds.ts](contract/bounds.ts) and exposes
+`invokeSdkWorkflowRetirement`. One-argument `retireWorkflow(id)` remains the compatibility path Auth currently
+calls; Auth re-exports the invocation, outcome and budget-error contract from its retirement fence. Performance
+owns funded Auth consumption on `closeAuthSdkWriters`. Failed work is the reserved
+dispatches of unsuccessful attempts and is not refunded when a later attempt converges.
+
+The bounded attempt reuses `maintainWorkflowOnce` semantics: prepaid rollback, one READ COMMITTED transaction,
+statement and lock waits set to the remaining deadline, no `withDbRetry`, no identity change and no payload
+deletion. Connection admission is reserved and raced against the same deadline. A lost COMMIT response is not a
+receipt: the next funded attempt rereads the permanent fence for that workflow ID and restore domain, or retires
+again if closure is still absent. Exhausted attempts leave custody on the existing maintenance lifecycle.
+
 The declaration commit preceded the implementation for consumer integration. The patch now supplies both the
 native implementation and declarations; declaration-only revisions establish no closure. Native proof and
 participant completion remain separate from source integration and typing. The native cases in
 [sdk-retirement-fence.test.ts](../../test/work/sdk-retirement-fence.test.ts) await post-integration execution.
+Decision: pin the funded bound on that same file with five cases (persistent connect failure, lock deadline,
+transient recovery, exhausted attempts, lost COMMIT); keep original fence, scan and transaction assertions; no stories.
+Decision: Work contract bounds/index unions Performance payload-family copies and FK cascade/statement/row/byte
+declarations with this producer's funded-retirement constants and types; Auth re-exports the SDK invocation,
+outcome and budget-error contract, and Performance owns `closeAuthSdkWriters` consumption. Existing retirement,
+fence and selection assertions stay. J18 Goal walk owns native receiving. No duplicate retention producer.
 
 Retirement establishes technical SDK writer closure only. Genuine Source, consumer and root admission belong to
 their owners. SUCCESS, cancellation, an empty status read or a caller boolean cannot supply that authority. This
@@ -356,6 +429,29 @@ refusal/rollback and late-writer cases remain UNRUN pending integration. This ad
 it consumes the existing producer's permanent fence, restore domain and native functions. History's compatible
 forward migration owns only its own original association and receiving guards. The detailed default wiring and
 same-frame Source cost handoff are in [Access](../access/README.md#cost-complete-selected-identity-unit).
+
+## Caller-funded SDK retirement
+
+`invokeSdkWorkflowRetirement` is the supported failure-bounded producer. Each attempt reserves connect, prepaid
+rollback, begin, settings, reconcile, retire when still open, and commit. Backoff between retryable failures is
+reserved and sleeps at most the remaining deadline. Full success with no predecessors is
+13/7/16/41120/1 including the connection; a closed-fence reconcile omits retire (8/2/8/8320/1). Failed attempts keep
+every dispatch they reserved. `WorkflowRetirementBudgetError` exposes `attempts` and `failedWork`.
+
+| Dispatch  | SQL / wait                                                     | rows / points / statements / bytes / engine |
+| --------- | -------------------------------------------------------------- | ------------------------------------------- |
+| connect   | pool checkout, raced against remaining deadline                | 0/0/0/0/1                                   |
+| rollback  | `ROLLBACK` prepaid                                             | 0/0/1/0/0                                   |
+| begin     | `BEGIN ISOLATION LEVEL READ COMMITTED`                         | 0/0/1/0/0                                   |
+| settings  | `statement_timeout` and `lock_timeout` both remaining deadline | 1/0/1/128/0                                 |
+| reconcile | keyed closed-fence read                                        | 3/2/1/8192/0                                |
+| retire    | original `retire_workflow_writers`                             | 8/5/9/32768/0                               |
+| commit    | `COMMIT`                                                       | 0/0/1/0/0                                   |
+| backoff   | sleep capped by remaining deadline                             | 0/0/0/0/0                                   |
+
+Pin with `test/work/sdk-retirement-fence.test.ts` (persistent connect failure, lock/deadline, transient recovery,
+exhausted attempts, lost COMMIT then same-identity convergence and old-client refusal). Original one-argument
+fence assertions stay in that file and `sdk-transaction-fence.test.ts`.
 
 ## Private Auth Kind enrollment participant
 
