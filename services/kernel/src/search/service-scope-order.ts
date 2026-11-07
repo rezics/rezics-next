@@ -30,10 +30,7 @@ function ordinalTerms() {
     return Object.freeze({
       metadataPrefix: MEMBERS_PREPARATION_SOURCE_TERMS().metadataPrefix,
       searchBody: MEMBERS_PREPARATION_SOURCE_TERMS().searchBody,
-      collectionState: repeatBound(
-        sourceBound(source.canonicalReceivingCost().state),
-        ordinalPath().membersSnapshots,
-      ),
+      collectionState: repeatBound(sourceBound(source.canonicalReceivingCost().state), ordinalPath().membersSnapshots),
       nativeOrdinal: repeatBound(sourceBound(nativeOrdinal().work), ordinalPath().rawOrdinalRowsMaximum),
       sourceTransaction: MEMBERS_PREPARATION_SOURCE_TERMS().sourceTransaction,
     });
@@ -69,12 +66,14 @@ export function SEARCH_SCOPE_ORDINAL_OPERATION() {
 }
 
 /** Bind the Search application orchestration to the installed Library capability. */
-export function createSearchScopeOrder(config: Readonly<{
-  pool: Pool;
-  options: LeafOptions;
-  clock: KernelClock;
-  library?: SearchLibraryScopePort;
-}>) {
+export function createSearchScopeOrder(
+  config: Readonly<{
+    pool: Pool;
+    options: LeafOptions;
+    clock: KernelClock;
+    library?: SearchLibraryScopePort;
+  }>,
+) {
   return createSearchScopeOrderApplication({
     ...config,
     library: config.library ?? searchLibraryScopePort(),
@@ -84,8 +83,4 @@ export function createSearchScopeOrder(config: Readonly<{
 }
 
 export { sameScopeObservation } from './scope-application.ts';
-export type {
-  SearchScopeCollection,
-  SearchScopeOrder,
-  SearchScopeOrdinalPrefix,
-} from './library-scope-port.ts';
+export type { SearchScopeCollection, SearchScopeOrder, SearchScopeOrdinalPrefix } from './library-scope-port.ts';

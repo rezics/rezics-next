@@ -1,7 +1,10 @@
 import { memoizedValue } from '../memoized.ts';
 import { BOUND_AXES, declareBound, repeatBound, sumBounds, type Bound } from '@rezics/bounds';
 import type { WorkDimensions } from '../library/contract/work-dimensions.ts';
-import { MEMBERS_PREPARATION_BRANCH_COST, MEMBERS_PREPARATION_STEP_CEILING } from '../library/members-preparation-cost.ts';
+import {
+  MEMBERS_PREPARATION_BRANCH_COST,
+  MEMBERS_PREPARATION_STEP_CEILING,
+} from '../library/members-preparation-cost.ts';
 import { SELECTED_COST } from '../work/selected-runtime-cost.ts';
 import { searchLibraryScopePort } from './scope-application.ts';
 

@@ -387,10 +387,7 @@ export function createSearchScopeSource({
     )
       unavailable();
     if (!reader.nativeT) unavailable();
-    const nativeWork = searchLibraryScopePort().members.createNativeCollectionWork(
-      work.remaining(),
-      reader.deadline,
-    );
+    const nativeWork = searchLibraryScopePort().members.createNativeCollectionWork(work.remaining(), reader.deadline);
     const bound = await (async () => {
       try {
         const captured = value.ordered?.state;

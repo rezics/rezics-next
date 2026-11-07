@@ -1,12 +1,23 @@
 /** Search-owned vocabulary for the installed Library-backed scoped Source capability. */
-import type { CollectionAliasProgress, CollectionSourceObservation, PreparedCollectionSource } from '../library/collection-source.ts';
+import type {
+  CollectionAliasProgress,
+  CollectionSourceObservation,
+  PreparedCollectionSource,
+} from '../library/collection-source.ts';
 import type { NativeCollectionWork } from '../library/collection-source-work.ts';
-import type { NativeOrdinalFrontier, NativeOrdinalKey, RawOrdinalCollectionPrefix } from '../library/collection-source-order.ts';
+import type {
+  NativeOrdinalFrontier,
+  NativeOrdinalKey,
+  RawOrdinalCollectionPrefix,
+} from '../library/collection-source-order.ts';
 import type { WorkAllowance, WorkReceipt } from '../library/contract/work-dimensions.ts';
 import type { NativeSourceIdentity } from '../library/native-source-custody.ts';
 import type { MembersPreparationWorkDefinition, PreparationLocator } from '../library/members-preparation.ts';
 import type { createCollectionSource } from '../library/collection-source.ts';
-import type { readCollectionSourceWorkGroup, readCollectionSourceWorkState } from '../library/collection-source-work-native.ts';
+import type {
+  readCollectionSourceWorkGroup,
+  readCollectionSourceWorkState,
+} from '../library/collection-source-work-native.ts';
 import type { CANONICAL_SOURCE_RECEIVING_COST } from '../library/canonical-source-bounds.ts';
 import type { nativeCollectionOrdinalPageBound } from '../library/collection-source-native.ts';
 import type { createMembersPreparation } from '../library/members-preparation.ts';

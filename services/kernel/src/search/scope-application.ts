@@ -13,11 +13,7 @@ import type { NativeOrdinalKey } from '../library/collection-source-order.ts';
 import type { LeafOptions } from '../semantic/scope-leaf-evidence.ts';
 import type { IdentityScopeObservation } from '../semantic/identity-scope-types.ts';
 import type { readScopeWorkDefinition } from './scope-work-context.ts';
-import type {
-  SearchLibraryScopePort,
-  SearchScopeCollection,
-  SearchScopeOrder,
-} from './library-scope-port.ts';
+import type { SearchLibraryScopePort, SearchScopeCollection, SearchScopeOrder } from './library-scope-port.ts';
 
 let installedLibraryScope: SearchLibraryScopePort;
 
@@ -34,14 +30,16 @@ export function searchLibraryScopePort(): SearchLibraryScopePort {
 type ScopeWorkDefinition = Awaited<ReturnType<typeof readScopeWorkDefinition>>;
 
 /** Application orchestration around the complete native Collection source capability. */
-export function createSearchScopeOrderApplication(config: Readonly<{
-  pool: Pool;
-  options: LeafOptions;
-  clock: KernelClock;
-  library: SearchLibraryScopePort;
-  readWorkDefinition: typeof readScopeWorkDefinition;
-  selectedOrdinalPage: () => Readonly<{ limit: number }>;
-}>) {
+export function createSearchScopeOrderApplication(
+  config: Readonly<{
+    pool: Pool;
+    options: LeafOptions;
+    clock: KernelClock;
+    library: SearchLibraryScopePort;
+    readWorkDefinition: typeof readScopeWorkDefinition;
+    selectedOrdinalPage: () => Readonly<{ limit: number }>;
+  }>,
+) {
   const { pool, options, clock, library, readWorkDefinition, selectedOrdinalPage } = config;
   const native = library.source.create({ pool, access: options.access, clock });
 
@@ -112,9 +110,7 @@ export function createSearchScopeOrderApplication(config: Readonly<{
       if (collection.order.kind !== 'ordinal') throw new TypeError('Ordinal source required');
       if (!Number.isSafeInteger(limit) || limit < 1 || limit > 100) throw new RangeError('Invalid ordinal limit');
       const statement =
-        options.work?.kind === 'members-preparation'
-          ? selectedOrdinalPage()
-          : library.source.ordinalPageBound(limit);
+        options.work?.kind === 'members-preparation' ? selectedOrdinalPage() : library.source.ordinalPageBound(limit);
       if (limit !== statement.limit) throw new ProblemError('dependency_unavailable');
       const admitted = await currentWork(collection.order, collection.observation);
       const page = await native.readRawOrdinalPrefix({
