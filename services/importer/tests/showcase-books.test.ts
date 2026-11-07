@@ -273,14 +273,20 @@ function reviewWorld(journal: ShowcaseJournal) {
     readReviewedSubject: async (id) => read(id),
     async reviewedCandidates(id, query) {
       expect(query.context).toBe(globalContext);
+      const adoption = adopted.get(`${id}\0${query.property}`);
       return {
-        candidates: [...candidates.values()].filter(
-          (candidate) =>
-            candidate.source.external_id === subjects.get(id)?.sourceExternalId &&
-            candidate.statement.property.id === query.property,
-        ),
+        candidates: [...candidates.values()]
+          .filter(
+            (candidate) =>
+              candidate.source.external_id === subjects.get(id)?.sourceExternalId &&
+              candidate.statement.property.id === query.property,
+          )
+          .map((candidate) => ({
+            ...candidate,
+            rank: adoption?.selection.find((selection) => selection.candidate === candidate.id)?.rank ?? null,
+          })),
         next: null,
-        adoption: adopted.get(`${id}\0${query.property}`) ?? null,
+        adoption: adoption ? { head: adoption.head, mode: 'replace' } : null,
       } as never;
     },
     async acceptReviewedCandidate(_id, candidateId) {

@@ -64,6 +64,9 @@ test('shared released discovery records converge through the actual default Sear
   const book = await fixture.createSubject('schema:Book', name);
   expect(book.release).toBe(fixture.release.digest);
   await fixture.search!.converge([book]);
+  const worker = await fixture.search!.workerStats();
+  expect(worker.registeredModules).toContain('search');
+  expect(worker.searchStarterInvocations).toBe(1);
   await visibleInSuggest(book.id, name);
 
   await fixture.search!.indexing('paused');

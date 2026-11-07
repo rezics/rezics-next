@@ -114,6 +114,12 @@ test('a retryable proposal 503 keeps sealed journal bytes and does not ACK', asy
     expect(error.partition).toBe(3);
     expect(error.transactionPhase).toBe('commit');
     expect(error.seedKey).toBe('source-scheme');
+    expect(error.remaining).toMatchObject({
+      op: 'propose',
+      source: 'rezics_reviewed_vocabulary',
+      nativeType: 'skos:ConceptScheme',
+      journalState: 'prepared',
+    });
     expect(JSON.stringify(error)).not.toContain('sql state 40001');
     const owner = reviewedCatalogueOwner(scheme, '');
     const proposal = JSON.parse(sent.at(-1)!) as { key: string };

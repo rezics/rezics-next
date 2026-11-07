@@ -6,7 +6,7 @@ import { join, resolve } from 'node:path';
 import { PassThrough } from 'node:stream';
 import type { spawn } from 'node:child_process';
 import { onCheckHost, stackRun } from './stack-run.ts';
-import { classifyCheck, environmentPrefixIsSafe, performanceHosts } from './check-placement.ts';
+import { classifyCheck, environmentPrefixIsSafe, isWalkStackCommand, performanceHosts } from './check-placement.ts';
 import { readHosts, RemoteTransportError } from './remote-check.ts';
 import { runWorkerCheck, workerCheckNeedsStack } from './worker-check.ts';
 
@@ -352,6 +352,31 @@ test('the fixed held-child operation retains ordinary remote placement and grant
   } finally {
     rmSync(root, { recursive: true, force: true });
   }
+});
+
+test('admitted walk commands are distinct from other unknown Bun scripts', () => {
+  expect(
+    isWalkStackCommand([
+      'bun',
+      'services/auth/scripts/dev-stack.ts',
+      'walk',
+      '--',
+      'bun',
+      'services/importer/src/imports-public-journey.ts',
+    ]),
+  ).toBe(true);
+  expect(isWalkStackCommand(['bun', 'services/auth/scripts/dev-stack.ts', 'start'])).toBe(false);
+  expect(isWalkStackCommand(['bun', '-e', 'process.exit(0)'])).toBe(false);
+  const walk = [
+    'bun',
+    'services/auth/scripts/dev-stack.ts',
+    'walk',
+    '--',
+    'bun',
+    'services/importer/src/imports-public-journey.ts',
+  ];
+  expect(classifyCheck(walk, repository).placement).toBe('remote');
+  expect(isWalkStackCommand(['--local', '--', ...walk])).toBe(true);
 });
 
 test('the hosts reader preserves explicit performance approval and rejects a nonboolean flag', () => {

@@ -43,7 +43,13 @@ import {
 } from './remote-check.ts';
 import { mainCheckout, writeLedger, type CheckLedgerEntry } from './check-ledger.ts';
 import { hostsLocation } from './stack-run.ts';
-import { classifyCheck, isCheckHostRun, performanceHosts, splitEnvironmentCommand } from './check-placement.ts';
+import {
+  classifyCheck,
+  isCheckHostRun,
+  isWalkStackCommand,
+  performanceHosts,
+  splitEnvironmentCommand,
+} from './check-placement.ts';
 import {
   refuseExcessWorkerCheckHostRun,
   refuseOrdinaryProductTestCheck,
@@ -1301,7 +1307,8 @@ export async function runWorkerCheck(
   }
   const physicallyRemote = isCheckHostRun(root);
   if (lifecycle && physicallyRemote) delete env.REZICS_LIFECYCLE_REMOTE_RUN;
-  const needsStack = classification.placement === 'remote' && !physicallyRemote;
+  const keepWalkLocal = localOnly && isWalkStackCommand(argv);
+  const needsStack = classification.placement === 'remote' && !physicallyRemote && !keepWalkLocal;
   const commandClass = setup(() => checkClass(argv, root));
   argv = setup(() => scopeRootTypecheck(argv, root, env, (line) => writeSync(descriptor, `${line}\n`)));
   const command = setup(() => resolveRepositoryBun(argv, root));
@@ -1353,7 +1360,11 @@ export async function runWorkerCheck(
     process.stderr.write(line);
     writeSync(descriptor, line);
   }
-  if (localOnly && needsStack) {
+  if (keepWalkLocal) {
+    const line = 'worker-check: --local keeps the admitted walk stack on this host\n';
+    process.stderr.write(line);
+    writeSync(descriptor, line);
+  } else if (localOnly && needsStack) {
     const line =
       'worker-check: --local cannot place a heavy or unknown check on this host; routing to a performance-approved check host\n';
     process.stderr.write(line);

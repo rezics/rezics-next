@@ -1,5 +1,6 @@
 import {
   createKernelClient,
+  identityOperationLocation,
   reviewedPersonRequests,
   isReviewedPersonEndpoint,
   type ReviewedPersonRead,
@@ -320,14 +321,40 @@ export function formatImportTransportError(error: ImportTransportError): string 
   const classification = safeDiagnosticField(error.phase, /^[A-Za-z][A-Za-z0-9]{0,31}$/u, 32);
   return `Import transport failed phase=${phase} method=${method} target=${target} status=${status} problem=${code} network=${network} correlation=${correlation}${classification ? ` classification=${classification}` : ''}`;
 }
+
+export function importTransportCause(error: unknown): string {
+  if (error instanceof ImportTransportError) return formatImportTransportError(error);
+  const text = error instanceof Error ? error.message : String(error);
+  return text.split('\n')[0]!.slice(0, 240);
+}
+
 type ClientResponse = { status: number; data: unknown; error: unknown; response?: Response };
-function httpFailure(reply: ClientResponse): ImportTransportError {
+function requestPath(url: string | undefined): string | undefined {
+  if (!url) return undefined;
+  try {
+    const path = new URL(url).pathname;
+    return path.startsWith('/v1/') && path.length <= 200 ? path : undefined;
+  } catch {
+    return undefined;
+  }
+}
+function attachRequest(error: ImportTransportError, method?: string, path?: string): ImportTransportError {
+  return new ImportTransportError(error.status, error.type, error.code, error.retryable, error.retry, error.phase, {
+    ...copiedDiagnostics(error),
+    ...(error.method === undefined && method !== undefined ? { method } : {}),
+    ...(error.path === undefined && path !== undefined ? { path } : {}),
+  });
+}
+function httpFailure(reply: ClientResponse, last?: { method: string; path: string }): ImportTransportError {
   // Only public problem identifiers are useful to callers. No remote diagnostic text is retained.
   const outer =
     typeof reply.error === 'object' && reply.error !== null && !types.isProxy(reply.error) ? reply.error : undefined;
   const nested = outer === undefined ? undefined : Object.getOwnPropertyDescriptor(outer, 'value')?.value;
   const value =
     typeof nested === 'object' && nested !== null && !types.isProxy(nested) ? nested : (outer as object | undefined);
+  // Eden represents a rejected fetch as a 503 error envelope with the thrown value.
+  // Recover our request-local error before interpreting public HTTP problem fields.
+  if (!reply.response && value instanceof ImportTransportError) return attachRequest(value, last?.method, last?.path);
   const field = (name: string): unknown =>
     value && !types.isProxy(value) ? Object.getOwnPropertyDescriptor(value, name)?.value : undefined;
   const type = field('type');
@@ -358,6 +385,7 @@ function httpFailure(reply: ClientResponse): ImportTransportError {
     undefined,
     {
       ...(request ?? fallback),
+      ...(last && !request ? { method: last.method, path: last.path } : {}),
       phase: reply.response ? 'http' : 'response',
       ...(correlationId === undefined ? {} : { correlationId }),
     },
@@ -367,6 +395,7 @@ async function response(
   call: () => Promise<ClientResponse>,
   expected: number | readonly number[],
   signal?: AbortSignal,
+  last?: () => { method: string; path: string } | undefined,
 ) {
   signal?.throwIfAborted();
   let reply: ClientResponse;
@@ -374,6 +403,8 @@ async function response(
     reply = await call();
   } catch (error) {
     signal?.throwIfAborted();
+    const request = last?.();
+    if (error instanceof ImportTransportError) throw attachRequest(error, request?.method, request?.path);
     const diagnostics = importRequestFailure(error);
     if (diagnostics) {
       throw new ImportTransportError(undefined, undefined, undefined, false, undefined, undefined, {
@@ -383,6 +414,7 @@ async function response(
     }
     throw new ImportTransportError(undefined, undefined, undefined, false, undefined, undefined, {
       phase: 'network',
+      ...(request ?? {}),
       cause: error,
     });
   }
@@ -392,12 +424,12 @@ async function response(
     reply.error ||
     !(typeof expected === 'number' ? reply.status === expected : expected.includes(reply.status))
   )
-    throw httpFailure(reply);
+    throw httpFailure(reply, last?.());
   if (expected === 204) {
     ensure(reply.data === undefined || reply.data === null || reply.data === '');
-    return { status: reply.status, body: null };
+    return { status: reply.status, body: null, headers: reply.response.headers };
   }
-  return { status: reply.status, body: snapshot(reply.data, RESPONSE_BYTES) };
+  return { status: reply.status, body: snapshot(reply.data, RESPONSE_BYTES), headers: reply.response.headers };
 }
 
 function wait(ms: number, signal?: AbortSignal, sleep?: (ms: number) => Promise<void>): Promise<void> {
@@ -437,7 +469,7 @@ export function createImportTransport(options: ImportTransportOptions) {
   const pollAttempts = setting(options.pollAttempts, 5, 5, 1);
   const pollDelayMs = setting(options.pollDelayMs, 1000, 1000);
   ensure((pollAttempts - 1) * pollDelayMs <= 4000);
-  setting(options.maxAttempts, 3, 5, 1);
+  const maxAttempts = setting(options.maxAttempts, 3, 5, 1);
   const deadlineMs = setting(options.deadlineMs, MAX_IMPORT_DEADLINE_MS, MAX_IMPORT_DEADLINE_MS, 1);
   const maxWaitMs = setting(options.maxWaitMs, MAX_IMPORT_WAIT_MS, MAX_IMPORT_WAIT_MS);
   const maxTotalWaitMs = setting(options.maxTotalWaitMs, MAX_IMPORT_TOTAL_WAIT_MS, MAX_IMPORT_TOTAL_WAIT_MS);
@@ -454,23 +486,40 @@ export function createImportTransport(options: ImportTransportOptions) {
       !origin.hash,
   );
   const importFetch = options.importFetch ?? createImportFetch({ ...options, token: options.tokenProvider });
-  const observedFetch: typeof fetch = options.onDeniedResponse
-    ? Object.assign(
-        async (input: Parameters<typeof fetch>[0], init?: Parameters<typeof fetch>[1]) => {
-          const request = new Request(input, init);
-          const reply = await importFetch(request);
-          if (reply.status === 401 || reply.status === 403) {
-            await options.onDeniedResponse!({
-              method: request.method,
-              path: new URL(request.url).pathname,
-              response: reply.clone(),
-            });
-          }
-          return reply;
-        },
-        { preconnect: importFetch.preconnect },
-      )
-    : importFetch;
+  let lastRequest: { method: string; path: string } | undefined;
+  const observedFetch: typeof fetch = Object.assign(
+    async (input: Parameters<typeof fetch>[0], init?: Parameters<typeof fetch>[1]) => {
+      const request = new Request(input, init);
+      const path = requestPath(request.url);
+      lastRequest = {
+        method: request.method,
+        path: path ?? '/v1/subjects:batchWrite',
+      };
+      try {
+        const reply = await importFetch(request);
+        if (options.onDeniedResponse && (reply.status === 401 || reply.status === 403)) {
+          await options.onDeniedResponse({
+            method: request.method,
+            path: path ?? new URL(request.url).pathname,
+            response: reply.clone(),
+          });
+        }
+        return reply;
+      } catch (error) {
+        if (error instanceof ImportTransportError) throw attachRequest(error, lastRequest.method, lastRequest.path);
+        const diagnostics = importRequestFailure(error);
+        throw new ImportTransportError(undefined, undefined, undefined, false, undefined, undefined, {
+          phase: 'network',
+          method: request.method,
+          origin: new URL(request.url).origin,
+          path: new URL(request.url).pathname,
+          ...diagnostics,
+          cause: error,
+        });
+      }
+    },
+    { preconnect: importFetch.preconnect },
+  );
   const client =
     options.client ??
     createKernelClient(options.origin, {
@@ -479,6 +528,8 @@ export function createImportTransport(options: ImportTransportOptions) {
       ...(options.onSession === undefined ? {} : { onSession: options.onSession }),
     });
   const fetchOptions = (signal?: AbortSignal) => (signal === undefined ? {} : { fetch: { signal } });
+  const exchange = (call: () => Promise<ClientResponse>, expected: number | readonly number[], signal?: AbortSignal) =>
+    response(call, expected, signal, () => lastRequest);
 
   async function sendBatch(body: BatchWriteRequest, signal?: AbortSignal): Promise<BatchWriteResult> {
     const results: BatchWriteResult['results'] = [];
@@ -500,7 +551,7 @@ export function createImportTransport(options: ImportTransportOptions) {
           })();
       for (let attempt = 0; ; attempt++) {
         const request = { commands: indices.map((index) => body.commands[index]!) };
-        const reply = await response(
+        const reply = await exchange(
           () => client.subjects.$batchWrite.post(request, fetchOptions(controller.signal)),
           200,
           controller.signal,
@@ -557,7 +608,7 @@ export function createImportTransport(options: ImportTransportOptions) {
         (body.expected_metadata_revision === null ||
           (Number.isSafeInteger(body.expected_metadata_revision) && body.expected_metadata_revision > 0)),
     );
-    const reply = await response(
+    const reply = await exchange(
       () =>
         client['source-records'].$setMetadata.post(body, {
           headers: { 'idempotency-key': idempotencyKey(input.idempotencyKey) },
@@ -611,7 +662,7 @@ export function createImportTransport(options: ImportTransportOptions) {
   ): Promise<void> {
     ensure(typeof input.subjectId === 'string' && uuid.test(input.subjectId) && input.source === 'vndb');
     const body = sourceStatisticBody(input.value);
-    const reply = await response(
+    const reply = await exchange(
       () =>
         client
           .subjects({ id: input.subjectId })
@@ -655,7 +706,7 @@ export function createImportTransport(options: ImportTransportOptions) {
         new Date(`${value.asOf}T00:00:00.000Z`).toISOString().slice(0, 10) === value.asOf,
     );
     // The generated client maps the registered custom method to the public :clear URL.
-    await response(
+    await exchange(
       () =>
         client
           .subjects({ id: input.subjectId })
@@ -718,26 +769,45 @@ export function createImportTransport(options: ImportTransportOptions) {
         tuple.externalId.length <= 255 &&
         FIELD_GROUPS.includes(tuple.fieldGroup),
     );
-    const reply = await response(
-      () => client.sourceFences.$check.get({ query: tuple, ...fetchOptions(signal) }),
-      200,
-      signal,
-    );
-    const value = reply.body as { fenced?: unknown; securityRevision?: unknown } | null;
-    ensure(
-      value !== null &&
-        typeof value === 'object' &&
-        Object.keys(value).length === 2 &&
-        typeof value.fenced === 'boolean' &&
-        (value.fenced
-          ? typeof value.securityRevision === 'string' && value.securityRevision.length > 0
-          : value.securityRevision === null),
-    );
-    return value as { fenced: boolean; securityRevision: string | null };
+    const deadline = now() + deadlineMs;
+    let scheduledWait = 0;
+    for (let attempt = 0; ; attempt++) {
+      try {
+        const reply = await exchange(
+          () => client.sourceFences.$check.get({ query: tuple, ...fetchOptions(signal) }),
+          200,
+          signal,
+        );
+        const value = reply.body as { fenced?: unknown; securityRevision?: unknown } | null;
+        ensure(
+          value !== null &&
+            typeof value === 'object' &&
+            Object.keys(value).length === 2 &&
+            typeof value.fenced === 'boolean' &&
+            (value.fenced
+              ? typeof value.securityRevision === 'string' && value.securityRevision.length > 0
+              : value.securityRevision === null),
+        );
+        return value as { fenced: boolean; securityRevision: string | null };
+      } catch (error) {
+        const delay = 100 * 2 ** attempt;
+        if (
+          !(error instanceof ImportTransportError) ||
+          (error.status !== 503 && error.status !== 429) ||
+          attempt + 1 >= maxAttempts ||
+          delay > maxWaitMs ||
+          delay > maxTotalWaitMs - scheduledWait ||
+          now() + delay >= deadline
+        )
+          throw error;
+        scheduledWait += delay;
+        await wait(delay, signal, options.sleep);
+      }
+    }
   }
   async function postMedia(body: MediaImportRequest, key: string, signal?: AbortSignal) {
     const header = idempotencyKey(key);
-    const reply = await response(
+    const reply = await exchange(
       () => client.media.$importFromUrl.post(body, { headers: { 'idempotency-key': header }, ...fetchOptions(signal) }),
       202,
       signal,
@@ -770,7 +840,7 @@ export function createImportTransport(options: ImportTransportOptions) {
   }
   async function mediaStatus(id: string, signal?: AbortSignal) {
     mediaId(id);
-    const reply = await response(() => client.media({ id }).$importStatus.get(fetchOptions(signal)), 200, signal);
+    const reply = await exchange(() => client.media({ id }).$importStatus.get(fetchOptions(signal)), 200, signal);
     ensure(checkMediaImportStatus(reply.body).length === 0);
     const status = reply.body as MediaImportStatus;
     ensure(status.media.id === id);
@@ -789,7 +859,7 @@ export function createImportTransport(options: ImportTransportOptions) {
   ): Promise<MediaVariantDecision> {
     mediaId(id);
     ensure(/^(?:avif|webp)-[1-9][0-9]{0,4}$/u.test(variant));
-    const reply = await response(
+    const reply = await exchange(
       () => client.media({ id }).$authorizeDownload.get({ query: { variant }, ...fetchOptions(signal) }),
       200,
       signal,
@@ -836,7 +906,7 @@ export function createImportTransport(options: ImportTransportOptions) {
       });
       if (reply.status !== 308) {
         try {
-          const result = await response(async () => reply, 200, signal);
+          const result = await exchange(async () => reply, 200, signal);
           const read = result.body as ReviewedSubjectRead;
           ensure(read?.subject?.id === current);
           return read;
@@ -869,7 +939,7 @@ export function createImportTransport(options: ImportTransportOptions) {
     source: ReviewedPersonSource,
     signal?: AbortSignal,
   ): Promise<ReviewedPersonRead> {
-    const reply = await response(
+    const reply = await exchange(
       () => reviewedPersonRequests(client).read(id, source, fetchOptions(signal)),
       200,
       signal,
@@ -892,10 +962,10 @@ export function createImportTransport(options: ImportTransportOptions) {
     body: ReviewedPersonMerge,
     key: string,
     signal?: AbortSignal,
-  ): Promise<ReviewedPersonAdmission> {
+  ): Promise<ReviewedPersonAdmission & { location: string }> {
     const safe = snapshot(body, BODY_BYTES) as ReviewedPersonMerge;
     try {
-      const reply = await response(
+      const reply = await exchange(
         () =>
           reviewedPersonRequests(client).merge(safe, {
             headers: { 'idempotency-key': idempotencyKey(key) },
@@ -906,7 +976,8 @@ export function createImportTransport(options: ImportTransportOptions) {
       );
       const result = reply.body as ReviewedPersonAdmission;
       ensure(typeof result?.operation?.id === 'string' && uuid.test(result.operation.id));
-      return result;
+      const location = identityOperationLocation(reply.headers, result.operation.id);
+      return { ...result, location };
     } catch (error) {
       if (error instanceof ImportTransportError && error.status === 403)
         throw new ImportTransportError(
@@ -921,12 +992,15 @@ export function createImportTransport(options: ImportTransportOptions) {
       throw error;
     }
   }
-  /** Admission is not completion: callers observe the native job until its survivor and redirect are final. */
-  async function readReviewedPersonOperation(id: string, signal?: AbortSignal): Promise<ReviewedPersonOperation> {
-    mediaId(id);
-    const reply = await response(() => reviewedPersonRequests(client).operation(id, fetchOptions(signal)), 200, signal);
+  /** Admission is not completion: callers observe the supplied Location until survivor and redirect are final. */
+  async function readReviewedPersonOperation(location: string, signal?: AbortSignal): Promise<ReviewedPersonOperation> {
+    const reply = await exchange(
+      () => reviewedPersonRequests(client).operationAt(location, fetchOptions(signal)),
+      200,
+      signal,
+    );
     const observed = (reply.body as { operation?: ReviewedPersonOperation } | null)?.operation;
-    ensure(observed?.id === id && typeof observed.done === 'boolean');
+    ensure(typeof observed?.id === 'string' && uuid.test(observed.id) && typeof observed.done === 'boolean');
     if (observed.done)
       ensure(
         typeof observed.result?.survivor === 'string' &&
@@ -958,7 +1032,7 @@ export function createImportTransport(options: ImportTransportOptions) {
       ...(query.cursor !== undefined ? { cursor: query.cursor } : {}),
     };
     const safe = snapshot(safeQuery, BODY_BYTES) as typeof safeQuery;
-    const reply = await response(
+    const reply = await exchange(
       () => client.subjects({ id }).candidates.get({ query: safe, ...fetchOptions(signal) }),
       200,
       signal,
@@ -975,7 +1049,7 @@ export function createImportTransport(options: ImportTransportOptions) {
     mediaId(id);
     mediaId(candidate);
     const safe = snapshot(body, BODY_BYTES) as typeof body;
-    const reply = await response(
+    const reply = await exchange(
       () =>
         client
           .subjects({ id })
@@ -997,7 +1071,7 @@ export function createImportTransport(options: ImportTransportOptions) {
   ): Promise<ReviewedAdoption> {
     mediaId(id);
     const safe = snapshot(body, BODY_BYTES) as typeof body;
-    const reply = await response(
+    const reply = await exchange(
       () =>
         client.subjects({ id }).$adopt.post(safe, {
           headers: { 'idempotency-key': idempotencyKey(key) },
@@ -1013,7 +1087,7 @@ export function createImportTransport(options: ImportTransportOptions) {
     signal?: AbortSignal,
   ): Promise<readonly ImportSourceStatisticFigure[]> {
     ensure(typeof input.subjectId === 'string' && uuid.test(input.subjectId));
-    const reply = await response(
+    const reply = await exchange(
       () => client.subjects({ id: input.subjectId })['source-statistics'].get(fetchOptions(signal)),
       200,
       signal,
@@ -1082,7 +1156,7 @@ export function createImportTransport(options: ImportTransportOptions) {
     ensure(typeof input.subjectId === 'string' && uuid.test(input.subjectId));
     ensure(Array.isArray(input.associations) && input.associations.length <= 32);
     const associations = input.associations.map(associationBody);
-    const reply = await response(
+    const reply = await exchange(
       () => classifications(input.subjectId).$read.post({ associations }, fetchOptions(signal)),
       200,
       signal,
@@ -1111,7 +1185,7 @@ export function createImportTransport(options: ImportTransportOptions) {
       input.expectedObservation === null ||
         (typeof input.expectedObservation === 'string' && /^[0-9a-f]{64}$/.test(input.expectedObservation)),
     );
-    const body = await response(
+    const body = await exchange(
       () =>
         classifications(input.subjectId).$put.post(
           {
@@ -1157,7 +1231,7 @@ export function createImportTransport(options: ImportTransportOptions) {
       input.expectedObservation === null ||
         (typeof input.expectedObservation === 'string' && /^[0-9a-f]{64}$/.test(input.expectedObservation)),
     );
-    const body = await response(
+    const body = await exchange(
       () =>
         classifications(input.subjectId).$clear.post(
           {
@@ -1185,7 +1259,7 @@ export function createImportTransport(options: ImportTransportOptions) {
   }
   async function readPublicFigure(input: { subjectId: string }, signal?: AbortSignal): Promise<ImportPublicFigure> {
     ensure(typeof input.subjectId === 'string' && uuid.test(input.subjectId));
-    const reply = await response(
+    const reply = await exchange(
       () => client.subjects({ id: input.subjectId }).figure.get(fetchOptions(signal)),
       200,
       signal,

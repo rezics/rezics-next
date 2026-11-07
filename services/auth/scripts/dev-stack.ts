@@ -657,7 +657,7 @@ export async function assemble(options?: {
       await service.internal.registerClient({
         clientId: personaClient,
         firstParty: true,
-        scopes: [...new Set([...importerScopes, 'account:manage', 'exposure:open'])],
+        scopes: [...new Set([...importerScopes, 'account:manage', 'exposure:open', 'access:grant'])],
       });
       await service.internal.registerClient(localShowcaseClientRegistration());
     })(),
@@ -733,7 +733,7 @@ export async function provisionPersona(composition: Awaited<ReturnType<typeof as
           email: 'developer@rezics.test',
           password: keys.password,
           client_id: personaClient,
-          scope: [...new Set([...importerScopes, 'account:manage', 'exposure:open'])],
+          scope: [...new Set([...importerScopes, 'account:manage', 'exposure:open', 'access:grant'])],
         }),
       }),
     );

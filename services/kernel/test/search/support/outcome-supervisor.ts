@@ -7,7 +7,7 @@ import type { Persona } from '../../../../../specs/semantic-driver.ts';
 import { routeOf } from '../../../src/route/route.ts';
 import { STANDARD_QUESTION_ID } from '../../../src/rating/votes.ts';
 import { createKernel } from '../../../src/http/kernel.ts';
-import { composeSearchSemanticSource } from '../../../src/composition/search-semantic.ts';
+import { composeSearchNativePorts } from '../../../src/composition/search-native.ts';
 import { systemClock } from '../../../src/clock.ts';
 import { createWorkClient, type WorkClient } from '../../../src/work/client.ts';
 import {
@@ -228,6 +228,7 @@ function supervise(parent: OutcomeRpc) {
     workerOutput: '',
   };
   let semantic: SemanticOutcomeDriver | undefined;
+  let nativePorts: ReturnType<typeof composeSearchNativePorts> | undefined;
   let publicFilters: DefaultPublicFilterRuntime | undefined;
   let nativeCoverage: (() => ReturnType<typeof assertNativeGenerationCoverage>) | undefined;
   let preparationClient: Promise<WorkClient> | undefined;
@@ -244,6 +245,7 @@ function supervise(parent: OutcomeRpc) {
   const votersByName = new Map<string, Promise<{ voter: string; accountId: string }>>();
   const voters = new Map<string, { account: Account; session?: string }>();
   const prefix = `test-${randomBytes(12).toString('hex')}-`;
+  const searchPorts = () => (nativePorts ??= composeSearchNativePorts());
 
   const snapshot = () => structuredClone(observation);
   async function own(resource: OwnedResource) {
@@ -452,7 +454,8 @@ function supervise(parent: OutcomeRpc) {
       semantic = await createSemanticDriver(
         (config) => {
           if (!config.tokens) throw new Error('Semantic fixtures did not supply session keys');
-          const { source, ratings } = createRatedSubjectSource(config.pool, config.routeKey);
+          const ports = searchPorts();
+          const { source, ratings } = createRatedSubjectSource(config.pool, config.routeKey, undefined, ports);
           return createKernel({
             ...config,
             onAccessReady(access, viewerActions) {
@@ -468,7 +471,6 @@ function supervise(parent: OutcomeRpc) {
                   keys,
                 });
               };
-              composeSearchSemanticSource();
               publicFilters = createDefaultPublicFilterRuntime({
                 pool: config.pool,
                 routeKey: config.routeKey,

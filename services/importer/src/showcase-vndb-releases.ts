@@ -24,6 +24,7 @@ import {
   vndbReleasePlatformConceptUri,
   vndbReleasePlatformSchemeUri,
 } from '@rezics/conversion/support';
+import { ImportTransportError } from './import-client.ts';
 import type { ImporterOptions } from './importer.ts';
 import type { ImportConversion } from './import-contract.ts';
 import {
@@ -279,6 +280,25 @@ function isReleaseClassificationCommand(command: BatchCommand): boolean {
   );
 }
 
+function classificationBatchFailure(result: {
+  key: string;
+  status: number;
+  problem?: { type?: unknown; code?: unknown };
+}) {
+  const type = result.problem && typeof result.problem.type === 'string' ? result.problem.type : undefined;
+  const code = result.problem && typeof result.problem.code === 'string' ? result.problem.code : undefined;
+  const safeType =
+    type === 'about:blank' ||
+    (type !== undefined && /^https:\/\/rezics\.com\/problems\/[a-z0-9_-]{1,80}(?![\s\S])/.test(type))
+      ? type
+      : undefined;
+  const safeCode = typeof code === 'string' && /^[a-z0-9_-]{1,80}$/.test(code) ? code : undefined;
+  return new ImportTransportError(result.status, safeType, safeCode, false, undefined, undefined, {
+    method: 'POST',
+    path: '/v1/subjects:batchWrite',
+  });
+}
+
 async function sendReleaseClassificationPages(
   port: Pick<CrossMediaPort, 'batch'>,
   commands: readonly BatchCommand[],
@@ -287,19 +307,43 @@ async function sendReleaseClassificationPages(
     const page = commands.slice(offset, offset + BATCH_LIMIT);
     if (checkBatchWrite({ commands: [...page] }, bundledRelease).length)
       throw new TypeError('VNDB release classification commands failed portable validation');
-    await port.batch({ commands: [...page] });
+    const sent = await port.batch({ commands: [...page] });
+    const refused = sent.results.find((row) => row.status !== 200 && row.status !== 201);
+    if (refused) throw classificationBatchFailure(refused);
+  }
+}
+
+async function openClassificationFences(
+  port: Pick<CrossMediaPort, 'batch'> & Partial<Pick<CrossMediaPort, 'fence'>>,
+  commands: readonly BatchCommand[],
+): Promise<void> {
+  if (!port.fence) return;
+  const seen = new Set<string>();
+  for (const command of commands) {
+    const key = `${command.source.source}\0${command.source.external_id}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    const current = await port.fence({
+      source: command.source.source,
+      externalId: command.source.external_id,
+      fieldGroup: 'facts',
+    });
+    if (current.fenced) throw new TypeError('VNDB release classification source facts are fenced');
   }
 }
 
 async function sendMissingReleaseClassificationCommands(input: {
-  port: Pick<CrossMediaPort, 'batch'>;
+  port: Pick<CrossMediaPort, 'batch'> & Partial<Pick<CrossMediaPort, 'fence'>>;
   journal: ShowcaseJournal;
   commands: readonly BatchCommand[];
 }): Promise<void> {
   const pending = input.journal
     .preparedCommands()
     .flatMap((row) => (isReleaseClassificationCommand(row.command) ? [row.command] : []));
-  if (pending.length) await sendReleaseClassificationPages(input.port, pending);
+  if (pending.length) {
+    await openClassificationFences(input.port, pending);
+    await sendReleaseClassificationPages(input.port, pending);
+  }
   const sealed = new Map<string, string>();
   const created = new Set<string>();
   for (const row of [...input.journal.acknowledgedCommands(), ...input.journal.preparedCommands()]) {
@@ -316,7 +360,10 @@ async function sendMissingReleaseClassificationCommands(input: {
     }
     return command.op !== 'create' || !created.has(command.source.external_id);
   });
-  if (commands.length) await sendReleaseClassificationPages(input.port, commands);
+  if (commands.length) {
+    await openClassificationFences(input.port, commands);
+    await sendReleaseClassificationPages(input.port, commands);
+  }
 }
 
 function acknowledgedReleaseClassificationCreates(journal: ShowcaseJournal): Map<string, string> {
@@ -353,7 +400,7 @@ function releaseClassificationGroups(
 /** Stage only selected release classification Concepts in the common showcase journal. */
 export async function prepareShowcaseVndbReleaseClassifications(input: {
   plan: CrossMediaPlan;
-  port: Pick<CrossMediaPort, 'batch' | 'readReviewedSubject'>;
+  port: Pick<CrossMediaPort, 'batch' | 'readReviewedSubject'> & Partial<Pick<CrossMediaPort, 'fence'>>;
   journal: ShowcaseJournal;
   stage: 'schemes' | 'concepts';
 }): Promise<{
