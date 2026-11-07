@@ -29,6 +29,7 @@ import { createSearchWriterGuard } from './writer-guard.ts';
 import { subjectConsumer } from './runner.ts';
 import { subjectListingSource } from '../library/listing-counts.ts';
 import { type HistoryBarrier } from '../history/contract/index.ts';
+import type { SearchNativePorts } from './native-ports.ts';
 
 const eventType = 'com.rezics.access.account-tombstoned.v1';
 const workflowName = 'search.erasure';
@@ -669,12 +670,15 @@ export function registerSearchErasure(
   context: WorkContext,
   configuration?: { url: string; prefix: string },
   composeCreditSearch?: (pool: Pool, routeKey: Uint8Array) => import('./credit-search.ts').CreditSearchSource,
+  nativePorts?: SearchNativePorts,
 ) {
   const routeKey = context.env.KERNEL_ROUTE_KEY ? readMembershipRouteKey(context.env) : undefined;
   let source: SubjectErasureSource | undefined;
   const search = configuration ? createOpenSearch(configuration.url) : undefined;
   const creditSearch = routeKey ? composeCreditSearch?.(context.pool, routeKey) : undefined;
-  const nativeSource = routeKey ? createRatedSubjectSource(context.pool, routeKey, creditSearch).source : undefined;
+  const nativeSource = routeKey
+    ? createRatedSubjectSource(context.pool, routeKey, creditSearch, nativePorts).source
+    : undefined;
   const listing = subjectListingSource(context.pool);
   const runtime: SearchErasureRuntime = {
     get source() {
@@ -686,7 +690,7 @@ export function registerSearchErasure(
             nativeDiscoveryRegistry(
               context.pool,
               routeKey,
-              createRatedSubjectSource(context.pool, routeKey, creditSearch).source,
+              createRatedSubjectSource(context.pool, routeKey, creditSearch, nativePorts).source,
             ),
         }
       : {}),

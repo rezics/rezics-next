@@ -15,12 +15,23 @@ import {
   createReviewDiscoverySource,
 } from '../content/review-discovery.ts';
 import { readReviewDiscoveryChanges, refreshReviewDiscoveryChanges } from '../content/review-discovery-changes.ts';
-import { admitCollectionKindPreparationStep, bindCollectionKindPreparationStep, readCollectionKindWorkDefinition } from '../library/collection-kind-work-admission.ts';
-import { admitCollectionPublicationStep, readCollectionPublicationWorkDefinition } from '../library/collection-publication-work-admission.ts';
+import {
+  admitCollectionKindPreparationStep,
+  bindCollectionKindPreparationStep,
+  readCollectionKindWorkDefinition,
+} from '../library/collection-kind-work-admission.ts';
+import {
+  admitCollectionPublicationStep,
+  readCollectionPublicationWorkDefinition,
+} from '../library/collection-publication-work-admission.ts';
 import { readPublicCollectionDiscoverySummaries } from '../library/collection-discovery-summaries.ts';
 import { createNativeLibrarySourceCustody } from '../library/native-source-custody.ts';
 import { withOwnerFilterNativeRead } from '../library/owner-filter-native-binding.ts';
-import { bindOwnerFilterRead, readOwnerFilterCandidate, readOwnerFilterCandidateClosure } from '../library/owner-filter-plan.ts';
+import {
+  bindOwnerFilterRead,
+  readOwnerFilterCandidate,
+  readOwnerFilterCandidateClosure,
+} from '../library/owner-filter-plan.ts';
 import { admitCollectionMemberQuery, leafProvider } from '../library/owner-filter.ts';
 import {
   createIdentityScopedObservations,
@@ -30,6 +41,7 @@ import {
   createSubjectSourceKeyPages,
   publicFilterSource,
   readNativePublicFilterPublicationCompletion,
+  readPublicFilterSourceDefinition,
 } from '../semantic/index.ts';
 import { readSubjectErasureSourceProof, verifySubjectErasureSourceProof } from '../semantic/account-erasure-source.ts';
 import { activeRelease, readRelease } from '../semantic/definitions.ts';
@@ -42,7 +54,6 @@ import {
   joinNativePublicFilterRepair,
   readNativePublicFilterAccountRepair,
   readNativePublicFilterRepairStart,
-  readPublicFilterSourceDefinition,
 } from '../semantic/public-filter-source-binding.ts';
 import { publicFilterSourceOrigin } from '../semantic/public-filter-source.ts';
 import { currentReadSnapshot, withReadTransaction } from '../semantic/read.ts';
@@ -50,14 +61,10 @@ import { relationSource } from '../semantic/search-relations.ts';
 import { readIdentitySourceProjection, subjectSource } from '../semantic/search-source.ts';
 import { readScopeLeafEvidence } from '../semantic/scope-leaf-evidence.ts';
 import { readSubjectSummaries } from '../semantic/summaries.ts';
-import {
-  bindSearchNativePorts,
-  bindSearchSemanticSourcePort,
-  type SearchNativePorts,
-} from '../search/composition.ts';
+import { bindSearchNativeCapabilities, type SearchNativePorts } from '../search/composition.ts';
 
 /** Bind existing native producers to Search's consumer-owned ports. */
-export function composeSearchNativePorts(): void {
+export function composeSearchNativePorts(): SearchNativePorts {
   const port: SearchNativePorts = Object.freeze({
     PublicFilterSourceDefinitionError,
     REVIEW_DISCOVERY_PAGE_LIMIT,
@@ -119,11 +126,10 @@ export function composeSearchNativePorts(): void {
     withOwnerFilterNativeRead,
     withReadTransaction,
   });
-  bindSearchNativePorts(port);
-  bindSearchSemanticSourcePort(port);
+  return bindSearchNativeCapabilities(port);
 }
 
 /** Compatibility name used by ordinary Kernel composition. */
-export function composeSearchSemanticSource(): void {
-  composeSearchNativePorts();
+export function composeSearchSemanticSource(): SearchNativePorts {
+  return composeSearchNativePorts();
 }

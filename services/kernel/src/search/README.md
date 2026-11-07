@@ -18,6 +18,11 @@ Content and Community natives through installed consumer-owned ports bound at co
 population is a Search leaf. Library scoped-Source construction lives in composition. Same-client transactions,
 Source admission, identity observations, typed outcomes, replay and settlement keep their producer functions.
 
+Decision: the process root owns one lazy, memoized `SearchNativePorts` supplier per default worker module list.
+Semantic and Search registration share that typed instance after the worker pool is ready; Search passes it into
+erasure, rated Source and runtime construction. HTTP defaults and preloads install through the same complete binding
+seam, while supplied application instances retain their producer object.
+
 [Rejected text query repair](text-query-repair.md) owns bounded parser diagnostics and deliberate in-place correction.
 
 Search owns the subject search projection, indexing consumers, disclosure checks, query API, freshness and index
