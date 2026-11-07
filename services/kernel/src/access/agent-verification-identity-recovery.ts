@@ -10,7 +10,7 @@ import {
   publishedAccountIdentityUndo,
   readOriginalAgentIdentityDecision,
 } from './agent-verification-identity.ts';
-import { tryAccessApplication } from './adapters/bind.ts';
+import { agentIdentityMaintenance, tryAccessApplication } from './adapters/bind.ts';
 import type { OriginalAccountAgentIdentity } from '../semantic/access-capabilities.ts';
 import { declareAgentIdentitySource } from '../history/application/index.ts';
 import {
@@ -245,7 +245,7 @@ export async function recoverMissingAccountIdentitySource(
   // The complete Source/History aggregate has not funded the extra foreign probes and
   // recovery writer. Do not dispatch them from a Source frame on the earlier partial
   // allocation; ordinary Access recovery keeps its own command owner and deadline.
-  if (identityPort().activeIdentitySourceConsumerMaintenance?.(pool)) {
+  if (agentIdentityMaintenance().activeMaintenance(pool)) {
     throw new IdentityHistoryWorkUnavailable();
   }
   const partition = partitionOf(routeOf(receipt.account)!);

@@ -40,25 +40,26 @@ They do not import Access internals, Platform pool helpers or Semantic agent tab
 Progress adoption classifies grant denial and Access unavailability through `resource-access-errors.ts` and `unavailable.ts`;
 those files are the owner public error identities.
 
-Decision: Kernel Access is split into `contract`, `core`, `application` and adapter modules. Vocabulary and finite
-bounds live in `access/contract`. Pure authorization, original-work and Kind-audience rules live in `access/core`.
-Use cases consume Access-owned ports in `access/application`. Native adapters in `access/adapters/native.ts` implement
-those ports by calling Content, Community, Library and Search public capability facades and the focused Semantic
-entries for Account/agent mapping (`semantic/agents.ts`), original recovery, read snapshots, Source custody and
-maintenance. Public account reads import mapping from `semantic/agents.ts` so recovery and Source-maintenance
-implementations stay out of that value graph. `createKernel`/`server`/`worker` bind the ports through
-`composition/access.ts`. Contract, core and application import no downstream domain behaviour. Tests pin allow/deny,
-identity recovery with the original actor/request/deadline, and original-work admission against fake ports without
-loading native adapters; growth membership remains the native bounded-work check. Contribution attribution remains
-nullable for missing, pending and unavailable identity; only an anchored Account tombstone is deletion.
+Decision: Access contracts own vocabulary/bounds; core owns pure authorization, original-work and Kind-audience
+rules; application owns use cases over Access ports. Native adapters implement them through public producer entries.
+`composition/access.ts` binds the application and `AgentIdentityMaintenancePort` for ordinary createKernel, server,
+worker and native preload. Unbinding Access clears both; isolated overrides return a disposer.
 
-Public entries: `access/contract/index.ts`, `access/core/index.ts`, `access/application/index.ts`,
-`access/adapters/index.ts`, `access/contribution-attribution.ts`, `access/public-identity.ts`, plus the
-existing Access adapter facades. Ports: `AvatarMediaPort`,
-`RealmAdministrationPort`, `IdentitySemanticPort`, `IdentityRecoveryStorePort`, `IdentityRetentionPort`,
-`KindAudienceLibraryPort`, `OriginalWorkPort`, `SearchErasurePort`, `NativeErasureCoordinatorPort`,
-`ResourceAuthorizationPort`. Wiring adds no
-query, scan or extra statement; native cost stays with the existing producer declarations.
+Agent verification, retained technical Source, recovery, publication and reversal consume that Access-owned native
+capability from `adapters/bind.ts`. Its Semantic producer is `semantic/adapters/agent-identity-maintenance.ts`.
+Access imports neither Semantic maintenance/terminal behavior nor private SQL. The producer owns accepted-binding
+and retained-reference SQL, published-scope reads and their exact declarations. It validates the original opaque
+accepted binding, never substitutes active admission. Terminal commands retain original fencing, bounded drain,
+release and recovery. Pool, authority, deadline, native receipt, work vector and original-home custody pass to the
+existing producers. Cross-domain declarations are requested only during the admitted operation. Source/Core/owner
+prices and technical fallback remain unchanged; pure schedule/error vocabulary lives in Semantic contract leaves.
+
+Contract, core and application load no downstream behavior. Existing application ports keep their owners;
+public identity stays nullable until the anchored Account proves deletion.
+
+Acceptance choice: retain existing verification, reversal, recovery and source-work assertions; focused capability
+tests pin exact receipt/Pool/deadline forwarding, error identity and scoped reset. Native composition supplies the
+producer declarations. Typing is the worker gate; runtime journeys remain with the integrated Goal walks.
 
 ## Pure policy core consumer
 

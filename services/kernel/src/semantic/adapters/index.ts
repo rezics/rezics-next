@@ -18,3 +18,5 @@ export {
   resolvedSemanticDomain,
 } from './registry.ts';
 export { hashingOf, routingOf, contentLifecycleOf, bindOrdinaryContentLifecycle } from './ports.ts';
+
+export type { IdentityTerminalCommand } from './agent-identity-maintenance.ts';
