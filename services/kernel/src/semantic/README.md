@@ -32,6 +32,9 @@ startup cleanup. A failure retains the first producer error alongside its last p
 and shutdown still require the original assertions and deadlines.
 Ordinary Work composition supplies its authorization factory before registration so the first Accounts producer
 does not load the Kernel graph synchronously from inside the registration callback.
+The journey distinguishes authorization module loading from factory execution. Worker authorization uses the same
+completed Kernel catalogue as HTTP without compiling HTTP request handlers; real Content roles and Access remain
+covered by the existing native authorization tests.
 
 Decision: `composeSemanticIdentityParticipants` supplies the Source reader factory while constructing the fixed
 worker participant because Semantic registration precedes Search service startup. It passes the real typed

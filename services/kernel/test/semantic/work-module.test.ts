@@ -30,6 +30,15 @@ const program = `
   const { DBOS } = await import('@dbos-inc/dbos-sdk');
   const { spyOn } = await import('bun:test');
   phase('sdk-loaded');
+  const authorizationModule = await import('./src/work/authorization.ts');
+  phase('authorization-module-loaded');
+  const createWorkerAuthorization = authorizationModule.createWorkerAuthorization;
+  spyOn(authorizationModule, 'createWorkerAuthorization').mockImplementation((...args) => {
+    phase('authorization-factory');
+    const authorization = createWorkerAuthorization(...args);
+    phase('authorization-created');
+    return authorization;
+  });
   const relayModule = await import('./src/events/relays.ts');
   let identityRegistrations = 0;
   let launches = 0;

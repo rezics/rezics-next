@@ -426,8 +426,20 @@ export function createKernelAccessResolver(options: {
   return { resolveAccess, realmRoleReader };
 }
 
-/** The route key must stay the same across restarts, or retries lose their receipts. */
+/** HTTP hosts compile handlers before admitting the first request. */
 export function createKernel(dependencies: KernelDependencies): Kernel {
+  const { app } = composeKernel(dependencies);
+  app.compile();
+  return app;
+}
+
+/** Workers use the complete native catalogue without compiling HTTP handlers they never serve. */
+export function createKernelAuthorization(dependencies: KernelDependencies): Access {
+  return composeKernel(dependencies).resolveAccess();
+}
+
+/** The route key must stay the same across restarts, or retries lose their receipts. */
+function composeKernel(dependencies: KernelDependencies): { app: Kernel; resolveAccess: () => Access } {
   bindOrdinaryContentLifecycle(nativeContentLifecycle());
   bindContextAccess(nativeContextAccess());
   bindZoneResourceApplication(createZoneResourceApplication(bindZoneResourceAccess(createZoneResourceAccess())));
@@ -1040,9 +1052,10 @@ export function createKernel(dependencies: KernelDependencies): Kernel {
     bindings: viewerBindings,
   });
   mountSubjectPagePublication(zones, resolvePublication);
-  // Route/schema compilation is startup work, before the first request's fixed deadline.
-  zones.compile();
-  return zones as Kernel;
+  return {
+    app: zones as Kernel,
+    resolveAccess: () => realmAwareContentAccess(resolveAccess({ actions, realmRoleReader })),
+  };
 }
 
 // The module inherits definition routes. Keep their existing schemas only once: intersecting

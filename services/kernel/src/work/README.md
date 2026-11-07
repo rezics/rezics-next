@@ -15,6 +15,11 @@ Decision: ordinary composition supplies the native worker authorization factory 
 The first Accounts registration must not synchronously load the Kernel module graph from inside a lazy
 `getAuthorization()` call. The installed worker lifecycle and default discovery journeys cover that startup path;
 authorization still uses the worker's original pool, client, clock, environment and receipt keys.
+Worker authorization and HTTP hosts share Kernel route assembly and catalogue validation. The worker resolves native
+Access from that completed assembly; only HTTP hosts compile request handlers and schemas. Worker startup never
+spends its registration budget compiling a transport it does not serve. The existing authorization tests retain
+native Content roles, action refusals, consent freshness and no-I/O assertions; installed lifecycle tests retain
+readiness, link convergence, failure cleanup and graceful drain under their original deadlines.
 
 Public entries: `work/contract/index.ts`, `work/contract/bounds.ts`, `work/contract/vocabulary.ts`,
 `work/contract/cost.ts`, `work/core/index.ts`, `work/application/index.ts`, `work/adapters/index.ts`,
