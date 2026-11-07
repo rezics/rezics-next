@@ -2,9 +2,10 @@
 import { isDeepStrictEqual } from 'node:util';
 import type { Release } from '@rezics/definitions';
 import { deadlineClient } from './access-port.ts';
+import type { RelationFacetMatch } from '../search/source.ts';
 import { withConnection } from '../database/pool.ts';
 import { routeOf } from '../route/route.ts';
-import { zeroScopeWork } from '../search/scope-execution.ts';
+import { zeroScopeWork } from '../search/contract/index.ts';
 import { currentOwnerClauseKey } from '../search/current-filter-plan.ts';
 import { readRelease } from '../semantic/definitions.ts';
 import { readScopeLeafEvidence, type LeafEvidence, type LeafWork } from '../semantic/scope-leaf-evidence.ts';
@@ -12,7 +13,17 @@ import { readCanonicalSourceGroup, readCanonicalSourceState, type CanonicalRawKe
 import type { PreparedCollectionSource } from './collection-source.ts';
 import type { NativeCollectionWork } from './collection-source-work.ts';
 import type { OwnerFilterCandidateClosure, OwnerFilterReadBinding } from './owner-filter-plan.ts';
-import type { OwnerFilterFactLocator } from './owner-filter.ts';
+import {
+  evaluateOwnerFilterLeaves,
+  matchOwnerFilterCatalogue,
+  matchOwnerFilterState,
+  matchOwnerFilterSupport,
+  ownerFilterStateWinner,
+  type CollectionMemberAdmission,
+  type OwnerFilterEntryFact,
+  type OwnerFilterFactLocator,
+  type OwnerFilterNativeFact,
+} from './owner-filter.ts';
 import { resolveSubject } from './subject-anchor.ts';
 import {
   nativeOwnerFilterBinding,
@@ -32,6 +43,76 @@ import populationQuery from './owner-filter-native-closure-population.sql';
 type NativeFactKey = { driver: number; factId: string; labelId: string | null };
 import { OWNER_FILTER_CLOSURE_REFERENCE_LIMIT, OWNER_FILTER_CLOSURE_ORIGINAL_LIMIT } from './contract/index.ts';
 export { OWNER_FILTER_CLOSURE_REFERENCE_LIMIT, OWNER_FILTER_CLOSURE_ORIGINAL_LIMIT } from './contract/index.ts';
+
+/** Evaluate the complete native closure on the caller's snapshot and ledger. */
+export async function evaluateNativeOwnerFilterCandidate(
+  client: Pick<import('pg').PoolClient, 'query'>,
+  admission: CollectionMemberAdmission,
+  closure: OwnerFilterCandidateClosure,
+  work: NativeCollectionWork,
+): Promise<RelationFacetMatch> {
+  const plan = admission.plan;
+  if (plan === null) return true;
+  const facts: OwnerFilterNativeFact[] = [];
+  const entries: OwnerFilterEntryFact[] = [];
+  const presence: boolean[] = [];
+  const wantsPresence = plan.leaves.some((leaf) => leaf.kind === 'owner' && 'presence' in leaf.leaf.owner);
+  const seen = new Set<string>();
+  const originals = new Set<string>();
+  let raw = 0;
+  for (const original of closure.originals) {
+    raw += 1 + original.facts.length;
+    if (raw > 100) throw ownerFilterUnavailable();
+  }
+  for (const original of closure.originals) {
+    if (originals.has(original.subjectId) || routeOf(original.subjectId) === null)
+      throw new TypeError('Invalid native owner original closure');
+    originals.add(original.subjectId);
+    for (const locator of original.facts) {
+      if (locator.subjectId !== original.subjectId) throw new TypeError('Foreign native owner fact');
+      const key = JSON.stringify(locator);
+      if (seen.has(key)) throw new TypeError('Duplicate native owner locator');
+      seen.add(key);
+      if (!admission.owner) throw new TypeError('Native owner family was not admitted');
+      if (wantsPresence) presence.push(await admission.owner.readPresence(client, locator, work));
+      const needed = plan.leaves.some((leaf) => {
+        if (leaf.kind !== 'owner') return false;
+        const owner = leaf.leaf.owner;
+        return (
+          ('state' in owner && locator.kind === 'entry') ||
+          ('label' in owner && locator.kind === 'label' && locator.labelId === owner.label.id) ||
+          ('session' in owner && locator.kind === 'session') ||
+          ('holding' in owner && locator.kind === 'holding')
+        );
+      });
+      // Presence uses independent fixed-width native liveness points, without hydrating a profile pin.
+      if (!needed) continue;
+      const fact = await admission.owner.read(client, locator, work);
+      if (!fact) continue;
+      facts.push(fact);
+      if (fact.kind === 'entry') entries.push(fact);
+    }
+  }
+  if (!originals.has(closure.subjectId)) throw new TypeError('Missing native owner terminal original');
+  const winner = ownerFilterStateWinner(entries);
+  const observations = new Map<string, RelationFacetMatch>();
+  for (const leaf of plan.leaves) {
+    const key = currentOwnerClauseKey(leaf);
+    if (leaf.kind === 'catalogue') {
+      const evidence = closure.catalogue.get(key);
+      observations.set(key, evidence ? matchOwnerFilterCatalogue(leaf, evidence) : 'not_proven');
+      continue;
+    }
+    const owner = leaf.leaf.owner;
+    if ('presence' in owner) observations.set(key, presence.some(Boolean));
+    else if ('state' in owner) observations.set(key, matchOwnerFilterState(owner.state, winner, closure.releases));
+    else {
+      const matches = facts.map((fact) => matchOwnerFilterSupport(owner, fact, closure.releases));
+      observations.set(key, matches.includes(true) ? true : matches.includes('not_proven') ? 'not_proven' : false);
+    }
+  }
+  return evaluateOwnerFilterLeaves(plan, observations);
+}
 
 /** A prepared answer must reauthorize its complete structural population, including exclusions/order.
  * LIMIT bounds raw references before hydration. A full window is unavailable, never fabricated coverage.

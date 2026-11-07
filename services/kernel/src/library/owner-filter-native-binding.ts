@@ -19,7 +19,7 @@ import { withConnection } from '../database/pool.ts';
 import { ProblemError } from '../http/problem-error.ts';
 import type { Access, AccessContext, Actor } from '../request/access.ts';
 import { partitionOf, routeOf } from '../route/route.ts';
-import { scopeAllowance, zeroScopeWork } from '../search/scope-execution.ts';
+import { zeroScopeWork } from '../search/contract/index.ts';
 import { createIdentityScopedObservations } from '../semantic/identity-scoped-observations.ts';
 import type { IdentityScopeLibraryIdentity, IdentityScopeObservation } from '../semantic/identity-scope-types.ts';
 import { freeze } from '../semantic/definitions.ts';
@@ -98,6 +98,21 @@ export type NativeOwnerFilterCeilings = Readonly<{
   /** Static prefix retained by this binding phase before its remainder is transferred. */
   binding: WorkDimensions;
 }>;
+function ownerFilterRootAllowance(keys: number, reservationId: string, remaining?: WorkDimensions): WorkAllowance {
+  return {
+    reservationId,
+    remaining: remaining ?? {
+      candidateKeys: keys,
+      nativeRows: 65536,
+      identityMetadataRows: 16384,
+      emptySeeks: 256,
+      nativePoints: 4096,
+      witnessKeys: 8192,
+      statements: 8192,
+      bytes: 4 * 1024 * 1024,
+    },
+  };
+}
 const bindings = new WeakMap<OwnerFilterReadBinding, NativeOwnerFilterBinding>();
 
 /** Only a direct ordinary read owns its minted read time. Commands/Search keep their caller's lifetime. */
@@ -515,7 +530,7 @@ export async function bindNativeOwnerFilterRead(
   }
   // The direct reader owns one root; a nested Search reader lends its existing root instead.
   const reservationId = randomUUID();
-  const root = scopeAllowance(100, reservationId, ceilings?.total);
+  const root = ownerFilterRootAllowance(100, reservationId, ceilings?.total);
   // One direct Source request reservation, never renewed by a candidate/refill/closure.
   // Search supplies its own existing ceilings unchanged.
   const work =

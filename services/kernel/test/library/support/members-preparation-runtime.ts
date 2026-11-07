@@ -6,11 +6,8 @@ import { actionCatalogue } from '../../../src/http/request.ts';
 import { createWriteRateLimiter } from '../../../src/access/write-rate.ts';
 import { LIFECYCLE_ACTIONS } from '../../../src/access/lifecycle.ts';
 import { runOperationalTransaction } from '../../../src/command/operational.ts';
-import {
-  createMembersPreparation,
-  type PreparationDefinition,
-  type PreparationLocator,
-} from '../../../src/library/members-preparation.ts';
+import { requireLibraryMembersPreparation } from '../../../src/library/domain-binding.ts';
+import { type PreparationDefinition, type PreparationLocator } from '../../../src/library/members-preparation.ts';
 import { accessCheck } from '../../../src/request/access-check.ts';
 import { actorOf } from '../../../src/request/access.ts';
 import { newId, partitionOf, routeOf } from '../../../src/route/route.ts';
@@ -77,7 +74,7 @@ export async function membersPreparationRuntime() {
       { ...context(), pool },
     );
   const store = (pool: Pool = db.pool) =>
-    createMembersPreparation({ pool, workClient, access: kernel.testAccess, clock });
+    requireLibraryMembersPreparation().createPreparation({ pool, workClient, access: kernel.testAccess, clock });
   async function person(): Promise<Persona> {
     const row = await auth.person(`m_${crypto.randomUUID().replaceAll('-', '')}`);
     const signed = await auth.request('/signin', {

@@ -2,6 +2,11 @@
 
 export type { WorkAllowance, WorkDimensions, WorkReceipt } from './work-dimensions.ts';
 export type * from './native-public-output.ts';
+export type {
+  MembersPreparationApplicationAdapters,
+  MembersPreparationReservationCapability,
+  NativeOwnerFilterCapability,
+} from './members-preparation.ts';
 export { libraryActorOf } from './actors.ts';
 export type { GrantedAccount, LibraryAccountActor, LibraryActor, LibraryAnonymousActor } from './actors.ts';
 export {
