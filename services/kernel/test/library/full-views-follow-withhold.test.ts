@@ -11,6 +11,13 @@ mock.module('../../src/library/subject-anchor.ts', () => ({
     const next = resolutions.shift();
     return { subjectId: next ?? id, requestedSubjectId: id };
   },
+  mapSubjectTerminals: async (_pool: unknown, ids: readonly string[]) =>
+    new Map(
+      ids.map((id) => {
+        const next = resolutions.shift();
+        return [id, next ?? id];
+      }),
+    ),
 }));
 
 mock.module('../../src/semantic/summaries.ts', () => ({

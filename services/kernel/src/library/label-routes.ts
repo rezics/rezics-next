@@ -381,12 +381,17 @@ export function personalLabelRoutes(
         return admission.run('normal', job, async () => {
           const body = await command(() => assignments().listAssignments(actor, query, job.deadline));
           // The owner RR connection is released before standard per-partition summary readers acquire theirs.
+          // FULL by-label keeps the raw assignment frontier: a concealed or moved Source is
+          // subject: null, not dependency_unavailable.
           return fullView(
             { ...deps, access: deps.access() },
             actor,
             query.labelId ? query.view : 'BASIC',
             body,
-            { deadline: job.deadline },
+            {
+              deadline: job.deadline,
+              ...(query.labelId && query.view === 'FULL' ? { withholdChangedSource: true as const } : {}),
+            },
           );
         });
       },

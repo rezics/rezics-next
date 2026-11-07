@@ -42,6 +42,8 @@ provenance summary per notice rather than one telemetry entry per EXPLAIN node, 
 under the per-tree node cap rather than the capture-wide 20 000-node telemetry budget; Seq Scan
 on Library relations stays refused. FULL assignment pages hydrate Subject summaries from the admitted
 request deadline and one Semantic `prepareReadDecisions` page, not per-subject Access point formulas.
+A concealed or moved Source on FULL by-label withholds (`subject: null`) through `withholdChangedSource`;
+it does not 503 the assignment page or shrink the raw cursor.
 The folded FULL warmup still sees 34 `personal_label` parent
 observations and zero sequential scans. Existing Label command, HTTP and growth suites pin this; no extra
 tests or stories.
@@ -168,8 +170,9 @@ summaries, indexed active-label fallback and Community actions; repeated origina
 changed source. Serialization never refunds hidden work.
 
 Decision: FULL follow original/current Source mismatch or a non-current summary observation withholds that target
-(`target: null`) and keeps the private edge; it does not 503 the list or point. Other FULL Library views still refuse
-with `dependency_unavailable`. Create/unfollow freeze original actor, client, owner, edge, request key, typed target
+(`target: null`) and keeps the private edge; it does not 503 the list or point. Published-log and Label FULL
+assignment pages withhold the same way (`subject: null`) and keep the raw frontier. Other FULL Library views still
+refuse with `dependency_unavailable`. Create/unfollow freeze original actor, client, owner, edge, request key, typed target
 body and absolute deadline before receipt replay; replay returns that acknowledged result. Empty exhaustion and
 other-member/anonymous views use their own admission. Web binds list GET and the callable point separately; Following
 return stores cursor, kind and target on the private list history entry with the current session. Fewest tests: one
@@ -820,7 +823,7 @@ PostgreSQL timestamp text. The active-session seek is the existing partial index
 `(route, account_id, subject_id, last_changed_at DESC, session_id)`. FULL subject summaries are Semantic-owned:
 `ViewReader.subject`/`loadSubjects` use `readSubjectSummaryObservation` with original and terminal authorization,
 identity/Source/cover fences and language/profile/type currentness. A withheld summary does not shrink the raw
-assignment frontier. Counter-only rebuilds keep last-complete FULL tiles; field backfill withholds them until
+assignment frontier: FULL by-label passes `withholdChangedSource` so a concealed Subject stays `subject: null`. Counter-only rebuilds keep last-complete FULL tiles; field backfill withholds them until
 publication, after which the original Label and Shelf actions return the published generation.
 Fewest tests: one native maintenance journey covers last-complete, field-backfill preparing, and those original
 actions after publication; served HTTP uses own-account admission, open personal_library, and listEntries standing.

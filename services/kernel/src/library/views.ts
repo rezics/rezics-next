@@ -126,7 +126,8 @@ class ViewReader {
     });
   }
 
-  /** Follow FULL keeps the private edge. Published-log FULL keeps the snapshot. Other FULL views still refuse. */
+  /** Follow FULL keeps the private edge. Published-log and Label FULL keep the snapshot.
+   * Other FULL views still refuse. */
   discloseSource(originalId: string | undefined, currentId: string | undefined, observationCurrent: boolean): boolean {
     if (observationCurrent && currentId === originalId) return true;
     if (this.follow || this.withholdChangedSource) return false;
