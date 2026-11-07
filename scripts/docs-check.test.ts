@@ -172,6 +172,18 @@ describe('documentation links and owner rules', () => {
     expect(result.exitCode).toBe(0);
   });
 
+  test('changed mode ignores tracked temporary Markdown missing from the work tree', async () => {
+    write('.temp/continuation/kept.md', '# Continuation\n');
+    write('docs/development/plan.md', '[next](../../.temp/continuation/kept.md)\n');
+    write('docs/development/changed.md', '# First\n');
+    commit();
+    write('docs/development/changed.md', '# Second\n');
+    commit('docs');
+    rmSync(path.join(root, '.temp/continuation/kept.md'));
+    const result = await runDocsCheck(root, ['--changed', 'HEAD~1']);
+    expect(result.exitCode).toBe(0);
+  });
+
   test('finds dated headings, task IDs and temporary paths in owner documents', async () => {
     write('docs/development/owner.md', '## 2026-11-05 Notes\nTask TASK-ABCD\nSee .temp/continuation/next.md\n');
     const result = await runDocsCheck(root);

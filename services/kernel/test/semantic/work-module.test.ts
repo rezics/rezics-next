@@ -2,6 +2,7 @@ import { afterAll, expect, test } from 'bun:test';
 import pg from 'pg';
 import { bundledDigest, bundledRelease } from '@rezics/definitions/bundled';
 import { createPool } from '../../src/database/pool.ts';
+import { installNativeHistory } from '../../src/composition/history.ts';
 import { createKernel } from '../../src/http/kernel.ts';
 import { partitionOf, routeOf } from '../../src/route/route.ts';
 import { bootstrapRelease, GLOBAL_CONTEXT } from '../../src/semantic/definitions.ts';
@@ -16,6 +17,7 @@ import { createRealAccess } from './real-access.ts';
 
 const databaseUrl = process.env.DATABASE_URL;
 if (!databaseUrl) throw new Error('DATABASE_URL must name the migrated test database');
+installNativeHistory();
 const pool = createPool(databaseUrl);
 const admin = new pg.Pool({ connectionString: databaseUrl, max: 4 });
 afterAll(async () => {
