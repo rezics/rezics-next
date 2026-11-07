@@ -180,7 +180,7 @@ export function renderJourneyTable(rows: JourneyRow[]): string {
 }
 
 const CENSUS_REPAIRS =
-  '`.temp/continuation/auth-website-kernel-bearer.md`, `auth-recovery-and-credentials.md`, `accounts-operations-e18.md`, `accounts-follow.md`, `accounts-walk-browser.md`, `accounts-realm.md`';
+  '`.temp/continuation/rating-walk-setup.md`, `auth-website-kernel-bearer.md`, `auth-recovery-and-credentials.md`, `accounts-operations-e18.md`, `accounts-follow.md`, `accounts-walk-browser.md`, `accounts-realm.md`';
 const CENSUS_MARKER = ' The table-shape check does not start Storybook.';
 
 export function renderWalkCensus(
