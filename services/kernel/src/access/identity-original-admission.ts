@@ -16,7 +16,7 @@ import type { IdentitySourceConsumerMaintenanceContext } from '../semantic/acces
 import type { WorkClient } from '../work/client.ts';
 import { routeOf } from '../route/route.ts';
 import { withConnection } from '../database/pool.ts';
-import { NativeCollectionWork } from '../library/collection-source-work.ts';
+import { NativeCollectionWork } from '../library/collection-native-work.ts';
 import { tryAccessApplication } from './adapters/bind.ts';
 import { admitOriginalWorkDeclaration, composeOriginalWorkAdmission } from './core/index.ts';
 
