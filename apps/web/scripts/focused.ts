@@ -55,7 +55,9 @@ export function focusedTestCommands(command: string[]): string[][] {
   if (command[0] !== 'bun' || command[1] !== 'test') return [command];
   const selectors = testSelectorArgumentIndices(command);
   if (selectors.length < 2) return [command];
-  return selectors.map((selectedIndex) => command.filter((_, index) => !selectors.includes(index) || index === selectedIndex));
+  return selectors.map((selectedIndex) =>
+    command.filter((_, index) => !selectors.includes(index) || index === selectedIndex),
+  );
 }
 
 /** One exclusive Worker graph at a time in a focused 6 GiB slot when Copies and signed-in-routes both compile. */
@@ -211,9 +213,7 @@ export async function runFocusedCommand(command: string[], options: FocusedRunne
     routedEnvironment,
   );
   if (routed !== null) return routed;
-  const admitted = admitSerialBunTestCommand(
-    admitExplicitHostTestCommand(selection.command),
-  );
+  const admitted = admitSerialBunTestCommand(admitExplicitHostTestCommand(selection.command));
   const wrapShared =
     commandNeedsSharedDevServer(admitted) &&
     existsSync(join(appDirectory, 'vite.config.ts')) &&

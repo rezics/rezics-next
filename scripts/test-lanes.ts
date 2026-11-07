@@ -863,17 +863,13 @@ export async function capture(
 }
 
 /** Tests start containers and compilers; under a loaded host Bun's 5 s per-test default fails them at random. */
-export function testCommand(
-  file: string,
-  junitFile: string,
-  preload?: string,
-  testArguments: string[] = [],
-): string[] {
+export function testCommand(file: string, junitFile: string, preload?: string, testArguments: string[] = []): string[] {
   const separator = testArguments.indexOf('--');
   const bunArguments = separator < 0 ? testArguments : testArguments.slice(0, separator);
   const programArguments = separator < 0 ? [] : testArguments.slice(separator + 1);
   const hasTimeout = bunArguments.some(
-    (argument) => argument === '--timeout' || argument.startsWith('--timeout=') || argument === '-t' || /^-t\d/u.test(argument),
+    (argument) =>
+      argument === '--timeout' || argument.startsWith('--timeout=') || argument === '-t' || /^-t\d/u.test(argument),
   );
   return [
     'test',
