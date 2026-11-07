@@ -1076,7 +1076,8 @@
         "apps/web/src/library/loans-query.ts",
         "apps/web/src/library/loans-actions.ts",
         "apps/web/src/library/settings-contract.ts",
-        "apps/web/src/library/settings-adapter.ts"
+        "apps/web/src/library/settings-adapter.ts",
+        "apps/web/src/library/search-action-binding.tsx"
       ],
       "allowedDependencies": [
         "client",
@@ -1175,7 +1176,9 @@
         "apps/web/src/features/pages/showcase-work/index.ts",
         "apps/web/src/features/pages/shared.tsx",
         "apps/web/src/search/public-collection-directory/index.ts",
-        "apps/web/src/search/saved-query-condition-input.tsx"
+        "apps/web/src/search/saved-query-condition-input.tsx",
+        "apps/web/src/search/saved-query-selection.ts",
+        "apps/web/src/search/library-action-port.tsx"
       ],
       "allowedDependencies": [
         "client",

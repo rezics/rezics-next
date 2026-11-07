@@ -4,6 +4,7 @@ import { viewerExposureLifetime, viewerExposureQuery } from '../kernel/viewer-ex
 import { sessionQuery, exposureQuery } from './query';
 import type { RecoveryObserver, RecoveryObservation } from '../library/application';
 import { LibraryPrivateLifetime } from '../library/private-lifetime';
+import { SearchLibraryActionBinding } from '../library/search-action-binding';
 import type { ReactNode } from 'react';
 import { LibraryApplicationContext, type LibraryApplication } from '../library/application';
 import { useSession } from './query';
@@ -26,7 +27,9 @@ export const libraryApplication: LibraryApplication = {
 export function LibraryApplicationBoundary({ children }: { children: ReactNode }) {
   return (
     <LibraryApplicationContext value={libraryApplication}>
-      <LibraryPrivateLifetime>{children}</LibraryPrivateLifetime>
+      <SearchLibraryActionBinding>
+        <LibraryPrivateLifetime>{children}</LibraryPrivateLifetime>
+      </SearchLibraryActionBinding>
     </LibraryApplicationContext>
   );
 }
