@@ -14,11 +14,11 @@ function details(values: Partial<ImportRequestDiagnostics>, fallbackPhase: strin
   const path = safeField(values.path, /^\/[A-Za-z0-9._~!$&'()*+,;=:@%\/-]{0,512}$/u, 512);
   const target = `${origin ?? 'unknown-origin'}${path ?? ''}`;
   const phase = safeField(values.phase, /^[a-z-]{1,24}$/u, 24) ?? fallbackPhase;
-  const status = Number.isInteger(values.status) && values.status! >= 100 && values.status! <= 599
-    ? String(values.status)
-    : 'none';
+  const status =
+    Number.isInteger(values.status) && values.status! >= 100 && values.status! <= 599 ? String(values.status) : 'none';
   const code = safeField(values.code, /^[a-z0-9_-]{1,80}$/u, 80) ?? 'none';
-  const network = safeField(values.networkCode, /^(?:E[A-Z0-9_]{1,64}|ERR_[A-Z0-9_]{1,64}|UND_ERR_[A-Z0-9_]{1,64})$/u, 72) ?? 'none';
+  const network =
+    safeField(values.networkCode, /^(?:E[A-Z0-9_]{1,64}|ERR_[A-Z0-9_]{1,64}|UND_ERR_[A-Z0-9_]{1,64})$/u, 72) ?? 'none';
   const correlation = safeField(values.correlationId, /^[A-Za-z0-9._:-]{1,128}$/u, 128) ?? 'none';
   return `phase=${phase} method=${method} target=${target} status=${status} problem=${code} network=${network} correlation=${correlation}`;
 }
@@ -45,7 +45,7 @@ export function formatSeedError(error: unknown): string {
       error.status === undefined ? 'transport' : 'http',
     );
     const classification = safeField(error.phase, /^[A-Za-z][A-Za-z0-9]{0,31}$/u, 32);
-    return `Import transport failed ${outer}${classification ? ` classification=${classification}` : ''}${cause ? ` auth{${details(cause.diagnostics ?? {}, 'credential') }}` : ''}`;
+    return `Import transport failed ${outer}${classification ? ` classification=${classification}` : ''}${cause ? ` auth{${details(cause.diagnostics ?? {}, 'credential')}}` : ''}`;
   }
   if (error instanceof CredentialDeniedError || error instanceof CredentialServiceError)
     return `Credential request failed ${details(error.diagnostics ?? {}, 'credential')}`;

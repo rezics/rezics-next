@@ -64,8 +64,10 @@ export class CrossMediaTableScanLimitError extends Error {
 
 /** A duplicate module instance can produce the same named scan-limit error. */
 export function isCrossMediaTableScanLimitError(error: unknown): error is CrossMediaTableScanLimitError {
-  return error instanceof CrossMediaTableScanLimitError ||
-    (error instanceof Error && error.name === 'CrossMediaTableScanLimitError');
+  return (
+    error instanceof CrossMediaTableScanLimitError ||
+    (error instanceof Error && error.name === 'CrossMediaTableScanLimitError')
+  );
 }
 
 function scanResumeBytes(error: { resumeBytes?: unknown }): number {

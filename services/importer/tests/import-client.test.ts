@@ -408,7 +408,9 @@ test('token acquisition reports its own safe Auth failure beside the Import oper
     failurePhase: 'token',
   });
   expect((failure as ImportTransportError).cause).toBe(credential);
-  expect(formatSeedError(failure)).toContain('auth{phase=http method=POST target=http://auth.importer.test/token status=503');
+  expect(formatSeedError(failure)).toContain(
+    'auth{phase=http method=POST target=http://auth.importer.test/token status=503',
+  );
   expect(formatSeedError(failure)).toContain('problem=identity_unavailable');
   expect(formatSeedError(failure)).toContain('correlation=auth-req-7');
 });

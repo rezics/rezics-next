@@ -549,10 +549,7 @@ test('selected VNDB entry_meta rows continue from the exact unread dump offset',
     const db = join(directory, 'db');
     await mkdir(db, { recursive: true });
     await writeFile(join(db, 'entry_meta.header'), 'id\trevision\tlastmod\n');
-    await writeFile(
-      join(db, 'entry_meta'),
-      'c1\t1\t2026-10-25 00:00:00+00\nv1\t7\t2026-10-25 00:00:00+00\n',
-    );
+    await writeFile(join(db, 'entry_meta'), 'c1\t1\t2026-10-25 00:00:00+00\nv1\t7\t2026-10-25 00:00:00+00\n');
     const dump = new CrossMediaDumpFiles(join(directory, 'bangumi'), directory);
     const pending = new Set(['v1']);
     const found = new Map<string, number>();

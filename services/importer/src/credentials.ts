@@ -40,14 +40,20 @@ export class CredentialInputError extends Error {
 }
 
 export class CredentialDeniedError extends Error {
-  constructor(readonly diagnostics?: Partial<ImportRequestDiagnostics>, cause?: unknown) {
+  constructor(
+    readonly diagnostics?: Partial<ImportRequestDiagnostics>,
+    cause?: unknown,
+  ) {
     super('Account-key sign-in was denied', { cause });
     this.name = 'CredentialDeniedError';
   }
 }
 
 export class CredentialServiceError extends Error {
-  constructor(readonly diagnostics?: Partial<ImportRequestDiagnostics>, cause?: unknown) {
+  constructor(
+    readonly diagnostics?: Partial<ImportRequestDiagnostics>,
+    cause?: unknown,
+  ) {
     super('Credential service request failed', { cause });
     this.name = 'CredentialServiceError';
   }
@@ -311,26 +317,19 @@ async function authRequest(options: AuthRequest): Promise<{ response: Response; 
     const code = publicProblemCode(bytes);
     if (response.status === 401 || response.status === 403)
       throw new CredentialDeniedError(credentialDiagnostics(options, 'http', response, code));
-    if (!response.ok)
-      throw new CredentialServiceError(credentialDiagnostics(options, 'http', response, code));
+    if (!response.ok) throw new CredentialServiceError(credentialDiagnostics(options, 'http', response, code));
     return { response, bytes };
   } catch (error) {
     controller.abort();
     if (error instanceof CredentialDeniedError || error instanceof CredentialInputError) throw error;
     if (error instanceof CredentialServiceError) {
       if (error.diagnostics) throw error;
-      throw new CredentialServiceError(
-        credentialDiagnostics(options, response ? 'response' : phase, response),
-        error,
-      );
+      throw new CredentialServiceError(credentialDiagnostics(options, response ? 'response' : phase, response), error);
     }
     const failurePhase = controller.signal.aborted && !options.signal?.aborted ? 'deadline' : phase;
     const diagnostics = credentialDiagnostics(options, failurePhase, response);
     const networkCode = failurePhase === 'network' ? importNetworkCode(error) : undefined;
-    throw new CredentialServiceError(
-      { ...diagnostics, ...(networkCode === undefined ? {} : { networkCode }) },
-      error,
-    );
+    throw new CredentialServiceError({ ...diagnostics, ...(networkCode === undefined ? {} : { networkCode }) }, error);
   } finally {
     clearTimeout(timer);
     options.signal?.removeEventListener('abort', aborted);

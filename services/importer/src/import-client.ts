@@ -266,10 +266,9 @@ export class ImportTransportError extends Error {
     readonly phase?: ImportTransportPhase,
     diagnostics: Partial<ImportRequestDiagnostics> & { cause?: unknown } = {},
   ) {
-    super(
-      phase ? `Import transport request failed at ${phase}` : 'Import transport request failed',
-      { cause: diagnostics.cause },
-    );
+    super(phase ? `Import transport request failed at ${phase}` : 'Import transport request failed', {
+      cause: diagnostics.cause,
+    });
     this.name = 'ImportTransportError';
     this.method = diagnostics.method;
     this.origin = diagnostics.origin;
@@ -318,9 +317,7 @@ function httpFailure(reply: ClientResponse): ImportTransportError {
       // A generated response can omit or malformedly report its URL; keep the safe envelope partial.
     }
   }
-  const correlationId = reply.response
-    ? (request?.correlationId ?? importCorrelationId(reply.response))
-    : undefined;
+  const correlationId = reply.response ? (request?.correlationId ?? importCorrelationId(reply.response)) : undefined;
   return new ImportTransportError(
     reply.response?.status ?? (reply.status > 0 ? reply.status : undefined),
     safeType,
@@ -881,7 +878,15 @@ export function createImportTransport(options: ImportTransportOptions) {
       return result;
     } catch (error) {
       if (error instanceof ImportTransportError && error.status === 403)
-        throw new ImportTransportError(403, error.type, error.code, false, error.retry, 'merge403', copiedDiagnostics(error));
+        throw new ImportTransportError(
+          403,
+          error.type,
+          error.code,
+          false,
+          error.retry,
+          'merge403',
+          copiedDiagnostics(error),
+        );
       throw error;
     }
   }
