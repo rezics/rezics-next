@@ -356,10 +356,10 @@ test('a failed authored operation rolls back and releases its transaction', asyn
       throw new Error('measured sample failed');
     }),
   ).rejects.toThrow('measured sample failed');
-  const rows = await db.admin.query(
-    'SELECT id FROM content.authored_field WHERE route=$1 AND candidate=$2',
-    [route, proposal.candidate],
-  );
+  const rows = await db.admin.query('SELECT id FROM content.authored_field WHERE route=$1 AND candidate=$2', [
+    route,
+    proposal.candidate,
+  ]);
   expect(rows.rows).toEqual([]);
   await expect(db.pool.query('SELECT 1 AS available')).resolves.toMatchObject({ rows: [{ available: 1 }] });
 });
