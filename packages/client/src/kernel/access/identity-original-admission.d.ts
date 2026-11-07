@@ -3,7 +3,7 @@ import type { AccessWorkDimensions as WorkDimensions } from './contract/index.ts
 import type { HistoryRegistry } from '../history/contract/index.ts';
 import type { IdentitySourceConsumerMaintenanceContext } from '../semantic/access-capabilities.ts';
 import type { WorkClient } from '../work/client.ts';
-import { NativeCollectionWork } from '../library/collection-source-work.ts';
+import { NativeCollectionWork } from '../library/collection-native-work.ts';
 export { IDENTITY_ORIGINAL_DEADLINE_MS, ORIGINAL_WORK_AXES as ORIGINAL_AXES } from './contract/index.ts';
 export { ADDITIONAL_ORIGINAL_TRANSFER_CONTROL, HISTORY_ORIGINAL_CONTROL, HISTORY_ORIGINAL_LOCAL_ALLOWANCE, HISTORY_ORIGINAL_SELECTION, HISTORY_ORIGINAL_SETTLEMENT, HISTORY_ORIGINAL_TRANSFER_CONTROL, HISTORY_ORIGINAL_VALIDATION, HISTORY_SELECTED_LOCAL_CONTROL, ORIGINAL_NATIVE_CONTROL, originalControlWork, originalWorkVector, scaleOriginalControl, sumOriginalControl, } from './core/index.ts';
 export declare const IDENTITY_ORIGINAL_SOURCE_TRANSFER_MISSING = "identity-history-original-source-transfer-unavailable";

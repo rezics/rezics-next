@@ -2,7 +2,7 @@ import type { OperationalTransaction } from '../command/operational.ts';
 import type { IdentityNativeReceipt } from '../semantic/identity-epoch-contract.ts';
 import type { IdentityScopeObservation } from '../semantic/identity-scope-types.ts';
 import type { CollectionSourceObservation } from './collection-source.ts';
-import { NativeCollectionWork } from './collection-source-work.ts';
+import { NativeCollectionWork } from './collection-native-work.ts';
 import { type NativeSourceIdentity, type NativeSourceCustody } from './native-source-custody.ts';
 export { collectionKindInputAdmissionWork } from './collection-kind-input-bounds.ts';
 export type CollectionKindPreparationLocator = Readonly<{
