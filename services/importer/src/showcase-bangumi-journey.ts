@@ -431,11 +431,14 @@ async function checkTarget(work: JourneyWork, subjectIds: ReadonlyMap<string, st
 export type BangumiJourneyOptions = {
   skipPersona?: boolean;
   skipSeed?: boolean;
-  startFrontends?: boolean;
+  startFrontends?: boolean | 'web';
 };
 
-async function startWalkFrontends(web: string, issuer: string) {
-  const children = (['pages', 'web'] as const).map((action) =>
+export async function startWalkStackActions(
+  actions: readonly ('pages' | 'web')[],
+  readyUrls: readonly string[],
+) {
+  const children = actions.map((action) =>
     Bun.spawn(['bun', 'services/auth/scripts/dev-stack.ts', action], {
       cwd: root,
       env: process.env,
@@ -449,8 +452,7 @@ async function startWalkFrontends(web: string, issuer: string) {
   };
   process.once('exit', killOnExit);
   try {
-    await ready(`${issuer}/.well-known/openid-configuration`);
-    await ready(web);
+    for (const url of readyUrls) await ready(url);
   } catch (error) {
     process.off('exit', killOnExit);
     for (const child of children) if (child.exitCode === null && child.signalCode === null) child.kill('SIGKILL');
@@ -463,6 +465,10 @@ async function startWalkFrontends(web: string, issuer: string) {
       await Promise.all(children.map((child) => child.exited));
     },
   };
+}
+
+async function startWalkFrontends(web: string, issuer: string) {
+  return startWalkStackActions(['pages', 'web'], [`${issuer}/.well-known/openid-configuration`, web]);
 }
 
 export async function runBangumiJourney(options: BangumiJourneyOptions = {}) {
@@ -624,7 +630,12 @@ export async function runBangumiJourney(options: BangumiJourneyOptions = {}) {
   );
 
   phase = 'anonymous-browser';
-  const frontends = options.startFrontends === false ? undefined : await startWalkFrontends(web, issuer);
+  const frontends =
+    options.startFrontends === false
+      ? undefined
+      : options.startFrontends === 'web'
+        ? await startWalkStackActions(['web'], [web])
+        : await startWalkFrontends(web, issuer);
   const require = createRequire(resolve(root, 'apps/web/package.json'));
   const { chromium } = require('playwright') as {
     chromium: { launch(options: { headless: boolean }): Promise<any> };

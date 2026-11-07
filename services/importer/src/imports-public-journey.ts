@@ -20,6 +20,7 @@ import {
   citedAnimeCreditTargets,
   runBangumiJourney,
   selectJourneyWorks,
+  startWalkStackActions,
   type JourneyPublishedRow,
 } from './showcase-bangumi-journey.ts';
 import type { CrossMediaSeedReport } from './cross-media-seed.ts';
@@ -141,6 +142,128 @@ export function walkInventorySummary(inventory: WalkInventory): string {
   return `${inventory.passing}/${inventory.total} passing; slowest failing ${
     slowest ? `${slowest.id} ${slowest.elapsedMs}ms ${slowest.cause}` : 'none'
   }; ${failing.length} failing`;
+}
+
+const OBSERVED_WALK_HEADING = '### Observed walk';
+
+export const WALK_ROW_REPAIR_OWNERS: Record<
+  FirstPublicImportRowId,
+  { goal: string; manager: string }
+> = {
+  I01: { goal: 'imports', manager: 'imports' },
+  I02: { goal: 'imports', manager: 'imports' },
+  I03: { goal: 'imports', manager: 'imports' },
+  I04: { goal: 'imports', manager: 'imports' },
+  I05: { goal: 'imports', manager: 'imports' },
+  I06: { goal: 'imports', manager: 'imports' },
+  I07: { goal: 'semantic', manager: 'semantic' },
+  I08: { goal: 'imports', manager: 'imports' },
+  I09: { goal: 'semantic', manager: 'semantic' },
+  I10: { goal: 'semantic', manager: 'semantic' },
+  I11: { goal: 'imports', manager: 'imports' },
+  I12: { goal: 'imports', manager: 'imports' },
+};
+
+function markdownTableCell(value: string): string {
+  return value.replaceAll('|', '/').replaceAll('\n', ' ').slice(0, 220);
+}
+
+function currentReadEvidence(evidence: Record<string, unknown>): string {
+  const parts: string[] = [];
+  for (const key of ['id', 'series', 'canonical', 'sourceKey', 'type', 'kind']) {
+    const value = evidence[key];
+    if (typeof value === 'string') parts.push(`${key} ${value}`);
+  }
+  if (evidence.browser === 'passing' || evidence.browser === 'failing') parts.push(`browser ${evidence.browser}`);
+  if (evidence.sharedStartup === true) parts.push('shared startup not exercised');
+  if (evidence.seed === true) parts.push('catalogue seed not exercised');
+  return parts.join(', ') || 'current read';
+}
+
+export function capabilitiesResultCell(row: WalkRowResult): string {
+  const detail = row.result === 'passing' ? currentReadEvidence(row.evidence) : (row.cause ?? 'failed');
+  return markdownTableCell(`${row.result}; ${row.elapsedMs}ms; ${detail}`);
+}
+
+export function applyWalkInventoryToCapabilities(markdown: string, inventory: WalkInventory): string {
+  let text = markdown;
+  for (const row of inventory.rows) {
+    const pattern = new RegExp(`(\\| ${row.id}\\s+\\| [^|\\n]+\\| )[^|\\n]+`);
+    if (!pattern.test(text)) throw new Error(`capabilities table is missing ${row.id}`);
+    text = text.replace(pattern, `$1${capabilitiesResultCell(row)} `);
+  }
+  const record = [
+    OBSERVED_WALK_HEADING,
+    '',
+    `Command: \`${inventory.command}\`. Revision \`${inventory.revision}\`. Started ${inventory.startedAt}; ended ${inventory.endedAt}. ${inventory.passing}/${inventory.total} passing.`,
+    inventory.slowestFailing
+      ? `Slowest failing: ${inventory.slowestFailing.id} ${inventory.slowestFailing.elapsedMs}ms ${inventory.slowestFailing.cause}.`
+      : 'No failing journey.',
+    '',
+  ].join('\n');
+  if (text.includes(OBSERVED_WALK_HEADING)) {
+    text = text.replace(/### Observed walk\n(?:.*\n)*?(?=\nBooks owner-grant)/, `${record}`);
+  } else {
+    text = text.replace('\nBooks owner-grant', `\n${record}Books owner-grant`);
+  }
+  return text;
+}
+
+export function walkRepairSkipReason(row: WalkRowResult): string | null {
+  if (row.result !== 'failing' || row.cause === null) return null;
+  if (row.id === 'I09' && /handle|continuation|erasur/i.test(row.cause))
+    return 'Tags has a same-handle continuation; this walk records the independent property reread and does not duplicate that repair.';
+  if (row.id === 'I10' && /erasur|contention|identity/i.test(row.cause))
+    return 'Semantic owns concurrent Sources erasure and identity contention; this walk does not duplicate that repair.';
+  return null;
+}
+
+export function walkRepairBrief(inventory: WalkInventory, row: WalkRowResult): string {
+  const owner = WALK_ROW_REPAIR_OWNERS[row.id];
+  return `# Repair: ${row.id} ${row.path}
+
+Goal: ${owner.goal}
+Manager: ${owner.manager}
+
+## Observed failure
+
+Command: \`${inventory.command}\`
+Revision: \`${inventory.revision}\`
+Elapsed: ${row.elapsedMs}ms
+Cause: ${row.cause}
+
+Current public reads, rights and exact provenance decide success. Do not weaken the walk assertions or add a parallel driver.
+
+## Required repair
+
+Reproduce with the retained walk command on one admitted stack. Fix the owning module so this row's current-read evidence passes, then rerun the same driver.
+`;
+}
+
+export async function writeWalkInventoryArtifacts(inventory: WalkInventory): Promise<void> {
+  const capabilitiesPath = resolve(root, 'docs/goals/imports.capabilities.md');
+  const markdown = applyWalkInventoryToCapabilities(await readFile(capabilitiesPath, 'utf8'), inventory);
+  await writeFile(capabilitiesPath, markdown);
+  await mkdir(resolve(root, '.temp/continuation'), { recursive: true, mode: 0o700 });
+  const failing = inventory.rows.filter((row) => row.result === 'failing');
+  const shared = failing.length === inventory.total && failing.every((row) => row.evidence.sharedStartup === true);
+  if (shared && failing[0]) {
+    await writeFile(
+      resolve(root, '.temp/continuation/imports-walk-shared-startup.md'),
+      `# Shared walk startup\n\nGoal: imports\nManager: imports\n\nAll twelve first-public rows failed before product paths ran: ${failing[0].cause}\n\nReproduce with the retained walk command. Persona/token sign-in must use the live Auth origin on an admitted stack.\n`,
+    );
+    return;
+  }
+  for (const row of failing) {
+    const skip = walkRepairSkipReason(row);
+    const name = `imports-walk-${row.id.toLowerCase()}.md`;
+    const path = resolve(root, '.temp/continuation', name);
+    if (skip) {
+      await writeFile(path, `# ${row.id} ${row.path}\n\n${skip}\n`);
+      continue;
+    }
+    await writeFile(path, walkRepairBrief(inventory, row));
+  }
 }
 
 export function selectPublished(
@@ -618,6 +741,9 @@ export async function runImportsPublicJourney(): Promise<WalkInventory> {
   const startedAt = new Date().toISOString();
   const revision = (await Bun.$`git rev-parse HEAD`.cwd(root).text()).trim();
   await mkdir(evidenceRoot, { recursive: true, mode: 0o700 });
+  const origins = stackOrigins();
+  const pages = await startWalkStackActions(['pages'], [`${origins.issuer}/.well-known/openid-configuration`]);
+  try {
   const rows: WalkRowResult[] = [];
   let persona: SeedEnv | undefined;
   let sharedStartup: string | null = null;
@@ -744,7 +870,7 @@ export async function runImportsPublicJourney(): Promise<WalkInventory> {
     );
 
     const browser = await walkRow('I05', async () => {
-      await runBangumiJourney({ skipPersona: true, skipSeed: true });
+      await runBangumiJourney({ skipPersona: true, skipSeed: true, startFrontends: 'web' });
       return { browser: 'passing' };
     });
     for (const id of ['I05', 'I11', 'I12'] as const) {
@@ -783,8 +909,12 @@ export async function runImportsPublicJourney(): Promise<WalkInventory> {
     rows,
   };
   await writeFile(resolve(evidenceRoot, 'inventory.json'), JSON.stringify(inventory, null, 2), { mode: 0o600 });
+  await writeWalkInventoryArtifacts(inventory);
   console.log(walkInventorySummary(inventory));
   return inventory;
+  } finally {
+    await pages.stop();
+  }
 }
 
 if (import.meta.main) {

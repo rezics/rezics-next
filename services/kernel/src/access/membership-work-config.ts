@@ -1,6 +1,7 @@
 import { ConfigError } from '../commerce/config.ts';
 import type { KeyRing } from '../tokens/seal.ts';
 import type { AuthenticationConfig } from './authenticate.ts';
+import { loopbackNativeJwksAllowed } from './auth-jwks-url.ts';
 
 type Environment = Readonly<Record<string, string | undefined>>;
 export const MEMBERSHIP_WORK_DEADLINE_MS = 30_000;
@@ -106,8 +107,7 @@ export function readMembershipWorkConfig(env: Environment): MembershipWorkConfig
     throw new ConfigError('AUTH_AUDIENCE');
   const jwks = url(env, 'AUTH_JWKS_URL');
   if (
-    jwks.protocol !== issuer.protocol ||
-    jwks.origin !== issuer.origin ||
+    !loopbackNativeJwksAllowed(issuer, jwks) ||
     jwks.href !== env.AUTH_JWKS_URL ||
     jwks.username ||
     jwks.password ||

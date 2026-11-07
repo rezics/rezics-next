@@ -2,11 +2,16 @@ import { expect, test } from 'bun:test';
 import { citedAnimeCreditTargets, journeyTargets, selectJourneyWorks } from '../src/showcase-bangumi-journey.ts';
 import {
   FIRST_PUBLIC_IMPORT_ROWS,
+  applyWalkInventoryToCapabilities,
+  capabilitiesResultCell,
   firstPublicRow,
   licensedVndbArchive,
   selectPublished,
   walkInventorySummary,
+  walkRepairBrief,
+  walkRepairSkipReason,
   type WalkInventory,
+  type WalkRowResult,
 } from '../src/imports-public-journey.ts';
 import {
   BOOK_OWNER_GRANT_ACTIONS,
@@ -208,4 +213,61 @@ test('the walk inventory reports passing over twelve and the slowest failing jou
   expect(walkInventorySummary(inventory)).toBe(
     '10/12 passing; slowest failing I06 12000ms seed published no Game identity; 2 failing',
   );
+});
+
+test('the walk inventory replaces each pending capabilities row and names the slowest failure', () => {
+  const failing: WalkRowResult = {
+    id: 'I06',
+    path: 'Game/Release/counterpart',
+    result: 'failing',
+    elapsedMs: 12_000,
+    cause: 'seed published no Game identity',
+    evidence: { seed: true },
+  };
+  const passing: WalkRowResult = {
+    id: 'I01',
+    path: 'Bangumi operator',
+    result: 'passing',
+    elapsedMs: 40,
+    cause: null,
+    evidence: { id: 'subject-1', type: 'schema:Thing' },
+  };
+  expect(capabilitiesResultCell(passing)).toContain('passing; 40ms; id subject-1');
+  const markdown = `| Path | Scope | Current dev result and evidence |\n| ---- | ----- | ------------------------------- |\n| I01  | Bangumi operator | Pending initial dev walk.       |\n| I06  | Game | Pending initial dev walk.       |\n\nBooks owner-grant composition uses the ordinary Global grant intent.\n`;
+  const updated = applyWalkInventoryToCapabilities(markdown, {
+    command: 'bun services/auth/scripts/dev-stack.ts walk -- bun services/importer/src/imports-public-journey.ts',
+    revision: 'abc',
+    startedAt: '2026-11-07T00:00:00Z',
+    endedAt: '2026-11-07T00:10:00Z',
+    passing: 1,
+    total: 2,
+    slowestFailing: { id: 'I06', path: failing.path, elapsedMs: 12_000, cause: failing.cause! },
+    rows: [passing, failing],
+  });
+  expect(updated).toContain('passing; 40ms; id subject-1, type schema:Thing');
+  expect(updated).toContain('failing; 12000ms; seed published no Game identity');
+  expect(updated).toContain('### Observed walk');
+  expect(updated).toContain('Slowest failing: I06 12000ms seed published no Game identity.');
+  expect(updated).toContain('Books owner-grant composition uses the ordinary Global grant intent.');
+  expect(walkRepairSkipReason(failing)).toBeNull();
+  expect(walkRepairBrief(
+    {
+      command: 'walk',
+      revision: 'abc',
+      startedAt: 't0',
+      endedAt: 't1',
+      passing: 1,
+      total: 2,
+      slowestFailing: { id: 'I06', path: failing.path, elapsedMs: 12_000, cause: failing.cause! },
+      rows: [passing, failing],
+    },
+    failing,
+  )).toContain('Goal: imports');
+  expect(
+    walkRepairSkipReason({
+      ...failing,
+      id: 'I09',
+      cause: 'same-handle continuation lost the independent property',
+    }),
+  ).toContain('same-handle continuation');
 });
