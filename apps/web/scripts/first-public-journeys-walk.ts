@@ -1,14 +1,21 @@
 /**
  * Current-dev first-public journey walk for Performance. Runs inside `dev-stack.ts walk`.
- * Anonymous portions of mixed paths use real seeded pages and kernel readback. Signed-in paths stay
- * FAIL-unreached while issuer/JWKS origins differ; ce33aabc owns that sign-in startup repair.
- * Evidence stays under `.temp/goal/performance/` and never records secrets.
+ * Anonymous portions of mixed paths use real seeded pages and kernel readback. Content ce33
+ * integrated `ea7dc5fe59`: signed-in paths resume on a stack that contains it. Issuer, JWKS and
+ * launcher failures are recorded causes; this walk does not repair startup. Evidence stays under
+ * `.temp/goal/performance/` and never records secrets. The walk writes the 17-row table in
+ * `docs/goals/performance.capabilities.md`.
  */
 import { spawn } from 'node:child_process';
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { join, resolve } from 'node:path';
 import { chromium, type Browser, type BrowserContext, type Page } from 'playwright';
 import { startSeededFrontends } from '../../../services/auth/scripts/dev-stack.ts';
+import {
+  CAPABILITIES_BEGIN,
+  CAPABILITIES_END,
+  capabilitiesTableMarkdown,
+} from './first-public-journeys-table.ts';
 import {
   FIRST_PUBLIC_JOURNEY_PATHS,
   type JourneyAuth,
@@ -24,6 +31,7 @@ export {
   type JourneyOwner,
   type JourneyStatus,
 } from './first-public-journeys-paths.ts';
+export { CAPABILITIES_BEGIN, CAPABILITIES_END, capabilitiesTableMarkdown } from './first-public-journeys-table.ts';
 
 const root = resolve(import.meta.dir, '../../..');
 export const evidenceDir = join(root, '.temp/goal/performance');
@@ -34,7 +42,8 @@ const phone = { width: 390, height: 844 };
 const desktop = { width: 1280, height: 860 };
 
 export const SIGN_IN_STARTUP_CAUSE =
-  'issuer JWKS origin differs from native Auth JWKS; urgent ce33aabc owns sign-in startup';
+  'issuer JWKS origin differs from native Auth JWKS after ce33 ea7dc5fe59; recorded, not repaired here';
+const capabilitiesPath = join(root, 'docs/goals/performance.capabilities.md');
 
 type Json = Record<string, unknown>;
 type Stack = { web: string; issuer: string; native: string; kernel: string };
@@ -232,6 +241,46 @@ async function probeSignIn(stack: Stack): Promise<{ ok: boolean; detail: string 
     ok: true,
     detail: `issuer JWKS HTTP ${issuerJwks.status}; native JWKS HTTP ${nativeJwks.status}; login HTTP ${login.status}`,
   };
+}
+
+async function probeKernel(stack: Stack): Promise<{ ok: boolean; detail: string }> {
+  const definitions = await http(`${stack.kernel}/v1/definitions`);
+  const nativeJwks = await http(`${stack.native}/.well-known/jwks.json`);
+  const worker = await http(`${stack.kernel}/v1/health`).catch((error: Error) => ({
+    status: 0,
+    headers: {},
+    text: error.message,
+  }));
+  const ok = definitions.status < 500 && nativeJwks.status < 500;
+  return {
+    ok,
+    detail: `kernel /v1/definitions HTTP ${definitions.status}; native JWKS HTTP ${nativeJwks.status}; kernel /v1/health HTTP ${worker.status}`,
+  };
+}
+
+async function gitRevision(args: string[]): Promise<string> {
+  const proc = Bun.spawn(['git', ...args], { cwd: root, stdout: 'pipe', stderr: 'ignore' });
+  const text = (await new Response(proc.stdout).text()).trim();
+  await proc.exited;
+  return text;
+}
+
+async function writeCapabilitiesTable(
+  source: string,
+  results: PathResult[],
+  extras: { stack?: Stack; seed?: Seed; kernel?: { ok: boolean; detail: string }; signIn?: { ok: boolean; detail: string } } = {},
+): Promise<void> {
+  const base = (await gitRevision(['merge-base', 'HEAD', 'dev']).catch(() => '')) || source;
+  const text = await readFile(capabilitiesPath, 'utf8');
+  const begin = text.indexOf(CAPABILITIES_BEGIN);
+  const end = text.indexOf(CAPABILITIES_END);
+  if (begin < 0 || end < 0 || end < begin)
+    throw new Error('docs/goals/performance.capabilities.md is missing first-public-journeys markers');
+  const section = capabilitiesTableMarkdown(source, base, results, extras);
+  await writeFile(
+    capabilitiesPath,
+    `${text.slice(0, begin)}${CAPABILITIES_BEGIN}\n\n${section}${text.slice(end)}`,
+  );
 }
 
 async function developerPassword(): Promise<string> {
@@ -634,11 +683,16 @@ export async function run(): Promise<PathResult[]> {
   const stack = stackOrigins();
   const frontends = await startSeededFrontends();
   let browser: Browser | undefined;
+  let signIn: { ok: boolean; detail: string } | undefined;
+  let kernelReady: { ok: boolean; detail: string } | undefined;
   try {
-    const signIn = await probeSignIn(stack);
+    const admitted = await probeSignIn(stack);
+    const kernel = await probeKernel(stack);
+    signIn = admitted;
+    kernelReady = kernel;
     await writeFile(
       join(evidenceDir, 'sign-in-probe.json'),
-      `${JSON.stringify({ stack, signIn, seed: publicFields(seed) }, null, 2)}\n`,
+      `${JSON.stringify({ stack, signIn: admitted, kernel, seed: publicFields(seed) }, null, 2)}\n`,
     );
     browser = await chromium.launch({ headless: true, env: { ...process.env, TMPDIR: '/tmp/rw' } });
     const desktopContext: BrowserContext = await browser.newContext({ locale: 'en-US', viewport: desktop });
@@ -647,14 +701,14 @@ export async function run(): Promise<PathResult[]> {
     page.setDefaultTimeout(60_000);
     const phonePage = await phoneContext.newPage();
     phonePage.setDefaultTimeout(60_000);
-    const ctx: WalkContext = { stack, seed, page, source, signIn, signedIn: false };
-    const phoneCtx: WalkContext = { stack, seed, page: phonePage, source, signIn, signedIn: false };
+    const ctx: WalkContext = { stack, seed, page, source, signIn: admitted, signedIn: false };
+    const phoneCtx: WalkContext = { stack, seed, page: phonePage, source, signIn: admitted, signedIn: false };
 
     for (const path of FIRST_PUBLIC_JOURNEY_PATHS) {
       const started = performance.now();
       const walker = walkers[path.id];
       try {
-        if (path.auth === 'signed-in' && !signIn.ok) {
+        if (path.auth === 'signed-in' && !admitted.ok) {
           results.push({
             id: path.id,
             job: path.job,
@@ -664,15 +718,15 @@ export async function run(): Promise<PathResult[]> {
             persona: 'signed-in',
             elapsedMs: Math.round(performance.now() - started),
             source,
-            evidence: { cause: signIn.detail },
-            firstWrong: signIn.detail,
+            evidence: { cause: admitted.detail },
+            firstWrong: admitted.detail,
           });
           hourly(results);
           continue;
         }
         const evidence = await walker(ctx);
         let phoneEvidence: unknown = undefined;
-        if (path.auth !== 'signed-in' || signIn.ok) {
+        if (path.auth !== 'signed-in' || admitted.ok) {
           try {
             phoneEvidence = await walker(phoneCtx);
           } catch (error) {
@@ -714,12 +768,18 @@ export async function run(): Promise<PathResult[]> {
     await browser?.close();
     await frontends.stop();
   }
-  await writeEvidence(source, results, stack, seed);
+  await writeEvidence(source, results, stack, seed, { kernel: kernelReady, signIn });
   hourly(results);
   return results;
 }
 
-async function writeEvidence(source: string, results: PathResult[], stack?: Stack, seed?: Seed): Promise<void> {
+async function writeEvidence(
+  source: string,
+  results: PathResult[],
+  stack?: Stack,
+  seed?: Seed,
+  extras: { kernel?: { ok: boolean; detail: string }; signIn?: { ok: boolean; detail: string } } = {},
+): Promise<void> {
   const passing = results.filter((row) => row.status === 'PASS').length;
   const failing = results.filter((row) => row.status !== 'PASS');
   const slowest = failing.slice().sort((a, b) => b.elapsedMs - a.elapsedMs)[0];
@@ -735,12 +795,15 @@ async function writeEvidence(source: string, results: PathResult[], stack?: Stac
           : null,
         stack,
         seed: publicFields(seed),
+        kernel: extras.kernel,
+        signIn: extras.signIn,
         results,
       },
       null,
       2,
     )}\n`,
   );
+  await writeCapabilitiesTable(source, results, { stack, seed, ...extras });
 }
 
 if (import.meta.main) {

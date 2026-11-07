@@ -35,9 +35,12 @@ workers where relevant, and recorded revision evidence.
 Decision: pin the 17 first-public journey path IDs in one focused walk-source test; add no extra stories. Native,
 browser and growth evidence is the sole Goal walk
 `bun services/auth/scripts/dev-stack.ts walk -- bun apps/web/scripts/first-public-journeys-walk.ts`.
-The walk records actual integrated-dev results in this file; candidate branch results cannot pass a row. Public and
-anonymous portions run now; signed-in paths stay FAIL-unreached while Content ce33 owns issuer/JWKS. Fewest tests:
-`apps/web/tests/first-public-journeys-walk.test.ts` plus the walk itself.
+The walk records actual integrated-dev results in this file; typing, local units and source integration alone cannot
+pass a row. Content ce33 integrated `ea7dc5fe59`: signed-in paths resume on a stack that contains it. Issuer, JWKS
+and launcher failures are recorded causes; this walk does not repair startup. The walk writes the table below from
+secret-free evidence. Fewest tests: `apps/web/tests/first-public-journeys-walk.test.ts` plus the walk itself.
+
+<!-- first-public-journeys:begin -->
 
 ## Current-dev first-public journeys
 
@@ -75,6 +78,8 @@ observed, so no additional repair brief is opened here.
 | P15 | Labels create/select, assign, FULL assignment/shelf, exact removal/readback | setup | 0.530 s | FAIL-unreached | Same launcher; sign-in not reached | Library |
 | P16 | Active shelf page/session/target/return, complete or retire, updated shelf | setup | 0.530 s | FAIL-unreached | Same launcher; sign-in not reached | Library |
 | P17 | Published Log publish, owner/member/anonymous snapshot, retract/Undo, My Logs return | setup | 0.530 s | FAIL-unreached | Same launcher; anonymous snapshot not executed | Library |
+
+<!-- first-public-journeys:end -->
 
 ## composed-discovery-cost
 
