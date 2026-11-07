@@ -3003,6 +3003,10 @@ Native receiving keeps parent/Board statement getters, one-client routing assert
 fixtures. The mounted website scope probe follows the installed Progress action `progress_session:update`
 while retaining media completion and post creation assertions.
 
+Decision: moderation fixtures begin with a reserved imported cover and use the native importer and image job to
+reach available with generated display metadata and variants; exact media takedown retains appeal evidence, while
+the source-cover fence remains a separate command with its own security revision and replay.
+
 Post-image download and document media presentation inherit the permanent
 `claimed_item_id` post's current disclosure chain, including its reservation
 container, board and Realm. A claim must still belong to that container's chain;
