@@ -1,4 +1,5 @@
 import type { PoolClient } from 'pg';
+import identityRead from './label-assignment-identity.sql';
 import read from './label-assignment-read.sql';
 import unassign from './label-assignment-unassign.sql';
 import {
@@ -124,34 +125,43 @@ async function observe(client: Client, input: Expected, context: Context, expect
   }
   const db = { query: client.query.bind(client) };
   const readInput = { ...parameters(input), assignment_id: input.assignmentId, time: context.time };
-  const plan = labelSqlPlan('assignment.observe', read.sql, readInput, {
+  const output = {
+    route: 65_535,
+    accountId: 'f'.repeat(36),
+    subjectId: 'f'.repeat(36),
+    labelId: 'f'.repeat(36),
+    id: 'f'.repeat(36),
+    revision: 2_147_483_647,
+    slotNo: 31,
+    createdAt: '\u0000'.repeat(64),
+    updatedAt: '\u0000'.repeat(64),
+    deletedAt: '\u0000'.repeat(64),
+    purgeAfter: '\u0000'.repeat(64),
+    transactionId: 'f'.repeat(36),
+    identityMatches: false,
+    started: false,
+    expired: false,
+  };
+  const identityPlan = labelSqlPlan('assignment.observe-identity', identityRead.sql, readInput, {
     candidateKeys: 1,
     nativeRows: 1,
     points: 1,
     emptySeeks: 1,
-    output: {
-      route: 65_535,
-      accountId: 'f'.repeat(36),
-      subjectId: 'f'.repeat(36),
-      labelId: 'f'.repeat(36),
-      id: 'f'.repeat(36),
-      revision: 2_147_483_647,
-      slotNo: 31,
-      createdAt: '\u0000'.repeat(64),
-      updatedAt: '\u0000'.repeat(64),
-      deletedAt: '\u0000'.repeat(64),
-      purgeAfter: '\u0000'.repeat(64),
-      transactionId: 'f'.repeat(36),
-      identityMatches: false,
-      started: false,
-      expired: false,
-    },
+    output,
     outputRows: 1,
   });
-  return executeLabelSql(plan, (operands) => read.run(db, operands)).then((result) => ({
-    row: firstObserved(result) ?? null,
-    parentChanged: false as const,
-  }));
+  const identified = firstObserved(await executeLabelSql(identityPlan, (operands) => identityRead.run(db, operands)));
+  if (identified) return { row: identified, parentChanged: false as const };
+  const tuplePlan = labelSqlPlan('assignment.observe-tuple-fallback', read.sql, readInput, {
+    candidateKeys: 1,
+    nativeRows: 1,
+    points: 1,
+    emptySeeks: 1,
+    output,
+    outputRows: 1,
+  });
+  const fallback = firstObserved(await executeLabelSql(tuplePlan, (operands) => read.run(db, operands)));
+  return { row: fallback ?? null, parentChanged: false as const };
 }
 
 async function unassignStoredLabelAssignmentInOperation(

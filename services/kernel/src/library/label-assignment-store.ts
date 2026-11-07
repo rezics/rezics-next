@@ -249,7 +249,7 @@ async function setLabelAssignmentInOperation(
       outputRows: 1,
     });
     const reclaimed = await executeLabelSql(reclaimPlan, (operands) => reclaim.run(db, operands));
-    if (!reclaimed || reclaimed.assignment_id !== victim.id) lostObservation();
+    if (reclaimed[0]?.assignment_id !== victim.id) lostObservation();
     slot = victim.slotNo;
   }
   const setInput = {

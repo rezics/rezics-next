@@ -918,25 +918,25 @@ capacity and later-edit assertions.
 
 Native Label and Search-receiving journeys, and the capability each pins:
 
-| Journey | Capability |
-| --- | --- |
-| `label-catalogue-command` | create/rename/delete/restore receipts, cursor identity |
-| `label-catalogue-http` | served catalogue pages and admission |
-| `label-catalogue-growth` | indexed catalogue windows as owners grow |
-| `label-prefix-command` | prefix normalization and continuation |
-| `label-prefix-growth` | generic `personal_label_live_name` prefix seeks |
-| `label-assignment-command` | assign receipts and capacity |
-| `label-assignment-command-growth` | assignment command work as neighbours grow |
-| `label-assignment-http` | served assignment pages |
-| `label-assignment-growth` | indexed assignment pages as owners grow |
-| `label-assignment-lifecycle-growth` | unassign/restore CAS under growth |
-| `label-full-http` | FULL headings, tiles, withheld Subject cursor |
-| `label-full-growth` | folded FULL work, 34 parent points, no Seq Scan |
-| `scoped-work-context` | Search scoped work frame |
-| `members-native-scope` | native member scope |
-| `scope-members-source-declaration` | member source declaration |
-| `scope-kind-work-context` | kind work frame |
-| `publication-work-context` | publication work frame |
+| Journey                             | Capability                                             |
+| ----------------------------------- | ------------------------------------------------------ |
+| `label-catalogue-command`           | create/rename/delete/restore receipts, cursor identity |
+| `label-catalogue-http`              | served catalogue pages and admission                   |
+| `label-catalogue-growth`            | indexed catalogue windows as owners grow               |
+| `label-prefix-command`              | prefix normalization and continuation                  |
+| `label-prefix-growth`               | generic `personal_label_live_name` prefix seeks        |
+| `label-assignment-command`          | assign receipts and capacity                           |
+| `label-assignment-command-growth`   | assignment command work as neighbours grow             |
+| `label-assignment-http`             | served assignment pages                                |
+| `label-assignment-growth`           | indexed assignment pages as owners grow                |
+| `label-assignment-lifecycle-growth` | unassign/restore CAS under growth                      |
+| `label-full-http`                   | FULL headings, tiles, withheld Subject cursor          |
+| `label-full-growth`                 | folded FULL work, 34 parent points, no Seq Scan        |
+| `scoped-work-context`               | Search scoped work frame                               |
+| `members-native-scope`              | native member scope                                    |
+| `scope-members-source-declaration`  | member source declaration                              |
+| `scope-kind-work-context`           | kind work frame                                        |
+| `publication-work-context`          | publication work frame                                 |
 
 Ordinary Global `definitions:publish` / `definitions:activate` grants are the grant command after Access bootstrap;
 `platform.governance` is the first holder. No test-only grant rows. Passing/total and the slowest failure are the
@@ -951,3 +951,23 @@ callers. Source CAS, reserved capacity, later edits and Shelf batch100 stay at t
 Decision: Label command-attempt, snapshot and FULL observation bounds compose Core, Access and Semantic costs
 through the existing session scaffold and Follow authorization/summary owners. They do not import those owners'
 SQL files; cross-module SQL stays behind declared public entries or already-ratcheted Library bound files.
+
+### Received source repairs and acceptance boundary
+
+Decision: fewest tests keep stable seed ordering, identity-anchor plans, and executable catalogue-page structure in
+the existing focused growth suites; no additional journey is needed for these named states.
+
+The growth seed batcher retains the fixture's first-appearance table order across row and byte splits, including
+ordinal-batch boundaries. Batch row and encoded-byte ceilings remain unchanged. Retained assignment lifecycle
+observations first seek `(route, account_id, assignment_id)` through `label_assignment_identity`, then use the exact
+owner tuple point only when the identity seek is empty. The fallback preserves legacy null-identity diagnosis and
+detects a replaced tuple without scanning retained history. Reassign, reclaim, and unassign statements carry
+identity row bounds and scalar key equalities from their one-row materialized input. Existing candidate, row, retry,
+removal, and buffer assertions remain in place.
+
+Catalogue growth binds the captured page statement by its embedded source file and checks the bounded key range,
+ordering, and limit-first native plan. It no longer relies on the internal CTE name. Synthetic SQL-kind captures pair
+statement and plan backend arrays, preserving capture-evidence validation.
+
+These repairs establish source and affected-workspace typing only. Native Label/growth and browser acceptance remain
+open for the integrated dev verifier after merge; source integration and typing do not pass those rows.

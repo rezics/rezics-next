@@ -8,6 +8,7 @@ function captured(statements: string[], errors?: (string | null)[]): Capture {
     statements,
     plans: [],
     statementBackends: statements.map(() => 71),
+    planBackends: [],
     ...(errors === undefined ? {} : { statementErrors: errors }),
   };
 }

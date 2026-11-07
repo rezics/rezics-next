@@ -69,6 +69,64 @@ test('splits by total rows and preserves placement, table order, and supported e
   });
 });
 
+test('preserves declared table order when row and byte caps split batches across ordinals', async () => {
+  const rows = recordingPool();
+  await seedBulkRows(
+    rows.admin,
+    0,
+    2,
+    (ordinal) => ordinal,
+    (ordinal) =>
+      ordinal === 0
+        ? {
+            'growth.parent': Array.from({ length: SEED_BATCH_ROW_LIMIT }, (_, id) => ({ id })),
+            'growth.child': [{ id: 'first-child' }],
+          }
+        : {
+            'growth.child': [{ id: 'next-child' }],
+            'growth.parent': [{ id: 'later-parent' }],
+            'growth.padding': [{ id: ordinal }],
+          },
+  );
+  expect(rows.transactions.map((batch) => batch.map(({ table, rows: inserted }) => [table, inserted.length]))).toEqual([
+    [['growth.parent', SEED_BATCH_ROW_LIMIT]],
+    [
+      ['growth.parent', 1],
+      ['growth.child', 2],
+      ['growth.padding', 1],
+    ],
+  ]);
+
+  const bytes = recordingPool();
+  await seedBulkRows(
+    bytes.admin,
+    0,
+    2,
+    (ordinal) => ordinal,
+    (ordinal) =>
+      ordinal === 0
+        ? {
+            'growth.parent': [{ id: 'first-parent', value: 'p'.repeat(600_000) }],
+            'growth.child': [{ id: 'first-child', value: 'c'.repeat(500_000) }],
+          }
+        : {
+            'growth.child': [{ id: 'next-child' }],
+            'growth.parent': [{ id: 'later-parent' }],
+            'growth.padding': [{ id: ordinal }],
+          },
+  );
+  expect(bytes.transactions.map((batch) => batch.map(({ table, rows: inserted }) => [table, inserted.length]))).toEqual(
+    [
+      [['growth.parent', 1]],
+      [
+        ['growth.parent', 1],
+        ['growth.child', 2],
+        ['growth.padding', 1],
+      ],
+    ],
+  );
+});
+
 test('rejects seed targets PostgreSQL would truncate or cannot represent before connecting', async () => {
   const sharedPrefix = 'a'.repeat(63);
   const invalidTargets: readonly {

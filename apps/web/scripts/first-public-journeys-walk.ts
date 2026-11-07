@@ -12,11 +12,7 @@ import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { join, resolve } from 'node:path';
 import { chromium, type Browser, type BrowserContext, type Page } from 'playwright';
 import { startSeededFrontends } from '../../../services/auth/scripts/dev-stack.ts';
-import {
-  CAPABILITIES_BEGIN,
-  CAPABILITIES_END,
-  capabilitiesTableMarkdown,
-} from './first-public-journeys-table.ts';
+import { CAPABILITIES_BEGIN, CAPABILITIES_END, capabilitiesTableMarkdown } from './first-public-journeys-table.ts';
 import {
   FIRST_PUBLIC_JOURNEY_PATHS,
   type JourneyAuth,
@@ -204,10 +200,7 @@ async function hydrated(page: Page): Promise<void> {
   await page.locator('html[data-hydrated]').waitFor({ state: 'attached', timeout: hydrateBudgetMs });
 }
 
-async function probeHydration(
-  page: Page,
-  origin: string,
-): Promise<{ ok: boolean; detail: string; elapsedMs: number }> {
+async function probeHydration(page: Page, origin: string): Promise<{ ok: boolean; detail: string; elapsedMs: number }> {
   const started = performance.now();
   try {
     const response = await page.goto(`${origin}/en`, { waitUntil: 'domcontentloaded', timeout: 60_000 });
@@ -311,10 +304,7 @@ async function writeCapabilitiesTable(
   if (begin < 0 || end < 0 || end < begin)
     throw new Error('docs/goals/performance.capabilities.md is missing first-public-journeys markers');
   const section = capabilitiesTableMarkdown(source, base, results, { ...extras, devRevision });
-  await writeFile(
-    capabilitiesPath,
-    `${text.slice(0, begin)}${CAPABILITIES_BEGIN}\n\n${section}${text.slice(end)}`,
-  );
+  await writeFile(capabilitiesPath, `${text.slice(0, begin)}${CAPABILITIES_BEGIN}\n\n${section}${text.slice(end)}`);
 }
 
 async function developerPassword(): Promise<string> {
@@ -368,11 +358,7 @@ async function openSettings(ctx: WalkContext, hash: string): Promise<{ url: stri
   return { url: ctx.page.url(), heading };
 }
 
-async function clickNamed(
-  page: Page,
-  names: string[],
-  role: 'button' | 'link' = 'button',
-): Promise<string> {
+async function clickNamed(page: Page, names: string[], role: 'button' | 'link' = 'button'): Promise<string> {
   for (const name of names) {
     const control = page.getByRole(role, { name: new RegExp(name, 'i') }).first();
     if ((await control.count()) > 0) {
@@ -399,7 +385,11 @@ async function walkP01(ctx: WalkContext): Promise<unknown> {
   const savedStatus = await ctx.page.getByRole('status').count();
   const left = await gotoPage(ctx.page, `${ctx.stack.web}/en/library`);
   await gotoPage(ctx.page, opened.url);
-  const recovered = await ctx.page.getByRole('textbox').first().inputValue().catch(() => '');
+  const recovered = await ctx.page
+    .getByRole('textbox')
+    .first()
+    .inputValue()
+    .catch(() => '');
   return publicFields({
     opened: opened.url,
     filled,
@@ -411,7 +401,9 @@ async function walkP01(ctx: WalkContext): Promise<unknown> {
   });
 }
 
-async function walkAnonymousProfile(ctx: WalkContext): Promise<{ url: string; canonical: string | null; status: number }> {
+async function walkAnonymousProfile(
+  ctx: WalkContext,
+): Promise<{ url: string; canonical: string | null; status: number }> {
   const handle = ctx.seed.handle ?? 'developer';
   const opened = await gotoPage(ctx.page, `${ctx.stack.web}/en/@${handle}`);
   if (opened.status >= 400 || opened.url.includes('/auth/sign-in'))
@@ -557,7 +549,13 @@ async function walkP13(ctx: WalkContext): Promise<unknown> {
   const destination = ctx.page.url();
   await ctx.page.goBack({ waitUntil: 'domcontentloaded' });
   await hydrated(ctx.page);
-  return publicFields({ opened: opened.url, count, destination, returned: ctx.page.url(), sameRange: ctx.page.url() === before });
+  return publicFields({
+    opened: opened.url,
+    count,
+    destination,
+    returned: ctx.page.url(),
+    sameRange: ctx.page.url() === before,
+  });
 }
 
 async function walkP14(ctx: WalkContext): Promise<unknown> {
@@ -607,13 +605,14 @@ async function walkP16(ctx: WalkContext): Promise<unknown> {
   return publicFields({ shelf: shelf.url, frontier, target, returned: ctx.page.url() });
 }
 
-async function walkAnonymousLog(ctx: WalkContext): Promise<{ id?: string; url?: string; status: number; empty: boolean }> {
+async function walkAnonymousLog(
+  ctx: WalkContext,
+): Promise<{ id?: string; url?: string; status: number; empty: boolean }> {
   if (typeof ctx.seed.accountId !== 'string') return { status: 0, empty: true };
   const listed = await kernel(ctx.stack, 'GET', '/v1/publishedLogs', {
     query: { accountId: ctx.seed.accountId, limit: '5' },
   });
-  const items =
-    (listed.value.publishedLogs as Json[] | undefined) ?? (listed.value.items as Json[] | undefined) ?? [];
+  const items = (listed.value.publishedLogs as Json[] | undefined) ?? (listed.value.items as Json[] | undefined) ?? [];
   const id = items.find((row) => typeof row.id === 'string')?.id;
   if (typeof id !== 'string') return { status: listed.status, empty: true };
   const opened = await gotoPage(ctx.page, `${ctx.stack.web}/en/logs/${id}`);
@@ -673,7 +672,9 @@ function hourly(results: PathResult[]): void {
 
 export async function run(): Promise<PathResult[]> {
   if (!process.env.GOAL_TASK_ID || !/(native|browser)/.test(process.env.GOAL_ACCEPTANCE_REQUIRES ?? ''))
-    throw new Error('The first-public journey walk runs on a walk stack whose brief lists native and browser acceptance');
+    throw new Error(
+      'The first-public journey walk runs on a walk stack whose brief lists native and browser acceptance',
+    );
   await mkdir(evidenceDir, { recursive: true, mode: 0o700 });
   await mkdir('/tmp/rw', { recursive: true, mode: 0o700 });
   const source = await sourceRevision();
@@ -733,7 +734,8 @@ export async function run(): Promise<PathResult[]> {
     seed = await readSeed();
   } catch (error) {
     const seedLog = (await readFile(join(evidenceDir, 'seed.log'), 'utf8').catch(() => '')).trim();
-    const first = seedLog.split('\n').find((line) => line.trim()) ?? (error instanceof Error ? error.message : String(error));
+    const first =
+      seedLog.split('\n').find((line) => line.trim()) ?? (error instanceof Error ? error.message : String(error));
     seedCause = `seed exited ${seedCode}: ${first}`;
     await writeFile(
       join(evidenceDir, 'seed-failure.json'),
@@ -842,11 +844,11 @@ export async function run(): Promise<PathResult[]> {
     await frontends?.stop();
   }
   await writeEvidence(source, devRevision, base, results, stack, seed, {
-    kernel: kernelReady,
-    signIn,
-    seedCause,
+    ...(kernelReady === undefined ? {} : { kernel: kernelReady }),
+    ...(signIn === undefined ? {} : { signIn }),
+    ...(seedCause === undefined ? {} : { seedCause }),
     seedElapsedMs,
-    hydration,
+    ...(hydration === undefined ? {} : { hydration }),
   });
   hourly(results);
   return results;
@@ -895,7 +897,11 @@ async function writeEvidence(
       2,
     )}\n`,
   );
-  await writeCapabilitiesTable(source, devRevision, base, results, { stack, seed, ...extras });
+  await writeCapabilitiesTable(source, devRevision, base, results, {
+    ...(stack === undefined ? {} : { stack }),
+    ...(seed === undefined ? {} : { seed }),
+    ...extras,
+  });
 }
 
 if (import.meta.main) {

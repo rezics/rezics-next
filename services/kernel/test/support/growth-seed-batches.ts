@@ -137,11 +137,22 @@ function rowBytes(row: SeedRow, table: string, ordinal: number): number {
   return bytes;
 }
 
+function orderedTables(tables: ReadonlyMap<string, TableRows>, tableOrder: readonly string[]): TableRows[] {
+  const ordered: TableRows[] = [];
+  for (const name of tableOrder) {
+    const table = tables.get(name);
+    if (table) ordered.push(table);
+  }
+  return ordered;
+}
+
 function* collectBatches<TPlacement>(
   from: number,
   to: number,
   place: (ordinal: number) => TPlacement,
   rowsFor: (placement: TPlacement) => Readonly<Record<string, readonly SeedRow[]>>,
+  tableOrder: string[],
+  declaredTables: Set<string>,
 ): Generator<TableRows[]> {
   const columnsByTable = new Map<string, string[]>();
   const rowNumbers = new Map<string, number>();
@@ -159,6 +170,10 @@ function* collectBatches<TPlacement>(
       const { schema, table } = seedTableTarget(name);
       const rows = records[name]!;
       for (const row of rows) {
+        if (!declaredTables.has(name)) {
+          declaredTables.add(name);
+          tableOrder.push(name);
+        }
         const columns = Object.keys(row);
         if (!columns.length) throw new Error(`Rows for ${name} must include at least one column`);
         for (const column of columns) {
@@ -180,7 +195,7 @@ function* collectBatches<TPlacement>(
         let target = tables.get(name);
         let addedBytes = encodedBytes + (target ? 1 : 2);
         if (rowCount >= SEED_BATCH_ROW_LIMIT || addedBytes > SEED_BATCH_BYTE_LIMIT - byteCount) {
-          const completed = [...tables.values()];
+          const completed = orderedTables(tables, tableOrder);
           tables = new Map();
           rowCount = 0;
           byteCount = 0;
@@ -199,7 +214,7 @@ function* collectBatches<TPlacement>(
       }
     }
   }
-  if (rowCount > 0) yield [...tables.values()];
+  if (rowCount > 0) yield orderedTables(tables, tableOrder);
 }
 
 async function insertBatch(admin: Pool, tables: TableRows[]): Promise<void> {
@@ -243,8 +258,11 @@ export async function seedBulkRows<TPlacement>(
   place: (ordinal: number) => TPlacement,
   rowsFor: (placement: TPlacement) => Readonly<Record<string, readonly SeedRow[]>>,
 ): Promise<void> {
+  const tableOrder: string[] = [];
+  const declaredTables = new Set<string>();
   for (let batchFrom = from; batchFrom < to; batchFrom += ORDINAL_BATCH_SIZE) {
     const batchTo = Math.min(batchFrom + ORDINAL_BATCH_SIZE, to);
-    for (const batch of collectBatches(batchFrom, batchTo, place, rowsFor)) await insertBatch(admin, batch);
+    for (const batch of collectBatches(batchFrom, batchTo, place, rowsFor, tableOrder, declaredTables))
+      await insertBatch(admin, batch);
   }
 }
