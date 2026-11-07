@@ -647,6 +647,38 @@ test('Web verifier selections reach check.ts one file at a time with the capture
   ]);
 });
 
+test('Web failure attribution keeps the selected file before trailing program arguments', async () => {
+  const root = repo();
+  const base = git(root, 'rev-parse', 'dev');
+  commit(root, 'apps/web/bunfig.toml', '[test]\n', 'web test config');
+  const file = 'apps/web/tests/selected.test.ts';
+  const target = commit(root, file, 'test("selected", () => {});\n', 'web selected test');
+  git(root, 'branch', '-f', 'dev', target);
+  const ctx = setup(root, [landedTask(base, target, 'web-owner', ['apps/web/**'])]);
+  ctx.settings.verifierChecks = [
+    { paths: ['apps/web/**'], command: ['bun', 'test', file, '--', 'fixture.test.ts'] },
+  ];
+  const commands: string[][] = [];
+  await verifyDev({
+    ...ctx.options,
+    runGate: async (command) => {
+      commands.push([...command]);
+      if (!command.includes('scripts/check.ts')) return { passed: true, timedOut: false, output: '' };
+      return {
+        passed: false,
+        timedOut: false,
+        output: 'AssertionError: selected child failed\nat tests/unrelated.test.ts:18',
+      };
+    },
+  });
+  expect(commands.find((command) => command.includes('scripts/check.ts'))?.slice(-3)).toEqual([
+    'tests/selected.test.ts',
+    '--',
+    'fixture.test.ts',
+  ]);
+  expect([...ctx.findings.values()].map((finding) => finding.test)).toEqual([file]);
+});
+
 test('deadline cancellation records the first cause and carries each unstarted Web file selection', async () => {
   const root = repo();
   const base = git(root, 'rev-parse', 'dev');

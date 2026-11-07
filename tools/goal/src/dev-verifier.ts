@@ -136,8 +136,12 @@ function testFilesFor(check: CheckRun['check'], evidence: DevVerifierEvidence): 
     const relative = path.replace(/^\.\//, '');
     return check.cwd && !relative.startsWith(check.cwd + '/') ? check.cwd + '/' + relative : relative;
   };
-  const hostSelection = check.command.indexOf('--host');
-  const selectedFile = hostSelection >= 0 ? check.command[hostSelection + 1] : check.command.at(-1);
+  const webRunner = check.command.indexOf('scripts/check.ts');
+  const runnerArguments = webRunner >= 0 ? check.command.slice(webRunner + 1) : check.command;
+  const separator = webRunner >= 0 ? runnerArguments.indexOf('--') : -1;
+  const selectionArguments = separator < 0 ? runnerArguments : runnerArguments.slice(0, separator);
+  const hostSelection = selectionArguments.indexOf('--host');
+  const selectedFile = hostSelection >= 0 ? selectionArguments[hostSelection + 1] : selectionArguments.at(-1);
   const selectedFiles = selectedFile && TEST_FILE.test(selectedFile) ? [normalize(selectedFile)] : [];
   if (selectedFiles.length === 1) return selectedFiles;
   const found = new Set<string>();
@@ -146,7 +150,6 @@ function testFilesFor(check: CheckRun['check'], evidence: DevVerifierEvidence): 
     /(?:^|[\s([{"'])((?:[A-Za-z0-9_.@-]+\/)*[A-Za-z0-9_.@-]+\.(?:test|spec)\.[cm]?[jt]sx?)(?::\d+(?::\d+)?)?/g;
   for (const match of output.matchAll(expression)) found.add(match[1]!);
   if (found.size) return [...found].map(normalize);
-  if (selectedFiles.length) return selectedFiles;
   const source = check.closure.find((path) => !path.includes('*') && TEST_FILE.test(path));
   if (source) return [normalize(source)];
   return [check.command.join(' ')];

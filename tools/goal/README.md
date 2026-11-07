@@ -2987,6 +2987,12 @@ Decision: dev-verifier-plan.ts owns shared changed-path and full-suite planning;
 
 Decision: each selected Web test file is an independent verifier check routed through `apps/web/scripts/check.ts`, which owns check-host admission, preparation, browser placement, and fresh per-file Bun processes. Browser and unit lanes run serially for verifier selections to keep nested concurrency within the round's three-check cap. Web boot smoke uses `apps/web/scripts/focused.ts`. The routed command, exact file selection, and captured candidate commit are part of the verifier cache identity; findings prefer the selected file for attribution, and deadline carry stores each unstarted file as its own check.
 
+Browser placement serializes Bun filters, timeout/retry options and program arguments after `--`; the receiving
+`--browser` route restores them for each child. The owning runner retains reporter flags for returned JUnit evidence.
+Attribution uses the selected file before trailing program arguments, even when diagnostics mention another file.
+Infrastructure retries preserve every attempt's output and classify the final attempt. Focused checks decide shared
+server wrapping per child; native/browser readiness, growth and release acceptance still require integrated execution.
+
 Each fresh verifier tree installs its own dependencies, even after an earlier tree's setup passed. Installation uses
 an available matching repository Bun or bootstraps with the verifier process's Bun, and logs the executable used.
 Checks still require the installed pinned Bun; an actual installation failure remains infrastructure.
