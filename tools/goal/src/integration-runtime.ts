@@ -73,5 +73,7 @@ export type HostRequest = {
   recipient?: string;
   summary?: string;
   sessionId?: string;
+  residentProvider?: 'codex' | 'claude';
+  replaceSession?: string;
   goal?: string;
 };

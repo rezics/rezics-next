@@ -1263,9 +1263,16 @@ Goal writes the current priority to `.temp/goal/task-priority` in the task workt
 `goal priority <task> critical|normal` changes it. Critical priority requires a task-bound grant from the task manager's
 configured supermanager. Dispatch tasks with normal priority first; a brief with `criticalPath: true` or a derived
 `critical-path` task class is refused at dispatch. Register the already-running configured supermanager from its resident
-Claude Code session with `bun tools/goal/src/cli.ts manager register-supermanager`. Run this command inside that Claude
-session so the control plane records its `CLAUDE_CODE_SESSION_ID`; it does not launch another manager, Goal, window,
-app-server, pool reservation or token budget. The supermanager grants with
+Codex or Claude session with `bun tools/goal/src/cli.ts manager register-supermanager`. Run this command inside the
+resident session so the control plane records its native `CODEX_THREAD_ID` or `CLAUDE_CODE_SESSION_ID` and provider;
+it does not launch another manager, Goal, window, app-server, pool reservation or token budget. Registration is
+idempotent for the same provider and thread. To transfer the role explicitly, run
+`bun tools/goal/src/cli.ts manager register-supermanager --replace-session <previous-thread-id>` inside the new
+resident session after stopping the previous resident and its watchdog. Replacement atomically compares the previous
+registered thread, invalidates its authority and retains the configured manager identity and inbox. A changed or
+missing previous thread refuses the transfer; ordinary registration cannot overwrite another resident. Restart the
+manager host on the updated code before using Codex registration or replacement. Resume the watchdog against the
+new provider and registered thread after the transfer. The supermanager grants with
 `bun tools/goal/src/cli.ts priority grant <task>`. The owning manager consumes the one-use grant with
 `bun tools/goal/src/cli.ts priority <task> critical`, or by retrying with a critical brief after a grant exists.
 `bun tools/goal/src/cli.ts priority revoke <task> <grant-id>` revokes an unused grant by its grantor. The owner may
@@ -2498,7 +2505,7 @@ bun tools/goal/src/cli.ts verify
 bun tools/goal/src/cli.ts manager start <goal> --engine codex --budget 20000
 bun tools/goal/src/cli.ts manager assign <goal> <manager>
 bun tools/goal/src/cli.ts manager status
-bun tools/goal/src/cli.ts manager register-supermanager
+bun tools/goal/src/cli.ts manager register-supermanager [--replace-session <previous-thread-id>]
 bun tools/goal/src/cli.ts manager renew <manager>
 bun tools/goal/src/cli.ts manager stop <manager>
 bun tools/goal/src/cli.ts manager complete <manager>

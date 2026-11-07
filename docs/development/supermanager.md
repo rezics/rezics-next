@@ -59,8 +59,17 @@ Recover in this order, stopping as soon as it responds:
 
 1. The watchdog types a one-line note into the resident window naming the waiting items.
 2. After ten more minutes without activity, it alerts the project's Telegram group with the resume command.
-3. Whoever answers the alert restarts the session in that same window and registered thread with
+3. Whoever answers the alert resumes the registered provider session in that same window and thread: Codex uses
+   `codex resume <registered-thread-id>`; Claude uses
    `claude --resume <registered-thread-id> --permission-mode bypassPermissions`. Never start a second supermanager.
+
+The resident may be an external Codex or Claude session. Register it from that session with
+`bun tools/goal/src/cli.ts manager register-supermanager`; its native `CODEX_THREAD_ID` or `CLAUDE_CODE_SESSION_ID`
+is its authority. Registration creates no managed session or budget, and host recovery never resumes the resident.
+For an explicit role transfer, stop the previous resident and its watchdog, update the manager host, then register
+from the new session with `manager register-supermanager --replace-session <previous-thread-id>`. The write compares
+the previous registered thread atomically, immediately invalidates the old identity and keeps the manager and inbox.
+A missing or changed previous thread refuses replacement. Restart supervision against the new provider and thread.
 
 While the resident is stuck, managers keep independent work moving under the owner-agreement rules and escalate only
 architecture, scope or choices requiring the maintainer.
