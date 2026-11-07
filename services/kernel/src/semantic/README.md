@@ -36,11 +36,14 @@ The journey distinguishes authorization module loading from factory execution. W
 completed Kernel catalogue as HTTP without compiling HTTP request handlers; real Content roles and Access remain
 covered by the existing native authorization tests.
 
-Decision: `composeSemanticIdentityParticipants` supplies the Source reader factory while constructing the fixed
-worker participant because Semantic registration precedes Search service startup. It passes the real typed
-`createIdentitySourceSupportReader` into the receiving configuration; each receiving adapter creates its own reader
-from the supplied `{pool, routeKey, access, clock}` tuple. Native Source mapping, Access, custody, transaction and
-cost authority remain with their owner commands.
+Decision: the process root supplies the complete Search native port before Semantic participant registration.
+The default module list shares one lazy supplier between Semantic and Search after pool preparation; HTTP and direct
+WorkModule hosts pass the same real producer explicitly. `composeSemanticIdentityParticipants` passes its typed
+`createIdentitySourceSupportReader` into the receiving configuration; each adapter creates its own reader from the
+supplied `{pool, routeKey, access, clock}` tuple. Native Source mapping, Access, custody, transaction and cost
+authority remain with their owner commands. Lifecycle observers collect every registered effect batch before
+asserting the complete effect set; startup, projection and shutdown retain their original deadlines and assertions.
+Native write fixtures submit valid boundary bodies and the current revision returned by publication transitions.
 
 Summary: Composition installs the sole native `SubjectReadingApplication`; server and Search-worker runtime defaults
 inject it into Kernel, tests pass it explicitly, and direct compatibility hosts resolve the same installed binding.

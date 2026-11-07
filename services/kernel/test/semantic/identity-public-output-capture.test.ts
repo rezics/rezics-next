@@ -69,15 +69,9 @@ const work = (): PublicIdentityOutputWork => ({
 });
 const config = () => ({ pool: f.pool, access: f.access, routeKey: testRouteKey(), clock: systemClock });
 async function setup(ids: readonly string[], visibility: 'public' | 'private' = 'public') {
-  const response = await f.send(f.owner.bearer, 'POST', '/v1/collections', {
-    membershipKind: 'dynamic',
-    title: 'Canonical output capture',
-    visibility,
-    rule: { filter: { owner: { presence: true } } },
-  });
-  expect(response.status, await response.clone().text()).toBe(201);
-  const collectionId = (await response.json()).collection.id as string;
-  const ref = { route: routeOf(collectionId)!, collectionId, generation: randomUUID() };
+  const collection = await f.collection(visibility);
+  const collectionId = collection.collectionId;
+  const ref = { ...collection, generation: randomUUID() };
   await f.command(collectionId, { begin: ref }, (tx) =>
     beginCollectionSourceOutput(tx, { ...ref, expectedMembers: ids.length }),
   );
@@ -280,7 +274,7 @@ test('eligibility loss refuses fresh use while the original binding, pages and c
   expect(
     (
       await f.send(f.owner.bearer, 'PATCH', '/v1/collections/' + s.ref.collectionId, {
-        revision: 1,
+        revision: 2,
         visibility: 'private',
       })
     ).status,
@@ -558,7 +552,7 @@ test('a private Collection cannot establish a fresh public output binding or rep
   expect(
     (
       await f.send(f.owner.bearer, 'PATCH', '/v1/collections/' + s.ref.collectionId, {
-        revision: 1,
+        revision: 2,
         visibility: 'private',
       })
     ).status,
@@ -612,7 +606,7 @@ test('Exact public COMPLETE output can be bound and held natively for the existi
   expect(
     (
       await f.send(f.owner.bearer, 'PATCH', '/v1/collections/' + s.ref.collectionId, {
-        revision: 1,
+        revision: 2,
         visibility: 'private',
       })
     ).status,

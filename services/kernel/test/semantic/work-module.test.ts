@@ -8,6 +8,7 @@ import { bootstrapRelease, GLOBAL_CONTEXT } from '../../src/semantic/definitions
 import { createSemanticWorkModule } from '../../src/semantic/work-module.ts';
 import { createWorkerAuthorization } from '../../src/work/authorization.ts';
 import { composeSemanticIdentityParticipants } from '../../src/composition/semantic.ts';
+import { composeSearchNativePorts } from '../../src/composition/search-native.ts';
 import { KERNEL_WORK_MODULES } from '../support/default-work-modules.ts';
 import { testReceiptKeys } from '../support/receipt-keys.ts';
 import { workerTestEnv } from '../support/worker-env.ts';
@@ -123,13 +124,9 @@ const program = `
         registrations++;
         pool = context.pool;
         assert.equal(DBOS.isInitialized(), false);
+        const registeredEffects = [];
         await module.register({ ...context, addEffects(effects) {
-          const erasure = effects.find(effect => effect.name === 'semantic_erasure');
-          assert.ok(erasure, 'Semantic registers its account tombstone effect even when no local data applies');
-          assert.deepEqual(erasure.types, ['com.rezics.access.account-tombstoned.v1']);
-          const identity = effects.find(effect => effect.name === 'identity_epoch_admission');
-          assert.ok(identity, 'Semantic registers durable resumption of the saved identity job');
-          assert.deepEqual(identity.types, ['com.rezics.semantic.identity-epoch.admitted.v1']);
+          registeredEffects.push(...effects);
           context.addEffects(effects);
         }, addService(start) {
           context.addService(async () => {
@@ -144,6 +141,12 @@ const program = `
             }};
           });
         }});
+        const erasure = registeredEffects.find(effect => effect.name === 'semantic_erasure');
+        assert.ok(erasure, 'Semantic registers its account tombstone effect even when no local data applies');
+        assert.deepEqual(erasure.types, ['com.rezics.access.account-tombstoned.v1']);
+        const identity = registeredEffects.find(effect => effect.name === 'identity_epoch_admission');
+        assert.ok(identity, 'Semantic registers durable resumption of the saved identity job');
+        assert.deepEqual(identity.types, ['com.rezics.semantic.identity-epoch.admitted.v1']);
         phase('registered:' + module.name);
       }
     }));
@@ -449,7 +452,7 @@ test('default Semantic composition registers its real locator and bounded local 
   const clock = () => new Date();
   try {
     const authorization = createWorkerAuthorization({ pool, client, env, clock, receiptKeys: testReceiptKeys() });
-    await createSemanticWorkModule(composeSemanticIdentityParticipants).register({
+    await createSemanticWorkModule(composeSemanticIdentityParticipants, composeSearchNativePorts).register({
       pool,
       env,
       clock,

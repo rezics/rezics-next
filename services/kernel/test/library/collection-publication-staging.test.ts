@@ -125,7 +125,7 @@ test('a changed output fence refuses late unknown-size allocation and preserves 
   const b = { ...collection, generation: randomUUID() };
   await f.command(collection.collectionId, { b }, (tx) => beginWholeQueryCollectionSourceOutput(tx, b));
   const response = await f.send(f.owner.bearer, 'PATCH', `/v1/collections/${collection.collectionId}`, {
-    revision: 1,
+    revision: 2,
     visibility: 'private',
   });
   expect(response.status).toBe(200);
