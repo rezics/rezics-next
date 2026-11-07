@@ -5,11 +5,12 @@ comes from the common `GET /v1/collections/{id}/members` Source; the browser doe
 rows. Unique canonical subjects keep per-member Type presentation and subject links. Occurrence notes, occurrence
 IDs, member counts and Collection timestamps stay omitted. The saved predicate never appears on this page.
 
-Owner-only `RuleEditLink` opens `/collections/{id}/rule` when the signed-in viewer is the curator and the identity
-is not a built-in. Authoring owns that rule editor. The owner-only `SavedQueryPublicationAction` slot, consumed by
-saved-query management, opens the existing `/collections/{id}/publish` selected-members route. Built-ins, curated
-identities and other viewers get no publication entry. The action is a handoff; it does not publish, and a rule
-edit never auto-publishes. Public and other readers receive only already-published permitted membership. They never
+Owner-only `RuleEditLink` opens `/collections/{id}/rule` when the signed-in viewer is the curator, the identity is
+not a built-in, and the authenticated page's viewerActions admit `collection_rule.update`. Authoring owns that rule
+editor. The owner-only `SavedQueryPublicationAction` on the results header opens `/collections/{id}/publish`. Both
+links belong in the first HTML from that page identity; they do not wait for client `useOperation`. Built-ins,
+curated identities and other viewers get no publication entry. The action is a handoff; it does not publish, and a
+rule edit never auto-publishes. Public and other readers receive only already-published permitted membership. They never
 receive the owner predicate or a private fact-derived evaluation. Native Collection GET concealment still hides a
 private unknown identity.
 

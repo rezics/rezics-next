@@ -1,11 +1,11 @@
 import type { DiaryAddress } from './address';
-import type { DiaryPage, KernelClient } from '@rezics/client';
+import type { DiaryOccurrence, DiaryPage, KernelClient } from '@rezics/client';
 import { isPlatformClosedProblem } from '../../kernel/platform-closed';
 
 export const PRIVATE_DIARY_PAGE_LIMIT = 25;
 export const PRIVATE_DIARY_PAGE_BYTES = 65_536;
 
-export type { DiaryPage };
+export type { DiaryOccurrence, DiaryPage };
 export type ConsumptionSummary = NonNullable<
   Awaited<ReturnType<KernelClient['libraryConsumptionSummary']['get']>>['data']
 >;

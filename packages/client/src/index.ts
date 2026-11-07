@@ -73,7 +73,7 @@ export type {
   PersonalEntryTimestamp,
   PersonalEntryTimestampInput,
 } from './kernel/library/entry-personal-model';
-export type { DiaryOccurrence, DiaryPage } from './kernel/library/diary-model';
+export type { DiaryOccurrence, DiaryPage, DiaryQuery, DiarySubject } from './kernel/library/diary-model';
 export type {
   EntryAnnotationCorrectionItem,
   EntryAnnotationOperation as EntryAnnotationCorrectionOperation,
@@ -115,6 +115,12 @@ export type {
   BangumiScoreSelection,
 } from './kernel/library/list-import-bangumi-model.ts';
 export type { BangumiTag, BangumiTagPage } from './kernel/library/list-import-bangumi-label-model.ts';
+export type {
+  MalLabelOutcome,
+  MalLabelReview,
+  MalLabelSelection,
+  MalTagEvidence,
+} from './kernel/library/list-import-mal-tags.ts';
 
 type NativePostHistoryPage = Routes['posts'][':id']['revisions']['get']['response'][200]['page'];
 type Routes = KernelType['~Routes']['v1'];

@@ -22,6 +22,12 @@ import {
 
 type FollowRead = FollowListPage;
 type RawFollow = FollowEdge;
+/** Agent-subject FULL target: kernel contribution attribution, omitted from the Eden list union. */
+type AccountFollowTarget = {
+  id: string;
+  kind: string;
+  displayName: string | null;
+};
 
 export type MineFollow = {
   targetId: string;
@@ -47,7 +53,7 @@ export type MineFollowingPage = {
 };
 
 /** FULL follow targets are a catalogue summary, a live account identity, an id-free deletion, or unavailable. */
-function followSubject(target: RawFollow['target']): LibrarySubject | null {
+function followSubject(target: RawFollow['target'] | AccountFollowTarget): LibrarySubject | null {
   if (!target || !('id' in target)) return null;
   if ('type' in target) {
     return subjectOf({

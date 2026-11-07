@@ -17,7 +17,6 @@ import { admitsCollectionOperation } from '../collection-records';
 import type { DynamicCollectionPage } from '../dynamic-collection';
 import { useSession } from '../../session/query';
 import { CollectionMetadataEditor } from '../collection-editor';
-import { SavedQueryPublicationAction } from '../saved-query-publication';
 import { SavedQueryManagementController, type ManagedSavedQuery } from './controller';
 import { savedQueryReturnTo } from './return-to';
 
@@ -217,15 +216,6 @@ function SavedQueryManagementLifetime({
       aria-label={m.library_saved_query_manage()}
       data-saved-query-management
     >
-      <SavedQueryPublicationAction
-        collection={{
-          id: page.id,
-          curatorAccountId: page.curatorAccountId ?? viewerId,
-          membershipKind: 'dynamic',
-        }}
-        viewerId={viewerId}
-        allowed
-      />
       {accessState === 'ready' ? (
         state.phase === 'closed' ? (
           <Button ref={trigger} type="button" variant="outline" onClick={controller.open}>

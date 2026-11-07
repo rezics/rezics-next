@@ -136,12 +136,12 @@ async function http(url: string): Promise<{ status: number; headers: Record<stri
 }
 
 type Seed = {
-  workId?: string;
-  boardId?: string;
-  threadId?: string;
-  collectionId?: string;
+  workId?: string | undefined;
+  boardId?: string | undefined;
+  threadId?: string | undefined;
+  collectionId?: string | undefined;
   collectionMembers: string[];
-  editionSubjectId?: string;
+  editionSubjectId?: string | undefined;
   readings: { provider: string; externalId: string; subjectId: string }[];
 };
 
@@ -558,7 +558,7 @@ async function walkW34(ctx: WalkContext): Promise<unknown> {
   await shellOk(ctx.page, 'en');
   await ctx.page.goBack({ waitUntil: 'domcontentloaded' });
   await hydrated(ctx.page);
-  return { id, url: page.url(), native: zones.status };
+  return { id, url: page.url, native: zones.status };
 }
 
 async function walkW35(ctx: WalkContext): Promise<unknown> {

@@ -116,18 +116,21 @@ export class PublicCollectionWindowVisit {
       movement,
       href,
       loading: false,
-      focus: document
+      ...(document
         ? {
-            eligible: () =>
-              eligible &&
-              (document.activeElement === action || (!action?.isConnected && document.activeElement === document.body)),
-            release: () => {
-              document.removeEventListener('focusin', focusIn);
-              document.removeEventListener('pointerdown', cancel);
-              document.removeEventListener('keydown', cancel);
+            focus: {
+              eligible: () =>
+                eligible &&
+                (document.activeElement === action ||
+                  (!action?.isConnected && document.activeElement === document.body)),
+              release: () => {
+                document.removeEventListener('focusin', focusIn);
+                document.removeEventListener('pointerdown', cancel);
+                document.removeEventListener('keydown', cancel);
+              },
             },
           }
-        : undefined,
+        : {}),
     };
     return true;
   }

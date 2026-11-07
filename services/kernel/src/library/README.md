@@ -132,7 +132,7 @@ rename select each named operand once in the one-row request and read those colu
 
 Decision: Source capture, member preparation, owner-query preparation, publication, presentation and Entry/progress admission use
 one fake-capability application suite; ordinary composition binds the real Access, Semantic, Search and Content
-implementations. Search filter-leaf classification is a composition port; publication-staging admits catalogue-only versus owner-only through that capability and core arithmetic. Content `media.ts` is a public cover-download entry. Native SQL declarations stay unchanged, so the new seam adds no query or statement. Missing identity disclosure defers to the native subject resolver. A composed collection-read
+implementations. Search filter-leaf classification is a composition port. Publication-staging takes population from the stored Source: a catalogue Source requires catalogue leaves and stages Search's public population; an owner Source evaluates every leaf through Search's owner scope and pins the public catalogue observation when catalogue leaves are present. Content `media.ts` is a public cover-download entry. Native SQL declarations stay unchanged, so the new seam adds no query or statement. Missing identity disclosure defers to the native subject resolver. A composed collection-read
 without a bound Access adapter is unbound and also defers; an explicit deny still refuses. Journal date preparation stays
 before the owner transaction and does not admit a session id as a Collection.
 
@@ -170,8 +170,10 @@ Current implementation evidence is narrower than the capability:
   native output hook. That hook switches target visibility and selects B in the same transaction, then writes
   output provenance from the actual Core callback. The returned result is reread from the committed episode and
   contains only its locator and selected output reference. Private working inputs and public/unlisted outputs
-  remain separate. Whole-query staging still refuses while the actual publication work-admission/getter and
-  Search-owned work branch are unavailable; no empty result, copied proof or fallback authority is supplied.
+  remain separate. Whole-query staging takes population from the stored Source: a catalogue Source requires catalogue
+  leaves and stages Search's public population; an owner Source evaluates every leaf through Search's owner scope and
+  pins the public catalogue observation at seal and activation when catalogue leaves are present. Empty complete
+  generations remain explicit complete output. No copied proof or fallback authority is supplied.
 - `collection-reads.ts` reads stored headers and ordinal curated occurrence pages. Dynamic headers omit curated
   counts/timestamps. Private saved members use the sole owner-filter binding and Source reader; public/unlisted
   members use only the Source's activated explicit COMPLETE output, including current original/terminal disclosure.

@@ -65,6 +65,9 @@ child file. Option operands and their values stay unchanged. Each named file sti
 log is not execution evidence. Pin current-reader recovery in the existing Subject community, CollectionList, Copies
 session and Person Location tests; Auth metadata uses the existing protocol cases plus a consumed-body fallback.
 
+Decision: mapper-enabled workspaces (Kernel, Auth, Web) typecheck one at a time inside an admitted slice so their
+tsc/Reylo runs cannot stack past the 6 GiB per-run memory cap; leaf packages may run in parallel.
+
 Acceptance names the narrowest command that proves the change. Managers name a full web or kernel check only for a
 workspace-wide change; the train and promotion own whole-workspace checks.
 
@@ -397,8 +400,10 @@ comparison copy, never in the checkout or frozen files.
 
 Use `bun check --no-script -p tsconfig.json` in the eleven workspaces below, both in
 their check commands and their root-invoked typecheck scripts. `--no-script` is required
-because each workspace defines a `check` script. Keep generation before checking the
-websites. Both checkers reported zero errors for every workspace in the paired run.
+because each workspace defines a `check` script. Leaf packages `access`, `bounds`, `money`,
+`operations`, `progress` and `search-text` define the same `check` script so a root-file
+typecheck can gate them. Keep generation before checking the websites. Both checkers
+reported zero errors for every workspace in the paired run.
 The regression fixture also compares diagnostic locations, error codes and messages
 for incompatible imported types, exact optional properties and indexed access, and
 checks that the corrected source passes both tools.
