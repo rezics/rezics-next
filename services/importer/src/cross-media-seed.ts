@@ -164,7 +164,14 @@ import {
   type BangumiCreditRoleBinding,
   type BangumiCreditVocabularyResolution,
 } from './showcase-bangumi-credits.ts';
-import { showcaseLimits, type ShowcaseAcknowledgement, type ShowcaseManifest } from './showcase-contract.ts';
+import {
+  CrossMediaTableScanLimitError,
+  showcaseLimits,
+  type CrossMediaTableScanLimits,
+  type ShowcaseAcknowledgement,
+  type ShowcaseManifest,
+} from './showcase-contract.ts';
+export { CrossMediaTableScanLimitError, type CrossMediaTableScanLimits };
 
 type Provider = 'bangumi' | 'vndb';
 type Row = Record<string, unknown>;
@@ -196,20 +203,6 @@ export function crossMediaFranchise(...names: unknown[]): Franchise | undefined 
 
 export interface CrossMediaTables {
   rows(provider: Provider, table: string, limits?: CrossMediaTableScanLimits): AsyncIterable<Row>;
-}
-export type CrossMediaTableScanLimits = {
-  maxRows: number;
-  maxBytes: number;
-  consumeRow?: (bytes: number) => void;
-};
-export class CrossMediaTableScanLimitError extends Error {
-  constructor(
-    readonly provider: Provider,
-    readonly table: string,
-  ) {
-    super(`Cross-media ${provider}/${table} exceeded its bounded scan`);
-    this.name = 'CrossMediaTableScanLimitError';
-  }
 }
 export type SelectedVndbCharacterNameRows = {
   names: Map<string, Row[]>;
@@ -2025,6 +2018,7 @@ export class CrossMediaDumpFiles implements CrossMediaTables {
   constructor(
     private readonly bangumi: string,
     private readonly vndb: string,
+    private readonly onTableReleased?: (file: string) => void,
   ) {}
   async *rows(provider: Provider, table: string, limits?: CrossMediaTableScanLimits): AsyncGenerator<Row> {
     ensure(/^[a-z][a-z_-]*$/.test(table), 'Invalid dump table name');
@@ -2119,6 +2113,7 @@ export class CrossMediaDumpFiles implements CrossMediaTables {
       throw error;
     } finally {
       stream.destroy();
+      this.onTableReleased?.(file);
     }
     const key = `${provider}/${table}`,
       hash = digest.digest('hex');
@@ -3451,6 +3446,8 @@ export type CrossMediaSeedCliOptions = {
   /** Calendar date from the selected VNDB dump's verified snapshot provenance. */
   sourceSnapshotAsOf?: string;
   composePersona?: (context: DevelopmentShowcaseContext) => Promise<DevelopmentShowcaseResult>;
+  /** Walk seeds drop each scanned dump table from the 6 GiB file cache. */
+  onDumpTableReleased?: (file: string) => void;
 };
 
 export type CrossMediaSeedReport = CrossMediaSeedResult & {
@@ -3520,7 +3517,11 @@ export async function runCrossMediaSeedCli(
   for (const flag of requiredFlags) ensure(values.has(flag), 'Missing seed option: ' + flag);
   const api = normalizeCrossMediaSeedOrigin(values.get('--api')!),
     auth = normalizeCrossMediaSeedOrigin(values.get('--auth')!);
-  const input = new CrossMediaDumpFiles(values.get('--bangumi')!, values.get('--vndb')!);
+  const input = new CrossMediaDumpFiles(
+    values.get('--bangumi')!,
+    values.get('--vndb')!,
+    options.onDumpTableReleased,
+  );
   let plan = await planCrossMediaSeed(input, {
     deferVndbCharacterAppearances: true,
     ...(options.selection ? { selection: showcaseFranchiseSelection(options.selection) } : {}),

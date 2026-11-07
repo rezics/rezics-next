@@ -30,19 +30,21 @@ export function ContributionReaction({
   const states = (['set', 'clear'] as const).map((operation) =>
     !isCurrent()
       ? 'retired'
-      : presentation.failed
-        ? 'failed'
-        : reference
-          ? contributionOperationAdvice({
-              reference,
-              operation: 'reaction',
-              action: 'reaction:set',
-              operationId: `${kind}.${operation}_reaction`,
-              source,
-              reader,
-              isCurrent,
-            })
-          : 'unavailable',
+      : presentation.restriction
+        ? presentation.restriction
+        : presentation.failed
+          ? 'failed'
+          : reference
+            ? contributionOperationAdvice({
+                reference,
+                operation: 'reaction',
+                action: 'reaction:set',
+                operationId: `${kind}.${operation}_reaction`,
+                source,
+                reader,
+                isCurrent,
+              })
+            : 'unavailable',
   );
   const state = states.find((state) => state !== 'available') ?? 'available';
   const lease = isCurrent() ? presentation.operation('reaction') : undefined;

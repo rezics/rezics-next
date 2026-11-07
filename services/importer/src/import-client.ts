@@ -281,7 +281,7 @@ function httpFailure(reply: ClientResponse): ImportTransportError {
   const code = field('code');
   const safeCode = typeof code === 'string' && /^[a-z0-9_-]{1,80}$/.test(code) ? code : undefined;
   return new ImportTransportError(
-    reply.response?.status,
+    reply.response?.status ?? (reply.status > 0 ? reply.status : undefined),
     safeType,
     safeCode,
     field('retryable') === true,

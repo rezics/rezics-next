@@ -177,7 +177,7 @@ export function communityBoard(kind: CommunityKind): Board {
 /** Selected Board is independent of any readable card's boardId. */
 export function communityCurrentEntry(
   kind: CommunityKind,
-  subject: typeof communitySubject,
+  subject: { id: string; label: string },
   place = GLOBAL,
   createThread: 'allowed' | 'denied' | 'sign-in' | 'unavailable' = 'allowed',
 ) {
@@ -185,7 +185,13 @@ export function communityCurrentEntry(
   return {
     state: 'current' as const,
     request: { subjectId: subject.id, placeId: place, kind, selectedBoardId: boardId },
-    board: { id: boardId, availability: 'available' as const, visibility: 'published' as const },
+    board: {
+      id: boardId,
+      title: kind === 'review' ? 'Public book reviews' : 'Public book discussions',
+      purpose: kind === 'review' ? 'reviews' : 'discussion',
+      availability: 'available' as const,
+      visibility: 'published' as const,
+    },
     actions: { createThread },
   };
 }
@@ -198,6 +204,14 @@ const subjectThreads: FakeRoute['story'] = ({ request, match }) => {
   if (kind !== 'review' && kind !== 'discussion') return;
   const cursor = query.get('cursor');
   if (cursor !== null && cursor !== 'community-next') return { status: 400 };
+  const place = query.get('place') ?? GLOBAL;
+  const selected = query.get('board');
+  const entry =
+    selected === null
+      ? undefined
+      : selected === communityCurrentEntry(kind, subject, place).board.id
+        ? communityCurrentEntry(kind, subject, place, request.headers.has('authorization') ? 'allowed' : 'sign-in')
+        : { state: 'concealed' as const, request: { subjectId: subject.id, placeId: place, kind, selectedBoardId: selected } };
   return {
     status: 200,
     ...communityThreadPage(
@@ -205,7 +219,8 @@ const subjectThreads: FakeRoute['story'] = ({ request, match }) => {
       subject,
       [communityThread(kind, cursor !== null, subject)],
       cursor ? null : 'community-next',
-      query.get('place') ?? GLOBAL,
+      place,
+      entry,
     ),
   };
 };

@@ -3,18 +3,7 @@ import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { createMemoryHistory, createRootRoute, createRouter, RouterProvider } from '@tanstack/react-router';
 
-let session: { state: string; subject: string | null; csrfToken: string | null } = {
-  state: 'signed-in',
-  subject: 'current-person',
-  csrfToken: 'csrf',
-};
 mock.module('cloudflare:workers', () => ({ env: {} }));
-const sessionQueries = await import('../src/session/query');
-mock.module('../src/session/query', () => ({
-  ...sessionQueries,
-  useSession: () => session,
-  sessionCsrfToken: () => session.csrfToken,
-}));
 
 const { SubjectCommunityRegion } = await import('../src/features/pages/subject-community-view');
 const { composedCommunityRegion } = await import('../src/features/pages/subject-community');
@@ -23,15 +12,21 @@ const { communityCurrentEntry, communitySubject, communityThread, communityThrea
   await import('../src/kernel/fake/subject-community');
 const { m } = await import('../src/paraglide/messages.js');
 
-const expected = {
-  kind: 'subjectThreads' as const,
-  id: communitySubject.id,
-  place: GLOBAL,
-  threadKind: 'review' as const,
-  limit: 20,
-};
-
-async function renderRegion(region: ReturnType<typeof composedCommunityRegion>) {
+test('hydrated Subject creation follows native entry.current Board, not a card boardId', async () => {
+  const thread = communityThread('review');
+  const entry = communityCurrentEntry('review', communitySubject);
+  const expected = {
+    kind: 'subjectThreads' as const,
+    id: communitySubject.id,
+    place: GLOBAL,
+    threadKind: 'review' as const,
+    board: entry.board.id,
+    limit: 20,
+  };
+  const region = composedCommunityRegion(
+    { status: 200, body: communityThreadPage('review', communitySubject, [thread], null, GLOBAL, entry) },
+    expected,
+  );
   const root = createRootRoute({
     component: () =>
       createElement(SubjectCommunityRegion, {
@@ -47,22 +42,10 @@ async function renderRegion(region: ReturnType<typeof composedCommunityRegion>) 
   });
   const router = createRouter({ routeTree: root, history: createMemoryHistory({ initialEntries: ['/'] }) });
   await router.load();
-  return renderToStaticMarkup(createElement(RouterProvider, { router }));
-}
-
-test('hydrated Subject create-thread follows native entry.current Board, not a card boardId', async () => {
-  const thread = communityThread('review');
-  const entry = communityCurrentEntry('review', communitySubject);
-  const region = composedCommunityRegion(
-    { status: 200, body: communityThreadPage('review', communitySubject, [thread], null, GLOBAL, entry) },
-    expected,
-  );
-  session = { state: 'signed-in', subject: 'current-person', csrfToken: 'csrf' };
-  const html = await renderRegion(region);
-  expect(html).toContain('data-slot="create-thread"');
-  expect(html).toContain(m.board_start_thread());
+  const html = renderToStaticMarkup(createElement(RouterProvider, { router }));
+  expect(html).toContain('data-slot="community-entry-start"');
+  expect(html).toContain(m.subject_community_review());
   expect(html).toContain(entry.board.id);
   expect(html).not.toContain(`/boards/${thread.boardId}/new`);
-  session = { state: 'unknown', subject: 'current-person', csrfToken: 'csrf' };
-  expect(await renderRegion(region)).not.toContain('data-slot="create-thread"');
+  expect(html).not.toContain('data-slot="create-thread"');
 });

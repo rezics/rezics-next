@@ -3662,7 +3662,20 @@ function runMemoryLimitShell(directory: string, memoryPerRunGiB: number): string
   const lastTestFile = quote(`${directory}/.last-test-file`);
   const reported = quote(`${directory}/.memory-limit-reported`);
   const bytes = Math.round(memoryPerRunGiB * 2 ** 30);
-  return `apply_run_memory_limit() {
+  return `resolve_run_slice_cgroup() {
+  slice_cgroup=$(systemctl show --property=ControlGroup --value "$REZICS_CHECK_SLICE" 2>/dev/null || true)
+  case "$slice_cgroup" in /*) return 0 ;; esac
+  slice_cgroup=$(awk -F: '$1 == "0" { print $3; exit }' /proc/self/cgroup 2>/dev/null || true)
+  case "$slice_cgroup" in /*) ;; *) slice_cgroup=; return 1 ;; esac
+  case "$REZICS_CHECK_SLICE" in ?*)
+    case "$slice_cgroup" in *"$REZICS_CHECK_SLICE"*)
+      slice_cgroup="\${slice_cgroup%%"$REZICS_CHECK_SLICE"*}$REZICS_CHECK_SLICE"
+    ;;
+    esac
+  ;;
+  esac
+}
+apply_run_memory_limit() {
   slice_cgroup=$(systemctl show --property=ControlGroup --value "$REZICS_CHECK_SLICE" 2>/dev/null)
   case "$slice_cgroup" in /*)
     printf '%s\\n' ${bytes} > "/sys/fs/cgroup$slice_cgroup/memory.max" 2>/dev/null || true
@@ -3711,6 +3724,14 @@ reclaim_run_file_cache() {
       esac
     fi
     ;;
+  esac
+}
+reclaim_run_inactive_file() {
+  resolve_run_slice_cgroup || return 0
+  inactive=$(awk '$1 == "inactive_file" { print $2 }' "/sys/fs/cgroup$slice_cgroup/memory.stat" 2>/dev/null || true)
+  case "$inactive" in ''|0|*[!0-9]*) ;; *)
+    printf '%s\\n' "$inactive" > "/sys/fs/cgroup$slice_cgroup/memory.reclaim" 2>/dev/null || true
+  ;;
   esac
 }
 apply_run_memory_limit`;
@@ -3877,6 +3898,7 @@ host=$REMOTE_CHECK_HOST
     install_finished=$(date +%s%N)
     awk -v elapsed="$((install_finished - install_started))" -v host="$host" 'BEGIN { printf "remote-check: bun install %.3f s on %s\\n", elapsed / 1000000000, host }' >&2
     if [ "$code" -eq 0 ]; then reclaim_run_file_cache; fi
+    reclaim_run_inactive_file
     if [ "$code" -eq 0 ]; then
       export PATH="$(dirname "$bun"):$PWD/node_modules/.bin:$PATH"
       ${preparationScript}

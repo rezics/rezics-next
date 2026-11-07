@@ -143,12 +143,13 @@ export function walkStackRequired(env: Environment): boolean {
   return (env.GOAL_ACCEPTANCE_REQUIRES ?? '').split(',').some((item) => item === 'native' || item === 'browser');
 }
 
-/** The host-wide admission directory: the main checkout's `.temp`, shared by every worktree on this host. */
-export function walkStackDirectory(root: string, env: Environment): string {
+/** Host-wide walk admission, including concurrent remote-check checkouts. `TMPDIR` does not override it. */
+export const WALK_STACK_DIRECTORY = '/tmp/rezics-walk-stacks';
+
+/** The host-wide admission directory: every worktree and check-host run on this host shares one queue. */
+export function walkStackDirectory(_root: string, env: Environment): string {
   if (env.REZICS_WALK_STACK_DIR) return env.REZICS_WALK_STACK_DIR;
-  const main = mainCheckout(root);
-  if (main === null) throw new Error(`walk stacks need a Git checkout to find the shared .temp directory: ${root}`);
-  return join(main, '.temp', 'walk-stacks');
+  return WALK_STACK_DIRECTORY;
 }
 
 /**

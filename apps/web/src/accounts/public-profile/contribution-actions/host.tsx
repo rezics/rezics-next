@@ -1,5 +1,5 @@
 import { Button } from '@rezics/ui/shadcn/button';
-import type { QueryClient } from '@tanstack/react-query';
+import type { QueryClient, QueryKey } from '@tanstack/react-query';
 import { useQueryClient } from '@tanstack/react-query';
 import { useRouter } from '@tanstack/react-router';
 import {
@@ -27,16 +27,20 @@ import { isRecord } from '../../../features/pages/shared';
 import {
   contributionActionsInput,
   ContributionActionsReceiver,
-  unavailableAuthorContributionActionsWire,
-  type AuthorContributionActionsWire,
   type ContributionActionsInput,
   type ContributionActionsState,
 } from './receiver';
+import type { AuthorContributionActionsResponse, AuthorContributionActionsWire } from './wire';
+import type { VerificationConfig } from '../../../report/turnstile';
 
 export type ContributionActionsPageScopeValue = {
   page: SubjectPageData;
   cursor: string | null;
   view: string;
+  /** The anonymous named-page query that supplied the original cohort. */
+  sourceQueryKey?: QueryKey | undefined;
+  /** Report verification for this page's native owners; absent keeps report controls unavailable. */
+  verification?: VerificationConfig | undefined;
 };
 
 const ContributionActionsPageScopeContext = createContext<ContributionActionsPageScopeValue | null>(null);
@@ -45,10 +49,12 @@ export function ContributionActionsPageScope({
   page,
   cursor,
   view,
+  verification,
+  sourceQueryKey,
   children,
 }: ContributionActionsPageScopeValue & { children: ReactNode }) {
   return (
-    <ContributionActionsPageScopeContext.Provider value={{ page, cursor, view }}>
+    <ContributionActionsPageScopeContext.Provider value={{ page, cursor, view, verification, sourceQueryKey }}>
       {children}
     </ContributionActionsPageScopeContext.Provider>
   );
@@ -101,6 +107,8 @@ export type ContributionActionsEpisode = {
   page: object | null;
   read: object;
   source: object;
+  sourceQuery?: object | undefined;
+  sourceCount?: number | undefined;
   selection: unknown;
   publication: object | null;
   postsPublished: boolean;
@@ -109,7 +117,7 @@ export type ContributionActionsEpisode = {
   credential: string | null;
   navigation: object;
   mount: object | null;
-  wire: AuthorContributionActionsWire<unknown>;
+  wire: AuthorContributionActionsWire<AuthorContributionActionsResponse>;
   rows: RowObservation[];
 };
 
@@ -133,6 +141,8 @@ export function sameContributionActionsEpisode(left: ContributionActionsEpisode,
     left.page !== right.page ||
     left.read !== right.read ||
     left.source !== right.source ||
+    left.sourceQuery !== right.sourceQuery ||
+    left.sourceCount !== right.sourceCount ||
     left.selection !== right.selection ||
     left.publication !== right.publication ||
     left.wire !== right.wire ||
@@ -147,7 +157,11 @@ export function sameContributionActionsEpisode(left: ContributionActionsEpisode,
 
 export type ContributionActionsHostValue = {
   input: ContributionActionsInput | undefined;
-  state: ContributionActionsState<unknown>;
+  state: ContributionActionsState<AuthorContributionActionsResponse>;
+  /** The reader's subject, the only identity that viewer advice may name. */
+  reader: string | null;
+  /** The last advice this visit admitted, retained through refresh and cleared by retirement. */
+  advice: AuthorContributionActionsResponse | undefined;
   isCurrent: () => boolean;
   retry: () => Promise<void>;
   operation: (operation: ContributionOperation) => OperationLease<ContributionOperation> | undefined;
@@ -159,14 +173,14 @@ export function useContributionActionsHost() {
   return useContext(ContributionActionsHostContext);
 }
 
-const unavailable: ContributionActionsState<unknown> = { state: 'unavailable' };
+const unavailable: ContributionActionsState<AuthorContributionActionsResponse> = { state: 'unavailable' };
 const noSubscribe = (_notify: () => void) => () => {};
 const noSnapshot = () => unavailable;
 const useClientLayoutEffect = typeof document === 'undefined' ? useEffect : useLayoutEffect;
 
 type Visit = {
   episode: ContributionActionsEpisode | undefined;
-  receiver?: ContributionActionsReceiver<unknown>;
+  receiver?: ContributionActionsReceiver<AuthorContributionActionsResponse>;
   address?: ContributionActionsAddress;
   operations?: Partial<Record<ContributionOperation, OperationLease<ContributionOperation>>>;
 };
@@ -184,7 +198,7 @@ export function ContributionActionsHost({
   postsPublished,
   reviewsPublished,
   rows,
-  wire = unavailableAuthorContributionActionsWire,
+  wire,
   children,
 }: {
   accountId: string;
@@ -199,11 +213,22 @@ export function ContributionActionsHost({
   postsPublished: boolean;
   reviewsPublished: boolean;
   rows: readonly Record<string, unknown>[];
-  wire?: AuthorContributionActionsWire<unknown>;
+  wire: AuthorContributionActionsWire<AuthorContributionActionsResponse>;
   children: ReactNode;
 }) {
   const client = useQueryClient();
   const router = useRouter();
+  const sourceKey = useContributionActionsPageScope()?.sourceQueryKey;
+  const sourceQuery = sourceKey ? client.getQueryCache().find({ queryKey: sourceKey, exact: true }) : undefined;
+  const sourceCount = sourceQuery?.state.dataUpdateCount;
+  const sourceCurrent = () =>
+    !sourceKey ||
+    (!!sourceQuery &&
+      client.getQueryCache().find({ queryKey: sourceKey, exact: true }) === sourceQuery &&
+      sourceQuery.state.status === 'success' &&
+      sourceQuery.state.fetchStatus === 'idle' &&
+      !sourceQuery.state.isInvalidated &&
+      sourceQuery.state.dataUpdateCount === sourceCount);
   const observation = useMemo(() => browserObservation(client), [client]);
   const reader = useSyncExternalStore(observation.subscribe, observation.getSnapshot, observation.getServerSnapshot);
   const session = normalizeSessionObservation(client.getQueryData(sessionQueryKey));
@@ -267,6 +292,8 @@ export function ContributionActionsHost({
     page,
     read,
     source,
+    sourceQuery,
+    sourceCount,
     selection,
     publication,
     postsPublished,
@@ -287,13 +314,15 @@ export function ContributionActionsHost({
     if (visit) visit.episode = undefined;
     const next: Visit = { episode };
     const published = view === 'reviews' ? reviewsPublished : postsPublished;
-    const readAdmitted = !!input && published && rows.length <= 20 && signedIn && navigation.active && mount !== null;
+    const readAdmitted =
+      !!input && published && rows.length <= 20 && signedIn && navigation.active && mount !== null && sourceCurrent();
     if (readAdmitted) {
       const address = new ContributionActionsAddress(
         client,
         reader,
         () =>
           current.current === next &&
+          sourceCurrent() &&
           mounted.current === episode.mount &&
           navigationRef.current === episode.navigation &&
           navigationRef.current.active &&
@@ -313,7 +342,8 @@ export function ContributionActionsHost({
   }
 
   const receiver = visit.receiver;
-  const state = useSyncExternalStore(receiver?.subscribe ?? noSubscribe, receiver?.snapshot ?? noSnapshot, noSnapshot);
+  const snapshot = receiver?.snapshot ?? noSnapshot;
+  const state = useSyncExternalStore(receiver?.subscribe ?? noSubscribe, snapshot, snapshot);
   useEffect(() => setHydrated(true), []);
   useClientLayoutEffect(() => visit.address?.attach(), [visit]);
   useEffect(() => {
@@ -330,7 +360,15 @@ export function ContributionActionsHost({
     if (nextLease) (visit.operations ??= {})[name] = nextLease;
     return nextLease;
   };
-  const hostValue: ContributionActionsHostValue = { input, state, isCurrent, retry, operation };
+  const hostValue: ContributionActionsHostValue = {
+    input,
+    state,
+    reader: reader.state === 'signed-in' ? reader.observation.subject : null,
+    advice: receiver?.advice(),
+    isCurrent,
+    retry,
+    operation,
+  };
   const showReadStatus = hydrated && signedIn;
   const signInHref =
     hydrated && reader.state === 'signed-out'

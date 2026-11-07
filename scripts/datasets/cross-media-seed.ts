@@ -3,7 +3,7 @@ import { chmod, mkdir, readFile, writeFile } from 'node:fs/promises';
 import { dirname, join, resolve } from 'node:path';
 import { createKernelClient } from '@rezics/client';
 import { createAccountTokenProvider, IMPORTER_SCOPES } from '../../services/importer/src/credentials.ts';
-import { createImportTransport } from '../../services/importer/src/import-client.ts';
+import { createImportTransport, ImportTransportError } from '../../services/importer/src/import-client.ts';
 import { createImportFetch } from '../../services/importer/src/import-fetch.ts';
 import {
   developmentPersonalListScopes,
@@ -14,6 +14,7 @@ import {
 import { seedReviewedCatalogue } from '../../services/importer/src/reviewed-catalogue.ts';
 import { createSeedDenialDiagnostics } from '../../services/importer/src/showcase-denial-diagnostics.ts';
 import { fetchCrossMediaDumps, type CrossMediaDumpPaths } from './fetch-dumps.ts';
+import { releaseWalkFileCache } from '../walk-memory.ts';
 import { ShowcaseJournal, type ShowcasePublicationResult } from '../../services/importer/src/showcase-publication.ts';
 import {
   createDevelopmentShowcaseClient,
@@ -213,6 +214,7 @@ export async function runDevelopmentSeed(
       ? {}
       : { sourceSnapshotAsOf: dumps.sourceSnapshots.vndb.timestamp.slice(0, 10) }),
     composePersona: (context) => seedDevelopmentShowcase({ ...context, accountId: account, request }),
+    ...(process.env.REZICS_WALK_SMOL === '1' ? { onDumpTableReleased: releaseWalkFileCache } : {}),
   });
   if (!importedResult) throw new TypeError('Cross-media seed did not return its native result handoff');
 
@@ -325,6 +327,16 @@ export async function runDevelopmentSeed(
   }
   return composedReport;
 }
+
+/** Seed CLI prints only public HTTP classifiers; remote bodies and credentials stay off the walk log. */
+export function seedFailureDetail(error: unknown): string {
+  if (error instanceof ImportTransportError) {
+    const detail = [error.status, error.code, error.type].filter((part) => part !== undefined && part !== '');
+    return detail.length === 0 ? error.message : `${error.message} (${detail.join(' ')})`;
+  }
+  return error instanceof Error ? error.message : 'Cross-media seed failed';
+}
+
 if (import.meta.main) {
   try {
     const args = Bun.argv.slice(2);
@@ -332,7 +344,7 @@ if (import.meta.main) {
       if ((await runDevelopmentSeed()).state !== 'complete') process.exitCode = 1;
     } else await runCrossMediaSeedCli(args);
   } catch (error) {
-    process.stderr.write(`${error instanceof Error ? error.message : 'Cross-media seed failed'}\n`);
+    process.stderr.write(`${seedFailureDetail(error)}\n`);
     process.exitCode = 1;
   }
 }

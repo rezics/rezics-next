@@ -1342,10 +1342,12 @@ Its current terms, field/language explanation, receipt and canonical publication
 | Revision author initialization  | One exact new revision anchor and, for native subject birth only, its exact subject resource; existing creation manifest and role initializer.                                                                                              | One resource and grant per account-authored write revision; compact facts do not multiply grants and 512 facts retain the existing 16-entry manifest cap.                                                                                                                                                                                                                                                | `test/semantic/contribution-authorship.test.ts` and `test/semantic/contribution-lifecycle.test.ts` inspect native creation/grant rows; 64/512/4096 full growth evidence remains post-integration.                                             |
 | Owned contribution availability | One indexed original-candidate locator, one retention lifecycle PK mutation and security revision update, current author Access and (restore only) fresh Global proposal Access; before/after native slot/publication and link-delta reads. | Each selected/expanded slot retains its existing 32-entry cap. Relation maintenance uses the existing exact affected-slot Context registry (C entries) and at most 32 selected facts per Context, O((1 + C) × 32), independent of unrelated subject history/population. No new Context cap, history walk, subject-degree scan or live aggregate recount. Payload purge and account cleanup are separate. | `test/semantic/contribution-authorship.test.ts` adds collision, rollback, replay, window, Content and single-connection cases. Existing `contribution-lifecycle.test.ts` and all 64/512/4096 growth acceptance remain post-integration proof. |
 
+Decision: the live ESM Semantic source-set module binds itself into History's producer slot after it
+finishes evaluating, so History locates the same command maps that `writeSubject` began. A CJS require
+of that path is a second instance and is only the fallback when the owner module never loaded.
+
 Required remaining work: run the original native acceptance and regenerate the API artifacts through the official
-integration producer. The native shared-history source-set producer is still unavailable at
-`history/record-source-set-native.ts:nativeRecordSourceSetProducer`; local producer custody does not replace that
-producer or prove shared-copy coverage. Separate platform early/legal purge, legal holds, automatic minimal personal/private payload purge and
+integration producer. Local producer custody does not prove shared-copy coverage. Separate platform early/legal purge, legal holds, automatic minimal personal/private payload purge and
 account-erasure de-identification remain outside this slice. Account confirmation
 is final in first scope: private cleanup starts at the same native T by bounded durable work, without a 30-day
 account grace. The 30-day restore window applies to individually deleted records. Only platform legal-order

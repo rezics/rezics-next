@@ -28,19 +28,21 @@ export function ContributionReport({
   const reference = originalContributionReference(input, row);
   const advice: ContributionAdviceState = !isCurrent()
     ? 'retired'
-    : presentation.failed
-      ? 'failed'
-      : reference
-        ? contributionOperationAdvice({
-            reference,
-            operation: 'report',
-            action: 'report:create',
-            operationId: 'report.create',
-            source,
-            reader,
-            isCurrent,
-          })
-        : 'unavailable';
+    : presentation.restriction
+      ? presentation.restriction
+      : presentation.failed
+        ? 'failed'
+        : reference
+          ? contributionOperationAdvice({
+              reference,
+              operation: 'report',
+              action: 'report:create',
+              operationId: 'report.create',
+              source,
+              reader,
+              isCurrent,
+            })
+          : 'unavailable';
   const candidateLease = isCurrent() ? presentation.operation('report') : undefined;
   const lease = isReportLease(candidateLease) ? candidateLease : undefined;
   const ready =
