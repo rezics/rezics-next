@@ -9,7 +9,7 @@ import { createLibraryCommandRunner } from '../../src/library/command-support.ts
 import { admitEntryAttempt } from '../../src/library/entry-lifecycle.ts';
 import * as store from '../../src/library/entry-store.ts';
 import { LibraryConflictError } from '../../src/library/entries.ts';
-import { deadlineFor } from '../../src/request/deadline.ts';
+import { deadlineFor, withRequestDeadline } from '../../src/request/deadline.ts';
 import { routeOf } from '../../src/route/route.ts';
 import { accountToken, authenticateAccount } from '../support/admitted-access.ts';
 import {
@@ -452,12 +452,16 @@ test('fresh guard work remains bounded across 64 512 and 4096 unrelated live ret
       growthSubjectCount: 4096,
     });
     const f = native;
-    const target = await f.createSubject('game');
-    let current = (await f.commands.putEntry(f.owner.actor, target, { state: 'planned' }, entryKey())).value.entry;
-    const original = current;
-    await f.commands.deleteEntry(f.owner.actor, target, current.revision, entryKey(), current.incarnationId!);
-    current = (await f.commands.putEntry(f.owner.actor, target, { state: 'planned' }, entryKey())).value.entry;
-    const old = await oldReceipts(f);
+    const target = f.baselineSubject;
+    const { current: initialCurrent, original, old } = await withRequestDeadline(Date.now() + 30_000, async () => {
+      let current = (await f.commands.putEntry(f.owner.actor, target, { state: 'planned' }, entryKey())).value.entry;
+      const original = current;
+      await f.commands.deleteEntry(f.owner.actor, target, current.revision, entryKey(), current.incarnationId!);
+      current = (await f.commands.putEntry(f.owner.actor, target, { state: 'planned' }, entryKey())).value.entry;
+      const old = await oldReceipts(f);
+      return { current, original, old };
+    });
+    let current = initialCurrent;
     const operation = async () => {
       for (const guard of [undefined, entryKey(), original.incarnationId!]) {
         await expect(
