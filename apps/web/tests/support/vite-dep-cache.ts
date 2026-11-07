@@ -1,18 +1,7 @@
 import { createHash } from 'node:crypto';
-import {
-  cpSync,
-  existsSync,
-  mkdirSync,
-  readdirSync,
-  readFileSync,
-  renameSync,
-  rmSync,
-  statSync,
-  writeFileSync,
-} from 'node:fs';
+import { cpSync, existsSync, mkdirSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { dirname, join, relative, resolve } from 'node:path';
-import { cleanupAll, ownBunProcess } from './server-custody.ts';
 
 export const viteDepCacheReadyName = '_ready';
 export const viteDepCacheLockName = '_lock';
@@ -20,13 +9,16 @@ export const viteDepCacheMetadataName = join('deps', '_metadata.json');
 export const viteDepCacheSsrMetadataName = join('deps_ssr', '_metadata.json');
 export const viteDepCacheMetadataFiles = [viteDepCacheMetadataName, viteDepCacheSsrMetadataName] as const;
 
-export const webViteClientOptimizeDeps: {
-  entries: string[];
-  holdUntilCrawlEnd: true;
-} = {
-  entries: ['src/routes/**/*.tsx'],
+export const webViteCalendarOptimizeDeps = ['react-day-picker', 'date-fns', '@date-fns/tz'] as const;
+
+/** Scan the complete route graph up front so a local Worker browser check never discovers a route dependency
+ * after the first page has loaded.
+ */
+export const webViteClientOptimizeDeps = {
+  entries: ['src/routes/**/*.tsx', 'src/server.ts', 'src/session/routes.ts'],
   holdUntilCrawlEnd: true,
-};
+  exclude: [...webViteCalendarOptimizeDeps],
+} as const;
 
 export const webViteWorkerSsrOptimizeDeps = {
   noDiscovery: true,
@@ -38,9 +30,15 @@ export const webViteWorkerSsrOptimizeDeps = {
     'react/jsx-dev-runtime',
     'react-dom',
     'react-dom/server',
+    'react-dom/server.edge',
     '@tanstack/react-router > @tanstack/react-store',
     '@inlang/paraglide-js/urlpattern-polyfill',
+    // CommonJS packages a Worker graph walk reached raw. Nested parents are not resolvable from the app root.
+    'satori/standalone',
+    '@puckeditor/core > flat',
+    '@puckeditor/core > object-hash',
   ],
+  exclude: [...webViteCalendarOptimizeDeps],
 };
 
 export const webViteWarmSsrEnvName = 'WEB_VITE_WARM_SSR';
@@ -73,6 +71,7 @@ export const webViteWorkerSsrEnvironment = {
     holdUntilCrawlEnd: webViteWorkerSsrOptimizeDeps.holdUntilCrawlEnd,
     entries: [] as string[],
     include: [...webViteWorkerSsrOptimizeDeps.include],
+    exclude: [...webViteWorkerSsrOptimizeDeps.exclude],
     rolldownOptions: webViteWorkerSsrRolldownOptions,
   },
 };
@@ -85,6 +84,7 @@ export const webViteOptimizerIdentity = {
     holdUntilCrawlEnd: webViteWorkerSsrOptimizeDeps.holdUntilCrawlEnd,
     entries: webViteWorkerSsrOptimizeDeps.entries,
     include: webViteWorkerSsrOptimizeDeps.include,
+    exclude: webViteWorkerSsrOptimizeDeps.exclude,
   },
 } as const;
 
@@ -122,35 +122,24 @@ export type ViteDepCacheOptimizerHashes = {
 export type ViteEnvironmentForDepHash = {
   config: {
     root: string;
-    keepProcessEnv?: boolean | undefined;
-    mode?: string | undefined;
+    keepProcessEnv?: boolean;
+    mode?: string;
     resolve?: unknown;
     assetsInclude?: unknown;
-    plugins?: ReadonlyArray<{ name: string }> | undefined;
-    optimizeDeps?:
-      | {
-          include?: readonly string[] | undefined;
-          exclude?: readonly string[] | undefined;
-          rolldownOptions?: Record<string, unknown> | undefined;
-        }
-      | undefined;
-    optimizeDepsPluginNames?: readonly string[] | undefined;
+    plugins?: Array<{ name: string }>;
+    optimizeDeps?: {
+      include?: string[];
+      exclude?: string[];
+      rolldownOptions?: Record<string, unknown> & { output?: Record<string, unknown> };
+    };
+    optimizeDepsPluginNames?: string[];
   };
 };
 
 export type ViteDepCacheAlignEnvironment = ViteEnvironmentForDepHash & {
-  name?: string | undefined;
-  depsOptimizer?: { init: () => Promise<unknown> } | undefined;
+  name?: string;
+  depsOptimizer?: { init: () => Promise<unknown> };
 };
-
-/** Vite's `server.environments` is a keyed DevEnvironment record; hash code only reads this bag. */
-export type ViteDepCacheAlignEnvironmentBag = {
-  readonly [name: string]: ViteDepCacheAlignEnvironment | undefined;
-};
-
-function environmentBag(environments: object): Record<string, ViteDepCacheAlignEnvironment | undefined> {
-  return environments as Record<string, ViteDepCacheAlignEnvironment | undefined>;
-}
 
 const lockfileFormats: Array<{ path: string; checkPatchesDir: false | string; manager: string }> = [
   { path: 'node_modules/.pnpm/lock.yaml', checkPatchesDir: false, manager: 'pnpm' },
@@ -184,7 +173,7 @@ function viteHash(text: string): string {
   return createHash('sha256').update(text).digest('hex').substring(0, 8);
 }
 
-function unique(values: readonly string[]): string[] {
+function unique(values: string[]): string[] {
   return [...new Set(values)];
 }
 
@@ -235,9 +224,7 @@ export function hashViteDepCacheIdentity(input: {
   optimizer?: unknown;
 }): string {
   const lock = typeof input.lockBytes === 'string' ? input.lockBytes : Buffer.from(input.lockBytes).toString('utf8');
-  return hashLockfile(
-    `${lock}\0${input.patchBytes ?? ''}\0${JSON.stringify(input.optimizer ?? webViteOptimizerIdentity)}`,
-  );
+  return hashLockfile(`${lock}\0${input.patchBytes ?? ''}\0${JSON.stringify(input.optimizer ?? webViteOptimizerIdentity)}`);
 }
 
 /** Same 8-character lockfile hash Vite uses, including bun `patches/` mtime. */
@@ -270,10 +257,6 @@ export function viteEnvironmentConfigHash(environment: ViteEnvironmentForDepHash
   const { config } = environment;
   const optimizeDeps = config.optimizeDeps ?? {};
   const rolldownOptions = optimizeDeps.rolldownOptions;
-  const rolldownOutput =
-    rolldownOptions && typeof rolldownOptions.output === 'object' && rolldownOptions.output !== null
-      ? (rolldownOptions.output as Record<string, unknown>)
-      : undefined;
   return viteHash(
     JSON.stringify(
       {
@@ -292,7 +275,7 @@ export function viteEnvironmentConfigHash(environment: ViteEnvironmentForDepHash
             onwarn: undefined,
             checks: undefined,
             output: {
-              ...rolldownOutput,
+              ...rolldownOptions?.output,
               plugins: undefined,
             },
           },
@@ -318,14 +301,6 @@ export function viteEnvironmentDepHashes(
     configHash,
     hash: viteHash(lockfileHash + configHash),
   };
-}
-
-function readReady(directory: string, lockHash: string): ViteDepCacheReady | undefined {
-  const path = join(directory, viteDepCacheReadyName);
-  if (!existsSync(path)) return undefined;
-  const parsed = JSON.parse(readFileSync(path, 'utf8')) as ViteDepCacheReady;
-  if (parsed.lockHash !== lockHash) return undefined;
-  return parsed;
 }
 
 export function viteDepCacheOptimizeCommand(appRoot: string): string[] {
@@ -387,63 +362,35 @@ export function alignViteDepCacheToOptimizer(
   writeMetadataHashes(path, hashes);
 }
 
-export function alignViteDepCacheEnvironments(directory: string, environments: object): void {
-  for (const [name, environment] of Object.entries(environmentBag(environments))) {
+export function alignViteDepCacheEnvironments(
+  directory: string,
+  environments: Record<string, ViteDepCacheAlignEnvironment | undefined>,
+): void {
+  for (const [name, environment] of Object.entries(environments)) {
     if (!environment?.config) continue;
     alignViteDepCacheToOptimizer(directory, environment.name ?? name, viteEnvironmentDepHashes(environment));
   }
 }
 
-const wrappedDepOptimizers = new WeakSet<object>();
-
-function wrapDepsOptimizerInit(
-  directory: string,
-  name: string,
-  environment: ViteDepCacheAlignEnvironment,
-  optimizer: NonNullable<ViteDepCacheAlignEnvironment['depsOptimizer']>,
-): NonNullable<ViteDepCacheAlignEnvironment['depsOptimizer']> {
-  if (wrappedDepOptimizers.has(optimizer)) return optimizer;
-  const originalInit = optimizer.init.bind(optimizer);
-  optimizer.init = async () => {
-    alignViteDepCacheEnvironments(directory, { [name]: environment });
-    return originalInit();
-  };
-  wrappedDepOptimizers.add(optimizer);
-  return optimizer;
-}
-
-function captureDepsOptimizer(directory: string, name: string, environment: ViteDepCacheAlignEnvironment): void {
-  let optimizer = environment.depsOptimizer;
-  const assign = (value: ViteDepCacheAlignEnvironment['depsOptimizer']) => {
-    optimizer = value ? wrapDepsOptimizerInit(directory, name, environment, value) : value;
-    return optimizer;
-  };
-  if (optimizer) assign(optimizer);
-  Object.defineProperty(environment, 'depsOptimizer', {
-    configurable: true,
-    enumerable: true,
-    get() {
-      return optimizer;
-    },
-    set(value: ViteDepCacheAlignEnvironment['depsOptimizer']) {
-      assign(value);
-    },
-  });
-}
-
 /**
  * Restamp hashes now and again immediately before `depsOptimizer.init`.
- * Cloudflare's pre `configureServer` may create or call init before Vite post-hooks, so the
- * caller must register this from a pre plugin and this wrap follows a later optimizer assignment.
+ * Cloudflare may call init during `configureServer`, which is before Vite's post-hooks.
  */
-export function bindViteDepCacheAlign(directory: string, environments: object): () => void {
-  const bag = environmentBag(environments);
-  alignViteDepCacheEnvironments(directory, bag);
-  for (const [name, environment] of Object.entries(bag)) {
-    if (!environment) continue;
-    captureDepsOptimizer(directory, name, environment);
+export function bindViteDepCacheAlign(
+  directory: string,
+  environments: Record<string, ViteDepCacheAlignEnvironment | undefined>,
+): () => void {
+  alignViteDepCacheEnvironments(directory, environments);
+  for (const [name, environment] of Object.entries(environments)) {
+    const optimizer = environment?.depsOptimizer;
+    if (!optimizer) continue;
+    const originalInit = optimizer.init.bind(optimizer);
+    optimizer.init = async () => {
+      alignViteDepCacheEnvironments(directory, { [name]: environment });
+      return originalInit();
+    };
   }
-  return () => alignViteDepCacheEnvironments(directory, bag);
+  return () => alignViteDepCacheEnvironments(directory, environments);
 }
 
 /** Copy published dependency output into a run-private directory the Vite process may restamp. */
@@ -452,98 +399,4 @@ export function materializeViteDepCache(published: ViteDepCache, runDirectory: s
   mkdirSync(dirname(runDirectory), { recursive: true, mode: 0o700 });
   cpSync(published.directory, runDirectory, { recursive: true });
   return runDirectory;
-}
-
-async function runOwned(command: string[], appRoot: string, env: NodeJS.ProcessEnv, label: string): Promise<string> {
-  const child = Bun.spawn(command, {
-    cwd: appRoot,
-    env,
-    stdin: 'ignore',
-    stdout: 'pipe',
-    stderr: 'pipe',
-  });
-  const custody = ownBunProcess(child, { label });
-  try {
-    const status = await child.exited;
-    if (status !== 0) throw new Error(`${label} exited with ${status}\n${custody.diagnostics()}`);
-    return custody.diagnostics();
-  } finally {
-    await cleanupAll([{ label, run: () => custody.close(), timeoutMs: 12_000 }]);
-  }
-}
-
-async function defaultBuild(stagingDirectory: string, env: NodeJS.ProcessEnv, appRoot: string): Promise<void> {
-  const childEnv: NodeJS.ProcessEnv = {
-    ...env,
-    WEB_VITE_CACHE_DIR: stagingDirectory,
-    REZICS_TEST_RUNTIME: '1',
-    CLOUDFLARE_VITE_FORCE_LOCAL: 'true',
-  };
-  const optimizeOutput = await runOwned(
-    viteDepCacheOptimizeCommand(appRoot),
-    appRoot,
-    childEnv,
-    'Vite dependency pre-bundle',
-  );
-  const warmOutput = await runOwned(viteDepCacheWarmCommand(appRoot), appRoot, childEnv, 'Vite SSR dependency warm');
-  const missing = viteDepCacheMetadataFiles.filter((relativePath) => !existsSync(join(stagingDirectory, relativePath)));
-  if (missing.length > 0) {
-    throw new Error(`Vite dependency pre-bundle did not write ${missing.join(', ')}\n${optimizeOutput}\n${warmOutput}`);
-  }
-}
-
-/** Host-local Vite optimizeDeps cache keyed by lock, patch bytes and optimizer include/entries. */
-export async function prepareViteDepCache(options: PrepareViteDepCacheOptions): Promise<ViteDepCache> {
-  const env = options.env ?? process.env;
-  const lockBytes = options.lockBytes ?? readFileSync(join(options.workspaceRoot, 'bun.lock'));
-  const patchBytes = options.patchBytes ?? readPatchBytes(options.workspaceRoot);
-  const lockHash = hashViteDepCacheIdentity({
-    lockBytes,
-    patchBytes,
-    ...(options.optimizer === undefined ? {} : { optimizer: options.optimizer }),
-  });
-  const directory = join(viteDepCacheRoot(env, options.cacheHome), lockHash);
-  const pollIntervalMs = options.pollIntervalMs ?? 50;
-  const waitMs = options.waitMs ?? 180_000;
-  mkdirSync(dirname(directory), { recursive: true, mode: 0o700 });
-  if (readReady(directory, lockHash)) return { directory, lockHash, reused: true };
-
-  const lockDirectory = join(directory + '.lock');
-  let owned = false;
-  const deadline = Date.now() + waitMs;
-  while (!owned) {
-    if (readReady(directory, lockHash)) return { directory, lockHash, reused: true };
-    try {
-      mkdirSync(lockDirectory);
-      owned = true;
-    } catch (error) {
-      if ((error as NodeJS.ErrnoException).code !== 'EEXIST') throw error;
-      if (Date.now() >= deadline) throw new Error(`Vite dependency cache lock ${lockDirectory} did not release`);
-      await Bun.sleep(pollIntervalMs);
-    }
-  }
-
-  try {
-    if (readReady(directory, lockHash)) return { directory, lockHash, reused: true };
-    const staging = `${directory}.staging-${process.pid}`;
-    rmSync(staging, { recursive: true, force: true });
-    mkdirSync(staging, { recursive: true, mode: 0o700 });
-    try {
-      const build = options.build ?? ((path, buildEnv) => defaultBuild(path, buildEnv, options.appRoot));
-      await build(staging, { ...env, WEB_VITE_CACHE_DIR: staging, REZICS_TEST_RUNTIME: '1' });
-      const ready: ViteDepCacheReady = {
-        lockHash,
-        builtAt: (options.now ?? (() => new Date()))().toISOString(),
-      };
-      writeFileSync(join(staging, viteDepCacheReadyName), `${JSON.stringify(ready)}\n`);
-      rmSync(directory, { recursive: true, force: true });
-      renameSync(staging, directory);
-    } catch (error) {
-      rmSync(staging, { recursive: true, force: true });
-      throw error;
-    }
-    return { directory, lockHash, reused: false };
-  } finally {
-    rmSync(lockDirectory, { recursive: true, force: true });
-  }
 }

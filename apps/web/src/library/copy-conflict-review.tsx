@@ -1,4 +1,5 @@
 import { m } from '../paraglide/messages.js';
+import { copyConditionDraftOf } from './copy-condition';
 import type { CopyDraft } from './copy-fields';
 import type { CopyItem } from './copies-read';
 
@@ -17,6 +18,8 @@ export function adoptCopyConflictDraft(
     acquiredOn: empty(incoming.acquiredOn),
     disposedOn: empty(incoming.disposedOn),
     note: empty(incoming.note),
+    mediaCondition: copyConditionDraftOf(incoming.mediaCondition),
+    packagingCondition: copyConditionDraftOf(incoming.packagingCondition),
   };
   const draft = { ...incomingDraft };
   for (const key of Object.keys(incomingDraft) as (keyof CopyDraft)[]) {
@@ -55,7 +58,7 @@ export function CopyConflictReview({
       {review.state === 'loading' ? <p role="status">{m.library_copy_detail_loading()}</p> : null}
       {review.state === 'unavailable' ? <p role="status">{m.library_copy_detail_unavailable()}</p> : null}
       {review.state === 'forbidden' ? <p role="alert">{m.library_copy_detail_forbidden()}</p> : null}
-      {review.state === 'closed' ? <p role="alert">{m.library_subject_closed()}</p> : null}
+      {review.state === 'closed' ? <p role="status">{m.platform_closed_message()}</p> : null}
       {copy ? (
         <>
           <h3 className="font-medium">{m.library_copy_conflict_review_title()}</h3>

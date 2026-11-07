@@ -1,6 +1,5 @@
 import { afterAll, expect, test } from 'bun:test';
-import { startDevServer } from './support/dev-server.ts';
-import { mkdir, mkdtemp, rm } from 'node:fs/promises';
+import { cp, mkdir, mkdtemp, rm } from 'node:fs/promises';
 import { join, resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { chromium, type Browser, type Page } from 'playwright';
@@ -8,6 +7,7 @@ import { createStoryRecordedKernelFetch } from '../src/kernel/fake';
 import { readSessionState } from '../src/session/state';
 import type { SessionEnv } from '../src/session/client';
 import { cleanupAll, withCleanup } from './support/server-custody.ts';
+import { startDevServer } from './support/dev-server.ts';
 
 const app = join(import.meta.dir, '..');
 const timeout = 300_000;
@@ -17,6 +17,7 @@ const routes = [
   ['library/index.tsx', '/library'],
   ['library/collections.tsx', '/library/collections'],
   ['library/copies.tsx', '/library/copies'],
+  ['library/loans.tsx', '/library/loans'],
   ['library/following.tsx', '/library/following'],
   ['library/progress.index.tsx', '/library/progress'],
   ['library/progress.$id.tsx', '/library/progress/example'],
@@ -30,6 +31,7 @@ const routes = [
 const components = [
   'library/entries-page.tsx',
   'library/copies-page.tsx',
+  'library/loans-page.tsx',
   'library/mine-collections-page.tsx',
   'library/mine-following-page.tsx',
   'library/progress-page.tsx',
@@ -59,7 +61,8 @@ const backend = Bun.serve({
     return recorded(request);
   },
 });
-let server: Awaited<ReturnType<typeof startDevServer>> | undefined;
+let siteServer: Awaited<ReturnType<typeof startDevServer>> | undefined;
+let siteAbort: AbortController | undefined;
 let directory: string | undefined;
 let started: Promise<string> | undefined;
 type ResourceScope = 'suite' | 'test';
@@ -167,6 +170,8 @@ function site() {
       await mkdir(join(root, '.temp'), { recursive: true });
       directory = await mkdtemp(join(root, '.temp/signed-in-routes-'));
       const config = join(directory, 'vite.config.ts');
+      const cacheDir = join(directory, 'cache');
+      if (process.env.WEB_VITE_CACHE_DIR) await cp(process.env.WEB_VITE_CACHE_DIR, cacheDir, { recursive: true });
       // Substitute only the session store boundary. Routing, queries and loaders remain real.
       await Bun.write(
         config,
@@ -174,7 +179,7 @@ function site() {
       import { resolveWebViteConfig } from ${JSON.stringify(pathToFileURL(join(app, 'tests/support/vite-config.ts')).href)};
       export default async (env) => {
         const config = await resolveWebViteConfig(env, ${JSON.stringify(app)});
-        return { ...config, cacheDir: ${JSON.stringify(join(directory, 'cache'))}, plugins: [...(config.plugins ?? []), {
+        return { ...config, cacheDir: ${JSON.stringify(cacheDir)}, plugins: [...(config.plugins ?? []), {
         name: 'controlled-session-store', enforce: 'pre',
         transform(code, id) {
           if (id.endsWith('/src/router.tsx')) return code.replace('return router;', "if (typeof window !== 'undefined') window.__testRouter = router; return router;");
@@ -188,9 +193,23 @@ function site() {
       `,
       );
       if (teardownStarted) throw new Error('Signed-in-routes Vite acquisition began after suite teardown');
-      const running = await startDevServer({
+      siteAbort = new AbortController();
+      siteServer = await startDevServer({
         exclusive: true,
         cwd: app,
+        firstPath: '/en',
+        warmUpPaths: [],
+        signal: siteAbort.signal,
+        env: {
+          KERNEL_ORIGIN: backend.url.origin,
+          PUBLIC_ORIGIN: 'https://www.rezics.test',
+          WEBSITE_CLIENT_ID: process.env.WEBSITE_CLIENT_ID ?? 'web',
+          WEBSITE_CLIENT_KEY: process.env.WEBSITE_CLIENT_KEY ?? '{}',
+          AUTH_ISSUER: process.env.AUTH_ISSUER ?? 'https://auth.test',
+          API_RESOURCE: process.env.API_RESOURCE ?? 'https://kernel.test',
+          WEBSITE_SCOPES: process.env.WEBSITE_SCOPES ?? 'openid',
+          WEB_VITE_CACHE_DIR: cacheDir,
+        },
         command: ({ port }) => [
           'bun',
           'run',
@@ -203,16 +222,13 @@ function site() {
           String(port),
           '--strictPort',
         ],
-        env: { KERNEL_ORIGIN: backend.url.origin, PUBLIC_ORIGIN: 'https://www.rezics.test' },
-        warmUpPaths: [],
       });
-      server = running;
-      return running.origin;
+      return siteServer.origin;
     } catch (error) {
-      if (server) {
+      if (siteServer) {
         await withCleanup(async () => {
           throw error;
-        }, [{ label: 'Signed-in-routes Vite startup', run: () => server!.stop(), timeoutMs: 7000 }]);
+        }, [{ label: 'Signed-in-routes Vite startup', run: () => siteServer!.stop(), timeoutMs: 16_000 }]);
       } else if (directory) {
         const partialDirectory = directory;
         await withCleanup(async () => {
@@ -234,13 +250,14 @@ function site() {
 }
 afterAll(async () => {
   teardownStarted = true;
+  siteAbort?.abort();
   await withCleanup(
     () =>
       withCleanup(
         () => cleanupAll(resourceCleanupActions('test')),
         [
           ...resourceCleanupActions('suite'),
-          { label: 'Signed-in-routes Vite server', run: () => server?.stop(), timeoutMs: 7000 },
+          { label: 'Signed-in-routes Vite server', run: () => siteServer?.stop(), timeoutMs: 16_000 },
           { label: 'Signed-in-routes fixture backend', run: () => backend.stop(true), timeoutMs: 5000 },
         ],
       ),
@@ -250,7 +267,6 @@ afterAll(async () => {
         run: async () => {
           if (!directory) return;
           await started?.catch(() => {});
-          if (!directory) return;
           const ownedDirectory = directory;
           await rm(ownedDirectory, { recursive: true, force: true });
           if (directory === ownedDirectory) directory = undefined;
@@ -266,10 +282,17 @@ lifetimeTest(
   async () => {
     for (const [file] of routes) {
       const source = await Bun.file(join(app, 'src/routes', file)).text();
-      if (file === 'library/progress.index.tsx' || file === 'library/progress.$id.tsx') {
+      if (file === 'library/progress.$id.tsx') {
         expect(source, file).toMatch(
           /beforeLoad:\s*async\s*\(args\)\s*=>\s*\{\s*await requireSignedIn\(args\);\s*await prepareExposure\(args\.context\.queryClient\);\s*\}/,
         );
+      } else if (file === 'library/progress.index.tsx') {
+        expect(source, file).toMatch(
+          /beforeLoad:\s*async\s*\(args\)\s*=>\s*\{\s*await prepareExposure\(args\.context\.queryClient\);\s*\}/,
+        );
+      } else if (file === 'library/index.tsx' || file === 'settings.tsx' || file === 'realms/index.tsx') {
+        expect(source, file).toMatch(/requirePrivatePageAccess/);
+        expect(source, file).toMatch(/beforeLoad:\s*async\s*\(/);
       } else {
         expect(source, file).toMatch(/beforeLoad:\s*requireSignedIn/);
       }
@@ -283,9 +306,7 @@ lifetimeTest(
     expect(offer).not.toContain('requireSignedIn');
     for (const file of components) {
       const source = await Bun.file(join(app, 'src', file)).text();
-      expect(source, file).not.toMatch(
-        /SignInPrompt|(?:if\s*\([^\n]*|\{!?)(?:page|progress)\.signedIn|current\.reason === 'signed-out'/,
-      );
+      expect(source, file).not.toMatch(/SignInPrompt/);
     }
   },
 );

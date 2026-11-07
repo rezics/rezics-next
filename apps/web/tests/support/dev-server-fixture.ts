@@ -1,9 +1,6 @@
-import { mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
-import { join } from 'node:path';
+import { readFileSync, writeFileSync } from 'node:fs';
 
 export const sharedDevServerEnvName = 'WEB_TEST_DEV_SERVER';
-export const workerFixtureEnvFile = 'dev-fixture-env.json';
-export const workerFixtureLockDirectory = 'dev-fixture.lock';
 
 export const workerFixtureKeys = [
   'KERNEL_ORIGIN',
@@ -19,15 +16,13 @@ export const workerFixtureKeys = [
   'TURNSTILE_SITE_KEY',
   'TURNSTILE_SCRIPT_URL',
   'NATIVE_MEDIA_STORAGE_TOKEN',
-  'LOCAL_MEDIA_ORIGIN',
-  'LOCAL_MEDIA_TOKEN',
   'WORKER_INSPECTOR_PORT',
 ] as const;
 
 export type SharedDevServerRecord = {
   origin: string;
   pid: number;
-  fixtureDirectory: string;
+  workerBindings: WorkerFixtureOverlay;
   cacheDirectory?: string;
   lockHash?: string;
 };
@@ -47,50 +42,39 @@ export function workerFixtureOverlay(env?: NodeJS.ProcessEnv): WorkerFixtureOver
   return present ? overlay : undefined;
 }
 
+export function bindWorkerFixtureOrigins(overlay: WorkerFixtureOverlay, origin: string): WorkerFixtureOverlay {
+  const bound = { ...overlay };
+  for (const key of ['PUBLIC_ORIGIN', 'SITE_ORIGINS'] as const) {
+    const value = bound[key];
+    if (value !== undefined)
+      bound[key] = value.replace(/https?:\/\/(?:127\.0\.0\.1|localhost):(?:undefined|\$\{port\}|\d+)/g, origin);
+  }
+  return bound;
+}
+
+/** A shared server is safe only when every requested override matches its startup snapshot. */
+export function workerFixtureBindingsCompatible(
+  requested: WorkerFixtureOverlay | undefined,
+  startup: WorkerFixtureOverlay,
+): boolean {
+  return Object.entries(requested ?? {}).every(([key, value]) => startup[key] === value);
+}
+
 export function readSharedDevServer(path = process.env[sharedDevServerEnvName]): SharedDevServerRecord | undefined {
   if (!path) return undefined;
-  return JSON.parse(readFileSync(path, 'utf8')) as SharedDevServerRecord;
+  const record = JSON.parse(readFileSync(path, 'utf8')) as Partial<SharedDevServerRecord>;
+  if (
+    typeof record.origin !== 'string' ||
+    typeof record.pid !== 'number' ||
+    !record.workerBindings ||
+    typeof record.workerBindings !== 'object' ||
+    Array.isArray(record.workerBindings) ||
+    Object.values(record.workerBindings).some((value) => typeof value !== 'string')
+  )
+    return undefined;
+  return record as SharedDevServerRecord;
 }
 
 export function writeSharedDevServer(path: string, record: SharedDevServerRecord): void {
   writeFileSync(path, `${JSON.stringify(record)}\n`);
-}
-
-export async function acquireWorkerFixture(
-  fixtureDirectory: string,
-  overlay: WorkerFixtureOverlay | undefined,
-  options: { pollIntervalMs?: number; waitMs?: number } = {},
-): Promise<() => void> {
-  const lockDirectory = join(fixtureDirectory, workerFixtureLockDirectory);
-  const envFile = join(fixtureDirectory, workerFixtureEnvFile);
-  const pollIntervalMs = options.pollIntervalMs ?? 25;
-  const waitMs = options.waitMs ?? 120_000;
-  const deadline = Date.now() + waitMs;
-  mkdirSync(fixtureDirectory, { recursive: true });
-  for (;;) {
-    try {
-      mkdirSync(lockDirectory);
-      break;
-    } catch (error) {
-      if ((error as NodeJS.ErrnoException).code !== 'EEXIST') throw error;
-      if (Date.now() >= deadline)
-        throw new Error(`Web test fixture lock ${lockDirectory} did not release for a per-file overlay`);
-      await Bun.sleep(pollIntervalMs);
-    }
-  }
-  writeFileSync(envFile, `${JSON.stringify(overlay ?? {})}\n`);
-  return () => {
-    rmSync(envFile, { force: true });
-    rmSync(lockDirectory, { recursive: true, force: true });
-  };
-}
-
-export function readWorkerFixtureOverlay(fixtureDirectory: string): WorkerFixtureOverlay | undefined {
-  const path = join(fixtureDirectory, workerFixtureEnvFile);
-  try {
-    return JSON.parse(readFileSync(path, 'utf8')) as WorkerFixtureOverlay;
-  } catch (error) {
-    if ((error as NodeJS.ErrnoException).code === 'ENOENT') return undefined;
-    throw error;
-  }
 }

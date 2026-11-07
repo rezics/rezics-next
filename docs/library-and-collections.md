@@ -52,7 +52,8 @@ Personal notes and priority remain owner-local and revisioned; import evidence d
 explicit review. Copies remain separate holdings with their own status, revision and accepted kind. Optional
 physical-condition observations use the finite `physical-v1` media and packaging vocabulary only when the exact
 accepted Copy kind declares that condition; omission, explicit `unknown` and intentional `null` clear have distinct
-meaning. Current profile advice never changes historical admission.
+meaning. Current profile advice never changes historical admission. Copy and Loan day fields use the locale Calendar
+grid rather than a native date input, so stored Gregorian days keep their calendar meaning.
 
 Personal-score ordering, diary/history, statistics, Progress snapshots and published logs retain the separate
 contracts linked above. An active progress session can coexist with a non-active explicit state. Every allowed
@@ -397,11 +398,13 @@ kind source/release schema and type. Web profile preparation carries that explic
 including its absence on older releases; it never infers support from an ID or label. This current profile advice
 cannot establish historical admission or replace the private detail's per-field accepted pins.
 
-The installed generated client still lacks condition create/update/detail shapes. The retained Content publisher
-must publish those shapes through the official callables before Web can offer condition editing or render condition
-observations. Controls remain unavailable until that publication; profile preparation alone does not enable them.
-The remaining page journey includes the earlier Collection-item management comparison, independent media and
-packaging controls, full-Copy conflict review, exact retries and saved-copy reopening. Native, growth, browser and
+Until whole-Kernel declaration emission publishes Copy list filterOptions, condition write/detail fields and
+`copy-loans`, `@rezics/client` overlays those mounted contracts and yields when the generated envelopes exist.
+Kernel personal-routes already emit `copy-loans`; the client overlay is a no-op for that envelope. Web
+uses only those official types. Independent media and packaging controls, inventory comparison of recorded
+condition, Copy-editor loan commands and `/library/loans` are installed on that overlay. Inventory filter controls
+appear when native `filterOptions` decode or the address already carries kind or status.
+Native, growth, browser and
 promoted acceptance remain with the controller.
 
 A Collection has one identity, curator, visibility, title/description, follow target, Zone mount and schema.org

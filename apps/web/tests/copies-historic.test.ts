@@ -1,6 +1,14 @@
 import { expect, mock, test } from 'bun:test';
 import { createElement, Fragment, type ReactNode } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
+import {
+  createMemoryHistory,
+  createRootRoute,
+  createRoute,
+  createRouter,
+  RouterContextProvider,
+} from '@tanstack/react-router';
+import * as start from '../.storybook/react-start';
 import { createKernelClient, type KernelClient } from '@rezics/client';
 import { copyStatusChange, loadCopiesPage, loadCopyDetail, saveCopy, type CopyItem } from '../src/library/copies-read';
 import {
@@ -13,21 +21,41 @@ import {
 import { m } from '../src/paraglide/messages.js';
 import { CopyConflictReview } from '../src/library/copy-conflict-review';
 
-mock.module('../src/library/copies-actions', () => ({
-  createCopy() {},
-  updateCopy() {},
-  deleteCopy() {},
-  readCopySubject() {},
-  readCopyDetail() {},
-  undoCopy() {},
+mock.module('cloudflare:workers', () => ({ env: { WEBSITE_CLIENT_KEY: '{}' } }));
+mock.module('@tanstack/react-start', () => ({
+  ...start,
+  createIsomorphicFn: () => ({
+    server: (handler: (...args: never[]) => unknown) => ({ client: () => handler }),
+  }),
 }));
+mock.module('@tanstack/react-start/server', () => start);
 mock.module('../src/threads/composer', () => ({ csrfHeaders: () => ({ 'x-csrf-token': 'csrf' }) }));
 mock.module('../src/kernel/exposure', () => ({
   Exposure: ({ children }: { children: ReactNode }) => createElement(Fragment, null, children),
-}));
-mock.module('@tanstack/react-router', () => ({
-  Link: ({ children }: { children: ReactNode }) => createElement('a', null, children),
-  notFound: () => new Error('not found'),
+  operationIsAdmitted: (operation: string, admitted?: readonly string[]) => {
+    if (operation === 'library_entry.delete' || operation === 'library_entry.restore')
+      return admitted?.includes(operation) ?? false;
+    const groups: Record<string, string> = {
+      'copy.list': 'personal_library',
+      'copy.create': 'personal_library',
+      'copy.delete': 'personal_library',
+      'copy.get': 'personal_library',
+      'copy.update': 'personal_library',
+    };
+    return admitted?.includes(groups[operation] ?? operation) ?? false;
+  },
+  operationGroups: {
+    'copy.list': 'personal_library',
+    'copy.create': 'personal_library',
+    'copy.delete': 'personal_library',
+    'copy.get': 'personal_library',
+    'copy.update': 'personal_library',
+  },
+  prepareExposure: () => undefined,
+  useOperation: () => true,
+  useOperationAdmission: () => 'available',
+  readAdmitted: async () => [],
+  readAdmittedResult: async () => ({ state: 'ready', admitted: [] }),
 }));
 const { CopyForm, CopiesPage } = await import('../src/library/copies-page');
 const id = '01a17a3b-7065-7048-8c7f-f4ccfae1f400';
@@ -51,7 +79,16 @@ const conditions = {
   conditionEditing: {
     state: 'supported',
     currentness: 'current',
-    choices: [{ id: 'good', label: 'Good', description: 'Normal signs of use.' }],
+    choices: [
+      { id: 'unknown', label: 'Unknown', description: 'Assessed without a known grade.' },
+      { id: 'mint', label: 'Mint', description: 'No observable wear or defects.' },
+      { id: 'near_mint', label: 'Near mint', description: 'Almost no observable wear.' },
+      { id: 'very_good_plus', label: 'Very good plus', description: 'Minor observable wear.' },
+      { id: 'very_good', label: 'Very good', description: 'Noticeable wear, still fully usable.' },
+      { id: 'good', label: 'Good', description: 'Substantial wear, still usable.' },
+      { id: 'fair', label: 'Fair', description: 'Damage limits ordinary use.' },
+      { id: 'poor', label: 'Poor', description: 'Severe damage prevents ordinary use.' },
+    ],
   },
 } satisfies Pick<NativeCopyPresentation, 'mediaCondition' | 'packagingCondition' | 'conditionEditing'>;
 const presentation = {
@@ -66,7 +103,7 @@ const presentation = {
     statuses: [{ id: 'loan', label: 'Currently on loan', labelLanguage: 'en' }],
   },
 } satisfies NativeCopyPresentation;
-const copy = (extra: Partial<CopyItem> = {}): CopyItem => ({
+const copy =(extra: Partial<CopyItem> = {}): CopyItem => ({
   ...native,
   subject: null,
   idempotencyKey: key,
@@ -103,13 +140,40 @@ const form = (value: CopyItem, extra: object = {}) =>
       ...extra,
     }),
   );
+const pageMarkup = (page: Parameters<typeof CopiesPage>[0]['page']) => {
+  const rootRoute = createRootRoute();
+  const router = createRouter({
+    routeTree: rootRoute.addChildren([
+      createRoute({ getParentRoute: () => rootRoute, path: '/library/copies' }),
+      createRoute({ getParentRoute: () => rootRoute, path: '/library/loans' }),
+    ]),
+    history: createMemoryHistory({ initialEntries: ['/library/copies'] }),
+  });
+  return renderToStaticMarkup(
+    createElement(RouterContextProvider, { router }, createElement(CopiesPage, { page })),
+  );
+};
+
+test('copy editor dates are locale calendar controls rather than native date inputs', async () => {
+  const html = form(copy());
+  expect(html).not.toContain('type="date"');
+  expect(html).toContain(m.library_copy_acquired());
+  expect(html).toContain('aria-haspopup="dialog"');
+  const calendar = await Bun.file(new URL('../src/library/calendar-day-field.tsx', import.meta.url)).text();
+  expect(calendar).not.toMatch(/react-day-picker|date-fns/);
+});
 
 test('raw list keeps two same-edition identities and original facts, with no point-detail requests', async () => {
   const second = { ...native, id: '01a17a3b-7065-7048-8c7f-f4ccfae1f401', kind: 'digital', note: 'Second copy' };
-  const { client, calls } = transport(() => json({ copies: [native, second], next: null }));
+  const options = {
+    kinds: { state: 'available' as const, choices: [{ id: 'print', label: 'Print', meaning: 'available' as const }] },
+    statuses: { state: 'unavailable' as const, choices: [] },
+  };
+  const { client, calls } = transport(() => json({ copies: [native, second], next: null, filterOptions: options }));
   const page = await loadCopiesPage(client, request(), {}, {});
   expect(calls).toHaveLength(1);
   expect(new URL(calls[0]!.url).pathname).toBe('/v1/copies');
+  expect(page.filterOptions).toEqual(options);
   expect(page.copies.map((item) => item.id)).toEqual([native.id, second.id]);
   for (const [index, original] of [native, second].entries()) {
     const { subjectId: _subject, ...fields } = original;
@@ -117,7 +181,7 @@ test('raw list keeps two same-edition identities and original facts, with no poi
     expect(page.copies[index]?.kindLabel).toBeUndefined();
     expect(page.copies[index]?.statusLabel).toBeUndefined();
   }
-  const html = renderToStaticMarkup(createElement(CopiesPage, { page }));
+  const html = pageMarkup(page);
   expect(html).toContain('digital');
   expect(html).not.toContain('physical');
   expect(html.match(/data-slot="list-row"/g)).toHaveLength(2);
@@ -222,6 +286,7 @@ test('malformed or wrong-shape native presentation is unavailable without invent
     { ...presentation, statusEditing: { state: 'supported', statuses: [] } },
     { ...presentation, statusEditing: { state: 'supported', statuses: 'loan' } },
     { ...presentation, statusEditing: { state: 'supported', statuses: [null] } },
+    { ...presentation, conditionEditing: undefined },
     {
       ...presentation,
       statusEditing: { state: 'supported', statuses: [{ id: 'loan', label: 'On loan' }] },
@@ -290,7 +355,11 @@ test('native unknown historic kinds and missing releases retain raw facts withou
 test('unknown and unavailable presentation cannot supply labels or establish status-write support', () => {
   for (const meaning of ['unknown', 'unavailable'] as const) {
     const detail = { ...native, presentation: { ...presentation, meaning } } satisfies NativeCopy;
-    expect(nativeCopyPresentation(detail)).toEqual({ ...conditions, meaning, statusEditing: { state: 'unavailable' } });
+    expect(nativeCopyPresentation(detail)).toEqual({
+      ...conditions,
+      meaning,
+      statusEditing: { state: 'unavailable' },
+    });
   }
 });
 

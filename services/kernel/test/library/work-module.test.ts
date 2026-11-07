@@ -22,9 +22,21 @@ test('the library module runs once after commerce in the single configured kerne
     CHECKOUT_SUCCESS_URL: 'https://web.example.test/success',
     CHECKOUT_CANCEL_URL: 'https://web.example.test/cancel',
   });
-  const worker = await startWorker(readWorkerConfig(env), undefined, env);
+  let decoratedNames: string[] = [];
+  let decoratedLibrary: unknown;
+  const worker = await startWorker(
+    readWorkerConfig(env),
+    (modules) => {
+      decoratedNames = modules.map((module) => module.name);
+      decoratedLibrary = modules.find((module) => module.name === 'library');
+      return modules;
+    },
+    env,
+  );
   const client = await createWorkClient(databaseUrl);
   try {
+    expect(decoratedNames).toEqual(KERNEL_WORK_MODULES.map((module) => module.name));
+    expect(decoratedLibrary).toBe(libraryWorkModule);
     const workflowID = randomId();
     const handle = await client.enqueue(
       { workflowName: 'library.collectionListing', queueName: 'workflows', workflowID },

@@ -3,7 +3,7 @@ import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
-import { admitExplicitHostTestCommand, runFocusedCommand } from '../scripts/focused.ts';
+import { admitExplicitHostTestCommand, admitSerialBunTestCommand, runFocusedCommand } from '../scripts/focused.ts';
 import { webTestPrivateNetworkEnvName } from '../scripts/with-dev-server.ts';
 
 const temporary = mkdtempSync(join(tmpdir(), 'rezics-web-focused-test-'));
@@ -61,6 +61,18 @@ function outputGate(token: string) {
 }
 
 test('named host files use the host-runner path-ignore override', () => {
+  expect(admitSerialBunTestCommand(['bun', 'test', 'tests/page-stories.test.ts'])).toEqual([
+    'bun',
+    'test',
+    '--max-concurrency=1',
+    'tests/page-stories.test.ts',
+  ]);
+  expect(admitSerialBunTestCommand(['bun', 'test', '--max-concurrency=2', 'tests/page-stories.test.ts'])).toEqual([
+    'bun',
+    'test',
+    '--max-concurrency=2',
+    'tests/page-stories.test.ts',
+  ]);
   expect(admitExplicitHostTestCommand(['bun', 'test', 'tests/pages-workers.host.test.ts'])).toEqual([
     'bun',
     'test',

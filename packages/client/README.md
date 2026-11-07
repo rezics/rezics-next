@@ -41,6 +41,11 @@ Decision: until declaration emission succeeds, the Copy list compatibility seam 
 kind/status query and filterOptions schema; Web derives its wire types only from this official client.
 The seam automatically yields to the generated method when its filterOptions envelope is published.
 
+Decision: the Copy write and condition display types derive from the generated copy-condition declarations. The FULL
+presentation editing choices and inventory options remain a mirror until a generated declaration publishes them.
+Decision: the Copy-loan types (`Loan`, `LoanPage`, `LoanMutation`, `LoanWrite`, `LoanFilter`) derive from the published
+generated `copy-loans` route, so Web shares its union. No loan mirror remains.
+
 Decision: `GET /v1/accounts/{accountId}/verification` (`account.read_verification_request`) closes
 `{ verificationRequest, viewerActions }`. e9314e51 publishes that generated closure; this Settings consumer
 decodes the extra JSON field strictly and does not hand-edit declarations or emit a second client.

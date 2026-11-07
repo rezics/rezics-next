@@ -1,5 +1,4 @@
 import { env, WorkflowEntrypoint, type WorkflowEvent, type WorkflowStep } from 'cloudflare:workers';
-import { readTestFixtureOverlay, withTestFixtureEnv } from './test-runtime-bindings.ts';
 import { NonRetryableError } from 'cloudflare:workflows';
 import { authRequest } from './session/routes.ts';
 import { prepareSession } from './session/request.ts';
@@ -571,14 +570,12 @@ const worker = {
 export default {
   scheduled,
   async fetch(request: Request) {
-    return withTestFixtureEnv(readTestFixtureOverlay(request), async () => {
-      const response = await worker.fetch(request);
-      const path = new URL(request.url).pathname;
-      if (!path.startsWith('/auth/') && !path.startsWith('/_serverFn/')) return response;
-      const headers = new Headers(response.headers);
-      headers.set('X-Robots-Tag', 'noindex');
-      return new Response(response.body, { status: response.status, statusText: response.statusText, headers });
-    });
+    const response = await worker.fetch(request);
+    const path = new URL(request.url).pathname;
+    if (!path.startsWith('/auth/') && !path.startsWith('/_serverFn/')) return response;
+    const headers = new Headers(response.headers);
+    headers.set('X-Robots-Tag', 'noindex');
+    return new Response(response.body, { status: response.status, statusText: response.statusText, headers });
   },
 };
 
