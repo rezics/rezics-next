@@ -16,6 +16,7 @@ import {
   formatSeedFailure,
   remainingRequestFromPreparedCommand,
   remainingRequestFromPreparedJournal,
+  readSeedRemainingRequest,
   writeSeedRemainingRequest,
 } from '../src/seed-remaining-request.ts';
 import {
@@ -456,6 +457,29 @@ test('seed remaining request names the prepared classification create without bo
     db.run("INSERT INTO showcase_command VALUES ('k','{\"op\":\"create\",\"source\":{\"source\":\"vndb_cross_media\",\"external_id\":\"vocabulary:vndb.releases.media\",\"converter_revision\":\"vndb-release-classification-vocabulary@1\"},\"subject\":{\"type\":\"skos:ConceptScheme\"}}','prepared')");
     db.close();
     expect(remainingRequestFromPreparedJournal(journal)?.externalId).toBe('vocabulary:vndb.releases.media');
+    const reviewed = {
+      method: 'POST',
+      path: '/v1/subjects:batchWrite',
+      op: 'propose' as const,
+      source: 'rezics_reviewed_vocabulary',
+      externalId: 'v1:reviewed-episode-type-1',
+      nativeType: 'skos:Concept',
+      converter: 'reviewed-vocabulary@1',
+      journalState: 'prepared' as const,
+      status: 503,
+      type: 'https://rezics.com/problems/transaction_retry_exhausted',
+      code: 'transaction_retry_exhausted',
+    };
+    await writeSeedRemainingRequest(directory, reviewed);
+    expect(await readSeedRemainingRequest(directory)).toMatchObject({
+      method: 'POST',
+      path: '/v1/subjects:batchWrite',
+      op: 'propose',
+      source: 'rezics_reviewed_vocabulary',
+      nativeType: 'skos:Concept',
+      status: 503,
+      code: 'transaction_retry_exhausted',
+    });
   } finally {
     await rm(directory, { recursive: true, force: true });
   }

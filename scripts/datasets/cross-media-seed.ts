@@ -18,7 +18,7 @@ import {
   seedShowcasePersonalList,
   type ShowcasePersonalListUpload,
 } from '../../services/importer/src/showcase-personal-list.ts';
-import { seedReviewedCatalogue } from '../../services/importer/src/reviewed-catalogue.ts';
+import { ReviewedCatalogueProblemError, seedReviewedCatalogue } from '../../services/importer/src/reviewed-catalogue.ts';
 import { createSeedDenialDiagnostics } from '../../services/importer/src/showcase-denial-diagnostics.ts';
 import { fetchCrossMediaDumps, type CrossMediaDumpPaths } from './fetch-dumps.ts';
 import { ShowcaseJournal, type ShowcasePublicationResult } from '../../services/importer/src/showcase-publication.ts';
@@ -175,6 +175,7 @@ export async function runDevelopmentSeed(
     port: createImportTransport({
       origin: api,
       tokenProvider,
+      maxAttempts: 5,
       onDeniedResponse: createSeedDenialDiagnostics(join(dirname(state), 'diagnostics')),
     }),
   });
@@ -340,9 +341,11 @@ if (import.meta.main) {
     } else await runCrossMediaSeedCli(args);
   } catch (error) {
     const directory = resolve(import.meta.dir, '../../.temp/cross-media-seed');
+    const reviewed = error instanceof ReviewedCatalogueProblemError ? error.remaining : undefined;
     const journal = remainingRequestFromPreparedJournal(join(directory, 'showcase.sqlite'));
     const transport = error instanceof ImportTransportError ? remainingRequestFromTransport(error) : undefined;
-    const remaining = journal || transport ? mergeRemainingRequest(journal, transport) : undefined;
+    const remaining =
+      reviewed || journal || transport ? mergeRemainingRequest(reviewed ?? journal, transport) : undefined;
     if (remaining) await writeSeedRemainingRequest(directory, remaining);
     process.stderr.write(`${formatSeedFailure(error, remaining)}\n`);
     process.exitCode = 1;

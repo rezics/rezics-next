@@ -1,5 +1,5 @@
 import { Database } from 'bun:sqlite';
-import { mkdir, writeFile } from 'node:fs/promises';
+import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { importTransportCause, type ImportTransportError } from './import-client.ts';
 
@@ -155,4 +155,37 @@ export async function writeSeedRemainingRequest(directory: string, remaining: Se
   const path = join(directory, 'remaining-request.json');
   await writeFile(path, `${JSON.stringify(remaining)}\n`, { mode: 0o600 });
   return path;
+}
+
+export async function readSeedRemainingRequest(directory: string): Promise<SeedRemainingRequest | undefined> {
+  try {
+    const value: unknown = JSON.parse(await readFile(join(directory, 'remaining-request.json'), 'utf8'));
+    if (!value || typeof value !== 'object' || Array.isArray(value)) return undefined;
+    const record = value as Record<string, unknown>;
+    if (typeof record.method !== 'string' || typeof record.path !== 'string') return undefined;
+    const method = /^(GET|POST|PUT|DELETE)$/.test(record.method) ? record.method : 'POST';
+    const path = admit(record.path, PATH) ?? '/v1/subjects:batchWrite';
+    return mergeRemainingRequest(
+      {
+        method,
+        path,
+        ...(admit(record.op, OP) ? { op: admit(record.op, OP) } : {}),
+        ...(admit(record.source, SOURCE_ID) ? { source: admit(record.source, SOURCE_ID) } : {}),
+        ...(admit(record.externalId, EXTERNAL_ID) ? { externalId: admit(record.externalId, EXTERNAL_ID) } : {}),
+        ...(admit(record.nativeType, NATIVE_TYPE) ? { nativeType: admit(record.nativeType, NATIVE_TYPE) } : {}),
+        ...(admit(record.converter, CONVERTER) ? { converter: admit(record.converter, CONVERTER) } : {}),
+        ...(record.journalState === 'prepared' ? { journalState: 'prepared' } : {}),
+      },
+      {
+        method,
+        path,
+        ...(typeof record.status === 'number' ? { status: record.status } : {}),
+        ...(typeof record.type === 'string' ? { type: record.type } : {}),
+        ...(typeof record.code === 'string' ? { code: record.code } : {}),
+        ...(typeof record.phase === 'string' ? { phase: record.phase } : {}),
+      },
+    );
+  } catch {
+    return undefined;
+  }
 }

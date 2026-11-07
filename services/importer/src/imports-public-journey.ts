@@ -17,8 +17,8 @@ import { createImportTransport, importTransportCause, ImportTransportError } fro
 import {
   formatSeedFailure,
   mergeRemainingRequest,
+  readSeedRemainingRequest,
   remainingRequestFromPreparedJournal,
-  remainingRequestFromTransport,
 } from './seed-remaining-request.ts';
 import { ImportSession } from './import-session.ts';
 import { GLOBAL_CONTEXT, selectedSynopsisQueryFromPublic } from './public-bulk-client.ts';
@@ -900,9 +900,10 @@ export async function runImportsPublicJourney(): Promise<WalkInventory> {
       publication = loaded.publication;
       selectJourneyWorks(publication.published);
     } catch (error) {
-      const journal = remainingRequestFromPreparedJournal(resolve(root, '.temp/cross-media-seed/showcase.sqlite'));
-      const transport = error instanceof ImportTransportError ? remainingRequestFromTransport(error) : undefined;
-      const remaining = journal || transport ? mergeRemainingRequest(journal, transport) : undefined;
+      const directory = resolve(root, '.temp/cross-media-seed');
+      const written = await readSeedRemainingRequest(directory);
+      const journal = remainingRequestFromPreparedJournal(resolve(directory, 'showcase.sqlite'));
+      const remaining = written ?? (journal ? mergeRemainingRequest(journal) : undefined);
       seedCause = remaining ? formatSeedFailure(error, remaining) : walkFailureCause(error);
     }
   }

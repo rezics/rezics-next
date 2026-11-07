@@ -1,6 +1,12 @@
 import type { Database } from 'bun:sqlite';
 import { sameStatementProvenance } from './statement-provenance.ts';
-import type { BatchCommand, BatchStatement, BatchWriteRequest, Source } from '@rezics/definitions/bulk';
+import type {
+  BatchCommand,
+  BatchStatement,
+  BatchWriteRequest,
+  BatchWriteResult,
+  Source,
+} from '@rezics/definitions/bulk';
 import seeds from '../../../packages/definitions/src/reviewed-vocabulary.json';
 import {
   bangumiPublicTagScheme,
@@ -23,6 +29,10 @@ import { isImportSourceRecord } from './source-record-runtime.ts';
 import type { ImportSourceRecordMetadataCommand } from './import-contract.ts';
 import type { Owner, RecordBindings } from './record-bindings.ts';
 import { RunStore, type Run } from './run-store.ts';
+import {
+  remainingRequestFromPreparedCommand,
+  type SeedRemainingRequest,
+} from './seed-remaining-request.ts';
 
 export const reviewedCatalogueSource = 'rezics_reviewed_vocabulary';
 export const reviewedCatalogueRevision = 'reviewed-vocabulary@1';
@@ -184,6 +194,75 @@ class ReviewedBindingFencedError extends Error {
     this.name = 'ReviewedBindingFencedError';
   }
 }
+
+export const REVIEWED_CATALOGUE_RETRY_ATTEMPTS = 5;
+
+/** Retryable overload inside a successful batch is not a native refusal. */
+export class ReviewedCatalogueProblemError extends Error {
+  constructor(
+    readonly kind: 'bootstrap' | 'proposal',
+    readonly seedKey: string,
+    readonly remaining: SeedRemainingRequest,
+    problem: unknown,
+  ) {
+    super(`Reviewed catalogue ${kind} ${seedKey}: ${JSON.stringify(problem)}`);
+    this.name = 'ReviewedCatalogueProblemError';
+  }
+}
+
+function retryableBatchItem(item: BatchWriteResult['results'][number]): boolean {
+  return (
+    'problem' in item &&
+    (item.status === 503 || item.status === 429) &&
+    (item.problem as { retryable?: unknown }).retryable === true
+  );
+}
+
+function remainingFromReviewedCommand(command: BatchCommand, seed: Seed): SeedRemainingRequest {
+  return remainingRequestFromPreparedCommand({
+    op: command.op,
+    source: command.source,
+    subject: typeof command.subject === 'object' ? command.subject : { type: seed.type },
+  });
+}
+
+function throwReviewedProblem(
+  kind: 'bootstrap' | 'proposal',
+  seed: Seed,
+  command: BatchCommand,
+  item: Extract<BatchWriteResult['results'][number], { problem: unknown }>,
+): never {
+  const code = (item.problem as { code?: unknown }).code;
+  throw new ReviewedCatalogueProblemError(
+    kind,
+    seed.key,
+    {
+      ...remainingFromReviewedCommand(command, seed),
+      status: item.status,
+      ...(typeof item.problem.type === 'string' ? { type: item.problem.type } : {}),
+      ...(typeof code === 'string' ? { code } : {}),
+    },
+    item.problem,
+  );
+}
+
+async function deliverReviewedCommand(
+  port: ReviewedCataloguePort,
+  seed: Seed,
+  body: BatchWriteRequest,
+  wait: (ms: number) => Promise<void>,
+  signal?: AbortSignal,
+): Promise<BatchWriteResult> {
+  let last: BatchWriteResult | undefined;
+  for (let attempt = 0; attempt < REVIEWED_CATALOGUE_RETRY_ATTEMPTS; attempt++) {
+    await openFence(port, seed, signal);
+    last = await port.batch(body, signal);
+    const item = last.results[0];
+    if (!item || !retryableBatchItem(item) || attempt === REVIEWED_CATALOGUE_RETRY_ATTEMPTS - 1) return last;
+    await wait(200 * 2 ** attempt);
+  }
+  return last!;
+}
 /** Reviewed scalar and classification facts share the ordinary unkeyed property bucket. */
 export function reviewedCatalogueSlot(property: string) {
   return { property, context: globalContext, limit: 100 };
@@ -262,7 +341,9 @@ export async function seedReviewedCatalogue(input: {
   port: ReviewedCataloguePort;
   seeds?: unknown;
   signal?: AbortSignal;
+  wait?: (ms: number) => Promise<void>;
 }): Promise<ReviewedCatalogueResult> {
+  const wait = input.wait ?? ((ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms)));
   const rows = preflight(Object.hasOwn(input, 'seeds') ? input.seeds : seeds);
   const session = new ImportSession(input.path);
   const store = new RunStore<BatchStatement[]>(session.store.database);
@@ -340,10 +421,15 @@ export async function seedReviewedCatalogue(input: {
         subject: { type: seed.type, labels: seed.labels },
       };
       const pending = session.bindings.prepare(o, sourceDigest(create), { commands: [create] });
-      const result = await input.port.batch(JSON.parse(pending.bytes), input.signal);
+      const result = await deliverReviewedCommand(
+        input.port,
+        seed,
+        JSON.parse(pending.bytes) as BatchWriteRequest,
+        wait,
+        input.signal,
+      );
       const bootstrap = result.results[0]!;
-      if ('problem' in bootstrap)
-        throw new Error(`Reviewed catalogue bootstrap ${seed.key}: ${JSON.stringify(bootstrap.problem)}`);
+      if ('problem' in bootstrap) throwReviewedProblem('bootstrap', seed, create, bootstrap);
       session.bindings.acknowledge(o, pending.key, result);
       const claim = session.bindings.claim(o);
       ensure(claim?.state === 'bound');
@@ -370,10 +456,15 @@ export async function seedReviewedCatalogue(input: {
         await openFence(input.port, seed, input.signal);
         const journal = session.bindings.journal(o, command.key);
         ensure(journal);
-        const result = await input.port.batch(JSON.parse(journal.bytes), input.signal);
+        const result = await deliverReviewedCommand(
+          input.port,
+          seed,
+          JSON.parse(journal.bytes) as BatchWriteRequest,
+          wait,
+          input.signal,
+        );
         const proposal = result.results[0]!;
-        if ('problem' in proposal)
-          throw new Error(`Reviewed catalogue proposal ${seed.key}: ${JSON.stringify(proposal.problem)}`);
+        if ('problem' in proposal) throwReviewedProblem('proposal', seed, command, proposal);
         session.bindings.acknowledge(o, command.key, result);
         store.acknowledge(run, result, { recordKey: o.external_id });
         const entry = result.results[0]!;
