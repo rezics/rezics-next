@@ -298,55 +298,70 @@ test('stored authored rows are immutable except erasure to a bodyless tombstone'
 
 test('authored document append and read', async () => {
   const value = input();
-  const report = (
-    await command(async (tx) =>
-      checkGrowth(db, {
-        name: 'authored document append and read',
-        scales: [64, 512, 4096],
-        warmups: 1,
-        repetitions: 1,
-        bounds: { rows: 'constant', statements: 'constant', blocks: 'logarithmic' },
-        async grow(target, scale, previous) {
-          const bytes = Buffer.from(serializeDocument(value.document as ReturnType<typeof fromPlainText>));
-          await seed(
-            target,
-            {
-              name: 'unrelated authored fields',
-              hotPartition: partitionOf(route),
-              hotShare: 1,
-              rows: ({ route: other }) => ({
-                'content.authored_field': [
-                  {
-                    route: other,
-                    id: newId(other),
-                    subject: newId(other),
-                    candidate: newId(other),
-                    revision: 1,
-                    author_account_id: actorId,
-                    body: bytes,
-                    body_sha256: Buffer.from(hash(bytes), 'hex'),
-                    licence: value.licence,
-                    language: value.language,
-                    availability: 'available',
-                  },
-                ],
-              }),
-            },
-            { from: previous, to: scale },
-          );
+  const report = await checkGrowth(db, {
+    name: 'authored document append and read',
+    scales: [64, 512, 4096],
+    warmups: 1,
+    repetitions: 1,
+    bounds: { rows: 'constant', statements: 'constant', blocks: 'logarithmic' },
+    async grow(target, scale, previous) {
+      const bytes = Buffer.from(serializeDocument(value.document as ReturnType<typeof fromPlainText>));
+      await seed(
+        target,
+        {
+          name: 'unrelated authored fields',
+          hotPartition: partitionOf(route),
+          hotShare: 1,
+          rows: ({ route: other }) => ({
+            'content.authored_field': [
+              {
+                route: other,
+                id: newId(other),
+                subject: newId(other),
+                candidate: newId(other),
+                revision: 1,
+                author_account_id: actorId,
+                body: bytes,
+                body_sha256: Buffer.from(hash(bytes), 'hex'),
+                licence: value.licence,
+                language: value.language,
+                availability: 'available',
+              },
+            ],
+          }),
         },
-        async operation() {
-          const proposal = { ...value, candidate: newId(route) };
-          const result = await appendAuthoredField(tx, proposal);
-          expect((await readAuthoredField(tx, route, result.id))?.digest).toBe(result.digest);
-        },
-      }),
-    )
-  ).value;
+        { from: previous, to: scale },
+      );
+    },
+    async operation() {
+      const proposal = { ...value, candidate: newId(route) };
+      await command(async (tx) => {
+        const result = await appendAuthoredField(tx, proposal);
+        expect((await readAuthoredField(tx, route, result.id))?.digest).toBe(result.digest);
+      });
+    },
+  });
   expect(report.samples).toHaveLength(3);
   for (const sample of report.samples) {
     expect(sample.cost.statements).toBeGreaterThan(0);
   }
+});
+
+test('a failed authored operation rolls back and releases its transaction', async () => {
+  const proposal = input();
+  await expect(
+    command(async (tx) => {
+      const result = await appendAuthoredField(tx, proposal);
+      await readAuthoredField(tx, route, result.id);
+      throw new Error('measured sample failed');
+    }),
+  ).rejects.toThrow('measured sample failed');
+  const rows = await db.admin.query('SELECT id FROM content.authored_field WHERE route=$1 AND candidate=$2', [
+    route,
+    proposal.candidate,
+  ]);
+  expect(rows.rows).toEqual([]);
+  await expect(db.pool.query('SELECT 1 AS available')).resolves.toMatchObject({ rows: [{ available: 1 }] });
 });
 
 let creationAccess: ReturnType<typeof admittedAccess>;

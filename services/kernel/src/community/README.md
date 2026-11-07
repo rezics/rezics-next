@@ -9,6 +9,9 @@ This module provides commands, point reads and HTTP routes.
 `createCommunityDeclaration(ambient)` exposes work, events, membership/participation and effects;
 `createCommunityHttpDeclaration(ambient)` adds routes, viewer permissions and native container actions. Workers use
 the first only. Both take `CommunityAmbient.deadlineNow`; domain time remains an explicit `KernelClock`.
+Decision: mounted route schemas and header names (`problemSchema`, `SitemapQuerySchema`, Realm Home board query/page,
+`IDEMPOTENCY_HEADER`, and `SESSION_HEADER`) come directly from their public owning modules, so HTTP and fresh worker
+authorization mount the same Community route inventory without waiting for mutable runtime domain ports.
 Contracts own vocabulary/literals, core owns deadline rules, application owns use cases and adapters own clocks,
 effects and Access factories. Composition binds `ensureCommunityApplication` with `systemCommunityAmbient`;
 tests may supply a fixed ambient. Membership, participation, publication, container/Realm/Board/settings reads,

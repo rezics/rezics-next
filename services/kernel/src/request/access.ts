@@ -263,9 +263,16 @@ export async function accessCommandAuthorization(
     check,
     async prepare(attempt) {
       current = undefined;
+      let preparation: AccessContext;
       try {
-        const preparation = commandAccessContext(context, attempt);
+        preparation = commandAccessContext(context, attempt);
         await requireCommandAdmission(access, actor, preparation);
+      } catch (error) {
+        throwAccessUnavailable(error, context.deadline);
+        if (error instanceof AuthenticationError) throw error;
+        throw denied();
+      }
+      try {
         const evidence = access.prepare ? await access.prepare(actor, action, target, preparation) : null;
         const prepared: Prepared = {
           attempt,

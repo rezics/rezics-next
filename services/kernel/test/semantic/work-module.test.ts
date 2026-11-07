@@ -407,4 +407,7 @@ test('default Semantic composition registers its real locator and bounded local 
   const tombstone = effects.find((effect) => effect.name === 'semantic_erasure');
   expect(tombstone?.types).toEqual(['com.rezics.access.account-tombstoned.v1']);
   expect(ERASURE_LOCATOR_EFFECTS.has(tombstone!.name)).toBe(true);
+  const bootstrap = effects.find((effect) => effect.name === 'identity_epoch_bootstrap');
+  expect(bootstrap?.types).toContain('com.rezics.semantic.identity-epoch.bootstrap.v1');
+  expect(bootstrap?.types).toContain('com.rezics.semantic.identity-epoch.bootstrap-scheduled.v1');
 });

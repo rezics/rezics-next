@@ -2937,6 +2937,8 @@ handler. Disclosure follows the current semantic candidate, as it does for impor
 does not authorize disclosure.
 
 `eraseAuthoredField` requires account admission and `document:erase` on the document at the command's authorization time.
+Decision: authored-field mutation preserves Access's current-account `AuthenticationError` for suspended actors before
+target concealment; missing and non-author document targets still answer not found.
 It runs in the document's partition, clears the body and marks the row erased, while retaining its identity and digest.
 Only the author receives this owner permission. A repeat succeeds without another erased event. Moderation is separate:
 moderators end a harmful field's disclosure with native candidate hide or takedown, so its body is no longer served.
@@ -3000,6 +3002,10 @@ Worker configuration retains R2. This ensures native processing and browser tran
 Native receiving keeps parent/Board statement getters, one-client routing assertions and committed linked
 fixtures. The mounted website scope probe follows the installed Progress action `progress_session:update`
 while retaining media completion and post creation assertions.
+
+Decision: moderation fixtures begin with a reserved imported cover and use the native importer and image job to
+reach available with generated display metadata and variants; exact media takedown retains appeal evidence, while
+the source-cover fence remains a separate command with its own security revision and replay.
 
 Post-image download and document media presentation inherit the permanent
 `claimed_item_id` post's current disclosure chain, including its reservation

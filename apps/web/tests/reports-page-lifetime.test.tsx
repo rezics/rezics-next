@@ -1,5 +1,4 @@
 import { afterAll, afterEach, beforeEach, expect, mock, test } from 'bun:test';
-import { dirname } from 'node:path';
 import { act, StrictMode, type ComponentProps } from 'react';
 import userEvent from '@testing-library/user-event';
 import { createKernelClient } from '@rezics/client';
@@ -12,9 +11,7 @@ import type { ReportActionInput } from '../src/moderation/actions';
 
 // Authored actual composition, UNRUN in this implementation attempt. Only the server-function
 // boundary and native HTTP replies are supplied; the page, cache, queue and cards are real.
-const { Window } = await import(
-  Bun.resolveSync('happy-dom', dirname(Bun.resolveSync('@puckeditor/core', import.meta.dir)))
-);
+const { Window } = await import('happy-dom');
 const window = new Window({ url: 'https://site.test/en/boards/one/moderation' });
 const globals = {
   window,

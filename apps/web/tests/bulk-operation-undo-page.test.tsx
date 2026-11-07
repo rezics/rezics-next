@@ -1,5 +1,4 @@
 import { expect, mock, test } from 'bun:test';
-import { dirname } from 'node:path';
 import { act } from 'react';
 import * as start from '../.storybook/react-start';
 mock.module('cloudflare:workers', () => ({ env: {} }));
@@ -27,7 +26,9 @@ const reads: { data: OperationAddress; resolve: (value: BulkUndoRead) => void }[
 const preparations: { data: UndoTarget; headers: Headers }[] = [];
 const sends: Parameters<RestoreSender>[0][] = [];
 let acknowledge = false;
+const originalRecoveryServer = { ...(await import('../src/library/bulk-operation-recovery-server')) };
 mock.module('../src/library/bulk-operation-recovery-server', () => ({
+  ...originalRecoveryServer,
   readBulkOperation: ({ data }: { data: OperationAddress }) =>
     new Promise<BulkUndoRead>((resolve) => reads.push({ data, resolve })),
 }));
@@ -53,9 +54,7 @@ mock.module('../src/library/entries-actions', () => ({
 }));
 
 test('reopened page reads without CSRF, offers explicit eligible targets, and retains uncertain commands across read recovery', async () => {
-  const { Window } = await import(
-    Bun.resolveSync('happy-dom', dirname(Bun.resolveSync('@puckeditor/core', import.meta.dir)))
-  );
+  const { Window } = await import('happy-dom');
   const window = new Window({ url: `https://site.test/en/library/operations/${id}/undo` });
   const globals = {
     window,
@@ -185,6 +184,7 @@ test('reopened page reads without CSRF, offers explicit eligible targets, and re
       if (descriptor) Object.defineProperty(globalThis, key, descriptor);
       else Reflect.deleteProperty(globalThis, key);
     }
+    mock.module('../src/library/bulk-operation-recovery-server', () => originalRecoveryServer);
     mock.restore();
   }
 });

@@ -16,8 +16,8 @@ bun run --cwd apps/web dev
 
 Run this from the repository root. Vite logs its ready endpoint at `http://127.0.0.1:3000/`; requesting `/` follows
 the normal locale routing to the public shell. Stop this owned server with Ctrl-C. To use another loopback port,
-pass `--port 3001`; an occupied port fails instead of silently changing the endpoint. Localization is generated
-automatically during startup, and TanStack generates routes. Producer-owned client declarations in
+pass `--port 3001`; an occupied port fails instead of silently changing the endpoint. Localization is prepared
+automatically before Vite starts, and TanStack generates routes. Producer-owned client declarations in
 `packages/client/src/kernel/` must be prepared with `bun run --cwd services/kernel client` if absent or stale;
 this is generation, not native service startup.
 
@@ -144,6 +144,13 @@ are at least as new as the catalogues; `messages.js` mtime alone is not enough. 
 Cloudflare-denied `cloudflare.config.ts` dependencies from disk; the browser deny list stays unchanged. The shared Vite
 process fills missing Worker bindings from `.dev.vars.example` without writing `.dev.vars`, forces local Cloudflare
 bindings, and pins the Worker `optimizeDeps` after plugin merge so an isolated network never crawls the Worker graph.
+Decision: focused preparation, `storybook-dev --app` and Vite's serve hook share one app-local generation lock. Each
+caller checks freshness while holding it, compiles only incomplete or stale catalogues, and confirms the barrel,
+runtime and every catalogue leaf are complete before routes or Vite import them. A completed compile is reused by
+the next startup; partial output is completed before imports. Preparation and compiler lines report the stage, child
+PID, attempt, exit status and elapsed time, and cancellation settles the owned compiler and wrapper children. The
+generation parent stays lightweight; only its isolated worker imports the Paraglide compiler, and captured output
+keeps a bounded tail while preserving the original compiler failure.
 Decision: Vite owns test fixture transformation. `server.ts` does not import fixture bindings or honour a request
 header overlay; `WEB_TEST_WORKER_BINDINGS` is captured when Vite starts and injected into `test-runtime-bindings.ts`.
 The Worker selector shim resolves `use-sync-external-store/shim/with-selector` to the ESM adapter and leaves the

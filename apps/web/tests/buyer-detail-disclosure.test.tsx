@@ -1,5 +1,4 @@
 import { afterAll, expect, mock, test } from 'bun:test';
-import { dirname } from 'node:path';
 import type { ReactNode } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import * as start from '../.storybook/react-start';
@@ -11,22 +10,28 @@ import paid from '../src/kernel/recorded/order-paid.json';
 mock.module('cloudflare:workers', () => ({ env: {} }));
 mock.module('@tanstack/react-start', () => start);
 mock.module('@tanstack/react-start/server', () => start);
+const originalSession = { ...(await import('../src/session/query')) };
+const originalExposure = { ...(await import('../src/kernel/exposure')) };
 mock.module('../src/session/query', () => ({
+  ...originalSession,
   useSession: () => ({ state: 'unknown', subject: null, csrfToken: null }),
 }));
 mock.module('../src/kernel/exposure', () => ({
+  ...originalExposure,
   useOperation: () => false,
   Exposure: ({ children }: { children: ReactNode }) => children,
 }));
-afterAll(() => mock.restore());
+afterAll(() => {
+  mock.module('../src/session/query', () => originalSession);
+  mock.module('../src/kernel/exposure', () => originalExposure);
+  mock.restore();
+});
 
 const { OrderPage, applyOrderStatus } = await import('../src/checkout/order-page');
 const { EntitlementPage } = await import('../src/checkout/entitlement-page');
 const { m } = await import('../src/paraglide/messages.js');
 const { getLocale, overwriteGetLocale } = await import('../src/paraglide/runtime.js');
-const { Window } = await import(
-  Bun.resolveSync('happy-dom', dirname(Bun.resolveSync('@puckeditor/core', import.meta.dir)))
-);
+const { Window } = await import('happy-dom');
 
 function receipt(overrides: Partial<OrderPageData> = {}): OrderPageData {
   return {

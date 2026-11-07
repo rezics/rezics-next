@@ -8,7 +8,8 @@ import { createCollectionSource } from '../collection-source.ts';
 import { NativeCollectionWork } from '../collection-native-work.ts';
 import { nativeCollectionOrdinalPageBound } from '../collection-source-native.ts';
 import { readCollectionSourceWorkGroup, readCollectionSourceWorkState } from '../collection-source-work-native.ts';
-import { createMembersPreparation } from '../members-preparation.ts';
+import { requireLibraryMembersPreparation } from '../domain-binding.ts';
+import type { MembersPreparationWorkDefinition } from '../members-preparation.ts';
 import { CANONICAL_SOURCE_RECEIVING_COST } from '../canonical-source-bounds.ts';
 import { COLLECTION_SOURCE_WORK_GROUP_LIMIT } from '../contract/index.ts';
 import type {
@@ -66,7 +67,7 @@ export type ScopedSearchLibraryOperations = Readonly<{
     readWorkDefinition: (
       work: MembersPreparationWorkContext,
       options: Readonly<{ pool: Pool; access: Access; deadline: number }>,
-    ) => ReturnType<ReturnType<typeof createMembersPreparation>['readWorkDefinition']>;
+    ) => Promise<MembersPreparationWorkDefinition | null>;
   }>;
 }>;
 
@@ -101,11 +102,13 @@ export function createScopedSearchLibraryOperations(): ScopedSearchLibraryOperat
         options: Readonly<{ pool: Pool; access: Access; deadline: number }>,
       ) {
         const resources = currentOperationalResources(work.tx);
-        return createMembersPreparation({
-          pool: resources.pool,
-          workClient: resources.workClient,
-          access: options.access,
-        }).readWorkDefinition(work.tx, work.locator);
+        return requireLibraryMembersPreparation()
+          .createPreparation({
+            pool: resources.pool,
+            workClient: resources.workClient,
+            access: options.access,
+          })
+          .readWorkDefinition(work.tx, work.locator);
       },
     }),
   });

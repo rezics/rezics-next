@@ -1,5 +1,4 @@
 import { afterAll, expect, mock, test } from 'bun:test';
-import { dirname } from 'node:path';
 import { act } from 'react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { createMemoryHistory, createRootRouteWithContext, createRouter, RouterProvider } from '@tanstack/react-router';
@@ -14,18 +13,7 @@ mock.module('@tanstack/react-start', () => start);
 mock.module('@tanstack/react-start/server', () => start);
 mock.module('cloudflare:workers', () => ({ env: {} }));
 mock.module('../src/session/guard', () => ({ requireSignedIn: async () => {} }));
-mock.module('../src/kernel/exposure', () => ({
-  prepareExposure: async () => {},
-  readAdmittedResult: async () => ({ admitted: ['personal_library'], state: 'ready' }),
-}));
-mock.module('../src/session/request', () => ({
-  prepareSession: async () => {},
-  sessionSubject: () => 'viewer',
-  viewerCredential: () => 'Bearer viewer',
-}));
-const { Window } = await import(
-  Bun.resolveSync('happy-dom', dirname(Bun.resolveSync('@puckeditor/core', import.meta.dir)))
-);
+const { Window } = await import('happy-dom');
 const operationId = '12345678-1234-4234-8234-123456789abc';
 const otherId = '22345678-1234-4234-8234-123456789abc';
 const window = new Window({ url: `https://site.test/library/operations/${operationId}` });
@@ -47,6 +35,7 @@ const saved = new Map(Object.keys(globals).map((key) => [key, Object.getOwnPrope
 for (const [key, value] of Object.entries(globals))
   Object.defineProperty(globalThis, key, { configurable: true, writable: true, value });
 afterAll(async () => {
+  mock.module('../src/library/bulk-operation-recovery-server', () => originalRecoveryServer);
   mock.restore();
   await window.happyDOM.close();
   for (const [key, descriptor] of saved) {
@@ -91,6 +80,7 @@ function operation(id: string): LibraryBulkOperation {
     reason: null,
   };
 }
+const originalRecoveryServer = { ...(await import('../src/library/bulk-operation-recovery-server')) };
 const reads: Array<{ operationId: string; cursor?: string }> = [];
 const commands: unknown[] = [];
 let fail = false,
@@ -114,6 +104,7 @@ function page(cursor?: string) {
   return { outcomes, next: cursor === undefined ? 'b' : cursor === 'b' ? 'c' : cursor === 'c' ? 'd' : null };
 }
 mock.module('../src/library/bulk-operation-recovery-server', () => ({
+  ...originalRecoveryServer,
   readBulkOperationRecovery: async ({ data }: { data: { operationId: string; cursor?: string } }) => {
     reads.push(data);
     return { state: 'available', operation: operation(data.operationId), ...page(data.cursor) };

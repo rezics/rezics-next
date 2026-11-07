@@ -8,11 +8,13 @@ const generator = join(app, 'scripts/generate.ts');
 async function runGeneration(failures: number, message: string, code?: string, runtime: 'bun' | 'node' = 'bun') {
   const directory = mkdtempSync(join(app, '../../.temp/web-generate-'));
   const attempts = join(directory, 'attempts');
+  const compilerImports = join(directory, 'compiler-imports');
   const output = join(directory, 'output');
   const fakeCompiler = join(directory, 'compiler.ts');
   writeFileSync(
     fakeCompiler,
     `import { appendFileSync, readFileSync, writeFileSync } from 'node:fs';\n` +
+      `appendFileSync(${JSON.stringify(compilerImports)}, 'load\\n');\n` +
       `export async function compile() {\n` +
       `  appendFileSync(${JSON.stringify(attempts)}, 'attempt\\n');\n` +
       `  const count = readFileSync(${JSON.stringify(attempts)}, 'utf8').trim().split('\\n').length;\n` +
@@ -31,11 +33,15 @@ async function runGeneration(failures: number, message: string, code?: string, r
   const stderrPromise = new Response(child.stderr).text();
   const [codeResult, stdout, stderr] = await Promise.all([child.exited, stdoutPromise, stderrPromise]);
   const attemptsMade = existsSync(attempts) ? readFileSync(attempts, 'utf8').trim().split('\n').length : 0;
+  const compilerImportsMade = existsSync(compilerImports)
+    ? readFileSync(compilerImports, 'utf8').trim().split('\n').length
+    : 0;
   return {
     code: codeResult,
     stdout,
     stderr,
     attemptsMade,
+    compilerImportsMade,
     generated: existsSync(output),
     cleanup: () => rmSync(directory, { recursive: true, force: true }),
   };
@@ -46,7 +52,10 @@ test('retries Lix failures in new Node processes and succeeds', async () => {
   try {
     expect(result.code).toBe(0);
     expect(result.attemptsMade).toBe(2);
-    expect(result.stdout).toBe('');
+    expect(result.compilerImportsMade).toBe(2);
+    expect(result.stdout).toContain('[paraglide] stage=compiler-load pid=');
+    expect(result.stdout).toContain('[paraglide] stage=compile pid=');
+    expect(result.stderr).toContain('[paraglide] stage=compiler attempt=1/3 pid=');
     expect(result.stderr).toContain(
       'Retrying Paraglide compilation (attempt 2/3): Lix open did not settle within 30000ms',
     );
@@ -61,7 +70,10 @@ test('retries Lix timeouts in new processes and succeeds on a later compilation'
   try {
     expect(result.code).toBe(0);
     expect(result.attemptsMade).toBe(2);
-    expect(result.stdout).toBe('');
+    expect(result.compilerImportsMade).toBe(2);
+    expect(result.stdout).toContain('[paraglide] stage=compiler-load pid=');
+    expect(result.stdout).toContain('[paraglide] stage=compile pid=');
+    expect(result.stderr).toContain('[paraglide] stage=compiler attempt=1/3 pid=');
     expect(result.stderr).toContain(
       'Retrying Paraglide compilation (attempt 2/3): Lix open did not settle within 30000ms',
     );
@@ -80,6 +92,8 @@ test('retries Lix worker errors identified by code and reports the first error l
   try {
     expect(result.code).toBe(0);
     expect(result.attemptsMade).toBe(2);
+    expect(result.compilerImportsMade).toBe(2);
+    expect(result.stderr).toContain('[paraglide] stage=compiler attempt=1/3');
     expect(result.stderr).toContain(
       'Retrying Paraglide compilation (attempt 2/3): Lix worker did not acknowledge request receipt within 30000ms',
     );
@@ -94,6 +108,7 @@ test('retries twice and exits with the last Lix error after the third failure', 
   try {
     expect(result.code).not.toBe(0);
     expect(result.attemptsMade).toBe(3);
+    expect(result.compilerImportsMade).toBe(3);
     expect(result.stderr.match(/Retrying Paraglide compilation/gu)).toHaveLength(2);
     expect(result.stderr).toContain('LixError: Lix worker is closed');
     expect(result.stderr).toContain('additional context');
@@ -108,6 +123,7 @@ test('does not retry compilation errors outside the Lix failure signatures', asy
   try {
     expect(result.code).not.toBe(0);
     expect(result.attemptsMade).toBe(1);
+    expect(result.compilerImportsMade).toBe(1);
     expect(result.stderr).not.toContain('Retrying Paraglide compilation');
     expect(result.stderr).toContain('Invalid message syntax');
   } finally {
@@ -115,13 +131,17 @@ test('does not retry compilation errors outside the Lix failure signatures', asy
   }
 }, 120_000);
 
-test('a successful first compilation prints no retry message and writes generated output', async () => {
+test('a successful first compilation reports compiler stage evidence and writes generated output', async () => {
   const result = await runGeneration(0, 'unused');
   try {
     expect(result.code).toBe(0);
     expect(result.attemptsMade).toBe(1);
-    expect(result.stdout).toBe('');
-    expect(result.stderr).toBe('');
+    expect(result.compilerImportsMade).toBe(1);
+    expect(result.stdout).toContain('[paraglide] stage=compiler-load pid=');
+    expect(result.stdout).toMatch(/\[paraglide\] stage=compile pid=\d+ complete/u);
+    expect(result.stderr).toContain('[paraglide] stage=compiler attempt=1/3 pid=');
+    expect(result.stderr).toContain('exit=0');
+    expect(result.stderr).not.toContain('Retrying Paraglide compilation');
     expect(result.generated).toBe(true);
   } finally {
     result.cleanup();

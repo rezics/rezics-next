@@ -53,23 +53,34 @@ function setMtime(file: string, milliseconds: number): void {
   utimesSync(file, seconds, seconds);
 }
 
-test('missing Paraglide messages are generated once before bun test runs', () => {
+function writeGeneratedOutput(app: ReturnType<typeof makeApp>, barrel = 'export {}\n'): string[] {
+  const output = join(app.directory, 'src/paraglide');
+  const leaves = join(output, 'messages');
+  mkdirSync(leaves, { recursive: true });
+  writeFileSync(app.output, barrel);
+  writeFileSync(join(output, 'runtime.js'), 'export const locales = ["en"];\n');
+  const access = join(leaves, REQUIRED_PER_MESSAGE_MODULE);
+  writeFileSync(access, 'export const access_account = () => "Account";\n');
+  return [app.output, join(output, 'runtime.js'), access];
+}
+
+test('missing Paraglide messages are generated once before bun test runs', async () => {
   const app = makeApp();
   try {
     writeFileSync(join(app.messages, 'en.json'), '{}');
 
-    expect(ensureMessagesReady(app.directory)).toBe(0);
+    expect(await ensureMessagesReady(app.directory)).toBe(0);
     expect(existsSync(app.output)).toBe(true);
     expect(recordCalls(app.calls)).toEqual(['generate']);
 
-    expect(ensureMessagesReady(app.directory)).toBe(0);
+    expect(await ensureMessagesReady(app.directory)).toBe(0);
     expect(recordCalls(app.calls)).toEqual(['generate']);
   } finally {
     app.cleanup();
   }
 });
 
-test('fresh output is kept when it is newer than every message file', () => {
+test('fresh output with every catalogue leaf is reused', async () => {
   const app = makeApp();
   try {
     const messageFiles = [
@@ -83,77 +94,83 @@ test('fresh output is kept when it is newer than every message file', () => {
       'zh-Hant.json',
     ];
     for (const name of messageFiles) writeFileSync(join(app.messages, name), '{}');
-    mkdirSync(join(app.directory, 'src/paraglide'), { recursive: true });
-    writeFileSync(app.output, 'fresh');
-    writeFileSync(join(app.directory, 'src/paraglide/runtime.js'), 'fresh');
+    const generated = writeGeneratedOutput(app);
     const base = Date.now() - 60_000;
     for (const [index, name] of messageFiles.entries()) setMtime(join(app.messages, name), base + index * 1000);
-    setMtime(app.output, base + 10_000);
-    setMtime(join(app.directory, 'src/paraglide/runtime.js'), base + 10_000);
+    for (const file of generated) setMtime(file, base + 10_000);
 
     expect(messagesCurrent(app.directory)).toBe(true);
-    expect(ensureMessagesReady(app.directory)).toBe(0);
+    expect(await ensureMessagesReady(app.directory)).toBe(0);
     expect(recordCalls(app.calls)).toEqual([]);
   } finally {
     app.cleanup();
   }
 });
 
-test('messages.js without a catalogue leaf is regenerated', () => {
+test('partial output is completed before it becomes current and later startup reuses it', async () => {
   const app = makeApp();
   try {
     writeFileSync(join(app.messages, 'en.json'), JSON.stringify({ access_account: 'Account' }));
     mkdirSync(join(app.directory, 'src/paraglide'), { recursive: true });
-    writeFileSync(app.output, 'partial');
+    writeFileSync(app.output, `export { access_account } from './messages/${REQUIRED_PER_MESSAGE_MODULE}';\n`);
     writeFileSync(join(app.directory, 'src/paraglide/runtime.js'), 'fresh');
     const base = Date.now() - 60_000;
     setMtime(join(app.messages, 'en.json'), base);
     setMtime(app.output, base + 10_000);
 
     expect(messagesCurrent(app.directory)).toBe(false);
-    expect(ensureMessagesReady(app.directory)).toBe(0);
+    expect(await ensureMessagesReady(app.directory)).toBe(0);
     expect(recordCalls(app.calls)).toEqual(['generate']);
     expect(existsSync(join(app.directory, 'src/paraglide/messages/access_account.js'))).toBe(true);
     expect(messagesCurrent(app.directory)).toBe(true);
-    expect(ensureMessagesReady(app.directory)).toBe(0);
+    expect(await ensureMessagesReady(app.directory)).toBe(0);
     expect(recordCalls(app.calls)).toEqual(['generate']);
   } finally {
     app.cleanup();
   }
 });
 
-test('messages newer than the output cause generation again', () => {
+test('simultaneous preparation callers share one compile and recheck freshness under the lock', async () => {
+  const app = makeApp();
+  try {
+    writeFileSync(join(app.messages, 'en.json'), '{}');
+
+    expect(await Promise.all([ensureMessagesReady(app.directory), ensureMessagesReady(app.directory)])).toEqual([0, 0]);
+    expect(recordCalls(app.calls)).toEqual(['generate']);
+  } finally {
+    app.cleanup();
+  }
+});
+
+test('messages newer than the output cause generation again', async () => {
   const app = makeApp();
   try {
     const message = join(app.messages, 'en.json');
     writeFileSync(message, '{}');
-    mkdirSync(join(app.directory, 'src/paraglide'), { recursive: true });
-    writeFileSync(app.output, 'stale');
-    writeFileSync(join(app.directory, 'src/paraglide/runtime.js'), 'stale');
+    const generated = writeGeneratedOutput(app);
     const base = Date.now() - 60_000;
-    setMtime(app.output, base);
-    setMtime(join(app.directory, 'src/paraglide/runtime.js'), base);
+    for (const file of generated) setMtime(file, base);
     setMtime(message, base + 10_000);
 
-    expect(ensureMessagesReady(app.directory)).toBe(0);
+    expect(await ensureMessagesReady(app.directory)).toBe(0);
     expect(recordCalls(app.calls)).toEqual(['generate']);
   } finally {
     app.cleanup();
   }
 });
 
-test('generation failure returns its exit code and prevents tests from starting', () => {
+test('generation failure returns its exit code and prevents tests from starting', async () => {
   const app = makeApp();
   try {
     writeFileSync(join(app.messages, 'en.json'), '{}');
     writeFileSync(join(app.directory, 'fail-generation'), '');
 
-    expect(ensureMessagesReady(app.directory)).toBe(37);
+    expect(await ensureMessagesReady(app.directory)).toBe(37);
     expect(recordCalls(app.calls)).toEqual(['generate']);
     expect(existsSync(app.output)).toBe(false);
 
     const callbackStart = wrapperSource.indexOf('async (slotEnvironment) => {');
-    const readinessCall = wrapperSource.indexOf('ensureMessagesReady(app)');
+    const readinessCall = wrapperSource.indexOf('ensureMessagesReady(app, slotEnvironment)');
     const spawn = wrapperSource.indexOf('Bun.spawn(invocation');
     expect(callbackStart).toBeGreaterThanOrEqual(0);
     expect(readinessCall).toBeGreaterThan(callbackStart);
@@ -164,7 +181,7 @@ test('generation failure returns its exit code and prevents tests from starting'
   }
 });
 
-test('a barrel that imports per-message modules is not current until access_account.js exists', () => {
+test('a barrel that imports a per-message module is not current until the leaf exists', () => {
   const app = makeApp();
   try {
     writeFileSync(join(app.messages, 'en.json'), '{"access_account":"Account"}');
@@ -186,7 +203,7 @@ test('a barrel that imports per-message modules is not current until access_acco
 
 test('isolated wrapper checks readiness only for bun test, inside the local or check-host callback', () => {
   const callbackStart = wrapperSource.indexOf('async (slotEnvironment) => {');
-  const readinessCall = wrapperSource.indexOf('ensureMessagesReady(app)');
+  const readinessCall = wrapperSource.indexOf('ensureMessagesReady(app, slotEnvironment)');
   const commandCondition = wrapperSource.indexOf("appCommand[0] === 'bun' && appCommand[1] === 'test'");
   const firstRun = wrapperSource.indexOf('for (const run of commands)');
   const spawn = wrapperSource.indexOf('Bun.spawn(invocation');

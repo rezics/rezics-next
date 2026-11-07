@@ -606,7 +606,8 @@
         "services/kernel/src/library/contract/work-dimensions.ts",
         "services/kernel/src/library/contract/continue.ts",
         "services/kernel/src/library/contract/index.ts",
-        "services/kernel/src/library/contract/collection-policy.ts"
+        "services/kernel/src/library/contract/collection-policy.ts",
+        "services/kernel/src/library/contract/members-preparation.ts"
       ],
       "allowedDependencies": [],
       "capabilities": []
@@ -625,7 +626,10 @@
       "kind": "application",
       "owner": "commerce",
       "paths": ["services/kernel/src/library/application/**"],
-      "publicEntries": ["services/kernel/src/library/application/index.ts"],
+      "publicEntries": [
+        "services/kernel/src/library/application/index.ts",
+        "services/kernel/src/library/application/members-preparation.ts"
+      ],
       "allowedDependencies": ["kernel-library-contract", "kernel-library-core"],
       "capabilities": ["library-use-cases"]
     },
@@ -650,6 +654,9 @@
         "services/kernel/src/library/work-module.ts",
         "services/kernel/src/library/adapters/continue-page.ts",
         "services/kernel/src/library/adapters/index.ts",
+        "services/kernel/src/library/adapters/members-preparation.ts",
+        "services/kernel/src/library/owner-filter-plan.ts",
+        "services/kernel/src/library/domain.ts",
         "services/kernel/src/library/domain-binding.ts",
         "services/kernel/src/library/identity-original-work.ts",
         "services/kernel/src/library/identity-scope-effects.ts",

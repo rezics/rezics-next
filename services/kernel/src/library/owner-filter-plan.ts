@@ -19,17 +19,7 @@ import type { LeafEvidence } from '../semantic/scope-leaf-evidence.ts';
 import { decodeListCursor, encodeListCursor, type ListCursorBinding } from '../tokens/list-cursor.ts';
 import type { KeyRing } from '../tokens/seal.ts';
 import type { WorkClient } from '../work/client.ts';
-import {
-  bindNativeOwnerFilterRead,
-  type NativeOwnerFilterCeilings,
-  releaseNativeOwnerFilterRead,
-  revalidateOwnerFilterDisclosure,
-  nativeOwnerFilterBinding,
-  nativeOwnerFilterPagePlan,
-  withNativeOwnerFilterSource,
-} from './owner-filter-native-binding.ts';
-import { readNativeOwnerFilterClosure } from './owner-filter-native-closure.ts';
-import { createMembersPreparation } from './members-preparation.ts';
+import type { NativeOwnerFilterCeilings } from './owner-filter-native-binding.ts';
 import { attachCollectionListFacts } from './collection-list-facts.ts';
 import {
   createOrdinaryCollectionPageSource,
@@ -41,19 +31,15 @@ import { type WorkDimensions } from './contract/work-dimensions.ts';
 import { NativeCollectionWork } from './collection-native-work.ts';
 import {
   admitCollectionMemberQuery,
-  evaluateOwnerFilterLeaves,
-  matchOwnerFilterCatalogue,
-  matchOwnerFilterState,
-  matchOwnerFilterSupport,
-  ownerFilterStateWinner,
   type CollectionMemberAdmission,
   type CollectionMemberQuery,
-  type OwnerFilterEntryFact,
   type OwnerFilterFactLocator,
-  type OwnerFilterNativeFact,
 } from './owner-filter.ts';
 import { readNativeCollectionMemberAdmission } from './owner-filter-admission.ts';
 import { ordinaryCollectionPagePlan, type OrdinaryCollectionPagePlan } from './ordinary-read-bounds.ts';
+import type { MembersPreparation, PreparationDefinitionInput } from './members-preparation.ts';
+import type { NativeOwnerFilterCapability } from './contract/members-preparation.ts';
+import { requireLibraryMembersPreparation } from './domain-binding.ts';
 
 type Dependencies = {
   pool: Pool;
@@ -63,6 +49,7 @@ type Dependencies = {
   clock?: KernelClock;
   workClient?: () => Promise<WorkClient>;
 };
+export type OwnerFilterPlanDependencies = Dependencies;
 type Unavailable = Readonly<{ status: 'unavailable' }>;
 
 /** Private structural inputs to the Library matcher, never permission or an HTTP-supplied alias list.
@@ -81,37 +68,6 @@ export type OwnerFilterReadBinding = Readonly<{
   scope: IdentityScopeObservation;
 }>;
 
-/** Bind the current native Source and scoped capture at the caller's actual authoritative time.
- * Commands retain their executor time and partition; Search transfers its existing reservation and read time.
- */
-export async function bindOwnerFilterRead(
-  dependencies: Omit<Dependencies, 'tokens'>,
-  actor: Actor,
-  collectionId: string,
-  admission: CollectionMemberAdmission,
-  deadline: number,
-  attempt?: CommandAttempt,
-  pagePlan?: OrdinaryCollectionPagePlan,
-  ceilings?: NativeOwnerFilterCeilings,
-): Promise<Unavailable | Readonly<{ status: 'bound'; binding: OwnerFilterReadBinding }>> {
-  return bindNativeOwnerFilterRead(dependencies, actor, collectionId, admission, deadline, attempt, pagePlan, ceilings);
-}
-
-/** Complete native original/fact closure, independently of positive candidate enumeration.
- * Missing coverage never supplies private absence, even underneath a negative filter branch.
- */
-export async function readOwnerFilterCandidateClosure(
-  binding: OwnerFilterReadBinding,
-  source: PreparedCollectionSource,
-  subjectId: string,
-  work: NativeCollectionWork,
-  deferDisclosure = false,
-): Promise<Unavailable | Readonly<{ status: 'complete'; closure: OwnerFilterCandidateClosure }>> {
-  return withNativeOwnerFilterSource(binding, work, () =>
-    readNativeOwnerFilterClosure(binding, source, subjectId, work, deferDisclosure),
-  );
-}
-
 const zero: WorkDimensions = {
   candidateKeys: 0,
   nativeRows: 0,
@@ -128,12 +84,14 @@ async function prepareSparsePage(
   deps: Dependencies,
   admission: CollectionMemberAdmission,
   binding: OwnerFilterReadBinding,
+  reservation: OwnerFilterReservation,
 ): Promise<{ preparing: true }> {
   if (!deps.workClient || !admission.filter || !admission.release || !admission.releaseDigest) throw unavailable();
   const workClient = await deps.workClient();
   // reserve owns the fenced operational transaction, exact definition bytes, durable intent and enqueue.
   // The caller never enqueues again, touches LRU on a duplicate, or claims a pending result is ready.
-  const result = await createMembersPreparation({ pool: deps.pool, access: deps.access, workClient }).reserve(
+  const result = await reservation.reserve(
+    { pool: deps.pool, access: deps.access, workClient },
     binding.input.actor,
     binding.input.collectionId,
     [
@@ -150,74 +108,102 @@ async function prepareSparsePage(
   return { preparing: true };
 }
 
-/** All native points share the caller's snapshot and ledger. No Boolean branch skips authority or evidence. */
-export async function readOwnerFilterCandidate(
+export type OwnerFilterReservation = Readonly<{
+  reserve(
+    dependencies: Readonly<{ pool: Pool; access: Access; workClient: WorkClient }>,
+    actor: Actor,
+    collectionId: string,
+    definitions: readonly PreparationDefinitionInput[],
+    options?: Parameters<MembersPreparation['reserve']>[3],
+  ): ReturnType<MembersPreparation['reserve']>;
+}>;
+
+export type OwnerFilterNativeOperations = NativeOwnerFilterCapability<
+  Omit<Dependencies, 'tokens'>,
+  Actor,
+  CollectionMemberAdmission,
+  OwnerFilterReadBinding,
+  PreparedCollectionSource,
+  NativeCollectionWork,
+  OwnerFilterCandidateClosure,
+  RelationFacetMatch,
+  CommandAttempt,
+  OrdinaryCollectionPagePlan,
+  NativeOwnerFilterCeilings,
+  CollectionSourceObservation,
+  Pick<PoolClient, 'query'>,
+  import('./owner-filter-native-binding.ts').NativeOwnerFilterBinding
+>;
+
+export type OwnerFilterPlan = Readonly<{
+  bindOwnerFilterRead(
+    actor: Actor,
+    collectionId: string,
+    admission: CollectionMemberAdmission,
+    deadline: number,
+    attempt?: CommandAttempt,
+    pagePlan?: OrdinaryCollectionPagePlan,
+    ceilings?: NativeOwnerFilterCeilings,
+  ): Promise<Unavailable | Readonly<{ status: 'bound'; binding: OwnerFilterReadBinding }>>;
+  readOwnerFilterCandidateClosure(
+    binding: OwnerFilterReadBinding,
+    source: PreparedCollectionSource,
+    subjectId: string,
+    work: NativeCollectionWork,
+    deferDisclosure?: boolean,
+  ): ReturnType<typeof readOwnerFilterCandidateClosureNative>;
+  readOwnerFilterCandidate(
+    client: Pick<PoolClient, 'query'>,
+    admission: CollectionMemberAdmission,
+    closure: OwnerFilterCandidateClosure,
+    work: NativeCollectionWork,
+  ): ReturnType<typeof readOwnerFilterCandidateNative>;
+  readBoundOwnerFilterPage(
+    admission: CollectionMemberAdmission,
+    options: CollectionMemberQuery,
+    binding: OwnerFilterReadBinding,
+  ): Promise<{ members: { kind: 'dynamic'; subjectId: string }[]; next: string | null } | { preparing: true }>;
+  readOwnerFilterPage(
+    actor: Actor,
+    collectionId: string,
+    options: CollectionMemberQuery,
+    deadline: number,
+  ): ReturnType<typeof readOwnerFilterPageNative>;
+}>;
+
+function bindOwnerFilterReadNative(
+  deps: Omit<Dependencies, 'tokens'>,
+  native: OwnerFilterNativeOperations,
+  actor: Actor,
+  collectionId: string,
+  admission: CollectionMemberAdmission,
+  deadline: number,
+  attempt?: CommandAttempt,
+  pagePlan?: OrdinaryCollectionPagePlan,
+  ceilings?: NativeOwnerFilterCeilings,
+) {
+  return native.bind(deps, actor, collectionId, admission, deadline, attempt, pagePlan, ceilings);
+}
+
+function readOwnerFilterCandidateClosureNative(
+  native: OwnerFilterNativeOperations,
+  binding: OwnerFilterReadBinding,
+  source: PreparedCollectionSource,
+  subjectId: string,
+  work: NativeCollectionWork,
+  deferDisclosure = false,
+) {
+  return native.readClosure(binding, source, subjectId, work, deferDisclosure);
+}
+
+function readOwnerFilterCandidateNative(
+  native: OwnerFilterNativeOperations,
   client: Pick<PoolClient, 'query'>,
   admission: CollectionMemberAdmission,
   closure: OwnerFilterCandidateClosure,
   work: NativeCollectionWork,
-): Promise<RelationFacetMatch> {
-  const plan = admission.plan;
-  if (plan === null) return true;
-  const facts: OwnerFilterNativeFact[] = [];
-  const entries: OwnerFilterEntryFact[] = [];
-  const presence: boolean[] = [];
-  const wantsPresence = plan.leaves.some((leaf) => leaf.kind === 'owner' && 'presence' in leaf.leaf.owner);
-  const seen = new Set<string>();
-  const originals = new Set<string>();
-  let raw = 0;
-  for (const original of closure.originals) {
-    raw += 1 + original.facts.length;
-    if (raw > 100) throw unavailable();
-  }
-  for (const original of closure.originals) {
-    if (originals.has(original.subjectId) || routeOf(original.subjectId) === null)
-      throw new TypeError('Invalid native owner original closure');
-    originals.add(original.subjectId);
-    for (const locator of original.facts) {
-      if (locator.subjectId !== original.subjectId) throw new TypeError('Foreign native owner fact');
-      const key = JSON.stringify(locator);
-      if (seen.has(key)) throw new TypeError('Duplicate native owner locator');
-      seen.add(key);
-      if (!admission.owner) throw new TypeError('Native owner family was not admitted');
-      if (wantsPresence) presence.push(await admission.owner.readPresence(client, locator, work));
-      const needed = plan.leaves.some((leaf) => {
-        if (leaf.kind !== 'owner') return false;
-        const owner = leaf.leaf.owner;
-        return (
-          ('state' in owner && locator.kind === 'entry') ||
-          ('label' in owner && locator.kind === 'label' && locator.labelId === owner.label.id) ||
-          ('session' in owner && locator.kind === 'session') ||
-          ('holding' in owner && locator.kind === 'holding')
-        );
-      });
-      // Presence uses independent fixed-width native liveness points, without hydrating a profile pin.
-      if (!needed) continue;
-      const fact = await admission.owner.read(client, locator, work);
-      if (!fact) continue;
-      facts.push(fact);
-      if (fact.kind === 'entry') entries.push(fact);
-    }
-  }
-  if (!originals.has(closure.subjectId)) throw new TypeError('Missing native owner terminal original');
-  const winner = ownerFilterStateWinner(entries);
-  const observations = new Map<string, RelationFacetMatch>();
-  for (const leaf of plan.leaves) {
-    const key = currentOwnerClauseKey(leaf);
-    if (leaf.kind === 'catalogue') {
-      const evidence = closure.catalogue.get(key);
-      observations.set(key, evidence ? matchOwnerFilterCatalogue(leaf, evidence) : 'not_proven');
-      continue;
-    }
-    const owner = leaf.leaf.owner;
-    if ('presence' in owner) observations.set(key, presence.some(Boolean));
-    else if ('state' in owner) observations.set(key, matchOwnerFilterState(owner.state, winner, closure.releases));
-    else {
-      const matches = facts.map((fact) => matchOwnerFilterSupport(owner, fact, closure.releases));
-      observations.set(key, matches.includes(true) ? true : matches.includes('not_proven') ? 'not_proven' : false);
-    }
-  }
-  return evaluateOwnerFilterLeaves(plan, observations);
+) {
+  return native.evaluate(client, admission, closure, work);
 }
 
 function compatible(before: CollectionSourceObservation, after: CollectionSourceObservation): boolean {
@@ -263,8 +249,10 @@ async function revalidateScope(deps: Dependencies, binding: OwnerFilterReadBindi
 }
 
 /** Full-page caller over the one Source and Search interpreter. An incomplete window is never a 200 page. */
-export async function readBoundOwnerFilterPage(
+async function readBoundOwnerFilterPageNative(
   deps: Dependencies,
+  native: OwnerFilterNativeOperations,
+  reservation: OwnerFilterReservation,
   admission: CollectionMemberAdmission,
   options: CollectionMemberQuery,
   binding: OwnerFilterReadBinding,
@@ -272,15 +260,17 @@ export async function readBoundOwnerFilterPage(
   const limit = options.limit ?? 20;
   if (!Number.isInteger(limit) || limit < 1 || limit > 100) throw new ProblemError('invalid_request');
   const plan =
-    nativeOwnerFilterPagePlan(binding) ?? ordinaryCollectionPagePlan(limit, options.view === 'FULL' ? 'FULL' : 'BASIC');
+    native.pagePlan(binding) ?? ordinaryCollectionPagePlan(limit, options.view === 'FULL' ? 'FULL' : 'BASIC');
   const work = new NativeCollectionWork(binding.input.allowance, binding.input.deadline);
-  return withNativeOwnerFilterSource(binding, work, () =>
-    readWorkingOwnerFilterPage(deps, admission, options, binding, work, plan),
+  return native.withSource(binding, work, () =>
+    readWorkingOwnerFilterPage(deps, native, reservation, admission, options, binding, work, plan),
   );
 }
 
 async function readWorkingOwnerFilterPage(
   deps: Dependencies,
+  native: OwnerFilterNativeOperations,
+  reservation: OwnerFilterReservation,
   admission: CollectionMemberAdmission,
   options: CollectionMemberQuery,
   binding: OwnerFilterReadBinding,
@@ -311,8 +301,7 @@ async function readWorkingOwnerFilterPage(
   // The saved rule is versioned Source state, while caller filters are request identity. Keeping those
   // separate lets an authenticated old cursor report stale when the owner edits the stored rule.
   const savedRule =
-    readNativeCollectionMemberAdmission(admission)?.retainedMeaning &&
-    nativeOwnerFilterBinding(binding)?.metadata.ruleReady;
+    readNativeCollectionMemberAdmission(admission)?.retainedMeaning && native.binding(binding)?.metadata.ruleReady;
   const query = savedRule
     ? createHash('sha256')
         .update(canonicalize(options.filter === undefined ? null : parseStrictJson(options.filter))!)
@@ -340,7 +329,7 @@ async function readWorkingOwnerFilterPage(
       cursor.epoch !== current.observation.stamp.epoch ||
       basis !== current.observation.basis.digest ||
       capture !== binding.scope.captureId ||
-      fence !== (nativeOwnerFilterBinding(binding)?.ownerFence ?? '') ||
+      fence !== (native.binding(binding)?.ownerFence ?? '') ||
       revision !== binding.scope.committedRevision.toString()
     )
       throw new ProblemError('stale_cursor');
@@ -378,7 +367,14 @@ async function readWorkingOwnerFilterPage(
         throw unavailable();
       after = candidate.subjectId;
       if (!membership.result) continue;
-      const closure = await readOwnerFilterCandidateClosure(binding, current, candidate.subjectId, work, true);
+      const closure = await readOwnerFilterCandidateClosureNative(
+        native,
+        binding,
+        current,
+        candidate.subjectId,
+        work,
+        true,
+      );
       if (closure.status !== 'complete') throw unavailable();
       if (closure.closure.subjectId !== candidate.subjectId) throw new TypeError('Foreign native owner closure');
       const transaction = work.reserve({ ...zero, nativePoints: 1, statements: 3, bytes: 256 });
@@ -389,7 +385,7 @@ async function readWorkingOwnerFilterPage(
           const client = deadlineClient(connection, input.deadline);
           await client.query('BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY');
           try {
-            const result = await readOwnerFilterCandidate(client, admission, closure.closure, work);
+            const result = await readOwnerFilterCandidateNative(native, client, admission, closure.closure, work);
             await client.query('COMMIT');
             return result;
           } catch (error) {
@@ -407,12 +403,12 @@ async function readWorkingOwnerFilterPage(
     exhausted = prefix.exhausted && (prefix.candidates.length === 0 || after === prefix.candidates.at(-1)!.subjectId);
     if (members.length < limit && !exhausted && prefix.candidates.length === 0) throw unavailable();
   }
-  if (!exhausted && members.length < limit) return prepareSparsePage(deps, admission, binding);
+  if (!exhausted && members.length < limit) return prepareSparsePage(deps, admission, binding, reservation);
   // Reauthorize the source and ALL selective dependencies after negative/order work, before any row/cursor.
   const revalidate = async () => {
     const final = await work.compose((allowance) => source.prepare({ ...input, allowance }));
     if (!compatible(current.observation, final.source.observation)) throw new ProblemError('stale_cursor');
-    await revalidateOwnerFilterDisclosure(binding, work);
+    await native.revalidateDisclosure(binding, work);
   };
   await revalidate();
   let disclosed = members;
@@ -446,7 +442,7 @@ async function readWorkingOwnerFilterPage(
               current.observation.basis.digest,
               binding.scope.captureId,
               binding.scope.committedRevision.toString(),
-              nativeOwnerFilterBinding(binding)!.ownerFence ?? '',
+              native.binding(binding)!.ownerFence ?? '',
               after!,
             ],
           },
@@ -455,8 +451,10 @@ async function readWorkingOwnerFilterPage(
   };
 }
 
-export async function readOwnerFilterPage(
+async function readOwnerFilterPageNative(
   deps: Dependencies,
+  native: OwnerFilterNativeOperations,
+  reservation: OwnerFilterReservation,
   actor: Actor,
   collectionId: string,
   options: CollectionMemberQuery,
@@ -466,7 +464,16 @@ export async function readOwnerFilterPage(
   if (!Number.isInteger(limit) || limit < 1 || limit > 100) throw new ProblemError('invalid_request');
   const plan = ordinaryCollectionPagePlan(limit, options.view === 'FULL' ? 'FULL' : 'BASIC');
   const admission = await admitCollectionMemberQuery(deps, actor, options, deadline);
-  const bound = await bindOwnerFilterRead(deps, actor, collectionId, admission, deadline, undefined, plan);
+  const bound = await bindOwnerFilterReadNative(
+    deps,
+    native,
+    actor,
+    collectionId,
+    admission,
+    deadline,
+    undefined,
+    plan,
+  );
   if (bound.status !== 'bound') throw unavailable();
   if (
     bound.binding.input.actor !== actor ||
@@ -475,8 +482,94 @@ export async function readOwnerFilterPage(
   )
     throw new TypeError('Foreign native owner read binding');
   try {
-    return await readBoundOwnerFilterPage(deps, admission, options, bound.binding);
+    return await readBoundOwnerFilterPageNative(deps, native, reservation, admission, options, bound.binding);
   } finally {
-    releaseNativeOwnerFilterRead(bound.binding);
+    native.release(bound.binding);
   }
+}
+
+/** All operations in this plan share the supplied native implementation and reservation capability. */
+export function createOwnerFilterPlan(
+  dependencies: Dependencies,
+  native: OwnerFilterNativeOperations,
+  reservation: OwnerFilterReservation,
+): OwnerFilterPlan {
+  return Object.freeze({
+    bindOwnerFilterRead: (actor, collectionId, admission, deadline, attempt, pagePlan, ceilings) =>
+      bindOwnerFilterReadNative(
+        dependencies,
+        native,
+        actor,
+        collectionId,
+        admission,
+        deadline,
+        attempt,
+        pagePlan,
+        ceilings,
+      ),
+    readOwnerFilterCandidateClosure: (binding, source, subjectId, work, deferDisclosure) =>
+      readOwnerFilterCandidateClosureNative(native, binding, source, subjectId, work, deferDisclosure),
+    readOwnerFilterCandidate: (client, admission, closure, work) =>
+      readOwnerFilterCandidateNative(native, client, admission, closure, work),
+    readBoundOwnerFilterPage: (admission, options, binding) =>
+      readBoundOwnerFilterPageNative(dependencies, native, reservation, admission, options, binding),
+    readOwnerFilterPage: (actor, collectionId, options, deadline) =>
+      readOwnerFilterPageNative(dependencies, native, reservation, actor, collectionId, options, deadline),
+  });
+}
+
+function installed() {
+  return requireLibraryMembersPreparation();
+}
+
+/** Compatibility operations used by Search delegate to the application installed by Library composition. */
+export function bindOwnerFilterRead(
+  dependencies: Omit<Dependencies, 'tokens'>,
+  actor: Actor,
+  collectionId: string,
+  admission: CollectionMemberAdmission,
+  deadline: number,
+  attempt?: CommandAttempt,
+  pagePlan?: OrdinaryCollectionPagePlan,
+  ceilings?: NativeOwnerFilterCeilings,
+) {
+  return installed().native.bind(dependencies, actor, collectionId, admission, deadline, attempt, pagePlan, ceilings);
+}
+
+export function readOwnerFilterCandidateClosure(
+  binding: OwnerFilterReadBinding,
+  source: PreparedCollectionSource,
+  subjectId: string,
+  work: NativeCollectionWork,
+  deferDisclosure = false,
+) {
+  return installed().native.readClosure(binding, source, subjectId, work, deferDisclosure);
+}
+
+export function readOwnerFilterCandidate(
+  client: Pick<PoolClient, 'query'>,
+  admission: CollectionMemberAdmission,
+  closure: OwnerFilterCandidateClosure,
+  work: NativeCollectionWork,
+) {
+  return installed().native.evaluate(client, admission, closure, work);
+}
+
+export function readBoundOwnerFilterPage(
+  dependencies: Dependencies,
+  admission: CollectionMemberAdmission,
+  options: CollectionMemberQuery,
+  binding: OwnerFilterReadBinding,
+) {
+  return installed().createPlan(dependencies).readBoundOwnerFilterPage(admission, options, binding);
+}
+
+export function readOwnerFilterPage(
+  dependencies: Dependencies,
+  actor: Actor,
+  collectionId: string,
+  options: CollectionMemberQuery,
+  deadline: number,
+) {
+  return installed().createPlan(dependencies).readOwnerFilterPage(actor, collectionId, options, deadline);
 }

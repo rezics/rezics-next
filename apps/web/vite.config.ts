@@ -1,10 +1,9 @@
 import { viteNonceMarker } from './src/security/headers.ts';
 import { testWorkerBindingsEnvName } from './src/test-runtime-binding-config.ts';
-import { mkdirSync, readFileSync, realpathSync, rmSync, writeFileSync } from 'node:fs';
+import { readFileSync, realpathSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import { dirname, isAbsolute, join, relative, resolve, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { spawn } from 'node:child_process';
 import { defineConfig, type Plugin } from 'vite';
 import react from '@vitejs/plugin-react';
 import { tanstackStart } from '@tanstack/react-start/plugin/vite';
@@ -12,7 +11,7 @@ import { cloudflare } from '@cloudflare/vite-plugin';
 import tailwindcss from '@tailwindcss/vite';
 import { paraglideVitePlugin } from '@inlang/paraglide-js';
 import { createWorkerPersistence } from '../../scripts/worker-persistence.ts';
-import { messagesCurrent } from './scripts/messages-ready.ts';
+import { ensureMessagesReady } from './scripts/messages-ready.ts';
 import {
   alignViteLockfileHashes,
   bindViteDepCacheAlign,
@@ -36,7 +35,6 @@ if (nativeWebTls && (nativeWebHost !== 'web.native.rezics.com' || !nativeWebCert
 const appRoot = dirname(fileURLToPath(import.meta.url));
 const workspaceRoot = resolve(appRoot, '../..');
 const testRuntimeBindings = fileURLToPath(new URL('./src/test-runtime-bindings.ts', import.meta.url));
-const paraglideGenerateLock = join(workspaceRoot, '.temp/paraglide-generate.lock');
 const workerSsrOptimizeDeps = webViteWorkerSsrOptimizeDeps;
 
 function bunInstallRoot(resolved: string): string | undefined {
@@ -238,46 +236,6 @@ function pinWorkerSsrOptimizeDeps(environment?: { optimizeDeps?: Record<string, 
   };
 }
 
-function processExists(pid: number): boolean {
-  try {
-    process.kill(pid, 0);
-    return true;
-  } catch {
-    return false;
-  }
-}
-
-async function withParaglideGenerateLock(run: () => Promise<void>): Promise<void> {
-  mkdirSync(join(workspaceRoot, '.temp'), { recursive: true });
-  const deadline = Date.now() + 60_000;
-  for (;;) {
-    try {
-      mkdirSync(paraglideGenerateLock);
-      writeFileSync(join(paraglideGenerateLock, 'pid'), String(process.pid));
-      break;
-    } catch (error) {
-      if ((error as NodeJS.ErrnoException).code !== 'EEXIST') throw error;
-      let holder = 0;
-      try {
-        holder = Number.parseInt(readFileSync(join(paraglideGenerateLock, 'pid'), 'utf8'), 10);
-      } catch {
-        holder = 0;
-      }
-      if (!Number.isInteger(holder) || holder <= 0 || !processExists(holder)) {
-        rmSync(paraglideGenerateLock, { recursive: true, force: true });
-        continue;
-      }
-      if (Date.now() >= deadline) throw new Error('Paraglide generate lock timed out');
-      await new Promise((resolveWait) => setTimeout(resolveWait, 50));
-    }
-  }
-  try {
-    await run();
-  } finally {
-    rmSync(paraglideGenerateLock, { recursive: true, force: true });
-  }
-}
-
 export function shouldGenerateLocalization(env: NodeJS.ProcessEnv = process.env): boolean {
   // Isolated tests already ran generate.ts. A custom compiler module is the localization-startup seam.
   return env.REZICS_TEST_RUNTIME !== '1' || Boolean(env.REZICS_PARAGLIDE_COMPILER_MODULE);
@@ -470,20 +428,10 @@ export default defineConfig((context) => {
       {
         name: 'generate-localization',
         async config(_config, { command }) {
-          // Isolated tests already compiled catalogues. A check or `bun run generate` that already
-          // compiled current catalogues is reused, so a cold start compiles them once.
-          if (command !== 'serve' || !shouldGenerateLocalization() || messagesCurrent(appRoot)) return;
-          await withParaglideGenerateLock(
-            () =>
-              new Promise<void>((resolveGenerate, reject) => {
-                const child = spawn('bun', ['scripts/generate.ts'], { stdio: 'inherit' });
-                child.once('error', reject);
-                child.once('exit', (code, signal) => {
-                  if (code === 0) resolveGenerate();
-                  else reject(new Error(`Paraglide generation exited with ${signal ?? code}`));
-                });
-              }),
-          );
+          // Isolated tests already prepared messages. Other serve callers share the same freshness lock as startup.
+          if (command !== 'serve' || !shouldGenerateLocalization()) return;
+          const code = await ensureMessagesReady(appRoot);
+          if (code !== 0) throw new Error(`Paraglide generation exited ${code} before Vite started`);
         },
       },
       paraglideVitePlugin({ project: './project.inlang' }),
