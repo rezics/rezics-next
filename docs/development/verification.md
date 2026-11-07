@@ -465,9 +465,27 @@ tracked nested native work. Apply the existing [shared, notice and entry ceiling
 and await read-only post-drain verification before another preparation. Retain growing `progress_session` scan guards
 and exact doomed/retained assertions. State administrative work outside the capture.
 
-A SQL failure retains its bound head, scale, occurrence, plan, rows and buffers for the owning module. Forced plans,
-tolerance changes, larger capture caps and fixture-only passes do not close it. Root SQL admission requires actual
-supported Reylo types through affected Web/root checks; fast copy-on-write preparation does not establish SQL closure.
+A failed raw or folded capture preserves the initiating thrown value. Call `growthFailureEvidence(thrown)` from
+`services/kernel/test/support/growth.ts` to retrieve its explicit incomplete diagnostic; this also works when the thrown
+value is not an `Error`. The record retains observed foreground/background statements, plan occurrence ownership,
+available costs, SQLSTATEs, database/backend attribution, write targets, transaction tokens, and bounded primary and
+secondary causes. `checkGrowth` adds check name, source revision when available, failure phase, scale and repetition.
+
+When `GROWTH_PROFILE` is configured, `checkGrowth` appends the diagnostic as a separate JSONL record. `GROWTH_PROFILE_REQUIRED=1`
+continues to require normal profile export. If diagnostic export itself fails while preserving a native failure, the
+export error is retained as a secondary cause and the original native failure remains thrown. The profile serializer
+applies its byte, depth and value limits before writing a whole line. `readGrowthProfiles` exposes diagnostic records
+in its `diagnostics` result field; these records have no measurement identity or three-scale repetitions and do not
+enter calibration series. `GrowthProfileExportError` remains distinct for export-only failures.
+
+The evidence names its derivation: SQL text and SQLSTATE come from the instrumented pg wire occurrence; backend and
+database names come from that connection and native notice; each plan owner is the statement occurrence active when
+the notice arrived; raw mode retains the native document and folded mode retains native occurrence cost summaries.
+Relation write targets come from native `ModifyTable` plan nodes, transaction state from `ReadyForQuery` tokens, and
+pending failures from draining every registered task before attribution is restored. Missing plans and folded cost
+omissions are marked from the observations that were actually retained. Forced plans, tolerance changes, larger capture
+caps and fixture-only passes do not close a failure. Root SQL admission requires actual supported Reylo types through
+affected Web/root checks; fast copy-on-write preparation does not establish SQL closure.
 
 Existing cache and Git preparation retain their owner-defined locks, identity and cleanup. Deployment, process
 reconciliation, mechanical retries and check execution remain with their controller or host owner.

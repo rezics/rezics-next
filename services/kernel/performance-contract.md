@@ -506,10 +506,19 @@ release that reservation and the plan-walk occupancy of the folded tree. Raw cap
 visited plan nodes. Unmeasured warmup and prepare captures record only top-level plans for write discovery; nested
 trigger and SPI notices are not charged.
 
+Decision: failed captures expose a bounded incomplete diagnostic that references the already charged native
+occurrences, raw plan documents and ownership arrays, or folded occurrence costs and notices. Keep the original
+thrown value as the failure and retain drain, cleanup, verification and export failures as subordinate causes.
+`checkGrowth` adds check, source revision, phase, scale and repetition at the layer that knows them, then appends a
+diagnostic JSONL record through `GROWTH_PROFILE`. The profile reader retains these records as diagnostics and never
+admits them as measured points. Reuse retained capture data instead of cloning it; count diagnostic context against
+the shared capture capacity and let the profile writer's existing line, depth and value limits bound serialization.
+
 Each capture has hard caps of 20,000 evidence entries and 32 MiB of charged bytes shared by foreground and background
 evidence. Entries count retained statement text, retained statement error messages, currently reserved native notice
 envelopes and, for raw captures, plan nodes visited by the bounded plan walker. Statement and error strings use their
 UTF-8 byte size; native plan notices are charged at eight times their UTF-8 size to account for parsed-object
 expansion. A native notice is limited to 1 MiB, and its byte charge is reserved before JSON parsing. A focused capture
 may tighten these caps but cannot raise them. Exhaustion fails the capture after its operation and tracked queries
-drain, so no partial capture or cost is returned.
+drain. The failure includes retained work and an explicit omission count/reason for evidence that could not be kept;
+it never presents incomplete folded costs as a complete measurement.
