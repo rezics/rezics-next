@@ -17,6 +17,7 @@ import {
   runCommand,
   type CommandAttempt,
   type CommandAuthorization,
+  type CommandResult,
   type CommandTransaction,
 } from '../command/command.ts';
 import { appendImportedField } from '../content/imported-fields.ts';
@@ -172,7 +173,10 @@ export async function batchCommand(
     ...identity,
     receipt: { kind, key: command.key, digest },
   };
-  const body = async (tx: CommandTransaction, { transactionId }: { transactionId: string }) => {
+  const body = async (
+    tx: CommandTransaction,
+    { transactionId }: { transactionId: string },
+  ): Promise<CommandResult<Value>> => {
     try {
       const resolve = async (value: BulkValue) => {
         await declareCommandHistory(tx, kind, {
