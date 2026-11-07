@@ -319,6 +319,11 @@ async function journey(
   return record;
 }
 
+function pageEvidence(observed: PageCall & { page?: Page }): PageCall {
+  const { page: _page, ...rest } = observed;
+  return rest;
+}
+
 function fail(record: JourneyRecord, step: string): never {
   record.result = 'FAIL';
   record.firstFailure = step;
@@ -357,10 +362,22 @@ const evidenceBase = () => ({
   bearerIssued,
 });
 
+async function noteFailure(step: string, error: unknown): Promise<void> {
+  setup.push({
+    step,
+    error: error instanceof Error ? error.message.slice(0, 500) : String(error).slice(0, 500),
+  });
+}
+
 try {
   const started = Date.now();
   await child(['bun', 'services/auth/scripts/dev-stack.ts', 'persona'], 'persona');
   setup.push({ step: 'persona', elapsedSeconds: Number(((Date.now() - started) / 1000).toFixed(3)) });
+} catch (error) {
+  await noteFailure('persona-failure', error);
+}
+
+try {
   const seedEnv = { ...process.env, ...(await parseEnv(join(root, '.temp/local-stack/seed.env'))) };
   const seedStarted = Date.now();
   await child(['bun', 'scripts/datasets/cross-media-seed.ts', '--dev'], 'seed', seedEnv);
@@ -371,6 +388,11 @@ try {
     workId: showcase.workId,
     collections: showcase.collections.length,
   });
+} catch (error) {
+  await noteFailure('setup-failure', error);
+}
+
+try {
   const frontendStarted = Date.now();
   frontends = await startSeededFrontends();
   setup.push({
@@ -378,10 +400,7 @@ try {
     elapsedSeconds: Number(((Date.now() - frontendStarted) / 1000).toFixed(3)),
   });
 } catch (error) {
-  setup.push({
-    step: 'setup-failure',
-    error: error instanceof Error ? error.message.slice(0, 500) : String(error).slice(0, 500),
-  });
+  await noteFailure('frontends-failure', error);
 }
 
 try {
@@ -429,7 +448,7 @@ journeys.push(
     const context = await contextFor('en-US', desktop);
     try {
       const opened = await openPage(context, `${stack.web}/en/search?q=${encodeURIComponent(mixedQuery)}`, desktop, 'en');
-      record.pages.push(opened);
+      record.pages.push(pageEvidence(opened));
       if (opened.error) fail(record, `search page: ${opened.error}`);
       if ((opened.resultLinks ?? 0) < 1) fail(record, 'search page showed no permitted result links');
       const first = opened.page.locator('[data-search-results] a[href*="/subjects/"]').first();
@@ -462,7 +481,7 @@ journeys.push(
         phone,
         'en',
       );
-      record.pages.push(phonePage);
+      record.pages.push(pageEvidence(phonePage));
     } finally {
       await phoneContext.close();
     }
@@ -549,7 +568,7 @@ journeys.push(
           desktop,
           'en',
         );
-        record.pages.push(opened);
+        record.pages.push(pageEvidence(opened));
         const constraints = await opened.page.locator('[data-search-constraints]').count().catch(() => 0);
         record.pages.push({
           url: opened.page.url(),
@@ -604,7 +623,7 @@ journeys.push(
           desktop,
           'ja',
         );
-        record.pages.push(opened);
+        record.pages.push(pageEvidence(opened));
         const option = opened.page.locator('[role="option"]').first();
         const hit = opened.page.locator('[data-search-results] a[href*="/subjects/"]').first();
         if ((await option.count()) > 0) {
@@ -652,7 +671,7 @@ journeys.push(
         desktop,
         'en',
       );
-      record.pages.push(opened);
+      record.pages.push(pageEvidence(opened));
       const box = opened.page.locator('input[role="combobox"][name="q"]').first();
       if ((await box.count()) > 0) {
         await box.fill(mixedQuery);
@@ -688,16 +707,16 @@ journeys.push(
       const context = await contextFor('en-US', desktop);
       try {
         const home = await openPage(context, `${stack.web}/en/`, desktop, 'en');
-        record.pages.push(home);
+        record.pages.push(pageEvidence(home));
         const lists = await home.page.locator('[data-slot="type-list"], section, ol, ul').count().catch(() => 0);
         if (!home.hydrated && home.error) fail(record, `home page: ${home.error}`);
         if (lists < 1) fail(record, 'configured home lists were not visible');
         if (showcase.workId) {
           const subject = await openPage(context, `${stack.web}/en/subjects/${showcase.workId}/work`, desktop, 'en');
-          record.pages.push(subject);
+          record.pages.push(pageEvidence(subject));
         }
         const zhHome = await openPage(context, `${stack.web}/zh-Hant/`, desktop, 'zh-Hant');
-        record.pages.push(zhHome);
+        record.pages.push(pageEvidence(zhHome));
       } finally {
         await context.close();
       }
@@ -725,7 +744,7 @@ journeys.push(
     const context = await contextFor('en-US', desktop);
     try {
       const home = await openPage(context, `${stack.web}/en/`, desktop, 'en');
-      record.pages.push(home);
+      record.pages.push(pageEvidence(home));
     } finally {
       await context.close();
     }
