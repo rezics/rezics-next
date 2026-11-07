@@ -1,3 +1,4 @@
+import { searchOperationProblem } from '../../src/search/http/operation-problems.ts';
 import { afterAll, beforeAll, expect, test } from 'bun:test';
 import type { FilterRelease } from '@rezics/filter';
 import { createPool } from '../../src/database/pool.ts';
@@ -128,7 +129,7 @@ const names = async (filter: unknown) => (await search(filter)).subjects.map((re
 async function problem(promise: Promise<unknown>, code: string, errors: { pointer: string; code: string }[]) {
   const error = await promise.then(
     () => undefined,
-    (caught: unknown) => caught,
+    (caught: unknown) => searchOperationProblem(caught),
   );
   expect(error).toBeInstanceOf(ProblemError);
   expect([(error as ProblemError).code, (error as ProblemError).errors] as unknown[]).toEqual([code, errors]);

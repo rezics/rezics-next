@@ -1,5 +1,6 @@
 import { installRatingVoteSemantic } from './rating-votes.ts';
 import type { Pool } from 'pg';
+import { createNativeSearchDisclosure } from '../search/index.ts';
 import { composeLibraryDomain } from './library.ts';
 import { composeZoneCollection } from './zones.ts';
 import { createWriteRateLimiter, type WriteRateLimiter } from '../access/write-rate.ts';
@@ -27,6 +28,7 @@ import { bindSearchLibraryScopePort } from '../search/scope-application.ts';
 import { createSearchLibraryScopePort } from './search-library.ts';
 
 export type KernelRuntimeDefaults = {
+  searchDisclosure: typeof createNativeSearchDisclosure;
   tokens: KeyRing;
   receiptKeys: KeyRing;
   writeRate: WriteRateLimiter;
@@ -114,6 +116,7 @@ export function createKernelRuntimeDefaults(overrides: KernelRuntimeOverrides = 
   const auth = overrides.auth ?? readAuthConfig(env);
   const access: AccessFactory = auth ? (config: AccessConfig) => createAccess({ ...config, auth }) : createAccess;
   return {
+    searchDisclosure: createNativeSearchDisclosure,
     tokens,
     receiptKeys,
     writeRate,

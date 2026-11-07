@@ -1,3 +1,4 @@
+import { searchOperationProblem } from '../../src/search/http/operation-problems.ts';
 import { afterAll, beforeAll, expect, test } from 'bun:test';
 import { createPool } from '../../src/database/pool.ts';
 import { ProblemError } from '../../src/http/problem.ts';
@@ -147,7 +148,7 @@ afterAll(async () => {
 async function refusal(promise: Promise<unknown>) {
   const error = await promise.then(
     () => undefined,
-    (caught: unknown) => caught,
+    (caught: unknown) => searchOperationProblem(caught),
   );
   expect(error).toBeInstanceOf(ProblemError);
   return [(error as ProblemError).code, (error as ProblemError).errors] as unknown[];

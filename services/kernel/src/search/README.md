@@ -10,16 +10,16 @@ closed behind `search` platform grants. Advanced filters/scopes, facets and rati
 `search_advanced`. Complete population/privacy, physical incarnation, erasure and native growth proofs remain
 deferred; this closed slice does not complete the Search Goal.
 
-Decision: Search, suggest and facet HTTP problems share one typed family (`invalid`, `invalid-cursor`, `session`,
-`closed`, `denied`, `restart`, `index-not-ready`, `source-not-ready`, `unavailable`, `ready`) before a reader
-publishes ready. `503 semantic_not_ready` is source preparation, never an empty success. Generation or identity
-change restarts the executed request. Suggest `503` documents `semantic_not_ready` with the other unavailable codes.
-HTTP search, grouped releases, facets, typeahead and mixed discovery classify those families through
-`searchHttpExecute`; optional problem fields are omitted rather than passed as undefined.
-Decision: executed-request recovery classifies the public `problem-error.ts` ProblemError identity; query privacy
-heads consume Semantic's public `PrivacyReductionHead` and `PrivacyReductionObservation`; current-text analyzer
-concurrency is the module-init literal 16 matching `ENGINE_ANALYSIS_LIMITS` because that owner file is not a literal
-leaf.
+Decision: `disclosure-application.ts` owns candidate admission, current-text matching, owner revalidation,
+concept preparation and source/index recovery. `createKernelRuntimeDefaults().searchDisclosure`
+binds the physical analyzer through `search/index.ts`; concept adapters bind relation/store ports. `operation-outcomes.ts` owns refusal/correction and operand-retention vocabulary. `searchHttpExecute`
+maps native refusals through `http/operation-problems.ts`.
+
+Search, suggest and facets retain `invalid`, `invalid-cursor`, `session`, `closed`, `denied`, `restart`,
+`index-not-ready`, `source-not-ready`, `unavailable` and `ready`. Source preparation is `503 semantic_not_ready`;
+identity/generation changes restart. Current-text concurrency stays 16. Projection precedes CURRENT final; useful-page
+continuations, receipts and all existing native/replay reservations retain their owners. Query privacy heads consume
+Semantic's public `PrivacyReductionHead` and `PrivacyReductionObservation`.
 Decision: canonical Search admits self only from a published mapped-self row supplied by revision-1 creation or bounded original recovery;
 absent mappings use the existing preparation path. Four native HTTP cases pin executed-request recovery.
 

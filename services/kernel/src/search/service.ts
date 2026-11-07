@@ -33,8 +33,14 @@ import {
   type SearchSortValue,
 } from './cursor.ts';
 import { validateRequestSourceSnapshot } from './request-source-snapshot.ts';
-import { checkHits, type FactClause, type Hit as CheckedHit } from './disclosure/check.ts';
-import { createCurrentTextDisclosure } from './disclosure/current-text.ts';
+import type { FactClause, Hit as CheckedHit } from './disclosure/check.ts';
+import type { SearchDisclosureApplication } from './disclosure-application.ts';
+import {
+  createSearchDisclosureApplication,
+  createSearchIndexRequest,
+  runSearchSource,
+} from './disclosure-application.ts';
+import { analyzeInstalled } from './engine-analysis.ts';
 import { admitFacetCreditQualifiers, admitFacets, validateFacets, type FacetRequest } from './facets.ts';
 import { compileFilter } from './filter.ts';
 import { createFreshness } from './freshness.ts';
@@ -254,15 +260,9 @@ function indexNotReady(): ProblemError {
   return new ProblemError('index_not_ready', { headers: { 'retry-after': '1' } });
 }
 
-/** Unavailable current evidence must fail the response, including under negation. */
-async function sourceRequest<T>(operation: () => Promise<T>): Promise<T> {
-  try {
-    return await operation();
-  } catch (error) {
-    if (error instanceof ProblemError) throw error;
-    if (error instanceof SearchUnavailableError) throw indexNotReady();
-    throw new ProblemError('semantic_not_ready', { headers: { 'retry-after': '1' } });
-  }
+/** Preserve already classified adapter failures while native evidence recovery owns preparation. */
+function sourceRequest<T>(operation: () => Promise<T>): Promise<T> {
+  return runSearchSource(operation, (error) => error instanceof ProblemError);
 }
 
 function containsOwnerPredicate(value: unknown): boolean {
@@ -495,10 +495,14 @@ export function createSearchService({
   publicFilters,
   preparePublic,
   suggestionWorkContext,
+  disclosure = createSearchDisclosureApplication({
+    analyze: (index, analyzer, text) => analyzeInstalled(client, index, { analyzer, text }),
+  }),
   // Definition releases store value.pattern on the property schema. Keep that object so pattern compilation stays cached.
   release: releaseOverride,
 }: {
   pool: Pool;
+  disclosure?: SearchDisclosureApplication;
   client: OpenSearch;
   prefix: string;
   source: SubjectSource & Partial<{ canonicalNames: SubjectCanonicalNames }>;
@@ -532,25 +536,17 @@ export function createSearchService({
     : undefined;
   if (!Number.isSafeInteger(facetSample) || facetSample < 1)
     throw new RangeError('facetSample must be a positive safe integer');
-  let templates: Promise<void> | undefined;
   let aliasRead: Promise<number> | undefined;
   const freshness = new Map<number, ReturnType<typeof createFreshness>>();
 
-  async function indexRequest<T>(operation: () => Promise<T>): Promise<T> {
-    try {
-      templates ??= installTemplates(client, prefix);
-      await templates;
-      return await operation();
-    } catch (error) {
-      templates = undefined;
-      if (error instanceof SearchUnavailableError) throw indexNotReady();
-      if (error instanceof OpenSearchError) {
-        const body = error.body as { error?: unknown } | null;
-        if (error.type === 'index_not_found_exception' || missingTemplate(body?.error)) throw indexNotReady();
-      }
-      throw error;
-    }
-  }
+  const indexRequest = createSearchIndexRequest({
+    install: () => installTemplates(client, prefix),
+    unavailable(error) {
+      if (!(error instanceof OpenSearchError)) return false;
+      const body = error.body as { error?: unknown } | null;
+      return error.type === 'index_not_found_exception' || missingTemplate(body?.error);
+    },
+  });
 
   async function freshAliasGeneration(): Promise<number> {
     const { active } = await subjectGenerations(client, prefix);
@@ -917,7 +913,7 @@ export function createSearchService({
       });
       const hits = keys.map((key) => ({ ...key, matched: [] as string[] }));
       const checked = await sourceRequest(() =>
-        checkHits(source, hits, new Map(), {
+        disclosure.checkHits(source, hits, new Map(), {
           ...(admitted === undefined ? {} : { filter: catalogueFilter(admitted) }),
           relationProperties,
           spoilerThreshold: spoilerThreshold ?? 0,
@@ -1222,7 +1218,7 @@ export function createSearchService({
             ...observed,
           };
           await readContext?.complete(response);
-          const currentHits = await sourceRequest(() => checkHits(source, page.hits, new Map()));
+          const currentHits = await sourceRequest(() => disclosure.checkHits(source, page.hits, new Map()));
           if (
             currentHits.passed.length !== shown.length ||
             currentHits.passed.some(({ subject }, position) => subject.id !== shown[position]!.id)
@@ -1337,9 +1333,7 @@ export function createSearchService({
 
       const compiledText = text ? compileText(text, { field: 'search_text', prefix: 't' }) : undefined;
       const matchEvidencePlan = compiledText ? compileMatchEvidence(compiledText) : undefined;
-      const currentTextDisclosure = text
-        ? createCurrentTextDisclosure(client, subjectIndexName(prefix, generation!))
-        : undefined;
+      const currentTextDisclosure = text ? disclosure.currentText(subjectIndexName(prefix, generation!)) : undefined;
       const compiledFilter =
         admitted && !preparedScope
           ? compileFilter(admitted as FilterDocument, {
@@ -1424,7 +1418,7 @@ export function createSearchService({
       const checkCandidates = async (hits: readonly NativeSearchHit[]) => {
         sourcePositions.clear();
         const { passed, relationRejected } = await sourceRequest(() =>
-          checkHits(disclosureSource, hits, clauses, {
+          disclosure.checkHits(disclosureSource, hits, clauses, {
             ...(admitted && !preparedScope
               ? {
                   filter: catalogueFilter(admitted),
@@ -1982,10 +1976,10 @@ export function createSearchService({
       const options = validateHitOptions({ languages });
       const contextDeadline = read?.deadline ?? Date.now() + 10_000;
       await executedIdentity(contextDeadline);
-      let currentTextDisclosure: ReturnType<typeof createCurrentTextDisclosure> | undefined;
+      let currentTextDisclosure: ReturnType<SearchDisclosureApplication['currentText']> | undefined;
       const verifySuggestionHits = async (hits: readonly CheckedHit[], expected: readonly Result[]) => {
         const { passed: current } = await sourceRequest(() =>
-          checkHits(
+          disclosure.checkHits(
             source,
             hits.map((hit) => ({ ...hit, matched: [] })),
             new Map(),
@@ -2024,7 +2018,7 @@ export function createSearchService({
             : {}),
         });
       const generation = await discoveryGeneration();
-      currentTextDisclosure = createCurrentTextDisclosure(client, subjectIndexName(prefix, generation));
+      currentTextDisclosure = disclosure.currentText(subjectIndexName(prefix, generation));
       const parsed = read?.filter === undefined ? undefined : validate({ filter: read.filter }).filter;
       const current = parsed ? await activeRelease(pool) : undefined;
       const admitted = parsed ? await admitQuery(undefined, parsed, current?.release, false) : undefined;
@@ -2133,7 +2127,7 @@ export function createSearchService({
           const queried = await indexRequest(() => bound.operations.query(observation, context));
           if (queried.status !== 'queried') return await preparing();
           const { passed } = await sourceRequest(() =>
-            checkHits(
+            disclosure.checkHits(
               source,
               queried.result.map((hit) => ({ ...hit, matched: [] })),
               new Map(),
@@ -2172,7 +2166,7 @@ export function createSearchService({
       }
       const hits = await indexRequest(() => suggestSubjects(client, prefix, { text: q, size: 2 * limit, generation }));
       const { passed } = await sourceRequest(() =>
-        checkHits(
+        disclosure.checkHits(
           source,
           hits.map((hit) => ({ ...hit, matched: [] })),
           new Map(),

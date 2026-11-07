@@ -179,6 +179,7 @@ export function startServer(config: ServerConfig): Promise<RunningServer> & Runn
       openSearch === undefined || searchConfig === undefined || rated === undefined
         ? undefined
         : createSearchService({
+            disclosure: defaults.searchDisclosure(openSearch),
             pool,
             client: openSearch,
             prefix: searchConfig.prefix,
@@ -254,6 +255,7 @@ export function startServer(config: ServerConfig): Promise<RunningServer> & Runn
           });
           discovery = createDefaultDiscoverySearch(
             {
+              disclosure: defaults.searchDisclosure(openSearch),
               spaceEntryActions: viewerActions,
               pool,
               routeKey: config.routeKey,

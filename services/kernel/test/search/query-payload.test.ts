@@ -1,3 +1,4 @@
+import { searchOperationProblem } from '../../src/search/http/operation-problems.ts';
 import { afterAll, beforeAll, expect, test } from 'bun:test';
 import { bundledRelease } from '@rezics/definitions/bundled';
 import { createPool } from '../../src/database/pool.ts';
@@ -346,7 +347,7 @@ for (const operation of ['search', 'suggest', 'facet'] as const) {
           (method === 'GET' && (path === resolvePath || path === mappingPath)),
       ),
     ).toBe(true);
-    const error = 'error' in outcome ? outcome.error : outcome;
+    const error = searchOperationProblem('error' in outcome ? outcome.error : outcome);
     const response = problemResponse(error, { method: 'GET', id: 'payload-test' });
     expect(response.status).toBe(503);
     const body = await response.text();
@@ -383,7 +384,7 @@ for (const operation of ['search', 'suggest'] as const) {
     expect(reads).toBe(0);
     expect(observed.replies).toHaveLength(1);
     expect(observed.calls.filter(({ path }) => path.endsWith('/_search/template'))).toHaveLength(1);
-    const error = 'error' in outcome ? outcome.error : outcome;
+    const error = searchOperationProblem('error' in outcome ? outcome.error : outcome);
     expect(error).toBeInstanceOf(ProblemError);
     expect(error).toMatchObject({ code: 'index_not_ready', headers: { 'retry-after': '1' } });
     const response = problemResponse(error, { method: 'GET', id: 'partition-payload-test' });

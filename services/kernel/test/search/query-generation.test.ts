@@ -1,3 +1,4 @@
+import { searchOperationProblem } from '../../src/search/http/operation-problems.ts';
 import { afterAll, beforeAll, describe, expect, test } from 'bun:test';
 import { readFileSync } from 'node:fs';
 import { newId } from '../../src/route/route.ts';
@@ -318,7 +319,7 @@ function metadataService(client: OpenSearch) {
 async function metadataProblem(promise: Promise<unknown>, code = 'index_not_ready') {
   const error: unknown = await promise.then(
     () => undefined,
-    (error: unknown) => error,
+    (error: unknown) => searchOperationProblem(error),
   );
   expect(error).toBeInstanceOf(ProblemError);
   expect(error).toMatchObject({ code });
@@ -655,7 +656,7 @@ describe('native discovery generation custody', () => {
       });
   }
   async function discoveryProblem(promise: Promise<unknown>, code = 'index_not_ready') {
-    const error: unknown = await promise.catch((failure: unknown) => failure);
+    const error: unknown = await promise.catch((failure: unknown) => searchOperationProblem(failure));
     expect(error).toBeInstanceOf(ProblemError);
     expect(error).toMatchObject({ code });
     const response = problemResponse(error as ProblemError, { method: 'POST', id: 'discovery' });
