@@ -332,10 +332,16 @@ and do not prevent other resources from settling.
 Decision: focused preparation, `storybook-dev --app` and Vite's serve hook use the same app-local Paraglide lock and
 recheck catalogue freshness after acquiring it. Startup completes every generated catalogue leaf, including
 `messages/access_account.js`, before routes or Vite import them; a completed compile is reused. The preparation and
-compiler report their stage and child evidence. Dev-server readiness still waits for useful `/en` HTML and reports
-the observed probe, fetch or child-exit cause. Only an actual ECONNREFUSED is hydration startup; a closed-listener
+compiler report their stage and child evidence. Message preparation owns the full `bun run generate` process group;
+cancellation forwards its signal, escalates to SIGKILL after one second, and waits up to five seconds for the group to
+settle before releasing the shared lock. Dev-server readiness still waits for useful `/en` HTML and reports the
+observed probe, fetch or child-exit cause. Only an actual ECONNREFUSED is hydration startup; a closed-listener
 probe does not invent that code. The generator parent stays lightweight and only its isolated worker imports the
 Paraglide compiler. Original native walks remain open.
+
+Decision: `storybook-dev --app` logs entry before loading check custody, uses lightweight physical Web admission for
+finite Vite commands, and imports operator policy only when `--operator` is present. Regular app startup does not load
+the Web placement graph.
 
 Decision: website sign-in and `/token` POST the issuer Origin with that Origin header, the same form as Home and
 VN-realm walks. Seed and account-key calls use native Auth as transport and keep CSRF Origin plus assertion audience

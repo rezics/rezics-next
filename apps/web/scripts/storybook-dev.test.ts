@@ -72,3 +72,12 @@ test('Vite app and finite test serving generate Paraglide messages before the ch
   expect(viteConfig).toContain('ensureMessagesReady(appRoot)');
   expect(viteConfig).not.toContain('withParaglideGenerateLock');
 });
+
+test('the app entry logs before loading check custody and defers operator policy', () => {
+  const source = readFileSync(resolve(import.meta.dir, 'storybook-dev.ts'), 'utf8');
+  expect(source).not.toContain("from './check-placement.ts'");
+  expect(source).not.toContain("from './operator-entry.ts'");
+  expect(source).toContain("if (args.includes('--operator'))");
+  expect(source.indexOf('stage=entry start')).toBeLessThan(source.indexOf("await import('./operator-entry.ts')"));
+  expect(source.indexOf('stage=entry start')).toBeLessThan(source.indexOf("await import('./web-check-custody.ts')"));
+});
