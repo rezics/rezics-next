@@ -6,6 +6,7 @@ import { blockerFingerprint } from './attempt-progress.ts';
 import { agentAdapter } from './agents.ts';
 import { TRANSPORT_FAILURE_EVENT } from './agents/shared.ts';
 import { readLogFromOffset } from './records.ts';
+import { isTypingSettlementResult } from './worker-check-budget.ts';
 import type { WorkerStore } from './store.ts';
 import type { Attempt, RetryIntent, Settings, Task } from './types.ts';
 
@@ -384,6 +385,8 @@ export function recordToolBlockerFailure(
 ): { incident: ToolIncident | null; opened: boolean } {
   const policy = (settings.policy ?? defaultPolicy).toolIncidents;
   const ref = { taskId: task.id, attempt: attempt.attempt };
+  // Typing settlements are per-attempt: three in 20 minutes held two healthy retries behind one probe on 2026-11-07.
+  if (!attempt.blocker && isTypingSettlementResult(attempt.result)) return { incident: null, opened: false };
   const rawLine = blockerLine(attempt);
   const fingerprint = blockerFingerprint(attempt, task.worktree, store.policy.worker);
   if (!fingerprint) return { incident: null, opened: false };
