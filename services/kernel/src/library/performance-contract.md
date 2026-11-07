@@ -46,9 +46,10 @@ request deadline and one Semantic `prepareReadDecisions` page, not per-subject A
 A concealed or moved Source on FULL by-label withholds (`subject: null`) through `withholdChangedSource`;
 it does not 503 the assignment page or shrink the raw cursor.
 The folded FULL warmup still sees 34 `personal_label` parent
-observations and zero sequential scans. Point, catalogue and assignment pages bind typed input CTEs the same
-way prefix already does, so generic prepared plans keep those indexes. Existing Label command, HTTP and growth
-suites pin this; no extra tests or stories.
+observations and zero sequential scans. Point reads split `include_deleted` with UNION ALL the same way prefix
+splits `upper_bound`, so a generic prepared plan cannot hide the primary key behind `OR deleted_at IS NULL`.
+Point, catalogue and assignment pages bind typed input CTEs the same way prefix already does.
+Existing Label command, HTTP and growth suites pin this; no extra tests or stories.
 
 ## Collection operation costs
 

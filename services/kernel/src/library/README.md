@@ -123,7 +123,8 @@ identity-native declaration equality, ordinary `composeLibraryDomain` adapter in
 Selected identity seal cases keep the selected bind vector; transform fixtures use routable job IDs. Existing native
 identity, Source/member/publication, assignment-growth and lifecycle-growth cases keep their unchanged assertions.
 Label catalogue, assignment, parent and point SQL use typed input CTEs and LATERAL LIMIT-1 primary-key points
-(and the reserved-source 32-row seek) so generic prepared plans cannot Seq Scan an owner catalogue. Folded FULL
+(and the reserved-source 32-row seek) so generic prepared plans cannot Seq Scan an owner catalogue. Point reads
+split `include_deleted` with UNION ALL the same way prefix splits `upper_bound`. Folded FULL
 warmup sees 34 `personal_label` parent observations and zero sequential scans. Set, unassign, restore and
 rename select each named operand once in the one-row request and read those columns in the mutation WHERE.
 

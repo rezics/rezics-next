@@ -1,5 +1,5 @@
 -- Correlated LIMIT-1 primary-key points retain the unique index under generic prepared plans.
-WITH input AS NOT MATERIALIZED (
+WITH input AS MATERIALIZED (
   SELECT :route::integer AS route, :account_id::uuid AS account_id
 )
 SELECT entry."subjectId", entry.state, entry.revision, entry."createdAt", entry."updatedAt",
@@ -12,5 +12,6 @@ CROSS JOIN LATERAL (
          COALESCE(activity_at, updated_at)::text AS "lastActivityAt", finished_at::text AS "finishedAt"
   FROM library.entry
   WHERE route = input.route AND account_id = input.account_id AND subject_id = requested.subject_id
+  ORDER BY subject_id
   LIMIT 1
 ) AS entry;

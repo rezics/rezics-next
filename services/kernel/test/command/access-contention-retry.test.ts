@@ -116,7 +116,6 @@ test('a serialization failure raised through an Access query inside a command tr
 test('Access contention that outlasts the command deadline answers the same AccessUnavailableError with no effects', async () => {
   const key = crypto.randomUUID();
   const cause = new AccessUnavailableError('contention');
-  const deadline = Date.now() + 500;
   let attempts = 0;
   const authorization = authorizationFor(
     async () => {
@@ -131,6 +130,9 @@ test('Access contention that outlasts the command deadline answers the same Acce
        (SELECT count(*)::int FROM core.outbox) AS events,
        (SELECT count(*)::int FROM public.access_contention_effect) AS body`,
   );
+  // Mint time and gate admission must finish once before authorize throws; 500ms from test
+  // entry expired on loaded check hosts during mintTime, so the gate answered deadline.
+  const deadline = Date.now() + 5000;
   const caught = await runCommand(
     pool,
     {
