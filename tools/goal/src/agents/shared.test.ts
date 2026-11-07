@@ -1,5 +1,5 @@
 import { expect, test } from 'bun:test';
-import { parseExitObject } from './shared.ts';
+import { parseExitObject, textSignals } from './shared.ts';
 
 const blocked = { status: 'blocked', blocker: { kind: 'tool', detail: 'example' } };
 const waiting = { status: 'waiting', checks: ['check-1'] };
@@ -26,4 +26,11 @@ test('a complete report after a truncated object is still the exit', () => {
   const final = { status: 'waiting', checks: ['1d206ad1'] };
   expect(parseExitObject(`${truncated}\nReport: ${JSON.stringify(final)}`)).toEqual(final);
   expect(parseExitObject(`{ "note": "unclosed {"\n${JSON.stringify(success)}`)).toEqual(success);
+});
+
+test("Cursor's out-of-usage refusal is an allowance signal, not a tool fault", () => {
+  const stderr =
+    "ActionRequiredError: Increase limits for faster responses You're out of usage. Switch to Auto, or ask your admin to increase your limit to continue.";
+  expect(textSignals(stderr).allowance).toBe(true);
+  expect(textSignals('Error: Connection stalled').allowance).toBe(false);
 });

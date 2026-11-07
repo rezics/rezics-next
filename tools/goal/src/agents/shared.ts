@@ -28,7 +28,7 @@ export function tokens(value: Record<string, unknown>): Tokens {
 export const MODEL_AT_CAPACITY =
   /selected model is at capacity|model is at capacity|try a different model|server is overloaded|temporarily overloaded/i;
 export const POOL_EXHAUSTED =
-  /usage limit|hit your limit|quota exhausted|rate limit reached|balance exhausted|status 402|payment required/i;
+  /usage limit|hit your limit|quota exhausted|rate limit reached|balance exhausted|status 402|payment required|out of usage|increase limits for faster responses/i;
 export const USAGE_LIMIT_REFUSAL = /usage[\s_-]*limit|hit your limit/i;
 export function isUsageLimitRefusal(text: string): boolean {
   return USAGE_LIMIT_REFUSAL.test(text);

@@ -405,7 +405,8 @@ export async function settle(
           (!finalMeasurement.result.trim() || parsed == null) && errorLine
             ? errorLine
             : finalMeasurement.result.slice(-policy.worker.failedResultCharacters);
-        finalMeasurement.failureKind = 'tool';
+        // Cursor also refuses a spent allowance mid-session ("You're out of usage"); it excludes the pool, not a tool fault.
+        finalMeasurement.failureKind = adapter.signals?.(stderr).allowance ? 'pool-exhausted' : 'tool';
         finalMeasurement.result = `Worker ended without a success report (${code === null ? 'killed' : `exit ${code}`}): ${detail}`;
         if (transportLine) finalMeasurement.blocker = transportLine;
       }
