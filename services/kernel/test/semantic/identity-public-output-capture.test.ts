@@ -2,7 +2,7 @@ import { afterAll, beforeAll, expect, test } from 'bun:test';
 import { randomUUID } from 'node:crypto';
 import { systemClock } from '../../src/clock.ts';
 import { currentCommand, runCommand } from '../../src/command/command.ts';
-import { partitionOf, routeOf } from '../../src/route/route.ts';
+import { partitionOf } from '../../src/route/route.ts';
 import {
   beginCollectionSourceOutput,
   appendCollectionSourceOutput,
@@ -44,8 +44,12 @@ import type { WorkReceipt } from '../../src/library/contract/work-dimensions.ts'
 import type { PoolClient } from 'pg';
 
 let f: SourceRuntimeFixture;
+let release: SourceRuntimeFixture['original'];
 beforeAll(async () => {
   f = await sourceRuntimeFixture();
+  const published = await f.send('anonymous', 'GET', `/v1/definitions/releases/${f.originalDigest}`);
+  expect(published.status).toBe(200);
+  release = (await published.json()).release;
 }, 120000);
 afterAll(async () => {
   await f?.close();
@@ -93,12 +97,12 @@ async function setup(ids: readonly string[], visibility: 'public' | 'private' = 
   const resolved = await createPublicFilterSourceBinding(f.pool, c.routeKey, c.access).resolve(
     {
       source,
-      meaning: { digest: f.originalDigest, release: f.original, type: 'ex:Child' },
+      meaning: { digest: f.originalDigest, release, type: 'ex:Child' },
       capture: { sort: 'id', size: 20, filterDocument: undefined, text: undefined },
     },
     { deadline: Date.now() + 30000 },
   );
-  if (resolved.status !== 'resolved') throw new Error('Real registered public Source definition must resolve');
+  if (resolved.status !== 'resolved') throw new Error(`Real registered public Source definition: ${resolved.reason}`);
   for (let step = 0; (await readIdentityEpochCutover(f.pool)).state !== 'ready'; step++) {
     expect(step).toBeLessThan(100000);
     await stepIdentityEpochBootstrapWork(f.pool);

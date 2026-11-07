@@ -212,18 +212,19 @@ test('inward subject and summary adapters do not value-import native Content lif
   expect(violations).toEqual([]);
 });
 
-test('contract, core and application sources import only their own layers, identity-core and Definitions', () => {
+test('contract, core and application sources import only their own layers, identity-core, Definitions and contract schemas', () => {
   const semantic = fileURLToPath(new URL('../../src/semantic/', import.meta.url));
   const layers = ['contract', 'core', 'application'];
   const local = /^\.\/[\w-]+\.ts$/;
   const sibling = new RegExp(`^\\.\\./(${layers.join('|')}|identity-core)/[\\w-]+\\.ts$`);
-  const allowed = /^(?:@rezics\/definitions(?:\/validate)?)$/;
+  const allowed = /^@rezics\/definitions(?:\/(?:contract|validate))?$/;
   const violations: string[] = [];
   for (const layer of layers) {
     for (const file of readdirSync(`${semantic}${layer}`).filter((name) => name.endsWith('.ts'))) {
       const source = readFileSync(`${semantic}${layer}/${file}`, 'utf8');
       for (const [, specifier] of source.matchAll(/from\s+['"]([^'"]+)['"]/g)) {
-        if (!local.test(specifier!) && !sibling.test(specifier!) && !allowed.test(specifier!))
+        const contractSchema = layer === 'contract' && specifier === 'typebox';
+        if (!local.test(specifier!) && !sibling.test(specifier!) && !allowed.test(specifier!) && !contractSchema)
           violations.push(`${layer}/${file} -> ${specifier}`);
       }
     }

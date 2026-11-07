@@ -5,6 +5,9 @@ Decision: disclosed Subject and cover summaries live in `contract/summaries.ts`.
 and Library Continue consume those public entries. `http/summaries.ts` re-exports the schema for existing
 routes. Wire shapes are unchanged. Cover credit obligations stay the CC literals; schemas stay TypeBox objects
 so callers can spread `.properties` and `.anyOf`.
+The inward-layer import check permits the declared Definitions contract entry and TypeBox in contract schemas.
+Native public-output journeys bind the independently read published release body to its digest and retain Source
+refusal reasons in setup failures; compiler intermediates do not substitute for the published JSON body.
 
 Public-filter Collection reduction exposes `adapters/collection-reduction.ts` contract statement declarations
 without command-work implementation. Native reduction executes that exact SQL/bind plan; Library composes complete
