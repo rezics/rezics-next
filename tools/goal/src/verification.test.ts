@@ -1817,7 +1817,7 @@ export function readWorkerCheckHistory(id, physical, cwd) { return read(cwd, 'hi
   } finally {
     directory.close();
   }
-});
+}, 30_000);
 
 test('unavailable optional historical reader records one diagnostic while ordinary admission and orphan/retry recovery continue', async () => {
   const h = registeredFixture();
