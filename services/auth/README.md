@@ -2387,11 +2387,26 @@ cache and checks the selected original database identity, website registration a
 Changed-workspace typing is worker acceptance; the controller runs the original three-file native/browser selection
 after integration without increasing its timeout.
 
-Setup and native loading report fixed operation names with `starting`/`ready` markers on stderr; they never include
-database URLs or key material. Setup distinguishes environment loading, Auth database creation and migration,
-key loading, Kernel bindings, native catalogue construction and Web bindings. Startup reports Auth and default-worker
-readiness independently inside the existing identity phase. The fresh-stack test streams infrastructure stderr as
-it runs so a timeout retains the first incomplete operation, rather than only post-timeout cleanup output.
+Decision: local website setup and page bindings mount the complete native Kernel through
+`createKernelActionCatalogue`, sharing every declaration and composition check with `createKernel` while leaving
+HTTP handler/schema compilation to the serving host. Both required setup runs reconstruct that catalogue against
+the supplied database; no saved catalogue replaces current declarations or a supplied website configuration.
+
+Acceptance choice: keep all thirty original cases and their assertions; extend the supplied-database case to repeat
+composition and detect HTTP compilation, and add focused descendant-cancellation, inherited-pipe failure and deadline
+cases. The fresh browser fixture retains 300 seconds total, reserving its last 30 seconds for settlement. Admission,
+setup commands, readiness and browser cancellation share that absolute lifetime. Each command owns a detached process
+group, drains descendants before awaiting output EOF, escalates ignored termination and awaits observed terminal
+settlement before removing its exact containers, volumes and source copy or releasing its port lease. Independent
+cleanup failures retain the original cause and do not prevent the other resources from being settled.
+
+Setup and native loading report fixed operation names, UTC timestamps and elapsed milliseconds on stderr, without
+configuration values or credentials. Catalogue diagnostics distinguish configuration, native mounting, website scope
+composition and pool settlement. The fresh fixture streams infrastructure stderr, identifies first and repeated setup,
+and reports actual process and container/volume settlement. Startup reports Auth and default-worker readiness
+independently inside the existing identity phase. Typing, source review, the controller's native/browser rerun and the
+retained Accounts walk remain separate qualifications; only that rerun can establish the previously missing slow
+operation, complete journey timing and final resource settlement.
 
 Trusted `registerWebsiteDeployment(auth, actionCatalogue(kernel), registration, websiteConfigurationFile)`
 registers first, then emits Web's public `WEBSITE_CONFIGURATION_FILE` operand. Deployment supplies the actual
