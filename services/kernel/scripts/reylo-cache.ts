@@ -9,7 +9,7 @@ import {
   rmSync,
   writeFileSync,
 } from 'node:fs';
-import { dirname, join, resolve } from 'node:path';
+import { basename, dirname, join, relative, resolve, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { typecheckCacheRoot } from '../../../scripts/typecheck.ts';
 import { POSTGRES_IMAGE, schemaDumps } from './database.ts';
@@ -33,8 +33,14 @@ export type ReyloAnalysisDependencies = {
   cacheRoot?: string;
   repository?: string;
   workspace?: string;
+  /** Additional SQL roots imported by this compiler project, all analyzed through its private Reylo view. */
+  sourceWorkspaces?: readonly string[];
+  /** A compatible workspace cache whose immutable snapshot can seed the first combined-project snapshot. */
+  seedWorkspace?: string;
+  /** Workspace whose schema dump layout defines the cache key. */
+  schemaWorkspace?: string;
   schemaDumps?: (url: string, workspace: string) => Record<string, string>;
-  identity?: (repository: string, workspace: string) => string;
+  identity?: (repository: string, workspace: string, sourceWorkspaces?: readonly string[]) => string;
   generate?: (
     files: readonly string[],
     configFile: string,
@@ -56,7 +62,11 @@ export function schemaDumpDigest(dumps: Record<string, string>): string {
   return hash.digest('hex');
 }
 
-function reyloAnalysisIdentity(repository: string, workspace: string): string {
+function reyloAnalysisIdentity(
+  repository: string,
+  workspace: string,
+  sourceWorkspaces: readonly string[] = [workspace],
+): string {
   const hash = createHash('sha256')
     .update(Bun.version)
     .update('\0')
@@ -82,6 +92,21 @@ function reyloAnalysisIdentity(repository: string, workspace: string): string {
   if (engineOverride) hash.update(engineOverride).update('\0').update(readFileSync(engineOverride)).update('\0');
   for (const [name, path] of inputs) {
     hash.update(name).update('\0').update(readFileSync(path)).update('\0');
+  }
+  const included = new Set([workspace, ...sourceWorkspaces].map((project) => resolve(project)));
+  included.delete(directory);
+  for (const project of [...included].sort()) {
+    const relativeProject = relative(repository, project).split(sep).join('/');
+    const projectInputs: readonly (readonly [string, string])[] = [
+      ['package.json', join(project, 'package.json')],
+      ['tsconfig.json', join(project, 'tsconfig.json')],
+      ['node_modules/reylo/package.json', join(project, 'node_modules/reylo/package.json')],
+      ['node_modules/reylo/src/cli.js', join(project, 'node_modules/reylo/src/cli.js')],
+      ['node_modules/reylo/src/engine.js', join(project, 'node_modules/reylo/src/engine.js')],
+      ['node_modules/reylo/src/native.js', join(project, 'node_modules/reylo/src/native.js')],
+    ];
+    for (const [name, path] of projectInputs)
+      hash.update(`${relativeProject}/${name}`).update('\0').update(readFileSync(path)).update('\0');
   }
   return hash.digest('hex');
 }
@@ -116,8 +141,11 @@ function cacheManifest(value: unknown): ReyloCacheManifest {
   const files = record.files as Record<string, unknown>;
   for (const [path, digest] of Object.entries(files))
     if (
-      !path.startsWith('src/') ||
-      path.split('/').some((part) => part === '..' || part === '.') ||
+      path.startsWith('/') ||
+      path.includes('\\') ||
+      !path.split('/').includes('src') ||
+      path.split('/').at(-1) === 'src' ||
+      path.split('/').some((part) => part === '' || part === '..' || part === '.') ||
       typeof digest !== 'string' ||
       !/^[a-f0-9]{64}$/.test(digest)
     )
@@ -162,6 +190,22 @@ function readCacheSnapshot(base: string): ReyloCacheSnapshot | undefined {
   } catch (error) {
     if (error instanceof InvalidReyloAnalysisCache) return undefined;
     throw error;
+  }
+}
+
+/** Copy one immutable snapshot into a private run and verify the content digest before trusting its manifest. */
+function copyVerifiedSnapshot(snapshot: ReyloCacheSnapshot, privateRoot: string): boolean {
+  try {
+    const hash = createHash('sha256');
+    copyCacheTree(join(snapshot.directory, '.reylo'), join(privateRoot, '.reylo'), hash, '.reylo');
+    hash.update('manifest.json').update('\0').update(snapshot.manifestText).update('\0');
+    if (hash.digest('hex') !== snapshot.id)
+      throw new InvalidReyloAnalysisCache('Reylo analysis cache snapshot digest does not match its contents');
+    return true;
+  } catch (error) {
+    if (!(error instanceof InvalidReyloAnalysisCache) && !isInvalidCachePath(error)) throw error;
+    rmSync(join(privateRoot, '.reylo'), { recursive: true, force: true });
+    return false;
   }
 }
 
@@ -286,6 +330,11 @@ export async function prepareReyloAnalysisCache(
 ): Promise<ReyloAnalysisPreparation> {
   const repository = resolve(dependencies.repository ?? resolve(directory, '../..'));
   const workspace = resolve(dependencies.workspace ?? directory);
+  const sourceWorkspaces = [
+    ...new Set([workspace, ...(dependencies.sourceWorkspaces ?? [])].map((project) => resolve(project))),
+  ];
+  const schemaWorkspace = resolve(dependencies.schemaWorkspace ?? workspace);
+  const seedWorkspace = dependencies.seedWorkspace === undefined ? undefined : resolve(dependencies.seedWorkspace);
   const noCache = (): ReyloAnalysisPreparation => ({
     available: false,
     environment: env,
@@ -298,42 +347,59 @@ export async function prepareReyloAnalysisCache(
     !env.DATABASE_URL ||
     !env.KERNEL_DATABASE_CONTAINER ||
     env.REYLO_CONFIG !== undefined ||
-    existsSync(resolve(workspace, '.reylo.yaml')) ||
-    existsSync(resolve(workspace, '.reylo.yml'))
+    sourceWorkspaces.some(
+      (project) => existsSync(resolve(project, '.reylo.yaml')) || existsSync(resolve(project, '.reylo.yml')),
+    )
   )
     return noCache();
 
-  const dumps = (dependencies.schemaDumps ?? schemaDumps)(env.DATABASE_URL, workspace);
+  const dumps = (dependencies.schemaDumps ?? schemaDumps)(env.DATABASE_URL, schemaWorkspace);
   const schemaDigest = schemaDumpDigest(dumps);
-  const identity = sha256(
-    (dependencies.identity ?? reyloAnalysisIdentity)(repository, workspace),
-    stableDatabaseConfiguration(env.DATABASE_URL, env),
-  );
-  const base = join(dependencies.cacheRoot ?? typecheckCacheRoot(env), 'reylo-kernel', identity, schemaDigest);
+  const cacheIdentity = dependencies.identity ?? reyloAnalysisIdentity;
+  const databaseConfiguration = stableDatabaseConfiguration(env.DATABASE_URL, env);
+  const identity = sha256(cacheIdentity(repository, workspace, sourceWorkspaces), databaseConfiguration);
+  const cacheRoot = dependencies.cacheRoot ?? typecheckCacheRoot(env);
+  const namespace = `reylo-${basename(workspace)}`;
+  const base = join(cacheRoot, namespace, identity, schemaDigest);
   const snapshot = readCacheSnapshot(base);
   let previous: ReyloCacheManifest = snapshot?.manifest ?? { version: 1, files: {} };
 
-  const sourceFiles = [...new Bun.Glob('src/**/*.sql').scanSync({ cwd: workspace })].sort();
-  const hashes = Object.fromEntries(sourceFiles.map((file) => [file, sha256(readFileSync(resolve(workspace, file)))]));
-  let changed = sourceFiles.filter((file) => previous.files[file] !== hashes[file]);
+  const sourceFiles = sourceWorkspaces.flatMap((project) => {
+    const projectPrefix = project === workspace ? '' : relative(repository, project).split(sep).join('/');
+    const inputPrefix = relative(workspace, project).split(sep).join('/');
+    return [...new Bun.Glob('src/**/*.sql').scanSync({ cwd: project })].sort().map((file) => ({
+      key: projectPrefix ? `${projectPrefix}/${file}` : file,
+      input: inputPrefix ? `${inputPrefix}/${file}` : file,
+      path: resolve(project, file),
+    }));
+  });
+  const hashes = Object.fromEntries(sourceFiles.map(({ key, path }) => [key, sha256(readFileSync(path))]));
+  let changed = sourceFiles.filter(({ key }) => previous.files[key] !== hashes[key]);
   const runRoot = join(repository, '.temp/typecheck/reylo-runs');
   mkdirSync(runRoot, { recursive: true });
-  const privateRoot = mkdtempSync(join(runRoot, 'kernel-'));
+  const privateRoot = mkdtempSync(join(runRoot, `${basename(workspace)}-`));
   const configFile = join(privateRoot, '.reylo.yaml');
   let keep = false;
   try {
+    let inherited = false;
     if (snapshot) {
-      try {
-        const hash = createHash('sha256');
-        copyCacheTree(join(snapshot.directory, '.reylo'), join(privateRoot, '.reylo'), hash, '.reylo');
-        hash.update('manifest.json').update('\0').update(snapshot.manifestText).update('\0');
-        if (hash.digest('hex') !== snapshot.id)
-          throw new InvalidReyloAnalysisCache('Reylo analysis cache snapshot digest does not match its contents');
-      } catch (error) {
-        if (!(error instanceof InvalidReyloAnalysisCache) && !isInvalidCachePath(error)) throw error;
-        rmSync(join(privateRoot, '.reylo'), { recursive: true, force: true });
+      if (!copyVerifiedSnapshot(snapshot, privateRoot)) {
         previous = { version: 1, files: {} };
         changed = sourceFiles;
+      }
+    } else if (seedWorkspace) {
+      const seedIdentity = sha256(cacheIdentity(repository, seedWorkspace, [seedWorkspace]), databaseConfiguration);
+      const seedBase = join(cacheRoot, `reylo-${basename(seedWorkspace)}`, seedIdentity, schemaDigest);
+      const seedSnapshot = readCacheSnapshot(seedBase);
+      if (seedSnapshot && copyVerifiedSnapshot(seedSnapshot, privateRoot)) {
+        const prefix = relative(repository, seedWorkspace).split(sep).join('/');
+        previous = {
+          version: 1,
+          files: Object.fromEntries(
+            Object.entries(seedSnapshot.manifest.files).map(([path, digest]) => [`${prefix}/${path}`, digest]),
+          ),
+        };
+        inherited = true;
       }
     }
     let written = 0;
@@ -342,7 +408,12 @@ export async function prepareReyloAnalysisCache(
       const queries = join(privateRoot, '.reylo', 'queries');
       rekeyEntries(queries, env.DATABASE_URL);
       const before = entryCount(queries);
-      const generated = await (dependencies.generate ?? generateReyloAnalysis)(changed, configFile, env, workspace);
+      const generated = await (dependencies.generate ?? generateReyloAnalysis)(
+        changed.map(({ input }) => input),
+        configFile,
+        env,
+        workspace,
+      );
       if (generated.status !== 0) {
         rmSync(privateRoot, { recursive: true, force: true });
         return noCache();
@@ -350,7 +421,7 @@ export async function prepareReyloAnalysisCache(
       written = entryCount(queries) - before;
     }
     writeFileSync(configFile, 'direct_url: ""\n');
-    if (changed.length > 0) {
+    if (changed.length > 0 || inherited) {
       const manifest = JSON.stringify({ version: 1, files: hashes } satisfies ReyloCacheManifest) + '\n';
       mkdirSync(base, { recursive: true });
       publishCacheSnapshot(base, privateRoot, manifest);

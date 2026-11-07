@@ -38,6 +38,7 @@ import {
   WALK_DOCKER_REMOVE_MS,
   stopSpawned,
   waitUntilWalkReady,
+  walkStackPortsAvailable,
   type WalkNames,
 } from '../../../scripts/walk-stack.ts';
 import { localJwksTransport } from '../../kernel/src/access/membership-work-config.ts';
@@ -1271,7 +1272,10 @@ export async function startSeededFrontends(): Promise<{ stop(): Promise<void> }>
  * Runs `command` against one walk stack: admission, the stack `dev:infra` and `dev` start, then teardown when the
  * command ends or the attempt is signalled. Only a worker whose brief lists native or browser acceptance may start one.
  */
-async function walk(command: string[]): Promise<number> {
+export async function runWalk(
+  command: string[],
+  portsAvailable: typeof walkStackPortsAvailable = walkStackPortsAvailable,
+): Promise<number> {
   const task = process.env.GOAL_TASK_ID;
   if (!task || !walkStackRequired(process.env))
     throw new Error('walk stacks are for a worker whose brief lists acceptance.requires native or browser');
@@ -1324,7 +1328,7 @@ async function walk(command: string[]): Promise<number> {
   };
   try {
     while (true) {
-      slot = await admitWalkStack(task, process.env, root, controller.signal, blocked);
+      slot = await admitWalkStack(task, process.env, root, controller.signal, blocked, portsAvailable);
       const names = walkStackNames(task, slot.index!);
       const env = walkProcessEnvironment(task, slot.index!);
       const ports = walkStackPorts(slot.index!);
@@ -1448,7 +1452,7 @@ if (import.meta.main) {
     else if (action === 'start') await start();
     else if (action === 'walk') {
       const rest = process.argv.slice(3);
-      process.exitCode = await walk(rest[0] === '--' ? rest.slice(1) : rest);
+      process.exitCode = await runWalk(rest[0] === '--' ? rest.slice(1) : rest);
     } else throw new Error('Use setup, start, host, pages, web, persona or walk');
   } catch (error) {
     console.error(error);

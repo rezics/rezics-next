@@ -38,6 +38,7 @@ import {
   DEFAULT_PREPARATION_TIMEOUT_MS,
   dependencyPreparationProgram,
   effectiveRunLifetimeMs,
+  parseRemoteCommandStatus,
   RUN_LIFETIME_FAILURE_MARKER,
   parseRunLifetimeFailure,
   parseRemotePhysicalRunReceipt,
@@ -59,6 +60,7 @@ import {
   returnsProbe,
   readHosts,
   runScript,
+  statusScript,
   repositoryBun,
   remoteLaunch,
   MAX_REMOTE_LAUNCH_BYTES,
@@ -888,6 +890,7 @@ if (script.includes('/proc/loadavg')) {
   else {
     const runCount = Number(existsSync(dir + '/' + hostKey + '.run') ? readFileSync(dir + '/' + hostKey + '.run', 'utf8') : '0');
     if (runCount > 0 && runCount <= (config.preCommandFailures ?? 0)) console.log('NOT_STARTED');
+    else if (config.statusCleaningProbes?.includes(attempt)) console.log('CLEANING');
     else if (config.statusCompleteAfter !== undefined && attempt >= config.statusCompleteAfter) {
       const result = config.exit ?? 0;
       writeFileSync(statusFile, String(result));
@@ -1044,12 +1047,14 @@ const config = address ? JSON.parse(readFileSync(process.env.FAKE_DIR + '/config
 const rshIndex = args.indexOf('-e');
 const isBack = args.at(-1)?.endsWith('/') && !args.at(-1)?.startsWith('ops@');
 const hostKey = (address ?? '').replace(/[^a-z0-9]/gi, '_');
-const attemptFile = process.env.FAKE_DIR + '/' + hostKey + '.rsync-attempt';
+const attemptFile = process.env.FAKE_DIR + '/' + hostKey + (isBack ? '.rsync-back-attempt' : '.rsync-upload-attempt');
 const { existsSync, writeFileSync } = await import('node:fs');
 const attempt = Number(existsSync(attemptFile) ? readFileSync(attemptFile, 'utf8') : '0');
 writeFileSync(attemptFile, String(attempt + 1));
 const code = isBack
-  ? (config.rsyncBackExit ?? 0)
+  ? attempt < (config.rsyncBackFailures ?? 0)
+    ? (config.rsyncBackFailureCode ?? 20)
+    : (config.rsyncBackExit ?? 0)
   : attempt < (config.rsyncFailures ?? 0)
     ? (config.rsyncFailureCode ?? 12)
     : (config.rsyncExit ?? 0);
@@ -1209,10 +1214,13 @@ type HostConfig = {
   transportFailures?: number;
   statusAlwaysFails?: boolean;
   statusFailureProbes?: number[];
+  statusCleaningProbes?: number[];
   statusCompleteAfter?: number;
   statusWarning?: string;
   rsyncExit?: number;
   rsyncBackExit?: number;
+  rsyncBackFailures?: number;
+  rsyncBackFailureCode?: number;
   slowUploadMs?: number;
   slowReturnsMs?: number;
   uploadProgressMode?:
@@ -3369,6 +3377,52 @@ test('a dropped run reconnects through repeated status losses, then returns its 
   expect(events().filter((event) => event.kind === 'stop')).toHaveLength(0);
 });
 
+test('a reconnect treats a root result as cleaning until the host publishes terminal exit status', async () => {
+  const { env, events } = scenario({
+    a: {
+      available: 8e9,
+      transportFailures: 1,
+      statusCleaningProbes: [1, 2],
+      statusCompleteAfter: 3,
+      exit: 7,
+      present: ['.temp/output'],
+      returnedContent: 'native result retained through cleanup\n',
+    },
+  });
+  const directory = workspace();
+  const result = await remote(env, directory, ['true'], ['--returns', '.temp/output']);
+
+  expect(parseRemoteCommandStatus({ name: 'a' }, { code: 0, output: 'CLEANING', stdout: 'CLEANING\n' })).toEqual({
+    kind: 'cleaning',
+  });
+  expect(result.code).toBe(7);
+  expect(
+    events()
+      .filter((event) => event.kind === 'status')
+      .map((event) => event.attempt),
+  ).toEqual([1, 2, 3]);
+  expect(events().filter((event) => event.kind === 'run')).toHaveLength(1);
+  expect(events().filter((event) => event.kind === 'returns')).toHaveLength(1);
+});
+
+test('the reconnect status script hides retained root and lifetime results until cleanup is terminal', () => {
+  const directory = mkdtempSync(join(tmpdir(), 'remote-check-cleanup-status-'));
+  try {
+    writeFileSync(join(directory, '.command-result'), '7\n');
+    const pending = spawnSync('sh', ['-c', statusScript(directory)], { encoding: 'utf8' });
+    expect(pending.status).toBe(0);
+    expect(pending.stdout.trim()).toBe('CLEANING');
+    writeFileSync(join(directory, 'run-lifetime-status.json'), '{}\n');
+    const lifetime = spawnSync('sh', ['-c', statusScript(directory)], { encoding: 'utf8' });
+    expect(lifetime.stdout.trim()).toBe('CLEANING');
+    writeFileSync(join(directory, 'exit-status'), '7\n');
+    const terminal = spawnSync('sh', ['-c', statusScript(directory)], { encoding: 'utf8' });
+    expect(terminal.stdout.trim()).toBe('7');
+  } finally {
+    rmSync(directory, { recursive: true, force: true });
+  }
+});
+
 test('a run unreachable through its deadline is retained for stale cleanup without a stop or results cleanup', async () => {
   const { env, events } = scenario({
     a: { available: 8e9, transportFailures: 1, statusAlwaysFails: true },
@@ -5112,6 +5166,8 @@ if (command === 'systemd-run') {
     const run = typeof labelled === 'string' ? labelled.replace('rezics.check.run=', '') : process.env.REZICS_CHECK_RUN;
     state.containers.push({ id, run });
     state.volumes.push(id);
+    state.volumeRuns ??= {};
+    state.volumeRuns[id] = run;
     const parent = args.filter((arg) => arg.startsWith('--cgroup-parent=')).at(-1)?.split('=')[1] ?? process.env.REZICS_CHECK_SLICE ?? 'rezics-check.slice';
     const path = cgroup(parent);
     mkdirSync(path, { recursive: true });
@@ -5125,12 +5181,29 @@ if (command === 'systemd-run') {
     for (const container of state.containers) {
       if (!run || container.run === run) process.stdout.write(container.id + '\\n');
     }
+  } else if (args[0] === 'volume' && args[1] === 'ls') {
+    if (state.failVolumeList) {
+      console.error('docker volume ls failed: fixture daemon unavailable');
+      process.exit(2);
+    }
+    const filter = args.includes('--filter') ? args[args.indexOf('--filter') + 1] : args.find((arg) => arg.startsWith('--filter='))?.slice('--filter='.length);
+    const run = (filter ?? '').replace('label=rezics.check.run=', '');
+    for (const volume of state.volumes) {
+      if (!run || state.volumeRuns?.[volume] === run) process.stdout.write(volume + '\\n');
+    }
+  } else if (args[0] === 'volume' && args[1] === 'rm') {
+    const id = args.at(-1);
+    state.volumes = state.volumes.filter((volume) => volume !== id);
+    if (state.volumeRuns) delete state.volumeRuns[id];
   } else if (args[0] === 'inspect') {
     process.stdout.write((state.containers.find((container) => args.includes(container.id))?.id ?? '') + '\\n');
   } else if (args[0] === 'rm') {
     const id = args.at(-1);
     state.containers = state.containers.filter((container) => container.id !== id);
-    if (args.includes('-v')) state.volumes = state.volumes.filter((volume) => volume !== id);
+    if (args.includes('-v') && !state.preserveVolumes) {
+      state.volumes = state.volumes.filter((volume) => volume !== id);
+      if (state.volumeRuns) delete state.volumeRuns[id];
+    }
   }
 }
 writeFileSync(stateFile, JSON.stringify(state));
@@ -5144,7 +5217,12 @@ writeFileSync(stateFile, JSON.stringify(state));
   const stateFile = join(directory, 'state');
   writeFileSync(
     stateFile,
-    JSON.stringify({ ticks: 0, containers: [{ id: 'unrelated', run: 'other-run' }], volumes: ['unrelated'] }),
+    JSON.stringify({
+      ticks: 0,
+      containers: [{ id: 'unrelated', run: 'other-run' }],
+      volumes: ['unrelated'],
+      volumeRuns: { unrelated: 'other-run' },
+    }),
   );
   return {
     directory,
@@ -5558,6 +5636,7 @@ test('a run reports its CPU seconds, average cores and peak memory including its
 test('cleaning up a run removes its containers and their volumes', async () => {
   const scripts = await generatedRun();
   const fixture = runFixture();
+  fixture.update({ preserveVolumes: true });
   expect(fixture.execute(scripts.run).status).toBe(7);
   expect(fixture.state().containers).toHaveLength(3);
   expect(fixture.execute(scripts.cleanup).status).toBe(0);
@@ -5566,10 +5645,14 @@ test('cleaning up a run removes its containers and their volumes', async () => {
   const events = fixture.events();
   const stops = events.filter((event) => event.command === 'systemctl' && event.args[0] === 'stop');
   const removals = events.filter((event) => event.command === 'docker' && event.args[0] === 'rm');
+  const volumeRemovals = events.filter(
+    (event) => event.command === 'docker' && event.args[0] === 'volume' && event.args[1] === 'rm',
+  );
   expect(stops).toHaveLength(2);
   expect(stops[0].args[1]).toEndWith('.scope');
   expect(stops[1].args[1]).toEndWith('.slice');
   expect(removals).toHaveLength(2);
+  expect(volumeRemovals).toHaveLength(2);
   for (const removal of removals) {
     expect(removal.args.slice(0, 3)).toEqual(['rm', '-f', '-v']);
     expect(events.indexOf(removal)).toBeGreaterThan(events.indexOf(stops[0]));
@@ -5650,6 +5733,23 @@ test("a stale run directory's containers are removed with it", async () => {
     expect(events.indexOf(removal)).toBeGreaterThan(scopeStop);
     expect(events.indexOf(removal)).toBeLessThan(sliceStop);
   }
+});
+
+test('unavailable run-volume evidence keeps the native root result nonterminal', async () => {
+  const scripts = await generatedRun();
+  const fixture = runFixture();
+  fixture.update({ failVolumeList: true });
+  const result = fixture.execute(scripts.run);
+  const id = scripts.run.match(/REZICS_CHECK_RUN=([^\\s]+)/)![1]!;
+  const runDirectory = join(fixture.directory, 'runs', id);
+  expect(result.status).toBe(7);
+  expect(readFileSync(join(runDirectory, '.command-result'), 'utf8').trim()).toBe('7');
+  expect(JSON.parse(readFileSync(join(runDirectory, '.owned-resources-incomplete.json'), 'utf8'))).toMatchObject({
+    status: 'incomplete',
+    rootExitCode: 7,
+  });
+  expect(existsSync(join(runDirectory, 'exit-status'))).toBe(false);
+  expect(spawnSync('sh', ['-c', statusScript(runDirectory)], { encoding: 'utf8' }).stdout.trim()).toBe('CLEANING');
 });
 
 test('a run whose client stops renewing its liveness file is stopped by the next run that starts on the host, with its slice and containers', async () => {
@@ -5961,8 +6061,12 @@ test('transfer progress that stalls after real progress reports its byte count a
   const seen = returns.events();
   const returnTransfer = seen.find((event) => event.kind === 'rsync' && event.step === 'returns copy')!;
   const returnStop = seen.find((event) => event.kind === 'rsync-stopped' && event.step === 'returns copy')!;
+  const returnTransfers = seen.filter((event) => event.kind === 'rsync' && event.step === 'returns copy');
+  const stoppedTransfers = seen.filter((event) => event.kind === 'rsync-stopped' && event.step === 'returns copy');
   expect(returnStop.pid).toBe(returnTransfer.pid);
-  expect(seen.filter((event) => event.kind === 'rsync' && event.step === 'returns copy')).toHaveLength(1);
+  expect(stoppedTransfers.map((event) => event.pid)).toEqual(returnTransfers.map((event) => event.pid));
+  expect(returnTransfers).toHaveLength(2);
+  expect(stoppedTransfers).toHaveLength(2);
   expect(seen.filter((event) => event.kind === 'run')).toHaveLength(1);
   const releaseAt = seen.findIndex((event) => event.kind === 'release');
   const returnsAt = seen.findIndex((event) => event.kind === 'returns');
@@ -6113,8 +6217,9 @@ test('stalled upload and return transfers fail as transport, reap rsync and leav
   expect(returnsResult.stderr).toContain('connection to a failed during returns copy');
   const returnedEvents = returns.events();
   expect(returnedEvents.filter((event) => event.kind === 'run')).toHaveLength(1);
-  expect(returnedEvents.filter((event) => event.kind === 'rsync')).toHaveLength(2);
-  expect(returnedEvents.filter((event) => event.kind === 'rsync-stopped')).toHaveLength(1);
+  expect(returnedEvents.filter((event) => event.kind === 'rsync')).toHaveLength(3);
+  expect(returnedEvents.filter((event) => event.kind === 'rsync-stopped')).toHaveLength(2);
+  expect(returnedEvents.filter((event) => event.kind === 'rsync' && event.step === 'returns copy')).toHaveLength(2);
   const releaseAt = returnedEvents.findIndex((event) => event.kind === 'release');
   const returnAt = returnedEvents.findIndex((event) => event.kind === 'returns');
   expect(releaseAt).toBeGreaterThan(returnedEvents.findIndex((event) => event.kind === 'run'));
@@ -8822,7 +8927,11 @@ test('physical run lifetime uses safe estimate arithmetic, a finite fallback and
 test('host lifetime docker rm waits Auth run timeout; a probe timeout cannot abort labelled cleanup', () => {
   expect(dependencyPreparationProgram).toContain('DOCKER_RM_TIMEOUT = 120');
   expect(dependencyPreparationProgram).toContain('DOCKER_PROBE_TIMEOUT = 5');
-  expect(dependencyPreparationProgram).toContain("call(['docker', 'rm', '-f', '-v', token], DOCKER_RM_TIMEOUT)");
+  expect(dependencyPreparationProgram).toContain('DOCKER_SETTLEMENT_ATTEMPTS = 3');
+  expect(dependencyPreparationProgram).toContain("settle('container')");
+  expect(dependencyPreparationProgram).toContain("settle('volume')");
+  expect(dependencyPreparationProgram).toContain('if result.returncode:');
+  expect(dependencyPreparationProgram).toContain('settlement observed after Docker request failures');
   expect(dependencyPreparationProgram).toContain('try_clean_run_resources(run)');
   expect(dependencyPreparationProgram).not.toMatch(/timeout=3, text=True/);
 });
@@ -9021,11 +9130,74 @@ test('host lifetime preserves successful output and a native command exit 124 wi
   expect(existsSync(join(native.run, 'run-lifetime-status.json'))).toBe(false);
 });
 
+test('host lifetime retains the root command exit while bounding detached descendant cleanup', async () => {
+  const fixture = preparationFixture();
+  const pidFile = join(fixture.directory, 'detached-descendant.pid');
+  const command = `import pathlib,signal,subprocess,sys,time
+child=subprocess.Popen([sys.executable,'-c',"import signal,time; signal.signal(signal.SIGTERM, signal.SIG_IGN); time.sleep(60)"],start_new_session=True)
+pathlib.Path(${JSON.stringify(pidFile)}).write_text(str(child.pid))
+pathlib.Path('command-completed').write_text('once')
+sys.exit(7)`;
+  const run = fixture.create({ lifetime: 5_000, command: ['python3', '-c', command] });
+  const running = run.start();
+  try {
+    await waitFor(() => existsSync(join(run.run, '.command-result')));
+    const reconnect = spawnSync('sh', ['-c', statusScript(run.run)], { encoding: 'utf8' });
+    expect(reconnect.status).toBe(0);
+    expect(reconnect.stdout.trim()).toBe('CLEANING');
+    expect(readFileSync(join(run.run, '.command-result'), 'utf8')).toBe('7\n');
+    expect(existsSync(join(run.run, 'exit-status'))).toBe(false);
+    expect(await running.child.exited, await running.stderr).toBe(7);
+    await running.stdout;
+    await running.stderr;
+    expect(readFileSync(join(run.run, 'exit-status'), 'utf8')).toBe('7\n');
+    expect(readFileSync(join(run.run, 'command-completed'), 'utf8')).toBe('once');
+    expect(existsSync(join(run.run, 'run-lifetime-status.json'))).toBe(false);
+    expect(existsSync(join(run.run, 'preparation-status.json'))).toBe(false);
+    const descendantPid = Number(readFileSync(pidFile, 'utf8'));
+    expect(existsSync(`/proc/${descendantPid}`)).toBe(false);
+  } finally {
+    if (running.child.exitCode === null) running.child.kill('SIGTERM');
+    await running.child.exited;
+    await running.stdout;
+    await running.stderr;
+  }
+});
+
+test('return-copy retries one interrupted transfer on the same physical run and retains its output', async () => {
+  const fixture = scenario({
+    a: {
+      available: 20e9,
+      present: ['artifact'],
+      returnedContent: 'returned after one interrupted transfer\n',
+      rsyncBackFailures: 1,
+      rsyncBackFailureCode: 20,
+    },
+  });
+  const directory = workspace();
+  const completed = await remote(fixture.env, directory, ['true'], ['--returns', 'artifact']);
+  const transfers = fixture.events().filter((event) => event.kind === 'rsync' && event.step === 'returns copy');
+  expect(completed.code, completed.stderr).toBe(0);
+  expect(readFileSync(join(directory, 'artifact'), 'utf8')).toBe('returned after one interrupted transfer\n');
+  expect(transfers).toHaveLength(2);
+  expect(transfers.map((event) => event.code)).toEqual([20, 0]);
+  expect(transfers.every((event) => String(event.destination) === directory + '/')).toBe(true);
+  expect(fixture.events().filter((event) => event.kind === 'run')).toHaveLength(1);
+  expect(fixture.events().filter((event) => event.kind === 'release')).toHaveLength(1);
+});
+
 test.each([7, 124])(
   'a failed returns transfer cannot erase native exit %i or its named lifetime cause or repeat its command locally',
   async (exit) => {
     const fixture = scenario({
-      a: { available: 20e9, exit, lifetimeFailure: exit === 124, present: ['artifact'], rsyncBackExit: 12 },
+      a: {
+        available: 20e9,
+        exit,
+        lifetimeFailure: exit === 124,
+        present: ['artifact'],
+        rsyncBackFailures: 2,
+        rsyncBackFailureCode: 20,
+      },
     });
     const directory = workspace();
     const completed = await remote(
@@ -9051,6 +9223,8 @@ test.each([7, 124])(
     }
     expect(fixture.events().filter((event) => event.kind === 'run')).toHaveLength(1);
     expect(fixture.events().filter((event) => event.kind === 'release')).toHaveLength(1);
+    expect(completed.stderr).toContain('first attempt: rsync exit 20');
+    expect(completed.stderr).toContain('retry: rsync exit 20');
     if (exit === 124) expect(fixture.events().find((event) => event.kind === 'lifetime-status')?.slotHeld).toBe(false);
   },
 );

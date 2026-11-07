@@ -206,3 +206,9 @@ SQL leaves stay at zero engine/witness axes. FULL public snapshots withhold a ch
 history-state frontier so the public log URL never carries the private cursor. Seven Log suites plus five Search
 scope/work-context suites own the check; 64/512/4096 growth remains deferred. Fewest tests: extend operation-bounds
 and retract causal, plus one FULL withhold and one return-frontier pin.
+Decision: keep database ownership in the existing compiler and Kernel preparation paths. Readiness is rechecked for
+each admitted mapper consumer; the first failed probe retains its container identity and stops later consumers, while
+compiler and cleanup results remain independent. Same-run remote returns retry only the transfer and publish terminal
+status only after observed process and Docker-resource settlement. Auth prepares a schema/toolchain/content-keyed SQL
+view for Auth plus imported Kernel sources, seeding from a compatible Kernel snapshot and preserving explicit owner
+Reylo configurations.
