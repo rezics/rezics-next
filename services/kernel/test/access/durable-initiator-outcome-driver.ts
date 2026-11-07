@@ -39,7 +39,9 @@ import { workerTestEnv } from '../support/worker-env.ts';
 import { createLifecycleCommands, createLifecycleInternals, LIFECYCLE_ACTIONS } from '../../src/access/lifecycle.ts';
 import { readErasureInitiator } from '../../src/content/erasure-initiator.ts';
 import { createRealmMembership, readMembershipInitiator } from '../../src/community/membership.ts';
-import { communityWorkModule } from '../../src/community/work.ts';
+import { createCommunityWorkModule } from '../../src/community/work.ts';
+
+const communityWorkModule = createCommunityWorkModule({ deadlineNow: () => Date.now() });
 import { createAccountsWorkModule } from '../../src/access/membership-work.ts';
 import { readPost } from '../../src/content/reads.ts';
 import { readMembershipWorkConfig } from '../../src/access/membership-work-config.ts';
@@ -2301,6 +2303,7 @@ export async function runWorker() {
   const publicResources = new WeakMap<Attempt, Map<string, Resource>>();
   const restoredActors = new WeakMap<Attempt, Map<string, AccountActor>>();
   realmMembership = createRealmMembership({
+    deadlineNow: () => Date.now(),
     pool,
     access,
     referenceKeys: membershipConfig.referenceKeys,

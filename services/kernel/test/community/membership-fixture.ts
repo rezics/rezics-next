@@ -31,7 +31,7 @@ export async function createProductionAccess(
   const catalogue = productionActions();
   const access = createAccess({
     ...config,
-    actions: new Map(config.actions.map((action) => [action, catalogue.get(action) ?? { anonymous: false }])),
+    actions: catalogue,
     auth: {
       issuer,
       audience,

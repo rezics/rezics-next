@@ -96,7 +96,7 @@ export function encodeDiscoveryCursor(
   tokens: KeyRing,
   context: DiscoveryCursorContext,
   position: DiscoveryPosition,
-  now = Date.now(),
+  now: number,
 ): string {
   assertContext(context);
   if (!validPosition(position)) throw new TypeError('Invalid discovery rank position');
@@ -115,7 +115,7 @@ export function decodeDiscoveryCursor(
   tokens: KeyRing,
   context: DiscoveryCursorContext,
   token: string,
-  now = Date.now(),
+  now: number,
 ): DiscoveryPosition {
   assertContext(context);
   const decoded = decodeCursor(tokens, binding(context), token, now);
@@ -150,7 +150,14 @@ import {
   type DiscoveryCandidate,
 } from './discovery-projection-read.ts';
 
-export type DiscoveryDependencies = { pool: Pool; access: Access; tokens: KeyRing; clock: () => Date };
+export type DiscoveryDependencies = {
+  pool: Pool;
+  access: Access;
+  tokens: KeyRing;
+  clock: () => Date;
+  /** Real wall time for the snapshot and cursor budgets, supplied by composition. */
+  deadlineNow: () => number;
+};
 
 /** Public pages examine one rank range of at most twenty keys, including suppressed keys. */
 export async function listRealmDiscovery(
@@ -161,38 +168,46 @@ export async function listRealmDiscovery(
   const at = deps.clock();
   const cutoff = discoveryWindow(input.sort, at).cutoff;
   const limit = discoveryLimit(input.limit);
-  const page = await discoverySnapshot(deps.pool, DISCOVERY_PARTITION, deadline, async (client, epoch) => {
-    const anchor = (
-      await client.query<{ publication_epoch: string }>(
-        'SELECT publication_epoch::text FROM community.discovery_anchor WHERE route=0',
-      )
-    ).rows[0];
-    if (!anchor) throw new AccessUnavailableError('overloaded');
-    const context: DiscoveryCursorContext = {
-      sort: input.sort,
-      limit: limit.limit,
-      cutoff,
-      partitionEpoch: epoch,
-      publicationEpoch: anchor.publication_epoch,
-    };
-    const after =
-      input.cursor === undefined ? null : decodeDiscoveryCursor(deps.tokens, context, input.cursor, at.getTime());
-    const column = input.sort === 'popular' ? 'popular' : 'trending';
-    const rows = (
-      await client.query<DiscoveryCandidate>(
-        `SELECT ${stateColumns},${column}::text AS count
+  const page = await discoverySnapshot(
+    deps.pool,
+    DISCOVERY_PARTITION,
+    { deadline, now: deps.deadlineNow },
+    async (client, epoch) => {
+      const anchor = (
+        await client.query<{ publication_epoch: string }>(
+          'SELECT publication_epoch::text FROM community.discovery_anchor WHERE route=0',
+        )
+      ).rows[0];
+      if (!anchor) throw new AccessUnavailableError('overloaded');
+      const context: DiscoveryCursorContext = {
+        sort: input.sort,
+        limit: limit.limit,
+        cutoff,
+        partitionEpoch: epoch,
+        publicationEpoch: anchor.publication_epoch,
+      };
+      const after =
+        input.cursor === undefined ? null : decodeDiscoveryCursor(deps.tokens, context, input.cursor, at.getTime());
+      const column = input.sort === 'popular' ? 'popular' : 'trending';
+      const rows = (
+        await client.query<DiscoveryCandidate>(
+          `SELECT ${stateColumns},${column}::text AS count
       FROM community.discovery_realm WHERE route=0 AND ${column}>0
       ${after ? `AND (-${column},realm_id)>($1::bigint,$2::uuid)` : ''}
       ORDER BY (-${column}),realm_id LIMIT $${after ? 3 : 1}`,
-        after ? [(-BigInt(after.count)).toString(), after.realmId, limit.candidates] : [limit.candidates],
-      )
-    ).rows;
-    return { rows, context };
-  });
+          after ? [(-BigInt(after.count)).toString(), after.realmId, limit.candidates] : [limit.candidates],
+        )
+      ).rows;
+      return { rows, context };
+    },
+  );
   let cards = new Map<string, DiscoveryRealm>();
   if (page.rows.length) {
     const decisions = await prepareDiscoveryAccess(deps.pool, deps.access, deadline);
-    const first = await readDiscoveryCards(deps.pool, decisions, page.rows, cutoff, at.toISOString(), deadline);
+    const first = await readDiscoveryCards(deps.pool, decisions, page.rows, cutoff, at.toISOString(), {
+      deadline,
+      now: deps.deadlineNow,
+    });
     const avatars = new Map<string, RealmPresentationImage>();
     // All owner snapshots are released. Only selected avatars of the examined,
     // anonymously readable candidates reach the native media authority.
@@ -210,27 +225,35 @@ export async function listRealmDiscovery(
     const current = await currentDiscoveryCandidates(
       deps.pool,
       page.rows.filter((row) => first.has(row.realm_id)),
-      deadline,
+      { deadline, now: deps.deadlineNow },
     );
-    const final = await readDiscoveryCards(deps.pool, decisions, current, cutoff, deps.clock().toISOString(), deadline);
+    const final = await readDiscoveryCards(deps.pool, decisions, current, cutoff, deps.clock().toISOString(), {
+      deadline,
+      now: deps.deadlineNow,
+    });
     for (const [realmId, card] of final) {
       if (first.get(realmId)?.binding !== card.binding) continue;
       cards.set(realmId, { ...card.value, avatar: avatars.get(realmId) ?? null });
     }
-    await discoverySnapshot(deps.pool, DISCOVERY_PARTITION, deadline, async (client, epoch) => {
-      const anchor = (
-        await client.query<{ publication_epoch: string }>(
-          'SELECT publication_epoch::text FROM community.discovery_anchor WHERE route=0',
+    await discoverySnapshot(
+      deps.pool,
+      DISCOVERY_PARTITION,
+      { deadline, now: deps.deadlineNow },
+      async (client, epoch) => {
+        const anchor = (
+          await client.query<{ publication_epoch: string }>(
+            'SELECT publication_epoch::text FROM community.discovery_anchor WHERE route=0',
+          )
+        ).rows[0];
+        if (!anchor) throw new AccessUnavailableError('overloaded');
+        if (
+          epoch !== page.context.partitionEpoch ||
+          anchor.publication_epoch !== page.context.publicationEpoch ||
+          discoveryWindow(input.sort, deps.clock()).cutoff !== cutoff
         )
-      ).rows[0];
-      if (!anchor) throw new AccessUnavailableError('overloaded');
-      if (
-        epoch !== page.context.partitionEpoch ||
-        anchor.publication_epoch !== page.context.publicationEpoch ||
-        discoveryWindow(input.sort, deps.clock()).cutoff !== cutoff
-      )
-        throw new ProblemError('stale_cursor');
-    });
+          throw new ProblemError('stale_cursor');
+      },
+    );
   }
   const last = page.rows.at(-1);
   return {

@@ -27,6 +27,7 @@ const deps = () => ({
   pool: system.database.pool,
   access: system.access,
   routeKey: system.routeKey,
+  deadlineNow: () => Date.now(),
   clock: () => time,
 });
 const approver = () => system.actors.moderator.actor;

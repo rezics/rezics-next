@@ -87,8 +87,30 @@ Content then shares database.pool with WorkClient and composeWork. Registration 
 WorkClient; native queue registration refuses a stub. Tests pin the declaration, supplied clock, request identity
 and worker-import graph; no extra stories.
 
+Decision: pin Community construction with declaration inventory, ambient deadline refusal, and one populated Realm
+witness revision/replay native test including stale work; no extra stories. Domain clocks stay required on holders;
+deadlineNow is a separate ambient; Access-facing public entry includes realmReadEligibility. Command pools supply
+declared receipt keys before setup and grants; `createKernel` reuses a pool ring when composition omits `receiptKeys`.
+Policy catalogues drop resource types that did not resolve for the mounted action subset. JSON-array readers bind
+keys as text so `jsonb_to_recordset` never sees a non-array. Composition tests compare installed roles with
+`accessActionCatalogue` of the mounted routes. The Realm minting test records `preparePage` for the Global parent
+and `prepare` for Space/Context extras, capturing the live extras attempt during prepare because
+Access refuses a finished command time; extras deadline and the Space slot witness are stored on
+that command attempt at prepare so authorize admits only that attempt, without a shared scalar
+fallback. Growth isolation pools that run authored erasure commands bind the same dedicated
+receipt-key ring as HTTP fixtures. GrantDeniedError maps to forbidden before its write-denied superclass. Native HTTP
+fixtures carry dedicated receipt keys and the shared 30s request budget. Sequential fixtures unfence and re-issue tokens at the current
+authentication floor after suspension and never decrease `minimum_authn_epoch`.
+Boolean Realm-read and publication disclosure checks conceal eligibility `not_found` as a closed miss;
+a metadata revision rechecks current visibility. The publication list fixture deletes
+`search_selection_state` then the subject under Semantic erasure cleanup. Existing realm visibility
+and publication disclosure tests pin those states; no extra stories.
+
 Type compatibility repairs preserve outcome assertions and align callers with producer-owned contracts without
-changing behavior.
+changing behavior. Access resolver fixtures supply Community `deadlineNow`; existing assertions stay. Community
+domain clocks stay required on holders that already have one; deadlineNow is a separate ambient; Access-facing
+public entry includes realmReadEligibility. Tests pin declaration inventory, ambient deadline refusal, and one
+populated Realm witness revision/replay including stale work; no extra stories.
 
 ## Dependencies
 

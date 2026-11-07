@@ -3,7 +3,7 @@ export function workerTestEnv(overrides: Record<string, string>): Record<string,
 export function workerTestEnv(overrides: Record<string, string | undefined>): Record<string, string | undefined>;
 export function workerTestEnv(overrides: Record<string, string | undefined> = {}): Record<string, string | undefined> {
   // A module that adds a required worker variable adds its fixture here in the same task.
-  return {
+  const env: Record<string, string | undefined> = {
     KERNEL_ROUTE_KEY: Buffer.alloc(32, 41).toString('base64url'),
     KERNEL_SESSION_KEYS: `1:${Buffer.alloc(32, 42).toString('base64url')}`,
     KERNEL_RECEIPT_KEYS: `1:${Buffer.alloc(32, 17).toString('base64url')}`,
@@ -19,6 +19,9 @@ export function workerTestEnv(overrides: Record<string, string | undefined> = {}
     KERNEL_AUTH_CONSENT_URL: 'https://consent.worker.test/internal/v1/consents:read',
     CF_ACCESS_CLIENT_ID: 'worker-fixture-client',
     CF_ACCESS_CLIENT_SECRET: 'worker-fixture-client-secret',
-    ...overrides,
   };
+  for (const [key, value] of Object.entries(overrides)) {
+    if (value !== undefined) env[key] = value;
+  }
+  return env;
 }

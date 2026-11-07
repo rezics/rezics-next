@@ -1,3 +1,4 @@
+import { systemCommunityClock } from './ambient.ts';
 import { deadlineClient } from '../access/authenticate.ts';
 import { readViewerActions, type ViewerActionBindings, type ViewerActionResources } from '../access/viewer-actions.ts';
 import { readRealmPresentationImages } from '../content/realm-media.ts';
@@ -57,7 +58,7 @@ export async function readSpaceDiscoveryEntryBatch(
     for (let offset = 0; offset < refs.length; offset += 100) {
       try {
         const batch = await readViewerActions(
-          { ...deps, ...runtime, clock: deps.clock },
+          { ...deps, ...runtime, clock: deps.clock ?? systemCommunityClock },
           actor,
           refs.slice(offset, offset + 100),
           deadline,

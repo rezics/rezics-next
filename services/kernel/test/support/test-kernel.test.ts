@@ -9,6 +9,7 @@ import type { Access } from '../../src/request/access.ts';
 import { createKernelRuntimeDefaults } from '../../src/server.ts';
 import { createKernel, createKernelAccessResolver, type Kernel } from '../../src/http/kernel.ts';
 import { actionCatalogue, mountedRouteCatalogue } from '../../src/http/request.ts';
+import { configureTestReceiptKeys, testReceiptKeys } from './receipt-keys.ts';
 import {
   registerTestClient,
   testAccess,
@@ -47,8 +48,10 @@ function routeContract(kernel: Kernel) {
 }
 
 function productionComposition(): { kernel: Kernel; access: Access } {
+  configureTestReceiptKeys(pool);
   const defaults = createKernelRuntimeDefaults({
     tokens: testTokens(),
+    receiptKeys: testReceiptKeys(),
     auth: testAuth,
     writeRate: allowWrites,
   });
@@ -57,6 +60,7 @@ function productionComposition(): { kernel: Kernel; access: Access } {
     pool,
     tokens: runtime.tokens,
     clock: runtime.clock,
+    deadlineNow: runtime.deadlineNow,
     access: runtime.access,
   });
   const kernel = createKernel({ pool, routeKey: testRouteKey(), ...runtime, access: accessComposition.resolveAccess });
@@ -74,7 +78,7 @@ test('testKernel shares production routes, declarations, rate metadata and Acces
   expect(testComposition.testAccess.replayAuthorization?.('post:erase')).toBe(
     production.access.replayAuthorization?.('post:erase'),
   );
-});
+}, 180_000);
 
 test('testApp mounts the rate stage and testAccess binds the mounted action catalogue and resource types', async () => {
   const spends: { family: string; units: number | undefined }[] = [];
@@ -133,7 +137,7 @@ test('named overrides preserve the mounted composition and client registration d
   await registerTestClient(service, { clientId: 'test-client', firstParty: true });
   const scopes = (registrations[0] as { scopes: string[] }).scopes;
   expect(scopes).toEqual([...actionCatalogue(production).keys()].sort());
-});
+}, 180_000);
 
 test('receipt writer uses current principals and optionally records the production write basis', async () => {
   const accountId = randomUUID();

@@ -2,6 +2,8 @@ import { expect, test } from 'bun:test';
 import {
   compileNativePolicyCatalogue,
   decideNativePermission,
+  hasNativePolicyProfile,
+  uniqueNativePolicyResourceType,
   type NativePermissionProjection,
 } from '../../src/access/policy-core.ts';
 import type { ActionCatalogue } from '../../src/request/access.ts';
@@ -151,6 +153,38 @@ test('exact registered Global reach is the only alternate path, and unavailable 
     projection({ actorActionGrant: null, principalActionGrant: null }),
   );
   expect(unknown.decision).toBe('unavailable');
+});
+
+test('point inference uses complete declarations before the mounted type subset', () => {
+  const declared: ActionCatalogue = new Map([
+    ['access:grant', { anonymous: false, 'x-resource-types': ['community.realm', 'semantic.zone'] }],
+    ['profile:read', { anonymous: false, authority: 'own-account' }],
+  ]);
+  const resolved: ResolvedResourceRoles = {
+    roles: new Map([['community.realm.owner', ['access:grant']]]),
+    types: new Map([['community.realm', { owner: 'community.realm.owner', standing: [] }]]),
+  };
+  const compiled = compileNativePolicyCatalogue(declared, resolved);
+  expect(compiled.actionByName['access:grant']?.resourceTypes).toEqual(['community.realm']);
+  expect(uniqueNativePolicyResourceType(compiled, 'access:grant')).toBeUndefined();
+  expect(hasNativePolicyProfile(compiled, 'access:grant', 'community.realm')).toBe(true);
+  expect(uniqueNativePolicyResourceType(compiled, 'profile:read')).toBe('access.account');
+  expect(
+    decideNativePermission(
+      compiled,
+      {
+        action: 'profile:read',
+        resourceType: 'access.account',
+        anonymous: false,
+        hasPrincipal: true,
+        authenticatedBenefit: false,
+        scope: true,
+        floor: false,
+        mode: 'ordinary',
+      },
+      projection({ actorOwnAccountGrant: true, principalOwnAccountGrant: true }),
+    ).decision,
+  ).toBe('allow');
 });
 
 test('mounted production actions retain complete board ownership and exact definition and media policy types', () => {

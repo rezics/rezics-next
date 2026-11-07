@@ -5,6 +5,7 @@ import { createContentWorkAccess } from '../../../src/content/register.ts';
 import { contentEffects } from '../../../src/content/relays.ts';
 import { createContentWork } from '../../../src/content/work.ts';
 import { startWorker } from '../../../src/worker.ts';
+import { testReceiptKeys } from '../../support/receipt-keys.ts';
 import { createHash, randomUUID } from 'node:crypto';
 import { documentText, fromPlainText, serializeDocument, type DocumentSnapshot } from '@rezics/document';
 import type { Pool } from 'pg';

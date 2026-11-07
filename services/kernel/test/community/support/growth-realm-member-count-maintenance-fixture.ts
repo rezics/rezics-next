@@ -2,7 +2,9 @@ import { strict as assert } from 'node:assert';
 import { createInitiatorRestorer } from '../../../src/access/durable-initiator.ts';
 import { createAccountsWorkModule } from '../../../src/access/membership-work.ts';
 import { createRealmMembership, readMembershipInitiator } from '../../../src/community/membership.ts';
-import { communityWorkModule } from '../../../src/community/work.ts';
+import { createCommunityWorkModule } from '../../../src/community/work.ts';
+
+const communityWorkModule = createCommunityWorkModule({ deadlineNow: () => Date.now() });
 import { createKernel } from '../../../src/http/kernel.ts';
 import { createWriteRateLimiter } from '../../../src/access/write-rate.ts';
 import { newId, partitionOf } from '../../../src/route/route.ts';
@@ -41,6 +43,7 @@ export async function openMemberCountFixture() {
     realmRoleReader: (client, input) => roleReader(client, input),
   });
   const membership = createRealmMembership({
+    deadlineNow: () => Date.now(),
     pool: db.pool,
     access: production.access,
     referenceKeys: tokens,

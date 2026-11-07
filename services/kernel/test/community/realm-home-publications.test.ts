@@ -18,6 +18,7 @@ const deps = () => ({
   pool: runtime.system.database.pool,
   access: runtime.system.access,
   routeKey: runtime.system.routeKey,
+  deadlineNow: () => Date.now(),
 });
 
 beforeAll(async () => {
