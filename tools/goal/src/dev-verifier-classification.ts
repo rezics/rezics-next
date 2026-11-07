@@ -2,7 +2,13 @@ import { firstFailure } from './merge.ts';
 import { defaultPolicy } from './policy.ts';
 import { isTransportTimeout } from './check-failure.ts';
 import { CHECK_HOST_TRANSPORT } from './records.ts';
-import type { DevVerifierEvidence, DevVerifierResult } from './types.ts';
+import {
+  extractVerifierDiagnostics,
+  isCleanupFailureLine,
+  isCompilerDiagnosticLine,
+  isRsyncTelemetry,
+} from './dev-verifier-diagnostics.ts';
+import type { DevVerifierCause, DevVerifierEvidence, DevVerifierResult } from './types.ts';
 
 export function infraFailure(output: string, timedOut: boolean): boolean {
   return (
@@ -32,6 +38,16 @@ export function truncatedOutput(output: string): boolean {
   );
 }
 
+function ignoredAssertionLine(line: string): boolean {
+  return (
+    !line.trim() ||
+    isRsyncTelemetry(line) ||
+    /\berror\s+TS\d+\s*:/i.test(line) ||
+    isCompilerDiagnosticLine(line) ||
+    isCleanupFailureLine(line)
+  );
+}
+
 export function assertionLines(output: string): string[] {
   const finalAttempt = [...output.matchAll(/^--- verifier attempt \d+ \(final\) ---\n/gmu)].at(-1);
   const evidence = finalAttempt ? output.slice(finalAttempt.index + finalAttempt[0].length) : output;
@@ -42,7 +58,7 @@ export function assertionLines(output: string): string[] {
       assertion
         .split('\n')
         .map((line) => line.trim())
-        .filter(Boolean),
+        .filter((line) => !ignoredAssertionLine(line)),
     ),
   ];
 }
@@ -55,12 +71,24 @@ export function tooManyAssertions(output: string, policy = defaultPolicy.verifie
   return assertionLines(output).length > policy.findingAssertions;
 }
 
+export function verifierCauses(
+  result: Pick<DevVerifierEvidence, 'timedOut' | 'output'>,
+  policy = defaultPolicy.verifier,
+): DevVerifierCause[] {
+  const causes = new Set(extractVerifierDiagnostics(result).map(({ cause }) => cause));
+  if (stableAssertions(result.output, policy).length) causes.add('product-runtime');
+  return [...causes];
+}
+
 export function classifyRun(
   result: Pick<DevVerifierEvidence, 'passed' | 'timedOut' | 'output'> & Partial<Pick<DevVerifierEvidence, 'result'>>,
   policy = defaultPolicy.verifier,
 ): DevVerifierResult {
   if (result.result) return result.result;
   if (result.passed) return 'pass';
+
+  // A real compiler diagnostic is paid stage evidence even when later resource cleanup failed.
+  if (extractVerifierDiagnostics(result).some(({ cause }) => cause === 'compiler')) return 'fail';
   if (
     infraFailure(result.output, result.timedOut) ||
     unavailableFailure(result.output) ||

@@ -3,7 +3,10 @@ import { join } from 'node:path';
 import { randomUUID } from 'node:crypto';
 import { spawnSync } from 'node:child_process';
 import type {
+  DevVerifierCause,
+  DevVerifierCommand,
   DevVerifierEvidence,
+  DevVerifierDiagnostic,
   DevVerifierFinding,
   DevVerifierRoundSummary,
   DevVerifierRun,
@@ -21,17 +24,21 @@ import {
   runChecksAtHead,
   type CheckRun,
 } from './dev-verifier-comparison.ts';
-import { classifyRun, stableAssertions } from './dev-verifier-classification.ts';
+import { classifyRun, stableAssertions, verifierCauses } from './dev-verifier-classification.ts';
+import {
+  commandMetadata,
+  extractNamedTestFiles,
+  extractVerifierDiagnostics,
+  type DiagnosticWorkspaceContext,
+} from './dev-verifier-diagnostics.ts';
 import { installDependenciesCached } from './dev-verifier-execution.ts';
 import {
   countSourceIntervalCommits,
   createFullVerifierChecks,
   createVerifierChecks,
-  filesInCommits,
   matches,
   placeBootSmokeCheck,
   projectVerifierLandings,
-  taskCommits,
   trackedFilesAt,
   type DevVerifierCheck,
   type VerifierLandings,
@@ -56,16 +63,30 @@ const ref = (branch: string) => 'refs/heads/' + branch;
 const verifiedBranch = 'dev-verified';
 const TEST_FILE = /^(?:[A-Za-z0-9_.@-]+\/)*[A-Za-z0-9_.@-]+\.(?:test|spec)\.[cm]?[jt]sx?$/i;
 const tick = String.fromCharCode(96);
+const ACTIVE_OWNER_STATES = new Set(['ready', 'held', 'running', 'landing', 'stopped']);
+const LANDED_OWNER_STATES = new Set(['integrated', 'merged']);
 
 function head(cwd: string, branch: string): string {
   return git(cwd, 'rev-parse', '--verify', ref(branch));
 }
 
 export type TestFailure = {
-  test: string;
+  test?: string;
   assertions: string[];
   error: string;
   owner: Task;
+  cause?: DevVerifierCause;
+  diagnostic?: DevVerifierDiagnostic;
+  command?: DevVerifierCommand;
+  sourceRevision?: string;
+  evidenceLogPath?: string;
+  evidence?: TestFailureEvidence[];
+};
+export type TestFailureEvidence = {
+  command?: DevVerifierCommand;
+  sourceRevision?: string;
+  evidenceLogPath?: string;
+  output: string;
 };
 export type TestFailureRepair = {
   goal: string;
@@ -76,6 +97,44 @@ export type TestFailureRepair = {
   paths: string[];
   existingTaskId?: string;
 };
+
+function failureEvidence(failure: TestFailure): TestFailureEvidence[] {
+  return failure.evidence ?? [{
+    ...(failure.command ? { command: failure.command } : {}),
+    ...(failure.sourceRevision ? { sourceRevision: failure.sourceRevision } : {}),
+    ...(failure.evidenceLogPath ? { evidenceLogPath: failure.evidenceLogPath } : {}),
+    output: failure.error,
+  }];
+}
+
+function mergeRepeatedNamedTestFailures(failures: readonly TestFailure[]): TestFailure[] {
+  const result: TestFailure[] = [];
+  const byIdentity = new Map<string, number>();
+  for (const failure of failures) {
+    if (!failure.test || !TEST_FILE.test(failure.test)) {
+      result.push(failure);
+      continue;
+    }
+    const key = JSON.stringify([failure.owner.id, failure.cause ?? 'product-runtime', failure.test]);
+    const existingIndex = byIdentity.get(key);
+    if (existingIndex === undefined) {
+      byIdentity.set(key, result.length);
+      result.push(failure);
+      continue;
+    }
+    const existing = result[existingIndex]!;
+    const evidence = [...failureEvidence(existing), ...failureEvidence(failure)];
+    const uniqueEvidence = [...new Map(evidence.map((item) => [JSON.stringify(item), item])).values()];
+    const outputs = [...new Set(uniqueEvidence.map(({ output }) => output))];
+    result[existingIndex] = {
+      ...existing,
+      assertions: [...new Set([...existing.assertions, ...failure.assertions])],
+      error: outputs.join('\n\n--- separate verifier result ---\n\n'),
+      evidence: uniqueEvidence,
+    };
+  }
+  return result;
+}
 
 export type DevVerifierOptions = {
   settings: Settings;
@@ -131,85 +190,172 @@ function advanceVerified(settings: Settings, target: string): void {
   }
 }
 
-function testFilesFor(check: CheckRun['check'], evidence: DevVerifierEvidence): string[] {
-  const normalize = (path: string) => {
-    const relative = path.replace(/^\.\//, '');
-    return check.cwd && !relative.startsWith(check.cwd + '/') ? check.cwd + '/' + relative : relative;
-  };
-  const webRunner = check.command.indexOf('scripts/check.ts');
-  const runnerArguments = webRunner >= 0 ? check.command.slice(webRunner + 1) : check.command;
-  const separator = webRunner >= 0 ? runnerArguments.indexOf('--') : -1;
-  const selectionArguments = separator < 0 ? runnerArguments : runnerArguments.slice(0, separator);
-  const hostSelection = selectionArguments.indexOf('--host');
-  const selectedFile = hostSelection >= 0 ? selectionArguments[hostSelection + 1] : selectionArguments.at(-1);
-  const selectedFiles = selectedFile && TEST_FILE.test(selectedFile) ? [normalize(selectedFile)] : [];
-  if (selectedFiles.length === 1) return selectedFiles;
-  const found = new Set<string>();
-  const output = evidence.output.replaceAll('\\', '/');
-  const expression =
-    /(?:^|[\s([{"'])((?:[A-Za-z0-9_.@-]+\/)*[A-Za-z0-9_.@-]+\.(?:test|spec)\.[cm]?[jt]sx?)(?::\d+(?::\d+)?)?/g;
-  for (const match of output.matchAll(expression)) found.add(match[1]!);
-  if (found.size) return [...found].map(normalize);
-  const source = check.closure.find((path) => !path.includes('*') && TEST_FILE.test(path));
-  if (source) return [normalize(source)];
-  return [JSON.stringify(check.command)];
+function matchingPathSpecificity(file: string, paths: readonly string[], options: DevVerifierOptions): number {
+  const matching = paths.filter((path) => matches(file, [path], options.settings.policy?.brief));
+  const score = (path: string) => path.replaceAll('*', '').replaceAll('?', '').replaceAll('{', '').replaceAll('}', '').replaceAll('[', '').replaceAll(']', '').length;
+  return matching.length ? Math.max(...matching.map(score)) : -1;
 }
 
-function changedPaths(history: VerifierLandings | undefined, task: Task): string[] {
-  if (!history) return [];
-  return filesInCommits(history.interval, taskCommits(task, history.interval));
-}
-
-function ownerForFailure(
+function ownersForFile(
   options: DevVerifierOptions,
-  history: VerifierLandings | undefined,
+  file: string,
+  includeLanded: boolean,
+): { task: Task; specificity: number }[] {
+  return options.store
+    .tasks()
+    .filter((task) => ACTIVE_OWNER_STATES.has(task.state) || (includeLanded && LANDED_OWNER_STATES.has(task.state)))
+    .map((task) => ({ task, specificity: matchingPathSpecificity(file, task.brief.paths ?? [], options) }))
+    .filter(({ specificity }) => specificity >= 0);
+}
+
+function uniqueOwner(
+  candidates: { task: Task; specificity: number }[],
+  preferredTaskId: string | undefined,
+): { owner?: Task; ambiguous: Task[] } {
+  if (!candidates.length) return { ambiguous: [] };
+  const active = candidates.filter(({ task }) => ACTIVE_OWNER_STATES.has(task.state));
+  const eligible = active.length ? active : candidates;
+  const specificity = Math.max(...eligible.map(({ specificity: score }) => score));
+  const best = eligible.filter(({ specificity: score }) => score === specificity);
+  if (best.length > 1 && preferredTaskId) {
+    const preferred = best.find(({ task }) => task.id === preferredTaskId);
+    if (preferred) return { owner: preferred.task, ambiguous: [] };
+  }
+  return best.length === 1 ? { owner: best[0]!.task, ambiguous: [] } : { ambiguous: best.map(({ task }) => task) };
+}
+
+export type DiagnosticOwnerReconciliation = {
+  state: 'owned' | 'ambiguous' | 'stale' | 'unresolved';
+  owner?: Task;
+  currentRevision?: string;
+  reason: string;
+};
+
+function sourceUnchangedAtCurrentRevision(
+  checkout: string,
+  capturedRevision: string,
+  currentRevision: string,
+  file: string,
+): boolean | undefined {
+  const source = spawnSync('git', ['cat-file', '-e', `${currentRevision}:${file}`], { cwd: checkout });
+  if (source.error) throw source.error;
+  if (source.status === null) return undefined;
+  if (source.status !== 0) return false;
+  if (capturedRevision === currentRevision) return true;
+  const diff = spawnSync('git', ['diff', '--quiet', `${capturedRevision}..${currentRevision}`, '--', file], { cwd: checkout });
+  if (diff.error) throw diff.error;
+  if (diff.status === null) return undefined;
+  if (diff.status === 0) return true;
+  return diff.status === 1 ? false : undefined;
+}
+
+export function reconcileDiagnosticOwner(
+  options: DevVerifierOptions,
+  check: CheckRun['check'],
+  diagnostic: DevVerifierDiagnostic,
+  capturedRevision: string,
+  currentRevision = head(options.settings.mainCheckout, options.settings.integrationBranch ?? 'dev'),
+): DiagnosticOwnerReconciliation {
+  const location = diagnostic.location;
+  if (!location?.file || !location.resolved)
+    return { state: 'unresolved', reason: 'The compiler operand could not be resolved to a repository source path.' };
+
+  return reconcileSourceOwner(options, check, location.file, capturedRevision, currentRevision);
+}
+
+function reconcileSourceOwner(
+  options: DevVerifierOptions,
+  check: CheckRun['check'],
+  file: string,
+  capturedRevision: string,
+  currentRevision: string,
+  includeLanded = false,
+): DiagnosticOwnerReconciliation {
+  const checkout = options.settings.mainCheckout;
+  const branch = options.settings.integrationBranch ?? 'dev';
+  if (!isAncestor(checkout, capturedRevision, currentRevision))
+    return {
+      state: 'unresolved',
+      currentRevision,
+      reason: `Captured revision ${capturedRevision} is not an ancestor of current ${branch} ${currentRevision}.`,
+    };
+  const unchanged = sourceUnchangedAtCurrentRevision(checkout, capturedRevision, currentRevision, file);
+  if (unchanged === false)
+    return {
+      state: 'stale',
+      currentRevision,
+      reason: `Current source ${file} changed after captured revision ${capturedRevision}; current revision is ${currentRevision}.`,
+    };
+  if (unchanged === undefined)
+    return {
+      state: 'unresolved',
+      currentRevision,
+      reason: `Could not compare ${file} between captured revision ${capturedRevision} and current revision ${currentRevision}.`,
+    };
+
+  const candidates = ownersForFile(options, file, includeLanded);
+  const chosen = uniqueOwner(candidates, check.taskId);
+  if (chosen.owner)
+    return {
+      state: 'owned',
+      owner: chosen.owner,
+      currentRevision,
+      reason: `Concrete failed source ${file} matches the owner's declared paths.`,
+    };
+  if (chosen.ambiguous.length)
+    return {
+      state: 'ambiguous',
+      currentRevision,
+      reason: `Concrete failed source ${file} matches multiple owners: ${chosen.ambiguous.map(({ id }) => id).join(', ')}.`,
+    };
+  return { state: 'unresolved', currentRevision, reason: `No established owner declares concrete failed source ${file}.` };
+}
+
+function ownerForTest(
+  options: DevVerifierOptions,
   check: CheckRun['check'],
   test: string,
-): Task | undefined {
-  const tasks = options.store.tasks();
-  if (check.taskId) {
-    const direct = tasks.find((task) => task.id === check.taskId);
-    if (direct) return direct;
-  }
-  const testIsPath = TEST_FILE.test(test);
-  const eligible = tasks.filter((task) => ['integrated', 'merged'].includes(task.state));
-  const relevant = eligible.filter((task) => {
-    const paths = task.brief.paths ?? [];
-    if (testIsPath && matches(test, paths, options.settings.policy?.brief)) return true;
-    return changedPaths(history, task).some(
-      (file) =>
-        matches(file, paths, options.settings.policy?.brief) &&
-        matches(file, check.closure, options.settings.policy?.brief),
-    );
-  });
-  const interval = history?.interval;
-  relevant.sort((left, right) => {
-    const leftCommit = left.integratedCommit ?? left.mergedCommit;
-    const rightCommit = right.integratedCommit ?? right.mergedCommit;
-    const leftPosition = interval && leftCommit ? (interval.position.get(leftCommit) ?? -1) : -1;
-    const rightPosition = interval && rightCommit ? (interval.position.get(rightCommit) ?? -1) : -1;
-    return rightPosition - leftPosition || right.sequence - left.sequence;
-  });
-  return relevant[0];
+  capturedRevision: string,
+  currentRevision: string,
+): DiagnosticOwnerReconciliation {
+  return reconcileSourceOwner(options, check, test, capturedRevision, currentRevision, true);
 }
 
 export function testFailureRepairBrief(repair: TestFailureRepair, policy = defaultPolicy.verifier): string {
   const failures = repair.failures
     .map((failure) => {
       const assertions = failure.assertions.map((assertion) => '- ' + assertion).join('\n');
+      const isNamedTest = !!failure.test && TEST_FILE.test(failure.test);
+      const subject = isNamedTest
+        ? '- Test file: ' + tick + failure.test + tick
+        : failure.command || failure.test
+          ? '- Command: ' + tick + (failure.command ? JSON.stringify(failure.command.argv) : failure.test) + tick
+        : '- ' + (failure.cause ?? 'Verifier') + ' diagnostic: ' + (failure.diagnostic?.message ?? 'unresolved failure');
+      const sources = failureEvidence(failure);
+      const provenance = [
+        ...sources.map((source, index) => [
+          sources.length > 1 ? '  Evidence ' + (index + 1) + ':' : '',
+          source.sourceRevision ? '  Source revision: ' + tick + source.sourceRevision + tick : '',
+          source.command
+            ? '  Command: ' + tick + JSON.stringify(source.command.argv) + tick + ' (cwd ' + tick + (source.command.cwd ?? '.') + tick + ')'
+            : '',
+          source.evidenceLogPath ? '  Original result: ' + tick + source.evidenceLogPath + tick : '',
+        ].filter(Boolean).join('\n')),
+        failure.diagnostic?.location
+          ? '  Location: ' + tick + failure.diagnostic.location.file + ':' + (failure.diagnostic.location.line ?? '?') + ':' + (failure.diagnostic.location.column ?? '?') + tick
+          : '',
+      ].filter(Boolean).join('\n');
+      const output = sources.map(({ output: evidenceOutput }, index) =>
+        (sources.length > 1 ? `  Evidence ${index + 1}:\n` : '') +
+        evidenceOutput.slice(-policy.diagnosticCharacters).split('\n').map((line) => '  ' + line).join('\n'),
+      ).join('\n\n');
       return (
-        (TEST_FILE.test(failure.test) ? '- Test file: ' : '- Command: ') +
-        tick +
-        failure.test +
-        tick +
+        subject +
+        (provenance ? '\n' + provenance : '') +
         '\n  Assertions:\n' +
         assertions +
         '\n\n  Output:\n\n  ' +
-        failure.error
-          .slice(-policy.diagnosticCharacters)
-          .split('\n')
-          .map((line) => '  ' + line)
-          .join('\n')
+        output
       );
     })
     .join('\n\n');
@@ -260,21 +406,16 @@ function dispatchTestRepairs(options: DevVerifierOptions, failures: readonly Tes
     const goal = failure.owner.brief.goal;
     const manager = failure.owner.brief.manager;
     if (!goal || !manager) continue;
-    const key = goal + '\0' + manager;
+    const key = goal + '\0' + manager + '\0' + (failure.cause ?? 'product-runtime');
     groups.set(key, [...(groups.get(key) ?? []), failure]);
   }
   for (const [key, items] of groups) {
-    const [goal, manager] = key.split('\0') as [string, string];
+    const [goal, manager, cause] = key.split('\0') as [string, string, DevVerifierCause | 'product-runtime'];
     const owner = items[0]!.owner;
-    const paths = [
-      ...new Set(
-        items.flatMap(({ owner: itemOwner, test }) => [
-          ...(itemOwner.brief.paths ?? []),
-          ...(TEST_FILE.test(test) ? [test] : []),
-        ]),
-      ),
-    ];
-    const existing = openTestRepair(options.store, goal);
+    const paths = cause === 'compiler'
+      ? [...new Set(items.flatMap(({ diagnostic }) => diagnostic?.location?.file ? [diagnostic.location.file] : []))]
+      : [...new Set(items.flatMap(({ test }) => test && TEST_FILE.test(test) ? [test] : []))];
+    const existing = cause === 'compiler' ? undefined : openTestRepair(options.store, goal);
     try {
       options.dispatchTestRepair({
         goal,
@@ -291,9 +432,46 @@ function dispatchTestRepairs(options: DevVerifierOptions, failures: readonly Tes
   }
 }
 
-function recordResults(
+function findingProvenance(check: CheckRun['check'], revision: string): string {
+  const command = commandMetadata(check);
+  return `Captured revision ${revision}; argv ${JSON.stringify(command.argv)}; cwd ${command.cwd ?? '.'}. Original command output is retained in the finding evidence.`;
+}
+
+function saveDiagnosticFinding(
   options: DevVerifierOptions,
-  history: VerifierLandings | undefined,
+  check: CheckRun['check'],
+  base: string,
+  target: string,
+  diagnostic: DevVerifierDiagnostic,
+  status: DevVerifierFinding['status'],
+  evidence: DevVerifierEvidence,
+  reason: string,
+  result: DevVerifierFinding['result'],
+): void {
+  const location = diagnostic.location;
+  const assertion = [diagnostic.code, diagnostic.message].filter(Boolean).join(': ');
+  saveFinding(
+    options.store,
+    makeFinding(
+      check,
+      base,
+      target,
+      undefined,
+      assertion,
+      status,
+      evidence,
+      `${reason} ${findingProvenance(check, target)}`,
+      result,
+      diagnostic.cause,
+      diagnostic,
+      location ? `${location.file}:${location.line ?? '?'}:${location.column ?? '?'}` : undefined,
+    ),
+    options.settings.policy?.verifier,
+  );
+}
+
+export function recordVerifierResults(
+  options: DevVerifierOptions,
   base: string,
   target: string,
   runs: readonly CheckRun[],
@@ -302,66 +480,137 @@ function recordResults(
   let failed = 0;
   let unknown = 0;
   const repairs: TestFailure[] = [];
-  const failedTests = new Map<
-    string,
-    { check: CheckRun['check']; assertions: Set<string>; evidence: DevVerifierEvidence }
-  >();
+  const currentRevision = head(options.settings.mainCheckout, options.settings.integrationBranch ?? 'dev');
   for (const { check, evidence } of runs) {
     const outcome = classifyRun(evidence, options.settings.policy?.verifier);
     if (outcome === 'pass') {
       passed++;
       continue;
     }
-    const testNames = testFilesFor(check, evidence);
-    if (outcome === 'fail') {
-      failed++;
-      const assertions = stableAssertions(evidence.output, options.settings.policy?.verifier);
-      for (const test of testNames) {
-        const previous = failedTests.get(test);
-        if (previous) assertions.forEach((assertion) => previous.assertions.add(assertion));
-        else failedTests.set(test, { check, assertions: new Set(assertions), evidence });
-      }
-      continue;
-    }
-    unknown++;
-    const test = testNames[0] ?? check.command.join(' ');
-    saveFinding(
-      options.store,
-      makeFinding(
+    if (outcome === 'fail') failed++;
+    else unknown++;
+
+    const workspace: DiagnosticWorkspaceContext = {
+      repositoryRoot: options.settings.mainCheckout,
+      workspace: check.cwd ?? '',
+    };
+    const command = commandMetadata(check);
+    const diagnostics = extractVerifierDiagnostics(evidence, workspace);
+    const compilerDiagnostics = diagnostics.filter(({ cause }) => cause === 'compiler');
+    const independentDiagnostics = diagnostics.filter(({ cause }) => cause !== 'compiler');
+    const testNames = extractNamedTestFiles(check, evidence, workspace);
+    const assertions = stableAssertions(evidence.output, options.settings.policy?.verifier);
+    const causes = verifierCauses(evidence, options.settings.policy?.verifier);
+
+    for (const diagnostic of compilerDiagnostics) {
+      const ownerResult = reconcileDiagnosticOwner(options, check, diagnostic, target, currentRevision);
+      const owner = ownerResult.state === 'owned' ? ownerResult.owner : undefined;
+      saveDiagnosticFinding(
+        options,
         check,
         base,
         target,
-        test,
-        'Unknown verifier result: ' + evidence.output.slice(-1200),
-        'unknown',
+        diagnostic,
+        owner ? 'new' : 'unknown',
         evidence,
-        'The check did not produce a stable result.',
-        'infrastructure',
-      ),
-      options.settings.policy?.verifier,
-    );
-  }
-  for (const [test, failure] of failedTests) {
-    const assertions = [...failure.assertions];
-    saveFinding(
-      options.store,
-      makeFinding(
-        failure.check,
+        ownerResult.reason,
+        'fail',
+      );
+      if (owner) {
+        repairs.push({
+          assertions: [diagnostic.code ? `${diagnostic.code}: ${diagnostic.message}` : diagnostic.message],
+          error: evidence.output,
+          owner,
+          cause: 'compiler',
+          diagnostic,
+          command,
+          sourceRevision: target,
+          evidenceLogPath: evidence.logPath,
+        });
+      }
+    }
+
+    for (const diagnostic of independentDiagnostics) {
+      saveDiagnosticFinding(
+        options,
+        check,
         base,
         target,
-        test,
-        assertions.join('\n'),
-        'new',
-        failure.evidence,
-        'Failed at the current dev head during this verifier round.',
+        diagnostic,
+        'unknown',
+        evidence,
+        'Independent ' + diagnostic.cause + ' evidence; it does not replace any compiler or product result.',
+        'infrastructure',
+      );
+    }
+
+    if (assertions.length && testNames.length) {
+      for (const test of testNames) {
+        const ownerResult = ownerForTest(options, check, test, target, currentRevision);
+        const owner = ownerResult.state === 'owned' ? ownerResult.owner : undefined;
+        saveFinding(
+          options.store,
+          makeFinding(
+            check,
+            base,
+            target,
+            test,
+            assertions.join('\n'),
+            owner ? 'new' : 'unknown',
+            evidence,
+            `${ownerResult.reason} ${findingProvenance(check, target)}`,
+            'fail',
+            'product-runtime',
+          ),
+          options.settings.policy?.verifier,
+        );
+        if (owner) repairs.push({
+          test,
+          assertions,
+          error: evidence.output,
+          owner,
+          cause: 'product-runtime',
+          command,
+          sourceRevision: target,
+          evidenceLogPath: evidence.logPath,
+        });
+      }
+    } else if (assertions.length) {
+      const diagnostic: DevVerifierDiagnostic = { cause: 'product-runtime', message: assertions.join('\n') };
+      saveDiagnosticFinding(
+        options,
+        check,
+        base,
+        target,
+        diagnostic,
+        'unknown',
+        evidence,
+        'A product failure has no concrete named test operand; automatic implementation routing was withheld.',
         'fail',
-      ),
-      options.settings.policy?.verifier,
-    );
-    const owner = ownerForFailure(options, history, failure.check, test);
-    if (owner) repairs.push({ test, assertions, error: failure.evidence.output, owner });
+      );
+    }
+
+    if (!compilerDiagnostics.length && !independentDiagnostics.length && !assertions.length) {
+      const cause = causes[0];
+      saveFinding(
+        options.store,
+        makeFinding(
+          check,
+          base,
+          target,
+          undefined,
+          'The check did not produce a stable, attributable result.',
+          'unknown',
+          evidence,
+          `No concrete diagnostic operand was found. ${findingProvenance(check, target)}`,
+          'infrastructure',
+          cause,
+        ),
+        options.settings.policy?.verifier,
+      );
+    }
   }
-  return { testsRun: runs.length, passed, failed, unknown, repairs };
+  return { testsRun: runs.length, passed, failed, unknown, repairs: mergeRepeatedNamedTestFailures(repairs) };
 }
 
 function saveRoundRecord(options: DevVerifierOptions, summary: DevVerifierRoundSummary): void {
@@ -455,7 +704,7 @@ async function runRound(options: DevVerifierOptions, previous: DevVerifierRun | 
         bootChecks.length,
       );
       pendingChecks = executionResult.pending;
-      counts = recordResults(options, history, previousHead, captured, executionResult.results);
+      counts = recordVerifierResults(options, previousHead, captured, executionResult.results);
     } else pendingChecks = [];
   } finally {
     clearTimeout(deadlineTimer);

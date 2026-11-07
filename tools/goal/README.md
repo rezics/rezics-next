@@ -3107,6 +3107,25 @@ and head with its assertions. Failures are batched into one urgent repair per ow
 results remain visible but never hold progress, and every completed round advances dev-verified to its captured
 head. Findings and round summaries use the bounded dev_verifier_findings and dev_verifier_runs stores.
 
+### Verifier diagnostics and owner routing
+
+Verifier evidence keeps executable argv and cwd as command metadata. Only named test operands from argv, test-runner
+output or a single-file check closure become test findings; environment assignments and command text never become a
+test filename. TypeScript paths and line locations are parsed before normalization, using the active compiler
+workspace from command output and the check's real workspace cwd.
+
+Compiler, product runtime, transport and resource cleanup causes remain separate findings over the original command
+evidence. Rsync byte totals are transport telemetry; Expected/Received assertion lines remain product evidence. Cleanup
+or transport diagnostics do not replace a compiler result, and a current-head finding retains the original captured
+revision, argv, cwd and raw output.
+
+Automatic compiler routing requires a concrete repository source operand that is unchanged between the captured
+revision and current dev and matches an active owner's declared paths. The check task id can only break a tie between
+active owners that already match that source; closure overlap and recency do not establish ownership. Changed source,
+unresolved locations, missing active owners and unresolved ties stay visible as triage findings with their command and
+raw evidence. Concrete compiler failures go to their active owner's manager. Named test assertions retain automatic
+urgent repair routing, including the established Goal owner for an integrated test source when no active owner matches.
+
 Decision: dev-verifier-storage.ts owns bounded check evidence, one summary record per round and findings; the verifier advances the round head regardless of pass, failure or unknown results.
 
 Decision: dev-verifier-plan.ts owns shared changed-path and full-suite planning; dev-verifier-comparison.ts executes each selected check once at the captured head, with no baseline reconciliation.
