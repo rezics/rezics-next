@@ -81,7 +81,7 @@ test('a control-plane landing for main runs under its own lease while a queued d
   const devLanded = deferred();
   let running: Promise<void> | undefined;
   try {
-    s.enqueue('main-control', 'main-result', 'control-plane', 'main');
+    s.enqueue('main-control', 'tools/goal/src/main-result', 'control-plane', 'main');
     s.enqueue('dev-work', 'dev-result', 'web');
     expect(s.queue.nextBatch(10, [], 'main').map(({ request }) => request.taskId)).toEqual(['main-control']);
     expect(s.queue.nextBatch(10, [], 'dev').map(({ request }) => request.taskId)).toEqual(['dev-work']);
@@ -95,7 +95,7 @@ test('a control-plane landing for main runs under its own lease while a queued d
         },
       },
       runGate: async (_command, cwd) => {
-        if (existsSync(join(cwd, 'main-result'))) {
+        if (existsSync(join(cwd, 'tools/goal/src/main-result'))) {
           mainEntered.resolve();
           await releaseMain.promise;
         }
@@ -138,14 +138,14 @@ test('two control-plane landings targeting main are serialized within the main l
   let peak = 0;
   const order: string[] = [];
   try {
-    s.enqueue('main-one', 'main-one-result', 'control-plane', 'main');
-    s.enqueue('main-two', 'main-two-result', 'control-plane', 'main');
+    s.enqueue('main-one', 'tools/goal/src/main-one-result', 'control-plane', 'main');
+    s.enqueue('main-two', 'tools/goal/src/main-two-result', 'control-plane', 'main');
     await new MergeTrain({
       ...s.options,
       runGate: async (_command, cwd) => {
         active++;
         peak = Math.max(peak, active);
-        order.push(existsSync(join(cwd, 'main-two-result')) ? 'main-two' : 'main-one');
+        order.push(existsSync(join(cwd, 'tools/goal/src/main-two-result')) ? 'main-two' : 'main-one');
         await Bun.sleep(20);
         active--;
         return { passed: true, output: '', timedOut: false };
