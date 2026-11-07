@@ -32,6 +32,12 @@ The failure descriptions below are prior observations, not results on this integ
 
 ## Typing completion and infrastructure handback
 
+The previous successful typing run is historical evidence only: settlement rejected later documentation changes
+after that check. The controller has since replayed the retained source onto its current base. The current worker
+will submit the same combined five-workspace typing command after this final documentation commit; its terminal
+result determines closure. No tracked file will change after a successful check. Source, typing and deferred dev
+acceptance remain distinct, and all prior owner references and assertions stay retained.
+
 The combined typing command on 54559bc014 is:
 `bun scripts/worker-check.ts -- sh -c 'bun run --cwd apps/web typecheck; s=$?; bun run --cwd services/auth typecheck || s=1; bun run --cwd services/kernel typecheck || s=1; bun run --cwd services/importer typecheck || s=1; bun run --cwd packages/ui typecheck || s=1; exit $s'`.
 Checks f50e3114-e462-4959-b230-84ec490223fd and 29fdb03e-3e70-4ab9-9949-613a4fa69a79 both exited 1 on the
