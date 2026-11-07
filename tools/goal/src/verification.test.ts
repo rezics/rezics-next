@@ -1732,7 +1732,7 @@ export function readWorkerCheckHistory(id, physical, cwd) { return read(cwd, 'hi
     );
     git(directory.path, ['add', '.']);
     const tree = git(directory.path, ['write-tree']);
-    const producer = git(directory.path, ['rev-parse', 'HEAD']);
+    const producer = PROOF_PRODUCER_COMMIT;
     const commit = git(directory.path, [
       'commit-tree',
       tree,

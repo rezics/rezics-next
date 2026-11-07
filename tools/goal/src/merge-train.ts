@@ -3357,11 +3357,13 @@ export class MergeTrain {
       run: (runner) => async (argv, cwd, log) => {
         checkpoint();
         const result = await runner(argv, cwd, log, { signal: controller.signal });
+        // A product request can arrive between the last timer tick and command completion. Observe it
+        // before classifying the result so cancellation cannot become a retained proof failure.
+        checkpoint();
         // A product request aborts a still-running proof. The runner's resulting nonzero exit is
         // cancellation evidence, not a native assertion; retain failures only if they completed
         // before the controller yielded custody.
         if (!result.passed && !controller.signal.aborted) failure ??= { ...result, failedCommand: [...argv] };
-        checkpoint();
         return result;
       },
     };
@@ -3854,7 +3856,13 @@ export class MergeTrain {
       }
       if (controlPlane) {
         const release = this.readControlPlaneRecord(request);
-        if (!release || release.mainCommit !== entry.candidate || !this.controlPlaneRecordPublished(release)) {
+        if (
+          !release ||
+          release.mainBranch !== mainBranch ||
+          release.source?.branch !== request.branch ||
+          release.source?.commit !== sourceTip ||
+          !this.controlPlaneRecordPublished(release)
+        ) {
           result.stage = 'merge';
           result.firstFailure = firstFailure(
             `Control-plane candidate ${entry.candidate} is on ${mainBranch} without complete verified propagation; refusing to report the landing complete`,
@@ -3933,9 +3941,18 @@ export class MergeTrain {
       // diff. Only the commits after the main fork are considered for the main landing.
       let controlPlaneFork: string | undefined;
       if (!workspace && controlPlaneReleaseBrief(recorded) && o.integrationBranch !== undefined) {
-        const fork = this.git(o.mainCheckout, 'merge-base', sourceTip, `refs/heads/${mainBranch}`);
+        const published = this.readControlPlaneRecord(request);
+        const exactPublishedSource =
+          published?.mainBranch === mainBranch &&
+          published.source?.branch === request.branch &&
+          published.source?.commit === sourceTip;
+        const fork = exactPublishedSource
+          ? this.git(o.mainCheckout, 'merge-base', sourceTip, published.mainExpected)
+          : this.git(o.mainCheckout, 'merge-base', sourceTip, `refs/heads/${mainBranch}`);
         const taskChanges = changedPathsBetween(o.mainCheckout, fork, sourceTip, this.options.policy?.merge);
-        controlPlane = taskChanges.length > 0 && taskChanges.every((path) => path.startsWith(CONTROL_PLANE_PATH));
+        controlPlane =
+          exactPublishedSource ||
+          (taskChanges.length > 0 && taskChanges.every((path) => path.startsWith(CONTROL_PLANE_PATH)));
         if (controlPlane) controlPlaneFork = fork;
       }
       if (controlPlane) {
@@ -7292,15 +7309,13 @@ export class MergeTrain {
               this.options.policy?.merge,
             );
             const declared = preparedMembers.flatMap((member) => member.request.declaredPaths);
-            const approved = new Set(
-              node.indices.flatMap((index) => {
-                const member = manifest.members[index]!;
-                const approval = controlPlaneScopeApproval(member, scopeRuntime) ?? null;
-                if (!isDeepStrictEqual(journal.scopeApprovals![member.taskId], approval))
-                  throw new Error(`Batch member native scope approval changed for ${member.taskId}`);
-                return approval?.additionalPaths.map((addition) => addition.path) ?? [];
-              }),
-            );
+            const approved = new Set<string>();
+            for (const member of preparedMembers) {
+              const approval = controlPlaneScopeApproval(member.disposition, scopeRuntime) ?? null;
+              if (!isDeepStrictEqual(journal.scopeApprovals![member.request.taskId], approval))
+                throw new Error(`Batch member native scope approval changed for ${member.request.taskId}`);
+              for (const addition of approval?.additionalPaths ?? []) approved.add(addition.path);
+            }
             const outside = changed.filter(
               (path) => !approved.has(path) && outsideScope([path], declared).length > 0,
             );
