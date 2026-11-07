@@ -15,3 +15,11 @@ export function parseUtcHour(value: string): UtcHour {
     throw new Error('bucket must be a canonical UTC hour start');
   return { start: value, end: new Date(time + HOUR_MS).toISOString() };
 }
+
+/** Return the immediately preceding completed hours, newest first. */
+export function previousUtcHours(bucketValue: string, count: number): UtcHour[] {
+  const bucket = parseUtcHour(bucketValue);
+  if (!Number.isSafeInteger(count) || count < 0) throw new Error('hour count must be a non-negative integer');
+  const start = Date.parse(bucket.start);
+  return Array.from({ length: count }, (_, index) => parseUtcHour(new Date(start - (index + 1) * HOUR_MS).toISOString()));
+}
