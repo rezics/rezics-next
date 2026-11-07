@@ -20,6 +20,8 @@ import {
 import { createKernelRuntimeDefaults } from '../../src/server.ts';
 import { createKernel, createKernelAccessResolver, type Kernel } from '../../src/http/kernel.ts';
 import { actionCatalogue, mountedRouteCatalogue } from '../../src/http/request.ts';
+import { nativeSubjectReadingApplication } from '../../src/semantic/adapters/index.ts';
+import type { SubjectReadingApplication } from '../../src/semantic/index.ts';
 import { configureTestReceiptKeys, testReceiptKeys } from './receipt-keys.ts';
 import {
   registerTestClient,
@@ -58,7 +60,7 @@ function routeContract(kernel: Kernel) {
     .sort((left, right) => `${left.method} ${left.path}`.localeCompare(`${right.method} ${right.path}`));
 }
 
-function productionComposition(): { kernel: Kernel; access: Access } {
+function productionComposition(): { kernel: Kernel; access: Access; subjectReading: SubjectReadingApplication } {
   configureTestReceiptKeys(pool);
   const defaults = createKernelRuntimeDefaults({
     tokens: testTokens(),
@@ -66,7 +68,7 @@ function productionComposition(): { kernel: Kernel; access: Access } {
     auth: testAuth,
     writeRate: allowWrites,
   });
-  const { auth: _auth, ...runtime } = defaults;
+  const { auth: _auth, subjectReading, ...runtime } = defaults;
   const accessComposition = createKernelAccessResolver({
     pool,
     tokens: runtime.tokens,
@@ -74,8 +76,18 @@ function productionComposition(): { kernel: Kernel; access: Access } {
     deadlineNow: runtime.deadlineNow,
     access: runtime.access,
   });
-  const kernel = createKernel({ pool, routeKey: testRouteKey(), ...runtime, access: accessComposition.resolveAccess });
-  return { kernel, access: accessComposition.resolveAccess({ actions: actionCatalogue(kernel) }) };
+  const kernel = createKernel({
+    pool,
+    routeKey: testRouteKey(),
+    ...runtime,
+    subjectReading,
+    access: accessComposition.resolveAccess,
+  });
+  return {
+    kernel,
+    access: accessComposition.resolveAccess({ actions: actionCatalogue(kernel) }),
+    subjectReading,
+  };
 }
 
 test('testKernel shares production routes, declarations, rate metadata and Access configuration', () => {
@@ -89,6 +101,7 @@ test('testKernel shares production routes, declarations, rate metadata and Acces
     expect(routeContract(production.kernel).some((route) => route.path === '/v1/subjects/:id/ratings')).toBe(true);
     const testComposition = testKernel({ pool });
 
+    expect(nativeSubjectReadingApplication()).toBe(production.subjectReading);
     expect(routeContract(testComposition)).toEqual(routeContract(production.kernel));
     expect([...actionCatalogue(testComposition)]).toEqual([...actionCatalogue(production.kernel)]);
     expect(resourceRoleCatalogue(testComposition.testAccess)).toEqual(resourceRoleCatalogue(production.access));

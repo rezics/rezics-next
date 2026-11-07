@@ -27,6 +27,9 @@ supplies Account repair/enrollment, authorization and deadline classification th
 runtime defaults compose this application before Search runtime factories are used. Existing pool, route key, Access,
 request deadline, transaction, reached-child work and publication writer ownership flow through unchanged.
 
+Summary: Composition installs the sole native `SubjectReadingApplication`; server and Search-worker runtime defaults
+inject it into Kernel, tests pass it explicitly, and direct compatibility hosts resolve the same installed binding.
+
 This module owns subject facts and their item projections, partition paging, and immutable definition releases with editorial activation history.
 
 `contract/released-definitions.ts` and `adapters/released-definitions.ts` expose the existing digest-validated producer;
