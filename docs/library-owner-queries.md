@@ -594,6 +594,9 @@ Decision: after merging current main, publication keeps stored-Source population
 and public catalogue pins at seal/activation; History fixtures bind the public execution port; Score keeps Published
 Log journey composition. Fewest tests stay the three catalogue publication cases plus `saved-query-results.test.ts`.
 
+Decision: changed-workspace typing repairs add contribution attribution to story CurrentPost fixtures, allow Seed
+optionals to be undefined, read gotoPage's url field, and drop the duplicate kernel receipt-keys import. No extra tests.
+
 This adoption records the native plan and preserves required native-case freezing. It adds no production code, exported
 runtime symbol, schema migration, API tests or gate. File presence and document format/link validation establish
 **prose delivery only**, not product acceptance.
