@@ -1,10 +1,6 @@
 /** Collection list specialization and funded authorization-preparation use cases. */
 
-import type {
-  AccessApplicationPorts,
-  AccessWorkDimensions,
-  CollectionListPolicyOutcome,
-} from '../contract/index.ts';
+import type { AccessApplicationPorts, AccessWorkDimensions, CollectionListPolicyOutcome } from '../contract/index.ts';
 import { EMPTY_ACCESS_WORK_DIMENSIONS } from '../contract/index.ts';
 
 export function createCollectionPolicyApplication(ports: Pick<AccessApplicationPorts, 'collectionPolicy'>) {
