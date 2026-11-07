@@ -23,6 +23,7 @@ import { sourceRecordMetadataFixture } from './transport-driver.ts';
 import { parseAuthoredVndbCopy } from '../src/vndb-public-tags.ts';
 import { VNDB_PUBLIC_TAG_COLUMNS, vndbPublicTagLimits } from '../src/vndb-tables.ts';
 import { captureShowcaseCommands, ShowcaseJournal, type ShowcaseReviewPort } from '../src/showcase-publication.ts';
+import { showcaseDigest } from '../src/showcase-contract.ts';
 import { ImportTransportError, type ReviewedSubjectRead } from '../src/import-client.ts';
 import type { VndbTagRatingFetch } from '../src/showcase-vndb-tag-ratings.ts';
 import { importShowcaseTags } from '../src/selected-import.ts';
@@ -38,6 +39,7 @@ import {
   readReviewedTagCandidatePage,
   importerOwnedReviewedTagRetirements,
   completeReviewedSharedTagFlow,
+  adoptAcceptedReviewedTagSelection,
 } from '../src/showcase-tags.ts';
 
 const tagsHeader = VNDB_PUBLIC_TAG_COLUMNS.tags.join('\t');
@@ -1430,6 +1432,250 @@ test('two admitted Schemes withhold membership until child and parent share one 
         weights: [{ target: conceptId, amount: '+2.6', metric: 'vndbTagsRating' }],
       },
     ]);
+  } finally {
+    journal.close();
+    await rm(directory, { recursive: true, force: true });
+  }
+});
+
+const globalContext = '00000000-0000-8000-8000-000000000000';
+
+function reviewedTagAdoptKey(subjectId: string, property: string, digest: string) {
+  return `adopt:${showcaseDigest({ identity: `${subjectId}:${property}`, digest })}`;
+}
+
+function reviewedTagAdoptBody(
+  selection: { candidate: string; rank: 'normal' | 'preferred' }[],
+  head: number | null = 1,
+) {
+  return {
+    context: globalContext,
+    property: 'schema:genre',
+    mode: 'replace' as const,
+    expected_head: head,
+    selection,
+  };
+}
+
+test('reviewed-tag adopt resumes previous-format and later prepared keys before matching acknowledgements, then continues past 32 generations', async () => {
+  const directory = await mkdtemp(join(tmpdir(), 'reviewed-tag-adopt-lifetime-'));
+  const journal = new ShowcaseJournal(join(directory, 'showcase.sqlite'));
+  const intent = 'current';
+  const planned = reviewedTagAdoptBody([{ candidate: pageOneId, rank: 'normal' }]);
+  const other = reviewedTagAdoptBody([{ candidate: editorialId, rank: 'preferred' }]);
+  try {
+    const historical = journaledReview({
+      workCandidates: {
+        first: [candidateRow(pageOneId, { source: 'vndb', external_id: 'g311' }, 'accepted', 'normal')],
+        second: [],
+        adoption: { head: 4, selection: planned.selection },
+      },
+    });
+    const laterKey = reviewedTagAdoptKey(workId, 'schema:genre', showcaseDigest({ intent, generation: 1 }));
+    journal.prepareAction(laterKey, planned, showcaseDigest({ action: laterKey, body: planned }));
+    const resumed = await adoptAcceptedReviewedTagSelection(
+      historical as unknown as Pick<ShowcaseReviewPort, 'reviewedCandidates' | 'adoptReviewedCandidates'>,
+      workId,
+      'schema:genre',
+      journal,
+      { intent },
+    );
+    expect(resumed.complete).toBe(true);
+    expect(historical.adoptKeys).toEqual([journal.action(laterKey)!.idempotency_key]);
+    expect(historical.adoptBodies[0]).toEqual(planned);
+
+    const previousJournal = new ShowcaseJournal(join(directory, 'previous.sqlite'));
+    const previousKey = reviewedTagAdoptKey(workId, 'schema:genre', showcaseDigest({ intent, body: planned }));
+    previousJournal.prepareAction(previousKey, planned, showcaseDigest({ action: previousKey, body: planned }));
+    const previousReview = journaledReview({
+      workCandidates: {
+        first: [candidateRow(pageOneId, { source: 'vndb', external_id: 'g311' }, 'accepted', 'normal')],
+        second: [],
+        adoption: { head: 4, selection: planned.selection },
+      },
+    });
+    const previous = await adoptAcceptedReviewedTagSelection(
+      previousReview as unknown as Pick<ShowcaseReviewPort, 'reviewedCandidates' | 'adoptReviewedCandidates'>,
+      workId,
+      'schema:genre',
+      previousJournal,
+      { intent },
+    );
+    expect(previous.complete).toBe(true);
+    expect(previousReview.adoptKeys).toHaveLength(1);
+    previousJournal.close();
+
+    const boundJournal = new ShowcaseJournal(join(directory, 'bound.sqlite'));
+    for (let generation = 0; generation < 32; generation += 1) {
+      const action = reviewedTagAdoptKey(workId, 'schema:genre', showcaseDigest({ intent, generation }));
+      boundJournal.prepareAction(action, other, `bound-${generation}`);
+      boundJournal.acknowledgeAction(action);
+    }
+    const boundReview = journaledReview({
+      workCandidates: {
+        first: [candidateRow(pageOneId, { source: 'vndb', external_id: 'g311' }, 'accepted', 'normal')],
+        second: [],
+      },
+    });
+    const continued = await adoptAcceptedReviewedTagSelection(
+      boundReview as unknown as Pick<ShowcaseReviewPort, 'reviewedCandidates' | 'adoptReviewedCandidates'>,
+      workId,
+      'schema:genre',
+      boundJournal,
+      { intent },
+    );
+    expect(continued.complete).toBe(true);
+    expect(boundReview.adoptKeys).toHaveLength(1);
+    boundJournal.close();
+
+    const unknownPath = join(directory, 'unknown.sqlite');
+    let unknownJournal = new ShowcaseJournal(unknownPath);
+    for (let generation = 0; generation < 32; generation += 1) {
+      const action = reviewedTagAdoptKey(workId, 'schema:genre', showcaseDigest({ intent, generation }));
+      unknownJournal.prepareAction(action, other, `unknown-${generation}`);
+      unknownJournal.acknowledgeAction(action);
+    }
+    const unknownReview = journaledReview({
+      loseAdopt: true,
+      workCandidates: {
+        first: [candidateRow(pageOneId, { source: 'vndb', external_id: 'g311' }, 'accepted', 'normal')],
+        second: [],
+      },
+    });
+    await expect(
+      adoptAcceptedReviewedTagSelection(
+        unknownReview as unknown as Pick<ShowcaseReviewPort, 'reviewedCandidates' | 'adoptReviewedCandidates'>,
+        workId,
+        'schema:genre',
+        unknownJournal,
+        { intent },
+      ),
+    ).rejects.toThrow('Lost committed adoption');
+    expect(unknownReview.adoptKeys).toHaveLength(1);
+    const sealedKey = unknownReview.adoptKeys[0]!;
+    const sealedBody = unknownReview.adoptBodies[0];
+    unknownJournal.close();
+    unknownJournal = new ShowcaseJournal(unknownPath);
+    const starve = {
+      context: globalContext,
+      property: 'schema:keywords',
+      mode: 'replace' as const,
+      expected_head: 0,
+      selection: [] as { candidate: string; rank: 'normal' }[],
+    };
+    for (let index = 0; index < 64; index += 1)
+      unknownJournal.prepareAction(`adopt:${index.toString(16).padStart(64, '0')}`, starve, `starve-${index}`);
+    unknownReview.moveHead();
+    const recovered = await adoptAcceptedReviewedTagSelection(
+      unknownReview as unknown as Pick<ShowcaseReviewPort, 'reviewedCandidates' | 'adoptReviewedCandidates'>,
+      workId,
+      'schema:genre',
+      unknownJournal,
+      { intent },
+    );
+    expect(recovered.complete).toBe(true);
+    expect(unknownReview.adoptKeys).toEqual([sealedKey, sealedKey]);
+    expect(unknownReview.adoptBodies[1]).toEqual(sealedBody);
+    unknownJournal.close();
+  } finally {
+    journal.close();
+    await rm(directory, { recursive: true, force: true });
+  }
+});
+
+test('reviewed-tag adopt recovers identity-bound generation 32 after close, a later recorded window, and another property prefix', async () => {
+  const directory = await mkdtemp(join(tmpdir(), 'reviewed-tag-unknown-32-'));
+  const path = join(directory, 'showcase.sqlite');
+  const intent = 'current';
+  const planned = reviewedTagAdoptBody([{ candidate: pageOneId, rank: 'normal' }]);
+  const other = reviewedTagAdoptBody([{ candidate: editorialId, rank: 'preferred' }]);
+  const identity = `${workId}:schema:genre:${intent}`;
+  const sealedKey = 'unknown-32';
+  let journal = new ShowcaseJournal(path);
+  try {
+    for (let generation = 0; generation < 32; generation += 1) {
+      const action = reviewedTagAdoptKey(workId, 'schema:genre', showcaseDigest({ intent, generation }));
+      journal.prepareAction(action, other, `acked-${generation}`);
+      journal.acknowledgeAction(action);
+    }
+    const generation32 = reviewedTagAdoptKey(workId, 'schema:genre', showcaseDigest({ intent, generation: 32 }));
+    journal.prepareAction(generation32, planned, sealedKey);
+    journal.recordPendingAdopt(identity, generation32);
+    journal.advanceAdoptGeneration(identity, 70);
+    journal.close();
+
+    journal = new ShowcaseJournal(path);
+    const starve = {
+      context: globalContext,
+      property: 'schema:keywords',
+      mode: 'replace' as const,
+      expected_head: 0,
+      selection: [] as { candidate: string; rank: 'normal' }[],
+    };
+    for (let index = 0; index < 64; index += 1)
+      journal.prepareAction(`adopt:${index.toString(16).padStart(64, '0')}`, starve, `starve-${index}`);
+    const review = journaledReview({
+      workCandidates: {
+        first: [candidateRow(pageOneId, { source: 'vndb', external_id: 'g311' }, 'accepted', 'normal')],
+        second: [],
+        adoption: { head: 9, selection: other.selection },
+      },
+    });
+    review.moveHead();
+    const recovered = await adoptAcceptedReviewedTagSelection(
+      review as unknown as Pick<ShowcaseReviewPort, 'reviewedCandidates' | 'adoptReviewedCandidates'>,
+      workId,
+      'schema:genre',
+      journal,
+      { intent },
+    );
+    expect(recovered.complete).toBe(true);
+    expect(review.adoptKeys).toEqual([sealedKey]);
+    expect(review.adoptBodies[0]).toEqual(planned);
+  } finally {
+    journal.close();
+    await rm(directory, { recursive: true, force: true });
+  }
+});
+
+test('reviewed-tag adopt replays a historical acknowledgement into later unknown delivery, then a distinct sealed retirement', async () => {
+  const directory = await mkdtemp(join(tmpdir(), 'reviewed-tag-unknown-delivery-'));
+  const journalPath = join(directory, 'showcase.sqlite');
+  let journal = new ShowcaseJournal(journalPath);
+  try {
+    const review = journaledReview({
+      loseAdopt: true,
+      workCandidates: {
+        first: [candidateRow(pageOneId, { source: 'vndb', external_id: 'g311' })],
+        second: [],
+      },
+    });
+    const input = {
+      review: review as unknown as ShowcaseReviewPort,
+      schemes: [schemeId],
+      concepts: [conceptId],
+      works: [workId],
+      properties: ['schema:genre'] as const,
+      keepExternalIds: new Set(['g311']),
+    };
+    await expect(completeReviewedSharedTagFlow({ ...input, journal })).rejects.toThrow('Lost committed adoption');
+    const sealedKey = review.adoptKeys[0]!;
+    journal.close();
+    journal = new ShowcaseJournal(journalPath);
+    const recovered = await completeReviewedSharedTagFlow({ ...input, journal });
+    expect(review.adoptKeys).toEqual([sealedKey, sealedKey]);
+    expect(recovered.accepted).toEqual([pageOneId]);
+    const unchanged = await completeReviewedSharedTagFlow({ ...input, journal });
+    expect(review.adoptKeys).toHaveLength(2);
+    expect(unchanged.adopted[`${workId}:schema:genre`]?.selection).toEqual([{ candidate: pageOneId, rank: 'normal' }]);
+    review.addCandidate(
+      candidateRow(editorialId, { source: 'editorial', external_id: 'note' }, 'accepted', 'preferred'),
+    );
+    const changed = await completeReviewedSharedTagFlow({ ...input, journal, intent: 'include-editorial' });
+    expect(review.adoptKeys[2]).not.toBe(sealedKey);
+    expect(changed.adopted[`${workId}:schema:genre`]?.selection.map((row) => row.candidate).sort()).toEqual(
+      [editorialId, pageOneId].sort(),
+    );
   } finally {
     journal.close();
     await rm(directory, { recursive: true, force: true });

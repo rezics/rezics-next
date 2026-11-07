@@ -2447,6 +2447,8 @@ available. Filter intent is restored and Search executes again under current adm
 availability remain independent, and native
 lagging, preparing, unavailable, unsupported and exact-empty hierarchy states keep their separate meanings.
 
+Decision: visitors page genre and keyword membership independently from the current same-Scheme Concept; exact empty requires caught-up exact-zero evidence, a terminal empty window with unknown or inexact count keeps an unknown total, empty sparse windows continue, and replaced-reader addresses are retired. Membership types and work hrefs compose at the existing Concept view; explorer and reading membership modules do not import graph-browser, each other, or subject-href. Work tag-view type admission is local to that reader and uses the released client SubjectLinks/Subject statement types.
+
 The works request is capped at 24 Search rows, 65,536 serialized request bytes and 65,536 serialized response bytes.
 The current public result and viewer envelope share that response cap; the released work-admission metadata embedded
 in the Concept read is separately capped at 65,536 bytes. The work-list composition therefore retains at most

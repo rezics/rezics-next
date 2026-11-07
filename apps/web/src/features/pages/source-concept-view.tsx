@@ -13,6 +13,7 @@ import { actionClass, linkClass, ConceptHierarchy, visitAnnouncement } from './s
 import { ConceptMembershipReading } from './source-concept-reading/membership';
 import { useConceptVisit, type ConceptTransport } from './source-concept-reading/visit';
 import { originatingConceptReturn } from './source-concept-reading/origin';
+import { subjectHref } from '../../subject/subject-href';
 import {
   conceptVisitAddressFor,
   conceptVisitHref,
@@ -339,10 +340,17 @@ function ConceptVisitView({
               <ConceptMembershipReading
                 membership={read.membership}
                 locale={locale}
-                returnTo={returnTo}
-                hrefFor={(base, row) => subjectVisitHref(base, addressFor({ section: 'works', row: row.id }))}
+                hrefFor={(row) =>
+                  subjectVisitHref(
+                    subjectHref({ id: row.id, label: row.label }, locale).href,
+                    addressFor({ section: 'works', row: row.id }),
+                  )
+                }
                 busy={busy}
                 onRetry={() => void visit.refresh()}
+                onNext={(property) => void visit.membershipNext(property)}
+                onPrevious={(property) => void visit.membershipPrevious(property)}
+                indexFor={(property) => visit.membershipIndexFor(property)}
               />
 
               <section className="space-y-2" aria-labelledby="concept-actions-heading">
