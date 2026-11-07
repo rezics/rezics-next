@@ -465,6 +465,15 @@ every dispatch they reserved. `WorkflowRetirementBudgetError` exposes `attempts`
 | commit    | `COMMIT`                                                       | 0/0/1/0/0                                   |
 | backoff   | sleep capped by remaining deadline                             | 0/0/0/0/0                                   |
 
+Auth composes this installed finite SDK overload through one caller-owned invocation;
+its copies share the original deadline, signal and irreversible dispatch reservations.
+It retains success/error attempts and failed dispatches. Technical and personal payload
+removal uses the installed `maintainWorkflowOnce` native pool/restore/fence boundary;
+Auth's [retention cost](../../../auth/README.md#cost-derivation) adds admitted custody,
+recorder, request-trigger and artifact minimization work. The legacy one-argument
+`retireWorkflow` overload retains its old retry behavior; it is not Auth's maintenance path.
+Auth native/growth acceptance remains revision-qualified after integration.
+
 Pin with `test/work/sdk-retirement-fence.test.ts` (persistent connect failure, lock/deadline, transient recovery,
 exhausted attempts, lost COMMIT then same-identity convergence and old-client refusal). Original one-argument
 fence assertions stay in that file and `sdk-transaction-fence.test.ts`.

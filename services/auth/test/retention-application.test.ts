@@ -1,4 +1,5 @@
 import { expect, test } from 'bun:test';
+import { createAuthRetentionInvocation } from '../src/core/index.ts';
 import { createRetentionMaintenance, createWorkflowRetention, retireNativeRequest } from '../src/application/index.ts';
 import {
   SigningRotationPending,
@@ -73,44 +74,58 @@ function fixture() {
 test('the application commits its horizon before retirement and replays the exact identity after a lost reply', async () => {
   const f = fixture();
   let loseReply = true;
+  const invocation = createAuthRetentionInvocation({ maxPages: 2 });
   const ids: string[] = [];
   f.ports.scan.read = async (cursor) => ({
     cutoff: cursor.cutoff,
-    examined: 3,
+    examined: 1000,
     copies: [
       { workflowID: 'personal:1', workflowName: 'accounts.registration' },
+      { workflowID: 'personal:2', workflowName: 'accounts.operation' },
       { workflowID: 'technical:1', workflowName: 'auth.maintenance.tick' },
       { workflowID: 'technical:2', workflowName: 'auth.workflowRetention' },
     ],
     continuation: null,
     exhausted: true,
   });
-  f.ports.retireCopy = async (id) => {
+  f.ports.retireCopy = async (id, received) => {
+    expect(received).toBe(invocation);
+    await received.reserve('connect');
+    await received.reserve('reconcile');
     // Preparation has committed under the original horizon before any effect.
     expect(f.events.slice(0, 7)).toEqual(['admit', 'connect', 'begin', 'lock', 'open', 'save', 'commit']);
     expect(f.state.cursor).toEqual({ cutoff: 60 * 86400000, offset: 0 });
     ids.push(id);
     return true;
   };
-  f.ports.deleteTechnical = async (technical) => {
+  f.ports.deleteTechnical = async (technical, received) => {
+    expect(received).toBe(invocation);
+    await received.reserveDelete('commit');
     expect(technical).toEqual(['technical:1', 'technical:2']);
     if (loseReply) throw new Error('lost committed SDK reply');
   };
   const retention = createWorkflowRetention(f.ports);
-  await expect(retention.page(30)).rejects.toThrow('lost committed SDK reply');
+  await expect(retention.page(30, invocation)).rejects.toThrow('lost committed SDK reply');
   expect(f.events.slice(-2)).toEqual(['rollback', 'release']);
   expect(f.state.cursor).toEqual({ cutoff: 60 * 86400000, offset: 0 });
   f.state.now += 10 * 86400000;
   loseReply = false;
-  expect(await retention.page(30)).toEqual({
+  expect(await retention.page(30, invocation)).toEqual({
     cutoff: 60 * 86400000,
-    examined: 3,
-    eligible: 3,
-    retired: 3,
+    examined: 1000,
+    eligible: 4,
+    retired: 4,
     pending: 0,
     done: true,
   });
-  expect(ids).toEqual(['personal:1', 'personal:1']);
+  expect(ids).toEqual(['personal:1', 'personal:2', 'personal:1', 'personal:2']);
+  expect(invocation.snapshot()).toMatchObject({
+    pages: 2,
+    examined: 2000,
+    copies: 8,
+    technical: 4,
+    dispatches: { 'close:connect': 4, 'close:reconcile': 4, 'delete:commit': 2 },
+  });
   expect(f.state.opens).toBe(1);
   expect(f.state.cursor).toBeNull();
 });
@@ -264,4 +279,40 @@ test('maintenance keeps signing CAS admission independent and routes workflow re
   await expect(maintenance.retireSigningKeys()).rejects.toThrow('signing store unavailable');
   expect(await maintenance.retainWorkflowHistory(30)).toBe(2);
   expect(days).toEqual([30]);
+});
+
+test('expiry and cancellation preserve the saved frontier and prevent another copy or deletion', async () => {
+  const f = fixture();
+  let now = 100;
+  const abort = new AbortController();
+  const invocation = createAuthRetentionInvocation({ deadline: 200, signal: abort.signal, now: () => now });
+  f.ports.scan.read = async (cursor) => ({
+    cutoff: cursor.cutoff,
+    examined: 1000,
+    copies: [
+      { workflowID: 'one', workflowName: 'accounts.registration' },
+      { workflowID: 'two', workflowName: 'accounts.registration' },
+    ],
+    continuation: null,
+    exhausted: true,
+  });
+  const reached: string[] = [];
+  f.ports.retireCopy = async (id, received) => {
+    expect(received).toBe(invocation);
+    reached.push(id);
+    await received.reserve('connect');
+    now = 200;
+    return true;
+  };
+  f.ports.deleteTechnical = async () => {
+    throw new Error('unreached');
+  };
+  await expect(createWorkflowRetention(f.ports).page(30, invocation)).rejects.toThrow('deadline has expired');
+  expect(reached).toEqual(['one']);
+  expect(f.state.cursor).toEqual({ cutoff: 60 * 86400000, offset: 0 });
+  expect(invocation.snapshot()).toMatchObject({ examined: 1000, copies: 1, dispatches: { 'close:connect': 1 } });
+  now = 100;
+  abort.abort(new Error('original caller cancelled'));
+  await expect(invocation.reserve('commit')).rejects.toThrow('original caller cancelled');
+  expect(invocation.snapshot().dispatches['close:commit']).toBeUndefined();
 });

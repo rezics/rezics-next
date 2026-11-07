@@ -2636,7 +2636,7 @@ supported deletion without descendants, then raw absence probes. Missing commitm
 or consumer authority remains pending; age supplies neither. A failed body rolls
 back only the page checkpoint. Already committed exact retirements are idempotent
 on replay, using the saved cut. Only the two closed counts-only maintenance workflow
-names use direct SDK deletion. They create no personal request binding.
+names bypass personal custody; they still use funded native writer closure and deletion. They create no personal request binding.
 
 ### Application boundary
 
@@ -2646,7 +2646,11 @@ retirement and checkpoint recovery through ports; its cursor is the SDK producer
 continuation. `retention-store.ts` owns only SQL transactions and the singleton lock, and never
 imports orchestration. SQL request effects and SDK scanning live in `src/adapters`.
 `retention.ts` composes those effects; service assembly binds the existing `completeCopy` /
-`eraseCopy` capability once for both manual and scheduled maintenance. No second SDK writer
+`eraseCopy` capability once for both manual and scheduled maintenance. One
+`AuthRetentionInvocation` travels through every copy and technical deletion. Its default
+whole-operation deadline is 60 seconds; explicit caller deadlines and cancellation are
+preserved. Standalone SDK closure retains its five-second default. A drain shares one
+lifetime across at most 60 pages, rather than renewing time per page or copy. No second SDK writer
 or retirement implementation is introduced.
 
 Signing maintenance uses its own generation CAS and occupied-slot result through the pure
@@ -2685,16 +2689,19 @@ retirement, retention and growth receiving after integration.
   its readiness read/update, two original custody/precondition passes (each reads
   ≤17 roles, exact source/request/status, ≤140 artifact-ledger keys, seven exact
   physical families with ≤139 total rows/10 MiB, and an empty stream probe), the
-  funded close envelope (attempt/wait/backoff/reconcile reserved before dispatch
-  from Work `SDK_RETIREMENT_DISPATCH`) plus one-attempt writer retirement, local
+  funded SDK close (connect/rollback/begin/settings/reconcile/retire/commit,
+  with backoff only when reached), Auth recorder expansion, local
   receipt/request retirement, supported `deleteWorkflows` payload/FK deletion and
   the final fence reread/eight raw-family absence probes.
   `AUTH_WORKFLOW_RETENTION_COST` holds those nested ceilings. Failed reservations
   are never refunded. Timeout and uncertain COMMIT propagate the original identity.
-  Deletion is six top-level statements per SDK transaction (BEGIN, four exact-ID
-  deletes, COMMIT), plus all FK/recorder/writer-fence/request-trigger statements and
-  their touched rows. Technical IDs share one such transaction; personal copies
-  retain their individual supported boundary. Result reads, closure status mutation,
+  Deletion uses the installed `maintainWorkflowOnce(pool,state,delete,deadline,reserve)`
+  capability for each exact workflow: prepaid rollback, BEGIN, settings, native
+  restore/fence lock, four deletes and COMMIT. Both technical and personal IDs
+  retain this supported one-shot boundary. Add all FK, writer-fence and native
+  request-trigger statements and their touched rows. After eight-family absence,
+  the same Auth transaction clears the exact artifact inventory and sets rows/bytes
+  to zero while retaining the permanent fence and original consumer commitment. Result reads, closure status mutation,
   recorder work, request consumers and delete triggers belong to this same capture.
   Thus total work is the base page plus the sum of those bounded neighbourhoods,
   with logarithmic native probes; it is never priced by callback count alone.
@@ -2728,28 +2735,44 @@ retirement, retention and growth receiving after integration.
 The focused causal cases also pin inclusive producer cutoff ties, pending then recovered
 custody, late insertion inside the captured upper key, a 60-page continuation, deletion
 rollback and lost native receipt/reply replay. Personal writer closure is
-`closeAuthSdkWriters(id)`: Auth builds the exported SDK invocation
-`{deadline,maxAttempts,reserve,signal?}` with `maxAttempts=1` (ceiling 8) from the
-original finite operation and passes it to Accounts' `retireWorkflow(id, invocation)`,
-receiving `{fence, attempts, failedWork}` where `failedWork` is
-`readonly {attempt,dispatch}[]`. Aggregate counters are ignored. Auth funds native
-attempts, waits, backoff and reconciliation before dispatch using Work
-`SDK_RETIREMENT_DISPATCH`, not maintain/delete identities. Failed work stays charged.
-A lost reply rereads that writer identity and never treats timeout as absence.
-Uncertain COMMIT resumes the same workflow/domain closure.
-`WorkflowRetirementBudgetError` remains charged. The pinned workflow-status scan issues
-one pool query to open a sweep and one page query for a nonempty captured upper key;
-the null-upper-key path returns without querying. The installed plain `pg.Pool` adds no
-application retry loop. Charge failed dispatch and any outer Auth/DBOS re-execution to
-the real operation context. This does not bound connection acquisition or elapsed time.
-Native plans, nested producer constants, bytes and original operation attribution require
-the owning checks after integration; capability
-limits are recorded in
+`closeAuthSdkWriters(id, invocation)`. Auth passes the caller's original deadline,
+signal and reservation receiver to Accounts' installed finite `retireWorkflow` overload.
+Default `maxAttempts=1`, admitted ceiling 8. The supported producer reserves each actual
+dispatch; synthetic attempt/wait envelopes do not establish reached work. Its returned
+`{fence, attempts, failedWork}` and budget-error attempts/dispatch ledger are recorded
+on the same operation, including after expiry. Aggregate failed-work counters are ignored.
+A malformed funded success is an error. Failed reservations and reached failures are never
+refunded. A lost COMMIT reply converges on the same permanent native closure identity.
+
+Admission fixes pages P≤60, raw slots B=1000P and attempts A≤8 before native effects.
+Each local phase has a finite invocation-wide multiplicity: preparation/open/examination
+at most P, consumer/receipt/deletion/absence at most B, original custody and fence reread
+at most 2B, and closure dispatches at most BA. Closure recorder expansion follows the
+admitted 16 roles; physical deletion follows the 139-artifact/10 MiB custody, with
+139 exact artifact removals after absence. `AUTH_RETENTION_PHASE_COST` and
+`AUTH_WORKFLOW_RETENTION_COST` in `src/core/retention-cost.ts` own these executable
+ceilings. Reservations are dispatch ceilings, not measured native work. Snapshots expose
+paid dispatches, actual raw examined keys and closure outcomes to the caller without
+putting SDK payloads or keys into the counts-only DBOS result. Replaying within an
+operation consumes another admitted page and retains earlier charges. A later maintenance
+tick is a separately admitted operation against the same saved frontier and exact receipts.
+
+Copy transactions check the same cancellation/deadline before native queries and set
+transaction-local timeouts from its remaining time. Cleanup uses the original connection
+so expiry cannot suppress rollback. Result polling receives the absolute deadline. SDK
+one-shot deletion checks the same lifetime before each reserved dispatch; it never
+introduces an unbounded delete retry or cancellation write. The SDK's scan and state/fence
+reads use plain pool queries; admission does not claim bounded pool acquisition or wall-clock
+completion of those reads. Native capture retains their entire reached work, including errors.
+
+Decision: extend the existing application, binding, fence, retention and two growth suites
+only. Pin shared caller identity across copies, paid failed/lost-reply closure, outer replay,
+post-fence deletion and inventory minimization, raw 1000-key pages, pending/rejected custody,
+and drain plus three repeated-empty batches. Full/short and independent 256/1024/4096 axes
+remain unchanged. Full captures use the owning folded native capture, retaining complete
+rows, nested statements, buffers, wire bytes and background attribution within its telemetry
+cap. Integrated native/growth execution must record its source revision and remains open in
 [Performance acceptance](../../docs/goals/performance.capabilities.md).
-Executable nested ceilings live in `src/retention-cost.ts`.
-Decision: fewest tests extend the existing binding, fence, retention and two growth
-suites for one-arg funded close, zeroed aggregate failedWork, unavailable funded
-admission and same-identity replay; no new suite.
 
 ### Erasure cursor deployment
 

@@ -28,6 +28,8 @@ import { websiteProvider } from './website-provider.ts';
 import { WEBSITE_CLIENT_ID, websiteRoutes } from './website.ts';
 import { pruneExpiredProtocolState } from './protocol-maintenance.ts';
 import { createAuthWorkflowRetention } from './retention.ts';
+import type { AuthRetentionInvocation } from './contract/index.ts';
+import { createAuthRetentionInvocation } from './core/index.ts';
 import { APIError, createAuthEndpoint } from 'better-auth/api';
 import { setSessionCookie } from 'better-auth/cookies';
 import { serializeCookie } from 'better-call';
@@ -288,9 +290,9 @@ export async function buildAuthService(options: AuthServiceOptions): Promise<Aut
   if (!options.secret || options.secret.length < 32)
     throw new Error('Configure a persistent Better Auth secret of at least 32 characters');
   const signer = await createSigner(database, options.signing);
-  const retireWorkflowCopy = async (id: string) => {
-    await completeCopy(database, id);
-    return eraseCopy(database, id);
+  const retireWorkflowCopy = async (id: string, invocation = createAuthRetentionInvocation()) => {
+    await completeCopy(database, id, undefined, invocation);
+    return eraseCopy(database, id, invocation);
   };
   const workflowRetention = createAuthWorkflowRetention(database, retireWorkflowCopy);
   // Object identity, source and scope belong to this instance. No caller can
@@ -1521,7 +1523,8 @@ export async function buildAuthService(options: AuthServiceOptions): Promise<Aut
         return id;
       },
       redriveErasureHistory: () => redriveErasureHistory(database, trustedAccess),
-      retainWorkflowHistory: (retentionDays) => workflowRetention.batch(retentionDays),
+      retainWorkflowHistory: (retentionDays: number, invocation?: AuthRetentionInvocation) =>
+        workflowRetention.batch(retentionDays, invocation),
       retireWorkflowCopy,
       fenceKindConsentErasure,
       nativeErasurePage: (id) => nativeErasurePage(database, id, undefined, undefined, fenceKindConsentErasure),

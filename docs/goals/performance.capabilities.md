@@ -367,8 +367,8 @@ SDK delete exceed the 32 MiB and 20,000 retained-entry telemetry caps. Selector-
 clients. Payload tables share the 32,768-row planner floor so fanout 1/8/64 stays an indexed equality delete.
 Cascade inserts pack by parent. Measured nonempty batches are five application statements plus two control. Payload
 bytes use harness scales 1/8/64 mapped to admitted 1,024/8,192/65,536 because a growth scale cannot exceed 4,096.
-Owned inventory is read after the measured capture. Installed `retireWorkflow` uses unlimited `withDbRetry`; finite
-invocation and recovery evidence stay open with Accounts SDK owner e18b. Explicit
+Owned inventory is read after the measured capture. The installed finite `retireWorkflow(id, invocation)` overload is available; Auth
+composes it with supported one-shot deletion. Integrated recovery evidence remains open. Explicit
 Imports driver bindings use repo-relative paths in command argv, resolved on admitted remote checkouts; the frozen
 suite receives an absolute path.
 
@@ -425,7 +425,7 @@ bounding every page, including all rejected candidates and pending consumers.
 Fewest tests: extend the two existing growth suites, retention causal cases and SDK
 binding cases; use the existing genuine erasure fixture and consumable target helper.
 Do not substitute returned counts or a callback stub for retirement-body work.
-Pin one-arg funded close, `deleteWorkflows` payload deletion, unavailable funded
+Pin shared-invocation funded close, `maintainWorkflowOnce` payload deletion, unavailable funded
 admission and same-identity replay on the existing binding suite. Auth does not
 query `auth_dbos.workflow_status`; producer inclusive `completed_at <= createdBefore`
 eligibility is received as-is.
@@ -438,22 +438,35 @@ HTTP revoke request, closes native writers, deletes payload/FK families and veri
 raw absence. Missing consumer custody stays pending. Timestamp ties, late inserts
 inside the captured upper key, 60-page continuation, original-cut recovery,
 interruption and replay stay causal cases; old synthetic technical bindings have no
-source proof and must be retained. Personal closure is Auth's one-argument
-`closeAuthSdkWriters`, which funds Accounts' `retireWorkflow(id, invocation)` from
-the original finite operation (`maxAttempts=1`, ceiling 8) and receives
-`{fence, attempts, failedWork}` as `readonly {attempt,dispatch}[]`. Aggregate
-counters are ignored. Work `SDK_RETIREMENT_DISPATCH` prices the envelope and retire
-body; maintain/delete identities are not used. Failed funded work remains charged.
-Scan-page access is one pool query when opening a sweep and one page query for a nonempty captured upper key; the
-null-upper-key path returns without a query. The installed plain `pg.Pool` adds no application retry loop. Charge
-failed dispatch and any outer Auth/DBOS re-execution to the real operation context. This does not bound connection
-acquisition or elapsed time.
-Decision: fewest tests extend those existing suites only; no new suite.
+source proof and must be retained. Personal closure passes the same `AuthRetentionInvocation` to
+`closeAuthSdkWriters` and the installed `retireWorkflow(id, invocation)` overload.
+Default whole-operation lifetime is 60 seconds, at most one admitted SDK attempt per
+closure (ceiling 8). Explicit caller deadlines/signals are preserved through every copy,
+receipt reread and deletion. Retention admits raw slots before effects; actual examined
+keys and SDK success/error attempts/failed-dispatch entries remain on its snapshot.
+Failed reservations and outer replay retain their charges. Replays in the same operation
+spend another admitted page; later ticks separately admit work at the persisted frontier.
+
+Technical and personal deletion both compose the installed `maintainWorkflowOnce` capability
+against the bound native pool and exact restore/fence identity. Add native FK, Auth recorder,
+request-consumer/trigger work and the admitted 139-artifact/10 MiB, 16-role personal expansion.
+After physical absence the native inventory is cleared atomically with its zero row/byte
+counts; the original consumer commitment and permanent fence survive. The legacy one-argument
+SDK overload is not the installed Auth maintenance path. Scan/state/fence pool acquisition
+has no wall-clock bound; every reached statement remains in the owning capture.
+
+Decision: extend the existing application, binding, fence, retention and two growth suites
+only. The changed technical-deletion assertion now expects per-ID one-shot native work and
+a lost first-ID reply leaves the second ID for replay. Existing custody, terminal and source
+assertions remain. Full captures use folded native accounting to retain all rows, nested
+statements, buffers, bytes and background attribution without raw telemetry truncation.
+Worker source verification is Auth typing only; all named native/growth selections still
+require integrated execution with source-revision-qualified evidence.
 
 Run through the Auth owning runner:
 
 ```sh
-bun run --cwd services/auth check test/retention.test.ts test/growth-retention.test.ts test/growth-empty-retention.test.ts test/sdk-retirement-binding.test.ts test/sdk-retirement-fence.test.ts
+bun run --cwd services/auth check test/retention-application.test.ts test/retention.test.ts test/growth-retention.test.ts test/growth-empty-retention.test.ts test/sdk-retirement-binding.test.ts test/sdk-retirement-fence.test.ts
 ```
 
 Acceptance remains open until integrated native execution records its source revision,

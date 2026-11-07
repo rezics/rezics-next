@@ -16,3 +16,17 @@ export const AUTH_SDK_RETIREMENT_DISPATCH = Object.freeze({
 });
 
 export type AuthSdkRetirementDispatch = keyof typeof AUTH_SDK_RETIREMENT_DISPATCH;
+
+/** Installed maintainWorkflowOnce deletion, including native fence checks and
+ * FK fanout. Auth copy custody adds its own recorder/request-trigger expansion. */
+export const AUTH_SDK_DELETE_DISPATCH = Object.freeze({
+  rollback: { rows: 0, points: 0, statements: 1, bytes: 0, engineRequests: 0 },
+  begin: { rows: 0, points: 0, statements: 1, bytes: 0, engineRequests: 0 },
+  settings: { rows: 1, points: 0, statements: 1, bytes: 128, engineRequests: 0 },
+  lock: { rows: 4, points: 2, statements: 4, bytes: 8192, engineRequests: 0 },
+  commit: { rows: 0, points: 0, statements: 1, bytes: 0, engineRequests: 0 },
+  'delete-workflow_input': { rows: 1, points: 1, statements: 1, bytes: 0, engineRequests: 0 },
+  'delete-workflow_output': { rows: 1, points: 1, statements: 1, bytes: 0, engineRequests: 0 },
+  'delete-operation_outputs': { rows: 64, points: 1, statements: 1, bytes: 0, engineRequests: 0 },
+  'delete-workflow_status': { rows: 73, points: 5, statements: 5, bytes: 0, engineRequests: 0 },
+});

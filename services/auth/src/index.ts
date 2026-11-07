@@ -121,6 +121,8 @@ export { createInternalConsentHandler } from './internal-consent.ts';
 export type { InternalConsentAccessConfiguration } from './internal-consent.ts';
 export type { AccountOperationAccess } from './account-operations-transport.ts';
 export { SigningRotationPending } from './contract/index.ts';
+export type { AuthRetentionInvocation, AuthRetentionSnapshot } from './contract/index.ts';
+export { createAuthRetentionInvocation } from './core/index.ts';
 export { createAccountWorkflows } from './workflows.ts';
 export {
   AUTH_SDK_RETIREMENT,
@@ -309,7 +311,10 @@ export interface AuthService {
   verifier: VerifierConfiguration;
   internal: {
     /** One SDK scan page; durable createdBefore and continuation stay native. */
-    retainWorkflowHistory(retentionDays: number): Promise<number>;
+    retainWorkflowHistory(
+      retentionDays: number,
+      invocation?: import('./contract/index.ts').AuthRetentionInvocation,
+    ): Promise<number>;
     receivingClosure?: import('@rezics/auth-contract').AuthReceivingClosureProducer;
     /** Native Auth-owned participant used before Collection Kind evidence work. */
     kindConsentParticipant: KindConsentParticipant;
@@ -373,7 +378,10 @@ export interface AuthService {
     consumeAccountErasure(accountId: string, receiptId: string, workflowId: string): Promise<string>;
     redriveErasureHistory(): Promise<number>;
     /** Retention shares the exact native result/readiness/absence protocol. */
-    retireWorkflowCopy(workflowId: string): Promise<boolean>;
+    retireWorkflowCopy(
+      workflowId: string,
+      invocation?: import('./contract/index.ts').AuthRetentionInvocation,
+    ): Promise<boolean>;
     nativeErasurePage(id: string): Promise<import('./erasure-native.ts').ErasurePage>;
     redriveNativeErasure(): Promise<number>;
     openAutomatedSession(input: {

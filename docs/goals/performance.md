@@ -98,7 +98,13 @@ sparse/deep series prove nested FK cascades; the already-passing operations-only
 Observed statements, rollback/replay and `classifyEngineWork` pin the complete envelope; native evidence stays open
 after typing.
 Payload bytes use harness scales 1/8/64 mapped to admitted 1,024/8,192/65,536; inventory readback is after capture.
-Installed `retireWorkflow` uses unlimited `withDbRetry`; finite invocation stays open with Accounts SDK owner e18b.
+The installed finite `retireWorkflow(id, invocation)` overload funds actual SDK dispatches.
+Auth shares one caller deadline/cancellation through result consumption, copy custody,
+closure, receipt persistence and one-shot native deletion. Failed closure/replay charges
+remain on that operation; the saved raw frontier and permanent closure identity support
+later maintenance. The legacy one-argument overload retains its retry behavior. Auth
+[acceptance](performance.capabilities.md#auth-workflow-retention) remains open for integrated
+revision-qualified native/growth execution.
 Bound revision `e06e70f8c26d1f3175633ca1ecf08507f0ccd5b0` passed empty 0/1, short 90/5+2, full/backlog 107304/5+2,
 operations fanout 90/160/720 and sweep 41868/10+4; selector Index Only Scan; background 0.
 Search tombstone registration

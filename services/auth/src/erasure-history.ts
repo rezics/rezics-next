@@ -4,6 +4,7 @@ import { beginAuthReceivingClosure, recordAuthReceivingCopy } from './receiving-
 import { DBOS } from '@dbos-inc/dbos-sdk';
 import { NATIVE_PHASE_END, nativePhaseComplete } from './erasure-role-upgrade.ts';
 import { nativeRoleCoverageComplete } from './erasure-coverage.ts';
+import { createAuthSdkRetirementInvocation } from './sdk-retirement-fence.ts';
 import { copyTransaction, completeCopy, eraseCopy } from './erasure-copy.ts';
 
 type Progress = {
@@ -63,7 +64,13 @@ export async function dischargeErasureSource(database: Pool, id: string, value: 
   });
 }
 /** One page/unit. Missing coverage, live consumers and unmapped copies stay pending. */
-export async function erasureHistoryPage(database: Pool, id: string, restoreGeneration?: string): Promise<boolean> {
+export async function erasureHistoryPage(
+  database: Pool,
+  id: string,
+  restoreGeneration?: string,
+  invocation = createAuthSdkRetirementInvocation(),
+): Promise<boolean> {
+  invocation.check();
   const row = (await database.query<Progress>('SELECT * FROM auth_erasure WHERE id=$1', [id])).rows[0];
   if (!row || !barrier(row) || !row.source_accepted_at || !row.source_discharged_at || !row.source_published_at)
     return false;
@@ -89,8 +96,8 @@ export async function erasureHistoryPage(database: Pool, id: string, restoreGene
   if (work) {
     // Recover the actual result consumer from its native commitment. No HTTP
     // retry, old approval or resurrected session participates.
-    const consumed = await completeCopy(database, work.workflow_id);
-    if (!(await eraseCopy(database, work.workflow_id))) {
+    const consumed = await completeCopy(database, work.workflow_id, undefined, invocation);
+    if (!(await eraseCopy(database, work.workflow_id, invocation))) {
       const pending = (
         await database.query<{ sdk_fence_pending: string | null }>(
           'SELECT sdk_fence_pending FROM auth_copy_work WHERE workflow_id=$1',

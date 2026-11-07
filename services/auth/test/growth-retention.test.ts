@@ -62,11 +62,12 @@ async function runRetentionGrowth(kind: 'full' | 'short') {
       name: `${kind} Auth workflow retention batch: ${axis}`,
       scales: retentionScales,
       repetitions: 1,
+      captureMode: 'cost-folded',
       bounds: { rows: 'constant', blocks: 'logarithmic', statements: 'constant' },
       byteBounds: { requestBytes: 'constant', responseBytes: 'constant' },
       // Raw selection, upper key, native custody/role/source/artifact probes,
       // SDK closure, every deletion family and the request-retention trigger.
-      indexProbes: 200 + 10 * retired,
+      indexProbes: 200 + 32 * retired,
       grow: (current, scale) => seedRetentionAxes(current, axis, scale, now),
       ...targets.hooks,
       async verify(current, _scale, _repetition, value) {
@@ -100,6 +101,13 @@ async function runRetentionGrowth(kind: 'full' | 'short') {
             ])
           ).rowCount,
         ).toBe(0);
+        const technical = (
+          await current.admin.query<{ workflow_uuid: string }>(
+            'SELECT workflow_uuid FROM auth_dbos.workflow_writer_fences WHERE workflow_uuid LIKE $1 AND closed_at IS NOT NULL',
+            [`${target.tag}%`],
+          )
+        ).rows;
+        expect(technical).toHaveLength(retired - 1 - target.source.copies.length);
         for (const table of [
           'workflow_status',
           'workflow_input',
@@ -137,6 +145,7 @@ async function runRetentionGrowth(kind: 'full' | 'short') {
           scale: sample.scale,
           cost: sample.cost,
           native: sample.occurrenceRepetitions,
+          background: sample.cost.backgroundCosts,
         }),
       );
     }
