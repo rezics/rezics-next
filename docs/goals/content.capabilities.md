@@ -93,7 +93,7 @@ in `FIRST_SCOPE_ROWS`: threads-and-boards, exact-revisions, board-paging, contai
 edit-history-return, watches-and-reactions, takedown-erasure, author-erasure, media, realms-and-spaces,
 ratings-and-reviews, work-to-review, moderation-reports-appeals, notices, home-discovery, independent-queues and
 persona-matrix. Hourly passing/total uses that table. The walk records live issuer/JWKS origins and does not write
-`AUTH_JWKS_URL`; ce33 remains the canonical producer. No extra stories. Suspended bearers keep 401/403 on taken-down thread GET; ranking JWT lifetime follows wall time; each mounted
+`AUTH_JWKS_URL`; the launcher publishes issuer-origin JWKS and fetches that exact URL from native Auth. ce33 remains the canonical producer. No extra stories. Suspended bearers keep 401/403 on taken-down thread GET; ranking JWT lifetime follows wall time; each mounted
 HTTP request starts its envelope from wall time so a held late-revocation request cannot shrink the next command;
 author-item
 growth captures stay on a one-item page after bootstrapping the bundled release, and large other-author

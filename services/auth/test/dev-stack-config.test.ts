@@ -51,7 +51,7 @@ test('isolated Kernel bindings verify the selected Auth issuer and bind the sele
   ).toEqual({
     AUTH_ISSUER: 'http://127.0.0.1:20021',
     AUTH_AUDIENCE: 'https://api.rezics.test',
-    AUTH_JWKS_URL: 'http://127.0.0.1:20022/.well-known/jwks.json',
+    AUTH_JWKS_URL: 'http://127.0.0.1:20021/.well-known/jwks.json',
     KERNEL_HOSTNAME: '127.0.0.1',
     KERNEL_PORT: '20023',
   });

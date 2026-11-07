@@ -517,3 +517,28 @@ test('existing deployment seal ring is reused with bounded rotation and canonica
   ])
     expect(() => readMembershipWorkConfig({ ...env, KERNEL_SESSION_KEYS: value })).toThrow('KERNEL_SESSION_KEYS');
 });
+
+test('walk stacks fetch the public issuer JWKS URL from native Auth only', async () => {
+  const native = Bun.serve({
+    port: 0,
+    hostname: '127.0.0.1',
+    fetch: () => Response.json({ keys: [{ kty: 'EC', kid: 'walk-native' }] }),
+  });
+  try {
+    const config = readMembershipWorkConfig({
+      ...env,
+      REZICS_WALK_STACK_SLOT: '1',
+      REZICS_LOCAL_STACK_NATIVE_ORIGIN: `http://127.0.0.1:${native.port}`,
+    });
+    expect(config.auth.jwksUrl).toBe(env.AUTH_JWKS_URL);
+    expect(config.auth.fetch).toBeTypeOf('function');
+    const admitted = await config.auth.fetch!(env.AUTH_JWKS_URL, {});
+    expect(await admitted.json()).toEqual({ keys: [{ kty: 'EC', kid: 'walk-native' }] });
+    await expect(config.auth.fetch!('https://example.test/.well-known/jwks.json', {})).rejects.toThrow(
+      'JWKS fetch is limited to the configured public JWKS URL',
+    );
+    expect(readMembershipWorkConfig(env).auth.fetch).toBeUndefined();
+  } finally {
+    native.stop();
+  }
+});

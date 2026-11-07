@@ -12,6 +12,7 @@ import { installIdentitySourceConsumerRuntime } from './identity-source-consumer
 import { installIdentityRatingRepairProducer } from './identity-rating-repair.ts';
 import { bindOrdinaryContentLifecycle, nativeContentLifecycle } from '../semantic/adapters/index.ts';
 import { ConfigError } from '../commerce/config.ts';
+import { walkNativeJwksFetch } from '../access/membership-work-config.ts';
 import { assertReceiptKeyRing, readReceiptKeyRing } from '../command/receipt-key.ts';
 import { systemClock } from '../clock.ts';
 import type { KeyRing } from '../tokens/seal.ts';
@@ -65,7 +66,8 @@ function readAuthConfig(env: NodeJS.ProcessEnv): AuthenticationConfig | undefine
   const audience = env.AUTH_AUDIENCE;
   const jwksUrl = env.AUTH_JWKS_URL;
   if (issuer === undefined && audience === undefined && jwksUrl === undefined) return undefined;
-  return { issuer: issuer ?? '', audience: audience ?? '', jwksUrl: jwksUrl ?? '' };
+  const fetch = jwksUrl ? walkNativeJwksFetch(env, jwksUrl) : undefined;
+  return { issuer: issuer ?? '', audience: audience ?? '', jwksUrl: jwksUrl ?? '', ...(fetch ? { fetch } : {}) };
 }
 
 /** Production CreditSearchSource for the installed Search consumer. */

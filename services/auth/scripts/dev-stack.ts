@@ -83,7 +83,7 @@ export function developmentKernelBindings(
   return {
     AUTH_ISSUER: selected.issuer,
     AUTH_AUDIENCE: selected.audience,
-    AUTH_JWKS_URL: nativeJwksUrl(selected.native),
+    AUTH_JWKS_URL: nativeJwksUrl(selected.issuer),
     KERNEL_HOSTNAME: '127.0.0.1',
     KERNEL_PORT: String(localPort(selected.kernel)),
   };

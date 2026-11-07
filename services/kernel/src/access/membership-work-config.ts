@@ -114,9 +114,43 @@ export function readMembershipWorkConfig(env: Environment): MembershipWorkConfig
     /[?#]/.test(env.AUTH_JWKS_URL!)
   )
     throw new ConfigError('AUTH_JWKS_URL');
+  const fetch = walkNativeJwksFetch(env, env.AUTH_JWKS_URL!);
   return {
     routeKey,
     referenceKeys: keys,
-    auth: { issuer: env.AUTH_ISSUER!, audience: env.AUTH_AUDIENCE!, jwksUrl: env.AUTH_JWKS_URL! },
+    auth: {
+      issuer: env.AUTH_ISSUER!,
+      audience: env.AUTH_AUDIENCE!,
+      jwksUrl: env.AUTH_JWKS_URL!,
+      ...(fetch ? { fetch } : {}),
+    },
+  };
+}
+
+/** Walk stacks publish issuer-origin JWKS and fetch that exact URL from native Auth. */
+export function walkNativeJwksFetch(
+  env: Environment,
+  publicJwksUrl: string,
+): AuthenticationConfig['fetch'] | undefined {
+  if (!env.REZICS_WALK_STACK_SLOT) return undefined;
+  const native = env.REZICS_LOCAL_STACK_NATIVE_ORIGIN;
+  if (!native) return undefined;
+  let nativeJwks: string;
+  try {
+    const origin = new URL(native);
+    if (
+      origin.protocol !== 'http:' ||
+      !['127.0.0.1', 'localhost', '[::1]'].includes(origin.hostname) ||
+      origin.origin !== native
+    )
+      return undefined;
+    nativeJwks = `${origin.origin}/.well-known/jwks.json`;
+  } catch {
+    return undefined;
+  }
+  return async (url, init) => {
+    const href = typeof url === 'string' ? url : url instanceof URL ? url.href : String(url);
+    if (href !== publicJwksUrl) throw new TypeError('JWKS fetch is limited to the configured public JWKS URL');
+    return globalThis.fetch(nativeJwks, init);
   };
 }
