@@ -53,9 +53,6 @@ export {
   observeLibrarySubjectSummaries,
   readLibraryIdentityMappings,
 } from './library-presentation.ts';
-export type {
-  LibrarySubjectIdentityAdapter,
-  LibrarySubjectReferenceResult,
-} from './library-presentation.ts';
+export type { LibrarySubjectIdentityAdapter, LibrarySubjectReferenceResult } from './library-presentation.ts';
 export { createNativeLibraryObservationAdapter } from './library-observation.ts';
 export type { LibrarySubjectIdentityContext } from './library-presentation.ts';

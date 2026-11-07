@@ -320,13 +320,17 @@ function scopeKey(identity: NativeSourceIdentity): LibrarySemanticScopeKey {
 function semanticObservations(input: CanonicalCall): LibrarySemanticObservationCapability {
   return input.semanticObservations ?? librarySemanticObservations();
 }
-function bindSemanticObservations<T extends CanonicalCall>(input: T): T & {
+function bindSemanticObservations<T extends CanonicalCall>(
+  input: T,
+): T & {
   readonly semanticObservations: LibrarySemanticObservationCapability;
 } {
-  return input.semanticObservations ? input as T & { semanticObservations: LibrarySemanticObservationCapability } : {
-    ...input,
-    semanticObservations: librarySemanticObservations(),
-  };
+  return input.semanticObservations
+    ? (input as T & { semanticObservations: LibrarySemanticObservationCapability })
+    : {
+        ...input,
+        semanticObservations: librarySemanticObservations(),
+      };
 }
 function ledger(input: CanonicalCall): CollectionSourceLedger {
   const a = input.allowance;

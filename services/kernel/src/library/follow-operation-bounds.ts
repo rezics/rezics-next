@@ -449,9 +449,7 @@ export function followSubjectSummaryObservationWork(count: number): Bound {
   const subjects = Array.from({ length: n }, () => 'ffffffff-ffff-8fff-bfff-ffffffffffff');
   const asBound = (work: WorkDimensions): Bound => declareBound({ ...work, engineRequests: 0 });
   const mappings = asBound(observations.mappingWork(subjects));
-  const references = sumBounds(
-    ...subjects.map((id) => repeatBound(asBound(observations.subjectReferenceWork(id)), 4)),
-  );
+  const references = sumBounds(...subjects.map((id) => repeatBound(asBound(observations.subjectReferenceWork(id)), 4)));
   return sumBounds(
     repeatBound(mappings, 2),
     references,

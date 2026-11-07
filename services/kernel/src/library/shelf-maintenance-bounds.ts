@@ -422,8 +422,7 @@ export const shelfMaintenanceSourceExecution: PreparationSourceExecution = Objec
       'source.read',
       total,
       () => read(sizes.type_bytes ?? 0),
-      (result) =>
-        shelfMaintenanceWorkDimensions(sumBounds(local, semanticObservationBound(result.semanticWork))),
+      (result) => shelfMaintenanceWorkDimensions(sumBounds(local, semanticObservationBound(result.semanticWork))),
     );
   },
 });
