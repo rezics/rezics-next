@@ -225,7 +225,10 @@ function sameSerializedStatement(left: unknown, right: unknown): boolean {
 }
 class Interrupted extends Error {}
 type Phase = 'staged' | 'vanished' | 'resumed' | 'media';
-type Write = <T>(operation: () => Promise<T>) => Promise<T>;
+type Write = (<T>(operation: () => Promise<T>) => Promise<T>) & {
+  owner?: object;
+  waitForDependency?: <T>(dependency: Promise<T>, owner: object | undefined) => Promise<T>;
+};
 type ClassificationConfirmation = Readonly<{
   state: 'available' | 'absent' | 'unavailable';
   head: RetainedClassificationHead | null;
@@ -251,6 +254,10 @@ type Planned = {
   conversion?: ImportConversion;
   observationConflict?: boolean;
 };
+type PlanFlight = {
+  owner: object | undefined;
+  promise: Promise<Planned | 'failed' | null>;
+};
 
 // Native source keys are not normalized into different record identities. Compound
 // planner identities are hashed so their printable public keys remain bounded.
@@ -271,7 +278,7 @@ export class Importer {
   private readonly progressObservers = new WeakMap<AbortSignal, ImportProgressObserver>();
   private readonly recordConcurrency: number;
   private readonly writeWidths = new WeakMap<AbortSignal, { width: number }>();
-  private readonly planInflight = new WeakMap<AbortSignal, Map<string, Promise<Planned | 'failed' | null>>>();
+  private readonly planInflight = new WeakMap<AbortSignal, Map<string, PlanFlight>>();
   private readonly planningStack = new WeakMap<AbortSignal, Set<string>>();
   private readonly mediaDeadlineMs: number;
   private closing = false;
@@ -764,11 +771,19 @@ export class Importer {
     // Paused records retain their stack at the failed write, including its exact
     // envelope. Earlier planning, bootstrap and media effects are not repeated.
     type Retry = { resume(): void; next: Retry | undefined };
+    type Admission = { resume(): void; next: Admission | undefined };
     let retry: Retry | undefined;
+    let admission: Admission | undefined;
     await new Promise<void>((done) => {
-      const resume = () => {
+      const resumeRetry = () => {
         const entry = retry!;
         retry = entry.next;
+        active++;
+        entry.resume();
+      };
+      const resumeAdmission = () => {
+        const entry = admission!;
+        admission = entry.next;
         active++;
         entry.resume();
       };
@@ -779,10 +794,12 @@ export class Importer {
       };
       const pump = () => {
         if (stopped) {
-          while (retry) resume();
+          while (retry) resumeRetry();
+          while (admission) resumeAdmission();
         } else {
-          while (active < width.width && (retry || next < values.length)) {
-            if (retry) resume();
+          while (active < width.width && (retry || admission || next < values.length)) {
+            if (retry) resumeRetry();
+            else if (admission) resumeAdmission();
             else start(next++);
           }
         }
@@ -791,51 +808,78 @@ export class Importer {
           done();
         }
       };
-      const write: Write = async (effect) => {
-        let invocations = 0;
-        let prior: ImportTransportError | undefined;
-        for (;;) {
-          if (signal.aborted) throw new Interrupted('Import was interrupted');
-          if (prior?.retry) {
-            const { notBefore, deadline } = prior.retry;
-            if (this.now() >= deadline) throw prior;
-            if (notBefore !== undefined) {
-              await this.sleep(notBefore - this.now(), signal);
-              if (signal.aborted) throw new Interrupted('Import was interrupted');
-              // Never send early even if an injected sleeper wakes prematurely.
-              if (this.now() < notBefore || this.now() >= deadline) throw prior;
+      const acquire = () =>
+        new Promise<void>((resolve) => {
+          if (stopped || signal.aborted) {
+            active++;
+            resolve();
+            return;
+          }
+          admission = { resume: resolve, next: admission };
+          pump();
+        });
+      const createWrite = (): Write => {
+        const owner = {};
+        const write: Write = async <T>(effect: () => Promise<T>): Promise<T> => {
+          let invocations = 0;
+          let prior: ImportTransportError | undefined;
+          for (;;) {
+            if (signal.aborted) throw new Interrupted('Import was interrupted');
+            if (prior?.retry) {
+              const { notBefore, deadline } = prior.retry;
+              if (this.now() >= deadline) throw prior;
+              if (notBefore !== undefined) {
+                await this.sleep(notBefore - this.now(), signal);
+                if (signal.aborted) throw new Interrupted('Import was interrupted');
+                // Never send early even if an injected sleeper wakes prematurely.
+                if (this.now() < notBefore || this.now() >= deadline) throw prior;
+              }
+            }
+            const singleWriter = width.width === 1 && active === 1;
+            invocations++;
+            try {
+              const result = await effect();
+              width.width = Math.min(this.recordConcurrency, width.width + 1);
+              pump();
+              return result;
+            } catch (error) {
+              const overload =
+                error instanceof ImportTransportError &&
+                (error.status === 429 || (error.status === 503 && error.retryable));
+              // An older wide cohort can finish after another record narrowed to
+              // one. An isolated width-one failure can stop sooner than the cap.
+              if (
+                !overload ||
+                singleWriter ||
+                signal.aborted ||
+                invocations >= MAX_WRITE_INVOCATIONS ||
+                error.retry?.stopped
+              )
+                throw error;
+              prior = error;
+              width.width = Math.max(1, Math.floor(width.width / 2));
+              active--;
+              await new Promise<void>((resolve) => {
+                retry = { resume: resolve, next: retry };
+                pump();
+              });
             }
           }
-          const singleWriter = width.width === 1 && active === 1;
-          invocations++;
+        };
+        write.owner = owner;
+        write.waitForDependency = async <T>(dependency: Promise<T>, dependencyOwner: object | undefined) => {
+          // A plan running under this same record already owns its slot. A plan
+          // owned by another record can run while this parent yields its slot.
+          if (owner === dependencyOwner) return dependency;
+          active--;
+          pump();
           try {
-            const result = await effect();
-            width.width = Math.min(this.recordConcurrency, width.width + 1);
-            pump();
-            return result;
-          } catch (error) {
-            const overload =
-              error instanceof ImportTransportError &&
-              (error.status === 429 || (error.status === 503 && error.retryable));
-            // An older wide cohort can finish after another record narrowed to
-            // one. An isolated width-one failure can stop sooner than the cap.
-            if (
-              !overload ||
-              singleWriter ||
-              signal.aborted ||
-              invocations >= MAX_WRITE_INVOCATIONS ||
-              error.retry?.stopped
-            )
-              throw error;
-            prior = error;
-            width.width = Math.max(1, Math.floor(width.width / 2));
-            active--;
-            await new Promise<void>((resolve) => {
-              retry = { resume: resolve, next: retry };
-              pump();
-            });
+            return await dependency;
+          } finally {
+            await acquire();
           }
-        }
+        };
+        return write;
       };
       const start = (index: number) => {
         active++;
@@ -843,6 +887,7 @@ export class Importer {
         const value = values[index]!;
         const recordKey = key(value);
         this.options.observer?.onRecordActive?.(phase, recordKey, true);
+        const write = createWrite();
         void operation(value, write)
           .then(
             (result) => {
@@ -1849,7 +1894,10 @@ export class Importer {
       this.planInflight.set(signal, inflight);
     }
     const existing = inflight.get(staged.row.recordKey);
-    if (existing) return existing;
+    if (existing)
+      return write.waitForDependency && existing.owner !== write.owner
+        ? write.waitForDependency(existing.promise, existing.owner)
+        : existing.promise;
     const task = Promise.resolve().then(async () => {
       let stack = this.planningStack.get(signal);
       if (!stack) {
@@ -1866,7 +1914,7 @@ export class Importer {
         stack.delete(staged.row.recordKey);
       }
     });
-    inflight.set(staged.row.recordKey, task);
+    inflight.set(staged.row.recordKey, { owner: write.owner, promise: task });
     return task;
   }
 
@@ -1877,8 +1925,8 @@ export class Importer {
     staged: Staged<SourceProjection>,
     signal: AbortSignal,
     write: Write,
-  ): Promise<void> {
-    if (this.options.identifierLookup || staged.row.state !== 'present') return;
+  ): Promise<boolean> {
+    if (this.options.identifierLookup || staged.row.state !== 'present') return true;
     const stack = this.planningStack.get(signal);
     for (const key of this.openLibraryRelationKeys(staged.projection)) {
       if (signal.aborted) throw new Interrupted('Import was interrupted');
@@ -1887,8 +1935,10 @@ export class Importer {
       if (claim?.state === 'bound' || claim?.state === 'taken-down') continue;
       const dependency = this.session.store.key(staged.row.source, key, run).staged;
       if (!dependency || dependency.row.state !== 'present') continue;
-      await this.planOnce(registration, run, dependency, signal, write);
+      const planned = await this.planOnce(registration, run, dependency, signal, write);
+      if (planned === 'failed') return false;
     }
+    return true;
   }
 
   private async plan(
@@ -1897,9 +1947,9 @@ export class Importer {
     staged: Staged<SourceProjection>,
     signal: AbortSignal,
     write: Write,
-  ): Promise<Planned | null> {
+  ): Promise<Planned | 'failed' | null> {
     if (signal.aborted) throw new Interrupted('Import was interrupted');
-    await this.bindOwnDependencies(registration, run, staged, signal, write);
+    if (!(await this.bindOwnDependencies(registration, run, staged, signal, write))) return 'failed';
     const store = this.session.store;
     const { row } = staged;
     const owner = { source: row.source, external_id: row.recordKey };

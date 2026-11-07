@@ -19,6 +19,8 @@ The durable source tuple is configured alias plus exact external ID. The alias i
 
 Conversion maps one selected normalized record with current bindings and exact released descriptors. It does not acquire, resolve identities, authorize, accept, adopt or read public results. Importer records source and request journals, prepares ordinary create/propose commands and retains exact actor, destination, body, key and response through retry. A run stages and validates one complete generation, checks mass disappearance, then seals before writes. Unknown delivery resumes the same sealed intent before source reacquisition; changed terminal receipts remain distinct. Retryable 429/503 stays bounded; authorization and fence refusals remain refusals.
 
+Decision: a waiter for a staged same-run dependency owned by another active record yields its parent's write-admission slot and reacquires through the adaptive scheduler before continuing; a failed dependency leaves its parent unclassified for sealed replay. This keeps earlier effects and exact pending bytes intact at width one.
+
 ## Command line, metadata and recovery
 
 Run `bun services/importer/src/cli.ts` with `--source`, `--dump`, `--state`, `--api`, `--account-key`, `--account`, `--client` and `--auth`. `--help` needs no credentials, SQLite or network. `--dump -` reads plain stdin. Compression is explicit: gzip for Open Library/Wikidata, zstd for VNDB/Wikidata; it is never inferred from names. zstd requires one local regular file and trusted executable. Decoded input defaults to 256 GiB with at most one-window overshoot. gzip is refused for VNDB/Bangumi and zstd for Bangumi/Open Library before credentials or state; dump-set members remain none/gzip.
