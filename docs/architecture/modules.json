@@ -228,6 +228,31 @@
         "services/kernel/src/access/resource-group-grant.ts",
         "services/kernel/src/access/viewer-actions.ts",
         "services/kernel/src/access/index.ts",
+        "services/kernel/src/access/account-data.ts",
+        "services/kernel/src/access/account-standing.ts",
+        "services/kernel/src/access/adapters/bind.ts",
+        "services/kernel/src/access/adapters/copy-account.ts",
+        "services/kernel/src/access/adapters/collection-rule-authority.ts",
+        "services/kernel/src/access/adapters/library-presentation.ts",
+        "services/kernel/src/access/adapters/native.ts",
+        "services/kernel/src/access/adapters/reading.ts",
+        "services/kernel/src/access/creation-manifest.ts",
+        "services/kernel/src/access/eligibility.ts",
+        "services/kernel/src/access/factory.ts",
+        "services/kernel/src/access/parent-creation.ts",
+        "services/kernel/src/access/public-eligibility.ts",
+        "services/kernel/src/access/public-views.ts",
+        "services/kernel/src/access/realm-claim.ts",
+        "services/kernel/src/access/resource-authorization.ts",
+        "services/kernel/src/access/resource-initialization.ts",
+        "services/kernel/src/access/resource-role-held.ts",
+        "services/kernel/src/access/standing-parent.ts",
+        "services/kernel/src/access/viewer-actions.ts",
+        "services/kernel/src/access/workflow-approvals.ts",
+        "services/kernel/src/access/check.ts",
+        "services/kernel/src/access/native-time.ts",
+        "services/kernel/src/access/deadline.ts",
+        "services/kernel/src/access/read-bindings.ts",
         "services/kernel/src/access/command-admission.ts",
         "services/kernel/src/access/resource-access-errors.ts",
         "services/kernel/src/access/account-discovery-source.ts",
@@ -266,7 +291,15 @@
         "services/kernel/src/access/zone-resource-adapter.ts",
         "services/kernel/src/access/account-data.ts",
         "services/kernel/src/access/grant-commands.ts",
-        "services/kernel/src/access/content-adapter.ts"
+        "services/kernel/src/access/content-adapter.ts",
+        "services/kernel/src/access/public-eligibility.ts",
+        "services/kernel/src/access/parent-creation.ts",
+        "services/kernel/src/access/resource-initialization.ts",
+        "services/kernel/src/access/adapters/copy-account.ts",
+        "services/kernel/src/access/adapters/library.ts",
+        "services/kernel/src/access/public-views.ts",
+        "services/kernel/src/access/live-copy.ts",
+        "services/kernel/src/access/resource-roles.ts"
       ],
       "allowedDependencies": [
         "access-policy",
@@ -297,8 +330,12 @@
       "paths": ["services/kernel/src/access/contract/**"],
       "publicEntries": [
         "services/kernel/src/access/contract/index.ts",
+        "services/kernel/src/access/contract/authentication.ts",
         "services/kernel/src/access/contract/bounds.ts",
-        "services/kernel/src/access/contract/collection-policy.ts"
+        "services/kernel/src/access/contract/collection-policy.ts",
+        "services/kernel/src/access/contract/errors.ts",
+        "services/kernel/src/access/contract/erasure.ts",
+        "services/kernel/src/access/contract/contribution-attribution.ts"
       ],
       "allowedDependencies": [],
       "capabilities": ["access-vocabulary"]
@@ -384,7 +421,9 @@
         "services/kernel/src/content/imported-contract.ts",
         "services/kernel/src/content/media.ts",
         "services/kernel/src/content/schema-validation.ts",
-        "services/kernel/src/content/source-fence-schemas.ts"
+        "services/kernel/src/content/source-fence-schemas.ts",
+        "services/kernel/src/content/realm-subject-source.ts",
+        "services/kernel/src/content/review-discovery-changes.ts"
       ],
       "allowedDependencies": [
         "definitions",
@@ -620,7 +659,14 @@
         "services/kernel/src/library/zone-collection-adapter.ts",
         "services/kernel/src/library/members-preparation-source-declaration.ts",
         "services/kernel/src/library/command-support.ts",
-        "services/kernel/src/library/shelf-reader-unavailable.ts"
+        "services/kernel/src/library/shelf-reader-unavailable.ts",
+        "services/kernel/src/library/owner-filter.ts",
+        "services/kernel/src/library/owner-filter-plan.ts",
+        "services/kernel/src/library/owner-filter-native-binding.ts",
+        "services/kernel/src/library/native-source-custody.ts",
+        "services/kernel/src/library/collection-kind-work-admission.ts",
+        "services/kernel/src/library/collection-publication-work-admission.ts",
+        "services/kernel/src/library/access-port.ts"
       ],
       "allowedDependencies": [
         "access-policy",
@@ -646,7 +692,8 @@
         "operations",
         "progress",
         "kernel-library-core",
-        "kernel-search-contract"
+        "kernel-search-contract",
+        "kernel-access-contract"
       ],
       "capabilities": ["library"],
       "postgresPaths": ["services/kernel/src/library/**"]
@@ -675,6 +722,8 @@
         "services/kernel/src/search/contract/**"
       ],
       "publicEntries": [
+        "services/kernel/src/search/account-context-native.ts",
+        "services/kernel/src/search/source-publication-binding.ts",
         "services/kernel/src/search/index.ts",
         "services/kernel/src/search/composition.ts",
         "services/kernel/src/search/query-events.ts",
@@ -696,7 +745,10 @@
         "services/kernel/src/presentation/page-semantic-port.ts",
         "services/kernel/src/presentation/page-application.ts",
         "services/kernel/src/presentation/adapters/semantic-page.ts",
-        "services/kernel/src/search/config.ts"
+        "services/kernel/src/search/config.ts",
+        "services/kernel/src/search/global-context.ts",
+        "services/kernel/src/search/native-bindings.ts",
+        "services/kernel/src/search/native-ports.ts"
       ],
       "allowedDependencies": [
         "bounds",
@@ -806,7 +858,11 @@
         "services/kernel/src/semantic/identity-adapters/identity-epoch-read.ts",
         "services/kernel/src/semantic/erasure-producer.ts",
         "services/kernel/src/semantic/public-filter-source-binding.ts",
-        "services/kernel/src/semantic/public-filter-source.ts"
+        "services/kernel/src/semantic/public-filter-source.ts",
+        "services/kernel/src/semantic/identity-scoped-observations.ts",
+        "services/kernel/src/semantic/search-relations.ts",
+        "services/kernel/src/semantic/account-erasure-source.ts",
+        "services/kernel/src/semantic/scope-leaf-evidence.ts"
       ],
       "allowedDependencies": [
         "bounds",
@@ -916,6 +972,8 @@
         "services/kernel/src/route/route.ts",
         "services/kernel/src/tokens/seal.ts",
         "services/kernel/src/command/command.ts",
+        "services/kernel/src/command/key.ts",
+        "services/kernel/src/command/request.ts",
         "services/kernel/src/events/log.ts",
         "services/kernel/src/events/effects.ts",
         "services/kernel/src/events/relays.ts",
@@ -960,6 +1018,7 @@
         "definitions-compiler",
         "definitions-compiler-adapter",
         "kernel-access",
+        "kernel-access-contract",
         "kernel-commerce",
         "kernel-community",
         "kernel-content",

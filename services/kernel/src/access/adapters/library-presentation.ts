@@ -7,7 +7,7 @@ import type {
 import type { ContributionAttribution } from '../contract/index.ts';
 import { readAccount } from '../account-data.ts';
 import { readPublicAccount, readContributionAttributions } from '../public-identity.ts';
-import { deadlineClient } from '../authenticate.ts';
+import { deadlineClient } from '../deadline.ts';
 import { routeOf } from '../../route/route.ts';
 import { withConnection } from '../../database/pool.ts';
 

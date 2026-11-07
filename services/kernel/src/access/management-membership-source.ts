@@ -1,7 +1,7 @@
 import type { Pool } from 'pg';
 import type { AuthSessionPort, SessionProof } from '@rezics/auth-contract';
 import { AUTH_MANAGEMENT_CLIENT_ID, AUTH_MANAGEMENT_SCOPES } from '@rezics/auth-contract';
-import { accessCheck, type Access, type Actor } from '../request/access.ts';
+import { accessCheck, type Access, type Actor } from './check.ts';
 import { withConnection } from '../database/pool.ts';
 import { mintReadTime, authoritativeTimeValue, releaseOperationalTime } from '../command/command.ts';
 import { routeOf } from '../route/route.ts';

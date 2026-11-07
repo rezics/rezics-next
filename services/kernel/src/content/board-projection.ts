@@ -4,7 +4,7 @@ import { Value } from 'typebox/value';
 import { runCommand, type CommandReceipt } from '../command/command.ts';
 import { withConnection } from '../database/pool.ts';
 import type { Effect } from '../events/effects.ts';
-import { type CloudEvent } from '../events/log.ts';
+import type { CloudEvent } from '../events/log.ts';
 import { readPartition, type Partition } from '../partition/partition.ts';
 import { partitionOf, routeOf } from '../route/route.ts';
 import { CONTENT_EVENTS, type ContentEventData } from './events.ts';

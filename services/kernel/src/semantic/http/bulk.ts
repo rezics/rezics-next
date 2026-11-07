@@ -12,27 +12,18 @@ import {
 import { t } from 'elysia';
 import type { Pool } from 'pg';
 import type { OpenAPIV3 } from 'openapi-types';
-import { GrantDeniedError } from '../../access/grant-commands.ts';
 import { CommandUnavailableError } from '../../command/command.ts';
 import { resourceAuthorization } from '../../access/resource-authorization.ts';
 import { contentLifecycleOf } from '../adapters/ports.ts';
 import { discardConnection, withConnection } from '../../database/pool.ts';
 import { customMethod } from '../../http/custom-method.ts';
-import {
-  PROBLEM_TYPE_BASE,
-  ProblemError,
-  logInternalError,
-  problemResponse,
-  problemSchema,
-  type FieldError,
-} from '../../http/problem.ts';
+import { ProblemError, problemSchema, type FieldError } from '../../http/problem.ts';
 import { defineRateLimit } from '../../http/rate-limit.ts';
 import { SESSION_HEADER } from '../../http/request.ts';
 import { readPartition } from '../../partition/partition.ts';
 import { accessCommandAuthorization, AuthenticationError, type Access } from '../../request/access.ts';
 import { partitionOf, routeOf } from '../../route/route.ts';
 import { batchCommand, batchRoute, guardBatchAuthorization } from '../bulk.ts';
-import { EditorialConflictError, SubjectNotFoundError } from '../contract/subject-errors.ts';
 import { activeRelease } from '../definition-release-read.ts';
 import { GLOBAL_SUBJECT_CONTEXT as GLOBAL_CONTEXT } from '../contract/subject-values.ts';
 import {
@@ -45,15 +36,27 @@ import {
   sourceTuple,
   type SourceFencePlan,
 } from '../fences.ts';
-import { SubjectInputError } from '../item.ts';
-import { SubjectRedirectError } from '../contract/subject-errors.ts';
 import { SubjectAccessDeniedError, type SubjectComponent } from '../subject.ts';
 import { globalContextAnchor } from '../context.ts';
 import type { subjectRoutes } from './subjects.ts';
+import {
+  PROBLEM_TYPE_BASE,
+  bulkWriteCommandProblem,
+  bulkWriteUnavailableSchema,
+  logPendingFenceFailure,
+} from './batch.ts';
 
-type BulkProblemBody = Extract<BatchWriteResult['results'][number], { problem: unknown }>['problem'] & {
-  redirect?: { from: string; to: string };
-};
+export {
+  BULK_WRITE_ROUTE,
+  PROBLEM_TYPE_BASE,
+  bulkWriteAction,
+  bulkWriteCommandProblem,
+  bulkWriteDiagnostics,
+  bulkWriteUnavailableSchema,
+  logBulkWriteUnavailable,
+  logPendingFenceFailure,
+} from './batch.ts';
+export type { BulkWriteAction, BulkWriteProblemBody, BulkWriteTransactionPhase } from './batch.ts';
 
 // A malformed command key still needs its own result. Keep the portable success
 // shapes while allowing the diagnostic result to echo an empty or invalid key.
@@ -84,19 +87,6 @@ type Pending = {
 };
 
 const served = new Set(['facts', 'summary', 'cover']);
-const BULK_WRITE_ROUTE = '/v1/subjects:batchWrite';
-
-export function logPendingFenceFailure(requestId: string, commandIndex: number): Error {
-  const cause = new Error('Source fence was still pending after the retry pass');
-  logInternalError({
-    requestId,
-    method: 'POST',
-    route: BULK_WRITE_ROUTE,
-    cause,
-    commandIndex,
-  });
-  return cause;
-}
 
 function fencedProblem(requestId: string) {
   return {
@@ -165,7 +155,7 @@ export function bulkRoutes(
         400: problemSchema('invalid_request'),
         401: problemSchema('authentication_required', 'invalid_credentials'),
         403: problemSchema('forbidden'),
-        503: problemSchema('semantic_not_ready', 'overloaded', 'deadline_exceeded'),
+        503: bulkWriteUnavailableSchema(),
       },
       detail: {
         operationId: 'subject.batch_write',
@@ -341,37 +331,14 @@ export function bulkRoutes(
                 results[pending.index] = { key, status: 409, problem: fencedProblem(requestId) };
                 continue;
               }
-              let problem = error;
-              if (error instanceof SubjectInputError)
-                problem = new ProblemError('invalid_request', {
-                  errors: error.violations.map((violation) => ({
-                    ...violation,
-                    pointer: `/commands/${pending.index}${pending.command.op === 'create' ? '/subject' : ''}${violation.pointer}`,
-                  })),
-                });
-              if (error instanceof SubjectNotFoundError) problem = new ProblemError('not_found');
-              if (error instanceof EditorialConflictError || error instanceof SubjectRedirectError)
-                problem = new ProblemError('conflict');
-              if (error instanceof SubjectAccessDeniedError || error instanceof GrantDeniedError)
-                problem = new ProblemError('forbidden');
-              const response = problemResponse(problem, {
-                method: 'POST',
-                id: requestId,
-                action: pending.command?.op === 'create' ? 'subject:create' : 'statement:propose',
-              });
-              if (response.status === 500)
-                logInternalError({
+              results[pending.index] = {
+                key,
+                ...(await bulkWriteCommandProblem(error, {
                   requestId,
-                  method: 'POST',
-                  route: BULK_WRITE_ROUTE,
-                  cause: error,
                   commandIndex: pending.index,
-                });
-              const payload: unknown = await response.json();
-              if (!payload || typeof payload !== 'object') throw new TypeError('bulk write problem payload');
-              const payloadProblem = payload as BulkProblemBody;
-              if (error instanceof SubjectRedirectError) payloadProblem.redirect = { from: error.from, to: error.to };
-              results[pending.index] = { key, status: response.status, problem: payloadProblem };
+                  op: pending.command?.op,
+                })),
+              };
             }
           }
         } finally {
@@ -397,18 +364,13 @@ export function bulkRoutes(
       for (const [, jobs] of remaining) {
         for (const pending of jobs) {
           const key = typeof pending.command?.key === 'string' ? pending.command.key : '';
-          const cause = logPendingFenceFailure(requestId, pending.index);
-          const response = problemResponse(cause, {
-            method: 'POST',
-            id: requestId,
-            action: pending.command?.op === 'create' ? 'subject:create' : 'statement:propose',
-          });
-          const payload: unknown = await response.json();
-          if (!payload || typeof payload !== 'object') throw new TypeError('bulk write problem payload');
           results[pending.index] = {
             key,
-            status: response.status,
-            problem: payload as BulkProblemBody,
+            ...(await bulkWriteCommandProblem(logPendingFenceFailure(requestId, pending.index), {
+              requestId,
+              commandIndex: pending.index,
+              op: pending.command?.op,
+            })),
           };
         }
       }

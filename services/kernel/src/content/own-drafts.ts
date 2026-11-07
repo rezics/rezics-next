@@ -1,5 +1,7 @@
-import { accessCheck, AuthenticationError, type AccessCheck, type AccessClient } from '../request/access.ts';
-import { ProblemError } from '../http/problem.ts';
+import { accessCheck } from './access-port.ts';
+import { AuthenticationError } from '../access/contract/authentication.ts';
+import type { AccessCheck, AccessClient } from '../request/access.ts';
+import { ProblemError } from '../http/problem-error.ts';
 import type { CursorBinding } from '../tokens/cursor.ts';
 import { partitionOf, routeOf } from '../route/route.ts';
 import { readPartition } from '../partition/partition.ts';

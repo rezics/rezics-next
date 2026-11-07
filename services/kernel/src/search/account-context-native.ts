@@ -1,11 +1,10 @@
 import { createHash } from 'node:crypto';
 import type { Pool } from 'pg';
 import { accountAgentId, accountAgentsForSubjects } from '../semantic/agents.ts';
-import { withReadTransaction } from '../semantic/read.ts';
 import { requireAccessDeadline } from '../access/unavailable.ts';
 import { routeOf } from '../route/route.ts';
 import type { SearchIdentityMapping } from './semantic-source-port.ts';
-import { searchSourcePublicationApplication } from './source-publication-application.ts';
+import { readIdentityMappings, withReadTransaction } from './native-bindings.ts';
 
 type AccountContextDependencies = Readonly<{ pool: Pool; deadline: number }>;
 
@@ -43,7 +42,6 @@ export async function readAccountContextBindings(deps: AccountContextDependencie
   const originals = [
     ...new Set(accounts.flatMap((account, index) => [accountAgentId(account.id), candidates[index]!])),
   ];
-  const readIdentityMappings = searchSourcePublicationApplication().readIdentityMappings;
   const mappings = new Map<string, SearchIdentityMapping>();
   for (let offset = 0; offset < originals.length; offset += 100) {
     requireAccessDeadline(deps.deadline);

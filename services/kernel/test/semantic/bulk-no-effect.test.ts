@@ -2,7 +2,7 @@ import { afterAll, beforeAll, expect, test } from 'bun:test';
 import { randomUUID } from 'node:crypto';
 import { bundledDigest, bundledRelease } from '@rezics/definitions/bundled';
 import type { BatchCommand, Source } from '@rezics/definitions/bulk';
-import pg from 'pg';
+import pg, { type PoolClient, type QueryConfig } from 'pg';
 import { GrantDeniedError } from '../../src/access/grant-commands.ts';
 import { resourceAuthorization } from '../../src/access/resource-authorization.ts';
 import {
@@ -296,5 +296,58 @@ test('successful no-effect bulk resolve and replay preserve position and no outb
     }
     expect(await receipt(f.partition, command)).toEqual(rows);
     expect(await snapshot(f)).toEqual(before);
+  }
+});
+
+test('a facts proposal retries native contention and lands once under the original key', async () => {
+  const created = await fixture();
+  const propose: BatchCommand = {
+    op: 'propose',
+    key: randomUUID(),
+    source: {
+      source: 'openlibrary',
+      external_id: `OL${randomUUID()}W`,
+      record_revision: 'unversioned',
+      digest: 'd'.repeat(64),
+      converter_revision: 'openlibrary@1',
+      field_group: 'facts',
+    },
+    subject: created.id,
+    statement: {
+      property: { id: 'schema:inLanguage' },
+      value: { type: 'value', content: 'en' },
+      references: [
+        {
+          parts: [
+            { property: { id: 'schema:url' }, value: { type: 'value', content: 'https://openlibrary.org/works/OL2W' } },
+          ],
+        },
+      ],
+    },
+  };
+  const originals = new Map<PoolClient, PoolClient['query']>();
+  let retried = false;
+  const intercept = (client: PoolClient) => {
+    if (originals.has(client)) return;
+    const query = client.query;
+    originals.set(client, query);
+    client.query = ((statement: QueryConfig | string, ...args: unknown[]) => {
+      const text = typeof statement === 'string' ? statement : statement.text;
+      if (!retried && text.includes('INSERT INTO semantic.candidate')) {
+        retried = true;
+        throw Object.assign(new Error('Retry facts proposal'), { code: '40001' });
+      }
+      return Reflect.apply(query, client, [statement, ...args]);
+    }) as PoolClient['query'];
+  };
+  pool.on('acquire', intercept);
+  try {
+    const result = await batch(propose);
+    expect(retried).toBe(true);
+    expect(result.status).toBe(201);
+    expect(result.value.candidate).toBeString();
+  } finally {
+    pool.off('acquire', intercept);
+    for (const [client, query] of originals) client.query = query;
   }
 });

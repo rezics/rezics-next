@@ -1,7 +1,6 @@
 import type { Pool, PoolClient } from 'pg';
-import { deadlineClient } from '../access/authenticate.ts';
-import { readAccount } from '../access/account-data.ts';
-import { GrantDeniedError } from '../access/resource-access-errors.ts';
+import { deadlineClient, readAccount } from './access-port.ts';
+import { GrantDeniedError } from '../access/contract/errors.ts';
 import { withConnection } from '../database/pool.ts';
 import { partitionReadClient } from '../database/read-snapshot.ts';
 import type { Access, AccountActor, Actor } from '../request/access.ts';
@@ -18,7 +17,6 @@ import type { IdentityMapping } from '../semantic/identity-epoch-contract.ts';
 import { readIdentityMappings } from '../semantic/identity-adapters/read.ts';
 import { withReadTransaction } from '../semantic/read.ts';
 import viewerEntries from './viewer-facts-entries.sql';
-
 import {
   MAX_VIEWER_FACTS_ROWS,
   MAX_VIEWER_FACTS_INPUT_BYTES,

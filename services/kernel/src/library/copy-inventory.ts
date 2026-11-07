@@ -5,7 +5,7 @@ import type { NativeCopyProducers } from './adapters/copies.ts';
 import { chooseLabel } from '@rezics/definitions';
 import { decodeLibraryProfilePin } from './profile-pin.ts';
 import { resolveLibraryProfilePin } from './profile.ts';
-import { deadlineClient } from '../access/authenticate.ts';
+import { deadlineClient } from './access-port.ts';
 import { withConnection } from '../database/pool.ts';
 import {
   COPY_FILTER_OPTION_QUERY_LIMIT,
@@ -15,7 +15,6 @@ import {
 import { copyInventoryValuesStatementPlan } from './copy-operation-bounds.ts';
 
 export { MAX_COPY_FILTER_OPTIONS };
-
 import type { CopyInventoryChoice, CopyInventoryFacet, CopyInventory, CopyInventoryValue } from './contract/index.ts';
 export type { CopyInventoryChoice, CopyInventoryFacet, CopyInventory, CopyInventoryValue } from './contract/index.ts';
 export type CopyInventorySnapshot = Readonly<{ digest: string; release: Release }> | null;

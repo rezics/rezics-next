@@ -116,9 +116,16 @@ test('reviewed inventory exposes the native proposal refusal before acknowledgin
     }),
   };
   try {
-    await expect(seedReviewedCatalogue({ path: resolve(directory, 'state.sqlite'), port })).rejects.toThrow(
-      'Native proposal refused',
+    const failure = await seedReviewedCatalogue({ path: resolve(directory, 'state.sqlite'), port }).catch(
+      (error: unknown) => error,
     );
+    expect(failure).toMatchObject({
+      name: 'ReviewedCatalogueCommandError',
+      seedKey: 'source-scheme',
+      commandKind: 'proposal',
+      status: 422,
+    });
+    expect(JSON.stringify(failure)).not.toContain('Native proposal refused');
   } finally {
     await rm(directory, { recursive: true, force: true });
   }
@@ -154,10 +161,16 @@ test('reviewed bootstrap refusal names its seed and sends no proposal', async ()
     },
   };
   try {
-    const problem = '{"type":"urn:test:refused","title":"Native bootstrap refused","status":422}';
-    await expect(seedReviewedCatalogue({ path: resolve(directory, 'state.sqlite'), port })).rejects.toThrow(
-      `Reviewed catalogue bootstrap ${seeds[0]!.key}: ${problem}`,
+    const failure = await seedReviewedCatalogue({ path: resolve(directory, 'state.sqlite'), port }).catch(
+      (error: unknown) => error,
     );
+    expect(failure).toMatchObject({
+      name: 'ReviewedCatalogueCommandError',
+      seedKey: seeds[0]!.key,
+      commandKind: 'bootstrap',
+      status: 422,
+    });
+    expect(JSON.stringify(failure)).not.toContain('Native bootstrap refused');
     expect(batches).toBe(1);
   } finally {
     await rm(directory, { recursive: true, force: true });

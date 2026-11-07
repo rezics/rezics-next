@@ -5,8 +5,8 @@ import { t } from 'elysia';
 import type { Pool } from 'pg';
 import type { Static } from 'typebox';
 
-import { ContributionAttributionSchema } from '../access/contribution-attribution.ts';
-import { GrantDeniedError } from '../access/resource-access-errors.ts';
+import { ContributionAttributionSchema } from '../access/contract/contribution-attribution.ts';
+import { GrantDeniedError } from '../access/contract/errors.ts';
 import { SitemapQuerySchema, SitemapBoardPageSchema } from '../content/schemas.ts';
 import type { KernelClock } from '../clock.ts';
 import { customMethod } from '../http/custom-method.ts';
@@ -16,7 +16,7 @@ import { defineRateLimit } from '../http/rate-limit.ts';
 import { IDEMPOTENCY_HEADER } from '@rezics/operations/protocol';
 import { idempotencyKeyOf } from '../http/idempotency-key.ts';
 import { AuthenticationError } from '../request/authentication-error.ts';
-import { type Access, type Actor } from '../request/access.ts';
+import type { Access, Actor } from '../request/access.ts';
 import { languageRanges } from '../semantic/language.ts';
 import type { definitionRoutes } from '../semantic/http/definitions.ts';
 import { FactSchema } from '../search/http/routes.ts';
@@ -40,7 +40,6 @@ import {
 import { collectionPresentation } from './collection-presentation.ts';
 import { collectionBulkRoutes } from './collection-bulk-routes.ts';
 import { listSitemapCollections } from './sitemap.ts';
-
 import { basicQuery, curatorFields, embedded, fullMembers, fullView, subjectFields, viewQuery } from './views.ts';
 import { assertMemberPageCurrent } from './member-viewer-currentness.ts';
 import { withCollectionRetentionDeclaration } from './collection-retention-bounds.ts';

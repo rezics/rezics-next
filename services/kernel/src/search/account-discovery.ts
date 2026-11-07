@@ -5,9 +5,13 @@ import { readCreditIndexSnapshot } from './credit-index.ts';
 import { noEffect, runCommand } from '../command/command.ts';
 import { activeRelease } from '../semantic/definitions.ts';
 import type { Release } from '@rezics/definitions';
-import { readAccountDiscoveryBindings } from '../access/account-discovery-source.ts';
 import { redriveAccountDiscovery } from '../access/account-discovery-work.ts';
-import { readErasureStatus, recordLateErasureItem, resolveLateErasureItem } from '../access/erasure.ts';
+import {
+  readAccountDiscoveryBindings,
+  readErasureStatus,
+  recordLateErasureItem,
+  resolveLateErasureItem,
+} from './native-bindings.ts';
 import type { DiscoveryIndexAction, DiscoveryKey, DiscoveryOwnerAdapterSlots, DiscoveryRegistry } from './discovery.ts';
 import type { SubjectListingSource } from './source.ts';
 import { SearchUnavailableError, type OpenSearch } from './opensearch.ts';

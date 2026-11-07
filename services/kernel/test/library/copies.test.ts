@@ -4,7 +4,7 @@ import { randomUUID } from 'node:crypto';
 import { compileCatalogue } from '@rezics/definitions/compile';
 import { fixture } from '../../../../packages/definitions/test/support/library-profiles.ts';
 import { Value } from 'typebox/value';
-import { GrantDeniedError } from '../../src/access/grant-commands.ts';
+import { GrantDeniedError } from '../../src/access/contract/errors.ts';
 import { IdempotencyConflictError } from '../../src/command/command.ts';
 import { EVENT_TYPES, readBatch } from '../../src/events/log.ts';
 import { ProblemError } from '../../src/http/problem-error.ts';

@@ -8,10 +8,10 @@ import {
 } from '../command/command.ts';
 import { discardConnection, withConnection } from '../database/pool.ts';
 import { readPartition } from '../partition/partition.ts';
-import { accessCheck, type Access, type AccessClient, type AccountActor, type Actor } from '../request/access.ts';
+import { accessCheck, type Access, type AccessClient, type AccountActor, type Actor } from './check.ts';
 import { partitionOf, routeOf } from '../route/route.ts';
 import { readAccount, type Account } from './account-data.ts';
-import { deadlineClient, within } from './authenticate.ts';
+import { deadlineClient, within } from './deadline.ts';
 import assignmentRead from './delegation-read.sql';
 import { deriveAccess } from './derived-access.ts';
 import { accessClock } from './access-clock.ts';

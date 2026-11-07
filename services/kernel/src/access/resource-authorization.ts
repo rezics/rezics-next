@@ -10,9 +10,9 @@ import {
   type CommandAuthorization,
 } from '../command/command.ts';
 import { withConnection } from '../database/pool.ts';
-import { deadlineClient, within } from './authenticate.ts';
+import { deadlineClient, within } from './deadline.ts';
 import { validResource } from './grant-command.ts';
-import { GrantDeniedError } from './grant-commands.ts';
+import { GrantDeniedError } from './resource-access-errors.ts';
 import { permissionEvidenceDeadline, permissionHistoryAccounts } from './permission.ts';
 import type { ResourceEligibility } from './eligibility.ts';
 import {
@@ -23,7 +23,7 @@ import {
   type AccessContext,
   type Actor,
   type Resource,
-} from '../request/access.ts';
+} from './check.ts';
 import { governanceReachUse, recordGovernanceReachUse, type GovernanceReachUse } from './governance-reach.ts';
 import { bindCommandHistoryEvidence } from '../history/application/index.ts';
 import { type AccountReference } from '../history/contract/index.ts';

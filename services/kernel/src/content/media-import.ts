@@ -29,7 +29,8 @@ import {
 } from '../command/command.ts';
 import { withConnection } from '../database/pool.ts';
 import { readPartition } from '../partition/partition.ts';
-import { accessCheck, type Access, type AccessClient, type Actor } from '../request/access.ts';
+import { accessCheck } from './access-port.ts';
+import type { Access, AccessClient, Actor } from '../request/access.ts';
 import { newId, partitionOf, routeOf } from '../route/route.ts';
 import readContext from '../semantic/read-context.sql';
 import subjectExists from '../semantic/subject-exists.sql';

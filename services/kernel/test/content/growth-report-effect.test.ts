@@ -1,7 +1,8 @@
 import { afterAll, beforeAll, expect, test } from 'bun:test';
 import { randomUUID } from 'node:crypto';
 import { bundledRelease } from '@rezics/definitions/bundled';
-import { normalizeCommandKey, principalCommandIdentity } from '../../src/command/command.ts';
+import { normalizeCommandKey } from '../../src/command/key.ts';
+import { principalCommandIdentity } from '../../src/command/command.ts';
 import { createReport, type ReportTarget } from '../../src/content/reports.ts';
 import { applyReportEffect } from '../../src/content/report-effect.ts';
 import { readBatch, type CloudEvent } from '../../src/events/log.ts';

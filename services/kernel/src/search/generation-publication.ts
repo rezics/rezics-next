@@ -7,7 +7,7 @@ import { publicFilterCatalogue } from './discovery-catalogue.ts';
 import type { Pool, PoolClient } from 'pg';
 import type { KernelClock } from '../clock.ts';
 import { routeOf, partitionOf } from '../route/route.ts';
-import { readAccountDiscoveryWitness } from '../access/account-discovery-source.ts';
+import { readAccountDiscoveryWitness } from './native-bindings.ts';
 import { subjectListingSource } from '../library/listing-counts.ts';
 import type { PublicFilterConsumer } from '../semantic/index.ts';
 import type {

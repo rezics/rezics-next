@@ -12,10 +12,8 @@ import { createHash } from 'node:crypto';
 import canonicalize from 'canonicalize';
 import type { Pool } from 'pg';
 
-import { GrantDeniedError } from '../access/resource-access-errors.ts';
-import { readAccount, readAccountCommandState } from '../access/account-data.ts';
-import { shareAccount } from '../access/account-share.ts';
-import { LifecycleDeniedError } from '../access/lifecycle-20261025094010-command.ts';
+import { GrantDeniedError, LifecycleDeniedError } from '../access/contract/errors.ts';
+import { readAccount, readAccountCommandState, shareAccount } from './access-port.ts';
 import {
   principalCommandIdentity,
   runCommand,
@@ -40,7 +38,6 @@ import {
   withSessionCommandPlan,
   type SessionOperationKind,
 } from './session-operation-bounds.ts';
-
 import { libraryActorOf } from './contract/index.ts';
 import { peekLibraryDomain } from './domain-binding.ts';
 import { enterShelfWrite } from './shelf-maintenance-owner.ts';

@@ -3,11 +3,11 @@ import type {
   SubjectSourceKeyTraversal as SubjectSourceKeyPages,
 } from '../semantic/subject-source-key-pages.ts';
 import type { Pool } from 'pg';
-import { GLOBAL_CONTEXT } from '../access/gates/catalogue.ts';
+import { SEARCH_GLOBAL_CONTEXT as GLOBAL_CONTEXT } from './global-context.ts';
 import { ConfigError } from '../commerce/config.ts';
 import { createPublicRatingSource } from '../rating/public-rating-source.ts';
 import { STANDARD_QUESTION_ID } from '../rating/standard-question.ts';
-import { subjectSource } from '../semantic/search-source.ts';
+import { subjectSource } from './native-bindings.ts';
 import type { PublicRatingSource } from './rating-source.ts';
 import { withPublicRatings } from './rating-subject-source.ts';
 import type { SubjectSource } from './source.ts';

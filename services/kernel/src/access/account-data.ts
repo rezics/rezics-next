@@ -3,7 +3,7 @@ import { routeOf } from '../route/route.ts';
 import agentPagesPage from './agent-pages-page.sql';
 import { decodeListCursor, encodeListCursor } from '../tokens/list-cursor.ts';
 import type { KeyRing } from '../tokens/seal.ts';
-import { ProblemError } from '../http/problem.ts';
+import { ProblemError } from '../http/problem-error.ts';
 import accountRead from './account-read.sql';
 import commandStateRead from './account-command-state.sql';
 import publicPage from './public-identity-page.sql';

@@ -1,11 +1,10 @@
 import { isDeepStrictEqual } from 'node:util';
-import { subjectSource } from '../semantic/search-source.ts';
 import { subjectListingSource } from '../library/listing-counts.ts';
 import { documentActions, type IndexAction, type SubjectDocument } from './document.ts';
 import { readCreditIndexSnapshot } from './credit-index.ts';
 import { withConnection } from '../database/pool.ts';
 import { PARTITIONS, partitionOf, routeOf } from '../route/route.ts';
-import { readAccountDiscoveryWitness } from '../access/account-discovery-source.ts';
+import { readAccountDiscoveryWitness, subjectSource } from './native-bindings.ts';
 import type {
   DiscoveryKey,
   DiscoveryOwnerRegistry,

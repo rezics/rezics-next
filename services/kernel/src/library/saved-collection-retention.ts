@@ -1,5 +1,5 @@
 /** Local terminal disposition; shared native holds remain their actual owner's obligation. */
-import { type CommandTransaction } from '../command/command.ts';
+import type { CommandTransaction } from '../command/command.ts';
 import { routeOf } from '../route/route.ts';
 import type { CollectionCleanupPage } from './collection-retention.ts';
 import type { CollectionOutputPublication } from './collection-source-output.ts';

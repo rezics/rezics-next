@@ -13,7 +13,7 @@ import {
 import { discardConnection, withConnection } from '../database/pool.ts';
 import type { Effect } from '../events/effects.ts';
 import type { CloudEvent } from '../events/log.ts';
-import { requestDigest } from '../http/request.ts';
+import { requestDigest } from '../command/request.ts';
 import { readPartition } from '../partition/partition.ts';
 import type { AccessClient, Actor } from '../request/access.ts';
 import { derivedId, newId, partitionOf, routeOf } from '../route/route.ts';

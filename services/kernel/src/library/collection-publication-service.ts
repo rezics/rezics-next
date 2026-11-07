@@ -1,12 +1,11 @@
 import { isDeepStrictEqual } from 'node:util';
 import type { Pool, PoolClient } from 'pg';
-import { readAccount } from '../access/account-data.ts';
-import { deadlineClient } from '../access/authenticate.ts';
+import { readAccount, deadlineClient } from './access-port.ts';
 import { mintReadTime, releaseOperationalTime, type AuthoritativeTime } from '../command/command.ts';
 import { withConnection } from '../database/pool.ts';
 import { ProblemError } from '../http/problem-error.ts';
 import { accessCheck } from '../request/access-check.ts';
-import { type Access, type AccountActor, type Actor } from '../request/access.ts';
+import type { Access, AccountActor, Actor } from '../request/access.ts';
 import { deadlineFor } from '../request/deadline.ts';
 import { routeOf } from '../route/route.ts';
 import type { KernelClock } from '../clock.ts';

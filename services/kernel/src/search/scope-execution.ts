@@ -1,13 +1,17 @@
 export { ScopeWork, scopeAllowance, scopeWorkAxes, zeroScopeWork } from './scope-work.ts';
 import { ScopeWork, zeroScopeWork } from './scope-work.ts';
 import type { Pool } from 'pg';
-import { deadlineClient } from '../access/authenticate.ts';
 import { withConnection } from '../database/pool.ts';
-import { readOwnerFilterCandidate, readOwnerFilterCandidateClosure } from '../library/owner-filter-plan.ts';
 import { isDeepStrictEqual } from 'node:util';
 import { SearchOperationError } from './operation-outcomes.ts';
 import type { WorkAllowance, WorkDimensions, WorkReceipt } from '../library/contract/work-dimensions.ts';
-import { readScopeLeafEvidence, type LeafOptions, type LeafWork } from '../semantic/scope-leaf-evidence.ts';
+import type { LeafOptions, LeafWork } from '../semantic/scope-leaf-evidence.ts';
+import {
+  deadlineClient,
+  readOwnerFilterCandidate,
+  readOwnerFilterCandidateClosure,
+  readScopeLeafEvidence,
+} from './native-bindings.ts';
 import type { IdentityScopeWork } from '../semantic/identity-scope-types.ts';
 import type { PublicFilterCost } from '../semantic/index.ts';
 import { currentOwnerClauseKey, type CurrentOwnerFilterPlan } from './current-filter-plan.ts';

@@ -4,6 +4,11 @@
 import type * as NativeAccess from '../access/content-adapter.ts';
 
 export interface ContentAccessPort {
+  readonly accessCheck: typeof NativeAccess.accessCheck;
+  readonly accessExplicitCheck: typeof NativeAccess.accessExplicitCheck;
+  readonly accessCommandAuthorization: typeof NativeAccess.accessCommandAuthorization;
+  readonly actorOf: typeof NativeAccess.actorOf;
+  readonly prepareReadDecisions: typeof NativeAccess.prepareReadDecisions;
   readonly accessCommandAttempt: typeof NativeAccess.accessCommandAttempt;
   readonly accountStandingCheck: typeof NativeAccess.accountStandingCheck;
   readonly acknowledgeErasure: typeof NativeAccess.acknowledgeErasure;
@@ -58,6 +63,11 @@ function forward<K extends keyof ContentAccessPort>(key: K): ContentAccessPort[K
     Reflect.apply(contentAccess()[key], undefined, args)) as ContentAccessPort[K];
 }
 
+export const accessCheck = forward('accessCheck');
+export const accessExplicitCheck = forward('accessExplicitCheck');
+export const accessCommandAuthorization = forward('accessCommandAuthorization');
+export const actorOf = forward('actorOf');
+export const prepareReadDecisions = forward('prepareReadDecisions');
 export const accessCommandAttempt = forward('accessCommandAttempt');
 export const accountStandingCheck = forward('accountStandingCheck');
 export const acknowledgeErasure = forward('acknowledgeErasure');

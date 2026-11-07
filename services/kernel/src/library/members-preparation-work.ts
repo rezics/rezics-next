@@ -1,6 +1,6 @@
 import { memoizedValue } from '../memoized.ts';
 import { DBOS } from '@dbos-inc/dbos-sdk';
-import { LifecycleDeniedError } from '../access/lifecycle-20261025094010-command.ts';
+import { LifecycleDeniedError } from '../access/contract/errors.ts';
 import { authoritativeTimeValue, commandTime } from '../command/command.ts';
 import { enqueueIntent, runOperationalTransaction, type OperationalTransaction } from '../command/operational.ts';
 import { withConnection } from '../database/pool.ts';
@@ -44,7 +44,7 @@ import ownerFence from './owner-filter-native-binding-fence.sql';
 import { MEMBERS_PREPARATION_STEP_CEILING, MEMBERS_PREPARATION_LOCAL_COST } from './members-preparation-cost.ts';
 import { MEMBERS_PREPARATION_SOURCE_COST } from './members-preparation-source-declaration.ts';
 import { NativeCollectionWork } from './collection-native-work.ts';
-import { readMembershipRouteKey } from '../access/membership-work-config.ts';
+import { readMembershipRouteKey } from './access-port.ts';
 
 import { isDeepStrictEqual } from 'node:util';
 
@@ -54,7 +54,7 @@ import {
   type SelectedChildren,
 } from '../work/selected-runtime.ts';
 import type { WorkDimensions } from './contract/work-dimensions.ts';
-import { type SelectedOutcome } from '../history/contract/index.ts';
+import type { SelectedOutcome } from '../history/contract/index.ts';
 
 type Dependencies = Pick<WorkContext, 'pool' | 'client' | 'clock'> & {
   source: NativePreparationWork;

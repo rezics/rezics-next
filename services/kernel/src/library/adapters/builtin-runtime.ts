@@ -5,7 +5,7 @@ import { nextOwnerPin } from '../owner-index-metadata.ts';
 import type { Pool, PoolClient } from 'pg';
 import { createBuiltinOwnerAdmission, createBuiltinMembersApplication } from '../application/index.ts';
 import type { NativeLibraryPresentationPorts } from './presentation.ts';
-import { deadlineClient } from '../../access/authenticate.ts';
+import { deadlineClient } from '../access-port.ts';
 import { withConnection } from '../../database/pool.ts';
 import { ProblemError } from '../../http/problem-error.ts';
 import type { Access, Actor, AccountActor } from '../../request/access.ts';

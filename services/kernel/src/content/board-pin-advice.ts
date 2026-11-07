@@ -1,7 +1,8 @@
-import { accessCheck, type Actor } from '../request/access.ts';
+import { accessCheck } from './access-port.ts';
+import type { Actor } from '../request/access.ts';
 import { routeOf } from '../route/route.ts';
 import { readPartitions } from '../partition/partition.ts';
-import { ProblemError } from '../http/problem.ts';
+import { ProblemError } from '../http/problem-error.ts';
 import { MAX_BOARD_PINS, readBoardPinRevision, readBoardPins } from './board-projection.ts';
 import type { AnchoredPosition, ReadContext } from './model.ts';
 import {

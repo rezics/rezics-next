@@ -1,6 +1,6 @@
 import type { Pool, PoolClient } from 'pg';
-import { shareAccount } from '../access/account-share.ts';
-import { LifecycleDeniedError } from '../access/lifecycle-20261025094010-command.ts';
+import { shareAccount } from './access-port.ts';
+import { LifecycleDeniedError } from '../access/contract/errors.ts';
 import type { KernelClock } from '../clock.ts';
 import { authoritativeTimeValue, noEffect, runCommand } from '../command/command.ts';
 import { withConnection } from '../database/pool.ts';

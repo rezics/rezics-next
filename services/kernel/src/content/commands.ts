@@ -23,7 +23,8 @@ import {
   type CommandOutcome,
   type CommandTransaction,
 } from '../command/command.ts';
-import { accessCheck, type Access, type AccessClient, type Actor, type Resource } from '../request/access.ts';
+import { accessCheck } from './access-port.ts';
+import type { Access, AccessClient, Actor, Resource } from '../request/access.ts';
 import { prepareRealmParticipationResult, type RealmParticipationCheck } from '../community/participation.ts';
 import membershipHistory from '../community/membership-history.sql';
 import { readPartition } from '../partition/partition.ts';

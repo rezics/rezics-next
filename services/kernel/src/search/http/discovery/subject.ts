@@ -7,7 +7,7 @@ import { Compile } from 'typebox/compile';
 import { SubjectSummarySchema } from '../../../semantic/http/summaries.ts';
 import { PublicFigureSchema } from '../../../rating/public-figure-http.ts';
 import { STANDARD_QUESTION_ID } from '../../../rating/standard-question.ts';
-import { GLOBAL_CONTEXT } from '../../../access/gates/catalogue.ts';
+import { SEARCH_GLOBAL_CONTEXT as GLOBAL_CONTEXT } from '../../global-context.ts';
 import { MatchEvidenceSchema } from '../match-evidence-schema.ts';
 import { closed, id, key, unavailable, evidenceOrDefault, admitIdentity } from './primitives.ts';
 function characterPersonContexts() {

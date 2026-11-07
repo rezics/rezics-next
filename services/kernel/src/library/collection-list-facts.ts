@@ -1,5 +1,5 @@
 import type { Pool } from 'pg';
-import { within } from '../access/authenticate.ts';
+import { within } from './access-port.ts';
 import { requireAccessDeadline } from '../access/unavailable.ts';
 import { ProblemError } from '../http/problem-error.ts';
 import type { Access, Actor } from '../request/access.ts';

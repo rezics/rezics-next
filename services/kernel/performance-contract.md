@@ -215,6 +215,14 @@ shadow verdict use calibrated uncertainty from `docs/research/growth-uncertainty
 of the median), blocks max(9, 3%), and statements are exact. `slack` applies only to the step rule; byte metrics keep
 their existing slack handling.
 
+Decision: approximate regression and feasibility calculations use finite IEEE-754 rounded operations, with compensated
+accumulation for normalized regression variance and covariance. A finite model term may round away or underflow to
+zero; non-finite operands and unrepresentable results still fail with arithmetic context. This model path does not
+change measured evidence validation or strict counted-work and cost aggregation. Uncertainty-factor search clips an
+overflowing candidate interval to the finite evidence range; directly reported intervals remain subject to finite
+representability. Regression or feasibility arithmetic errors propagate instead of becoming an infeasible fit. The
+allowed families, rounding tolerances, confidence intervals and declared index-probe allowance are unchanged.
+
 When any metric lacks complete unchanged-code calibration checks, `scripts/growth-calibrate.ts` prints named omitted checks,
 missing runs, mismatched scales, unidentified or incompatible measurement identities and ineligible evidence to stderr, then exits nonzero without reporting fitted uncertainty, coverage or classifications.
 

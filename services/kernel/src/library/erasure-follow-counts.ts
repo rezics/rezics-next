@@ -1,6 +1,6 @@
 import type { PoolClient } from 'pg';
 import { Value } from 'typebox/value';
-import { ACCESS_EVENTS } from '../access/events.ts';
+import { ACCESS_EVENTS } from './access-port.ts';
 import type { CloudEvent } from '../events/log.ts';
 import { partitionOf } from '../route/route.ts';
 import { countRoute, countTransaction, lockCountOwner, type CountRuntime } from './follow-count-source.ts';

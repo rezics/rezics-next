@@ -1,5 +1,5 @@
 import { communityReportReadCheck, communityReportTargetFacts } from '../community/report-targets.ts';
-import { ProblemError } from '../http/problem.ts';
+import { ProblemError } from '../http/problem-error.ts';
 import { createHmac } from 'node:crypto';
 import type { Pool } from 'pg';
 import {
@@ -9,6 +9,7 @@ import {
   commandAccessContext,
   resourceAuthorization,
   readAccount,
+  accessCheck,
 } from './access-port.ts';
 import {
   authoritativeTimeValue,
@@ -23,9 +24,9 @@ import {
   type PrincipalCommandReceipt,
 } from '../command/command.ts';
 import { discardConnection, withConnection } from '../database/pool.ts';
-import { anonymousCommandTarget, anonymousRequestDigest, requestDigest } from '../http/request.ts';
+import { anonymousCommandTarget, anonymousRequestDigest, requestDigest } from '../command/request.ts';
 import { readPartition } from '../partition/partition.ts';
-import { accessCheck, type Access, type AccessClient, type AccessCheck, type Actor } from '../request/access.ts';
+import type { Access, AccessClient, AccessCheck, Actor } from '../request/access.ts';
 import { anchorRoute, derivedId, partitionOf, routeOf } from '../route/route.ts';
 import { decodeCursor, encodeCursor, type CursorBinding } from '../tokens/cursor.ts';
 import type { KeyRing } from '../tokens/seal.ts';

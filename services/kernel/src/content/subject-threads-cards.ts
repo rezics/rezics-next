@@ -1,6 +1,6 @@
 import { projectPublicConversationActivity } from './community-projection/index.ts';
 import { requireAccessDeadline } from '../access/unavailable.ts';
-import { ProblemError } from '../http/problem.ts';
+import { ProblemError } from '../http/problem-error.ts';
 import type { ConversationActivitySelection } from './conversation-activity.ts';
 import type { FeedAuthor } from './feed-contract.ts';
 import { prepareFeedContentContext } from './feed-context.ts';

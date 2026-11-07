@@ -1,5 +1,5 @@
 import { currentCommand, type CommandTransaction } from '../command/command.ts';
-import { shareAccount } from '../access/account-share.ts';
+import { shareAccount } from './access-port.ts';
 import { partitionOf, routeOf } from '../route/route.ts';
 import { identityEpochStore, IdentityEpochStoreError } from '../semantic/identity-adapters/index.ts';
 import { lookupIdentityReceivingEffect, type IdentityReceivingEffect } from '../semantic/identity-receiving-effects.ts';

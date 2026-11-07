@@ -1,12 +1,2 @@
-/** Authentication failure vocabulary shared by request adapters and domain admission. */
-export class AuthenticationError extends Error {
-  readonly status: 400 | 401;
-  readonly challenge: string;
-
-  constructor(status: 400 | 401, challenge: string) {
-    super('Authentication failed');
-    this.name = 'AuthenticationError';
-    this.status = status;
-    this.challenge = challenge;
-  }
-}
+/** Request compatibility entry; Access owns the shared authentication failure identity. */
+export { AuthenticationError } from '../access/contract/authentication.ts';

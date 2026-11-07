@@ -6,7 +6,7 @@ import { withConnection } from '../database/pool.ts';
 import { nativeReceiptKeyCandidates } from '../command/receipt-key.ts';
 import type { Partition } from '../partition/partition.ts';
 import { derivedId, partitionOf, routeOf } from '../route/route.ts';
-import { deadlineClient } from './authenticate.ts';
+import { deadlineClient } from './deadline.ts';
 import { PLATFORM_RESOURCE } from './bootstrap-governance.ts';
 import {
   committedContinuationDigest,
@@ -15,7 +15,7 @@ import {
   type ContinuationSnapshot,
 } from './committed-continuations.ts';
 import type { LifecycleEffects, LifecycleOriginalResult } from './lifecycle-review-contract.ts';
-import { ProblemError } from '../http/problem.ts';
+import { ProblemError } from '../http/problem-error.ts';
 
 const SERVICE_ID = '00000000-0000-8000-8000-000000000001';
 const ROOT_NAMESPACE = 'b7c3d1e2-4f50-4a61-8c70-0d1e2f304152';

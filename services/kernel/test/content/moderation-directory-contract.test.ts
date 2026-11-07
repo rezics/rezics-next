@@ -2,7 +2,8 @@ import { afterAll, expect, test } from 'bun:test';
 import { Pool } from 'pg';
 import { Value } from 'typebox/value';
 import { openApiDocument } from '../../src/http/openapi.ts';
-import { AuthenticationError, type AccountActor } from '../../src/request/access.ts';
+import { AuthenticationError } from '../../src/request/authentication-error.ts';
+import { type AccountActor } from '../../src/request/access.ts';
 import {
   ModerationDirectoryPageSchema,
   ModerationDirectoryQuerySchema,

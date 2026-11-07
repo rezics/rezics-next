@@ -1,6 +1,6 @@
 import { createHash } from 'node:crypto';
 import type { Pool } from 'pg';
-import { readAccount } from '../access/account-data.ts';
+import { readAccount } from './access-port.ts';
 import type { KernelClock } from '../clock.ts';
 import {
   normalizeCommandKey,

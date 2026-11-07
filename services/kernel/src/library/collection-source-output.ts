@@ -1,7 +1,7 @@
 /** Explicit membership Publication storage. It never evaluates personal predicates or grants read authority. */
 import type { PoolClient } from 'pg';
 import { isDeepStrictEqual } from 'node:util';
-import { shareAccount } from '../access/account-share.ts';
+import { shareAccount } from './access-port.ts';
 import {
   authoritativeTimeValue,
   currentCommand,

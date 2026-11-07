@@ -65,8 +65,8 @@ import {
   contextNativeActions,
   ContextDirectoryPreparingError,
 } from './context-application.ts';
+import { readViewerActions } from '../access/viewer-actions.ts';
 import {
-  readViewerActions,
   type ViewerActionBinding,
   type ViewerActionBindings,
   type ViewerActionResource,

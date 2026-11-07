@@ -25,7 +25,7 @@ import type { KeyRing } from '../tokens/seal.ts';
 import { redirectOf } from './subject-redirect.ts';
 import { SubjectRedirectError } from './contract/subject-errors.ts';
 import { initializeRevisionAuthorship, revisionResource, StaleRevisionAuthorshipError } from './authorship.ts';
-import { creationDeclares } from '../access/index.ts';
+import { creationDeclares } from '../access/parent-creation.ts';
 import { activeRelease, readRelease } from './definition-release-read.ts';
 import { GLOBAL_SUBJECT_CONTEXT as GLOBAL_CONTEXT } from './contract/subject-values.ts';
 import { baseOf, layeredRelease } from './definition-release-read.ts';
@@ -96,6 +96,22 @@ export { SubjectNotFoundError, EditorialConflictError } from './contract/subject
 const CANDIDATE_NS = '3c62c392-7c55-4fda-bf16-13b4853e7598';
 const record = (value: unknown): value is Record<string, unknown> =>
   typeof value === 'object' && value !== null && !Array.isArray(value);
+
+/** Unique collisions that are concurrent command races, not durable editorial conflicts. */
+export const PROPOSAL_UNIQUE_CONTENTION_CONSTRAINTS = ['revision_pkey', 'candidate_pkey', 'fact_pkey'] as const;
+export const BULK_UNIQUE_CONTENTION_CONSTRAINTS = [
+  'external_claim_pkey',
+  'source_candidate_pkey',
+  'receipt_pkey',
+  'revision_pkey',
+  'candidate_pkey',
+] as const;
+
+/** Core retries 40001 until the original deadline; this is not an HTTP outer-retry count. */
+export function asUniqueContention(error: unknown, constraints: readonly string[]): unknown {
+  if (record(error) && error.code === '23505' && constraints.includes(String(error.constraint))) error.code = '40001';
+  return error;
+}
 
 /** `.run` is one row, a row list, or null. Callers keep the same row and row-count checks. */
 function listed<T>(result: T[] | T | null): T[] {
@@ -330,15 +346,7 @@ export async function writeProposal(
       revision,
     });
   } catch (error) {
-    // PostgreSQL can report a concurrent insert as a uniqueness failure before SSI detects the race.
-    if (
-      record(error) &&
-      error.code === '23505' &&
-      ['revision_pkey', 'candidate_pkey', 'fact_pkey'].includes(String(error.constraint))
-    ) {
-      error.code = '40001';
-    }
-    throw error;
+    throw asUniqueContention(error, PROPOSAL_UNIQUE_CONTENTION_CONSTRAINTS);
   }
   await collectSemanticRecordFacts(
     tx,
@@ -417,12 +425,7 @@ async function appendEditorialRevision(
 }
 
 function retryEditorialUniqueness(error: unknown): void {
-  if (
-    record(error) &&
-    error.code === '23505' &&
-    ['revision_pkey', 'acceptance_pkey', 'adoption_pkey'].includes(String(error.constraint))
-  )
-    error.code = '40001';
+  asUniqueContention(error, ['revision_pkey', 'acceptance_pkey', 'adoption_pkey']);
 }
 
 export async function decideCandidate(

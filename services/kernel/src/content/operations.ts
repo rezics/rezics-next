@@ -21,7 +21,8 @@ import {
 } from '../command/command.ts';
 import { withConnection } from '../database/pool.ts';
 import { readPartition } from '../partition/partition.ts';
-import { accessCheck, type Access, type Actor, type Resource } from '../request/access.ts';
+import { accessCheck } from './access-port.ts';
+import type { Access, Actor, Resource } from '../request/access.ts';
 import { newId, partitionOf, routeOf } from '../route/route.ts';
 import type {
   AuthorErasureDependencies,

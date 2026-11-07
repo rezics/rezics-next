@@ -1,4 +1,4 @@
-import { accessCheck } from '../request/access.ts';
+import { accessCheck } from './access-port.ts';
 import { partitionReadClients } from '../database/read-snapshot.ts';
 import { withReadTransaction } from '../semantic/read.ts';
 import { chooseLabel } from '../semantic/language.ts';

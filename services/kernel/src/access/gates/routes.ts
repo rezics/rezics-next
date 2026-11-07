@@ -3,7 +3,7 @@ import { t } from 'elysia';
 import type { Static, TSchema } from 'typebox';
 import { Compile } from 'typebox/compile';
 import type { Pool } from 'pg';
-import { AuthenticationError, type Access } from '../../request/access.ts';
+import { AuthenticationError, type Access } from '../check.ts';
 import { ProblemError, problemSchema } from '../../http/problem.ts';
 import { customMethod } from '../../http/custom-method.ts';
 import { defineRateLimit } from '../../http/rate-limit.ts';

@@ -1,2 +1,2 @@
 /** Compatibility entry for the shared Access refusal identities. */
-export { ResourceAccessWriteDeniedError, GrantDeniedError, RealmLastOwnerError } from './contract/index.ts';
+export { ResourceAccessWriteDeniedError, GrantDeniedError, RealmLastOwnerError } from './contract/errors.ts';

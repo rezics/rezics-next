@@ -1,7 +1,7 @@
 /** Complete raw Source groups, ordinary disclosure and native private fact locators. */
 import { isDeepStrictEqual } from 'node:util';
 import type { Release } from '@rezics/definitions';
-import { deadlineClient } from '../access/authenticate.ts';
+import { deadlineClient } from './access-port.ts';
 import { withConnection } from '../database/pool.ts';
 import { routeOf } from '../route/route.ts';
 import { zeroScopeWork } from '../search/scope-execution.ts';
@@ -30,7 +30,6 @@ import releaseSize from './owner-filter-native-closure-release-size.sql';
 import populationQuery from './owner-filter-native-closure-population.sql';
 
 type NativeFactKey = { driver: number; factId: string; labelId: string | null };
-
 import { OWNER_FILTER_CLOSURE_REFERENCE_LIMIT, OWNER_FILTER_CLOSURE_ORIGINAL_LIMIT } from './contract/index.ts';
 export { OWNER_FILTER_CLOSURE_REFERENCE_LIMIT, OWNER_FILTER_CLOSURE_ORIGINAL_LIMIT } from './contract/index.ts';
 

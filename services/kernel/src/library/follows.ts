@@ -1,9 +1,7 @@
 import type { Pool, PoolClient } from 'pg';
-import { commandAccessContext } from '../access/command-admission.ts';
-import { readAccountCommandState } from '../access/account-data.ts';
-import { deadlineClient } from '../access/authenticate.ts';
+import { commandAccessContext, readAccountCommandState, deadlineClient } from './access-port.ts';
 import { currentCommandWorkAssociation } from '../command/work-context.ts';
-import { GrantDeniedError } from '../access/resource-access-errors.ts';
+import { GrantDeniedError } from '../access/contract/errors.ts';
 import {
   authoritativeTimeValue,
   mintReadTime,
@@ -15,7 +13,7 @@ import type { KernelClock } from '../clock.ts';
 import { readSpace, spaceReadEligibility } from '../community/space.ts';
 import { withConnection } from '../database/pool.ts';
 import { accessCheck } from '../request/access-check.ts';
-import { type Access, type AccountActor, type Actor } from '../request/access.ts';
+import type { Access, AccountActor, Actor } from '../request/access.ts';
 import { withRequestDeadline } from '../request/deadline.ts';
 import { routeOf } from '../route/route.ts';
 import { readCollection } from './collection-store.ts';

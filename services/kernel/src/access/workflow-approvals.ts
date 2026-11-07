@@ -29,7 +29,7 @@ import {
   type CommandAuthorization,
 } from '../command/command.ts';
 import { withConnection } from '../database/pool.ts';
-import { deadlineClient, within } from './authenticate.ts';
+import { deadlineClient, within } from './deadline.ts';
 import { readAccount } from './account-data.ts';
 import {
   APPROVAL_REFERENCE_PURPOSE,
@@ -41,7 +41,7 @@ import {
   type ApprovalRow,
 } from './approved-identity.ts';
 import { resourceAuthorization } from './resource-authorization.ts';
-import { GrantDeniedError } from './grant-commands.ts';
+import { GrantDeniedError } from './resource-access-errors.ts';
 import { permissionEvidenceDeadline } from './permission.ts';
 import type { LifecycleRequest } from './lifecycle.ts';
 import credentialRead from './auth-credential-capability-workflow-read.sql';

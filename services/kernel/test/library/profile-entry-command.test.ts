@@ -1,5 +1,5 @@
 import { afterAll, beforeAll, beforeEach, expect, test } from 'bun:test';
-import { GrantDeniedError } from '../../src/access/grant-commands.ts';
+import { GrantDeniedError } from '../../src/access/contract/errors.ts';
 import { IdempotencyConflictError } from '../../src/command/command.ts';
 import { nativeReceiptKeyCandidates } from '../../src/command/receipt-key.ts';
 import { LibraryNotFoundError } from '../../src/library/command-support.ts';
