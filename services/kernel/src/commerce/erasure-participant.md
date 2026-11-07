@@ -199,7 +199,9 @@ decorator unsubscribes every tombstone consumer except `commerce_erasure`, inclu
 Subject-source page, so unfinished foreign participants cannot occupy the shared effects executor. Content
 collection schedules are removed after launch, as in the financial outcome driver. Readiness is the ready line,
 the existing 5ms queue poll, and an effects consumer that has ticked with no pending envelopes. Paid-order checks
-wait for committed entitlement and settlement rows, not a moving partition head. The parent reaps the child with
+wait for committed entitlement and settlement rows, not a moving partition head. After concurrent late-pay and
+deletion release their Checkout and entitlement holds, the parent waits for that same catch-up before SIGKILL so an
+in-flight buyer-home envelope cannot occupy expiry restart. The parent reaps the child with
 SIGKILL because retention coordinators sleep. Seller Global grants are `board:create` and `offer:create` only:
 Content's native identities already install `subject:create`, `space:create` and `realm:create`. Positive purchase
 targets are real subjects created through the native API from released metadata on that public Realm board. One

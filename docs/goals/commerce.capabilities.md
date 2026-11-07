@@ -67,6 +67,8 @@ Decision: first-public acceptance is the seeded walk
 `bun services/auth/scripts/dev-stack.ts walk -- bun apps/web/tests/native/commerce-library-journeys.walk.ts`
 using `services/kernel/test/commerce/support/goal-journey-walk.ts`. Genuine-order retention stays
 `test/commerce/erasure-participant.test.ts`. No extra outcome suites.
+Decision: that one native case still pins paid minimization, expiry, restricted readback and late paid/refund;
+catch-up after late-pay/deletion holds and before SIGKILL is part of that case, not a second story.
 
 ## Evidence and stages
 
