@@ -2937,6 +2937,8 @@ handler. Disclosure follows the current semantic candidate, as it does for impor
 does not authorize disclosure.
 
 `eraseAuthoredField` requires account admission and `document:erase` on the document at the command's authorization time.
+Decision: authored-field mutation preserves Access's current-account `AuthenticationError` for suspended actors before
+target concealment; missing and non-author document targets still answer not found.
 It runs in the document's partition, clears the body and marks the row erased, while retaining its identity and digest.
 Only the author receives this owner permission. A repeat succeeds without another erased event. Moderation is separate:
 moderators end a harmful field's disclosure with native candidate hide or takedown, so its body is no longer served.

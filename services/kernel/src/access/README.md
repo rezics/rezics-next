@@ -469,7 +469,9 @@ A callback failure closes the whole request, including the independent grant bra
 `AccessUnavailableError` (HTTP 503). An existing Access unavailability error retains its identity through command
 rollback. The command retries Access contention inside its deadline with the normal fresh attempt and does not
 reclassify the error; deadline and overloaded errors pass through immediately.
-The module's own denial passes through unchanged. Any other failure uses the caller's existing denial form:
+Command preparation preserves the shared `AuthenticationError` from current actor admission, including suspension,
+before target-resource concealment. The module's own denial passes through unchanged. Any other failure uses the caller's
+existing denial form:
 boolean checks (`accessCheck`, `authorize`, and eligibility preparation/verification) answer `false` for the
 whole check, including the independent grant branch. Commands throw their `denied()` error;
 `GrantDeniedError` applies only to grant commands. The kernel's `console.error` logger records the original failure as
