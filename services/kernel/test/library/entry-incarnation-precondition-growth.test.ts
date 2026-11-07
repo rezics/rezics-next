@@ -470,44 +470,53 @@ test('fresh guard work remains bounded across 64 512 and 4096 unrelated live ret
     const operation = async () => {
       for (const guard of [undefined, entryKey(), original.incarnationId!]) {
         await expect(
-          f.commands.putEntry(
-            f.owner.actor,
-            target,
-            { state: 'planned', revision: current.revision, ...(guard === undefined ? {} : { incarnationId: guard }) },
-            entryKey(),
+          fixtureRequest(() =>
+            f.commands.putEntry(
+              f.owner.actor,
+              target,
+              {
+                state: 'planned',
+                revision: current.revision,
+                ...(guard === undefined ? {} : { incarnationId: guard }),
+              },
+              entryKey(),
+            ),
           ),
         ).rejects.toBeInstanceOf(LibraryConflictError);
         await expect(
-          f.commands.deleteEntry(f.owner.actor, target, current.revision, entryKey(), guard),
+          fixtureRequest(() => f.commands.deleteEntry(f.owner.actor, target, current.revision, entryKey(), guard)),
         ).rejects.toBeInstanceOf(LibraryConflictError);
       }
       current = (
-        await f.commands.putEntry(
-          f.owner.actor,
-          target,
-          { state: 'planned', revision: current.revision, incarnationId: current.incarnationId! },
-          entryKey(),
+        await fixtureRequest(() =>
+          f.commands.putEntry(
+            f.owner.actor,
+            target,
+            { state: 'planned', revision: current.revision, incarnationId: current.incarnationId! },
+            entryKey(),
+          ),
         )
       ).value.entry;
       const key = entryKey();
-      const removed = await f.commands.deleteEntry(
-        f.owner.actor,
-        target,
-        current.revision,
-        key,
-        current.incarnationId!,
+      const removed = await fixtureRequest(() =>
+        f.commands.deleteEntry(f.owner.actor, target, current.revision, key, current.incarnationId!),
       );
       const deleted = current;
-      current = (await f.commands.putEntry(f.owner.actor, target, { state: 'planned' }, entryKey())).value.entry;
+      current = (
+        await fixtureRequest(() => f.commands.putEntry(f.owner.actor, target, { state: 'planned' }, entryKey()))
+      ).value.entry;
       expect(
-        await f.commands.deleteEntry(f.owner.actor, target, deleted.revision, key, deleted.incarnationId!),
+        await fixtureRequest(() =>
+          f.commands.deleteEntry(f.owner.actor, target, deleted.revision, key, deleted.incarnationId!),
+        ),
       ).toEqual({ ...removed, replayed: true });
-      expect(await f.commands.putEntry(f.owner.actor, old.subjectId, old.input, old.key)).toEqual({
-        ...old.updated,
-        replayed: true,
-      });
+      expect(await fixtureRequest(() => f.commands.putEntry(f.owner.actor, old.subjectId, old.input, old.key))).toEqual(
+        { ...old.updated, replayed: true },
+      );
       expect(
-        await f.commands.deleteEntry(f.owner.actor, old.subjectId, old.updated.value.entry.revision, old.deleteKey),
+        await fixtureRequest(() =>
+          f.commands.deleteEntry(f.owner.actor, old.subjectId, old.updated.value.entry.revision, old.deleteKey),
+        ),
       ).toEqual({ ...old.deleted, replayed: true });
     };
     async function refreshFixtureActors() {
