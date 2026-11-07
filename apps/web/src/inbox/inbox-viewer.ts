@@ -1,7 +1,7 @@
 import { useSyncExternalStore } from 'react';
 import { useQueryClient, type QueryClient } from '@tanstack/react-query';
-import { sessionQuery, useSession } from '../session/query';
-import { browserObservation } from '../session/observation';
+import { productionInboxShellPort, useInboxSession, useInboxShell } from './adapters/shell';
+import type { InboxSessionObservation } from './ports/shell';
 
 type InboxSession = { state: string; subject?: string | null };
 
@@ -23,7 +23,6 @@ function createViewerStore(client: QueryClient) {
   let current: InboxViewer | null = null;
   const listeners = new Set<() => void>();
   let release: (() => void) | undefined;
-  const observation = browserObservation(client);
   const publish = () => {
     for (const changed of listeners) changed();
   };
@@ -32,7 +31,7 @@ function createViewerStore(client: QueryClient) {
     release = undefined;
   };
   const reconcile = () => {
-    const query = client.getQueryState<InboxSession>(sessionQuery.queryKey);
+    const query = productionInboxShellPort.sessionQueryState(client);
     const next = query?.status === 'success' ? subject(query.data) : null;
     if (next !== (current?.subject ?? null)) {
       // Replacing this object permanently retires it, including same-stack loss/recovery.
@@ -57,10 +56,10 @@ function createViewerStore(client: QueryClient) {
     if (release) return;
     // One cache observation outlives UI subscriptions while an imperative viewer is live.
     // A guard cannot infer an intervening loss from the final retained data alone.
-    release = observation.subscribeCache((event) => {
-      if (event.query.queryKey.length !== 1 || event.query.queryKey[0] !== sessionQuery.queryKey[0]) return;
+    release = productionInboxShellPort.observeSessionCache(client, (event) => {
+      if (!productionInboxShellPort.isSessionQuery(event.query.queryKey)) return;
       reconcile();
-      observation.publish(publish);
+      productionInboxShellPort.publishSessionObservation(client, publish);
     });
   };
   return {
@@ -106,7 +105,7 @@ export function currentInboxViewer(client: QueryClient): InboxViewer | null {
 /** Read current credentials at dispatch, including a refresh before React rerenders. */
 export function inboxViewerCsrfToken(client: QueryClient, viewer: InboxViewer): string | null {
   if (!viewer.isCurrent()) return null;
-  const query = client.getQueryState<InboxSession & { csrfToken?: string | null }>(sessionQuery.queryKey);
+  const query = productionInboxShellPort.sessionQueryState(client);
   return query?.status === 'success' && subject(query.data) === viewer.subject ? query.data?.csrfToken || null : null;
 }
 
@@ -115,7 +114,7 @@ const serverSessionRead = () => undefined;
 export type InboxSessionRead = { status: 'pending' | 'error' | 'success'; fetchStatus: 'fetching' | 'paused' | 'idle' };
 
 /** A failed initial read has no session data, so useSession alone still reports unknown. */
-export function inboxEntryState(state: ReturnType<typeof useSession>['state'], read?: InboxSessionRead) {
+export function inboxEntryState(state: InboxSessionObservation['state'], read?: InboxSessionRead) {
   if (read?.status === 'error') return 'unavailable';
   if (state === 'signed-out') return 'signed-out';
   if (state === 'unknown') return 'loading';
@@ -123,16 +122,13 @@ export function inboxEntryState(state: ReturnType<typeof useSession>['state'], r
 }
 
 export function useInboxViewer() {
-  const session = useSession();
+  const session = useInboxSession();
+  const { sessionQueryState } = useInboxShell();
   const client = useQueryClient();
   const store = inboxViewerStore(client);
   const current = useSyncExternalStore(store.subscribe, store.getSnapshot, serverViewer);
   // Read-only observation: useSession remains the sole owner of the initial browser read.
-  const sessionRead = useSyncExternalStore(
-    store.subscribe,
-    () => client.getQueryState(sessionQuery.queryKey),
-    serverSessionRead,
-  );
+  const sessionRead = useSyncExternalStore(store.subscribe, () => sessionQueryState(client), serverSessionRead);
   const viewer = current?.subject === subject(session) ? current : null;
   return { ...session, viewer, sessionRead };
 }

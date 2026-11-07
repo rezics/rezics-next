@@ -4,11 +4,10 @@ import { requirePrivatePageAccess } from '../session/guard';
 import { loadPrivatePage } from '../session/private-page';
 import { pageHead } from '../shell/head';
 import { pageHeadContext } from '../shell/head-context';
-import { sessionQuery } from '../session/query';
+import { sessionQuery } from '../session';
 import { createFileRoute } from '@tanstack/react-router';
 import { BoundCollectionPrivacySection, BoundShelfPreferencesCard } from '../settings/adapters/library-view.tsx';
-import { readSettingsPage } from '../settings/actions';
-import { SettingsPageView } from '../settings/settings-page';
+import { readSettingsPage, SettingsPageView } from '../settings';
 import { m } from '../paraglide/messages.js';
 
 export const Route = createFileRoute('/settings')({

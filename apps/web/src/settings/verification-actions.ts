@@ -2,14 +2,13 @@ import { createServerFn } from '@tanstack/react-start';
 import { getRequest, setResponseHeader } from '@tanstack/react-start/server';
 import { env } from 'cloudflare:workers';
 import { kernelClient, requestLocale } from '../kernel/client';
-import { isPlatformClosedError, isPlatformClosedProblem } from '../kernel/platform-closed';
+import { isPlatformClosedError, isPlatformClosedProblem, requestLanguages } from './ports/vocabulary';
 import { MediaProblem } from '../media/kernel';
 import { m } from '../paraglide/messages.js';
 import { readSubjectSuggestions, SUGGESTION_LIMIT } from '../search/suggestions';
 import { withVerificationDeadline } from './verification-request-deadline';
 import type { SessionEnv } from '../session/client';
 import { prepareSession, sessionSubject, viewerCredential } from '../session/request';
-import { requestLanguages } from '../kernel/languages';
 import {
   readVerificationEligibility,
   readVerificationTitle,

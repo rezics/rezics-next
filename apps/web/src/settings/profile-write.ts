@@ -10,7 +10,7 @@ import {
   type ProfileValues,
 } from './profile-data';
 import { profileReadFailure, type EditableProfileFailure, type ProfileEditing } from './editable-profile-source';
-import { isPlatformClosedError } from '../kernel/platform-closed';
+import { isPlatformClosedError } from './ports/vocabulary';
 import { preferenceRetryDeadline } from './preference-failure-retry';
 
 export type ProfileScope = 'profile' | 'views';

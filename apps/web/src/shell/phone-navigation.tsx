@@ -1,8 +1,7 @@
 import { createContext, useContext, useEffect, useRef, useState, type ReactNode } from 'react';
 import { House, Inbox, Library, Plus } from 'lucide-react';
 import { Menu } from '@rezics/ui/menu';
-import { UnreadBadgeView, useInboxUnreadCount } from '../inbox/unread-badge';
-import type { UnreadCount } from '../inbox/inbox-read';
+import { UnreadBadgeView, useInboxUnreadCount, type UnreadCount } from '../inbox';
 import { useOperation } from '../kernel/exposure';
 import { getLocale } from '../paraglide/runtime.js';
 import { m } from '../paraglide/messages.js';

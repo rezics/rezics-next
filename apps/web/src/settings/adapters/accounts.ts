@@ -3,7 +3,7 @@ import { createServerFn } from '@tanstack/react-start';
 import { getRequest, setResponseHeader } from '@tanstack/react-start/server';
 import * as v from 'valibot';
 import type { SessionEnv } from '../../session/client';
-import { authManagementPageHref } from '../../session/auth-page-routes';
+import { authManagementPageHref } from '../auth-management';
 import { carriesSession } from '../../session/csrf';
 import { prepareSession, sessionSubject, viewerCredential } from '../../session/request';
 import { managedAccountsException } from '../managed-accounts-read';

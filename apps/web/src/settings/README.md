@@ -1,5 +1,7 @@
 # Settings
 
+**Decision:** Settings consumes session observation, exposure admission, heading, appearance and subject addresses through a consumer-owned shell port. AppShell binds AppearanceControls, PageHeading, subjectHref and exposure. The adapter binds `sessionQuery` and `useSession` from the session public entry (`session/index.ts`); it does not import shell or kernel leaves. One `adapters/shell.ts` owns that binding and the React provider; a same-basename `.tsx` is not kept because both emit `shell.js`. Platform-closed, session-unavailable, personal-read and heading classifiers are Settings vocabulary. Auth management hrefs live beside trusted issuer URLs. AppearanceControls and subjectHref stay shell/subject leaves rather than new web-app public entries. The installed session query key remains `['session']`. Fewest tests: pin port identity, the public session bindings, bound appearance and the existing display HTML; wrap isolated display renders with the composed port; no extra stories.
+
 **Decision:** Collection privacy uses the existing private owner inventory and native `collection:update` advice; logical built-ins remain inspectable and read-only without a command revision.
 
 **Decision:** Settings consumes private Collection owner windows, privacy command/readback and Shelf type/default/column preferences through the typed Library port (`ports/library.ts`). Visibility, occurrence, frontier and preference vocabulary live in Library `settings-contract`; transport binds at `settings-adapter` and `adapters/library.ts`, presentation at `adapters/library-view.tsx`, composed from ordinary `/settings`. Exact failed cursors, independent command/read deadlines, drafts and acknowledged-original recovery stay on that port. Fewest tests: keep the existing Collection privacy and Shelf recovery suites and add one port-composition pin rather than a second suite.
@@ -368,7 +370,7 @@ The Account card reads the current identity from the managed session and keeps r
 **Decision:** Settings owns `ports/accounts.ts`: exact-account Profile destination, managed action/detail reads,
 rename navigation, current session observation and deliberate session recovery. `adapters/accounts.ts` owns the native
 management/viewer-actions requests, cookie-viewer binding and server-function envelopes. `adapters/accounts-browser.tsx`
-binds those operations and a query-backed session source. Ordinary Settings route composition supplies Accounts'
+binds those operations and observes the installed session query through the Settings shell port. Ordinary Settings route composition supplies Accounts'
 `profile-editor/address.ts` destination. Settings and Inbox have no dependency on Accounts page or request implementations;
 web-performance no longer declares web-accounts as a dependency.
 

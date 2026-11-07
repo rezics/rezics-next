@@ -1,5 +1,5 @@
 import type { KernelClient } from '@rezics/client';
-import { isPlatformClosedError } from '../kernel/platform-closed';
+import { isPlatformClosedError } from './ports/vocabulary';
 import { MediaProblem } from '../media/kernel';
 import { m } from '../paraglide/messages.js';
 import { validateVerificationDraft } from './verification-validation';

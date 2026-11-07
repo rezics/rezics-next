@@ -1,7 +1,6 @@
 import { hashKey, QueryObserver, useQueryClient, type QueryClient } from '@tanstack/react-query';
 import { useCallback, useLayoutEffect, useMemo, useRef, useSyncExternalStore } from 'react';
-import { personalRead } from '../kernel/query';
-import { sessionQuery, useSession } from '../session/query';
+import { productionSettingsShellPort, useSettingsSession } from './adapters/shell';
 import { readProfile, saveProfile } from './actions';
 import { profileCommandValues, profileReadObservation } from './profile-data';
 import { ProfileEditorSession } from './profile-write';
@@ -42,8 +41,8 @@ function retire(client: QueryClient, entry: EditorEntry) {
 }
 
 function createEntry(client: QueryClient) {
-  const sessionRecord = client.getQueryCache().get(hashKey(sessionQuery.queryKey));
-  const sessionState = client.getQueryState(sessionQuery.queryKey);
+  const sessionRecord = productionSettingsShellPort.sessionCacheRecord(client, hashKey);
+  const sessionState = productionSettingsShellPort.sessionQueryState(client);
   // These detect a committed success in the render-to-attachment gap, including structural sharing.
   const successes = sessionState?.dataUpdateCount;
   const observed =
@@ -54,8 +53,8 @@ function createEntry(client: QueryClient) {
   const observationCurrent = () => {
     const attached = entry;
     if (!attached || attached.retired) return false;
-    const query = client.getQueryCache().get(hashKey(sessionQuery.queryKey));
-    const state = client.getQueryState(sessionQuery.queryKey);
+    const query = productionSettingsShellPort.sessionCacheRecord(client, hashKey);
+    const state = productionSettingsShellPort.sessionQueryState(client);
     return (
       editors.get(client) === attached &&
       query === sessionRecord &&
@@ -137,13 +136,13 @@ function createEntry(client: QueryClient) {
 }
 
 export function useProfileEditor() {
-  useSession();
+  useSettingsSession();
   const client = useQueryClient();
   const previous = useRef<{ client: QueryClient; entry: EditorEntry } | null>(null);
   // Provider replacement revokes rendered callbacks during render, before layout cleanup or an await resumes.
   if (previous.current && previous.current.client !== client) retire(previous.current.client, previous.current.entry);
   let cached = editors.get(client);
-  const state = client.getQueryState(sessionQuery.queryKey);
+  const state = productionSettingsShellPort.sessionQueryState(client);
   const observed =
     state?.status === 'success' && state.data
       ? state.data
@@ -166,7 +165,7 @@ export function useProfileEditor() {
     if (!entry.observationCurrent()) retire(client, entry);
     if (!entry.retired && !entry.release) {
       const profileHash = hashKey(owner.key);
-      const sessionHash = hashKey(sessionQuery.queryKey);
+      const sessionHash = productionSettingsShellPort.sessionQueryHash(hashKey);
       const unsubscribe = client.getQueryCache().subscribe((event) => {
         if (entry.retired) return;
         if (event.query.queryHash === profileHash) {
@@ -202,7 +201,7 @@ export function useProfileEditor() {
   const observer = useMemo(
     () =>
       new QueryObserver(client, {
-        ...personalRead,
+        ...productionSettingsShellPort.personalRead,
         queryKey: owner.key,
         queryFn: async () => {
           if (!entry.current()) throw new Error('Profile unavailable');
@@ -211,7 +210,7 @@ export function useProfileEditor() {
           if (profile.accountId !== owner.reader?.subject) throw new Error('Profile account changed');
           return profile;
         },
-        enabled: personalRead.enabled && readable,
+        enabled: productionSettingsShellPort.personalRead.enabled && readable,
         retry: false,
         refetchOnMount: false,
         refetchOnWindowFocus: false,

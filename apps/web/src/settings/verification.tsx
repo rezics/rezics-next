@@ -5,12 +5,14 @@ import { Button } from '@rezics/ui/shadcn/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@rezics/ui/shadcn/card';
 import { Field, FieldDescription, FieldGroup, FieldLabel } from '@rezics/ui/shadcn/field';
 import { Textarea } from '@rezics/ui/shadcn/textarea';
-import { personalRead } from '../kernel/query';
-import { useOperation } from '../kernel/exposure';
 import { m } from '../paraglide/messages.js';
 import { getLocale } from '../paraglide/runtime.js';
-import { subjectHref } from '../subject/subject-href';
-import { useSession } from '../session/query';
+import {
+  productionSettingsShellPort,
+  useSettingsOperation,
+  useSettingsSession,
+  useSettingsShell,
+} from './adapters/shell';
 import {
   unwrapVerificationRead,
   type AgentVerificationRequest,
@@ -107,6 +109,7 @@ function VerificationState({
   verification: AgentVerificationRequest | null;
   subjectTitle: string | null;
 }) {
+  const { subjectHref } = useSettingsShell();
   const accountId = verification?.accountId;
   const subjectId = verification?.catalogueSubjectId;
   const locale = getLocale();
@@ -169,8 +172,8 @@ function VerificationState({
 }
 
 export function VerificationSection() {
-  const { state, csrfToken, subject } = useSession();
-  const admitted = useOperation('agent_verification.request');
+  const { state, csrfToken, subject } = useSettingsSession();
+  const admitted = useSettingsOperation('agent_verification.request');
   if (!admitted || state !== 'signed-in' || !subject) return null;
   return <ViewerVerification key={JSON.stringify([subject, csrfToken])} accountId={subject} csrfToken={csrfToken} />;
 }
@@ -230,7 +233,7 @@ export function verificationRecoveryIO(
         await client.cancelQueries({ queryKey: key, exact: true });
         if (!isCurrent()) throw new Error('Settings viewer changed');
         return client.fetchQuery({
-          ...personalRead,
+          ...productionSettingsShellPort.personalRead,
           queryKey: key,
           queryFn: ({ signal }) =>
             readGuard(async () => {

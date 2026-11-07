@@ -2,7 +2,7 @@ import { withManagedReadDeadline } from './managed-read-deadline';
 import type { ManagedReaderCurrent } from './managed-session-reader';
 import type { KernelClient } from '@rezics/client';
 import * as v from 'valibot';
-import { isPlatformClosedError } from '../kernel/platform-closed';
+import { isPlatformClosedError } from './ports/vocabulary';
 import { MediaProblem } from '../media/kernel';
 import { preferenceRetryDeadline } from './preference-failure-retry';
 

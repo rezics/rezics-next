@@ -1,5 +1,7 @@
 # Inbox
 
+**Decision:** Inbox consumes the installed session query and browser observation through a consumer-owned shell port bound at the inbox route and app shell. The adapter binds `sessionQuery`, `useSession` and `browserObservation` from the session public entry (`session/index.ts`). One `adapters/shell.ts` owns that binding and the React provider; a same-basename `.tsx` is not kept because both emit `shell.js`. Count, page and acknowledgement keys stay on that observation; the port does not start another fetch or cache. The shell receives UnreadBadge from the Inbox feature entry. Fewest tests: pin the shared session query key, public session bindings and unread-count prefix; keep the existing inbox suites.
+
 Inbox reads the signed-in account's private `GET /v1/accounts/{accountId}/notifications` page. The native response is
 the disclosure boundary: each closed item supplies its current actor and target state, owner summary, allowed open
 identity, one-item mark-seen identity and unread state. The reader sends All or Unread selection with the page size;

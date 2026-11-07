@@ -1,5 +1,5 @@
 import { queryOptions, type QueryClient } from '@tanstack/react-query';
-import { personalRead, readQueryKey } from '../kernel/query';
+import { productionInboxShellPort } from './adapters/shell';
 import { preferenceRetryDeadline } from '../settings/preference-failure-retry';
 import {
   DEFAULT_INBOX_SELECTION,
@@ -21,7 +21,7 @@ import { inboxObservationRecovery, type InboxObservationRecovery } from './inbox
 import { coalesceInboxViewerCount } from './inbox-work';
 import { forInboxViewer, inboxViewerCsrfToken, type InboxViewer } from './inbox-viewer';
 
-const inboxKey = readQueryKey(['notifications', 'inbox'], 'session');
+const inboxKey = productionInboxShellPort.readQueryKey(['notifications', 'inbox'], 'session');
 
 export function inboxViewerQueryKey(viewer: InboxViewer) {
   return [...inboxKey, viewer.subject, viewer.epoch] as const;
@@ -44,7 +44,7 @@ export function inboxPageQuery(
 ) {
   const query: InboxPageQuery = { selection, ...(cursor ? { cursor } : {}) };
   return queryOptions({
-    ...personalRead,
+    ...productionInboxShellPort.personalRead,
     // Each direction change and mounted return receives a fresh key. A prior cached payload
     // can never stand in for native admission of the same opaque address.
     queryKey: [...inboxViewerQueryKey(viewer), episode, selection, cursor ?? null, pageInstance, readId],
@@ -66,7 +66,7 @@ export function inboxPageQuery(
 }
 
 const unreadCountDefaults = {
-  ...personalRead,
+  ...productionInboxShellPort.personalRead,
   staleTime: 60_000,
   retry: false,
 } as const;
@@ -109,7 +109,7 @@ export async function fetchInboxUnreadCount(viewer: InboxViewer, signal?: AbortS
 // Retain the fixed prefix for existing cache invalidation consumers.
 export const unreadCountQuery = queryOptions({
   ...unreadCountDefaults,
-  queryKey: readQueryKey(['notifications', 'count'], 'session'),
+  queryKey: productionInboxShellPort.readQueryKey(['notifications', 'count'], 'session'),
   queryFn: () => readUnreadCount(),
 });
 

@@ -16,6 +16,7 @@ import {
 import { managedReadTimeout } from '../src/settings/managed-read-deadline';
 import type { ReadingIO } from '../src/settings/reading-preferences';
 import { DisplayPreferences } from '../src/settings/display-preferences';
+import { createSettingsShellPort, SettingsShellProvider } from '../src/settings';
 import { AppearanceControls } from '../src/shell/appearance-controls';
 import { locales, setLocale } from '../src/paraglide/runtime.js';
 import { m } from '../src/paraglide/messages.js';
@@ -251,13 +252,18 @@ test('a shared notification version arriving during a save requires current read
 });
 
 test('Settings display choices consume the actual shared AppearanceControls instead of maintaining a second locale/theme cookie implementation', () => {
-  const content = DisplayPreferences().props.children[1];
-  expect(content.props.children.type).toBe(AppearanceControls);
+  expect(createSettingsShellPort({ AppearanceControls }).AppearanceControls).toBe(AppearanceControls);
 });
 
 test('Current locale and theme settings reuse the shell preferences without inventing server storage', () => {
   setLocale('en', { reload: false });
-  const html = renderToStaticMarkup(createElement(DisplayPreferences));
+  const html = renderToStaticMarkup(
+    createElement(
+      SettingsShellProvider,
+      { port: createSettingsShellPort({ AppearanceControls }) },
+      createElement(DisplayPreferences),
+    ),
+  );
   const languages = [...html.matchAll(/<a[^>]*lang="([^"]+)"[^>]*href="([^"]+)"/g)].map((match) => [
     match[1],
     match[2],

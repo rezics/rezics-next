@@ -1255,6 +1255,9 @@
       "owner": "performance",
       "paths": ["apps/web/src/settings/**", "apps/web/src/inbox/**"],
       "publicEntries": [
+        "apps/web/src/inbox/index.ts",
+        "apps/web/src/settings/auth-management.ts",
+        "apps/web/src/settings/index.ts",
         "apps/web/src/settings/preferences.ts",
         "apps/web/src/settings/ports/accounts.ts",
         "apps/web/src/settings/ports/profile-editor.ts",

@@ -1,7 +1,7 @@
 import type { KernelClient } from '@rezics/client';
 import { getLocale, localizeHref } from '../paraglide/runtime.js';
 import { m } from '../paraglide/messages.js';
-import { isPlatformClosedError } from '../kernel/platform-closed';
+import { isPlatformClosedError } from './ports/vocabulary';
 import { MediaProblem } from '../media/kernel';
 import { threadLocation } from '../threads/thread-href';
 import { settingsCommandKeyHeader } from './command-headers';

@@ -27,8 +27,7 @@ import { Alert, AlertDescription, AlertTitle } from '@rezics/ui/shadcn/alert';
 import { ListRow, ListRowControl, ListRowLink } from '@rezics/ui/list-row';
 import { m } from '../paraglide/messages.js';
 import { getLocale } from '../paraglide/runtime.js';
-import { useOperation } from '../kernel/exposure';
-import { useSession } from '../session/query';
+import { useSettingsOperation, useSettingsSession } from './adapters/shell';
 import type { CollectionVisibility } from './ports/library';
 import { readOwnedCollection, readOwnedCollectionsPage, saveCollectionVisibility } from './actions';
 import type { OwnedCollection } from './preferences';
@@ -109,8 +108,8 @@ export function CollectionRow(props: CollectionRowProps) {
 }
 
 function AdmittedCollectionRow(props: OwnedRowProps) {
-  const canSave = useOperation('collection.update');
-  const canRead = useOperation('collection.get');
+  const canSave = useSettingsOperation('collection.update');
+  const canRead = useSettingsOperation('collection.get');
   return <CollectionRowView {...props} canSave={canSave} canRead={canRead} />;
 }
 
@@ -415,8 +414,8 @@ function CollectionRowView({
 
 /** Mounts afresh whenever the prepared account or operation admission changes. */
 export function CollectionPrivacySection() {
-  const admitted = useOperation('account.collections');
-  const { state, subject, csrfToken } = useSession();
+  const admitted = useSettingsOperation('account.collections');
+  const { state, subject, csrfToken } = useSettingsSession();
   return admitted && state === 'signed-in' && subject ? (
     <CollectionPrivacyView key={JSON.stringify([subject, csrfToken])} />
   ) : null;

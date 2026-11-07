@@ -5,7 +5,7 @@ import { Field, FieldDescription, FieldLabel } from '@rezics/ui/shadcn/field';
 import { m } from '../paraglide/messages.js';
 import { getLocale } from '../paraglide/runtime.js';
 import { searchRetryAt, useSearchRetryWait } from '../search/search-recovery-retry';
-import { useSession } from '../session/query';
+import { useSettingsSession } from './adapters/shell';
 import { withVerificationDeadline } from './verification-request-deadline';
 import type { VerificationSearchFailure, VerificationSearchResult } from './verification-core';
 
@@ -180,7 +180,7 @@ type Props = {
 };
 
 export function VerificationSubjectChooser(props: Props) {
-  const session = useSession();
+  const session = useSettingsSession();
   const onSelect = useRef(props.onSelect);
   useEffect(() => {
     onSelect.current = props.onSelect;

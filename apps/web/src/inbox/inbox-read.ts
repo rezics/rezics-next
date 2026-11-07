@@ -2,7 +2,7 @@ import type { KernelClient } from '@rezics/client';
 import { isNotFound, isRedirect } from '@tanstack/react-router';
 import { createServerFn } from '@tanstack/react-start';
 import { getRequest, setResponseHeader } from '@tanstack/react-start/server';
-import { isPlatformClosedError } from '../kernel/platform-closed';
+import { isPlatformClosedError } from '../settings/ports/vocabulary';
 import type { SessionEnv } from '../session/client';
 import { prepareSession, sessionSubject, viewerCredential } from '../session/request';
 import { MediaProblem } from '../media/kernel';
