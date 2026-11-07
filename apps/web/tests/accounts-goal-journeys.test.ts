@@ -109,6 +109,26 @@ test('the table-shape check does not boot Storybook, and follow writes the publi
   );
 });
 
+test('startup unit selections own their fixtures while mixed and page selections keep the shared server', () => {
+  const unitFiles = [
+    'scripts/check-placement.test.ts',
+    'scripts/check-placement-custody.test.ts',
+    'scripts/focused.test.ts',
+    'scripts/messages-ready.test.ts',
+    'scripts/storybook-dev.test.ts',
+    'tests/focused-runner.test.ts',
+    'tests/root-application-shell.test.tsx',
+  ];
+  for (const prefix of ['', 'apps/web/', '/source/apps/web/']) {
+    const files = unitFiles.map((file) => `${prefix}${file}`);
+    expect(commandNeedsSharedDevServer(['bun', 'test', ...files])).toBe(false);
+    expect(commandNeedsSharedDevServer(['bun', 'test', ...files, `${prefix}tests/session.test.ts`])).toBe(true);
+  }
+  expect(commandNeedsSharedDevServer(['bun', 'test'])).toBe(true);
+  expect(commandNeedsSharedDevServer(['bun', 'test', 'scripts/unknown.test.ts'])).toBe(true);
+  expect(commandNeedsSharedDevServer(['bun', 'test', 'tests/root-application.test.tsx'])).toBe(true);
+});
+
 test('admission EACCES replaces only unobserved rows with the exact first cause and infrastructure owner', () => {
   const rows = parseJourneyTable(readFileSync(capabilities, 'utf8'));
   const pending = rows.map((row) => ({ ...row, result: 'unobserved' as const }));
