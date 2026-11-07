@@ -6,6 +6,7 @@ WITH input AS (
   SELECT label.* FROM input CROSS JOIN LATERAL (
     SELECT label.* FROM library.personal_label AS label
     WHERE label.route = input.route AND label.account_id = input.account_id AND label.label_id = input.label_id
+    ORDER BY label.route, label.account_id, label.label_id
     LIMIT 1
     FOR UPDATE
   ) AS label

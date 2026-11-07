@@ -15,5 +15,6 @@ FROM input CROSS JOIN LATERAL (
   FROM library.label_assignment AS a
   WHERE a.route = input.route AND a.account_id = input.account_id
     AND a.subject_id = input.subject_id AND a.label_id = input.label_id
+  ORDER BY a.route, a.account_id, a.subject_id, a.label_id
   LIMIT 1
 ) AS a;

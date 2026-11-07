@@ -90,6 +90,25 @@ async function resolveMappedSubject(
     : null;
 }
 
+/** Map requested originals to current terminals without Access formula work. */
+export async function mapSubjectTerminals(
+  pool: Pool,
+  subjectIds: readonly string[],
+): Promise<Map<string, string>> {
+  const resolved = new Map<string, string>();
+  const distinctIds = [...new Set(subjectIds)].filter((id) => routeOf(id) !== null);
+  for (let offset = 0; offset < distinctIds.length; offset += MAX_SUBJECT_IDS) {
+    const page = distinctIds.slice(offset, offset + MAX_SUBJECT_IDS);
+    const mappings = await identityEpochStore().readMappings(pool, page);
+    for (let index = 0; index < page.length; index++) {
+      const mapping = mappings[index]!;
+      if (mapping.state === 'unavailable') throw new SubjectIdentityUnavailableError(mapping.reason);
+      if (mapping.state === 'mapped') resolved.set(page[index]!, mapping.terminal);
+    }
+  }
+  return resolved;
+}
+
 /** Keep stored IDs that resolve, preserving page identity and bounds. */
 export async function readableSubjects(
   deps: SubjectAnchorDependencies,

@@ -6,6 +6,7 @@ WITH input AS NOT MATERIALIZED (
     SELECT personal_label.* FROM library.personal_label
     WHERE personal_label.route = input.route AND personal_label.account_id = input.account_id
       AND personal_label.label_id = input.label_id
+    ORDER BY personal_label.route, personal_label.account_id, personal_label.label_id
     LIMIT 1
     FOR UPDATE
   ) AS label

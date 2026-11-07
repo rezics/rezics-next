@@ -59,7 +59,7 @@ test('label FULL pages name current labels include bounded owner entry tiles and
   expect(basic.status).toBe(200);
   const basicPage = await basic.json();
   expect(basicPage).not.toHaveProperty('label');
-  expect(Object.keys(basicPage.assignments[0]).sort()).toEqual(['id', 'labelId', 'subjectId', 'revision']);
+  expect(Object.keys(basicPage.assignments[0]).sort()).toEqual(['id', 'labelId', 'revision', 'subjectId']);
   const full = await send('GET', labelPath + '&view=FULL');
   expect(full.status).toBe(200);
   const page = await full.json();
@@ -102,7 +102,14 @@ test('label FULL pages name current labels include bounded owner entry tiles and
 
 test('native maximum FULL label page preserves the raw cursor when a Subject summary is withheld', async () => {
   expect((await f.send('steward', 'POST', '/v1/platform/exposure/personal_library:open')).status).toBe(200);
-  const owner = await f.identity(['subject:read', 'library_entry:update', 'library_entry:read', 'library_entry:list']);
+  expect((await f.send('steward', 'POST', '/v1/platform/exposure/reading_progress:open')).status).toBe(200);
+  const owner = await f.identity([
+    'subject:read',
+    'library_entry:update',
+    'library_entry:read',
+    'library_entry:list',
+    'progress_session:list',
+  ]);
   const send = (method: string, path: string, body?: unknown) => f.send(owner.bearer, method, path, body);
   const created = await send('POST', '/v1/libraryLabels', { name: 'Maximum withheld page' });
   expect(created.status).toBe(201);

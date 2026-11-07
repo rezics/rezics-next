@@ -25,8 +25,10 @@ async function main(): Promise<void> {
   // registering the SQL loader and before importing the command that uses it.
   const { installNativeHistoryPreload } = await import('../src/composition/preload.ts');
   installNativeHistoryPreload();
+  const { configureReceiptKeys, readReceiptKeyRing } = await import('../src/command/receipt-key.ts');
   const { bootstrapGovernance } = await import('../src/access/bootstrap-governance.ts');
   const pool = createPool(url);
+  configureReceiptKeys(pool, readReceiptKeyRing());
   try {
     await bootstrapGovernance(pool, accountId);
   } finally {
