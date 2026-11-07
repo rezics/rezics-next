@@ -44,7 +44,7 @@ test('the top bar keeps search and logo, offers Create and counted notifications
       />,
     );
 
-  test('the shared shell keeps one page landmark with its header, rail and phone destinations', async () => {
+  test('the default shell rail renders outside the Library boundary with one page landmark and phone destinations', async () => {
     mock.module('@fontsource-variable/manrope/files/manrope-latin-wght-normal.woff2?url', () => ({
       default: '/manrope.woff2',
     }));
@@ -59,7 +59,7 @@ test('the top bar keeps search and logo, offers Create and counted notifications
     });
     const root = createRootRoute({
       component: () => (
-        <AppShell communities={null} search={<input aria-label="Existing header search" />}>
+        <AppShell search={<input aria-label="Existing header search" />}>
           <h1>Page content</h1>
         </AppShell>
       ),
