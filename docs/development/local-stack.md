@@ -359,7 +359,8 @@ Inside `<command>`, provision with `bun services/auth/scripts/dev-stack.ts perso
 `bun --no-env-file scripts/datasets/cross-media-seed.ts --dev` after loading the private `seed.env` that persona wrote.
 Admitted walk processes bind `KERNEL_ORIGIN`, `AUTH_ORIGIN` and `KERNEL_PORT` to the slot so seed reaches this Kernel,
 not an inherited default-port origin; bun auto-loaded `.env` files must not replace those names. The walker waits for
-an importer fence and a subject write, because a fence-only ready check left identity-epoch subject writes failing.
+identity-epoch topology remaining to reach zero, then an importer fence and a subject write, because seed import
+writes racing unfinished bootstrap failed without an HTTP status.
 Do not run `task seed:dev` or `task dev:persona` inside a walk: those depend on `dev:infra` and would start the
 default-port stack beside the admitted slot. Ordinary member personas use actual signup; privileged roles come from native
 admission. Browser launch sets `TMPDIR` to a short root such as `/tmp/rw` when the inherited root is missing, so

@@ -5,6 +5,7 @@ import {
   FIRST_PUBLIC_JOURNEYS,
   publicFields,
   summarizeWalk,
+  waitUntilIdentityBootstrapRemainingZero,
   walkStripeOrigin,
   type JourneyWalkRow,
 } from './support/goal-journey-walk.ts';
@@ -104,4 +105,27 @@ test('walk results keep the finishing-register heading', () => {
   );
   expect(next.startsWith('## First-public journeys on dev')).toBe(true);
   expect(next).toContain('FAIL 48f34b7b8910 2026-11-07T06:13:14.996Z setup');
+});
+
+test('identity remaining wait returns once topology remaining is zero', async () => {
+  const seen: number[] = [];
+  await waitUntilIdentityBootstrapRemainingZero(
+    async () => {
+      seen.push(seen.length === 0 ? 12 : 0);
+      return seen.at(-1)!;
+    },
+    { sleep: async () => {}, ms: 5_000 },
+  );
+  expect(seen).toEqual([12, 0]);
+});
+
+test('identity remaining wait names the last remaining count', async () => {
+  let now = 0;
+  await expect(
+    waitUntilIdentityBootstrapRemainingZero(async () => 17, {
+      now: () => (now += 600),
+      sleep: async () => {},
+      ms: 1_000,
+    }),
+  ).rejects.toThrow('identity epoch bootstrap not caught up: remaining 17');
 });

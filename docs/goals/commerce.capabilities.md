@@ -81,8 +81,9 @@ for the paid entitlement. Seed uses the slot `KERNEL_ORIGIN`/`AUTH_ORIGIN`; bun 
 inherited default-port `KERNEL_ORIGIN`.
 Decision: walk stacks always retire leftover seed journals because a new database reuses the slot's PostgreSQL
 identity string; identity-equal journals still name the previous attempt's native UUIDs. The walker then waits for
-an importer fence and a subject write before seed, and seed bun uses `--no-env-file` so slot `KERNEL_ORIGIN` stays.
-Fewest first-public tests remain the seeded walk, `erasure-participant.test.ts`, and the VNDB scan-budget cases.
+identity-epoch topology remaining to reach zero, then an importer fence and a subject write before seed, and seed
+bun uses `--no-env-file` so slot `KERNEL_ORIGIN` stays. Fewest first-public tests remain the seeded walk,
+`erasure-participant.test.ts`, and the VNDB scan-budget cases.
 
 ## Evidence and stages
 

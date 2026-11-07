@@ -4,17 +4,23 @@
  * Native commands and served pages are recorded per finishing-register row.
  * Evidence stays under `.temp/commerce-walk/`.
  *
- * Kernel /v1/definitions/active must return a digest, then an importer fence
- * and a subject write must succeed, before seed. Leftover seed journals are
- * retired first. A 404 or sign-in mismatch is a page failure except anonymous
- * private pages, which must leave the member shell.
+ * Kernel /v1/definitions/active must return a digest, identity-epoch topology
+ * remaining must be zero, then an importer fence and a subject write must
+ * succeed, before seed. Leftover seed journals are retired first. A 404 or
+ * sign-in mismatch is a page failure except anonymous private pages, which
+ * must leave the member shell.
  */
 import { execFileSync, spawn } from 'node:child_process';
 import { randomBytes } from 'node:crypto';
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { join, resolve } from 'node:path';
 import { chromium, type Browser, type BrowserContext, type Page } from 'playwright';
-import { retireDevelopmentSeedState, startSeededFrontends } from '../../../../services/auth/scripts/dev-stack.ts';
+import {
+  identityEpochBootstrapRemaining,
+  kernelEnvironment,
+  retireDevelopmentSeedState,
+  startSeededFrontends,
+} from '../../../../services/auth/scripts/dev-stack.ts';
 import {
   createAccountTokenProvider,
   CredentialServiceError,
@@ -29,6 +35,7 @@ import {
   requireId,
   runJourney,
   summarizeWalk,
+  waitUntilIdentityBootstrapRemainingZero,
   type JourneyWalkRow,
   type WalkAccount,
   type WalkIdentities,
@@ -151,21 +158,36 @@ async function waitUntilImportReady(kernel: string, env: Record<string, string>,
       if (response.status === 201) return;
       last = `HTTP ${response.status}`;
     } catch (error) {
-      if (error instanceof ImportTransportError)
-        last = [
-          error.message,
-          error.status !== undefined ? `HTTP ${error.status}` : undefined,
-          error.code,
-          error.cause instanceof Error ? error.cause.message : undefined,
-        ]
-          .filter(Boolean)
-          .join(' ');
+      if (error instanceof ImportTransportError) last = transportDetail(error);
       else if (error instanceof CredentialServiceError) last = error.message;
       else last = error instanceof Error ? error.message : String(error);
     }
     await Bun.sleep(1_000);
   }
   throw new Error(`import writes not ready: ${last}`);
+}
+
+function transportDetail(error: ImportTransportError): string {
+  return [
+    error.message,
+    error.status !== undefined ? `HTTP ${error.status}` : undefined,
+    error.code,
+    error.phase,
+    error.cause instanceof Error
+      ? `${error.cause.name}: ${error.cause.message}`
+      : error.cause !== undefined
+        ? String(error.cause)
+        : undefined,
+  ]
+    .filter(Boolean)
+    .join(' ');
+}
+
+async function waitUntilIdentityCaughtUp(): Promise<void> {
+  const env = await kernelEnvironment();
+  const databaseUrl = env.DATABASE_URL;
+  if (!databaseUrl) throw new Error('KERNEL DATABASE_URL missing');
+  await waitUntilIdentityBootstrapRemainingZero(() => identityEpochBootstrapRemaining(databaseUrl));
 }
 
 async function parseEnv(path: string): Promise<Record<string, string>> {
@@ -405,6 +427,7 @@ async function seedCatalog(stack: Stack, env: Record<string, string>): Promise<v
   } catch (first) {
     const observed = first instanceof Error ? first.message : String(first);
     if (!/Import transport request failed/i.test(observed)) throw first;
+    await waitUntilIdentityCaughtUp();
     await waitUntilImportReady(stack.kernel, env);
     await child(command, 'seed-retry', env);
   }
@@ -490,6 +513,7 @@ async function main() {
   try {
     await waitUntilActiveRelease(stack.kernel);
     await retireDevelopmentSeedState(root);
+    await waitUntilIdentityCaughtUp();
     await child(['bun', 'services/auth/scripts/dev-stack.ts', 'persona'], 'persona');
     const env = await seedEnv(stack);
     await waitUntilImportReady(stack.kernel, env);
