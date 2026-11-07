@@ -16,7 +16,8 @@ mock.module('../src/search/search-query-options', () => ({
       'discovery-v1',
       searchSessionLifetime(locale, params, reader),
     ],
-    loadingPage: (params: SearchLoaderDeps) => searchPageForRecovery(searchUnavailablePage(params), { status: 'loading' }),
+    loadingPage: (params: SearchLoaderDeps) =>
+      searchPageForRecovery(searchUnavailablePage(params), { status: 'loading' }),
     unavailablePage: (params: SearchLoaderDeps) => searchUnavailablePage(params),
   },
   searchQueryOptions: (locale: string, params: SearchLoaderDeps, reader?: string) => ({

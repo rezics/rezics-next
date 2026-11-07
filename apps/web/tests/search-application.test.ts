@@ -15,11 +15,7 @@ const application = createSearchApplication({
 
 test('Search shares its query identity and pending/recovery page pair across the adapter and observer', () => {
   const params = searchLoaderDeps({ q: 'Mira', language: ['ja', 'en'] });
-  expect(application.queryKey('en', params)).toEqual([
-    'search',
-    'discovery-v1',
-    searchSessionLifetime('en', params),
-  ]);
+  expect(application.queryKey('en', params)).toEqual(['search', 'discovery-v1', searchSessionLifetime('en', params)]);
   expect(application.loadingPage(params)).toMatchObject({ queryState: params, recovery: { status: 'loading' } });
   expect(application.unavailablePage(params)).toMatchObject({
     queryState: params,

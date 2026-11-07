@@ -106,7 +106,15 @@ function selectedFacetValueLabels(
             if (!labels) return [];
             const picked = pickText(labels, locale);
             return picked.text.trim()
-              ? [[value, { text: picked.text, ...(picked.lang ? { lang: picked.lang } : {}) } satisfies SearchFacetValueLabel]]
+              ? [
+                  [
+                    value,
+                    {
+                      text: picked.text,
+                      ...(picked.lang ? { lang: picked.lang } : {}),
+                    } satisfies SearchFacetValueLabel,
+                  ],
+                ]
               : [];
           }),
         ),
@@ -158,10 +166,7 @@ async function readSearch(
     ? knownType
       ? yearProperties(release, knownType)
       : selectedSemanticKinds
-        ? [...new Set(selectedSemanticKinds.flatMap((kind) => yearProperties(release, kind)))].slice(
-            0,
-            YEAR_PROPERTIES,
-          )
+        ? [...new Set(selectedSemanticKinds.flatMap((kind) => yearProperties(release, kind)))].slice(0, YEAR_PROPERTIES)
         : yearProperties(release)
     : [];
   const properties = release
@@ -174,8 +179,7 @@ async function readSearch(
         ]),
       ].slice(0, 4)
     : [];
-  const refinementTypes =
-    knownType ?? (data.facetValues.type?.length ? data.facetValues.type : selectedSemanticKinds);
+  const refinementTypes = knownType ?? (data.facetValues.type?.length ? data.facetValues.type : selectedSemanticKinds);
   const roster = release ? refinementProperties(release, refinementTypes) : [];
   let refinementRequests: ReturnType<typeof scopedRefinementRequests> | undefined;
   try {
@@ -190,9 +194,7 @@ async function readSearch(
     (queryState.sort === 'rating' && queryState.ratingPopulation !== undefined);
   let client: KernelClient | undefined;
   const kernel = () => (client ??= adapters.createClient(data.locale));
-  const sendSearch = async (
-    request: Parameters<ReturnType<typeof kernel>['subjects']['$search']['post']>[0],
-  ) =>
+  const sendSearch = async (request: Parameters<ReturnType<typeof kernel>['subjects']['$search']['post']>[0]) =>
     kernel().subjects.$search.post(request, {
       ...(reader?.authorization ? { headers: { authorization: reader.authorization } } : {}),
       fetch: { signal, cache: 'no-store' },
@@ -338,4 +340,3 @@ async function readSearch(
     ...(realmRatingUnavailable ? { ratingReadiness: { status: 'unavailable' as const } } : {}),
   });
 }
-

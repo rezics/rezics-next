@@ -103,10 +103,7 @@ import { sessionCsrfToken, useSession } from '../session/query';
 import { searchSessionOwner } from './search-session-owner';
 import { useSearchQuery } from './use-search-query';
 import type { RealmDiscoveryState } from '../community/realm-discovery';
-import {
-  conditionAdmission,
-  conditionSearchState,
-} from './condition-editor-model';
+import { conditionAdmission, conditionSearchState } from './condition-editor-model';
 import { conditionConceptSuggestionFilter } from './condition-concept-model';
 import { createFilterDraft, resetFilterDraft } from './filter-draft-reset';
 import { useFilterSurfaceFocus } from './filter-surface-focus';

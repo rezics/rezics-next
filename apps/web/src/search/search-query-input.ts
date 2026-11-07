@@ -97,4 +97,3 @@ export function validateSearchInput(input: unknown): SearchRequestParams {
     ...(typeof input.kindCursor === 'string' ? { kindCursor: input.kindCursor } : {}),
   };
 }
-
