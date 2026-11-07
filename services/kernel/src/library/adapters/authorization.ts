@@ -5,6 +5,11 @@ import type { AuthoritativeTime } from '../../command/command.ts';
 import type { Access, Actor } from '../../request/access.ts';
 import type { AuthorizationCapability } from '../contract/index.ts';
 import type { LibraryActor } from '../contract/index.ts';
+import type {
+  CollectionAuthorizationPreparation,
+  CollectionListFilter,
+  SpecializeCollectionListInput,
+} from '../contract/index.ts';
 import { routeOf } from '../core/index.ts';
 
 export type NativeCollectionReadAdmission = (input: {
@@ -24,6 +29,8 @@ export type AuthorizationAdapterPorts = Readonly<{
   commandAuthorization(...args: readonly unknown[]): Promise<unknown>;
   deadlineClient<T extends object>(client: T, deadline: number): T;
   within<T>(deadline: number, work: () => Promise<T>): Promise<T>;
+  specializeCollectionList(input: SpecializeCollectionListInput): CollectionListFilter;
+  collectionAuthorizationPreparation(): CollectionAuthorizationPreparation;
 }>;
 
 export function createAuthorizationAdapter(input: {
@@ -76,6 +83,12 @@ export function createAuthorizationAdapter(input: {
     },
     within(deadline, work) {
       return ports.within(deadline, work);
+    },
+    specializeCollectionList(input) {
+      return ports.specializeCollectionList(input);
+    },
+    collectionAuthorizationPreparation() {
+      return ports.collectionAuthorizationPreparation();
     },
   };
 }

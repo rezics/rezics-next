@@ -73,6 +73,12 @@ export type {
   SessionWork,
 } from './progress-operations.ts';
 export type {
+  CollectionAuthorizationPreparation,
+  CollectionListFilter,
+  SpecializeCollectionListInput,
+} from './collection-policy.ts';
+export { EMPTY_COLLECTION_AUTHORIZATION_PREPARATION } from './collection-policy.ts';
+export type {
   CollectionPublicationNativeCapability,
   CollectionRuleAuthorityCapability,
   AuthorizationCapability,

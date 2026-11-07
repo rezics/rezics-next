@@ -51,6 +51,7 @@ import {
   createSearchPreparationAdapter,
   type SearchPreparationAdapterPorts,
 } from '../library/adapters/index.ts';
+import { createLibraryCollectionPolicyMethods } from '../access/adapters/collection-policy.ts';
 import {
   bindLibraryDomain,
   peekLibraryDomain,
@@ -67,6 +68,7 @@ import {
 import { admissionTerm, sumAdmission } from '../library/core/index.ts';
 
 function nativeAuthorizationPorts(): AuthorizationAdapterPorts {
+  const collectionPolicy = createLibraryCollectionPolicyMethods();
   return {
     async admitCollectionRead(input) {
       try {
@@ -107,6 +109,12 @@ function nativeAuthorizationPorts(): AuthorizationAdapterPorts {
     },
     within(deadline, work) {
       return within(deadline, work);
+    },
+    specializeCollectionList(input) {
+      return collectionPolicy.specializeCollectionList(input);
+    },
+    collectionAuthorizationPreparation() {
+      return collectionPolicy.collectionAuthorizationPreparation();
     },
   };
 }

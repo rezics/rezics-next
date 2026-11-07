@@ -231,6 +231,7 @@
         "services/kernel/src/access/public-identity.ts",
         "services/kernel/src/access/adapters/index.ts",
         "services/kernel/src/access/adapters/account-statements.ts",
+        "services/kernel/src/access/adapters/collection-policy.ts",
         "services/kernel/src/access/agent-verification-identity.ts",
         "services/kernel/src/access/agent-verification-identity-literals.ts",
         "services/kernel/src/access/agent-verification.ts",
@@ -280,7 +281,8 @@
       "paths": ["services/kernel/src/access/contract/**"],
       "publicEntries": [
         "services/kernel/src/access/contract/index.ts",
-        "services/kernel/src/access/contract/bounds.ts"
+        "services/kernel/src/access/contract/bounds.ts",
+        "services/kernel/src/access/contract/collection-policy.ts"
       ],
       "allowedDependencies": [],
       "capabilities": ["access-vocabulary"]
@@ -525,7 +527,8 @@
       "paths": ["services/kernel/src/library/contract/**"],
       "publicEntries": [
         "services/kernel/src/library/contract/work-dimensions.ts",
-        "services/kernel/src/library/contract/index.ts"
+        "services/kernel/src/library/contract/index.ts",
+        "services/kernel/src/library/contract/collection-policy.ts"
       ],
       "allowedDependencies": [],
       "capabilities": []

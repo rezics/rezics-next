@@ -1,5 +1,7 @@
 # Library
 
+Decision: Collection directory/list/order authorization consumes Library `AuthorizationCapability.specializeCollectionList` and Access's funded collection-update preparation bound. Access adapters own the catalogue residual, permission SQL and inverse membership limit (1000); Library directory SQL binds only the admitted curator/public parameter map. Collection mutation and Progress descriptors stay independent. Fewest tests: owner/public/unavailable list outcomes, preparation memberships, directory public-floor bytes, unchanged order/read assertions.
+
 Decision: native Collection preparation consumes Library's `PreparationWorkCapability` and `ScopeWorkCapability`.
 `adapters/preparation-work.ts` specializes them to the original native transaction, locator and ledger. Default
 `composition/library.ts` binds Search's `adapters/library-preparation.ts`: it borrows the already registered worker

@@ -9,6 +9,7 @@ import type {
   AccessQueryClient,
 } from './vocabulary.ts';
 import type { AccessWorkDeclaration, AccessWorkDimensions } from './bounds.ts';
+import type { CollectionListPolicyOutcome, CollectionPolicyPort } from './collection-policy.ts';
 
 export type AvatarSummary = Readonly<{
   media: string;
@@ -253,6 +254,7 @@ export type AccessApplicationPorts = {
   readonly searchErasure?: SearchErasurePort;
   readonly nativeErasure: NativeErasureCoordinatorPort;
   readonly resourceAuthorization?: ResourceAuthorizationPort;
+  readonly collectionPolicy?: CollectionPolicyPort;
   readonly clock?: () => Date;
 };
 
@@ -332,4 +334,6 @@ export type AccessApplication = {
   readonly originalWorkLocalAllowance: AccessWorkDimensions;
   decideAuthorization(facts: DecideAuthorizationInput): AccessDecision;
   authorizeResource(facts: DecideAuthorizationInput): Promise<AccessDecision>;
+  specializeCollectionList(access: unknown, fullView: boolean): CollectionListPolicyOutcome;
+  collectionAuthorizationPreparation(): AccessWorkDimensions;
 };
