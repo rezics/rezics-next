@@ -27988,11 +27988,6 @@
         },
         {
           "rule": "rule 2",
-          "file": "apps/web/src/inbox/inbox-read.ts",
-          "edge": "value import \"../threads/thread-href\" #1 => apps/web/src/threads/thread-href.ts"
-        },
-        {
-          "rule": "rule 2",
           "file": "apps/web/src/inbox/inbox-viewer.ts",
           "edge": "value import \"../session/query\" #1 => apps/web/src/session/query.ts"
         },

@@ -1,14 +1,14 @@
 import type { Pool } from 'pg';
 import { checkAvatarMedia, readAvatarSummaries } from '../../content/access-capabilities.ts';
 import { applyRealmClaimApproval, lockRealmClaimApprovalSource } from '../../community/index.ts';
+import { accountAgentId } from '../../semantic/agents.ts';
 import {
-  accountAgentId,
-  activeIdentitySourceConsumerMaintenance,
-  IDENTITY_HISTORY_ORIGINAL_SOURCE_DECLARATION,
   readOriginalAccountAgentIdentity,
   verifyOriginalAccountAgentIdentity,
-  withReadTransaction,
-} from '../../semantic/access-capabilities.ts';
+} from '../../semantic/account-agent-identity-recovery.ts';
+import { withReadTransaction } from '../../semantic/read.ts';
+import { activeIdentitySourceConsumerMaintenance } from '../../semantic/identity-source-consumer-maintenance.ts';
+import { IDENTITY_HISTORY_ORIGINAL_SOURCE_DECLARATION } from '../../semantic/identity-source-consumer-custody.ts';
 import {
   IDENTITY_HISTORY_ORIGINAL_LIBRARY_DECLARATION,
   collectionKindInputWork,

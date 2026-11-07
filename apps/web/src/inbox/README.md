@@ -12,7 +12,7 @@ continuation. A sparse page is neither an empty Inbox nor an exhausted unread ra
 The browser performs no actor or target hydration for an Inbox page. It uses owner summaries instead of fetching post
 bodies. Withheld actors are shown neutrally and withheld target titles or IDs are not rendered. A reporter outcome may
 still open its admitted report-status destination with withheld target context. Open actions use only the supported
-native identity and existing localized route builders; supplied URLs are never executed.
+native identity and Content's public `threadLocation` on `thread-reading-context`; supplied URLs are never executed.
 When native disclosure names both a thread and a board, the row shows both current titles while opening only the
 admitted thread-post destination.
 
@@ -57,6 +57,9 @@ labels, coalesces one count per viewer episode, and records installed `thread_wa
 
 **Decision:** After return, a notice absent from the freshly admitted selected page is reported at the Inbox heading;
 only a deliberate first-page refresh recovers, and no neighbor receives restored focus or acknowledgement.
+
+**Decision:** Inbox consumes Content's public `threadLocation`; destination cases stay on the existing inbox-read,
+inbox-native-triage, inbox-notice-detail and notifications-inbox suites.
 
 **Decision:** Pin this journey with the existing inbox-read, inbox-page, inbox-native-triage, inbox-notice-detail,
 inbox-session-authority, inbox-pagination, notifications-inbox and recorded-responses suites plus the consumption

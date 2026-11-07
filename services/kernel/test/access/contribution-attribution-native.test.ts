@@ -5,7 +5,7 @@ import {
   readContributionAttributions,
   type ContributionAttribution,
 } from '../../src/access/public-identity.ts';
-import { accountAgentId } from '../../src/semantic/access-capabilities.ts';
+import { accountAgentId } from '../../src/semantic/agents.ts';
 import { newId, routeOf } from '../../src/route/route.ts';
 
 const pool = new Pool({ connectionString: process.env.DATABASE_URL, max: 1 });
