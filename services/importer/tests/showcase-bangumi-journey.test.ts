@@ -396,20 +396,16 @@ test('leftover walk journals are archived before persona so wiped slot databases
   }
 });
 
-test('operator causes keep ImportTransportError status and seed causes keep the stderr TypeError', () => {
+test('operator causes keep safe status and request metadata without private nested text', () => {
   expect(walkFailureCause(new ImportTransportError(404))).toContain('status=404');
-  expect(walkFailureCause(new ImportTransportError(403, 'about:blank', 'forbidden'))).toBe(
-    expect.stringContaining('status=403 problem=forbidden'),
-  );
+  expect(walkFailureCause(new ImportTransportError(403, 'about:blank', 'forbidden'))).toContain('status=403 problem=forbidden');
   const named = new ImportTransportError(503, undefined, undefined, false, undefined, undefined, {
     method: 'POST', path: '/v1/subjects:batchWrite',
   });
   expect(walkFailureCause(named)).toContain('method=POST target=unknown-origin/v1/subjects:batchWrite status=503');
   const nested = new ImportTransportError();
   nested.cause = new TypeError('Import requests must target the configured API origin under /v1/');
-  expect(walkFailureCause(nested)).toBe(
-    expect.not.stringContaining('Import requests must target'),
-  );
+  expect(walkFailureCause(nested)).not.toContain('Import requests must target');
   expect(
     walkChildFailure(
       'seed',
