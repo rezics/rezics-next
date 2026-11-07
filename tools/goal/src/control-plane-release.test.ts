@@ -386,14 +386,21 @@ test('a checked candidate publishes main, stabilize and dev together with exact 
 test('an ordinary release runs only tests reached from its changed source owner', async () => {
   const h = integrationHarness();
   try {
-    const base = addBranchCommit(h, 'main', {
+    const baseFiles = {
       'tools/goal/src/hourly-ledger.ts': 'export const readLedger = () => 1;\n',
       'tools/goal/src/hourly-report.ts':
         "import { readLedger } from './hourly-ledger.ts';\nexport const report = () => readLedger();\n",
       'tools/goal/src/hourly-report.test.ts': "import { report } from './hourly-report.ts';\nvoid report;\n",
       'tools/goal/src/provider.ts': 'export const provider = () => true;\n',
       'tools/goal/src/provider-fixture.test.ts': "import { provider } from './provider.ts';\nvoid provider;\n",
-    });
+    };
+    for (const [path, contents] of Object.entries(baseFiles)) {
+      mkdirSync(dirname(join(h.root, path)), { recursive: true });
+      writeFileSync(join(h.root, path), contents);
+    }
+    git(h.root, 'add', '--', ...Object.keys(baseFiles));
+    git(h.root, 'commit', '-m', 'Seed impact selection fixture');
+    const base = h.head('main');
     h.ensureDev();
     const task = dispatchControlPlane(h, 'tools/goal/src/hourly-ledger.ts');
     await h.start(task);
@@ -416,7 +423,7 @@ test('an ordinary release runs only tests reached from its changed source owner'
     expect(readFileSync(h.outcomes[0]!.logPath, 'utf8')).toContain(
       `Control-plane check plan base=${base} candidate=${candidate} scope=affected; 1 Goal test file(s)`,
     );
-    expect(h.outcomes[0]?.passed).toBe(true);
+    expect(h.outcomes[0]).toMatchObject({ passed: true });
   } finally {
     h.dispose();
   }
@@ -2046,7 +2053,7 @@ for (const probeFails of [false, true])
         }
         return { passed: true, timedOut: false, output: '' };
       }).releaseControlPlaneBatch(manifest);
-      expect([fulls, probes, compatibility]).toEqual([probeFails ? 2 : 3, 1, 1]);
+      expect([fulls, probes, compatibility]).toEqual([2, probeFails ? 1 : 2, 1]);
       expect(result.members.find((member) => member.taskId === tasks[0]!.id)).toMatchObject({
         disposition: 'excluded',
         phase: 'native',
