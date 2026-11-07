@@ -1,13 +1,21 @@
-import { afterAll, expect, test } from 'bun:test';
+import { afterAll, expect, spyOn, test } from 'bun:test';
 import { createHash } from 'node:crypto';
-import { createPool, withConnection } from '../../src/database/pool.ts';
+import { createPool, withConnection, withQueryAccounting } from '../../src/database/pool.ts';
 import { newId, partitionOf } from '../../src/route/route.ts';
 import {
   accountDiscoverySource,
   readAccountDiscoveryBindings,
   readAccountDiscoveryWitness,
 } from '../../src/access/account-discovery-source.ts';
-import { consumeAccountDiscoveryClaim, redriveAccountDiscovery } from '../../src/access/account-discovery-work.ts';
+import {
+  ACCOUNT_DISCOVERY_RETRY_MS as RETRY,
+  ACCOUNT_DISCOVERY_START_DELAY_MS as START,
+  consumeAccountDiscoveryClaim,
+  redriveAccountDiscovery,
+  registerAccountDiscoveryWork,
+} from '../../src/access/account-discovery-work.ts';
+import type { Effect } from '../../src/events/effects.ts';
+import type { WorkContext, WorkService } from '../../src/work/registry.ts';
 
 const pool = createPool(process.env.DATABASE_URL!);
 const source = accountDiscoverySource(pool);
@@ -138,4 +146,107 @@ test('foreign claim redrive advances the Account once and permanently consumes r
     await pool.query('DELETE FROM access.handle_claim WHERE route=$1 AND normalized_handle=$2', [claimRoute, handle]);
     await pool.query('DELETE FROM access.account WHERE route=$1 AND account_id=$2', [route, id]);
   }
+});
+
+test('scheduled recovery preserves a rolled-back obligation and delivers its current revision', async () => {
+  const route = 62160,
+    home = partitionOf(route),
+    id = await seed(route);
+  const log = spyOn(console, 'error').mockImplementation(() => {});
+  let now = 0,
+    due = Infinity;
+  let next: (() => Promise<void>) | undefined;
+  let start!: () => WorkService | Promise<WorkService>;
+  let effects: Effect[] = [];
+  registerAccountDiscoveryWork(
+    {
+      pool,
+      clock: () => new Date(),
+      addEffects(value: Effect[]) {
+        effects = value;
+      },
+      addService(value: typeof start) {
+        start = value;
+      },
+    } as unknown as WorkContext,
+    {
+      now: () => now,
+      schedule(run, delay) {
+        next = run;
+        due = now + delay;
+        return () => {
+          next = undefined;
+          due = Infinity;
+        };
+      },
+    },
+  );
+  const advance = async (ms: number) => {
+    now += ms;
+    if (due > now) return;
+    const run = next!;
+    next = undefined;
+    due = Infinity;
+    await run();
+  };
+  const pending = async () =>
+    (
+      await pool.query<{ revision: string }>(
+        'SELECT revision::text FROM access.account_discovery_intent WHERE route=$1 AND account_id=$2',
+        [route, id],
+      )
+    ).rows;
+  const events = async () =>
+    (
+      await pool.query<{ data: { revision: string } }>(
+        `SELECT data FROM core.outbox WHERE partition_no=$1 AND subject=$2
+     AND type='com.rezics.access.account-discovery-changed.v1'`,
+        [home, id],
+      )
+    ).rows;
+  const service = await start();
+  try {
+    const original = await pending();
+    expect(original).toHaveLength(1);
+    await effects[0]!.run({ data: { accountId: id } } as Parameters<Effect['run']>[0]);
+    let failures = 0;
+    await withQueryAccounting(
+      {
+        connection: (dispatch) => dispatch(),
+        async query(sql, operands, dispatch) {
+          const result = await dispatch();
+          if (sql.startsWith('DELETE FROM access.account_discovery_intent') && operands[1] === id) {
+            failures++;
+            throw new Error('injected unexpected database failure after DELETE');
+          }
+          return result;
+        },
+      },
+      () => advance(START),
+    );
+    expect(failures).toBe(1);
+    expect(await pending()).toEqual(original);
+    expect(await events()).toEqual([]);
+    expect(due).toBe(now + RETRY);
+    // A new native revision replaces the old obligation during backoff. Recovery
+    // must reselect it rather than replay a retained row or skip the failed home.
+    await pool.query('UPDATE access.account SET display_name=$3 WHERE route=$1 AND account_id=$2', [
+      route,
+      id,
+      'Changed during recovery',
+    ]);
+    const current = await pending();
+    expect(BigInt(current[0]!.revision)).toBeGreaterThan(BigInt(original[0]!.revision));
+    await advance(RETRY - 1);
+    expect(await pending()).toEqual(current);
+    expect(await events()).toEqual([]);
+    await advance(1); // No second wakeup is supplied.
+    expect(await pending()).toEqual([]);
+    expect(await events()).toEqual([{ data: expect.objectContaining({ revision: current[0]!.revision }) }]);
+  } finally {
+    await service.stop();
+    log.mockRestore();
+    await pool.query('DELETE FROM access.account WHERE route=$1 AND account_id=$2', [route, id]);
+  }
+  expect(due).toBe(Infinity);
 });

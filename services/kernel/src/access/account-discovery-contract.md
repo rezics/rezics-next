@@ -59,11 +59,21 @@ Recovery scheduling uses one serial worker for sweep and coalesced source-event 
 pool connection. It starts one second after service launch and yields while foreground checkouts are waiting
 or only one pool slot remains. A full pass with no delivery or coverage progress sleeps for the named
 `ACCOUNT_DISCOVERY_IDLE_MS` (15 minutes); a source event wakes its home without restarting that idle pass.
-A productive pass continues catch-up. Classified unavailability retries the same home with exponential
-1–60 second backoff, which events cannot bypass; success resets the delay. Unexpected errors propagate.
-Stopping cancels the timer and drains the in-flight step. Persisted intents remain the recovery authority.
+A productive pass continues catch-up. Decision: every failed step retains its exact home and sweep/wakeup origin,
+and retries with exponential 1–60 second backoff, which events cannot bypass; success resets the delay.
+Classified unavailability and unexpected defects have distinct bounded diagnostics containing only home,
+origin, reason and retry delay, never raw errors, SQL, Account data or stacks. A failed step does not advance
+the sweep frontier. Each retry rereads durable obligations and obtains current native command custody; no saved
+revision or authority is reused. Stopping cancels recovery and drains an in-flight step even when that step fails.
+Persisted intents remain the recovery authority until atomically replaced by durable events.
+An empty home currently executes eight SQL statements: two intent reads, then coverage BEGIN, timeout setting,
+owner read, enrollment-head read, pending read and COMMIT. Thus an empty 4096-home pass costs **32,768** statements;
+the earlier 36,864 count does not match this implementation. Idle intervals execute none.
 `test/access/account-discovery-work.test.ts` pins startup/pool admission, empty-pass idle and timed recovery,
-event coalescing, pressure backoff/reset, unexpected failures and shutdown with a fake clock and pool.
+event coalescing, pressure backoff/reset, fault-cleared recovery and shutdown with a fake clock and pool.
+`test/access/account-discovery-source.test.ts` also pins an actual durable obligation across a failed delivery
+transaction and subsequent recovery from its current revision. These are source acceptance scenarios;
+worker workspace typing and controller-executed scheduler/native acceptance are separate evidence.
 
 Migration `20261030161528_account_discovery.sql` takes an exclusive Account/claim/preferences install cut,
 initializes all 4096 census rows and existing source revisions, queues existing source keys, then installs native

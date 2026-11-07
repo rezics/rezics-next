@@ -181,7 +181,7 @@ const timers: AccountDiscoveryTimers = {
  * It starts after SDK launch with a one-second grace and yields if the pool has
  * waiters or only one free slot. Empty steady state: zero queries during the
  * 15-minute idle interval; an empty 4096-home pass costs 32,768 SQL statements
- * (two intent reads plus six coverage statements per home), about 35 SQL/s
+ * (two intent reads plus BEGIN, timeout, owner, head, pending and COMMIT per home), about 35 SQL/s
  * averaged over pass + idle at the minimum 10 ms step, versus about 800 SQL/s
  * continuously before backoff. Events wake only their home without restarting
  * that idle scan. Durable intents make coalesced in-memory wakeups disposable.
@@ -219,7 +219,7 @@ export function registerAccountDiscoveryWork(context: WorkContext, time: Account
     const schedule = () => {
       if (stopped || running) return;
       cancel?.();
-      const next = wakeups.size ? time.now() : sweepAt;
+      const next = failed || wakeups.size ? time.now() : sweepAt;
       cancel = time.schedule(tick, Math.max(0, Math.max(availableAt, next) - time.now()));
     };
     const step = async () => {
@@ -253,10 +253,17 @@ export function registerAccountDiscoveryWork(context: WorkContext, time: Account
         }
       } catch (error) {
         if (!sweep) wakeups.add(home);
-        if (classifyUnavailability(error) === undefined) throw error;
         failed = { home, sweep };
-        console.error('Account discovery redrive failed', error);
-        // Wakeups never bypass pressure backoff; retry the same failed home.
+        // A failed step never completes its frontier. Retry from durable state,
+        // including after an unexpected database defect, with fresh command custody.
+        // Keep diagnostics finite and free of query text, Account data and stacks.
+        console.error('Account discovery redrive failed', {
+          home,
+          source: sweep ? 'sweep' : 'wake',
+          reason: classifyUnavailability(error) ?? 'unexpected',
+          retryInMs: retry,
+        });
+        // Wakeups never bypass backoff or replace the exact failed home.
         availableAt = time.now() + retry;
         retry = Math.min(retry * 2, ACCOUNT_DISCOVERY_MAX_RETRY_MS);
       }
@@ -270,8 +277,8 @@ export function registerAccountDiscoveryWork(context: WorkContext, time: Account
         await pending;
       } finally {
         running = false;
+        schedule();
       }
-      schedule();
     };
     wake = schedule;
     schedule();
