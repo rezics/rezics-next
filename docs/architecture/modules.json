@@ -254,7 +254,8 @@
         "kernel-memoized",
         "kernel-platform",
         "kernel-search",
-        "kernel-semantic"
+        "kernel-semantic",
+        "kernel-semantic-contract"
       ],
       "capabilities": ["access"],
       "postgresPaths": ["services/kernel/src/access/**"]
@@ -661,6 +662,7 @@
         "services/kernel/src/semantic/agents.ts",
         "services/kernel/src/semantic/public-subject-facts.ts",
         "services/kernel/src/semantic/adapters/native-domain.ts",
+        "services/kernel/src/semantic/adapters/agent-identity-maintenance.ts",
         "services/kernel/src/semantic/adapters/index.ts",
         "services/kernel/src/semantic/credit-search.ts",
         "services/kernel/src/semantic/deletion/index.ts",
@@ -1510,6 +1512,7 @@
       "paths": ["services/kernel/src/semantic/contract/**"],
       "publicEntries": [
         "services/kernel/src/semantic/contract/identity-values.ts",
+        "services/kernel/src/semantic/contract/identity-source-schedule.ts",
         "services/kernel/src/semantic/contract/identity-epoch-ports.ts",
         "services/kernel/src/semantic/contract/item-values.ts",
         "services/kernel/src/semantic/contract/domain-ports.ts",
