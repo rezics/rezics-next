@@ -85,11 +85,13 @@ The native command
 `bun scripts/worker-check.ts -- bun run --cwd services/kernel check test/semantic/batch-write-diagnostics.test.ts test/semantic/bulk-no-effect.test.ts test/search/review-population-readiness.test.ts test/search/second-scope-generations.test.ts test/search/review-discovery-receiving.test.ts test/search/default-discovery.test.ts`
 ran on host b at walk revision `b97e6a3082f2dedfc188a913848b797513bac51c`, before the Members integration.
 It returned exit 1 after 1029.508 seconds. Batch-write diagnostics passed all 3 tests; review-population readiness
-passed all 3 tests. Collection coverage still failed with
+passed all 3 tests. The Collection-producing reconciliation fixture failed coverage with
 `DiscoveryProducerCoverageError: Discovery generation is not ready: native producer coverage is incomplete (missing kinds: collection)`
 (10 pass / 1 fail). Review receiving still failed with
 `RangeError: concurrency must be a positive integer below the pool size` (0 pass / 1 fail).
-Default-worker startup now exposes
+The fixture declared only Account despite publishing Collection metadata. Its registry and generation kinds now
+declare both actual producers; raw frontier, currentness and physical target assertions are unchanged. This fixture
+failure does not establish a production missing-kind defect. Default-worker startup exposes
 `TypeError: createIdentitySourceSupportReader is not a function. (In 'createIdentitySourceSupportReader(config)', 'createIdentitySourceSupportReader' is undefined)`
 at `search/identity-receiving-native.ts:136` during Semantic registration. Both complete discovery cases timed out;
 the runner reproduced the failure alone. Source/coverage and readiness retain their existing causes and unchanged
@@ -119,6 +121,17 @@ The configured SQL connection refusal above remained. The fresh-stack test faile
 volume and source copy. These are receiving failures, not journey measurements or permission to change unrelated
 authorization and dependency owners. The exact root selection is the landing command supplied with this walk;
 all original assertions remain in place.
+
+The eight-file native landing selection at `73b3712c88270d8e81a6fa17f53665ba61f47500` returned exit 1 in
+296.254 seconds on host a. Account discovery passed 7/7, copy construction 3/3, Members composition 2/2,
+batch diagnostics 3/3 and the corrected bulk no-effect fixture 3/3. Collection source-output (1/10) and canonical
+public-output capture (1/16) stopped at Collection creation, expected 201 but received 503. The Subject fixture now
+composes the full Library domain in `onAccessReady`, matching the installed server. Boot (1/2) reached its independent
+native account synchronization but lacked ReceiptKeys on that newly constructed Pool; the fixture now supplies its
+dedicated keys. No original output, disclosure, receipt or startup assertions are weakened. Owned evidence:
+`.temp/goal/checks/worker-check-83e6cc48-d843-4b1d-b2ec-17db91b9a9f2-2026-11-07T10-33-45.521Z-e7b3ddbd.log`.
+Installed Members authority, Source process-root installation and Pool-aware relay lifecycle remain repairs of their
+existing owners. This walk receives their delivered integrations rather than creating another producer.
 
 ### Last observed dev census
 

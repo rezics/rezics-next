@@ -4,6 +4,7 @@ import { mkdir, mkdtemp, rm } from 'node:fs/promises';
 import { resolve } from 'node:path';
 import { withThrowawayDatabase } from '../../scripts/derived.ts';
 import { ordinaryCollectionPagePlan } from '../../src/library/ordinary-read-bounds.ts';
+import { configureTestReceiptKeys } from '../support/receipt-keys.ts';
 
 setDefaultTimeout(600_000);
 
@@ -173,6 +174,7 @@ async function boot(env: NodeJS.ProcessEnv) {
   const { synchronizeAccountAgent } = await import('../../src/access/account-agent-effect.ts');
   const { Pool } = await import('pg');
   const pool = new Pool({ connectionString: databaseUrl });
+  configureTestReceiptKeys(pool);
   try {
     await synchronizeAccountAgent(pool, personaId);
     const { accountAgentId } = await import('../../src/semantic/agents.ts');
