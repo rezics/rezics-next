@@ -1,6 +1,14 @@
 import type { Database } from 'bun:sqlite';
+import { spawnSync } from 'node:child_process';
 import { migrate } from './db.ts';
-import { completedUtcHour, parseUtcHour, type UtcHour } from './efficiency-report-time.ts';
+import { completedUtcHour, parseUtcHour, previousUtcHours, type UtcHour } from './efficiency-report-time.ts';
+import {
+  captureFrozenHourlyEfficiencyReport,
+  readFrozenHourlyEfficiencyReport,
+  type CaptureResult,
+  type HourlyObservationData,
+  type ObservationAttribution,
+} from './efficiency-report-delivery.ts';
 import { ensureFlow } from './flow.ts';
 import { lifecycleMetrics } from './lifecycle-metrics.ts';
 import { formatLifecycleMetrics } from './report.ts';
@@ -11,10 +19,33 @@ import type { AttemptRecord } from './types.ts';
 import { defaultPolicy, type ControlPolicy } from './policy.ts';
 type ReportPolicy = ControlPolicy['hourlyReport'];
 
-type ReportOptions = {
+export const PRODUCT_LINE_FILTER_VERSION = 'rezics-product-code-v1';
+
+export type ProductLineMeasurement = {
+  productLines: number | null;
+  attribution: ObservationAttribution;
+  sourceRevision: string | null;
+  backfillProductLines: number | null;
+  backfillAttribution: ObservationAttribution;
+  backfillFromRevision: string | null;
+  filterVersion: string;
+};
+
+export type HourlyPrivateDutyContext = {
+  label: string;
+  runningTasks: number;
+  stoppedTasks: number;
+  readyBriefs: string;
+  allowance: string;
+  alarms: string[];
+};
+
+export type ReportOptions = {
   policy?: ControlPolicy | undefined;
   bucket?: string;
   now?: Date | number;
+  productLineMeasurement?: ProductLineMeasurement;
+  privateDuty?: HourlyPrivateDutyContext;
 };
 
 type LandingRow = {
@@ -63,6 +94,184 @@ function clean(value: unknown, characters: number): string {
       .trim()
       .slice(0, characters) || 'unknown'
   );
+}
+
+function unknownMeasurement(
+  sourceRevision: string | null = null,
+  backfillFromRevision: string | null = null,
+): ProductLineMeasurement {
+  return {
+    productLines: null,
+    attribution: 'unknown',
+    sourceRevision,
+    backfillProductLines: null,
+    backfillAttribution: 'unknown',
+    backfillFromRevision,
+    filterVersion: PRODUCT_LINE_FILTER_VERSION,
+  };
+}
+
+function productLineCount(
+  repository: string,
+  revisions: string,
+  since: string | undefined,
+  until: string | undefined,
+  inWindow: (timestampMs: number) => boolean,
+): number | null {
+  const history = spawnSync(
+    'git',
+    [
+      'log',
+      revisions,
+      ...(since ? [`--since=${since}`] : []),
+      ...(until ? [`--until=${until}`] : []),
+      '--format=tformat:__COMMIT__%ct',
+      '--numstat',
+    ],
+    { cwd: repository, encoding: 'utf8', maxBuffer: 64 * 1024 * 1024 },
+  );
+  if (history.error) throw history.error;
+  if (history.status !== 0) return null;
+
+  let includeCommit = false;
+  let lines = 0;
+  for (const row of history.stdout.split(/\r?\n/)) {
+    if (row.startsWith('__COMMIT__')) {
+      const timestamp = Number(row.slice('__COMMIT__'.length));
+      if (!Number.isSafeInteger(timestamp)) return null;
+      includeCommit = inWindow(timestamp * 1000);
+      continue;
+    }
+    if (!includeCommit || !row) continue;
+    const [added, , path] = row.split('\t');
+    if (!path || !/^(apps|services|packages)\//.test(path)) continue;
+    if (/(test|tests|stories|fixtures|recordings|generated|\.d\.ts$|\.temp\/|\.json$|\.snap)/.test(path)) continue;
+    if (/^\d+$/.test(added ?? '')) lines += Number(added);
+  }
+  return lines;
+}
+
+/** Measure commit-date additions at one pinned dev revision using the private duty's existing path filter. */
+export function measureProductLineObservation(
+  repository: string,
+  bucketValue: string,
+  now: Date | number = Date.now(),
+  previousSourceRevision?: string | null,
+): ProductLineMeasurement {
+  const bucket = parseUtcHour(bucketValue);
+  if (completedUtcHour(now).start !== bucket.start) return unknownMeasurement();
+
+  const head = spawnSync('git', ['rev-parse', '--verify', 'dev^{commit}'], {
+    cwd: repository,
+    encoding: 'utf8',
+  });
+  if (head.error) throw head.error;
+  const revision = head.status === 0 ? head.stdout.trim() : '';
+  if (!/^[a-f\d]{40}(?:[a-f\d]{24})?$/i.test(revision)) return unknownMeasurement();
+  const startMs = Date.parse(bucket.start);
+  const endMs = Date.parse(bucket.end);
+  const lines = productLineCount(repository, revision, bucket.start, undefined, (time) => time >= startMs && time < endMs);
+  if (lines === null) return unknownMeasurement(revision);
+  const validPreviousRevision =
+    previousSourceRevision && /^[a-f\d]{40}(?:[a-f\d]{24})?$/i.test(previousSourceRevision)
+      ? previousSourceRevision
+      : null;
+  const backfillLines = validPreviousRevision
+    ? productLineCount(
+        repository,
+        `${validPreviousRevision}..${revision}`,
+        undefined,
+        undefined,
+        (time) => time < startMs,
+      )
+    : null;
+  return {
+    productLines: lines,
+    attribution: 'measured',
+    sourceRevision: revision,
+    backfillProductLines: backfillLines,
+    backfillAttribution: backfillLines === null ? 'unknown' : 'measured',
+    backfillFromRevision: backfillLines === null ? null : validPreviousRevision,
+    filterVersion: PRODUCT_LINE_FILTER_VERSION,
+  };
+}
+
+type RollingLines = { productLines: number | null; attribution: ObservationAttribution };
+
+function storedRollingLines(db: Database, bucket: UtcHour, current: ProductLineMeasurement): RollingLines {
+  const previous = previousUtcHours(bucket.start, 1)[0]!;
+  const row = db
+    .query('SELECT product_lines, attribution FROM efficiency_report_deliveries WHERE hour_bucket=?')
+    .get(previous.start) as { product_lines: number | null; attribution: string } | null;
+  if (current.attribution !== 'measured' || current.productLines === null || !row || row.attribution !== 'measured')
+    return { productLines: null, attribution: 'unknown' };
+  return { productLines: current.productLines + (row.product_lines ?? 0), attribution: 'measured' };
+}
+
+function observationData(
+  db: Database,
+  bucket: UtcHour,
+  measurement: ProductLineMeasurement,
+  privateDuty: HourlyPrivateDutyContext | undefined,
+  capturedAt: string,
+): HourlyObservationData {
+  const rolling = storedRollingLines(db, bucket, measurement);
+  const alerts = [...(privateDuty?.alarms ?? [])];
+  if (rolling.attribution === 'measured' && (rolling.productLines ?? 0) < 20_000)
+    alerts.unshift('Two-hour product code is below the 20,000-line stable target.');
+  return {
+    productLines: measurement.productLines,
+    attribution: measurement.attribution,
+    sourceRevision: measurement.sourceRevision,
+    backfillProductLines: measurement.backfillProductLines,
+    backfillAttribution: measurement.backfillAttribution,
+    backfillFromRevision: measurement.backfillFromRevision,
+    windowStart: bucket.start,
+    windowEnd: bucket.end,
+    filterVersion: measurement.filterVersion,
+    rollingProductLines: rolling.productLines,
+    rollingAttribution: rolling.attribution,
+    alerts,
+    capturedAt,
+  };
+}
+
+function productLineLines(bucket: UtcHour, data: HourlyObservationData): string[] {
+  const attribution = data.attribution === 'measured' ? 'measured' : 'unknown';
+  const source = data.sourceRevision ? `dev@${data.sourceRevision}` : 'source revision unavailable';
+  const count = data.productLines === null ? 'unknown' : String(data.productLines);
+  const total =
+    data.rollingAttribution === 'measured' && data.rollingProductLines !== null
+      ? `${data.rollingProductLines} across two frozen observations`
+      : 'unknown (one or both bucket observations unavailable)';
+  const backfill =
+    data.backfillAttribution === 'measured' && data.backfillProductLines !== null
+      ? `${data.backfillProductLines} additions newly visible since ${data.backfillFromRevision}..${data.sourceRevision}`
+      : 'unknown (prior source revision unavailable)';
+  return [
+    `Product lines added in UTC bucket: ${count} (attribution ${attribution}; ${source}; window [${bucket.start}, ${bucket.end}); filter ${data.filterVersion}).`,
+    `Product lines across this and the previous completed UTC hour: ${total}.`,
+    `Late integration backfill in this bucket: ${backfill}; excluded from measured throughput.`,
+    'Late integrations remain visible in their integration bucket and do not revise a frozen bucket or its measured throughput.',
+  ];
+}
+
+function privateDutyLines(context: HourlyPrivateDutyContext, data: HourlyObservationData): string[] {
+  const productLines = data.productLines === null ? 'unknown' : String(data.productLines);
+  const rolling =
+    data.rollingAttribution === 'measured' && data.rollingProductLines !== null
+      ? String(data.rollingProductLines)
+      : 'unknown';
+  return [
+    `Private hourly duty — ${context.label} UTC.`,
+    `New product code: ${productLines} lines (stable target 20,000; stretch 40,000).`,
+    `Product code across two completed hours: ${rolling}.`,
+    `Late integration backfill: ${data.backfillAttribution === 'measured' ? data.backfillProductLines : 'unknown'} lines (excluded from throughput).`,
+    `Running tasks: ${context.runningTasks}; stopped or held: ${context.stoppedTasks}.`,
+    `Ready briefs:${context.readyBriefs}.`,
+    `Allowance: ${context.allowance}.`,
+    `Alerts: ${data.alerts.length ? data.alerts.join('; ') : 'none'}.`,
+  ];
 }
 
 function targetFor(row: LandingRow): LandingTarget {
@@ -495,9 +704,13 @@ function nextActions(
   return actions.length ? actions.map((action, index) => `${index + 1}. ${action}`) : ['None from recorded evidence.'];
 }
 
-export async function renderHourlyEfficiencyReport(db: Database, options: ReportOptions): Promise<string> {
+function buildHourlyEfficiencyReport(
+  db: Database,
+  options: ReportOptions,
+  bucket: UtcHour,
+  observation: HourlyObservationData,
+): string {
   const policy = (options.policy ?? defaultPolicy).hourlyReport;
-  const bucket = options.bucket ? parseUtcHour(options.bucket) : completedUtcHour(options.now);
   const flowAvailable = hasTable(db, 'flow_events');
   if (flowAvailable) ensureFlow(db);
   const asOf = options.now ?? Date.now();
@@ -535,6 +748,8 @@ export async function renderHourlyEfficiencyReport(db: Database, options: Report
   const landingQueueAvailable = flowAvailable && openWorkAvailable && hasTable(db, 'landing_queue');
   const lines = [
     `Hourly operations report — ${bucket.start} to ${bucket.end} UTC`,
+    ...productLineLines(bucket, observation),
+    ...(options.privateDuty ? privateDutyLines(options.privateDuty, observation) : []),
     ...landed,
     latestUsefulLanding(db, bucket.end, flowAvailable, policy),
     backlogReturnsLine(db, bucket, flowAvailable),
@@ -571,7 +786,56 @@ export async function renderHourlyEfficiencyReport(db: Database, options: Report
   );
 }
 
+/** Capture one immutable report and its measured product-line provenance for a completed UTC bucket. */
+export function captureHourlyEfficiencyObservation(db: Database, options: ReportOptions): CaptureResult {
+  const bucket = options.bucket ? parseUtcHour(options.bucket) : completedUtcHour(options.now);
+  const existing = readFrozenHourlyEfficiencyReport(db, bucket.start);
+  const candidate = options.productLineMeasurement
+    ? {
+        ...options.productLineMeasurement,
+        windowStart: bucket.start,
+        windowEnd: bucket.end,
+      }
+    : undefined;
+  if (existing && !candidate)
+    return {
+      disposition: 'replayed',
+      attribution: existing.observation.attribution,
+      snapshot: existing,
+    };
+
+  const asOf = options.now ?? Date.now();
+  const capturedAt = (asOf instanceof Date ? asOf : new Date(asOf)).toISOString();
+  return captureFrozenHourlyEfficiencyReport(
+    db,
+    bucket.start,
+    candidate,
+    () => {
+      const measurement = options.productLineMeasurement ?? unknownMeasurement();
+      const observation = observationData(db, bucket, measurement, options.privateDuty, capturedAt);
+      if (
+        observation.attribution === 'measured' &&
+        (!Number.isSafeInteger(observation.productLines) || observation.productLines! < 0 || !observation.sourceRevision)
+      )
+        throw new Error('measured hourly observation requires product lines and a source revision');
+      return observation;
+    },
+    (observation) => buildHourlyEfficiencyReport(db, options, bucket, observation),
+  );
+}
+
+export async function renderHourlyEfficiencyReport(db: Database, options: ReportOptions): Promise<string> {
+  return captureHourlyEfficiencyObservation(db, options).snapshot.report;
+}
+
 export { efficiencyReportMigrations, sendHourlyEfficiencyReport } from './efficiency-report-delivery.ts';
+export { readFrozenHourlyEfficiencyReport };
 export type { DeliveryDisposition, DeliveryResult } from './efficiency-report-delivery.ts';
-export { completedUtcHour, parseUtcHour };
+export { completedUtcHour, parseUtcHour, previousUtcHours };
 export type { UtcHour } from './efficiency-report-time.ts';
+export type {
+  CaptureDisposition,
+  CaptureResult,
+  FrozenHourlyEfficiencyReport,
+  ObservationAttribution,
+} from './efficiency-report-delivery.ts';
