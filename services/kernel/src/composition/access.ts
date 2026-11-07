@@ -4,6 +4,7 @@ import { bindAccessApplication, createNativeAccessPorts, tryAccessApplication } 
 import type { AccessApplication } from '../access/contract/index.ts';
 import { IDENTITY_HISTORY_ORIGINAL_LIBRARY_DECLARATION } from '../library/identity-original-work.ts';
 import { resolveCollectionKindRawInput } from '../library/collection-kind-input.ts';
+import { installIdentityAdapterRuntime } from '../semantic/identity-adapter-runtime.ts';
 
 import { createAgentIdentityMaintenance } from '../semantic/adapters/agent-identity-maintenance.ts';
 
@@ -12,6 +13,7 @@ let composed: AccessApplication | undefined;
 /** Ordinary createKernel/server/worker composition binds the native Access adapters. */
 export function composeAccessApplication(): AccessApplication {
   if (composed && tryAccessApplication() === composed) return composed;
+  installIdentityAdapterRuntime();
   composed = bindAccessApplication(
     createAccessApplication(
       createNativeAccessPorts(acknowledgeErasure, {

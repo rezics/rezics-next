@@ -674,6 +674,8 @@
       "paths": ["services/kernel/src/semantic/**", "services/kernel/db/semantic/**"],
       "publicEntries": [
         "services/kernel/src/semantic/index.ts",
+        "services/kernel/src/semantic/identity-adapter-port.ts",
+        "services/kernel/src/semantic/identity-adapter-runtime.ts",
         "services/kernel/src/semantic/identity-adapters/index.ts",
         "services/kernel/src/semantic/identity-adapters/read.ts",
         "services/kernel/src/semantic/identity-adapters/identity-epoch-binding.ts",
@@ -1702,6 +1704,7 @@
       "publicEntries": [
         "services/kernel/src/semantic/contract/identity-values.ts",
         "services/kernel/src/semantic/contract/identity-source-schedule.ts",
+        "services/kernel/src/semantic/contract/identity-errors.ts",
         "services/kernel/src/semantic/contract/identity-epoch-ports.ts",
         "services/kernel/src/semantic/contract/item-values.ts",
         "services/kernel/src/semantic/contract/domain-ports.ts",

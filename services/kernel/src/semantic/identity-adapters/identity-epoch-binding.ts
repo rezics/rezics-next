@@ -1,50 +1,37 @@
 import { memoizedValue } from '../../memoized.ts';
 import { statementBytes } from '../../database/statement-bytes.ts';
 import { bindSemanticProducerRoles } from '../erasure-producer.ts';
-import { classifyUnavailability } from '../../access/unavailable.ts';
-import { readAccountIdentityTechnicalSource } from '../../access/agent-verification-identity-retention.ts';
 import { withRequestDeadline } from '../../request/deadline.ts';
 import {
   identitySourceConsumerNativeWork,
   isLiveIdentitySourceConsumerMaintenance,
   reserveIdentitySourceConsumerNativeWork,
 } from '../identity-source-consumer-maintenance.ts';
-import {
-  readAccountIdentitySource,
-  loadAccountIdentitySource,
-  assertAccountIdentitySource,
-  type AccountIdentitySource,
-  type AccountIdentityReversalSettlement,
+import type {
+  AccountIdentityReversalSettlement,
+  AccountIdentitySource,
 } from '../../access/agent-verification-identity.ts';
 import { IDENTITY_EPOCH_PROGRESS } from '../events.ts';
 import { createHash } from 'node:crypto';
 import canonicalize from 'canonicalize';
 import type { Pool } from 'pg';
-import {
-  currentCommand,
-  currentCommandResources,
-  IdempotencyConflictError,
-  noEffect,
-  registerCommandCallback,
-  runCommand,
-  type CommandTransaction,
-} from '../../command/command.ts';
+import type { CommandTransaction } from '../../command/command.ts';
 import { partitionOf, routeOf, newId } from '../../route/route.ts';
-import { withReadTransaction } from '../read.ts';
-import {
-  authorizeIdentityAdmission,
-  identityReceiptKey,
-  identityReceiptValue,
-  recordIdentityEpochNativeCommit,
-  serializeIdentityValue as json,
-  IdentityEpochStoreError,
-} from './index.ts';
+import { serializeIdentityValue as json } from '../identity-core/index.ts';
+import { IdentityEpochStoreError } from '../contract/identity-errors.ts';
+import { GLOBAL_CONTEXT } from '../definitions.ts';
+import { nativeIdentityCapabilities } from '../identity-adapter-bind.ts';
 import {
   commandAuthorityAt,
+  identityReceiptKey,
+  identityReceiptValue,
   type IdentityAdmissionAuthority,
   type IdentityAdmissionInput,
+  type IdentityIntent,
   type IdentityJobRef,
+  type IdentityReceipt,
 } from './identity-epoch-contract.ts';
+import storeInsertNativeCommit from '../identity-epoch-store-insert-native-commit.sql';
 import selectClaim from '../identity-epoch-binding-select.sql';
 import insertClaim from '../identity-epoch-binding-insert.sql';
 import acceptClaim from '../identity-epoch-binding-accept.sql';
@@ -122,6 +109,60 @@ const accountSources = new WeakMap<IdentityReceiptBinding, AccountIdentitySource
 const transactionSources = new WeakMap<CommandTransaction, AccountIdentitySource>();
 const rowSources = new WeakMap<object, AccountIdentitySource>();
 const verified = new WeakMap<IdentityReceiptBinding, IdentityBindingData>();
+const nativeCommitPurposes = new WeakMap<CommandTransaction, string>();
+
+function cmd() {
+  return nativeIdentityCapabilities().command;
+}
+function accounts() {
+  return nativeIdentityCapabilities().accountIdentity;
+}
+
+export async function authorizeIdentityAdmission(
+  tx: CommandTransaction,
+  receipt: IdentityReceipt,
+  binding?: IdentityReceiptBinding,
+  intent?: IdentityIntent,
+) {
+  const command = cmd().currentCommand(tx);
+  if (receipt.kind !== 'subject.merge') {
+    if (command.basis !== null) throw new TypeError('Accounts identity admission requires native platform intent');
+    if (binding) {
+      assertIdentityBindingSource(binding, receipt);
+      return;
+    }
+    return accounts().readSource(tx, receipt, intent);
+  }
+  const authorization = command.authorization;
+  if (
+    !command.basis ||
+    command.basis.actorAccountId !== receipt.command.actorAccountId ||
+    !authorization ||
+    authorization.mode !== 'execute' ||
+    authorization.action !== 'subject:merge' ||
+    authorization.resource.route !== 0 ||
+    authorization.resource.id !== GLOBAL_CONTEXT
+  )
+    throw new TypeError('Identity admission requires current native Global subject:merge authorization');
+}
+
+export function recordIdentityEpochNativeCommit(tx: CommandTransaction, purpose: string): void {
+  const command = cmd().currentCommand(tx);
+  const prior = nativeCommitPurposes.get(tx);
+  if (prior) {
+    if (prior !== purpose) throw new TypeError('Conflicting identity native commit purposes');
+    return;
+  }
+  nativeCommitPurposes.set(tx, purpose);
+  cmd().registerCommandCallback(tx, async (transactionId) => {
+    const result = await tx.query(storeInsertNativeCommit.sql, [command.partition, transactionId, purpose]);
+    if (result.rowCount !== 1)
+      throw new IdentityEpochStoreError(
+        'identity_epoch_unavailable',
+        'Identity source, native group generation or bootstrap closure is not current',
+      );
+  });
+}
 export function identityBindingData(proof: IdentityReceiptBinding): IdentityBindingData {
   const value = verified.get(proof);
   if (!value) throw new TypeError('Identity binding requires released committed native custody');
@@ -147,7 +188,7 @@ export function assertIdentityBindingSource(
   if (receipt.kind === 'subject.merge') return;
   const source = accountSources.get(binding);
   if (!source) throw new TypeError('Missing released Accounts source custody');
-  assertAccountIdentitySource(source, receipt);
+  accounts().assertSource(source, receipt);
 }
 
 export type AccountAgentReceipt = Extract<
@@ -163,8 +204,8 @@ export async function admittedAccountMappingSource(
   receipt: AccountAgentReceipt,
   intent: IdentityAdmissionInput['intent'],
 ): Promise<void> {
-  const source = await loadAccountIdentitySource(pool, receipt);
-  assertAccountIdentitySource(source, receipt, intent);
+  const source = await accounts().loadSource(pool, receipt);
+  accounts().assertSource(source, receipt, intent);
 }
 function proof(row: BindingRow): IdentityReceiptBinding {
   if (!row.binding_transaction_id) throw new TypeError('Receipt migration needs native released confirmation');
@@ -199,7 +240,8 @@ async function read(tx: CommandTransaction, input: IdentityAdmissionInput) {
   const source = await authorizeIdentityAdmission(tx, input.receipt, undefined, input.intent);
   if (source) transactionSources.set(tx, source);
   const home = identityReceiptPartition(input.receipt);
-  if (currentCommand(tx).partition !== home) throw new TypeError('Receipt lookup requires its native binding home');
+  if (cmd().currentCommand(tx).partition !== home)
+    throw new TypeError('Receipt lookup requires its native binding home');
   const row = (await tx.query<BindingRow>(selectClaim.sql, [home, identityReceiptKey(input.receipt)])).rows[0];
   if (input.receipt.kind !== 'subject.merge') {
     await assertOriginalConsumerOpen(tx, input.receipt);
@@ -210,7 +252,7 @@ async function read(tx: CommandTransaction, input: IdentityAdmissionInput) {
         receipt: input.intent.verificationReceipt,
       });
   }
-  if (row && row.intent_digest !== identityBindingDigest(input)) throw new IdempotencyConflictError(home);
+  if (row && row.intent_digest !== identityBindingDigest(input)) throw new (cmd().IdempotencyConflictError)(home);
   if (row && source) rowSources.set(row, source);
   return row;
 }
@@ -230,7 +272,7 @@ export async function readAcceptedAccountIdentityBinding(
 ): Promise<IdentityReceiptBinding | null> {
   if (input.receipt.kind !== 'account-agent.verify' && input.receipt.kind !== 'account-agent.unverify') return null;
   const partition = identityReceiptPartition(input.receipt);
-  if (currentCommand(tx).partition !== partition) return null;
+  if (cmd().currentCommand(tx).partition !== partition) return null;
   const row = (
     await tx.query<BindingRow>(acceptedAccountClaim.sql, [
       partition,
@@ -243,7 +285,7 @@ export async function readAcceptedAccountIdentityBinding(
   return row ? proof(row) : null;
 }
 export async function identityBindingJob(pool: Pool, data: IdentityBindingData) {
-  return withReadTransaction(
+  return nativeIdentityCapabilities().read.withReadTransaction(
     pool,
     async (tx) =>
       (await tx.query(committedJob.sql, [data.home, data.job.jobId, data.job.epoch.toString(), data.scope])).rows[0] ??
@@ -257,15 +299,17 @@ export async function lookupIdentityBinding(
   input: IdentityAdmissionInput,
 ) {
   let row = (
-    await runCommand(pool, await commandAuthorityAt(authority, identityReceiptPartition(input.receipt)), async (tx) =>
-      noEffect(await read(tx, input)),
+    await cmd().runCommand(
+      pool,
+      await commandAuthorityAt(authority, identityReceiptPartition(input.receipt)),
+      async (tx) => cmd().noEffect(await read(tx, input)),
     )
   ).value;
   if (!row) return null;
   if (!row.binding_transaction_id) {
     // Forward-migrated accepted receipts retain their original job/native transaction. Verify that
     // source at its actual home before the independent actor-home confirmation command.
-    const saved = await withReadTransaction(
+    const saved = await nativeIdentityCapabilities().read.withReadTransaction(
       pool,
       async (tx) =>
         (await tx.query(committedJob.sql, [row!.job_home, row!.job_id, row!.job_epoch, row!.scope_digest])).rows[0],
@@ -275,12 +319,12 @@ export async function lookupIdentityBinding(
         'identity_epoch_unavailable',
         'Migrated receipt has no current native job proof',
       );
-    await runCommand(pool, await commandAuthorityAt(authority, row.partition_no), async (tx) => {
+    await cmd().runCommand(pool, await commandAuthorityAt(authority, row.partition_no), async (tx) => {
       const current = await read(tx, input);
       if (!current) throw new TypeError('Missing migrated receipt');
-      if (current.binding_transaction_id) return noEffect(null);
+      if (current.binding_transaction_id) return cmd().noEffect(null);
       recordIdentityEpochNativeCommit(tx, 'admission');
-      registerCommandCallback(tx, async (id) => {
+      cmd().registerCommandCallback(tx, async (id) => {
         await tx.query(
           `INSERT INTO semantic.identity_epoch_receipt_claim_commit VALUES($1,$2,$3,$4) ON CONFLICT DO NOTHING`,
           [current.partition_no, current.receipt_key, current.generation, id],
@@ -291,14 +335,14 @@ export async function lookupIdentityBinding(
         events: [
           {
             type: IDENTITY_EPOCH_PROGRESS,
-            data: { partition: currentCommand(tx).partition, generation: current.generation },
+            data: { partition: cmd().currentCommand(tx).partition, generation: current.generation },
           },
         ],
       };
     });
     row = (
-      await runCommand(pool, await commandAuthorityAt(authority, row.partition_no), async (tx) =>
-        noEffect(await read(tx, input)),
+      await cmd().runCommand(pool, await commandAuthorityAt(authority, row.partition_no), async (tx) =>
+        cmd().noEffect(await read(tx, input)),
       )
     ).value;
   }
@@ -312,14 +356,14 @@ export async function claimIdentityBinding(
   prepared: { home: number; epoch: bigint; scope: string; sources: readonly IdentityAdmissionSource[] },
 ) {
   const partition = identityReceiptPartition(input.receipt);
-  await runCommand(pool, await commandAuthorityAt(authority, partition), async (tx) => {
+  await cmd().runCommand(pool, await commandAuthorityAt(authority, partition), async (tx) => {
     const existing = await read(tx, input);
-    if (existing && existing.state !== 'not-applied') return noEffect(null);
+    if (existing && existing.state !== 'not-applied') return cmd().noEffect(null);
     const source = transactionSources.get(tx);
     if (source) bindSemanticProducerRoles(tx, source.roles);
     recordIdentityEpochNativeCommit(tx, 'admission');
     const id = newId(prepared.home * 16);
-    registerCommandCallback(tx, async (transactionId) => {
+    cmd().registerCommandCallback(tx, async (transactionId) => {
       await tx.query(insertClaim.sql, [
         partition,
         identityReceiptKey(input.receipt),
@@ -361,7 +405,7 @@ export async function claimIdentityBinding(
         {
           type: IDENTITY_EPOCH_PROGRESS,
           data: {
-            partition: currentCommand(tx).partition,
+            partition: cmd().currentCommand(tx).partition,
             generation: (BigInt(existing?.generation ?? '0') + 1n).toString(),
           },
         },
@@ -385,11 +429,11 @@ export async function acceptIdentityBinding(
       'identity_epoch_unavailable',
       'Binding acceptance requires the committed first reservation',
     );
-  await runCommand(pool, await commandAuthorityAt(authority, data.partition), async (tx) => {
+  await cmd().runCommand(pool, await commandAuthorityAt(authority, data.partition), async (tx) => {
     const current = await readIdentityBinding(tx, input);
     if (!current || identityBindingData(current).generation !== data.generation)
       throw new TypeError('Obsolete binding generation');
-    if (identityBindingData(current).state === 'accepted') return noEffect(null);
+    if (identityBindingData(current).state === 'accepted') return cmd().noEffect(null);
     const source = transactionSources.get(tx);
     if (source) bindSemanticProducerRoles(tx, source.roles);
     const changed = await tx.query(acceptClaim.sql, [
@@ -405,7 +449,7 @@ export async function acceptIdentityBinding(
       events: [
         {
           type: IDENTITY_EPOCH_PROGRESS,
-          data: { partition: currentCommand(tx).partition, generation: data.generation },
+          data: { partition: cmd().currentCommand(tx).partition, generation: data.generation },
         },
       ],
     };
@@ -418,7 +462,7 @@ export async function readAccountIdentityUndo(
   receipt: Extract<IdentityAdmissionInput['receipt'], { kind: 'account-agent.verify' }>,
 ) {
   return (
-    await runCommand(pool, { partition: identityReceiptPartition(receipt) }, async (tx) => {
+    await cmd().runCommand(pool, { partition: identityReceiptPartition(receipt) }, async (tx) => {
       const guard = (
         await tx.query<{ consumer_terminal_custody: string | null }>(consumerGuard.sql, [
           identityReceiptPartition(receipt),
@@ -427,8 +471,8 @@ export async function readAccountIdentityUndo(
       ).rows[0];
       const source =
         guard?.consumer_terminal_custody != null
-          ? await readAccountIdentityTechnicalSource(tx, receipt)
-          : await readAccountIdentitySource(tx, receipt, undefined, true);
+          ? await accounts().readTechnicalSource(tx, receipt)
+          : await accounts().readSource(tx, receipt, undefined, true);
       if (!source)
         throw new IdentityEpochStoreError(
           'identity_epoch_unavailable',
@@ -442,7 +486,7 @@ export async function readAccountIdentityUndo(
           'identity_epoch_unavailable',
           'Accounts source: prior verification has no accepted native undo custody',
         );
-      return noEffect({ source, job: { jobId: row.job_id, epoch: BigInt(row.job_epoch) } });
+      return cmd().noEffect({ source, job: { jobId: row.job_id, epoch: BigInt(row.job_epoch) } });
     })
   ).value;
 }
@@ -524,7 +568,7 @@ export async function readIdentitySourceConsumerWork(
   return withRequestDeadline(context.deadline, async () => {
     try {
       if (!reserve(binding.work.nativeRows, binding.work.statements, binding.work.bytes, binding.work)) return null;
-      const row = await withReadTransaction(
+      const row = await nativeIdentityCapabilities().read.withReadTransaction(
         pool,
         async (tx) =>
           (
@@ -554,7 +598,7 @@ export async function readIdentitySourceConsumerWork(
       );
       if (!row) return null;
       // Release Source before checking its exact accepted job/control/native owner.
-      const job = await withReadTransaction(
+      const job = await nativeIdentityCapabilities().read.withReadTransaction(
         pool,
         async (tx) =>
           (
@@ -586,7 +630,7 @@ export async function readIdentitySourceConsumerWork(
         }),
       });
     } catch (error) {
-      if (classifyUnavailability(error)) return null;
+      if (accounts().classifyUnavailability(error)) return null;
       throw error;
     }
   });
@@ -637,9 +681,9 @@ async function currentConsumerClaim(
 ): Promise<ConsumerClaim | null> {
   if (
     !validConsumerReference(reference) ||
-    currentCommand(tx).partition !== reference.source.partition ||
-    currentCommand(tx).basis !== null ||
-    Date.now() >= currentCommandResources(tx).deadline ||
+    cmd().currentCommand(tx).partition !== reference.source.partition ||
+    cmd().currentCommand(tx).basis !== null ||
+    Date.now() >= cmd().currentCommandResources(tx).deadline ||
     !expected ||
     ![expected.replayGeneration, expected.undoGeneration, expected.restoreGeneration].every(
       (value) =>
@@ -674,7 +718,7 @@ async function currentConsumerClaim(
     row.restore_generation !== expected.restoreGeneration
   )
     return null;
-  const source = await readAccountIdentitySource(tx, reference.receipt, undefined, true);
+  const source = await accounts().readSource(tx, reference.receipt, undefined, true);
   if (
     source.partition !== reference.source.partition ||
     source.epoch !== reference.source.epoch ||
@@ -714,8 +758,7 @@ export async function verifyIdentitySourceConsumerCut(
 ): Promise<boolean> {
   if (disposition === 'discharged') {
     if (reference.erasedRole !== 'subject' || !reversal) return false;
-    const account = await import('../../access/agent-verification-identity.ts');
-    if (!(await account.verifyAccountIdentityReversalSettlement(tx, reference, reversal))) return false;
+    if (!(await accounts().verifyReversalSettlement(tx, reference, reversal))) return false;
   } else if (disposition !== 'transferred' || reference.erasedRole === 'subject') return false;
   const row = await currentConsumerClaim(tx, reference, expected);
   if (!row) return false;
@@ -728,7 +771,7 @@ export async function verifyIdentitySourceConsumerCut(
         row.terminal_sequence,
         json(reference),
         json(expected),
-        currentCommand(tx).transactionId,
+        cmd().currentCommand(tx).transactionId,
       ])
     ).rows[0]?.current === true
   );
