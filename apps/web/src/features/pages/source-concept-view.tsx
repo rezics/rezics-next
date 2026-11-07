@@ -13,12 +13,12 @@ import { actionClass, linkClass, ConceptHierarchy, visitAnnouncement } from './s
 import { ConceptMembershipReading } from './source-concept-reading/membership';
 import { useConceptVisit, type ConceptTransport } from './source-concept-reading/visit';
 import { originatingConceptReturn } from './source-concept-reading/origin';
+import { subjectHref } from '../../subject/subject-href';
 import {
   conceptVisitAddressFor,
   conceptVisitHref,
   conceptTargetHref,
   conceptVisitDescriptorFor,
-  conceptWorkSubjectHref,
   subjectVisitHref,
   type ConceptFocus,
   type ConceptHierarchyAddress,
@@ -342,7 +342,7 @@ function ConceptVisitView({
                 locale={locale}
                 hrefFor={(row) =>
                   subjectVisitHref(
-                    conceptWorkSubjectHref(row.id, row.label, locale),
+                    subjectHref({ id: row.id, label: row.label }, locale).href,
                     addressFor({ section: 'works', row: row.id }),
                   )
                 }

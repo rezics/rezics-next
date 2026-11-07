@@ -2570,7 +2570,7 @@ current or historical roots' directory entries.
 
 ## Source Concept reader
 
-Decision: This reader reads current source state only, explicitly identifies unsupported historical pins, and retains at most five opaque hierarchy cursor addresses; revisiting an address rechecks current disclosure. Inverse genre and keyword membership pages independently from that current source; exact empty requires caught-up exact-zero count evidence.
+Decision: This reader reads current source state only, explicitly identifies unsupported historical pins, and retains at most eight opaque hierarchy cursor addresses; revisiting an address rechecks current disclosure. Inverse genre and keyword membership pages independently from that current source; exact empty requires caught-up exact-zero count evidence.
 
 Correction entry comes from the mounted `subject.propose` operation and is evaluated at its actual Global Context authority, with the current subject visibility and revision checked again in the same native viewer-action read.
 

@@ -5,11 +5,11 @@ import { facetProperties, type FilterRelease } from '@rezics/filter';
 import { spoilerLevel } from '../../pages/shared';
 import { personEvidenceFits } from '../person-reader/model';
 import { candidateFailure, type CandidateFailure } from '../../../subject/candidates';
-import { CONCEPT_PAGE_CAP, typeExtends } from '../../pages/graph-browser';
 import { conditionMetadata, type ConditionMetadata } from '../../../search/condition-editor-model';
 import {
   emptyMembership,
   readConceptMembership,
+  typeExtends,
   validMembershipCursor,
   type ConceptHierarchyState,
   type ConceptMembership,
@@ -30,9 +30,11 @@ export {
   membershipPageCap,
   membershipProperties,
   readConceptMembership,
+  typeExtends,
   validMembershipCursor,
 } from './membership';
 
+export const conceptPageCap = 20;
 export const conceptContinuationLimit = 4096;
 export function validConceptCursor(cursor: string | undefined): boolean {
   return cursor === undefined || new TextEncoder().encode(cursor).byteLength <= conceptContinuationLimit;
@@ -384,14 +386,14 @@ export async function readSourceConcept(
           query: {
             property: conceptRequested.broader,
             language: locale,
-            limit: CONCEPT_PAGE_CAP,
+            limit: conceptPageCap,
             ...(input.cursor ? { cursor: input.cursor } : {}),
           },
           headers: headersOf(authorization, session),
         });
         if (page.status === 200 && page.data && 'links' in page.data) {
           if (
-            page.data.links.length > CONCEPT_PAGE_CAP ||
+            page.data.links.length > conceptPageCap ||
             new TextEncoder().encode(JSON.stringify(page.data)).byteLength > conceptEvidenceBounds.bytes
           )
             return { ok: false, reason: 'unavailable', oversized: true };

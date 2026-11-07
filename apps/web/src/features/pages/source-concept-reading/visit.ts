@@ -2,8 +2,8 @@ import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { candidateFailure, type CandidateFailure } from '../../../subject/candidates';
 import type { useCatalogueLifetime } from '../../../subject/candidate-lifetime';
 import { firstChangePage, type ChangePageHistory } from '../../catalogue/subject-changes-navigation';
-import { CONCEPT_PAGE_CAP } from '../graph-browser';
 import {
+  conceptPageCap,
   conceptSourceFits,
   membershipPageCap,
   membershipProperties,
@@ -204,7 +204,7 @@ function publish(
   // Validate before any path can publish private advice, rows, continuation or focus.
   if (
     result.ok &&
-    (    result.public.subject.id !== id ||
+    (result.public.subject.id !== id ||
       result.requestedRole !== role ||
       result.narrower.cursor !== destination.input.cursor ||
       !requestedMembershipMatches(result, destination.input.membership))
@@ -212,9 +212,7 @@ function publish(
     result = candidateFailure(400);
   if (
     result.ok &&
-    (!conceptSourceFits(result.public) ||
-      result.narrower.rows.length > CONCEPT_PAGE_CAP ||
-      membershipOversized(result))
+    (!conceptSourceFits(result.public) || result.narrower.rows.length > conceptPageCap || membershipOversized(result))
   )
     result = { ok: false, reason: 'unavailable', oversized: true };
   const done = { loading: false, busy: false, completed: state.completed + 1 };
@@ -532,7 +530,6 @@ export function useConceptVisit({
       const next = state.read?.membership.streams[property].next;
       return (
         next &&
-        !state.failed &&
         run(
           {
             input: visitInput(state, {

@@ -1,4 +1,4 @@
-import type { KernelClient } from '@rezics/client';
+import type { KernelClient, SubjectLinksResponse } from '@rezics/client';
 import type { Release } from '@rezics/definitions';
 
 export const membershipPageCap = 20;
@@ -41,10 +41,9 @@ export type ConceptMembership = {
 export type ConceptMembershipCursors = Partial<Record<MembershipProperty, string>>;
 
 type Definitions = Pick<Release, 'types' | 'properties'> & { digest?: string };
-type LinkPage = NonNullable<Awaited<ReturnType<ReturnType<KernelClient['subjects']>['links']['get']>>['data']>;
-type LinkAssertion = NonNullable<LinkPage['links'][number]['assertion']>;
+type LinkAssertion = NonNullable<SubjectLinksResponse['links'][number]['assertion']>;
 
-function typeExtends(release: Definitions, type: string, target: string, seen = new Set<string>()): boolean {
+export function typeExtends(release: Definitions, type: string, target: string, seen = new Set<string>()): boolean {
   if (type === target) return true;
   if (seen.has(type)) return false;
   seen.add(type);
@@ -160,7 +159,10 @@ export async function readConceptMembership(
 ): Promise<{ membership: ConceptMembership; session?: string; oversized?: true; failure?: number }> {
   const admitted = membershipProperties.filter((property) => membershipInverse(release, property));
   if (!admitted.length)
-    return { membership: emptyMembership('unsupported', input.cursors), ...(input.session ? { session: input.session } : {}) };
+    return {
+      membership: emptyMembership('unsupported', input.cursors),
+      ...(input.session ? { session: input.session } : {}),
+    };
 
   for (const property of membershipProperties) {
     if (!validMembershipCursor(input.cursors?.[property]))
@@ -186,11 +188,19 @@ export async function readConceptMembership(
         headers: headersOf(authorization, session),
       });
       if (page.status === 401 || page.status === 403 || page.status === 404)
-        return { membership: emptyMembership('unavailable', input.cursors), failure: page.status, ...(session ? { session } : {}) };
+        return {
+          membership: emptyMembership('unavailable', input.cursors),
+          failure: page.status,
+          ...(session ? { session } : {}),
+        };
       if (page.status !== 200 || !page.data || !('links' in page.data)) {
         const code = page.data && 'code' in page.data ? page.data.code : undefined;
         streams[property] = {
-          ...emptyMembershipStream(property, page.status === 503 && code === 'semantic_not_ready' ? 'preparing' : 'unavailable', cursor),
+          ...emptyMembershipStream(
+            property,
+            page.status === 503 && code === 'semantic_not_ready' ? 'preparing' : 'unavailable',
+            cursor,
+          ),
         };
         continue;
       }
@@ -199,7 +209,11 @@ export async function readConceptMembership(
         data.links.length > membershipPageCap ||
         new TextEncoder().encode(JSON.stringify(data)).byteLength > membershipEvidenceBytes
       )
-        return { membership: emptyMembership('unavailable', input.cursors), oversized: true, ...(session ? { session } : {}) };
+        return {
+          membership: emptyMembership('unavailable', input.cursors),
+          oversized: true,
+          ...(session ? { session } : {}),
+        };
       session = tokenOf(page) ?? session;
       const rows: ConceptMembershipRow[] = [];
       let withheld = 0;

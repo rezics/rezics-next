@@ -1,4 +1,3 @@
-import { slug } from '@rezics/definitions/slug';
 import { catalogueEntries } from '../../catalogue/catalogue-entry';
 import type { ConceptPage } from './visit';
 import type { ConceptWorksRouteState } from '../../catalogue/concept-works/view';
@@ -384,11 +383,6 @@ export function subjectVisitHref(base: string, returnTo: string | undefined): st
   const url = new URL(base, 'https://rezics.invalid');
   url.searchParams.set('via', returnTo);
   return `${url.pathname}${url.search}${url.hash}`;
-}
-
-/** Overview address for a tagged work. Membership reading receives the composed href from the Concept view. */
-export function conceptWorkSubjectHref(id: string, label: string, locale: string): string {
-  return `/${encodeURIComponent(locale)}/subjects/${encodeURIComponent(id)}/${slug(label || id)}`;
 }
 
 export function conceptVisitPosition(descriptor: ConceptVisitDescriptor): ConceptHierarchyAddress {
