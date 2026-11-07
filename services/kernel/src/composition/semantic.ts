@@ -33,6 +33,7 @@ import { createSubjectReadingApplication, type SubjectReadingApplication } from 
 import { createPublicIdentityOutputCapture } from '../semantic/identity-public-output-capture.ts';
 import { requireLibraryDomain } from '../library/domain-binding.ts';
 import { createNativeSubjectReadingPort, installNativeSubjectReadingApplication } from '../semantic/adapters/index.ts';
+import { composeSearchNativePorts } from './search-native.ts';
 import {
   bindSourceBindingApplication,
   createSourceBindingApplication,
@@ -62,6 +63,9 @@ export function composeSemanticIdentityParticipants(
   const config = readSearchConfig(context.env);
   const routeKey = config && context.env.KERNEL_ROUTE_KEY ? readMembershipRouteKey(context.env) : null;
   if (!config || !routeKey) return null;
+  // The Semantic worker module registers before Search services start. Install the real Source
+  // reader port here, then pass its typed factory into this participant's native adapter.
+  const nativePorts = composeSearchNativePorts();
   const search = createOpenSearch(config.url);
   const access = context.getAuthorization?.().access;
   const receiving =
@@ -73,6 +77,7 @@ export function composeSemanticIdentityParticipants(
           routeKey,
           access,
           clock: context.clock,
+          identitySourceSupportReaderFactory: nativePorts.createIdentitySourceSupportReader,
           work: searchReceivingProductionDeclaration(),
         })
       : undefined;

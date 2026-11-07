@@ -166,14 +166,17 @@ export function developmentMediaBindings(
 
 /** Build the same mounted Kernel declarations used by the host; no request-time discovery. */
 export async function developmentWebsiteConfiguration(env?: Record<string, string>) {
-  await import('reylo/register');
-  const [{ createKernel }, { readConfig }, { actionCatalogue }, { accessActionCatalogue }] = await Promise.all([
-    import('../../kernel/src/http/kernel.ts'),
-    import('../../kernel/src/server.ts'),
-    import('../../kernel/src/http/request.ts'),
-    import('../../kernel/src/access/index.ts'),
-  ]);
-  const config = readConfig(env ?? (await kernelEnvironment()));
+  const environment = env ?? (await kernelEnvironment());
+  const [{ createKernel }, { readConfig }, { actionCatalogue }, { accessActionCatalogue }] =
+    await withDevelopmentDatabase(environment, () =>
+      Promise.all([
+        import('../../kernel/src/http/kernel.ts'),
+        import('../../kernel/src/server.ts'),
+        import('../../kernel/src/http/request.ts'),
+        import('../../kernel/src/access/index.ts'),
+      ]),
+    );
+  const config = readConfig(environment);
   const pool = new Pool({ connectionString: config.databaseUrl });
   try {
     const catalogue = actionCatalogue(
@@ -422,6 +425,27 @@ export function localDatabase(url: string): URL {
     throw new Error('Local stack requires a PostgreSQL database on 127.0.0.1');
   return parsed;
 }
+
+/**
+ * Reylo's first SQL import creates a worker with a snapshot of process.env. Native
+ * Kernel imports reach SQL before readConfig can consume the supplied environment.
+ * Admit that exact local database before registration and native loading. Runtime
+ * pools still use explicit configuration; restore the caller's ambient environment
+ * after loading, including when an import fails.
+ */
+async function withDevelopmentDatabase<T>(environment: Record<string, string>, load: () => Promise<T>): Promise<T> {
+  const databaseUrl = localDatabase(environment.DATABASE_URL!).href;
+  const previous = process.env.DATABASE_URL;
+  process.env.DATABASE_URL = databaseUrl;
+  try {
+    await phase('native-registration', import('reylo/register'));
+    return await phase('native-imports', load());
+  } finally {
+    if (previous === undefined) delete process.env.DATABASE_URL;
+    else process.env.DATABASE_URL = previous;
+  }
+}
+
 async function authDatabaseUrl() {
   const kernel = await kernelEnvironment();
   const url = localDatabase(kernel.DATABASE_URL!);
@@ -431,40 +455,70 @@ async function authDatabaseUrl() {
 
 async function setup() {
   if (process.env.NODE_ENV === 'production') throw new Error('Local stack is development only');
-  const env = await kernelEnvironment();
+  const env = await phase('setup-environment', kernelEnvironment());
   const kernelUrl = localDatabase(env.DATABASE_URL!);
-  const pool = new Pool({ connectionString: kernelUrl.href });
-  try {
-    // The service has its own database even though development shares one PostgreSQL server.
-    if (!(await pool.query("SELECT 1 FROM pg_database WHERE datname='rezics_auth'")).rowCount) {
+  await phase(
+    'setup-auth-database',
+    (async () => {
+      const pool = new Pool({ connectionString: kernelUrl.href });
       try {
-        await pool.query('CREATE DATABASE rezics_auth');
-      } catch (error) {
-        if ((error as { code?: string }).code !== '42P04') throw error;
+        // The service has its own database even though development shares one PostgreSQL server.
+        if (!(await pool.query("SELECT 1 FROM pg_database WHERE datname='rezics_auth'")).rowCount) {
+          try {
+            await pool.query('CREATE DATABASE rezics_auth');
+          } catch (error) {
+            if ((error as { code?: string }).code !== '42P04') throw error;
+          }
+        }
+      } finally {
+        await pool.end();
       }
-    }
-  } finally {
-    await pool.end();
-  }
-  migrate(await authDatabaseUrl());
-  const keys = await developmentKeys();
+    })(),
+  );
+  await phase(
+    'setup-auth-migrations',
+    authDatabaseUrl().then((url) => migrate(url)),
+  );
+  const keys = await phase('setup-keys', developmentKeys());
   const contentBindings = developmentContentBindings(env);
   const kernelEnvFile = resolve(root, 'services/kernel/.env');
-  await privateFile(
-    kernelEnvFile,
-    updateEnvironmentText(await readFile(kernelEnvFile, 'utf8'), {
-      ...contentBindings,
-      ...developmentKernelBindings(),
-    }),
+  await phase(
+    'setup-kernel-bindings',
+    (async () => {
+      await privateFile(
+        kernelEnvFile,
+        updateEnvironmentText(await readFile(kernelEnvFile, 'utf8'), {
+          ...contentBindings,
+          ...developmentKernelBindings(),
+        }),
+      );
+      await privateFile(resolve(state, 'importer.jwk'), JSON.stringify(keys.importer));
+    })(),
   );
-  await privateFile(resolve(state, 'importer.jwk'), JSON.stringify(keys.importer));
-  await privateFile(
-    resolve(root, 'apps/web/.dev.vars'),
-    developmentBindings({
-      ...developmentWebsiteBindings(keys, await developmentWebsiteConfiguration(env)),
-      ...developmentMediaBindings({ ...env, ...contentBindings }, keys),
-    }),
+  const website = await phase('setup-catalogue', developmentWebsiteConfiguration(env));
+  await phase(
+    'setup-web-bindings',
+    privateFile(
+      resolve(root, 'apps/web/.dev.vars'),
+      developmentBindings({
+        ...developmentWebsiteBindings(keys, website),
+        ...developmentMediaBindings({ ...env, ...contentBindings }, keys),
+      }),
+    ),
   );
+}
+
+/** Development-only recovery output stays private; HTTP recovery never returns the token. */
+export function localStackRecoveryDelivery(
+  directory = resolve(state, 'recovery'),
+): NonNullable<import('../src/index.ts').AuthServiceOptions['recoveryDelivery']> {
+  return {
+    async deliver({ accountId, email, token, url }) {
+      await mkdir(directory, { recursive: true, mode: 0o700 });
+      await chmod(directory, 0o700);
+      await privateFile(resolve(directory, `${email}.json`), `${JSON.stringify({ accountId, token, url })}\n`);
+    },
+  };
 }
 
 export async function assemble(options?: {
@@ -474,7 +528,7 @@ export async function assemble(options?: {
   recoveryDelivery?: import('../src/index.ts').AuthServiceOptions['recoveryDelivery'];
 }) {
   if (process.env.NODE_ENV === 'production') throw new Error('Local stack is development only');
-  await import('reylo/register');
+  const env = options?.env ?? (await kernelEnvironment());
   const [
     auth,
     { createKernel },
@@ -482,17 +536,17 @@ export async function assemble(options?: {
     { createAccess, accessActionCatalogue },
     { createNativeAccountBindings },
     { readConfig },
-  ] = await Promise.all([
-    import('../src/index.ts'),
-    import('../../kernel/src/http/kernel.ts'),
-    import('../../kernel/src/http/request.ts'),
-    import('../../kernel/src/access/index.ts'),
-    import('../../kernel/src/access/native-account-bindings.ts'),
-    import('../../kernel/src/server.ts'),
-  ]);
-  const env = options?.env ?? (await kernelEnvironment());
+  ] = await withDevelopmentDatabase(env, () =>
+    Promise.all([
+      import('../src/index.ts'),
+      import('../../kernel/src/http/kernel.ts'),
+      import('../../kernel/src/http/request.ts'),
+      import('../../kernel/src/access/index.ts'),
+      import('../../kernel/src/access/native-account-bindings.ts'),
+      import('../../kernel/src/server.ts'),
+    ]),
+  );
   const config = readConfig(env);
-  localDatabase(config.databaseUrl);
   const kernelPool = new Pool({ connectionString: config.databaseUrl });
   const database = new Pool({ connectionString: options?.authDatabaseUrl ?? (await authDatabaseUrl()) });
   const keys = options?.keys ?? (await developmentKeys());
@@ -535,44 +589,52 @@ export async function assemble(options?: {
       barriers: auth.createBarrierProofVerifier({ database }),
     },
   });
-  const host = await auth.createAuthHost({
-    database,
-    issuer: origins.issuer,
-    audience: origins.audience,
-    secret: keys.secret,
-    signing: { activeKid: keys.signing.kid!, privateKeys: [keys.signing] },
-    stagingKey: Buffer.from(keys.staging, 'base64url'),
-    trustedAccess: bindings.trustedAccess,
-    access: bindings.workflowPorts,
-    siteActions: actions,
-    ...(options?.recoveryDelivery ? { recoveryDelivery: options.recoveryDelivery } : {}),
-    accountOperations: bindings.accountOperations,
-    accountManagementReads: bindings.accountManagementReads,
-    // The local widget and verifier never call Cloudflare. Production composition is unchanged.
-    turnstile: {
-      secret: 'loopback-only',
-      fetch: (async (_url, init) =>
-        Response.json({
-          success: new URLSearchParams(String(init?.body)).get('response') === 'rezics-local-signup',
-          action: 'signup',
-          hostname: '127.0.0.1',
-        })) as typeof fetch,
-    },
-  });
+  const host = await phase(
+    'auth-host',
+    auth.createAuthHost({
+      database,
+      issuer: origins.issuer,
+      audience: origins.audience,
+      secret: keys.secret,
+      signing: { activeKid: keys.signing.kid!, privateKeys: [keys.signing] },
+      stagingKey: Buffer.from(keys.staging, 'base64url'),
+      trustedAccess: bindings.trustedAccess,
+      access: bindings.workflowPorts,
+      siteActions: actions,
+      recoveryDelivery: options?.recoveryDelivery ?? localStackRecoveryDelivery(),
+      accountOperations: bindings.accountOperations,
+      accountManagementReads: bindings.accountManagementReads,
+      // The local widget and verifier never call Cloudflare. Production composition is unchanged.
+      turnstile: {
+        secret: 'loopback-only',
+        fetch: (async (_url, init) =>
+          Response.json({
+            success: new URLSearchParams(String(init?.body)).get('response') === 'rezics-local-signup',
+            action: 'signup',
+            hostname: '127.0.0.1',
+          })) as typeof fetch,
+      },
+    }),
+  );
   service = host.service;
-  await service.internal.registerWebsiteClient({
-    publicJwks: { keys: [publicKey(keys.website)] } as import('../src/index.ts').PublicJwks,
-    redirectUris: [`${origins.web}/auth/callback`],
-    postLogoutRedirectUris: [`${origins.web}/`],
-    scopes: website.scopes,
-  });
-  await service.internal.registerClient({
-    clientId: personaClient,
-    firstParty: true,
-    scopes: [...new Set([...importerScopes, 'account:manage', 'exposure:open'])],
-  });
-  await service.internal.registerClient(localShowcaseClientRegistration());
-  await host.start();
+  await phase(
+    'auth-registration',
+    (async () => {
+      await service.internal.registerWebsiteClient({
+        publicJwks: { keys: [publicKey(keys.website)] } as import('../src/index.ts').PublicJwks,
+        redirectUris: [`${origins.web}/auth/callback`],
+        postLogoutRedirectUris: [`${origins.web}/`],
+        scopes: website.scopes,
+      });
+      await service.internal.registerClient({
+        clientId: personaClient,
+        firstParty: true,
+        scopes: [...new Set([...importerScopes, 'account:manage', 'exposure:open'])],
+      });
+      await service.internal.registerClient(localShowcaseClientRegistration());
+    })(),
+  );
+  await phase('auth-worker', host.start());
   const stop = async () => {
     try {
       await host.stop();
@@ -761,7 +823,7 @@ function loopbackServe(
 async function serveHost() {
   const composition = await assemble();
   try {
-    const person = await provisionPersona(composition);
+    const person = await phase('auth-persona', provisionPersona(composition));
     printPersona(composition.keys, person.accountId);
   } catch (error) {
     await composition.stop();
@@ -945,7 +1007,10 @@ async function start() {
       const worker = launch(['bun', 'run', '--cwd', 'services/kernel', 'worker'], 'pipe');
       await phase(
         'identity',
-        Promise.all([untilOutput(worker, 'Worker ready'), untilReady(plan.nativeReady, [identity, worker])]),
+        Promise.all([
+          phase('identity-worker', untilOutput(worker, 'Worker ready')),
+          phase('identity-auth', untilReady(plan.nativeReady, [identity, worker])),
+        ]),
       );
       if (stopping) return;
       const kernel = launch(plan.kernel);
@@ -972,9 +1037,11 @@ async function start() {
 
 /** Names the startup phase that failed, so the stack output says which dependency was missing. */
 async function phase<T>(name: string, work: Promise<T>): Promise<T> {
+  // Fixed operation names only: never print environment values, credentials or request data.
+  console.error(`stack: ${name} starting`);
   try {
     const value = await work;
-    console.info(`stack: ${name} ready`);
+    console.error(`stack: ${name} ready`);
     return value;
   } catch (error) {
     throw new Error(`walk: the ${name} phase did not start: ${error instanceof Error ? error.message : String(error)}`);

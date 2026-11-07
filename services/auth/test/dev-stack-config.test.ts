@@ -20,6 +20,7 @@ import {
   developmentContentBindings,
   issuerRequest,
   localDatabase,
+  localStackRecoveryDelivery,
   openLocalShowcase,
   publicKey,
   privateFile,
@@ -314,6 +315,24 @@ test('first-run secrets remain private and stable across setup retries', async (
     expect(new Set([keys.signing.kid, keys.website.kid, keys.importer.kid]).size).toBe(3);
     expect(publicKey(keys.importer).d).toBeUndefined();
     expect(keys.secret).not.toBe(keys.staging);
+    const recovery = resolve(directory, 'recovery');
+    const file = resolve(recovery, 'owner@example.test.json');
+    await mkdir(recovery, { mode: 0o755 });
+    await writeFile(file, 'old proof', { mode: 0o644 });
+    const proof = {
+      accountId: 'local-owner',
+      token: 'native-proof',
+      url: 'http://127.0.0.1:4200/recovery#account_id=local-owner&token=native-proof',
+    };
+    await localStackRecoveryDelivery(recovery).deliver({
+      ...proof,
+      email: 'owner@example.test',
+      deliveryId: 'native-verification',
+      expiresAt: new Date(Date.now() + 300_000),
+    });
+    expect(JSON.parse(await readFile(file, 'utf8'))).toEqual(proof);
+    expect((await stat(recovery)).mode & 0o777).toBe(0o700);
+    expect((await stat(file)).mode & 0o777).toBe(0o600);
   } finally {
     await rm(directory, { recursive: true, force: true });
   }
@@ -525,6 +544,7 @@ test('installed host receives management operations and independent reads from i
   );
   expect(assembly).toContain('accountOperations: bindings.accountOperations');
   expect(assembly).toContain('accountManagementReads: bindings.accountManagementReads');
+  expect(assembly).toContain('recoveryDelivery: options?.recoveryDelivery ?? localStackRecoveryDelivery()');
   expect(assembly).toContain('workflow: proofs');
   expect(assembly).toContain('referenceKeys: config.tokens');
   expect(assembly).toContain('await host.stop()');

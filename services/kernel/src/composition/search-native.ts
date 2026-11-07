@@ -64,7 +64,7 @@ import { readSubjectSummaries } from '../semantic/summaries.ts';
 import { bindSearchNativePorts, bindSearchSemanticSourcePort, type SearchNativePorts } from '../search/composition.ts';
 
 /** Bind existing native producers to Search's consumer-owned ports. */
-export function composeSearchNativePorts(): void {
+export function composeSearchNativePorts(): SearchNativePorts {
   const port: SearchNativePorts = Object.freeze({
     PublicFilterSourceDefinitionError,
     REVIEW_DISCOVERY_PAGE_LIMIT,
@@ -128,9 +128,10 @@ export function composeSearchNativePorts(): void {
   });
   bindSearchNativePorts(port);
   bindSearchSemanticSourcePort(port);
+  return port;
 }
 
 /** Compatibility name used by ordinary Kernel composition. */
-export function composeSearchSemanticSource(): void {
-  composeSearchNativePorts();
+export function composeSearchSemanticSource(): SearchNativePorts {
+  return composeSearchNativePorts();
 }

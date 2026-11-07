@@ -12,8 +12,8 @@ import {
   type CompositionDocument,
 } from '@rezics/composition';
 
-// Consumers resolve the package name. The in-source tests import ../src directly, so this file is the only proof that
-// the package entry loads and its Zone exports and paged TypeList admission run through it together.
+// Consumers resolve the package name. Most in-source tests import ../src directly; agent-views.test.ts also checks the
+// public account-view profile through this package entry.
 const page = (content: CompositionDocument['content']): CompositionDocument => ({ root: { props: {} }, content });
 const labels = Object.fromEntries(UI_LOCALES.map((locale) => [locale, `Books (${locale})`]));
 const starter = {

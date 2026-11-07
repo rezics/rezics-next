@@ -597,6 +597,10 @@ concept or fictional character uses its type template, a series uses
 `schema:CreativeWorkSeries`, another bundled work uses `schema:CreativeWork`, and every other
 bundled type uses `generic`.
 
+Decision: paged `AccountThreads` honors its configured limit up to the native 20-entry ceiling. Standalone account
+Posts, Reviews and Collections therefore plan 20, 20 and 24 entries, while overview previews remain 4, 4 and 3 within
+the 128-row page budget.
+
 `OutgoingRelations` is an inert component descriptor for one native `/relations` read. It accepts the same
 property, optional filter/type, limit and paged selectors as relation groups. Paged relation descriptors request
 at most 12 rows; continuation binds the native cursor to one current node and its selected Context. The existing

@@ -2368,6 +2368,31 @@ plus Auth's `organization:create`, `account:manage`, `account:delete`. Never use
 scopes. Local setup, host and launch share this composition. Auth's Access-supplied `siteActions` refuses
 unmounted names.
 
+Development database admission resolves the supplied environment (or Kernel's local `.env`) before registering
+Reylo and importing native Kernel modules in either `developmentWebsiteConfiguration` or `assemble`. The first SQL
+load starts Reylo's worker with a process-environment snapshot: `http/kernel.ts` reaches
+`commerce/content-edition-buyer-fact.sql`, while Access's native factory reaches `permission-time.sql`, before
+`readConfig` can run. Both entries temporarily install the original supplied local `DATABASE_URL` for those imports
+and restore the previous ambient value afterward, including on failure. Runtime pools still receive that original
+database explicitly; mounted scopes, native Auth/Access and workflow registration use the ordinary composition.
+
+Acceptance choice: preserve all existing mounted-catalogue and fresh browser assertions; replace the placeholder
+catalogue URL with a migrated throwaway database and cold-process admission against a conflicting ambient URL.
+Fresh setup first admits a shared stack slot and carries its selected container names, database/search ports and
+service origins through the documented setup/start commands, readiness probes and browser assertions. The fixture
+holds that lease directly rather than enabling the walk's deferred-page startup, preserving the ordinary default
+worker and Web/Auth pages. It releases the lease after stopping its processes and removing its exact containers,
+volumes and source copy. UUID names alone do not reserve ports. Setup starts without an inherited database or Reylo
+cache and checks the selected original database identity, website registration and connection retirement.
+Changed-workspace typing is worker acceptance; the controller runs the original three-file native/browser selection
+after integration without increasing its timeout.
+
+Setup and native loading report fixed operation names with `starting`/`ready` markers on stderr; they never include
+database URLs or key material. Setup distinguishes environment loading, Auth database creation and migration,
+key loading, Kernel bindings, native catalogue construction and Web bindings. Startup reports Auth and default-worker
+readiness independently inside the existing identity phase. The fresh-stack test streams infrastructure stderr as
+it runs so a timeout retains the first incomplete operation, rather than only post-timeout cleanup output.
+
 Trusted `registerWebsiteDeployment(auth, actionCatalogue(kernel), registration, websiteConfigurationFile)`
 registers first, then emits Web's public `WEBSITE_CONFIGURATION_FILE` operand. Deployment supplies the actual
 composition, public JWK and callbacks; Web refuses a scope override mismatch. Importer grants stay separate.
@@ -2389,8 +2414,13 @@ allows a deployment to inspect those exact operands before construction; it neit
 Delivery remains the installed private `recoveryDelivery.deliver` callback: forward the original native URL and
 delivery identity through the configured delivery owner. A void return retains the native unresolved external-copy
 custody; successful delivery does not certify deletion or make an uncertain command safe to resend. Local
-`assemble({env,authDatabaseUrl,keys,recoveryDelivery})` forwards an explicitly supplied adapter to that same port.
-No local mailbox, public delivery endpoint, provider receipt or new storage is introduced.
+`assemble({env,authDatabaseUrl,keys,recoveryDelivery})` forwards an explicitly supplied adapter to that same port,
+taking precedence over the development fallback. Without an adapter, local assembly writes the original
+`{accountId,token,url}` to `.temp/local-stack/recovery/<email>.json` for local journeys. The directory is owner-only
+(`0700`) and each file is private (`0600`), including replacement of existing permissive output. This local file
+delivery adds no HTTP delivery endpoint or provider receipt; production delivery and HTTP proof secrecy stay unchanged.
+Acceptance choice: extend the existing secret-privacy case with the actual local delivery payload and permissions,
+and retain the installed-host assertion for supplied-adapter precedence alongside all original native/browser cases.
 
 Update registration/configuration together, then deliberately sign out, sign in and complete renewed consent.
 Old sessions/access/refresh ceilings remain unchanged. Registration supplies no resource, exposure, ownership

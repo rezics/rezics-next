@@ -149,6 +149,7 @@ export type TestKernelOptions = TestRuntimeOptions & {
 export type TestKernel = Kernel & { readonly testAccess: Access };
 
 export function testKernel(options: TestKernelOptions): TestKernel {
+  configureTestReceiptKeys(options.pool);
   const defaults = runtimeDefaults({
     auth: options.auth ?? testAuth,
     ...(options.clock === undefined ? {} : { clock: options.clock }),
@@ -225,6 +226,19 @@ function productionActions(): ActionCatalogue {
     }),
   );
   return mountedActions;
+}
+
+/** Select fixture actions from the mounted kernel catalogue and optional native declarations. */
+export function testActionSubset(actions: readonly string[], nativeActions?: ActionCatalogue): ActionCatalogue {
+  const available = new Map(productionActions());
+  for (const [action, declaration] of nativeActions ?? []) available.set(action, declaration);
+  return new Map(
+    actions.map((action) => {
+      const declaration = available.get(action);
+      if (!declaration) throw new Error(`Native test action is not declared: ${action}`);
+      return [action, declaration] as const;
+    }),
+  );
 }
 
 export async function registerTestClient(

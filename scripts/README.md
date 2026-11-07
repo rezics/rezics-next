@@ -902,6 +902,11 @@ Its capacity is `max(1, min(floor(logical processors / 8), floor(total GiB / 7.5
 `REZICS_STACK_SLOTS` overrides capacity; `REZICS_STACK_LEASE_DIR` overrides the directory, but `TMPDIR` does not.
 Inherited `REZICS_STACK_SLOT` or `REZICS_STACK_LEASE=off` skips acquisition.
 Waits have no timeout. Stderr reports held slots and tickets ahead every minute, then acquisition time.
+Walk admission uses the shared `/tmp/rezics-walk-stacks` FIFO across worktrees and host identities. Its creator sets
+the directory to sticky mode `01777`; privileged provisioning repairs existing root-created state. Persistent mutex,
+sequence and slot lock files are mode `0666` and retain their inodes, with the sequence updated in place. Removable
+tickets live in the mode `0777` `tickets` child so any admitted identity can clean up a dead ticket without replacing
+the host-wide queue.
 Worker memory admission uses a separate FIFO lease under `/tmp/rezics-check-memory`. The worker acquires it only
 before local execution or after remote transport failure. A nested `stack-run` recognizes the worker's memory lease
 and remains local for that admitted command; explicit `--local` is propagated to nested stack runs even when no

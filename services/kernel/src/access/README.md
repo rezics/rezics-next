@@ -13,6 +13,8 @@ from Access's bounded `readAccountCommandState` producer. It keeps the original 
 bigint authentication floor and missing-row result, using the current command's Access work ledger when present.
 Library retains its current-authority decision. Focused producer tests pin forwarding, current states and accounting;
 existing Collection rule/preparation assertions remain unchanged. Worker typing is acceptance; runtime walks run after integration.
+The account-state query consumes one keyed point plus its command-dispatch point (two points total), returns two row
+units, and charges the measured input/result bytes (156 for a present account, 70 for absence).
 
 [Architecture](../../../../docs/architecture.md): catalogue, closed-operand `decide`, bounded explanations,
 conformance and residuals live in `packages/access/src/index.ts`; imports point inward.

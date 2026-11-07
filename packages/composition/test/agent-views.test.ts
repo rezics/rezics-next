@@ -8,8 +8,8 @@ import {
   templateViews,
   validateProfile,
   type PresentationProfile,
-} from '../src/index.ts';
-import platform from '../profiles/platform.json' with { type: 'json' };
+} from '@rezics/composition';
+import platform from '@rezics/composition/profiles/platform.json' with { type: 'json' };
 
 const profile = platform as unknown as PresentationProfile;
 const subject = '0192f3a0-6c1e-7b2a-9d4e-1a2b3c4d5e30';
@@ -47,6 +47,12 @@ test('the agent templates define the account views beside the graph views, in th
     'collections',
     'details',
   ]);
+  for (const type of agents) {
+    const accountSections = templateViews(entry(type))
+      .overview!.content.map((node) => node.props.id)
+      .filter((id) => id === 'account-posts' || id === 'account-reviews' || id === 'account-collections');
+    expect(accountSections).toEqual(['account-posts', 'account-reviews', 'account-collections']);
+  }
 });
 
 test('each account view is one bounded page of its list, and the overview previews a few of each', () => {

@@ -4,9 +4,7 @@ import { createHash, randomUUID } from 'node:crypto';
 import { bundledDigest, bundledRelease } from '@rezics/definitions/bundled';
 import { Value } from 'typebox/value';
 import type pg from 'pg';
-import { readAccount, type Account } from '../../src/access/account-data.ts';
 import { GrantDeniedError } from '../../src/access/contract/errors.ts';
-import { createAccess } from '../../src/access/permission.ts';
 import { EVENT_TYPES, readBatch } from '../../src/events/log.ts';
 import type { CollectionVisibility } from '../../src/library/collection-model.ts';
 import * as collections from '../../src/library/collection-store.ts';
@@ -14,11 +12,13 @@ import { LibraryNotFoundError } from '../../src/library/command-support.ts';
 import { createFollowCommands } from '../../src/library/follows.ts';
 import * as followStore from '../../src/library/follow-store.ts';
 import type { FollowTargetType } from '../../src/library/follow-model.ts';
-import type { Access, AccountActor, Actor } from '../../src/request/access.ts';
+import { accessCommandAuthorization, type Access, type AccountActor, type Actor } from '../../src/request/access.ts';
 import { newId, partitionOf, routeOf } from '../../src/route/route.ts';
-import { bootstrapRelease } from '../../src/semantic/definitions.ts';
+import { bootstrapRelease, GLOBAL_CONTEXT } from '../../src/semantic/definitions.ts';
 import { createSubject, subjectTarget } from '../../src/semantic/subject.ts';
 import { capture, measure, openGrowthDatabase, type GrowthDatabase } from '../support/growth.ts';
+import { testActionSubset } from '../support/test-kernel.ts';
+import { createRealAccess } from '../semantic/real-access.ts';
 
 const databaseUrl = process.env.DATABASE_URL;
 if (!databaseUrl) throw new Error('DATABASE_URL must name the migrated test database');
@@ -34,6 +34,12 @@ let database: GrowthDatabase;
 let pool: pg.Pool;
 let admin: pg.Pool;
 let access: Access;
+let subjectCreationAccess: Access;
+let subjectCreator: AccountActor;
+let owner: AccountActor;
+let other: AccountActor;
+let suspended: AccountActor;
+let noScope: AccountActor;
 let now = Date.parse('2026-10-26T12:00:00.000Z');
 const clock = () => new Date(now);
 const tick = () => {
@@ -47,21 +53,6 @@ const accountIds = {
   noScope: newId(ownerRoute),
 };
 
-function actor(accountId: string, actorScopes: readonly string[] = scopes): AccountActor {
-  return {
-    kind: 'account',
-    accountId,
-    clientId: 'library-follow-test',
-    scopes: actorScopes,
-    requestedBy: null,
-    authnEpoch: 1,
-  };
-}
-
-const owner = actor(accountIds.owner);
-const other = actor(accountIds.other);
-const suspended = actor(accountIds.suspended);
-const noScope = actor(accountIds.noScope, ['subject:read']);
 const anonymous: Actor = { kind: 'anonymous' };
 const commands = () =>
   createFollowCommands({
@@ -76,29 +67,27 @@ function requestKey(): string {
   return `follow:${newId(ownerRoute)}`;
 }
 
-async function installAccount(accountId: string, state: 'active' | 'suspended'): Promise<Account> {
-  await admin.query(
-    `INSERT INTO access.account(route, account_id, kind, state, transaction_id, authn_fenced, minimum_authn_epoch)
-     VALUES ($1, $2, 'actor', $3, $4, false, 1)`,
-    [ownerRoute, accountId, 'active', newId(ownerRoute)],
-  );
-  if (state === 'suspended') await suspendAccount(admin, accountId);
-  const current = await readAccount(admin, ownerRoute, accountId);
-  if (!current) throw new Error('Test account was not created');
-  return current;
-}
-
 async function createReadableSubject(label: string = randomUUID()): Promise<string> {
   for (let attempt = 0; attempt < 5; attempt += 1) {
     const key = `library-follow-${randomUUID()}`;
+    const deadline = Date.now() + 30_000;
+    const authorization = await accessCommandAuthorization(
+      subjectCreationAccess,
+      subjectCreator,
+      'subject:create',
+      { route: 0, id: GLOBAL_CONTEXT },
+      { pool, deadline },
+      () => new GrantDeniedError(),
+    );
     const result = await createSubject(pool, {
-      actor: owner,
-      target: subjectTarget(routeKey, owner.accountId, key),
+      actor: subjectCreator,
+      target: subjectTarget(routeKey, subjectCreator.accountId, key),
       idempotencyKey: key,
       digest: createHash('sha256').update(key).digest(),
       item: { type: 'schema:Book', labels: { en: label } },
       release: { digest: bundledDigest, release: bundledRelease },
-      authorize: async () => true,
+      deadline,
+      authorization,
     });
     const subjectId = result.subject.id;
     if (partitionOf(routeOf(subjectId)!) !== partitionOf(ownerRoute)) return subjectId;
@@ -253,19 +242,25 @@ beforeAll(async () => {
   pool = database.pool;
   admin = database.admin;
   await bootstrapRelease(pool, bundledRelease);
-  const accounts = new Map<string, Account>();
-  accounts.set(accountIds.owner, await installAccount(accountIds.owner, 'active'));
-  accounts.set(accountIds.other, await installAccount(accountIds.other, 'active'));
-  accounts.set(accountIds.suspended, await installAccount(accountIds.suspended, 'suspended'));
-  accounts.set(accountIds.noScope, await installAccount(accountIds.noScope, 'active'));
-  access = createAccess({
-    actions: new Map([
-      ['subject:read', { anonymous: true }],
-      ['follow:create', { anonymous: false, authority: 'own-account' }],
-      ['follow:delete', { anonymous: false, authority: 'own-account' }],
-    ]),
-    accountEvidence: (candidate) => accounts.get(candidate.accountId) ?? null,
+  const real = await createRealAccess(admin, accountIds, scopes);
+  access = real.access({ actions: testActionSubset(scopes) });
+  owner = await access.authenticate(real.bearer('owner'), { pool, deadline: Date.now() + 30_000 });
+  other = await access.authenticate(real.bearer('other'), { pool, deadline: Date.now() + 30_000 });
+  suspended = await access.authenticate(real.bearer('suspended'), { pool, deadline: Date.now() + 30_000 });
+  noScope = await access.authenticate(await real.bearerFor('noScope', ['subject:read']), {
+    pool,
+    deadline: Date.now() + 30_000,
   });
+  const subjectFixture = await createRealAccess(admin, { owner: accountIds.owner }, ['subject:create'], {
+    registered: ['owner'],
+  });
+  subjectCreationAccess = subjectFixture.access({ actions: testActionSubset(['subject:create']) });
+  await subjectFixture.grant({ route: 0, id: GLOBAL_CONTEXT }, 'owner', 'subject:create');
+  subjectCreator = await subjectCreationAccess.authenticate(subjectFixture.bearer('owner'), {
+    pool,
+    deadline: Date.now() + 30_000,
+  });
+  await suspendAccount(admin, accountIds.suspended);
   followCommands = commands();
 });
 

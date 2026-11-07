@@ -9,14 +9,19 @@ const generation = {
   state: 'active',
   kinds: [] as string[],
 };
+const secondGeneration = { ...generation, generation: 2, uuid: 'g2', incarnation: '2' };
 type RelayControl = {
   paused: boolean;
   stopped: boolean;
   hold: boolean;
+  concurrency: number | undefined;
+  consumers: string[];
   reached: PromiseWithResolvers<void>;
   release: PromiseWithResolvers<void>;
 };
 const created: RelayControl[] = [];
+let availableGenerations = [generation];
+let failProjectionGeneration: number | undefined;
 let holdMaintenance = false;
 let maintenanceReached = Promise.withResolvers<void>();
 let maintenanceRelease = Promise.withResolvers<void>();
@@ -30,25 +35,39 @@ mock.module('../../src/search/account-discovery.ts', () => ({
     }
     return {};
   },
-  createDiscoveryProjection: () => ({}),
+  createDiscoveryProjection: ({ target }: { target: { generation: number } }) => {
+    if (failProjectionGeneration === target.generation) throw new Error('Controlled projection failure');
+    return {};
+  },
   registerRetiredErasure: async () => {},
   copyLocator: () => ({}),
 }));
 mock.module('../../src/search/generations.ts', () => ({
   discoveryConsumer: (prefix: string, n: number) => `search_${prefix.replaceAll('-', '_')}discovery_g${n}`,
   advanceDiscovery: async () => {},
-  discoveryGenerations: async () => [generation],
+  discoveryGenerations: async () => availableGenerations,
 }));
 mock.module('../../src/search/indexer.ts', () => ({
-  createDiscoveryIndexer: () => ({ consumer: 'search_intent_discovery_g1', run: async () => ({ status: 'busy' }) }),
+  createDiscoveryIndexer: (_pool: unknown, _projection: unknown, consumer: string) => ({
+    consumer,
+    run: async () => ({ status: 'busy' }),
+  }),
   createSubjectIndexer: () => ({ consumer: 'search_intent_subjects_g1', run: async () => ({ status: 'busy' }) }),
 }));
 mock.module('../../src/events/relays.ts', () => ({
-  startRelays(_pool: unknown, _relays: unknown, options: { paused?: boolean } = {}) {
+  relayConcurrencyForPool: (pool: { options?: { max?: number } }) =>
+    Math.min(4, Math.max(1, (pool.options?.max ?? 10) - 1)),
+  startRelays(
+    _pool: unknown,
+    relays: { consumer: string }[],
+    options: { paused?: boolean; concurrency?: number } = {},
+  ) {
     const relay: RelayControl = {
       paused: options.paused ?? false,
       stopped: false,
       hold: false,
+      concurrency: options.concurrency,
+      consumers: relays.map(({ consumer }) => consumer),
       reached: Promise.withResolvers(),
       release: Promise.withResolvers(),
     };
@@ -72,6 +91,19 @@ mock.module('../../src/events/relays.ts', () => ({
 }));
 
 const { startDiscoveryIndexing } = await import('../../src/search/runner.ts');
+
+function runner(poolMax: number, concurrency?: number) {
+  return startDiscoveryIndexing({
+    pool: { options: { max: poolMax } } as never,
+    search: {} as never,
+    source: {} as never,
+    listing: {} as never,
+    prefix: 'intent-',
+    routeKey: new Uint8Array(32),
+    intervalMs: INTERVAL,
+    ...(concurrency === undefined ? {} : { concurrency }),
+  });
+}
 
 async function bounded<T>(promise: Promise<T>, name: string): Promise<T> {
   let timer: ReturnType<typeof setTimeout> | undefined;
@@ -170,5 +202,46 @@ test('resume during an unresolved discovery pause wins after drains settle; stop
     await runner.stop();
     globalThis.setTimeout = originalSet;
     globalThis.clearTimeout = originalClear;
+  }
+});
+
+test('discovery relay ownership follows the supplied Pool across failure and generation retirement', async () => {
+  created.length = 0;
+  availableGenerations = [generation];
+  const smallPool = runner(2);
+  try {
+    await smallPool.refresh();
+    const installed = created[0]!;
+    expect(installed).toMatchObject({ concurrency: 1, consumers: ['search_intent_discovery_g1'] });
+
+    availableGenerations = [generation, secondGeneration];
+    failProjectionGeneration = 2;
+    await expect(smallPool.refresh()).rejects.toThrow('Controlled projection failure');
+    expect(created).toHaveLength(1);
+    expect(installed.stopped).toBe(false);
+
+    failProjectionGeneration = undefined;
+    await smallPool.refresh();
+    expect(installed.stopped).toBe(true);
+    expect(created[1]).toMatchObject({
+      concurrency: 1,
+      consumers: ['search_intent_discovery_g1', 'search_intent_discovery_g2'],
+    });
+    availableGenerations = [secondGeneration];
+    await smallPool.refresh();
+    expect(created[1]?.stopped).toBe(true);
+    expect(created[2]).toMatchObject({ concurrency: 1, consumers: ['search_intent_discovery_g2'] });
+  } finally {
+    await smallPool.stop();
+  }
+
+  created.length = 0;
+  availableGenerations = [generation];
+  const configuredPool = runner(5, 2);
+  try {
+    await configuredPool.refresh();
+    expect(created[0]?.concurrency).toBe(2);
+  } finally {
+    await configuredPool.stop();
   }
 });

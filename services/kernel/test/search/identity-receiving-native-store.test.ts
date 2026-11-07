@@ -4,6 +4,7 @@ import { Pool } from 'pg';
 import { composeLibraryDomain } from '../../src/composition/library.ts';
 import { noEffect, runCommand } from '../../src/command/command.ts';
 import { subjectListingSource } from '../../src/library/listing-counts.ts';
+import { createIdentitySourceSupportReader } from '../../src/semantic/index.ts';
 import { stepIdentityEpochAdmission } from '../../src/semantic/identity-epoch-admission.ts';
 import { stepIdentityEpochMapping } from '../../src/semantic/identity-epoch-mapping.ts';
 import { identityEpochStore as store } from '../../src/semantic/identity-epoch-store.ts';
@@ -453,6 +454,7 @@ test('the genuine six-method factory retains same-T acceptance rollback and refu
     search,
     index,
     consumer,
+    identitySourceSupportReaderFactory: createIdentitySourceSupportReader,
   });
   expect(Object.keys(adapter).sort()).toEqual(
     ['readAndHold', 'revalidateHold', 'resolvePlanned', 'recordApplied', 'reconcileOriginal', 'releaseHold'].sort(),
@@ -492,6 +494,7 @@ test('the genuine six-method factory retains same-T acceptance rollback and refu
       search,
       index,
       consumer,
+      identitySourceSupportReaderFactory: createIdentitySourceSupportReader,
     });
     await runCommand(f.pool, { partition: plan.source.receivingHome }, async (tx) => {
       expect(await foreign.readAndHold(tx, binding, context())).toMatchObject({
@@ -521,6 +524,7 @@ test('factory release cannot use a terminal cursor or another invocation as priv
     search,
     index,
     consumer,
+    identitySourceSupportReaderFactory: createIdentitySourceSupportReader,
   });
   const record: SearchIdentityReceivingRecord = {
     job: input.selection.job,
@@ -561,6 +565,7 @@ test('the factory rejects noncanonical or oversized reconciliation cursors befor
     search,
     index,
     consumer,
+    identitySourceSupportReaderFactory: createIdentitySourceSupportReader,
   });
   const locator = { kind: 'search-canonical-index' as const, version: 1 as const, partition: 0, planId: randomUUID() };
   const valid = { version: 1, identity: 'a'.repeat(64), copy: -1, terminal: false };

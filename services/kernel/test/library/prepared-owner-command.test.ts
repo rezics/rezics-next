@@ -6,12 +6,14 @@ import { GrantDeniedError } from '../../src/access/contract/errors.ts';
 import type { AuthoritativeTime } from '../../src/command/command.ts';
 import { createLibraryCommandRunner } from '../../src/library/command-support.ts';
 import { newId, partitionOf } from '../../src/route/route.ts';
+import { configureTestReceiptKeys } from '../support/receipt-keys.ts';
 import { openGrowthDatabase, type GrowthDatabase } from '../support/growth.ts';
 let db: GrowthDatabase;
 let single: pg.Pool;
 beforeAll(async () => {
   db = await openGrowthDatabase();
   single = new pg.Pool({ ...db.pool.options, max: 1 });
+  configureTestReceiptKeys(single);
 });
 afterAll(async () => {
   await single?.end();

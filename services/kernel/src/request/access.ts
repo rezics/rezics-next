@@ -296,6 +296,7 @@ export async function accessCommandAuthorization(
         return proof;
       } catch (error) {
         throwAccessUnavailable(error, context.deadline);
+        if (error instanceof AuthenticationError) throw error;
         throw denied();
       }
     },
