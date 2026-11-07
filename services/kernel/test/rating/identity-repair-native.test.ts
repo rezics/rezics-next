@@ -80,16 +80,18 @@ test('installed module application admits, pages at 64, commits an empty termina
   ]);
   for (const receipt of started.receipts) {
     expect(receipt.obligationId).toBeTruthy();
-    expect(receipt.mappingDigest).toMatch(/^[0-9a-f]{64}$/);
+    const mappingDigest = receipt.mappingDigest;
+    if (mappingDigest === null) throw new Error('expected mapping digest');
+    expect(mappingDigest).toMatch(/^[0-9a-f]{64}$/);
     const obligation = await host.read.boundObligation(voter.accountId, receipt.pageId);
     expect(obligation).toMatchObject({
       obligationId: receipt.obligationId,
-      mappingDigest: receipt.mappingDigest,
+      mappingDigest,
       receiptTransactionId: receipt.transactionId,
       state: 'bound',
       laterVote: true,
     });
-    expect(identityMappingDigest(obligation?.mappings ?? [])).toBe(receipt.mappingDigest);
+    expect(identityMappingDigest(obligation?.mappings ?? [])).toBe(mappingDigest);
   }
   expect((await host.read.voteEffects(voter.accountId)).length).toBeGreaterThan(0);
 });
