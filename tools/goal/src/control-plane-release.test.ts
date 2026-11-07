@@ -2049,7 +2049,8 @@ for (const probeFails of [false, true])
         if (command[0] === 'bun' && command[1] === 'test') {
           focusedRuns++;
           expect(command).toEqual(['bun', 'test', '--timeout', '30000', suspect]);
-          return { passed: !probeFails, timedOut: false, output: 'focused negative observation\n' };
+          const probePassed = !probeFails && focusedRuns < 3;
+          return { passed: probePassed, timedOut: false, output: 'focused negative observation\n' };
         }
         return { passed: true, timedOut: false, output: '' };
       }).releaseControlPlaneBatch(manifest);
