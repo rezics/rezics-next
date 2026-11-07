@@ -1,3 +1,5 @@
+import type { FilterDocument } from '@rezics/filter';
+
 export type ConceptWorksRouteState = {
   role?: string | undefined;
   returnTo?: string | undefined;
@@ -12,3 +14,17 @@ export type ConceptWorksRouteState = {
   cursor?: string | undefined;
   invalid?: boolean | undefined;
 };
+
+export type ConceptWorksRoutePatch = {
+  [
+    Key in
+      | 'property'
+      | 'scheme'
+      | 'type'
+      | 'sort'
+      | 'includeChildren'
+      | 'spoilerThreshold'
+      | 'cursor'
+      | 'tagQualifiersText'
+  ]?: ConceptWorksRouteState[Key] | undefined;
+} & { condition?: FilterDocument | undefined };

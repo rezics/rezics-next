@@ -29,22 +29,8 @@ import { readPublicConceptWorks } from './actions';
 import { ConceptWeightRange } from '../../../search/condition-weight';
 import type { DiscoveryRequest, DiscoveryState } from '../../../search/discovery';
 
-import type { ConceptWorksRouteState } from './contract';
-export type { ConceptWorksRouteState } from './contract';
-
-export type ConceptWorksRoutePatch = {
-  [
-    Key in
-      | 'property'
-      | 'scheme'
-      | 'type'
-      | 'sort'
-      | 'includeChildren'
-      | 'spoilerThreshold'
-      | 'cursor'
-      | 'tagQualifiersText'
-  ]?: ConceptWorksRouteState[Key] | undefined;
-} & { condition?: FilterDocument | undefined };
+import type { ConceptWorksRoutePatch, ConceptWorksRouteState } from './contract';
+export type { ConceptWorksRoutePatch, ConceptWorksRouteState } from './contract';
 
 type Props = {
   read: Extract<ConceptRead, { ok: true }>;

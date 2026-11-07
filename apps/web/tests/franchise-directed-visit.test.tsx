@@ -401,7 +401,8 @@ test('mounted VN to anime to book uses one immediate window opener, inverse mean
     const next = host.querySelector<HTMLAnchorElement>(`a[href*="/subjects/${id(3)}/"][href*="via="]`)!;
     const immediate = new URL(next.href).searchParams.get('via')!;
     expect(immediate).toContain(id(2));
-    expect(immediate).not.toContain('via=');
+    expect(new URL(immediate, 'https://site.test').searchParams.get('via')).toBe(via);
+    expect(subjectVisitReturn(immediate, 'en')).toBe(immediate);
     browser.location.href = next.href;
     await mount(id(3), immediate);
     browser.location.href = `https://site.test${via}`;

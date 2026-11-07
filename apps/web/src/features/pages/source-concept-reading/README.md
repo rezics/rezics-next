@@ -15,3 +15,8 @@ Inspection reuses `FactInspectionEntry` and its exact holder/property/statement/
 Admission uses the existing fact limits: 1 MiB UTF-8, 4,096 statements, 32 qualifiers, 32 reference groups and 32 parts per group; the inverse window is capped at 20 rows. Oversized input fails explicitly before aliases or evidence expand. For admitted source bytes B, statements S, qualifier/reference parts Q and hierarchy cap H, adapter work is O(B + S + Q + H), with bounded extra serialization/copy passes. The byte admission also charges each repeated disclosed item/property/unit summary; label selection, copied strings, reference rendering and nested summaries therefore fit the same 1 MiB expansion budget. IDs do not bound text or response bytes. No source catalogue/history traversal, per-row Subject reads or automatic hierarchy loading is introduced. The existing signed-in Subject preference query remains its owner's one exact account-preference read; follow state and explicit inspection use their existing bounded owner endpoints.
 
 Decision: Works wait behind each required native scheme-assertion reveal because their selectors expose scheme identities; the original filter admission, tuples and route state remain unchanged.
+
+Decision: a returned visit resumes its saved descendant and work filters only when the URL has no replacement.
+The first filter edit materializes the complete effective operand and source scheme, keeps the exact hierarchy
+position, and retires the saved work selection. Clearing a filter therefore remains cleared on subsequent reads;
+a different Concept's parent-return descriptor stays attached to that parent.

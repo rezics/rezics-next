@@ -1,6 +1,6 @@
 import { CredentialDeniedError, CredentialServiceError } from './credentials.ts';
 import { formatImportTransportError, ImportTransportError } from './import-client.ts';
-import type { ImportRequestDiagnostics } from './import-fetch.ts';
+import { importRequestFailure, type ImportRequestDiagnostics } from './import-fetch.ts';
 
 type CredentialFailure = CredentialDeniedError | CredentialServiceError;
 
@@ -9,6 +9,8 @@ function safeField(value: unknown, pattern: RegExp, limit: number): string | und
 }
 
 function details(values: Partial<ImportRequestDiagnostics>, fallbackPhase: string): string {
+  const operation =
+    values.operation === 'dump-download' || values.operation === 'dump-index' ? `operation=${values.operation} ` : '';
   const method = safeField(values.method, /^(GET|HEAD|POST|PUT|PATCH|DELETE)$/u, 8) ?? 'unknown';
   const origin = safeField(values.origin, /^https?:\/\/[A-Za-z0-9.:[\]_-]+(?::[0-9]{1,5})?$/u, 256);
   const path = safeField(values.path, /^\/[A-Za-z0-9._~!$&'()*+,;=:@%\/-]{0,512}$/u, 512);
@@ -20,7 +22,7 @@ function details(values: Partial<ImportRequestDiagnostics>, fallbackPhase: strin
   const network =
     safeField(values.networkCode, /^(?:E[A-Z0-9_]{1,64}|ERR_[A-Z0-9_]{1,64}|UND_ERR_[A-Z0-9_]{1,64})$/u, 72) ?? 'none';
   const correlation = safeField(values.correlationId, /^[A-Za-z0-9._:-]{1,128}$/u, 128) ?? 'none';
-  return `phase=${phase} method=${method} target=${target} status=${status} problem=${code} network=${network} correlation=${correlation}`;
+  return `${operation}phase=${phase} method=${method} target=${target} status=${status} problem=${code} network=${network} correlation=${correlation}`;
 }
 
 function credentialCause(error: unknown): CredentialFailure | undefined {
@@ -35,10 +37,7 @@ export function formatSeedError(error: unknown): string {
   }
   if (error instanceof CredentialDeniedError || error instanceof CredentialServiceError)
     return `Credential request failed ${details(error.diagnostics ?? {}, 'credential')}`;
-  if (error instanceof Error) {
-    const name = safeField(error.name, /^[A-Za-z][A-Za-z0-9]{0,63}$/u, 64) ?? 'Error';
-    const detail = safeField(error.message, /^[A-Za-z0-9][A-Za-z0-9 .,:;_/+(){}[\]-]{0,239}$/u, 240);
-    return detail ? `Cross-media seed failed (${name}): ${detail}` : `Cross-media seed failed (${name})`;
-  }
+  const diagnostics = importRequestFailure(error);
+  if (diagnostics?.operation) return `Cross-media seed source failure ${details(diagnostics, 'source')}`;
   return 'Cross-media seed failed';
 }

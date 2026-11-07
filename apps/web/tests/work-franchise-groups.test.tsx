@@ -224,13 +224,15 @@ test('mounted groups preserve originals, gated evidence, human labels and exact 
     expect(new URL(sources.href).pathname).toContain(id(2));
     expect(new URL(why.href).searchParams.get('statement')).toBe(id(20));
     expect(new URL(why.href).searchParams.get('context')).toBe(id(4));
-    for (const link of [sources, why, links.find((a) => a.lang === 'ja')!]) {
+    const peer = links.find((a) => a.lang === 'ja')!;
+    for (const link of [sources, why, peer]) {
       const via = new URL(link.href).searchParams.get('via')!;
       expect(subjectVisitReturn(via, 'en')).toBe(via);
       expect(workFranchiseReturn(new URL(via, 'https://site.test').hash)).toMatchObject({
-        stream: `in:${property}`,
+        stream: `${link === peer ? 'out' : 'in'}:${property}`,
         statement: id(20),
         holder: id(2),
+        focus: link === peer ? 'browse' : 'evidence',
       });
     }
     browser.location.href = `https://site.test${new URL(sources.href).searchParams.get('via')}`;
@@ -298,11 +300,18 @@ test('mounted groups preserve originals, gated evidence, human labels and exact 
             h(WorkFranchiseReading, {
               page,
               reading: subjectBody(page),
-              selection: { node: 'selected', property, direction: 'inverse' },
+              selection: { node: 'selected', property, direction: 'inverse', cursor: page.continuation?.cursor },
               definitions,
               locale: 'en',
               returnTo: `/en/subjects/${id(1)}/source`,
-              currentHref: `${browser.location.pathname}${browser.location.search}${browser.location.hash}`,
+              currentHref: `/en/subjects/${id(1)}/source/relations?${new URLSearchParams({
+                realm: id(5),
+                node: 'selected',
+                streamProperty: property,
+                streamDirection: 'inverse',
+                via: `/en/subjects/${id(3)}/origin`,
+                ...(page.continuation ? { cursor: page.continuation.cursor } : {}),
+              })}`,
               onContinue: (next) => continued.push(next),
             }),
           ),
@@ -319,6 +328,30 @@ test('mounted groups preserve originals, gated evidence, human labels and exact 
     expect(continued).toEqual([{ node: 'selected', cursor: 'node-owned-next' }]);
     host.querySelector<HTMLDetailsElement>('[data-work-statement] details')!.open = true;
     const equal = structuredClone(native);
+    const failed = structuredClone(native);
+    failed.continuation = { node: 'selected', cursor: 'original+cursor' };
+    const failedPlan = planReads(platformRegistry, nativeDocument, {
+      subject: subject.id,
+      context: value.context,
+      continuation: failed.continuation,
+    });
+    for (const status of [503, 204]) {
+      const unavailable = structuredClone(failed);
+      unavailable.reads[failedPlan.nodes.selected!] = { status, body: {} };
+      await drawNative(unavailable);
+      expect(host.querySelectorAll('[data-work-stream]')).toHaveLength(1);
+      const retry = [...host.querySelectorAll<HTMLAnchorElement>('a')].find((el) => el.textContent === 'Retry')!;
+      const retryUrl = new URL(retry.href);
+      expect(Object.fromEntries(retryUrl.searchParams)).toEqual({
+        realm: id(5),
+        node: 'selected',
+        streamProperty: property,
+        streamDirection: 'inverse',
+        cursor: 'original+cursor',
+        via: `/en/subjects/${id(3)}/origin`,
+      });
+      expect(workFranchiseReturn(retryUrl.hash)).toMatchObject({ node: 'selected', stream: `in:${property}` });
+    }
     await drawNative(equal);
     expect(host.querySelector<HTMLDetailsElement>('[data-work-statement] details')!.open).toBe(false);
     await drawNative(equal, { ...value, cacheReader: 'replacement' });

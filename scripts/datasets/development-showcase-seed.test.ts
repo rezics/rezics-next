@@ -4,8 +4,10 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import type { CrossMediaReading } from '../../services/importer/src/cross-media-seed.ts';
 import type { CrossMediaSeedCliOptions } from '../../services/importer/src/cross-media-seed.ts';
+import { ReviewedCatalogueCommandError } from '../../services/importer/src/http.ts';
 import { ShowcaseJournal } from '../../services/importer/src/showcase-publication.ts';
-import { runDevelopmentSeed } from './cross-media-seed.ts';
+import { runDevelopmentSeed, seedFailureDetail } from './cross-media-seed.ts';
+import { cacheDumpAsset } from './fetch-dumps.ts';
 import {
   createDevelopmentShowcaseRequest,
   developmentCollectionFailure,
@@ -83,6 +85,57 @@ test('development seed carries the verified VNDB generation date and omits an un
   expect(pinned.sourceSnapshotAsOf).toBe('2026-11-04');
   const unpinned = await captureSeedOptions();
   expect(unpinned).not.toHaveProperty('sourceSnapshotAsOf');
+});
+
+test('cross-media seed caller prints local dump metadata and preserves reviewed-catalogue attribution', async () => {
+  const tempRoot = join(process.cwd(), '.temp');
+  await mkdir(tempRoot, { recursive: true });
+  const root = await mkdtemp(join(tempRoot, 'seed-diagnostic-'));
+  const cause = new Error('Bearer abc123 raw imported record body');
+  const fetchImpl = Object.assign(
+    async () => {
+      throw cause;
+    },
+    { preconnect() {} },
+  );
+  const source = 'https://operator:secret@dl.vndb.org/dump/vndb-db.tar.zst?token=private#fragment';
+  try {
+    const failure = await cacheDumpAsset(source, join(root, 'downloads', 'vndb-db.tar.zst'), '0'.repeat(64), {
+      fetchImpl,
+    }).catch((error: unknown) => error);
+    const detail = seedFailureDetail(failure);
+    expect(detail).toContain('operation=dump-download phase=network');
+    expect(detail).toContain('target=https://dl.vndb.org/dump/vndb-db.tar.zst');
+    expect(detail).not.toContain('operator');
+    expect(detail).not.toContain('secret');
+    expect(detail).not.toContain('private');
+    expect(detail).not.toContain('Bearer abc123');
+    expect(detail).not.toContain('raw imported record body');
+
+    const httpFetch = Object.assign(
+      async () => new Response('Bearer abc123 raw imported record body', { status: 404 }),
+      { preconnect() {} },
+    );
+    const unavailable = await cacheDumpAsset(source, join(root, 'downloads', 'unavailable.tar.zst'), '0'.repeat(64), {
+      fetchImpl: httpFetch,
+    }).catch((error: unknown) => error);
+    const httpDetail = seedFailureDetail(unavailable);
+    expect(httpDetail).toContain('operation=dump-download phase=http');
+    expect(httpDetail).toContain('status=404');
+    expect(httpDetail).toContain('target=https://dl.vndb.org/dump/vndb-db.tar.zst');
+    expect(httpDetail).not.toContain('Bearer abc123');
+    expect(httpDetail).not.toContain('raw imported record body');
+    expect(httpDetail).not.toContain('token=private');
+
+    const reviewed = new ReviewedCatalogueCommandError('seed-1', 'proposal', {
+      status: 403,
+      code: 'forbidden',
+      operation: 'statement:propose',
+    });
+    expect(seedFailureDetail(reviewed)).toContain('seed=seed-1 kind=proposal operation=statement:propose');
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
 });
 
 function fixture() {
