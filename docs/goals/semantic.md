@@ -64,6 +64,10 @@ hidden write_basis and outbox writes, before effects, and persist continuation s
 the native all-home walk. Empty sealed homes charge a page/seek read then one hold and one transfer command;
 the independent terminal proof is walked after the page cursor.
 
+Decision: fewest tests pin the 31 first-public catalogue and Zone paths: one kernel native suite over the bundled
+release plus one admitted seeded walk that marks each row from execution. Fixtures and typing are not native or
+browser passes. Web owns rendering and navigation; Semantic owns native meaning, decisions and static Zone pages.
+
 ## Ownership
 
 Placement decision: each existing owner remains the sole authority for its contract: Definitions for vocabulary, Semantic for native behavior, Conversion for value fidelity, Imports for acquisition and publication, and Web for reading and correction. The [Semantic module](../../services/kernel/src/semantic/README.md), [Definitions](../../packages/definitions/README.md), [Conversion](../../packages/conversion/README.md), [filters](../../packages/filter/README.md), [Zones](../zones.md), [membership](../zone-membership.md), [Collection sources](../collection-source.md), [dynamic Collections](../dynamic-collections.md) and [deletion](../deletion.md) hold their contracts.
