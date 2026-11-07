@@ -290,8 +290,7 @@ async function fixture(database = { pool, admin }) {
   mediaStores.push(mediaStore);
   const mediaId = await insertMedia(database.admin, database.pool, access, mediaStore.storage);
   await grant(database.admin, mediaId);
-  const addMedia = (id = newId(route)) =>
-    insertMedia(database.admin, database.pool, access, mediaStore.storage, id);
+  const addMedia = (id = newId(route)) => insertMedia(database.admin, database.pool, access, mediaStore.storage, id);
   const authenticate = (id = moderatorId, scoped = true) =>
     access.authenticate(tokens.get(`${id}:${scoped}`)!, { pool: database.pool, deadline: Date.now() + 180_000 });
   const actor = await authenticate();
@@ -422,9 +421,7 @@ test('anonymous uploader author and suspended denials preserve state; bytes and 
   const variants = (
     await admin.query('SELECT * FROM content.media_variant WHERE route=$1 AND media_id=$2', [route, f.mediaId])
   ).rows;
-  const retainedObjects = f.mediaStore
-    .inspect()
-    .filter(({ key }) => key.startsWith(`m/${f.mediaId}/`));
+  const retainedObjects = f.mediaStore.inspect().filter(({ key }) => key.startsWith(`m/${f.mediaId}/`));
   const original = await f.mediaStore.storage.get(`m/${f.mediaId}/original`);
   expect(original).toBeInstanceOf(Uint8Array);
   await f.execute();
