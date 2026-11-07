@@ -25,6 +25,16 @@ import {
 } from '../../../services/auth/scripts/database.ts';
 import { ensureLocalWorkerVars } from './dev-vars.ts';
 import { compileWebPrograms } from './typecheck.ts';
+import {
+  isWebHostTestFile,
+  readWebTestSelectionContext,
+  resolveWebTestSelection,
+  testSelectorArgumentIndices,
+  webTestSelectionContextEnvironment,
+  writeWebTestSelectionContext,
+  type WebTestSelection,
+  type WebTestSelectionContext,
+} from './selection.ts';
 
 export { ensureLocalWorkerVars };
 
@@ -352,16 +362,22 @@ async function runWebTypecheck(env: NodeJS.ProcessEnv): Promise<void> {
   if (code !== 0) throw new Error(`typecheck failed with status ${code}`);
 }
 
-async function runCommand(label: string, command: string, args: string[], env: NodeJS.ProcessEnv): Promise<void> {
+async function runCommand(
+  label: string,
+  command: string,
+  args: string[],
+  env: NodeJS.ProcessEnv,
+  cwd = app,
+): Promise<void> {
   process.stdout.write(`\n[web check] ${label}\n`);
   const started = performance.now();
-  const routed = await routeWebCheck({ root, cwd: app, command: [command, ...args] }, env);
+  const routed = await routeWebCheck({ root, cwd, command: [command, ...args] }, env);
   if (routed !== null) {
     if (routed !== 0) throw new Error(`${label} failed with status ${routed}`);
     return;
   }
   const child = Bun.spawn([command, ...args], {
-    cwd: app,
+    cwd,
     env,
     stdin: 'inherit',
     stdout: 'inherit',
@@ -400,9 +416,12 @@ export async function runHostTests(
 }
 
 /** Runs the Auth-backed Web host fixture in Auth's database lane without widening the general Web host suite. */
-async function runAuthBindingHostTest(env: NodeJS.ProcessEnv = process.env): Promise<void> {
+async function runAuthBindingHostTest(
+  env: NodeJS.ProcessEnv = process.env,
+  testArguments: string[] = [],
+): Promise<void> {
   const routed = await routeWebCheck(
-    { root, cwd: app, command: ['bun', 'scripts/check.ts', '--auth-binding-host'] },
+    { root, cwd: app, command: ['bun', 'scripts/check.ts', '--auth-binding-host', ...testArguments] },
     env,
   );
   if (routed !== null) {
@@ -410,7 +429,7 @@ async function runAuthBindingHostTest(env: NodeJS.ProcessEnv = process.env): Pro
     return;
   }
   const file = 'apps/web/tests/auth-binding.host.test.ts';
-  const remoteCommand = ['bun', '../../apps/web/scripts/check.ts', '--auth-binding-host'];
+  const remoteCommand = ['bun', '../../apps/web/scripts/check.ts', '--auth-binding-host', ...testArguments];
   const code = await databaseCheck(remoteCommand, async () => {
     const database = ownDatabase();
     try {
@@ -434,12 +453,15 @@ async function runAuthBindingHostTest(env: NodeJS.ProcessEnv = process.env): Pro
         directory: root,
         files: [file],
         partial: true,
+        testArguments,
         createDatabase: (name) => psql(`CREATE DATABASE ${name} TEMPLATE ${TEMPLATE_DATABASE}`),
         dropDatabase: (name) => psql(`DROP DATABASE IF EXISTS ${name} WITH (FORCE)`),
         environment: (name) => {
           const url = database.url.replace(`/${TEMPLATE_DATABASE}?`, `/${name}?`);
+          const testEnvironment: NodeJS.ProcessEnv = { ...env };
+          delete testEnvironment[webTestSelectionContextEnvironment];
           return {
-            ...env,
+            ...testEnvironment,
             AUTH_CHECK_CONTAINER: database.container,
             AUTH_CHECK_LANE_OWNER: String(process.pid),
             DATABASE_URL: url,
@@ -463,7 +485,17 @@ export type WebHostTestRuntime = {
   /** Runs the Auth fixture through its existing Auth-owned database lane. */
   runAuthBinding?: (env: NodeJS.ProcessEnv) => Promise<void>;
   /** Runs the remaining native host files through Bun's existing host-test runner. */
-  runNative?: (files: string[], env: NodeJS.ProcessEnv) => Promise<void>;
+  runNative?: (
+    files: string[],
+    env: NodeJS.ProcessEnv,
+    execution: { cwd: string; command: string[]; selection?: WebTestSelectionContext },
+  ) => Promise<void>;
+};
+
+export type WebNativeHostExecution = {
+  cwd: string;
+  command: string[];
+  selection?: WebTestSelectionContext;
 };
 
 function discoverWebHostFiles(directory: string): string[] {
@@ -474,22 +506,26 @@ function discoverWebHostFiles(directory: string): string[] {
 export async function runWebHostTests(
   env: NodeJS.ProcessEnv = process.env,
   runtime: WebHostTestRuntime = {},
+  selection?: WebTestSelectionContext,
 ): Promise<void> {
   const directory = runtime.directory ?? app;
-  const files = discoverWebHostFiles(directory);
+  const files = selection?.selectedFiles.length ? selection.selectedFiles.slice() : discoverWebHostFiles(directory);
   const authFile = 'tests/auth-binding.host.test.ts';
   const nativeFiles = files.filter((file) => file !== authFile);
   const failures: string[] = [];
   const runAuthBinding = runtime.runAuthBinding ?? runAuthBindingHostTest;
+  const nativeExecution: WebNativeHostExecution = {
+    cwd: directory,
+    command: ['bun', 'test', '--path-ignore-patterns=node_modules/**', ...nativeFiles.map((file) => `./${file}`)],
+    ...(selection === undefined ? {} : { selection }),
+  };
   const runNative =
     runtime.runNative ??
-    ((selected: string[], commandEnv: NodeJS.ProcessEnv) =>
-      runCommand(
-        'host tests',
-        'bun',
-        ['test', '--path-ignore-patterns=node_modules/**', ...selected.map((file) => `./${file}`)],
-        commandEnv,
-      ));
+    ((selected: string[], commandEnv: NodeJS.ProcessEnv, execution: WebNativeHostExecution) => {
+      const commandEnvironment = { ...commandEnv };
+      delete commandEnvironment[webTestSelectionContextEnvironment];
+      return runCommand('host tests', 'bun', execution.command.slice(1), commandEnvironment, execution.cwd);
+    });
 
   if (files.includes(authFile)) {
     try {
@@ -501,7 +537,7 @@ export async function runWebHostTests(
 
   if (nativeFiles.length > 0) {
     try {
-      await runNative(nativeFiles, env);
+      await runNative(nativeFiles, env, nativeExecution);
     } catch (error) {
       failures.push(error instanceof Error ? error.message : String(error));
     }
@@ -512,7 +548,10 @@ export async function runWebHostTests(
 
 export type WebCheckRuntime = {
   hostTests?: WebHostTestRuntime;
-  authBindingHostTest?: (env: NodeJS.ProcessEnv) => Promise<void>;
+  authBindingHostTest?: (env: NodeJS.ProcessEnv, testArguments: string[]) => Promise<void>;
+  /** Lets focused routing tests inspect the exact owning cwd and retained selection context. */
+  route?: typeof routeWebCheck;
+  invocationDirectory?: string;
 };
 
 async function prepare(env: NodeJS.ProcessEnv): Promise<void> {
@@ -527,20 +566,6 @@ function testScriptArgument(args: string[]): string {
   if (command !== 'bun run test')
     throw new Error('Usage: bun scripts/check.ts [--stories] --test-command "bun run test"');
   return command;
-}
-
-function requestedTestFiles(args: string[]): string[] {
-  const files: string[] = [];
-  for (let index = 0; index < args.length; index += 1) {
-    const argument = args[index]!;
-    if (argument === '--skip-format') continue;
-    if (argument === '--test-command') {
-      index += 1;
-      continue;
-    }
-    if (!argument.startsWith('--')) files.push(argument);
-  }
-  return files;
 }
 
 async function runTests(files: string[], env: NodeJS.ProcessEnv, testScript: string): Promise<void> {
@@ -583,21 +608,48 @@ async function runTests(files: string[], env: NodeJS.ProcessEnv, testScript: str
 }
 
 export async function main(args: string[], runtime: WebCheckRuntime = {}): Promise<void> {
-  const workerReport = browserWorkerRequest(args)?.report;
+  const routedSelection = args.length === 1 && args[0] === '--routed-selection';
+  const inheritedSelection = routedSelection ? readWebTestSelectionContext() : undefined;
+  if (routedSelection && !inheritedSelection)
+    throw new Error('--routed-selection requires the placed Web test selection context');
+  const currentArgs = routedSelection ? inheritedSelection!.normalizedArgv.slice() : args.slice();
+  const isSpecialRoute =
+    currentArgs[0] === '--personal-host' ||
+    currentArgs[0] === '--auth-binding-host' ||
+    currentArgs.includes('--browser') ||
+    currentArgs.includes('--stories') ||
+    currentArgs.includes('--prepare-only');
+  const selection: WebTestSelection | undefined = isSpecialRoute
+    ? undefined
+    : inheritedSelection
+      ? { ...inheritedSelection, executionCwd: app, command: inheritedSelection.normalizedArgv.slice() }
+      : resolveWebTestSelection(currentArgs, {
+          rootDirectory: root,
+          appDirectory: app,
+          invocationDirectory: runtime.invocationDirectory ?? process.cwd(),
+          source: 'apps/web/scripts/check.ts',
+          commandKind: 'web-check',
+        });
+  const routeEnvironment = selection ? writeWebTestSelectionContext(selection) : process.env;
+  const routeCommand = selection ? ['--routed-selection'] : currentArgs;
+  const workerReport = browserWorkerRequest(currentArgs)?.report;
   const returned = workerReport ? [workspacePath(root, workerReport)] : ['apps/web/.cache/check-timings.json'];
-  if (args.includes('--prepare-only')) returned.push('apps/web/.dev.vars');
-  const routed = await routeWebCheck({
-    root,
-    cwd: app,
-    command: ['bun', 'scripts/check.ts', ...args],
-    returns: returned,
-  });
+  if (currentArgs.includes('--prepare-only')) returned.push('apps/web/.dev.vars');
+  const routed = await (runtime.route ?? routeWebCheck)(
+    {
+      root,
+      cwd: app,
+      command: ['bun', 'scripts/check.ts', ...routeCommand],
+      returns: returned,
+    },
+    routeEnvironment,
+  );
   if (routed !== null) {
     process.exitCode = routed;
     return;
   }
-  if (args[0] === '--personal-host') {
-    if (args.length !== 1) throw new Error('Usage: bun apps/web/scripts/check.ts --personal-host');
+  if (currentArgs[0] === '--personal-host') {
+    if (currentArgs.length !== 1) throw new Error('Usage: bun apps/web/scripts/check.ts --personal-host');
     // Explicit integration gate: keep ordinary host discovery/placement and its
     // parent ownership rules unchanged. The frozen suite owns each factory.
     await runCommand(
@@ -608,22 +660,28 @@ export async function main(args: string[], runtime: WebCheckRuntime = {}): Promi
     );
     return;
   }
-  if (args[0] === '--auth-binding-host') {
-    if (args.length !== 1) throw new Error('Usage: bun apps/web/scripts/check.ts --auth-binding-host');
-    await (runtime.authBindingHostTest ?? runAuthBindingHostTest)(process.env);
+  if (currentArgs[0] === '--auth-binding-host') {
+    const testArguments = currentArgs.slice(1);
+    const selectors = testSelectorArgumentIndices(['bun', 'test', ...testArguments], 'bun-test');
+    if (selectors.length > 0) throw new Error('--auth-binding-host accepts Bun test options, not file selectors');
+    await (runtime.authBindingHostTest ?? runAuthBindingHostTest)(process.env, testArguments);
     return;
   }
-  if (args[0] === '--host') {
-    if (args.length !== 1) throw new Error('Usage: bun apps/web/scripts/check.ts --host');
-    await runWebHostTests(process.env, runtime.hostTests);
+  if (currentArgs[0] === '--host') {
+    const files = selection?.selectedFiles ?? [];
+    if (currentArgs.length > 1 && files.length === 0)
+      throw new Error('Usage: bun apps/web/scripts/check.ts --host [tests/**/*.host.test.ts]');
+    if (files.some((file) => !isWebHostTestFile(file)))
+      throw new Error('--host accepts only Web *.host.test.ts selectors');
+    await runWebHostTests(process.env, runtime.hostTests, selection);
     return;
   }
-  if (args.includes('--prepare-only')) {
+  if (currentArgs.includes('--prepare-only')) {
     ensureLocalWorkerVars();
     await prepare(process.env);
     return;
   }
-  const worker = browserWorkerRequest(args);
+  const worker = browserWorkerRequest(currentArgs);
   if (worker) {
     await prepare(process.env);
     const code = await runBrowserWorker(worker);
@@ -636,24 +694,34 @@ export async function main(args: string[], runtime: WebCheckRuntime = {}): Promi
   }
 
   const env = process.env;
-  const testScript = testScriptArgument(args);
-  if (args.includes('--stories')) {
+  const testScript = testScriptArgument(currentArgs);
+  if (currentArgs.includes('--stories')) {
     await runTests(['tests/page-stories.test.ts'], env, testScript);
     return;
   }
 
-  if (!args.includes('--skip-format'))
+  if (!currentArgs.includes('--skip-format'))
     await runCommand('format', 'oxfmt', ['--check', '.', '!src/kernel/recorded/*.json'], env);
   await prepare(env);
 
-  const requestedFiles = requestedTestFiles(args);
-  const files = (
+  const requestedFiles = selection?.selectedFiles ?? [];
+  const files =
     requestedFiles.length > 0
       ? requestedFiles
-      : [...new Bun.Glob('tests/*.test.ts').scanSync({ cwd: app })].filter((file) => !file.endsWith('.host.test.ts'))
-  ).sort();
+      : [...new Bun.Glob('tests/*.test.ts').scanSync({ cwd: app })]
+          .filter((file) => !file.endsWith('.host.test.ts'))
+          .sort();
   if (requestedFiles.length > 0) {
-    await runTests(files, env, testScript);
+    const nativeFiles = requestedFiles.filter(isWebHostTestFile);
+    const ordinaryFiles = requestedFiles.filter((file) => !isWebHostTestFile(file));
+    await runTests(ordinaryFiles, env, testScript);
+    if (nativeFiles.length > 0) {
+      await runWebHostTests(
+        env,
+        runtime.hostTests,
+        selection ? { ...selection, selectedFiles: nativeFiles } : undefined,
+      );
+    }
     return;
   }
   const results = await Promise.allSettled([runWebTypecheck(env), runTests(files, env, testScript)]);

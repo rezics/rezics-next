@@ -1,10 +1,20 @@
 import { existsSync, mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { isAbsolute, join, relative, resolve, sep } from 'node:path';
+import { join, resolve } from 'node:path';
 import { ensureMessagesReady } from './messages-ready.ts';
 import { hasWebCheckCustody, routeWebCheck } from './check-placement.ts';
 import { commandNeedsSharedDevServer, privateNetworkCommand, webTestPrivateNetworkEnvName } from './with-dev-server.ts';
 import { ownBunProcess } from '../tests/support/server-custody.ts';
+import {
+  admitWebHostTestCommand,
+  mapWebTestSelector,
+  readWebTestSelectionContext,
+  resolveWebTestSelection,
+  testSelectorArgumentIndices,
+  writeWebTestSelectionContext,
+  type WebTestSelection,
+  type WebTestSelectionContext,
+} from './selection.ts';
 
 const app = resolve(import.meta.dir, '..');
 const signals = [
@@ -12,18 +22,11 @@ const signals = [
   ['SIGTERM', 15],
   ['SIGHUP', 1],
 ] as const;
-const hostTestFile = /\.host\.test\.[cm]?[jt]sx?$/u;
-const testFile = /\.test\.[cm]?[jt]sx?$/u;
 
 /** bunfig excludes `*.host.test.ts`; named host files use the same CLI override as `test:host`. */
 export function admitExplicitHostTestCommand(command: string[]): string[] {
   if (command[0] !== 'bun' || command[1] !== 'test') return command;
-  if (
-    command.some((argument) => argument === '--path-ignore-patterns' || argument.startsWith('--path-ignore-patterns='))
-  )
-    return command;
-  if (!command.slice(2).some((argument) => hostTestFile.test(argument))) return command;
-  return ['bun', 'test', '--path-ignore-patterns=node_modules/**', ...command.slice(2)];
+  return admitWebHostTestCommand(command);
 }
 
 /** Map a named test file onto the focused child's working directory. Option operands stay untouched. */
@@ -32,14 +35,7 @@ export function focusedChildTestFile(
   appDirectory: string,
   repoRoot = resolve(appDirectory, '../..'),
 ): string {
-  const appDirectoryPath = resolve(appDirectory);
-  const posix = (value: string) => value.split(sep).join('/');
-  const childRelative = (absolute: string) => {
-    const rel = relative(appDirectoryPath, absolute);
-    return rel && !rel.startsWith('..') && !isAbsolute(rel) ? posix(rel) : null;
-  };
-  if (isAbsolute(file)) return childRelative(resolve(file)) ?? file;
-  return childRelative(resolve(repoRoot, file)) ?? childRelative(resolve(appDirectoryPath, file)) ?? file;
+  return mapWebTestSelector(file, appDirectory, repoRoot, appDirectory);
 }
 
 /** Canonicalize only explicit test-file selectors; flags and their values keep their original tokens. */
@@ -48,19 +44,20 @@ export function focusedChildTestCommand(
   appDirectory: string,
   repoRoot = resolve(appDirectory, '../..'),
 ): string[] {
-  return command.map((argument) =>
-    testFile.test(argument) ? focusedChildTestFile(argument, appDirectory, repoRoot) : argument,
+  const selectors = new Set(testSelectorArgumentIndices(command));
+  return command.map((argument, index) =>
+    selectors.has(index) ? focusedChildTestFile(argument, appDirectory, repoRoot) : argument,
   );
 }
 
 /** Explicit files run in fresh runtimes: Bun's module mocks otherwise survive across file boundaries. */
 export function focusedTestCommands(command: string[]): string[][] {
   if (command[0] !== 'bun' || command[1] !== 'test') return [command];
-  const files = command.slice(2).filter((argument) => testFile.test(argument));
-  if (files.length < 2) return [command];
-  const selected = new Set(files);
-  const prefix = command.filter((argument) => !selected.has(argument));
-  return files.map((file) => [...prefix, file]);
+  const selectors = testSelectorArgumentIndices(command);
+  if (selectors.length < 2) return [command];
+  return selectors.map((selectedIndex) =>
+    command.filter((_, index) => !selectors.includes(index) || index === selectedIndex),
+  );
 }
 
 /** One exclusive Worker graph at a time in a focused 6 GiB slot when Copies and signed-in-routes both compile. */
@@ -73,7 +70,11 @@ export function admitSerialBunTestCommand(command: string[]): string[] {
 
 export type FocusedRunnerOptions = {
   appDirectory?: string;
+  /** The caller's actual cwd before this command is routed to the owning Web workspace. */
+  invocationDirectory?: string;
   env?: NodeJS.ProcessEnv;
+  /** Present only when the placed CLI re-enters through its private routing token. */
+  selectionContext?: WebTestSelectionContext;
   privateNetwork?: boolean;
   prepare?: (appDirectory: string, env: NodeJS.ProcessEnv, signal?: AbortSignal) => number | Promise<number>;
   onStart?: (runtime: { pid?: number; stateDirectory: string }) => void;
@@ -176,6 +177,19 @@ export async function runFocusedCommand(command: string[], options: FocusedRunne
     throw new Error('--private-network requires Linux user and network namespaces');
 
   const appDirectory = resolve(options.appDirectory ?? app);
+  const selection: WebTestSelection = options.selectionContext
+    ? {
+        ...options.selectionContext,
+        executionCwd: appDirectory,
+        command: options.selectionContext.normalizedArgv.slice(),
+      }
+    : resolveWebTestSelection(command, {
+        rootDirectory: resolve(appDirectory, '../..'),
+        appDirectory,
+        invocationDirectory: options.invocationDirectory ?? process.cwd(),
+        source: 'apps/web/scripts/focused.ts',
+      });
+  const routedEnvironment = writeWebTestSelectionContext(selection, { ...process.env, ...options.env });
   if (
     !hasWebCheckCustody(resolve(app, '../..'), appDirectory) &&
     !options.place &&
@@ -187,30 +201,26 @@ export async function runFocusedCommand(command: string[], options: FocusedRunne
   const place = options.place ?? routeWebCheck;
   const routed = await place(
     {
-      root: resolve(app, '../..'),
+      root: resolve(appDirectory, '../..'),
       cwd: appDirectory,
       command: [
         'bun',
         'scripts/focused.ts',
         ...(options.privateNetwork ? ['--private-network'] : []),
-        '--',
-        ...command,
+        '--routed-selection',
       ],
     },
-    { ...process.env, ...options.env },
+    routedEnvironment,
   );
   if (routed !== null) return routed;
-  const admitted = admitSerialBunTestCommand(
-    admitExplicitHostTestCommand(focusedChildTestCommand(command, appDirectory)),
-  );
+  const admitted = admitSerialBunTestCommand(admitExplicitHostTestCommand(selection.command));
   const wrapShared =
     commandNeedsSharedDevServer(admitted) &&
     existsSync(join(appDirectory, 'vite.config.ts')) &&
     existsSync(join(appDirectory, 'scripts/with-dev-server.ts'));
   const stateDirectory = mkdtempSync(join(tmpdir(), 'rezics-web-focused-'));
   const childEnvironment: NodeJS.ProcessEnv = {
-    ...process.env,
-    ...options.env,
+    ...routedEnvironment,
     REZICS_TEST_RUNTIME: '1',
     REZICS_WEB_SERIAL_VITE: '1',
     WEB_TEST_STATE_DIR: stateDirectory,
@@ -226,6 +236,7 @@ export async function runFocusedCommand(command: string[], options: FocusedRunne
     'KERNEL_ORIGIN',
   ])
     delete childEnvironment[name];
+  delete childEnvironment.REZICS_WEB_TEST_SELECTION_CONTEXT;
   const invocations = focusedTestCommands(admitted).map((command) =>
     wrapShared
       ? ['bun', 'scripts/with-dev-server.ts', '--', ...command]
@@ -316,7 +327,22 @@ export async function runFocusedCommand(command: string[], options: FocusedRunne
   }
 }
 
-function parseArguments(args: string[]): { command: string[]; privateNetwork: boolean } {
+function parseArguments(args: string[]): {
+  command: string[];
+  privateNetwork: boolean;
+  selectionContext?: WebTestSelectionContext;
+} {
+  if (args.at(-1) === '--routed-selection') {
+    const flags = args.slice(0, -1);
+    if (flags.some((flag) => flag !== '--private-network')) throw new Error(`Unknown option: ${flags.join(' ')}`);
+    const context = readWebTestSelectionContext();
+    if (!context) throw new Error('--routed-selection requires the placed Web test selection context');
+    return {
+      command: context.normalizedArgv.slice(),
+      privateNetwork: flags.includes('--private-network'),
+      selectionContext: context,
+    };
+  }
   const separator = args.indexOf('--');
   if (separator < 0) throw new Error('Usage: bun scripts/focused.ts [--private-network] -- <command...>');
   const flags = args.slice(0, separator);
@@ -328,8 +354,11 @@ function parseArguments(args: string[]): { command: string[]; privateNetwork: bo
 
 if (import.meta.main) {
   try {
-    const { command, privateNetwork } = parseArguments(process.argv.slice(2));
-    process.exitCode = await runFocusedCommand(command, { privateNetwork });
+    const { command, privateNetwork, selectionContext } = parseArguments(process.argv.slice(2));
+    process.exitCode = await runFocusedCommand(command, {
+      privateNetwork,
+      ...(selectionContext === undefined ? {} : { selectionContext }),
+    });
   } catch (error) {
     console.error(error instanceof Error ? (error.stack ?? error.message) : error);
     process.exitCode = 1;
