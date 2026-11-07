@@ -37,6 +37,7 @@ import {
   walkStackPortsAvailable,
   walkUrlNeedsHtml,
   walkUsefulPageResponse,
+  walkCommerceProviderEnvironment,
 } from './walk-stack.ts';
 import { databaseRunArgs } from '../services/kernel/scripts/database.ts';
 import { searchRunArgs } from '../services/kernel/scripts/search.ts';
@@ -199,6 +200,17 @@ test('walk admission preserves an occupied slot and reuses it after its listener
     if (listener.listening) listener.close();
     await rm(directory, { recursive: true, force: true });
   }
+});
+
+test('walk Stripe fixture bindings stay loopback HTTP with https Checkout return URLs', () => {
+  expect(walkCommerceProviderEnvironment(18765, 'whsec_local_stripe_fixture')).toEqual({
+    STRIPE_SECRET_KEY: 'sk_test_walk_commerce',
+    STRIPE_API_HOST: 'http://127.0.0.1:18765',
+    STRIPE_WEBHOOK_SECRETS: 'whsec_local_stripe_fixture',
+    STRIPE_MANAGED_PAYMENTS: 'false',
+    CHECKOUT_SUCCESS_URL: 'https://example.test/orders/{ORDER_ID}/paid',
+    CHECKOUT_CANCEL_URL: 'https://example.test/orders/{ORDER_ID}/cancel',
+  });
 });
 
 test('admitted stacks launch Kernel without watch, fetch JWKS from native Auth, and defer Web', () => {

@@ -4,9 +4,9 @@
  * Native commands and served pages are recorded per finishing-register row.
  * Evidence stays under `.temp/commerce-walk/`.
  *
- * Kernel /v1/definitions/active must return a digest before seed. A 404 or
- * sign-in mismatch is a page failure except anonymous private pages, which must
- * leave the member shell.
+ * Kernel /v1/definitions/active must return a digest, then an importer fence
+ * must succeed, before seed. A 404 or sign-in mismatch is a page failure except
+ * anonymous private pages, which must leave the member shell.
  */
 import { execFileSync, spawn } from 'node:child_process';
 import { randomBytes } from 'node:crypto';
@@ -14,6 +14,12 @@ import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { join, resolve } from 'node:path';
 import { chromium, type Browser, type BrowserContext, type Page } from 'playwright';
 import { startSeededFrontends } from '../../../../services/auth/scripts/dev-stack.ts';
+import {
+  createAccountTokenProvider,
+  CredentialServiceError,
+  IMPORTER_SCOPES,
+} from '../../../../services/importer/src/credentials.ts';
+import { createImportTransport, ImportTransportError } from '../../../../services/importer/src/import-client.ts';
 import {
   applyWalkResults,
   createWalkKernel,
@@ -100,6 +106,42 @@ async function waitUntilActiveRelease(origin: string, ms = 1_200_000): Promise<v
     await Bun.sleep(1_000);
   }
   throw new Error(`Kernel /v1/definitions/active not ready: ${last}`);
+}
+
+async function waitUntilImportReady(kernel: string, env: Record<string, string>, ms = 1_200_000): Promise<void> {
+  for (const name of [
+    'REZICS_DEV_PERSONA_ACCOUNT_KEY',
+    'REZICS_DEV_PERSONA_ACCOUNT',
+    'REZICS_DEV_PERSONA_CLIENT',
+    'AUTH_ORIGIN',
+  ] as const) {
+    if (!env[name]) throw new Error(`seed.env missing ${name}`);
+  }
+  const tokenProvider = await createAccountTokenProvider({
+    accountKeyPath: env.REZICS_DEV_PERSONA_ACCOUNT_KEY,
+    account: env.REZICS_DEV_PERSONA_ACCOUNT,
+    client: env.REZICS_DEV_PERSONA_CLIENT,
+    authOrigin: env.AUTH_ORIGIN,
+    scopes: [...IMPORTER_SCOPES, 'subject:read', 'context:accept', 'context:adopt'],
+  });
+  const transport = createImportTransport({ origin: kernel, tokenProvider });
+  const deadline = Date.now() + ms;
+  let last = 'no response';
+  while (Date.now() < deadline) {
+    try {
+      await transport.fence({ source: 'rezics_reviewed_vocabulary', externalId: 'walk-import-ready', fieldGroup: 'facts' });
+      return;
+    } catch (error) {
+      if (error instanceof ImportTransportError)
+        last = [error.message, error.status !== undefined ? `HTTP ${error.status}` : undefined, error.code]
+          .filter(Boolean)
+          .join(' ');
+      else if (error instanceof CredentialServiceError) last = error.message;
+      else last = error instanceof Error ? error.message : String(error);
+    }
+    await Bun.sleep(1_000);
+  }
+  throw new Error(`import fence not ready: ${last}`);
 }
 
 async function parseEnv(path: string): Promise<Record<string, string>> {
@@ -401,6 +443,7 @@ async function main() {
   try {
     await waitUntilActiveRelease(stack.kernel);
     await child(['bun', 'services/auth/scripts/dev-stack.ts', 'persona'], 'persona');
+    await waitUntilImportReady(stack.kernel, await parseEnv(join(root, '.temp/local-stack/seed.env')));
     await seedCatalog();
     frontends = await startSeededFrontends();
     const showcase = await readShowcase();

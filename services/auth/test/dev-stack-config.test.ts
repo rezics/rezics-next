@@ -77,6 +77,9 @@ test('seeded frontends wait for useful /en HTML through waitUntilWalkReady', asy
   expect(source).toContain('${origins.web}${SEEDED_WEB_READY_PATH}');
   expect(source).toContain('issuerJwksUrl(origins.issuer)');
   expect(source).toContain('walkOriginListening(origins.issuer)');
+  expect(source).toContain('startFakeStripe');
+  expect(source).toContain('walkCommerceProviderEnvironment');
+  expect(source).toContain("process.env.STRIPE_SECRET_KEY === 'sk_test_walk_commerce'");
 });
 
 test('isolated Kernel bindings verify the selected Auth issuer and bind the selected API port', () => {

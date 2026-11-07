@@ -3,7 +3,7 @@ import { chmod, mkdir, readFile, writeFile } from 'node:fs/promises';
 import { dirname, join, resolve } from 'node:path';
 import { createKernelClient } from '@rezics/client';
 import { createAccountTokenProvider, IMPORTER_SCOPES } from '../../services/importer/src/credentials.ts';
-import { createImportTransport } from '../../services/importer/src/import-client.ts';
+import { createImportTransport, ImportTransportError } from '../../services/importer/src/import-client.ts';
 import { createImportFetch } from '../../services/importer/src/import-fetch.ts';
 import {
   developmentPersonalListScopes,
