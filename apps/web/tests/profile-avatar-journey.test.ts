@@ -1,19 +1,20 @@
-import { mediaClient, readAvatarUploadAdvice } from '../src/media/kernel';
+import { MediaProblem, mediaClient, readAvatarUploadAdvice } from '../src/media/kernel';
 import { expect, test } from 'bun:test';
 import { spyOn } from 'bun:test';
 import {
   createMediaReservationIntent,
   readSiteAvatarUploadAdvice,
   uploadAvatar,
-  UploadRefusal,
   type MediaReservationIntent,
-  type UploadRefusalReason,
 } from '../src/threads/upload';
+import { UploadRefusal, type UploadRefusalReason } from '../src/threads/upload-vocabulary';
 import type { AvatarAdviceRead, AvatarAdviceReadResult, AvatarResume } from '../src/settings/profile-avatar-upload';
 import { ProfileAvatarUpload, type AvatarUpload } from '../src/settings/profile-avatar-upload';
+import type { SettingsAvatarMedia } from '../src/settings/ports/content';
 import type { ProfileValues } from '../src/settings/profile-data';
 import { ProfileEditor, type ProfileAttempt } from '../src/settings/profile-write';
 import { managedReadTimeout } from '../src/settings/managed-read-deadline';
+import { settingsMediaFailure } from '../src/settings/adapters/content';
 import { createBrowserSettingsAmbient } from '../src/settings/adapters/ambient';
 
 const settingsAmbient = createBrowserSettingsAmbient();
@@ -66,6 +67,32 @@ function advice(accountId: string, actions: ['upload'] | [] = ['upload']) {
 function adviceResult(body: unknown, result: Partial<AvatarAdviceReadResult> = {}): AvatarAdviceReadResult {
   return { ok: true, body, responseTime: Date.now(), ...result };
 }
+
+test('Settings projects only Content media problems into its closed retry envelope', () => {
+  const problem = { type: 'about:blank', title: 'Unavailable', status: 503, code: 'dependency_unavailable' };
+  const failure = new MediaProblem(problem, { 'retry-after': '12' });
+  expect(settingsMediaFailure(failure)).toEqual({ status: 503, problem, headers: { 'retry-after': '12' } });
+  expect(settingsMediaFailure(new Error('unrelated failure'))).toBeUndefined();
+});
+
+function avatarContent(
+  editor: ProfileEditor,
+  upload: AvatarUpload,
+  readAdvice: AvatarAdviceRead | undefined,
+  resume?: AvatarResume,
+): SettingsAvatarMedia {
+  return {
+    createIntent: (accountId, selected) =>
+      createMediaReservationIntent({ containerId: accountId }, selected, 'avatar', accountId),
+    upload,
+    resume:
+      resume ??
+      (async () => {
+        throw new UploadRefusal('unavailable');
+      }),
+    readAdvice: readAdvice ?? (async () => adviceResult(advice(editor.snapshot().draft?.accountId ?? ''))),
+  };
+}
 async function submit(controller: ProfileAvatarUpload, selected = file()) {
   controller.choose(selected);
   for (let attempt = 0; attempt < 8; attempt += 1) {
@@ -92,22 +119,16 @@ function uploads(editor: ProfileEditor, readAdvice?: AvatarAdviceRead) {
     // Intentionally ignore abort: ownership must also guard an already completed provider response.
     return result.promise;
   };
-  const controller = new ProfileAvatarUpload(
-    editor,
-    upload,
-    {
-      createObjectURL: () => {
-        const url = `blob:owned-${created.length}`;
-        created.push(url);
-        return url;
-      },
-      revokeObjectURL: (url) => {
-        revoked.push(url);
-      },
+  const controller = new ProfileAvatarUpload(editor, avatarContent(editor, upload, readAdvice), {
+    createObjectURL: () => {
+      const url = `blob:owned-${created.length}`;
+      created.push(url);
+      return url;
     },
-    undefined,
-    readAdvice ?? (async () => adviceResult(advice(editor.snapshot().draft?.accountId ?? ''))),
-  );
+    revokeObjectURL: (url) => {
+      revoked.push(url);
+    },
+  });
   return { controller, requests, created, revoked, disconnect: controller.connect() };
 }
 async function mounted(editor: ProfileEditor, readAdvice?: AvatarAdviceRead) {
@@ -345,7 +366,7 @@ function recovery(
   const resume: AvatarResume = (mediaId, file, signal) => request('resume', mediaId, file, signal);
   const controller = new ProfileAvatarUpload(
     editor,
-    uploadOverride ?? defaultUpload,
+    avatarContent(editor, uploadOverride ?? defaultUpload, readAdvice, resumeAvailable ? resume : undefined),
     {
       createObjectURL: () => {
         const url = `blob:recovery-${created.length}`;
@@ -356,8 +377,6 @@ function recovery(
         revoked.push(url);
       },
     },
-    resumeAvailable ? resume : undefined,
-    readAdvice ?? (async () => adviceResult(advice(editor.snapshot().draft?.accountId ?? ''))),
   );
   return { controller, calls, created, revoked, disconnect: controller.connect() };
 }

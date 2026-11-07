@@ -6,6 +6,7 @@ import { expect, within, userEvent, waitFor } from 'storybook/test';
 import { m } from '../../paraglide/messages.js';
 import { sessionQuery } from '../../session/query';
 import { SettingsPageView } from '../../settings/settings-page';
+import { settingsContent } from '../../settings/adapters/presentation';
 import { ManagedAccountsSection } from '../../settings/managed-accounts';
 import { AppShell } from '../../shell/shell';
 import { PatternStory } from '../page';
@@ -84,6 +85,7 @@ function SettingsExample({ recovery = false, longRecovery = false }: { recovery?
           securityHref: 'https://auth.example.test/security',
         }}
         csrfToken="story-csrf-token"
+        content={settingsContent}
         managedAccountsIO={io}
       />
     </AppShell>
@@ -274,11 +276,12 @@ function InventoryJourneyExample({ scenario, multiple = false }: { scenario: Inv
           securityHref: 'https://auth.example.test/security',
         }}
         csrfToken="story-csrf-token"
+        content={settingsContent}
         managedAccountsIO={sources[0]}
       />
       {multiple ? (
         <div dir="rtl">
-          <ManagedAccountsSection io={sources[1]} />
+          <ManagedAccountsSection io={sources[1]} initials={settingsContent.initials} />
         </div>
       ) : null}
     </AppShell>

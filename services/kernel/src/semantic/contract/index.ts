@@ -79,3 +79,4 @@ export type {
   SemanticProgressIdentityDescriptor,
   SemanticProgressIdentityStatement,
 } from './progress-identity.ts';
+export type { ReleasedDefinitions } from './released-definitions.ts';

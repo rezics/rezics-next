@@ -2,9 +2,8 @@ import type { KernelClient } from '@rezics/client';
 import { getLocale, localizeHref } from '../paraglide/runtime.js';
 import { m } from '../paraglide/messages.js';
 import { isPlatformClosedError } from './ports/vocabulary';
-import { MediaProblem } from '../media/kernel';
-import { threadLocation } from '../threads/thread-href';
 import { settingsCommandKeyHeader } from './command-headers';
+import type { SettingsContentFailureReader } from './ports/content';
 
 export type WatchKind = 'thread' | 'board';
 export type WatchAdvice = 'available' | 'denied';
@@ -105,13 +104,17 @@ function writeFailure(
   return { kind: 'uncertain', problem };
 }
 
-function failureFromException(error: unknown): { status: number | null; body?: unknown; headers?: HeadersInit } {
+function failureFromException(
+  error: unknown,
+  mediaFailure: SettingsContentFailureReader = () => undefined,
+): { status: number | null; body?: unknown; headers?: HeadersInit } {
   if (isPlatformClosedError(error)) return { status: error.status, body: error.problem };
-  if (error instanceof MediaProblem)
+  const failure = mediaFailure(error);
+  if (failure)
     return {
-      status: error.problem.status,
-      body: error.problem,
-      ...(error.headers ? { headers: error.headers } : {}),
+      status: failure.status,
+      body: failure.problem,
+      ...(failure.headers ? { headers: failure.headers } : {}),
     };
   return { status: null };
 }
@@ -121,7 +124,9 @@ export async function readWatchInventoryNative(
   client: Pick<KernelClient, 'accounts'>,
   accountId: string,
   input: { kind: WatchKind; limit: 20; cursor: string | null },
+  threadHref: (locale: string, thread: { id: string; title?: string | null }) => string,
   signal?: AbortSignal,
+  mediaFailure: SettingsContentFailureReader = () => undefined,
 ): Promise<WatchRead> {
   try {
     const result = await client.accounts({ accountId }).watches.get({
@@ -130,9 +135,9 @@ export async function readWatchInventoryNative(
     });
     if (result.error || result.data === null || result.status !== 200)
       return readFailure(result.status, result.error?.value ?? result.data, result.headers);
-    return { kind: 'page', page: decodeWatchPage(result.data, input.kind) };
+    return { kind: 'page', page: decodeWatchPage(result.data, input.kind, threadHref) };
   } catch (error) {
-    const failure = failureFromException(error);
+    const failure = failureFromException(error, mediaFailure);
     return readFailure(failure.status, failure.body, failure.headers);
   }
 }
@@ -142,6 +147,7 @@ export async function removeWatchNative(
   client: Pick<KernelClient, 'accounts'>,
   input: StopWatch,
   authorization: string,
+  mediaFailure: SettingsContentFailureReader = () => undefined,
 ): Promise<StopWatchResult> {
   const headers = {
     authorization,
@@ -161,7 +167,7 @@ export async function removeWatchNative(
     if (!result.error && result.status === 200 && result.data?.removed === true) return { kind: 'removed' };
     return writeFailure(result.status, result.error?.value ?? result.data, result.headers);
   } catch (error) {
-    const failure = failureFromException(error);
+    const failure = failureFromException(error, mediaFailure);
     return writeFailure(failure.status, failure.body, failure.headers);
   }
 }
@@ -214,7 +220,11 @@ function decodeActions(value: unknown): WatchActions {
 }
 
 /** Reject malformed management pages and strip target identity from unavailable rows. */
-export function decodeWatchPage(value: unknown, kind: WatchKind): WatchPage {
+export function decodeWatchPage(
+  value: unknown,
+  kind: WatchKind,
+  threadHref: (locale: string, thread: { id: string; title?: string | null }) => string,
+): WatchPage {
   if (
     !isRecord(value) ||
     !Array.isArray(value.items) ||
@@ -258,7 +268,7 @@ export function decodeWatchPage(value: unknown, kind: WatchKind): WatchPage {
     const title = item.title ?? m.threads_untitled();
     const href =
       kind === 'thread'
-        ? threadLocation(getLocale(), { id: item.resourceId, title: item.title as string | null })
+        ? threadHref(getLocale(), { id: item.resourceId, title: item.title as string | null })
         : localizeHref(`/boards/${encodeURIComponent(item.resourceId)}`);
     return { ...shared, target: { title, href } };
   });

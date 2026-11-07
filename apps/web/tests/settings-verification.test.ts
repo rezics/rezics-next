@@ -4,13 +4,9 @@ import { operationGroups } from '../src/kernel/exposure';
 import type { SessionEnv } from '../src/session/client';
 import type { SessionStore } from '../src/session/store';
 import { loadSettingsPage } from '../src/settings/preferences';
-import { validateVerificationDraft, verificationCharacterCount } from '../src/settings/verification-validation';
-import {
-  readVerification,
-  requestVerification,
-  withdrawVerification,
-  type VerificationInput,
-} from '../src/settings/verification-core';
+import { validateVerificationDraft, verificationCharacterCount } from '../src/settings/core/verification';
+import { readVerification, requestVerification, withdrawVerification } from '../src/settings/adapters/verification';
+import type { VerificationInput } from '../src/settings/contract/verification';
 
 const request = {
   id: 'request-1',
@@ -379,8 +375,11 @@ import {
   canWithdrawVerification,
   verificationQueryKey,
   verificationWithdrawalObservation,
-} from '../src/settings/verification-recovery';
-import type { AgentVerificationRequest, VerificationCommandResult } from '../src/settings/verification-core';
+} from '../src/settings/application/verification';
+import type { AgentVerificationRequest, VerificationCommandResult } from '../src/settings/contract/verification';
+import { createBrowserSettingsAmbient } from '../src/settings/adapters/ambient';
+
+const settingsAmbient = createBrowserSettingsAmbient();
 
 test('a receipt waits for current readback and older requests or revisions cannot replace it', async () => {
   const pending = {
@@ -597,14 +596,11 @@ test('verification reads reject missing data and other accounts, and late comman
 });
 
 import { spyOn } from 'bun:test';
-import { createBrowserSettingsAmbient } from '../src/settings/adapters/ambient';
-
-const settingsAmbient = createBrowserSettingsAmbient();
 import {
   VerificationReadError,
   unwrapVerificationRead,
   type VerificationReadResult,
-} from '../src/settings/verification-core';
+} from '../src/settings/contract/verification';
 
 function nativeVerificationClient(responses: Response[]) {
   const calls: Request[] = [];

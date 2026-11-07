@@ -27,30 +27,17 @@ import {
   bindIdentityAdapterPort,
   bindNativeIdentityCapabilities,
   identityAdapterPort,
+  tryIdentityAdapterPort,
 } from './identity-adapter-bind.ts';
 import type { IdentityAdapterPort, NativeIdentityCapabilities } from './identity-adapter-port.ts';
-import { identityEpochStore } from './identity-adapters/index.ts';
-import {
-  readIdentityBasis,
-  readIdentityHome,
-  readIdentityMappings,
-  readIdentityRatingEvidenceInTransaction,
-  readIdentityRatingReview,
-  readIdentityRepairEvidenceInTransaction,
-} from './identity-adapters/identity-epoch-read.ts';
-import {
-  admitBoundIdentityEpoch,
-  bindIdentityEpochReceipt,
-  guardIdentityAdmissionReviewedPerson,
-  identityHomeAvailable,
-  prepareIdentityEpochAdmission,
-} from './identity-epoch-admission.ts';
-import { guardReviewedPersonIdentity, observeReviewedPersonIdentity } from './reviewed-person-identity.ts';
+import { createIdentityEpochStore } from './identity-adapters/index.ts';
+import { createIdentityReaders } from './identity-adapters/identity-epoch-read.ts';
+import { createIdentityAdmissionOperations } from './identity-epoch-admission.ts';
+import { createReviewedPersonOperations } from './reviewed-person-identity.ts';
 import { createIdentityRatingCommitParticipant } from './identity-rating-commit-participant.ts';
 
-/** Real native read/command/slot/review bodies. Composition installs them once. */
-export function createNativeIdentityCapabilities(): NativeIdentityCapabilities {
-  return Object.freeze({
+function nativeLeaves(): Omit<NativeIdentityCapabilities, 'reviewedPerson' | 'admission'> {
+  return {
     read: Object.freeze({ withReadTransaction }),
     command: Object.freeze({
       currentCommand,
@@ -71,17 +58,6 @@ export function createNativeIdentityCapabilities(): NativeIdentityCapabilities {
       editorialConflict: () => new EditorialConflictError(),
     }),
     ratingReview: nativeRatingReview(),
-    reviewedPerson: Object.freeze({
-      observe: observeReviewedPersonIdentity,
-      guard: guardReviewedPersonIdentity,
-    }),
-    admission: Object.freeze({
-      prepareAdmission: prepareIdentityEpochAdmission,
-      bindReceipt: bindIdentityEpochReceipt,
-      admitBound: admitBoundIdentityEpoch,
-      guardReviewedPerson: guardIdentityAdmissionReviewedPerson,
-      identityHomeAvailable,
-    }),
     accountIdentity: Object.freeze({
       readSource: readAccountIdentitySource,
       loadSource: loadAccountIdentitySource,
@@ -90,23 +66,36 @@ export function createNativeIdentityCapabilities(): NativeIdentityCapabilities {
       verifyReversalSettlement: verifyAccountIdentityReversalSettlement,
       classifyUnavailability: (error: unknown) => classifyAccessUnavailability(error) !== undefined,
     }),
-  });
+  };
 }
 
-function livePort(capabilities: NativeIdentityCapabilities): IdentityAdapterPort {
-  bindNativeIdentityCapabilities(capabilities);
-  return Object.freeze({
-    store: identityEpochStore(),
-    read: Object.freeze({
-      readIdentityMappings,
-      readIdentityRatingReview,
-      readIdentityRatingEvidenceInTransaction,
-      readIdentityRepairEvidenceInTransaction,
-      readIdentityBasis,
-      readIdentityHome,
+/** Real native read/command/slot/review bodies. Composition installs them once. */
+export function createNativeIdentityCapabilities(): NativeIdentityCapabilities {
+  const capabilities = nativeLeaves() as NativeIdentityCapabilities;
+  const reviewedPerson = createReviewedPersonOperations(capabilities);
+  Object.assign(capabilities, { reviewedPerson });
+  const admission = createIdentityAdmissionOperations(capabilities);
+  Object.assign(capabilities, {
+    admission: Object.freeze({
+      prepareAdmission: admission.prepareAdmission,
+      bindReceipt: admission.bindReceipt,
+      admitBound: admission.admitBound,
+      guardReviewedPerson: admission.guardReviewedPerson,
+      identityHomeAvailable: admission.identityHomeAvailable,
     }),
+  });
+  return Object.freeze(capabilities);
+}
+
+/** One constructed Identity application. Its store, readers, admission, reviewed Person and Rating participant
+ * close over this capability set, including nested, deferred and resume/replay paths. */
+export function createIdentityAdapterApplication(capabilities: NativeIdentityCapabilities): IdentityAdapterPort {
+  return Object.freeze({
+    store: createIdentityEpochStore(capabilities),
+    read: createIdentityReaders(capabilities),
+    admission: capabilities.admission,
     reviewedPerson: capabilities.reviewedPerson,
-    ratingParticipant: createIdentityRatingCommitParticipant(),
+    ratingParticipant: createIdentityRatingCommitParticipant(capabilities),
   });
 }
 
@@ -114,9 +103,15 @@ function livePort(capabilities: NativeIdentityCapabilities): IdentityAdapterPort
 export function installIdentityAdapterRuntime(
   capabilities: NativeIdentityCapabilities = createNativeIdentityCapabilities(),
 ): IdentityAdapterPort {
-  const port = livePort(capabilities);
+  const port = createIdentityAdapterApplication(capabilities);
+  bindNativeIdentityCapabilities(capabilities);
   bindIdentityAdapterPort(port);
   return port;
+}
+
+/** Ordinary Access/Semantic composition shares one default constructed instance. */
+export function resolveIdentityAdapterRuntime(): IdentityAdapterPort {
+  return tryIdentityAdapterPort() ?? installIdentityAdapterRuntime();
 }
 
 export function identityAdapterRuntime(): IdentityAdapterPort {

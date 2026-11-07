@@ -164,7 +164,9 @@ does not establish native, browser or finite-execution acceptance.
 
 The Collection directory binds its qualified owner full-view result or the existing public floor; per-Collection
 management grants do not widen another account's directory. The account's public face keeps public-floor semantics
-even when its owner is viewing it.
+even when its owner is viewing it. Library owns the list-filter capability; Access adapters implement the residual
+and publish the collection-update authorization preparation bound. Shared Collection policy literals live in the
+Access and Library contract leaves so adapters do not evaluate membership-inverse or barrel re-exports at import.
 
 ## Data access
 

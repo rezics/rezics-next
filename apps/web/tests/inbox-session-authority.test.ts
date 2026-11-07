@@ -95,6 +95,7 @@ let seenSend: (input: { data: InboxSeenAttempt; headers?: HeadersInit }) => Prom
 spyOn(reads, 'readUnreadCount').mockImplementation(() => countRead());
 spyOn(reads, 'markInboxSeen').mockImplementation((input) => seenSend(input));
 const { InboxPageView } = await import('../src/inbox/inbox-page');
+const { inboxContent } = await import('../src/inbox/adapters/presentation');
 const { UnreadBadge } = await import('../src/inbox/unread-badge');
 const { currentInboxViewer, inboxViewerStore, forInboxViewer } = await import('../src/inbox/inbox-viewer');
 const { inboxPageQuery, inboxViewerQueryKey, unreadCountQuery, unreadCountQueryFor, markInboxViewerSeen } =
@@ -227,7 +228,7 @@ async function screen(strict = false) {
           createElement(
             Fragment,
             null,
-            page ? createElement(InboxPageView, { loadPage }) : null,
+            page ? createElement(InboxPageView, { loadPage, content: inboxContent }) : null,
             badge ? createElement('aside', { 'data-badge': true }, createElement(UnreadBadge)) : null,
           ),
         ),

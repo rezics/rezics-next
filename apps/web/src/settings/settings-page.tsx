@@ -58,6 +58,7 @@ import {
   useSettingsSectionFocus,
   type SettingsSectionFocus,
 } from './settings-return-context';
+import type { SettingsContentPort } from './ports/content';
 
 type PreferenceIO = {
   read: ReadingIO['read'];
@@ -325,6 +326,7 @@ function SettingsSections({
   managedAccountsIO,
   watchesIO,
   preferenceIO,
+  content,
   watchReturn = null,
   profileReturn = null,
   ShelfCard = BoundShelfPreferencesCard,
@@ -335,6 +337,7 @@ function SettingsSections({
   managedAccountsIO?: ManagedAccountsIO | undefined;
   watchesIO?: WatchManagementIO | undefined;
   preferenceIO: PreferenceIO;
+  content: SettingsContentPort;
   watchReturn?: WatchReturnReceipt | null;
   profileReturn?: import('./settings-return').ProfileReturnSnapshot | null;
   ShelfCard?: typeof BoundShelfPreferencesCard;
@@ -479,12 +482,12 @@ function SettingsSections({
     ),
     profile: (
       <section id="profile" aria-label={m.settings_profile_heading()} className="scroll-mt-6">
-        <ProfileSection />
+        <ProfileSection content={content} />
       </section>
     ),
     'public-activity': (
       <section id="public-activity" aria-label={m.settings_public_activity_heading()} className="scroll-mt-6">
-        <PublicViewsSection />
+        <PublicViewsSection mediaFailure={content.mediaFailure} />
       </section>
     ),
     account: (
@@ -494,6 +497,8 @@ function SettingsSections({
             accountId={managedTarget}
             backHref={managedBackHref}
             onBack={returnToManagedDirectory}
+            initials={content.initials}
+            mediaFailure={content.mediaFailure}
           />
         ) : managedSelectionUnavailable ? (
           <ManagedAccountSelectionUnavailable backHref={managedBackHref} onBack={returnToManagedDirectory} />
@@ -509,7 +514,7 @@ function SettingsSections({
             />
           </>
         )}
-        <ManagedAccountsSection io={managedAccountsIO} />
+        <ManagedAccountsSection io={managedAccountsIO} initials={content.initials} />
       </section>
     ),
   };
@@ -601,13 +606,19 @@ export function SettingsSessionRecovery({
 }
 
 /** Local browser choices remain available after the account session ends. */
-export function SignedOutSettings({ returnTo }: { returnTo: string }) {
+export function SignedOutSettings({
+  returnTo,
+  SignInPrompt,
+}: {
+  returnTo: string;
+  SignInPrompt: SettingsContentPort['SignInPrompt'];
+}) {
   return (
     <div className="space-y-8">
       <div id="display" className="scroll-mt-6">
         <DisplayPreferences />
       </div>
-      <AccountSafetyCard state="signed-out" returnTo={returnTo} />
+      <AccountSafetyCard state="signed-out" returnTo={returnTo} SignInPrompt={SignInPrompt} />
     </div>
   );
 }
@@ -618,6 +629,7 @@ function OwnedSettingsPage({
   preferenceIO,
   managedAccountsIO,
   watchesIO,
+  content,
   onRetry,
   ShelfCard = BoundShelfPreferencesCard,
   PrivacySection = BoundCollectionPrivacySection,
@@ -627,6 +639,7 @@ function OwnedSettingsPage({
   preferenceIO: PreferenceIO;
   managedAccountsIO?: ManagedAccountsIO | undefined;
   watchesIO?: WatchManagementIO | undefined;
+  content: SettingsContentPort;
   onRetry: () => void;
   ShelfCard?: typeof BoundShelfPreferencesCard;
   PrivacySection?: typeof BoundCollectionPrivacySection;
@@ -652,6 +665,7 @@ function OwnedSettingsPage({
           preferenceIO={preferenceIO}
           managedAccountsIO={managedAccountsIO}
           watchesIO={watchesIO}
+          content={content}
           watchReturn={returnEntry.receipt}
           profileReturn={returnEntry.profile}
           ShelfCard={ShelfCard}
@@ -668,6 +682,7 @@ export function SettingsPageView({
   managedAccountsIO,
   watchesIO,
   preferenceIO = nativePreferences,
+  content,
   ShelfCard = BoundShelfPreferencesCard,
   PrivacySection = BoundCollectionPrivacySection,
 }: {
@@ -678,6 +693,7 @@ export function SettingsPageView({
   managedAccountsIO?: ManagedAccountsIO | undefined;
   watchesIO?: WatchManagementIO | undefined;
   preferenceIO?: PreferenceIO;
+  content: SettingsContentPort;
   ShelfCard?: typeof BoundShelfPreferencesCard;
   PrivacySection?: typeof BoundCollectionPrivacySection;
 }) {
@@ -735,12 +751,13 @@ export function SettingsPageView({
           preferenceIO={preferenceIO}
           managedAccountsIO={managedAccountsIO}
           watchesIO={watchesIO}
+          content={content}
           onRetry={retry}
           ShelfCard={ShelfCard}
           PrivacySection={PrivacySection}
         />
       ) : signedOut ? (
-        <SignedOutSettings returnTo={location.publicHref} />
+        <SignedOutSettings returnTo={location.publicHref} SignInPrompt={content.SignInPrompt} />
       ) : (
         <div className="space-y-3">
           <SettingsSessionRecovery

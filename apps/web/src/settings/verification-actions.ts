@@ -1,24 +1,55 @@
-import { serverSettingsTimer } from './adapters/ambient';
+import { createServerSettingsAmbient, serverSettingsTimer } from './adapters/ambient';
 import { createServerFn } from '@tanstack/react-start';
 import { getRequest, setResponseHeader } from '@tanstack/react-start/server';
 import { env } from 'cloudflare:workers';
 import { kernelClient, requestLocale } from '../kernel/client';
-import { isPlatformClosedError, isPlatformClosedProblem, requestLanguages } from './ports/vocabulary';
-import { MediaProblem } from '../media/kernel';
+import { requestLanguages } from './ports/vocabulary';
 import { m } from '../paraglide/messages.js';
-import { readSubjectSuggestions, SUGGESTION_LIMIT } from '../search/suggestions';
-import { withVerificationDeadline } from './verification-request-deadline';
 import type { SessionEnv } from '../session/client';
 import { prepareSession, sessionSubject, viewerCredential } from '../session/request';
 import {
-  readVerificationEligibility,
-  readVerificationTitle,
+  createVerificationApplication,
+  searchEligibleVerificationSubjects,
+  withVerificationDeadline,
+} from './application/verification';
+import {
+  nativeVerificationCopy,
+  nativeVerificationOperations,
+  verificationSubjectSearchFailure as nativeVerificationSubjectSearchFailure,
+} from './adapters/verification';
+import { truncateVerificationQuery, validateVerificationDraft } from './core/verification';
+import type { VerificationFailure, VerificationInput, VerificationOperations } from './contract/verification';
+import {
+  readVerification,
+  requestVerification,
   verificationSafeFailure,
-  type VerificationFailure,
-  type VerificationInput,
-  type VerificationSearchFailure,
+  withdrawVerification,
 } from './verification-core';
-import { validateVerificationDraft } from './verification-validation';
+import { settingsMediaFailure } from './adapters/content';
+
+/** Bind Content's owned fault reader alongside the native verification capabilities. */
+function bindVerificationApplication(
+  client: Parameters<typeof nativeVerificationOperations>[0],
+  authorization: string,
+  languages: string[],
+) {
+  const operations: VerificationOperations = {
+    ...nativeVerificationOperations(client, authorization, languages),
+    status: (accountId, signal) => readVerification(client, accountId, authorization, signal, settingsMediaFailure),
+    request: (accountId, input, signal) =>
+      requestVerification(client, accountId, authorization, input, signal, settingsMediaFailure),
+    withdraw: (accountId, idempotencyKey, signal) =>
+      withdrawVerification(client, accountId, authorization, idempotencyKey, signal, settingsMediaFailure),
+  };
+  return createVerificationApplication(operations, nativeVerificationCopy(), createServerSettingsAmbient());
+}
+
+function verificationSubjectSearchFailure(error: unknown) {
+  const content = settingsMediaFailure(error);
+  return nativeVerificationSubjectSearchFailure(
+    content ? { problem: { ...content.problem, status: content.status }, headers: content.headers } : error,
+  );
+}
 
 function uuid(value: unknown): value is string {
   return (
@@ -79,59 +110,11 @@ async function viewer() {
 }
 
 function currentReadFailure(error: unknown): VerificationFailure {
-  return verificationSafeFailure(error, m.settings_verification_load_failed());
+  return verificationSafeFailure(error, m.settings_verification_load_failed(), settingsMediaFailure);
 }
 
 function commandFailure(error: unknown) {
-  return { ok: false as const, ...verificationSafeFailure(error) };
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === 'object' && value !== null && !Array.isArray(value);
-}
-
-function safeSearchCode(value: unknown): string | undefined {
-  return typeof value === 'string' && /^[A-Za-z0-9][A-Za-z0-9_.-]{0,63}$/.test(value) ? value : undefined;
-}
-
-function verificationSubjectSearchFailure(error: unknown): VerificationSearchFailure {
-  let statusValue: unknown;
-  let problem: Record<string, unknown> | undefined;
-  let retryAfter: string | undefined;
-  if (error instanceof MediaProblem) {
-    statusValue = error.problem.status;
-    problem = error.problem;
-    try {
-      const header = new Headers(error.headers).get('retry-after');
-      if (header !== null && header.length <= 128) retryAfter = header;
-    } catch {
-      // Malformed headers are not part of the private response contract.
-    }
-  } else if (isPlatformClosedError(error)) {
-    statusValue = error.status;
-    if (isRecord(error.problem)) problem = error.problem;
-  }
-  const status =
-    typeof statusValue === 'number' && Number.isInteger(statusValue) && statusValue >= 100 && statusValue <= 599
-      ? statusValue
-      : 0;
-  const code = safeSearchCode(problem?.code);
-  const closed = isPlatformClosedError(error) || isPlatformClosedProblem(status, problem);
-  const kind = closed ? 'closed' : status >= 400 && status < 500 ? 'refused' : 'unavailable';
-  const message =
-    kind === 'closed'
-      ? m.settings_verification_search_closed()
-      : kind === 'refused'
-        ? m.settings_verification_search_refused()
-        : m.settings_verification_search_unavailable();
-  return {
-    kind,
-    status,
-    message,
-    ...(code === undefined ? {} : { code }),
-    ...(typeof problem?.retryable === 'boolean' ? { retryable: problem.retryable } : {}),
-    ...(retryAfter === undefined ? {} : { retryAfter }),
-  };
+  return { ok: false as const, ...verificationSafeFailure(error, undefined, settingsMediaFailure) };
 }
 
 export const readVerificationState = createServerFn({ method: 'GET' })
@@ -142,8 +125,12 @@ export const readVerificationState = createServerFn({ method: 'GET' })
       const { request, authorization, accountId } = await viewer();
       if (accountId !== expectedAccountId)
         return { ok: false as const, failure: { status: 409, message: m.settings_verification_identity_changed() } };
-      const { readVerification } = await import('./verification-core');
-      const status = await readVerification(kernelClient(), accountId, authorization, request.signal);
+      const application = bindVerificationApplication(
+        kernelClient(),
+        authorization,
+        requestLanguages(requestLocale(request) ?? 'en'),
+      );
+      const status = await application.status(accountId, request.signal);
       return { ok: true as const, value: { accountId, ...status, subjectTitle: null } };
     } catch (error) {
       return { ok: false as const, failure: currentReadFailure(error) };
@@ -163,13 +150,12 @@ export const readVerificationSubjectTitle = createServerFn({ method: 'GET' })
     try {
       const { request, authorization, accountId } = await viewer();
       if (accountId !== data.accountId) return null;
-      return readVerificationTitle(
+      const application = bindVerificationApplication(
         kernelClient(),
-        data.subjectId,
         authorization,
         requestLanguages(requestLocale(request) ?? 'en'),
-        request.signal,
       );
+      return application.title(data.subjectId, requestLanguages(requestLocale(request) ?? 'en'), request.signal);
     } catch {
       return null;
     }
@@ -179,67 +165,17 @@ export const searchVerificationSubjects = createServerFn({ method: 'GET' })
   .validator((input: unknown) => {
     if (!input || typeof input !== 'object' || typeof (input as { query?: unknown }).query !== 'string')
       throw new Error('Invalid query');
-    const query = (input as { query: string }).query;
-    // Retain the input's UTF-16 budget without cutting a code point in half.
-    return query.slice(0, 100).replace(/[\uD800-\uDBFF]$/u, '');
+    return truncateVerificationQuery((input as { query: string }).query);
   })
   .handler(async ({ data: query }) => {
     setResponseHeader('cache-control', 'private, no-store');
     if (!query.trim()) return { ok: true as const, value: [] };
     try {
       const { request, authorization } = await viewer();
+      const languages = requestLanguages(requestLocale(request) ?? 'en');
+      const operations = nativeVerificationOperations(kernelClient(), authorization, languages);
       const value = await withVerificationDeadline(
-        async (signal) => {
-          const client = kernelClient();
-          const result = await readSubjectSuggestions(
-            client,
-            {
-              q: query,
-              limit: SUGGESTION_LIMIT,
-              languages: requestLanguages(requestLocale(request) ?? 'en'),
-            },
-            authorization,
-            signal,
-          );
-          // Native empty suggestions need no eligibility metadata.
-          if (result.subjects.length === 0) return [];
-          const release = await readVerificationEligibility(client, authorization, signal);
-          if (!release?.types || typeof release.types !== 'object' || Array.isArray(release.types))
-            throw new Error('Invalid eligibility metadata');
-          const resolved = new Map<string, Set<string>>();
-          const roots = (type: string, visited = new Set<string>()): Set<string> => {
-            const known = resolved.get(type);
-            if (known) return known;
-            const definition = Object.hasOwn(release.types, type) ? release.types[type] : undefined;
-            if (
-              !definition ||
-              typeof definition !== 'object' ||
-              Array.isArray(definition) ||
-              (definition.bases !== undefined &&
-                (!Array.isArray(definition.bases) ||
-                  definition.bases.some((base: unknown) => typeof base !== 'string' || !base))) ||
-              visited.has(type)
-            )
-              throw new Error('Invalid eligibility metadata');
-            if (type === 'schema:Person' || type === 'schema:Organization') return new Set([type]);
-            visited.add(type);
-            const result = new Set<string>(
-              (definition.bases ?? []).flatMap((base: string) => [...roots(base, visited)]),
-            );
-            visited.delete(type);
-            resolved.set(type, result);
-            return result;
-          };
-          return result.subjects.flatMap((subject) => {
-            const title = subject.summary?.label?.value ?? Object.values(subject.labels)[0] ?? subject.id;
-            const baseTypes = roots(subject.type);
-            if (baseTypes.has('schema:Person'))
-              return [{ id: subject.id, title, type: m.settings_verification_person() }];
-            if (baseTypes.has('schema:Organization'))
-              return [{ id: subject.id, title, type: m.settings_verification_organization() }];
-            return [];
-          });
-        },
+        (signal) => searchEligibleVerificationSubjects(query, operations, nativeVerificationCopy(), languages, signal),
         request.signal,
         serverSettingsTimer(),
       );
@@ -261,8 +197,12 @@ export const requestVerificationAction = createServerFn({ method: 'POST' })
       const { request, authorization, accountId } = await viewer();
       if (accountId !== data.accountId)
         return { ok: false as const, status: 409, message: m.settings_verification_identity_changed() };
-      const { requestVerification } = await import('./verification-core');
-      return requestVerification(kernelClient(), accountId, authorization, data, request.signal);
+      const application = bindVerificationApplication(
+        kernelClient(),
+        authorization,
+        requestLanguages(requestLocale(request) ?? 'en'),
+      );
+      return application.request(accountId, data, request.signal);
     } catch (error) {
       return commandFailure(error);
     }
@@ -280,8 +220,12 @@ export const withdrawVerificationAction = createServerFn({ method: 'POST' })
       const { request, authorization, accountId } = await viewer();
       if (accountId !== data.accountId)
         return { ok: false as const, status: 409, message: m.settings_verification_identity_changed() };
-      const { withdrawVerification } = await import('./verification-core');
-      return withdrawVerification(kernelClient(), accountId, authorization, data.idempotencyKey, request.signal);
+      const application = bindVerificationApplication(
+        kernelClient(),
+        authorization,
+        requestLanguages(requestLocale(request) ?? 'en'),
+      );
+      return application.withdraw(accountId, data.idempotencyKey, request.signal);
     } catch (error) {
       return commandFailure(error);
     }

@@ -1,8 +1,9 @@
 import type { Release } from '@rezics/definitions';
 import type { AuthoritativeTime } from '../command/command.ts';
 import { ProblemError } from '../http/problem.ts';
-import { readRelease } from '../semantic/definitions.ts';
-import { chooseLabel } from '../semantic/language.ts';
+import { copyReleasedDefinitions } from './adapters/copy-producers.ts';
+import type { NativeCopyProducers } from './adapters/copies.ts';
+import { chooseLabel } from '@rezics/definitions';
 import {
   COPY_CONDITION_CHOICES,
   copyConditionAdmission,
@@ -133,6 +134,7 @@ export async function prepareCopyPresentation(
   deps: LibraryProfileSourceDependencies,
   fact: CopyPresentationFact,
   languages: readonly string[],
+  definitions: NativeCopyProducers['definitions'] = copyReleasedDefinitions(),
 ) {
   const snapshots = new Map<string, Snapshot>();
   let source: LibraryProfileSource = null;
@@ -148,7 +150,7 @@ export async function prepareCopyPresentation(
     if (!pin || snapshots.has(pin.releaseDigest)) continue;
     let snapshot: Snapshot = null;
     try {
-      const release = await readRelease(deps.pool, pin.releaseDigest, { composed: false });
+      const release = await definitions.read(deps.pool, pin.releaseDigest, { composed: false });
       if (release) snapshot = { digest: pin.releaseDigest, release };
     } catch {
       // Optional display dependency failure cannot select another release.

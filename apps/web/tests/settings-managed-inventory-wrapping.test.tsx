@@ -21,6 +21,7 @@ let ManagedAccounts: (typeof import('../src/settings/managed-accounts'))['Manage
 let ManagedAccountsSection: (typeof import('../src/settings/managed-accounts'))['ManagedAccountsSection'];
 let managedAccountHref: (typeof import('../src/settings/managed-accounts-read'))['managedAccountHref'];
 let managedAccountsFailure: (typeof import('../src/settings/managed-accounts-read'))['managedAccountsFailure'];
+let settingsContent: (typeof import('../src/settings/adapters/presentation'))['settingsContent'];
 let sessionQuery: (typeof import('../src/session/query'))['sessionQuery'];
 let m: (typeof import('../src/paraglide/messages.js'))['m'];
 let setLocale: (typeof import('../src/paraglide/runtime.js'))['setLocale'];
@@ -31,6 +32,7 @@ beforeAll(async () => {
   ({ AccountsQueryProvider: QueryClientProvider } = await import('./fixtures/accounts-composition'));
   ({ createRoot } = await import('react-dom/client'));
   ({ ManagedAccounts, ManagedAccountsSection } = await import('../src/settings/managed-accounts'));
+  ({ settingsContent } = await import('../src/settings/adapters/presentation'));
   ({ managedAccountHref, managedAccountsFailure } = await import('../src/settings/managed-accounts-read'));
   ({ sessionQuery } = await import('../src/session/query'));
   ({ m } = await import('../src/paraglide/messages.js'));
@@ -205,10 +207,10 @@ test('mounted independent inventories retain native controls, long and unavailab
   const view = await mount(
     <>
       <section data-case="a">
-        <ManagedAccounts viewerId={viewer} settingsHref={settingsHref} io={a.io} />
+        <ManagedAccounts viewerId={viewer} settingsHref={settingsHref} io={a.io} initials={settingsContent.initials} />
       </section>
       <section data-case="b">
-        <ManagedAccounts viewerId={viewer} settingsHref={settingsHref} io={b.io} />
+        <ManagedAccounts viewerId={viewer} settingsHref={settingsHref} io={b.io} initials={settingsContent.initials} />
       </section>
     </>,
   );
@@ -300,7 +302,14 @@ test('mounted independent inventories retain native controls, long and unavailab
 
 test('mounted preparing and sparse responsibilities remain distinct from empty and failures, with no invented authority or extra reads', async () => {
   const source = controlled();
-  const view = await mount(<ManagedAccounts viewerId={viewer} settingsHref={settingsHref} io={source.io} />);
+  const view = await mount(
+    <ManagedAccounts
+      viewerId={viewer}
+      settingsHref={settingsHref}
+      io={source.io}
+      initials={settingsContent.initials}
+    />,
+  );
   try {
     const preparing = page();
     preparing.organizations = { state: 'preparing', items: [], next: null };
@@ -333,7 +342,14 @@ test('mounted preparing and sparse responsibilities remain distinct from empty a
 for (const outcome of ['wait', 'denied', 'unavailable'] as const) {
   test(`mounted initial ${outcome} retains exact metadata and deliberate recovery without private rows`, async () => {
     const source = controlled();
-    const view = await mount(<ManagedAccounts viewerId={viewer} settingsHref={settingsHref} io={source.io} />);
+    const view = await mount(
+      <ManagedAccounts
+        viewerId={viewer}
+        settingsHref={settingsHref}
+        io={source.io}
+        initials={settingsContent.initials}
+      />,
+    );
     try {
       await settle(() =>
         source.replies[0]!.resolve(
@@ -376,7 +392,9 @@ for (const transition of ['error', 'signed-out', 'subject', 'remove'] as const) 
       const client = new QueryClient({ defaultOptions: { queries: { retry: false, gcTime: Infinity } } });
       const session = { state: 'signed-in', subject: viewer, csrfToken: 'original-token' };
       client.setQueryData(sessionQuery.queryKey, session);
-      const route = createRootRoute({ component: () => <ManagedAccountsSection io={source.io} /> });
+      const route = createRootRoute({
+        component: () => <ManagedAccountsSection io={source.io} initials={settingsContent.initials} />,
+      });
       const router = createRouter({
         routeTree: route,
         history: createMemoryHistory({ initialEntries: [directoryHref] }),
@@ -444,7 +462,14 @@ for (const transition of ['error', 'signed-out', 'subject', 'remove'] as const) 
 for (const selected of ['organizations', 'responsibilities'] as const) {
   test(`mounted ${selected} first-page recovery preserves a pending sibling and retained rows through retry wait`, async () => {
     const source = controlled();
-    const view = await mount(<ManagedAccounts viewerId={viewer} settingsHref={settingsHref} io={source.io} />);
+    const view = await mount(
+      <ManagedAccounts
+        viewerId={viewer}
+        settingsHref={settingsHref}
+        io={source.io}
+        initials={settingsContent.initials}
+      />,
+    );
     try {
       await settle(() => source.replies[0]!.resolve(ready()));
       const label = selected === 'organizations' ? m.managed_organizations_title() : m.managed_operated_title();
@@ -505,7 +530,12 @@ for (const [locale, direction, width] of [
     const source = controlled();
     const view = await mount(
       <div dir={direction} style={{ width }}>
-        <ManagedAccounts viewerId={viewer} settingsHref={settingsHref} io={source.io} />
+        <ManagedAccounts
+          viewerId={viewer}
+          settingsHref={settingsHref}
+          io={source.io}
+          initials={settingsContent.initials}
+        />
       </div>,
     );
     try {
@@ -526,7 +556,14 @@ for (const [locale, direction, width] of [
 for (const size of [1, 8, 20]) {
   test(`mounted supplied ${size}-row page adds no IO per identity`, async () => {
     const source = controlled();
-    const view = await mount(<ManagedAccounts viewerId={viewer} settingsHref={settingsHref} io={source.io} />);
+    const view = await mount(
+      <ManagedAccounts
+        viewerId={viewer}
+        settingsHref={settingsHref}
+        io={source.io}
+        initials={settingsContent.initials}
+      />,
+    );
     try {
       await settle(() => source.replies[0]!.resolve(ready(page(size))));
       expect(feed(view.host, m.managed_organizations_title()).querySelectorAll('li')).toHaveLength(size);

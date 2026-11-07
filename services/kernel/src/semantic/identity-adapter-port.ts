@@ -177,6 +177,7 @@ export type IdentityNativeReaders = Readonly<{
 export type IdentityAdapterPort = Readonly<{
   store: IdentityEpochStore;
   read: IdentityNativeReaders;
+  admission: NativeIdentityAdmission;
   reviewedPerson: NativeReviewedPersonOperations;
   ratingParticipant: IdentityRatingCommitParticipant;
 }>;

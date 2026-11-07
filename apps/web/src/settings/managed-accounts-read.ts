@@ -5,8 +5,8 @@ import type { ManagedReaderCurrent } from './managed-session-reader';
 import type { KernelClient } from '@rezics/client';
 import * as v from 'valibot';
 import { isPlatformClosedError } from './ports/vocabulary';
-import { MediaProblem } from '../media/kernel';
 import { preferenceRetryDeadline } from './preference-failure-retry';
+import type { SettingsContentFailureReader } from './ports/content';
 
 const id = v.pipe(v.string(), v.uuid());
 const text = v.nullable(v.string());
@@ -94,9 +94,13 @@ export function managedAccountsFailure(
     ...(requestId ? { requestId } : {}),
   };
 }
-export function managedAccountsException(error: unknown): ManagedAccountsFailure {
+export function managedAccountsException(
+  error: unknown,
+  mediaFailure: SettingsContentFailureReader,
+): ManagedAccountsFailure {
   if (isPlatformClosedError(error)) return managedAccountsFailure(error.status, error.problem);
-  if (error instanceof MediaProblem) return managedAccountsFailure(error.problem.status, error.problem, error.headers);
+  const failure = mediaFailure(error);
+  if (failure) return managedAccountsFailure(failure.status, failure.problem, failure.headers);
   return managedAccountsFailure(null);
 }
 
@@ -107,6 +111,7 @@ export async function loadManagedAccounts(
   viewerId: string,
   cursors: ManagedAccountsCursors,
   signal?: AbortSignal,
+  mediaFailure: SettingsContentFailureReader = () => undefined,
 ): Promise<ManagedAccountsResult> {
   try {
     const result = await withManagedReadDeadline(
@@ -137,7 +142,7 @@ export async function loadManagedAccounts(
       return managedAccountsFailure(result.status, undefined, result.headers);
     return { ok: true, page };
   } catch (error) {
-    return managedAccountsException(error);
+    return managedAccountsException(error, mediaFailure);
   }
 }
 
@@ -264,7 +269,11 @@ export class ManagedAccountsInventory {
         return { ok: false, kind: 'denied', status: null, code: null };
       return result;
     } catch (error) {
-      return managedAccountsException(error);
+      // The Settings server adapter projects Content failures before this typed result port.
+      // Preserve the native platform-closed envelope here; unexpected transport faults stay unavailable.
+      return isPlatformClosedError(error)
+        ? managedAccountsFailure(error.status, error.problem)
+        : managedAccountsFailure(null);
     }
   }
   private deny(failure: ManagedAccountsFailure) {

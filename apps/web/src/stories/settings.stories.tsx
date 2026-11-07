@@ -7,6 +7,7 @@ import { m } from '../paraglide/messages.js';
 import { SettingsShellProvider } from '../settings';
 import { SignedOutSettings } from '../settings/settings-page';
 import { boundSettingsShellPort } from '../shell/app-shell';
+import { settingsContent } from '../settings/adapters/presentation';
 import { PageHeading } from '../shell/page-heading';
 import { PageStory, pageReady } from './page';
 import { selectSettingsCategory } from './settings-category-navigation';
@@ -31,7 +32,7 @@ function SignedOutSettingsPreview() {
             <header>
               <PageHeading>{m.settings_heading()}</PageHeading>
             </header>
-            <SignedOutSettings returnTo="/settings" />
+            <SignedOutSettings returnTo="/settings" SignInPrompt={settingsContent.SignInPrompt} />
           </article>
         </div>
       </main>

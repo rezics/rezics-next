@@ -1,7 +1,7 @@
 import { isPlatformClosedError, isPlatformClosedProblem } from './ports/vocabulary';
 import { readLibraryResult } from '../library/settings-adapter';
-import { MediaProblem } from '../media/kernel';
 import type { NativePreferenceFailure } from './preferences';
+import type { SettingsContentFailureReader } from './ports/content';
 
 export type CollectionPrivacyFailure = 'closed' | 'forbidden' | 'unavailable';
 export type CollectionPrivacyRead<T> =
@@ -23,12 +23,10 @@ export function isCollectionPrivacyReadRefusal(reason: CollectionPrivacyFailure)
 }
 
 /** Preserve native admission failures across the private server-function boundary. */
-export function readCollectionPrivacyResult<T>(result: {
-  data?: T | null;
-  error?: unknown;
-  status?: number;
-  headers?: HeadersInit | undefined;
-}): T {
+export function readCollectionPrivacyResult<T>(
+  result: { data?: T | null; error?: unknown; status?: number; headers?: HeadersInit | undefined },
+  mediaFailure: SettingsContentFailureReader,
+): T {
   try {
     const error = result.error;
     const body = error && typeof error === 'object' && 'value' in error ? error.value : error;
@@ -37,27 +35,37 @@ export function readCollectionPrivacyResult<T>(result: {
     return readLibraryResult(result);
   } catch (error) {
     throw new CollectionPrivacyReadError(
-      collectionPrivacyFailure(error),
-      collectionPrivacyFailureMetadata(result.error, result.status, result.headers),
+      collectionPrivacyFailure(error, mediaFailure),
+      collectionPrivacyFailureMetadata(result.error, result.status, result.headers, mediaFailure),
     );
   }
 }
 
-export function collectionPrivacyFailure(error: unknown): CollectionPrivacyFailure {
+export function collectionPrivacyFailure(
+  error: unknown,
+  mediaFailure: SettingsContentFailureReader = () => undefined,
+): CollectionPrivacyFailure {
   if (error instanceof CollectionPrivacyReadError) return error.reason;
   if (isPlatformClosedError(error) || (error instanceof Error && error.message === 'Collection privacy closed'))
     return 'closed';
-  if (error instanceof MediaProblem && (error.problem.status === 401 || error.problem.status === 403))
-    return 'forbidden';
+  const content = mediaFailure(error);
+  if (content?.status === 401 || content?.status === 403) return 'forbidden';
   return error instanceof Error && error.message === 'Collection privacy forbidden' ? 'forbidden' : 'unavailable';
 }
 
-export async function collectionPrivacyRead<T>(read: () => Promise<T>): Promise<CollectionPrivacyRead<T>> {
+export async function collectionPrivacyRead<T>(
+  read: () => Promise<T>,
+  mediaFailure: SettingsContentFailureReader,
+): Promise<CollectionPrivacyRead<T>> {
   try {
     return { ok: true, value: await read() };
   } catch (error) {
-    const failure = collectionPrivacyFailureMetadata(error);
-    return { ok: false, reason: collectionPrivacyFailure(error), ...(failure ? { failure } : {}) };
+    const failure = collectionPrivacyFailureMetadata(error, undefined, undefined, mediaFailure);
+    return {
+      ok: false,
+      reason: collectionPrivacyFailure(error, mediaFailure),
+      ...(failure ? { failure } : {}),
+    };
   }
 }
 
@@ -65,16 +73,21 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
 
-/** Existing Settings failure projection, shared with the Collection privacy adapters. */
+/** Settings projects Content failures into the native preference envelope at this adapter boundary. */
 export function nativePreferenceFailureDetails(
   value: unknown,
   status?: number,
   headers?: HeadersInit,
+  mediaFailure: SettingsContentFailureReader = () => undefined,
 ): NativePreferenceFailure {
   const root = isRecord(value) ? value : undefined;
-  const problem = root && isRecord(root.value) ? root.value : root && isRecord(root.problem) ? root.problem : root;
+  const content = mediaFailure(value);
+  const problem =
+    content?.problem ??
+    (root && isRecord(root.value) ? root.value : root && isRecord(root.problem) ? root.problem : root);
   const nativeStatus =
     status ??
+    content?.status ??
     (root && typeof root.status === 'number'
       ? root.status
       : problem && typeof problem.status === 'number'
@@ -82,7 +95,7 @@ export function nativePreferenceFailureDetails(
         : null);
   const retryAfter =
     (headers === undefined ? undefined : new Headers(headers).get('retry-after')) ??
-    (value instanceof MediaProblem ? new Headers(value.headers).get('retry-after') : undefined) ??
+    (content?.headers === undefined ? undefined : new Headers(content.headers).get('retry-after')) ??
     (root && typeof root.retryAfter === 'string' ? root.retryAfter : undefined);
   return {
     status: nativeStatus,
@@ -102,9 +115,11 @@ export function collectionPrivacyFailureMetadata(
   value: unknown,
   status?: number,
   headers?: HeadersInit,
+  mediaFailure: SettingsContentFailureReader = () => undefined,
 ): NativePreferenceFailure | undefined {
   if (value instanceof CollectionPrivacyReadError) return value.failure;
-  const failure = nativePreferenceFailureDetails(value, status, headers);
+  const content = mediaFailure(value);
+  const failure = nativePreferenceFailureDetails(value, status, headers, mediaFailure);
   const root = isRecord(value) ? value : undefined;
   const problem =
     root && 'value' in root
@@ -114,7 +129,7 @@ export function collectionPrivacyFailureMetadata(
       : root && isRecord(root.problem)
         ? root.problem
         : root;
-  return value instanceof MediaProblem ||
+  return content ||
     failure.retryAfter !== undefined ||
     failure.retryable !== undefined ||
     failure.requestId !== undefined ||

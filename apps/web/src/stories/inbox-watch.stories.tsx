@@ -1,10 +1,10 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import { expect, userEvent, within } from 'storybook/test';
 import { InboxPageView } from '../inbox/inbox-page';
+import { inboxContent } from '../inbox/adapters/presentation';
 import { readyInboxPage, type InboxPage, type InboxPageQuery, type ResolvedInboxPage } from '../inbox/inbox-read';
 import { m } from '../paraglide/messages.js';
 import { getLocale } from '../paraglide/runtime.js';
-import { threadLocation } from '../threads/thread-href';
 import { AppShell } from '../shell/shell';
 import { PageStory, PatternStory } from './page';
 
@@ -25,7 +25,11 @@ type Story = StoryObj<typeof meta>;
 
 const watchThread = '01a17a3b-0884-721b-91ef-d7ffd7bb58f1';
 const watchPost = '01a17a3b-0884-721b-91ef-d7ffd7bb58f2';
-const watchHref = threadLocation(getLocale(), { id: watchThread, title: 'Reading together' }, undefined, watchPost);
+const watchHref = inboxContent.threadHref(getLocale(), {
+  id: watchThread,
+  title: 'Reading together',
+  postId: watchPost,
+});
 
 function InboxStory({ fixture }: { fixture: string }) {
   return <PageStory visitor="Signed In" path={`/inbox?fixture=${fixture}`} />;
@@ -97,7 +101,7 @@ function Example({ state }: { state: 'inaccessible' | 'failed' }) {
   return (
     <PatternStory visitor="Signed In" path="/inbox?fixture=thread-watch">
       <AppShell>
-        <InboxPageView loadPage={loadPage} />
+        <InboxPageView loadPage={loadPage} content={inboxContent} />
       </AppShell>
     </PatternStory>
   );

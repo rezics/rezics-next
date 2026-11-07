@@ -282,6 +282,7 @@ const recoveryProblem = {
 test('profile and activity failure controls honor native delay/date headers while draft review stays local', async () => {
   mock.module('cloudflare:workers', () => ({ env: {} }));
   const { ProfileCard } = await import('../src/settings/profile');
+  const { settingsContent } = await import('../src/settings/adapters/presentation');
   const { PublicViewsCard } = await import('../src/settings/public-views');
   for (const scope of ['profile', 'views'] as const) {
     for (const retryAfter of [
@@ -342,7 +343,7 @@ test('profile and activity failure controls honor native delay/date headers whil
           createElement(
             'div',
             null,
-            createElement(ProfileCard, { editor }),
+            createElement(ProfileCard, { content: settingsContent, editor }),
             createElement(PublicViewsCard, { editor }),
           ),
         ),

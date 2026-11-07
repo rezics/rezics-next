@@ -4,6 +4,7 @@ import { expect, userEvent, within } from 'storybook/test';
 import { readSettingsPage } from '../settings/actions';
 import type { SettingsPage } from '../settings/preferences';
 import { SettingsPageView } from '../settings/settings-page';
+import { settingsContent } from '../settings/adapters/presentation';
 import type { ManagedWatch, StopWatch, WatchKind, WatchManagementIO } from '../settings/watch-native';
 import { m } from '../paraglide/messages.js';
 import { getLocale } from '../paraglide/runtime.js';
@@ -107,7 +108,7 @@ function Preview({ view, attempts }: { view: View; attempts: StopWatch[] }) {
     void readSettingsPage().then(setPage);
   }, []);
   return page ? (
-    <SettingsPageView page={page} csrfToken={null} watchesIO={io} />
+    <SettingsPageView page={page} csrfToken={null} watchesIO={io} content={settingsContent} />
   ) : (
     <p role="status">{m.settings_watches_loading()}</p>
   );

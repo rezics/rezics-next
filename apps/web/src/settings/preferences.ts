@@ -9,7 +9,6 @@ import {
   type PreferencePageKind,
   type PreferenceShelfAdvice,
 } from '@rezics/client';
-import { MediaProblem } from '../media/kernel';
 import { isPlatformClosedError, isSessionUnavailableError } from './ports/vocabulary';
 import { dynamicCollectionTitle } from '../library/settings-adapter';
 import {
@@ -36,6 +35,7 @@ import {
 } from './collection-privacy-data';
 import type { AccountRenameNavigation } from './account-rename-actions';
 import { settingsCommandKeyHeader } from './command-headers';
+import type { SettingsContentFailureReader } from './ports/content';
 
 // Shared Profile/retry boundary for the Accounts editor and Settings tests.
 export { preferenceRetryDeadline, usePreferenceRetry } from './preference-failure-retry';
@@ -299,6 +299,7 @@ export async function readOwnedCollections(
   request: Request,
   sessionEnv: Partial<SessionEnv>,
   cursor: string | null,
+  mediaFailure: SettingsContentFailureReader = () => undefined,
 ): Promise<OwnedCollectionsPage> {
   await prepareSession(request, sessionEnv);
   const authorization = viewerCredential(request);
@@ -319,6 +320,7 @@ export async function readOwnedCollections(
   });
   const page = readCollectionPrivacyResult(
     result as { data?: unknown; error?: unknown; status?: number; headers?: HeadersInit },
+    mediaFailure,
   ) as OwnerManagementRead;
   return ownerPage(page, accountId);
 }
@@ -328,6 +330,7 @@ export async function changeCollectionVisibility(
   request: Request,
   sessionEnv: Partial<SessionEnv>,
   input: { collectionId: string; revision: number; visibility: CollectionVisibility; idempotencyKey: string },
+  mediaFailure: SettingsContentFailureReader = () => undefined,
 ): Promise<CollectionVisibilityWrite> {
   try {
     await prepareSession(request, sessionEnv);
@@ -350,17 +353,17 @@ export async function changeCollectionVisibility(
     );
     if (!result.error && result.data?.collection)
       return { ok: true, collection: ownedCollection(result.data.collection, accountId) };
-    const failure = collectionPrivacyFailureMetadata(result.error, result.status, result.headers);
+    const failure = collectionPrivacyFailureMetadata(result.error, result.status, result.headers, mediaFailure);
     const metadata = failure ? { failure } : {};
     if (result.status === 409) return { ok: false, reason: 'conflict', ...metadata };
     if (result.status === 400 || result.status === 422) return { ok: false, reason: 'invalid', ...metadata };
-    if (failureDetails(result.error, result.status).code === 'platform_closed')
+    if (failureDetails(result.error, result.status, undefined, mediaFailure).code === 'platform_closed')
       return { ok: false, reason: 'closed', ...metadata };
     if (result.status === 401 || result.status === 403) return { ok: false, reason: 'forbidden', ...metadata };
     return { ok: false, reason: 'unavailable', ...metadata };
   } catch (error) {
-    const failure = collectionPrivacyFailureMetadata(error);
-    return { ok: false, reason: collectionPrivacyFailure(error), ...(failure ? { failure } : {}) };
+    const failure = collectionPrivacyFailureMetadata(error, undefined, undefined, mediaFailure);
+    return { ok: false, reason: collectionPrivacyFailure(error, mediaFailure), ...(failure ? { failure } : {}) };
   }
 }
 
@@ -369,6 +372,7 @@ export async function reloadOwnedCollection(
   request: Request,
   sessionEnv: Partial<SessionEnv>,
   collectionId: string,
+  mediaFailure: SettingsContentFailureReader = () => undefined,
 ): Promise<OwnedCollection> {
   await prepareSession(request, sessionEnv);
   const authorization = viewerCredential(request);
@@ -384,6 +388,7 @@ export async function reloadOwnedCollection(
   });
   const response = readCollectionPrivacyResult(
     result as { data?: unknown; error?: unknown; status?: number; headers?: HeadersInit },
+    mediaFailure,
   ) as OwnerManagementRead;
   return ownedCollection(response.collection, accountId);
 }
@@ -729,9 +734,10 @@ export async function loadSettingsPage(
   client: KernelClient,
   request: Request,
   sessionEnv: Partial<SessionEnv>,
-  options: { signal?: AbortSignal } = {},
+  options: { signal?: AbortSignal; mediaFailure?: SettingsContentFailureReader } = {},
 ): Promise<SettingsPage> {
   const signal = options.signal;
+  const mediaFailure = options.mediaFailure ?? (() => undefined);
   let accountId: string | null = null;
   try {
     signal?.throwIfAborted();
@@ -749,7 +755,7 @@ export async function loadSettingsPage(
     signal?.throwIfAborted();
     const preferences = !result.error ? present(result.data) : undefined;
     if (!preferences) {
-      const failure = failureDetails(result.error ?? result.data, statusOf(result), result.headers);
+      const failure = failureDetails(result.error ?? result.data, statusOf(result), result.headers, mediaFailure);
       return {
         signedIn: true,
         accountId,
@@ -770,7 +776,7 @@ export async function loadSettingsPage(
   } catch (error) {
     signal?.throwIfAborted();
     if (isSessionUnavailableError(error)) throw error;
-    const failure = failureDetails(error);
+    const failure = failureDetails(error, undefined, undefined, mediaFailure);
     return {
       signedIn: true,
       accountId,
@@ -787,6 +793,7 @@ export async function changePreferences(
   request: Request,
   sessionEnv: Partial<SessionEnv>,
   change: PreferenceChange,
+  mediaFailure: SettingsContentFailureReader = () => undefined,
 ): Promise<PreferenceWriteResult> {
   try {
     await prepareSession(request, sessionEnv);
@@ -802,9 +809,9 @@ export async function changePreferences(
     });
     const preferences = !result.error ? present(result.data) : undefined;
     if (preferences) return { ok: true, preferences };
-    return writeFailure(failureDetails(result.error ?? result.data, statusOf(result), result.headers));
+    return writeFailure(failureDetails(result.error ?? result.data, statusOf(result), result.headers, mediaFailure));
   } catch (error) {
-    const failure = failureDetails(error);
+    const failure = failureDetails(error, undefined, undefined, mediaFailure);
     if (isPlatformClosedError(error) || failure.code === 'platform_closed')
       return { ok: false, reason: 'closed', failure };
     return writeFailure(failure);
@@ -817,6 +824,7 @@ export async function changeNotifications(
   request: Request,
   sessionEnv: Partial<SessionEnv>,
   change: NotificationChange,
+  mediaFailure: SettingsContentFailureReader = () => undefined,
 ): Promise<NotificationWriteResult> {
   try {
     await prepareSession(request, sessionEnv);
@@ -840,18 +848,17 @@ export async function changeNotifications(
         return {
           ok: false,
           reason: 'unavailable',
-          failure: failureDetails(result.data, result.status, result.headers),
+          failure: failureDetails(result.data, result.status, result.headers, mediaFailure),
         };
       return { ok: true, notifications, version: preferences.version, page };
     }
-    const failure = failureDetails(result.error, statusOf(result), result.headers);
+    const failure = failureDetails(result.error, statusOf(result), result.headers, mediaFailure);
     const refused = writeFailure(failure);
     const page = failure.status === 409 && failure.code === 'conflict' ? conflictPageFrom(result.error) : undefined;
     return page ? { ...refused, page } : refused;
   } catch (error) {
-    const failure = failureDetails(error);
-    if (error instanceof MediaProblem && error.problem.code === 'forbidden')
-      return { ok: false, reason: 'forbidden', failure };
+    const failure = failureDetails(error, undefined, undefined, mediaFailure);
+    if (mediaFailure(error)?.problem.code === 'forbidden') return { ok: false, reason: 'forbidden', failure };
     if (isPlatformClosedError(error) || failure.code === 'platform_closed')
       return { ok: false, reason: 'closed', failure };
     return writeFailure(failure);

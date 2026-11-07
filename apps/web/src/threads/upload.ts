@@ -4,6 +4,17 @@ import type { DocumentNode, DocumentSnapshot } from '@rezics/document';
 import type { UploadedImage } from '@rezics/ui';
 import type { Media, ReservationInput } from '../media/kernel';
 import { isPlatformClosedProblem } from '../kernel/platform-closed.ts';
+import { UploadRefusal } from './upload-vocabulary';
+import type { MediaReservationIntent, UploadResponseWait, UploadStage, UploadStageUpdate } from './upload-vocabulary';
+
+export { UploadRefusal } from './upload-vocabulary';
+export type {
+  MediaReservationIntent,
+  UploadRefusalReason,
+  UploadResponseWait,
+  UploadStage,
+  UploadStageUpdate,
+} from './upload-vocabulary';
 
 /** Kernel reservation accepts only these image types. */
 const postImageTypes = ['image/avif', 'image/gif', 'image/jpeg', 'image/png', 'image/webp'] as const;
@@ -20,38 +31,11 @@ const maxDelay = 2_000;
 const maxWait = 60_000;
 const maxReads = 32;
 
-export type UploadRefusalReason = 'closed' | 'type' | 'too-large' | 'rejected' | 'rate-limited' | 'unavailable';
-
-export class UploadRefusal extends Error {
-  readonly reason: UploadRefusalReason;
-  readonly retryAfter?: number;
-  retryAfterHeader?: string;
-  responseTime?: number;
-  /** Retain a known reservation when completion or processing has an uncertain outcome. */
-  mediaId?: string;
-  constructor(reason: UploadRefusalReason, retryAfter?: number) {
-    super(reason);
-    this.name = 'UploadRefusal';
-    this.reason = reason;
-    if (retryAfter !== undefined) this.retryAfter = retryAfter;
-  }
-}
-
 type ReservedMedia = Pick<Media, 'id' | 'state' | 'mediaType' | 'byteCount' | 'containerId'>;
 type FutureThread = { boardId: string; idempotencyKey: string };
 type PostReserveTarget = string | { containerId: string } | { newThread: FutureThread };
 type ReserveTarget = PostReserveTarget | { realmId: string };
 type ImagePurpose = 'post-image' | 'avatar' | 'realm-icon' | 'realm-banner';
-export type UploadStage = 'reservation' | 'transfer' | 'processing';
-export type UploadStageUpdate = (stage: UploadStage, mediaId?: string) => void;
-export type UploadResponseWait = (status: number, retryAfterHeader: string | undefined, responseTime: number) => void;
-export type MediaReservationIntent = Readonly<{
-  key: string;
-  body: Readonly<ReturnType<typeof reserveBody>>;
-  file: File;
-  viewer: string;
-  credential: string;
-}>;
 
 /** One attachment's original commands. A disclosed container gets its own immutable reservation command. */
 export type ReplyImageReservation = {

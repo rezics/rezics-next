@@ -18,12 +18,10 @@ export { bindSemanticProducerRoles, identityErasureRoles };
 import { admitIdentityReceivingEffect } from '../identity-receiving-effects.ts';
 import {
   admittedAccountMappingSource,
-  authorizeIdentityAdmission,
+  createIdentityBindingOperations,
   identityBindingData,
   identityBindingDigest,
   identityReceiptPartition,
-  readIdentityBinding,
-  recordIdentityEpochNativeCommit,
 } from './identity-epoch-binding.ts';
 import bindingInsert from '../identity-epoch-binding-insert.sql';
 import bindingAccept from '../identity-epoch-binding-accept.sql';
@@ -66,7 +64,13 @@ import type { CommandTransaction } from '../../command/command.ts';
 import { withConnection } from '../../database/pool.ts';
 import { readPartition } from '../../partition/partition.ts';
 import { nativeIdentityCapabilities } from '../identity-adapter-bind.ts';
-import { readIdentityMappings, readIdentityRatingReview, selectIdentityEpochRemainder } from './identity-epoch-read.ts';
+import type { NativeIdentityCapabilities } from '../identity-adapter-port.ts';
+import {
+  createIdentityReaders,
+  readIdentityMappings,
+  readIdentityRatingReview,
+  selectIdentityEpochRemainder,
+} from './identity-epoch-read.ts';
 import { identityEpochLibraryInputsSQL } from '../identity-epoch-library-inputs.ts';
 import { newId, partitionOf, routeOf } from '../../route/route.ts';
 import { IDENTITY_EPOCH_ADMITTED } from '../events.ts';
@@ -117,18 +121,6 @@ function route(id: string): number {
   const value = routeOf(id);
   if (value === null) throw new TypeError('Identity original must be a native routed ID');
   return value;
-}
-function cmd() {
-  return nativeIdentityCapabilities().command;
-}
-function admission() {
-  return nativeIdentityCapabilities().admission;
-}
-function control(tx: CommandTransaction, platform = false) {
-  const command = cmd().currentCommand(tx);
-  if (platform && command.basis !== null)
-    throw new TypeError('Identity maintenance requires native admitted platform work');
-  return command;
 }
 
 export { serializeIdentityValue } from '../identity-core/index.ts';
@@ -287,9 +279,23 @@ export async function pageLibraryIdentityEpochChanges(
   return { changes, next: cutoff ? changes.at(-1)!.original : null };
 }
 
+const storeByCapabilities = new WeakMap<NativeIdentityCapabilities, IdentityEpochStore>();
+
 /** Native source mappings and partition-scoped admission. Participant completion is never inferred. */
-export function identityEpochStore(): IdentityEpochStore {
-  return memoizedValue(identityEpochStore, () => ({
+export function createIdentityEpochStore(capabilities: NativeIdentityCapabilities): IdentityEpochStore {
+  const cached = storeByCapabilities.get(capabilities);
+  if (cached) return cached;
+  const cmd = () => capabilities.command;
+  const admission = () => capabilities.admission;
+  const bindingOps = createIdentityBindingOperations(capabilities);
+  const readers = createIdentityReaders(capabilities);
+  function control(tx: CommandTransaction, platform = false) {
+    const command = cmd().currentCommand(tx);
+    if (platform && command.basis !== null)
+      throw new TypeError('Identity maintenance requires native admitted platform work');
+    return command;
+  }
+  const store: IdentityEpochStore = {
     // Compatibility for topology observations only; actual job homes are encoded by their native routed IDs.
     controlPartition: IDENTITY_EPOCH_CONTROL_PARTITION,
     prepareAdmission: (pool, authority, input) => admission().prepareAdmission(pool, authority, input),
@@ -311,11 +317,11 @@ export function identityEpochStore(): IdentityEpochStore {
         : { state: 'published', epoch: BigInt(row.published_epoch) };
     },
     readJob,
-    async findJob(tx, receipt, binding) {
+    async findJob(tx, receipt, proof) {
       const command = cmd().currentCommand(tx);
-      await authorizeIdentityAdmission(tx, receipt, binding);
-      if (binding) {
-        const data = identityBindingData(binding);
+      await bindingOps.authorizeIdentityAdmission(tx, receipt, proof);
+      if (proof) {
+        const data = identityBindingData(proof);
         if (data.key !== receiptKey(receipt) || canonicalize(data.receipt) !== canonicalize(receiptValue(receipt)))
           throw new (cmd().IdempotencyConflictError)(command.partition);
         if (command.partition !== data.home) throw new TypeError('Job lookup requires the explicit native job home');
@@ -328,20 +334,20 @@ export function identityEpochStore(): IdentityEpochStore {
       ).rows[0];
       return row ? readJob(tx, { jobId: row.job_id, epoch: BigInt(row.epoch) }) : null;
     },
-    readMappings: readIdentityMappings,
+    readMappings: readers.readIdentityMappings,
     async readMapping(pool, original) {
-      return (await readIdentityMappings(pool, [original]))[0]!;
+      return (await readers.readIdentityMappings(pool, [original]))[0]!;
     },
     async admit(tx, admissionInput) {
       const { intent, receipt, binding } = admissionInput;
       if (binding) return admission().admitBound(tx, { ...admissionInput, binding }, true);
       if (cmd().currentCommand(tx).partition !== identityReceiptPartition(receipt)) {
-        await authorizeIdentityAdmission(tx, receipt);
+        await bindingOps.authorizeIdentityAdmission(tx, receipt);
         throw new TypeError('Cross-home receipt admission requires a released native binding proof');
       }
       const command = control(tx);
-      const accountSource = await authorizeIdentityAdmission(tx, receipt, undefined, intent);
-      const claimed = await readIdentityBinding(tx, admissionInput);
+      const accountSource = await bindingOps.authorizeIdentityAdmission(tx, receipt, undefined, intent);
+      const claimed = await bindingOps.readIdentityBinding(tx, admissionInput);
       if (claimed) return admission().admitBound(tx, { ...admissionInput, binding: claimed }, true);
       const prior = (await tx.query(storeSelectJob3.sql, [receiptKey(receipt), command.partition])).rows[0];
       if (prior) {
@@ -437,7 +443,7 @@ export function identityEpochStore(): IdentityEpochStore {
         )
         .digest('hex');
       if (accountSource) bindSemanticProducerRoles(tx, accountSource.roles);
-      recordIdentityEpochNativeCommit(tx, 'admission');
+      bindingOps.recordIdentityEpochNativeCommit(tx, 'admission');
       cmd().registerCommandCallback(tx, async (transactionId) => {
         await tx.query(bindingInsert.sql, [
           command.partition,
@@ -805,7 +811,13 @@ export function identityEpochStore(): IdentityEpochStore {
         ],
       };
     },
-  }));
+  };
+  storeByCapabilities.set(capabilities, store);
+  return store;
+}
+
+export function identityEpochStore(): IdentityEpochStore {
+  return createIdentityEpochStore(nativeIdentityCapabilities());
 }
 
 export {

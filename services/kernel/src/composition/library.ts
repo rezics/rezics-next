@@ -1,3 +1,5 @@
+import { createNativeCopyAccountAdmission } from '../access/adapters/index.ts';
+import { nativeReleasedDefinitions, nativeCopyListContext } from '../semantic/adapters/index.ts';
 import { nativeFollowCountRuntime } from './library-follow-counts.ts';
 import { createLibraryPreparationWork, nativeLibraryScopeWork } from '../search/adapters/index.ts';
 /** Library process composition. Binds native SQL and foreign Access/Search/Semantic/Content adapters. */
@@ -36,6 +38,7 @@ import {
   createNativeCollectionPublicationEpisodes,
   readBuiltinPublicationRule,
   createNativeCollectionMutationPorts,
+  createNativeCopyPorts,
   createAuthorizationAdapter,
   type AuthorizationAdapterPorts,
   createContentPublicationAdapter,
@@ -48,6 +51,7 @@ import {
   createSearchPreparationAdapter,
   type SearchPreparationAdapterPorts,
 } from '../library/adapters/index.ts';
+import { createLibraryCollectionPolicyMethods } from '../access/adapters/collection-policy.ts';
 import {
   bindLibraryDomain,
   peekLibraryDomain,
@@ -64,6 +68,7 @@ import {
 import { admissionTerm, sumAdmission } from '../library/core/index.ts';
 
 function nativeAuthorizationPorts(): AuthorizationAdapterPorts {
+  const collectionPolicy = createLibraryCollectionPolicyMethods();
   return {
     async admitCollectionRead(input) {
       try {
@@ -104,6 +109,12 @@ function nativeAuthorizationPorts(): AuthorizationAdapterPorts {
     },
     within(deadline, work) {
       return within(deadline, work);
+    },
+    specializeCollectionList(input) {
+      return collectionPolicy.specializeCollectionList(input);
+    },
+    collectionAuthorizationPreparation() {
+      return collectionPolicy.collectionAuthorizationPreparation();
     },
   };
 }
@@ -338,6 +349,12 @@ export function composeLibraryDomain(options: LibraryComposeOptions = {}): Libra
   const previous = peekLibraryDomain();
   return bindLibraryDomain({
     ...createLibraryApplications(capabilities),
+    copyContext: nativeCopyListContext(),
+    copyPorts: (config) =>
+      createNativeCopyPorts(config, {
+        account: createNativeCopyAccountAdmission(config),
+        definitions: nativeReleasedDefinitions(),
+      }),
     followCounts: nativeFollowCountRuntime(),
     preparationWork: options.preparationWork ?? previous?.preparationWork ?? createLibraryPreparationWork,
     scopeWork: options.scopeWork ?? previous?.scopeWork ?? nativeLibraryScopeWork,

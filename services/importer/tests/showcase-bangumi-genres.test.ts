@@ -4,14 +4,13 @@ import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import type { BatchCommand, BatchStatement } from '@rezics/definitions/bulk';
+import { bangumiPublicTagScheme, reviewedReferenceKey } from '@rezics/conversion/support';
 import { emptyCrossMediaPlan, seedCrossMedia } from '../src/cross-media-seed.ts';
 import { ImportSession } from '../src/import-session.ts';
+import { createReviewedCatalogueApplication } from '../src/reviewed-catalogue-application.ts';
 import { sameStatementProvenance } from '../src/statement-provenance.ts';
-import {
-  readReviewedBangumiBinding,
-  seedReviewedCatalogue,
-  type ReviewedCataloguePort,
-} from '../src/reviewed-catalogue.ts';
+import { releasedReviewedVocabulary } from '../src/reviewed-vocabulary-port.ts';
+import { seedReviewedCatalogue, type ReviewedCataloguePort } from '../src/reviewed-catalogue.ts';
 
 const context = '00000000-0000-8000-8000-000000000000';
 test('statement provenance admits data descriptors before projecting semantic fields', () => {
@@ -165,13 +164,23 @@ function fakePort(): ReviewedCataloguePort & Parameters<typeof seedCrossMedia>[2
   return port as unknown as ReviewedCataloguePort & Parameters<typeof seedCrossMedia>[2];
 }
 
-test('current reviewed binding accepts transport JSON records and still refuses changed statement provenance', async () => {
+test('constructed reviewed application seeds, binds and independently reads current vocabulary through its supplied port', async () => {
   const directory = await mkdtemp(join(import.meta.dir, '../../../.temp/reviewed-binding-'));
   const path = join(directory, 'state.sqlite');
   const native = fakePort();
   let changed = false;
+  let readSignal: AbortSignal | undefined;
+  let fenceSignal: AbortSignal | undefined;
   const port: ReviewedCataloguePort = {
     ...native,
+    async fence(...args) {
+      fenceSignal = args[1];
+      return native.fence(...args);
+    },
+    async readReviewedSubject(...args) {
+      readSignal = args[1];
+      return native.readReviewedSubject(...args);
+    },
     async reviewedCandidates(...args) {
       const page = JSON.parse(JSON.stringify(await native.reviewedCandidates(...args)), (_key, value) =>
         value && typeof value === 'object' && !Array.isArray(value) ? Object.setPrototypeOf(value, null) : value,
@@ -194,16 +203,44 @@ test('current reviewed binding accepts transport JSON records and still refuses 
       return page;
     },
   };
+  const vocabulary = releasedReviewedVocabulary();
+  const application = createReviewedCatalogueApplication({ vocabulary });
+  const signal = new AbortController().signal;
   try {
-    const result = await seedReviewedCatalogue({ path, port });
+    const result = await application.seed({ path, port, signal });
+    expect(fenceSignal).toBe(signal);
     const session = new ImportSession(path);
     try {
-      expect(await readReviewedBangumiBinding(session.bindings, port)).toEqual({
+      const inspected = await application.inspect(session.bindings, port, signal);
+      expect(inspected).toMatchObject({
+        state: 'bound',
+        evidence: {
+          binding: {
+            sourceConcept: result.subjects['source-harem'],
+            canonicalConcept: result.subjects['canonical-harem'],
+          },
+        },
+      });
+      const binding = {
         sourceConcept: result.subjects['source-harem']!,
         canonicalConcept: result.subjects['canonical-harem']!,
+      };
+      expect(await application.readBinding(session.bindings, port, signal)).toEqual(binding);
+      expect(await application.resolveCurrentReviewedBangumiTagSubjects(port, binding, signal)).toEqual({
+        source: { requestedId: binding.sourceConcept, currentId: binding.sourceConcept, available: true },
+        canonical: { requestedId: binding.canonicalConcept, currentId: binding.canonicalConcept, available: true },
       });
+      expect(readSignal).toBe(signal);
+      const lookup = application.lookup(session.bindings, port);
+      expect(
+        await lookup.resolve({
+          owner: { source: 'bangumi', external_id: '884' },
+          conversion: { source: 'bangumi', normalized: { meta_tags: ['后宫'] } } as never,
+          signal,
+        }),
+      ).toEqual({ [reviewedReferenceKey(bangumiPublicTagScheme, '后宫')]: binding.sourceConcept });
       changed = true;
-      expect(await readReviewedBangumiBinding(session.bindings, port)).toBeNull();
+      expect(await application.readBinding(session.bindings, port, signal)).toBeNull();
     } finally {
       session.close();
     }

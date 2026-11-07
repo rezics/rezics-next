@@ -41,6 +41,7 @@ for (const [key, value] of Object.entries(globals))
 const { AccountsQueryProvider: QueryClientProvider } = await import('./fixtures/accounts-composition');
 const { createRoot } = await import('react-dom/client');
 const { ManagedAccountDetailCard } = await import('../src/settings/managed-account-detail');
+const { settingsContent } = await import('../src/settings/adapters/presentation');
 const { ManagedAccountReader } = await import('../src/settings/managed-account-detail-read');
 const { AnonymousSessionContext } = await import('../src/session/query');
 const { m } = await import('../src/paraglide/messages.js');
@@ -85,7 +86,12 @@ async function mount(reader: InstanceType<typeof ManagedAccountReader>) {
     root.render(
       <QueryClientProvider client={client}>
         <AnonymousSessionContext value={true}>
-          <ManagedAccountDetailCard reader={reader} backHref={backHref} />
+          <ManagedAccountDetailCard
+            reader={reader}
+            backHref={backHref}
+            initials={settingsContent.initials}
+            mediaFailure={settingsContent.mediaFailure}
+          />
         </AnonymousSessionContext>
       </QueryClientProvider>,
     ),

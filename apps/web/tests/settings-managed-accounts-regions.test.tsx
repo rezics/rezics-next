@@ -51,6 +51,7 @@ let ManagedAccountsSection: (typeof import('../src/settings/managed-accounts'))[
 let ManagedAccountSelectionUnavailable: (typeof import('../src/settings/settings-page'))['ManagedAccountSelectionUnavailable'];
 let managedAccountsFailure: (typeof import('../src/settings/managed-accounts-read'))['managedAccountsFailure'];
 let sessionQuery: (typeof import('../src/session/query'))['sessionQuery'];
+let settingsContent: (typeof import('../src/settings/adapters/presentation'))['settingsContent'];
 let managedAccountsExample: (typeof import('../src/stories/patterns/managed-accounts.fixtures'))['managedAccountsExample'];
 let managedViewer: (typeof import('../src/stories/patterns/managed-accounts.fixtures'))['managedViewer'];
 let m: (typeof import('../src/paraglide/messages.js'))['m'];
@@ -65,6 +66,7 @@ beforeAll(async () => {
   ({ createRoot } = await import('react-dom/client'));
   ({ within } = await import('storybook/test'));
   ({ ManagedAccountsSection } = await import('../src/settings/managed-accounts'));
+  ({ settingsContent } = await import('../src/settings/adapters/presentation'));
   ({ ManagedAccountSelectionUnavailable } = await import('../src/settings/settings-page'));
   ({ managedAccountsFailure } = await import('../src/settings/managed-accounts-read'));
   ({ sessionQuery } = await import('../src/session/query'));
@@ -133,7 +135,7 @@ async function mounted(
       <>
         {sources.map(({ io }, index) => (
           <section key={index} aria-label={`Inventory ${index + 1}`} dir={dir}>
-            <ManagedAccountsSection io={io} />
+            <ManagedAccountsSection io={io} initials={settingsContent.initials} />
           </section>
         ))}
       </>

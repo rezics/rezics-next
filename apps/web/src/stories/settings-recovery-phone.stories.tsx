@@ -8,6 +8,7 @@ import { m } from '../paraglide/messages.js';
 import { localizeUrl } from '../paraglide/runtime.js';
 import { sessionQuery } from '../session/query';
 import { retrySettingsSession, SettingsPageView } from '../settings/settings-page';
+import { settingsContent } from '../settings/adapters/presentation';
 import type { SettingsPage } from '../settings/preferences';
 import { AppShell } from '../shell/shell';
 import { PatternStory } from './page';
@@ -115,7 +116,7 @@ function SettingsRecoveryComposition() {
 
   return (
     <AppShell>
-      <SettingsPageView page={page} csrfToken={null} preferenceIO={preferenceIO} />
+      <SettingsPageView page={page} csrfToken={null} preferenceIO={preferenceIO} content={settingsContent} />
     </AppShell>
   );
 }

@@ -5,7 +5,6 @@ import { getRequest, setResponseHeader } from '@tanstack/react-start/server';
 import { isPlatformClosedError } from '../settings/ports/vocabulary';
 import type { SessionEnv } from '../session/client';
 import { prepareSession, sessionSubject, viewerCredential } from '../session/request';
-import { MediaProblem } from '../media/kernel';
 import {
   decodeInboxPage,
   decodeUnreadCount,
@@ -20,6 +19,7 @@ import {
   type ResolvedInboxPage,
 } from './inbox-decode';
 import { INBOX_PAGE_SIZE, MAX_INBOX_CURSOR_LENGTH } from './inbox-work';
+import type { InboxContentPort } from './ports/content';
 
 export { INBOX_PAGE_KERNEL_READ_CEILING, INBOX_PAGE_SIZE } from './inbox-work';
 export {
@@ -78,17 +78,25 @@ function failureState(failure: NativeInboxFailure): 'closed' | 'preparing' | 'un
   return 'unavailable';
 }
 
-function transportFailure(value: unknown, status?: number, headers?: HeadersInit): NativeInboxFailure {
-  const fromProblem = value instanceof MediaProblem ? value.headers : undefined;
+function transportFailure(
+  value: unknown,
+  status?: number,
+  headers?: HeadersInit,
+  mediaFailure: InboxContentPort['mediaFailure'] = () => undefined,
+): NativeInboxFailure {
+  const fromProblem = mediaFailure(value)?.headers;
   return nativeFailure(value, status, headers ?? fromProblem);
 }
 
-export function inboxReadFailure(error: unknown): Extract<InboxPage, { failure: NativeInboxFailure }> {
+export function inboxReadFailure(
+  error: unknown,
+  mediaFailure: InboxContentPort['mediaFailure'] = () => undefined,
+): Extract<InboxPage, { failure: NativeInboxFailure }> {
   rethrowFrameworkControlFlow(error);
   const failure =
     error instanceof InboxReadError
       ? error.failure
-      : transportFailure(error, isPlatformClosedError(error) ? error.status : undefined);
+      : transportFailure(error, isPlatformClosedError(error) ? error.status : undefined, undefined, mediaFailure);
   return { signedIn: true, state: failureState(failure), failure };
 }
 
@@ -104,6 +112,7 @@ async function readNoticePage(
   authorization: string,
   query: InboxPageQuery,
   signal?: AbortSignal,
+  mediaFailure: InboxContentPort['mediaFailure'] = () => undefined,
 ) {
   const result = await client.accounts({ accountId }).notifications.get({
     query: {
@@ -115,7 +124,7 @@ async function readNoticePage(
     ...(signal ? { fetch: { signal } } : {}),
   });
   if (result.error || result.status !== 200)
-    throw new InboxReadError(transportFailure(result.error, result.status, result.headers));
+    throw new InboxReadError(transportFailure(result.error, result.status, result.headers, mediaFailure));
   return decodeInboxPage(result.data, accountId);
 }
 
@@ -142,9 +151,13 @@ export async function loadInboxPage(
   accountId: string,
   authorization: string,
   query: InboxPageQuery | string = { selection: 'all' },
+  content: Pick<InboxContentPort, 'mediaFailure' | 'threadHref'>,
   signal?: AbortSignal,
 ): Promise<ResolvedInboxPage> {
-  return resolveInboxItems(await readNoticePage(client, accountId, authorization, inboxPageQueryOf(query), signal));
+  return resolveInboxItems(
+    await readNoticePage(client, accountId, authorization, inboxPageQueryOf(query), signal, content.mediaFailure),
+    content.threadHref,
+  );
 }
 
 export const setInboxResponsePolicy = createServerFn({ method: 'GET' }).handler(() => {
@@ -172,6 +185,11 @@ export const readInboxPage = createServerFn({ method: 'GET' })
     setResponseHeader('cache-control', 'private, no-store');
     try {
       const request = getRequest();
+      const { inboxMediaFailure, inboxThreadHref } = await import('./adapters/content');
+      const content: Pick<InboxContentPort, 'mediaFailure' | 'threadHref'> = {
+        mediaFailure: inboxMediaFailure,
+        threadHref: inboxThreadHref,
+      };
       await prepareSession(request, await inboxSessionEnv());
       const authorization = viewerCredential(request);
       const accountId = sessionSubject(request);
@@ -180,10 +198,11 @@ export const readInboxPage = createServerFn({ method: 'GET' })
       return {
         signedIn: true,
         state: 'ready',
-        ...(await loadInboxPage(client, accountId, authorization, data, request.signal)),
+        ...(await loadInboxPage(client, accountId, authorization, data, content, request.signal)),
       };
     } catch (error) {
-      return inboxReadFailure(error);
+      const { inboxMediaFailure } = await import('./adapters/content');
+      return inboxReadFailure(error, inboxMediaFailure);
     }
   });
 
@@ -205,6 +224,7 @@ export async function loadUnreadCount(
   request: Request,
   sessionEnv: Partial<SessionEnv>,
   signal?: AbortSignal,
+  mediaFailure: InboxContentPort['mediaFailure'] = () => undefined,
 ): Promise<UnreadCount> {
   try {
     await prepareSession(request, sessionEnv, { refresh: false });
@@ -216,24 +236,27 @@ export async function loadUnreadCount(
       ...(signal ? { fetch: { signal } } : {}),
     });
     if (result.error || !result.data)
-      throw new InboxReadError(transportFailure(result.error, result.status, result.headers));
+      throw new InboxReadError(transportFailure(result.error, result.status, result.headers, mediaFailure));
     const count = decodeUnreadCount(result.data, result.status);
     return { signedIn: true, state: 'ready', ...count };
   } catch (error) {
-    return unreadCountUnavailable(error);
+    return unreadCountUnavailable(error, mediaFailure);
   }
 }
 
-function unreadCountUnavailable(error: unknown): Extract<UnreadCount, { state: 'unavailable' }> {
+function unreadCountUnavailable(
+  error: unknown,
+  mediaFailure: InboxContentPort['mediaFailure'] = () => undefined,
+): Extract<UnreadCount, { state: 'unavailable' }> {
   rethrowFrameworkControlFlow(error);
   const failure =
     error instanceof InboxReadError
       ? error.failure
-      : transportFailure(error, isPlatformClosedError(error) ? error.status : undefined);
+      : transportFailure(error, isPlatformClosedError(error) ? error.status : undefined, undefined, mediaFailure);
   return {
     signedIn: true,
     state: 'unavailable',
-    failure: inboxSeenFailure(new InboxSeenError(failure)).failure,
+    failure: inboxSeenFailure(new InboxSeenError(failure), mediaFailure).failure,
   };
 }
 
@@ -242,9 +265,11 @@ export const readUnreadCount = createServerFn({ method: 'GET' }).handler(async (
   try {
     const request = getRequest();
     const { client } = await inboxKernelClient();
-    return await loadUnreadCount(client, request, await inboxSessionEnv(), request.signal);
+    const { inboxMediaFailure } = await import('./adapters/content');
+    return await loadUnreadCount(client, request, await inboxSessionEnv(), request.signal, inboxMediaFailure);
   } catch (error) {
-    return unreadCountUnavailable(error);
+    const { inboxMediaFailure } = await import('./adapters/content');
+    return unreadCountUnavailable(error, inboxMediaFailure);
   }
 });
 
@@ -262,9 +287,13 @@ export class InboxSeenError extends Error {
 }
 
 /** Project only bounded native diagnostics. Body text, credentials and body-supplied waits stay private. */
-export function inboxSeenFailure(error: unknown): Extract<InboxSeenResult, { failure: NativeInboxFailure }> {
+export function inboxSeenFailure(
+  error: unknown,
+  mediaFailure: InboxContentPort['mediaFailure'] = () => undefined,
+): Extract<InboxSeenResult, { failure: NativeInboxFailure }> {
   rethrowFrameworkControlFlow(error);
-  const native = error instanceof InboxSeenError ? error.failure : transportFailure(error);
+  const native =
+    error instanceof InboxSeenError ? error.failure : transportFailure(error, undefined, undefined, mediaFailure);
   const bounded = (value: string | undefined) =>
     value && value.length <= 128 && !/[\u0000-\u001f\u007f]/.test(value) ? value : undefined;
   const code = bounded(native.code);
@@ -291,6 +320,7 @@ export async function markInboxThrough(
   accountId: string,
   authorization: string,
   attempt: InboxSeenAttempt,
+  mediaFailure: InboxContentPort['mediaFailure'] = () => undefined,
 ): Promise<void> {
   const result = await client
     .accounts({ accountId })
@@ -299,7 +329,7 @@ export async function markInboxThrough(
       { headers: { ...authHeaders(authorization), 'idempotency-key': JSON.stringify(attempt.idempotencyKey) } },
     );
   if (result.error || result.status !== 204)
-    throw new InboxSeenError(transportFailure(result.error, result.status, result.headers));
+    throw new InboxSeenError(transportFailure(result.error, result.status, result.headers, mediaFailure));
 }
 
 /** A chosen notice has its own native identity; it never advances the bulk through frontier. */
@@ -308,6 +338,7 @@ export async function markInboxNoticeSeen(
   accountId: string,
   authorization: string,
   attempt: InboxNoticeSeenAttempt,
+  mediaFailure: InboxContentPort['mediaFailure'] = () => undefined,
 ): Promise<void> {
   if (attempt.accountId !== accountId || !noticeId(attempt.noticeId))
     throw new InboxSeenError({ status: 403, code: 'forbidden', retryable: false });
@@ -318,7 +349,7 @@ export async function markInboxNoticeSeen(
       headers: { ...authHeaders(authorization), 'idempotency-key': JSON.stringify(attempt.idempotencyKey) },
     });
   if (result.error || result.status !== 204)
-    throw new InboxSeenError(transportFailure(result.error, result.status, result.headers));
+    throw new InboxSeenError(transportFailure(result.error, result.status, result.headers, mediaFailure));
 }
 
 /** The private server-function result, including session/CSRF refusals, has one serializable failure shape. */
@@ -327,16 +358,17 @@ export async function loadInboxSeen(
   request: Request,
   sessionEnv: Partial<SessionEnv>,
   attempt: InboxSeenAttempt,
+  mediaFailure: InboxContentPort['mediaFailure'] = () => undefined,
 ): Promise<InboxSeenResult> {
   try {
     await prepareSession(request, sessionEnv);
     const authorization = viewerCredential(request);
     const accountId = sessionSubject(request);
     if (!authorization || !accountId) return { signedIn: false };
-    await markInboxThrough(client, accountId, authorization, attempt);
+    await markInboxThrough(client, accountId, authorization, attempt, mediaFailure);
     return { signedIn: true };
   } catch (error) {
-    return inboxSeenFailure(error);
+    return inboxSeenFailure(error, mediaFailure);
   }
 }
 
@@ -353,7 +385,14 @@ export const markInboxSeen = createServerFn({ method: 'POST' })
   })
   .handler(async ({ data }): Promise<InboxSeenResult> => {
     setResponseHeader('cache-control', 'private, no-store');
-    return loadInboxSeen((await inboxKernelClient()).client, getRequest(), await inboxSessionEnv(), data);
+    const { inboxMediaFailure } = await import('./adapters/content');
+    return loadInboxSeen(
+      (await inboxKernelClient()).client,
+      getRequest(),
+      await inboxSessionEnv(),
+      data,
+      inboxMediaFailure,
+    );
   });
 
 export async function loadInboxNoticeSeen(
@@ -361,16 +400,17 @@ export async function loadInboxNoticeSeen(
   request: Request,
   sessionEnv: Partial<SessionEnv>,
   attempt: InboxNoticeSeenAttempt,
+  mediaFailure: InboxContentPort['mediaFailure'] = () => undefined,
 ): Promise<InboxSeenResult> {
   try {
     await prepareSession(request, sessionEnv);
     const authorization = viewerCredential(request);
     const accountId = sessionSubject(request);
     if (!authorization || !accountId) return { signedIn: false };
-    await markInboxNoticeSeen(client, accountId, authorization, attempt);
+    await markInboxNoticeSeen(client, accountId, authorization, attempt, mediaFailure);
     return { signedIn: true };
   } catch (error) {
-    return inboxSeenFailure(error);
+    return inboxSeenFailure(error, mediaFailure);
   }
 }
 
@@ -388,5 +428,12 @@ export const markInboxItemSeen = createServerFn({ method: 'POST' })
   })
   .handler(async ({ data }): Promise<InboxSeenResult> => {
     setResponseHeader('cache-control', 'private, no-store');
-    return loadInboxNoticeSeen((await inboxKernelClient()).client, getRequest(), await inboxSessionEnv(), data);
+    const { inboxMediaFailure } = await import('./adapters/content');
+    return loadInboxNoticeSeen(
+      (await inboxKernelClient()).client,
+      getRequest(),
+      await inboxSessionEnv(),
+      data,
+      inboxMediaFailure,
+    );
   });

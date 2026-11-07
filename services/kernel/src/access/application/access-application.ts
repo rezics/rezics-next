@@ -10,6 +10,7 @@ import { createKindAudienceApplication } from './kind-audience.ts';
 import { createOriginalAdmission } from './original-admission.ts';
 import { createRealmAdministration } from './realm-administration.ts';
 import { createResourceAuthorizationApplication } from './resource-authorization.ts';
+import { createCollectionPolicyApplication } from './collection-policy.ts';
 
 /** Use cases over Access-owned ports. Downstream implementations are never imported here. */
 export function createAccessApplication(
@@ -24,6 +25,7 @@ export function createAccessApplication(
   const kindAudience = createKindAudienceApplication(ports, membershipLimit);
   const originalWork = createOriginalAdmission(ports);
   const authorization = createResourceAuthorizationApplication(ports);
+  const collectionPolicy = createCollectionPolicyApplication(ports);
   return Object.freeze({
     ports,
     qualifyAvatar: avatar.qualifyAvatar,
@@ -38,5 +40,7 @@ export function createAccessApplication(
     originalWorkLocalAllowance: originalWork.localAllowance,
     decideAuthorization: authorization.decide,
     authorizeResource: authorization.authorize,
+    specializeCollectionList: collectionPolicy.specializeCollectionList,
+    collectionAuthorizationPreparation: collectionPolicy.authorizationPreparation,
   });
 }

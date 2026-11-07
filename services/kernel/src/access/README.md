@@ -2,12 +2,15 @@
 
 ## Policy boundary
 
-The [adopted architecture](../../../../docs/architecture.md) places the pure catalogue, closed-operand `decide`,
-bounded explanations/conformance and residual specialization behind `packages/access/src/index.ts`. Imports go
-inward through that public entry only, with no reverse or private edges. Kernel retains native facts, qualified
-completeness, opaque proofs, authoritative time, floors/fences, command admission, audit and execution. Exposure
-is a distinct consumer. The first core and Collection directory residual use are integrated; this remaining-profile migration
-adds no baseline allowance and no old/new allow-OR. Source compatibility is no native acceptance.
+[Architecture](../../../../docs/architecture.md): catalogue, closed-operand `decide`, bounded explanations,
+conformance and residuals live in `packages/access/src/index.ts`; imports point inward.
+Kernel owns facts, qualified completeness, proofs, time, floors/fences, admission, audit and execution. Exposure is independent. Core/Collection residuals are integrated; remaining profiles add no
+baseline allowance or allow-OR. Compatibility is not native acceptance.
+
+Copy: `contract/copy-account.ts`, `adapters/copy-account.ts`: account/state/share SQL, finite bounds
+and authn floor before private-state/receipt disclosure. Error, Access, Pool, actor, time/deadline identities remain.
+
+Decision: Collection directory, list, order-bounds and current reads consume Library `AuthorizationCapability.specializeCollectionList` and the Access-funded `collectionAuthorizationPreparation` bound. Access adapters keep `specializePolicy`, residual lowering, native permission SQL and the inverse membership limit; Library does not import private policy-core/filter or reconstruct permission statements. Wire shapes, independent deny operands and final authority before disclosure stay the same. Collection authorization memberships, residual operands and action names live in the Access contract literal leaf; adapters re-export them and do not evaluate membership-inverse at import. Fewest tests: owner/public/unavailable list outcomes and the funded inverse membership limit 1000.
 
 [Accounts](../../../../docs/accounts.md) owns product identity, delegation, consent and preferences;
 [Deletion](../../../../docs/deletion.md) owns erasure/restore policy;
@@ -25,7 +28,7 @@ Decision: native erasure completion acknowledges the coordinator through a requi
 with the real `acknowledgeErasure` command. Normal startup and the isolated native preload use the same composition;
 local Access completion remains distinct from pending shared-history custody. Live-copy discovery binds the same
 Work execution contract as server and worker on each client it opens; there is no process-global client.
-`composeAccessApplication` also installs Semantic `installIdentityAdapterRuntime`, so Agent source, technical
+`composeAccessApplication` also resolves Semantic `resolveIdentityAdapterRuntime`, so Agent source, technical
 receiver and reversal ports are the same constructed native capabilities used for epoch binding, publication and
 replay. IdentityEpochStoreError remains the single runtime class from Semantic `contract/identity-errors`.
 
@@ -119,11 +122,12 @@ checks and per-ID answers. Pure evaluation adds no query, clock read, scan, per-
 `packages/access/README.md` documents the public API and limits.
 The admitted import edges are `services/kernel/src/access/policy-core.ts -> @rezics/access` (public entry),
 `services/kernel/src/access/policy-core.ts -> ./resource-roles.ts` (existing native role association),
-`services/kernel/src/access/permission.ts -> ./policy-core.ts`, `services/kernel/src/library/collection-reads.ts ->
-../access/policy-core.ts`, `services/kernel/src/library/collection-reads.ts -> ./collection-list-policy.ts`,
-`services/kernel/src/library/collection-list-policy.ts -> @rezics/access` (public entry),
-`services/kernel/src/library/collection-list-policy.ts -> ../access/policy-filter.ts`, and
-`services/kernel/src/access/policy-filter.ts -> @rezics/access` (public types only).
+`services/kernel/src/access/permission.ts -> ./policy-core.ts`, `services/kernel/src/access/adapters/collection-policy.ts ->
+./policy-core.ts`, `services/kernel/src/library/collection-reads.ts -> ./collection-list-policy.ts`,
+`services/kernel/src/library/collection-list-policy.ts -> ../access/adapters/collection-policy.ts` (public entry),
+`services/kernel/src/library/collection-order-bounds.ts -> ../access/adapters/collection-policy.ts` (public entry),
+`services/kernel/src/access/policy-filter.ts -> @rezics/access` (public types only), and
+`services/kernel/src/access/policy-filter.ts -> ../library/contract/collection-policy.ts` (Library-owned filter).
 
 ## Collection directory residual
 

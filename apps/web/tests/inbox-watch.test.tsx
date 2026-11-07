@@ -6,7 +6,6 @@ import { settingsPreferencePage } from '../src/kernel/fake/settings-notification
 import { NotificationEditor } from '../src/settings/notification-recovery';
 import type { NotificationChange, NotificationWriteResult } from '../src/settings/preferences';
 import { WatchNotificationGuide } from '../src/settings/watch-notification-guide';
-import { threadLocation } from '../src/threads/thread-href';
 import { getLocale, locales, overwriteGetLocale, setLocale } from '../src/paraglide/runtime.js';
 import { m } from '../src/paraglide/messages.js';
 import { createBrowserSettingsAmbient } from '../src/settings/adapters/ambient';
@@ -14,11 +13,23 @@ import { performanceAmbientTree } from './performance-ambient';
 
 const settingsAmbient = createBrowserSettingsAmbient();
 mock.module('cloudflare:workers', () => ({ env: {} }));
-const { decodeInboxPage, loadInboxPage, nativeInboxEnvelope, resolveInboxItems } =
-  await import('../src/inbox/inbox-read');
+const {
+  decodeInboxPage,
+  loadInboxPage: readInboxPage,
+  nativeInboxEnvelope,
+  resolveInboxItems: readInboxItems,
+} = await import('../src/inbox/inbox-read');
+const { inboxContent } = await import('../src/inbox/adapters/presentation');
 const { InboxRows, InboxPreferencesLink } = await import('../src/inbox/inbox-page');
 type InboxNotice = import('../src/inbox/inbox-read').InboxNotice;
 type ResolvedNotice = import('../src/inbox/inbox-read').ResolvedInboxPage['items'][number];
+const loadInboxPage = (
+  client: Parameters<typeof readInboxPage>[0],
+  accountId: string,
+  authorization: string,
+  query?: Parameters<typeof readInboxPage>[3],
+) => readInboxPage(client, accountId, authorization, query, inboxContent);
+const resolveInboxItems = (page: Parameters<typeof readInboxItems>[0]) => readInboxItems(page, inboxContent.threadHref);
 
 function wireNotice(overrides: Partial<InboxNotice> = {}, accountId = 'viewer'): InboxNotice {
   const base = {
@@ -84,6 +95,7 @@ test('an uncertain chosen acknowledgement keeps its exact retry visible after a 
   const html = renderToStaticMarkup(
     performanceAmbientTree(
       createElement(InboxRows, {
+        content: inboxContent,
         page: { items: [item], next: null },
         onMarkSeen: () => {},
         onRetrySeen: () => {},
@@ -137,7 +149,7 @@ test('the composed Inbox page includes installed watch kinds and does not hydrat
     'moderation_decision',
   ]);
   expect(page.items[1]).toMatchObject({ actorName: 'Momo', text: 'A current owner summary' });
-  const currentPost = threadLocation(getLocale(), { id: 'thread', title: 'A current thread' }, undefined, 'post');
+  const currentPost = inboxContent.threadHref(getLocale(), { id: 'thread', title: 'A current thread', postId: 'post' });
   expect(page.items[2]?.href).toBe(currentPost);
   expect(page.items[3]?.href).toBe(currentPost);
   expect(page.items[4]?.href).toBe(`/${getLocale()}/moderation/decisions/decision`);
@@ -183,7 +195,7 @@ test('withheld actors and report targets conceal private context while the admit
     actorId: null,
     href: `/${getLocale()}/moderation/reports/report`,
   });
-  const html = renderToStaticMarkup(performanceAmbientTree(createElement(InboxRows, { page })));
+  const html = renderToStaticMarkup(performanceAmbientTree(createElement(InboxRows, { content: inboxContent, page })));
   expect(html).toContain(`href="/${getLocale()}/moderation/reports/report"`);
   expect(html).not.toContain('data-actor-id=');
   expect(html).not.toContain('boardTitle');
@@ -200,6 +212,7 @@ test('all locales explain watch categories and mandatory outcomes, link preferen
       const html = renderToStaticMarkup(
         performanceAmbientTree(
           createElement(InboxRows, {
+            content: inboxContent,
             page: {
               items: [
                 { ...item, id: 'watch', watch: 'thread' },

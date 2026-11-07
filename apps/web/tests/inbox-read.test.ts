@@ -30,6 +30,7 @@ const {
   readUnreadCount,
   readyInboxPage,
 } = await import('../src/inbox/inbox-read');
+const { inboxContent } = await import('../src/inbox/adapters/presentation');
 import type { SessionEnv } from '../src/session/client';
 import { preferenceRetryDeadline } from '../src/settings/preference-failure-retry';
 
@@ -141,13 +142,25 @@ test('loadInboxPage sends All or Unread with the page size and retries the same 
     }) as typeof fetch,
   });
   const { loadInboxPage } = await import('../src/inbox/inbox-read');
-  const page = await loadInboxPage(client, 'alice', 'Bearer alice', {
-    selection: 'unread',
-    cursor: 'opaque/+input==',
-  });
+  const page = await loadInboxPage(
+    client,
+    'alice',
+    'Bearer alice',
+    {
+      selection: 'unread',
+      cursor: 'opaque/+input==',
+    },
+    inboxContent,
+  );
   expect(page.selection).toBe('unread');
   expect(page.actions.markSeen).toBeNull();
-  await loadInboxPage(client, 'alice', 'Bearer alice', { selection: 'unread', cursor: 'opaque/+input==' });
+  await loadInboxPage(
+    client,
+    'alice',
+    'Bearer alice',
+    { selection: 'unread', cursor: 'opaque/+input==' },
+    inboxContent,
+  );
   expect(queries).toEqual([
     'limit=20&selection=unread&cursor=opaque%2F%2Binput%3D%3D',
     'limit=20&selection=unread&cursor=opaque%2F%2Binput%3D%3D',

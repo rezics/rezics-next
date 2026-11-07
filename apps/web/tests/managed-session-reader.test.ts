@@ -115,11 +115,13 @@ const { ManagedAccountsInventory } = await import('../src/settings/managed-accou
 const { accountSessionSource } = await import('../src/settings/adapters/accounts-browser');
 const { ManagedAccountReader } = await import('../src/settings/managed-account-detail-read');
 const { ManagedAccountActionsRead } = await import('../src/settings/managed-account-actions-read');
+const noMediaFailure = () => undefined;
 const { AccountRenameRegion, AccountSafetySection, readCurrentAccountRename } =
   await import('../src/settings/account-safety');
 const { ManagedAccountsSection } = await import('../src/settings/managed-accounts');
 const { ManagedAccountDetail } = await import('../src/settings/managed-account-detail');
 const { ManagedAccountActions } = await import('../src/settings/managed-account-actions');
+const { settingsContent } = await import('../src/settings/adapters/presentation');
 const { closedProfileEditing } = await import('../src/settings/editable-profile-source');
 const identity = (id = viewerId) => ({
   id,
@@ -246,6 +248,7 @@ for (const kind of ['error', 'remove', 'loss', 'subject'] as const) {
         return actResult.promise;
       },
       settingsAmbient,
+      noMediaFailure,
       owner.isCurrent,
     );
     const rename = new AccountRenameRegion(
@@ -504,6 +507,7 @@ test('synchronous loss and recovery during pending publication refuses actual IO
         return actionResult();
       },
       settingsAmbient,
+      noMediaFailure,
       owner.isCurrent,
     );
     const rename = new AccountRenameRegion(
@@ -551,15 +555,21 @@ async function mounted(surface: Surface, initialNavigation?: ManagedAuthNavigati
     select = setSelected;
     observe = setNavigation;
     return surface === 'inventory'
-      ? h(ManagedAccountsSection)
+      ? h(ManagedAccountsSection, { initials: settingsContent.initials })
       : surface === 'detail'
-        ? h(ManagedAccountDetail, { accountId: selected, backHref: '/en/settings#account' })
+        ? h(ManagedAccountDetail, {
+            accountId: selected,
+            backHref: '/en/settings#account',
+            initials: settingsContent.initials,
+            mediaFailure: settingsContent.mediaFailure,
+          })
         : surface === 'actions'
           ? h(ManagedAccountActions, {
               accountId: selected,
               nativeAccountKind: 'organization',
               self: false,
               operated: false,
+              mediaFailure: settingsContent.mediaFailure,
               authNavigation: navigation,
               authCsrfToken: token,
             })
@@ -849,6 +859,7 @@ for (const failure of [false, true]) {
         return actOutcome.promise;
       },
       settingsAmbient,
+      noMediaFailure,
     );
     const rename = new AccountRenameRegion(
       () => {
@@ -961,6 +972,7 @@ test('composed fake account capabilities keep exact Profile selection and synchr
             nativeAccountKind: 'organization',
             operated: false,
             self: false,
+            mediaFailure: settingsContent.mediaFailure,
           }),
         }),
       );

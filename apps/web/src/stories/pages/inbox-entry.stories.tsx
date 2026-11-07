@@ -3,6 +3,7 @@ import { useEffect, useState } from 'react';
 import { expect, userEvent, waitFor, within } from 'storybook/test';
 import { env } from '../../../.storybook/cloudflare-workers';
 import { InboxPageView } from '../../inbox/inbox-page';
+import { inboxContent } from '../../inbox/adapters/presentation';
 import { m } from '../../paraglide/messages.js';
 import { getLocale } from '../../paraglide/runtime.js';
 import { AppShell } from '../../shell/shell';
@@ -58,7 +59,7 @@ function SessionTransportExample({ scenario }: { scenario: Scenario }) {
   if (!ready) return null;
   return (
     <AppShell>
-      <InboxPageView />
+      <InboxPageView content={inboxContent} />
     </AppShell>
   );
 }
@@ -75,7 +76,7 @@ export const SignedOut: Story = {
   render: () => (
     <PatternStory visitor="Signed Out" path="/inbox?from=navigation">
       <AppShell>
-        <InboxPageView />
+        <InboxPageView content={inboxContent} />
       </AppShell>
     </PatternStory>
   ),

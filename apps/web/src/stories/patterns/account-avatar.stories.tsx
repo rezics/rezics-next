@@ -1,12 +1,13 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { expect, userEvent, waitFor, within } from 'storybook/test';
 import recording from '../../kernel/recorded/agent-page.json';
 import { profileStoryValues } from '../../kernel/fake/settings-profile';
 import { m } from '../../paraglide/messages.js';
 import { ProfileCard } from '../../settings/profile';
-import type { AvatarResume, AvatarUpload } from '../../settings/profile-avatar-upload';
-import { UploadRefusal } from '../../threads/upload';
+import type { AvatarResume, AvatarUpload } from '../../settings/ports/content';
+import { settingsContent } from '../../settings/adapters/presentation';
+import { UploadRefusal } from '../../threads/upload-vocabulary';
 import { createBrowserSettingsAmbient } from '../../settings/adapters/ambient';
 import { ProfileEditor } from '../../settings/profile-write';
 import { rebaseProfile } from '../../settings/profile-write';
@@ -72,8 +73,40 @@ function Example({ scenario = 'complete' }: { scenario?: Scenario }) {
       if (mediaId !== avatar.media) throw new UploadRefusal('unavailable');
       return { src: mediaId };
     };
-    return { editor, upload, resume, counts: () => ({ uploads, resumes }), finishRead: () => completeRead() };
+    return {
+      accountId: current.accountId,
+      editor,
+      upload,
+      resume,
+      counts: () => ({ uploads, resumes }),
+      finishRead: () => completeRead(),
+    };
   });
+  const content = useMemo(
+    () => ({
+      ...settingsContent,
+      avatar: {
+        ...settingsContent.avatar,
+        upload: fixture.upload,
+        resume: fixture.resume,
+        readAdvice: async (_signal: AbortSignal) => ({
+          ok: true,
+          body: {
+            viewerState: 'signed_in',
+            viewer: { accountId: fixture.accountId },
+            target: { containerId: fixture.accountId, purpose: 'avatar' },
+            constraints: {
+              mediaTypes: ['image/avif', 'image/gif', 'image/jpeg', 'image/png', 'image/webp'],
+              maxByteCount: 20_971_520,
+            },
+            allowedActions: ['upload'],
+          },
+          responseTime: Date.now(),
+        }),
+      },
+    }),
+    [fixture],
+  );
   return (
     <PatternStory visitor="Signed In" path="/settings#profile">
       <AppShell>
@@ -89,7 +122,7 @@ function Example({ scenario = 'complete' }: { scenario?: Scenario }) {
                 }
               }}
             >
-              <ProfileCard editor={fixture.editor} avatarUpload={fixture.upload} avatarResume={fixture.resume} />
+              <ProfileCard editor={fixture.editor} content={content} />
             </section>
           </article>
         </div>

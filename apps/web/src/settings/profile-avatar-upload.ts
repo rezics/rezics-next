@@ -1,17 +1,15 @@
-import { parseAvatarUploadAdvice } from '../media/kernel';
-import {
-  createMediaReservationIntent,
-  readSiteAvatarUploadAdvice,
-  UploadRefusal,
-  type MediaReservationIntent,
-  type UploadStage,
-  type UploadStageUpdate,
-  type UploadResponseWait,
-} from '../threads/upload';
+import { UploadRefusal } from '../threads/upload-vocabulary';
 import { preferenceRetryDeadline } from './preference-failure-retry';
 import { withProfileDeadline } from './profile-request-deadline';
 import type { ProfileValues } from './profile-data';
 import type { ProfileEditor } from './profile-write';
+import { parseAvatarUploadAdvice, type SettingsAvatarMedia } from './ports/content';
+import type {
+  MediaReservationIntent,
+  UploadResponseWait,
+  UploadStage,
+  UploadStageUpdate,
+} from '../threads/upload-vocabulary';
 import { readAvatarCropSource } from './profile-avatar-source';
 import {
   avatarCropSourceSupported,
@@ -24,32 +22,7 @@ import {
   type AvatarCropPosition,
 } from './profile-avatar-crop.ts';
 
-export type AvatarUpload = (
-  accountId: string,
-  file: File,
-  signal: AbortSignal,
-  intent?: MediaReservationIntent,
-  onStage?: UploadStageUpdate,
-  onResponseWait?: UploadResponseWait,
-) => Promise<{ src: string }>;
-export type AvatarResume = (
-  mediaId: string,
-  file: File,
-  signal: AbortSignal,
-  onStage?: UploadStageUpdate,
-  intent?: MediaReservationIntent,
-  onResponseWait?: UploadResponseWait,
-) => Promise<{ src: string }>;
-export type AvatarAdviceReadResult = {
-  ok: boolean;
-  body?: unknown;
-  retryAfter?: string;
-  responseTime: number;
-};
-export type AvatarAdviceRead = (
-  signal: AbortSignal,
-  onResponseWait?: UploadResponseWait,
-) => Promise<AvatarAdviceReadResult>;
+export type { AvatarAdviceRead, AvatarAdviceReadResult, AvatarResume, AvatarUpload } from './ports/content';
 export type AvatarAdviceState = 'loading' | 'unavailable' | 'denied' | 'allowed';
 type Failure = Pick<UploadRefusal, 'reason' | 'retryAfter'>;
 type Avatar = ProfileValues['avatar'];
@@ -112,10 +85,8 @@ export class ProfileAvatarUpload {
   private adviceEpisode = 0;
   constructor(
     private editor: ProfileEditor,
-    private upload: AvatarUpload,
+    private content: SettingsAvatarMedia,
     private urls: Pick<typeof URL, 'createObjectURL' | 'revokeObjectURL'> = URL,
-    private resume?: AvatarResume,
-    private readAdvice: AvatarAdviceRead = readSiteAvatarUploadAdvice,
   ) {
     this.waits = waitsFor(editor);
   }
@@ -192,7 +163,7 @@ export class ProfileAvatarUpload {
       const onResponseWait: UploadResponseWait = (_status, retryAfter, responseTime) =>
         this.retainAdviceWait(target, retryAfter, responseTime);
       const result = await withProfileDeadline(
-        (signal) => this.readAdvice(signal, onResponseWait),
+        (signal) => this.content.readAdvice(signal, onResponseWait),
         request.signal,
         this.editor.ambient.timer,
       );
@@ -367,17 +338,11 @@ export class ProfileAvatarUpload {
     !!this.selection &&
     this.selection.accountId === this.adviceTarget &&
     this.advice === 'allowed' &&
-    (!this.selection.reservation || !!this.resume) &&
     !['type', 'too-large', 'rejected'].includes(this.state.failure?.reason ?? 'unavailable');
   private bindIntent(selection: Selection) {
     if (selection.intent && selection.intent.file === selection.file && selection.intent.viewer === selection.accountId)
       return selection.intent;
-    selection.intent = createMediaReservationIntent(
-      { containerId: selection.accountId },
-      selection.file,
-      'avatar',
-      selection.accountId,
-    );
+    selection.intent = this.content.createIntent(selection.accountId, selection.file);
     return selection.intent;
   }
   private async send(selection: Selection) {
@@ -391,7 +356,7 @@ export class ProfileAvatarUpload {
       return;
     }
     const reservation = selection.reservation;
-    if (reservation && !this.resume) return;
+    const resume = this.content.resume;
     if (!reservation && !this.canUpload()) return;
     if (reservation && !selection.intent) return;
     const intent = selection.intent ?? this.bindIntent(selection);
@@ -412,12 +377,13 @@ export class ProfileAvatarUpload {
     try {
       const result = reservation
         ? await withProfileDeadline(
-            (signal) => this.resume!(reservation, selection.file, signal, onStage, intent, onResponseWait),
+            (signal) => resume(reservation, selection.file, signal, onStage, intent, onResponseWait),
             request.signal,
             this.editor.ambient.timer,
           )
         : await withProfileDeadline(
-            (signal) => this.upload(selection.accountId, selection.file, signal, intent, onStage, onResponseWait),
+            (signal) =>
+              this.content.upload(selection.accountId, selection.file, signal, intent, onStage, onResponseWait),
             request.signal,
             this.editor.ambient.timer,
           );

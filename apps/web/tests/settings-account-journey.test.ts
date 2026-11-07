@@ -1,3 +1,4 @@
+import { SignInPrompt } from '../src/threads/write-prompts';
 import { AccountsQueryProvider as QueryClientProvider } from './fixtures/accounts-composition';
 import { expect, mock, test } from 'bun:test';
 import { createElement } from 'react';
@@ -135,7 +136,9 @@ test('Sign out remains a CSRF-protected POST and unavailable Auth configuration 
 
 test('signed-out entry uses the existing sign-in and return-to flow without exposing account actions', () => {
   const html = renderToStaticMarkup(
-    performanceAmbientTree(createElement(AccountSafetyCard, { state: 'signed-out', returnTo: '/fr/settings#account' })),
+    performanceAmbientTree(
+      createElement(AccountSafetyCard, { state: 'signed-out', SignInPrompt, returnTo: '/fr/settings#account' }),
+    ),
   );
   expect(hrefs(html)).toEqual(['/auth/sign-in?return_to=%2Ffr%2Fsettings%23account']);
   expect(html).not.toContain('<form');
@@ -145,16 +148,21 @@ test('signed-out entry uses the existing sign-in and return-to flow without expo
 test('the signed-out Settings account journey renders its real main content and sign-in continuation in the normal page composition, with no personal controls or fabricated session', async () => {
   // This reviews the fallback composition, not access to the guarded production route.
   mock.module('cloudflare:workers', () => ({ env: {} }));
-  const [{ AppShell }, { SettingsPageView }, { m }] = await Promise.all([
+  const [{ AppShell }, { SettingsPageView }, { settingsContent }, { m }] = await Promise.all([
     import('../src/shell/shell'),
     import('../src/settings/settings-page'),
+    import('../src/settings/adapters/presentation'),
     import('../src/paraglide/messages.js'),
   ]);
   const queryClient = new QueryClient();
   const root = createRootRoute({
     component: () =>
       createElement(AppShell, {
-        children: createElement(SettingsPageView, { page: { signedIn: false }, csrfToken: null }),
+        children: createElement(SettingsPageView, {
+          page: { signedIn: false },
+          csrfToken: null,
+          content: settingsContent,
+        }),
       }),
   });
   const router = createRouter({
@@ -200,8 +208,9 @@ test('the signed-out Settings account journey renders its real main content and 
 
 test('an unknown hydration session cannot mount a prepared account preference form, even with a seeded session cache', async () => {
   mock.module('cloudflare:workers', () => ({ env: {} }));
-  const [{ SettingsPageView }, { sessionQuery }, { m }] = await Promise.all([
+  const [{ SettingsPageView }, { settingsContent }, { sessionQuery }, { m }] = await Promise.all([
     import('../src/settings/settings-page'),
+    import('../src/settings/adapters/presentation'),
     import('../src/session/query'),
     import('../src/paraglide/messages.js'),
   ]);
@@ -219,6 +228,7 @@ test('an unknown hydration session cannot mount a prepared account preference fo
           securityHref: 'https://accounts.example.test/security',
         },
         csrfToken: 'current-alice',
+        content: settingsContent,
       }),
   });
   const router = createRouter({ routeTree: root, history: createMemoryHistory({ initialEntries: ['/en/settings'] }) });

@@ -232,6 +232,7 @@ test('A new or unready actor never receives a prior private profile and an expli
   // Exercise the real cards' outer guards without introducing a browser or native harness.
   mock.module('cloudflare:workers', () => ({ env: {} }));
   const { ProfileCard } = await import('../src/settings/profile');
+  const { settingsContent } = await import('../src/settings/adapters/presentation');
   const { PublicViewsCard } = await import('../src/settings/public-views');
   for (const unresolved of [false, true]) {
     let denied = true;
@@ -261,7 +262,12 @@ test('A new or unready actor never receives a prior private profile and an expli
     expect(editor.snapshot().attempt).toBe(before.attempt);
     const html = renderToStaticMarkup(
       performanceAmbientTree(
-        createElement('div', null, createElement(ProfileCard, { editor }), createElement(PublicViewsCard, { editor })),
+        createElement(
+          'div',
+          null,
+          createElement(ProfileCard, { content: settingsContent, editor }),
+          createElement(PublicViewsCard, { editor }),
+        ),
       ),
     );
     for (const privateValue of ['Private editable source', 'Retained unsent words', 'example.test/notes', mediaId])
@@ -289,7 +295,7 @@ test('A new or unready actor never receives a prior private profile and an expli
     expect(editor.snapshot().attempt).toBe(before.attempt);
     expect(editor.snapshot().phase).toBe(unresolved ? 'uncertain' : 'review');
     const hidden = renderToStaticMarkup(
-      performanceAmbientTree(createElement(ProfileCard, { editor, writable: false })),
+      performanceAmbientTree(createElement(ProfileCard, { content: settingsContent, editor, writable: false })),
     );
     expect(hidden).not.toContain('Retained unsent words');
     expect(hidden).not.toContain('<input');
@@ -298,7 +304,7 @@ test('A new or unready actor never receives a prior private profile and an expli
         createElement(
           'div',
           null,
-          createElement(ProfileCard, { editor, writable: false, readable: true }),
+          createElement(ProfileCard, { content: settingsContent, editor, writable: false, readable: true }),
           createElement(PublicViewsCard, { editor, writable: false, readable: true }),
         ),
       ),

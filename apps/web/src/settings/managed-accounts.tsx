@@ -19,7 +19,6 @@ import { ContentItem, ContentItemHeading } from '@rezics/ui/content-item';
 import { m } from '../paraglide/messages.js';
 import { getLocale } from '../paraglide/runtime.js';
 import { useAccounts } from './managed-account-capabilities';
-import { initials } from '../threads/initials';
 import { readManagedAccountsInventory } from './actions';
 import { useManagedReaderLifetime, useManagedSessionReader, type ManagedSessionReader } from './managed-session-reader';
 import { useSettingsAmbient } from './adapters/ambient-view.tsx';
@@ -50,12 +49,14 @@ function IdentityRow({
   href,
   feed,
   rowKey,
+  initials,
 }: {
   account: ManagedIdentity;
   children?: ReactNode;
   href?: string | undefined;
   feed: RowFeed;
   rowKey: string;
+  initials: (name: string, fallback?: string) => string;
 }) {
   const name = account.displayName || (account.handle ? `@${account.handle}` : m.managed_unnamed());
   return (
@@ -288,6 +289,7 @@ export function ManagedAccountsView({
   firstPage,
   retry,
   current = () => true,
+  initials,
 }: {
   current?: () => boolean;
   active?: boolean | undefined;
@@ -300,6 +302,7 @@ export function ManagedAccountsView({
   previousPage: (feed: ManagedFeed) => void;
   firstPage: (feed: ManagedFeed) => void;
   retry: () => void;
+  initials: (name: string, fallback?: string) => string;
 }) {
   const id = useId();
   const viewerHeadingId = `${id}-viewer`;
@@ -438,6 +441,7 @@ export function ManagedAccountsView({
                 feed="self"
                 rowKey={account.id}
                 href={destination('self', account.id, account)}
+                initials={initials}
               />
             </ul>
           ) : null}
@@ -495,6 +499,7 @@ export function ManagedAccountsView({
                       feed="organizations"
                       rowKey={account.id}
                       href={destination('organizations', account.id, account)}
+                      initials={initials}
                     >
                       <Badge variant="secondary" className={stateClassName}>
                         {role === 'owner' ? m.managed_owner() : m.managed_member()}
@@ -546,6 +551,7 @@ export function ManagedAccountsView({
                         feed="responsibilities"
                         rowKey={item.reservationId}
                         href={destination('responsibilities', item.reservationId, item.account)}
+                        initials={initials}
                       >
                         <Badge variant="secondary" className={stateClassName}>
                           {item.state === 'current' ? m.managed_current() : m.managed_reconciling()}
@@ -597,6 +603,7 @@ function ViewerInventory({
   owner,
   active,
   onVisit,
+  initials,
 }: {
   viewerId: string;
   settingsHref: string;
@@ -604,6 +611,7 @@ function ViewerInventory({
   onVisit?: ((href: string) => void) | undefined;
   io?: ManagedAccountsIO | undefined;
   owner?: ManagedSessionReader | undefined;
+  initials: (name: string, fallback?: string) => string;
 }) {
   const locale = getLocale();
   const ambient = useSettingsAmbient();
@@ -631,6 +639,7 @@ function ViewerInventory({
       reader={inventory}
       current={() => (!owner || owner.isCurrent()) && inventory.snapshot().account !== null}
       settingsHref={settingsHref}
+      initials={initials}
       more={(feed) => void inventory.more(feed)}
       previousPage={(feed) => void inventory.previous(feed)}
       firstPage={(feed) => void inventory.firstPage(feed)}
@@ -647,12 +656,19 @@ export function ManagedAccounts(props: {
   onVisit?: ((href: string) => void) | undefined;
   io?: ManagedAccountsIO | undefined;
   owner?: ManagedSessionReader | undefined;
+  initials: (name: string, fallback?: string) => string;
 }) {
   return <ViewerInventory key={props.viewerId} {...props} />;
 }
 
 /** The public/SSR page never starts a private read. A session transition removes the entire prior inventory. */
-export function ManagedAccountsSection({ io }: { io?: ManagedAccountsIO | undefined }) {
+export function ManagedAccountsSection({
+  io,
+  initials,
+}: {
+  io?: ManagedAccountsIO | undefined;
+  initials: (name: string, fallback?: string) => string;
+}) {
   const { session } = useAccounts();
   const location = useLocation();
   const router = useRouter();
@@ -671,6 +687,7 @@ export function ManagedAccountsSection({ io }: { io?: ManagedAccountsIO | undefi
         viewerId={session.subject}
         settingsHref={location.publicHref}
         io={io}
+        initials={initials}
         owner={owner}
         active={selected}
         onVisit={(href) => void router.navigate({ href, hashScrollIntoView: false })}

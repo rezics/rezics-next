@@ -1,5 +1,5 @@
 import { readPublicAccountCanonicalTargets } from '../access/account-canonical-targets.ts';
-import { preparePublicSemanticPageMetadata } from '../presentation/semantic-page.ts';
+import { presentationApplication } from '../presentation/page-application.ts';
 import { routeOf } from '../route/route.ts';
 import type { SummaryReaderDependencies } from './summaries.ts';
 
@@ -21,7 +21,7 @@ export async function preparePublicSubjectPageCandidates(
   if (!(deps.routeKey instanceof Uint8Array) || deps.routeKey.byteLength < 32)
     throw new TypeError('Public subject page candidates require the server route key');
   const reader: SummaryReaderDependencies = { ...deps, actor: { kind: 'anonymous' } };
-  const metadata = ids.length ? await preparePublicSemanticPageMetadata(reader, ids) : null;
+  const metadata = ids.length ? await presentationApplication().preparePublicSemanticPageMetadata(reader, ids) : null;
   const accounts = metadata ? await readPublicAccountCanonicalTargets(reader, ids) : null;
   return {
     async finish(): Promise<Map<string, PublicSubjectPageCandidate | null>> {

@@ -1,6 +1,11 @@
 import { expect, test } from 'bun:test';
 import { compileNativePolicyCatalogue } from '../../src/access/policy-core.ts';
+import {
+  bindCollectionListFilter,
+  specializeCollectionListFromCatalogue,
+} from '../../src/access/adapters/collection-policy.ts';
 import { specializeCollectionListPolicy } from '../../src/library/collection-list-policy.ts';
+import { peekLibraryDomain, unbindLibraryDomain, bindLibraryDomain } from '../../src/library/domain-binding.ts';
 import type { ActionCatalogue } from '../../src/request/access.ts';
 import type { ResolvedResourceRoles } from '../../src/access/resource-roles.ts';
 
@@ -12,8 +17,11 @@ const roles: ResolvedResourceRoles = {
 const catalogue = compileNativePolicyCatalogue(actions, roles);
 
 test('the owner qualification selects the curator branch and the account face retains public floor', () => {
-  expect(specializeCollectionListPolicy(catalogue, true)).toMatchObject({ status: 'ready', source: 'curator' });
-  expect(specializeCollectionListPolicy(catalogue, false)).toEqual({
+  expect(bindCollectionListFilter(specializeCollectionListFromCatalogue(catalogue, true))).toMatchObject({
+    status: 'ready',
+    source: 'curator',
+  });
+  expect(bindCollectionListFilter(specializeCollectionListFromCatalogue(catalogue, false))).toEqual({
     status: 'ready',
     source: 'public',
     parameters: { policy_visibility: 'public' },
@@ -25,5 +33,17 @@ test('missing or incompatible mounted Collection policy stays unavailable', () =
     roles: new Map(),
     types: new Map(),
   });
-  expect(specializeCollectionListPolicy(empty, false)).toEqual({ status: 'unavailable' });
+  expect(bindCollectionListFilter(specializeCollectionListFromCatalogue(empty, false))).toEqual({
+    status: 'unavailable',
+  });
+});
+
+test('unbound Collection list policy treats a catalogue-less Access handle as unavailable', () => {
+  const previous = peekLibraryDomain();
+  unbindLibraryDomain();
+  try {
+    expect(specializeCollectionListPolicy({}, true)).toEqual({ status: 'unavailable' });
+  } finally {
+    if (previous) bindLibraryDomain(previous);
+  }
 });

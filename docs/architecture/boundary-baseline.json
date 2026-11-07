@@ -27747,96 +27747,6 @@
       "reason": "pre-boundary code",
       "violations": [
         {
-          "rule": "rule 2",
-          "file": "apps/web/src/inbox/inbox-entry-state.tsx",
-          "edge": "value import \"../threads/write-prompts\" #1 => apps/web/src/threads/write-prompts.tsx"
-        },
-        {
-          "rule": "rule 2",
-          "file": "apps/web/src/inbox/inbox-read.ts",
-          "edge": "value import \"../media/kernel\" #1 => apps/web/src/media/kernel.ts"
-        },
-        {
-          "rule": "rule 2",
-          "file": "apps/web/src/settings/account-safety.tsx",
-          "edge": "value import \"../threads/write-prompts\" #1 => apps/web/src/threads/write-prompts.tsx"
-        },
-        {
-          "rule": "rule 2",
-          "file": "apps/web/src/settings/collection-privacy-data.ts",
-          "edge": "value import \"../media/kernel\" #1 => apps/web/src/media/kernel.ts"
-        },
-        {
-          "rule": "rule 2",
-          "file": "apps/web/src/settings/editable-profile-source.ts",
-          "edge": "value import \"../media/kernel\" #1 => apps/web/src/media/kernel.ts"
-        },
-        {
-          "rule": "rule 2",
-          "file": "apps/web/src/settings/managed-account-actions-read.ts",
-          "edge": "value import \"../media/kernel\" #1 => apps/web/src/media/kernel.ts"
-        },
-        {
-          "rule": "rule 2",
-          "file": "apps/web/src/settings/managed-account-detail.tsx",
-          "edge": "value import \"../threads/initials\" #1 => apps/web/src/threads/initials.ts"
-        },
-        {
-          "rule": "rule 2",
-          "file": "apps/web/src/settings/managed-accounts-read.ts",
-          "edge": "value import \"../media/kernel\" #1 => apps/web/src/media/kernel.ts"
-        },
-        {
-          "rule": "rule 2",
-          "file": "apps/web/src/settings/managed-accounts.tsx",
-          "edge": "value import \"../threads/initials\" #1 => apps/web/src/threads/initials.ts"
-        },
-        {
-          "rule": "rule 2",
-          "file": "apps/web/src/settings/preferences.ts",
-          "edge": "value import \"../media/kernel\" #1 => apps/web/src/media/kernel.ts"
-        },
-        {
-          "rule": "rule 2",
-          "file": "apps/web/src/settings/profile-avatar-crop.ts",
-          "edge": "type import \"../threads/upload\" #1 => apps/web/src/threads/upload.ts"
-        },
-        {
-          "rule": "rule 2",
-          "file": "apps/web/src/settings/profile-avatar-upload.ts",
-          "edge": "value import \"../media/kernel\" #1 => apps/web/src/media/kernel.ts"
-        },
-        {
-          "rule": "rule 2",
-          "file": "apps/web/src/settings/profile-avatar-upload.ts",
-          "edge": "value import \"../threads/upload\" #1 => apps/web/src/threads/upload.ts"
-        },
-        {
-          "rule": "rule 2",
-          "file": "apps/web/src/settings/profile-avatar.tsx",
-          "edge": "value import \"../threads/upload\" #1 => apps/web/src/threads/upload.ts"
-        },
-        {
-          "rule": "rule 2",
-          "file": "apps/web/src/settings/profile.tsx",
-          "edge": "value import \"../threads/upload\" #1 => apps/web/src/threads/upload.ts"
-        },
-        {
-          "rule": "rule 2",
-          "file": "apps/web/src/settings/verification-actions.ts",
-          "edge": "value import \"../search/suggestions\" #1 => apps/web/src/search/suggestions.ts"
-        },
-        {
-          "rule": "rule 2",
-          "file": "apps/web/src/settings/watch-native.ts",
-          "edge": "value import \"../media/kernel\" #1 => apps/web/src/media/kernel.ts"
-        },
-        {
-          "rule": "rule 2",
-          "file": "apps/web/src/settings/watch-native.ts",
-          "edge": "value import \"../threads/thread-href\" #1 => apps/web/src/threads/thread-href.ts"
-        },
-        {
           "rule": "rule 3",
           "file": "<module:web-performance>",
           "edge": "web-performance => web-accounts (module dependency cycle)"
@@ -27855,11 +27765,6 @@
           "rule": "rule 3",
           "file": "<module:web-performance>",
           "edge": "web-performance => web-library (module dependency cycle)"
-        },
-        {
-          "rule": "rule 3",
-          "file": "<module:web-performance>",
-          "edge": "web-performance => web-search (module dependency cycle)"
         }
       ]
     },

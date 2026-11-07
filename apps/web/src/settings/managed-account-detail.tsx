@@ -5,7 +5,7 @@ import { Alert, AlertDescription, AlertTitle } from '@rezics/ui/shadcn/alert';
 import { Button } from '@rezics/ui/shadcn/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@rezics/ui/shadcn/card';
 import { m } from '../paraglide/messages.js';
-import { initials } from '../threads/initials';
+import type { SettingsContentFailureReader } from './ports/content';
 import { useAccounts } from './managed-account-capabilities';
 import { useManagedReaderLifetime, useManagedSessionReader } from './managed-session-reader';
 import { useSettingsAmbient } from './adapters/ambient-view.tsx';
@@ -29,7 +29,13 @@ function identityName(account: ManagementIdentity | null) {
     : m.settings_managed_detail_identity_unavailable();
 }
 
-function IdentityAvatar({ account }: { account: ManagementIdentity | null }) {
+function IdentityAvatar({
+  account,
+  initials,
+}: {
+  account: ManagementIdentity | null;
+  initials: (name: string, fallback?: string) => string;
+}) {
   return (
     <Avatar aria-hidden="true">
       <AvatarFallback>{initials(account?.displayName || account?.handle || '')}</AvatarFallback>
@@ -51,10 +57,18 @@ function AccountDetails({ accountId }: { accountId: string }) {
   );
 }
 
-function Identity({ account, accountId }: { account: ManagementIdentity; accountId: string }) {
+function Identity({
+  account,
+  accountId,
+  initials,
+}: {
+  account: ManagementIdentity;
+  accountId: string;
+  initials: (name: string, fallback?: string) => string;
+}) {
   return (
     <div className="flex min-w-0 gap-3">
-      <IdentityAvatar account={account} />
+      <IdentityAvatar account={account} initials={initials} />
       <div className="min-w-0 flex-1 wrap-anywhere">
         <p className="text-lg font-semibold">{identityName(account)}</p>
         {account.displayName && account.handle ? (
@@ -70,17 +84,19 @@ function IdentityRow({
   account,
   accountId,
   state,
+  initials,
 }: {
   account: ManagementIdentity | null;
   accountId: string;
   state: ReactNode;
+  initials: (name: string, fallback?: string) => string;
 }) {
   return (
     <ContentItem
       className="min-w-0 max-w-full wrap-anywhere"
       headingLevel={4}
       title={identityName(account)}
-      visual={<IdentityAvatar account={account} />}
+      visual={<IdentityAvatar account={account} initials={initials} />}
       metadata={
         account?.displayName && account.handle ? <p className="min-w-0 wrap-anywhere">@{account.handle}</p> : null
       }
@@ -197,10 +213,14 @@ export function ManagedAccountDetailCard({
   reader,
   backHref,
   onBack,
+  initials,
+  mediaFailure,
 }: {
   reader: ManagedAccountReader | null;
   backHref: string;
   onBack?: MouseEventHandler<HTMLAnchorElement> | undefined;
+  initials: (name: string, fallback?: string) => string;
+  mediaFailure: SettingsContentFailureReader;
 }) {
   const state = useSyncExternalStore(
     reader?.subscribe ?? noSubscribe,
@@ -243,7 +263,7 @@ export function ManagedAccountDetailCard({
         {detail && reader ? (
           <>
             <section className="min-w-0 space-y-3" aria-label={m.managed_target_title()}>
-              <Identity account={detail.account} accountId={detail.account.id} />
+              <Identity account={detail.account} accountId={detail.account.id} initials={initials} />
               <p className="text-sm text-muted-foreground">
                 {detail.account.kind === 'organization'
                   ? m.managed_organization_identity()
@@ -260,7 +280,7 @@ export function ManagedAccountDetailCard({
               {detail.operator ? (
                 <div className="space-y-2">
                   <h3 className="font-medium">{m.managed_operator_title()}</h3>
-                  <Identity account={detail.operator} accountId={detail.operator.id} />
+                  <Identity account={detail.operator} accountId={detail.operator.id} initials={initials} />
                   <p className="text-sm text-muted-foreground">{m.managed_operator_text()}</p>
                 </div>
               ) : null}
@@ -295,6 +315,7 @@ export function ManagedAccountDetailCard({
                               {item.role === 'owner' ? m.managed_owner() : m.managed_member()}
                             </span>
                           }
+                          initials={initials}
                         />
                       ))}
                     </ul>
@@ -347,6 +368,7 @@ export function ManagedAccountDetailCard({
                               {item.state === 'current' ? m.managed_current() : m.managed_reconciling()}
                             </p>
                           }
+                          initials={initials}
                         />
                       ))}
                     </ul>
@@ -373,6 +395,7 @@ export function ManagedAccountDetailCard({
               self={detail.self}
               authNavigation={state.authNavigation}
               authCsrfToken={reader.csrfToken}
+              mediaFailure={mediaFailure}
             />
             {!state.failure ? (
               <Button
@@ -405,10 +428,14 @@ export function ManagedAccountDetail({
   accountId,
   backHref,
   onBack,
+  initials,
+  mediaFailure,
 }: {
   accountId: string | null;
   backHref: string;
   onBack?: MouseEventHandler<HTMLAnchorElement> | undefined;
+  initials: (name: string, fallback?: string) => string;
+  mediaFailure: SettingsContentFailureReader;
 }) {
   const ambient = useSettingsAmbient();
   const { session, readDetail } = useAccounts();
@@ -425,7 +452,15 @@ export function ManagedAccountDetail({
   useEffect(() => {
     if (reader) void reader.load();
   }, [reader]);
-  return <ManagedAccountDetailCard reader={owner.isCurrent() ? reader : null} backHref={backHref} onBack={onBack} />;
+  return (
+    <ManagedAccountDetailCard
+      reader={owner.isCurrent() ? reader : null}
+      backHref={backHref}
+      onBack={onBack}
+      initials={initials}
+      mediaFailure={mediaFailure}
+    />
+  );
 }
 
 const noDispose = () => {};

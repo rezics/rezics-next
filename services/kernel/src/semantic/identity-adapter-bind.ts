@@ -21,3 +21,7 @@ export function identityAdapterPort(): IdentityAdapterPort {
   if (!port) throw new TypeError('Identity adapter runtime is not installed');
   return port;
 }
+
+export function tryIdentityAdapterPort(): IdentityAdapterPort | undefined {
+  return port;
+}

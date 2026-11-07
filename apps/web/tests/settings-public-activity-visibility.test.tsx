@@ -30,6 +30,7 @@ test('explicit activity save recovers refusal and uncertainty without losing lat
     Object.defineProperty(globalThis, key, { configurable: true, writable: true, value });
   const { createRoot } = await import('react-dom/client');
   const { ProfileCard } = await import('../src/settings/profile');
+  const { settingsContent } = await import('../src/settings/adapters/presentation');
   const { PublicViewsCard } = await import('../src/settings/public-views');
   let current: ProfileValues = {
     accountId: '019a0000-0000-7000-8000-000000000001',
@@ -75,7 +76,7 @@ test('explicit activity save recovers refusal and uncertainty without losing lat
     await act(() =>
       root.render(
         <>
-          <ProfileCard editor={editor} previewActive />
+          <ProfileCard editor={editor} previewActive content={settingsContent} />
           <PublicViewsCard editor={editor} />
         </>,
       ),

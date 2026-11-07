@@ -29,3 +29,11 @@ export {
   kindAudienceOverhead,
 } from './kind-audience-work.ts';
 export type { KindAudienceFormulaShape } from './kind-audience-work.ts';
+export {
+  admitCollectionListOutcome,
+  collectionListPolicyFacts,
+  collectionListPolicyRequest,
+  collectionListRequiredResiduals,
+  interpretCollectionListResidual,
+  sumCollectionAuthorizationWork,
+} from './collection-policy.ts';

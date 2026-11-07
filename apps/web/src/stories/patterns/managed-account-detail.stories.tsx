@@ -10,6 +10,7 @@ import { ManagedAccountReader, type DetailRead, type DetailSection } from '../..
 
 import { sessionQuery } from '../../session/query';
 import { PatternStory } from '../page';
+import { settingsContent } from '../../settings/adapters/presentation';
 
 type ExampleProps = {
   member?: boolean;
@@ -91,7 +92,12 @@ function ConnectedDetail({ member = false, paging = false, failed, waiting = fal
   }, [reader, failed]);
   return (
     <div className="mx-auto min-w-0 max-w-3xl">
-      <ManagedAccountDetailCard reader={reader} backHref="/en/settings?view=accounts#account" />
+      <ManagedAccountDetailCard
+        reader={reader}
+        backHref="/en/settings?view=accounts#account"
+        initials={settingsContent.initials}
+        mediaFailure={settingsContent.mediaFailure}
+      />
     </div>
   );
 }

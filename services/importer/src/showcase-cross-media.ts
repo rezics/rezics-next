@@ -10,12 +10,25 @@ import {
   type ReviewedCatalogueLedger,
   type ReviewedCataloguePort,
   type ReviewedCatalogueResult,
-} from './reviewed-catalogue.ts';
+} from './reviewed-catalogue-contract.ts';
 import { releasedReviewedVocabulary, type ReviewedVocabularyPort } from './reviewed-vocabulary-port.ts';
 import { prepareShowcaseVndbReleases, seedShowcaseVndbReleases } from './showcase-vndb-releases.ts';
 
 export { releasedReviewedVocabulary, type ReviewedVocabularyPort } from './reviewed-vocabulary-port.ts';
 export { openReviewedCatalogueLedger, createReviewedCatalogueApplication } from './reviewed-catalogue-application.ts';
+export type { ReviewedCatalogueApplication } from './reviewed-catalogue-application.ts';
+export type {
+  ReviewedBangumiBindingEvidence,
+  ReviewedBangumiBindingStatus,
+  ReviewedBangumiTagBinding,
+  ReviewedBangumiTagCurrentRead,
+  ReviewedCatalogueLedger,
+  ReviewedCataloguePort,
+  ReviewedCatalogueReceipt,
+  ReviewedCatalogueResult,
+  ReviewedCatalogueSeed,
+  ReviewedCatalogueSeedInput,
+} from './reviewed-catalogue-contract.ts';
 
 export type ReviewedCatalogueHost = Readonly<{
   vocabulary: ReviewedVocabularyPort;

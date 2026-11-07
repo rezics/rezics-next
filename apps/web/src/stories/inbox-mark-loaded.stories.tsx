@@ -3,6 +3,7 @@ import { useEffect, useState } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { expect, userEvent, waitFor, within } from 'storybook/test';
 import { InboxPageView } from '../inbox/inbox-page';
+import { inboxContent } from '../inbox/adapters/presentation';
 import { readyInboxPage, type InboxPage, type InboxPageQuery, type ResolvedInboxPage } from '../inbox/inbox-read';
 import { currentInboxViewer } from '../inbox/inbox-viewer';
 import { inboxViewerQueryKey } from '../inbox/inbox-query';
@@ -153,7 +154,7 @@ function ControlledInbox() {
   const [loadPage] = useState(() => journey.loadPage.bind(journey));
   return ready ? (
     <AppShell>
-      <InboxPageView loadPage={loadPage} />
+      <InboxPageView loadPage={loadPage} content={inboxContent} />
     </AppShell>
   ) : null;
 }

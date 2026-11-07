@@ -3,6 +3,7 @@ import { Button, buttonVariants } from '@rezics/ui/shadcn/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@rezics/ui/shadcn/card';
 import { cn } from '@rezics/ui/utils';
 import { m } from '../paraglide/messages.js';
+import type { SettingsContentFailureReader } from './ports/content';
 import { useAccounts } from './managed-account-capabilities';
 import {
   managedNavigationGuard,
@@ -30,6 +31,7 @@ const labels: Record<ManagedActionName, () => string> = {
 };
 
 type ActionsProps = ManagedAccountActionsTarget & {
+  mediaFailure: SettingsContentFailureReader;
   authNavigation?: ManagedAuthNavigation | undefined;
   authCsrfToken?: string | null | undefined;
 };
@@ -45,8 +47,15 @@ function TargetActions({ viewerId, csrfToken, authCsrfToken, io, authNavigation,
   const ambient = useSettingsAmbient();
   const actionIO = io ?? accounts.readActions;
   const read = useMemo(
-    () => new ManagedAccountActionsRead({ accountId: target.accountId, viewerId }, actionIO, ambient, owner?.isCurrent),
-    [ambient, target.accountId, viewerId, actionIO, owner],
+    () =>
+      new ManagedAccountActionsRead(
+        { accountId: target.accountId, viewerId },
+        actionIO,
+        ambient,
+        target.mediaFailure,
+        owner?.isCurrent,
+      ),
+    [ambient, target.accountId, viewerId, actionIO, owner, target.mediaFailure],
   );
   useManagedReaderLifetime(read.dispose, owner);
   const { result, pending, retryAt } = useSyncExternalStore(read.subscribe, read.snapshot, read.snapshot);

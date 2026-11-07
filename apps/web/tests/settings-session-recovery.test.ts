@@ -43,6 +43,7 @@ const { SettingsPageView, SettingsSessionRecovery, retrySettingsSession } =
   await import('../src/settings/settings-page');
 const { SettingsShellProvider } = await import('../src/settings');
 const { boundSettingsShellPort } = await import('../src/shell/app-shell');
+const { settingsContent } = await import('../src/settings/adapters/presentation');
 type PageProps = Parameters<typeof SettingsPageView>[0];
 type Session = NonNullable<PageProps['requestSession']>;
 const prepared: PageProps['page'] = {
@@ -66,6 +67,7 @@ async function pageMarkup(client: QueryClient, requestSession?: Session, path = 
       createElement(SettingsPageView, {
         page: prepared,
         csrfToken: 'ignored-prop',
+        content: settingsContent,
         ...(requestSession ? { requestSession } : {}),
       }),
   });
@@ -356,7 +358,8 @@ test('the current authorized closed reading recording reaches the guarded page a
     });
     expect(page).not.toHaveProperty('preferences');
     const root = createRootRoute({
-      component: () => createElement(SettingsPageView, { page, csrfToken: null, requestSession }),
+      component: () =>
+        createElement(SettingsPageView, { page, csrfToken: null, requestSession, content: settingsContent }),
     });
     const router = createRouter({
       routeTree: root,

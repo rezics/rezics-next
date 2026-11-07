@@ -103,6 +103,7 @@ spyOn(reads, 'markInboxSeen').mockImplementation(async ({ data }) => {
   return { signedIn: true } satisfies InboxSeenResult;
 });
 const { InboxPageView } = await import('../src/inbox/inbox-page');
+const { inboxContent } = await import('../src/inbox/adapters/presentation');
 const { UnreadBadge } = await import('../src/inbox/unread-badge');
 const { fetchInboxUnreadCount, inboxViewerQueryKey, unreadCountQueryFor } = await import('../src/inbox/inbox-query');
 const { currentInboxViewer } = await import('../src/inbox/inbox-viewer');
@@ -174,7 +175,11 @@ async function mount(
               Fragment,
               null,
               badge ? createElement(UnreadBadge) : null,
-              createElement(InboxPageView, { loadPage, ...(acknowledgeNotice ? { acknowledgeNotice } : {}) }),
+              createElement(InboxPageView, {
+                content: inboxContent,
+                loadPage,
+                ...(acknowledgeNotice ? { acknowledgeNotice } : {}),
+              }),
             ),
           ),
         ),
@@ -228,6 +233,7 @@ async function mountRouted(
       });
       return createElement(InboxPageView, {
         loadPage,
+        content: inboxContent,
         historyKey,
         ...(acknowledgeNotice ? { acknowledgeNotice } : {}),
       });

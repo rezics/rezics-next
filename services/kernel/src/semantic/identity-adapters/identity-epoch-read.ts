@@ -27,6 +27,7 @@ import { CommandUnavailableError, requireAccessDeadline, throwAccessUnavailable 
 import { withRequestDeadline } from '../../request/deadline.ts';
 import type { CommandTransaction } from '../../command/command.ts';
 import { nativeIdentityCapabilities } from '../identity-adapter-bind.ts';
+import type { IdentityNativeReaders, NativeIdentityCapabilities } from '../identity-adapter-port.ts';
 import type { IdentityIntent, IdentityMapping } from './identity-epoch-contract.ts';
 import selectRemainder from '../identity-epoch-mapping-remainder.sql';
 import owners from '../identity-epoch-read-owners.sql';
@@ -214,8 +215,8 @@ function identityReviewFromEvidence(
   );
 }
 
-/** Bounded exact reviewed mapping evidence; source/control homes are released independently and double-collected. */
-export async function readIdentityRatingReview(
+async function readIdentityRatingReviewWith(
+  capabilities: NativeIdentityCapabilities,
   pool: Pool,
   input: Readonly<{ requestedOriginalId: string; canonicalTerminalId: string; deadline: number }>,
 ): Promise<IdentityRatingReviewResult> {
@@ -239,7 +240,7 @@ export async function readIdentityRatingReview(
       subjects: [] as SubjectDisclosure[],
     };
     for (const home of sourceHomes) {
-      const part = await nativeIdentityCapabilities().read.withReadTransaction(
+      const part = await capabilities.read.withReadTransaction(
         pool,
         (client) => sourcePhase(client, sourceIdentities, routes, home),
         input.deadline,
@@ -257,7 +258,7 @@ export async function readIdentityRatingReview(
       current: [] as IdentityControlEvidence[],
     };
     for (const home of [...new Set(locators.map((row) => row.partition))].sort((a, b) => a - b)) {
-      const part = await nativeIdentityCapabilities().read.withReadTransaction(
+      const part = await capabilities.read.withReadTransaction(
         pool,
         (client) =>
           controlPhase(
@@ -386,8 +387,11 @@ export function classifyIdentityRatingReviewEvidence(
   return identityReviewFromEvidence(requestedOriginalId, canonicalTerminalId, sourceIdentities, sourceHomes, evidence);
 }
 
-/** Bounded exact mapping proof, with source and control homes released independently. */
-export async function readIdentityMappings(pool: Pool, originals: readonly string[]): Promise<IdentityMapping[]> {
+async function readIdentityMappingsWith(
+  capabilities: NativeIdentityCapabilities,
+  pool: Pool,
+  originals: readonly string[],
+): Promise<IdentityMapping[]> {
   if (originals.length > 100) throw new RangeError('Identity page must contain at most 100 originals');
   if (!originals.length) return [];
   const routes = originals.map((id) => {
@@ -406,7 +410,7 @@ export async function readIdentityMappings(pool: Pool, originals: readonly strin
       currentRows: IdentityControlEvidence[] = [];
     for (const home of new Set(routes.map(partitionOf))) {
       const indices = routes.flatMap((route, index) => (partitionOf(route) === home ? [index] : []));
-      await nativeIdentityCapabilities().read.withReadTransaction(pool, async (tx) => {
+      await capabilities.read.withReadTransaction(pool, async (tx) => {
         sourceOwners.push(...(await tx.query(owners.sql, [[home]])).rows);
         sourceRows.push(
           ...(
@@ -421,7 +425,7 @@ export async function readIdentityMappings(pool: Pool, originals: readonly strin
     const available = sourceRows.filter((row) => row.original && row.control_partition !== null && row.control_group);
     for (const home of new Set(available.map((row) => row.control_partition!))) {
       const group = available.filter((row) => row.control_partition === home);
-      await nativeIdentityCapabilities().read.withReadTransaction(pool, async (tx) => {
+      await capabilities.read.withReadTransaction(pool, async (tx) => {
         controlOwners.push(...(await tx.query(owners.sql, [[home]])).rows);
         pendingRows.push(
           ...(await tx.query(pending.sql, [group.map(() => home), group.map((row) => row.control_group)])).rows.map(
@@ -552,17 +556,20 @@ function tuples(homes: readonly HomeIdentity[]): string {
   );
 }
 
-/** Two released observations, never an Access decision or promise about subsequent writes. */
-export async function readIdentityBasis(pool: Pool, options: { deadline: number }): Promise<BasisRead> {
+async function readIdentityBasisWith(
+  capabilities: NativeIdentityCapabilities,
+  pool: Pool,
+  options: { deadline: number },
+): Promise<BasisRead> {
   const { deadline } = options;
   try {
     requireAccessDeadline(deadline);
     const first = await withRequestDeadline(deadline, () =>
-      nativeIdentityCapabilities().read.withReadTransaction(pool, readIdentityHomes, deadline),
+      capabilities.read.withReadTransaction(pool, readIdentityHomes, deadline),
     );
     requireAccessDeadline(deadline);
     const second = await withRequestDeadline(deadline, () =>
-      nativeIdentityCapabilities().read.withReadTransaction(pool, readIdentityHomes, deadline),
+      capabilities.read.withReadTransaction(pool, readIdentityHomes, deadline),
     );
     requireAccessDeadline(deadline);
     if (!first || !second || first.some((home) => home.pending !== 0n) || second.some((home) => home.pending !== 0n))
@@ -575,4 +582,46 @@ export async function readIdentityBasis(pool: Pool, options: { deadline: number 
     throwAccessUnavailable(error, deadline);
     throw error;
   }
+}
+
+const readersByCapabilities = new WeakMap<NativeIdentityCapabilities, IdentityNativeReaders>();
+
+/** Mapping, rating-review and basis readers closed over one native read capability. */
+export function createIdentityReaders(capabilities: NativeIdentityCapabilities): IdentityNativeReaders {
+  const cached = readersByCapabilities.get(capabilities);
+  if (cached) return cached;
+  const readers: IdentityNativeReaders = Object.freeze({
+    readIdentityMappings: (pool: Pool, originals: readonly string[]) =>
+      readIdentityMappingsWith(capabilities, pool, originals),
+    readIdentityRatingReview: (
+      pool: Pool,
+      input: Readonly<{ requestedOriginalId: string; canonicalTerminalId: string; deadline: number }>,
+    ) => readIdentityRatingReviewWith(capabilities, pool, input),
+    readIdentityRatingEvidenceInTransaction,
+    readIdentityRepairEvidenceInTransaction,
+    readIdentityBasis: (pool: Pool, options: { deadline: number }) =>
+      readIdentityBasisWith(capabilities, pool, options),
+    readIdentityHome,
+  });
+  readersByCapabilities.set(capabilities, readers);
+  return readers;
+}
+
+function defaultReaders() {
+  return createIdentityReaders(nativeIdentityCapabilities());
+}
+
+export async function readIdentityRatingReview(
+  pool: Pool,
+  input: Readonly<{ requestedOriginalId: string; canonicalTerminalId: string; deadline: number }>,
+): Promise<IdentityRatingReviewResult> {
+  return defaultReaders().readIdentityRatingReview(pool, input);
+}
+
+export async function readIdentityMappings(pool: Pool, originals: readonly string[]): Promise<IdentityMapping[]> {
+  return defaultReaders().readIdentityMappings(pool, originals);
+}
+
+export async function readIdentityBasis(pool: Pool, options: { deadline: number }): Promise<BasisRead> {
+  return defaultReaders().readIdentityBasis(pool, options);
 }

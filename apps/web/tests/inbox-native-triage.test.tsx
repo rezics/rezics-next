@@ -3,7 +3,6 @@ import { createKernelClient, type NoticeInboxItem } from '@rezics/client';
 import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { getLocale } from '../src/paraglide/runtime.js';
-import { threadLocation } from '../src/threads/thread-href';
 import { createBrowserInboxAmbient } from '../src/inbox/adapters/ambient';
 import { performanceAmbientTree } from './performance-ambient';
 
@@ -19,17 +18,27 @@ mock.module('cloudflare:workers', () => ({ env: {} }));
 const {
   decodeInboxPage,
   inboxReadFailure,
-  loadInboxPage,
+  loadInboxPage: readInboxPageWithPort,
   markInboxNoticeSeen,
   nativeInboxEnvelope,
-  resolveInboxItems,
+  resolveInboxItems: resolveInboxItemsWithPort,
 } = await import('../src/inbox/inbox-read');
+const { inboxContent } = await import('../src/inbox/adapters/presentation');
 const { InboxRows } = await import('../src/inbox/inbox-page');
 const { InboxNoticeDetailView } = await import('../src/inbox/inbox-notice-detail');
 const { setLocale } = await import('../src/paraglide/runtime.js');
 const { m } = await import('../src/paraglide/messages.js');
 setLocale('en', { reload: false });
 type Notice = NoticeInboxItem;
+const loadInboxPage = (
+  client: Parameters<typeof readInboxPageWithPort>[0],
+  accountId: string,
+  authorization: string,
+  query?: Parameters<typeof readInboxPageWithPort>[3],
+  signal?: AbortSignal,
+) => readInboxPageWithPort(client, accountId, authorization, query, inboxContent, signal);
+const resolveInboxItems = (page: Parameters<typeof resolveInboxItemsWithPort>[0]) =>
+  resolveInboxItemsWithPort(page, inboxContent.threadHref);
 
 function notice(id: string, kind: Notice['kind']): Notice {
   const report = kind === 'moderation_decision';
@@ -116,13 +125,13 @@ test('Inbox uses one composed page for current disclosure, installed kinds and a
   expect(page.items[0]).toMatchObject({ actorName: 'Momo', context: 'Current discussion', text: 'Update reply-1' });
   expect(page.items[1]).toMatchObject({ actorId: null, actor: { state: 'withheld' }, href: expect.any(String) });
   expect(page.items[0]?.href).toBe(
-    threadLocation(getLocale(), { id: 'thread-1', title: 'Current discussion' }, undefined, 'post-1'),
+    inboxContent.threadHref(getLocale(), { id: 'thread-1', title: 'Current discussion', postId: 'post-1' }),
   );
   expect(page.items[2]?.href).toBe(
-    threadLocation(getLocale(), { id: 'watched-thread', title: 'Current discussion' }, undefined, 'post-1'),
+    inboxContent.threadHref(getLocale(), { id: 'watched-thread', title: 'Current discussion', postId: 'post-1' }),
   );
   expect(page.items[3]?.href).toBe(
-    threadLocation(getLocale(), { id: 'thread-1', title: 'Current discussion' }, undefined, 'post-1'),
+    inboxContent.threadHref(getLocale(), { id: 'thread-1', title: 'Current discussion', postId: 'post-1' }),
   );
   expect(page.items[3]?.context).toBe('Current discussion · Current board');
   expect(page.items[4]).toMatchObject({
@@ -140,15 +149,23 @@ test('Inbox uses one composed page for current disclosure, installed kinds and a
 
 test('list and detail share available actor identity while withheld and system labels stay distinct', async () => {
   const resolved = await resolveInboxItems(nativeInboxEnvelope(composed, null, 'alice'));
-  const list = renderToStaticMarkup(performanceAmbientTree(createElement(InboxRows, { page: resolved })));
+  const list = renderToStaticMarkup(
+    performanceAmbientTree(createElement(InboxRows, { content: inboxContent, page: resolved })),
+  );
   const availableDetail = renderToStaticMarkup(
-    performanceAmbientTree(createElement(InboxNoticeDetailView, { notice: composed[0]!, selection: 'all' })),
+    performanceAmbientTree(
+      createElement(InboxNoticeDetailView, { content: inboxContent, notice: composed[0]!, selection: 'all' }),
+    ),
   );
   const withheldDetail = renderToStaticMarkup(
-    performanceAmbientTree(createElement(InboxNoticeDetailView, { notice: composed[1]!, selection: 'all' })),
+    performanceAmbientTree(
+      createElement(InboxNoticeDetailView, { content: inboxContent, notice: composed[1]!, selection: 'all' }),
+    ),
   );
   const systemDetail = renderToStaticMarkup(
-    performanceAmbientTree(createElement(InboxNoticeDetailView, { notice: composed[4]!, selection: 'all' })),
+    performanceAmbientTree(
+      createElement(InboxNoticeDetailView, { content: inboxContent, notice: composed[4]!, selection: 'all' }),
+    ),
   );
 
   expect(list).toContain('Momo');
@@ -163,11 +180,14 @@ test('list and detail share available actor identity while withheld and system l
   expect(list).not.toContain('src="https://');
   const { inboxNoticeActorPresentation } = await import('../src/inbox/inbox-notice-actor');
   expect(
-    inboxNoticeActorPresentation({
-      actor: composed[0]!.actor,
-      actorId: composed[0]!.actorId,
-      actorName: 'Momo',
-    }).avatarUrl,
+    inboxNoticeActorPresentation(
+      {
+        actor: composed[0]!.actor,
+        actorId: composed[0]!.actorId,
+        actorName: 'Momo',
+      },
+      inboxContent.initials,
+    ).avatarUrl,
   ).toBeNull();
 });
 
@@ -323,6 +343,7 @@ test('a consumed acknowledgement does not offer command retry, and a native send
   const confirmed = renderToStaticMarkup(
     performanceAmbientTree(
       createElement(InboxRows, {
+        content: inboxContent,
         page: resolved,
         onMarkSeen: () => {},
         onRetrySeen: () => {},
