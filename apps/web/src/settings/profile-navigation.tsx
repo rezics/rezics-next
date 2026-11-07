@@ -12,7 +12,7 @@ import {
   useSettingsNavigationDraft,
   useSettingsNavigationOwner,
 } from './reading-navigation';
-import { profileChanges } from './profile-data';
+import { profileChanges } from './profile-model';
 import type { ProfileAvatarUpload } from './profile-avatar-upload';
 import type { ProfileEditor, ProfileEditorState } from './profile-write';
 import { useSettingsProfileReturn } from './settings-return-context';

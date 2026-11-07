@@ -5,7 +5,7 @@ import { newCsrfToken } from '../src/session/csrf';
 import { boundViewer } from '../src/accounts/profile-editor/request';
 import { AccountProfileEditor } from '../src/accounts/profile-editor/editor';
 import { parseSubmission, profilePageReadError, readTarget, writeTarget } from '../src/accounts/profile-editor/data';
-import type { ProfilePatch, ProfileValues } from '../src/settings/profile-data';
+import type { ProfilePatch, ProfileValues } from '../src/settings/profile-model';
 import { officialProfileRead } from '../src/settings/editable-profile-source';
 import { createBrowserSettingsAmbient } from '../src/settings/adapters/ambient';
 

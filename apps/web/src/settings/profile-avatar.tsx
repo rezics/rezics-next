@@ -6,7 +6,7 @@ import { MediaImage } from '@rezics/ui/media-image';
 import { m } from '../paraglide/messages.js';
 import type { UploadRefusalReason } from '../threads/upload-vocabulary';
 import type { SettingsAvatarMedia } from './ports/content';
-import type { ProfileValues } from './profile-data';
+import type { ProfileValues } from './profile-model';
 import type { ProfileEditor } from './profile-write';
 import { avatarMedia, ProfileAvatarUpload, type AvatarAdviceState } from './profile-avatar-upload';
 import { ProfileAvatarCrop } from './profile-avatar-crop.tsx';
