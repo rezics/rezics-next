@@ -516,6 +516,8 @@ export async function settle(
         unchangedClaim && git(task.worktree, ['status', '--porcelain', '--untracked-files=all']) !== '';
       evidenceBundle(task, store.attempt(ref), undefined, store.policy.evidence);
       await write(() => {
+        // Contract amendment and landing publication share this fence: never enqueue an earlier scope or gate.
+        const contract = store.task(ref.taskId);
         store.updateTask(ref, (t) => {
           t.state = 'landing';
         });
@@ -529,13 +531,13 @@ export async function settle(
             ...(unchangedClaim
               ? {
                   unchangedClaim: true as const,
-                  contractHash: createHash('sha256').update(task.brief.markdown).digest('hex'),
+                  contractHash: createHash('sha256').update(contract.brief.markdown).digest('hex'),
                   ...(sourceDirtyAtSettlement ? { sourceDirtyAtSettlement: true as const } : {}),
                 }
               : {}),
-            declaredPaths: task.brief.paths,
-            protectedRiskAreas: tasks.protectedRiskAreas(task.brief),
-            gate: task.brief.acceptance.command,
+            declaredPaths: contract.brief.paths,
+            protectedRiskAreas: tasks.protectedRiskAreas(contract.brief),
+            gate: contract.brief.acceptance.command,
           },
           (request) => landing.enqueue(request),
         );

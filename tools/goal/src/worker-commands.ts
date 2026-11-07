@@ -174,7 +174,11 @@ export async function runWorkerCommand(
         JSON.stringify(
           tasks.amend(
             parsedArguments.taskId,
-            { expectedAttempt: parsedArguments.expectedAttempt, brief: parsedArguments.brief },
+            {
+              expectedAttempt: parsedArguments.expectedAttempt,
+              brief: parsedArguments.brief,
+              ...(parsedArguments.active ? { active: true } : {}),
+            },
             authenticatedManager(store.db, env) ?? null,
           ),
         ),
