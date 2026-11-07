@@ -2,6 +2,7 @@ import { useMemo } from 'react';
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import { ScreenCurrentVisitRecovery } from '../features/catalogue/screen-profile-session';
 import { ScreenProfileReader } from '../features/catalogue/screen-profile-reader';
+import { ScreenReadingBoundary } from '../features/pages/data';
 import {
   screenCurrentInspectionId,
   screenCurrentReturnHref,
@@ -90,25 +91,27 @@ function ScreenCurrentVisitStory({ state = 'selected-reading' }: { state?: Scree
                 Pointer or keyboard interaction cancels the pending return focus.
               </p>
             ) : null}
-            <ScreenProfileReader
-              locale={locale}
-              public={reading}
-              release={release}
-              currentVisit={currentVisit}
-              {...(inspection ? { inspection } : {})}
-              {...(state === 'unsupported-context'
-                ? {
-                    unsupportedCorrection: true,
-                    globalHref: `/${locale}/subjects/${subjectId}/the-observatory/screen`,
-                  }
-                : {})}
-              {...(returnHref ? { returnHref } : {})}
-              visitIdentity={`screen-current-visit:${state}`}
-              returnNotice={
-                state === 'duplicate-evidence' &&
-                !reading.subject.statements[property]?.some((item) => item.id === occurrence?.statement)
-              }
-            />
+            <ScreenReadingBoundary>
+              <ScreenProfileReader
+                locale={locale}
+                public={reading}
+                release={release}
+                currentVisit={currentVisit}
+                {...(inspection ? { inspection } : {})}
+                {...(state === 'unsupported-context'
+                  ? {
+                      unsupportedCorrection: true,
+                      globalHref: `/${locale}/subjects/${subjectId}/the-observatory/screen`,
+                    }
+                  : {})}
+                {...(returnHref ? { returnHref } : {})}
+                visitIdentity={`screen-current-visit:${state}`}
+                returnNotice={
+                  state === 'duplicate-evidence' &&
+                  !reading.subject.statements[property]?.some((item) => item.id === occurrence?.statement)
+                }
+              />
+            </ScreenReadingBoundary>
             {state === 'duplicate-evidence' && occurrence ? (
               <p id={screenCurrentInspectionId(occurrence.statement)} className="sr-only">
                 {m.screen_visit_inspect()}

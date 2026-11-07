@@ -2,6 +2,8 @@ import type { MemberPageTarget } from './member-list-query';
 import type { DocumentNode, DocumentSnapshot } from '@rezics/document';
 import { PAGE_GLOBAL_CONTEXT, type SelectedContext } from '@rezics/composition';
 import { OverviewContext } from './overview-context';
+import { ScreenReadingBinding } from './screen-reading-binding';
+import type { ScreenReadingPort } from '../catalogue/screen-reading-port';
 import { PageReadState } from './page-read-state';
 import { RatingsSection } from './subject-ratings-view';
 import { SubjectCommunityRegion, useSubjectCommunity } from './subject-community-view';
@@ -171,6 +173,23 @@ export type OverviewValue = {
 };
 
 export { OverviewContext };
+
+/** Page composition installs Screen reading capabilities beside the ordinary overview value. */
+export function OverviewRoot({
+  value,
+  PageValue,
+  children,
+}: {
+  value: OverviewValue;
+  PageValue: ScreenReadingPort['PageValue'];
+  children: ReactNode;
+}) {
+  return (
+    <ScreenReadingBinding PageValue={PageValue}>
+      <OverviewContext.Provider value={value}>{children}</OverviewContext.Provider>
+    </ScreenReadingBinding>
+  );
+}
 
 const SUMMARY_PROPERTY = 'schema:abstract';
 

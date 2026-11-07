@@ -33,6 +33,7 @@ import { statementDocument } from './documents';
 import * as accounts from './account';
 import { accountOf } from './account-read';
 import * as overview from './overview';
+import { ScreenReadingBinding } from './screen-reading-binding';
 import { SubjectPageCover } from './subject-page-cover';
 import { SubjectArtwork, SubjectArtworkBoundary } from '../catalogue/subject-artwork/view';
 import { CharacterRelationshipsSlot, SubjectPurchaseSlot } from './subject-slots';
@@ -322,6 +323,11 @@ export function CandidateValue({
       labels: { documentSpoiler: '', spoilerShow: '', cover: { withheld: '', reveal: '', credit: '', via: '' } },
     }) ?? <span>{m.candidate_value_unavailable({}, { locale: locale as never })}</span>
   );
+}
+
+/** Fully bound Screen reading adapter for correction routes and isolated readers. */
+export function ScreenReadingBoundary({ children }: { children: ReactNode }) {
+  return <ScreenReadingBinding PageValue={CandidateValue}>{children}</ScreenReadingBinding>;
 }
 
 export function PublicationOverlayView({
@@ -1129,7 +1135,7 @@ export function PageData({
       ])}
       label={overviewSubjectLabel || resolved.unlabelled}
     >
-      <overview.OverviewContext.Provider value={overviewValue}>
+      <overview.OverviewRoot value={overviewValue} PageValue={CandidateValue}>
         <TypeListContext.Provider
           value={{
             ...(listTarget ? { target: listTarget } : {}),
@@ -1154,7 +1160,7 @@ export function PageData({
             {children}
           </PageContext.Provider>
         </TypeListContext.Provider>
-      </overview.OverviewContext.Provider>
+      </overview.OverviewRoot>
     </SubjectArtworkBoundary>
   );
 }

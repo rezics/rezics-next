@@ -1,5 +1,7 @@
 # Architecture check
 
+Decision: Screen profile and episode continuation are instantiated from the Semantic-owned screen reading application. Navigation descriptors are dependency-free values consumed by the visit owner. Page values, spoiler disclosure, canonical Subject hrefs and visit-return admission are a Semantic-owned port bound by Search at `OverviewRoot` / `ScreenReadingBoundary`. Semantic no longer value-imports `pages/data`, `pages/values`, `subject/candidates` or `subject-visit-navigation` for this operation. Public entries are `screen-reading-port.ts` and `screen-reading-application.tsx`.
+
 Decision: Zone membership and mounted Collection pages invert Library route/read and load-time `CollectionSourceLedger` evaluation through a Zone-owned collection port. The Library adapter is a public entry bound by the composition root (`composition/zones.ts`) and `zoneRoutes`; composition may depend on `kernel-zones` for that install. Zone HTTP no longer value-imports `collection-routes.ts` or `collection-reads.ts`.
 
 Decision: Keep the current workspace and capability boundaries, assign each module to its documented Goal owner, and snapshot existing imports as explicit dependencies while grandfathering their violations for gradual removal.

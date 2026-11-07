@@ -1,5 +1,7 @@
 # Catalogue creation
 
+Decision: Screen profile and episode continuation construct through the Semantic-owned reading application (`screen-reading-application.tsx`). Navigation descriptors in `screen-episode-reader/navigation.ts` are dependency-free values. Search installs the page-value, spoiler, href and visit-return port at `OverviewRoot` and `ScreenReadingBoundary`.
+
 Music context, catalogue file and Concept creation use `creation-host/use-creation-host.tsx`
 for the mounted metadata reading, last good release, retained term/fact types, archived choices,
 refresh exclusion and review revision. Profiles retain native preparation, commands, field admission
