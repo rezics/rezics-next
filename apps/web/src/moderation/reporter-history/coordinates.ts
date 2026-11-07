@@ -1,5 +1,5 @@
 import type { QueryClient } from '@tanstack/react-query';
-import { browserObservation } from '../../session/observation';
+import { browserObservation } from '../../reader/lifetime/index';
 import type { ReporterHistoryQuery } from './model';
 
 export type Movement = 'next' | 'previous' | 'first' | 'selection' | 'restart';

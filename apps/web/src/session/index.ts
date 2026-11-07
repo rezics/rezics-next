@@ -15,3 +15,4 @@ export {
   type OperationLease,
 } from '../reader/lease';
 export { SessionRecoveryPage } from './recovery';
+export { SessionProvider } from './provider';

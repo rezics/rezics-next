@@ -1255,7 +1255,8 @@
         "web-accounts",
         "web-app",
         "web-library",
-        "web-search"
+        "web-search",
+        "browser-reader-lifetime"
       ],
       "capabilities": ["content-pages"]
     },
@@ -1322,6 +1323,15 @@
       "capabilities": []
     },
     {
+      "id": "browser-reader-lifetime",
+      "kind": "adapter",
+      "owner": "web",
+      "paths": ["apps/web/src/reader/lifetime/**"],
+      "publicEntries": ["apps/web/src/reader/lifetime/index.ts", "apps/web/src/reader/lifetime/contract.ts"],
+      "allowedDependencies": [],
+      "capabilities": []
+    },
+    {
       "id": "web-app",
       "kind": "UI/transport library",
       "owner": "web",
@@ -1346,7 +1356,8 @@
         "apps/web/src/features/contexts/**",
         "apps/web/src/zones/**",
         "apps/web/src/subject/display-definition-cache/**",
-        "apps/web/src/routes/**"
+        "apps/web/src/routes/**",
+        "apps/web/src/reader/lifetime/**"
       ],
       "publicEntries": [
         "apps/web/src/kernel/client.ts",
@@ -1390,7 +1401,8 @@
         "web-performance",
         "web-search",
         "web-semantic",
-        "web-display-definition-cache"
+        "web-display-definition-cache",
+        "browser-reader-lifetime"
       ],
       "capabilities": ["web-interface"]
     },

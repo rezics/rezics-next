@@ -1,4 +1,4 @@
-import type { ReadCredentialMode } from '../../kernel/credential';
+import type { ReadCredentialMode } from '../../reader/lifetime/contract';
 import type { ExactRevisionIdentity } from '../exact-revision';
 import type { HistoricalReaderSource } from '../historical-reader-provenance';
 

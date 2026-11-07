@@ -2,7 +2,7 @@ import { threadPageOperation } from './thread-page-advice';
 import type { ThreadPageObservation } from './thread-page';
 import { QueryClientContext, type QueryClient } from '@tanstack/react-query';
 import { useContext, useLayoutEffect, useRef, useSyncExternalStore } from 'react';
-import { normalizeSessionObservation } from '../session/browser-state';
+import { normalizeSessionObservation } from '../reader/lifetime/index';
 import {
   threadWatchNative,
   type ThreadWatchCommand,
