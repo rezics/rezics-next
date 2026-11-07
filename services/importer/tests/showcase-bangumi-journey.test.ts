@@ -1,5 +1,6 @@
 import { expect, test } from 'bun:test';
 import { citedAnimeCreditTargets, journeyTargets, selectJourneyWorks } from '../src/showcase-bangumi-journey.ts';
+import { runImportCli } from '../src/cli.ts';
 import {
   FIRST_PUBLIC_IMPORT_ROWS,
   applyWalkInventoryToCapabilities,
@@ -249,6 +250,20 @@ test('the walk inventory replaces each pending capabilities row and names the sl
   expect(updated).toContain('### Observed walk');
   expect(updated).toContain('Slowest failing: I06 12000ms seed published no Game identity.');
   expect(updated).toContain('Books owner-grant composition uses the ordinary Global grant intent.');
+  const adjacent = updated.replace('\n\nBooks owner-grant', '\nBooks owner-grant');
+  const rewritten = applyWalkInventoryToCapabilities(adjacent, {
+    command: 'bun services/auth/scripts/dev-stack.ts walk -- bun services/importer/src/imports-public-journey.ts',
+    revision: 'def',
+    startedAt: '2026-11-07T01:00:00Z',
+    endedAt: '2026-11-07T01:20:00Z',
+    passing: 1,
+    total: 2,
+    slowestFailing: { id: 'I06', path: failing.path, elapsedMs: 4_000, cause: failing.cause! },
+    rows: [passing, failing],
+  });
+  expect(rewritten).toContain('Revision `def`.');
+  expect(rewritten).toContain('Slowest failing: I06 4000ms seed published no Game identity.');
+  expect(rewritten).toContain('Books owner-grant composition uses the ordinary Global grant intent.');
   expect(walkRepairSkipReason(failing)).toBeNull();
   expect(walkRepairBrief(
     {
@@ -270,4 +285,33 @@ test('the walk inventory replaces each pending capabilities row and names the sl
       cause: 'same-handle continuation lost the independent property',
     }),
   ).toContain('same-handle continuation');
+});
+
+test('ordinary CLI admits loopback HTTP Auth with the kernel test origin', async () => {
+  const argv = [
+    '--source',
+    'bangumi',
+    '--dump',
+    '-',
+    '--state',
+    '/tmp/imports-walk-cli-origin.sqlite',
+    '--api',
+    'http://127.0.0.1:9',
+    '--auth',
+    'http://127.0.0.1:8',
+    '--account-key',
+    '/dev/null',
+    '--account',
+    '00000000-0000-0000-0000-000000000001',
+    '--client',
+    'walk',
+  ];
+  const loopback = await runImportCli(argv, { testOrigin: 'http://127.0.0.1:9' });
+  expect(loopback.stderr).not.toContain('Invalid importer arguments.');
+  const remote = await runImportCli(
+    argv.map((value) => (value === 'http://127.0.0.1:8' ? 'http://example.test' : value)),
+    { testOrigin: 'http://127.0.0.1:9' },
+  );
+  expect(remote.code).toBe(2);
+  expect(remote.stderr).toContain('Invalid importer arguments.');
 });
