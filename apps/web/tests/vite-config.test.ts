@@ -18,11 +18,90 @@ import {
 
 const appRoot = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const workspaceRoot = resolve(appRoot, '../..');
+const workerSelectorImport = 'use-sync-external-store/shim/with-selector';
+
+function pluginNames(config: Awaited<ReturnType<typeof resolveWebViteConfig>>): string[] {
+  return (config.plugins ?? [])
+    .flatMap((plugin) => (Array.isArray(plugin) ? plugin : [plugin]))
+    .flatMap((plugin) =>
+      plugin !== null && typeof plugin === 'object' && 'name' in plugin ? [String(plugin.name)] : [],
+    );
+}
 
 function isWithin(parent: string, child: string): boolean {
   const path = relative(parent, child);
   return path === '' || (path !== '..' && !path.startsWith(`..${sep}`) && !isAbsolute(path));
 }
+
+test('test Worker bindings are startup-only and production has no fixture header path', async () => {
+  const serverSource = readFileSync(join(appRoot, 'src/server.ts'), 'utf8');
+  const bindingsSource = readFileSync(join(appRoot, 'src/test-runtime-bindings.ts'), 'utf8');
+  const viteSource = readFileSync(join(appRoot, 'vite.config.ts'), 'utf8');
+  expect(serverSource).not.toContain('x-rezics-test-env');
+  expect(serverSource).not.toContain('readTestFixtureOverlay');
+  expect(serverSource).not.toContain('./test-runtime-bindings.ts');
+  expect(bindingsSource).toContain('__REZICS_TEST_WORKER_BINDINGS__');
+  expect(bindingsSource).not.toContain('process.env');
+  expect(bindingsSource).not.toContain('active');
+  expect(bindingsSource).not.toContain('depth');
+  expect(bindingsSource).not.toContain('request.headers');
+  expect(viteSource).toContain('testWorkerBindingsEnvName');
+
+  const previous = process.env.REZICS_TEST_RUNTIME;
+  const previousBindings = process.env.WEB_TEST_WORKER_BINDINGS;
+  try {
+    delete process.env.REZICS_TEST_RUNTIME;
+    const production = await resolveWebViteConfig({ command: 'build', mode: 'production' }, appRoot);
+    expect(pluginNames(production)).not.toContain('rezics-test-env-bindings');
+    expect(production.define).not.toHaveProperty('__REZICS_TEST_WORKER_BINDINGS__');
+
+    process.env.REZICS_TEST_RUNTIME = '1';
+    process.env.WEB_TEST_WORKER_BINDINGS = '{"KERNEL_ORIGIN":"https://test.example"}';
+    const testRuntime = await resolveWebViteConfig({ command: 'serve', mode: 'test' }, appRoot);
+    expect(pluginNames(testRuntime)).toContain('rezics-test-env-bindings');
+    expect(testRuntime.define).not.toHaveProperty('__REZICS_TEST_WORKER_BINDINGS__');
+    const plugins = (testRuntime.plugins ?? []).flatMap((plugin) => (Array.isArray(plugin) ? plugin : [plugin]));
+    const bindingsPlugin = plugins.find(
+      (plugin) =>
+        plugin !== null && typeof plugin === 'object' && 'name' in plugin && plugin.name === 'rezics-test-env-bindings',
+    );
+    const transformHook = bindingsPlugin && 'transform' in bindingsPlugin ? bindingsPlugin.transform : undefined;
+    const transform =
+      typeof transformHook === 'function'
+        ? transformHook
+        : transformHook && 'handler' in transformHook
+          ? transformHook.handler
+          : undefined;
+    expect(typeof transform).toBe('function');
+    const transformed = transform?.call(undefined, bindingsSource, join(appRoot, 'src/test-runtime-bindings.ts'));
+    expect(transformed).toHaveProperty('code', expect.stringContaining('= {"KERNEL_ORIGIN":"https://test.example"};'));
+  } finally {
+    if (previous === undefined) delete process.env.REZICS_TEST_RUNTIME;
+    else process.env.REZICS_TEST_RUNTIME = previous;
+    if (previousBindings === undefined) delete process.env.WEB_TEST_WORKER_BINDINGS;
+    else process.env.WEB_TEST_WORKER_BINDINGS = previousBindings;
+  }
+});
+
+test('the Worker selector dependency resolves to ESM while the client keeps the package implementation', async () => {
+  const config = await resolveWebViteConfig({ command: 'serve', mode: 'test' }, appRoot);
+  const plugins = (config.plugins ?? []).flatMap((plugin) => (Array.isArray(plugin) ? plugin : [plugin]));
+  const selector = plugins.find(
+    (plugin) =>
+      plugin !== null && typeof plugin === 'object' && 'name' in plugin && plugin.name === 'web-worker-selector-esm',
+  ) as
+    | {
+        applyToEnvironment?: (environment: { name: string }) => boolean;
+        resolveId?: ((id: string) => unknown) | { handler: (id: string) => unknown };
+      }
+    | undefined;
+  const resolveId = typeof selector?.resolveId === 'function' ? selector.resolveId : selector?.resolveId?.handler;
+
+  expect(selector).toBeDefined();
+  expect(selector?.applyToEnvironment?.({ name: 'ssr' })).toBe(true);
+  expect(selector?.applyToEnvironment?.({ name: 'client' })).toBe(false);
+  expect(resolveId?.(workerSelectorImport)).toBe(join(appRoot, 'src/kernel/use-sync-external-store-with-selector.ts'));
+});
 
 test('the dep-cache align hook is a Vite Plugin configureServer', () => {
   const plugin: Plugin = {

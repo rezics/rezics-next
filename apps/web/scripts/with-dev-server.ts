@@ -1,6 +1,11 @@
 import { join, resolve } from 'node:path';
 import { startDevServer, type DevServerOptions } from '../tests/support/dev-server.ts';
-import { sharedDevServerEnvName, writeSharedDevServer } from '../tests/support/dev-server-fixture.ts';
+import {
+  sharedDevServerEnvName,
+  workerFixtureOverlay,
+  writeSharedDevServer,
+} from '../tests/support/dev-server-fixture.ts';
+import { testWorkerBindingsEnvName } from '../src/test-runtime-binding-config.ts';
 import { materializeViteDepCache, prepareViteDepCache } from '../tests/support/vite-dep-cache.ts';
 import { readExampleWorkerVars } from './dev-vars.ts';
 
@@ -10,7 +15,7 @@ const signals = ['SIGINT', 'SIGTERM', 'SIGHUP'] as const;
 export const webTestPrivateNetworkEnvName = 'WEB_TEST_PRIVATE_NETWORK';
 export const webTestDepCacheReadyEnvName = 'WEB_TEST_DEV_SERVER_CACHE_READY';
 
-/** Vite-process bindings for a shared test server. Per-file overlays still replace those on each request. */
+/** Vite-process bindings for a shared test server; Worker env is captured once at server startup. */
 export function sharedViteChildEnvironment(
   env: NodeJS.ProcessEnv,
   extras: { cacheDirectory?: string } = {},
@@ -22,6 +27,8 @@ export function sharedViteChildEnvironment(
     CLOUDFLARE_VITE_FORCE_LOCAL: 'true',
   };
   if (extras.cacheDirectory) child.WEB_VITE_CACHE_DIR = extras.cacheDirectory;
+  const overlay = workerFixtureOverlay(child);
+  if (overlay) child[testWorkerBindingsEnvName] = JSON.stringify(overlay);
   return child;
 }
 

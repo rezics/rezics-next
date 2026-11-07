@@ -8,6 +8,7 @@ import {
   sharedDevServerEnvName,
   workerFixtureOverlay,
 } from './dev-server-fixture.ts';
+import { testWorkerBindingsEnvName } from '../../src/test-runtime-binding-config.ts';
 
 // Render budgets start at Vite's ready line, independently of its startup budget.
 const phaseBudgets = { ready: 150_000, firstResponse: 120_000, warmUp: 120_000 };
@@ -227,6 +228,8 @@ export async function startDevServer(options: DevServerOptions): Promise<DevServ
       childEnvironment.SITE_ORIGINS = bindOrigin(childEnvironment.SITE_ORIGINS, origin);
     if (options.env?.WEB_TEST_STATE_DIR && !options.env.WEB_TEST_STATE_INSTANCE_DIR)
       childEnvironment.WEB_TEST_STATE_INSTANCE_DIR = options.env.WEB_TEST_STATE_DIR;
+    const overlay = workerFixtureOverlay(childEnvironment);
+    if (overlay) childEnvironment[testWorkerBindingsEnvName] = JSON.stringify(overlay);
     child = Bun.spawn(command, {
       cwd: options.cwd ?? join(import.meta.dir, '../..'),
       env: childEnvironment,

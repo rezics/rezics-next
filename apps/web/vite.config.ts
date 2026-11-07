@@ -1,5 +1,5 @@
 import { viteNonceMarker } from './src/security/headers.ts';
-import { testFixtureEnvHeader } from './src/test-fixture-header.ts';
+import { testWorkerBindingsEnvName } from './src/test-runtime-binding-config.ts';
 import { createRequire } from 'node:module';
 import { readFileSync, realpathSync } from 'node:fs';
 import { dirname, isAbsolute, join, relative, resolve, sep } from 'node:path';
@@ -13,7 +13,6 @@ import tailwindcss from '@tailwindcss/vite';
 import { paraglideVitePlugin } from '@inlang/paraglide-js';
 import { createWorkerPersistence } from '../../scripts/worker-persistence.ts';
 import { messagesCurrent } from './scripts/messages-ready.ts';
-import { readWorkerFixtureOverlay } from './tests/support/dev-server-fixture.ts';
 import {
   bindViteDepCacheAlign,
   alignViteLockfileHashes,
@@ -33,6 +32,12 @@ if (nativeWebTls && (nativeWebHost !== 'web.native.rezics.com' || !nativeWebCert
 const appRoot = dirname(fileURLToPath(import.meta.url));
 const workspaceRoot = resolve(appRoot, '../..');
 const testRuntimeBindings = fileURLToPath(new URL('./src/test-runtime-bindings.ts', import.meta.url));
+const workerSelectorImport = 'use-sync-external-store/shim/with-selector';
+const workerSelectorShimPath = join(appRoot, 'src/kernel/use-sync-external-store-with-selector.ts');
+
+function filePathOf(id: string): string {
+  return (id.split('?')[0] ?? id).replace(/\\/g, '/');
+}
 
 function bunInstallRoot(resolved: string): string | undefined {
   const marker = `${sep}node_modules${sep}.bun${sep}`;
@@ -218,6 +223,7 @@ export default defineConfig((context) => {
   }
   const persistence = createWorkerPersistence('web', context, appRoot);
   const testRuntime = process.env.REZICS_TEST_RUNTIME === '1';
+  const testWorkerBindings = process.env[testWorkerBindingsEnvName] ?? '{}';
   const config: UserConfig = {
     server: {
       // The native stack binds 127.0.0.1 in an isolated network; publication tests prove a foreign Host never reaches page URLs.
@@ -254,27 +260,18 @@ export default defineConfig((context) => {
       ...(testRuntime
         ? [
             {
-              name: 'rezics-test-fixture-env',
-              configureServer(server: {
-                middlewares: {
-                  use: (
-                    handler: (req: { headers: Record<string, unknown> }, res: unknown, next: () => void) => void,
-                  ) => void;
-                };
-              }) {
-                const directory = process.env.WEB_TEST_STATE_DIR;
-                if (!directory) return;
-                server.middlewares.use((req, _res, next) => {
-                  const overlay = readWorkerFixtureOverlay(directory);
-                  if (overlay) req.headers[testFixtureEnvHeader] = JSON.stringify(overlay);
-                  next();
-                });
-              },
-            },
-            {
               name: 'rezics-test-env-bindings',
               enforce: 'pre' as const,
               transform(code: string, id: string) {
+                if (filePathOf(id) === filePathOf(testRuntimeBindings)) {
+                  return {
+                    code: code.replace(
+                      'declare const __REZICS_TEST_WORKER_BINDINGS__: Record<string, string>;',
+                      `const __REZICS_TEST_WORKER_BINDINGS__: Record<string, string> = ${testWorkerBindings};`,
+                    ),
+                    map: null,
+                  };
+                }
                 if (id.includes('test-runtime-bindings')) return;
                 if (!code.includes("from 'cloudflare:workers'")) return;
                 return {
@@ -313,6 +310,25 @@ export default defineConfig((context) => {
         ...(persistence.directory ? { persistState: { path: persistence.directory } } : {}),
       }),
       ...(persistence.cleanupPlugin ? [persistence.cleanupPlugin] : []),
+      {
+        name: 'web-worker-selector-esm',
+        enforce: 'pre' as const,
+        applyToEnvironment(environment) {
+          return environment.name !== 'client';
+        },
+        resolveId(id) {
+          if (id === workerSelectorImport || id === `${workerSelectorImport}.js`) return workerSelectorShimPath;
+          return null;
+        },
+        load(id) {
+          const path = filePathOf(id);
+          if (path.endsWith('/use-sync-external-store/shim/index.js'))
+            return { code: "export { useSyncExternalStore } from 'react';\n", map: null };
+          if (path.endsWith('/use-sync-external-store/shim/with-selector.js'))
+            return { code: `export * from ${JSON.stringify(workerSelectorShimPath)};\n`, map: null };
+          return null;
+        },
+      },
       workerDeniedDependencies(),
       {
         // Cloudflare's config hook enables discovery from the Worker entry. mergeConfig concatenates `entries`, so a

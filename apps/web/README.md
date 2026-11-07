@@ -142,7 +142,10 @@ are at least as new as the catalogues; `messages.js` mtime alone is not enough. 
 Cloudflare-denied `cloudflare.config.ts` dependencies from disk; the browser deny list stays unchanged. The shared Vite
 process fills missing Worker bindings from `.dev.vars.example` without writing `.dev.vars`, forces local Cloudflare
 bindings, and pins the Worker `optimizeDeps` after plugin merge so an isolated network never crawls the Worker graph.
-Per-file overlays still replace those bindings on each request. Source modules stay worktree-current; only the
+Decision: Vite owns test fixture transformation. `server.ts` does not import fixture bindings or honour a request
+header overlay; `WEB_TEST_WORKER_BINDINGS` is captured when Vite starts and injected into `test-runtime-bindings.ts`.
+The Worker selector shim resolves `use-sync-external-store/shim/with-selector` to the ESM adapter and leaves the
+client on the package implementation. Loan product semantics stay with Commerce. Source modules stay worktree-current; only the
 dependency output is shared until the lock changes. The runner stops that Vite process tree, including descendants that
 left the process group, when the invocation ends or is interrupted. Lifecycle, fixture-lock and lock-hash cache tests
 pin that composed-run behaviour; existing browser page assertions stay unchanged. Decision: wrap optimizer init from a
