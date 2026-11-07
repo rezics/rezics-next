@@ -77,9 +77,9 @@ test('the table-shape check does not boot Storybook, and follow writes the publi
     ]),
   ).toBe(false);
   expect(commandNeedsSharedDevServer(['bun', 'test', 'tests/server-custody.test.ts'])).toBe(false);
-  expect(
-    commandNeedsSharedDevServer(['bun', 'test', 'tests/server-custody.test.ts', 'tests/session.test.ts']),
-  ).toBe(true);
+  expect(commandNeedsSharedDevServer(['bun', 'test', 'tests/server-custody.test.ts', 'tests/session.test.ts'])).toBe(
+    true,
+  );
   expect(commandNeedsSharedDevServer(['bun', 'test', 'tests/session.test.ts'])).toBe(true);
   const source = readFileSync(walk, 'utf8');
   expect(source).toContain("const session = await signIn(stack, person, 'login', []);");

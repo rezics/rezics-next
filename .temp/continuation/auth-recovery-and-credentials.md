@@ -10,7 +10,6 @@ J03 (1819ms): `POST /recovery/complete` with that privately delivered token retu
 
 J04 (1843ms): `POST /credential-effects/stage` with a fresh login-client session returned HTTP 403 `{error:credential_effect_denied, effect_status:not_applied}`. Stage and apply password replace through that login session, then review and revoke sessions. Human proof still rejects automated and operator callers.
 
-
 ## Integrated ordinary round
 
 Goal: accounts. Manager: content. Tested source `0eb618cfd609c2abb281bbd3ced29e73e685fd71` includes Auth40c038, native fixtures65d590 and allocator6948a892. Ordinary `REZICS_WALK_DEFER_FRONTENDS=0 bun apps/web/scripts/accounts-goal-walk.ts --launch` ran on the worker host, without a remote check ID; observation began2026-11-07T11:53:10.775Z, launcher completed2026-11-07T12:12:11Z with exit0 after supported teardown. Exit0 is process completion, not nineteen-outcome acceptance. Admission succeeded in1320ms on allocated slot1; database, migrations, native Auth, real Kernel worker/relay and API driver were reached. Auth pages became ready. Evidence: `.temp/accounts/journeys.json`, `.temp/accounts/launcher.log`, `.temp/walk/e249c4cc-302e-4529-8b4a-d7453450a8fa/stack.log`. Full per-row UTC/persona/revision/elapsed values are retained in the table and JSON. No screenshots.
