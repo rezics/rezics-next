@@ -4,6 +4,7 @@ import { decodeListCursor, encodeListCursor, type ListCursorBinding } from '../t
 import type { KeyRing } from '../tokens/seal.ts';
 import ownerFence from './owner-filter-native-binding-fence.sql';
 import { requireLibraryMembersPreparation } from './domain-binding.ts';
+import { collectionReadEligibility } from './collection-read-eligibility.ts';
 import readHeader from './members-preparation-read.sql';
 import readResults from './members-preparation-results.sql';
 import step from './members-preparation-step.sql';
@@ -442,7 +443,7 @@ export function createMembersPreparationNative(config: {
         config.access,
         actor,
         'collection:read',
-        { route, id: collectionId },
+        { route, id: collectionId, eligibility: collectionReadEligibility({ route, id: collectionId }) },
         { pool: config.pool, deadline },
         notFound,
       )) as CommandAuthorization;
@@ -680,7 +681,11 @@ export function createMembersPreparationNative(config: {
         config.access,
         actor,
         'collection:read',
-        { route: locator.route, id: locator.collectionId },
+        {
+          route: locator.route,
+          id: locator.collectionId,
+          eligibility: collectionReadEligibility({ route: locator.route, id: locator.collectionId }),
+        },
         { pool: config.pool, deadline },
         notFound,
       )) as CommandAuthorization;

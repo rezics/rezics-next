@@ -96,6 +96,10 @@ Reservation must recheck the exact current active curated header and owner bindi
 the earlier successful read and an explicit grant alone cannot substitute for current Collection liveness.
 Use the existing private-read concealment: `accessCommandAuthorization` receives `not_found` as its denial,
 including when its native command-admission preparation refuses a terminal owner.
+Reservation and touch supply the mounted reader's bounded current Collection public-eligibility producer.
+Private evidence returns false and retains the curator grant path; no synthetic eligibility or prior read substitutes
+for that evidence or the transaction's current-header check. The original native authorization, intent and growth
+assertions are retained to verify this shared binding.
 A batch covers distinct definitions for that ONE Collection. This is sufficient to specify two reads and an intent
 with multiple locators without claiming all common-page reads are supported. This initial interface does not
 narrow the required full common-page capability. Cross-Collection/source batches

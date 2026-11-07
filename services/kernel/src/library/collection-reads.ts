@@ -1,6 +1,4 @@
-import { statementBytes } from '../database/statement-bytes.ts';
 import type { AccessWorkAccounting } from '../access/work.ts';
-import { EMPTY_ACCESS_WORK } from '../access/contract/bounds.ts';
 import outputHeadForRetention from './collection-source-output-head.sql';
 import { createBuiltinRuntime, type BuiltinCollectionView } from './builtin-runtime.ts';
 import type { Pool, PoolClient } from 'pg';
@@ -9,7 +7,6 @@ import {
   commandAccessContext,
   readAccount,
   readAccountCommandState,
-  createResourcePublicEligibility,
 } from './access-port.ts';
 import {
   mintReadTime,
@@ -22,6 +19,7 @@ import type { ContributionAttribution } from '../access/public-identity.ts';
 import { contributionDeleted, readContributionAttributions } from './access-port.ts';
 import { readPublicViews } from './access-port.ts';
 import publicGeneration from './collection-public-generation.sql';
+import { collectionReadEligibility, type CollectionReadObservation } from './collection-read-eligibility.ts';
 import { withConnection } from '../database/pool.ts';
 import { ProblemError } from '../http/problem-error.ts';
 import { readPartition } from '../partition/partition.ts';
@@ -92,11 +90,7 @@ type CuratorPageOptions = {
 type QueryClient = Pick<PoolClient, 'query'>;
 type StoredCollection = NonNullable<Awaited<ReturnType<typeof collectionRead.run>>>;
 type MemberRow = Awaited<ReturnType<typeof memberPage.run>>[number];
-type Sink = {
-  seen: boolean;
-  row: StoredCollection | null;
-  failure?: { error: unknown };
-};
+type Sink = CollectionReadObservation;
 export type CollectionView = CollectionPresentation &
   Partial<CollectionPreview> & {
     // Older internal callers may construct the curated presentation without wire-only fields.
@@ -336,44 +330,6 @@ async function readOnly<T>(pool: Pool, work: (client: PoolClient) => Promise<T>)
   });
 }
 
-function readEligibility(route: number, id: string, sink: Sink) {
-  const resource = Object.freeze({ route, id });
-  const declared = collectionDirectoryRowPlan(resource).total;
-  const native = Object.freeze({
-    keys: declared.candidateKeys,
-    points: declared.nativePoints,
-    rows: declared.nativeRows,
-    witnesses: declared.witnessKeys,
-    emptySeeks: declared.emptySeeks,
-    // Access holds binds/projection; transport adds the literal SQL surface.
-    bytes: declared.bytes - statementBytes(collectionRead),
-  });
-  return createResourcePublicEligibility({
-    work: {
-      prepare: { bound: () => EMPTY_ACCESS_WORK, actual: () => EMPTY_ACCESS_WORK },
-      verify: { bound: () => native, actual: () => native },
-    },
-    resource,
-    action: 'collection:read',
-    async prepare() {
-      return { ready: true };
-    },
-    // False leaves the owner's grant path intact. A throw would hide a private Collection from its curator.
-    async verify({ client }) {
-      try {
-        const row = await readCollectionRow(client, { route, id });
-        sink.seen = true;
-        sink.row = row;
-        return row !== null && row.state === 'active' && row.visibility !== 'private';
-      } catch (error) {
-        // Access fails closed on evidence errors. The owning read must still preserve an unavailable outcome.
-        sink.failure = { error };
-        throw error;
-      }
-    },
-  });
-}
-
 export function createCollectionReads(
   dependencies: PreviewPreparationDependencies & {
     tokens: KeyRing;
@@ -501,7 +457,7 @@ export function createCollectionReads(
       access,
       viewer,
       'collection:read',
-      { route, id, eligibility: readEligibility(route, id, sink) },
+      { route, id, eligibility: collectionReadEligibility({ route, id }, sink) },
       observation?.attempt ? commandAccessContext(context, observation.attempt) : context,
     );
     return readOnly(pool, async (connection) => {

@@ -26,17 +26,26 @@ export async function sourceRuntimeFixture() {
   const native = await createProfileEntryFixture();
   try {
     expect((await native.send('steward', 'POST', '/v1/platform/exposure/collections:open')).status).toBe(200);
+    expect((await native.send('steward', 'POST', '/v1/platform/exposure/reading_progress:open')).status).toBe(200);
     const owner = await native.identity([
       'subject:read',
       'collection:create',
       'collection:read',
       'collection:update',
       'collection:delete',
+      'library_entry:list',
+      'progress_session:list',
+      'copy:list',
     ]);
-    async function collection(visibility: 'private' | 'public' | 'unlisted' = 'public') {
+    async function collection(
+      visibility: 'private' | 'public' | 'unlisted' = 'public',
+      membershipKind: 'dynamic' | 'curated' = 'dynamic',
+    ) {
       const response = await native.send(owner.bearer, 'POST', '/v1/collections', {
         title: 'Explicit source runtime',
         visibility,
+        membershipKind,
+        ...(membershipKind === 'dynamic' ? { rule: { filter: { owner: { presence: true } } } } : {}),
       });
       expect(response.status).toBe(201);
       const id = (await response.json()).collection.id as string;
