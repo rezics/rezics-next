@@ -1020,10 +1020,12 @@ without a trailing slash, and tests use `https://api.rezics.test`. A local HTTP
 issuer does not permit an HTTP audience. Tokens retain the exact issuer and port;
 own-key assertions must target exactly `${issuer}/token`, including that port.
 Kernel may fetch HTTP public JWKS only on that same approved HTTP issuer origin.
-A local walk stack therefore sets `AUTH_JWKS_URL` on that issuer origin and port.
+A local walk stack therefore sets `AUTH_JWKS_URL` on that issuer origin and port;
+native Auth's port is transport, not a second allowed JWKS identity.
 Kernel's trusted `AuthenticationConfig.fetch` seam, installed from
 `REZICS_LOCAL_STACK_NATIVE_ORIGIN`, retrieves only that exact public document from
-native Auth while issuer pages are still deferred. Production URL validation is
+native Auth while issuer pages are still deferred, forwarding jose's GET options
+and rejecting every other URL. Production URL validation is
 unchanged. The local issuer tests use separate migrated Auth databases; kernel tests run
 password signin, token issuance and public JWKS verification over real loopback
 sockets for all three approved hosts.

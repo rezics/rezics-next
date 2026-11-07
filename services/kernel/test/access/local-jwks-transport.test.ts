@@ -69,6 +69,18 @@ test('HTTPS issuers keep production JWKS identity and ignore a leftover native o
   ).toThrow(ConfigError);
 });
 
+test('membership admission refuses JWKS on native Auth loopback port', () => {
+  expect(() =>
+    readMembershipWorkConfig({
+      ...keys,
+      AUTH_ISSUER: 'http://127.0.0.1:20021',
+      AUTH_AUDIENCE: 'https://api.rezics.test',
+      AUTH_JWKS_URL: 'http://127.0.0.1:20022/.well-known/jwks.json',
+      REZICS_LOCAL_STACK_NATIVE_ORIGIN: 'http://127.0.0.1:20022',
+    }),
+  ).toThrow(ConfigError);
+});
+
 test('a malformed native origin is refused before any JWKS request', () => {
   expect(() =>
     localJwksTransport(
