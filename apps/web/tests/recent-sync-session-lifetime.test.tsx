@@ -47,9 +47,10 @@ mock.module('../src/search/recent', () => ({
 const { Window } = await import(
   Bun.resolveSync('happy-dom', dirname(Bun.resolveSync('@puckeditor/core', import.meta.dir)))
 );
-const [{ sessionQuery }, { useRecentSearchSyncAdapter }] = await Promise.all([
+const [{ sessionQuery }, { useRecentSearchSyncAdapter }, { RecentSearchBinding }] = await Promise.all([
   import('../src/session/query'),
   import('../src/search/recent-sync-hook'),
+  import('../src/session/recent-search-binding'),
 ]);
 
 test('same-account session replacement retires late work and resumes its pending visit with current reads', async () => {
@@ -109,7 +110,9 @@ test('same-account session replacement retires late work and resumes its pending
     await act(async () =>
       root.render(
         <QueryClientProvider client={client}>
-          <Owner />
+          <RecentSearchBinding>
+            <Owner />
+          </RecentSearchBinding>
         </QueryClientProvider>,
       ),
     );

@@ -45,6 +45,8 @@ publish React notifications through this same observer without changing speciali
 
 Decision: outage recovery retains only a bounded, query-free local return path in a short-lived HttpOnly login cookie; callback credentials and private query state are never replayed. An indeterminate private route offers explicit session retry and safe sign-in with that same bounded path. Neither action admits a private loader until a current signed-in observation succeeds.
 
+Decision: Recent Search mounts `RecentSearchBinding` beside the Library application boundary. That host supplies the session observer, storage event source, clock and native Recent transport; the Search application does not read `session/query` or `session/browser-state` for this operation.
+
 ## Public module entry
 
 `session/index.ts` is the public browser adapter entry for observation and read/operation/address leases.

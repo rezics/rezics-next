@@ -1,11 +1,20 @@
 import type { SearchScope } from './header-search/types';
 import { isWithinGlobalSearchQueryLimit } from './query-text-limit';
+import {
+  RECENT_HISTORY_LIMIT,
+  RECENT_NATIVE_QUERY_TEXT_LIMIT,
+  RECENT_QUEUE_LIMIT,
+  recentSearchBucket,
+} from './recent-contract';
 
-export const RECENT_HISTORY_LIMIT = 32;
-/** Native Recent query text is still TypeBox maxLength 256 (UTF-16 units). */
-export const NATIVE_RECENT_QUERY_TEXT_LIMIT = 256;
+export {
+  RECENT_HISTORY_LIMIT,
+  RECENT_NATIVE_QUERY_TEXT_LIMIT as NATIVE_RECENT_QUERY_TEXT_LIMIT,
+  recentSearchBucket as recentBucket,
+};
+
 function isAdmittedRecentQuery(query: string): boolean {
-  return isWithinGlobalSearchQueryLimit(query) || query.length <= NATIVE_RECENT_QUERY_TEXT_LIMIT;
+  return isWithinGlobalSearchQueryLimit(query) || query.length <= RECENT_NATIVE_QUERY_TEXT_LIMIT;
 }
 export type RecentEntry = { id: string; query: string; languages?: string[]; scope?: SearchScope; visitedAt: number };
 export type RecentStorage = Pick<Storage, 'getItem' | 'setItem'>;
@@ -24,9 +33,6 @@ export type RecentHistory = {
   remember(query: string, scope?: SearchScope, languages?: readonly string[]): void;
   remove(id: string): void;
 };
-export function recentBucket(state: string, subject?: string | null): string | null {
-  return state === 'signed-out' ? 'anonymous' : state === 'signed-in' && subject ? `account:${subject}` : null;
-}
 export const recentHistoryKey = (bucket: string) => `rezics.search-history.v1:${encodeURIComponent(bucket)}`;
 const kinds = new Set(['Library', 'Collection', 'Realm', 'Zone', 'Agent']);
 function cleanLanguages(value: unknown): string[] | undefined {
@@ -179,7 +185,7 @@ export function readRecentDocument(storage: RecentStorage, bucket: string): Rece
     return {
       entries,
       removed: Array.isArray(raw?.removed)
-        ? raw.removed.filter((id: unknown) => typeof id === 'string').slice(0, 100)
+        ? raw.removed.filter((id: unknown) => typeof id === 'string').slice(0, RECENT_QUEUE_LIMIT)
         : [],
       ...(typeof raw?.clear === 'string' ? { clear: raw.clear } : {}),
       ...(hasNative ? { native: raw.native } : {}),

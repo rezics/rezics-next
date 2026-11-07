@@ -1,4 +1,5 @@
 import { LibraryApplicationBoundary } from '../session/library-application';
+import { RecentSearchBinding } from '../session/recent-search-binding';
 import { QueryClient, QueryClientContext, QueryClientProvider } from '@tanstack/react-query';
 import { useContext, useState, type ReactNode } from 'react';
 
@@ -14,10 +15,11 @@ export function createDefaultReaderQueryClient() {
 export function DefaultReaderProvider({ children }: { children: ReactNode }) {
   const existing = useContext(QueryClientContext);
   const [fallback] = useState(createDefaultReaderQueryClient);
-  if (existing) return <LibraryApplicationBoundary>{children}</LibraryApplicationBoundary>;
-  return (
-    <QueryClientProvider client={fallback}>
-      <LibraryApplicationBoundary>{children}</LibraryApplicationBoundary>
-    </QueryClientProvider>
+  const bound = (
+    <LibraryApplicationBoundary>
+      <RecentSearchBinding>{children}</RecentSearchBinding>
+    </LibraryApplicationBoundary>
   );
+  if (existing) return bound;
+  return <QueryClientProvider client={fallback}>{bound}</QueryClientProvider>;
 }
