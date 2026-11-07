@@ -85,7 +85,7 @@ export class ReviewedCatalogueCommandError extends ImportTransportError {
     const status = problem.status;
     super(status, problem.type, problem.code, problem.retryable === true, undefined, undefined, {
       method: diagnostics.method ?? 'POST',
-      origin: diagnostics.origin,
+      ...(diagnostics.origin === undefined ? {} : { origin: diagnostics.origin }),
       path: diagnostics.path ?? '/v1/subjects:batchWrite',
       phase: diagnostics.phase ?? 'http',
       ...(status === undefined ? {} : { status }),
