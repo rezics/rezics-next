@@ -296,7 +296,8 @@ export type StartedDatabase = {
   url: string;
   /** The database container lets schema dump helpers use docker exec instead of starting another client image. */
   container?: string;
-  remove: () => void | Promise<void>;
+  /** Ordinary callers omit `wait` and prove settlement. Signal handlers pass `false` so a 200ms SIGKILL cannot abort removal. */
+  remove: (wait?: boolean) => void | Promise<void>;
 };
 
 export type TypecheckOptions = CompilerPlacementDependencies & {
@@ -606,35 +607,24 @@ async function withStartedDatabase(
     );
   }
   let removed = false;
-  const remove = async (): Promise<void> => {
+  const remove = async (wait = true): Promise<void> => {
     if (removed) return;
     removed = true;
-    await database.remove();
+    await database.remove(wait);
   };
-  const onSigint = (): void => {
-    void remove()
-      .catch((error) => {
-        console.error(
-          `root typecheck infrastructure failure: compiler database cleanup could not be proven: ${error instanceof Error ? error.message : String(error)}`,
-        );
-      })
-      .finally(() => {
-        state?.discard();
-        process.exit(130);
-      });
+  const abortOwnedCleanup = (status: number): void => {
+    try {
+      void remove(false);
+    } catch (error) {
+      console.error(
+        `root typecheck infrastructure failure: compiler database cleanup could not be proven: ${error instanceof Error ? error.message : String(error)}`,
+      );
+    }
+    state?.discard();
+    process.exit(status);
   };
-  const onSigterm = (): void => {
-    void remove()
-      .catch((error) => {
-        console.error(
-          `root typecheck infrastructure failure: compiler database cleanup could not be proven: ${error instanceof Error ? error.message : String(error)}`,
-        );
-      })
-      .finally(() => {
-        state?.discard();
-        process.exit(143);
-      });
-  };
+  const onSigint = (): void => abortOwnedCleanup(130);
+  const onSigterm = (): void => abortOwnedCleanup(143);
   process.on('SIGINT', onSigint);
   process.on('SIGTERM', onSigterm);
   let result = 75;

@@ -404,6 +404,7 @@ test('ordinary compiler cleanup keeps native status; no-diagnostic compiler fail
     expect(diagnostic).toContain('phase=database-cleanup');
     expect(diagnostic).toContain('compiler status 0');
     expect(diagnostic).toContain('volume remains');
+    expect(readFileSync(new URL('./typecheck.ts', import.meta.url), 'utf8')).toContain('void remove(false)');
   } finally {
     error.mockRestore();
     databaseFixture.remove();

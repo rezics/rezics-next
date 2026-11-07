@@ -72,7 +72,7 @@ check-startup and Auth config assertions already pin native 23, placed 75/124/13
 ordinary cleanup settlement and detached signal cleanup; add no extra suite. Typecheck repair updates Follow,
 contribution-story, public-scope walk and Auth retirement fixtures to current contracts; those assertions stay. Ordinary compiler-database cleanup
 waits for `docker rm -f -v` then inspects the container and labelled volume gone; that error stays beside native
-0/23 and does not become 75. Root's shared-database cleanup uses the same keep-status rule. spawnSync removal waits
+0/23 and does not become 75. Root's shared-database cleanup uses the same keep-status rule, and its SIGINT/SIGTERM handlers pass `wait=false` into that removal. spawnSync removal waits
 in-process; only SIGTERM/SIGINT uses `beginDetachedDockerRm` so a 200ms SIGKILL cannot abort it. `docker run` retries once after spawn
 timeout and nonce reap; that failure stays 75. Labelled reap lists (`ps -aq`) use the run timeout. Combined units
 run after landing.
