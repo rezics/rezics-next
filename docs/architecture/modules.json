@@ -1294,10 +1294,42 @@
       "capabilities": ["account-pages"]
     },
     {
+      "id": "web-performance-verification-contract",
+      "kind": "contract",
+      "owner": "performance",
+      "paths": ["apps/web/src/settings/contract/**"],
+      "publicEntries": ["apps/web/src/settings/contract/verification.ts"],
+      "allowedDependencies": [],
+      "capabilities": ["settings-verification-vocabulary"]
+    },
+    {
+      "id": "web-performance-verification-core",
+      "kind": "core",
+      "owner": "performance",
+      "paths": ["apps/web/src/settings/core/**"],
+      "publicEntries": ["apps/web/src/settings/core/verification.ts"],
+      "allowedDependencies": ["web-performance-verification-contract"],
+      "capabilities": ["settings-verification-rules"]
+    },
+    {
+      "id": "web-performance-verification-application",
+      "kind": "application",
+      "owner": "performance",
+      "paths": ["apps/web/src/settings/application/**"],
+      "publicEntries": ["apps/web/src/settings/application/verification.ts"],
+      "allowedDependencies": ["web-performance-verification-contract", "web-performance-verification-core"],
+      "capabilities": ["settings-verification-use-cases"]
+    },
+    {
       "id": "web-performance",
       "kind": "UI/transport library",
       "owner": "performance",
       "paths": ["apps/web/src/settings/**", "apps/web/src/inbox/**"],
+      "excludes": [
+        "apps/web/src/settings/contract/**",
+        "apps/web/src/settings/core/**",
+        "apps/web/src/settings/application/**"
+      ],
       "publicEntries": [
         "apps/web/src/inbox/index.ts",
         "apps/web/src/settings/auth-management.ts",
@@ -1307,9 +1339,12 @@
         "apps/web/src/settings/ports/profile-editor.ts",
         "apps/web/src/settings/ports/profile-editor-view.ts",
         "apps/web/src/settings/ports/ambient.ts",
+        "apps/web/src/settings/ports/verification.ts",
         "apps/web/src/settings/adapters/accounts-browser.tsx",
         "apps/web/src/settings/adapters/ambient.ts",
         "apps/web/src/settings/adapters/ambient-view.tsx",
+        "apps/web/src/settings/adapters/verification.ts",
+        "apps/web/src/settings/adapters/verification-view.tsx",
         "apps/web/src/settings/managed-account-capabilities.tsx",
         "apps/web/src/settings/ports/library.ts",
         "apps/web/src/settings/adapters/library.ts",
@@ -1328,7 +1363,16 @@
         "apps/web/src/inbox/adapters/content.ts",
         "apps/web/src/inbox/adapters/presentation.tsx"
       ],
-      "allowedDependencies": ["client", "ui", "web-app", "web-content", "web-library", "web-search"],
+      "allowedDependencies": [
+        "client",
+        "ui",
+        "web-app",
+        "web-content",
+        "web-library",
+        "web-performance-verification-application",
+        "web-performance-verification-contract",
+        "web-performance-verification-core"
+      ],
       "capabilities": ["account-settings"]
     },
     {

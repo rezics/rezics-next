@@ -8,19 +8,19 @@ import * as start from '../.storybook/react-start';
 import { personalRead } from '../src/kernel/query';
 import { m } from '../src/paraglide/messages.js';
 import { getServerAsyncLocalStorage, locales, overwriteServerAsyncLocalStorage } from '../src/paraglide/runtime.js';
-import { readVerification, unwrapVerificationRead, VerificationReadError } from '../src/settings/verification-core';
-import type { AgentVerificationRequest } from '../src/settings/verification-core';
+import { readVerification } from '../src/settings/adapters/verification';
 import { createBrowserSettingsAmbient } from '../src/settings/adapters/ambient';
 import { performanceAmbientTree } from './performance-ambient';
+import {
+  unwrapVerificationRead,
+  VerificationReadError,
+  type AgentVerificationRequest,
+  type VerificationSnapshot,
+} from '../src/settings/contract/verification';
+import { VerificationRecovery, canRequestVerification, verificationQueryKey } from '../src/settings/application/verification';
+import { observeVerificationRead } from '../src/settings/verification-recovery';
 
 const settingsAmbient = createBrowserSettingsAmbient();
-import {
-  canRequestVerification,
-  observeVerificationRead,
-  VerificationRecovery,
-  verificationQueryKey,
-  type VerificationSnapshot,
-} from '../src/settings/verification-recovery';
 
 mock.module('@tanstack/react-start', () => start);
 let setupFault: unknown = new Error('Unexpected native read');
