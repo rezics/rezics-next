@@ -1705,7 +1705,10 @@ test('historical reader validates the complete captured closure before importing
   const directory = temporaryDirectory();
   try {
     // Only structural read APIs are installed. No native product/remote module or execution capability is imported.
-    git(directory.path, ['clone', '--shared', '--no-checkout', resolve(import.meta.dir, '../../..'), '.']);
+    const producerRoot = resolve(import.meta.dir, '../../..');
+    git(directory.path, ['clone', '--shared', '--no-checkout', producerRoot, '.']);
+    const producerRef = git(producerRoot, ['symbolic-ref', '--short', 'HEAD']);
+    git(directory.path, ['fetch', '--no-tags', producerRoot, producerRef]);
     git(directory.path, ['config', 'user.name', 'Fixture']);
     git(directory.path, ['config', 'user.email', 'fixture@example.invalid']);
     mkdirSync(join(directory.path, 'scripts'));
