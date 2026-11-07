@@ -7,10 +7,7 @@ import { currentOperationalResources } from '../../command/operational.ts';
 import { createCollectionSource } from '../collection-source.ts';
 import { NativeCollectionWork } from '../collection-native-work.ts';
 import { nativeCollectionOrdinalPageBound } from '../collection-source-native.ts';
-import {
-  readCollectionSourceWorkGroup,
-  readCollectionSourceWorkState,
-} from '../collection-source-work-native.ts';
+import { readCollectionSourceWorkGroup, readCollectionSourceWorkState } from '../collection-source-work-native.ts';
 import { createMembersPreparation } from '../members-preparation.ts';
 import { CANONICAL_SOURCE_RECEIVING_COST } from '../canonical-source-bounds.ts';
 import { COLLECTION_SOURCE_WORK_GROUP_LIMIT } from '../contract/source.ts';
@@ -99,7 +96,10 @@ export function createScopedSearchLibraryOperations(): ScopedSearchLibraryOperat
     }),
     members: Object.freeze({
       createWork: (allowance: WorkAllowance, deadline: number) => new NativeCollectionWork(allowance, deadline),
-      async readWorkDefinition(work: MembersPreparationWorkContext, options: Readonly<{ pool: Pool; access: Access; deadline: number }>) {
+      async readWorkDefinition(
+        work: MembersPreparationWorkContext,
+        options: Readonly<{ pool: Pool; access: Access; deadline: number }>,
+      ) {
         const resources = currentOperationalResources(work.tx);
         return createMembersPreparation({
           pool: resources.pool,

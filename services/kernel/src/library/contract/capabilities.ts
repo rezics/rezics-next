@@ -14,7 +14,6 @@ import type { NestedAdmissionAccount } from './membership.ts';
 import type { WorkAllowance, WorkDimensions, WorkReceipt } from './work-dimensions.ts';
 import type { ProgressOperationCatalog } from './progress-operations.ts';
 
-
 export type IdentityWorkHandle = Readonly<{
   resultByteBound(key: string): number | undefined;
 }>;

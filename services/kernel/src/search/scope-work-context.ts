@@ -108,8 +108,7 @@ export async function readCollectionPublicationScopeWorkDefinition(
   options: WorkOptions,
 ): Promise<CollectionPublicationWorkDefinition> {
   const { tx } = work;
-  if (work.kind !== 'collection-publication' || !hasLiveOperationalTransaction(tx))
-    unready();
+  if (work.kind !== 'collection-publication' || !hasLiveOperationalTransaction(tx)) unready();
   const resources = currentOperationalResources(tx);
   const locator = Object.freeze({
     route: work.locator.route,
@@ -290,11 +289,9 @@ export async function readCollectionKindPreparationWorkDefinition(
   authoritativeTimeValue(time);
   // Library verifies the COMMITTED prepare/repair intent, current audience and exact custody.
   // Neither the Core fence nor the returned definition is a substitute for this admission.
-  if ((await admitCollectionKindPreparationStep(tx, locator, kindContexts.get(work)!.work)) !== true)
-    unready();
+  if ((await admitCollectionKindPreparationStep(tx, locator, kindContexts.get(work)!.work)) !== true) unready();
   const native = await readCollectionKindWorkDefinition(tx, locator, kindContexts.get(work)!.work);
-  if (!hasLiveOperationalTransaction(tx) || Date.now() >= Math.min(options.deadline, resources.deadline))
-    unready();
+  if (!hasLiveOperationalTransaction(tx) || Date.now() >= Math.min(options.deadline, resources.deadline)) unready();
   authoritativeTimeValue(time);
   if (!native) unready();
   const { sourceIdentity: source, observation, identityObservation, custody, repairReceipt } = native;
@@ -368,8 +365,7 @@ async function readMembersDefinition(
   options: Readonly<{ pool: Pool; access: Access; deadline: number; library?: SearchLibraryScopePort }>,
 ): Promise<MembersPreparationWorkDefinition> {
   const { tx } = work;
-  if (work.kind !== 'members-preparation' || !hasLiveOperationalTransaction(tx))
-    unready();
+  if (work.kind !== 'members-preparation' || !hasLiveOperationalTransaction(tx)) unready();
   const resources = currentOperationalResources(tx);
   const locator = Object.freeze({
     route: work.locator.route,
