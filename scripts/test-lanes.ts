@@ -863,16 +863,28 @@ export async function capture(
 }
 
 /** Tests start containers and compilers; under a loaded host Bun's 5 s per-test default fails them at random. */
-export function testCommand(file: string, junitFile: string, preload?: string): string[] {
+export function testCommand(
+  file: string,
+  junitFile: string,
+  preload?: string,
+  testArguments: string[] = [],
+): string[] {
+  const separator = testArguments.indexOf('--');
+  const bunArguments = separator < 0 ? testArguments : testArguments.slice(0, separator);
+  const programArguments = separator < 0 ? [] : testArguments.slice(separator + 1);
+  const hasTimeout = bunArguments.some(
+    (argument) => argument === '--timeout' || argument.startsWith('--timeout=') || argument === '-t' || /^-t\d/u.test(argument),
+  );
   return [
     'test',
     ...(preload ? ['--preload', preload] : []),
-    '--timeout',
-    '60000',
+    ...(hasTimeout ? [] : ['--timeout', '60000']),
     '--reporter=junit',
     `--reporter-outfile=${junitFile}`,
     '--dots',
+    ...bunArguments,
     `./${file}`,
+    ...(separator < 0 ? [] : ['--', ...programArguments]),
   ];
 }
 
@@ -887,6 +899,8 @@ export type LaneSuite = {
   /** The module directory: `bun test` runs here and the timings directory is found from it. */
   directory: string;
   files: string[];
+  /** Additional Bun options from a focused owner command; emitted before the selected file. */
+  testArguments?: string[];
   /** A run of named files merges its timings into the last recorded ones. */
   partial: boolean;
   createDatabase: (database: string) => Promise<void>;
@@ -953,7 +967,7 @@ export async function runLaneSuite(suite: LaneSuite): Promise<{ failed: string[]
       const report = join(reports, `${database}.xml`);
       const result = await capture(
         'bun',
-        testCommand(file, report, preload),
+        testCommand(file, report, preload, suite.testArguments),
         { ...suite.environment(database), ...slot?.env },
         suite.directory,
         { file, ...fileBounds(latest[file]), ...(latest[file] ? { record: latest[file] } : {}) },
