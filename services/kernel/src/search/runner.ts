@@ -21,7 +21,7 @@ import { resolveDiscoveryOwnerAdapters } from './discovery-owner-registry.ts';
 import { discoveryIndexName, discoveryIndexUuid } from './indices.ts';
 import type { PublicPreparation } from './public-preparation.ts';
 import type { Pool } from 'pg';
-import { startRelays } from '../events/relays.ts';
+import { relayConcurrencyForPool, startRelays } from '../events/relays.ts';
 import {
   OpenSearchError,
   SearchUnavailableError,
@@ -364,13 +364,20 @@ export function startDiscoveryIndexing(options: {
   producers?: DiscoveryProducerEntry;
   reviewSource?: ReviewDiscoverySource;
 }) {
-  const receivers = new Map<number, ReturnType<typeof createReviewDiscoveryReceiving>>();
-  const incarnations = new Map<number, string>();
-  const relays = new Map<number, ReturnType<typeof startRelays>>();
+  const configuredConcurrency = options.concurrency ?? 2;
+  if (!Number.isInteger(configuredConcurrency) || configuredConcurrency < 1)
+    throw new RangeError('concurrency must be a positive integer below the pool size');
+  const relayConcurrency = Math.min(configuredConcurrency, relayConcurrencyForPool(options.pool));
+  type Installation = {
+    bindings: Map<number, string>;
+    receivers: Map<number, ReturnType<typeof createReviewDiscoveryReceiving>>;
+    relay: ReturnType<typeof startRelays>;
+  };
+  let installation: Installation | undefined;
   let stopped = false,
     paused = false,
-    timer: ReturnType<typeof setTimeout> | undefined;
-  let running = Promise.resolve(),
+    timer: ReturnType<typeof setTimeout> | undefined,
+    running = Promise.resolve(),
     pauseDrain = Promise.resolve(),
     resumeAfter: Promise<void> | undefined,
     closing: Promise<void> | undefined,
@@ -420,30 +427,52 @@ export function startDiscoveryIndexing(options: {
       !readiness && generations.some((row) => !['active', 'retiring', 'quarantined'].includes(row.state))
         ? 0
         : (options.intervalMs ?? 100);
-    for (const target of generations) {
-      if (stopped || paused) return;
-      if (!target.uuid || ['allocated', 'retired', 'quarantined', 'retiring'].includes(target.state)) continue;
-      const binding = `${target.uuid}:${target.incarnation}`;
-      if (incarnations.has(target.generation) && incarnations.get(target.generation) !== binding) {
-        await relays.get(target.generation)?.stop();
-        relays.delete(target.generation);
-        receivers.delete(target.generation);
-      }
-      if (!relays.has(target.generation)) {
-        incarnations.set(target.generation, binding);
+
+    const relayTargets = generations.filter(
+      (target): target is DiscoveryGeneration & { uuid: string } =>
+        Boolean(target.uuid) && !['allocated', 'retired', 'quarantined', 'retiring'].includes(target.state),
+    );
+    const bindings = new Map<number, string>(
+      relayTargets.map((target) => [target.generation, target.uuid + ':' + target.incarnation]),
+    );
+    const sameBindings =
+      installation !== undefined &&
+      bindings.size === installation.bindings.size &&
+      [...bindings].every(([generation, binding]) => installation!.bindings.get(generation) === binding);
+
+    if (relayTargets.length > 0 && !sameBindings) {
+      // Prepare the complete replacement before stopping the current relay set. A
+      // failed projection leaves the installed generations owned and running.
+      const prepared: {
+        target: (typeof relayTargets)[number];
+        projection: ReturnType<typeof createDiscoveryProjection>;
+        relay: ReturnType<typeof createDiscoveryIndexer>;
+      }[] = [];
+      for (const target of relayTargets) {
+        if (stopped || paused) return;
         const projection = createDiscoveryProjection({
           ...options,
           target,
           registry,
           ...(metadataProducers ? { metadataProducers } : {}),
         });
+        prepared.push({
+          target,
+          projection,
+          relay: createDiscoveryIndexer(options.pool, projection, discoveryConsumer(options.prefix, target.generation)),
+        });
+      }
+
+      const nextReceivers = new Map<number, ReturnType<typeof createReviewDiscoveryReceiving>>();
+      for (const { target, projection } of prepared) {
+        if (stopped || paused) return;
         if (
           reviewSource &&
           registry.ownerAdapters?.review?.readiness === 'ready' &&
           (await projection.hasMetadataPopulation?.('review'))
         ) {
           if (stopped || paused) return;
-          receivers.set(
+          nextReceivers.set(
             target.generation,
             createReviewDiscoveryReceiving({
               ...options,
@@ -452,48 +481,43 @@ export function startDiscoveryIndexing(options: {
             }),
           );
         }
-        relays.set(
-          target.generation,
-          startRelays(
-            options.pool,
-            [createDiscoveryIndexer(options.pool, projection, discoveryConsumer(options.prefix, target.generation))],
-            {
-              paused,
-              intervalMs: options.intervalMs ?? 100,
-              concurrency: options.concurrency ?? 2,
-            },
-          ),
-        );
       }
+      if (stopped || paused) return;
+
+      // All generations sharing this Pool share one relay budget. Per-generation
+      // supervisors could each pass the local pool guard while exhausting the
+      // connection reserved for source reads, receiving and lifecycle commands.
+      const previous = installation;
+      if (previous) await previous.relay.stop();
+      if (installation === previous) installation = undefined;
+      if (stopped) return;
+      const relay = startRelays(
+        options.pool,
+        prepared.map(({ relay }) => relay),
+        { paused, intervalMs: options.intervalMs ?? 100, concurrency: relayConcurrency },
+      );
+      installation = { bindings, receivers: nextReceivers, relay };
+    } else if (relayTargets.length === 0 && installation) {
+      const previous = installation;
+      await previous.relay.stop();
+      if (installation === previous) installation = undefined;
     }
+
     // One finite current-review page per live target, sharing this supervisor's lifecycle and transport.
     for (const target of generations) {
       if (stopped || paused) return;
       if (target.uuid && !['allocated', 'retiring', 'retired', 'quarantined'].includes(target.state))
-        await receivers.get(target.generation)?.next();
+        await installation?.receivers.get(target.generation)?.next();
     }
     if (stopped || paused) return;
     for (const target of generations.filter((row) => row.state === 'retiring')) {
       if (stopped || paused) return;
-      await relays.get(target.generation)?.stop();
-      relays.delete(target.generation);
-      receivers.delete(target.generation);
-      incarnations.delete(target.generation);
       await retireDiscovery(
         options.pool,
         options.search,
         target,
         generations.find((row) => row.state === 'active'),
       );
-    }
-    for (const [generation, relay] of relays) {
-      if (stopped || paused) return;
-      if (!generations.some((row) => row.generation === generation && row.state !== 'quarantined')) {
-        await relay.stop();
-        relays.delete(generation);
-        receivers.delete(generation);
-        incarnations.delete(generation);
-      }
     }
     if (readiness) throw readiness;
   };
@@ -521,12 +545,12 @@ export function startDiscoveryIndexing(options: {
       paused = true;
       resumeAfter = undefined;
       clearSchedule();
-      const projection = Promise.all([...relays.values()].map((relay) => relay.pause()));
+      const projection = installation?.relay.pause() ?? Promise.resolve();
       // Finish in-flight maintenance and relay drains, then apply the current
       // pause intent to every retained or newly created relay.
       pauseDrain = Promise.all([running, projection]).then(async () => {
         if (stopped) return;
-        await Promise.all([...relays.values()].map((relay) => relay.pause()));
+        await installation?.relay.pause();
       });
       return pauseDrain;
     },
@@ -539,7 +563,7 @@ export function startDiscoveryIndexing(options: {
           if (stopped || resumeAfter !== after) return;
           resumeAfter = undefined;
           paused = false;
-          for (const relay of relays.values()) relay.resume();
+          installation?.relay.resume();
           schedule(0);
         },
         (error) => {
@@ -555,10 +579,8 @@ export function startDiscoveryIndexing(options: {
       resumeAfter = undefined;
       clearSchedule();
       return (closing = running.then(async () => {
-        await Promise.all([...relays.values()].map((relay) => relay.stop()));
-        relays.clear();
-        receivers.clear();
-        incarnations.clear();
+        await installation?.relay.stop();
+        installation = undefined;
       }));
     },
   };
