@@ -1,4 +1,4 @@
-import type { DataType, RelationDefinition, Release } from '@rezics/definitions';
+import type { DataType, RelationDefinition, Release } from '@rezics/definitions/contract';
 import { checkSubjectStructure, type Violation } from '@rezics/definitions/validate';
 import {
   ITEM_FACT_LIMIT,

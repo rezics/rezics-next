@@ -1,4 +1,4 @@
-import type { Release } from '@rezics/definitions';
+import type { Release } from '@rezics/definitions/contract';
 
 type SubjectIdentity = { type: string; release: string };
 type CatalogueMetadata = {
