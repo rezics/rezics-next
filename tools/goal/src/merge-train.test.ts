@@ -127,7 +127,7 @@ describe('sequential integration', () => {
       ]);
       expect(git(second.worktree, 'rev-parse', 'HEAD')).toBe(original);
       expect(git(s.main, 'symbolic-ref', 'HEAD')).toBe('refs/heads/main');
-      expect(git(s.main, 'worktree', 'list', '--porcelain')).not.toMatch(/\/train-[0-9a-f-]{36}/);
+      expect(git(s.main, 'worktree', 'list', '--porcelain')).not.toContain(`worktree ${s.options.worktreeRoot}/`);
       expect(readFileSync(join(s.main, 'a'), 'utf8')).toBe('a');
       expect(readFileSync(join(s.main, 'b'), 'utf8')).toBe('b');
     } finally {
