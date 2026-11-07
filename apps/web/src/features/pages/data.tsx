@@ -34,6 +34,7 @@ import * as accounts from './account';
 import { accountOf } from './account-profile-reading';
 import * as overview from './overview';
 import { ScreenReadingBinding } from './screen-reading-binding';
+import { CharacterReadingBinding } from './character-reading-binding';
 import { SubjectPageCover } from './subject-page-cover';
 import { SubjectArtwork, SubjectArtworkBoundary } from '../catalogue/subject-artwork/view';
 import { CharacterRelationshipsSlot, SubjectPurchaseSlot } from './subject-slots';
@@ -1156,30 +1157,32 @@ export function PageData({
         label={overviewSubjectLabel || resolved.unlabelled}
       >
         <overview.OverviewRoot value={overviewValue} PageValue={CandidateValue}>
-          <TypeListContext.Provider
-            value={{
-              ...(listTarget ? { target: listTarget } : {}),
-              ...(fullList ? { full: fullList } : {}),
-              ...(listCursor !== undefined ? { cursor: listCursor } : {}),
-              ...(listHref ? { listHref } : {}),
-              ...(memberHref ? { memberHref } : {}),
-            }}
-          >
-            <PageContext.Provider
+          <CharacterReadingBinding>
+            <TypeListContext.Provider
               value={{
-                locale,
-                messages: resolved,
-                nodes,
-                subject,
-                agentHeader: profile !== undefined,
-                sources,
-                link,
-                ...(zoneRatio ? { ratio: zoneRatio } : {}),
+                ...(listTarget ? { target: listTarget } : {}),
+                ...(fullList ? { full: fullList } : {}),
+                ...(listCursor !== undefined ? { cursor: listCursor } : {}),
+                ...(listHref ? { listHref } : {}),
+                ...(memberHref ? { memberHref } : {}),
               }}
             >
-              {children}
-            </PageContext.Provider>
-          </TypeListContext.Provider>
+              <PageContext.Provider
+                value={{
+                  locale,
+                  messages: resolved,
+                  nodes,
+                  subject,
+                  agentHeader: profile !== undefined,
+                  sources,
+                  link,
+                  ...(zoneRatio ? { ratio: zoneRatio } : {}),
+                }}
+              >
+                {children}
+              </PageContext.Provider>
+            </TypeListContext.Provider>
+          </CharacterReadingBinding>
         </overview.OverviewRoot>
       </SubjectArtworkBoundary>
     </StatementReadingBinding>

@@ -1,16 +1,7 @@
-import type { ConnectionStream } from '../../pages/subject-connections';
+import { characterWorkStream, type CharacterConnectionStream, type CharacterWorkKind } from '../character-reading-port';
 
-export type CharacterWorkKind = 'appearance' | 'performance';
+export type { CharacterWorkKind };
+export type CharacterWorkStream = CharacterConnectionStream;
 
 /** Only streams already admitted by the current release enter this presentation. No inverse aliases. */
-export function characterWorkStream(stream: ConnectionStream, character: string): CharacterWorkKind | undefined {
-  if (stream.direction !== 'in') return;
-  if (stream.group === 'characters' && stream.property === 'schema:character' && !stream.filter) return 'appearance';
-  if (
-    stream.group === 'credits' &&
-    stream.property === 'wdt:P725' &&
-    stream.qualifier === 'wdt:P453' &&
-    stream.filter === character
-  )
-    return 'performance';
-}
+export { characterWorkStream };

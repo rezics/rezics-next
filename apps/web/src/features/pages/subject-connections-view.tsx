@@ -12,7 +12,12 @@ import {
 import { Button } from '@rezics/ui/shadcn/button';
 import { NativeSelect, NativeSelectOption } from '@rezics/ui/shadcn/native-select';
 import { m } from '../../paraglide/messages.js';
-import { CharacterAssociationBinding } from '../catalogue/character-public-reading/bridge';
+import {
+  CharacterAssociationBinding,
+  CharacterWorkRows,
+  characterWorkStream,
+} from '../catalogue/character-reading-application';
+import { CharacterReadingBinding } from './character-reading-binding';
 import { PlainLink } from './shared';
 import { CoverList } from './cover-list';
 import { SpoilerGate } from './values';
@@ -46,8 +51,6 @@ import {
 import { directedWorkRelations } from './showcase-work/model';
 import { WorkRelation } from './showcase-work/relation';
 import { useSubjectCommunityReading } from './subject-community-lifetime';
-import { characterWorkStream } from '../catalogue/character-work-visit/model';
-import { CharacterWorkRows } from '../catalogue/character-work-visit/view';
 import { CharacterIdentityVisit } from '../catalogue/character-identity-visit/view';
 import { identityProperty } from '../catalogue/character-relationships/reading';
 
@@ -152,18 +155,20 @@ export function SubjectConnections({
     };
   }
   return (
-    <CharacterAssociationBinding source={page} window={incarnation.current!.window}>
-      <ConnectionsReading
-        key={incarnation.current!.serial}
-        window={incarnation.current!.window}
-        character={character}
-        ready={ready}
-        unavailable={viewer.state === 'unavailable' || !lifetime.available}
-        returnTo={subjectVisitReturn(returnTo, value.locale)}
-        resume={incarnation.current!.resume}
-        retiredReturn={incarnation.current!.retiredReturn}
-      />
-    </CharacterAssociationBinding>
+    <CharacterReadingBinding>
+      <CharacterAssociationBinding source={page} window={incarnation.current!.window}>
+        <ConnectionsReading
+          key={incarnation.current!.serial}
+          window={incarnation.current!.window}
+          character={character}
+          ready={ready}
+          unavailable={viewer.state === 'unavailable' || !lifetime.available}
+          returnTo={subjectVisitReturn(returnTo, value.locale)}
+          resume={incarnation.current!.resume}
+          retiredReturn={incarnation.current!.retiredReturn}
+        />
+      </CharacterAssociationBinding>
+    </CharacterReadingBinding>
   );
 }
 

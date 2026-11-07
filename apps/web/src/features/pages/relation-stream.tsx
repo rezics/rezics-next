@@ -11,7 +11,7 @@ import { subjectViewHref } from '../../subject/subject-href';
 import { workCastVisitReturn } from './subject-visit-navigation';
 import { sessionQuery } from '../../session/query';
 import { CoverList } from './cover-list';
-import { creditVisit } from '../catalogue/credit-inspection/model';
+import { creditVisit } from '../catalogue/character-reading-application';
 import {
   holderItems,
   pageRepresentation,

@@ -1,11 +1,12 @@
-import type { ConnectionRead } from '../../pages/subject-connections-window';
-import type { ConnectionStream, ConnectionVisit } from '../../pages/subject-connections';
-import { connectionStreams } from '../../pages/subject-connections';
-import type { OverviewValue } from '../../pages/overview';
 import { PlainLink } from '../../pages/shared';
 import { defaultReader } from '../../../subject/reader';
 import { peopleFactsExample } from '../people-facts/examples';
-import type { GuideRelease } from '../definition-guide';
+import type {
+  CharacterConnectionRead,
+  CharacterConnectionStream,
+  CharacterConnectionVisit,
+  CharacterPage,
+} from '../character-reading-port';
 
 const id = (n: number) => `00000000-0000-4000-8000-${String(n).padStart(12, '0')}`;
 const snak = (property: string, content: unknown, data_type = 'wikibase-item') => ({
@@ -21,6 +22,31 @@ const summary = (key: string, label: string, type = 'schema:Person') => ({
   cover: null,
 });
 
+function characterStreams(character: string): CharacterConnectionStream[] {
+  return [
+    {
+      key: 'in:schema:character',
+      property: 'schema:character',
+      direction: 'in',
+      group: 'characters',
+      label: 'Work appearances',
+      forwardLabel: 'Character',
+      language: 'en',
+    },
+    {
+      key: 'in:wdt:P725:qualified',
+      property: 'wdt:P725',
+      direction: 'in',
+      group: 'credits',
+      label: 'Voice performances',
+      forwardLabel: 'Voice actor',
+      language: 'en',
+      filter: character,
+      qualifier: 'wdt:P453',
+    },
+  ];
+}
+
 /** Illustrative native-shaped inputs; the seeded database remains independent publication evidence. */
 export function characterPublicExample(
   locale = 'en',
@@ -30,10 +56,8 @@ export function characterPublicExample(
   profile.read.subject.statements = {};
   profile.read.subject.labels = { ja: '牧瀬紅莉栖', 'zh-Hant': '牧瀨紅莉栖', en: 'Kurisu Makise' };
   const character = profile.read.subject.id;
-  const streams = connectionStreams(profile.release as GuideRelease, 'wd:Q95074', character, locale).filter(
-    (stream) => stream.property === 'schema:character' || stream.qualifier === 'wdt:P453',
-  );
-  const row = (stream: ConnectionStream, second: boolean) => ({
+  const streams = characterStreams(character);
+  const row = (stream: CharacterConnectionStream, second: boolean) => ({
     subject: id(2),
     statement: id(second ? 11 : stream.group === 'characters' ? 10 : 20),
     property: stream.property,
@@ -57,7 +81,7 @@ export function characterPublicExample(
       [id(4)]: summary(id(4), '今井麻美'),
     },
   });
-  const visit = (second = false): Extract<ConnectionVisit, { ok: true }> => ({
+  const visit = (second = false): Extract<CharacterConnectionVisit, { ok: true }> => ({
     ok: true,
     id: character,
     release: profile.read.subject.release,
@@ -85,7 +109,7 @@ export function characterPublicExample(
       ]),
     ),
   });
-  const read: ConnectionRead = async (address) => {
+  const read: CharacterConnectionRead = async (address) => {
     const cursorOf = (group: string) => address.selection?.[group as 'characters' | 'credits']?.cursor;
     const result = visit(
       Boolean(address.only ? cursorOf(address.only) : cursorOf('characters') || cursorOf('credits')),
@@ -111,7 +135,7 @@ export function characterPublicExample(
     }
     return result;
   };
-  const value = {
+  const value: CharacterPage = {
     subject: character,
     subjectLabel: 'Kurisu Makise',
     locale,
@@ -121,9 +145,8 @@ export function characterPublicExample(
     unlabelled: 'Unlabelled',
     spoilerShow: 'Reveal',
     relations: {},
-    sections: new Map(),
     relationNodes: [],
     releaseDigest: profile.read.subject.release,
-  } as unknown as OverviewValue;
+  };
   return { profile, value, read, visit, streams };
 }

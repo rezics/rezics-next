@@ -1356,7 +1356,9 @@
         "apps/web/src/features/catalogue/manga-reader/navigation.ts",
         "apps/web/src/features/catalogue/screen-reading-port.ts",
         "apps/web/src/features/catalogue/screen-reading-application.tsx",
-        "apps/web/src/features/catalogue/page-render-binding.tsx"
+        "apps/web/src/features/catalogue/page-render-binding.tsx",
+        "apps/web/src/features/catalogue/character-reading-port.ts",
+        "apps/web/src/features/catalogue/character-reading-application.tsx"
       ],
       "allowedDependencies": [
         "client",
