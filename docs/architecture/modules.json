@@ -566,7 +566,8 @@
         "services/kernel/src/library/contract/work-dimensions.ts",
         "services/kernel/src/library/contract/continue.ts",
         "services/kernel/src/library/contract/index.ts",
-        "services/kernel/src/library/contract/collection-policy.ts"
+        "services/kernel/src/library/contract/collection-policy.ts",
+        "services/kernel/src/library/contract/semantic-observation.ts"
       ],
       "allowedDependencies": [],
       "capabilities": []
@@ -620,7 +621,8 @@
         "services/kernel/src/library/zone-collection-adapter.ts",
         "services/kernel/src/library/members-preparation-source-declaration.ts",
         "services/kernel/src/library/command-support.ts",
-        "services/kernel/src/library/shelf-reader-unavailable.ts"
+        "services/kernel/src/library/shelf-reader-unavailable.ts",
+        "services/kernel/src/library/semantic-observation.ts"
       ],
       "allowedDependencies": [
         "access-policy",
@@ -806,7 +808,8 @@
         "services/kernel/src/semantic/identity-adapters/identity-epoch-read.ts",
         "services/kernel/src/semantic/erasure-producer.ts",
         "services/kernel/src/semantic/public-filter-source-binding.ts",
-        "services/kernel/src/semantic/public-filter-source.ts"
+        "services/kernel/src/semantic/public-filter-source.ts",
+        "services/kernel/src/semantic/library-observation.ts"
       ],
       "allowedDependencies": [
         "bounds",
@@ -2119,9 +2122,10 @@
         "services/kernel/src/semantic/contract/subject-values.ts",
         "services/kernel/src/semantic/contract/summaries.ts",
         "services/kernel/src/semantic/contract/index.ts",
-        "services/kernel/src/semantic/contract/global-context.ts"
+        "services/kernel/src/semantic/contract/global-context.ts",
+        "services/kernel/src/semantic/contract/library-observation.ts"
       ],
-      "allowedDependencies": ["definitions"],
+      "allowedDependencies": ["definitions", "kernel-library-contract"],
       "capabilities": ["semantic-contract"]
     },
     {

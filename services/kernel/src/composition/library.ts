@@ -1,5 +1,6 @@
 import { createNativeCopyAccountAdmission } from '../access/adapters/index.ts';
 import { nativeReleasedDefinitions, nativeCopyListContext } from '../semantic/adapters/index.ts';
+import { createLibraryObservationApplication } from '../semantic/index.ts';
 import {
   createLibrarySubjectIdentityAdapter,
   observeLibrarySubjectSummaries,
@@ -69,6 +70,7 @@ import {
   bindLibraryDomain,
   bindLibraryPresentation,
   peekLibraryDomain,
+  peekLibraryPresentation,
   requireLibraryDomain,
   unbindLibraryDomain,
 } from '../library/domain-binding.ts';
@@ -249,13 +251,14 @@ function stubSource(): PreparedCollectionSource {
   };
 }
 
-function nativeLibraryPresentation() {
+function nativeLibraryPresentation(semanticObservations: LibraryCapabilities['semanticObservations']) {
   return createNativeLibraryPresentation({
-    identity: createLibrarySubjectIdentityAdapter(),
-    readMappings: readLibraryIdentityMappings,
+    semanticObservations,
+    identity: createLibrarySubjectIdentityAdapter(semanticObservations),
+    readMappings: (pool, ids) => readLibraryIdentityMappings(semanticObservations, pool, ids),
     accountEligibility: createLibraryAccountEligibilityAdapter(),
     createResourcePublicEligibility,
-    observeSubjects: observeLibrarySubjectSummaries,
+    observeSubjects: (context, ids) => observeLibrarySubjectSummaries(semanticObservations, context, ids),
     observeAccount: observeLibraryPublicAccount,
     observeAttributions: observeLibraryAttributions,
     observeSpace: observeLibrarySpaceSummary,
@@ -264,10 +267,17 @@ function nativeLibraryPresentation() {
 
 /** Preloads install the same native presentation as server/worker without a placeholder Collection Source. */
 export function composeLibraryPresentation(): void {
-  bindLibraryPresentation(nativeLibraryPresentation());
+  const semanticObservations = peekLibraryDomain()?.semanticObservations ?? createLibraryObservationApplication();
+  bindLibraryPresentation(nativeLibraryPresentation(semanticObservations));
 }
 
 export function composeLibraryDomain(options: LibraryComposeOptions = {}): ReturnType<typeof bindLibraryDomain> {
+  const previous = peekLibraryDomain();
+  const semanticObservations =
+    options.capabilities?.semanticObservations ??
+    previous?.semanticObservations ??
+    peekLibraryPresentation()?.semanticObservations ??
+    createLibraryObservationApplication();
   const identityNative =
     options.capabilities?.identityNative ?? createIdentityNativeApplication(createIdentityNativeCatalog());
   const sourceCapture =
@@ -304,6 +314,7 @@ export function composeLibraryDomain(options: LibraryComposeOptions = {}): Retur
   if (options.access !== undefined) extras.access = options.access;
   if (options.routeKey !== undefined) extras.routeKey = options.routeKey;
   const capabilities: LibraryCapabilities & { search?: unknown; access?: unknown; routeKey?: Uint8Array } = {
+    semanticObservations,
     authorization:
       options.capabilities?.authorization ??
       createAuthorizationAdapter({ access: options.access, pool: options.pool, ports: nativeAuthorizationPorts() }),
@@ -378,7 +389,6 @@ export function composeLibraryDomain(options: LibraryComposeOptions = {}): Retur
       options.capabilities?.accountAdmission ?? sumAdmission([admissionTerm('composition', { statements: 1 })]),
     ...extras,
   };
-  const previous = peekLibraryDomain();
   return bindLibraryDomain({
     ...createLibraryApplications(capabilities),
     copyContext: nativeCopyListContext(),
@@ -387,7 +397,7 @@ export function composeLibraryDomain(options: LibraryComposeOptions = {}): Retur
         account: createNativeCopyAccountAdmission(config),
         definitions: nativeReleasedDefinitions(),
       }),
-    presentation: nativeLibraryPresentation(),
+    presentation: nativeLibraryPresentation(semanticObservations),
     followCounts: nativeFollowCountRuntime(),
     preparationWork: options.preparationWork ?? previous?.preparationWork ?? createLibraryPreparationWork,
     scopeWork: options.scopeWork ?? previous?.scopeWork ?? nativeLibraryScopeWork,

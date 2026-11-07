@@ -7,6 +7,13 @@ import type { AuthoritativeTime } from '../../command/command.ts';
 import type { KeyRing } from '../../tokens/seal.ts';
 import type { ContributionAttribution } from '../../access/contract/index.ts';
 import type { SubjectSummary, IdentityMapping } from '../../semantic/contract/index.ts';
+import type { LibrarySubjectIdentityAdapter } from '../../semantic/adapters/index.ts';
+import type {
+  LibrarySemanticObservationCapability,
+  LibrarySemanticSummaryObservation,
+} from '../contract/semantic-observation.ts';
+import { consumeFollowWork } from '../follow-operation-bounds.ts';
+import { semanticObservationBound } from '../semantic-observation.ts';
 import type { createResourcePublicEligibility } from '../../access/adapters/index.ts';
 import { currentCommandWorkAssociation } from '../../command/work-context.ts';
 import { ProblemError } from '../../http/problem-error.ts';
@@ -21,7 +28,6 @@ import type {
   CurrentObservation,
   LibraryAccountSummary,
   LibraryTargetSummary,
-  SubjectIdentityCapability,
   FollowingSpaceProjection,
 } from '../contract/index.ts';
 import { createCollectionReads } from '../collection-reads.ts';
@@ -52,17 +58,18 @@ type SummaryContext = {
 
 /** Composition supplies real foreign adapters; this host owns no producer implementation or fallback. */
 export type NativeLibraryPresentationPorts = {
-  identity: SubjectIdentityCapability<LibraryIdentityContext, IdentityMapping>;
-  readMappings(pool: Pool, ids: readonly string[]): Promise<readonly IdentityMapping[]>;
+  semanticObservations: LibrarySemanticObservationCapability;
+  identity: LibrarySubjectIdentityAdapter;
+  readMappings(
+    pool: Pool,
+    ids: readonly string[],
+  ): Promise<import('../contract/semantic-observation.ts').LibrarySemanticObservationResult<readonly IdentityMapping[]>>;
   accountEligibility: CurrentAccountEligibilityCapability<Pick<PoolClient, 'query'>>;
   createResourcePublicEligibility: typeof createResourcePublicEligibility;
   observeSubjects(
     context: SummaryContext,
     ids: readonly string[],
-  ): Promise<{
-    summaries: ReadonlyMap<string, SubjectSummary | null>;
-    current(): Promise<boolean>;
-  }>;
+  ): Promise<import('../contract/semantic-observation.ts').LibrarySemanticObservationResult<LibrarySemanticSummaryObservation>>;
   observeAccount(pool: Pool, id: string, deadline: number): Promise<CurrentObservation<LibraryAccountSummary | null>>;
   observeAttributions(
     pool: Pool,
@@ -80,12 +87,67 @@ export type NativeLibraryPresentationPorts = {
 };
 
 export function createNativeLibraryPresentation(ports: NativeLibraryPresentationPorts) {
+  const identity: LibrarySubjectIdentityAdapter = {
+    ...ports.identity,
+    async readMappings(context, ids) {
+      const observed = await consumeFollowWork(
+        'identity.mapping',
+        semanticObservationBound(ports.semanticObservations.follow.mappingWork(ids)),
+        () => ports.semanticObservations.follow.readMappings(context.pool, ids),
+        (result) => semanticObservationBound(result.work),
+      );
+      return observed.value as readonly IdentityMapping[];
+    },
+    async prepareReference(context, id) {
+      const read = await ports.identity.prepareReference(context, id);
+      return async () => {
+        const observed = await consumeFollowWork(
+          'identity.reference',
+          semanticObservationBound(ports.semanticObservations.follow.subjectReferenceWork(id)),
+          read,
+          (result) => semanticObservationBound(result.work),
+        );
+        const { work: _work, ...value } = observed;
+        return value;
+      };
+    },
+  };
+  async function observeSubjects(context: SummaryContext, ids: readonly string[]) {
+    const observed = await consumeFollowWork(
+      'identity.summary',
+      semanticObservationBound(ports.semanticObservations.follow.subjectSummaryWork(ids)),
+      () => ports.observeSubjects(context, ids),
+      (result) => semanticObservationBound(result.work),
+    );
+    return {
+      summaries: observed.value.summaries as ReadonlyMap<string, SubjectSummary | null>,
+      current: async () => {
+        const current = await consumeFollowWork(
+          'identity.summary.current',
+          semanticObservationBound(ports.semanticObservations.follow.subjectSummaryCurrentWork(ids)),
+          () => observed.value.current(),
+          (result) => semanticObservationBound(result.work),
+        );
+        return current.value;
+      },
+    };
+  }
+  const readMappings = async (pool: Pool, ids: readonly string[]) => {
+    const observed = await consumeFollowWork(
+      'identity.mapping',
+      semanticObservationBound(ports.semanticObservations.follow.mappingWork(ids)),
+      () => ports.readMappings(pool, ids),
+      (result) => semanticObservationBound(result.work),
+    );
+    return observed.value;
+  };
   return {
+    semanticObservations: ports.semanticObservations,
     builtins: (config: Parameters<typeof createNativeBuiltinRuntime>[1]) => createNativeBuiltinRuntime(ports, config),
     builtinOriginalInputs: (pool: Pool, accountId: string, after: string | null, limit: number) =>
       readNativeBuiltinOriginalInputs(ports, pool, accountId, after, limit),
-    identity: createSubjectAnchorApplication(ports.identity),
-    readMappings: ports.readMappings,
+    identity: createSubjectAnchorApplication(identity),
+    readMappings,
     admitOwner: createBuiltinOwnerAdmission(ports.accountEligibility),
     fullMembers(
       deps: LibraryPresentationDependencies,
@@ -118,7 +180,7 @@ export function createNativeLibraryPresentation(ports: NativeLibraryPresentation
       const unavailable = () => new ProblemError('dependency_unavailable');
       const withholdChangedSource = options.follow === true || options.withholdChangedSource === true;
       const subjects = createSubjectPresentationApplication(ports.identity, {
-        observe: (ids) => ports.observeSubjects(context, ids),
+        observe: (ids) => observeSubjects(context, ids),
         unavailable,
       });
       const full = createLibraryPresentationApplication<SubjectSummary, ContributionAttribution>({

@@ -166,6 +166,8 @@ export {
   recordPrivacyReduction,
 } from './public-filter-source.ts';
 export type * from './public-filter-source-contract.ts';
+export { createLibraryObservationApplication } from './library-observation.ts';
+export type { LibraryObservationProvider } from './contract/library-observation.ts';
 export {
   bindSourceBindingApplication,
   createSourceBindingApplication,
