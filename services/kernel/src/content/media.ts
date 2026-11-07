@@ -25,8 +25,10 @@ import {
 import { GrantDeniedError } from '../access/contract/index.ts';
 import { AccessUnavailableError } from '../access/unavailable.ts';
 import { withConnection, discardConnection } from '../database/pool.ts';
-import { ProblemError } from '../http/problem.ts';
-import { accessCheck, accessCommandAuthorization, AuthenticationError, type AccessCheck } from '../request/access.ts';
+import { ProblemError } from '../http/problem-error.ts';
+import { accessCheck, accessCommandAuthorization } from './access-port.ts';
+import { AuthenticationError } from '../access/contract/authentication.ts';
+import type { AccessCheck } from '../request/access.ts';
 import { deadlineFor } from '../request/deadline.ts';
 import { readPartition } from '../partition/partition.ts';
 import { newId, partitionOf, routeOf } from '../route/route.ts';

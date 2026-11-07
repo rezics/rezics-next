@@ -3,7 +3,7 @@ import type { PoolClient } from 'pg';
 import { deadlineClient, within } from './access-port.ts';
 import { CommandUnavailableError } from '../access/unavailable.ts';
 import { withConnection } from '../database/pool.ts';
-import { ProblemError } from '../http/problem.ts';
+import { ProblemError } from '../http/problem-error.ts';
 import { readPartition } from '../partition/partition.ts';
 import type { Actor } from '../request/access.ts';
 import { partitionOf, routeOf } from '../route/route.ts';

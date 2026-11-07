@@ -1,6 +1,12 @@
 # Content
 
-Decision: Content consumes cyclic Access behavior through its own `ContentAccessPort`; server, worker and test composition bind the native Access producer before use. Forwarders retain the exact native generic and opaque-evidence signatures through type-only imports, resolve the current binding per call, and preserve returned values and thrown errors. Shared refusal constructors live in the Access contract with identity-preserving compatibility exports. Architecture and type checking are acceptance for this behavior-preserving migration; focused port tests run after integration.
+Decision: Content imports HTTP problem vocabulary, schemas, headers and Idempotency-Key decoding from their defining
+leaves, command request digests from `command/request.ts`, and the authentication error constructor from the Access
+contract. Request-facing authorization, actor resolution and prepared read checks use Content's existing
+`ContentAccessPort`; native composition forwards the original arguments, opaque evidence, return values and errors.
+Compatibility exports preserve constructor identity and the sole prepared-work registry remains in
+`request/access-check.ts`. Architecture and workspace typing are acceptance for this behavior-preserving migration;
+existing behavior assertions and the focused port composition test run after integration.
 
 Feed's mounted list operation consumes the shared immutable declaration catalogue through the
 Kernel transport adapter. Content retains the Feed query/result schemas and current disclosure

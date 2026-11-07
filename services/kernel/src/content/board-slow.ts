@@ -12,7 +12,8 @@ import {
   type CommandTransaction,
 } from '../command/command.ts';
 import { withConnection } from '../database/pool.ts';
-import { accessExplicitCheck, type Actor, type AccessExplicitCheck, type AccessClient } from '../request/access.ts';
+import { accessExplicitCheck } from './access-port.ts';
+import type { Actor, AccessExplicitCheck, AccessClient } from '../request/access.ts';
 import { partitionOf, routeOf } from '../route/route.ts';
 import type { ContentCommandDependencies } from './commands.ts';
 import type { ContentCommandValue, RequestContext } from './model.ts';

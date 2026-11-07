@@ -10,7 +10,8 @@ import {
   type CommandTransaction,
 } from '../command/command.ts';
 import { creationDeclares } from './access-port.ts';
-import { accessCommandAuthorization, type Access, type Actor } from '../request/access.ts';
+import { accessCommandAuthorization } from './access-port.ts';
+import type { Access, Actor } from '../request/access.ts';
 import { newId, partitionOf, routeOf } from '../route/route.ts';
 import { ContentNotFoundError } from './commands.ts';
 import { admitAuthoredLanguage, admitAuthoredRevision, authoredFieldContainsMedia } from './core/index.ts';

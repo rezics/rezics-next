@@ -15,7 +15,8 @@ import {
   runCommand,
   type AuthoritativeTime,
 } from '../command/command.ts';
-import { accessCheck, type Access, type AccessCheck, type Actor } from '../request/access.ts';
+import { accessCheck } from './access-port.ts';
+import type { Access, AccessCheck, Actor } from '../request/access.ts';
 import { prepareRealmParticipationResult, type RealmParticipationCheck } from '../community/participation.ts';
 import { partitionOf, routeOf } from '../route/route.ts';
 import { REACTION_KINDS } from './events.ts';

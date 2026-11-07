@@ -1,7 +1,7 @@
 import { authoritativeTimeValue, noEffect, principalCommandIdentity, runCommand } from '../command/command.ts';
 import { withConnection } from '../database/pool.ts';
 import { deadlineClient, within } from './access-port.ts';
-import { ProblemError } from '../http/problem.ts';
+import { ProblemError } from '../http/problem-error.ts';
 import type { Actor } from '../request/access.ts';
 import { newId, partitionOf, routeOf } from '../route/route.ts';
 import type { RequestContext } from './model.ts';

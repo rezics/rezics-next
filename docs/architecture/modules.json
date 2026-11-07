@@ -297,6 +297,7 @@
       "paths": ["services/kernel/src/access/contract/**"],
       "publicEntries": [
         "services/kernel/src/access/contract/index.ts",
+        "services/kernel/src/access/contract/authentication.ts",
         "services/kernel/src/access/contract/bounds.ts",
         "services/kernel/src/access/contract/collection-policy.ts"
       ],
@@ -913,6 +914,11 @@
         "services/kernel/src/clock.ts",
         "services/kernel/src/request/access.ts",
         "services/kernel/src/partition/partition.ts",
+        "services/kernel/src/request/authentication-error.ts",
+        "services/kernel/src/command/key.ts",
+        "services/kernel/src/command/request.ts",
+        "services/kernel/src/http/problem-schema.ts",
+        "services/kernel/src/http/idempotency-key.ts",
         "services/kernel/src/route/route.ts",
         "services/kernel/src/tokens/seal.ts",
         "services/kernel/src/command/command.ts",
@@ -960,6 +966,7 @@
         "definitions-compiler",
         "definitions-compiler-adapter",
         "kernel-access",
+        "kernel-access-contract",
         "kernel-commerce",
         "kernel-community",
         "kernel-content",

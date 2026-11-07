@@ -9,7 +9,8 @@ const registerContent = createContentWorkModule({ fetch: (request) => fetch(requ
 import { effectsRelay, effectWorkflowId, type Effect } from '../../../src/events/effects.ts';
 import { readBatch, type CloudEvent, type Envelope } from '../../../src/events/log.ts';
 import { startRelays } from '../../../src/events/relays.ts';
-import { normalizeCommandKey, principalCommandIdentity } from '../../../src/command/command.ts';
+import { normalizeCommandKey } from '../../../src/command/key.ts';
+import { principalCommandIdentity } from '../../../src/command/command.ts';
 import { anchorRoute, newId, partitionOf, routeOf } from '../../../src/route/route.ts';
 import { createWorkClient } from '../../../src/work/client.ts';
 import { composeWork } from '../../../src/work/registry.ts';

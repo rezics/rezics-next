@@ -1,4 +1,5 @@
-import { accessCheck, type AccessCheck, type Actor } from '../request/access.ts';
+import { accessCheck } from './access-port.ts';
+import type { AccessCheck, Actor } from '../request/access.ts';
 import { partitionOf, routeOf } from '../route/route.ts';
 import { partitionReadClients } from '../database/read-snapshot.ts';
 import { withReadTransaction } from '../semantic/read.ts';

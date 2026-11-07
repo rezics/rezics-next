@@ -1,7 +1,8 @@
 import type { Pool } from 'pg';
-import { accessCheck, type Access, type Actor } from '../request/access.ts';
+import { accessCheck } from './access-port.ts';
+import type { Access, Actor } from '../request/access.ts';
 import { readSpaceForViewer, spaceReadEligibility } from '../community/space.ts';
-import { ProblemError } from '../http/problem.ts';
+import { ProblemError } from '../http/problem-error.ts';
 import { feedRoute } from './feed-activity.ts';
 import { readBoard } from './reads.ts';
 import type { KeyRing } from '../tokens/seal.ts';

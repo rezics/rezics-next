@@ -1,6 +1,7 @@
 import { routeOf } from '../route/route.ts';
 import { createHash } from 'node:crypto';
-import { AuthenticationError, type Actor } from '../request/access.ts';
+import { AuthenticationError } from '../access/contract/authentication.ts';
+import type { Actor } from '../request/access.ts';
 import { decodeListCursor, encodeListCursor } from '../tokens/list-cursor.ts';
 import type { ContentReadDependencies } from './reads.ts';
 import {

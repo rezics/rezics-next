@@ -1,5 +1,5 @@
 import { authoritativeTimeValue, noEffect, principalCommandIdentity, runCommand } from '../command/command.ts';
-import { accessCheck, accessCommandAuthorization } from '../request/access.ts';
+import { accessCheck, accessCommandAuthorization } from './access-port.ts';
 import { partitionOf, routeOf } from '../route/route.ts';
 import { ContentNotFoundError } from './commands.ts';
 import type { ReadContext } from './model.ts';

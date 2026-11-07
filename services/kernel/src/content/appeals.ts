@@ -19,17 +19,12 @@ import {
 import { discardConnection, withConnection } from '../database/pool.ts';
 import { GrantDeniedError } from '../access/contract/index.ts';
 import type { Effect } from '../events/effects.ts';
-import { ProblemError } from '../http/problem.ts';
-import { requestDigest } from '../http/request.ts';
+import { ProblemError } from '../http/problem-error.ts';
+import { requestDigest } from '../command/request.ts';
 import { readPartition } from '../partition/partition.ts';
-import {
-  AuthenticationError,
-  accessCheck,
-  accessCommandAuthorization,
-  type Access,
-  type AccessClient,
-  type Actor,
-} from '../request/access.ts';
+import { AuthenticationError } from '../access/contract/authentication.ts';
+import { accessCheck, accessCommandAuthorization } from './access-port.ts';
+import type { Access, AccessClient, Actor } from '../request/access.ts';
 import { newId, partitionOf, routeOf } from '../route/route.ts';
 import { decodeCursor, encodeCursor } from '../tokens/cursor.ts';
 import type { KeyRing } from '../tokens/seal.ts';

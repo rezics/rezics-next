@@ -1,6 +1,6 @@
 import { deadlineClient, within } from './access-port.ts';
 import type { RealmParticipationReadDecision, RealmParticipationCheck } from '../community/participation.ts';
-import { ProblemError } from '../http/problem.ts';
+import { ProblemError } from '../http/problem-error.ts';
 import type { Actor } from '../request/access.ts';
 import { routeOf } from '../route/route.ts';
 import { decodeCursor, encodeCursor, type CursorBinding } from '../tokens/cursor.ts';

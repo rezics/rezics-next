@@ -4,8 +4,10 @@ import { readAccount, verifiedBearerExpiry, deadlineClient, readAssignment } fro
 import { ApprovalIdentityDeniedError } from '../access/contract/index.ts';
 import { AccessUnavailableError } from '../access/unavailable.ts';
 import { CommandUnavailableError } from '../command/command.ts';
-import { ProblemError } from '../http/problem.ts';
-import { accessCheck, actorOf, AuthenticationError, type Actor } from '../request/access.ts';
+import { ProblemError } from '../http/problem-error.ts';
+import { accessCheck, actorOf } from './access-port.ts';
+import { AuthenticationError } from '../access/contract/authentication.ts';
+import type { Actor } from '../request/access.ts';
 import { routeOf } from '../route/route.ts';
 import { appealReviewSnapshot } from './appeal-review-page.ts';
 import { composeModerationDecision, ModerationDecisionSchema } from './moderation-decisions.ts';

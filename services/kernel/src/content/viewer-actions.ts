@@ -1,5 +1,6 @@
 import type { ViewerActionResource, ViewerActionResources } from '../access/viewer-actions.ts';
-import { prepareReadDecisions, type AccessClient, type ReadDecisions } from '../request/access.ts';
+import { prepareReadDecisions } from './access-port.ts';
+import type { AccessClient, ReadDecisions } from '../request/access.ts';
 import { routeOf } from '../route/route.ts';
 import type { AuthoritativeTime } from '../command/command.ts';
 import sources from './viewer-actions.sql';

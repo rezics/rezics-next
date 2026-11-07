@@ -21,7 +21,8 @@ import { bindAuthorErasureWorkflow } from '../../src/content/erasure-workflow-id
 import { createWorkClient } from '../../src/work/client.ts';
 import { readBatch, type Envelope } from '../../src/events/log.ts';
 import { derivedId, newId, partitionOf, routeOf } from '../../src/route/route.ts';
-import { AuthenticationError, type AccountActor } from '../../src/request/access.ts';
+import { AuthenticationError } from '../../src/request/authentication-error.ts';
+import { type AccountActor } from '../../src/request/access.ts';
 import { checkGrowth, openGrowthDatabase, seed, type Population } from '../support/growth.ts';
 import { trustedAccessPorts } from '../support/trusted-access.ts';
 

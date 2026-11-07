@@ -1,5 +1,6 @@
 import { expect, test } from 'bun:test';
-import { AuthenticationError, type Actor } from '../../src/request/access.ts';
+import { AuthenticationError } from '../../src/request/authentication-error.ts';
+import { type Actor } from '../../src/request/access.ts';
 import type { FeedItem } from '../../src/content/feed-contract.ts';
 import { prepareFeedSubjectReactions } from '../../src/content/feed-subject-reactions.ts';
 import { readSubjectSummaries } from '../../src/semantic/summaries.ts';

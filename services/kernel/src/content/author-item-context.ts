@@ -1,6 +1,6 @@
 import type { DocumentNode } from '@rezics/document';
 import { readSubjectSummaryObservation } from '../semantic/summaries.ts';
-import { ProblemError } from '../http/problem.ts';
+import { ProblemError } from '../http/problem-error.ts';
 import type { FeedConversationActivity } from './feed-contract.ts';
 import { createConversationActivityBatch } from './conversation-activity.ts';
 import type { AnchoredPosition, FeedParentContext, FeedReviewContext, ReadContext } from './model.ts';

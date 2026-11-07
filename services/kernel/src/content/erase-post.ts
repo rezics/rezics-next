@@ -23,8 +23,10 @@ import {
   type CommandOutcome,
   type CommandTransaction,
 } from '../command/command.ts';
-import { resourceAuthorizationPage, deadlineClient } from './access-port.ts';
-import { accessCommandAuthorization, type Access, type AccessClient, type Actor } from '../request/access.ts';
+import { resourceAuthorizationPage } from './access-port.ts';
+import { accessCommandAuthorization } from './access-port.ts';
+import type { Access, AccessClient, Actor } from '../request/access.ts';
+import { deadlineClient } from './access-port.ts';
 import { withConnection } from '../database/pool.ts';
 import { newId, partitionOf, routeOf } from '../route/route.ts';
 import readScope from './read-erasure-scope.sql';

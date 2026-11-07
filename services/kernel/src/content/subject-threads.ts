@@ -1,5 +1,6 @@
 import { deadlineClient, within } from './access-port.ts';
-import { accessCheck, type AccessCheck, type Actor } from '../request/access.ts';
+import { accessCheck } from './access-port.ts';
+import type { AccessCheck, Actor } from '../request/access.ts';
 import { CommandUnavailableError } from '../command/command.ts';
 import { discardConnection, withConnection } from '../database/pool.ts';
 import { readPartition } from '../partition/partition.ts';

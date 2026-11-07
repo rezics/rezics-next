@@ -3,7 +3,7 @@ import { deadlineClient, within } from './access-port.ts';
 import { withConnection } from '../database/pool.ts';
 import { readPartition } from '../partition/partition.ts';
 import { partitionOf } from '../route/route.ts';
-import { ProblemError } from '../http/problem.ts';
+import { ProblemError } from '../http/problem-error.ts';
 
 /** Exactly one backend/home snapshot, released before any other home is entered. */
 export function feedSnapshot<T>(

@@ -1,14 +1,8 @@
 import { createHash } from 'node:crypto';
 import canonicalize from 'canonicalize';
 import type { Pool } from 'pg';
-import {
-  accessCommandAuthorization,
-  type AccessCommandAuthorization,
-  type Access,
-  type AccessContext,
-  type Actor,
-  type Resource,
-} from '../request/access.ts';
+import { accessCommandAuthorization } from './access-port.ts';
+import type { AccessCommandAuthorization, Access, AccessContext, Actor, Resource } from '../request/access.ts';
 import { GrantDeniedError } from '../access/contract/index.ts';
 import { deadlineClient } from './access-port.ts';
 import { realmReadEligibility } from '../community/realm.ts';
