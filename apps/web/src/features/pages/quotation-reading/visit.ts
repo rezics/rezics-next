@@ -233,7 +233,8 @@ export function useQuotationVisit(props: {
       result = { ok: false, reason: 'unavailable' };
     }
     const accepted = acceptCandidateReading(work, readingAddress, result);
-    if (!mounted.current || accepted.kind !== 'accepted' || owner !== sequence.current || source.current !== address) return;
+    if (!mounted.current || accepted.kind !== 'accepted' || owner !== sequence.current || source.current !== address)
+      return;
     result = accepted.value;
     if (result.ok && !readingMatchesContext(result, context)) result = { ok: false, reason: 'stale' };
     if (expected && result.ok) {

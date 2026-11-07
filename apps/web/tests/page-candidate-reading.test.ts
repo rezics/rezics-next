@@ -33,6 +33,12 @@ describe('page candidate readings', () => {
     expect(acceptCandidateReading(reading(), { ...request, address: ['replacement', 'context'] }, 'late')).toEqual({
       kind: 'retired',
     });
-    expect(acceptCandidateReading(reading(() => false), request, 'late')).toEqual({ kind: 'retired' });
+    expect(
+      acceptCandidateReading(
+        reading(() => false),
+        request,
+        'late',
+      ),
+    ).toEqual({ kind: 'retired' });
   });
 });

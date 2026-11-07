@@ -64,7 +64,10 @@ function ProducerHistoryPageLive({
   const lifetime = useEditorLifetime();
   const reader = useProducerHistorySlice({ id, locale, transport, initial });
   const { slice, read } = reader;
-  const lease = useCandidateReading({ candidate: 'producer-history-editor', locale, address: slice.revision }, lifetime);
+  const lease = useCandidateReading(
+    { candidate: 'producer-history-editor', locale, address: slice.revision },
+    lifetime,
+  );
   const [selected, setSelected] = useState<{ revision: number; index: number }>();
   const [draft, setDraft] = useState<Correction>();
   const [part, setPart] = useState<EntityPickerSubject[]>([]);

@@ -58,7 +58,11 @@ function ProducerHistorySessionLive({
   realm?: string | undefined;
   via?: string | undefined;
 }) {
-  const editorWork = useCandidateReading({ candidate: 'producer-history-transport', locale, address: [id, context, realm, via] });
+  const editorWork = useCandidateReading({
+    candidate: 'producer-history-transport',
+    locale,
+    address: [id, context, realm, via],
+  });
   const observed = useSession();
   const { state } = observed;
   const search = useCallback(

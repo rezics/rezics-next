@@ -145,10 +145,12 @@ export function candidateSession<Props extends object>(Component: ComponentType<
       () => ({ reader: observed.subject ?? '', live: () => observation.current() }),
       [observation, observed.subject],
     );
-    return createElement(
-      CandidateReaderBoundary,
-      { admission, observed, address, children: createElement(Component, props) },
-    );
+    return createElement(CandidateReaderBoundary, {
+      admission,
+      observed,
+      address,
+      children: createElement(Component, props),
+    });
   };
 }
 

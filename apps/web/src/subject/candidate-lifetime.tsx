@@ -18,10 +18,7 @@ export function CandidateReaderBoundary(props: {
   children: ReactNode;
   admission?: CandidateWork;
 }) {
-  return createElement(
-    PageVisitBinding,
-    { children: createElement(PageCandidateReaderBoundary, props) },
-  );
+  return createElement(PageVisitBinding, { children: createElement(PageCandidateReaderBoundary, props) });
 }
 
 /** Compatibility entry; new Search page readers use the page-owned application directly. */
