@@ -44,41 +44,40 @@ secret-free evidence. Fewest tests: `apps/web/tests/first-public-journeys-walk.t
 
 ## Current-dev first-public journeys
 
-Observed source `a65c11979d` on base `fd920c9cdb`. Two admitted walk attempts ran
-`bun services/auth/scripts/dev-stack.ts walk -- bun apps/web/scripts/first-public-journeys-walk.ts`
-(host Bun 1.4.3, then pinned `1.4.4-canary.1+da867c60b`). The walk stack never admitted a slot. Persona is **setup**.
-Phone/desktop and seed were not mounted. Secret-free evidence is the walk launcher stderr in this attempt.
+Observed source `93fa0fb702` on base `fd920c9cdb`. Walk command
+`bun services/auth/scripts/dev-stack.ts walk -- bun apps/web/scripts/first-public-journeys-walk.ts`.
+Cherry-picked ce33 `5156e56d49`..`ea7dc5fe59` so Worker/Kernel admit issuer-origin JWKS. Slot 1 operands: Web
+`http://127.0.0.1:20010`, issuer `http://127.0.0.1:20011`, native Auth `http://127.0.0.1:20012`, Kernel
+`http://127.0.0.1:20013`. Native JWKS became reachable; identity then Kernel `/v1/definitions` admitted.
+Persona `developer@rezics.test` provisioned. Cross-media seed then exited 1. Phone/desktop pages were not
+mounted. Secret-free evidence is `.temp/goal/performance/evidence.json` and `seed.log` in this attempt.
 
-First causal error: **`SyntaxError: export 'WORKFLOW_RETIREMENT_DISPATCH' not found in '@dbos-inc/dbos-sdk'`**.
-Auth `sdk-retirement-fence.ts` imports that patched export; installed `5.5.3-preview` in this worktree does not
-contain it. Elapsed **0.530 s**. Kernel, issuer JWKS and Web never started. Public and anonymous portions of P02
-and P17 did not proceed. Signed-in paths remain unreached for the same launcher failure; Content **ce33aabc** still
-owns issuer/JWKS once a stack starts. Auth/Work retain SDK retirement. Rerun after the patched SDK is installed
-and after ce33aabc lands.
+First causal error: **`Import transport request failed`**. Seed wrote no `result.json`. Worker later logged
+`Connection terminated unexpectedly` during teardown; that is not the first product failure. Imports owns the
+seed transport. Public P02/P17 snapshots did not run. Signed-in paths remain unreached for the same seed.
 
-Hourly: **0/17**. Slowest failing path: **P01** (shared 0.530 s launcher). No other reached product failure was
+Hourly: **0/17**. Slowest failing path: **P01** (shared 757.837 s setup). No other reached product failure was
 observed, so no additional repair brief is opened here.
 
 | Path | User-visible journey | Persona | Elapsed | Result | First wrong result | Owner |
 | ---- | -------------------- | ------- | ------: | ------ | ------------------ | ----- |
-| P01 | Settings Profile edit, Save, private readback, leave/return with draft and focus | setup | 0.530 s | FAIL-unreached | `WORKFLOW_RETIREMENT_DISPATCH` missing from `@dbos-inc/dbos-sdk`; walk stack never admitted | Settings |
-| P02 | Public profile save fields/view flags; read as owner, member and anonymous | setup | 0.530 s | FAIL-unreached | Same launcher; anonymous `@developer` not executed | Accounts |
-| P03 | Safety managed-account directory, detail/profile, exact frontier/focus return | setup | 0.530 s | FAIL-unreached | Same launcher; sign-in not reached | Accounts |
-| P04 | Settings security into native Auth security page and current-session return | setup | 0.530 s | FAIL-unreached | Same launcher; sign-in not reached | Accounts |
-| P05 | Settings rename into native Auth, complete rename, return to current identity | setup | 0.530 s | FAIL-unreached | Same launcher; sign-in not reached | Accounts |
-| P06 | Settings deletion into native Auth deletion/recovery | setup | 0.530 s | FAIL-unreached | Same launcher; sign-in not reached | Accounts |
-| P07 | Sign out, signed-out destination, uncertain-response session read | setup | 0.530 s | FAIL-unreached | Same launcher; sign-in not reached | Accounts |
-| P08 | Safety verification select, submit, revisit, withdraw, return | setup | 0.530 s | FAIL-unreached | Same launcher; sign-in not reached | Accounts |
-| P09 | Notification preferences Save/readback and Reset | setup | 0.530 s | FAIL-unreached | Same launcher; sign-in not reached | Inbox |
-| P10 | Reading spoiler/suitability Save/readback, Reset/native defaults | setup | 0.530 s | FAIL-unreached | Same launcher; sign-in not reached | Settings |
-| P11 | Layout type override Save/readback, remove, resulting default | setup | 0.530 s | FAIL-unreached | Same launcher; sign-in not reached | Settings |
-| P12 | Private Collections inventory/privacy Save/readback and version-conflict recovery | setup | 0.530 s | FAIL-unreached | Same launcher; sign-in not reached | Settings |
-| P13 | Inbox page reply/mention/moderation, destination, same-range return, acknowledge/badge | setup | 0.530 s | FAIL-unreached | Same launcher; sign-in not reached | Inbox |
-| P14 | Follow edge, page Following, target, original-frontier return, remove/replay | setup | 0.530 s | FAIL-unreached | Same launcher; sign-in not reached | Accounts |
-| P15 | Labels create/select, assign, FULL assignment/shelf, exact removal/readback | setup | 0.530 s | FAIL-unreached | Same launcher; sign-in not reached | Library |
-| P16 | Active shelf page/session/target/return, complete or retire, updated shelf | setup | 0.530 s | FAIL-unreached | Same launcher; sign-in not reached | Library |
-| P17 | Published Log publish, owner/member/anonymous snapshot, retract/Undo, My Logs return | setup | 0.530 s | FAIL-unreached | Same launcher; anonymous snapshot not executed | Library |
-
+| P01 | Settings Profile edit, Save, private readback, leave/return with draft and focus | setup | 757.837 s | FAIL-unreached | seed exited 1: Import transport request failed | Settings |
+| P02 | Public profile save fields/view flags; read as owner, member and anonymous | setup | 757.837 s | FAIL-unreached | Same seed; anonymous `@developer` not executed | Accounts |
+| P03 | Safety managed-account directory, detail/profile, exact frontier/focus return | setup | 757.837 s | FAIL-unreached | Same seed; sign-in not reached | Accounts |
+| P04 | Settings security into native Auth security page and current-session return | setup | 757.837 s | FAIL-unreached | Same seed; sign-in not reached | Accounts |
+| P05 | Settings rename into native Auth, complete rename, return to current identity | setup | 757.837 s | FAIL-unreached | Same seed; sign-in not reached | Accounts |
+| P06 | Settings deletion into native Auth deletion/recovery | setup | 757.837 s | FAIL-unreached | Same seed; sign-in not reached | Accounts |
+| P07 | Sign out, signed-out destination, uncertain-response session read | setup | 757.837 s | FAIL-unreached | Same seed; sign-in not reached | Accounts |
+| P08 | Safety verification select, submit, revisit, withdraw, return | setup | 757.837 s | FAIL-unreached | Same seed; sign-in not reached | Accounts |
+| P09 | Notification preferences Save/readback and Reset | setup | 757.837 s | FAIL-unreached | Same seed; sign-in not reached | Inbox |
+| P10 | Reading spoiler/suitability Save/readback, Reset/native defaults | setup | 757.837 s | FAIL-unreached | Same seed; sign-in not reached | Settings |
+| P11 | Layout type override Save/readback, remove, resulting default | setup | 757.837 s | FAIL-unreached | Same seed; sign-in not reached | Settings |
+| P12 | Private Collections inventory/privacy Save/readback and version-conflict recovery | setup | 757.837 s | FAIL-unreached | Same seed; sign-in not reached | Settings |
+| P13 | Inbox page reply/mention/moderation, destination, same-range return, acknowledge/badge | setup | 757.837 s | FAIL-unreached | Same seed; sign-in not reached | Inbox |
+| P14 | Follow edge, page Following, target, original-frontier return, remove/replay | setup | 757.837 s | FAIL-unreached | Same seed; sign-in not reached | Accounts |
+| P15 | Labels create/select, assign, FULL assignment/shelf, exact removal/readback | setup | 757.837 s | FAIL-unreached | Same seed; sign-in not reached | Library |
+| P16 | Active shelf page/session/target/return, complete or retire, updated shelf | setup | 757.837 s | FAIL-unreached | Same seed; sign-in not reached | Library |
+| P17 | Published Log publish, owner/member/anonymous snapshot, retract/Undo, My Logs return | setup | 757.837 s | FAIL-unreached | Same seed; anonymous snapshot not executed | Library |
 <!-- first-public-journeys:end -->
 
 ## composed-discovery-cost

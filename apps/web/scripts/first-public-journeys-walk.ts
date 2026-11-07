@@ -637,7 +637,9 @@ export async function run(): Promise<PathResult[]> {
   await mkdir('/tmp/rw', { recursive: true, mode: 0o700 });
   const source = await sourceRevision();
   const results: PathResult[] = [];
+  const began = performance.now();
   const failRest = (cause: string, persona = 'setup') => {
+    const elapsedMs = Math.round(performance.now() - began);
     for (const path of FIRST_PUBLIC_JOURNEY_PATHS) {
       if (results.some((row) => row.id === path.id)) continue;
       results.push({
@@ -647,11 +649,18 @@ export async function run(): Promise<PathResult[]> {
         owner: path.owner,
         status: 'FAIL-unreached',
         persona,
-        elapsedMs: 0,
+        elapsedMs,
         source,
         evidence: { cause },
         firstWrong: cause,
       });
+    }
+  };
+  const stackIfAdmitted = (): Stack | undefined => {
+    try {
+      return stackOrigins();
+    } catch {
+      return undefined;
     }
   };
 
@@ -664,7 +673,7 @@ export async function run(): Promise<PathResult[]> {
   const personaCode = await child(['bun', 'services/auth/scripts/dev-stack.ts', 'persona'], 'persona');
   if (personaCode !== 0) {
     failRest(`persona exited ${personaCode}; see .temp/goal/performance/persona.log`);
-    await writeEvidence(source, results);
+    await writeEvidence(source, results, stackIfAdmitted());
     hourly(results);
     return results;
   }
@@ -674,8 +683,10 @@ export async function run(): Promise<PathResult[]> {
   try {
     seed = await readSeed();
   } catch (error) {
-    failRest(`seed exited ${seedCode}: ${error instanceof Error ? error.message : String(error)}`);
-    await writeEvidence(source, results);
+    const seedLog = (await readFile(join(evidenceDir, 'seed.log'), 'utf8').catch(() => '')).trim().split('\n')[0];
+    const missing = error instanceof Error ? error.message : String(error);
+    failRest(seedLog ? `seed exited ${seedCode}: ${seedLog}` : `seed exited ${seedCode}: ${missing}`);
+    await writeEvidence(source, results, stackIfAdmitted());
     hourly(results);
     return results;
   }
