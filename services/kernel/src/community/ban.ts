@@ -1,9 +1,11 @@
+import { RealmBanInputError } from './contract/index.ts';
+export { RealmBanInputError } from './contract/index.ts';
 import { createHash } from 'node:crypto';
 import canonicalize from 'canonicalize';
-import { GrantDeniedError } from '../access/grant-commands.ts';
-import { endResourceDenial, recordResourceDenial } from '../access/resource-denials.ts';
+import { GrantDeniedError } from '../access/resource-access-errors.ts';
+import { endResourceDenial, recordResourceDenial, accessCommandAuthorization } from './domain-ports.ts';
 import { authoritativeTimeValue, principalCommandIdentity, runCommand } from '../command/command.ts';
-import { accessCommandAuthorization, type AccountActor } from '../request/access.ts';
+import type { AccountActor } from '../request/access.ts';
 import { partitionOf, routeOf } from '../route/route.ts';
 import type { KeyRing } from '../tokens/seal.ts';
 import type { WorkClient } from '../work/client.ts';
@@ -27,13 +29,6 @@ export type Ban = {
 };
 type Context = { idempotencyKey: string; deadline: number };
 type Target = { realmId: string; accountId: string };
-
-export class RealmBanInputError extends Error {
-  constructor() {
-    super('Invalid Realm ban');
-    this.name = 'RealmBanInputError';
-  }
-}
 
 function target(input: Target) {
   const route = routeOf(input.realmId);

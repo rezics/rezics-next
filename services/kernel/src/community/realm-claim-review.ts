@@ -1,15 +1,13 @@
 import { randomBytes } from 'node:crypto';
 import canonicalize from 'canonicalize';
 import type { Pool } from 'pg';
-import { readPublicIdentities, type PublicIdentity } from '../access/account-data.ts';
-import { deadlineClient } from '../access/authenticate.ts';
-import { PLATFORM_RESOURCE } from '../access/bootstrap-governance.ts';
+import { readPublicIdentities, deadlineClient, PLATFORM_RESOURCE, accessCheck } from './domain-ports.ts';
+import type { PublicIdentity } from '../access/account-data.ts';
 import globalContext from '../access/bootstrap-governance-read.sql';
 import { authoritativeTimeValue, mintReadTime, releaseOperationalTime } from '../command/command.ts';
 import { discardConnection, withConnection } from '../database/pool.ts';
-import { ProblemError } from '../http/problem.ts';
+import { ProblemError } from '../http/problem-error.ts';
 import { readPartition } from '../partition/partition.ts';
-import { accessCheck } from '../request/access.ts';
 import { partitionOf, routeOf } from '../route/route.ts';
 import { decodeCursor, encodeCursor } from '../tokens/cursor.ts';
 import type { KeyRing } from '../tokens/seal.ts';

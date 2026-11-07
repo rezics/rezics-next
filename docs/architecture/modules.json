@@ -214,6 +214,19 @@
         "services/kernel/src/access/application/**"
       ],
       "publicEntries": [
+        "services/kernel/src/access/account-authority.ts",
+        "services/kernel/src/access/account-data.ts",
+        "services/kernel/src/access/bootstrap-governance.ts",
+        "services/kernel/src/access/handle-holder.ts",
+        "services/kernel/src/access/lifecycle.ts",
+        "services/kernel/src/access/membership-inverse.ts",
+        "services/kernel/src/access/permission.ts",
+        "services/kernel/src/access/realm-membership-transition.ts",
+        "services/kernel/src/access/realm-ownership.ts",
+        "services/kernel/src/access/resource-authorization.ts",
+        "services/kernel/src/access/resource-denials.ts",
+        "services/kernel/src/access/resource-group-grant.ts",
+        "services/kernel/src/access/viewer-actions.ts",
         "services/kernel/src/access/index.ts",
         "services/kernel/src/access/command-admission.ts",
         "services/kernel/src/access/resource-access-errors.ts",
@@ -313,7 +326,11 @@
       "kind": "adapter",
       "owner": "commerce",
       "paths": ["services/kernel/src/commerce/**", "services/kernel/db/commerce/**"],
-      "publicEntries": ["services/kernel/src/commerce/config.ts", "services/kernel/src/commerce/work-module.ts"],
+      "publicEntries": [
+        "services/kernel/src/commerce/catalogue.ts",
+        "services/kernel/src/commerce/config.ts",
+        "services/kernel/src/commerce/work-module.ts"
+      ],
       "allowedDependencies": [
         "kernel-access",
         "kernel-content",
@@ -339,6 +356,15 @@
         "services/kernel/src/content/application/**"
       ],
       "publicEntries": [
+        "services/kernel/src/content/boards.ts",
+        "services/kernel/src/content/community-presentation-rules.ts",
+        "services/kernel/src/content/community-presentation.ts",
+        "services/kernel/src/content/discovery-mutation.ts",
+        "services/kernel/src/content/discovery.ts",
+        "services/kernel/src/content/notices.ts",
+        "services/kernel/src/content/reads.ts",
+        "services/kernel/src/content/realm-media.ts",
+        "services/kernel/src/content/schemas.ts",
         "services/kernel/src/content/document-public.ts",
         "services/kernel/src/content/realm-board-home.ts",
         "services/kernel/src/content/index.ts",
@@ -436,6 +462,7 @@
         "services/kernel/src/community/application/**"
       ],
       "publicEntries": [
+        "services/kernel/src/community/domain-ports.ts",
         "services/kernel/src/community/index.ts",
         "services/kernel/src/community/declaration.ts",
         "services/kernel/src/community/http-declaration.ts",
@@ -573,6 +600,7 @@
         "services/kernel/src/library/application/**"
       ],
       "publicEntries": [
+        "services/kernel/src/library/follows.ts",
         "services/kernel/src/library/index.ts",
         "services/kernel/src/library/collection-discovery-source.ts",
         "services/kernel/src/library/collection-discovery-summaries.ts",
@@ -705,6 +733,11 @@
       "owner": "semantic",
       "paths": ["services/kernel/src/semantic/**", "services/kernel/db/semantic/**"],
       "publicEntries": [
+        "services/kernel/src/semantic/eligibility.ts",
+        "services/kernel/src/semantic/merges.ts",
+        "services/kernel/src/semantic/references.ts",
+        "services/kernel/src/semantic/subject.ts",
+        "services/kernel/src/semantic/summaries.ts",
         "services/kernel/src/semantic/index.ts",
         "services/kernel/src/semantic/identity-adapter-port.ts",
         "services/kernel/src/semantic/identity-adapter-runtime.ts",
@@ -870,6 +903,8 @@
         "services/kernel/src/route/contract.ts"
       ],
       "publicEntries": [
+        "services/kernel/src/http/problem.ts",
+        "services/kernel/src/http/request.ts",
         "services/kernel/src/command/receipt-key.ts",
         "services/kernel/src/database/json.ts",
         "services/kernel/src/database/statement-bytes.ts",

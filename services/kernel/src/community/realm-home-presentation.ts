@@ -1,9 +1,9 @@
 import type { Pool } from 'pg';
 import { classifyUnavailability } from '../access/unavailable.ts';
 import type { CommunityPresentation } from '../content/community-presentation-model.ts';
-import { readCommunityPresentations } from '../content/community-presentation.ts';
+import { readCommunityPresentations } from './domain-ports.ts';
 import type { ReadContext } from '../content/model.ts';
-import { ProblemError } from '../http/problem.ts';
+import { ProblemError } from '../http/problem-error.ts';
 import type { Access } from '../request/access.ts';
 import { routeOf } from '../route/route.ts';
 

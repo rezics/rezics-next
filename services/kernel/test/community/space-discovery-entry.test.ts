@@ -4,8 +4,8 @@ import { bundledRelease } from '@rezics/definitions/bundled';
 import { bootstrapRelease, GLOBAL_CONTEXT } from '../../src/semantic/definitions.ts';
 import { compileViewerActionBindings } from '../../src/access/viewer-actions.ts';
 import { readSpaceDiscoveryEntryBatch } from '../../src/community/space-discovery-entry.ts';
-import { spaceViewerActionResource } from '../../src/community/space.ts';
-import { realmViewerActionResource } from '../../src/community/realm.ts';
+import { spaceViewerActionResource } from '../../src/community/space-read.ts';
+import { realmViewerActionResource } from '../../src/community/realm-read.ts';
 import {
   createNativeContentSystemWithOrdinaryScopes,
   type NativeContentSystem,

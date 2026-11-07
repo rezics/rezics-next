@@ -1,13 +1,8 @@
 import { createHash } from 'node:crypto';
 import { DBOS } from '@dbos-inc/dbos-sdk';
 import type { Pool } from 'pg';
-import {
-  acknowledgeErasure,
-  readErasureStatus,
-  resolveRetention,
-  type ErasureOutcome,
-  type RetentionException,
-} from '../access/erasure.ts';
+import { acknowledgeErasure, readErasureStatus, resolveRetention, eraseAccountNoticesPage } from './domain-ports.ts';
+import type { ErasureOutcome, RetentionException } from '../access/erasure.ts';
 import { noEffect, runCommand } from '../command/command.ts';
 import { withConnection } from '../database/pool.ts';
 import type { CloudEvent } from '../events/log.ts';
@@ -24,7 +19,7 @@ import {
   purgeAccountBanReasonsPage,
   type CommunityRecordsCursor,
 } from './account-erasure-records.ts';
-import { eraseAccountNoticesPage, type NoticeErasureCursor } from '../content/notices.ts';
+import type { NoticeErasureCursor } from '../content/notices.ts';
 import { readRatingErasureDone } from '../rating/erasure-status.ts';
 import nextDue from './account-erasure-records-next-due.sql';
 

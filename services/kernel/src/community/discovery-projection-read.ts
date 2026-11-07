@@ -2,11 +2,12 @@ import type { Pool } from 'pg';
 import { AccessUnavailableError } from '../access/unavailable.ts';
 import type { Access, ReadDecisions } from '../request/access.ts';
 import { partitionOf, routeOf } from '../route/route.ts';
-import { realmViewerActionResource } from './realm.ts';
+import { realmViewerActionResource } from './realm-read.ts';
 import { realmPresentation } from './presentation.ts';
-import { spaceViewerActionResource } from './space.ts';
+import { spaceViewerActionResource } from './space-read.ts';
 import { readRealmDiscoveryGate } from './discovery-source.ts';
-import { discoveryDescription, type DiscoveryRealm } from './discovery.ts';
+import { discoveryDescription } from './contract/index.ts';
+import { type DiscoveryRealm } from './discovery.ts';
 import {
   DISCOVERY_PARTITION,
   discoverySnapshot,

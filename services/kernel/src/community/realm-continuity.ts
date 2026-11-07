@@ -1,10 +1,17 @@
-import { memoizedValue } from '../memoized.ts';
+import { realmContinuityView } from './realm-governance.ts';
+import type { RealmContinuity } from './contract/index.ts';
+export { realmContinuityView, realmGovernanceAuthorization, RealmReadOnlyError } from './realm-governance.ts';
+export type { RealmContinuity } from './contract/index.ts';
 import { createHash } from 'node:crypto';
 import canonicalize from 'canonicalize';
-import { resourceAuthorization } from '../access/resource-authorization.ts';
-import { accessCommandAttempt } from '../access/command-admission.ts';
+import {
+  authorizeResource as resourceAuthorization,
+  accessCommandAttempt,
+  accessCheck,
+  readAppliedRealmErasureSuccession,
+} from './domain-ports.ts';
 import { deriveAccess } from '../access/derived-access.ts';
-import { GrantDeniedError } from '../access/grant-commands.ts';
+import { GrantDeniedError } from '../access/resource-access-errors.ts';
 import {
   authoritativeTimeValue,
   currentCommand,
@@ -12,29 +19,22 @@ import {
   principalCommandIdentity,
   runCommand,
   type AuthoritativeTime,
-  type CommandAuthorization,
   type CommandTransaction,
   type CurrentCommand,
 } from '../command/command.ts';
-import { ProblemError } from '../http/problem.ts';
-import { accessCheck, type AccessCheck, type Actor, type Resource } from '../request/access.ts';
+import { ProblemError } from '../http/problem-error.ts';
+import type { AccessCheck, Actor } from '../request/access.ts';
 import { newId, partitionOf, routeOf } from '../route/route.ts';
 import { realmParticipationAnchor } from './participation.ts';
-import { realmReadEligibility, RealmInputError, type RealmDependencies, type RealmContext } from './realm.ts';
+import { realmReadEligibility } from './realm-read.ts';
+import { RealmInputError } from './contract/index.ts';
+import { type RealmDependencies, type RealmContext } from './realm.ts';
 import read from './realm-continuity-read.sql';
 import lock from './realm-continuity-lock.sql';
 import insertRequest from './realm-continuity-request-insert.sql';
 import readRequest from './realm-continuity-request-read.sql';
-import { readAppliedRealmErasureSuccession } from '../access/realm-ownership.ts';
 import lockSource from './realm-continuity-source-lock.sql';
 import applySuccession from './realm-continuity-apply.sql';
-
-export type RealmContinuity = Readonly<{
-  ownershipState: 'owned' | 'orphaned';
-  orphanedAt: string | null;
-  claimEligibleAt: string | null;
-  governanceReadOnly: boolean;
-}>;
 
 const lockedOwnership: unique symbol = Symbol('native locked Realm ownership');
 export type LockedRealmOwnershipSource = Readonly<{
@@ -105,61 +105,6 @@ export async function applyRealmOwnershipSuccession(
     throw new ProblemError('conflict', { detail: 'Native Realm succession changed its original orphan episode.' });
   ownershipSources.delete(source);
   return realmContinuityView(row);
-}
-
-export function RealmReadOnlyError() {
-  return memoizedValue(
-    RealmReadOnlyError,
-    () =>
-      class RealmReadOnlyError extends ProblemError {
-        constructor() {
-          super('conflict', {
-            detail: 'This Realm is orphaned and governance is read-only pending a platform ownership decision.',
-          });
-          this.name = 'RealmReadOnlyError';
-        }
-      },
-  );
-}
-export type RealmReadOnlyError = InstanceType<ReturnType<typeof RealmReadOnlyError>>;
-
-export function realmContinuityView(row: {
-  ownership_state: string;
-  orphaned_at: string | null;
-  claim_eligible_at: string | null;
-}): RealmContinuity {
-  if (row.ownership_state !== 'owned' && row.ownership_state !== 'orphaned')
-    throw new Error('Invalid native Realm ownership decision');
-  return {
-    ownershipState: row.ownership_state,
-    orphanedAt: row.orphaned_at === null ? null : new Date(row.orphaned_at).toISOString(),
-    claimEligibleAt: row.claim_eligible_at === null ? null : new Date(row.claim_eligible_at).toISOString(),
-    governanceReadOnly: row.ownership_state === 'orphaned',
-  };
-}
-
-/** The transaction rechecks and locks the same native identity before receipt replay
- * or a new write. A concurrent succession cannot slip between this check and commit.
- * This guard consumes ordinary Access authorization; it grants no action itself.
- */
-export function realmGovernanceAuthorization(
-  authorization: CommandAuthorization,
-  resource: Resource,
-): CommandAuthorization {
-  return {
-    ...authorization,
-    async authorize(tx, attempt, proof) {
-      const outcome = await authorization.authorize(tx, attempt, proof);
-      const row = await lock.run(tx, {
-        route: resource.route,
-        id: resource.id,
-        at: authoritativeTimeValue(attempt.time),
-      });
-      if (!row) throw new GrantDeniedError();
-      if (row.ownership_state !== 'owned') throw new (RealmReadOnlyError())();
-      return outcome;
-    },
-  };
 }
 
 export type RealmClaimRequest = Readonly<{

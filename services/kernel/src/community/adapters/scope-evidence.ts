@@ -1,13 +1,13 @@
 import type { Pool } from 'pg';
 import type { Access, Actor, AccessClient, AccessCheck } from '../../request/access.ts';
-import { accessCheck } from '../../request/access.ts';
+import { accessCheck } from '../domain-ports.ts';
 import type { AccessWorkAccounting } from '../../access/work.ts';
 import { routeOf } from '../../route/route.ts';
 import type { ScopeEvidenceHost, ScopeEvidenceObservation } from '../contract/index.ts';
 type Dependencies = Readonly<{ pool: Pool; access: Access }>;
 type Context = Readonly<{ actor: Actor; deadline: number; work: AccessWorkAccounting }>;
-import { realmReadEligibility } from '../realm.ts';
-import { spaceReadEligibility } from '../space.ts';
+import { realmReadEligibility } from '../realm-read.ts';
+import { spaceReadEligibility } from '../space-read.ts';
 import { realmReadBanAccounts } from '../eligibility-access-work.ts';
 import bindingRead from '../container-lifecycle-binding.sql';
 import bansRead from '../read-ban-current.sql';

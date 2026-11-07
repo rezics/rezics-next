@@ -1,4 +1,5 @@
 import { composeRatingDependencies } from './rating.ts';
+import { composeCommunityDomainPorts } from './community-domain-ports.ts';
 import { composeLibraryPresentation } from './library.ts';
 import { installNativeHistory } from './history.ts';
 import { composeContentReading } from './content.ts';
@@ -13,6 +14,7 @@ import { composePresentationApplication } from './presentation.ts';
  */
 export function installNativeHistoryPreload(): void {
   composeRatingDependencies();
+  composeCommunityDomainPorts();
   composeAccessApplication();
   composeContentReading();
   installNativeHistory();

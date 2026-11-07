@@ -1,19 +1,30 @@
-import { viewerActionEligibilityWork } from './eligibility-access-work.ts';
+import { realmRecord, voteMap } from './realm-record.ts';
+import { RealmInputError } from './contract/index.ts';
+export { RealmInputError } from './contract/index.ts';
+export {
+  readRealm,
+  readRealmSettingsHead,
+  realmReadEligibility,
+  allowRealmRead,
+  realmViewerActionResource,
+} from './realm-read.ts';
 import { bindRealmDiscoveryCommand } from './discovery-source.ts';
 import { createHash } from 'node:crypto';
 import canonicalize from 'canonicalize';
 import {
-  createResourcePublicEligibility,
   initializeResourceGrants,
   parentCreationAuthorization,
   resourceAuthorization,
-  type ResourceEligibility,
-} from '../access/index.ts';
-import { accessCommandAttempt } from '../access/command-admission.ts';
-import { deadlineClient, within } from '../access/authenticate.ts';
+  accessCommandAttempt,
+  deadlineClient,
+  within,
+  permissionEvidenceDeadline,
+  platformRootAnchor,
+  claimRealmPresentationMedia,
+  prepareRealmRulesSelection,
+} from './domain-ports.ts';
 import { deriveAccess } from '../access/derived-access.ts';
-import { GrantDeniedError } from '../access/grant-commands.ts';
-import { permissionEvidenceDeadline } from '../access/permission.ts';
+import { GrantDeniedError } from '../access/resource-access-errors.ts';
 import { installResourceRoleCatalogue, resourceRoleCatalogue } from '../access/resource-roles.ts';
 import {
   authoritativeTimeValue,
@@ -24,36 +35,21 @@ import {
   type CommandAuthorization,
   type CommandTransaction,
 } from '../command/command.ts';
-import { platformRootAnchor } from '../commerce/catalogue.ts';
-import { REACTION_KINDS } from '../content/events.ts';
 import { withConnection } from '../database/pool.ts';
-import { ProblemError } from '../http/problem.ts';
-import {
-  accessCheck,
-  type Access,
-  type AccessCheck,
-  type AccessClient,
-  type Actor,
-  type Resource,
-} from '../request/access.ts';
+import { type Access, type Actor, type Resource } from '../request/access.ts';
 import { newId, partitionOf, routeOf } from '../route/route.ts';
 import { publicContextEligibility } from '../semantic/context.ts';
 import { ensureRealmMemberGrant } from './participation.ts';
-import { realmContinuityView, realmGovernanceAuthorization, type RealmContinuity } from './realm-continuity.ts';
+import { realmGovernanceAuthorization, type RealmContinuity } from './realm-governance.ts';
 import type { RealmVotes } from './realm-votes.ts';
 import type { SpaceDependencies, SpaceContext } from './space.ts';
-import { systemCommunityAmbient, type CommunityAmbient } from './ambient.ts';
+import { type CommunityAmbient } from './ambient.ts';
 import { emptyRealmPresentation, realmPresentation, type RealmPresentation } from './presentation.ts';
-import { claimRealmPresentationMedia } from '../content/realm-media.ts';
-import { prepareRealmRulesSelection } from '../content/community-presentation-rules.ts';
 import read from './realm-read.sql';
-import bindingRead from './container-lifecycle-binding.sql';
-import currentReadBan from './read-ban-current.sql';
 import insert from './realm-insert.sql';
 import append from './realm-revision.sql';
 import moveHead from './realm-head.sql';
 import host from './realm-space.sql';
-import { realmEligibilityAccessWork, realmReadBanAccounts } from './eligibility-access-work.ts';
 
 export type RealmDependencies = SpaceDependencies;
 export type RealmContext = SpaceContext;
@@ -107,30 +103,9 @@ export class RealmConflictError extends Error {
     this.name = 'RealmConflictError';
   }
 }
-export class RealmInputError extends Error {
-  constructor() {
-    super('Invalid Realm metadata or revision identity');
-    this.name = 'RealmInputError';
-  }
-}
 function account(actor: Actor) {
   if (actor.kind !== 'account') throw new GrantDeniedError();
   return actor;
-}
-function voteMap(value: unknown, invalid: new () => Error): RealmVotes {
-  if (typeof value !== 'object' || value === null || Array.isArray(value)) throw new invalid();
-  const source = value as Record<string, unknown>;
-  const present = Object.keys(source);
-  if (present.length > 7) throw new invalid();
-  const votes: Partial<Record<(typeof REACTION_KINDS)[number], 1 | -1>> = {};
-  for (const kind of REACTION_KINDS) {
-    if (!Object.hasOwn(source, kind)) continue;
-    const weight = source[kind];
-    if (weight !== 1 && weight !== -1) throw new invalid();
-    votes[kind] = weight;
-  }
-  if (Object.keys(votes).length !== present.length) throw new invalid();
-  return Object.freeze(votes);
 }
 function metadata(title: unknown, summary: unknown, visibility: unknown, contextId: string) {
   if (
@@ -169,171 +144,6 @@ function options(
     },
   };
 }
-function record(row: RealmRow): RealmView {
-  return {
-    ...realmContinuityView(row),
-    realmId: row.realm_id,
-    spaceId: row.space_id,
-    state: row.state,
-    visibility: row.visibility,
-    contextId: row.context_id,
-    boardSchemeId: row.board_scheme_id,
-    headRevisionId: row.head_revision_id,
-    createdAt: new Date(row.created_at).toISOString(),
-    creator: row.creator,
-    predecessor: row.predecessor,
-    title: row.title,
-    summary: row.summary,
-    revisionCreatedAt: new Date(row.revision_created_at).toISOString(),
-    author: row.author,
-    votes: voteMap(row.votes, TypeError),
-    presentation: realmPresentation(row.presentation),
-  };
-}
-
-/** Exact current source for a composed management read. The caller owns disclosure,
- * management, partition and lifecycle checks on this same snapshot. */
-export async function readRealmSettingsHead(
-  client: Parameters<typeof read.run>[0],
-  realmId: string,
-  at: string,
-): Promise<RealmView | null> {
-  const route = routeOf(realmId);
-  if (route === null) return null;
-  const row = await read.run(client, { route, id: realmId, at });
-  return row ? record(row) : null;
-}
-
-/** One head seek at Access's authoritative T, with the native grant branch
- * and no current ban required for protected Realms. Missing and denied resources both return null.
- */
-export async function readRealm(
-  deps: Pick<RealmDependencies, 'pool' | 'access'> & Partial<CommunityAmbient>,
-  actor: Actor,
-  realmId: string,
-  context: { deadline: number },
-): Promise<RealmView | null> {
-  const route = routeOf(realmId);
-  const now = deps.deadlineNow ?? systemCommunityAmbient.deadlineNow;
-  if (route === null || !Number.isFinite(context.deadline) || now() >= context.deadline) return null;
-  let current: RealmRow | null = null;
-  const resource = { route, id: realmId };
-  const eligibility = readEligibility(resource, (row) => {
-    current = row;
-  });
-  try {
-    const check = await accessCheck(
-      deps.access,
-      actor,
-      'realm:read',
-      { ...resource, eligibility },
-      { pool: deps.pool, deadline: context.deadline },
-    );
-    return await withConnection(deps.pool, async (client) => {
-      if (!(await allowRealmRead(check, deadlineClient(client, context.deadline)))) return null;
-      return current ? record(current) : null;
-    });
-  } catch (error) {
-    if (realmReadDenied(error)) return null;
-    throw error;
-  }
-}
-
-// Access and HTTP problem mapping share this module graph; construct the error only during a read.
-const realmReadDenials = new WeakSet<Error>();
-function realmReadDeniedError(): ProblemError {
-  const error = new ProblemError('not_found');
-  realmReadDenials.add(error);
-  return error;
-}
-
-function realmReadDenied(error: unknown): boolean {
-  return (
-    (error instanceof Error && realmReadDenials.has(error)) ||
-    (error instanceof ProblemError && error.code === 'not_found')
-  );
-}
-
-/** Boolean Realm-read checks conceal eligibility not_found as a closed miss. */
-export async function allowRealmRead(
-  check: AccessCheck,
-  client: AccessClient,
-  time?: AuthoritativeTime,
-): Promise<boolean> {
-  try {
-    return await check(client, time);
-  } catch (error) {
-    if (realmReadDenied(error)) return false;
-    throw error;
-  }
-}
-
-type BindingRow = Awaited<ReturnType<typeof bindingRead.run>>;
-/** Identity and lifecycle only. Heads change on metadata revisions; visibility is rechecked from the current row. */
-function containerChain(binding: NonNullable<BindingRow>) {
-  return {
-    realm_id: binding.realm_id,
-    space_id: binding.space_id,
-    context_id: binding.context_id,
-    realm_version: binding.realm_version,
-    space_version: binding.space_version,
-  };
-}
-
-function readEligibility(identity: Resource, observe?: (row: RealmRow | null) => void): ResourceEligibility {
-  const resource = Object.freeze({ route: identity.route, id: identity.id });
-  const native = realmEligibilityAccessWork<{ binding: BindingRow }>(resource);
-  return createResourcePublicEligibility({
-    resource,
-    action: 'realm:read',
-    work: native.work,
-    prepare(context) {
-      return native.prepare(context, async (dispatch) => {
-        const parameters = { ...resource, at: 'infinity', subject: null };
-        return {
-          binding: await dispatch(
-            native.bindingPlan,
-            parameters,
-            () => bindingRead.run(deadlineClient(context.pool, context.deadline), parameters),
-            true,
-          ),
-        };
-      });
-    },
-    verify(context) {
-      return native.verify(context, async (dispatch) => {
-        const { client, actor, at, evidence } = context;
-        const parameters = { ...resource, at };
-        const row = await dispatch(native.realmPlan, parameters, () => read.run(client, parameters));
-        const binding = { ...resource, at, subject: null };
-        const current = await dispatch(native.bindingPlan, binding, () => bindingRead.run(client, binding));
-        if (
-          !row ||
-          !current ||
-          !evidence.binding ||
-          canonicalize(containerChain(current)) !== canonicalize(containerChain(evidence.binding))
-        )
-          throw realmReadDeniedError();
-        if (row.visibility === 'protected' && actor.kind === 'account') {
-          // Auth/Access validates the assignment reference. Its principal is a
-          // second fixed identity, never an expansion of grants or memberships.
-          const accountIds = realmReadBanAccounts(actor);
-          const ban = { route: resource.route, realm_id: resource.id, account_ids: accountIds, at };
-          if (await dispatch(native.banPlan(accountIds.length), ban, () => currentReadBan.run(client, ban)))
-            // A false floor alone would leave independent grants available.
-            throw realmReadDeniedError();
-        }
-        observe?.(row);
-        return row.visibility === 'public';
-      });
-    },
-  });
-}
-
-export function realmReadEligibility(identity: Resource): ResourceEligibility {
-  return readEligibility(identity);
-}
-
 type Requirement = { action: string; resource: Resource };
 /** Add independently anchored checks to the parent's exact trusted context.
  * Production Access caches its single admission observation by actor/live T.
@@ -566,7 +376,7 @@ export async function updateRealm(
       async validate(client, time) {
         const row = await read.run(client, { route, id: body.realmId, at: authoritativeTimeValue(time) });
         if (!row) return false;
-        current.set(time, record(row));
+        current.set(time, realmRecord(row));
         return true;
       },
     },
@@ -656,35 +466,3 @@ export async function updateRealm(
 }
 
 /** The read route's exact identity/head eligibility, batched by supplied full keys. */
-export const realmViewerActionResource: import('../access/viewer-actions.ts').ViewerActionResource = {
-  readAction: 'realm:read',
-  async read(client, ids, at, _time, work) {
-    const dispatch = async () => {
-      const result = await client.query<{ id: string; public: boolean }>(
-        `SELECT row.* FROM unnest($1::integer[], $2::uuid[]) AS wanted(route,id)
-       CROSS JOIN LATERAL (
-         WITH identity AS MATERIALIZED (
-           SELECT h.* FROM community.realm h
-           WHERE h.route = wanted.route AND h.realm_id = wanted.id
-           ORDER BY h.route, h.realm_id LIMIT 1
-         )
-         SELECT h.realm_id AS id, h.visibility = 'public' AS public
-         FROM identity h
-         CROSS JOIN LATERAL (
-           SELECT r.created_at FROM community.realm_revision r
-           WHERE r.route = h.route AND r.realm_id = h.realm_id AND r.revision_id = h.head_revision_id
-           ORDER BY r.route, r.realm_id, r.revision_id LIMIT 1
-         ) r
-         WHERE h.state = 'active'
-           AND EXISTS (SELECT 1 FROM community.space s WHERE s.route=h.route AND s.space_id=h.space_id AND s.state='active')
-           AND h.created_at <= $3::timestamptz AND r.created_at <= $3::timestamptz
-       ) row`,
-        [ids.map((id) => routeOf(id)!), ids, at],
-      );
-      return Object.fromEntries(result.rows.map((row) => [row.id, row.public]));
-    };
-    return work
-      ? work.run('community.realm.viewer-resource', viewerActionEligibilityWork('realm', ids, at), dispatch)
-      : dispatch();
-  },
-};

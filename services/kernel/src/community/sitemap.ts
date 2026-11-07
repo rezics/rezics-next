@@ -1,12 +1,12 @@
 import type { Pool } from 'pg';
 import { decodeListCursor, encodeListCursor, type ListCursorBinding } from '../tokens/list-cursor.ts';
-import { accessCheck, type Access, type Actor } from '../request/access.ts';
-import { deadlineClient } from '../access/authenticate.ts';
+import { accessCheck, deadlineClient } from './domain-ports.ts';
+import type { Access, Actor } from '../request/access.ts';
 import { withConnection } from '../database/pool.ts';
 import { routeOf } from '../route/route.ts';
 import type { KeyRing } from '../tokens/seal.ts';
-import { realmReadEligibility } from './realm.ts';
-import { spaceReadEligibility } from './space.ts';
+import { realmReadEligibility } from './realm-read.ts';
+import { spaceReadEligibility } from './space-read.ts';
 import { readSpaceAddress } from './space-address.ts';
 import realmsPage from './sitemap-realms-page.sql';
 import newestRealmBoard from './sitemap-realm-board-newest.sql';

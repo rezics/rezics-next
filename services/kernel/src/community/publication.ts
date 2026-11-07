@@ -1,10 +1,15 @@
 import { createHash } from 'node:crypto';
 import canonicalize from 'canonicalize';
-import { resourceAuthorization } from '../access/index.ts';
-import { accessCommandAttempt } from '../access/command-admission.ts';
-import { deadlineClient, within } from '../access/authenticate.ts';
+import {
+  resourceAuthorization,
+  accessCommandAttempt,
+  deadlineClient,
+  within,
+  accessCheck,
+  subjectReadEligibility,
+} from './domain-ports.ts';
 import { deriveAccess } from '../access/derived-access.ts';
-import { GrantDeniedError } from '../access/grant-commands.ts';
+import { GrantDeniedError } from '../access/resource-access-errors.ts';
 import {
   authoritativeTimeValue,
   principalCommandIdentity,
@@ -14,16 +19,15 @@ import {
 } from '../command/command.ts';
 import { discardConnection, withConnection } from '../database/pool.ts';
 import { readPartition } from '../partition/partition.ts';
-import { accessCheck, type AccessCheck, type AccessClient, type Actor, type Resource } from '../request/access.ts';
+import type { AccessCheck, AccessClient, Actor, Resource } from '../request/access.ts';
 import { newId, partitionOf, routeOf } from '../route/route.ts';
-import { subjectReadEligibility } from '../semantic/eligibility.ts';
 import { decodeCursor, encodeCursor, type CursorBinding } from '../tokens/cursor.ts';
 import type { KeyRing } from '../tokens/seal.ts';
 import type { SpaceDependencies } from './space.ts';
 import type { CommunityAmbient } from './ambient.ts';
-import { allowRealmRead, realmReadEligibility } from './realm.ts';
+import { allowRealmRead, realmReadEligibility } from './realm-read.ts';
 import { readContainerBinding, revalidateContainerBinding } from './container-lifecycle.ts';
-import { realmGovernanceAuthorization } from './realm-continuity.ts';
+import { realmGovernanceAuthorization } from './realm-governance.ts';
 import realmActive from './publication-realm.sql';
 import insertRecord from './publication-insert.sql';
 import insertHead from './publication-head-insert.sql';

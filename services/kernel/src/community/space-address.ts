@@ -2,10 +2,13 @@ import { systemCommunityClock } from './ambient.ts';
 import { createHash } from 'node:crypto';
 import canonicalize from 'canonicalize';
 import type { Actor, AccessClient } from '../request/access.ts';
-import { GrantDeniedError } from '../access/grant-commands.ts';
-import { handleHolder } from '../access/handle-holder.ts';
-import { normalizeHandle } from '../access/lifecycle.ts';
-import { readOrganizationRole } from '../access/account-data.ts';
+import { GrantDeniedError } from '../access/resource-access-errors.ts';
+import {
+  handleHolder,
+  normalizeHandle,
+  readOrganizationRole,
+  authorizeResource as resourceAuthorization,
+} from './domain-ports.ts';
 import {
   authoritativeTimeValue,
   principalCommandIdentity,
@@ -14,15 +17,8 @@ import {
 } from '../command/command.ts';
 import { withConnection } from '../database/pool.ts';
 import { derivedId, newId, partitionOf, routeOf } from '../route/route.ts';
-import { resourceAuthorization } from '../access/resource-authorization.ts';
-import {
-  SpaceConflictError,
-  SpaceInputError,
-  readSpace,
-  type Space,
-  type SpaceDependencies,
-  type SpaceContext,
-} from './space.ts';
+import { SpaceConflictError, SpaceInputError, type Space, type SpaceDependencies, type SpaceContext } from './space.ts';
+import { readSpace } from './space-read.ts';
 import readAddress from './space-address-read.sql';
 import readActiveAddresses from './space-address-batch-active.sql';
 import reserveAddress from './space-address-pending.sql';

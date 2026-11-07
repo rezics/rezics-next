@@ -1,17 +1,17 @@
 import canonicalize from 'canonicalize';
-import { readPublicIdentities, type PublicIdentity } from '../access/account-data.ts';
-import { readNativeAccountStates } from '../access/account-authority.ts';
-import { deadlineClient, within } from '../access/authenticate.ts';
+import { readPublicIdentities, readNativeAccountStates, deadlineClient, within, accessCheck } from './domain-ports.ts';
+import type { PublicIdentity } from '../access/account-data.ts';
 import { AccessUnavailableError, CommandUnavailableError } from '../access/unavailable.ts';
-import { GrantDeniedError } from '../access/grant-commands.ts';
+import { GrantDeniedError } from '../access/resource-access-errors.ts';
 import { authoritativeTimeValue, mintReadTime, releaseOperationalTime } from '../command/command.ts';
 import { discardConnection, withConnection } from '../database/pool.ts';
-import { ProblemError } from '../http/problem.ts';
+import { ProblemError } from '../http/problem-error.ts';
 import { readPartition } from '../partition/partition.ts';
-import { accessCheck, type AccessClient, type Actor } from '../request/access.ts';
+import type { AccessClient, Actor } from '../request/access.ts';
 import { partitionOf, routeOf } from '../route/route.ts';
 import { decodeCursor, encodeCursor } from '../tokens/cursor.ts';
-import { RealmBanInputError, type BanDependencies } from './ban.ts';
+import { RealmBanInputError } from './contract/index.ts';
+import { type BanDependencies } from './ban.ts';
 import type {
   BanReviewIdentity,
   BanReviewPage,
@@ -19,8 +19,8 @@ import type {
   BanReviewPageQuery,
 } from './ban-review-page-schemas.ts';
 import { PublicationCursorError } from './publication.ts';
-import { realmReadEligibility } from './realm.ts';
-import { spaceReadEligibility } from './space.ts';
+import { realmReadEligibility } from './realm-read.ts';
+import { spaceReadEligibility } from './space-read.ts';
 import sourceRead from './ban-review-page-source.sql';
 import windowRead from './ban-review-page-window.sql';
 import selectedRead from './ban-review-page-selected.sql';
