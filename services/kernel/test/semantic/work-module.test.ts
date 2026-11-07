@@ -50,56 +50,50 @@ const program = `
     return startRelays(nativePool, relays, ...rest);
   });
   const { readWorkerConfig, startWorker } = await import('./src/worker.ts');
-  import { createDiscoveryProducerEntry } from './src/composition/discovery.ts';
-  import { createKernelRuntimeDefaults } from './src/composition/runtime-defaults.ts';
-    import { createKernelWorkModules } from './src/composition/work-modules.ts';
-    import { composeSemanticIdentityParticipants } from './src/composition/semantic.ts';
-    const KERNEL_WORK_MODULES = createKernelWorkModules(
-      createDiscoveryProducerEntry,
-      createKernelRuntimeDefaults,
-      composeSemanticIdentityParticipants,
-    );
   let pool;
   let starts = 0;
   let stops = 0;
   let registrations = 0;
-  assert.equal(KERNEL_WORK_MODULES.filter(m => m.name === 'semantic').length, 1);
-  const modules = KERNEL_WORK_MODULES.map(module => ({
-    name: module.name,
-    async register(context) {
-      if (module.name !== 'semantic') return module.register(context);
-      registrations++;
-      pool = context.pool;
-      assert.equal(DBOS.isInitialized(), false);
-      await module.register({ ...context, addEffects(effects) {
-        const erasure = effects.find(effect => effect.name === 'semantic_erasure');
-        assert.ok(erasure, 'Semantic registers its account tombstone effect even when no local data applies');
-        assert.deepEqual(erasure.types, ['com.rezics.access.account-tombstoned.v1']);
-        const identity = effects.find(effect => effect.name === 'identity_epoch_admission');
-        assert.ok(identity, 'Semantic registers durable resumption of the saved identity job');
-        assert.deepEqual(identity.types, ['com.rezics.semantic.identity-epoch.admitted.v1']);
-        context.addEffects(effects);
-      }, addService(start) {
-        context.addService(async () => {
-          assert.equal(DBOS.isInitialized(), true);
-          const service = await start();
-          starts++;
-          return { async stop() {
-            assert.equal(pool.ended, false);
-            assert.equal(DBOS.isInitialized(), true);
-            await service.stop();
-            stops++;
-          }};
-        });
-      }});
-    }
-  }));
   const fail = process.env.SEMANTIC_START_FAILURE === 'true';
-  if (fail) modules.push({ name: 'startup-failure', register(context) {
-    context.addService(() => { throw new Error('later starter failed'); });
-  }});
+  const decorate = nativeModules => {
+    assert.equal(nativeModules.filter(m => m.name === 'semantic').length, 1);
+    const modules = nativeModules.map(module => ({
+      name: module.name,
+      async register(context) {
+        if (module.name !== 'semantic') return module.register(context);
+        registrations++;
+        pool = context.pool;
+        assert.equal(DBOS.isInitialized(), false);
+        await module.register({ ...context, addEffects(effects) {
+          const erasure = effects.find(effect => effect.name === 'semantic_erasure');
+          assert.ok(erasure, 'Semantic registers its account tombstone effect even when no local data applies');
+          assert.deepEqual(erasure.types, ['com.rezics.access.account-tombstoned.v1']);
+          const identity = effects.find(effect => effect.name === 'identity_epoch_admission');
+          assert.ok(identity, 'Semantic registers durable resumption of the saved identity job');
+          assert.deepEqual(identity.types, ['com.rezics.semantic.identity-epoch.admitted.v1']);
+          context.addEffects(effects);
+        }, addService(start) {
+          context.addService(async () => {
+            assert.equal(DBOS.isInitialized(), true);
+            const service = await start();
+            starts++;
+            return { async stop() {
+              assert.equal(pool.ended, false);
+              assert.equal(DBOS.isInitialized(), true);
+              await service.stop();
+              stops++;
+            }};
+          });
+        }});
+      }
+    }));
+    if (fail) modules.push({ name: 'startup-failure', register(context) {
+      context.addService(() => { throw new Error('later starter failed'); });
+    }});
+    return modules;
+  };
   try {
-    const worker = await startWorker(readWorkerConfig(process.env), modules);
+    const worker = await startWorker(readWorkerConfig(process.env), decorate);
     assert.equal(fail, false);
     assert.equal(registrations, 1);
     assert.equal(identityRegistrations, 1);
@@ -382,7 +376,7 @@ test('default Semantic composition registers its real locator and bounded local 
   try {
     await createSemanticWorkModule(composeSemanticIdentityParticipants).register({
       pool,
-      env: process.env,
+      env: { ...process.env, ...workerTestEnv() },
       clock: () => new Date(),
       queues: WORK_QUEUES,
       client,

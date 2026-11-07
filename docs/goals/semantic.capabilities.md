@@ -102,6 +102,9 @@ Native rule creation requests include the read scopes required by the released e
 scopes required by execution; curated creation omits the dynamic-only wire fields. Producer reconciliation remains
 with the sole Members owner. The bounded bootstrap continuation and safe phase diagnostics are received through
 the existing native journeys; integration alone establishes no first-public or Content rerun pass.
+Worker lifecycle fixtures decorate the worker's installed module list after History composition and supply the same
+dedicated worker environment to direct registration. Registration counts, native link convergence and shutdown
+drain assertions remain unchanged; these fixture checks do not establish an admitted first-public pass.
 
 ## Evidence stages
 
