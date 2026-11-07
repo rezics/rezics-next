@@ -1441,6 +1441,9 @@ Source correction starts each field at Preserve; setting or clearing a field req
 
 ## first-public-journeys-on-dev
 
+Decision: retain all 26 original journey rows and assertions; move the Library follow/collection fixtures to current
+Access-backed actor inputs, then route any revealed boundary mismatches to their owning Goal.
+
 Walk attempt: **0/26 reached; 26 setup failures (journey runners were not entered)**. At `2026-11-07 12:16:27 UTC`,
 the admitted dev walk process failed while importing the DBOS SDK, before it started the stack, selected a persona,
 served a page or queried a dev revision. The runner reported slot acquisition after 63 ms; per-path duration and
