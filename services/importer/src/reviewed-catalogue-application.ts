@@ -29,6 +29,7 @@ import {
   type ReviewedCataloguePort,
   type ReviewedCatalogueReceipt,
   type ReviewedCatalogueResult,
+  throwReviewedCatalogueBatchFailure,
   type ReviewedCatalogueSeed,
   type ReviewedCatalogueSeedInput,
 } from './reviewed-catalogue-contract.ts';
@@ -251,9 +252,7 @@ async function seedReviewedCatalogueWith(
       };
       const pending = session.bindings.prepare(o, sourceDigest(create), { commands: [create] });
       const result = await input.port.batch(JSON.parse(pending.bytes), input.signal);
-      const bootstrap = result.results[0]!;
-      if ('problem' in bootstrap)
-        throw new Error(`Reviewed catalogue bootstrap ${seed.key}: ${JSON.stringify(bootstrap.problem)}`);
+      throwReviewedCatalogueBatchFailure(seed.key, 'bootstrap', result);
       session.bindings.acknowledge(o, pending.key, result);
       const claim = session.bindings.claim(o);
       assertReviewedCatalogue(claim?.state === 'bound');
@@ -283,9 +282,7 @@ async function seedReviewedCatalogueWith(
         const journal = session.bindings.journal(o, command.key);
         assertReviewedCatalogue(journal);
         const result = await input.port.batch(JSON.parse(journal.bytes), input.signal);
-        const proposal = result.results[0]!;
-        if ('problem' in proposal)
-          throw new Error(`Reviewed catalogue proposal ${seed.key}: ${JSON.stringify(proposal.problem)}`);
+        throwReviewedCatalogueBatchFailure(seed.key, 'proposal', result);
         session.bindings.acknowledge(o, command.key, result);
         store.acknowledge(run, result, { recordKey: o.external_id });
         const entry = result.results[0]!;
