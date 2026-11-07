@@ -15,7 +15,7 @@ import {
   projectCollectionDirectoryPage,
 } from './collection-directory.ts';
 import type { DiscoveryOwnerMetadataSummary } from './discovery.ts';
-import type { PublicFilterSource } from '../semantic/public-filter-source-contract.ts';
+import type { PublicFilterSource } from '../semantic/index.ts';
 import type { SpaceSubjectPopulation } from '../content/feed-subject-scope.ts';
 import type { KeyRing } from '../tokens/seal.ts';
 import { decodeDiscoveryCursor, decodeSearchCursor, encodeDiscoveryCursor, encodeSearchCursor } from './cursor.ts';

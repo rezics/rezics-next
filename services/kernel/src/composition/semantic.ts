@@ -9,7 +9,11 @@ import {
   createSearchIdentityEpochParticipant,
   searchIdentityReceivingComposition,
 } from '../search/identity-epoch-participant.ts';
+import { createSearchSourceBindingAdapter } from '../search/composition.ts';
 import { readSearchConfig } from '../search/config.ts';
+import { readAccountDiscoveryRepairObservation } from '../access/account-discovery-source.ts';
+import { accessCheck, classifyUnavailability, enrollAccountDiscoveryHome } from '../access/adapters/index.ts';
+import { AccessUnavailableError, requireAccessDeadline } from '../access/unavailable.ts';
 import { createIdentityEpochParticipants } from '../semantic/application/identity-epoch-participants.ts';
 import type { IdentityEpochParticipantPorts } from '../semantic/contract/identity-epoch-ports.ts';
 import {
@@ -27,6 +31,14 @@ import { resolveIdentityAdapterRuntime } from '../semantic/identity-adapter-runt
 import { composeZoneResource } from './zones.ts';
 import { createSubjectReadingApplication } from '../semantic/index.ts';
 import { createNativeSubjectReadingPort } from '../semantic/adapters/index.ts';
+import {
+  bindSourceBindingApplication,
+  createSourceBindingApplication,
+  createNativePublicFilterSourceBinding,
+  createNativePublicFilterSource,
+  readNativePublicFilterSourceDefinition,
+  type PublicFilterAccessBindingPort,
+} from '../semantic/index.ts';
 
 type SemanticCompositionContext = {
   readonly env: Readonly<Record<string, string | undefined>>;
@@ -34,6 +46,8 @@ type SemanticCompositionContext = {
   readonly clock?: KernelClock;
   getAuthorization?(): { readonly access: Access };
 };
+
+let sourceBindingApplicationInstalled = false;
 
 /** Real fixed identity participants for the default worker: Search currentness and Library custody, bound to the
  * worker pool. Returns null when Search configuration or the membership route key is absent, so the coordinator is
@@ -77,10 +91,35 @@ export function composeSemanticAdapters(): void {
   bindOrdinaryContentLifecycle(nativeContentLifecycle());
   composeSemanticContext();
   composeZoneResource();
+  if (!sourceBindingApplicationInstalled) {
+    bindSourceBindingApplication(
+      createSourceBindingApplication({
+        native: {
+          createBinding: createNativePublicFilterSourceBinding,
+          createSource: createNativePublicFilterSource,
+          readDefinition: readNativePublicFilterSourceDefinition,
+        },
+        search: createSearchSourceBindingAdapter(),
+        access: sourceBindingAccessPort(),
+      }),
+    );
+    sourceBindingApplicationInstalled = true;
+  }
   installIdentitySourceConsumerRuntime();
   installIdentityRatingRepairProducer();
   installRatingVoteSemantic();
   resolveIdentityAdapterRuntime();
+}
+
+function sourceBindingAccessPort(): PublicFilterAccessBindingPort {
+  return Object.freeze({
+    readAccountRepair: readAccountDiscoveryRepairObservation,
+    enrollAccountHome: enrollAccountDiscoveryHome,
+    classifyUnavailability,
+    requireDeadline: requireAccessDeadline,
+    isUnavailable: (error: unknown) => error instanceof AccessUnavailableError,
+    checkSubjectRead: accessCheck,
+  });
 }
 
 /** One request-independent reading application for the ordinary Kernel. */

@@ -1,10 +1,8 @@
 import { afterAll, beforeAll, expect, test } from 'bun:test';
 import { createHash, randomUUID } from 'node:crypto';
 import { subjectListingSource } from '../../src/library/listing-counts.ts';
-import {
-  PublicFilterSourceDefinitionError,
-  readPublicFilterSourceDefinition,
-} from '../../src/semantic/public-filter-source-binding.ts';
+import { PublicFilterSourceDefinitionError, readNativePublicFilterSourceDefinition } from '../../src/semantic/index.ts';
+import { createSearchSourceBindingAdapter } from '../../src/search/source-binding-adapter.ts';
 import { subjectSource } from '../../src/semantic/search-source.ts';
 import { stepIdentityEpochAdmission } from '../../src/semantic/identity-epoch-admission.ts';
 import { stepIdentityEpochMapping } from '../../src/semantic/identity-epoch-mapping.ts';
@@ -179,7 +177,8 @@ test('the fixed Search participant uses genuine native original receiving custod
     )
   ).rows[0]!;
   const routeDigest = createHash('sha256').update(routeKey).digest('hex');
-  const read = () => readPublicFilterSourceDefinition(retained.definition, f.pool, routeDigest, 20_480);
+  const search = createSearchSourceBindingAdapter();
+  const read = () => readNativePublicFilterSourceDefinition(retained.definition, f.pool, routeDigest, search, 20_480);
   const loaded = await read();
   const retainedCapture = (
     await f.admin.query<{ capture: string }>(
@@ -195,9 +194,9 @@ test('the fixed Search participant uses genuine native original receiving custod
     dependencyKeys: expect.any(Array),
   });
   expect(loaded.bytes).toBeLessThanOrEqual(20_480);
-  await expect(readPublicFilterSourceDefinition(randomUUID(), f.pool, routeDigest, 20_480)).rejects.toMatchObject({
-    reason: 'definition_missing',
-  });
+  await expect(
+    readNativePublicFilterSourceDefinition(randomUUID(), f.pool, routeDigest, search, 20_480),
+  ).rejects.toMatchObject({ reason: 'definition_missing' });
   const refuseMutation = async (update: string, values: unknown[], restore: string, restoreValues: unknown[]) => {
     await f.admin.query(update, values);
     try {

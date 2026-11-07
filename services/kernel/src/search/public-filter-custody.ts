@@ -37,9 +37,9 @@ import { compileFilter } from './filter.ts';
 import { compileText } from './text.ts';
 import { validatePublicSuggestionInput } from './public-suggestion-input.ts';
 import { createOpenSearch, OpenSearchError, type OpenSearch } from './opensearch.ts';
-import type { PublicFilterCost } from '../semantic/public-filter-source-contract.ts';
+import type { PublicFilterCost } from '../semantic/index.ts';
 import { assertRetainedPitDeletion } from './erasure-pit.ts';
-import type { PublicFilterConsumer, PublicFilterDependencyKey } from '../semantic/public-filter-source-contract.ts';
+import type { PublicFilterConsumer, PublicFilterDependencyKey } from '../semantic/index.ts';
 import type {
   PublicCanonicalCaptureInput,
   PublicFilterConsumerContext,

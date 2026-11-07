@@ -3,7 +3,7 @@ import type { CollectionAliasProgress } from '../library/collection-source.ts';
 import type { ScopeLeafResume } from './scope-execution.ts';
 import type { NativeOrdinalKey } from '../library/collection-source-order.ts';
 import type { NativeSourceFrontier, NativeSourceIdentity } from '../library/native-source-custody.ts';
-import type { PublicFilterSourceDefinition } from '../semantic/public-filter-source-binding.ts';
+import type { PublicFilterSourceDefinition } from '../semantic/index.ts';
 import type { IdentityScopeObservation } from '../semantic/identity-scope-types.ts';
 import { withConnection } from '../database/pool.ts';
 import { enqueueWorkIntent, type WorkClient } from '../work/client.ts';

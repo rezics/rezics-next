@@ -1,6 +1,14 @@
 import { memoizedValue } from '../memoized.ts';
 export { createAccountPublicEligibility } from './account-authority.ts';
-export type { AccessCheck, PreparedAccessCheckInvocation, PreparedAccessCheckWork } from '../request/access.ts';
+export type {
+  Access,
+  AccessCheck,
+  AccessContext,
+  Actor,
+  Resource,
+  PreparedAccessCheckInvocation,
+  PreparedAccessCheckWork,
+} from '../request/access.ts';
 export type * from './kind-audience.ts';
 import type { PermissionAccount } from './account-authority.ts';
 import { accessCheckout, accessTransaction, AccessWorkAccounting, AccessWorkUnavailableError } from './work.ts';

@@ -1,6 +1,6 @@
 import type { FacetNativePlan, FacetNativeRead } from './facet-discovery-native.ts';
 import type { PublicFilterConsumerContext, PublicFilterQueriedObservation } from './public-filter-consumer-contract.ts';
-import type { PublicFilterCost } from '../semantic/public-filter-source-contract.ts';
+import type { PublicFilterCost } from '../semantic/index.ts';
 import { createHash } from 'node:crypto';
 import canonicalize from 'canonicalize';
 import type { Pool, PoolClient } from 'pg';
@@ -9,8 +9,8 @@ import type {
   PrivacyReductionStart,
   PublicFilterSource,
   PublicFilterProjectionFrontier,
-} from '../semantic/public-filter-source-contract.ts';
-import type { PublicFilterSourceBinding } from '../semantic/public-filter-source-binding.ts';
+} from '../semantic/index.ts';
+import type { PublicFilterSourceBinding } from '../semantic/index.ts';
 import type { FacetPopulationSource } from '../semantic/facet-population-contract.ts';
 import type { OpenSearch } from './opensearch.ts';
 import { assertCompleteSearch } from './complete-search.ts';

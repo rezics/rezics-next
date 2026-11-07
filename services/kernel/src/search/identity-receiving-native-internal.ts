@@ -1,6 +1,6 @@
 import type { Pool } from 'pg';
 import type { IdentityFrontier, IdentityNativeReceipt, NativeStepWork } from '../semantic/identity-epoch-contract.ts';
-import type { PublicFilterProjectionFrontier } from '../semantic/public-filter-source-contract.ts';
+import type { PublicFilterProjectionFrontier } from '../semantic/index.ts';
 import type {
   SearchIdentityReceivingLocator,
   SearchIdentityReceivingSelection,

@@ -1,5 +1,10 @@
 import type { Pool } from 'pg';
-import type { PublicFilterSourceBinding } from '../semantic/public-filter-source-binding.ts';
+import type { PublicFilterSourceBinding } from '../semantic/index.ts';
+import type {
+  PublicFilterConsumerContext,
+  PublicFilterConsumerUnavailable,
+  PublicFilterQueriedObservation,
+} from '../semantic/index.ts';
 import type { DiscoveryConsumerCaptureInput, DiscoveryConsumerQuery, DiscoveryRegistry } from './discovery.ts';
 import type { FilterDocument } from '@rezics/filter';
 import type { TextNode } from './text.ts';
@@ -11,7 +16,7 @@ import type {
   PublicFilterSource,
   PrivacyReductionHead,
   PrivacyReductionStart,
-} from '../semantic/public-filter-source-contract.ts';
+} from '../semantic/index.ts';
 import type { OpenSearch } from './opensearch.ts';
 import type { SearchPlan, SearchResult, SubjectHit } from './query.ts';
 import type { CreditSearchSource } from './credit-search.ts';
@@ -21,15 +26,7 @@ export const PUBLIC_FILTER_PREPARATION_BATCH_SIZE = 100;
 /** Raw mixed candidates include duplicates and current-predicate rejects. */
 export const PUBLIC_FILTER_PREPARATION_RAW_LIMIT = 1_000;
 
-/** The ONE queried-observation type. Internal native locators, never public transport fields.
- * Each locator resolves to retained native execution/registration state; its shape proves nothing.
- */
-export type PublicFilterQueriedObservation = Readonly<{
-  consumer: PublicFilterConsumer;
-  snapshot:
-    | Readonly<{ kind: 'pit'; observation: string; pit: string }>
-    | Readonly<{ kind: 'prepared'; observation: string; build: string; generation: bigint }>;
-}>;
+export type { PublicFilterConsumerContext, PublicFilterConsumerUnavailable, PublicFilterQueriedObservation };
 
 /** Shared semantic input, never a compiled-only admission. All inherited native DSL/metadata
  * fields are optional compatibility evidence and must match the plan derived from this AST.
@@ -65,24 +62,8 @@ export type PublicSuggestionQuery =
       Readonly<{ result: readonly SubjectHit[] }>)
   | Exclude<PublicFilterConsumerQuery, { status: 'queried' }>;
 
-/** Actual caller request/worker deadline. Domain clock is installed once at the trusted factory. */
-export type PublicFilterConsumerContext = Readonly<{ deadline: number }>;
-
 /** Locator of persisted native repair work, not an input/frontier or completion assertion. */
 export type PublicFilterConsumerJob = Readonly<{ consumer: PublicFilterConsumer; job: string }>;
-
-export type PublicFilterConsumerUnavailable = Readonly<{
-  status: 'unready' | 'unavailable';
-  reason:
-    | 'registration_missing'
-    | 'incarnation_changed'
-    | 'observation_lost'
-    | 'source_pending'
-    | 'routing_incomplete'
-    | 'deadline'
-    | 'dependency_unavailable';
-  cost: PublicFilterCost;
-}>;
 
 export type PublicFilterConsumerCapture =
   | Readonly<{ status: 'preparing'; repair: PublicFilterConsumerJob; cost: PublicFilterCost }>

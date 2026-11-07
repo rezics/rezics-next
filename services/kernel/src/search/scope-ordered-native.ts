@@ -7,11 +7,11 @@ import type {
   PublicFilterSource,
   PublicFilterProjectionMeaning,
   PublicFilterCost,
-} from '../semantic/public-filter-source-contract.ts';
+} from '../semantic/index.ts';
 import type {
   PublicFilterSourceBootstrapBinding,
   PublicFilterSourceCaptureInput,
-} from '../semantic/public-filter-source-binding.ts';
+} from '../semantic/index.ts';
 import {
   createPublicFilterConsumerOperations,
   queryScopeOrderedKeys,

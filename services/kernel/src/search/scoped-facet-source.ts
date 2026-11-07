@@ -1,6 +1,6 @@
 import canonicalize from 'canonicalize';
 import { createHash } from 'node:crypto';
-import type { PublicFilterCost } from '../semantic/public-filter-source-contract.ts';
+import type { PublicFilterCost } from '../semantic/index.ts';
 import type { PublicFilterConsumerContext } from './public-filter-consumer-contract.ts';
 import { subjectPartition } from './source.ts';
 

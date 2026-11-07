@@ -5,7 +5,7 @@ import {
   readNativePublicFilterRepairStart,
   readNativePublicFilterPublicationCompletion,
   type NativePublicFilterPublicationCompletion,
-} from '../semantic/public-filter-source-binding.ts';
+} from '../semantic/index.ts';
 import repairSave from './public-filter-custody-repair-save.sql';
 import repairCurrent from './public-filter-custody-repair-current.sql';
 import repairEffectSave from './public-filter-custody-repair-effect-save.sql';
@@ -21,7 +21,7 @@ import type {
   PublicFilterConsumer,
   PublicFilterDependencyKey,
   PublicFilterProjectionMeaning,
-} from '../semantic/public-filter-source-contract.ts';
+} from '../semantic/index.ts';
 import {
   PUBLIC_FILTER_PREPARATION_BATCH_SIZE,
   PUBLIC_FILTER_PREPARATION_RAW_LIMIT,
@@ -600,14 +600,14 @@ import type {
   PublicFilterCost,
   PrivacyReductionStart,
   PublicFilterProjectionRecord,
-} from '../semantic/public-filter-source-contract.ts';
-import { advanceNativePublicFilterPreparation } from '../semantic/public-filter-source-binding.ts';
+} from '../semantic/index.ts';
+import { advanceNativePublicFilterPreparation } from '../semantic/index.ts';
 import type {
   PublicFilterSourceBinding,
   PublicFilterSourceBootstrapBinding,
   PublicSourceBootstrap,
   PublicSourceRepair,
-} from '../semantic/public-filter-source-binding.ts';
+} from '../semantic/index.ts';
 import type {
   PublicCanonicalCaptureInput,
   PublicFilterConsumerOperationsFactory,
@@ -638,7 +638,7 @@ import type {
   RetainedRepairPage,
   RetainedSourceRepair,
 } from './public-filter-custody-contract.ts';
-import { publicFilterSourceOrigin } from '../semantic/public-filter-source.ts';
+import { publicFilterSourceOrigin } from '../semantic/index.ts';
 import { createRatedSubjectSource } from './rated-source.ts';
 import { subjectListingSource } from '../library/listing-counts.ts';
 import {

@@ -11,14 +11,14 @@ import type {
   PublicFilterCost,
   PublicFilterDependencyKey,
   PublicFilterProjectionMeaning,
-} from '../semantic/public-filter-source-contract.ts';
+} from '../semantic/index.ts';
 import type { OpenSearch } from './opensearch.ts';
 import type { AccountDiscoveryRepairObservation } from '../access/account-discovery-source.ts';
 import type {
   PublicFilterSourceBinding,
   NativeSourceRepairLocator,
   PublicSourceRepair,
-} from '../semantic/public-filter-source-binding.ts';
+} from '../semantic/index.ts';
 
 /** Structural Source data copied by trusted producers; custody never certifies Source authority. */
 export type CustodyDefinition<Capture extends PublicCanonicalCaptureInput = PublicFilterConsumerCaptureInput> =
@@ -102,7 +102,7 @@ export type {
   NativeSourceRepairVerification,
   NativeSourceRepairStepRead,
   NativeSourceRepairStepVerification,
-} from '../semantic/public-filter-source-binding.ts';
+} from '../semantic/index.ts';
 export type PublicFilterRepairSourceBinding = PublicFilterSourceBinding;
 export type RetainedSourceRepair = Omit<PublicSourceRepair, 'receipt'> &
   Readonly<{ receipt: NativeSourceRepairLocator }>;
