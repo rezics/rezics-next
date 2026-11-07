@@ -24,6 +24,7 @@ import {
   parseRemotePhysicalRunReceipt,
   requestExecutionCancellation,
   type RemotePhysicalRunReceipt,
+  type RemoteCleanupReceipt,
 } from './remote-check.ts';
 
 export const CHECK_RUN_SETTLEMENT_SCHEMA = 1 as const;
@@ -134,6 +135,19 @@ export type CheckRunInvocationPhase =
   | 'cancel-requested'
   | 'cancelled';
 
+/** Physical cleanup does not establish a command result or release the frozen input custody. */
+export type CheckRunPhysicalCleanup = {
+  schema: 1;
+  invocationId: string;
+  nonce: string;
+  binding: CheckRunInvocationBinding;
+  physical: CheckRunPhysicalIdentity;
+  remote: RemoteCleanupReceipt;
+  reconciliationTransportChildReaped: boolean;
+  transportIdentity: CheckRunTransportIdentityState;
+  transportChildReaped: boolean;
+};
+
 export type CheckRunInvocationRecord = {
   schema: 1;
   invocationId: string;
@@ -156,6 +170,7 @@ export type CheckRunInvocationRecord = {
   final: CheckRunFinalSettlement | null;
   finalCustody: CheckRunFinalCustody | null;
   failure: string | null;
+  physicalCleanup?: CheckRunPhysicalCleanup;
 };
 
 export type CheckRunFinalCustodyObservation = {
@@ -247,6 +262,7 @@ export type CheckRunMessageExpectation = {
 };
 
 export type CheckRunReconciliation =
+  | { disposition: 'physical-cleanup'; observation: CheckRunPhysicalCleanup }
   | { disposition: 'settled'; final: CheckRunFinalSettlement; transportIdentity?: CheckRunTransportIdentityState }
   | { disposition: 'unknown'; reason: string; transportIdentity?: CheckRunTransportIdentityState };
 
@@ -1514,6 +1530,98 @@ function validateFreshReconciliationCandidate(
   return '';
 }
 
+function validatePhysicalCleanup(value: unknown): CheckRunPhysicalCleanup {
+  const item = closedObject(
+    value,
+    [
+      'schema',
+      'invocationId',
+      'nonce',
+      'binding',
+      'physical',
+      'remote',
+      'reconciliationTransportChildReaped',
+      'transportIdentity',
+      'transportChildReaped',
+    ],
+    'physical cleanup',
+  );
+  const physical = validatePhysical(item.physical);
+  const remote = closedObject(
+    item.remote,
+    [
+      'schema',
+      'host',
+      'run',
+      'status',
+      'supervisorStopped',
+      'commandGroupTerminal',
+      'containersRemoved',
+      'runDirectoryRemoved',
+      'failures',
+    ],
+    'remote physical cleanup',
+  );
+  if (
+    item.schema !== 1 ||
+    typeof item.invocationId !== 'string' ||
+    !UUID.test(item.invocationId) ||
+    typeof item.nonce !== 'string' ||
+    !HASH.test(item.nonce) ||
+    remote.schema !== 1 ||
+    remote.host !== physical.host ||
+    remote.run !== physical.run ||
+    remote.status !== 'verified' ||
+    remote.supervisorStopped !== true ||
+    remote.commandGroupTerminal !== true ||
+    remote.containersRemoved !== true ||
+    remote.runDirectoryRemoved !== true ||
+    !Array.isArray(remote.failures) ||
+    remote.failures.length !== 0 ||
+    typeof item.reconciliationTransportChildReaped !== 'boolean' ||
+    !['live-same', 'gone-or-replaced', 'unknown'].includes(String(item.transportIdentity)) ||
+    item.transportChildReaped !==
+      (item.reconciliationTransportChildReaped && item.transportIdentity === 'gone-or-replaced')
+  )
+    throw new Error('check-run-settlement: invalid verified physical cleanup');
+  return {
+    schema: 1,
+    invocationId: item.invocationId,
+    nonce: item.nonce,
+    binding: validateCheckRunInvocationBinding(item.binding),
+    physical,
+    remote: {
+      schema: 1,
+      host: physical.host,
+      run: physical.run,
+      status: 'verified',
+      supervisorStopped: true,
+      commandGroupTerminal: true,
+      containersRemoved: true,
+      runDirectoryRemoved: true,
+      failures: [],
+    },
+    reconciliationTransportChildReaped: item.reconciliationTransportChildReaped,
+    transportIdentity: item.transportIdentity as CheckRunTransportIdentityState,
+    transportChildReaped: item.transportChildReaped as boolean,
+  };
+}
+
+function assertPhysicalCleanupBinding(
+  record: Pick<CheckRunInvocationRecord, 'invocationId' | 'nonce' | 'binding' | 'physical'>,
+  observation: CheckRunPhysicalCleanup,
+): void {
+  if (
+    observation.invocationId !== record.invocationId ||
+    observation.nonce !== record.nonce ||
+    checkRunBindingHash(observation.binding) !== checkRunBindingHash(record.binding) ||
+    !record.physical ||
+    observation.physical.host !== record.physical.host ||
+    observation.physical.run !== record.physical.run
+  )
+    throw new Error('check-run-settlement: physical cleanup differs from the original invocation binding');
+}
+
 function validateRecord(value: unknown): CheckRunInvocationRecord {
   const item = closedObjectWithOptional(
     value,
@@ -1535,7 +1643,7 @@ function validateRecord(value: unknown): CheckRunInvocationRecord {
       'final',
       'failure',
     ],
-    ['preparedExecution', 'descriptor', 'preparationIntent', 'snapshotCustody', 'finalCustody'],
+    ['preparedExecution', 'descriptor', 'preparationIntent', 'snapshotCustody', 'finalCustody', 'physicalCleanup'],
     'invocation record',
   );
   if (item.schema !== 1 || typeof item.invocationId !== 'string' || !UUID.test(item.invocationId))
@@ -1613,6 +1721,18 @@ function validateRecord(value: unknown): CheckRunInvocationRecord {
   const failure = item.failure === null ? null : boundedText(item.failure, 'failure detail');
   const final = item.final === null ? null : validateCheckRunFinalSettlement(item.final);
   const finalCustody = item.finalCustody == null ? null : validateFinalCustody(item.finalCustody);
+  const physicalCleanup =
+    item.physicalCleanup === undefined ? undefined : validatePhysicalCleanup(item.physicalCleanup);
+  if (physicalCleanup)
+    assertPhysicalCleanupBinding(
+      {
+        invocationId: item.invocationId,
+        nonce,
+        binding: validateCheckRunInvocationBinding(item.binding),
+        physical: item.physical === null ? null : validatePhysical(item.physical),
+      },
+      physicalCleanup,
+    );
   const phase =
     item.phase === 'settled' && finalCustody?.aggregate !== 'settled'
       ? 'unknown'
@@ -1642,6 +1762,7 @@ function validateRecord(value: unknown): CheckRunInvocationRecord {
     final,
     finalCustody,
     failure,
+    ...(physicalCleanup ? { physicalCleanup } : {}),
   };
 }
 
@@ -2445,6 +2566,7 @@ export async function reconcileCheckRunInvocation(
   options: CheckRunReconcileOptions = {},
 ): Promise<CheckRunInvocationRecord> {
   const before = await getCheckRunStatus(invocationId, options);
+  if (before.physicalCleanup) return before;
   if (before.final) {
     const custody = before.finalCustody ?? makeFinalCustody(before, before.final, 'unknown');
     const identityFailure = validateFinalCustodyIdentity(before, custody);
@@ -2527,7 +2649,10 @@ export async function reconcileCheckRunInvocation(
     let reconciliationFailure = 'reconciliation did not return exact custody evidence';
     try {
       const observed = await options.reconcilePhysical(before.physical, before);
-      observedTransportIdentity = observed.transportIdentity ?? null;
+      observedTransportIdentity =
+        observed.disposition === 'physical-cleanup' ? null : (observed.transportIdentity ?? null);
+      if (observed.disposition === 'physical-cleanup')
+        throw new Error('cleanup-only evidence cannot replace an immutable native final');
       if (observed.disposition === 'settled') observedFinal = validateCheckRunFinalSettlement(observed.final);
       else reconciliationFailure = boundedText(observed.reason, 'reconciliation failure');
       if (observedFinal)
@@ -2629,11 +2754,26 @@ export async function reconcileCheckRunInvocation(
     );
   try {
     const observed = await options.reconcilePhysical(before.physical, before);
+    if (observed.disposition === 'physical-cleanup') {
+      const observation = validatePhysicalCleanup(observed.observation);
+      assertPhysicalCleanupBinding(before, observation);
+      return mutateRecord(invocationId, options, async (directory, record) => {
+        if (record.physicalCleanup || record.final) return record;
+        assertPhysicalCleanupBinding(record, observation);
+        if (record.native) throw new Error('cleanup-only reconciliation cannot replace a native command result');
+        return updateRecord(directory, record, {
+          phase: 'unknown',
+          physicalCleanup: observation,
+          failure:
+            record.failure ?? 'original native command outcome is unavailable; verified physical cleanup retained',
+        });
+      });
+    }
     if (observed.disposition === 'unknown') {
       return mutateRecord(invocationId, options, async (directory, record) =>
         updateRecord(directory, record, {
           phase: 'unknown',
-          failure: boundedText(observed.reason, 'reconciliation failure'),
+          failure: record.failure ?? boundedText(observed.reason, 'reconciliation failure'),
         }),
       );
     }
@@ -2663,7 +2803,7 @@ export async function reconcileCheckRunInvocation(
     return mutateRecord(invocationId, options, async (directory, record) => {
       const reason = `reconciliation failed for the original physical run: ${error instanceof Error ? error.message.slice(0, 512) : 'unknown error'}`;
       if (record.final) return record;
-      return updateRecord(directory, record, { phase: 'unknown', failure: reason });
+      return updateRecord(directory, record, { phase: 'unknown', failure: record.failure ?? reason });
     });
   }
 }
