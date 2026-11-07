@@ -2,10 +2,7 @@ import type { Pool } from 'pg';
 import { deliverAccountIdentity } from '../../src/access/agent-verification-identity.ts';
 import type { AgentVerificationReversal } from '../../src/access/agent-verification.ts';
 import { classifyUnavailability } from '../../src/access/unavailable.ts';
-import {
-  enqueueAgentIdentityReversal,
-  enqueueAgentIdentityVerification,
-} from '../../src/history/application/index.ts';
+import { enqueueAgentIdentityReversal, enqueueAgentIdentityVerification } from '../../src/history/application/index.ts';
 import { IdentityEpochStoreError } from '../../src/semantic/identity-adapters/index.ts';
 import type { WorkClient } from '../../src/work/client.ts';
 
@@ -99,7 +96,5 @@ export async function runAccountIdentityReversal(
   client: WorkClient,
   decision: AgentVerificationReversal,
 ): Promise<void> {
-  await admitOrJoin(client, reversalWorkflowId(decision), () =>
-    enqueueAgentIdentityReversal(pool, client, decision),
-  );
+  await admitOrJoin(client, reversalWorkflowId(decision), () => enqueueAgentIdentityReversal(pool, client, decision));
 }

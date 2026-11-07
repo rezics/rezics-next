@@ -534,12 +534,7 @@ export async function verifyAccountIdentityReversalSettlement(
   const verify = ACCOUNT_IDENTITY_REVERSAL_VERIFY_DECLARATION();
   if (
     !work ||
-    !reserveIdentitySourceConsumerNativeWork(
-      resources.pool,
-      work,
-      accountIdentityNativeStep(verify.work),
-      verify.work,
-    )
+    !reserveIdentitySourceConsumerNativeWork(resources.pool, work, accountIdentityNativeStep(verify.work), verify.work)
   )
     return false;
   const data = (proof as Proof | null)?.[locator];
@@ -547,4 +542,3 @@ export async function verifyAccountIdentityReversalSettlement(
   const result = await settlementFor(tx, reference);
   return !!result && sameNative(result.terminal, data.terminal) && result.snapshot === data.snapshot;
 }
-
