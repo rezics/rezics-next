@@ -2,12 +2,7 @@ import type { AccessWorkAccounting } from '../access/work.ts';
 import outputHeadForRetention from './collection-source-output-head.sql';
 import { createBuiltinRuntime, type BuiltinCollectionView } from './builtin-runtime.ts';
 import type { Pool, PoolClient } from 'pg';
-import {
-  deadlineClient,
-  commandAccessContext,
-  readAccount,
-  readAccountCommandState,
-} from './access-port.ts';
+import { deadlineClient, commandAccessContext, readAccount, readAccountCommandState } from './access-port.ts';
 import {
   mintReadTime,
   releaseOperationalTime,
