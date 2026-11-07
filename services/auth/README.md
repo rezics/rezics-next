@@ -2378,9 +2378,14 @@ database explicitly; mounted scopes, native Auth/Access and workflow registratio
 
 Acceptance choice: preserve all existing mounted-catalogue and fresh browser assertions; replace the placeholder
 catalogue URL with a migrated throwaway database and cold-process admission against a conflicting ambient URL.
-Fresh setup starts without an inherited database or Reylo cache and checks the original database identity,
-website registration and connection retirement. Changed-workspace typing is worker acceptance; the controller runs
-the original three-file native/browser selection after integration without increasing its timeout.
+Fresh setup first admits a shared stack slot and carries its selected container names, database/search ports and
+service origins through the documented setup/start commands, readiness probes and browser assertions. The fixture
+holds that lease directly rather than enabling the walk's deferred-page startup, preserving the ordinary default
+worker and Web/Auth pages. It releases the lease after stopping its processes and removing its exact containers,
+volumes and source copy. UUID names alone do not reserve ports. Setup starts without an inherited database or Reylo
+cache and checks the selected original database identity, website registration and connection retirement.
+Changed-workspace typing is worker acceptance; the controller runs the original three-file native/browser selection
+after integration without increasing its timeout.
 
 Setup and native loading report fixed operation names with `starting`/`ready` markers on stderr; they never include
 database URLs or key material. Setup distinguishes environment loading, Auth database creation and migration,
