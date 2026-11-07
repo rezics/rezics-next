@@ -94,10 +94,10 @@ slot, parallel reader, route, writer, score cache or GET repair is introduced.
 The manifest splits Library by layer. `kernel-library-contract` owns `library/contract/**`: work dimensions, actors,
 Source, membership, ordering, capability ports and application result types. Access, Platform, Search, Semantic,
 Content and Zones import those shapes from the contract entries, not from the Source runtime. `kernel-library-core`
-owns pure route/grant, page-plan, work-ledger, Source classification, membership accounting, identity-native matching
-and publication admission. `kernel-library-application` owns Source capture, owner-query, member preparation,
-publication admission, identity-native and Entry/progress use cases; they load without Access, Search, Semantic or
-Content and run with fake capabilities. Native SQL catalogs and foreign Access/Search/Semantic/Content adapters live
+owns pure route/grant, page-plan, work-ledger, Source classification, membership accounting, identity-native matching,
+publication admission, Collection history plans and retention disposition. `kernel-library-application` owns Source
+capture, owner-query, member preparation, publication admission, Collection mutations, identity-native and
+Entry/progress use cases; they load without Access, Search, Semantic or Content and run with fake capabilities. Native SQL catalogs and foreign Access/Search/Semantic/Content adapters live
 in `library/adapters/**` and are bound only from `composition/library.ts`. `createKernelRuntimeDefaults`, the HTTP
 server and the worker call `composeLibraryDomain`. Compatibility entries (`identity-native-bounds.ts`,
 `account-grant.ts`, `ordinary-read-bounds.ts`, `builtin-runtime-query.ts`, `members-preparation.ts`,
@@ -122,7 +122,7 @@ uses the Library `searchPreparation` capability through existing dependency obje
 Search `ScopeWork` subclassing. The Source adapter ABI keeps Search `ScopeWorkContext` so Search receiving type pins
 stay exact; contract `CollectionSourceContext.work` stays unknown so contract/core/application load without Search.
 
-Decision: pin this increment's user-visible composition with the existing domain-composition suite, including presentation kind admission and withheld cover, rather than a second suite.
+[Collection mutations](collection-mutation.md) owns mutation layers, effects and focused tests.
 
 Fewest tests: one `domain-composition.test.ts` suite covering fake-capability applications plus Source, member,
 publication, presentation and Entry/progress edges (actor, deadline, private working versus activated public, repeated ordered

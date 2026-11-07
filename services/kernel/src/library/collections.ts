@@ -54,7 +54,7 @@ import { assertCollectionOrderWritable, beginCollectionOrderRepair } from './col
 import { withCollectionOrderDeclaration } from './collection-order-bounds.ts';
 import { withCollectionRetentionDeclaration, executeCollectionRetentionQuery } from './collection-retention-bounds.ts';
 import { consumeShelfMaintenance, shelfMaintenanceCommandPlan } from './shelf-maintenance-bounds.ts';
-import { captureCollectionMetadataHistory } from './collection-metadata-history.ts';
+import { collectionMutationApplication } from './collection-mutation.ts';
 import {
   deleteMember as deleteMemberRow,
   insertCollection,
@@ -794,22 +794,30 @@ export function createCollectionCommands(config: {
       async (tx, command, route) => {
         if (!command.rule) throw new Error('Missing admitted Collection rule');
         const previous = await activeCollection(tx, route, id);
-        if (previous.revision !== revision) throw new ProblemError('conflict');
-        const saved = await readSavedCollectionRule(tx, route, id);
-        if (
-          saved &&
-          isDeepStrictEqual(saved.filter, command.rule.filter) &&
-          saved.sort === command.rule.sort &&
-          saved.source.kind === command.rule.source.kind &&
-          saved.releaseDigest === command.rule.releaseDigest
-        )
-          return { value: previous, events: collectionEvents('updated', id, false) };
-        await updateSavedCollectionRule(tx, route, id, revision, command.rule, command);
-        await retireCollectionPublicationWork(tx, route, id);
-        const updated = await activeCollection(tx, route, id);
-        if (previous.visibility !== 'private')
-          await recordPublicCollectionReduction(tx, route, id, command.transactionId);
-        return { value: updated, events: collectionEvents('updated', id, listed(previous)) };
+        const result = await collectionMutationApplication().updateRule(
+          tx,
+          { before: previous, revision },
+          {
+            conflict() {
+              throw new ProblemError('conflict');
+            },
+            async unchanged() {
+              const saved = await readSavedCollectionRule(tx, route, id);
+              return (
+                !!saved &&
+                isDeepStrictEqual(saved.filter, command.rule!.filter) &&
+                saved.sort === command.rule!.sort &&
+                saved.source.kind === command.rule!.source.kind &&
+                saved.releaseDigest === command.rule!.releaseDigest
+              );
+            },
+            write: () => updateSavedCollectionRule(tx, route, id, revision, command.rule!, command),
+            retirePublication: () => retireCollectionPublicationWork(tx, route, id),
+            readCurrent: () => activeCollection(tx, route, id),
+            reducePublicSource: () => recordPublicCollectionReduction(tx, route, id, command.transactionId),
+          },
+        );
+        return { value: result.value, events: collectionEvents('updated', id, result.changed && listed(previous)) };
       },
       undefined,
       undefined,
@@ -852,39 +860,29 @@ export function createCollectionCommands(config: {
       input,
       async (tx, command, route) => {
         const current = await activeCollection(tx, route, id);
-        if (current.revision !== revision) throw new ProblemError('conflict');
         const wasListed = listed(current);
-        const value = await updateCollectionRow(
-          tx,
-          route,
-          id,
-          revision,
-          {
-            title: title ?? current.title,
-            description: description === undefined ? current.description : description,
-            visibility: visibility ?? current.visibility,
-            presentationKind:
-              selection.presentationKind === undefined ? current.presentationKind : selection.presentationKind,
-            coverMediaId: selection.coverMediaId === undefined ? current.coverMediaId : selection.coverMediaId,
-          },
-          command,
-        );
-        if (!value) throw new ProblemError('conflict');
-        await captureCollectionMetadataHistory(tx, {
-          route,
-          before: current,
-          after: value,
-          transactionId: command.transactionId,
-          time: command.time,
-        });
-        if (current.membershipKind === 'dynamic' && current.visibility !== value.visibility)
-          await retireCollectionPublicationWork(tx, route, id);
-        if ((wasListed && !listed(value)) || (current.visibility !== 'private' && value.visibility === 'private'))
-          await recordPublicCollectionReduction(tx, route, id, command.transactionId);
-        return {
-          value: current.membershipKind === 'dynamic' ? await activeCollection(tx, route, id) : value,
-          events: collectionEvents('updated', id, wasListed !== listed(value)),
+        const changes = {
+          title: title ?? current.title,
+          description: description === undefined ? current.description : description,
+          visibility: visibility ?? current.visibility,
+          presentationKind:
+            selection.presentationKind === undefined ? current.presentationKind : selection.presentationKind,
+          coverMediaId: selection.coverMediaId === undefined ? current.coverMediaId : selection.coverMediaId,
         };
+        const value = await collectionMutationApplication().updateMetadata(
+          tx,
+          { route, before: current, revision, changes, ...command },
+          {
+            conflict() {
+              throw new ProblemError('conflict');
+            },
+            write: () => updateCollectionRow(tx, route, id, revision, changes, command),
+            retirePublication: () => retireCollectionPublicationWork(tx, route, id),
+            reducePublicSource: () => recordPublicCollectionReduction(tx, route, id, command.transactionId),
+            readCurrent: () => activeCollection(tx, route, id),
+          },
+        );
+        return { value, events: collectionEvents('updated', id, wasListed !== listed(value)) };
       },
       undefined,
       undefined,
