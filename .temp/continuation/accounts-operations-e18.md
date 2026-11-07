@@ -1,16 +1,16 @@
-# Personal delete applies on the walk Auth host
+# Software opening completes on the walk Auth host
 
 goal: accounts
 manager: accounts
 owner: Accounts
 reuse: SDK e18, Auth c883
 
-Walk revision `c20a775de46c4920f7480490f313eab40c43e37a` at 2026-11-07T04:18Z.
-Organization create, owner transfer, rename and software opening passed (J06–J09).
-Website Kernel bearer is accepted.
+Walk revision `50d6ddce544ba428e2f64de731703520790f5d9c` at 2026-11-07T06:40Z.
+Organization create, owner transfer, rename and personal delete passed
+(J06–J08, J18). Website Kernel bearer is accepted.
 
-J18: `POST /account-operations/approve` then execute `{kind:delete}` with the current
-handle as confirmation returned HTTP 400 `{error:account_operation_denied,
-effect_status:not_applied}`. Bind the Kernel account-operation receiver so a human
-delete with that handle confirmation applies, then sign-in is refused and public
-attribution remains without a live handle. Do not add a new denial envelope.
+J09: `POST /account-operations` `{kind:automated}` then
+`POST /operator-sessions/open` timed out at 18431ms (`The operation timed out.`).
+A previous round on this handle completed the same opening in 7127ms with
+outsider open HTTP 403. Finish automated create and outsider-denied operator
+open on this walk Auth host. Do not add a new denial envelope.

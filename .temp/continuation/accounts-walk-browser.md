@@ -1,18 +1,16 @@
-# Walk Web stays alive for desktop and phone Home
+# Walk Web resolves Worker bindings for desktop and phone Home
 
 goal: accounts
 manager: accounts
 
-Walk revision `c20a775de46c4920f7480490f313eab40c43e37a` at 2026-11-07T04:28Z. Auth
-pages became ready. Web `dev` on walk port 20010 printed ready, then the Vite/Rolldown
-process died:
+Walk revision `50d6ddce544ba428e2f64de731703520790f5d9c` at 2026-11-07T07:15Z.
+Auth pages became ready. Web `dev` on walk port 20050 printed ready, then Vite
+failed to resolve `cloudflare:workers` from `src/kernel/client.ts` and
+`src/features/catalogue/definition-guide-actions.ts`. Chromium then saw
+`Failed to fetch dynamically imported module: .../src/client.tsx`. Desktop 1280
+and phone 390 were not inspected. J01 native HTTP already passed. Teardown
+exited `dev` with code 143.
 
-`FATAL ERROR: Reached heap limit Allocation failed - JavaScript heap out of memory`
-
-then `error: script "dev" exited with code 134`. Chromium `goto` `/en/` was
-`net::ERR_CONNECTION_REFUSED`. Desktop 1280 and phone 390 were not inspected. J01
-native HTTP already passed.
-
-Repair: Web `dev` on the admitted walk ports must stay running through Home and the
-public person page at 1280 and 390. Keep one Chromium process. Do not open a second
-walk.
+Repair: Web `dev` on the admitted walk ports must resolve Worker bindings and
+stay running through Home and the public person page at 1280 and 390. Keep one
+Chromium process. Do not open a second walk.
