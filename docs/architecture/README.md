@@ -1,5 +1,7 @@
 # Architecture check
 
+Decision: Search result saving and configured Concept following invert private Library save, owner observation and follow through a Search-owned `SearchLibraryActionPort`. `library-action-port.tsx` and `saved-query-selection.ts` are Search public entries; `search-action-binding.tsx` is the Library public adapter installed once by `LibraryApplicationBoundary`. Search results and `source-concept-view` consume the host; they no longer value-import `save-query`, `saved-query-editor/selection` or `follow-target-control`. Subject `pages/data`, overview and `load-subject` stay read/href composition for this pair.
+
 Decision: Game edition/evidence and Manga evidence invert `pages/data` `CandidateValue` through a catalogue-owned `WorkReadingPort`. `work-reading-binding.tsx` binds that adapter at Subject page composition; the readers are public entries and no longer value-import `pages/data` or `overview.sectionClass`.
 
 Decision: Screen profile and episode continuation are instantiated from the Semantic-owned screen reading application. Navigation descriptors are dependency-free values consumed by the visit owner. Page values, spoiler disclosure, canonical Subject hrefs and visit-return admission are a Semantic-owned port bound by Search at `OverviewRoot` / `ScreenReadingBoundary`. Semantic no longer value-imports `pages/data`, `pages/values`, `subject/candidates` or `subject-visit-navigation` for this operation. Public entries are `screen-reading-port.ts` and `screen-reading-application.tsx`.

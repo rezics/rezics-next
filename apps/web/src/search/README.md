@@ -151,6 +151,11 @@ query identity starts a fresh admitted state.
 
 ## Library integration
 
+Decision: Search owns saved-filter selection and the Library action host (`library-action-port.tsx`). Library installs
+the native adapter (`search-action-binding.tsx`) once on the Library application host. Executed Search results save
+through that host; configured Concept pages follow through the same host. The three former private Library imports
+(`save-query`, `saved-query-editor/selection`, `follow-target-control`) are removed from Search consumers.
+
 Decision: Search provides the public Collection directory read and row-presentation adapters and the saved-rule
 ConditionEditor adapter; the ordinary Collection and new-rule routes choose them. Library owns the request/result
 and presentation ports. Search's adapters import those public ports, with no Library implementation dependency.

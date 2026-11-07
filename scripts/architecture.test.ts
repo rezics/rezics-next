@@ -460,6 +460,8 @@ describe('architecture boundaries', () => {
     );
     expect(module('web-commerce')?.publicEntries).toContain('apps/web/src/checkout/reader-origin.ts');
     expect(module('web-search')?.publicEntries).toContain('apps/web/src/search/search.tsx');
+    expect(module('web-search')?.publicEntries).toContain('apps/web/src/search/library-action-port.tsx');
+    expect(module('web-library')?.publicEntries).toContain('apps/web/src/library/search-action-binding.tsx');
 
     expectImports(
       '@rezics/access',
