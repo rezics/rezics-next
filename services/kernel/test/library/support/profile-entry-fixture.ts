@@ -546,7 +546,9 @@ export async function createProfileEntryFixture(
     if (growthSubjects.length > 0) {
       // The documented legacy-import window closes when native identity installation commits.
       // Seed only Semantic source rows here; Library entries still use native commands.
-      const source = JSON.stringify(growthSubjects.map((subjectId) => ({ subjectId, transactionId: randomUUID() })));
+      const source = JSON.stringify(
+        growthSubjects.map((subjectId) => ({ subject_id: subjectId, transaction_id: randomUUID() })),
+      );
       await pool.query(
         `WITH source AS (
            SELECT $1::integer AS route, subject_id::uuid, transaction_id::uuid
