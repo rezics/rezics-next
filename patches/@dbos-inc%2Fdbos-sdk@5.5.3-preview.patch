@@ -82,7 +82,7 @@ index 7a6d950117..535517cb48 100644
 +        return this.systemDatabase.maintainWorkflowOnce(pool, expected, action, deadline, reserve);
 +    }
 +    retireWorkflow(workflowID, invocation) {
-+        return invocation === undefined
++        return arguments.length < 2
 +            ? this.systemDatabase.retireWorkflow(workflowID)
 +            : this.systemDatabase.invokeRetireWorkflow(workflowID, invocation);
 +    }
@@ -289,7 +289,7 @@ index 370a89e439..fbfd616bf6 100644
 +    static async retireWorkflow(workflowID, invocation) {
 +        (0, decorators_1.ensureDBOSIsLaunched)('retireWorkflow');
 +        // The native receipt is independent of workflow checkpoints and execution deletion.
-+        return invocation === undefined
++        return arguments.length < 2
 +            ? dbos_executor_1.DBOSExecutor.globalInstance.systemDatabase.retireWorkflow(workflowID)
 +            : dbos_executor_1.DBOSExecutor.globalInstance.systemDatabase.invokeRetireWorkflow(workflowID, invocation);
 +    }
@@ -793,7 +793,7 @@ index 79ef5957a3..2c92b08a83 100644
              // Check existence separately: a zero-row update also means "already complete", a legal no-op.
              const existingParams = [];
              const { rows } = await client.query(`SELECT workflow_uuid FROM "${this.schemaName}".workflow_status WHERE ${this.wfIn(undefined, workflowIDs, existingParams)}`, existingParams);
-@@ -2003,6 +2006,126 @@ class SystemDatabase {
+@@ -2003,6 +2006,131 @@ class SystemDatabase {
          }
          return [...descendants];
      }
@@ -832,8 +832,13 @@ index 79ef5957a3..2c92b08a83 100644
 +                }
 +            }
 +            await reserve('commit');
-+            await client.query('COMMIT');
-+            begun = false;
++            try {
++                await client.query('COMMIT');
++                begun = false;
++            } catch (error) {
++                begun = false;
++                throw error;
++            }
 +            if (action === 'delete') this.runningWorkflowMap.delete(expected.workflowID);
 +            return result;
 +        } catch (error) {
@@ -920,7 +925,7 @@ index 79ef5957a3..2c92b08a83 100644
      /** Delete workflows and all associated data, and with deleteChildren every workflow they started, recursively. */
      async deleteWorkflows(workflowIDs, deleteChildren = false) {
          const allIds = [...workflowIDs];
-@@ -2063,6 +2186,9 @@ class SystemDatabase {
+@@ -2063,6 +2191,9 @@ class SystemDatabase {
          const client = await this.connect();
          try {
              await client.query('BEGIN ISOLATION LEVEL READ COMMITTED');
@@ -930,7 +935,7 @@ index 79ef5957a3..2c92b08a83 100644
              const statusParams = [];
              const { rows: statusRows } = await client.query(`SELECT status FROM "${schema}".workflow_status WHERE ${this.wf(undefined, workflowID, statusParams)}`, statusParams);
              if (statusRows.length === 0) {
-@@ -2158,6 +2284,9 @@ class SystemDatabase {
+@@ -2158,6 +2289,9 @@ class SystemDatabase {
          const client = await this.connect();
          try {
              await client.query('BEGIN ISOLATION LEVEL READ COMMITTED');
@@ -940,7 +945,7 @@ index 79ef5957a3..2c92b08a83 100644
              // Fetch the status of all original workflows inside the transaction.
              const statusParams = [];
              const { rows: statusRows } = await client.query(`SELECT ws.workflow_uuid, ws.name, ws.class_name, ws.config_name, ws.application_id,
-@@ -3672,6 +3801,12 @@ class SystemDatabase {
+@@ -3672,6 +3806,12 @@ class SystemDatabase {
      }
      // ==================== Queries & Maintenance ====================
      /** With `keyedIDs`, the listed workflow IDs are addressed by their shard keys, as a batch read of known workflows. */

@@ -2,8 +2,63 @@ import { expect, test } from 'bun:test';
 import { DBOS, DBOSClient } from '@dbos-inc/dbos-sdk';
 import { completeCopy, copiesAbsent, eraseCopy } from '../src/erasure-copy.ts';
 import { AUTH_SYSTEM_SCHEMA } from '../src/maintenance.ts';
-import { authSdkRetirementReadiness, nativeFence, readAuthSdkFence } from '../src/sdk-retirement-fence.ts';
-import { failNativeQueries, nativeFixture } from './support/erasure-native.ts';
+import { workflowStatusScanReadiness } from '../src/retention-scan.ts';
+import { AUTH_WORKFLOW_RETENTION_COST } from '../src/retention-cost.ts';
+import {
+  AUTH_SDK_RETIREMENT,
+  AUTH_SDK_RETIREMENT_DISPATCH,
+  authSdkFundedReadiness,
+  authSdkRetirementReadiness,
+  createAuthSdkRetirementInvocation,
+  fundAuthSdkRetirementEnvelope,
+  nativeFence,
+  nativeRetirementWork,
+  readAuthSdkFence,
+} from '../src/sdk-retirement-fence.ts';
+import { failNativeQueries, nativeFixture, runNativeRetentionTick } from './support/erasure-native.ts';
+
+test('Auth funds retirement attempts, waits, backoff and reconciliation before dispatch', async () => {
+  const reserved: string[] = [];
+  const invocation = createAuthSdkRetirementInvocation();
+  expect(invocation.maxAttempts).toBe(1);
+  expect(invocation.maxAttempts).toBeLessThanOrEqual(8);
+  const tracking = {
+    ...invocation,
+    async reserve(dispatch: string) {
+      reserved.push(dispatch);
+      return invocation.reserve(dispatch);
+    },
+  };
+  await fundAuthSdkRetirementEnvelope(tracking);
+  expect(reserved).toEqual(['attempt', 'wait', 'backoff', 'reconcile']);
+  await tracking.reserve('rollback');
+  expect(reserved.at(-1)).toBe('rollback');
+  await expect(
+    fundAuthSdkRetirementEnvelope({
+      deadline: Date.now() - 1,
+      maxAttempts: 1,
+      reserve: async () => {
+        throw new Error('expired envelope must not dispatch');
+      },
+    }),
+  ).rejects.toThrow('Auth SDK retirement deadline has expired');
+  expect(AUTH_WORKFLOW_RETENTION_COST.fundedClose.statements).toBeGreaterThan(
+    AUTH_SDK_RETIREMENT_DISPATCH.retire.statements,
+  );
+  const fence = {
+    workflowID: 'wf-1',
+    generation: '2',
+    closureID: 'aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee',
+    closedAt: 1,
+  };
+  expect(nativeRetirementWork(fence, 'wf-1')).toBeNull();
+  expect(
+    nativeRetirementWork({ fence, attempts: 1, failedWork: { attempts: 1, statements: 4, rows: 2, bytes: 8 } }, 'wf-1'),
+  ).toEqual({ fence, attempts: 1, failedWork: [] });
+  expect(
+    nativeRetirementWork({ fence, attempts: 1, failedWork: [{ attempt: 1, dispatch: 'commit' }] }, 'wf-1'),
+  ).toEqual({ fence, attempts: 1, failedWork: [{ attempt: 1, dispatch: 'commit' }] });
+});
 
 test('default Auth retirement persists the actual SDK fence before physical deletion and preserves living history', async () => {
   const f = await nativeFixture();
@@ -11,6 +66,8 @@ test('default Auth retirement persists the actual SDK fence before physical dele
     // These cases consume the producer's actual package after integration. No
     // synthetic native receipt, writer coverage bit or result ACK is installed.
     expect(authSdkRetirementReadiness().ready).toBe(true);
+    expect(authSdkFundedReadiness().ready).toBe(true);
+    expect(workflowStatusScanReadiness().ready).toBe(true);
     const person = await f.person('native-fence-binding');
     const survivor = await f.person('native-fence-living');
     const original = (
@@ -23,7 +80,11 @@ test('default Auth retirement persists the actual SDK fence before physical dele
     ).rows[0]!;
     expect(original).toMatchObject({ ready: true, retired: false, result_finished_at: expect.any(Date) });
     expect(await readAuthSdkFence(original.workflow_id)).toBeNull();
-    expect(await f.host.service.internal.retireWorkflowCopy(original.workflow_id)).toBe(true);
+    await f.pool.query('UPDATE auth_dbos.workflow_status SET created_at=$2,completed_at=$2 WHERE workflow_uuid=$1', [
+      original.workflow_id,
+      Date.now() - 90 * 86400000,
+    ]);
+    await runNativeRetentionTick(f.pool, 'z:binding-retention');
     const receipt = await readAuthSdkFence(original.workflow_id);
     expect(receipt).toMatchObject({ workflowID: original.workflow_id, generation: '2' });
     if (!receipt) throw new Error('Native fence missing');
@@ -81,7 +142,7 @@ test('default Auth retirement persists the actual SDK fence before physical dele
 
 test('absent SDK retirement capability preserves genuine consumed Auth custody and physical history', async () => {
   const f = await nativeFixture();
-  const retirement = Object.getOwnPropertyDescriptor(DBOS, 'retireWorkflow');
+  const retire = Object.getOwnPropertyDescriptor(DBOSClient.prototype, 'retireWorkflow');
   try {
     const person = await f.person('native-fence-unavailable');
     const original = (
@@ -93,10 +154,15 @@ test('absent SDK retirement capability preserves genuine consumed Auth custody a
       )
     ).rows[0]!;
     expect(await completeCopy(f.pool, original.workflow_id)).toBe(true);
-    // Exercise an actually absent runtime method, without a replacement body or receipt.
-    if (!retirement || !Reflect.deleteProperty(DBOS, 'retireWorkflow'))
-      throw new Error('Native retirement method cannot be removed for absence case');
-    expect(authSdkRetirementReadiness().ready).toBe(false);
+    // Exercise an actually absent funded runtime method, without a replacement body or receipt.
+    if (!retire || !Reflect.deleteProperty(DBOSClient.prototype, 'retireWorkflow'))
+      throw new Error('Funded retirement method cannot be removed for absence case');
+    expect(authSdkFundedReadiness().ready).toBe(false);
+    await f.pool.query('UPDATE auth_dbos.workflow_status SET created_at=$2,completed_at=$2 WHERE workflow_uuid=$1', [
+      original.workflow_id,
+      Date.now() - 90 * 86400000,
+    ]);
+    expect(await f.host.service.internal.retainWorkflowHistory(30)).toBe(0);
     expect(await eraseCopy(f.pool, original.workflow_id)).toBe(false);
     expect(await copiesAbsent(f.pool, original.workflow_id)).toBe(false);
     expect(await DBOS.getWorkflowWriterFence(original.workflow_id)).toBeNull();
@@ -121,10 +187,13 @@ test('absent SDK retirement capability preserves genuine consumed Auth custody a
       sdk_fence_generation: null,
       sdk_fence_closure_id: null,
       sdk_fence_closed_at: null,
-      sdk_fence_pending: 'auth-sdk-permanent-late-writer-fence-unavailable',
+      sdk_fence_pending: AUTH_SDK_RETIREMENT.fundedGap,
     });
+    if (retire) Object.defineProperty(DBOSClient.prototype, 'retireWorkflow', retire);
+    expect(await f.host.service.internal.retainWorkflowHistory(30)).toBe(1);
+    expect(await copiesAbsent(f.pool, original.workflow_id)).toBe(true);
   } finally {
-    if (retirement) Object.defineProperty(DBOS, 'retireWorkflow', retirement);
+    if (retire) Object.defineProperty(DBOSClient.prototype, 'retireWorkflow', retire);
     await f.close();
   }
 }, 180_000);
@@ -143,13 +212,17 @@ test('lost Auth receipt persistence retries the same native closure without canc
         [person.accountId],
       )
     ).rows[0]!;
+    await f.pool.query('UPDATE auth_dbos.workflow_status SET created_at=$2,completed_at=$2 WHERE workflow_uuid=$1', [
+      original.workflow_id,
+      Date.now() - 90 * 86400000,
+    ]);
     let interrupted = false;
     restore = failNativeQueries(f.pool, (sql) => {
       if (interrupted || !sql.includes('SET sdk_fence_generation=')) return false;
       interrupted = true;
       return true;
     });
-    await expect(f.host.service.internal.retireWorkflowCopy(original.workflow_id)).rejects.toThrow(
+    await expect(f.host.service.internal.retainWorkflowHistory(30)).rejects.toThrow(
       'Injected native consumer interruption',
     );
     restore();
@@ -165,7 +238,7 @@ test('lost Auth receipt persistence retries the same native closure without canc
       ).rows[0],
     ).toEqual(original);
     expect(await copiesAbsent(f.pool, original.workflow_id)).toBe(false);
-    expect(await f.host.service.internal.retireWorkflowCopy(original.workflow_id)).toBe(true);
+    expect(await f.host.service.internal.retainWorkflowHistory(30)).toBe(1);
     expect(await readAuthSdkFence(original.workflow_id)).toEqual(receipt);
     expect(await copiesAbsent(f.pool, original.workflow_id)).toBe(true);
   } finally {

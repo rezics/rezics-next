@@ -27,6 +27,7 @@ import { jwt } from 'better-auth/plugins';
 import { websiteProvider } from './website-provider.ts';
 import { WEBSITE_CLIENT_ID, websiteRoutes } from './website.ts';
 import { pruneExpiredProtocolState } from './protocol-maintenance.ts';
+import { runWorkflowRetentionBatch } from './retention.ts';
 import { APIError, createAuthEndpoint } from 'better-auth/api';
 import { setSessionCookie } from 'better-auth/cookies';
 import { serializeCookie } from 'better-call';
@@ -1515,6 +1516,8 @@ export async function buildAuthService(options: AuthServiceOptions): Promise<Aut
         return id;
       },
       redriveErasureHistory: () => redriveErasureHistory(database, trustedAccess),
+      retainWorkflowHistory: (retentionDays) =>
+        runWorkflowRetentionBatch(database, retentionDays, DBOS, new Date(), service.internal.retireWorkflowCopy),
       async retireWorkflowCopy(id) {
         await completeCopy(database, id);
         return eraseCopy(database, id);
