@@ -546,19 +546,12 @@ The installed Community target variants use the same closed entry shape as the p
 The sole `realm-subject-source.ts` census/factory owner supplies original keys; this evaluator creates no
 population, candidate storage, bootstrap, event consumer or registration. `listSubjectThreads` is not a census.
 
-Exported types are `RealmSubjectCandidate = Readonly<{ threadId: string; openingPostId: string;
-subjectId: string }>`, `RealmSubjectDisclosureInput = Readonly<{ realmId: string;
-candidates: readonly RealmSubjectCandidate[] }>`, `RealmSubjectDisclosureDependencies = Readonly<{
-pool: Pool; access: Access }>`, and `RealmSubjectDisclosureContext = Readonly<{ actor: Actor;
-deadline: number; work: AccessWorkAccounting }>`. `RealmSubjectDisclosure` has only
-`finish(): Promise<readonly RealmSubjectEvidence[]>`. Evidence is aligned with input, without echoed keys:
-`{ state: 'positive'; freshness: RealmSubjectFreshness }` or `{ state: 'absent' | 'withheld' | 'unknown' }`.
-`RealmSubjectFreshness = Readonly<{ before: string; final: string; expiresAt: number; anchors: readonly AnchoredPosition[] }>`
-is internal native freshness, never permission or a reusable bearer proof. Signatures hash actual native
-source and parent observations. No concealed identifiers, counts, denial details or public DTOs are returned.
-The internal `reads.ts` export `prepareRealmSubjectThreadDisclosure` returns `state`, nullable `signature`,
-`anchors` and `final(): Promise<{ signature: string; anchors: readonly AnchoredPosition[] } | null>`;
-its state is `positive | absent | withheld`. It reuses native source, ancestry and board disclosure without bytes.
+`content/contract/index.ts` owns the consumer capabilities and aligned evidence shapes. The native facade keeps
+`RealmSubjectCandidate`, `RealmSubjectDisclosureInput`, Pool/Access dependencies, actual actor/deadline/work context,
+and `finish(): Promise<readonly RealmSubjectEvidence[]>`. Evidence is positive with `before`, `final`, `expiresAt`
+and lossless native anchors, or absent/withheld/unknown without echoed keys. Signatures and freshness are internal
+observations, never permissions. `reads.ts` retains `prepareRealmSubjectThreadDisclosure`: positive/absent/withheld,
+nullable signature, anchors and one final native source observation. It reads source/ancestry/Board metadata only.
 
 Decision: exact evidence pins the original Subject and requires its native reference to remain terminal;
 a redirect never substitutes a different Subject. Missing native capabilities and dependency failures produce
@@ -577,12 +570,20 @@ a missing producer refuses the attempt. The deadline is capped at the caller roo
 bans include the actual actor and authenticated delegating principal. Protected grants, account fences,
 source/parent revisions, takedown and restoration retain native read authority at both rounds.
 
-`realm-subject-search.ts` exports `createRealmSubjectSearchSource`, re-exported from the Content `index.ts` boundary.
-The service supplies the actual request `LeafOptions`; Content binds that reader's Access and actor to the exact
-disclosure evaluator and live lifecycle before Search creates its Realm scope. Prefix candidate disclosure is batched
-in groups of at most eight, with one existing Access work ledger bridged into Search's caller-owned `ScopeWork`.
-Resolve, currentness, candidate batches and terminal Subject reads stay request-bound; no native locator or copied
-authorization observation leaves Content. The default service runtime creates this composition per reader.
+Decision: install Realm community, exact disclosure and Subject search together through
+`createContentRealmApplication`; preserve settled behavior and test identity, unavailable authority and final
+currentness without claiming positive default-journey proof or adding stories.
+
+The existing facade entries delegate to this bound application. HTTP `createKernel` and `composition/content.ts`
+bind Community's current Realm/Space evidence, Semantic's independent exact terminal Subject evidence and Search's
+native work bridge through their public adapter entries. Application code consumes Content-owned ports only.
+Publication advice supplies no global ownership; Realm never becomes Zone. Current carrier disclosure and the
+original/terminal association remain native owner decisions. The original request, Pool and deadline pass unchanged;
+the facade retains the public wire shapes. Search settles into the existing caller root with the accepted bounds.
+The unchanged source/lifecycle own native sparse cursors and final currentness: no directory, scan, registry or feed
+predicate is added. Missing producers remain unavailable. `realm-application.test.ts` pins those use-case outcomes;
+`realm-composition.test.ts` pins default binding and missing authority before IO. Native journey acceptance stays
+with the Goal walk.
 
 ## Mixed Home summaries
 

@@ -16,3 +16,6 @@ export {
   type ReadingPageCapabilities,
 } from './reading-page-bind.ts';
 export { createNativeReadingPageCapabilities, type ContentReadingAccess } from './reading-page.ts';
+export { createNativeContentRealmApplication, type NativeRealmProducers } from './realm.ts';
+export { nativeRealmEvidenceHost } from './realm-disclosure.ts';
+export { bindContentRealmApplication, contentRealmApplication } from './realm-binding.ts';
