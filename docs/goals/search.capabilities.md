@@ -134,8 +134,15 @@ The refresh passed at `11017a16d0396da1d2e65aa67c72e7b8d93c428c`: Kernel and bot
 returned exit 0. The wrapper reported exit 0 on host b, with peak memory 6307 MiB and owned artifact staging
 cleaned. Evidence:
 `.temp/goal/checks/worker-check-04f6654a-c194-4b41-8543-fc353b394d27-2026-11-07T17-22-34.730Z-d595ddba.log`.
-The committed integration meets the changed-workspace typing gate. Native, browser, root and six-path acceptance
-remain deferred to the integrated-dev verifier; no additional behavior run is claimed.
+That pass covers the source snapshot before the later evidence-document edit; settlement requires a fresh check
+of the final committed content. The retry keeps the completed integration and original evidence, then checks Kernel
+before Web with a fail-fast chain and the declared documentation control-plane acceptance. All documentation is
+committed before submission; the returned check result is reported without changing the checked content.
+Ordinary native, browser, root and six-path acceptance remain deferred to the integrated-dev verifier.
+
+```sh
+bun scripts/worker-check.ts -- sh -c 'bun run --cwd services/kernel typecheck && bun run --cwd apps/web typecheck && bun test scripts/docs-check.test.ts'
+```
 
 The retained seventeen-file Kernel command at `cea61c8e7dbf418048ea308a87b37031cb7d08ad` returned exit 1 on host b
 in 1722.930 seconds. Compilation passed in 21.101 seconds and eight files passed, including native boot, original
