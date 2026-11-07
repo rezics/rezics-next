@@ -332,14 +332,6 @@ function commandIncludesTypecheckFlag(command: readonly string[]): boolean {
   return command.includes('check') && command.includes('--no-script');
 }
 
-export function verifierFailureRevertsLanding(check: {
-  command: readonly string[];
-  closure?: readonly string[];
-}): boolean {
-  if (isTypecheckCommand(check.command)) return true;
-  return [...check.command, ...(check.closure ?? [])].some((part) => isMoneyPath(part));
-}
-
 export function worktreeChangedPaths(cwd: string): string[] {
   const git = (args: string[]) => spawnSync('git', args, { cwd, encoding: 'utf8' });
   const head = git(['rev-parse', 'HEAD']);

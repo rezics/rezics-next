@@ -1,5 +1,4 @@
 import { spawnSync } from 'node:child_process';
-import { basename } from 'node:path';
 import type { Settings, Task } from './types.ts';
 import { siblingTestCommand, siblingTestFiles } from './affected-tests.ts';
 import { defaultPolicy } from './policy.ts';
@@ -20,12 +19,6 @@ export type SourceInterval = {
   position: Map<string, number>;
   filesByCommit: Map<string, string[]>;
   parents: Map<string, string[]>;
-  gitReads: number;
-};
-export type RevisionSource = {
-  commit: string;
-  objects: Map<string, string | null>;
-  gitReads: number;
 };
 export type VerifierLandings = { interval: SourceInterval; tasks: Task[] };
 
@@ -90,40 +83,6 @@ function gitText(cwd: string, args: string[], input?: string): string {
   return result.stdout.trim();
 }
 
-/** One batched `cat-file --batch-check` at an immutable revision; never a per-path scan. */
-export function projectRevisionSource(cwd: string, commit: string, paths: readonly string[]): RevisionSource {
-  const unique = [...new Set(paths.filter(Boolean))];
-  const objects = new Map<string, string | null>();
-  if (!unique.length) return { commit, objects, gitReads: 0 };
-  const output = gitText(
-    cwd,
-    ['cat-file', '--batch-check'],
-    `${unique.map((path) => `${commit}:${path}`).join('\n')}\n`,
-  );
-  const lines = output ? output.split('\n') : [];
-  unique.forEach((path, index) => {
-    const line = lines[index] ?? '';
-    objects.set(path, line.endsWith(' missing') ? null : line.split(' ')[0] || null);
-  });
-  return { commit, objects, gitReads: 1 };
-}
-
-export function mergeRevisionSource(
-  cwd: string,
-  commit: string,
-  paths: readonly string[],
-  existing?: RevisionSource,
-): RevisionSource {
-  const needed = [...new Set(paths.filter(Boolean))];
-  const missing = existing ? needed.filter((path) => !existing.objects.has(path)) : needed;
-  if (!missing.length) return existing ?? { commit, objects: new Map(), gitReads: 0 };
-  const extra = projectRevisionSource(cwd, commit, missing);
-  if (!existing) return extra;
-  for (const [path, oid] of extra.objects) existing.objects.set(path, oid);
-  existing.gitReads += extra.gitReads;
-  return existing;
-}
-
 function parseNameOnlyLog(output: string): { commit: string; parents: string[]; files: string[] }[] {
   if (!output) return [];
   return output.split('\n\n').flatMap((chunk) => {
@@ -170,7 +129,6 @@ export function projectSourceInterval(
     position: new Map(),
     filesByCommit: new Map(),
     parents: new Map(),
-    gitReads: 1,
   };
   recordLog(
     interval,
@@ -179,7 +137,6 @@ export function projectSourceInterval(
   );
   const extras = [...new Set(extraCommits.filter((commit) => !interval.landed.has(commit)))];
   if (!extras.length) return interval;
-  interval.gitReads++;
   recordLog(
     interval,
     parseNameOnlyLog(
@@ -219,7 +176,6 @@ export function projectVerifierLandings(
     (commit) => !interval.landed.has(commit),
   );
   if (extras.length) {
-    interval.gitReads++;
     recordLog(
       interval,
       parseNameOnlyLog(
@@ -229,6 +185,13 @@ export function projectVerifierLandings(
     );
   }
   return { interval, tasks };
+}
+
+/** Count a range before projecting every changed path; oversized ranges use the complete suite. */
+export function countSourceIntervalCommits(cwd: string, base: string, target: string): number {
+  const count = Number(gitText(cwd, ['rev-list', '--count', `${base}..${target}`]));
+  if (!Number.isSafeInteger(count) || count < 0) throw new Error('git rev-list returned an invalid commit count');
+  return count;
 }
 
 export function matches(file: string, paths: readonly string[], policy = defaultPolicy.brief): boolean {
@@ -263,6 +226,7 @@ export function createVerifierChecks(
   settings: Settings,
   history: VerifierLandings,
   candidate = history.interval.target,
+  excludeTests: readonly string[] = [],
 ): DevVerifierCheck[] {
   const checkout = settings.mainCheckout;
   const files = changedFiles(checkout, history.interval.base, history.interval.target);
@@ -281,7 +245,7 @@ export function createVerifierChecks(
   if (settings.siblingTests) {
     const nonSpecFiles = files.filter((file) => !file.startsWith('spec/') && !file.startsWith('specs/'));
     const groups = new Map<string, string[]>();
-    for (const file of siblingTestFilesAtCommit(nonSpecFiles, tracked)) {
+    for (const file of siblingTestFilesAtCommit(nonSpecFiles, tracked).filter((path) => !excludeTests.includes(path))) {
       const workspace = bunWorkspace(file, tracked) ?? '';
       groups.set(workspace, [...(groups.get(workspace) ?? []), file]);
     }
@@ -298,64 +262,40 @@ export function createVerifierChecks(
   return checks.map((check) => placeInWorkspace(check, tracked));
 }
 
-function checkSourcePaths(command: readonly string[]): string[] {
-  let index = 0;
-  if (command[index] === 'env') {
-    index++;
-    while (command[index] && /^[A-Za-z_][A-Za-z0-9_]*=/.test(command[index]!)) index++;
-  }
-  const program = basename(command[index] ?? '');
-  if (!['bun', 'node', 'tsx', 'ts-node', 'python', 'python3', 'sh', 'bash', 'deno'].includes(program)) return [];
-  const paths: string[] = [];
-  for (let cursor = index + 1; cursor < command.length; cursor++) {
-    const arg = command[cursor]!;
-    if (arg === '--') break;
-    if (arg === '--cwd' || arg === '--config' || arg === '--loader' || arg === '-r' || arg === '--require') {
-      cursor++;
-      continue;
+/** Plan a bounded complete test set for the first round or a change range too large to select from. */
+export function createFullVerifierChecks(
+  settings: Settings,
+  candidate: string,
+  excludeTests: readonly string[] = [],
+): DevVerifierCheck[] {
+  const configured = settings.verifierChecks ?? settings.affectedTests ?? [];
+  const checks: Check[] = [
+    { command: ['bun', 'scripts/typecheck.ts'], closure: ['**'] },
+    ...configured.map((item) => ({ command: [...item.command], closure: [...item.paths] })),
+  ];
+  if (settings.siblingTests) {
+    const tracked = trackedFilesAt(settings.mainCheckout, candidate);
+    const tests = [...tracked]
+      .filter((path) => /\.(?:test|spec)\.[cm]?[jt]sx?$/i.test(path))
+      .filter((path) => !path.startsWith('services/kernel/'))
+      .filter((path) => !excludeTests.includes(path))
+      .sort();
+    const workspaces = new Map<string, string[]>();
+    for (const test of tests) {
+      const workspace = bunWorkspace(test, tracked) ?? '';
+      workspaces.set(workspace, [...(workspaces.get(workspace) ?? []), test]);
     }
-    if (['run', 'test', 'x', 'exec', 'check', 'fmt', 'lint', '-e', '-c', '--eval'].includes(arg)) {
-      if (['-e', '-c', '--eval'].includes(arg)) cursor++;
-      continue;
+    const chunkSize = 25;
+    for (const files of workspaces.values()) {
+      for (let offset = 0; offset < files.length; offset += chunkSize) {
+        const chunk = files.slice(offset, offset + chunkSize);
+        const command = siblingTestCommand(chunk, settings.siblingTests.command);
+        if (command) checks.push({ command, closure: chunk });
+      }
     }
-    if (arg.startsWith('-') || arg.includes('=') || /^https?:/.test(arg)) continue;
-    if (/[./\\]/.test(arg) || /\.(?:[cm]?[jt]sx?|py|sh|json)$/i.test(arg)) paths.push(arg);
   }
-  return paths;
-}
-
-export function checkSourceFiles(check: DevVerifierCheck): string[] {
-  return checkSourcePaths(check.command)
-    .filter((candidate) => !candidate.startsWith('/'))
-    .map((candidate) => {
-      const path = candidate.replace(/^[.][/\\]/, '').replaceAll('\\', '/');
-      return check.cwd ? `${check.cwd}/${path}` : path;
-    });
-}
-
-export function checkInputAreas(check: DevVerifierCheck): string[] | undefined {
-  const areas = new Set(['package.json', 'bun.lock', ...(check.cwd ? [check.cwd] : [])]);
-  for (const path of [...check.closure, ...checkSourceFiles(check)]) {
-    const segments = path.split('/');
-    const workspace = ['apps', 'services', 'packages'].includes(segments[0]!);
-    const area = segments.slice(0, workspace ? 2 : 1);
-    if (area.some((segment) => !segment || /[*?{}]/.test(segment))) return undefined;
-    areas.add(area.join('/'));
-    if (workspace && segments[0] !== 'packages') areas.add('packages');
-  }
-  return [...areas];
-}
-
-export function checkSourceQueryPaths(check: DevVerifierCheck): string[] {
-  const files = checkSourceFiles(check);
-  const areas = checkInputAreas(check);
-  return areas ? [...new Set([...files, ...areas])] : files;
-}
-
-export function projectChecksSource(cwd: string, commit: string, checks: readonly DevVerifierCheck[]): RevisionSource {
-  return projectRevisionSource(cwd, commit, checks.flatMap(checkSourceQueryPaths));
-}
-
-export function sourcePresentAt(source: RevisionSource, check: DevVerifierCheck): boolean {
-  return checkSourceFiles(check).every((path) => source.objects.get(path) != null);
+  const tracked = trackedFilesAt(settings.mainCheckout, candidate);
+  const unique = new Map<string, Check>();
+  for (const check of checks) unique.set(JSON.stringify(check), check);
+  return [...unique.values()].map((check) => placeInWorkspace(check, tracked));
 }

@@ -18,7 +18,6 @@ import {
   refuseExcessWorkerCheckHostRun,
   refuseOrdinaryProductTestCheck,
   settleWorkerCheckHostBudget,
-  verifierFailureRevertsLanding,
   workerCheckBudgetDirectory,
   workerCheckHostBudgetLimit,
   workerCheckHostCommandReached,
@@ -651,15 +650,4 @@ test('verification, proof-run, control-plane, urgent and requires briefs keep th
   } finally {
     directory.close();
   }
-});
-
-test('the verifier reverts typecheck and payment-path failures and repairs other test failures', () => {
-  expect(verifierFailureRevertsLanding({ command: ['bun', 'scripts/typecheck.ts'], closure: ['**'] })).toBe(true);
-  expect(
-    verifierFailureRevertsLanding({
-      command: ['bun', 'test', 'services/kernel/test/commerce/work.test.ts'],
-      closure: ['services/kernel/src/commerce/**'],
-    }),
-  ).toBe(true);
-  expect(verifierFailureRevertsLanding({ command: ['affected-check'], closure: ['services/kernel/**'] })).toBe(false);
 });

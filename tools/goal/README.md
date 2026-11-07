@@ -307,7 +307,7 @@ acceptance already does.
 Decision: a check waiting on a full upload host moves after two minutes when another performance host can start it now;
 it uploads there, takes the slot, releases the first copy, and keeps gate and landing order on the host it moves to.
 A later move needs another two minutes full. A host with a free slot never moves.
-Decision: the minimal check runs every typecheck in one `sh -c` script and never joins them with `&&`. Product outcomes land when they type-check: a type error blocks a minimal worker, and a failing payment, payout, order settlement, points or balance test does so when those paths changed. Other tests run after landing in the dev verifier. Its result rule sits in the minimal footer, so the condition body stays within `policy.prompt.conditionBytes`.
+Decision: the minimal check runs every changed-workspace typecheck in one `sh -c` script and never joins them with `&&`. Product attempts keep the typing-only rule, with money-path tests included when those paths changed; other product acceptance runs in dev verifier rounds. Control-plane attempts run their declared acceptance command before exit, including when minimal verification is enabled. The product result rule sits in the minimal footer, so the condition body stays within `policy.prompt.conditionBytes`.
 
 Ordinary contracts can be amended before their first worker starts:
 
@@ -890,7 +890,7 @@ protocol or representation meaning; they are not operator limits.
 | `policy.verifier.installAttempts`                     | `3`                                                                        | Verifier dependency installation attempts including the first.                                                                                                                              |
 | `policy.verifier.checkAttempts`                       | `3`                                                                        | Verifier check attempts including the first, retrying infrastructure failures.                                                                                                              |
 | `policy.verifier.findingRows`                         | `2000`                                                                     | Maximum durable verifier findings and default finding page size.                                                                                                                            |
-| `policy.verifier.runRows`                             | `5000`                                                                     | Maximum durable verifier cached runs.                                                                                                                                                       |
+| `policy.verifier.runRows`                             | `5000`                                                                     | Maximum durable verifier check evidence and round records.                                                                                                                                  |
 | `policy.leases.waitMs`                                | `30000`                                                                    | Default synchronous directory lease wait (ms); explicit caller deadlines retain precedence.                                                                                                 |
 | `policy.leases.pollMs`                                | `50`                                                                       | Synchronous directory lease wait polling interval (ms).                                                                                                                                     |
 | `policy.leases.acquisitionAttempts`                   | `3`                                                                        | Atomic directory lease publication attempts, including dead-owner reclamation races.                                                                                                        |
@@ -912,13 +912,14 @@ protocol or representation meaning; they are not operator limits.
 | `policy.controlPlane.negativeProbeCommands`           | `1`                                                                        | Maximum negative-only probe commands attempted per bisection candidate.                                                                                                                     |
 | `policy.controlPlane.negativeProbeFiles`              | `3`                                                                        | Maximum failing test files inherited by a negative-only bisection probe.                                                                                                                    |
 | `policy.controlPlane.diagnosticCharacters`            | `6000`                                                                     | Maximum compiler output characters in a control-plane diagnostic.                                                                                                                           |
-| `policy.verifier.concurrency`                         | `3`                                                                        | Maximum checks or existing-failure probes executed concurrently by one verifier.                                                                                                            |
+| `policy.verifier.concurrency`                         | `3`                                                                        | Maximum selected checks executed concurrently in one verifier round.                                                                                                                        |
 | `policy.verifier.findingAssertions`                   | `64`                                                                       | Maximum stable assertions per verifier result; larger results remain infrastructure/unverified.                                                                                             |
-| `policy.verifier.existingProbes`                      | `8`                                                                        | Maximum intermediate commits sampled for an existing failure; one samples the earliest prefix.                                                                                              |
-| `policy.verifier.diagnosticCharacters`                | `6000`                                                                     | Maximum output characters in a verifier revert notification.                                                                                                                                |
-| `policy.verifier.gitBufferBytes`                      | `33554432`                                                                 | Native Git revert and commit output buffer limit (bytes).                                                                                                                                   |
+| `policy.verifier.diagnosticCharacters`                | `6000`                                                                     | Maximum output characters included per failure in an urgent verifier repair.                                                                                                                |
 | `policy.verifier.residentPollMs`                      | `60000`                                                                    | Pause between completed resident verifier passes (ms).                                                                                                                                      |
-| `policy.verifier.bootSmokeTimeoutMs`                  | `120000`                                                                   | Newest-head boot-smoke deadline (ms); about two minutes for the tests in `bootSmoke.tests`.                                                                                                 |
+| `policy.verifier.bootSmokeTimeoutMs`                  | `120000`                                                                   | Boot-smoke deadline for each test (ms).                                                                                                                                                     |
+| `policy.verifier.roundIntervalMs`                     | `3600000`                                                                  | Minimum time between verifier rounds (ms).                                                                                                                                                  |
+| `policy.verifier.roundDeadlineMs`                     | `3300000`                                                                  | Maximum elapsed time scheduled for one verifier round (ms); unstarted checks carry into the next round.                                                                                     |
+| `policy.verifier.maxSelectionCommits`                 | `1000`                                                                     | Largest changed commit range selected by changed paths before using the complete configured test set.                                                                                       |
 | `policy.pageData.intervalMs`                          | `7200000`                                                                  | Minimum time between page-data checks on the dedicated seeded stack (ms).                                                                                                                   |
 | `policy.pageData.bootTimeoutMs`                       | `300000`                                                                   | Dedicated stack startup readiness deadline (ms).                                                                                                                                            |
 | `policy.pageData.commandTimeoutMs`                    | `600000`                                                                   | Database migration, search startup and auth setup deadline (ms).                                                                                                                            |
@@ -1566,8 +1567,9 @@ check's paths and command come from `devLandingBoot`, not from call sites.
 Main and stabilize train checks retain their existing baseline behavior. They compare recorded failing files with the
 integration base, reuse a result for the same base and command, or run a separate base-worktree check. Failing files
 added by the branch are introduced by definition; failures shared with the base are allowed. These checks retain their
-existing transport retries, unverified environment classification and failure logs. Dev verification uses its own
-captured `dev-verified..dev` change set and advances `dev-verified` only after its selected checks pass.
+existing transport retries, unverified environment classification and failure logs. Dev verification runs periodic
+latest-head rounds, selects changes since its prior round, reports current-head failures and advances `dev-verified`
+when each round ends regardless of its results.
 
 Decision: every two hours by default, the resident verifier refreshes a dedicated detached `dev` checkout against a
 persistent seeded local stack whose PostgreSQL and OpenSearch containers and volumes use the `rezics-pagecheck-`
@@ -2606,31 +2608,25 @@ always gates its own frozen integration candidate.
 
 ### Development verification
 
-Landing on `dev` is a mechanical integration step. A leased verifier checks each new `dev` head
-after the merge train lands its batch; it cannot hold the train lease or block later ready landings. On each new
-dev head it first runs the repository boot smoke named in `bootSmoke.tests` (Kernel and Web client-graph boot tests by
-default; a missing file is skipped until it lands). Heads that arrive while that smoke runs coalesce onto the newest
-head; older heads are skipped for this stage. The smoke uses a local process group with `policy.verifier.bootSmokeTimeoutMs`
-and never takes a worker slot, check-host admission, or the train lease. A product failure records a boot finding,
-bisects with the existing-failure probes, and dispatches one urgent repair brief to the breaking commit's Goal (a later
-failure on the same test updates that repair). It does not revert. Queued typecheck, `verifierChecks`, sibling tests and
-acceptance then run as before. Passing verification advances `dev-verified` with a compare-and-swap unless boot smoke
-still fails. Workers, retries and rebases use that verified ref as their base, and promotion cuts stabilize candidates
-from it. `status` reports the verified commit, how many landings `dev` is ahead, and whether verification is pending,
-running or current.
+Landing on `dev` is a mechanical integration step. The leased verifier runs one round per
+`policy.verifier.roundIntervalMs` on the newest captured `dev` head; a round already running causes another invocation
+to skip. Heads that arrive during a round are coalesced into the next round, so intermediate heads are not queued. Each
+round starts with the repository boot smoke named in `bootSmoke.tests` (Kernel and Web client-graph tests by default;
+a missing file is skipped until it lands), then runs at most three selected checks at once. The first round and any
+range above `policy.verifier.maxSelectionCommits` run the complete configured test set. Other rounds use the shared
+changed-path selection from the previous round head. Work that does not start before
+`policy.verifier.roundDeadlineMs` is carried into the next round.
 
-When a check fails, the verifier narrows suspects by the failing command's workspace closure and bisects only those
-landings. For an affected-check failure after a conflict resolution, it attributes the failing integrated resolution
-commit to that resolution task's original manager, even if an earlier owner's source commit passes the check. Type
-errors, boot failures and payment, payout, order settlement, points or balance test failures keep that handling: type
-errors and payment-path failures revert only the culprit's integrated changes in one commit, return the task to its
-manager with the exact failing log, and keep the worker's source branch available for the owner's fix, then advance the
-verified ref past the culprit so the fix can start from that verified base. A test failure outside those paths creates
-or updates one repair for the owning manager and never reverts the landing. A transport or other recognized
-infrastructure failure during a culprit probe is retried up to twice and remains unassigned if it still cannot run; it
-is not treated as an assertion.
-Decision: source-presence and failed-input hashes use one Git batch-check per revision; missing paths, cwd, closure/package trees, env/toolchain identity and hashes stay.
-Decision: comparison, evidence construction and failure attribution live in `dev-verifier-comparison.ts`; `dev-verifier.ts` retains orchestration while planning, execution/classification and persistence stay with their existing owners.
+Checks report only their captured head result; there is no baseline rerun or failure bisection. Every stable failure
+is recorded once per test file and head with its assertions. The verifier sends one urgent repair containing all
+failing tests and assertions to each owning Goal. Unknown and infrastructure results are recorded, findings never
+hold progress, and `dev-verified` advances to the captured head when the round ends. Workers, retries and rebases use
+that round head as their base, and promotion cuts stabilize candidates from it. `status` reports the verified commit,
+how many landings `dev` is ahead, and whether verification is pending, running or current.
+
+Control-plane briefs run their declared acceptance command in the worker attempt before exit, including under minimal
+verification. Product attempts retain the typing-only rule; their other acceptance tests run in a verifier round.
+Decision: verifier rounds run the newest captured `dev` head on an hourly policy interval, start with boot smoke, select changed checks from the previous round head, carry deadline backlog, report current-head failures in one urgent batch per owning Goal, and always advance `dev-verified` at round end.
 
 When a Codex manager reaches 90% of its token budget, the host delivers one instruction to replace
 `.temp/goal/<manager>/CONTINUATION.md` with at most 8,000 characters (live task IDs, decisions in force as links to
@@ -2890,37 +2886,25 @@ Claude keeps launch argv, event/session parsing and worker token accounting in `
 parsing, streamed rate-limit observations and OAuth/cache I/O live in `src/agents/claude-usage.ts`, with the three
 public allowance functions re-exported from `claude.ts`.
 
-## Baseline findings and release gates
+## Verifier rounds and release gates
 
-This policy supersedes the earlier `Development verification` overview above. `dev-verified` records verifier progress
-and known findings; it is not a green release gate. Before those queued checks, each newest `dev` head runs `bootSmoke.tests`
-locally under `policy.verifier.bootSmokeTimeoutMs`. For every captured `dev` head, the verifier then compares every selected
-head check with the exact previous `dev-verified` commit under the same command selection, environment and concurrency
-limit. Selection uses `verifierChecks` (or legacy `affectedTests` when unset), the root typecheck with its exact
-`TYPECHECK_CHANGED` paths, candidate sibling tests for non-specification files, and landed task acceptance commands
-except for specification and research tasks.
+dev-verified records round progress and current-head findings; it is not a green release gate. The resident verifier
+polls at policy.verifier.residentPollMs and starts a round only when policy.verifier.roundIntervalMs has elapsed
+since its latest round record. A round captures the newest dev head after acquiring the lease. It runs boot smoke
+first under policy.verifier.bootSmokeTimeoutMs, then uses the shared dev-verifier-plan.ts changed-path selection
+from the previous round head. The first round after this policy is introduced and ranges above
+policy.verifier.maxSelectionCommits run the complete configured test set. At most three checks run concurrently.
 
-A stable assertion that fails at both revisions is durably recorded as an existing finding. It does not block the
-verification progress ref or earn a task a success receipt. A head assertion absent from the baseline is new and may
-be attributed only to a task whose integrated range can affect that check. The verifier reconciles every head result
-and its individual baseline comparison before advancing; a passing retry for one command cannot cover another
-unresolved failure. Stable assertion evidence distinguishes an existing failure from a different new failure in the
-same command. Unknown setup, absent commands, transport or other infrastructure errors, and incomplete output remain
-unknown rather than clean baseline results. Findings and exact run evidence are bounded and stored in SQLite so an
-unchanged finding does not start another sweep after restart. Baseline runs, probes and retries all share the ordinary
-three-check concurrency cap.
+policy.verifier.roundDeadlineMs bounds scheduled checks. Checks not started when the deadline expires are persisted
+with the round and carried into the next one. Checks that ran are reported from the captured head only: the verifier
+does not rerun them at the previous head or bisect integrated prefixes. Each failure is recorded once per test file
+and head with its assertions. Failures are batched into one urgent repair per owning Goal. Infrastructure and unknown
+results remain visible but never hold progress, and every completed round advances dev-verified to its captured
+head. Findings and round summaries use the bounded dev_verifier_findings and dev_verifier_runs stores.
 
-Decision: run and finding persistence live in `dev-verifier-storage.ts`; the verifier retains execution order and the existing store-method precedence, SQLite fallbacks and failure behavior.
+Decision: dev-verifier-storage.ts owns bounded check evidence, one summary record per round and findings; the verifier advances the round head regardless of pass, failure or unknown results.
 
-Decision: the landing train and dev verifier share pure changed-path selection. Each caller retains its configured order,
-closures, exclusions, workspace placement and execution authority.
-
-Decision: each verification builds one source-interval landing history (one Git log of `base..target`, plus one optional
-batched extra-commit read). That projection is not reused across source intervals, and a landing is not treated as
-verified unless its acceptance passed on that exact head.
-
-Decision: `dev-verifier-plan.ts` owns read-only source projections and verifier check planning; `dev-verifier.ts`
-retains hashes, cache policy, execution, comparison, findings and lifecycle writes.
+Decision: dev-verifier-plan.ts owns shared changed-path and full-suite planning; dev-verifier-comparison.ts executes each selected check once at the captured head, with no baseline reconciliation.
 
 Each fresh verifier tree installs its own dependencies, even after an earlier tree's setup passed. Installation uses
 an available matching repository Bun or bootstraps with the verifier process's Bun, and logs the executable used.

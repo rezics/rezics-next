@@ -455,10 +455,8 @@ export function createRuntime(options: RuntimeOptions = {}): Runtime {
       verifyDev({
         settings,
         store,
-        inbox,
         runGate: verifierGate,
         runBootSmoke: bootSmokeGate,
-        dispatchRepair: repairRouting.dispatchBootSmokeRepair,
         dispatchTestRepair: repairRouting.dispatchTestFailureRepair,
         runPageData: async () =>
           runPageDataCycle({

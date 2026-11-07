@@ -313,6 +313,20 @@ export type DevVerifierRun = {
   key: string;
   createdAt: string;
   evidence: DevVerifierEvidence;
+  round?: DevVerifierRoundSummary;
+};
+export type DevVerifierRoundSummary = {
+  baseCommit: string;
+  headCommit: string;
+  startedAt: string;
+  completedAt: string;
+  durationMs: number;
+  testsRun: number;
+  passed: number;
+  failed: number;
+  unknown: number;
+  fullSuite: boolean;
+  pendingChecks: { command: string[]; closure: string[]; taskId?: string; cwd?: string }[];
 };
 export type DevVerifierFinding = {
   rangeKey: string;
@@ -324,6 +338,7 @@ export type DevVerifierFinding = {
   result: DevVerifierResult;
   check: { command: string[]; closure: string[]; taskId?: string; cwd?: string };
   assertion: string;
+  test?: string;
   baseline: DevVerifierEvidence | null;
   head: DevVerifierEvidence | null;
   reason: string;
