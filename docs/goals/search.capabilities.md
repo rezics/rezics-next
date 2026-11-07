@@ -32,20 +32,21 @@ specification update; the observed issuer/JWKS gate joins the existing urgent re
 
 ### Current dev census
 
-Observed dev and walk source: `4904c8e26e1994442c45dce707a642dda0125168`.
-This row set replaces the prior 90.471 s census. The 439.242 s launcher interval is the current-dev observation,
-not a journey pass. Decision: the six rows are the acceptance evidence; no extra product tests. Kernel postlanding
-cells do not pass an unexecuted journey.
+Observed walk revision: `06f822b6d30aa9f3291fc112ab0a5f09a2d4b147` (docs-only commits on product
+`4904c8e26e1994442c45dce707a642dda0125168`). This row set replaces the prior 439.242 s census with a new
+2026-11-07 02:48 UTC execution. The 269.257 s launcher interval is the current-dev observation, not a journey
+pass. Decision: the six rows are the acceptance evidence; no extra product tests. Kernel postlanding cells do
+not pass an unexecuted journey.
 
 One admitted slot, with PostgreSQL and OpenSearch, ran
-`bun services/auth/scripts/dev-stack.ts walk --` with a child that would run native `persona`, load private
-`seed.env`, run `bun scripts/datasets/cross-media-seed.ts --dev`, then start seeded frontends.
-The launcher failed before admitting that child. No second concurrent Search walk ran.
+`bun services/auth/scripts/dev-stack.ts walk -- bun .temp/worker-tmp/search-first-public-walk.ts`.
+The child would run native `persona`, load private `seed.env`, run `bun scripts/datasets/cross-media-seed.ts --dev`,
+then start seeded frontends. The launcher failed before that child started. No second concurrent Search walk ran.
 
-Native startup was observed from **2026-11-07 00:45:00.411 UTC** through **00:52:19.653 UTC**:
-**439.242 seconds** wall from walk start to identity reject. Identity-phase work was **10.250 seconds**
-(00:51:52.478–00:52:02.728 UTC). This is the recorded shared prerequisite interval, not six separately timed
-journeys. Every row below inherits this actual failure. No journey reached native Search HTTP or a mounted page.
+Native startup was observed from **2026-11-07 02:48:40.036 UTC** through **02:53:09.293 UTC**:
+**269.257 seconds** wall from walk start to identity reject. Slot **3/6** after 24 ms. This is the recorded
+shared prerequisite interval, not six separately timed journeys. Every row below inherits this actual failure.
+No journey reached native Search HTTP or a mounted page.
 
 Persona **setup** means the walk never obtained a usable native persona or session.
 Granted signed-in reader/editor, ungranted reader, suspended reader's pre-suspension bearer and revoked reader were
@@ -54,27 +55,27 @@ not provisioned. Anonymous is not a substitute for those identities. Phone 390, 
 
 | Journey               | User-visible path and passing result                                                                                                                                                                                         | Exposure                                                                            | Dev walk result                                                                                | Evidence / first failure                                                                                                                                       |
 | --------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Mixed Search          | Open Search, submit text, open a permitted result and return to the executed query; continued pages remain useful and current after a visibility change.                                                                     | Existing Search grant                                                               | FAIL — setup persona; 439.242 s shared startup; dev `4904c8e26e1994442c45dce707a642dda0125168` | Native startup rejected `AUTH_JWKS_URL` before `Worker ready`; query/result/return and visibility change not executed. [Repair](#native-startup-repair).       |
-| Refine and continue   | Submit supported Type/filter operands, inspect current facet choices, continue and restart in the same executed query; changed reader or resource scope retires old values and cursors.                                      | Existing Search grant; advanced second-scope operands remain outside this inventory | FAIL — setup persona; 439.242 s shared startup; dev `4904c8e26e1994442c45dce707a642dda0125168` | Same first startup failure; supported filters/facets, continuation and scope retirement not executed. [Repair](#native-startup-repair).                        |
-| Multilingual names    | Type an original-language name or current alias, select a suggestion, open the matching Subject and change locale without losing the query or authored language order.                                                       | Existing Search grant                                                               | FAIL — setup persona; 439.242 s shared startup; dev `4904c8e26e1994442c45dce707a642dda0125168` | Same first startup failure; suggestions and locale return not executed. [Repair](#native-startup-repair).                                                      |
-| Search recovery       | Correct an invalid authored operand or deliberately retry a preparing/unavailable request after its deadline; generation loss restarts that executed request and renders useful output.                                      | Existing Search grant                                                               | FAIL — setup persona; 439.242 s shared startup; dev `4904c8e26e1994442c45dce707a642dda0125168` | Same first startup failure; invalid-input correction, deadline/manual retry and generation restart not executed. [Repair](#native-startup-repair).             |
-| Configured reading    | Open a configured Subject or static Zone page and read its declared lists in document order; unavailable slots leave supported siblings usable, and a current continuation/retry reaches the right list.                     | Public configured reader where the owning scope admits it                           | FAIL — setup persona; 439.242 s shared startup; dev `4904c8e26e1994442c45dce707a642dda0125168` | Same first startup failure; no independent native-ready public page survived; Subject/Zone list reading not executed. [Repair](#native-startup-repair).        |
-| Published composition | Publish an admitted shared profile or curated Collection presentation, open the selected public version while the editor has a later draft, and deliberately recover a refused/lost response to the actual published result. | Existing publication authority and public selected-version reading                  | FAIL — setup persona; 439.242 s shared startup; dev `4904c8e26e1994442c45dce707a642dda0125168` | Same first startup failure; no publication identity, selected public A, later draft B or response-loss recovery was created. [Repair](#native-startup-repair). |
+| Mixed Search          | Open Search, submit text, open a permitted result and return to the executed query; continued pages remain useful and current after a visibility change.                                                                     | Existing Search grant                                                               | FAIL — setup persona; 269.257 s shared startup; rev `06f822b6d30aa9f3291fc112ab0a5f09a2d4b147` | Native startup rejected `AUTH_JWKS_URL` before `Worker ready`; query/result/return and visibility change not executed. [Repair](#native-startup-repair).       |
+| Refine and continue   | Submit supported Type/filter operands, inspect current facet choices, continue and restart in the same executed query; changed reader or resource scope retires old values and cursors.                                      | Existing Search grant; advanced second-scope operands remain outside this inventory | FAIL — setup persona; 269.257 s shared startup; rev `06f822b6d30aa9f3291fc112ab0a5f09a2d4b147` | Same first startup failure; supported filters/facets, continuation and scope retirement not executed. [Repair](#native-startup-repair).                        |
+| Multilingual names    | Type an original-language name or current alias, select a suggestion, open the matching Subject and change locale without losing the query or authored language order.                                                       | Existing Search grant                                                               | FAIL — setup persona; 269.257 s shared startup; rev `06f822b6d30aa9f3291fc112ab0a5f09a2d4b147` | Same first startup failure; suggestions and locale return not executed. [Repair](#native-startup-repair).                                                      |
+| Search recovery       | Correct an invalid authored operand or deliberately retry a preparing/unavailable request after its deadline; generation loss restarts that executed request and renders useful output.                                      | Existing Search grant                                                               | FAIL — setup persona; 269.257 s shared startup; rev `06f822b6d30aa9f3291fc112ab0a5f09a2d4b147` | Same first startup failure; invalid-input correction, deadline/manual retry and generation restart not executed. [Repair](#native-startup-repair).             |
+| Configured reading    | Open a configured Subject or static Zone page and read its declared lists in document order; unavailable slots leave supported siblings usable, and a current continuation/retry reaches the right list.                     | Public configured reader where the owning scope admits it                           | FAIL — setup persona; 269.257 s shared startup; rev `06f822b6d30aa9f3291fc112ab0a5f09a2d4b147` | Same first startup failure; no independent native-ready public page survived; Subject/Zone list reading not executed. [Repair](#native-startup-repair).        |
+| Published composition | Publish an admitted shared profile or curated Collection presentation, open the selected public version while the editor has a later draft, and deliberately recover a refused/lost response to the actual published result. | Existing publication authority and public selected-version reading                  | FAIL — setup persona; 269.257 s shared startup; rev `06f822b6d30aa9f3291fc112ab0a5f09a2d4b147` | Same first startup failure; no publication identity, selected public A, later draft B or response-loss recovery was created. [Repair](#native-startup-repair). |
 
 ### Native observation and operands
 
 Secret-free evidence is the walk stack log for this attempt: slot, public origins, the JWKS error, and the
 unexecuted persona/seed/frontend stages. No bearer, password, key, cookie or private seed environment is recorded.
 
-- Launcher operands: slot 1; Web `http://127.0.0.1:20010`, issuer `http://127.0.0.1:20011`, native Auth
-  `http://127.0.0.1:20012`, Kernel `http://127.0.0.1:20013`.
-- Actual native readback: readiness probes to native Auth `/.well-known/jwks.json` repeatedly reported
-  `ECONNREFUSED`. No successful HTTP response, seeded UUID or mounted DOM was obtained.
+- Launcher operands: slot 3; Web `http://127.0.0.1:20030`, issuer `http://127.0.0.1:20031`, native Auth
+  `http://127.0.0.1:20032`, Kernel `http://127.0.0.1:20033`.
+- Actual native readback: readiness probes to native Auth `http://127.0.0.1:20032/.well-known/jwks.json` and
+  Kernel `http://127.0.0.1:20033/v1/definitions` reported `ECONNREFUSED`. No successful HTTP response, seeded UUID
+  or mounted DOM was obtained.
 - First causal error: **`Invalid or missing AUTH_JWKS_URL`**, followed by worker exit 1 and
   `walk: the identity phase did not start: walk: "Worker ready" was not printed; the process exited (1)`.
-- `AUTH_ISSUER=http://127.0.0.1:20011` and
-  `AUTH_JWKS_URL=http://127.0.0.1:20012/.well-known/jwks.json` were the actual generated operands.
-  This was not a missing variable: their origins differ.
+- `developmentKernelBindings` still sets `AUTH_ISSUER` from the issuer origin (`:20031`) and `AUTH_JWKS_URL` from
+  the native origin (`:20032/.well-known/jwks.json`). This was not a missing variable: their origins differ.
 
 Planned, unexecuted downstream operands were mixed text `Steins;Gate`, a supported Book Type refinement,
 original names `シュタインズ・ゲート`/`CLANNAD`, invalid authored text correction, the seed's actual configured
@@ -93,14 +94,15 @@ second failure.
 issuer origins to match. [Authentication](../../services/kernel/src/access/authenticate.ts) independently has the
 same requirement. Content owns the walk launcher; Accounts owns the authentication integration.
 
-This census **returns the same anonymous startup gate to the existing urgent issuer/JWKS repair**. Search does not
-duplicate that implementation. Canonical issuer-origin JWKS, exact native-key transport into both worker and Kernel
-consumers, key readiness before Worker ready, and a real issued bearer remain required. The next Search walk after
-that integration records the actual revision, bearer, personas, seed and pages.
+This census **returns the same anonymous startup gate to the existing urgent issuer/JWKS repair**
+(`ce33aabc-b3eb-4691-bcd2-45524f4e4115`). Search does not duplicate that implementation. Canonical issuer-origin
+JWKS, exact native-key transport into both worker and Kernel consumers, key readiness before Worker ready, and a
+real issued bearer remain required. The next Search walk after that integration records the actual revision,
+bearer, personas, seed and pages.
 
 ### Scope of this census and handoff
 
-The result is **0/6 passing**. All six rows fail at the recorded 439.242-second shared launcher interval; Mixed Search
+The result is **0/6 passing**. All six rows fail at the recorded 269.257-second shared launcher interval; Mixed Search
 is the representative slowest failing journey. Its first failing step is worker identity startup, and its repair
 artifact is [Native startup repair](#native-startup-repair). Partial public steps do not pass an unexecuted whole
 journey. Existing broader acceptance below is preserved.
@@ -108,7 +110,7 @@ journey. Existing broader acceptance below is preserved.
 The prior registration-handle failure was not reached. The importer-proposal `POST /v1/grants` 403 was not reached.
 Members' binding/fixtures, Web's Character/Person search, condition weights and composition, Semantic's tagged works,
 Imports' reviewed records and Performance's fake-discovery notices have no mounted-journey verdict from this startup
-failure. Their assertions remain required.
+failure. Their assertions remain required. Deferred metadata stays deferred. No new Imports outcome.
 
 Teardown left this attempt's walk containers and volumes absent. No unrelated stack was stopped or pruned.
 Native persona/seed, mounted browser checks and root typecheck did not run after the setup failure.
@@ -116,26 +118,33 @@ Documentation formatting is the focused delivery check; it supplies no native/br
 
 ### Additional owner-requested acceptance
 
-Owner-requested Kernel cells ran through the owning runner on source `4904c8e26e1994442c45dce707a642dda0125168`
-after the walk ended. They are not mounted-journey evidence and do not pass any of the six rows.
+Owner-requested Kernel cells ran through the owning runner on this attempt. They are not mounted-journey evidence
+and do not pass any of the six rows. Product code is `4904c8e26e1994442c45dce707a642dda0125168`.
 
-| File                                              | Actual result                                                                                                                                                                                                                                                                               |
-| ------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `test/search/review-population-readiness.test.ts` | PASS (11 tests, 0 fail).                                                                                                                                                                                                                                                                    |
-| `test/search/second-scope-generations.test.ts`    | FAIL: `DiscoveryProducerCoverageError: native producer coverage is incomplete (missing kinds: collection)` at `generations.ts` `assertDiscoveryProducerCoverage`; case “a later metadata reconciliation step resumes the committed raw frontier before indexed cleanup” (10 pass / 1 fail). |
-| `test/search/review-discovery-receiving.test.ts`  | FAIL: `TypeError: Invalid native Access policy catalogue: unknown-resource-action` eight times in `standingFixture` / `compileNativePolicyCatalogue` before cases.                                                                                                                          |
-| `test/search/default-discovery.test.ts`           | Started on the same runner; unfinished at census commit. Not a pass.                                                                                                                                                                                                                        |
+| File                                              | Actual result                                                                                                                                                                                                                                                                                                                                 |
+| ------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `test/search/review-population-readiness.test.ts` | PASS (3 tests). Executed 2026-11-07 00:55 UTC through the Kernel runner.                                                                                                                                                                                                                                                                      |
+| `test/search/second-scope-generations.test.ts`    | FAIL: `DiscoveryProducerCoverageError: native producer coverage is incomplete (missing kinds: collection)` at `generations.ts` `assertDiscoveryProducerCoverage`; case “a later metadata reconciliation step resumes the committed raw frontier before indexed cleanup” (10 pass / 1 fail). The injected setup already has a collection producer. |
+| `test/search/review-discovery-receiving.test.ts`  | FAIL: `TypeError: Invalid native Access policy catalogue: unknown-resource-action` in `standingFixture` / `compileNativePolicyCatalogue` before cases (0 pass / 1 fail / 1 error).                                                                                                                                                            |
+| `test/search/default-discovery.test.ts`           | FAIL: both cases `OutcomeRpcError: init did not complete within 90000 ms`, then `Worker did not drain: {"code":null,"signal":"SIGKILL"}` (0 pass / 2 fail, 456.44 s). Executed 2026-11-07 02:48–03:01 UTC on rev `06f822b6d30aa9f3291fc112ab0a5f09a2d4b147`.                                                                                |
 
-**Collection producer repair, Search generation owner:** install the missing `collection` discovery producer in the
-native coverage map used by `advanceDiscovery`, then rerun the existing metadata-reconciliation case. Do not drop that
-assertion or substitute a stub producer. Commerce remains owner of Collection records.
+**Receiving coverage repair, Search generation owner:** the failing metadata-reconciliation case already injects a
+`collection` producer (`owner: commerce`) in `metadataProducers`; the injected registry/target kinds are account-only.
+Reconcile that registry/target/producer contract in existing receiving, then rerun the same case. Do not install a
+new producer, drop the coverage assertion, or open deferred metadata. Commerce remains owner of Collection records.
 
-**Access catalogue repair, Accounts owner:** add the missing resource-actions the discovery standing fixture compiles,
-or stop compiling actions the catalogue does not declare. Rerun `review-discovery-receiving` through the owning Kernel
-runner. Do not loosen the catalogue compiler.
+**Review fixture repair, Content/Accounts owner:** `standingFixture` must compile a valid native Access catalogue
+before Review discovery cases run. Content/Accounts owns that valid Review fixture setup. Keep the existing
+intentional invalid-policy assertions. Do not add catalogue actions from Search or loosen the compiler.
 
-Web Character local-selection and with-dev-server cells were not completed as this census's evidence after the walk
-setup failure. Commerce assertions remain required. Loans query/read stay Commerce-owned.
+**Default-worker init repair, Search default-worker owner:** both default-discovery cases failed at outcome-rpc
+`init` (90 s) with SIGKILL drain. Retain the existing default-worker assertions and rerun through the owning Kernel
+runner after worker init completes. This is not a new Imports outcome.
+
+Web Character local-selection and with-dev-server cells were not executed: `bun apps/web/scripts/focused.ts
+--private-network -- bun test tests/character-local-selection.test.tsx tests/with-dev-server.test.ts` failed twice
+with `Web check unavailable: the selected Performance snapshot is not integrated into canonical dev`. Commerce
+401f58 assertions remain required. Loans query/read stay Commerce-owned.
 
 ## Evidence rules and common boundaries
 
