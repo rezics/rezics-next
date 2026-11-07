@@ -274,9 +274,9 @@ test('three distinct tasks with one normalized blocker open one incident and hol
         state: task.state,
         currentAttempt: task.currentAttempt,
         urgent: false,
-        ...(task.dependencies ? { dependencies: task.dependencies } : {}),
-        ...(task.waitingFor ? { waitingFor: task.waitingFor } : {}),
-        ...(task.pendingRetry ? { pendingRetry: task.pendingRetry } : {}),
+        ...('dependencies' in task && task.dependencies ? { dependencies: task.dependencies } : {}),
+        ...('waitingFor' in task && task.waitingFor ? { waitingFor: task.waitingFor } : {}),
+        ...('pendingRetry' in task && task.pendingRetry ? { pendingRetry: task.pendingRetry } : {}),
       })),
     });
     expect(cohortRead).toHaveBeenCalledTimes(1);

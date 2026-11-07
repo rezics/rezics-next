@@ -1,6 +1,6 @@
 import { expect, spyOn, test } from 'bun:test';
 import { spawnSync } from 'node:child_process';
-import { mkdirSync, rmSync } from 'node:fs';
+import { mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { run } from './cli.ts';
 import { loadSettings, type Runtime } from './config.ts';
@@ -274,6 +274,16 @@ test('global status summarizes large history while retaining full single-task br
         auxiliaryProcesses: [],
       };
     });
+    const ready = create('live-ready', 'live', 'ready');
+    const routing = JSON.parse(readFileSync(join(import.meta.dir, '../routing.json'), 'utf8')) as {
+      [key: string]: unknown;
+      experiments: unknown[];
+    };
+    routing.experiments = [];
+    h.settings.routingFile = join(h.settings.stateDirectory, 'routing-status-test.json');
+    writeFileSync(h.settings.routingFile, JSON.stringify(routing));
+    const fixturePool = h.settings.pools![0]!;
+    h.settings.pools = [{ ...fixturePool, policy: { ...fixturePool.policy, allowUnknown: false } }];
 
     const attemptRead = spyOn(h.store, 'attempt');
     const globalOutput: string[] = [];
@@ -290,11 +300,11 @@ test('global status summarizes large history while retaining full single-task br
     expect(globalOutput[0]).not.toContain('history-marker:');
     const status = JSON.parse(globalOutput[0]!);
     expect(status.taskCounts).toEqual({
-      total: 6,
-      byGoal: { history: 3, live: 3 },
-      byState: { cancelled: 1, held: 1, integrated: 1, merged: 1, running: 2 },
+      total: 7,
+      byGoal: { history: 3, live: 4 },
+      byState: { cancelled: 1, held: 1, integrated: 1, merged: 1, ready: 1, running: 2 },
     });
-    expect(status.tasks.map((task: Task) => task.id)).toEqual([dependency.id, active.id, terminating.id]);
+    expect(status.tasks.map((task: Task) => task.id)).toEqual([dependency.id, active.id, terminating.id, ready.id]);
     expect(status.tasks[1]).toMatchObject({
       id: active.id,
       sequence: active.sequence,
@@ -313,6 +323,7 @@ test('global status summarizes large history while retaining full single-task br
       currentAttempt: 1,
       terminationRequest: { operation: 'stop', state: 'requested', processIdentity: 'known' },
     });
+    expect(status.pools).toContainEqual(expect.objectContaining({ name: 'fixture', waiting: 1 }));
     expect(attemptRead).toHaveBeenCalledTimes(2);
 
     attemptRead.mockClear();

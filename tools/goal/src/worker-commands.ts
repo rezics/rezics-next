@@ -264,7 +264,7 @@ export async function runWorkerCommand(
       const table = settings.routingFile ? readRouting(settings.routingFile, settings.policy?.routing) : undefined;
       const allowanceWaiting = table
         ? countAllowanceWaiting(
-            selectedTasks.flatMap((task) => {
+            statusCohort.flatMap((task) => {
               if (task.state !== 'ready' || task.brief.urgent === true) return [];
               try {
                 return [admissionProfiles(task.brief, table, task.sequence)];
