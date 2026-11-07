@@ -1164,7 +1164,12 @@ export function createIdentityScopedObservations(
     const k = identityScopeAddress(key);
     if (key.source.kind === 'library' && key.source.identity.scope === 'public_output') {
       if (!allowance) return fail('custody_missing', measured);
-      const result = await readPublicIdentityOutputCaptureCurrent(pool, key, { deadline, allowance }, nativePublicOutput());
+      const result = await readPublicIdentityOutputCaptureCurrent(
+        pool,
+        key,
+        { deadline, allowance },
+        nativePublicOutput(),
+      );
       charge(measured, result.work);
       measured.outputWork = result.work;
       if (result.status !== 'current' || !same(result.key, key)) return fail('source_unready', measured);
@@ -1833,10 +1838,15 @@ export function createIdentityScopedObservations(
     async register(input) {
       const measured = work();
       if (input.capture.kind === 'public-output') {
-        const result = await readPublicIdentityOutputCaptureCurrent(pool, input.capture.capture, {
-          deadline: input.deadline,
-          allowance: input.capture.allowance,
-        }, nativePublicOutput());
+        const result = await readPublicIdentityOutputCaptureCurrent(
+          pool,
+          input.capture.capture,
+          {
+            deadline: input.deadline,
+            allowance: input.capture.allowance,
+          },
+          nativePublicOutput(),
+        );
         charge(measured, result.work);
         measured.outputWork = result.work;
         if (result.status !== 'current' || !same(result.key, input.key)) return fail('capture_incomplete', measured);
@@ -1959,11 +1969,16 @@ export function createIdentityScopedObservations(
         if (!input.allowance) return fail('custody_missing', measured);
         const options = { deadline: input.deadline, allowance: input.allowance };
         const result = input.tx
-          ? await lockPublicIdentityOutputCaptureCurrent(input.tx, input.key, {
-              ...options,
-              pool,
-              at: currentCommand(input.tx).time,
-            }, nativePublicOutput())
+          ? await lockPublicIdentityOutputCaptureCurrent(
+              input.tx,
+              input.key,
+              {
+                ...options,
+                pool,
+                at: currentCommand(input.tx).time,
+              },
+              nativePublicOutput(),
+            )
           : await readPublicIdentityOutputCaptureCurrent(pool, input.key, options, nativePublicOutput());
         charge(measured, result.work);
         measured.outputWork = result.work;

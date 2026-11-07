@@ -132,9 +132,7 @@ export function composeSubjectReadingApplication(): SubjectReadingApplication {
 }
 
 /** Construct the Semantic producer with the installed Library native output/custody pair. */
-export function composePublicIdentityOutputCapture(
-  config: Parameters<typeof createPublicIdentityOutputCapture>[0],
-) {
+export function composePublicIdentityOutputCapture(config: Parameters<typeof createPublicIdentityOutputCapture>[0]) {
   return createPublicIdentityOutputCapture(config, requireLibraryDomain().nativePublicOutput!);
 }
 

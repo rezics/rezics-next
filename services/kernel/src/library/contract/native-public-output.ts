@@ -141,20 +141,34 @@ export type NativePublicOutputApplication<Tx, PoolLike, Time> = Readonly<{
     tx: Tx,
     selection: PublicOutputBindingSelection,
     context: PublicOutputCommandContext<PoolLike, Time>,
-  ): Promise<PublicOutputRefusal | Readonly<{ status: 'bound'; binding: NativePublicOutputBinding; work: WorkReceipt }>>;
+  ): Promise<
+    PublicOutputRefusal | Readonly<{ status: 'bound'; binding: NativePublicOutputBinding; work: WorkReceipt }>
+  >;
   revalidateNativePublicCollectionOutputHold(
     tx: Tx,
     binding: NativePublicOutputBinding,
     context: PublicOutputCommandContext<PoolLike, Time>,
-  ): Promise<PublicOutputRefusal | Readonly<{ status: 'locked'; binding: NativePublicOutputBinding; work: WorkReceipt }>>;
+  ): Promise<
+    PublicOutputRefusal | Readonly<{ status: 'locked'; binding: NativePublicOutputBinding; work: WorkReceipt }>
+  >;
   transferNativePublicCollectionOutputHold(
     tx: Tx,
     selection: PublicOutputDispositionSelection,
     context: PublicOutputCommandContext<PoolLike, Time>,
-  ): Promise<PublicOutputRefusal | Readonly<{ status: 'transferred'; successorHoldId: string; transfer: NativePublicOutputReceipt; work: WorkReceipt }>>;
+  ): Promise<
+    | PublicOutputRefusal
+    | Readonly<{
+        status: 'transferred';
+        successorHoldId: string;
+        transfer: NativePublicOutputReceipt;
+        work: WorkReceipt;
+      }>
+  >;
   releaseNativePublicCollectionOutputHold(
     tx: Tx,
     selection: PublicOutputDispositionSelection,
     context: PublicOutputCommandContext<PoolLike, Time>,
-  ): Promise<PublicOutputRefusal | Readonly<{ status: 'released'; release: NativePublicOutputReceipt; work: WorkReceipt }>>;
+  ): Promise<
+    PublicOutputRefusal | Readonly<{ status: 'released'; release: NativePublicOutputReceipt; work: WorkReceipt }>
+  >;
 }>;
