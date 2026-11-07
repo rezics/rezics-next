@@ -19,6 +19,7 @@ import {
   webViteWorkerSsrOptimizeDeps,
   webViteWorkerSsrResolve,
 } from './support/vite-dep-cache.ts';
+import { createSettingsViteRuntime, settingsClientModuleGraph } from './support/settings-vite-runtime';
 
 const appRoot = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const workspaceRoot = resolve(appRoot, '../..');
@@ -71,13 +72,25 @@ test('test Worker bindings are startup-only and production has no fixture header
       (plugin) =>
         plugin !== null && typeof plugin === 'object' && 'name' in plugin && plugin.name === 'rezics-test-env-bindings',
     );
-    const transformHook = bindingsPlugin && 'transform' in bindingsPlugin ? bindingsPlugin.transform : undefined;
+    const bindingHooks = bindingsPlugin as
+      | {
+          applyToEnvironment?: (environment: { name: string }) => boolean;
+          transform?:
+            | ((this: unknown, code: string, id: string) => { code?: string } | undefined)
+            | { handler: (this: unknown, code: string, id: string) => { code?: string } | undefined };
+        }
+      | undefined;
+    const transformHook = bindingHooks?.transform;
+    const applyToEnvironment = bindingHooks?.applyToEnvironment;
     const transform =
       typeof transformHook === 'function'
         ? transformHook
         : transformHook && 'handler' in transformHook
           ? transformHook.handler
           : undefined;
+    expect(applyToEnvironment).toBeTypeOf('function');
+    expect(applyToEnvironment?.({ name: 'ssr' })).toBe(true);
+    expect(applyToEnvironment?.({ name: 'client' })).toBe(false);
     expect(typeof transform).toBe('function');
     const transformed = transform?.call(undefined, bindingsSource, join(appRoot, 'src/test-runtime-bindings.ts'));
     expect(transformed).toHaveProperty('code', expect.stringContaining('= {"KERNEL_ORIGIN":"https://test.example"};'));
@@ -88,6 +101,20 @@ test('test Worker bindings are startup-only and production has no fixture header
     else process.env.WEB_TEST_WORKER_BINDINGS = previousBindings;
   }
 });
+
+test('the real Settings browser graph transforms without loading the Worker fixture module', async () => {
+  const runtime = await createSettingsViteRuntime({ KERNEL_ORIGIN: 'https://settings-browser.test' });
+  try {
+    const graph = await settingsClientModuleGraph(runtime, '/src/routes/settings.tsx');
+    expect(graph.get('/src/routes/settings.tsx')?.status).toBe(200);
+    expect([...graph.values()].every((module) => module.status === 200)).toBe(true);
+    expect(graph.has('/src/settings/profile-model.ts')).toBe(true);
+    expect(graph.has('/src/settings/adapters/accounts-browser.tsx')).toBe(true);
+    expect(graph.has('/src/test-runtime-bindings.ts')).toBe(false);
+  } finally {
+    await runtime.close();
+  }
+}, 60_000);
 
 test('the dep-cache align hook is a Vite Plugin configureServer', () => {
   const plugin: Plugin = {

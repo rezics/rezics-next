@@ -1,6 +1,6 @@
 import type { KernelClient } from '@rezics/client';
 import { officialProfileRead, type EditableProfileRead } from '../../src/settings/editable-profile-source';
-import type { ProfileValues } from '../../src/settings/profile-data';
+import type { ProfileValues } from '../../src/settings/profile-model';
 
 type Envelope = NonNullable<Awaited<ReturnType<ReturnType<KernelClient['accounts']>['profile']['get']>>['data']>;
 type Profile = Envelope['profile'];

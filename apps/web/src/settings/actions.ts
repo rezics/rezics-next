@@ -4,7 +4,7 @@ import { env } from 'cloudflare:workers';
 import { kernelClient } from '../kernel/client';
 import type { SessionEnv } from '../session/client';
 import { prepareSession, requestCsrfToken, sessionSubject, viewerCredential } from '../session/request';
-import { runReadProfile, runSaveProfile } from './profile-data';
+import { runReadProfile, runSaveProfile } from './profile-server';
 import { parseProfileWrite } from './profile-write-input';
 import {
   loadManagedAccounts,

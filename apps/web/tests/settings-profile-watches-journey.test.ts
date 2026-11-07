@@ -11,7 +11,7 @@ import {
   type WatchRead,
 } from '../src/settings/watch-native';
 import { closedProfileEditing } from '../src/settings/editable-profile-source';
-import type { ObservedProfile, ProfileValues } from '../src/settings/profile-data';
+import type { ObservedProfile, ProfileValues } from '../src/settings/profile-model';
 import { ProfileEditor } from '../src/settings/profile-write';
 import { captureProfileReturn } from '../src/settings/settings-return';
 import { editableProfile, profileValues } from './factories/profile';

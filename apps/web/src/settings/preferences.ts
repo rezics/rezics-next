@@ -49,14 +49,13 @@ export {
   type EditableProfileFailure,
 } from './editable-profile-source';
 export {
-  loadProfileRecord,
   profileControlFlow,
   profilePatchAdmitted,
   profileSaveSetupFailure,
   serializeProfileResult,
   type ObservedProfile,
   type ProfilePatch,
-} from './profile-data';
+} from './profile-model';
 export { profileFieldErrors } from './profile-write';
 
 export type SpoilerLevel = 0 | 1 | 2;

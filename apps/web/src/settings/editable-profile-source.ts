@@ -2,8 +2,9 @@ import { serverSettingsTimer } from './adapters/ambient';
 import { withProfileDeadline } from './profile-request-deadline';
 import type { KernelClient } from '@rezics/client';
 import * as v from 'valibot';
-import type { SettingsContentFailureReader } from './ports/content';
-import type { NativePreferenceFailure } from './preferences';
+import { EditableProfileReadError, nativeProfileFailure } from './profile-failure';
+export { EditableProfileReadError, nativeProfileFailure };
+export type { EditableProfileFailure } from './profile-failure';
 
 type ProfileGet = ReturnType<KernelClient['accounts']>['profile']['get'];
 export type EditableProfile = NonNullable<Awaited<ReturnType<ProfileGet>>['data']>['profile'];
@@ -12,54 +13,6 @@ export type EditableProfile = NonNullable<Awaited<ReturnType<ProfileGet>>['data'
 export type EditableProfileSource = {
   read: (authorization: string, accountId: string, signal?: AbortSignal) => Promise<EditableProfileRead>;
 };
-
-export type EditableProfileFailure = NativePreferenceFailure & { status: number };
-
-export class EditableProfileReadError extends Error {
-  constructor(
-    readonly status: number,
-    readonly failure?: EditableProfileFailure,
-  ) {
-    super('Profile unavailable');
-  }
-}
-
-/** Only a native problem envelope and actual response headers supply optional metadata. */
-export function nativeProfileFailure(status: number, body?: unknown, headers?: HeadersInit): EditableProfileFailure {
-  const problem = body && typeof body === 'object' ? body : undefined;
-  const native =
-    problem &&
-    'type' in problem &&
-    typeof problem.type === 'string' &&
-    'title' in problem &&
-    typeof problem.title === 'string' &&
-    'code' in problem &&
-    typeof problem.code === 'string'
-      ? problem
-      : undefined;
-  const retryAfter = new Headers(headers).get('retry-after');
-  return {
-    status,
-    ...(native ? { code: native.code as string } : {}),
-    ...(native && 'retryable' in native && typeof native.retryable === 'boolean'
-      ? { retryable: native.retryable }
-      : {}),
-    ...(native && 'request_id' in native && typeof native.request_id === 'string'
-      ? { requestId: native.request_id }
-      : {}),
-    ...(retryAfter ? { retryAfter } : {}),
-  };
-}
-
-export function profileReadFailure(
-  error: unknown,
-  mediaFailure: SettingsContentFailureReader,
-): EditableProfileFailure | undefined {
-  if (error instanceof EditableProfileReadError) return { ...error.failure, status: error.status };
-  const failure = mediaFailure(error);
-  if (failure) return nativeProfileFailure(failure.status, failure.problem, failure.headers);
-  return undefined;
-}
 
 const dimension = v.pipe(v.number(), v.integer(), v.minValue(1));
 const coordinate = v.pipe(v.number(), v.minValue(0), v.maxValue(1));

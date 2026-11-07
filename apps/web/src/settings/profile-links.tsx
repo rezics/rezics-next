@@ -3,7 +3,7 @@ import { Button } from '@rezics/ui/shadcn/button';
 import { Field, FieldLabel, FieldLegend, FieldSet } from '@rezics/ui/shadcn/field';
 import { Input } from '@rezics/ui/shadcn/input';
 import { m } from '../paraglide/messages.js';
-import type { ProfileLink } from './profile-data';
+import type { ProfileLink } from './profile-model';
 import type { profileFieldErrors } from './profile-write';
 
 export function ProfileLinks({

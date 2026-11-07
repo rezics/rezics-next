@@ -2,7 +2,7 @@ import { expect, mock, test } from 'bun:test';
 import { createRequire } from 'node:module';
 import { act } from 'react';
 import { ProfileEditor, type ProfileAttempt } from '../src/settings/profile-write';
-import type { ProfileValues } from '../src/settings/profile-data';
+import type { ProfileValues } from '../src/settings/profile-model';
 import { m } from '../src/paraglide/messages.js';
 import { createBrowserSettingsAmbient } from '../src/settings/adapters/ambient';
 import { performanceAmbientTree } from './performance-ambient';

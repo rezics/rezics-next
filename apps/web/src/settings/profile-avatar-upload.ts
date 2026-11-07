@@ -1,7 +1,7 @@
 import { UploadRefusal } from '../threads/upload-vocabulary';
 import { preferenceRetryDeadline } from './preference-failure-retry';
 import { withProfileDeadline } from './profile-request-deadline';
-import type { ProfileValues } from './profile-data';
+import type { ProfileValues } from './profile-model';
 import type { ProfileEditor } from './profile-write';
 import { parseAvatarUploadAdvice, type SettingsAvatarMedia } from './ports/content';
 import type {
