@@ -1,7 +1,7 @@
 import canonicalize from 'canonicalize';
 import { createHash } from 'node:crypto';
 import type { FilterDocument, FilterRelease } from '@rezics/filter';
-import { ProblemError } from '../http/problem.ts';
+import { ProblemError } from '../http/problem-error.ts';
 import type { KeyRing } from '../tokens/seal.ts';
 import type { PublicFilterCost } from '../semantic/public-filter-source-contract.ts';
 import type { PublicFilterConsumerContext } from './public-filter-consumer-contract.ts';
@@ -46,7 +46,7 @@ export type FacetDiscoveryInput = Readonly<{
   languages: readonly string[] | undefined;
   now: number;
   context: PublicFilterConsumerContext;
-  /** Internal request supplied by the Realm/Collection admission owner; absent from the facet wire DTO. */
+  /** Internal request supplied by the Realm/Collection admission owner from the Access observation application. */
   scope?: ScopedFacetAdmission;
   scopeBinding?: FacetScopeCursorBinding;
 }>;

@@ -30,6 +30,7 @@ import type { ScopeRuntime } from './service-scope.ts';
 import { isAdmittedSearchPrefix } from './consumer-name.ts';
 import type { SubjectSource } from './source.ts';
 import type { CreditSearchSource } from './credit-search.ts';
+import type { FacetAccessObservationPort } from './facet-access-port.ts';
 
 export type SearchConfig = { url: string; prefix: string };
 
@@ -104,7 +105,9 @@ type SearchRuntimeDefaults = Required<
     Parameters<typeof createKernel>[0],
     'tokens' | 'receiptKeys' | 'writeRate' | 'rateAttribution' | 'clock' | 'access'
   >
->;
+> & {
+  facetAccess: FacetAccessObservationPort;
+};
 type SearchRuntimeDefaultsComposer = (input: { env: NodeJS.ProcessEnv; clock: KernelClock }) => SearchRuntimeDefaults;
 type CreditSearchSourceComposer = (pool: Pool, routeKey: Uint8Array) => CreditSearchSource;
 
@@ -400,6 +403,7 @@ export function createSearchWorkModule(
                 search,
                 prefix: config.prefix,
                 clock: context.clock,
+                facetAccess: defaults.facetAccess,
                 ...(creditSearch === undefined ? {} : { creditSearch }),
               });
             },

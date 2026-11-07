@@ -90,7 +90,8 @@ import { normalizePublicRatingFigure, type PublicRatingEpoch, type PublicRatingS
 import { subjectConsumer } from './runner.ts';
 import { registerSearchScopeRuntime, createSearchScopeForService } from './service-scope.ts';
 import { readScopedFacetDiscovery } from './scoped-facet-admission.ts';
-import { serviceRealmScopeFacetAdmission, serviceScopeFacetAdmission } from './scoped-facet-source.ts';
+import type { FacetAccessObservationPort } from './facet-access-port.ts';
+import { createScopedFacetApplication } from './scoped-facet-application.ts';
 import type { RealmSubjectSource } from '../content/realm-subject-source.ts';
 import type { RealmSubjectCapabilities } from './realm-scope.ts';
 import type { LeafOptions } from '../semantic/scope-leaf-evidence.ts';
@@ -498,6 +499,7 @@ export function createSearchService({
   disclosure = createSearchDisclosureApplication({
     analyze: (index, analyzer, text) => analyzeInstalled(client, index, { analyzer, text }),
   }),
+  facetAccess,
   // Definition releases store value.pattern on the property schema. Keep that object so pattern compilation stays cached.
   release: releaseOverride,
 }: {
@@ -523,7 +525,12 @@ export function createSearchService({
   facetProvider?: () => Promise<FacetDiscoveryProvider | undefined>;
   /** Optional batched handoff to the qualified work-context owner. */
   suggestionWorkContext?: SuggestionWorkContextReader;
+  /** Composition-bound Access observation for scoped Collection/Realm facet execution. */
+  facetAccess?: FacetAccessObservationPort;
 }) {
+  const scopedFacets = createScopedFacetApplication({
+    ...(facetAccess === undefined ? {} : { access: facetAccess }),
+  });
   const release =
     releaseOverride ?? (async () => ((await activeRelease(pool))?.release as FilterRelease | undefined) ?? null);
   const realmRelease = releaseOverride
@@ -1863,7 +1870,7 @@ export function createSearchService({
               languages,
               now,
               context: { deadline: context.deadline },
-              scope: serviceRealmScopeFacetAdmission({
+              scope: scopedFacets.admitRealm({
                 resource: scopedRequest.scope,
                 scope,
                 prepared: prepared.scope,
@@ -1891,7 +1898,7 @@ export function createSearchService({
             languages,
             now,
             context: { deadline: context.deadline },
-            scope: serviceScopeFacetAdmission({
+            scope: scopedFacets.admitCollection({
               resource: scopedRequest.scope,
               scope,
               prepared,

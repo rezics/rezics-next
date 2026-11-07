@@ -22,6 +22,8 @@ import type { CreditSearchSource } from '../search/credit-search.ts';
 import { createCreditSearchSource } from '../semantic/credit-search.ts';
 import { bindSearchLibraryScopePort } from '../search/scope-application.ts';
 import { createSearchLibraryScopePort } from './search-library.ts';
+import { composeSearchAccess } from './search-access.ts';
+import type { FacetAccessObservationPort } from '../search/facet-access-port.ts';
 
 export type KernelRuntimeDefaults = {
   searchDisclosure: typeof createNativeSearchDisclosure;
@@ -34,6 +36,8 @@ export type KernelRuntimeDefaults = {
   deadlineNow: () => number;
   access: AccessFactory;
   auth?: AuthenticationConfig;
+  /** Search-owned Access observation used by live scoped facet execution. */
+  facetAccess: FacetAccessObservationPort;
 };
 
 export type KernelRuntimeOverrides = {
@@ -116,6 +120,7 @@ export function createKernelRuntimeDefaults(overrides: KernelRuntimeOverrides = 
     clock: overrides.clock ?? systemClock,
     deadlineNow: overrides.deadlineNow ?? systemDeadlineNow,
     access,
+    facetAccess: composeSearchAccess(),
     ...(auth === undefined ? {} : { auth }),
   };
 }

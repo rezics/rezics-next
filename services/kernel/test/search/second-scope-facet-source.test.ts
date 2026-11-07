@@ -5,10 +5,10 @@ import { subjectPartition } from '../../src/search/source.ts';
 import {
   bindScopedFacetPorts,
   createScopedFacetSource,
-  serviceRealmScopeFacetAdmission,
   scopedFacetIdentityKey,
   type ScopedFacetIdentity,
 } from '../../src/search/scoped-facet-source.ts';
+import { serviceRealmScopeFacetAdmission } from '../../src/search/scoped-facet-application.ts';
 import { ScopeWork, scopeAllowance, zeroScopeWork } from '../../src/search/scope-execution.ts';
 import type { PreparedRealmScope } from '../../src/search/realm-scope.ts';
 
