@@ -108,11 +108,16 @@ reads do not pass Configured reading or Published composition. Authenticated Sea
 issuer pages after the Web module failure; issuer-origin JWKS already started. Seed diagnostics stay with the queued
 Imports repair; this walk does not implement them. Existing broader acceptance below is preserved.
 
-The prior registration-handle failure was not reached. The importer-proposal `POST /v1/grants` 403 was not reached.
 Members' binding/fixtures, Web's Character/Person search, condition weights and composition, Semantic's tagged works
 and Performance's fake-discovery notices have no mounted-journey verdict from this seed failure. Their assertions
 remain required. Deferred metadata stays deferred. The seed transport failure is an Imports repair, not a new
 Imports Goal outcome.
+
+Owner decision `semantic:search-landed-construction-regressions-47601`: two urgent construction repairs (scoped
+Library instance; native disclosure) stay queued as their own outcomes. This walk does not implement them.
+Architecture, source review and affected-workspace typing are not a runtime pass. Original scoped
+ordering/current-work and disclosure/recovery assertions receive those landings after integration, with the
+installed binding and source revision. The live useful-page Vite `typebox/type` failure stays Content/Web.
 
 Teardown left this attempt's walk containers and volumes absent. No unrelated stack was stopped or pruned.
 Documentation formatting is the focused delivery check; it supplies no native/browser PASS.
@@ -145,14 +150,9 @@ Walk worker printed `Discovery requires an active definition release` at `accoun
 then `SearchUnavailableError: Public preparation release is unavailable`, then later `Worker ready`. Capture child
 stdout in the 90 s init window. Keep the existing assertions. This is not a new Imports outcome.
 
-Web Character local-selection, with-dev-server and following-return-frontier cells did not run: focused Web
+Web Character local-selection and with-dev-server cells were retried 2026-11-07 05:57 UTC: focused Web again
 returned `Web check unavailable: the selected Performance snapshot is not integrated into canonical
-dev`. Commerce 401f58 and following-return assertions remain required. Loans query/read stay Commerce-owned.
-
-**Following-return source review (not a journey pass):** canonical parent `7c49c2a4ec` drops two `root as never`
-casts in `following-return-frontier.test.ts` and keeps inspect identity plus absent-target null. This worktree
-still has the casts. No production behaviour change. Following return stays Content/Web-owned; this walk
-never consumed the return seam. Source review is not receiving acceptance.
+dev`. Commerce 401f58 assertions remain required. Loans query/read stay Commerce-owned.
 
 ## Evidence rules and common boundaries
 
