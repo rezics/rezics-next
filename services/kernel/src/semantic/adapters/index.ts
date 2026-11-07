@@ -40,3 +40,5 @@ export function createNativeSemanticCopyWorkReaderPort(searchEvidence: CopyWorkS
     readListPresentationFacts: readNativeListPresentationFacts,
   });
 }
+export { nativeReleasedDefinitions, type NativeReleasedDefinitions } from './released-definitions.ts';
+export { nativeCopyListContext, type NativeCopyListContext } from './copy-list-context.ts';

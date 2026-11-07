@@ -87,3 +87,5 @@ export type {
   AccessAccountStatementDeclaration,
   AccessAccountStatementDescriptor,
 } from './account-statements.ts';
+
+export type { CopyAccountAdmission, CopyAccountWork, CopyAccountStatementWork } from './copy-account.ts';

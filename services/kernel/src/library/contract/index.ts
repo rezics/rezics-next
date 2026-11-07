@@ -176,3 +176,7 @@ export type {
 } from './preparation-work.ts';
 
 export { OWNER_FILTER_CLOSURE_REFERENCE_LIMIT, OWNER_FILTER_CLOSURE_ORIGINAL_LIMIT } from './preparation-limits.ts';
+
+export * from './copy-values.ts';
+export * from './copy-application.ts';
+export * from './copy-operations.ts';

@@ -1,22 +1,24 @@
 # Semantic
 
-Decision: public-filter Collection reduction exposes the native statement declaration through
-`adapters/collection-reduction.ts`, using `contract` statement names. That descriptor has no command work-association
-implementation. Native reduction executes the identical SQL and serialized-bind plan from that adapter; Library
-retention can compose the original complete cost without loading reduction execution. Existing publication,
-currentness and terminal fencing remain authoritative.
+Public-filter Collection reduction exposes `adapters/collection-reduction.ts` contract statement declarations
+without command-work implementation. Native reduction executes that exact SQL/bind plan; Library composes complete
+retention cost without loading execution. Publication, currentness and terminal fences stay authoritative.
 
 Decision: `adapters/progress-identity-statements.ts` owns definition-release and identity-mapping SQL descriptors for Library progress planning, using `contract/progress-identity.ts` statement names. Library composes those producer maxima; it does not import the SQL. Mapping, definition activation and type/reference bounds stay Semantic-owned.
 
 This module owns subject facts and their item projections, partition paging, and immutable definition releases with editorial activation history.
 
+`contract/released-definitions.ts` and `adapters/released-definitions.ts` expose the existing digest-validated producer;
+Copy retained pins keep `composed: false` and the original native source. `adapters/copy-list-context.ts` supplies the
+bounded identity/summary/list-fact/active-release producers to Library composition, preserving raw duplicates,
+fences and disclosure.
+
 Decision: the seeded Global Context ID lives in the literal-only `context-literals.ts` leaf. Ordinary History composition binds the typed Semantic record-source-set producer before installing History; importing the Semantic producer has no registration side effect.
 
 ## Semantic label policy
 
-`languageRanges` and `chooseLabel` are pure shared Definitions functions exported by the package root, including its
-browser condition. The native `services/kernel/src/semantic/language.ts` entry is a compatibility re-export for
-Content, Library and Search. The policy and stored-tag behavior remain unchanged. There is no general pickText or model change; native consumers retain their existing import path.
+Definitions' public root owns pure `languageRanges`/`chooseLabel`, including browser exports and stored-tag behavior.
+`semantic/language.ts` remains the native compatibility entry; no general pickText or model change is introduced.
 
 ## Canonical identity boundary
 

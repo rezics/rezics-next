@@ -2,12 +2,13 @@
 
 ## Policy boundary
 
-The [adopted architecture](../../../../docs/architecture.md) places the pure catalogue, closed-operand `decide`,
-bounded explanations/conformance and residual specialization behind `packages/access/src/index.ts`. Imports go
-inward through that public entry only, with no reverse or private edges. Kernel retains native facts, qualified
-completeness, opaque proofs, authoritative time, floors/fences, command admission, audit and execution. Exposure
-is a distinct consumer. The first core and Collection directory residual use are integrated; this remaining-profile migration
-adds no baseline allowance and no old/new allow-OR. Source compatibility is no native acceptance.
+[Architecture](../../../../docs/architecture.md): catalogue, closed-operand `decide`, bounded explanations,
+conformance and residuals live in `packages/access/src/index.ts`; imports point inward.
+Kernel owns facts, qualified completeness, proofs, time, floors/fences, admission, audit and execution. Exposure is independent. Core/Collection residuals are integrated; remaining profiles add no
+baseline allowance or allow-OR. Compatibility is not native acceptance.
+
+Copy: `contract/copy-account.ts`, `adapters/copy-account.ts`: account/state/share SQL, finite bounds
+and authn floor before private-state/receipt disclosure. Error, Access, Pool, actor, time/deadline identities remain.
 
 [Accounts](../../../../docs/accounts.md) owns product identity, delegation, consent and preferences;
 [Deletion](../../../../docs/deletion.md) owns erasure/restore policy;

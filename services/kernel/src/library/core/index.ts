@@ -59,3 +59,16 @@ export type {
   CollectionMetadataSnapshotInput,
   CollectionMetadataFieldInput,
 } from './collection-history.ts';
+
+export {
+  parseCreate,
+  parseUpdate,
+  parseCopyRestore,
+  subjectId as copySubjectId,
+  vocabularyValue as copyVocabularyValue,
+  revisionValue as copyRevisionValue,
+  parseCopyConditionFields,
+  isCopyConditionValue,
+  CopyConditionInvalidError,
+} from './copy-input.ts';
+export * from './copy-operations.ts';
