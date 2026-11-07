@@ -34,3 +34,5 @@ export {
   deliverFollowCountApplication,
   runFollowCountPartition,
 } from './follow-counts.ts';
+
+export { createCollectionMutationApplication } from './collection-mutation.ts';

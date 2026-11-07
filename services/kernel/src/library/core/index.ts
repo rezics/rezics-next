@@ -30,3 +30,22 @@ export {
 } from './publication-admission.ts';
 
 export { followCountScalar, followCountHealthCurrent } from './follow-counts.ts';
+
+export {
+  collectionMetadataChangedFields,
+  collectionMetadataMutationPlan,
+  collectionRetentionDisposition,
+} from './collection-mutation.ts';
+export type { CollectionRetentionHead } from './collection-mutation.ts';
+
+export {
+  createCollectionHistoryPlans,
+  COLLECTION_METADATA_HISTORY_LIMIT,
+  COLLECTION_METADATA_HISTORY_PAGE_SIZE,
+  COLLECTION_METADATA_HISTORY_MAX_PAGE_SIZE,
+} from './collection-history.ts';
+export type {
+  CollectionHistoryStatementSizes,
+  CollectionMetadataSnapshotInput,
+  CollectionMetadataFieldInput,
+} from './collection-history.ts';

@@ -13,3 +13,15 @@ export { createContentPublicationAdapter, type ContentPublicationAdapterPorts } 
 export { createNativeSourceCaptureAdapter } from './native-source.ts';
 
 export { createNativeFollowCountReads, type NativeFollowCountReadPorts } from './follow-count-reads.ts';
+
+export { createNativeCollectionMutationPorts } from './collection-mutation.ts';
+
+export {
+  createNativeCollectionPublicationEpisodes,
+  type NativeCollectionPublicationCommandPorts,
+} from './collection-publication-command.ts';
+export { readBuiltinPublicationRule } from '../builtin-materialization.ts';
+
+export { retireNativeCollectionCapturePage } from '../native-source-custody.ts';
+export { purgeSavedCollectionPage } from '../saved-collection-retention.ts';
+export { admitCollectionPublicationStep } from '../collection-publication-work-admission.ts';
