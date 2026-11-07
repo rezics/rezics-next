@@ -149,6 +149,8 @@ this handle, retaining Recent Search around the shell. Production-cache and walk
 their runtime environment explicitly; the SSR fixture follows the installed include list for both React server
 entries. Existing tests retain their other assertions. Changed-workspace typing is worker completion; the sole dev
 verification retains native/browser/growth and promoted-revision closure under the current owner policy.
+The installed-root shell fixture mounts a document, supplies the application's router context and binds the DOM
+scroll API. Its anonymous rendering and admitted viewer-replacement assertions remain unchanged.
 
 ## realms-and-spaces
 

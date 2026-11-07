@@ -112,6 +112,23 @@ existing Web shell/composition packets supply the boundary repair contract.
 
 ## Retained owner contracts
 
+The integrated source passed all three changed-workspace typing commands onf0bc63863c:
+`bun run --cwd apps/web typecheck` (6c1ac776-a09f-44ce-9a77-50afb35c46ae),
+`bun run --cwd services/auth typecheck` (c57b3b0e-cc16-40c7-ba1d-8f3aed5eb360), and
+`bun run --cwd services/kernel typecheck` (20a1a50e-c152-4e8d-b8f8-523afb71eaad), each through worker-check.
+The focused Vite/root receiving command969915fc-3f16-4e59-930a-f08e5844ec2e passed all thirteen Vite cases
+but failed the new root fixture because its router context and global scrollTo were absent. The fixture now mounts
+the actual document shell with its declared router context and bound DOM scroll API; all six existing root
+assertions remain. This repairs the fixture rather than introducing a product fallback for an invalid internal
+caller. Its focused rerun remains required after the edit; no browser or native acceptance is inferred.
+
+The selector receiving packet names1cfb9ccec1cbf3afb5032dbca273cef0d4e1083f. That commit is formatting over
+selector implementation absent from this handle; cherry-picking its formatting alone would not deliver selector
+routing. The controller and existing selector owner retain that integrated source input for the original walks.
+No second selector or custody implementation is introduced. Semantic retains ECHILD leader settlement with the
+original cancellation143, native nonzero status and descendant absence assertions. Search/root receives the paid
+Recent Search host around AppShell inside LibraryApplicationBoundary.
+
 Every prior owner reference remains in force; later observations do not erase independent obligations.
 
 - .temp/goal/backlog/content/decisions/47116-public-identity-rating-cost-receiving.md
@@ -198,3 +215,5 @@ Every prior owner reference remains in force; later observations do not erase in
 - .temp/goal/content/library-shell-integrated-receiving-20261107.md
 - .temp/goal/content/typing-only-worker-receiving-20261107-1330.md
 - .temp/goal/content/auth-boot-integrated-receiving-20261107-1340.md
+- .temp/goal/content/selector-integrated-receiving-20261107-1355.md
+- .temp/goal/content/shell-recent-and-custody-receiving-20261107-1410.md
