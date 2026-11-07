@@ -21,7 +21,7 @@ import {
 import type { CollectionSourceObservation } from './collection-source.ts';
 import type { WorkReceipt } from './contract/work-dimensions.ts';
 import type { IdentityScopeObservation } from '../semantic/identity-scope-types.ts';
-import type { SearchScopeOrder } from '../search/service-scope-order.ts';
+import type { SearchScopeOrder } from '../search/library-scope-port.ts';
 import { createSearchScopeSource } from '../search/scope-source.ts';
 import type { MembersPreparationWorkContext } from '../search/scope-work-context.ts';
 import ownerLock from './members-preparation-owner-lock.sql';
@@ -228,7 +228,7 @@ async function advancePreparation(
     const page = await work.compose((allowance) =>
       source.sourcePrefix(prepared.value, {
         afterSubjectId: checkpoint.id,
-        candidateLimit: MEMBERS_PREPARATION_SOURCE_PATHS.id.candidatePrefixMaximum,
+        candidateLimit: MEMBERS_PREPARATION_SOURCE_PATHS().id.candidatePrefixMaximum,
         allowance,
       }),
     );

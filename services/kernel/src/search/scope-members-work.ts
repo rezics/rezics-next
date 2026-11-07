@@ -7,12 +7,6 @@ import { hasLiveOperationalTransaction } from '../command/operational.ts';
 import { ProblemError } from '../http/problem.ts';
 import type { Access } from '../request/access.ts';
 import { routeOf } from '../route/route.ts';
-import { NativeCollectionWork } from '../library/collection-source-work.ts';
-import {
-  readCollectionSourceWorkGroup,
-  readCollectionSourceWorkState,
-} from '../library/collection-source-work-native.ts';
-import type { MembersPreparationWorkDefinition } from '../library/members-preparation.ts';
 import type { CollectionPublicationWorkDefinition } from '../library/collection-publication-work-admission.ts';
 import type { NativeOrdinalKey } from '../library/collection-source-order.ts';
 import type { WorkDimensions } from '../library/contract/work-dimensions.ts';
@@ -44,6 +38,12 @@ import {
 } from './scope-members-work-cost.ts';
 import { zeroScopeWork, type ScopeWork } from './scope-execution.ts';
 import type { ScopeEvaluationProgress } from './scope-source.ts';
+import { searchLibraryScopePort } from './scope-application.ts';
+import type {
+  MembersPreparationWorkDefinition,
+  SearchLibraryScopePort,
+  SearchNativeCollectionWork,
+} from './library-scope-port.ts';
 
 export type MembersWorkInput = Readonly<{
   pool: Pool;
@@ -53,7 +53,7 @@ export type MembersWorkInput = Readonly<{
 }>;
 export type MembersSnapshot = Readonly<{
   native: MembersPreparationWorkDefinition | CollectionPublicationWorkDefinition;
-  source: Awaited<ReturnType<typeof readCollectionSourceWorkState>>;
+  source: Awaited<ReturnType<SearchLibraryScopePort['source']['readWorkState']>>;
   observation: IdentityScopeObservation;
   ownerFence: string | null;
 }>;
@@ -71,9 +71,9 @@ const unavailable = () => new ProblemError('semantic_not_ready');
 export async function runMembersWork<T>(
   input: MembersWorkInput,
   work: ScopeWork,
-  body: (native: NativeCollectionWork) => Promise<T>,
+  body: (native: SearchNativeCollectionWork) => Promise<T>,
 ): Promise<T> {
-  const native = new NativeCollectionWork(work.remaining(), input.deadline);
+  const native = searchLibraryScopePort().members.createNativeCollectionWork(work.remaining(), input.deadline);
   try {
     return await withMembersWorkBudget(native, () => body(native));
   } catch (error) {
@@ -86,7 +86,7 @@ export async function runMembersWork<T>(
 
 async function query<R extends QueryResultRow>(
   input: MembersWorkInput,
-  work: NativeCollectionWork,
+  work: SearchNativeCollectionWork,
   sql: string,
   values: unknown[],
   bound: WorkDimensions,
@@ -102,7 +102,7 @@ async function query<R extends QueryResultRow>(
  * Read the actual capture/revision at that exact source fence; Collection observations are never cast to Scope70. */
 export async function readMembersSnapshot(
   input: MembersWorkInput,
-  work: NativeCollectionWork,
+  work: SearchNativeCollectionWork,
 ): Promise<MembersSnapshot> {
   const workContext = input.work;
   const native = structuredClone(
@@ -115,7 +115,7 @@ export async function readMembersSnapshot(
           () => readCollectionPublicationScopeWorkDefinition(workContext, input),
         )),
   );
-  const source = await readCollectionSourceWorkState(input.pool, input.work, input);
+  const source = await searchLibraryScopePort().source.readWorkState(input.pool, input.work, input);
   if (!isDeepStrictEqual(source.definition, native)) throw unavailable();
   const scopeValues = [
     native.sourceIdentity.route,
@@ -156,7 +156,7 @@ export async function readMembersSnapshot(
 export async function revalidateMembersObservation(
   input: MembersWorkInput,
   observation: IdentityScopeObservation,
-  work: NativeCollectionWork,
+  work: SearchNativeCollectionWork,
 ): Promise<void> {
   const result = await membersBounded(
     work,
@@ -180,7 +180,7 @@ export function sameMembersSnapshot(expected: MembersSnapshot, actual: MembersSn
   return isDeepStrictEqual(value(expected), value(actual));
 }
 
-export async function membersRelease(input: MembersWorkInput, work: NativeCollectionWork, digest: string) {
+export async function membersRelease(input: MembersWorkInput, work: SearchNativeCollectionWork, digest: string) {
   return withMembersWorkBudget(work, () =>
     meterMembersDefinition(input.work.tx, () => readRelease(input.work.tx, digest, { composed: false })),
   );
@@ -214,7 +214,7 @@ export function membersExecution(
 
 /** Indexed local directory of the actual READY capture. No foreign identity home is opened here.
  * Its native enrollment recorded the original's real control group; Scope70 checks fence changes. */
-export async function membersTerminal(execution: MembersExecution, original: string, work: NativeCollectionWork) {
+export async function membersTerminal(execution: MembersExecution, original: string, work: SearchNativeCollectionWork) {
   const { input, snapshot } = execution;
   const address = identityScopeAddress(snapshot.observation.key);
   const terminalValues = [
@@ -242,7 +242,7 @@ export async function membersTerminal(execution: MembersExecution, original: str
 }
 
 /** Retain raw keys only. An incomplete window cannot prove absence or advance a caller's subject frontier. */
-async function group(execution: MembersExecution, subject: string, work: NativeCollectionWork): Promise<Group> {
+async function group(execution: MembersExecution, subject: string, work: SearchNativeCollectionWork): Promise<Group> {
   const saved = execution.groups.get(subject) ?? { keys: [], complete: false };
   if (saved.complete || saved.keys.length >= 100) return saved;
   const limit = Math.min(100, 101 - saved.keys.length, work.available('candidateKeys'), work.available('witnessKeys'));
@@ -252,7 +252,7 @@ async function group(execution: MembersExecution, subject: string, work: NativeC
     const drivers = ['member', 'entry', 'label', 'session', 'copy', 'output'] as const;
     const driver = last && drivers[last.driver];
     if (last && (!driver || last.driver < 1 || last.driver > 4)) throw unavailable();
-    const page = await readCollectionSourceWorkGroup(
+    const page = await searchLibraryScopePort().source.readWorkGroup(
       execution.input.work,
       execution.snapshot.source,
       subject,
@@ -306,7 +306,7 @@ export function membersProgress(execution: MembersExecution, subject: string, ba
   };
 }
 
-async function acceptedRelease(execution: MembersExecution, digest: string, work: NativeCollectionWork) {
+async function acceptedRelease(execution: MembersExecution, digest: string, work: SearchNativeCollectionWork) {
   // Immutable cache hits still verify existence on this transaction. Only a real body projection
   // performs its size admission; a warm pin must not pay a fictitious compressed-body read.
   return membersRelease(execution.input, work, digest);
@@ -315,7 +315,7 @@ async function acceptedRelease(execution: MembersExecution, digest: string, work
 async function closure(
   execution: MembersExecution,
   subject: string,
-  work: NativeCollectionWork,
+  work: SearchNativeCollectionWork,
 ): Promise<OwnerFilterCandidateClosure | null> {
   const raw = await group(execution, subject, work);
   if (!raw.complete || !raw.keys.length || raw.keys.length > 100) return null;
@@ -406,7 +406,7 @@ export async function evaluateMembersSubject(execution: MembersExecution, subjec
 export async function firstMembersOrdinal(
   execution: MembersExecution,
   subject: string,
-  work: NativeCollectionWork,
+  work: SearchNativeCollectionWork,
 ): Promise<NativeOrdinalKey | null> {
   const raw = await group(execution, subject, work);
   if (!raw.complete || !raw.keys.length || raw.keys.length > 100) return null;

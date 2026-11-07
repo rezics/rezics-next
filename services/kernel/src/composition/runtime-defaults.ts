@@ -22,6 +22,8 @@ import type { AccessFactory } from '../request/access.ts';
 import type { WriteRateStageOptions } from '../access/write-rate-stage.ts';
 import type { CreditSearchSource } from '../search/credit-search.ts';
 import { createCreditSearchSource } from '../semantic/credit-search.ts';
+import { bindSearchLibraryScopePort } from '../search/scope-application.ts';
+import { createSearchLibraryScopePort } from './search-library.ts';
 
 export type KernelRuntimeDefaults = {
   tokens: KeyRing;
@@ -81,6 +83,7 @@ const systemDeadlineNow = (): number => Date.now();
 
 /** Shared runtime defaults for the HTTP server and Search work factory. */
 export function createKernelRuntimeDefaults(overrides: KernelRuntimeOverrides = {}): KernelRuntimeDefaults {
+  bindSearchLibraryScopePort(createSearchLibraryScopePort());
   composeAccessApplication();
   composeWorkApplication();
   composeContentApplication();

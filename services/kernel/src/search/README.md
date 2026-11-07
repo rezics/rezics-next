@@ -586,13 +586,19 @@ coveredThrough. All [filtered-list budgets](../../../../docs/filtered-lists.md#c
 their independent work axes. The returned receipt settles the actual supplied root once. Native Source
 availability and Library's missing admitted preparation fields/ports remain explicit integration dependencies.
 
-`service-scope-order.ts:createSearchScopeOrder({pool, options: LeafOptions, clock})` is the internal ordered
-Source adapter. `SearchScopeOrder` is `{kind:'id', source?: NativeSourceIdentity} | {kind:'ordinal',
-source: NativeSourceIdentity}`. These are native locators; they confer no authority. `prepare(order, allowance)`
+`scope-application.ts` owns native source ordering orchestration. `service-scope-order.ts:createSearchScopeOrder({pool,
+options: LeafOptions, clock})` binds that application to the installed port. `SearchScopeOrder` is
+`{kind:'id', source?: NativeSourceIdentity} | {kind:'ordinal', source: NativeSourceIdentity}`. These are native
+locators; they confer no authority. `prepare(order, allowance)`
 returns `{collection, work}` with the complete `CollectionSourceObservation` and native prepared Source.
 `rawOrdinal(collection, after: NativeOrdinalKey|null, limit, allowance)` returns the canonical Library
 `RawOrdinalCollectionPrefix`; `prefix` and `contains` preserve the native ID APIs and actual work receipts.
 `contains` also accepts the native optional `CollectionAliasProgress` as its fourth argument.
+
+Decision: scoped Search membership, continuation and ordinal execution use the Search-owned `SearchLibraryScopePort`;
+Kernel composition binds Library's complete native Source, fixed bounds and limits, ordinal page capability, and
+Members definition reader. Search retains current work admission, observation revalidation, disclosure and receipt
+settlement.
 The adapter adds no public Search sort and manufactures no Search Hits from Collection rows.
 
 `createSearchScopeForService(service, options)` remains the sole resolved-service boundary with the original two
