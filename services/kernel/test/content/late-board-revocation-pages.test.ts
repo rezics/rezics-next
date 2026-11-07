@@ -7,7 +7,7 @@ beforeAll(async () => {
 }, 180_000);
 afterAll(async () => {
   await system?.close();
-});
+}, 120_000);
 
 async function page(path: string, actor: Reader) {
   const response = await system.get(path, actor);

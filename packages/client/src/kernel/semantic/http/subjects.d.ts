@@ -5614,4 +5614,5 @@ declare function subjectRoutes(app: ReturnType<typeof createApp>, { pool, routeK
         })[];
     };
 }>;
+export type SubjectRoutes = ReturnType<typeof subjectRoutes>['~Routes']['v1']['subjects'];
 export { subjectRoutes };

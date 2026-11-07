@@ -11,7 +11,9 @@ import {
   readMembershipInitiator,
   type MembershipOperationFacts,
 } from '../../src/community/membership.ts';
-import { communityWorkModule } from '../../src/community/work.ts';
+import { createCommunityWorkModule } from '../../src/community/work.ts';
+
+const communityWorkModule = createCommunityWorkModule({ deadlineNow: () => Date.now() });
 import { createKernel } from '../../src/http/kernel.ts';
 import { IDEMPOTENCY_HEADER } from '../../src/http/request.ts';
 import { newId, partitionOf, routeOf } from '../../src/route/route.ts';
@@ -32,6 +34,7 @@ import {
   type GrowthReport,
 } from '../support/growth.ts';
 import { createProductionAccess } from './membership-fixture.ts';
+import { testReceiptKeys } from '../support/receipt-keys.ts';
 
 const probeRoute = 0x2130;
 const hotPartition = partitionOf(probeRoute);
@@ -287,6 +290,7 @@ beforeAll(async () => {
   });
   const apiMembership = createRealmMembership({
     clock: () => new Date(),
+    deadlineNow: () => Date.now(),
     pool: db.pool,
     access: production.access,
     referenceKeys: tokens,
@@ -295,6 +299,7 @@ beforeAll(async () => {
 
   const workerMembership = createRealmMembership({
     clock: () => new Date(),
+    deadlineNow: () => Date.now(),
     pool: db.pool,
     access: production.access,
     referenceKeys: tokens,
@@ -355,6 +360,7 @@ beforeAll(async () => {
     pool: db.pool,
     routeKey,
     tokens,
+    receiptKeys: testReceiptKeys(),
     workClient: work,
     access: production.access,
     writeRate: createWriteRateLimiter({ secret: 'realm-growth-check-write-rate-secret-32' }),

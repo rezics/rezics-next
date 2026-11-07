@@ -177,7 +177,7 @@ test('the Web receiver maps the mounted page while preserving a selected reply a
   });
   expect(page.mentions).toEqual({ [authorId]: { handle: 'disclosed-author' } });
   expect(page.mentionProjection).toEqual(response.mentions);
-  expect(mentionsForThreadPost(page.documentMentions!, { ...opening, revisionId: reply.revisionId })).toEqual({});
+  expect(mentionsForThreadPost(page.documentMentions!, { ...opening, revisionId: reply.revisionId }, 0)).toEqual({});
   expect(page.reviewContext).toEqual(response.reviewContext);
   expect(page.conversationActivity).toEqual({
     state: 'current',

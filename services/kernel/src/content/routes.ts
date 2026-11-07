@@ -54,6 +54,7 @@ import readLiveReview from './live-review-read.sql';
 import { createBoard, BoardCreationConflictError, BoardCreationInputError } from './board-create.ts';
 import { applyBoardCandidate } from './board-projection.ts';
 import { documentRoutes } from './document-routes.ts';
+import { readContributedPost } from './contribution-present.ts';
 import { sourceFenceRoutes } from './source-fence-routes.ts';
 import { mediaModerationRoutes } from './media-moderation-routes.ts';
 import {
@@ -71,7 +72,6 @@ import { InvalidMediaClaimError, MediaUnavailableError } from './media.ts';
 import { DocumentTooLargeError, InvalidDocumentError, MAX_DOCUMENT_BYTES } from './document.ts';
 import { mediaImportRoutes } from './media-import-routes.ts';
 import { reportRoutes } from './report-routes.ts';
-import { presentContributedPost } from './contribution-present.ts';
 import { isErasedPlaceholder } from './model.ts';
 import type { Anchored, AnchoredPosition, ReadContext } from './model.ts';
 import { clearReaction, setReaction, type ReactionKind } from './reactions.ts';
@@ -125,6 +125,7 @@ import {
   RevisionPageResponseSchema,
   PostInputSchema,
   PostResponseSchema,
+  ContributedPostResponseSchema,
   EditionSourceIdentitySchema,
   ReactionInputSchema,
   ReactionResponseSchema,
@@ -1206,7 +1207,10 @@ export function contentRoutes(app: ReturnType<typeof definitionRoutes>, dependen
       {
         params,
         response: {
-          200: withHeaders(postResponse(), { ...sessionHeader(), etag: t.Optional(t.String()) }),
+          200: withHeaders(strictContentSchema(ContributedPostResponseSchema()), {
+            ...sessionHeader(),
+            etag: t.Optional(t.String()),
+          }),
           ...readFailures(),
         },
         detail: {
@@ -1221,12 +1225,16 @@ export function contentRoutes(app: ReturnType<typeof definitionRoutes>, dependen
         contentOperation(() =>
           admission.run('normal', job, async () => {
             const context = { actor, deadline: job.deadline };
-            const threadId = await containingThread(id, context);
             let finish!: Parameters<RetainContentRead<PostEntry>>[0];
-            const post = await readPost(dependencies, threadId, id, context, undefined, (current) => {
-              finish = current;
-            });
-            if (!post.value) throw new ProblemError('not_found');
+            const post = await readContributedPost(
+              dependencies,
+              await containingThread(id, context),
+              id,
+              context,
+              (current) => {
+                finish = current;
+              },
+            );
             session.record(sessionComponent(post.anchor));
             if (!isErasedPlaceholder(post.value)) set.headers.etag = JSON.stringify(post.value.revisionId);
             const [personal] = await withViewerReactions(dependencies, actor, [post.value], job.deadline);
@@ -1239,7 +1247,10 @@ export function contentRoutes(app: ReturnType<typeof definitionRoutes>, dependen
             session.record(sessionComponent(final.anchor));
             if (actor.kind === 'account') set.headers['cache-control'] = 'private, no-store';
             return {
-              post: await presentContributedPost(dependencies.pool, retainCurrentReactions(final.value, shown)),
+              post:
+                'authorId' in final.value
+                  ? retainCurrentReactions(post.value, shown)
+                  : retainCurrentReactions(final.value, shown),
             };
           }),
         ),

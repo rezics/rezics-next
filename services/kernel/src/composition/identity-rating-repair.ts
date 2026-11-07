@@ -1,14 +1,14 @@
 import type { Pool } from 'pg';
-import { currentCommand, runCommand } from '../command/command.ts';
-import { bindRatingIdentityProducer } from '../rating/segment-identity-guard.ts';
+import { currentCommand, runCommand, type CommandEvent } from '../command/command.ts';
+import { bindRatingIdentityProducer } from '../rating/index.ts';
 import { partitionOf, routeOf } from '../route/route.ts';
 import {
   continueIdentityRatingRepair,
   createIdentityRatingRepairProducer,
+  IDENTITY_RATING_REPAIR_CONTINUATION,
   type IdentityRatingRepairDrain,
   type IdentityRatingRepairProducer,
 } from '../semantic/identity-rating-repair-producer.ts';
-import { IDENTITY_EPOCH_PROGRESS } from '../semantic/events.ts';
 
 let installed: IdentityRatingRepairProducer | undefined;
 
@@ -45,8 +45,20 @@ type CustodyRow = {
   drainReceiptId: string | null;
 };
 
-function progress(partition: number) {
-  return { type: IDENTITY_EPOCH_PROGRESS, data: { partition, generation: '1' } };
+function continuation(partition: number, obligationId: string, kind: 'prepare' | 'drain' = 'drain'): CommandEvent {
+  return {
+    type: IDENTITY_RATING_REPAIR_CONTINUATION,
+    data: { partition, voterPartition: partition, obligationId, kind, originals: [] },
+  };
+}
+
+function eventsOf(
+  partition: number,
+  obligationId: string,
+  emitted: readonly CommandEvent[] | undefined,
+  kind: 'prepare' | 'drain',
+): CommandEvent[] {
+  return emitted?.length ? [...emitted] : [continuation(partition, obligationId, kind)];
 }
 
 /** Drain later_change/later_vote on the installed producer in an owner command. */
@@ -60,7 +72,7 @@ export async function drainInstalledIdentityRatingRepair(
       const drained = await producer.drain(tx);
       return {
         value: drained,
-        events: drained.events.length ? [...drained.events] : [progress(partition)],
+        events: eventsOf(partition, currentCommand(tx).transactionId, drained.events, 'drain'),
       };
     })
   ).value;
@@ -90,8 +102,12 @@ export async function continueInstalledIdentityRatingRepair(
     });
     return {
       value: authority,
-      events:
-        authority.status === 'pending' && authority.events?.length ? [...authority.events] : [progress(data.partition)],
+      events: eventsOf(
+        data.partition,
+        data.obligationId,
+        authority.status === 'pending' ? authority.events : undefined,
+        'prepare',
+      ),
     };
   });
   const current = prepared.value;
@@ -106,8 +122,12 @@ export async function continueInstalledIdentityRatingRepair(
     });
     return {
       value: handed,
-      events:
-        handed.status === 'pending' && handed.events?.length ? [...handed.events] : [progress(data.voterPartition)],
+      events: eventsOf(
+        data.voterPartition,
+        data.obligationId,
+        handed.status === 'pending' ? handed.events : undefined,
+        'prepare',
+      ),
     };
   });
 }
@@ -158,8 +178,9 @@ export async function holdInstalledIdentityRatingRepairPartition(
 ): Promise<void> {
   const producer = identityRatingRepairProducer();
   await runCommand(pool, { partition }, async (tx) => {
-    await body(producer, currentCommand(tx).transactionId);
-    return { value: null, events: [progress(partition)] };
+    const transactionId = currentCommand(tx).transactionId;
+    await body(producer, transactionId);
+    return { value: null, events: [continuation(partition, transactionId)] };
   });
 }
 

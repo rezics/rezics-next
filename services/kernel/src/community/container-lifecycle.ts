@@ -32,6 +32,7 @@ import readRealm from './container-lifecycle-realm-read.sql';
 import writeSpace from './container-lifecycle-space-write.sql';
 import writeRealm from './container-lifecycle-realm-write.sql';
 import binding from './container-lifecycle-binding.sql';
+import type { CommunityAmbient } from './ambient.ts';
 
 export type ContainerKind = 'space' | 'realm';
 export type ContainerLifecycleInput = Readonly<{
@@ -131,7 +132,7 @@ function view(
 
 /** Private moderation read; denied and missing are identical. No removed metadata or Context content escapes. */
 export async function readContainerLifecycle(
-  deps: Pick<SpaceDependencies, 'pool' | 'access' | 'clock'>,
+  deps: Pick<SpaceDependencies, 'pool' | 'access' | 'clock'> & CommunityAmbient,
   actor: Actor,
   kind: ContainerKind,
   id: string,
@@ -166,7 +167,7 @@ export async function readContainerLifecycle(
     const permission = {
       remove: await remove(bounded, time),
       restore: await restore(bounded, time),
-      platform: platform.allowed && Date.now() < platform.deadline,
+      platform: platform.allowed && deps.deadlineNow() < platform.deadline,
     };
     if (
       !row ||
@@ -177,13 +178,16 @@ export async function readContainerLifecycle(
     )
       return null;
     const value = view(kind, row, current, actor, permission);
-    return { ...value, mayRestore: value.mayRestore && contextRead.allowed && Date.now() < contextRead.deadline };
+    return {
+      ...value,
+      mayRestore: value.mayRestore && contextRead.allowed && deps.deadlineNow() < contextRead.deadline,
+    };
   });
 }
 
 /** Fresh command-T formula evaluation, independently anchored and released. */
 async function platformRestoration(
-  deps: { pool: SpaceDependencies['pool']; access: Access },
+  deps: { pool: SpaceDependencies['pool']; access: Access; deadlineNow: () => number },
   actor: Actor,
   kind: ContainerKind,
   time: AuthoritativeTime,
@@ -196,7 +200,7 @@ async function platformRestoration(
   return withConnection(deps.pool, async (client) => {
     const bounded = deadlineClient(client, context.deadline);
     const allowed =
-      Date.now() < deadline &&
+      deps.deadlineNow() < deadline &&
       (await globalContextAnchor.validate(bounded, time)) &&
       (await installed.authorize(bounded, actor, action, globalContextAnchor.resource, evidence, time));
     return { allowed, deadline };
@@ -204,7 +208,7 @@ async function platformRestoration(
 }
 
 async function readableContext(
-  deps: { pool: SpaceDependencies['pool']; access: Access },
+  deps: { pool: SpaceDependencies['pool']; access: Access; deadlineNow: () => number },
   actor: Actor,
   id: string,
   time: AuthoritativeTime,
@@ -218,7 +222,7 @@ async function readableContext(
     const bounded = deadlineClient(client, context.deadline);
     try {
       const allowed =
-        Date.now() < deadline &&
+        deps.deadlineNow() < deadline &&
         (await anchor.validate(bounded, time)) &&
         (await deps.access.authorize(bounded, actor, 'context:read', resource, evidence, time));
       return { allowed, deadline };
@@ -230,7 +234,7 @@ async function readableContext(
 }
 
 export function removeContainer(
-  deps: SpaceDependencies,
+  deps: SpaceDependencies & CommunityAmbient,
   actor: Actor,
   input: ContainerRemovalInput,
   context: SpaceContext,
@@ -238,7 +242,7 @@ export function removeContainer(
   return transition(deps, actor, input, context, 'removed');
 }
 export function restoreContainer(
-  deps: SpaceDependencies,
+  deps: SpaceDependencies & CommunityAmbient,
   actor: Actor,
   input: ContainerLifecycleInput,
   context: SpaceContext,
@@ -246,7 +250,7 @@ export function restoreContainer(
   return transition(deps, actor, { ...input, reason: '' }, context, 'active');
 }
 function transition(
-  deps: SpaceDependencies,
+  deps: SpaceDependencies & CommunityAmbient,
   actor: Actor,
   input: ContainerRemovalInput,
   context: SpaceContext,
@@ -301,7 +305,7 @@ function transition(
       const row = await read(client, body.kind, body.id, time);
       const current = await role(client, body.kind, body.id, checkedActor, time);
       const before = prepared.get(time);
-      if (!row || !before || Date.now() >= before.deadline) return false;
+      if (!row || !before || deps.deadlineNow() >= before.deadline) return false;
       return state === 'removed' || row.state === 'active'
         ? current !== null || before.platform
         : mayRestore(row, current, checkedActor, before.platform);
@@ -369,7 +373,7 @@ function transition(
       const row = await read(tx, body.kind, body.id, command.time);
       const current = await role(tx, body.kind, body.id, actor, command.time);
       const before = prepared.get(command.time);
-      if (!row || !before || Date.now() >= before.deadline) throw new GrantDeniedError();
+      if (!row || !before || deps.deadlineNow() >= before.deadline) throw new GrantDeniedError();
       if (
         row.head_revision_id !== body.expectedHead ||
         row.lifecycle_version !== body.expectedVersion ||

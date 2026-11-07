@@ -18,6 +18,7 @@ test('native rank primitives reobserve selected publication, prior and authority
       deadline: Date.now() + 30_000,
     });
     const source = createRealmRankOrderSource({
+      deadlineNow: () => Date.now(),
       pool: fixture.database.pool,
       access: system.access,
       tokens: system.tokenKeys,

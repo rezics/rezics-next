@@ -1,4 +1,5 @@
 import { configureTestReceiptKeys, testReceiptKeys } from '../../support/receipt-keys.ts';
+import { TEST_REQUEST_DEADLINE_MS } from '../../support/test-kernel.ts';
 import { registerAccountDeletionRuntime, type AccountDeletionRuntime } from '../../support/account-deletion.ts';
 import {
   createAuthHost,
@@ -198,12 +199,12 @@ async function createNativeContentSystemWithOptions(
       let realmMembership: ReturnType<typeof createRealmMembership> | undefined;
       const realmRoleReader: AccessRealmRoleReader = Object.assign(
         (client: Parameters<AccessRealmRoleReader>[0], input: Parameters<AccessRealmRoleReader>[1]) => {
-          realmMembership ??= createRealmMembership({ pool, access: fresh, clock });
+          realmMembership ??= createRealmMembership({ deadlineNow: () => Date.now(), pool, access: fresh, clock });
           return realmMembership.roleReader(client, input);
         },
         {
           batch: ((client, input) => {
-            realmMembership ??= createRealmMembership({ pool, access: fresh, clock });
+            realmMembership ??= createRealmMembership({ deadlineNow: () => Date.now(), pool, access: fresh, clock });
             return realmMembership.roleReader.batch!(client, input);
           }) as NonNullable<AccessRealmRoleReader['batch']>,
         },
@@ -211,13 +212,13 @@ async function createNativeContentSystemWithOptions(
       Object.defineProperties(realmRoleReader, {
         work: {
           get: () => {
-            realmMembership ??= createRealmMembership({ pool, access: fresh, clock });
+            realmMembership ??= createRealmMembership({ deadlineNow: () => Date.now(), pool, access: fresh, clock });
             return realmMembership.roleReader.work;
           },
         },
         batchWork: {
           get: () => {
-            realmMembership ??= createRealmMembership({ pool, access: fresh, clock });
+            realmMembership ??= createRealmMembership({ deadlineNow: () => Date.now(), pool, access: fresh, clock });
             return realmMembership.roleReader.batchWork;
           },
         },
@@ -244,6 +245,7 @@ async function createNativeContentSystemWithOptions(
     // This same instance authenticates fixture credentials on this exact pool.
     const kernel = createKernel({
       receiptKeys: testReceiptKeys(),
+      requestDeadlineMs: TEST_REQUEST_DEADLINE_MS,
       pool,
       routeKey,
       tokens: tokenKeys,
@@ -261,6 +263,7 @@ async function createNativeContentSystemWithOptions(
     const createKernelForPool: ContentSystem['createKernelForPool'] = (targetPool, targetAccess) =>
       createKernel({
         receiptKeys: testReceiptKeys(),
+        requestDeadlineMs: TEST_REQUEST_DEADLINE_MS,
         pool: targetPool,
         routeKey,
         tokens: tokenKeys,

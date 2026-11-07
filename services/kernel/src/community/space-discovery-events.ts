@@ -1,8 +1,10 @@
 import { Type, type Static } from 'typebox';
+import { COMMUNITY_LOG_POSITION, COMMUNITY_ROUTED_UUID, COMMUNITY_UUID } from './contract/index.ts';
 
-const id = Type.String({ pattern: '^[0-9a-f]{8}-[0-9a-f]{4}-[78][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$' });
+const logId = Type.String({ pattern: COMMUNITY_UUID });
+const routedId = Type.String({ pattern: COMMUNITY_ROUTED_UUID });
 const closed = { additionalProperties: false };
-const key = (kind: 'space' | 'context' | 'media') => Type.Object({ kind: Type.Literal(kind), id }, closed);
+const key = (kind: 'space' | 'context' | 'media') => Type.Object({ kind: Type.Literal(kind), id: routedId }, closed);
 
 /** An invalidation is not an eligible document or permission to disclose one. */
 export const SpaceDiscoveryInvalidation = Type.Object(
@@ -27,14 +29,14 @@ export const SpaceDiscoveryInvalidation = Type.Object(
       {
         partition: Type.Integer({ minimum: 0, maximum: 4095 }),
         epoch: Type.Integer({ minimum: 1 }),
-        position: Type.String({ pattern: '^[1-9][0-9]{0,18}$' }),
-        eventId: id,
-        resourceId: Type.Union([id, Type.Null()]),
+        position: Type.String({ pattern: COMMUNITY_LOG_POSITION }),
+        eventId: logId,
+        resourceId: Type.Union([routedId, Type.Null()]),
         type: Type.String({ minLength: 1, maxLength: 256 }),
       },
       closed,
     ),
-    revisionId: Type.Union([id, Type.Null()]),
+    revisionId: Type.Union([routedId, Type.Null()]),
     nativeVersion: Type.Union([Type.String({ pattern: '^(0|[1-9][0-9]*)$' }), Type.Null()]),
   },
   closed,

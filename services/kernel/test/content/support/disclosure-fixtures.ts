@@ -5,12 +5,14 @@ import { createContentWorkAccess } from '../../../src/content/register.ts';
 import { contentEffects } from '../../../src/content/relays.ts';
 import { createContentWork } from '../../../src/content/work.ts';
 import { startWorker } from '../../../src/worker.ts';
+import { testReceiptKeys } from '../../support/receipt-keys.ts';
 import { createHash, randomUUID } from 'node:crypto';
 import { documentText, fromPlainText, serializeDocument, type DocumentSnapshot } from '@rezics/document';
 import type { Pool } from 'pg';
 import { createTurnstileVerifier, type TurnstileVerifier } from '../../../src/content/turnstile.ts';
 import { newId } from '../../../src/route/route.ts';
 import type { Revision } from '../../../../../specs/content-disclosure-driver.ts';
+import { testReceiptKeys } from '../../support/receipt-keys.ts';
 
 export const AUDIENCE = 'https://content.test';
 export const PROJECTION_CONSUMER = 'disclosure_projection';
@@ -296,6 +298,7 @@ async function runDisclosureWorker(): Promise<void> {
       databaseUrl: process.env.DATABASE_URL ?? '',
       executorId: 'disclosure-test',
       poolSize: 5,
+      receiptKeys: testReceiptKeys(),
     },
     [
       {

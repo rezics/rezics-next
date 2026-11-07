@@ -40,7 +40,13 @@ function idAt(route: number, milliseconds: number, sequence: number): string {
 }
 
 function publicationDependencies() {
-  return { clock: () => new Date(), pool: f.db.pool, access: f.system.access, routeKey: f.system.routeKey };
+  return {
+    clock: () => new Date(),
+    pool: f.db.pool,
+    access: f.system.access,
+    routeKey: f.system.routeKey,
+    deadlineNow: () => Date.now(),
+  };
 }
 
 async function createCommunity(visibility: 'public' | 'protected' = 'public'): Promise<Community> {

@@ -3277,4 +3277,5 @@ function subjectRoutes(
     );
 }
 
+export type SubjectRoutes = ReturnType<typeof subjectRoutes>['~Routes']['v1']['subjects'];
 export { subjectRoutes };

@@ -14,6 +14,7 @@ import type { NativePermissionProjection } from './permission-projection.ts';
 export type { NativePermissionProjection } from './permission-projection.ts';
 
 const nativePolicyCatalogues = new WeakMap<ResolvedResourceRoles, PolicyCatalogue>();
+const completeDeclaredTypes = new WeakMap<PolicyCatalogue, ReadonlyMap<string, readonly string[]>>();
 
 function subject(
   row: NativePermissionProjection,
@@ -50,20 +51,26 @@ export function compileNativePolicyCatalogue(actions: ActionCatalogue, roles: Re
     }
   }
   const hasOwnAccountAction = [...actions.values()].some((metadata) => metadata.authority === 'own-account');
+  const knownTypes = new Set([...roles.types.keys(), ...(hasOwnAccountAction ? (['access.account'] as const) : [])]);
+  const completeTypes = new Map<string, readonly string[]>();
   const result = compilePolicyCatalogue({
-    actions: [...actions].map(([action, metadata]) => ({
-      action,
-      anonymous: metadata.anonymous,
-      authority: metadata.authority === 'own-account' ? 'own-account' : 'resource',
-      resourceTypes: [
+    actions: [...actions].map(([action, metadata]) => {
+      const declared = [
         ...new Set([
           ...(metadata['x-resource-types'] ?? []),
           ...(typesByAction.get(action) ?? []),
           ...(metadata.authority === 'own-account' ? ['access.account'] : []),
         ]),
-      ],
-      globalReach: isGlobalReachAction(action),
-    })),
+      ];
+      completeTypes.set(action, declared);
+      return {
+        action,
+        anonymous: metadata.anonymous,
+        authority: metadata.authority === 'own-account' ? 'own-account' : 'resource',
+        resourceTypes: declared.filter((type) => knownTypes.has(type)),
+        globalReach: isGlobalReachAction(action),
+      };
+    }),
     roles: [...roles.roles].map(([role, values]) => ({ role, actions: [...values] })),
     resourceTypes: [
       ...[...roles.types].map(([type, template]) => ({
@@ -81,6 +88,7 @@ export function compileNativePolicyCatalogue(actions: ActionCatalogue, roles: Re
       `Invalid native Access policy catalogue: ${result.errors.map((error) => error.code).join(',')}`,
     );
   nativePolicyCatalogues.set(roles, result.catalogue);
+  completeDeclaredTypes.set(result.catalogue, completeTypes);
   return result.catalogue;
 }
 
@@ -95,9 +103,10 @@ export function hasNativePolicyProfile(catalogue: PolicyCatalogue, action: strin
   return catalogue.actionByName[action]?.resourceTypes.includes(resourceType) ?? false;
 }
 
-/** A point Resource omits its type, so only a single registered type is inferable. */
+/** A point Resource omits its type, so only a single complete declaration is inferable.
+ * The mounted subset must not make a multi-type declaration look unique. */
 export function uniqueNativePolicyResourceType(catalogue: PolicyCatalogue, action: string): string | undefined {
-  const types = catalogue.actionByName[action]?.resourceTypes;
+  const types = completeDeclaredTypes.get(catalogue)?.get(action) ?? catalogue.actionByName[action]?.resourceTypes;
   return types?.length === 1 ? types[0] : undefined;
 }
 

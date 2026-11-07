@@ -206,6 +206,7 @@ test('served page readers retain native owner outage status and delay and retry 
     access: realAccess.access,
     tokens,
     clock: () => new Date(),
+    deadlineNow: () => Date.now(),
     dispatch: async (request) => {
       nativeRequests.push(new URL(request.url).pathname);
       if (unavailable)

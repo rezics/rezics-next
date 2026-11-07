@@ -5,11 +5,11 @@ import { MembershipInverseIncompleteError, requireMembershipInverseReady } from 
 import { ProblemError } from '../http/problem.ts';
 import { discardConnection, withConnection } from '../database/pool.ts';
 import { readPartition } from '../partition/partition.ts';
-import type { AccountActor, Access, AccessClient } from '../request/access.ts';
+import type { AccountActor, AccessClient } from '../request/access.ts';
 import { partitionOf, routeOf } from '../route/route.ts';
 import { decodeCursor, encodeCursor } from '../tokens/cursor.ts';
-import type { KeyRing } from '../tokens/seal.ts';
 import { hydrateOwnRealms } from './own-realms-view.ts';
+import { sameOwnRealmMembership, type OwnRealmMembership, type OwnRealmsDependencies } from './own-realms-shape.ts';
 import inversePage from './own-realms-inverse-page.sql';
 import confirmMembership from './own-realms-membership.sql';
 
@@ -18,30 +18,6 @@ const SCAN_PAGE_SIZE = 20;
 const MAX_INVERSE_ROWS = 80;
 const START_AFTER = '00000000-0000-0000-0000-000000000000';
 
-export type OwnRealmsDependencies = {
-  pool: Pool;
-  tokens: KeyRing;
-  access: Access;
-  clock: () => Date;
-};
-export type OwnRealmMembership = NonNullable<Awaited<ReturnType<typeof confirmMembership.run>>> & {
-  epoch: number;
-  since: string;
-};
-/** Exact selected native episode and source, independent of presentation labels. */
-export function sameOwnRealmMembership(a: OwnRealmMembership | null, b: OwnRealmMembership | null): boolean {
-  if (!a || !b) return a === b;
-  return (
-    a.realmId === b.realmId &&
-    a.reservationId === b.reservationId &&
-    a.transactionId === b.transactionId &&
-    a.interval === b.interval &&
-    a.since === b.since &&
-    a.headRevisionId === b.headRevisionId &&
-    a.lifecycleVersion === b.lifecycleVersion &&
-    a.epoch === b.epoch
-  );
-}
 type OwnRealmsInput = { cursor?: string };
 type Context = { deadline: number; at: string };
 

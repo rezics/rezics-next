@@ -14,7 +14,12 @@ test('native membership pages converge rank and prior; late votes and old join/l
   const f = await createFigureFixture({ subjects: 12, partitions: 1, deferMembership: true });
   try {
     const { system, kernel } = communityFixtureRuntime();
-    const source = createRealmRankSource({ pool: f.database.pool, access: system.access, tokens: system.tokenKeys });
+    const source = createRealmRankSource({
+      deadlineNow: () => Date.now(),
+      pool: f.database.pool,
+      access: system.access,
+      tokens: system.tokenKeys,
+    });
     const counter = createRatingCounter({ secret: Buffer.alloc(32, 43) });
     const member = f.realmMembers[0]!;
     const request = {

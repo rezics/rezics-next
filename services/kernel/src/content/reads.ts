@@ -173,6 +173,8 @@ export type ContentReadDependencies = Readonly<{
   clock: () => Date;
   disclosureBarrier?: DisclosureBarrier;
   pageDisclosureBarrier?: PageDisclosureBarrier;
+  /** Real wall time for realm read deadlines; absent callers keep the composition clock. */
+  deadlineNow?: () => number;
 }>;
 /** Retain the initial source and prepared native authority across foreign work.
  * The optional qualifier evaluates already-prepared native checks in the same

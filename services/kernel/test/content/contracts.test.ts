@@ -348,6 +348,7 @@ function publishedModels(): void {
         clock: () => Date;
         disclosureBarrier?: reads.DisclosureBarrier;
         pageDisclosureBarrier?: reads.PageDisclosureBarrier;
+        deadlineNow?: () => number;
       }>
     >
   >();
@@ -359,6 +360,7 @@ function publishedModels(): void {
         access: Access;
         realmParticipation?: RealmParticipationCheck;
         clock: () => Date;
+        deadlineNow?: () => number;
         downloadContext?: DownloadContext;
       }>
     >
@@ -799,6 +801,7 @@ function publishedModels(): void {
         access: Access;
         routeKey: Uint8Array;
         clock: () => Date;
+        deadlineNow?: () => number;
         anonymousVerifier?: TurnstileVerifier;
       }>
     >

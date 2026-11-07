@@ -8,7 +8,7 @@ beforeAll(async () => {
 }, 180_000);
 afterAll(async () => {
   await system?.close();
-});
+}, 120_000);
 
 function opening(title: string) {
   return {

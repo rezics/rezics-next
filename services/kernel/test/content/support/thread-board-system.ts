@@ -9,7 +9,8 @@ import { createSubjectThreadEffect } from '../../../src/content/subject-thread-i
 import { readBatch, type CloudEvent } from '../../../src/events/log.ts';
 import { partitionOf, routeOf } from '../../../src/route/route.ts';
 import { GLOBAL_CONTEXT } from '../../../src/semantic/definitions.ts';
-import { testReceiptKeys } from '../../support/receipt-keys.ts';
+import { configureTestReceiptKeys, testReceiptKeys } from '../../support/receipt-keys.ts';
+import { TEST_REQUEST_DEADLINE_MS } from '../../support/test-kernel.ts';
 import { createWorkClient } from '../../../src/work/client.ts';
 import { seedGovernanceAuthority } from './disclosure-fixtures.ts';
 import { governance, highRates, openUserCasesSystem } from './user-cases-fixtures.ts';
@@ -36,6 +37,7 @@ export async function openThreadBoardSystem() {
     const pool = system.database.pool;
     const databaseUrl = pool.options.connectionString;
     if (!databaseUrl) throw new Error('Thread/Board fixture database URL is missing');
+    configureTestReceiptKeys(pool);
     const client = await createWorkClient(databaseUrl, pool);
     workClient = client;
     const pointHolds = new Map<string, Hold>();
@@ -56,7 +58,7 @@ export async function openThreadBoardSystem() {
       receiptKeys: testReceiptKeys(),
       workClient: client,
       access: () => system.access,
-      requestDeadlineMs: 120_000,
+      requestDeadlineMs: Math.max(TEST_REQUEST_DEADLINE_MS, 120_000),
       content: {
         disclosureBarrier: (target) => wait(pointHolds, target.postId ?? target.threadId),
         pageDisclosureBarrier: (target) => wait(pageHolds, target.threadId ?? target.boardId),

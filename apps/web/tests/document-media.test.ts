@@ -13,6 +13,7 @@ import { m } from '../src/paraglide/messages.js';
 import thread from '../src/kernel/recorded/thread.json';
 import recordedPosts from '../src/kernel/recorded/thread-posts.json';
 import { authoredReadingPage } from '../src/kernel/fake/thread-reading-page';
+import { readingPageDocumentMedia } from '../src/threads/thread-page-context';
 
 mock.module('cloudflare:workers', () => ({ env: {} }));
 const { ThreadReading } = await import('../src/threads/thread-reading');
@@ -185,6 +186,11 @@ describe('Sole document image adapter and native media in ordinary thread bodies
       images: [{ id: image.id, state: 'available' as const, presentation: image }],
     };
     const result = receiveThreadDocumentMedia({ state: 'available', documents: [document] }, [post, erased, withheld]);
+    const page = authoredReadingPage({ ...thread.thread, firstPost: erased }, [post]);
+    page.documentMedia = { state: 'available', documents: [document] };
+    const continued = readingPageDocumentMedia(page);
+    expect(documentImageForPost(continued, post, image.id, 1)).toEqual(image);
+    expect(documentImageForPost(continued, post, image.id, 0)).toBeNull();
     expect(documentImageForPost(result, post, image.id)).toEqual(image);
     expect(documentImageForPost(result, post, id(2))).toBeNull();
     expect(documentImageForPost(result, { ...post, revisionId: id(9) }, image.id)).toBeNull();

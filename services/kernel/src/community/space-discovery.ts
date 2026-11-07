@@ -10,6 +10,7 @@ import type { Effect } from '../events/effects.ts';
 import type { CloudEvent } from '../events/log.ts';
 import { PARTITIONS, partitionOf, routeOf } from '../route/route.ts';
 import { SPACE_DISCOVERY_INVALIDATED, type SpaceDiscoveryInvalidation } from './space-discovery-events.ts';
+import type { CommunityAmbient } from './ambient.ts';
 import {
   spaceDiscoveryDependencyReadiness,
   type SpaceDiscoveryDependencyReadiness,
@@ -61,7 +62,8 @@ const basis = {
 /** Exact log identity, not a wall clock, event UUID ordering or a caller's eligibility flag. */
 function origin(event: CloudEvent): SpaceDiscoveryInvalidation['origin'] {
   const match = /^urn:rezics:log:(\d+)\.(\d+)$/.exec(event.source);
-  if (!match || !/^0*[1-9][0-9]*$/.test(event.sequence)) throw new TypeError('Invalid Space discovery log origin');
+  if (!match || !/^0*(?:0|[1-9][0-9]*)$/.test(event.sequence))
+    throw new TypeError('Invalid Space discovery log origin');
   const partition = Number(match[1]);
   const epoch = Number(match[2]);
   const position = BigInt(event.sequence);
@@ -223,11 +225,13 @@ export type SpaceDiscoverySnapshot = Readonly<{
   position: bigint;
   spaces: readonly IndexedSpace[];
 }>;
-export type SpaceDiscoveryDependencies = Readonly<{
-  pool: Pool;
-  access: Access;
-  clock: () => Date;
-}>;
+export type SpaceDiscoveryDependencies = Readonly<
+  {
+    pool: Pool;
+    access: Access;
+    clock: () => Date;
+  } & CommunityAmbient
+>;
 export interface SpaceDiscoverySource {
   /** Dependency capability is separate from census and current hydration. */
   dependencies(): Promise<SpaceDiscoveryDependencyReadiness>;
@@ -276,7 +280,7 @@ export function spaceDiscoverySource(
   deps: SpaceDiscoveryDependencies,
   context?: Readonly<{ deadline: number }>,
 ): SpaceDiscoveryTupleSource {
-  const deadline = () => context?.deadline ?? Date.now() + DEFAULT_REQUEST_DEADLINE_MS;
+  const deadline = () => context?.deadline ?? deps.deadlineNow() + DEFAULT_REQUEST_DEADLINE_MS;
   return {
     dependencies: () => spaceDiscoveryDependencyReadiness(deps.pool),
     tupleWitnesses(partition, ids) {

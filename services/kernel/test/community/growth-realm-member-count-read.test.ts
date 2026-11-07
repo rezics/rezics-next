@@ -252,7 +252,7 @@ test('Realm home member count stays a native point read across member, unrelated
   const runtime = communityFixtureRuntime();
   await expect(
     readRealmHomePresentation(
-      { clock: () => new Date(), pool: database.pool, access: runtime.system.access },
+      { clock: () => new Date(), pool: database.pool, access: runtime.system.access, deadlineNow: () => Date.now() },
       fixture.growth.realmId,
       {
         actor: { kind: 'anonymous' },

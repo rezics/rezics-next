@@ -20,7 +20,12 @@ test('a current reviewer selects one exact native destination and sparse pages r
       pool: world.db.pool,
       access,
       routeKey: world.routeKey,
-      realmParticipation: createRealmParticipationCheck({ clock: () => new Date(), pool: world.db.pool, access }),
+      realmParticipation: createRealmParticipationCheck({
+        clock: () => new Date(),
+        pool: world.db.pool,
+        access,
+        deadlineNow: () => Date.now(),
+      }),
     };
     const created = await createBoard(
       dependencies,

@@ -11,10 +11,12 @@ import { createKernelCreditSearchSource, createKernelRuntimeDefaults } from './c
 import { composeSemanticDomain } from './composition/semantic.ts';
 import { composeAccessApplication } from './composition/access.ts';
 import { composeWorkApplication } from './composition/work.ts';
+import { composeCommunityApplication } from './composition/community.ts';
 import { installNativeHistory } from './composition/history.ts';
 import { startContentApplication } from './composition/content.ts';
 import { composeLibraryDomain } from './composition/library.ts';
 import { createKernelWorkModules } from './composition/work-modules.ts';
+import { installIdentityRatingRepairProducer } from './composition/identity-rating-repair.ts';
 import { composeWork, type WorkModule } from './work/registry.ts';
 import { effectsRelay } from './events/effects.ts';
 import { relayConcurrencyForPool, startRelays } from './events/relays.ts';
@@ -80,7 +82,9 @@ export async function startWorker(
 ) {
   composeAccessApplication();
   composeWorkApplication();
+  const community = composeCommunityApplication();
   installNativeHistory();
+  installIdentityRatingRepairProducer();
   const content = startContentApplication(config.clock ? { clock: config.clock } : undefined);
   const composed = () =>
     createKernelWorkModules(
@@ -93,6 +97,7 @@ export async function startWorker(
         id: content.application.ambient.id,
       },
       createKernelCreditSearchSource,
+      community.ambient,
     );
   const resolvedModules =
     modules === undefined ? composed() : typeof modules === 'function' ? modules(composed()) : modules;

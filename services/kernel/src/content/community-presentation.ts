@@ -20,11 +20,11 @@ import bans from './ban-current-many-batch.sql';
 
 export type { CommunityPresentation } from './community-presentation-model.ts';
 export { CommunityPresentationSchema } from './community-presentation-model.ts';
-type Dependencies = Readonly<{ pool: Pool; access: Access; clock: () => Date }>;
+type Dependencies = Readonly<{ pool: Pool; access: Access; clock: () => Date; deadlineNow?: () => number }>;
 const none = { state: 'none', value: null } as const;
 const unavailable = { state: 'unavailable', value: null } as const;
 const unknownMembers = { state: 'unknown', count: null, version: null } as const;
-const keys = (ids: readonly string[]) => [...new Set(ids)].map((id) => ({ route: routeOf(id), id }));
+const keys = (ids: readonly string[]) => JSON.stringify([...new Set(ids)].map((id) => ({ route: routeOf(id), id })));
 
 /** One batch per row kind, one snapshot per round. Source failures fail the
  * container read; optional producer failures carry no cached positive value. */

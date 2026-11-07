@@ -7,7 +7,7 @@ import { createAccess } from '../../src/access/index.ts';
 import { createKernel } from '../../src/http/kernel.ts';
 import { newId, routeOf } from '../../src/route/route.ts';
 import { bootstrapRelease } from '../../src/semantic/definitions.ts';
-import { capture, costOf, openGrowthDatabase, seed } from '../support/growth.ts';
+import { capture, captureWithFoldedCost, costOf, openGrowthDatabase, seed } from '../support/growth.ts';
 
 const authorRoute = 0x9abc;
 const contentRoute = 0x1234;
@@ -342,11 +342,6 @@ test('two public view observations fence each author page at any item count', as
   const author = newId(authorRoute);
   await account(author);
   await item(author, 'discussion', 20);
-  await db.admin.query(
-    `INSERT INTO access.account(route,account_id,kind,state,authn_fenced,membership_inverse_complete,transaction_id)
-     SELECT $1,id,'actor','active',false,false,id FROM unnest($2::uuid[]) AS ids(id)`,
-    [authorRoute, Array.from({ length: 500 }, () => newId(authorRoute))],
-  );
 
   function accountScans(value: unknown): Record<string, unknown>[] {
     if (Array.isArray(value)) return value.flatMap(accountScans);
@@ -358,31 +353,42 @@ test('two public view observations fence each author page at any item count', as
     ];
   }
 
-  async function reads() {
-    const result = await capture(db, () => get(path(author, 'threads', undefined, { limit: '1' })));
+  const planned = await capture(db, () => get(path(author, 'threads', undefined, { limit: '1' })));
+  expect(planned.value.status).toBe(200);
+  expect(planned.capture.statements.filter((statement) => statement.includes('public_views'))).toHaveLength(2);
+  const statement = planned.capture.statements.find((statement) => statement.includes('public_views'));
+  const plans = planned.capture.plans
+    .flatMap((plan): unknown[] => (Array.isArray(plan) ? plan : [plan]))
+    .filter(
+      (plan) => plan !== null && typeof plan === 'object' && 'Query Text' in plan && plan['Query Text'] === statement,
+    );
+  expect(plans).toHaveLength(2);
+  expect(accountScans(plans)).toEqual([
+    expect.objectContaining({
+      'Node Type': expect.stringMatching(/^Index (?:Only )?Scan$/),
+      'Index Name': expect.stringMatching(/^(account_pkey|account_active_pages)$/),
+    }),
+    expect.objectContaining({
+      'Node Type': expect.stringMatching(/^Index (?:Only )?Scan$/),
+      'Index Name': expect.stringMatching(/^(account_pkey|account_active_pages)$/),
+    }),
+  ]);
+  expect(costOf(planned.capture).relations['access.account']?.rows).toBe(2);
+
+  await db.admin.query(
+    `INSERT INTO access.account(route,account_id,kind,state,authn_fenced,membership_inverse_complete,transaction_id)
+     SELECT $1,id,'actor','active',false,false,id FROM unnest($2::uuid[]) AS ids(id)`,
+    [authorRoute, Array.from({ length: 500 }, () => newId(authorRoute))],
+  );
+
+  async function boundedRows() {
+    const result = await captureWithFoldedCost(db, () => get(path(author, 'threads', undefined, { limit: '1' })));
     expect(result.value.status).toBe(200);
     expect(result.capture.statements.filter((statement) => statement.includes('public_views'))).toHaveLength(2);
-    const statement = result.capture.statements.find((statement) => statement.includes('public_views'));
-    const plans = result.capture.plans
-      .flatMap((plan): unknown[] => (Array.isArray(plan) ? plan : [plan]))
-      .filter(
-        (plan) => plan !== null && typeof plan === 'object' && 'Query Text' in plan && plan['Query Text'] === statement,
-      );
-    expect(plans).toHaveLength(2);
-    expect(accountScans(plans)).toEqual([
-      expect.objectContaining({
-        'Node Type': expect.stringMatching(/^Index (?:Only )?Scan$/),
-        'Index Name': expect.stringMatching(/^(account_pkey|account_active_pages)$/),
-      }),
-      expect.objectContaining({
-        'Node Type': expect.stringMatching(/^Index (?:Only )?Scan$/),
-        'Index Name': expect.stringMatching(/^(account_pkey|account_active_pages)$/),
-      }),
-    ]);
-    expect(costOf(result.capture).relations['access.account']?.rows).toBe(2);
+    expect(result.capture.cost.relations['access.account']?.rows).toBe(2);
   }
 
-  await reads();
+  await boundedRows();
   for (let index = 21; index < 29; index++) await item(author, 'discussion', index);
-  await reads();
+  await boundedRows();
 });

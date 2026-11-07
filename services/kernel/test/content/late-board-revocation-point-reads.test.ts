@@ -8,7 +8,7 @@ beforeAll(async () => {
 }, 180_000);
 afterAll(async () => {
   await system?.close();
-});
+}, 120_000);
 
 for (const visibility of ['published', 'protected'] as const) {
   test(`late-board-revocation-point-reads: ${visibility} authority is current on every reader surface`, async () => {

@@ -179,6 +179,13 @@ test('incremental client declarations match a clean emit after one source file c
     const withKernelAddition = clientDeclarationCacheDirectory(fixture, kernel);
     writeFileSync(resolve(fixture, 'packages/search-text/src/extra.ts'), 'export type Extra = string;\n');
     expect(clientDeclarationCacheDirectory(fixture, kernel)).not.toBe(withKernelAddition);
+    writeFileSync(
+      resolve(fixture, 'packages/client/src/index.ts'),
+      "export type { Missing } from './kernel/zones/subjects.ts';\n",
+    );
+    expect(() => clientDeclarations(kernel, { repositoryRoot: fixture, cacheDirectory: incrementalCache })).toThrow(
+      'Client public entry imports ./kernel/zones/subjects.ts, but zones/subjects.d.ts was not emitted.',
+    );
   } finally {
     rmSync(fixture, { recursive: true, force: true });
   }

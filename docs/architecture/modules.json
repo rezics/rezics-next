@@ -401,19 +401,31 @@
       "kind": "adapter",
       "owner": "content",
       "paths": ["services/kernel/src/community/**", "services/kernel/db/community/**"],
+      "excludes": [
+        "services/kernel/src/community/contract/**",
+        "services/kernel/src/community/core/**",
+        "services/kernel/src/community/application/**"
+      ],
       "publicEntries": [
         "services/kernel/src/community/index.ts",
+        "services/kernel/src/community/declaration.ts",
+        "services/kernel/src/community/http-declaration.ts",
+        "services/kernel/src/community/events.ts",
         "services/kernel/src/community/access-capabilities.ts",
         "services/kernel/src/community/content-capabilities.ts",
         "services/kernel/src/community/space-discovery.ts",
         "services/kernel/src/community/membership.ts",
-        "services/kernel/src/community/work.ts"
+        "services/kernel/src/community/work.ts",
+        "services/kernel/src/community/adapters/index.ts"
       ],
       "allowedDependencies": [
         "auth-contract",
         "document",
         "kernel-access",
         "kernel-commerce",
+        "kernel-community-application",
+        "kernel-community-contract",
+        "kernel-community-core",
         "kernel-content",
         "kernel-history-contract",
         "kernel-library",
@@ -424,6 +436,33 @@
       ],
       "capabilities": ["community"],
       "postgresPaths": ["services/kernel/src/community/**"]
+    },
+    {
+      "id": "kernel-community-contract",
+      "kind": "contract",
+      "owner": "content",
+      "paths": ["services/kernel/src/community/contract/**"],
+      "publicEntries": ["services/kernel/src/community/contract/index.ts"],
+      "allowedDependencies": [],
+      "capabilities": ["community-vocabulary"]
+    },
+    {
+      "id": "kernel-community-core",
+      "kind": "core",
+      "owner": "content",
+      "paths": ["services/kernel/src/community/core/**"],
+      "publicEntries": ["services/kernel/src/community/core/index.ts"],
+      "allowedDependencies": ["kernel-community-contract"],
+      "capabilities": ["community-domain-rules"]
+    },
+    {
+      "id": "kernel-community-application",
+      "kind": "application",
+      "owner": "content",
+      "paths": ["services/kernel/src/community/application/**"],
+      "publicEntries": ["services/kernel/src/community/application/index.ts"],
+      "allowedDependencies": ["kernel-community-contract", "kernel-community-core"],
+      "capabilities": ["community-use-cases"]
     },
     {
       "id": "kernel-rating",
@@ -819,6 +858,9 @@
         "kernel-content-application",
         "kernel-content-contract",
         "kernel-content-core",
+        "kernel-community-application",
+        "kernel-community-contract",
+        "kernel-community-core",
         "kernel-history-adapters",
         "kernel-history-application",
         "kernel-history-contract",

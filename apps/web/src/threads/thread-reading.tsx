@@ -516,7 +516,9 @@ export function ThreadReading({
                       }
                       reactionViewerAvailable={reactionViewerAvailable}
                       mentions={
-                        page.documentMentions ? mentionsForThreadPost(page.documentMentions, post) : currentMentions
+                        page.documentMentions
+                          ? mentionsForThreadPost(page.documentMentions, post, row.index)
+                          : currentMentions
                       }
                       documentMedia={documentMedia}
                       now={now}

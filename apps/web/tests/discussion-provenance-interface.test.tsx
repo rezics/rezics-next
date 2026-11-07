@@ -17,8 +17,11 @@ import subject from '../src/kernel/recorded/subject.json';
 import thread from '../src/kernel/recorded/thread.json';
 import posts from '../src/kernel/recorded/thread-posts.json';
 import { exactRevisionHref } from '../src/threads/exact-revision-href';
+import { threadLocation } from '../src/threads/thread-href';
 import { loadThreadPageWithAuthors } from '../src/identity/page-loaders';
 import { subjectHref } from '../src/subject/subject-href';
+import { authoredReadingPage } from '../src/kernel/fake/thread-reading-page';
+import type { ReadingPage } from '../src/threads/thread-page';
 
 mock.module('cloudflare:workers', () => ({ env: {} }));
 const { ExactRevisionView } = await import('../src/threads/exact-revision-view');
@@ -39,6 +42,21 @@ async function readingPage(fetchPaths: string[]): Promise<ThreadReadingPage> {
     fetch: async (input, init) => {
       const path = new URL(new Request(input, init).url).pathname;
       fetchPaths.push(path);
+      if (path.endsWith('/reading-page'))
+        return Response.json(
+          authoredReadingPage(
+            thread.thread as ReadingPage['thread'],
+            posts.posts.filter((post) => post.id !== thread.thread.firstPost.id) as ReadingPage['replies']['items'],
+            accounts.accounts
+              .filter((account) => account.state === 'active')
+              .map((account) => ({
+                id: account.id,
+                displayName: 'displayName' in account ? account.displayName : null,
+                handle: 'handle' in account ? account.handle : null,
+                avatar: null,
+              })),
+          ),
+        );
       if (path.endsWith('/posts')) return Response.json(posts);
       if (path.includes('/boards/')) return Response.json(board);
       if (path.endsWith('/accounts')) return Response.json(accounts);
@@ -133,7 +151,7 @@ test('discussion readers keep human context primary and exact source data reacha
     createElement(QueryClientProvider, { client: queryClient }, createElement(RouterProvider, { router })),
   );
 
-  expect(exactHtml).toContain(`<h1>${m.exact_revision_heading()}</h1>`);
+  expect(exactHtml.match(/<h1\b[^>]*>(.*?)<\/h1>/s)?.[1]).toBe(m.exact_revision_heading());
   expect(exactHtml).toContain(m.discussion_provenance_details_subject_unavailable());
   expect(exactHtml).toContain('<details');
   expect(exactHtml).toContain('<summary');
@@ -144,7 +162,8 @@ test('discussion readers keep human context primary and exact source data reacha
   expect(exactHtml.slice(0, exactHtml.indexOf('<details'))).not.toContain(questionId);
   expect(exactHtml.split(selected.licence).length - 1).toBe(1);
   expect(exactHtml).toContain(completeDocumentText);
-  expect(exactHtml).toContain(exactRevisionHref(identity, 'en'));
+  expect(exactHtml).toContain(`href="${threadLocation('en', exactPage.thread, undefined, identity.postId)}"`);
+  expect(exactHtml).toContain(`<bdi dir="ltr">${identity.revisionId}</bdi>`);
 
   expect(historyHtml).toContain(`<a href="${exactRevisionHref(identity, 'en')}"`);
   expect(historyHtml).toContain(

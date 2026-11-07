@@ -1,9 +1,16 @@
 import { expect, test } from 'bun:test';
 import { deferred, follow, mountFollowing, page, realmId, spaceId } from './helpers/following-reading';
+import { m } from '../src/paraglide/messages.js';
 
 test('keyboard close restores only the current trigger; ordinary links keep the localized destination and native continuation', async () => {
   const h = await mountFollowing({ ...page(follow('subject')), next: 'opaque/page+' });
   try {
+    const destination = h.host.querySelector<HTMLAnchorElement>('[data-follow-target-type="subject"] a')!;
+    destination.addEventListener('click', (event) => event.preventDefault(), { once: true });
+    await h.settle(() =>
+      destination.dispatchEvent(new h.window.MouseEvent('click', { button: 0, bubbles: true, cancelable: true })),
+    );
+    expect(h.window.history.state.followingReturn.kind).toBe('all');
     const trigger = await h.inspect(spaceId);
     expect(h.window.document.activeElement?.id).toBe('following-inspection-title');
     const link = h.host.querySelector<HTMLAnchorElement>('[role="dialog"] a')!;
@@ -16,7 +23,8 @@ test('keyboard close restores only the current trigger; ordinary links keep the 
     );
     expect(h.host.querySelector('[role="dialog"]')).toBeNull();
     expect(h.window.document.activeElement).toBe(trigger);
-    expect(new URL(h.host.querySelector<HTMLAnchorElement>('nav a')!.href).searchParams.get('cursor')).toBe(
+    const pagination = h.host.querySelector(`nav[aria-label="${m.library_following_heading()}"]`)!;
+    expect(new URL(pagination.querySelector<HTMLAnchorElement>('a')!.href).searchParams.get('cursor')).toBe(
       'opaque/page+',
     );
     await h.inspect(spaceId);

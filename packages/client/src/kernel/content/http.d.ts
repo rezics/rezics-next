@@ -14286,7 +14286,7 @@ export declare function mountContentHttp(searched: Parameters<typeof contentRout
                         headers: unknown;
                         response: {
                             200: {
-                                post: import("./reads.ts").PostEntry & {
+                                post: import("./contribution-present.ts").ContributedPostEntry & {
                                     readonly viewerReaction?: ("downvote" | "insightful" | "laugh" | "like" | "love" | "sad" | "upvote") | null;
                                 } & {
                                     readonly reactions?: {
