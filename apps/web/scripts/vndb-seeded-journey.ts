@@ -281,157 +281,162 @@ try {
   releaseWalkFileCache();
 
   await withFrontends(async () => {
-  ({ chromium } = await import('playwright'));
-  ({ expect } = await import('playwright/test'));
-  await withBrowser(async (browser) => {
-    for (const locale of locales) {
-      for (const [width, theme] of [
-        [390, 'light'],
-        [1440, 'dark'],
-      ] as const) {
-        await withPage(browser, { width, theme, blockMedia: true }, async (page) => {
-          const response = await page.goto(`${stack.web}${workPath.replace('/en/', `/${locale}/`)}`, {
-            waitUntil: 'domcontentloaded',
+    ({ chromium } = await import('playwright'));
+    ({ expect } = await import('playwright/test'));
+    await withBrowser(async (browser) => {
+      for (const locale of locales) {
+        for (const [width, theme] of [
+          [390, 'light'],
+          [1440, 'dark'],
+        ] as const) {
+          await withPage(browser, { width, theme, blockMedia: true }, async (page) => {
+            const response = await page.goto(`${stack.web}${workPath.replace('/en/', `/${locale}/`)}`, {
+              waitUntil: 'domcontentloaded',
+            });
+            assert.equal(response?.status(), 200);
+            await expect(page.locator('[data-slot="community-entry"][data-state="sign-in"]').first()).toBeVisible();
+            await capture(page, `anonymous-${locale}-${width}-${theme}`);
+            report.visits.push({ url: page.url(), locale, width, theme });
           });
-          assert.equal(response?.status(), 200);
-          await expect(page.locator('[data-slot="community-entry"][data-state="sign-in"]').first()).toBeVisible();
-          await capture(page, `anonymous-${locale}-${width}-${theme}`);
-          report.visits.push({ url: page.url(), locale, width, theme });
-        });
+        }
       }
-    }
-  });
+    });
 
-  await withBrowser(async (browser) =>
-    withPage(browser, { width: 1440, theme: 'light', blockMedia: true }, async (page) => {
-      const errors: string[] = [];
-      page.on('pageerror', (error) => {
-        if (errors.length < 20) errors.push(error.message.slice(0, 1_000));
-      });
-      await page.goto(`${stack.web}${workPath}`, { waitUntil: 'domcontentloaded' });
-      const signin = page.locator('[data-slot="community-entry"] a[href^="/auth/sign-in"]').first();
-      const signinHref = await signin.getAttribute('href');
-      assert(signinHref, 'Subject entry must sign in to the supplied composer');
-      const compose = new URL(new URL(signinHref, stack.web).searchParams.get('return_to') ?? '', stack.web);
-      assert.equal(compose.pathname, `/en/boards/${boardId}/new`);
-      assert.equal(compose.searchParams.get('subject'), subjectId);
-      const regionReturn = compose.searchParams.get('returnTo');
-      assert(regionReturn?.includes(`board=${boardId}`) && regionReturn.includes('#'), 'Exact regional return required');
-      const keys = JSON.parse(await readFile(resolve(root, '.temp/local-stack/keys.json'), 'utf8')) as {
-        password: string;
-      };
-      await signin.click();
-      await page.waitForURL('**/login?**');
-      await page.locator('input[name="email"]').fill('developer@rezics.test');
-      await page.locator('input[name="password"]').fill(keys.password);
-      await page.locator('button[type="submit"]').click();
-      const approve = page.getByRole('button', { name: 'Approve', exact: true });
-      await approve.waitFor({ state: 'visible', timeout: 10_000 }).then(
-        () => approve.click(),
-        () => undefined,
-      );
-      await page.waitForURL((url) => url.origin === stack.web && url.pathname.endsWith(`/boards/${boardId}/new`));
-      assert.equal(new URL(page.url()).searchParams.get('returnTo'), regionReturn);
-      assert.equal(new URL(page.url()).searchParams.get('subject'), subjectId);
-      const title = `A discussion from the supplied Subject ${Date.now()}`;
-      await page.locator('#thread-title').fill(title);
-      await page
-        .getByRole('textbox', { name: 'Thread body', exact: true })
-        .fill('An original contribution from this exact Subject region.');
-      await page.getByRole('button', { name: 'Send', exact: true }).click();
-      await page.waitForURL(/\/threads\/[0-9a-f-]{36}\//);
-      const threadId = /\/threads\/([0-9a-f-]{36})\//.exec(page.url())![1]!;
-      const bearer = await websiteBearer(keys.password);
-      const headers = { authorization: `Bearer ${bearer}` };
-      const created = data(await client.threads({ id: threadId }).get({ headers }), 'independent created thread');
-      assert.equal(created.thread.boardId, boardId);
-      assert.equal(created.thread.title, title);
-      const postId = created.thread.firstPost.id;
-      report.identities = { subjectId, boardId, threadId, postId };
-      await expect(page.locator('[data-slot="thread-subject-return"]')).toHaveAttribute('href', regionReturn);
-      await capture(page, 'acknowledged-thread');
-      await page.locator('[data-slot="thread-subject-return"]').click();
-      await expect(page).toHaveURL(`${stack.web}${regionReturn}`);
-      await expect(page.getByRole('link', { name: title, exact: true }).first()).toBeVisible();
-      report.phases.push('subject-sign-in-preset-acknowledgement-exact-region');
+    await withBrowser(async (browser) =>
+      withPage(browser, { width: 1440, theme: 'light', blockMedia: true }, async (page) => {
+        const errors: string[] = [];
+        page.on('pageerror', (error) => {
+          if (errors.length < 20) errors.push(error.message.slice(0, 1_000));
+        });
+        await page.goto(`${stack.web}${workPath}`, { waitUntil: 'domcontentloaded' });
+        const signin = page.locator('[data-slot="community-entry"] a[href^="/auth/sign-in"]').first();
+        const signinHref = await signin.getAttribute('href');
+        assert(signinHref, 'Subject entry must sign in to the supplied composer');
+        const compose = new URL(new URL(signinHref, stack.web).searchParams.get('return_to') ?? '', stack.web);
+        assert.equal(compose.pathname, `/en/boards/${boardId}/new`);
+        assert.equal(compose.searchParams.get('subject'), subjectId);
+        const regionReturn = compose.searchParams.get('returnTo');
+        assert(regionReturn, 'Exact regional return required');
+        assert(
+          regionReturn.includes(`board=${boardId}`) && regionReturn.includes('#'),
+          'Exact regional return required',
+        );
+        const keys = JSON.parse(await readFile(resolve(root, '.temp/local-stack/keys.json'), 'utf8')) as {
+          password: string;
+        };
+        await signin.click();
+        await page.waitForURL('**/login?**');
+        await page.locator('input[name="email"]').fill('developer@rezics.test');
+        await page.locator('input[name="password"]').fill(keys.password);
+        await page.locator('button[type="submit"]').click();
+        const approve = page.getByRole('button', { name: 'Approve', exact: true });
+        await approve.waitFor({ state: 'visible', timeout: 10_000 }).then(
+          () => approve.click(),
+          () => undefined,
+        );
+        await page.waitForURL((url) => url.origin === stack.web && url.pathname.endsWith(`/boards/${boardId}/new`));
+        assert.equal(new URL(page.url()).searchParams.get('returnTo'), regionReturn);
+        assert.equal(new URL(page.url()).searchParams.get('subject'), subjectId);
+        const title = `A discussion from the supplied Subject ${Date.now()}`;
+        await page.locator('#thread-title').fill(title);
+        await page
+          .getByRole('textbox', { name: 'Thread body', exact: true })
+          .fill('An original contribution from this exact Subject region.');
+        await page.getByRole('button', { name: 'Send', exact: true }).click();
+        await page.waitForURL(/\/threads\/[0-9a-f-]{36}\//);
+        const threadId = /\/threads\/([0-9a-f-]{36})\//.exec(page.url())![1]!;
+        const bearer = await websiteBearer(keys.password);
+        const headers = { authorization: `Bearer ${bearer}` };
+        const created = data(await client.threads({ id: threadId }).get({ headers }), 'independent created thread');
+        assert.equal(created.thread.boardId, boardId);
+        assert.equal(created.thread.title, title);
+        const postId = created.thread.firstPost.id;
+        report.identities = { subjectId, boardId, threadId, postId };
+        await expect(page.locator('[data-slot="thread-subject-return"]')).toHaveAttribute('href', regionReturn);
+        await capture(page, 'acknowledged-thread');
+        await page.locator('[data-slot="thread-subject-return"]').click();
+        await expect(page).toHaveURL(`${stack.web}${regionReturn}`);
+        await expect(page.getByRole('link', { name: title, exact: true }).first()).toBeVisible();
+        report.phases.push('subject-sign-in-preset-acknowledgement-exact-region');
 
-      await page.getByRole('link', { name: title, exact: true }).first().click();
-      const authorLink = page.locator('main a[href*="/@"]').first();
-      const authorHref = await authorLink.getAttribute('href');
-      assert(authorHref, 'Thread must expose its actual public author');
-      await authorLink.click();
-      const discussionsLink = page.locator('a[href$="/discussions"]').first();
-      if (await discussionsLink.isVisible()) await discussionsLink.click();
-      else await page.goto(`${stack.web}${authorHref.replace(/\/$/, '')}/discussions`);
-      const metadata = page.locator(`[data-profile-contribution-id="${threadId}"]`).first();
-      await expect(metadata).toBeVisible();
-      const row = metadata.locator('xpath=ancestor::li[1]');
-      const occurrence = await metadata.getAttribute('data-profile-contribution-occurrence');
-      assert(occurrence, 'The surviving profile row must have its exact occurrence');
-      const profileReturn = new URL(page.url());
-      profileReturn.searchParams.set('journey', 'participation');
-      profileReturn.hash = `profile-contribution-${threadId}`;
-      await page.goto(profileReturn.href);
-      report.profileReturn = `${profileReturn.pathname}${profileReturn.search}${profileReturn.hash}`;
-      await expect(row.getByRole('button', { name: 'Watch', exact: true })).toBeEnabled();
-      await row.getByRole('button', { name: 'Watch', exact: true }).click();
-      await expect(row.getByRole('button', { name: 'Stop watching', exact: true })).toBeVisible();
-      assert.equal(
-        data(await client.threads({ id: threadId }).watch.get({ headers }), 'independent watch').watching,
-        true,
-      );
-      await row.getByRole('button', { name: 'React', exact: true }).click();
-      await page.getByRole('button', { name: /^Like / }).click();
-      await expect
-        .poll(
-          async () =>
-            data(await client.threads({ id: threadId }).get({ headers }), 'independent reaction').thread.viewerReaction,
-        )
-        .toBe('like');
-      await row.getByRole('button', { name: /Like/ }).first().click();
-      await expect
-        .poll(
-          async () =>
-            data(await client.threads({ id: threadId }).get({ headers }), 'independent clear').thread.viewerReaction,
-        )
-        .toBeNull();
-      await row.getByRole('button', { name: 'More actions', exact: true }).click();
-      await page.getByRole('menuitem', { name: 'Report', exact: true }).click();
-      const dialog = page.getByRole('dialog');
-      await dialog.getByRole('radio', { name: /^Spam/ }).click();
-      await dialog.getByLabel('Additional details', { exact: true }).fill('Private participation journey report.');
-      await dialog.getByRole('button', { name: 'Submit report', exact: true }).click();
-      await expect(page.getByText('Thank you for your report.', { exact: true })).toBeVisible();
-      const reports = data(
-        await client.threads({ id: threadId }).reports.get({ headers }),
-        'independent report inventory',
-      );
-      assert(reports.reports.some((entry) => entry.target.id === threadId && entry.reason === 'spam'));
-      await page.keyboard.press('Escape');
-      const replyText = `Reply from the original profile occurrence ${Date.now()}`;
-      await row.getByRole('textbox', { name: 'Reply', exact: true }).fill(replyText);
-      await row.getByRole('button', { name: 'Send', exact: true }).click();
-      await expect
-        .poll(async () => {
-          const posts = data(await client.threads({ id: threadId }).posts.get({ headers }), 'independent reply');
-          return posts.posts.some((post) => post.parentId === postId);
-        })
-        .toBe(true);
-      await expect(page).toHaveURL(profileReturn.href);
-      await capture(page, 'profile-actions-acknowledged');
-      const readLink = row.locator('[data-slot="list-row-link"]');
-      await readLink.click();
-      await page.goBack();
-      await expect(page).toHaveURL(profileReturn.href);
-      await expect(page.locator(`[data-profile-contribution-id="${threadId}"]`).first()).toHaveAttribute(
-        'data-profile-contribution-occurrence',
-        occurrence,
-      );
-      await capture(page, 'exact-profile-occurrence-return');
-      assert.deepEqual(errors, [], 'Browser runtime errors');
-      report.phases.push('profile-watch-reaction-set-clear-report-reply-durable-readbacks-and-return');
-    }),
-  );
+        await page.getByRole('link', { name: title, exact: true }).first().click();
+        const authorLink = page.locator('main a[href*="/@"]').first();
+        const authorHref = await authorLink.getAttribute('href');
+        assert(authorHref, 'Thread must expose its actual public author');
+        await authorLink.click();
+        const discussionsLink = page.locator('a[href$="/discussions"]').first();
+        if (await discussionsLink.isVisible()) await discussionsLink.click();
+        else await page.goto(`${stack.web}${authorHref.replace(/\/$/, '')}/discussions`);
+        const metadata = page.locator(`[data-profile-contribution-id="${threadId}"]`).first();
+        await expect(metadata).toBeVisible();
+        const row = metadata.locator('xpath=ancestor::li[1]');
+        const occurrence = await metadata.getAttribute('data-profile-contribution-occurrence');
+        assert(occurrence, 'The surviving profile row must have its exact occurrence');
+        const profileReturn = new URL(page.url());
+        profileReturn.searchParams.set('journey', 'participation');
+        profileReturn.hash = `profile-contribution-${threadId}`;
+        await page.goto(profileReturn.href);
+        report.profileReturn = `${profileReturn.pathname}${profileReturn.search}${profileReturn.hash}`;
+        await expect(row.getByRole('button', { name: 'Watch', exact: true })).toBeEnabled();
+        await row.getByRole('button', { name: 'Watch', exact: true }).click();
+        await expect(row.getByRole('button', { name: 'Stop watching', exact: true })).toBeVisible();
+        assert.equal(
+          data(await client.threads({ id: threadId }).watch.get({ headers }), 'independent watch').watching,
+          true,
+        );
+        await row.getByRole('button', { name: 'React', exact: true }).click();
+        await page.getByRole('button', { name: /^Like / }).click();
+        await expect
+          .poll(
+            async () =>
+              data(await client.threads({ id: threadId }).get({ headers }), 'independent reaction').thread
+                .viewerReaction,
+          )
+          .toBe('like');
+        await row.getByRole('button', { name: /Like/ }).first().click();
+        await expect
+          .poll(
+            async () =>
+              data(await client.threads({ id: threadId }).get({ headers }), 'independent clear').thread.viewerReaction,
+          )
+          .toBeNull();
+        await row.getByRole('button', { name: 'More actions', exact: true }).click();
+        await page.getByRole('menuitem', { name: 'Report', exact: true }).click();
+        const dialog = page.getByRole('dialog');
+        await dialog.getByRole('radio', { name: /^Spam/ }).click();
+        await dialog.getByLabel('Additional details', { exact: true }).fill('Private participation journey report.');
+        await dialog.getByRole('button', { name: 'Submit report', exact: true }).click();
+        await expect(page.getByText('Thank you for your report.', { exact: true })).toBeVisible();
+        const reports = data(
+          await client.threads({ id: threadId }).reports.get({ headers }),
+          'independent report inventory',
+        );
+        assert(reports.reports.some((entry) => entry.target.id === threadId && entry.reason === 'spam'));
+        await page.keyboard.press('Escape');
+        const replyText = `Reply from the original profile occurrence ${Date.now()}`;
+        await row.getByRole('textbox', { name: 'Reply', exact: true }).fill(replyText);
+        await row.getByRole('button', { name: 'Send', exact: true }).click();
+        await expect
+          .poll(async () => {
+            const posts = data(await client.threads({ id: threadId }).posts.get({ headers }), 'independent reply');
+            return posts.posts.some((post) => post.parentId === postId);
+          })
+          .toBe(true);
+        await expect(page).toHaveURL(profileReturn.href);
+        await capture(page, 'profile-actions-acknowledged');
+        const readLink = row.locator('[data-slot="list-row-link"]');
+        await readLink.click();
+        await page.goBack();
+        await expect(page).toHaveURL(profileReturn.href);
+        await expect(page.locator(`[data-profile-contribution-id="${threadId}"]`).first()).toHaveAttribute(
+          'data-profile-contribution-occurrence',
+          occurrence,
+        );
+        await capture(page, 'exact-profile-occurrence-return');
+        assert.deepEqual(errors, [], 'Browser runtime errors');
+        report.phases.push('profile-watch-reaction-set-clear-report-reply-durable-readbacks-and-return');
+      }),
+    );
   });
 } catch (error) {
   report.error = error instanceof Error ? error.message : String(error);
