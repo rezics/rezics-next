@@ -1,7 +1,14 @@
 import { constants } from 'node:fs';
 import { open } from 'node:fs/promises';
 import { randomUUID } from 'node:crypto';
-import { MAX_IMPORT_BODY_BYTES, MAX_IMPORT_DEADLINE_MS, MAX_IMPORT_RESPONSE_BYTES } from './import-fetch.ts';
+import {
+  MAX_IMPORT_BODY_BYTES,
+  MAX_IMPORT_DEADLINE_MS,
+  MAX_IMPORT_RESPONSE_BYTES,
+  importCorrelationId,
+  importNetworkCode,
+  type ImportRequestDiagnostics,
+} from './import-fetch.ts';
 
 const KEY_LIMIT = 16 * 1024;
 const REFRESH_EARLY_MS = 60_000;
@@ -33,15 +40,15 @@ export class CredentialInputError extends Error {
 }
 
 export class CredentialDeniedError extends Error {
-  constructor() {
-    super('Account-key sign-in was denied');
+  constructor(readonly diagnostics?: Partial<ImportRequestDiagnostics>, cause?: unknown) {
+    super('Account-key sign-in was denied', { cause });
     this.name = 'CredentialDeniedError';
   }
 }
 
 export class CredentialServiceError extends Error {
-  constructor() {
-    super('Credential service request failed');
+  constructor(readonly diagnostics?: Partial<ImportRequestDiagnostics>, cause?: unknown) {
+    super('Credential service request failed', { cause });
     this.name = 'CredentialServiceError';
   }
 }
@@ -214,6 +221,58 @@ type AuthRequest = {
   signal: AbortSignal | undefined;
 };
 
+function credentialDiagnostics(
+  options: AuthRequest,
+  phase: ImportRequestDiagnostics['phase'],
+  response?: Response,
+  code?: string,
+): ImportRequestDiagnostics {
+  const url = new URL(options.url);
+  const correlationId = response ? importCorrelationId(response) : undefined;
+  return {
+    method: 'POST',
+    origin: url.origin.slice(0, 256),
+    path: url.pathname.slice(0, 512),
+    phase,
+    ...(response === undefined ? {} : { status: response.status }),
+    ...(code === undefined ? {} : { code }),
+    ...(correlationId === undefined ? {} : { correlationId }),
+  };
+}
+
+function credentialResponseDiagnostics(
+  origin: string,
+  path: '/signin/key' | '/token',
+  response: Response,
+): ImportRequestDiagnostics {
+  const correlationId = importCorrelationId(response);
+  return {
+    method: 'POST',
+    origin: new URL(origin).origin.slice(0, 256),
+    path,
+    phase: 'response',
+    status: response.status,
+    ...(correlationId === undefined ? {} : { correlationId }),
+  };
+}
+
+function publicProblemCode(bytes: Uint8Array): string | undefined {
+  try {
+    const value: unknown = JSON.parse(new TextDecoder('utf-8', { fatal: true }).decode(bytes));
+    if (
+      typeof value === 'object' &&
+      value !== null &&
+      !Array.isArray(value) &&
+      typeof Reflect.get(value, 'code') === 'string' &&
+      /^[a-z0-9_-]{1,80}$/.test(Reflect.get(value, 'code') as string)
+    )
+      return Reflect.get(value, 'code') as string;
+  } catch {
+    // Error bodies are diagnostic input only; malformed text is never retained or printed.
+  }
+  return undefined;
+}
+
 async function authRequest(options: AuthRequest): Promise<{ response: Response; bytes: Uint8Array }> {
   if (Buffer.byteLength(options.body) > MAX_IMPORT_BODY_BYTES) throw new CredentialServiceError();
   const controller = new AbortController();
@@ -224,10 +283,12 @@ async function authRequest(options: AuthRequest): Promise<{ response: Response; 
     () => controller.abort(new DOMException('Credential request deadline exceeded', 'TimeoutError')),
     MAX_IMPORT_DEADLINE_MS,
   );
+  let phase: ImportRequestDiagnostics['phase'] = 'network';
+  let response: Response | undefined;
   try {
     const headers = new Headers({ 'content-type': 'application/json', origin: options.origin });
     if (options.cookie) headers.set('cookie', options.cookie);
-    const response = await abortable(
+    response = await abortable(
       controller.signal,
       () =>
         options.fetch(
@@ -244,20 +305,32 @@ async function authRequest(options: AuthRequest): Promise<{ response: Response; 
         void response.body?.cancel().catch(() => {});
       },
     );
+    phase = 'response';
     const bytes = await responseBytes(response, controller.signal);
     controller.signal.throwIfAborted();
-    if (response.status === 401 || response.status === 403) throw new CredentialDeniedError();
-    if (!response.ok) throw new CredentialServiceError();
+    const code = publicProblemCode(bytes);
+    if (response.status === 401 || response.status === 403)
+      throw new CredentialDeniedError(credentialDiagnostics(options, 'http', response, code));
+    if (!response.ok)
+      throw new CredentialServiceError(credentialDiagnostics(options, 'http', response, code));
     return { response, bytes };
   } catch (error) {
     controller.abort();
-    if (
-      error instanceof CredentialDeniedError ||
-      error instanceof CredentialServiceError ||
-      error instanceof CredentialInputError
-    )
-      throw error;
-    throw new CredentialServiceError();
+    if (error instanceof CredentialDeniedError || error instanceof CredentialInputError) throw error;
+    if (error instanceof CredentialServiceError) {
+      if (error.diagnostics) throw error;
+      throw new CredentialServiceError(
+        credentialDiagnostics(options, response ? 'response' : phase, response),
+        error,
+      );
+    }
+    const failurePhase = controller.signal.aborted && !options.signal?.aborted ? 'deadline' : phase;
+    const diagnostics = credentialDiagnostics(options, failurePhase, response);
+    const networkCode = failurePhase === 'network' ? importNetworkCode(error) : undefined;
+    throw new CredentialServiceError(
+      { ...diagnostics, ...(networkCode === undefined ? {} : { networkCode }) },
+      error,
+    );
   } finally {
     clearTimeout(timer);
     options.signal?.removeEventListener('abort', aborted);
@@ -309,7 +382,15 @@ export async function createAccountTokenProvider(options: AccountCredentialsOpti
         assertion: signed,
       }),
     });
-    const session = cookie(signin.response);
+    let session: string;
+    try {
+      session = cookie(signin.response);
+    } catch (error) {
+      throw new CredentialServiceError(
+        credentialResponseDiagnostics(options.authOrigin, '/signin/key', signin.response),
+        error,
+      );
+    }
     const token = await authRequest({
       fetch: upstream,
       url: `${options.authOrigin}/token`,
@@ -321,8 +402,11 @@ export async function createAccountTokenProvider(options: AccountCredentialsOpti
     let value: unknown;
     try {
       value = JSON.parse(new TextDecoder('utf-8', { fatal: true }).decode(token.bytes));
-    } catch {
-      throw new CredentialServiceError();
+    } catch (error) {
+      throw new CredentialServiceError(
+        credentialResponseDiagnostics(options.authOrigin, '/token', token.response),
+        error,
+      );
     }
     if (
       typeof value !== 'object' ||
@@ -334,7 +418,7 @@ export async function createAccountTokenProvider(options: AccountCredentialsOpti
       !Number.isSafeInteger(Reflect.get(value, 'expires_in')) ||
       (Reflect.get(value, 'expires_in') as number) <= 0
     )
-      throw new CredentialServiceError();
+      throw new CredentialServiceError(credentialResponseDiagnostics(options.authOrigin, '/token', token.response));
     expiresAt = now() + (Reflect.get(value, 'expires_in') as number) * 1000;
     ensureActive();
     accessToken = Reflect.get(value, 'access_token') as string;

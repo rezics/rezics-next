@@ -13,6 +13,7 @@ import {
 } from '../../services/importer/src/showcase-personal-list.ts';
 import { seedReviewedCatalogue } from '../../services/importer/src/reviewed-catalogue.ts';
 import { createSeedDenialDiagnostics } from '../../services/importer/src/showcase-denial-diagnostics.ts';
+import { formatSeedError } from '../../services/importer/src/seed-cli.ts';
 import { fetchCrossMediaDumps, type CrossMediaDumpPaths } from './fetch-dumps.ts';
 import { ShowcaseJournal, type ShowcasePublicationResult } from '../../services/importer/src/showcase-publication.ts';
 import {
@@ -332,7 +333,7 @@ if (import.meta.main) {
       if ((await runDevelopmentSeed()).state !== 'complete') process.exitCode = 1;
     } else await runCrossMediaSeedCli(args);
   } catch (error) {
-    process.stderr.write(`${error instanceof Error ? error.message : 'Cross-media seed failed'}\n`);
+    process.stderr.write(`${formatSeedError(error)}\n`);
     process.exitCode = 1;
   }
 }
