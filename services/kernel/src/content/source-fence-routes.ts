@@ -26,7 +26,7 @@ import type { Anchored } from './model.ts';
 import { SourceFenceQuerySchema, SourceFenceResponseSchema, strictContentSchema } from './schemas.ts';
 import { readFences } from './source-fences.ts';
 
-type Dependencies = Readonly<{ pool: Pool; access: Access; routeKey: Uint8Array }>;
+type Dependencies = Readonly<{ pool: Pool; access: Access; routeKey: Uint8Array; clock: () => Date }>;
 function root() {
   return memoizedValue(root, () => Object.freeze({ route: 0, id: GLOBAL_CONTEXT }));
 }
@@ -66,7 +66,7 @@ async function authorizeRoot(dependencies: Dependencies, actor: Actor, deadline:
   // No anonymous eligibility or synthetic tuple UUID: the sole seeded Context
   // supplies authority, using the mounted protected action and normal formula.
   const context = { pool: dependencies.pool, deadline };
-  const time = await readNativeAccessTime(context);
+  const time = await readNativeAccessTime(context, dependencies.clock);
   try {
     const check = await accessCheck(dependencies.access, actor, 'source_fence:read', root(), { ...context, time });
     return await snapshot(dependencies.pool, 0, deadline, async (client) => {
