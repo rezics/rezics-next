@@ -3,7 +3,7 @@ import { chmod, mkdir, readFile, writeFile } from 'node:fs/promises';
 import { dirname, join, resolve } from 'node:path';
 import { createKernelClient } from '@rezics/client';
 import { createAccountTokenProvider, IMPORTER_SCOPES } from '../../services/importer/src/credentials.ts';
-import { createImportTransport } from '../../services/importer/src/import-client.ts';
+import { createImportTransport, ImportTransportError } from '../../services/importer/src/import-client.ts';
 import { createImportFetch } from '../../services/importer/src/import-fetch.ts';
 import {
   developmentPersonalListScopes,
@@ -332,7 +332,20 @@ if (import.meta.main) {
       if ((await runDevelopmentSeed()).state !== 'complete') process.exitCode = 1;
     } else await runCrossMediaSeedCli(args);
   } catch (error) {
-    process.stderr.write(`${error instanceof Error ? error.message : 'Cross-media seed failed'}\n`);
+    const detail =
+      error instanceof ImportTransportError
+        ? [
+            error.message,
+            error.status !== undefined ? `HTTP ${error.status}` : undefined,
+            error.code,
+            error.retryable ? 'retryable' : undefined,
+          ]
+            .filter(Boolean)
+            .join(' ')
+        : error instanceof Error
+          ? error.message
+          : 'Cross-media seed failed';
+    process.stderr.write(`${detail}\n`);
     process.exitCode = 1;
   }
 }

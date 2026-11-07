@@ -1,8 +1,10 @@
 import { expect, test } from 'bun:test';
 import {
+  checkoutSessionIdFromUrl,
   FIRST_PUBLIC_JOURNEYS,
   publicFields,
   summarizeWalk,
+  walkStripeOrigin,
   type JourneyWalkRow,
 } from './support/goal-journey-walk.ts';
 
@@ -29,4 +31,11 @@ test('walk evidence keeps all twenty-six first-public rows', () => {
   expect(report.rows).toHaveLength(26);
   expect(report.rows.at(-1)?.journey).toBe('follower-counts');
   expect(report.passing).toBe(0);
+});
+
+test('walk checkout URLs yield the hosted session and loopback Stripe origin', () => {
+  expect(checkoutSessionIdFromUrl('https://checkout.stripe.com/c/pay/cs_000000000001')).toBe('cs_000000000001');
+  expect(checkoutSessionIdFromUrl('https://checkout.stripe.com/c/pay/cs_test_walkSession')).toBe('cs_test_walkSession');
+  expect(walkStripeOrigin({ STRIPE_API_HOST: 'http://127.0.0.1:18765' })).toBe('http://127.0.0.1:18765');
+  expect(walkStripeOrigin({ STRIPE_API_HOST: 'https://api.stripe.com' })).toBeUndefined();
 });

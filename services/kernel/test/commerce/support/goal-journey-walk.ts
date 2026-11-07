@@ -325,6 +325,27 @@ export function createWalkKernel(origin: string, timeoutMs = 30_000): WalkKernel
   };
 }
 
+export function checkoutSessionIdFromUrl(checkoutUrl: string): string | undefined {
+  try {
+    const match = /\/pay\/(cs_(?:(?:test|live)_)?[A-Za-z0-9]+)$/.exec(new URL(checkoutUrl).pathname);
+    return match?.[1];
+  } catch {
+    return undefined;
+  }
+}
+
+export function walkStripeOrigin(env: NodeJS.ProcessEnv = process.env): string | undefined {
+  const host = env.STRIPE_API_HOST;
+  if (!host) return undefined;
+  try {
+    const url = new URL(host);
+    if (url.protocol !== 'http:' || url.hostname !== '127.0.0.1' || url.pathname !== '/') return undefined;
+    return url.origin;
+  } catch {
+    return undefined;
+  }
+}
+
 function nested(value: Json, path: string): unknown {
   return path.split('.').reduce<unknown>((current, key) => {
     if (!current || typeof current !== 'object') return undefined;
@@ -394,6 +415,91 @@ class Recorder {
     const id = requireId(nested(call.value, field), `${name} ${field}`);
     return { call, id };
   }
+
+  async waitForPaidOrder(orderId: string, ms = 90_000): Promise<KernelCall> {
+    const deadline = Date.now() + ms;
+    let last: KernelCall | undefined;
+    while (Date.now() < deadline) {
+      last = await this.kernel.call('GET', `/v1/orders/${orderId}`, { bearer: this.bearer });
+      const settlement = nested(last.value, 'order.settlement');
+      const entitlementId = nested(last.value, 'order.entitlementId');
+      if (last.status === 200 && settlement === 'paid' && typeof entitlementId === 'string') {
+        this.steps.push({
+          name: 'paid order',
+          command: last.command,
+          ok: true,
+          status: last.status,
+          observed: publicFields(last.value),
+          expected: 'HTTP 200 paid entitlement',
+        });
+        return last;
+      }
+      await Bun.sleep(500);
+    }
+    this.steps.push({
+      name: 'paid order',
+      command: last?.command ?? `GET /v1/orders/${orderId}`,
+      ok: false,
+      status: last?.status,
+      observed: publicFields(last?.value ?? {}),
+      expected: 'HTTP 200 paid entitlement',
+    });
+    throw new JourneyFailure(
+      `GET /v1/orders/${orderId}`,
+      'paid entitlement after signed Checkout',
+      last ? `HTTP ${last.status} ${JSON.stringify(publicFields(last.value)).slice(0, 400)}` : 'no order read',
+      this.steps,
+    );
+  }
+}
+
+export async function settleWalkCheckout(
+  kernel: WalkKernel,
+  checkoutUrl: string,
+  stripeOrigin: string,
+): Promise<void> {
+  const sessionId = checkoutSessionIdFromUrl(checkoutUrl);
+  if (!sessionId)
+    throw new JourneyFailure('POST /v1/orders', 'hosted Checkout session', checkoutUrl);
+  const pay = await fetch(`${stripeOrigin}/walk/pay`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ sessionId }),
+  });
+  if (!pay.ok)
+    throw new JourneyFailure(
+      'POST /walk/pay',
+      'signed fixture pay',
+      `HTTP ${pay.status}`,
+    );
+  const signed = await fetch(`${stripeOrigin}/walk/event`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ type: 'checkout.session.completed', objectId: sessionId }),
+  });
+  if (!signed.ok)
+    throw new JourneyFailure(
+      'POST /walk/event',
+      'signed checkout.session.completed',
+      `HTTP ${signed.status}`,
+    );
+  const payload = (await signed.json()) as { bytes?: unknown; headers?: unknown };
+  const bytes = typeof payload.bytes === 'string' ? payload.bytes : undefined;
+  const headers = payload.headers && typeof payload.headers === 'object' ? (payload.headers as Record<string, string>) : undefined;
+  const signature = headers?.['stripe-signature'];
+  if (!bytes || !signature)
+    throw new JourneyFailure('POST /walk/event', 'signed webhook bytes', JSON.stringify(payload).slice(0, 200));
+  const webhook = await fetch(`${kernel.origin}/v1/webhooks/stripe`, {
+    method: 'POST',
+    headers: { 'stripe-signature': signature },
+    body: bytes,
+  });
+  if (!webhook.ok)
+    throw new JourneyFailure(
+      'POST /v1/webhooks/stripe',
+      'HTTP 200 received',
+      `HTTP ${webhook.status}`,
+    );
 }
 
 async function publishEdition(kernel: WalkKernel, bearer: string, title: string) {
@@ -556,6 +662,14 @@ const purchase: Runner = async (ctx) => {
   const checkout = nested(order.value, 'order.checkoutUrl');
   if (typeof checkout !== 'string' || checkout.length < 8)
     throw new JourneyFailure('POST /v1/orders', 'hosted checkout URL', JSON.stringify(publicFields(order.value)));
+  const stripeOrigin = walkStripeOrigin();
+  if (!stripeOrigin)
+    throw new JourneyFailure('POST /v1/orders', 'signed walk Stripe origin', 'STRIPE_API_HOST missing');
+  const buyerRec = new Recorder(ctx.kernel, buyer.bearer);
+  await settleWalkCheckout(ctx.kernel, checkout, stripeOrigin);
+  const paid = await buyerRec.waitForPaidOrder(orderId);
+  rec.steps.push(...buyerRec.steps);
+  ctx.identities.entitlementId = requireId(nested(paid.value, 'order.entitlementId'), 'entitlement');
   await rec.expect('anonymous cannot buy', 'POST', '/v1/orders', [401, 403], {
     bearer: undefined,
     body: { offerId: ctx.identities.offerId, expectedOfferRevision: ctx.identities.offerRevision },

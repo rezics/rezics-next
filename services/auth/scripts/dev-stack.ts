@@ -29,6 +29,7 @@ import {
   stackStartPlan,
   walkOriginListening,
   walkProcessEnvironment,
+  walkCommerceProviderEnvironment,
   SEEDED_WEB_READY_PATH,
   walkStackNames,
   walkStackPorts,
@@ -861,6 +862,17 @@ async function start() {
     ...(await kernelEnvironment()),
     ...developmentKernelBindings(),
   };
+  // Walk fixture keys must survive kernel .env: that file may hold a developer's Stripe bindings.
+  if (process.env.STRIPE_SECRET_KEY === 'sk_test_walk_commerce') {
+    Object.assign(env, {
+      STRIPE_SECRET_KEY: process.env.STRIPE_SECRET_KEY,
+      STRIPE_API_HOST: process.env.STRIPE_API_HOST,
+      STRIPE_WEBHOOK_SECRETS: process.env.STRIPE_WEBHOOK_SECRETS,
+      STRIPE_MANAGED_PAYMENTS: process.env.STRIPE_MANAGED_PAYMENTS,
+      CHECKOUT_SUCCESS_URL: process.env.CHECKOUT_SUCCESS_URL,
+      CHECKOUT_CANCEL_URL: process.env.CHECKOUT_CANCEL_URL,
+    });
+  }
   const plan = stackStartPlan(env, origins);
   const identityLine = ownerProcessIdentity();
   console.info(stackPhaseLine('owner', identityLine));
@@ -1113,7 +1125,11 @@ async function walk(command: string[]): Promise<number> {
     const ports = walkStackPorts(slot.index!);
     let starting: ReturnType<typeof Bun.spawn> | undefined;
     let walkFailure: unknown;
+    let stripe: { port: number; webhookSecret: string; stop(): void } | undefined;
     try {
+      const { startFakeStripe } = await import('../../kernel/test/commerce/support/fake-stripe.ts');
+      stripe = startFakeStripe();
+      Object.assign(env, walkCommerceProviderEnvironment(stripe.port, stripe.webhookSecret));
       removeWalkStack(names); // an interrupted attempt of this slot may have left its stack behind
       for (const script of walkSetupScripts(env)) {
         // A setup step that fails once is retried: a busy host can time out a container start.
@@ -1165,6 +1181,7 @@ async function walk(command: string[]): Promise<number> {
       walkFailure = error;
       throw error;
     } finally {
+      stripe?.stop();
       if (starting) await stopSpawned(starting);
       try {
         removeWalkStack(names);
