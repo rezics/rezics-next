@@ -173,7 +173,10 @@ export type IdentityBindingOperations = Readonly<{
     tx: CommandTransaction,
     input: IdentityAdmissionInput &
       Readonly<{
-        receipt: Extract<IdentityAdmissionInput['receipt'], { kind: 'account-agent.verify' | 'account-agent.unverify' }>;
+        receipt: Extract<
+          IdentityAdmissionInput['receipt'],
+          { kind: 'account-agent.verify' | 'account-agent.unverify' }
+        >;
       }>,
   ): Promise<IdentityReceiptBinding | null>;
   identityBindingJob(pool: Pool, data: IdentityBindingData): Promise<{ state: string } | null>;
@@ -221,9 +224,7 @@ export type IdentityBindingOperations = Readonly<{
 const bindingByCapabilities = new WeakMap<NativeIdentityCapabilities, IdentityBindingOperations>();
 
 /** Binding, Accounts source and native commit operations closed over one capability set. */
-export function createIdentityBindingOperations(
-  capabilities: NativeIdentityCapabilities,
-): IdentityBindingOperations {
+export function createIdentityBindingOperations(capabilities: NativeIdentityCapabilities): IdentityBindingOperations {
   const cached = bindingByCapabilities.get(capabilities);
   if (cached) return cached;
   function cmd() {
@@ -382,7 +383,10 @@ export function createIdentityBindingOperations(
     tx: CommandTransaction,
     input: IdentityAdmissionInput &
       Readonly<{
-        receipt: Extract<IdentityAdmissionInput['receipt'], { kind: 'account-agent.verify' | 'account-agent.unverify' }>;
+        receipt: Extract<
+          IdentityAdmissionInput['receipt'],
+          { kind: 'account-agent.verify' | 'account-agent.unverify' }
+        >;
       }>,
   ): Promise<IdentityReceiptBinding | null> {
     if (input.receipt.kind !== 'account-agent.verify' && input.receipt.kind !== 'account-agent.unverify') return null;
@@ -533,7 +537,8 @@ export function createIdentityBindingOperations(
       };
     });
     const committed = await lookupIdentityBinding(pool, authority, input);
-    if (!committed) throw new IdentityEpochStoreError('identity_epoch_unavailable', 'Native receipt claim lost custody');
+    if (!committed)
+      throw new IdentityEpochStoreError('identity_epoch_unavailable', 'Native receipt claim lost custody');
     return committed;
   }
   /** The first group reservation is independently durable before this immutable accepted pointer. */

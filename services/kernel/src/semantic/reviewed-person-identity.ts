@@ -256,12 +256,8 @@ export function createReviewedPersonOperations(
       release: Release,
       lockSelected?: boolean,
     ) => observeReviewedPersonIdentityWith(capabilities, tx, subject, source, routeKey, release, lockSelected),
-    guard: (
-      tx: CommandTransaction,
-      expected: ReviewedPersonExpectation,
-      routeKey: Uint8Array,
-      release: Release,
-    ) => guardReviewedPersonIdentityWith(capabilities, tx, expected, routeKey, release),
+    guard: (tx: CommandTransaction, expected: ReviewedPersonExpectation, routeKey: Uint8Array, release: Release) =>
+      guardReviewedPersonIdentityWith(capabilities, tx, expected, routeKey, release),
   });
   reviewedPersonByCapabilities.set(capabilities, operations);
   return operations;

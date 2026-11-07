@@ -95,7 +95,9 @@ export type IdentityAdmissionOperations = NativeIdentityAdmission &
   }>;
 
 /** Admission, resume and replay operations closed over one capability set. */
-export function createIdentityAdmissionOperations(capabilities: NativeIdentityCapabilities): IdentityAdmissionOperations {
+export function createIdentityAdmissionOperations(
+  capabilities: NativeIdentityCapabilities,
+): IdentityAdmissionOperations {
   const cached = admissionByCapabilities.get(capabilities);
   if (cached) return cached;
   const bindingOps = createIdentityBindingOperations(capabilities);
@@ -278,7 +280,8 @@ export function createIdentityAdmissionOperations(capabilities: NativeIdentityCa
       .digest('hex');
     if (existing && (identityBindingData(existing).state === 'pending' || cancelled)) {
       const prior = identityBindingData(existing);
-      if (!cancelled && prior.scope === scope && prior.job.epoch === BigInt(state.allocated_epoch) + 1n) return existing;
+      if (!cancelled && prior.scope === scope && prior.job.epoch === BigInt(state.allocated_epoch) + 1n)
+        return existing;
       if (!(await closeUnreservedBinding(pool, authority, input, existing))) {
         await bindingOps.acceptIdentityBinding(pool, authority, input, existing);
         return (await bindingOps.lookupIdentityBinding(pool, authority, input))!;
@@ -416,10 +419,10 @@ export function createIdentityAdmissionOperations(capabilities: NativeIdentityCa
       return cmd().noEffect(data.job);
     }
     const closed = (
-      await tx.query(`SELECT state FROM semantic.identity_epoch_admission_attempt WHERE partition_no=$1 AND job_id=$2`, [
-        home,
-        data.job.jobId,
-      ])
+      await tx.query(
+        `SELECT state FROM semantic.identity_epoch_admission_attempt WHERE partition_no=$1 AND job_id=$2`,
+        [home, data.job.jobId],
+      )
     ).rows[0];
     if (closed?.state === 'closed') throw stale();
     await guardIdentityAdmissionReviewedPerson(tx, input);
@@ -684,8 +687,9 @@ export function createIdentityAdmissionOperations(capabilities: NativeIdentityCa
             [home, ref.jobId, ref.epoch.toString(), scope],
             measured,
           );
-        const duplicate = (await measuredQuery(tx, receipt.sql, [home, ref.jobId, ref.epoch.toString(), stage], measured))
-          .rows[0];
+        const duplicate = (
+          await measuredQuery(tx, receipt.sql, [home, ref.jobId, ref.epoch.toString(), stage], measured)
+        ).rows[0];
         if (duplicate) return cmd().noEffect(null);
         if (stage === 'closed')
           await measuredQuery(tx, close.sql, [home, ref.jobId, ref.epoch.toString(), scope], measured);
@@ -768,7 +772,16 @@ export function createIdentityAdmissionOperations(capabilities: NativeIdentityCa
           await measuredQuery(
             tx,
             `INSERT INTO semantic.identity_epoch_admission_source_hold(partition_no,job_id,job_epoch,original,route,scope_digest,basis,transaction_id) VALUES($1,$2,$3,$4,$5,$6,$7,$8)`,
-            [sourceHome, ref.jobId, ref.epoch.toString(), base.original, base.route, saved.scope_digest, json(base), id],
+            [
+              sourceHome,
+              ref.jobId,
+              ref.epoch.toString(),
+              base.original,
+              base.route,
+              saved.scope_digest,
+              json(base),
+              id,
+            ],
             measured,
           );
         });
