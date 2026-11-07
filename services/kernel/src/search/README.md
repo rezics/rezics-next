@@ -7,6 +7,8 @@ progress. Search contract owns path multiplicities; Library declares the complet
 composition binds both capabilities before registration; absent Search runtime remains unavailable. Search retains
 Source settlement, public discovery and its existing native/growth outcomes.
 
+Decision: Search's native scope bindings and Library work-definition read defer imported values behind memoized factories and typed forwarding functions. Outcome subclasses keep their bases in the same module; `discovery-errors.ts` remains a compatibility re-export.
+
 [Rejected text query repair](text-query-repair.md) owns bounded parser diagnostics and deliberate in-place correction.
 
 Search owns the subject search projection, indexing consumers, disclosure checks, query API, freshness and index

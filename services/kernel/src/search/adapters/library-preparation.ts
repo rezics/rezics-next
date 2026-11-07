@@ -20,10 +20,10 @@ export function createNativeLibraryScopeWork(library: SearchLibraryScopePort): N
   };
 }
 
+const readDefinition: typeof readScopeWorkDefinition = (...args) => readScopeWorkDefinition(...args);
+
 /** Compatibility binding used when composition has already constructed a Library capability. */
-export const nativeLibraryScopeWork: NativeScopeWork = {
-  readDefinition: (work, options) => readScopeWorkDefinition(work, options),
-};
+export const nativeLibraryScopeWork: NativeScopeWork = { readDefinition };
 
 type OrderedSource = ReturnType<typeof createSearchScopeSource>;
 

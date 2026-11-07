@@ -226,6 +226,7 @@ export function formatModuleMap(manifest: ArchitectureManifest, paths?: readonly
   const { legend, text } = renderModuleMap(selected);
   const complete = `${text}\n${MODULE_MAP_POINTER}`;
   if (complete.length <= MAX_MODULE_MAP_CHARACTERS) return complete;
+  // Keep owned rows authoritative and make truncation explicit when dependency rows do not fit.
   const ownedIds = new Set(owned.map((module) => module.id));
   const prioritized = [...owned, ...selected.filter((module) => !ownedIds.has(module.id)).sort(compareModuleId)];
   return fitRows(legend, prioritized.map(moduleMapRow), MODULE_MAP_POINTER, MODULE_MAP_TRUNCATION);

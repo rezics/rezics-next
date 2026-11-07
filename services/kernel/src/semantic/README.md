@@ -10,6 +10,8 @@ Decision: `adapters/progress-identity-statements.ts` owns definition-release and
 
 This module owns subject facts and their item projections, partition paging, and immutable definition releases with editorial activation history.
 
+Decision: the seeded Global Context ID lives in the literal-only `context-literals.ts` leaf. Ordinary History composition binds the typed Semantic record-source-set producer before installing History; importing the Semantic producer has no registration side effect.
+
 ## Semantic label policy
 
 `languageRanges` and `chooseLabel` are pure shared Definitions functions exported by the package root, including its
