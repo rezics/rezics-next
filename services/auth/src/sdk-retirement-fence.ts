@@ -167,7 +167,8 @@ export function nativeRetirementWork(value: unknown, id: string): WorkflowRetire
 }
 
 export async function reserveAuthSdkRetirement(dispatch: string): Promise<void> {
-  if (!Object.hasOwn(AUTH_SDK_RETIREMENT_DISPATCH, dispatch)) throw new TypeError(`Unpriced SDK retirement dispatch: ${dispatch}`);
+  if (!Object.hasOwn(AUTH_SDK_RETIREMENT_DISPATCH, dispatch))
+    throw new TypeError(`Unpriced SDK retirement dispatch: ${dispatch}`);
 }
 
 /** One finite Auth operation: a single funded attempt, original deadline. */
