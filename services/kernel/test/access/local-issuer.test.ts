@@ -124,7 +124,10 @@ for (const [index, host] of ['127.0.0.1', 'localhost', '[::1]'].entries()) {
       const native = Bun.serve({
         hostname: host === '[::1]' ? '::1' : '127.0.0.1',
         port: 0,
-        fetch: () => service.handler(new Request(`${issuer}/.well-known/jwks.json`)),
+        fetch: () => {
+          if (!service) throw new Error('Auth not started');
+          return service.handler(new Request(`${issuer}/.well-known/jwks.json`));
+        },
       });
       try {
         const nativeOrigin = `http://${host === '[::1]' ? '[::1]' : host}:${native.port}`;
