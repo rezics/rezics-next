@@ -30,7 +30,6 @@ import {
   firstPublicRow,
   licensedVndbArchive,
   retireWalkJournals,
-  runBoundedWalkCommand,
   selectPublished,
   walkChildFailure,
   walkFailureCause,
@@ -49,23 +48,6 @@ import {
   ordinaryOwnerGrantKey,
   ordinaryOwnerGrantResource,
 } from '../src/ordinary-owner-grants.ts';
-
-test('a stuck operator is terminated while an independent operator retains its result', async () => {
-  const cwd = join(import.meta.dir, '../../..');
-  const [stuck, independent] = await Promise.all([
-    runBoundedWalkCommand(['bun', '-e', 'console.log("started"); setInterval(() => {}, 1000)'], {
-      cwd,
-      deadlineMs: 1000,
-    }),
-    runBoundedWalkCommand(['bun', '-e', 'console.log("current read complete")'], {
-      cwd,
-      deadlineMs: 1000,
-    }),
-  ]);
-  expect(stuck).toMatchObject({ timedOut: true, stdout: 'started\n' });
-  expect(stuck.code).not.toBe(0);
-  expect(independent).toMatchObject({ timedOut: false, code: 0, stdout: 'current read complete\n' });
-});
 
 function publishedRow(sourceKey: string, provider = 'bangumi') {
   return {
