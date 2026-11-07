@@ -1,5 +1,6 @@
 import { afterAll, beforeAll, expect, test } from 'bun:test';
 import { nativeSignInProof } from './sign-in-fixture';
+import { signInPage } from './security-page-fixture';
 import { spawn, type ChildProcess } from 'node:child_process';
 import { createHmac, randomBytes } from 'node:crypto';
 import { createServer } from 'node:net';
@@ -113,6 +114,9 @@ const fake = Bun.serve({
     };
     calls.push(call);
     const headers = new Headers({ 'cache-control': 'no-store' });
+
+    if (url.pathname === '/signin/page' && request.method === 'POST')
+      return Response.json(signInPage(JSON.parse(call.body).query, url.origin, { kind: 'signed-out' }), { headers });
 
     if (url.pathname === '/authorize' && request.method === 'GET') {
       if ((call.headers.cookie ?? '').split(';').some((cookie) => cookie.trim() === `auth_session=${session}`))
@@ -350,11 +354,38 @@ test(
     try {
       const login = new URL(page.url());
       expect(login.pathname).toBe('/login');
-      await Promise.all([
-        page.waitForURL(/\/signup\?/),
-        page.getByRole('link', { name: 'Create an account', exact: true }).click(),
-      ]);
-      await page.locator('html[data-hydrated]').waitFor({ state: 'attached', timeout: 120_000 });
+      // Root hydration precedes the current native page read. Settle that advice before clicking its moving layout.
+      await page.getByLabel('Email', { exact: true }).waitFor({ state: 'visible' });
+      expect(login.search.startsWith(`?${authorizationQuery}&exp=`)).toBe(true);
+      const advice = calls.filter((call) => call.url === '/signin/page' && call.method === 'POST');
+      expect(advice).toHaveLength(1);
+      expect(JSON.parse(advice[0]!.body)).toEqual({ query: login.search });
+      const createAccount = page.getByRole('link', { name: 'Create an account', exact: true });
+      expect(await createAccount.getAttribute('href')).toBe(`/signup${login.search}`);
+      const initialDocument = await page.evaluateHandle(() => document);
+      try {
+        await Promise.all([
+          page.waitForURL(`${origin}/signup${login.search}`, { waitUntil: 'commit' }),
+          createAccount.click(),
+        ]);
+        expect(await page.evaluate((initial) => initial === document, initialDocument)).toBe(true);
+      } catch (cause) {
+        // Distinguish a failed click/URL commit from signup advice or challenge readiness on this same visit.
+        throw new Error(
+          `login to signup did not commit: ${JSON.stringify({
+            url: page.url(),
+            state: await page.evaluate(() => ({
+              href: document.querySelector('a[href^="/signup"]')?.getAttribute('href'),
+              ready: document.readyState,
+              hydrated: 'hydrated' in document.documentElement.dataset,
+            })),
+            requests: calls.map(({ method, url }) => ({ method, path: new URL(url, fake.url).pathname })),
+          })}`,
+          { cause },
+        );
+      } finally {
+        await initialDocument.dispose();
+      }
       const signupUrl = new URL(page.url());
       expect(signupUrl.pathname).toBe('/signup');
       expect(signupUrl.search).toBe(login.search);

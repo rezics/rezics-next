@@ -370,6 +370,17 @@ the native closed-envelope and uncertainty rules above: explicit original-attemp
 fresh token, unsupported registration 429 stays unknown, and departure keeps generic history without reopening fields.
 Step-up retains its opaque authorization assertions; readiness diagnostics precede teardown and never read credentials.
 
+Decision: the signup browser fixture serves signed-out `/signin/page` advice through the existing native DTO fixture,
+matching login. Root hydration alone does not settle that read or its layout. The first failing signup visit recorded
+no navigation event after the click; its default document-load wait does not prove a slow signup load, and missing
+advice alone does not prove the navigation cause. The existing journey now waits for the advised login form, checks
+the exact initiating query and signup href, then observes URL commit and the same document before waiting for the
+registration form. A failed commit reports the current URL, href, hydration and request stages on that visit. Login
+and signup continue to take the raw query from router history, retaining duplicate resources and empty operands;
+creation uncertainty, explicit retry and native session authority keep their existing rules. The original eight-case
+selection and its remaining assertions stay in dev verification; no longer timeout or production navigation change
+is introduced.
+
 ## Consent
 
 `/consent?client_id=<id>&scope=<space-separated scopes>` reviews a third-party client's request. The private
