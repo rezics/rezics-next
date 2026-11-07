@@ -1,5 +1,6 @@
 import { expect, test } from 'bun:test';
 import {
+  commandNeedsSharedDevServer,
   privateNetworkCommand,
   sharedViteChildEnvironment,
   walkViteChildEnvironment,
@@ -61,4 +62,14 @@ test('private-network wrapping keeps the original command after the namespace se
     'tests/search.test.ts',
   ]);
   expect(webTestPrivateNetworkEnvName).toBe('WEB_TEST_PRIVATE_NETWORK');
+});
+
+test('the self-hosted post editing journey keeps its own Worker bindings without an unused default server', () => {
+  expect(commandNeedsSharedDevServer(['bun', 'test', 'tests/post-editing.test.ts'])).toBe(false);
+  expect(commandNeedsSharedDevServer(['bun', 'test', '--max-concurrency=1', 'tests/post-editing.test.ts'])).toBe(false);
+  expect(
+    commandNeedsSharedDevServer(['bun', 'test', 'tests/post-editing.test.ts', 'tests/thread-reading.test.ts']),
+  ).toBe(true);
+  expect(commandNeedsSharedDevServer(['bun', 'test', 'tests'])).toBe(true);
+  expect(commandNeedsSharedDevServer(['bun', 'test'])).toBe(true);
 });

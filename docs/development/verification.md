@@ -68,7 +68,9 @@ controller-owned driver and Auth-persona walk pass after integration.
 Decision: Web's focused runner (`apps/web/scripts/focused.ts`) canonicalizes explicit test-file selectors to the child
 `apps/web` working directory before isolated per-file execution. Repository-relative (`apps/web/tests/foo.test.ts`),
 application-relative (`tests/foo.test.ts`) and absolute paths that resolve inside that directory all run the same
-child file. Option operands and their values stay unchanged. Each named file still gets a fresh runtime. A zero-match
+child file. The runner chooses shared-server wrapping separately for each isolated file: `post-editing.test.ts`
+owns its issuer-bound Vite server and must not retain an unused default Vite/Worker graph beside it. Its private
+network and process-group cleanup remain. Ordinary and mixed selections retain shared-server preparation. Option operands and their values stay unchanged. Each named file still gets a fresh runtime. A zero-match
 log is not execution evidence. Pin current-reader recovery in the existing Subject community, CollectionList, Copies
 session and Person Location tests; Auth metadata uses the existing protocol cases plus a consumed-body fallback.
 

@@ -53,7 +53,10 @@ export function walkViteChildEnvironment(
 }
 
 export function commandNeedsSharedDevServer(command: string[]): boolean {
-  return command[0] === 'bun' && command[1] === 'test';
+  if (command[0] !== 'bun' || command[1] !== 'test') return false;
+  const selectors = command.slice(2).filter((argument) => !argument.startsWith('-'));
+  // This browser journey owns a server with private issuer/client bindings; a second default server is unused.
+  return selectors.length === 0 || !selectors.every((file) => /(?:^|\/)post-editing\.test\.ts$/.test(file));
 }
 
 export function privateNetworkCommand(command: string[]): string[] {

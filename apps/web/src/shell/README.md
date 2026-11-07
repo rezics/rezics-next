@@ -11,7 +11,8 @@ Navigation reads are private and bound to the current account, locale and operat
 Decision: followed-community navigation consumes `session/reader` directly, preserving the current viewer, locale,
 operation and response guards. The root shell surrounds the Library route boundary; its default rail must render
 without that boundary. The existing mounted `app-shell.test.tsx` case exercises the default rail rather than replacing
-it with prepared communities, retaining its landmark and destination assertions.
+it with prepared communities, retaining its landmark and destination assertions. The test is registered at file
+scope. Community icon assertions count the two linked category icons independently of the group folding controls.
 
 Decision: locale selection uses router-managed document navigation, preserving the current page, query and fragment
 in browser history and honoring leave-page blockers. The destination rereads native data and renders translated UI;
