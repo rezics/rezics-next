@@ -31,7 +31,8 @@ journey tests. Receive Identity `e815ae17`, Imports `a67c30ad`/`681d1fa8`, Perfo
 `d87dc7a9` through those journeys; Identity isolation is a separate successor; original disclosure,
 identity/default-worker and mounted return proofs stay. One failed shared setup step fails every dependent journey;
 independent executable paths still run. Documentation formatting is the focused delivery check; it supplies no native
-or browser PASS.
+or browser PASS. Census 0/6 before seed keeps setup time separate; Collection coverage stays `bf195aa3` and relay/startup
+stays `7a3f2fc9`.
 
 ### Current dev census
 
@@ -39,6 +40,7 @@ Observed walk revision: `93eb7908d8e983998d4b280ea275b131aaa444a1` (origin/dev `
 `d87dc7a9045e7fe65110db6bedfa4decb4b2ce5d`, Identity `e815ae17`, Imports `a67c30ad`/`681d1fa8`, Performance shell
 `95e3fac9`). Membership JWKS config stays off authenticate SQL at module load. This row set replaces the 06:25–07:03
 UTC census. Worker identity started. Partial public steps never pass an unexecuted whole journey.
+Elapsed launcher time is setup, not a measured product journey. This round is closed.
 
 `bun services/auth/scripts/dev-stack.ts walk -- bun apps/web/scripts/search-first-public-walk.ts` failed twice at
 walk slot admission, before persona, seed or frontends. First run **2026-11-07 07:33:04.872 UTC**, exit 1 in **0.887 s**.
@@ -52,12 +54,12 @@ not exercised; they do not match this permission failure.
 
 | Journey               | User-visible path and passing result                                                                                                                                                                                         | Exposure                                                                            | Dev walk result                                                                                 | Evidence / first failure                                                                                                                                                          |
 | --------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Mixed Search          | Open Search, submit text, open a permitted result and return to the executed query; continued pages remain useful and current after a visibility change.                                                                     | Existing Search grant                                                               | FAIL — walk slot admission; 0.887 s; rev `93eb7908d8e983998d4b280ea275b131aaa444a1`              | `EACCES: permission denied, open '/tmp/rezics-walk-stacks/sequence.next'`. Submit, result open, return and visibility change not executed. [Repair](#walk-stack-directory-repair). |
-| Refine and continue   | Submit supported Type/filter operands, inspect current facet choices, continue and restart in the same executed query; changed reader or resource scope retires old values and cursors.                                      | Existing Search grant; advanced second-scope operands remain outside this inventory | FAIL — walk slot admission; 0.887 s; rev `93eb7908d8e983998d4b280ea275b131aaa444a1`              | Same admission `EACCES`. Typed search, facets, continuation and reader retirement not executed. [Repair](#walk-stack-directory-repair).                                            |
-| Multilingual names    | Type an original-language name or current alias, select a suggestion, open the matching Subject and change locale without losing the query or authored language order.                                                       | Existing Search grant                                                               | FAIL — walk slot admission; 0.887 s; rev `93eb7908d8e983998d4b280ea275b131aaa444a1`              | Same admission `EACCES`. Suggest, Subject and locale return not executed. [Repair](#walk-stack-directory-repair).                                                                  |
-| Search recovery       | Correct an invalid authored operand or deliberately retry a preparing/unavailable request after its deadline; generation loss restarts that executed request and renders useful output.                                      | Existing Search grant                                                               | FAIL — walk slot admission; 0.887 s; rev `93eb7908d8e983998d4b280ea275b131aaa444a1`              | Same admission `EACCES`. Invalid operand, corrected search and recovery page not executed. [Repair](#walk-stack-directory-repair).                                                 |
-| Configured reading    | Open a configured Subject or static Zone page and read its declared lists in document order; unavailable slots leave supported siblings usable, and a current continuation/retry reaches the right list.                     | Public configured reader where the owning scope admits it                           | FAIL — walk slot admission; 0.887 s; rev `93eb7908d8e983998d4b280ea275b131aaa444a1`              | Same admission `EACCES`. Public configured lists and mounted Home/Subject pages not executed. [Repair](#walk-stack-directory-repair).                                              |
-| Published composition | Publish an admitted shared profile or curated Collection presentation, open the selected public version while the editor has a later draft, and deliberately recover a refused/lost response to the actual published result. | Existing publication authority and public selected-version reading                  | FAIL — walk slot admission; 0.887 s; rev `93eb7908d8e983998d4b280ea275b131aaa444a1`              | Same admission `EACCES`. Selected-public read, lost digest recover and editor publish not executed. [Repair](#walk-stack-directory-repair).                                       |
+| Mixed Search          | Open Search, submit text, open a permitted result and return to the executed query; continued pages remain useful and current after a visibility change.                                                                     | Existing Search grant                                                               | FAIL — setup (not a journey); 0.887 s; rev `93eb7908d8e983998d4b280ea275b131aaa444a1`              | `EACCES: permission denied, open '/tmp/rezics-walk-stacks/sequence.next'`. Submit, result open, return and visibility change not executed. [Repair](#walk-stack-directory-repair). |
+| Refine and continue   | Submit supported Type/filter operands, inspect current facet choices, continue and restart in the same executed query; changed reader or resource scope retires old values and cursors.                                      | Existing Search grant; advanced second-scope operands remain outside this inventory | FAIL — setup (not a journey); 0.887 s; rev `93eb7908d8e983998d4b280ea275b131aaa444a1`              | Same admission `EACCES`. Typed search, facets, continuation and reader retirement not executed. [Repair](#walk-stack-directory-repair).                                            |
+| Multilingual names    | Type an original-language name or current alias, select a suggestion, open the matching Subject and change locale without losing the query or authored language order.                                                       | Existing Search grant                                                               | FAIL — setup (not a journey); 0.887 s; rev `93eb7908d8e983998d4b280ea275b131aaa444a1`              | Same admission `EACCES`. Suggest, Subject and locale return not executed. [Repair](#walk-stack-directory-repair).                                                                  |
+| Search recovery       | Correct an invalid authored operand or deliberately retry a preparing/unavailable request after its deadline; generation loss restarts that executed request and renders useful output.                                      | Existing Search grant                                                               | FAIL — setup (not a journey); 0.887 s; rev `93eb7908d8e983998d4b280ea275b131aaa444a1`              | Same admission `EACCES`. Invalid operand, corrected search and recovery page not executed. [Repair](#walk-stack-directory-repair).                                                 |
+| Configured reading    | Open a configured Subject or static Zone page and read its declared lists in document order; unavailable slots leave supported siblings usable, and a current continuation/retry reaches the right list.                     | Public configured reader where the owning scope admits it                           | FAIL — setup (not a journey); 0.887 s; rev `93eb7908d8e983998d4b280ea275b131aaa444a1`              | Same admission `EACCES`. Public configured lists and mounted Home/Subject pages not executed. [Repair](#walk-stack-directory-repair).                                              |
+| Published composition | Publish an admitted shared profile or curated Collection presentation, open the selected public version while the editor has a later draft, and deliberately recover a refused/lost response to the actual published result. | Existing publication authority and public selected-version reading                  | FAIL — setup (not a journey); 0.887 s; rev `93eb7908d8e983998d4b280ea275b131aaa444a1`              | Same admission `EACCES`. Selected-public read, lost digest recover and editor publish not executed. [Repair](#walk-stack-directory-repair).                                       |
 
 ### Native observation and operands
 
@@ -77,13 +79,14 @@ directory `0755`, so later workers cannot write `sequence.next`. Performance/con
 
 Repair: provision `/tmp/rezics-walk-stacks` as mode `01777` (sticky, like `/tmp`) before workers admit, or chmod it to
 that mode in the stack-lease creator. Keep the host-wide queue; do not fall back to a worktree `.temp` directory. Do not
-chmod from Search. Do not treat this as a Search indexer, seed or Vite defect. Vite 8.3.6 / Cloudflare beta.v.12 /
-React 6.2.1 candidates do not establish this permission failure.
+chmod from Search. Live Performance `0c9024bc` is a first-public walk, not a launcher writer; control-plane is paused.
+Send the reproducible `EACCES` packet to the Performance manager for one urgent creator/provisioning repair. Vite 8.3.6 /
+Cloudflare beta.v.12 / React 6.2.1 candidates do not establish this permission failure.
 
 ### Scope of this census and handoff
 
-The result is **0/6 passing**. The slowest failing journey is Mixed Search at **0.887 s**; its first failing step is
-walk slot admission `EACCES`. Every row joins [Walk-stack directory repair](#walk-stack-directory-repair). Authenticated
+The result is **0/6 passing**. Slowest failing path is Mixed Search setup at **0.887 s**; first failing step is walk
+slot admission `EACCES` (setup, not a journey). Every row joins [Walk-stack directory repair](#walk-stack-directory-repair). Authenticated
 Search and publication stay blocked on that directory. Identity `e815ae17`, Imports `a67c30ad`/`681d1fa8`, Performance
 shell `95e3fac9` and startup `d87dc7a9` are ancestors of this product and were not exercised through journeys. Identity
 isolation stays a separate successor. Original disclosure, identity/default-worker and mounted return proofs stay.
@@ -107,21 +110,22 @@ rows.
 | `test/search/review-discovery-receiving.test.ts`  | FAIL: `RangeError: concurrency must be a positive integer below the pool size` at `events/relays.ts` `startRelays` from `search/runner.ts:414` (`concurrency: options.concurrency ?? 2`) during `runner.refresh()`; case “default mixed supervisor applies current reviews and recovers exact journal progress” (0 pass / 1 fail). Prior `unknown-resource-action` catalogue error did not recur. |
 | `test/search/default-discovery.test.ts`           | FAIL: both cases `OutcomeRpcError: init did not complete within 90000 ms`, then `Worker did not drain: {"code":null,"signal":"SIGKILL"}` (0 pass / 2 fail, 477.19 s). Child stdout in the drain error was empty.                                                                                                                                 |
 
-**Receiving coverage repair, Search generation owner:** the failing metadata-reconciliation case already injects a
-`collection` producer (`owner: commerce`) in `metadataProducers`; the injected registry/target kinds are account-only.
-Reconcile that registry/target/producer contract in existing receiving, then rerun the same case. Do not install a
-new producer, drop the coverage assertion, or open deferred metadata. Commerce remains owner of Collection records.
+**Receiving coverage repair, Source/publication owner `bf195aa3`:** the failing metadata-reconciliation case already
+injects a `collection` producer (`owner: commerce`) in `metadataProducers`; the injected registry/target kinds are
+account-only. Reconcile that registry/target/producer contract in existing receiving, then rerun the same case. Do not
+install a new producer, drop the coverage assertion, or open deferred metadata. Commerce remains owner of Collection
+records.
 
-**Review relay concurrency repair, Search runner owner:** `startRelays` refuses `concurrency >= pool.options.max`.
+**Review relay concurrency repair, readiness owner `7a3f2fc9`:** `startRelays` refuses `concurrency >= pool.options.max`.
 `runner.ts` defaults `concurrency` to 2. Size the Review discovery fixture pool above 2, or pass
 `relayConcurrencyForPool(options.pool)` instead of 2. Keep the existing coverage assertions. Do not loosen
 `startRelays`. The prior Content/Accounts catalogue fixture error did not recur on this product.
 
-**Default-worker init repair, Search default-worker owner:** both default-discovery cases failed at
+**Default-worker init repair, readiness owner `7a3f2fc9`:** both default-discovery cases failed at
 `startOutcomeWorkerProcess` `rpc.request('init')` (`timeoutMs: 90_000`). Child `outcome-worker.ts` `startWorker` never
 replied; `close()` awaits that `ready` then SIGKILLs at 90 s (`Worker did not drain: {"code":null,"signal":"SIGKILL"}`).
 The drain error carried empty child stdout. Capture child stdout in the 90 s init window. Keep the existing assertions.
-This is not a new Imports outcome.
+This is not a new Imports outcome. Receive those integrated changes in the sole walk; no second native producer.
 
 Web Character local-selection and with-dev-server cells were retried 2026-11-07 07:48 UTC after `95e3fac9` became an
 ancestor: focused Web again returned `Web check unavailable: the selected Performance snapshot is not integrated into
