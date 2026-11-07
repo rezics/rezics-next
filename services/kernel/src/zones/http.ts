@@ -38,10 +38,18 @@ import {
   ZoneSubjectListProgressSchema,
 } from './page-continuation.ts';
 import { readStaticZonePage, readZoneSubjects } from './page-runtime.ts';
-import { createZoneCommands, zoneIfMatch } from './resource-commands.ts';
-import { createZoneReads, requireZoneAccount } from './resource-reads.ts';
+import { createZoneResourceAccess } from './adapters/index.ts';
+import {
+  bindZoneResourceAccess,
+  bindZoneResourceApplication,
+  createZoneResourceApplication,
+  tryZoneResourceAccess,
+  tryZoneResourceApplication,
+  type ZoneResourceApplication,
+} from './resource-application.ts';
 import { bindZoneCollectionPort, peekZoneCollectionPort } from './collection-port.ts';
 import { readZoneCollections } from './mounted-collections.ts';
+import type { ZoneAccountActor, ZoneActor } from './resource-access-port.ts';
 
 const closed = { additionalProperties: false } as const;
 const params = t.Object({ id: t.String() }, closed);
@@ -107,6 +115,13 @@ function ensureZoneCollectionPort() {
   if (!peekZoneCollectionPort()) bindZoneCollectionPort(createZoneCollectionAdapter());
 }
 
+function ensureZoneResourceApplication(): ZoneResourceApplication {
+  const existing = tryZoneResourceApplication();
+  if (existing) return existing;
+  const access = tryZoneResourceAccess() ?? bindZoneResourceAccess(createZoneResourceAccess());
+  return bindZoneResourceApplication(createZoneResourceApplication(access));
+}
+
 /** Resource routes and the one common-page composition over native source owners. */
 export function zoneRoutes(
   app: ReturnType<typeof definitionRoutes>,
@@ -120,8 +135,12 @@ export function zoneRoutes(
   },
 ) {
   ensureZoneCollectionPort();
-  const reads = () => createZoneReads({ ...dependencies, access: dependencies.access() });
-  const commands = () => createZoneCommands({ ...dependencies, access: dependencies.access() });
+  const resources: ZoneResourceApplication = ensureZoneResourceApplication();
+  const runtime = () => resources.runtime({ ...dependencies, access: dependencies.access() });
+  const reads = () => runtime().reads;
+  const commands = () => runtime().commands;
+  const requireZoneAccount: (actor: ZoneActor) => asserts actor is ZoneAccountActor = resources.requireAccount;
+  const zoneIfMatch = resources.ifMatch;
   return app
     .post(
       '/v1/zones',

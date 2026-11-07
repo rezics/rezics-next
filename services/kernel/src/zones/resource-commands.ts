@@ -1,11 +1,5 @@
 import { enrollResourceRecordSources } from '../semantic/record-purge-custody.ts';
 import { platformRegistry, validateZoneConfiguration } from '@rezics/composition';
-import type { Pool } from 'pg';
-import { commandAccessContext } from '../access/command-admission.ts';
-import { GrantDeniedError } from '../access/grant-commands.ts';
-import { parentCreationAuthorization } from '../access/parent-creation.ts';
-import { resourceAuthorizationPage } from '../access/resource-authorization.ts';
-import { initializeResourceGrants } from '../access/resource-initialization.ts';
 import {
   authoritativeTimeValue,
   principalCommandIdentity,
@@ -19,14 +13,13 @@ import {
 } from '../command/command.ts';
 import { ACCOUNT_ROLE_BITS } from '../history/contract/index.ts';
 import { bindCommandHistoryEvidence } from '../history/command-evidence.ts';
-import { ProblemError } from '../http/problem.ts';
+import { ProblemError } from '../http/problem-error.ts';
 import { requestDigest } from '../http/request.ts';
-import type { Access, AccountActor, Actor } from '../request/access.ts';
+import type { Access } from '../request/access.ts';
 import { zoneCollectionReads } from './collection-port.ts';
 import { newId, partitionOf, routeOf } from '../route/route.ts';
 import { globalContextAnchor } from '../semantic/context.ts';
 import { activeRelease, GLOBAL_CONTEXT } from '../semantic/definitions.ts';
-import type { KeyRing } from '../tokens/seal.ts';
 import type {
   ZoneConfigureInput,
   ZoneCreateInput,
@@ -47,12 +40,20 @@ import {
 } from './resource-store.ts';
 import { liveCoverage, withPurgeIntent } from './cleanup-intent.ts';
 import { changeTakedown, rebindWithholding, withholdingJson } from './takedown.ts';
+import {
+  zoneResourceAccess,
+  type ZoneAccessHandle,
+  type ZoneAccountActor,
+  type ZoneActor,
+  type ZoneResourceAccessPort,
+  type ZoneResourceRuntimeDependencies,
+} from './resource-access-port.ts';
 
 export type ZoneMutation = 'configure' | 'publish' | 'delete' | 'restore' | 'takedown' | 'release_takedown';
 export type ZonePlatformMutation = 'hold' | 'release_hold' | 'purge';
 
 /** Platform hold/purge enter Access, then bind the operator so History enrollment has evidence. */
-function bindZonePlatformHistory(tx: CommandTransaction, actor: AccountActor): void {
+function bindZonePlatformHistory(tx: CommandTransaction, actor: ZoneAccountActor): void {
   bindCommandHistoryEvidence(tx, [
     {
       accountRoute: routeOf(actor.accountId)!,
@@ -80,12 +81,24 @@ type Prepared = {
   permission?: unknown;
   proof: unknown;
 };
-export function createZoneCommands(dependencies: { pool: Pool; access: Access; tokens: KeyRing; clock: () => Date }) {
+
+export type ZoneCommandDependencies = ZoneResourceRuntimeDependencies & {
+  ports?: ZoneResourceAccessPort;
+};
+
+function denied(ports: ZoneResourceAccessPort, error: unknown): never {
+  if (ports.isGrantDenied(error)) throw new ProblemError('forbidden');
+  throw error;
+}
+
+/** Native create, configure, publish, delete, restore, takedown and platform lifecycle. Access is the bound port. */
+export function createZoneCommands(dependencies: ZoneCommandDependencies) {
   const { pool, access, tokens, clock } = dependencies;
-  const collections = zoneCollectionReads({ pool, access, tokens });
+  const ports = dependencies.ports ?? zoneResourceAccess();
+  const collections = zoneCollectionReads({ pool, access: access as Access, tokens });
 
   async function validate(
-    actor: AccountActor,
+    actor: ZoneAccountActor,
     body: ZoneConfigureInput,
     deadline: number,
   ): Promise<PreparedConfiguration> {
@@ -121,7 +134,7 @@ export function createZoneCommands(dependencies: { pool: Pool; access: Access; t
    * receipt lookup so exact replay retains its original result across later release/source changes. */
   function prepareConfiguration(
     base: CommandAuthorization,
-    actor: AccountActor,
+    actor: ZoneAccountActor,
     body: ZoneConfigureInput | null,
     deadline: number,
     resource: { route: number; id: string },
@@ -146,21 +159,25 @@ export function createZoneCommands(dependencies: { pool: Pool; access: Access; t
         const proof = await base.prepare!(attempt);
         const value: Prepared = { proof, configuration, failure };
         if (fresh)
-          value.permission = await access.prepare?.(
+          value.permission = await ports.prepareAction(
+            access,
             actor,
             action,
             resource,
-            commandAccessContext({ pool, deadline }, attempt),
+            ports.commandAccessContext({ pool, deadline }, attempt),
           );
         attempts.set(attempt.time, value);
         return value;
       },
       async authorize(tx, attempt, evidence) {
         const value = attempts.get(attempt.time);
-        if (!value || evidence !== value) throw new GrantDeniedError();
+        if (!value || evidence !== value) throw ports.grantDenied();
         const mode = await base.authorize(tx, attempt, value.proof);
-        if (fresh && !(await access.authorize(tx, actor, action, resource, value.permission, attempt.time)))
-          throw new GrantDeniedError();
+        if (
+          fresh &&
+          !(await ports.authorizeAction(tx, access, actor, action, resource, value.permission, attempt.time))
+        )
+          throw ports.grantDenied();
         return mode;
       },
       ...(base.finalize
@@ -178,12 +195,12 @@ export function createZoneCommands(dependencies: { pool: Pool; access: Access; t
     };
   }
 
-  async function create(actor: Actor, input: ZoneCreateInput, key: string, deadline: number) {
+  async function create(actor: ZoneActor, input: ZoneCreateInput, key: string, deadline: number) {
     requireZoneAccount(actor);
     const route = routeOf(actor.accountId)!;
     const resource = { route, id: newId(route) };
     let provenance: { transactionId: string; at: string } | null = null;
-    const base = parentCreationAuthorization({
+    const base = ports.parentCreationAuthorization({
       access,
       actor,
       action: 'zone:create',
@@ -237,7 +254,7 @@ export function createZoneCommands(dependencies: { pool: Pool; access: Access; t
             kind: 'zone.create',
             birth: true,
           });
-          await initializeResourceGrants(tx, { resource, type: 'semantic.zone', creator: actor.accountId });
+          await ports.initializeResourceGrants(tx, { resource, type: 'semantic.zone', creator: actor.accountId });
           return {
             value: { zone: zoneOwned(row) },
             events: [
@@ -247,13 +264,12 @@ export function createZoneCommands(dependencies: { pool: Pool; access: Access; t
         },
       );
     } catch (error) {
-      if (error instanceof GrantDeniedError) throw new ProblemError('forbidden');
-      throw error;
+      denied(ports, error);
     }
   }
 
   async function mutate(
-    actor: Actor,
+    actor: ZoneActor,
     id: string,
     operation: ZoneMutation,
     input: ZoneConfigureInput | ZonePublishInput | ZoneTakedownInput | null,
@@ -269,7 +285,7 @@ export function createZoneCommands(dependencies: { pool: Pool; access: Access; t
     const action = platform ? 'moderation:takedown' : `zone:${operation}`;
     const context = { pool, deadline, partition: partitionOf(resource.route) };
     const base = platform
-      ? resourceAuthorizationPage({
+      ? ports.resourceAuthorizationPage({
           access,
           actor,
           action,
@@ -281,7 +297,7 @@ export function createZoneCommands(dependencies: { pool: Pool; access: Access; t
           },
           context,
         })
-      : resourceAuthorizationPage({
+      : ports.resourceAuthorizationPage({
           access,
           actor,
           action,
@@ -315,7 +331,7 @@ export function createZoneCommands(dependencies: { pool: Pool; access: Access; t
           operation === 'restore' &&
           !(await hasZoneOwnerRole(tx, resource.route, id, actor.accountId, authoritativeTimeValue(attempt.time)))
         )
-          throw new GrantDeniedError();
+          throw ports.grantDenied();
         return mode;
       },
     };
@@ -406,13 +422,12 @@ export function createZoneCommands(dependencies: { pool: Pool; access: Access; t
         },
       );
     } catch (error) {
-      if (error instanceof GrantDeniedError) throw new ProblemError('forbidden');
-      throw error;
+      denied(ports, error);
     }
   }
 
   async function platform(
-    actor: Actor,
+    actor: ZoneActor,
     id: string,
     operation: 'hold' | 'release_hold',
     input: ZoneHoldInput | Record<string, never>,
@@ -420,7 +435,7 @@ export function createZoneCommands(dependencies: { pool: Pool; access: Access; t
     deadline: number,
   ): Promise<CommandOutcome<{ id: string; held: boolean }>>;
   async function platform(
-    actor: Actor,
+    actor: ZoneActor,
     id: string,
     operation: 'purge',
     input: ZonePurgeInput,
@@ -428,7 +443,7 @@ export function createZoneCommands(dependencies: { pool: Pool; access: Access; t
     deadline: number,
   ): Promise<CommandOutcome<{ id: string; state: 'purge_pending' }>>;
   async function platform(
-    actor: Actor,
+    actor: ZoneActor,
     id: string,
     operation: ZonePlatformMutation,
     input: ZoneHoldInput | ZonePurgeInput | Record<string, never>,
@@ -437,7 +452,7 @@ export function createZoneCommands(dependencies: { pool: Pool; access: Access; t
   ) {
     requireZoneAccount(actor);
     const resource = zoneIdentity(id);
-    const authorization = resourceAuthorizationPage({
+    const authorization = ports.resourceAuthorizationPage({
       access,
       actor,
       action: 'zone:purge',
@@ -500,9 +515,10 @@ export function createZoneCommands(dependencies: { pool: Pool; access: Access; t
         },
       );
     } catch (error) {
-      if (error instanceof GrantDeniedError) throw new ProblemError('forbidden');
-      throw error;
+      denied(ports, error);
     }
   }
   return { create, mutate, platform };
 }
+
+export type { ZoneAccessHandle, ZoneAccountActor, ZoneActor };

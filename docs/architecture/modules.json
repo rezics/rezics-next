@@ -247,7 +247,8 @@
         "services/kernel/src/access/work.ts",
         "services/kernel/src/access/durable-initiator-capture.ts",
         "services/kernel/src/access/unavailable.ts",
-        "services/kernel/src/access/resource-access-errors.ts"
+        "services/kernel/src/access/resource-access-errors.ts",
+        "services/kernel/src/access/zone-resource-adapter.ts"
       ],
       "allowedDependencies": [
         "access-policy",
@@ -758,7 +759,11 @@
         "services/kernel/src/zones/resource-head.ts",
         "services/kernel/src/zones/cleanup-intent.ts",
         "services/kernel/src/zones/account-erasure-zone.ts",
-        "services/kernel/src/zones/collection-port.ts"
+        "services/kernel/src/zones/collection-port.ts",
+        "services/kernel/src/zones/resource-access-port.ts",
+        "services/kernel/src/zones/resource-application.ts",
+        "services/kernel/src/zones/adapters/index.ts",
+        "services/kernel/src/zones/index.ts"
       ],
       "allowedDependencies": [
         "composition",

@@ -17,6 +17,8 @@ adds no baseline allowance and no old/new allow-OR. Source compatibility is no n
 
 Decision: resource-role identifier helpers are functions so circular Access composition can resolve during module load.
 
+Decision: Zone resource command and read operations consume Access through the public producer `zone-resource-adapter.ts`. Composition binds that producer onto the Zone-owned Access port; Zone does not import command-admission, parent-creation, resource-authorization, resource-initialization, account-data or account-viewer-actions for this operation. Parent locks, History enrollment and participant cleanup stay in Zone owner commands.
+
 ## Domain composition
 
 Decision: native erasure completion acknowledges the coordinator through a required Access adapter port composed

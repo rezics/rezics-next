@@ -24,6 +24,7 @@ import { installIdentitySourceConsumerRuntime } from './identity-source-consumer
 import { installIdentityRatingRepairProducer } from './identity-rating-repair.ts';
 import { composeSemanticContext } from './semantic-context.ts';
 import { installIdentityAdapterRuntime } from '../semantic/identity-adapter-runtime.ts';
+import { composeZoneResource } from './zones.ts';
 
 type SemanticCompositionContext = {
   readonly env: Readonly<Record<string, string | undefined>>;
@@ -73,6 +74,7 @@ export function composeSemanticIdentityParticipants(
 export function composeSemanticAdapters(): void {
   bindOrdinaryContentLifecycle(nativeContentLifecycle());
   composeSemanticContext();
+  composeZoneResource();
   installIdentitySourceConsumerRuntime();
   installIdentityRatingRepairProducer();
   installRatingVoteSemantic();

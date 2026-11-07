@@ -10,7 +10,8 @@ import {
   encodeZoneCollectionsCursor,
   zoneCollectionsCursorBinding,
 } from './page-continuation.ts';
-import { createZoneReads, type ZoneCollectionBasis } from './resource-reads.ts';
+import type { ZoneCollectionBasis } from './resource-reads.ts';
+import { requireZoneResourceRuntime } from './resource-application.ts';
 
 export type ZoneCollectionPage = {
   collections: ZoneCollectionPublicView[];
@@ -30,7 +31,7 @@ export async function readZoneCollections(
 ): Promise<ZoneCollectionPage> {
   const { pool, access, tokens, clock } = dependencies;
   const { actor, id, deadline } = input;
-  const zones = createZoneReads(dependencies);
+  const zones = requireZoneResourceRuntime(dependencies).reads;
   const first = await zones.collectionBasis(actor, id, deadline);
 
   await admitGroup({

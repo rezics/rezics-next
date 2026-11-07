@@ -23,7 +23,7 @@ import { readSubjectSummaries, readSubjectSummaryObservation, type SubjectSummar
 import { decodeSession, type SessionComponent } from '../tokens/session.ts';
 import type { KeyRing } from '../tokens/seal.ts';
 import type { ZonePageRequest, ZonePageResponse, ZoneSubjectListItem, ZoneSubjectListResponse } from './contract.ts';
-import { createZoneReads } from './resource-reads.ts';
+import { requireZoneResourceRuntime } from './resource-application.ts';
 import {
   createZoneMembership,
   zoneDigest,
@@ -135,7 +135,7 @@ async function composeZonePage(
     throw new ProblemError('invalid_request', { errors: [{ pointer: '/target/route', code: 'invalid_format' }] });
   const { languages } = validateHitOptions({ languages: input.body.languages });
   requireAccessDeadline(input.deadline);
-  const reads = createZoneReads(dependencies);
+  const reads = requireZoneResourceRuntime(dependencies).reads;
   const selected = await reads.page(input.actor, input.id, route, input.deadline);
   let document = selected.document;
   let plan = document === null ? null : planReads(platformRegistry, document, { subject: null });
@@ -497,7 +497,7 @@ async function composeZoneSubjects(
 ): Promise<ZoneSubjectListResult> {
   const limit = input.limit ?? 20;
   requireAccessDeadline(input.deadline);
-  const reads = createZoneReads(dependencies);
+  const reads = requireZoneResourceRuntime(dependencies).reads;
   const selected = await reads.page(input.actor, input.id, null, input.deadline);
   await admitGroup({
     pool: dependencies.pool,
