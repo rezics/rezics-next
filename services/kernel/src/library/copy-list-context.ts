@@ -6,12 +6,13 @@ import { ProblemError } from '../http/problem.ts';
 import type { Access, Actor } from '../request/access.ts';
 import type { Fact } from '../search/hits.ts';
 import { routeOf } from '../route/route.ts';
-import { readIdentityMappings } from '../semantic/identity-adapters/read.ts';
-import { readListPresentationFacts } from '../semantic/index.ts';
-import { readSubjectSummaries, type SubjectSummary } from '../semantic/summaries.ts';
-import { activeRelease } from '../semantic/definitions.ts';
+import { nativeCopyListContext, type NativeCopyListContext } from '../semantic/adapters/index.ts';
+import { peekLibraryDomain } from './domain-binding.ts';
+type SubjectSummary = NonNullable<
+  Awaited<ReturnType<NativeCopyListContext['summaries']>> extends Map<string, infer Summary> ? Summary : never
+>;
 
-type IdentityMapping = Awaited<ReturnType<typeof readIdentityMappings>>[number];
+type IdentityMapping = Awaited<ReturnType<NativeCopyListContext['mappings']>>[number];
 
 export const COPY_LIST_CONTEXT_MAX_ROWS = 100;
 export const COPY_LIST_CONTEXT_MAX_BYTES = 65_536;
@@ -94,6 +95,7 @@ export async function attachCopyListContext<T extends ContextCopy>(
   if (copies.length > COPY_LIST_CONTEXT_MAX_ROWS)
     throw new ProblemError('content_too_large', { detail: 'Copy list context accepts at most 100 raw copies' });
   requireAccessDeadline(deps.deadline);
+  const semantic = peekLibraryDomain()?.copyContext ?? nativeCopyListContext();
   if (!copies.length) return [];
 
   const originals = copies.map((copy) => copy.subjectId);
@@ -106,20 +108,20 @@ export async function attachCopyListContext<T extends ContextCopy>(
   let releaseBefore: { digest: string; head: number } | null = null;
 
   try {
-    const active = await withConnection(deps.pool, (client) => activeRelease(deadlineClient(client, deps.deadline)));
+    const active = await withConnection(deps.pool, (client) => semantic.active(deadlineClient(client, deps.deadline)));
     if (active) releaseBefore = { digest: active.digest, head: active.head };
     else semanticUnavailable = true;
-    before = await readIdentityMappings(deps.pool, validOriginals);
+    before = await semantic.mappings(deps.pool, validOriginals);
     const byOriginal = new Map(validOriginals.map((id, index) => [id, before![index]!]));
     const terminals = before.flatMap((mapping) => (mapping.state === 'mapped' ? [mapping.terminal] : []));
     const summaryIds = [...new Set([...validOriginals, ...terminals])];
     const languageOptions = options.languages?.length ? { languages: options.languages } : {};
-    if (!semanticUnavailable) summaries = await readSubjectSummaries(deps, summaryIds, languageOptions);
+    if (!semanticUnavailable) summaries = await semantic.summaries(deps, summaryIds, languageOptions);
 
     // Pass every mapped raw row, duplicates included, through one existing Semantic fact batch.
     const mappedOriginals = originals.filter((id) => byOriginal.get(id)?.state === 'mapped');
     if (!semanticUnavailable && mappedOriginals.length)
-      facts = await readListPresentationFacts(deps, mappedOriginals, languageOptions);
+      facts = await semantic.facts(deps, mappedOriginals, languageOptions);
   } catch (error) {
     if (!semanticFailure(error)) throw error;
     semanticUnavailable = true;
@@ -127,7 +129,7 @@ export async function attachCopyListContext<T extends ContextCopy>(
 
   if (before) {
     try {
-      after = await readIdentityMappings(deps.pool, validOriginals);
+      after = await semantic.mappings(deps.pool, validOriginals);
     } catch (error) {
       if (!semanticFailure(error)) throw error;
       semanticUnavailable = true;
@@ -135,7 +137,7 @@ export async function attachCopyListContext<T extends ContextCopy>(
   }
 
   try {
-    const active = await withConnection(deps.pool, (client) => activeRelease(deadlineClient(client, deps.deadline)));
+    const active = await withConnection(deps.pool, (client) => semantic.active(deadlineClient(client, deps.deadline)));
     if (!active || !releaseBefore || active.digest !== releaseBefore.digest || active.head !== releaseBefore.head)
       semanticUnavailable = true;
   } catch (error) {

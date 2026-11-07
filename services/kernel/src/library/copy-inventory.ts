@@ -1,7 +1,8 @@
 import type { Pool, PoolClient } from 'pg';
 import type { Release } from '@rezics/definitions';
-import { readRelease } from '../semantic/definitions.ts';
-import { chooseLabel } from '../semantic/language.ts';
+import { copyReleasedDefinitions } from './adapters/copy-producers.ts';
+import type { NativeCopyProducers } from './adapters/copies.ts';
+import { chooseLabel } from '@rezics/definitions';
 import { decodeLibraryProfilePin } from './profile-pin.ts';
 import { resolveLibraryProfilePin } from './profile.ts';
 import { deadlineClient } from '../access/authenticate.ts';
@@ -15,27 +16,8 @@ import {
 
 export { MAX_COPY_FILTER_OPTIONS };
 
-export type CopyInventoryChoice = Readonly<{
-  id: string;
-  label: string;
-  labelLanguage?: string;
-  meaning: 'available' | 'unsupported' | 'unavailable';
-}>;
-export type CopyInventoryFacet = Readonly<{
-  state: 'available' | 'unavailable';
-  choices: readonly CopyInventoryChoice[];
-}>;
-export type CopyInventory = Readonly<{
-  kinds: CopyInventoryFacet;
-  statuses: CopyInventoryFacet;
-}>;
-export type CopyInventoryValue = Readonly<{
-  dimension: 'kind' | 'status';
-  id: string;
-  copyId: string;
-  copyKind: string | null;
-  profilePin: unknown;
-}>;
+import type { CopyInventoryChoice, CopyInventoryFacet, CopyInventory, CopyInventoryValue } from './contract/index.ts';
+export type { CopyInventoryChoice, CopyInventoryFacet, CopyInventory, CopyInventoryValue } from './contract/index.ts';
 export type CopyInventorySnapshot = Readonly<{ digest: string; release: Release }> | null;
 
 function queryClient(client: Pick<PoolClient, 'query'>) {
@@ -133,6 +115,7 @@ export async function prepareCopyInventory(
   values: readonly CopyInventoryValue[],
   deadline: number,
   languages: readonly string[] = [],
+  definitions: NativeCopyProducers['definitions'] = copyReleasedDefinitions(),
 ): Promise<CopyInventory> {
   const kinds = values.filter((value) => value.dimension === 'kind');
   const statuses = values.filter((value) => value.dimension === 'status');
@@ -154,7 +137,7 @@ export async function prepareCopyInventory(
   for (const digest of digests) {
     try {
       const release = await withConnection(pool, (client) =>
-        readRelease(deadlineClient(client, deadline), digest, { composed: false }),
+        definitions.read(deadlineClient(client, deadline), digest, { composed: false }),
       );
       snapshots.set(digest, release ? { digest, release } : null);
     } catch {

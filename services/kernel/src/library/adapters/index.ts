@@ -46,3 +46,10 @@ export {
   MEMBERS_PREPARATION_SOURCE_DECLARATION,
   type MembersPreparationSourceCost,
 } from '../members-preparation-source-declaration.ts';
+
+export {
+  createNativeCopyPorts,
+  type NativeCopyConfig,
+  type NativeCopyTypes,
+  type NativeCopyProducers,
+} from './copies.ts';

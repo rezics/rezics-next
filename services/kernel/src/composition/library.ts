@@ -1,3 +1,5 @@
+import { createNativeCopyAccountAdmission } from '../access/adapters/index.ts';
+import { nativeReleasedDefinitions, nativeCopyListContext } from '../semantic/adapters/index.ts';
 import { nativeFollowCountRuntime } from './library-follow-counts.ts';
 import { createLibraryPreparationWork, nativeLibraryScopeWork } from '../search/adapters/index.ts';
 /** Library process composition. Binds native SQL and foreign Access/Search/Semantic/Content adapters. */
@@ -36,6 +38,7 @@ import {
   createNativeCollectionPublicationEpisodes,
   readBuiltinPublicationRule,
   createNativeCollectionMutationPorts,
+  createNativeCopyPorts,
   createAuthorizationAdapter,
   type AuthorizationAdapterPorts,
   createContentPublicationAdapter,
@@ -333,6 +336,12 @@ export function composeLibraryDomain(options: LibraryComposeOptions = {}): Libra
   };
   return bindLibraryDomain({
     ...createLibraryApplications(capabilities),
+    copyContext: nativeCopyListContext(),
+    copyPorts: (config) =>
+      createNativeCopyPorts(config, {
+        account: createNativeCopyAccountAdmission(config),
+        definitions: nativeReleasedDefinitions(),
+      }),
     followCounts: nativeFollowCountRuntime(),
     preparationWork: createLibraryPreparationWork,
     scopeWork: nativeLibraryScopeWork,

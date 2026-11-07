@@ -36,3 +36,5 @@ export {
 } from './follow-counts.ts';
 
 export { createCollectionMutationApplication } from './collection-mutation.ts';
+
+export { createCopyApplication } from './copies.ts';
