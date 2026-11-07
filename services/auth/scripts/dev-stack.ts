@@ -27,6 +27,8 @@ import {
   stackPhaseLine,
   stackStartPlan,
   walkProcessEnvironment,
+  walkPublishedPortAllocated,
+  walkStackLimit,
   SEEDED_WEB_READY_PATH,
   walkStackNames,
   walkStackPorts,
@@ -1132,71 +1134,123 @@ async function walk(command: string[]): Promise<number> {
   });
   let slot: StackSlot | undefined;
   let code = 0;
+  const blocked = new Set<number>();
+  const recordSetup = async (script: string[], env: Record<string, string>) => {
+    const child = Bun.spawn([process.execPath, ...script], {
+      cwd: root,
+      env,
+      stdin: 'ignore',
+      stdout: 'pipe',
+      stderr: 'pipe',
+    });
+    current = child;
+    let stdout = '';
+    let stderr = '';
+    const pump = async (stream: ReadableStream<Uint8Array> | number | undefined, write: (text: string) => void) => {
+      if (stream === undefined || typeof stream === 'number') return;
+      for await (const chunk of stream) {
+        const text = Buffer.from(chunk).toString();
+        write(text);
+      }
+    };
+    const [, , status] = await Promise.all([
+      pump(child.stdout, (text) => {
+        stdout += text;
+        process.stdout.write(text);
+      }),
+      pump(child.stderr, (text) => {
+        stderr += text;
+        process.stderr.write(text);
+      }),
+      child.exited,
+    ]);
+    return { status, recorded: `${stdout}${stderr}` };
+  };
   try {
-    slot = await admitWalkStack(task, process.env, root, controller.signal);
-    const names = walkStackNames(task, slot.index!);
-    const env = walkProcessEnvironment(task, slot.index!);
-    const ports = walkStackPorts(slot.index!);
-    let starting: ReturnType<typeof Bun.spawn> | undefined;
-    let walkFailure: unknown;
-    try {
-      removeWalkStack(names); // an interrupted attempt of this slot may have left its stack behind
-      for (const script of walkSetupScripts(env)) {
-        // A setup step that fails once is retried: a busy host can time out a container start.
-        let status = 1;
-        for (let attempt = 0; attempt < 2 && status !== 0; attempt++) {
-          current = Bun.spawn([process.execPath, ...script], {
+    while (true) {
+      slot = await admitWalkStack(task, process.env, root, controller.signal, blocked);
+      const names = walkStackNames(task, slot.index!);
+      const env = walkProcessEnvironment(task, slot.index!);
+      const ports = walkStackPorts(slot.index!);
+      let starting: ReturnType<typeof Bun.spawn> | undefined;
+      let walkFailure: unknown;
+      let occupiedSlot: number | undefined;
+      try {
+        try {
+          removeWalkStack(names); // an interrupted attempt of this slot may have left its stack behind
+          for (const script of walkSetupScripts(env)) {
+            // A setup step that fails once is retried: a busy host can time out a container start.
+            let status = 1;
+            for (let attempt = 0; attempt < 2 && status !== 0; attempt++) {
+              const result = await recordSetup(script, env);
+              status = result.status;
+              const allocated = walkPublishedPortAllocated(status, result.recorded, slot.index!);
+              if (allocated) {
+                occupiedSlot = allocated.index;
+                throw allocated;
+              }
+              if (status !== 0 && attempt === 0 && script[1] === 'up' && script[0]?.endsWith('database.ts'))
+                removeWalkStack(names);
+            }
+            if (status !== 0) throw new Error(`walk: ${script.join(' ')} failed`);
+          }
+          const log = join(root, '.temp', 'walk', task, 'stack.log');
+          await mkdir(dirname(log), { recursive: true });
+          await writeFile(log, '');
+          // Journals from another database cannot replay into this stack; retire them before the seed reads them.
+          const kernelEnv = await kernelEnvironment();
+          if (kernelEnv.DATABASE_URL) await retireStaleSeedJournals(root, kernelEnv.DATABASE_URL);
+          starting = current = Bun.spawn([process.execPath, 'services/auth/scripts/dev-stack.ts', 'start'], {
             cwd: root,
             env,
             stdin: 'ignore',
-            stdout: 'inherit',
-            stderr: 'inherit',
+            stdout: Bun.file(log),
+            stderr: Bun.file(log),
           });
-          status = await current.exited;
-          if (status !== 0 && attempt === 0 && script[1] === 'up' && script[0]?.endsWith('database.ts'))
+          // An admitted stack's frontends start after its journey seeds, so readiness is Auth JWKS and Kernel only.
+          const plan = stackStartPlan(env, {
+            web: `http://127.0.0.1:${ports.web}`,
+            issuer: `http://127.0.0.1:${ports.issuer}`,
+            native: `http://127.0.0.1:${ports.native}`,
+            kernel: `http://127.0.0.1:${ports.kernel}`,
+          });
+          await untilReady(
+            [
+              ...plan.nativeReady,
+              ...(env.REZICS_WALK_DEFER_FRONTENDS === '1'
+                ? [`http://127.0.0.1:${ports.kernel}/health`]
+                : plan.kernelReady),
+            ],
+            starting,
+          );
+          current = Bun.spawn(command, { env, stdin: 'inherit', stdout: 'inherit', stderr: 'inherit' });
+          code = await current.exited;
+        } catch (error) {
+          walkFailure = error;
+          throw error;
+        } finally {
+          if (starting) await stopSpawned(starting);
+          try {
             removeWalkStack(names);
+          } catch (cleanupError) {
+            if (walkFailure) throw retainOriginalAndCleanupFailure(walkFailure, cleanupError, 'walk failed');
+            throw cleanupError;
+          }
         }
-        if (status !== 0) throw new Error(`walk: ${script.join(' ')} failed`);
-      }
-      const log = join(root, '.temp', 'walk', task, 'stack.log');
-      await mkdir(dirname(log), { recursive: true });
-      await writeFile(log, '');
-      // Journals from another database cannot replay into this stack; retire them before the seed reads them.
-      const kernelEnv = await kernelEnvironment();
-      if (kernelEnv.DATABASE_URL) await retireStaleSeedJournals(root, kernelEnv.DATABASE_URL);
-      starting = current = Bun.spawn([process.execPath, 'services/auth/scripts/dev-stack.ts', 'start'], {
-        cwd: root,
-        env,
-        stdin: 'ignore',
-        stdout: Bun.file(log),
-        stderr: Bun.file(log),
-      });
-      // An admitted stack's frontends start after its journey seeds, so readiness is Auth JWKS and Kernel only.
-      const plan = stackStartPlan(env, {
-        web: `http://127.0.0.1:${ports.web}`,
-        issuer: `http://127.0.0.1:${ports.issuer}`,
-        native: `http://127.0.0.1:${ports.native}`,
-        kernel: `http://127.0.0.1:${ports.kernel}`,
-      });
-      await untilReady(
-        [
-          ...plan.nativeReady,
-          ...(env.REZICS_WALK_DEFER_FRONTENDS === '1' ? [`http://127.0.0.1:${ports.kernel}/health`] : plan.kernelReady),
-        ],
-        starting,
-      );
-      current = Bun.spawn(command, { env, stdin: 'inherit', stdout: 'inherit', stderr: 'inherit' });
-      code = await current.exited;
-    } catch (error) {
-      walkFailure = error;
-      throw error;
-    } finally {
-      if (starting) await stopSpawned(starting);
-      try {
-        removeWalkStack(names);
-      } catch (cleanupError) {
-        if (walkFailure) throw retainOriginalAndCleanupFailure(walkFailure, cleanupError, 'walk failed');
-        throw cleanupError;
+        break;
+      } catch (error) {
+        if (occupiedSlot !== undefined && interrupted === undefined) {
+          blocked.add(occupiedSlot);
+          await slot.release();
+          slot = undefined;
+          if (blocked.size < walkStackLimit(process.env)) {
+            console.error(
+              `walk: slot ${occupiedSlot} published port is already allocated; admitting another`,
+            );
+            continue;
+          }
+        }
+        throw error;
       }
     }
   } catch (error) {

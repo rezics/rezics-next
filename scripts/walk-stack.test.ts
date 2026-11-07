@@ -27,6 +27,8 @@ import {
   walkPageBodyIsUseful,
   walkParentInvocation,
   walkPortAllocated,
+  walkPublishedPortAllocated,
+  WalkPublishedPortAllocated,
   walkReadyResponse,
   walkReadyUrls,
   walkReadyWaitingMessage,
@@ -165,6 +167,16 @@ test('Docker published mappings occupy a walk slot even when nothing is listenin
     ),
   ).toBe(true);
   expect(walkPortAllocated('walk: services/kernel/scripts/database.ts up failed')).toBe(false);
+  const allocated = walkPublishedPortAllocated(
+    1,
+    'docker: Error response from daemon: Bind for 127.0.0.1:20064 failed: port is already allocated',
+    6,
+  );
+  expect(allocated).toBeInstanceOf(WalkPublishedPortAllocated);
+  expect(allocated?.index).toBe(6);
+  expect(allocated?.message).toBe('walk: slot 6 published port is already allocated');
+  expect(walkPublishedPortAllocated(0, 'port is already allocated', 6)).toBeUndefined();
+  expect(walkPublishedPortAllocated(1, 'walk: services/kernel/scripts/database.ts up failed', 6)).toBeUndefined();
 });
 
 test('walk admission preserves an occupied slot and reuses it after its listener closes', async () => {

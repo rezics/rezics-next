@@ -88,7 +88,11 @@ The second command uses the bound native driver. Existing board-sort tests do no
 page outcomes.
 
 Decision: the Content Goal seeded walk uses the existing thread-board driver, seed-journal cleanup and Performance
-`waitUntilWalkReady` hydration recovery. The first-scope table walked on one admitted stack is the 18 named journeys
+`waitUntilWalkReady` hydration recovery. When Docker refuses a slot's published port (`port is already allocated`),
+the walk adds that index to Performance `admitWalkStack` blocked set, releases the slot and admits another;
+same-slot `database.ts up` retry remains for start timeouts. The fewest tests that pin the skip are
+`scripts/walk-stack.test.ts` and `scripts/stack-run.test.ts`; composed native/browser proof is the seeded walk.
+The first-scope table walked on one admitted stack is the 18 named journeys
 in `FIRST_SCOPE_ROWS`: threads-and-boards, exact-revisions, board-paging, container-disclosure, late-revocation,
 edit-history-return, watches-and-reactions, takedown-erasure, author-erasure, media, realms-and-spaces,
 ratings-and-reviews, work-to-review, moderation-reports-appeals, notices, home-discovery, independent-queues and
