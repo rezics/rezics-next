@@ -2498,8 +2498,7 @@ export class MergeTrain {
                   resolution,
                 };
               }
-              if (error.detail || previous !== base)
-                refuseRebaseConflict(result, error.path, error.message, logPath);
+              if (error.detail || previous !== base) refuseRebaseConflict(result, error.path, error.message, logPath);
               else acceptAlreadyPresent(result, previous, [error.path], logPath);
               result.conflictResolution = {
                 method: 'worker',
@@ -3901,8 +3900,7 @@ export class MergeTrain {
       result.stage = 'merge';
       result.mergedCommit = candidate;
       if (workspace) workspace.integrated(recorded.workspace!.module, target());
-      if (controlPlane)
-        await this.propagateControlPlaneCommit(candidate, request.taskId, recorded.manager, logPath);
+      if (controlPlane) await this.propagateControlPlaneCommit(candidate, request.taskId, recorded.manager, logPath);
       else if (stabilize) {
         candidateWorkspace = this.trainWorkspace(trainTree, candidate, trainCandidateCleanup);
         await this.mergeStabilizedCommitIntoDev(candidate, trainTree, request.taskId, recorded.manager, logPath);
@@ -5590,8 +5588,7 @@ export class MergeTrain {
   /** Combined main cohorts need separate exact-source owner authority for every additional file. */
   private checkControlPlaneScope(files: readonly string[], request: LandingRequest, logPath: string): void {
     const outside = outsideScope(files, request.declaredPaths);
-    if (outside.length)
-      throw new Error(`Changed files require an exact native scope approval: ${outside.join(', ')}`);
+    if (outside.length) throw new Error(`Changed files require an exact native scope approval: ${outside.join(', ')}`);
     this.checkScope(files, request, logPath);
   }
 
@@ -7341,11 +7338,8 @@ export class MergeTrain {
               ...member.request.declaredPaths,
               ...(approvedPaths.get(member.request.taskId) ?? []),
             ]);
-            const outside = changed.filter(
-              (path) => outsideScope([path], declared).length > 0,
-            );
-            if (outside.length)
-              throw new Error(`Combined candidate changed unapproved files: ${outside.join(', ')}`);
+            const outside = changed.filter((path) => outsideScope([path], declared).length > 0);
+            if (outside.length) throw new Error(`Combined candidate changed unapproved files: ${outside.join(', ')}`);
             const frozenChanges = changedFrozenFiles(tree, frozen);
             if (frozenChanges.length)
               throw new Error(`Combined candidate changed frozen acceptance files: ${frozenChanges.join(', ')}`);

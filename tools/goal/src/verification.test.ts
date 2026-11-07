@@ -1737,14 +1737,7 @@ export function readWorkerCheckHistory(id, physical, cwd) { return read(cwd, 'hi
     git(directory.path, ['add', '.']);
     const tree = git(directory.path, ['write-tree']);
     const producer = PROOF_PRODUCER_COMMIT;
-    const commit = git(directory.path, [
-      'commit-tree',
-      tree,
-      '-p',
-      producer,
-      '-m',
-      'Readonly reader fixture',
-    ]);
+    const commit = git(directory.path, ['commit-tree', tree, '-p', producer, '-m', 'Readonly reader fixture']);
     git(directory.path, ['update-ref', 'refs/heads/reader-fixture', commit]);
     git(directory.path, ['symbolic-ref', 'HEAD', 'refs/heads/reader-fixture']);
     git(directory.path, ['reset', '--hard', commit]);

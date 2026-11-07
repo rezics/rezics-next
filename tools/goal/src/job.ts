@@ -749,10 +749,7 @@ export class WorkerJob implements GateOutcomeSink {
             this.policy.worker.settlementBackoffMs,
           );
           if (resolved.length)
-            await retrySettlementPersistence(
-              () => this.resumePendingRetries(),
-              this.policy.worker.settlementBackoffMs,
-            );
+            await retrySettlementPersistence(() => this.resumePendingRetries(), this.policy.worker.settlementBackoffMs);
         } while (providerProgressRequested);
       })()
         .catch((error) => {
