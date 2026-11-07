@@ -2171,14 +2171,19 @@ def directory_entries(namespace, cookie):
 
 
 def tree_nodes(root):
-    # Postorder without Python recursion, a wide in-memory list or one open fd per depth.
-    # Linux directory cookies resume each parent after descent; no symlink is followed.
-    parents = []
-    path, cookie = root, 0
-    while not MAINTENANCE_STOP:
-        with contextlib.closing(directory_entries(path, cookie)) as stream:
+    # Postorder without Python recursion or a wide in-memory list. Parent directory streams stay open while
+    # descending: telldir cookies are valid only on that stream, so a reopen cannot resume. No symlink is followed.
+    stack = []
+    path = root
+    iterator = directory_entries(path, 0)
+    try:
+        while not MAINTENANCE_STOP:
             descended = False
-            for name, cookie in stream:
+            while True:
+                try:
+                    name, _cookie = next(iterator)
+                except StopIteration:
+                    name = None
                 if MAINTENANCE_STOP:
                     return
                 if name is None:
@@ -2188,17 +2193,26 @@ def tree_nodes(root):
                 child = path / name
                 info = child.lstat()
                 if stat.S_ISDIR(info.st_mode):
-                    parents.append((path, cookie))
-                    path, cookie = child, 0
+                    stack.append((path, iterator))
+                    path = child
+                    iterator = directory_entries(path, 0)
                     descended = True
                     break
                 yield child, info
             if descended:
                 continue
-        yield path, path.lstat()
-        if not parents:
-            return
-        path, cookie = parents.pop()
+            iterator.close()
+            yield path, path.lstat()
+            if not stack:
+                return
+            path, iterator = stack.pop()
+    finally:
+        pending = [iterator, *[parent for _, parent in stack]]
+        for item in pending:
+            try:
+                item.close()
+            except Exception:
+                pass
 
 
 def maintenance_report(cache, force=False, **values):
@@ -2263,18 +2277,12 @@ def delete_tree(cache, root, keep_root=False):
     for path, info in tree_nodes(root):
         if keep_root and path == root:
             continue
-        parent = path.parent
         if stat.S_ISDIR(info.st_mode):
             path.rmdir()
         else:
             os.unlink(path)
-        # Make removal durable before admitting more garbage. A crash before this point loses credit.
-        # Hardlinked legacy files earn nothing until their final link is removed.
-        descriptor = os.open(parent, os.O_RDONLY | os.O_DIRECTORY)
-        try:
-            os.fsync(descriptor)
-        finally:
-            os.close(descriptor)
+        # Hardlinked legacy files earn nothing until their final link is removed. Credit is in-memory per
+        # ownership interval; a crash before the next admit loses it rather than inventing it.
         freed = info.st_blocks * 512 if stat.S_ISDIR(info.st_mode) or info.st_nlink == 1 else 0
         RECLAIM_CREDIT = min(RECLAIM_LIMIT, RECLAIM_CREDIT + freed)
         MAINTENANCE_STATUS['deletedBytes'] = MAINTENANCE_STATUS.get('deletedBytes', 0) + freed
@@ -3300,9 +3308,11 @@ def lifetime():
             elif interrupted:
                 reason = 'abort'
             elif not (root / '.bun-install-complete').exists():
+                current = active_packages(root)
+                if current:
+                    packages = current
                 if now >= preparation_deadline:
                     reason = 'install/preparation'
-                    packages = active_packages(root)
         if reason is not None and stopped_at is None:
             diagnostics = preparation_diagnostics(root)
             stopped_at = now

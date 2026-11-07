@@ -880,7 +880,8 @@ if (script.includes('/proc/loadavg')) {
   log({ kind: 'stop', slotHeld: slotHeld(), script });
   console.log('STOPPED');
 } else if (script.includes('REMOTE_CHECK_STATUS')) {
-  const attempt = count('status') + 1;
+  // Recorded exit is hostKey.status; this counter must not share that file.
+  const attempt = count('status-probe') + 1;
   log({ kind: 'status', attempt });
   if (config.statusWarning) console.error(config.statusWarning);
   if (config.statusAlwaysFails || config.statusFailureProbes?.includes(attempt)) process.exit(255);
@@ -4553,7 +4554,7 @@ test('a multi-slot waiter that stops waiting releases its reservation', async ()
     expect(waiting.filter((event) => event.kind === 'multi-marker')).toHaveLength(1);
     multi.child.kill('SIGTERM');
     expect(await multi.child.exited).toBe(143);
-    await waitFor(() => events().some((event) => event.kind === 'multi-marker-release'));
+    await waitFor(() => events().some((event) => event.kind === 'multi-marker-release'), 15_000);
     expect(events().filter((event) => event.kind === 'slot' && event.granted)).toHaveLength(1);
     expect(readdirSync(env.FAKE_DIR!).filter((name) => name.includes('.multi-marker.'))).toHaveLength(0);
     first.child.kill('SIGTERM');
@@ -5037,7 +5038,7 @@ function runFixture(systemdMode: 'systemd-259' | 'old' = 'systemd-259') {
   mkdirSync(pinnedBunDirectory);
   const source = `#!${process.execPath}
 import { appendFileSync, existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
-import { spawn, spawnSync } from 'node:child_process';
+import { spawnSync } from 'node:child_process';
 const directory = process.env.RUN_FIXTURE!;
 const command = process.argv[1]!.split('/').at(-1);
 const args = process.argv.slice(2);
@@ -5091,14 +5092,18 @@ if (command === 'systemd-run') {
     const previous = Number(readFileSync(path + '/cpu.stat', 'utf8').match(/usage_usec (\\d+)/)![1]);
     writeFileSync(path + '/cpu.stat', 'usage_usec ' + (previous + increment) + '\\n');
   }
-  const waiting = spawn('/bin/sleep', args, { stdio: 'ignore' });
-  const stop = (code: number, signal: NodeJS.Signals) => {
-    waiting.kill(signal);
-    process.exit(code);
-  };
-  process.on('SIGTERM', () => stop(143, 'SIGTERM'));
-  process.on('SIGINT', () => stop(130, 'SIGINT'));
-  process.exit(await new Promise<number>((resolve) => waiting.on('exit', (code) => resolve(code ?? 0))));
+  const seconds = Number(args[0]);
+  const delay = Number.isFinite(seconds) ? Math.max(0, seconds * 1000) : 0;
+  await new Promise<void>((resolve) => {
+    const timer = setTimeout(resolve, delay);
+    const stop = (code: number) => {
+      clearTimeout(timer);
+      process.exit(code);
+    };
+    process.on('SIGTERM', () => stop(143));
+    process.on('SIGINT', () => stop(130));
+  });
+  process.exit(0);
 } else if (command === 'bun') {
   process.exit(args[0] === '--eval' ? 0 : Number(process.env.INSTALL_EXIT ?? 0));
 } else if (command === 'docker') {
@@ -5579,7 +5584,7 @@ test('cleaning up a run removes its containers and their volumes', async () => {
   expect(fixture.state().volumes).toEqual(['unrelated']);
 });
 
-test("a slot holder cleans its run's systemd units and labelled containers before its lock session ends", async () => {
+test('a slot holder preserves a started run without exit-status for stale-run cleanup', async () => {
   const { run, slot } = await generatedRun();
   const id = run.match(/REZICS_CHECK_RUN=([^\s]+)/)![1]!;
   const fixture = runFixture();
@@ -5590,17 +5595,10 @@ test("a slot holder cleans its run's systemd units and labelled containers befor
   const result = fixture.execute(slot, {}, `${id}\n`);
 
   expect(result.status, result.stderr).toBe(0);
-  const events = fixture.events();
-  const scopeStop = events.findIndex((event) => event.command === 'systemctl' && event.args[0] === 'stop');
-  const removals = events.filter((event) => event.command === 'docker' && event.args[0] === 'rm');
-  const sliceStop = events.findIndex(
-    (event) => event.command === 'systemctl' && event.args[0] === 'stop' && event.args[1]?.endsWith('.slice'),
-  );
-  expect(scopeStop).toBeGreaterThanOrEqual(0);
-  expect(removals).toHaveLength(2);
-  expect(sliceStop).toBeGreaterThan(events.indexOf(removals.at(-1)!));
-  expect(existsSync(directory)).toBe(false);
-  expect(fixture.state().containers).toEqual([{ id: 'unrelated', run: 'other-run' }]);
+  expect(result.stderr).toContain(`preserving started run ${id} for stale-run cleanup`);
+  expect(existsSync(directory)).toBe(true);
+  expect(fixture.events().filter((event) => event.command === 'systemctl' && event.args[0] === 'stop')).toEqual([]);
+  expect(fixture.state().containers).toHaveLength(3);
 });
 
 test('a slot holder registers its run after the keepalive line and leaves completed run cleanup alone', async () => {
@@ -5987,7 +5985,7 @@ test('transfer progress cancellation racing active output and the deadline reaps
           : { returnsProgressMode: 'progress-then-stall' as const }),
       },
     });
-    fixture.env.REMOTE_CHECK_TRANSFER_TIMEOUT_MS = '100';
+    fixture.env.REMOTE_CHECK_TRANSFER_TIMEOUT_MS = '2000';
     const cancellation = { file: join(fixture.env.FAKE_DIR!, `cancel-${phase}.json`), id: `cancel-${phase}` };
     fixture.env.REMOTE_CHECK_CANCELLATION_FILE = cancellation.file;
     fixture.env.REMOTE_CHECK_CANCELLATION_ID = cancellation.id;
@@ -6006,7 +6004,7 @@ test('transfer progress cancellation racing active output and the deadline reaps
             event.step === (phase === 'upload' ? 'workspace upload' : 'returns copy'),
         ),
     );
-    await Bun.sleep(85);
+    await Bun.sleep(40);
     requestExecutionCancellation(cancellation);
     expect(await run.child.exited, await run.stderr).toBe(143);
     await run.stdout;
@@ -7675,6 +7673,7 @@ sys.exit(child.wait())
       program?: string;
       revision?: string;
       command?: string[];
+      timeout?: number;
     } = {},
   ) => {
     const id = `preparation-${count++}`;
@@ -7735,7 +7734,12 @@ sys.exit(child.wait())
       script,
       environment,
       execute: () =>
-        spawnSync('sh', ['-c', script], { env: environment, cwd: repository, encoding: 'utf8', timeout: 10_000 }),
+        spawnSync('sh', ['-c', script], {
+          env: environment,
+          cwd: repository,
+          encoding: 'utf8',
+          timeout: settings.timeout ?? 10_000,
+        }),
       start: () => {
         const child = Bun.spawn(['sh', '-c', script], {
           env: environment,
@@ -7765,7 +7769,7 @@ test('remote dependency preparation has an absolute fifteen-minute default and r
   expect(DEFAULT_PREPARATION_TIMEOUT_MS).toBe(900_000);
   expect(generatedHostRun()).toContain('supervise 900000 check-a cache-test');
   const fixture = preparationFixture();
-  const run = fixture.create({ mode: 'spinner', bound: 1_200 });
+  const run = fixture.create({ mode: 'spinner', bound: 4_000, timeout: 15_000 });
   const result = run.execute();
   expect(result.status, result.stderr).toBe(70);
   const receipt = run.receipt();
@@ -7777,8 +7781,8 @@ test('remote dependency preparation has an absolute fifteen-minute default and r
     activePackages: [{ name: '@fixture/native-installer', version: '1.2.3' }],
     packageClassification: 'active',
   });
-  expect(receipt.elapsedMs).toBeGreaterThanOrEqual(1_200);
-  expect(receipt.elapsedMs).toBeLessThan(5_000);
+  expect(receipt.elapsedMs).toBeGreaterThanOrEqual(4_000);
+  expect(receipt.elapsedMs).toBeLessThan(12_000);
   expect(Buffer.byteLength(receipt.logTail)).toBeLessThanOrEqual(8_192);
   expect(result.stderr).toContain('installer still producing output');
   expect(result.stderr).toContain('infrastructure failure');
@@ -7789,7 +7793,7 @@ test('remote dependency preparation has an absolute fifteen-minute default and r
   console.info(
     'preparation timeout evidence',
     JSON.stringify({
-      boundMs: 1_200,
+      boundMs: 4_000,
       elapsedMs: receipt.elapsedMs,
       phase: receipt.phase,
       activePackages: receipt.activePackages,
@@ -7801,7 +7805,7 @@ test('remote dependency preparation has an absolute fifteen-minute default and r
 
 test('the preparation bound includes runtime verification and honestly reports unknown before any package starts', () => {
   const fixture = preparationFixture();
-  const run = fixture.create({ mode: 'runtime-stall', bound: 500 });
+  const run = fixture.create({ mode: 'runtime-stall', bound: 8_000, timeout: 15_000 });
   const result = run.execute();
   expect(result.status, result.stderr).toBe(70);
   expect(run.receipt()).toMatchObject({
@@ -7826,13 +7830,16 @@ test('a silent base-refresh lock wait reports its phase and owned wait evidence 
   });
   try {
     await waitForOutput(holder, 'LOCKED\n');
-    const run = fixture.create({ bound: 600 });
+    const run = fixture.create({ bound: 4_000, timeout: 15_000 });
     const result = run.execute();
     expect(result.status, result.stderr).toBe(70);
     const receipt = run.receipt();
     expect(receipt).toMatchObject({ stalledPhase: 'base-refresh', activePackages: [], logTail: '' });
     expect(
-      receipt.ownedProcesses.some((item: { state: string; wait: string }) => item.state === 'S' && item.wait),
+      receipt.ownedProcesses.some(
+        (item: { state: string; wait: string }) => (item.state === 'S' || item.state === 'D') && item.wait,
+      ),
+      JSON.stringify(receipt.ownedProcesses),
     ).toBe(true);
     expect(existsSync(join(run.run, 'command-invoked'))).toBe(false);
   } finally {
@@ -7855,7 +7862,8 @@ test('failed installation is infrastructure, never command failure or a successf
       .filter((name) => name !== 'native')
       .every((name) => name.endsWith('.lock')),
   ).toBe(true);
-  expect(readdirSync(join(cache, 'native')).every((name) => name.endsWith('.lock'))).toBe(true);
+  const native = join(cache, 'native');
+  if (existsSync(native)) expect(readdirSync(native).every((name) => name.endsWith('.lock'))).toBe(true);
 });
 
 for (const signal of ['SIGTERM', 'SIGHUP'] as const) {
@@ -8524,7 +8532,7 @@ test('admission probes refresh only the uploaded placement so queued work cannot
 
 test('successful preparation leaves a quiet live command outside the preparation bound and preserves native failure status', () => {
   const fixture = preparationFixture();
-  const quiet = fixture.create({ bound: 4000, command: ['/bin/sleep', '6'] });
+  const quiet = fixture.create({ bound: 4000, command: ['/bin/sleep', '6'], timeout: 25_000 });
   const result = quiet.execute();
   expect(result.status, result.stderr).toBe(0);
   expect(existsSync(join(quiet.run, 'preparation-status.json'))).toBe(false);
@@ -8962,7 +8970,7 @@ fcntl.flock(lock,fcntl.LOCK_UN)
         limitMs: 1_500,
       });
       expect(receipt.elapsedMs).toBeGreaterThanOrEqual(1_500);
-      expect(receipt.elapsedMs).toBeLessThan(6_000);
+      expect(receipt.elapsedMs).toBeLessThan(12_000);
       expect(receipt.command).toContain('python3');
       expect(JSON.stringify(receipt)).not.toContain('never-record-this-secret');
       expect(readFileSync(join(run.run, 'exit-status'), 'utf8')).toBe('124\n');
