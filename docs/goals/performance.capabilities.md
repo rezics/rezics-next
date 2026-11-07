@@ -88,6 +88,18 @@ Hourly: **0/17**. Slowest failing path: **P02** (181.891 s FAIL). First causal e
 | P17 | Published Log publish, owner/member/anonymous snapshot, retract/Undo, My Logs return | anonymous | 0.207 s | FAIL-unreached | anonymous published-log list HTTP 400 (empty); publish unreached: sign-in surfaces unavailable: login HTTP 200; web sign-in HTTP 404; issuer JWKS HTTP 200; native JWKS HTTP 200 | Library |
 <!-- first-public-journeys:end -->
 
+### Candidate walk setup attempts
+
+The integrated-dev table above remains the last actual dev observation; neither worker-stack attempt below ran a
+journey or seed, so neither changes a row result. Task source `df0953bf308bed5b43e1b3acf79c29ccbe89c3cb` targeted
+base/dev revision `100b66159886575f852ea9d819c5b6d0058f7f58`. The candidate stack never reached the walk executable;
+P01–P17, all personas, both viewports and all seeds were unstarted. The second attempt failed after 907 remote CPU
+seconds with `remote-check: check exceeded its memory limit (6 GiB) while running the check command`; the same
+failure occurred on the preceding attempt. Owner: shared remote-check infrastructure. Evidence:
+`.temp/check-logs/329fcf97-436d-4af2-8e18-bd90f9b0334a.log` and
+`.temp/check-logs/580a377f-b3c2-493e-9d08-08d7e7d3a476.log`. The current-dev table remains 0/17; no current-dev
+persona, seed, elapsed journey time or per-row evidence was produced by these candidate checks.
+
 ## composed-discovery-cost
 
 **User job:** Anonymous and Alice find light novels tagged harem with more than 1,000,000 words, and vegetarian
@@ -426,7 +438,10 @@ the original finite operation (`maxAttempts=1`, ceiling 8) and receives
 `{fence, attempts, failedWork}` as `readonly {attempt,dispatch}[]`. Aggregate
 counters are ignored. Work `SDK_RETIREMENT_DISPATCH` prices the envelope and retire
 body; maintain/delete identities are not used. Failed funded work remains charged.
-Scan-page connection retry stays an explicit unbounded producer bound.
+Scan-page access is one pool query when opening a sweep and one page query for a nonempty captured upper key; the
+null-upper-key path returns without a query. The installed plain `pg.Pool` adds no application retry loop. Charge
+failed dispatch and any outer Auth/DBOS re-execution to the real operation context. This does not bound connection
+acquisition or elapsed time.
 Decision: fewest tests extend those existing suites only; no new suite.
 
 Run through the Auth owning runner:
