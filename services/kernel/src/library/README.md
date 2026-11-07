@@ -11,7 +11,8 @@ Decision: retain the original 64/512/4096 native growth axes while seeding one r
 one live same-owner entry per unique subject. Seed the Semantic source subjects through the supported historical
 import window before native identity installation, then let native bootstrap map them; retain all Library entry
 mutations as native commands. Keep fresh-account entries on one shared subject, refresh fixture actors every 16 units,
-and omit redundant refills.
+reuse the fixture's already accepted baseline Subject, give setup commands the fixture's configured 30-second request
+deadline, and omit redundant refills. Measured growth commands retain their ordinary native deadline.
 
 Decision: apply the shared measured-page path rule to those growth samples: reject sequential scans only when a guarded
 relation exceeds eight pages. A scan count without its measured relation footprint cannot establish a growth-path

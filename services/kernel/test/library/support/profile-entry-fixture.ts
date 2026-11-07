@@ -34,7 +34,7 @@ import { createEntryCommands } from '../../../src/library/entries.ts';
 import { stepLibraryIdentityEpoch } from '../../../src/library/identity-epoch-participant.ts';
 import { accessCheck } from '../../../src/request/access-check.ts';
 import { type Access, type AccountActor } from '../../../src/request/access.ts';
-import { deadlineFor } from '../../../src/request/deadline.ts';
+import { deadlineFor, withRequestDeadline } from '../../../src/request/deadline.ts';
 import { newId, partitionOf, routeOf } from '../../../src/route/route.ts';
 import { linkProjection } from '../../../src/semantic/links.ts';
 import {
@@ -836,7 +836,9 @@ export async function createProfileEntryFixture(
     await setLibraryOpen(true);
     // A native, authorized baseline must finish before any expected missing profile behavior.
     const baseline = await createSubject('game');
-    const accepted = await commands.putEntry(owner.actor, baseline, { state: 'planned' }, entryKey());
+    const accepted = await withRequestDeadline(Date.now() + 30_000, () =>
+      commands.putEntry(owner.actor, baseline, { state: 'planned' }, entryKey()),
+    );
     expect(accepted.value.entry.subjectId).toBe(baseline);
     await awaitCurrentIdentity(baseline);
     if (growthSubjects.length > 0) {
@@ -866,6 +868,7 @@ export async function createProfileEntryFixture(
       replacement,
       originalDigest,
       replacementDigest,
+      baselineSubject: baseline,
       growthSubjects,
       identity,
       send,
