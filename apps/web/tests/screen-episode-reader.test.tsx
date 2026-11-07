@@ -1,8 +1,14 @@
 import { expect, mock, test } from 'bun:test';
 import type { KernelClient } from '@rezics/client';
+import type { ReactNode } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 
 mock.module('cloudflare:workers', () => ({ env: {} }));
+const { ScreenReadingBoundary } = await import('../src/features/pages/data');
+function bound(node: ReactNode) {
+  return <ScreenReadingBoundary>{node}</ScreenReadingBoundary>;
+}
+
 const { ScreenEpisodeList } = await import('../src/features/catalogue/screen-episode-reader/view');
 const { screenEpisodeContinuationHref } = await import('../src/features/catalogue/screen-episode-reader/navigation');
 const { subjectVisitReturn } = await import('../src/features/pages/subject-visit-navigation');
@@ -154,7 +160,7 @@ test('screen episode windows retain ordered original memberships, disclosures, c
     hash: `#screen-episode-entry-${seasonMembership}`,
   };
   const html = renderToStaticMarkup(
-    <ScreenEpisodeList locale="en" read={read} release={profile.release} origin={origin} />,
+    bound(<ScreenEpisodeList locale="en" read={read} release={profile.release} origin={origin} />),
   );
   expect(html).toContain(`/en/subjects/${seasonId}/season-one`);
   expect(html).toContain(`/en/subjects/${episodeId}/the-special`);
@@ -196,13 +202,15 @@ test('spoiler membership titles stay out of the tree and unsupported membership 
     'en',
   );
   const html = renderToStaticMarkup(
-    <ScreenEpisodeList
-      locale="en"
-      read={spoiled}
-      release={profile.release}
-      readerSpoilerLevel={0}
-      origin={{ pathname: '/en/subjects/00000000-0000-4000-8000-000000000901/the-observatory', searchStr: '' }}
-    />,
+    bound(
+      <ScreenEpisodeList
+        locale="en"
+        read={spoiled}
+        release={profile.release}
+        readerSpoilerLevel={0}
+        origin={{ pathname: '/en/subjects/00000000-0000-4000-8000-000000000901/the-observatory', searchStr: '' }}
+      />,
+    ),
   );
   expect(html).toContain('Show spoilers');
   expect(html).not.toContain('Secret title');
@@ -236,12 +244,14 @@ test('unknown totals keep a sparse disclosed window continuable and oversized ev
   const terminalEmpty = await readScreenEpisodePage(clientFor(linkPage([])), profile.release, profile.public, 'en');
   expect(terminalEmpty).toEqual({ ok: true, state: 'empty', entries: [], next: null });
   const emptyHtml = renderToStaticMarkup(
-    <ScreenEpisodeList
-      locale="en"
-      read={terminalEmpty}
-      release={profile.release}
-      origin={{ pathname: '/en/subjects/00000000-0000-4000-8000-000000000901/the-observatory', searchStr: '' }}
-    />,
+    bound(
+      <ScreenEpisodeList
+        locale="en"
+        read={terminalEmpty}
+        release={profile.release}
+        origin={{ pathname: '/en/subjects/00000000-0000-4000-8000-000000000901/the-observatory', searchStr: '' }}
+      />,
+    ),
   );
   expect(emptyHtml).toContain('This film or series has no admitted profile facts yet.');
 
@@ -267,21 +277,23 @@ test('unknown totals keep a sparse disclosed window continuable and oversized ev
   ]);
 
   const continuationHtml = renderToStaticMarkup(
-    <ScreenEpisodeList
-      locale="en"
-      read={terminalContinuation}
-      release={profile.release}
-      origin={{
-        pathname: '/en/subjects/00000000-0000-4000-8000-000000000901/the-observatory',
-        searchStr: '?screenCursor=opaque-terminal-window',
-      }}
-      visit={
-        {
-          previousHref:
-            '/en/subjects/00000000-0000-4000-8000-000000000901/the-observatory?screenCursor=opaque-previous',
-        } as unknown as NonNullable<Parameters<typeof ScreenEpisodeList>[0]['visit']>
-      }
-    />,
+    bound(
+      <ScreenEpisodeList
+        locale="en"
+        read={terminalContinuation}
+        release={profile.release}
+        origin={{
+          pathname: '/en/subjects/00000000-0000-4000-8000-000000000901/the-observatory',
+          searchStr: '?screenCursor=opaque-terminal-window',
+        }}
+        visit={
+          {
+            previousHref:
+              '/en/subjects/00000000-0000-4000-8000-000000000901/the-observatory?screenCursor=opaque-previous',
+          } as unknown as NonNullable<Parameters<typeof ScreenEpisodeList>[0]['visit']>
+        }
+      />,
+    ),
   );
   expect(continuationHtml).toContain('Previous');
   expect(continuationHtml).not.toContain('Continue');

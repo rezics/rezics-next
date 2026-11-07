@@ -1324,7 +1324,9 @@
         "apps/web/src/features/catalogue/game-reader/model.ts",
         "apps/web/src/features/catalogue/manga-reader/entry.tsx",
         "apps/web/src/features/catalogue/manga-reader/model.ts",
-        "apps/web/src/features/catalogue/manga-reader/navigation.ts"
+        "apps/web/src/features/catalogue/manga-reader/navigation.ts",
+        "apps/web/src/features/catalogue/screen-reading-port.ts",
+        "apps/web/src/features/catalogue/screen-reading-application.tsx"
       ],
       "allowedDependencies": [
         "client",
