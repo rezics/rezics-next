@@ -1,11 +1,12 @@
 import { createHash } from 'node:crypto';
-import type {
-  ReviewedPersonAdmission,
-  ReviewedPersonEndpoint,
-  ReviewedPersonMerge,
-  ReviewedPersonOperation,
-  ReviewedPersonRead,
-  ReviewedPersonSource,
+import {
+  identityOperationId,
+  type ReviewedPersonAdmission,
+  type ReviewedPersonEndpoint,
+  type ReviewedPersonMerge,
+  type ReviewedPersonOperation,
+  type ReviewedPersonRead,
+  type ReviewedPersonSource,
 } from '@rezics/client';
 import type { MediaVariantDecision, ReviewedSubjectRead } from './import-client.ts';
 import { ReviewedSubjectNotReady } from './public-bulk-client.ts';
@@ -189,8 +190,12 @@ export type ReviewedPersonMergeTransport = Readonly<{
     source: ReviewedPersonSource,
     signal?: AbortSignal,
   ): Promise<ReviewedPersonRead>;
-  mergeReviewedPersons(body: ReviewedPersonMerge, key: string, signal?: AbortSignal): Promise<ReviewedPersonAdmission>;
-  readReviewedPersonOperation(id: string, signal?: AbortSignal): Promise<ReviewedPersonOperation>;
+  mergeReviewedPersons(
+    body: ReviewedPersonMerge,
+    key: string,
+    signal?: AbortSignal,
+  ): Promise<ReviewedPersonAdmission & { location: string }>;
+  readReviewedPersonOperation(location: string, signal?: AbortSignal): Promise<ReviewedPersonOperation>;
 }>;
 
 /** Sealed action journal. A send that may have reached Kernel keeps its exact body and key for replay. */
@@ -282,11 +287,11 @@ export async function publishReviewedPersonMerge(input: {
   }
   const sealed = JSON.parse(intent.body_json) as ReviewedPersonMerge;
   if (intent.state === 'refused') return { state: 'withheld', reason: intent.error_code ?? 'refused' };
-  let operation: string | null = intent.result_id;
-  if (operation === null) {
+  let location: string | null = intent.result_id;
+  if (location === null) {
     try {
       const admission = await input.transport.mergeReviewedPersons(sealed, intent.idempotency_key);
-      operation = admission.operation.id;
+      location = admission.location;
     } catch (error) {
       // A definite client refusal is terminal. Other failures may have reached Kernel: resume replays this exact intent.
       const status = (error as { status?: unknown }).status;
@@ -297,13 +302,14 @@ export async function publishReviewedPersonMerge(input: {
       }
       throw error;
     }
-    input.journal.acknowledgeAction(actionKey, operation);
+    input.journal.acknowledgeAction(actionKey, location);
   }
+  const operation = identityOperationId(location);
   const pause = input.pause ?? ((ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms)));
   const polls = input.polls ?? MERGE_POLLS;
   let done: Extract<ReviewedPersonOperation, { done: true }> | undefined;
   for (let attempt = 0; attempt < polls && !done; attempt += 1) {
-    const observed = await input.transport.readReviewedPersonOperation(operation);
+    const observed = await input.transport.readReviewedPersonOperation(location);
     if (observed.done) done = observed;
     else if (attempt + 1 < polls) await pause(MERGE_POLL_MS);
   }

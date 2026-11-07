@@ -786,34 +786,55 @@ function subjectType(read: ReviewedSubjectRead): string | null {
 
 function safeCandidatePage(value: unknown): CandidatePage {
   if (!value || typeof value !== 'object') throw new TypeError('Invalid current candidate page');
-  const page = value as Partial<CandidatePage>;
+  const page = value as {
+    candidates?: (CandidateRead & { deleted?: unknown; rank?: unknown })[];
+    next?: unknown;
+    adoption?: { mode?: unknown; head?: unknown } | null;
+  };
   if (
     !Array.isArray(page.candidates) ||
     page.candidates.length > showcaseLimits.reviewPage ||
+    (page.next !== null && typeof page.next !== 'string') ||
     page.candidates.some(
       (candidate) =>
         !candidate ||
         typeof candidate !== 'object' ||
+        typeof candidate.id !== 'string' ||
         !nativeUuid.test(candidate.id) ||
-        !candidate.statement ||
-        typeof candidate.statement !== 'object',
+        (candidate.deleted !== true &&
+          (!candidate.statement ||
+            typeof candidate.statement !== 'object' ||
+            (candidate.rank !== null &&
+              !['normal', 'preferred', 'deprecated'].includes(candidate.rank as string)))),
     ) ||
     (page.adoption !== null &&
       (!page.adoption ||
+        !['inherit', 'replace', 'suppress'].includes(page.adoption.mode as string) ||
         !Number.isSafeInteger(page.adoption.head) ||
-        (page.adoption.head as number) < 1 ||
-        !Array.isArray(page.adoption.selection) ||
-        page.adoption.selection.some(
-          (selection) =>
-            !selection ||
-            typeof selection.candidate !== 'string' ||
-            !nativeUuid.test(selection.candidate) ||
-            typeof selection.rank !== 'string' ||
-            !['normal', 'preferred', 'deprecated'].includes(selection.rank),
-        )))
+        (page.adoption.head as number) < 1))
   )
     throw new TypeError('Invalid current candidate page');
-  return page as CandidatePage;
+  const candidates = page.candidates.filter((candidate) => candidate.deleted !== true);
+  return {
+    candidates,
+    next: page.next,
+    adoption: page.adoption
+      ? {
+          head: page.adoption.head as number,
+          // The served page carries current ranks on candidates, not an adoption selection array.
+          // A continuation cannot certify the complete selection for a replacement write.
+          ...(page.next === null
+            ? {
+                selection: candidates.flatMap((candidate) =>
+                  candidate.rank === null
+                    ? []
+                    : [{ candidate: candidate.id, rank: candidate.rank as 'normal' | 'preferred' | 'deprecated' }],
+                ),
+              }
+            : {}),
+        }
+      : null,
+  };
 }
 
 function groupKey(subject: string, property: string): string {

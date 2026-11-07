@@ -82,6 +82,14 @@ test('seeded frontends wait for useful /en HTML through waitUntilWalkReady', asy
   expect(source).toContain('${origins.web}${SEEDED_WEB_READY_PATH}');
 });
 
+test('walk host Kernel Access authenticates a seeded persona against issuer JWKS', async () => {
+  const source = await readFile(resolve(import.meta.dir, '../scripts/dev-stack.ts'), 'utf8');
+  expect(source).toContain('jwksUrl = issuerPublicJwksUrl(origins.issuer)');
+  expect(source).toContain('access: (mounted) => createAccess({ ...mounted, auth: kernelAuth })');
+  expect(source).toContain('const actor = await access.authenticate(bearer, context)');
+  expect(source).toContain("if (actor.kind !== 'account') throw new Error('Local persona is not an account')");
+});
+
 test('isolated Kernel bindings verify the selected Auth issuer and bind the selected API port', () => {
   expect(
     developmentKernelBindings({

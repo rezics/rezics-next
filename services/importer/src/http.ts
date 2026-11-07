@@ -1,6 +1,7 @@
 import type { BatchWriteResult } from '@rezics/definitions/bulk';
 import { formatImportTransportError, ImportTransportError } from './import-client.ts';
 import type { ImportRequestDiagnostics } from './import-fetch.ts';
+import type { SeedRemainingRequest } from './seed-remaining-request.ts';
 
 export type ReviewedCatalogueCommandKind = 'bootstrap' | 'proposal';
 
@@ -81,6 +82,7 @@ export class ReviewedCatalogueCommandError extends ImportTransportError {
     commandKind: ReviewedCatalogueCommandKind,
     problem: ReviewedCatalogueProblem,
     diagnostics: Partial<ImportRequestDiagnostics> = {},
+    readonly remaining?: SeedRemainingRequest,
   ) {
     const status = problem.status;
     super(status, problem.type, problem.code, problem.retryable === true, undefined, undefined, {
@@ -115,11 +117,12 @@ export function throwReviewedCatalogueBatchFailure(
   seedKey: string,
   kind: ReviewedCatalogueCommandKind,
   result: BatchWriteResult,
+  remaining?: SeedRemainingRequest,
 ): void {
   const entry = result.results[0];
   if (!entry) throw new TypeError('Reviewed catalogue batch returned no command result');
   if ('problem' in entry)
-    throw new ReviewedCatalogueCommandError(seedKey, kind, reviewedCatalogueProblem(entry.problem));
+    throw new ReviewedCatalogueCommandError(seedKey, kind, reviewedCatalogueProblem(entry.problem), {}, remaining);
 }
 
 export function formatReviewedCatalogueSeedError(error: unknown): string {

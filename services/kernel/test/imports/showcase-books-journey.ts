@@ -5,6 +5,7 @@ import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { resolve } from 'node:path';
 import { createRequire } from 'node:module';
 import { createAccountTokenProvider, IMPORTER_SCOPES } from '../../../importer/src/credentials.ts';
+import { BOOK_OWNER_GRANT_ACTIONS, grantOrdinaryOwnerActions } from '../../../importer/src/ordinary-owner-grants.ts';
 import { createImportTransport } from '../../../importer/src/import-client.ts';
 import { createPublicBulkClient } from '../../../importer/src/public-bulk-client.ts';
 import { crossMediaAliases, type CrossMediaTables } from '../../../importer/src/cross-media-seed.ts';
@@ -84,6 +85,26 @@ try {
     client: seedEnv.REZICS_DEV_PERSONA_CLIENT!,
     authOrigin: origins.issuer,
   };
+  const grantorToken = await createAccountTokenProvider({
+    ...credential,
+    scopes: [...IMPORTER_SCOPES, 'subject:read', 'context:accept', 'context:adopt', 'access:grant'],
+  });
+  await grantOrdinaryOwnerActions({
+    accountId: credential.account,
+    actions: BOOK_OWNER_GRANT_ACTIONS,
+    post: async ({ path, body, idempotencyKey }) => {
+      const response = await fetch(`${origins.kernel}${path}`, {
+        method: 'POST',
+        headers: {
+          authorization: `Bearer ${await grantorToken()}`,
+          'content-type': 'application/json',
+          'idempotency-key': JSON.stringify(idempotencyKey),
+        },
+        body: JSON.stringify(body),
+      });
+      return { status: response.status, text: await response.text() };
+    },
+  });
   const tokenProvider = await createAccountTokenProvider({
     ...credential,
     scopes: [...IMPORTER_SCOPES, 'subject:read'],

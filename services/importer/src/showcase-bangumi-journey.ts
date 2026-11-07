@@ -3,13 +3,14 @@
  *   bun services/auth/scripts/dev-stack.ts walk -- bun services/importer/src/showcase-bangumi-journey.ts
  *
  * `walk` owns the slot, ports, database, search, dependency order, and teardown. This driver seeds and reads only through
- * the initialized services, so an unfinished journey cannot leave its infrastructure running.
+ * the initialized services, so an unfinished journey cannot leave its infrastructure running. Auth pages and Web start
+ * after the seed, through the same `pages`/`web` actions the admitted stack uses.
  */
 import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { resolve } from 'node:path';
-import { chromium } from 'playwright';
+import { createRequire } from 'node:module';
 import { bangumiRecordUrl } from '@rezics/conversion/cross-media-entities';
 import type { CrossMediaSeedReport } from './cross-media-seed.ts';
 import type { ShowcasePublicationResult } from './showcase-publication.ts';
@@ -147,7 +148,7 @@ export type JourneyBrowserTarget = {
   citation: string;
   statementId: string;
   holder: string;
-  kind: 'episode' | 'person' | 'organization' | 'book' | 'book-series' | 'anime';
+  kind: 'episode' | 'person' | 'organization' | 'book' | 'book-series' | 'anime' | 'character';
 };
 type PublicLink = {
   subject: string;
@@ -269,9 +270,11 @@ function targetFromInverseLink(
           ? 'book-series'
           : expectedType === 'schema:TVSeries'
             ? 'anime'
-            : expectedType === 'schema:Organization'
-              ? 'organization'
-              : 'person';
+            : expectedType === 'wd:Q95074'
+              ? 'character'
+              : expectedType === 'schema:Organization'
+                ? 'organization'
+                : 'person';
   return {
     id: link.summary.id,
     property,
@@ -322,7 +325,8 @@ function statementTargets(
     if (typeof id !== 'string' || typeof statement.id !== 'string') return [];
     const citation = citationUrls(statement).find((value) => citations.has(value));
     if (!citation) return [];
-    const kind = property === 'schema:publisher' ? 'organization' : 'person';
+    const kind =
+      property === 'schema:publisher' ? 'organization' : property === 'schema:character' ? 'character' : 'person';
     return [{ id, property, citation, statementId: statement.id, holder: read.subject.id, kind }];
   });
 }
@@ -348,13 +352,15 @@ function assertCurrentIdentity(read: PublicSubject, target: JourneyBrowserTarget
       ? ['schema:Organization']
       : target.kind === 'person'
         ? ['schema:Person', 'schema:Organization']
-        : target.kind === 'episode'
-          ? ['schema:Episode']
-          : target.kind === 'book'
-            ? ['schema:Book']
-            : target.kind === 'book-series'
-              ? ['schema:BookSeries']
-              : ['schema:TVSeries'];
+        : target.kind === 'character'
+          ? ['wd:Q95074']
+          : target.kind === 'episode'
+            ? ['schema:Episode']
+            : target.kind === 'book'
+              ? ['schema:Book']
+              : target.kind === 'book-series'
+                ? ['schema:BookSeries']
+                : ['schema:TVSeries'];
   assert.ok(expected.includes(read.subject.type), `${target.id} is current ${target.kind} (${read.subject.type})`);
 }
 
@@ -427,25 +433,71 @@ async function checkTarget(work: JourneyWork, subjectIds: ReadonlyMap<string, st
   return { read, citation };
 }
 
-export async function runBangumiJourney() {
+export type BangumiJourneyOptions = {
+  skipPersona?: boolean;
+  skipSeed?: boolean;
+  startFrontends?: boolean | 'web';
+};
+
+export async function startWalkStackActions(
+  actions: readonly ('pages' | 'web')[],
+  readyUrls: readonly string[],
+) {
+  const children = actions.map((action) =>
+    Bun.spawn(['bun', 'services/auth/scripts/dev-stack.ts', action], {
+      cwd: root,
+      env: process.env,
+      stdin: 'ignore',
+      stdout: 'inherit',
+      stderr: 'inherit',
+    }),
+  );
+  const killOnExit = () => {
+    for (const child of children) if (child.exitCode === null && child.signalCode === null) child.kill('SIGKILL');
+  };
+  process.once('exit', killOnExit);
+  try {
+    for (const url of readyUrls) await ready(url);
+  } catch (error) {
+    process.off('exit', killOnExit);
+    for (const child of children) if (child.exitCode === null && child.signalCode === null) child.kill('SIGKILL');
+    throw error;
+  }
+  return {
+    stop: async () => {
+      process.off('exit', killOnExit);
+      for (const child of children) if (child.exitCode === null && child.signalCode === null) child.kill('SIGTERM');
+      await Promise.all(children.map((child) => child.exited));
+    },
+  };
+}
+
+async function startWalkFrontends(web: string, issuer: string) {
+  return startWalkStackActions(['pages', 'web'], [`${issuer}/.well-known/openid-configuration`, web]);
+}
+
+export async function runBangumiJourney(options: BangumiJourneyOptions = {}) {
   const web = requiredOrigin('REZICS_LOCAL_STACK_WEB_ORIGIN');
   const issuer = requiredOrigin('REZICS_LOCAL_STACK_ISSUER_ORIGIN');
   const api = requiredOrigin('REZICS_LOCAL_STACK_KERNEL_ORIGIN');
   await mkdir(evidence, { recursive: true, mode: 0o700 });
   await mkdir(privateLogs, { recursive: true, mode: 0o700 });
-  // `walk` has initialized the issuer and workflow worker before Kernel and Web.
+  // An admitted walk starts Kernel first; Auth pages and Web start after the seed.
   await ready(`${issuer}/.well-known/openid-configuration`);
   await ready(api);
-  await ready(web);
-  phase = 'persona';
-  await command('persona', ['bun', 'services/auth/scripts/dev-stack.ts', 'persona']);
-  phase = 'seed';
-  await command('seed', [
-    'bun',
-    '--env-file=.temp/local-stack/seed.env',
-    'scripts/datasets/cross-media-seed.ts',
-    '--dev',
-  ]);
+  if (!options.skipPersona) {
+    phase = 'persona';
+    await command('persona', ['bun', 'services/auth/scripts/dev-stack.ts', 'persona']);
+  }
+  if (!options.skipSeed) {
+    phase = 'seed';
+    await command('seed', [
+      'bun',
+      '--env-file=.temp/local-stack/seed.env',
+      'scripts/datasets/cross-media-seed.ts',
+      '--dev',
+    ]);
+  }
   const reportValue: unknown = JSON.parse(await readFile(resolve(root, '.temp/cross-media-seed/result.json'), 'utf8'));
   if (!isRecord(reportValue) || !isRecord(reportValue.showcase) || !Array.isArray(reportValue.showcase.published))
     throw new TypeError('Cross-media seed result has no published showcase identities');
@@ -559,8 +611,10 @@ export async function runBangumiJourney() {
   });
   assert.ok(cast.length, 'anime 233 has a current cited Bangumi voice-cast target');
   assert.ok(staff.length, 'anime 233 has a current cited Bangumi staff target');
-  for (const target of [...cast, ...staff]) assertCurrentIdentity(await current(api, target.id), target);
-  keepTargets('233', [episodes[0]!, cast[0]!, staff[0]!]);
+  const characters = statementTargets(animeWorkRead, 'schema:character', sourceCitations(animeRow, 'schema:character'));
+  assert.ok(characters.length, 'anime 233 has a current cited Character');
+  for (const target of [...cast, ...staff, ...characters]) assertCurrentIdentity(await current(api, target.id), target);
+  keepTargets('233', [episodes[0]!, cast[0]!, staff[0]!, characters[0]!]);
 
   // Preserve independently current public identities and their exact source evidence for diagnosis.
   await writeFile(
@@ -574,6 +628,7 @@ export async function runBangumiJourney() {
           episodes,
           cast,
           staff,
+          characters,
         },
       },
       null,
@@ -583,7 +638,18 @@ export async function runBangumiJourney() {
   );
 
   phase = 'anonymous-browser';
-  const browser = await chromium.launch({ headless: true });
+  const frontends =
+    options.startFrontends === false
+      ? undefined
+      : options.startFrontends === 'web'
+        ? await startWalkStackActions(['web'], [web])
+        : await startWalkFrontends(web, issuer);
+  const require = createRequire(resolve(root, 'apps/web/package.json'));
+  const { chromium } = require('playwright') as {
+    chromium: { launch(options: { headless: boolean; env?: NodeJS.ProcessEnv }): Promise<any> };
+  };
+  await mkdir('/tmp/rw', { recursive: true, mode: 0o700 });
+  const browser = await chromium.launch({ headless: true, env: { ...process.env, TMPDIR: '/tmp/rw' } });
   try {
     const visits: {
       viewport: string;
@@ -632,6 +698,7 @@ export async function runBangumiJourney() {
     await writeFile(resolve(evidence, 'browser.json'), JSON.stringify(visits, null, 2), { mode: 0o600 });
   } finally {
     await browser.close();
+    await frontends?.stop();
   }
   phase = 'complete';
 }

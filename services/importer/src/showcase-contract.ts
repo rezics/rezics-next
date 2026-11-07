@@ -51,6 +51,12 @@ export type CrossMediaTableScanLimits = {
   resumeBytes?: number;
 };
 
+/** One selected-family page of VNDB `entry_meta`. Continuation reads the next page instead of raising this cap. */
+export const VNDB_ENTRY_META_SCAN_PAGE: CrossMediaTableScanLimits = Object.freeze({
+  maxRows: 100_000,
+  maxBytes: 64 * 1024 * 1024,
+});
+
 export class CrossMediaTableScanLimitError extends Error {
   constructor(
     readonly provider: Provider,

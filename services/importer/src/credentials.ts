@@ -131,14 +131,32 @@ async function readAccountKey(path: string, observer?: CredentialsObserver): Pro
   }
 }
 
-function assertion(account: string, authOrigin: string, accountKey: AccountKey, now: number): Promise<string> {
+/** Native Auth is transport only; CSRF Origin and assertion audience stay on the issuer. */
+export function accountKeyIssuerOrigin(
+  authOrigin: string,
+  env: NodeJS.ProcessEnv = process.env,
+  explicit?: string,
+): string {
+  if (explicit) return explicit;
+  const native = env.REZICS_LOCAL_STACK_NATIVE_ORIGIN;
+  const issuer = env.REZICS_LOCAL_STACK_ISSUER_ORIGIN;
+  if (!native || !issuer) return authOrigin;
+  try {
+    if (new URL(authOrigin).origin !== new URL(native).origin) return authOrigin;
+    return new URL(issuer).origin;
+  } catch {
+    return authOrigin;
+  }
+}
+
+function assertion(account: string, issuerOrigin: string, accountKey: AccountKey, now: number): Promise<string> {
   const issuedAt = Math.floor(now / 1000);
   const protectedValue = base64url(JSON.stringify({ alg: 'ES256', kid: accountKey.kid }));
   const payload = base64url(
     JSON.stringify({
       iss: account,
       sub: account,
-      aud: `${authOrigin}/token`,
+      aud: `${issuerOrigin}/token`,
       iat: issuedAt,
       exp: issuedAt + ASSERTION_LIFETIME_SECONDS,
       jti: randomUUID(),
@@ -350,16 +368,13 @@ export type AccountCredentialsOptions = {
   signal?: AbortSignal;
 };
 
-function credentialIssuerOrigin(options: AccountCredentialsOptions): string {
-  return options.issuerOrigin ?? process.env.REZICS_LOCAL_STACK_ISSUER_ORIGIN ?? options.authOrigin;
-}
-
 export type AccountTokenProvider = (fresh?: boolean) => Promise<string>;
 
 export async function createAccountTokenProvider(options: AccountCredentialsOptions): Promise<AccountTokenProvider> {
   const accountKey = await readAccountKey(options.accountKeyPath, options.observer);
   const upstream = options.fetch ?? globalThis.fetch;
   const now = options.now ?? Date.now;
+  const issuerOrigin = accountKeyIssuerOrigin(options.authOrigin, process.env, options.issuerOrigin);
   let accessToken: string | undefined;
   let expiresAt = 0;
   let renewing: Promise<string> | undefined;
@@ -374,12 +389,11 @@ export async function createAccountTokenProvider(options: AccountCredentialsOpti
 
   const renew = async (): Promise<string> => {
     ensureActive();
-    const issuer = credentialIssuerOrigin(options);
-    const signed = await assertion(options.account, issuer, accountKey, now());
+    const signed = await assertion(options.account, issuerOrigin, accountKey, now());
     const signin = await authRequest({
       fetch: upstream,
       url: `${options.authOrigin}/signin/key`,
-      origin: issuer,
+      origin: issuerOrigin,
       signal: options.signal,
       body: JSON.stringify({
         account_id: options.account,
@@ -400,7 +414,7 @@ export async function createAccountTokenProvider(options: AccountCredentialsOpti
     const token = await authRequest({
       fetch: upstream,
       url: `${options.authOrigin}/token`,
-      origin: issuer,
+      origin: issuerOrigin,
       signal: options.signal,
       body: '{}',
       cookie: session,
