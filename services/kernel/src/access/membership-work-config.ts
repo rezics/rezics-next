@@ -1,6 +1,10 @@
 import { ConfigError } from '../commerce/config.ts';
 import type { KeyRing } from '../tokens/seal.ts';
-import type { AuthenticationConfig } from './authenticate.ts';
+import {
+  isApprovedLocalHttpOrigin,
+  publicJwksMatchesIssuer,
+  type AuthenticationConfig,
+} from './authenticate.ts';
 
 type Environment = Readonly<Record<string, string | undefined>>;
 export const MEMBERSHIP_WORK_DEADLINE_MS = 30_000;
@@ -98,22 +102,13 @@ export function readMembershipWorkConfig(env: Environment): MembershipWorkConfig
   const routeKey = readMembershipRouteKey(env);
   const keys = referenceKeys(env);
   const issuer = url(env, 'AUTH_ISSUER');
-  const local = issuer.protocol === 'http:' && ['127.0.0.1', 'localhost', '[::1]'].includes(issuer.hostname);
-  if ((issuer.protocol !== 'https:' && !local) || issuer.origin !== env.AUTH_ISSUER)
+  if ((issuer.protocol !== 'https:' && !isApprovedLocalHttpOrigin(issuer)) || issuer.origin !== env.AUTH_ISSUER)
     throw new ConfigError('AUTH_ISSUER');
   const audience = url(env, 'AUTH_AUDIENCE');
   if (audience.protocol !== 'https:' || audience.username || audience.password || audience.hash)
     throw new ConfigError('AUTH_AUDIENCE');
   const jwks = url(env, 'AUTH_JWKS_URL');
-  if (
-    jwks.protocol !== issuer.protocol ||
-    jwks.origin !== issuer.origin ||
-    jwks.href !== env.AUTH_JWKS_URL ||
-    jwks.username ||
-    jwks.password ||
-    /[?#]/.test(env.AUTH_JWKS_URL!)
-  )
-    throw new ConfigError('AUTH_JWKS_URL');
+  if (!publicJwksMatchesIssuer(issuer, jwks, env.AUTH_JWKS_URL!)) throw new ConfigError('AUTH_JWKS_URL');
   return {
     routeKey,
     referenceKeys: keys,

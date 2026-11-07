@@ -517,3 +517,20 @@ test('existing deployment seal ring is reused with bounded rotation and canonica
   ])
     expect(() => readMembershipWorkConfig({ ...env, KERNEL_SESSION_KEYS: value })).toThrow('KERNEL_SESSION_KEYS');
 });
+
+test('local membership config accepts native JWKS on a second loopback port', () => {
+  expect(() =>
+    readMembershipWorkConfig({
+      ...env,
+      AUTH_ISSUER: 'http://127.0.0.1:20041',
+      AUTH_JWKS_URL: 'http://127.0.0.1:20042/.well-known/jwks.json',
+    }),
+  ).not.toThrow();
+  expect(() =>
+    readMembershipWorkConfig({
+      ...env,
+      AUTH_ISSUER: 'http://127.0.0.1:20041',
+      AUTH_JWKS_URL: 'http://192.168.1.8:20042/.well-known/jwks.json',
+    }),
+  ).toThrow('AUTH_JWKS_URL');
+});
