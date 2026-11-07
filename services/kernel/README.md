@@ -29,6 +29,13 @@ Decision: native Content and Library fixture composition binds the dedicated rec
 setup, supplies History actor evidence through real Access authorization on the original client and finite deadline,
 and derives mounted action subsets from the native catalogue plus lifecycle declarations.
 
+The native boot journey uses `test/support/receipt-keys.ts` for one dedicated receipt ring throughout the
+throwaway database's lifetime. Persona composition, API and worker entries receive its serialized environment
+configuration; the direct account-agent/lifecycle command pool binds the same ring with
+`configureTestReceiptKeys` before its first command. Session keys remain independent. Keep the native outbox
+anchor, non-transaction receipt, forged-event rejection and queue partition persistence assertions on their real
+pools; restarting an entry must not replace keys for receipts already stored by another entry.
+
 Run `bun run --cwd services/kernel typecheck` through the [compiler placement contract](../../docs/development/compiler-check-placement.md).
 The command runs TypeScript plus construct on an approved check host against one migrated compiler database.
 An explicit `DATABASE_URL` requires an already admitted physical run. Unavailable placement fails closed;
