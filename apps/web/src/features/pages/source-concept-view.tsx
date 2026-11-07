@@ -1,7 +1,8 @@
 import { pickText } from '@rezics/composition';
 import { Button } from '@rezics/ui/shadcn/button';
 import { m } from '../../paraglide/messages.js';
-import { useCatalogueLifetime } from '../../subject/candidate-lifetime';
+import { useCandidateReading, type CandidateReading } from './candidate-reading-application';
+import { subjectHref } from '../../subject/load-subject';
 import { useLayoutEffect, useMemo } from 'react';
 import { defaultReader, type Reader } from '../../subject/reader';
 import { useSession } from '../../session/query';
@@ -13,7 +14,6 @@ import { actionClass, linkClass, ConceptHierarchy, visitAnnouncement } from './s
 import { ConceptMembershipReading } from './source-concept-reading/membership';
 import { useConceptVisit, type ConceptTransport } from './source-concept-reading/visit';
 import { originatingConceptReturn } from './source-concept-reading/origin';
-import { subjectHref } from '../../subject/load-subject';
 import {
   conceptVisitAddressFor,
   conceptVisitHref,
@@ -53,9 +53,11 @@ type Props = {
 };
 
 export function SourceConceptView(props: Props) {
-  const admission = useCatalogueLifetime(
-    JSON.stringify(['concept-explore', props.id, props.locale, props.role, props.returnTo]),
-  );
+  const admission = useCandidateReading({
+    candidate: 'concept-explore',
+    locale: props.locale,
+    address: [props.id, props.role, props.returnTo],
+  });
   return <ConceptVisitView key={admission.generation} {...props} admission={admission} />;
 }
 
@@ -85,7 +87,7 @@ function ConceptVisitView({
   transport: ConceptTransport;
   initial?: ConceptRead | undefined;
   reader?: Reader | undefined;
-  admission: ReturnType<typeof useCatalogueLifetime>;
+  admission: CandidateReading;
   worksRoute?: ConceptWorksRouteState | undefined;
   onWorksChange?: ((patch: ConceptWorksRoutePatch, options?: { replace?: boolean }) => void) | undefined;
   conceptVisit?: ConceptVisitDescriptor | undefined;
@@ -108,14 +110,18 @@ function ConceptVisitView({
     onAddressChange: onHierarchyChange,
   });
   const { read, error, busy } = visit;
-  const source = useCatalogueLifetime(
-    JSON.stringify([
-      read?.public.subject.id,
-      read?.public.subject.context,
-      read?.public.subject.release,
-      read?.public.subject.revision,
-      read?.session,
-    ]),
+  const source = useCandidateReading(
+    {
+      candidate: 'concept-source',
+      locale,
+      address: [
+        read?.public.subject.id,
+        read?.public.subject.context,
+        read?.public.subject.release,
+        read?.public.subject.revision,
+        read?.session,
+      ],
+    },
     admission,
   );
   const { FollowTarget } = useSearchLibraryActionHost();

@@ -1,7 +1,7 @@
 import { useQuery } from '@tanstack/react-query';
 import { buttonVariants } from '@rezics/ui/shadcn/button';
 import { subjectReaderQuery } from '../../pages/subject-queries';
-import { candidateSession, useCatalogueLifetime } from '../../../subject/candidate-lifetime';
+import { candidateSession, useCandidateReading } from '../../pages/candidate-reading-application';
 import { useSession } from '../../../session/query';
 import { csrfHeaders } from '../../../threads/composer';
 import { m } from '../../../paraglide/messages.js';
@@ -44,7 +44,11 @@ export const SourceConceptSession = candidateSession(function SourceConceptSessi
   onHierarchyChange,
   publicVisitKey,
 }: SourceConceptSessionProps) {
-  const work = useCatalogueLifetime(JSON.stringify(['concept-explore', id, locale, role, returnTo, publicVisitKey]));
+  const work = useCandidateReading({
+    candidate: 'concept-explore',
+    locale,
+    address: [id, role, returnTo, publicVisitKey],
+  });
   const { state } = useSession();
   const expectedReader = state === 'signed-in' ? work.reader : null;
   const preferences = useQuery({
