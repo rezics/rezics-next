@@ -100,12 +100,9 @@ test('cross-media seed caller prints local dump metadata and preserves reviewed-
   );
   const source = 'https://operator:secret@dl.vndb.org/dump/vndb-db.tar.zst?token=private#fragment';
   try {
-    const failure = await cacheDumpAsset(
-      source,
-      join(root, 'downloads', 'vndb-db.tar.zst'),
-      '0'.repeat(64),
-      { fetchImpl },
-    ).catch((error: unknown) => error);
+    const failure = await cacheDumpAsset(source, join(root, 'downloads', 'vndb-db.tar.zst'), '0'.repeat(64), {
+      fetchImpl,
+    }).catch((error: unknown) => error);
     const detail = seedFailureDetail(failure);
     expect(detail).toContain('operation=dump-download phase=network');
     expect(detail).toContain('target=https://dl.vndb.org/dump/vndb-db.tar.zst');
@@ -119,12 +116,9 @@ test('cross-media seed caller prints local dump metadata and preserves reviewed-
       async () => new Response('Bearer abc123 raw imported record body', { status: 404 }),
       { preconnect() {} },
     );
-    const unavailable = await cacheDumpAsset(
-      source,
-      join(root, 'downloads', 'unavailable.tar.zst'),
-      '0'.repeat(64),
-      { fetchImpl: httpFetch },
-    ).catch((error: unknown) => error);
+    const unavailable = await cacheDumpAsset(source, join(root, 'downloads', 'unavailable.tar.zst'), '0'.repeat(64), {
+      fetchImpl: httpFetch,
+    }).catch((error: unknown) => error);
     const httpDetail = seedFailureDetail(unavailable);
     expect(httpDetail).toContain('operation=dump-download phase=http');
     expect(httpDetail).toContain('status=404');

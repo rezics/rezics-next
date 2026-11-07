@@ -10,9 +10,7 @@ function safeField(value: unknown, pattern: RegExp, limit: number): string | und
 
 function details(values: Partial<ImportRequestDiagnostics>, fallbackPhase: string): string {
   const operation =
-    values.operation === 'dump-download' || values.operation === 'dump-index'
-      ? `operation=${values.operation} `
-      : '';
+    values.operation === 'dump-download' || values.operation === 'dump-index' ? `operation=${values.operation} ` : '';
   const method = safeField(values.method, /^(GET|HEAD|POST|PUT|PATCH|DELETE)$/u, 8) ?? 'unknown';
   const origin = safeField(values.origin, /^https?:\/\/[A-Za-z0-9.:[\]_-]+(?::[0-9]{1,5})?$/u, 256);
   const path = safeField(values.path, /^\/[A-Za-z0-9._~!$&'()*+,;=:@%\/-]{0,512}$/u, 512);
