@@ -315,20 +315,19 @@ function privatePath(path: string): boolean {
 
 function expandPath(path: string, identities: WalkIdentities): string | undefined {
   if (path.includes(':id')) {
-    const id =
-      path.startsWith('/offers/')
-        ? identities.offerId
-        : path.startsWith('/orders/')
-          ? identities.orderId
-          : path.startsWith('/collections/')
-            ? (identities.ownedCollectionId ?? identities.collectionId)
-            : path.startsWith('/library/progress/')
-              ? identities.sessionId
-              : path.startsWith('/logs/')
-                ? identities.publishedLogId
-                : path.startsWith('/creator/statements/')
-                  ? undefined
-                  : identities.workId;
+    const id = path.startsWith('/offers/')
+      ? identities.offerId
+      : path.startsWith('/orders/')
+        ? identities.orderId
+        : path.startsWith('/collections/')
+          ? (identities.ownedCollectionId ?? identities.collectionId)
+          : path.startsWith('/library/progress/')
+            ? identities.sessionId
+            : path.startsWith('/logs/')
+              ? identities.publishedLogId
+              : path.startsWith('/creator/statements/')
+                ? undefined
+                : identities.workId;
     if (!id) return undefined;
     return path.replace(':id', id);
   }
@@ -342,8 +341,17 @@ async function openPage(
 ): Promise<{ url: string; status: number | null; main: boolean; title: string; heading: string }> {
   const href = `${stack.web}${localize(path)}`;
   const response = await page.goto(href, { waitUntil: 'domcontentloaded', timeout: 120_000 });
-  await page.locator('main').waitFor({ state: 'visible', timeout: 120_000 }).catch(() => undefined);
-  const heading = ((await page.locator('main h1, main h2').first().textContent().catch(() => '')) ?? '').trim();
+  await page
+    .locator('main')
+    .waitFor({ state: 'visible', timeout: 120_000 })
+    .catch(() => undefined);
+  const heading = (
+    (await page
+      .locator('main h1, main h2')
+      .first()
+      .textContent()
+      .catch(() => '')) ?? ''
+  ).trim();
   return {
     url: page.url(),
     status: response?.status() ?? null,
@@ -381,7 +389,13 @@ function pageMismatch(
   return undefined;
 }
 
-function failSetup(revision: string, utc: string, elapsedSeconds: number, stage: string, error: unknown): JourneyWalkRow[] {
+function failSetup(
+  revision: string,
+  utc: string,
+  elapsedSeconds: number,
+  stage: string,
+  error: unknown,
+): JourneyWalkRow[] {
   const observed = error instanceof Error ? error.message : String(error);
   return FIRST_PUBLIC_JOURNEYS.map((journey) => ({
     journey: journey.id,
@@ -440,7 +454,10 @@ async function reviewJourneyPages(
   stack: Stack,
   viewers: Record<Viewer, BrowserContext>,
   phone: BrowserContext,
-): Promise<{ pages: { path: string; viewer: Viewer; observed: unknown }[]; failure?: JourneyWalkRow['firstDiffering'] }> {
+): Promise<{
+  pages: { path: string; viewer: Viewer; observed: unknown }[];
+  failure?: JourneyWalkRow['firstDiffering'];
+}> {
   const pages: { path: string; viewer: Viewer; observed: unknown }[] = [];
   const templates = native.pages.length ? native.pages : spec.pages;
   const roles: Viewer[] = spec.personas.includes('anonymous')
@@ -460,7 +477,11 @@ async function reviewJourneyPages(
         if (mismatch) {
           return {
             pages,
-            failure: { command: `GET ${localize(path)} as ${viewer}`, expected: 'intended served page', observed: mismatch },
+            failure: {
+              command: `GET ${localize(path)} as ${viewer}`,
+              expected: 'intended served page',
+              observed: mismatch,
+            },
           };
         }
       }
@@ -488,7 +509,11 @@ async function reviewJourneyPages(
         if (mismatch) {
           return {
             pages,
-            failure: { command: `GET ${localize(path)} phone-390`, expected: 'intended served page', observed: mismatch },
+            failure: {
+              command: `GET ${localize(path)} phone-390`,
+              expected: 'intended served page',
+              observed: mismatch,
+            },
           };
         }
       }
@@ -625,9 +650,13 @@ async function main() {
   }
 
   const report = summarizeWalk(revision, rows);
-  await writeFile(join(evidenceDir, 'results.json'), `${JSON.stringify({ stack, report: publicFields(report) }, null, 2)}\n`, {
-    mode: 0o600,
-  });
+  await writeFile(
+    join(evidenceDir, 'results.json'),
+    `${JSON.stringify({ stack, report: publicFields(report) }, null, 2)}\n`,
+    {
+      mode: 0o600,
+    },
+  );
   const capabilitiesPath = join(root, 'docs/goals/commerce.capabilities.md');
   try {
     const capabilities = await readFile(capabilitiesPath, 'utf8');

@@ -453,39 +453,26 @@ class Recorder {
   }
 }
 
-export async function settleWalkCheckout(
-  kernel: WalkKernel,
-  checkoutUrl: string,
-  stripeOrigin: string,
-): Promise<void> {
+export async function settleWalkCheckout(kernel: WalkKernel, checkoutUrl: string, stripeOrigin: string): Promise<void> {
   const sessionId = checkoutSessionIdFromUrl(checkoutUrl);
-  if (!sessionId)
-    throw new JourneyFailure('POST /v1/orders', 'hosted Checkout session', checkoutUrl);
+  if (!sessionId) throw new JourneyFailure('POST /v1/orders', 'hosted Checkout session', checkoutUrl);
   const pay = await fetch(`${stripeOrigin}/walk/pay`, {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
     body: JSON.stringify({ sessionId }),
   });
-  if (!pay.ok)
-    throw new JourneyFailure(
-      'POST /walk/pay',
-      'signed fixture pay',
-      `HTTP ${pay.status}`,
-    );
+  if (!pay.ok) throw new JourneyFailure('POST /walk/pay', 'signed fixture pay', `HTTP ${pay.status}`);
   const signed = await fetch(`${stripeOrigin}/walk/event`, {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
     body: JSON.stringify({ type: 'checkout.session.completed', objectId: sessionId }),
   });
   if (!signed.ok)
-    throw new JourneyFailure(
-      'POST /walk/event',
-      'signed checkout.session.completed',
-      `HTTP ${signed.status}`,
-    );
+    throw new JourneyFailure('POST /walk/event', 'signed checkout.session.completed', `HTTP ${signed.status}`);
   const payload = (await signed.json()) as { bytes?: unknown; headers?: unknown };
   const bytes = typeof payload.bytes === 'string' ? payload.bytes : undefined;
-  const headers = payload.headers && typeof payload.headers === 'object' ? (payload.headers as Record<string, string>) : undefined;
+  const headers =
+    payload.headers && typeof payload.headers === 'object' ? (payload.headers as Record<string, string>) : undefined;
   const signature = headers?.['stripe-signature'];
   if (!bytes || !signature)
     throw new JourneyFailure('POST /walk/event', 'signed webhook bytes', JSON.stringify(payload).slice(0, 200));
@@ -494,12 +481,7 @@ export async function settleWalkCheckout(
     headers: { 'stripe-signature': signature },
     body: bytes,
   });
-  if (!webhook.ok)
-    throw new JourneyFailure(
-      'POST /v1/webhooks/stripe',
-      'HTTP 200 received',
-      `HTTP ${webhook.status}`,
-    );
+  if (!webhook.ok) throw new JourneyFailure('POST /v1/webhooks/stripe', 'HTTP 200 received', `HTTP ${webhook.status}`);
 }
 
 async function publishEdition(kernel: WalkKernel, bearer: string, title: string) {

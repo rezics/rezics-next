@@ -309,13 +309,7 @@ export async function advanceCommerceErasure(pool: Pool, accountId: string): Pro
                 : 'resolve';
           await checkpoint.run(
             tx,
-            checkpointInput(
-              key,
-              progress,
-              retained.at(-1)?.id ?? progress.cursor,
-              nextPhase,
-              progress.blocker,
-            ),
+            checkpointInput(key, progress, retained.at(-1)?.id ?? progress.cursor, nextPhase, progress.blocker),
           );
           return {
             value: nextPhase === 'retained' ? ('more' as const) : nextPhase,

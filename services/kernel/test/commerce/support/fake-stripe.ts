@@ -388,7 +388,8 @@ export function startFakeStripe(rewriteRead?: (path: string, response: Response)
         } catch {
           return error('invalid_request_error', 400, 'Invalid walk fixture body');
         }
-        const record = typeof body === 'object' && body !== null && !Array.isArray(body) ? (body as Record<string, unknown>) : {};
+        const record =
+          typeof body === 'object' && body !== null && !Array.isArray(body) ? (body as Record<string, unknown>) : {};
         const sessionId = typeof record.sessionId === 'string' ? record.sessionId : undefined;
         const objectId = typeof record.objectId === 'string' ? record.objectId : sessionId;
         const type = typeof record.type === 'string' ? record.type : undefined;

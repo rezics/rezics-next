@@ -1454,33 +1454,33 @@ Command: `bun services/auth/scripts/dev-stack.ts walk -- bun apps/web/tests/nati
 First differing result for every row: `SyntaxError: export 'WORKFLOW_RETIREMENT_DISPATCH' not found in
 '@dbos-inc/dbos-sdk'`. Evidence: `.temp/check-logs/de736263-6dd4-4b5c-b0b9-b2b1ec4e393b.log`.
 
-| Journey | Result |
-| --- | --- |
-| Offer management | FAIL — shared setup; not reached |
-| Purchase | FAIL — shared setup; not reached |
-| Owned use | FAIL — shared setup; not reached |
-| Payment repair | FAIL — shared setup; not reached |
-| Creator money | FAIL — shared setup; not reached |
-| Financial lifecycle | FAIL — shared setup; not reached |
-| Entry facts | FAIL — shared setup; not reached |
-| Profiles | FAIL — shared setup; not reached |
-| Labels | FAIL — shared setup; not reached |
-| Progress | FAIL — shared setup; not reached |
-| Sessions | FAIL — shared setup; not reached |
-| Copies and loans | FAIL — shared setup; not reached |
+| Journey                | Result                           |
+| ---------------------- | -------------------------------- |
+| Offer management       | FAIL — shared setup; not reached |
+| Purchase               | FAIL — shared setup; not reached |
+| Owned use              | FAIL — shared setup; not reached |
+| Payment repair         | FAIL — shared setup; not reached |
+| Creator money          | FAIL — shared setup; not reached |
+| Financial lifecycle    | FAIL — shared setup; not reached |
+| Entry facts            | FAIL — shared setup; not reached |
+| Profiles               | FAIL — shared setup; not reached |
+| Labels                 | FAIL — shared setup; not reached |
+| Progress               | FAIL — shared setup; not reached |
+| Sessions               | FAIL — shared setup; not reached |
+| Copies and loans       | FAIL — shared setup; not reached |
 | Everything and filters | FAIL — shared setup; not reached |
-| Liked and score | FAIL — shared setup; not reached |
-| Continue | FAIL — shared setup; not reached |
-| Curated Collections | FAIL — shared setup; not reached |
-| Collection reading | FAIL — shared setup; not reached |
+| Liked and score        | FAIL — shared setup; not reached |
+| Continue               | FAIL — shared setup; not reached |
+| Curated Collections    | FAIL — shared setup; not reached |
+| Collection reading     | FAIL — shared setup; not reached |
 | Collection publication | FAIL — shared setup; not reached |
-| Pins and return | FAIL — shared setup; not reached |
-| Undo and archive | FAIL — shared setup; not reached |
-| Personal history | FAIL — shared setup; not reached |
-| Published Logs | FAIL — shared setup; not reached |
-| Library lifecycle | FAIL — shared setup; not reached |
-| Follow edges | FAIL — shared setup; not reached |
-| Following | FAIL — shared setup; not reached |
-| Follower counts | FAIL — shared setup; not reached |
+| Pins and return        | FAIL — shared setup; not reached |
+| Undo and archive       | FAIL — shared setup; not reached |
+| Personal history       | FAIL — shared setup; not reached |
+| Published Logs         | FAIL — shared setup; not reached |
+| Library lifecycle      | FAIL — shared setup; not reached |
+| Follow edges           | FAIL — shared setup; not reached |
+| Following              | FAIL — shared setup; not reached |
+| Follower counts        | FAIL — shared setup; not reached |
 
 The database/served-page walk remains unverified until the shared SDK installation exposes the required export.

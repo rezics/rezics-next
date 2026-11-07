@@ -354,10 +354,7 @@ test('walk stacks retire leftover journals even when the PostgreSQL identity str
     await mkdir(resolve(repository, '.temp/cross-media-seed'), { recursive: true });
     await writeFile(resolve(repository, '.temp/cross-media-seed/database-identity'), '127.0.0.1:20024/rezics\n');
     await writeFile(resolve(repository, '.temp/cross-media-seed/state.sqlite'), 'previous-attempt-native-ids');
-    const archived = await resetWalkSeedJournals(
-      repository,
-      'postgres://rezics:rezics@127.0.0.1:20024/rezics',
-    );
+    const archived = await resetWalkSeedJournals(repository, 'postgres://rezics:rezics@127.0.0.1:20024/rezics');
     expect(archived).toBeDefined();
     expect(await readFile(resolve(archived!, 'state.sqlite'), 'utf8')).toBe('previous-attempt-native-ids');
     expect(await readFile(resolve(repository, '.temp/cross-media-seed/database-identity'), 'utf8')).toBe(

@@ -52,8 +52,7 @@ export async function awaitEffectsCaughtUp(
   await waitUntil(
     async () => {
       const lag = await withConnection(pool, (client) => readConsumerLag(client, EFFECTS_CONSUMER));
-      const caughtUp =
-        lag !== null && lag.oldestPendingAt === null && Date.now() - lag.observedAt.getTime() < 5_000;
+      const caughtUp = lag !== null && lag.oldestPendingAt === null && Date.now() - lag.observedAt.getTime() < 5_000;
       if (caughtUp) return { caughtUp: true as const };
       return {
         caughtUp: false as const,

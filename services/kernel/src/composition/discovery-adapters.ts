@@ -279,7 +279,11 @@ function createSpacePopulationProducer(adapter: SpaceDiscoveryAdapter): Discover
     async read(partition, ids) {
       const keys = requestedKeys('content', 'space', partition, ids);
       const snapshot = await adapter.source.read(partition, ids);
-      return { position: snapshot.position, keys, records: spaceRecords(partition, snapshot.position, snapshot.spaces) };
+      return {
+        position: snapshot.position,
+        keys,
+        records: spaceRecords(partition, snapshot.position, snapshot.spaces),
+      };
     },
     async position(partition) {
       return (await adapter.source.read(partition, [])).position;

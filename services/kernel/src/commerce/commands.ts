@@ -477,11 +477,7 @@ export function createCommerceCommands(config: {
     const { parent, authorization } = admission();
     const sale = withSalePreparation(authorization, async (attempt, deadline) => {
       const offer = parent.at(attempt.time);
-      return requireCurrentContentEdition(
-        offer.contentEdition,
-        { pool, access, ...saleConsent },
-        { actor, deadline },
-      );
+      return requireCurrentContentEdition(offer.contentEdition, { pool, access, ...saleConsent }, { actor, deadline });
     });
     try {
       return await runCommand(

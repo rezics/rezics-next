@@ -531,7 +531,8 @@ export function issuerJwksUrl(issuerOrigin: string): string {
 export function walkCommerceProviderEnvironment(port: number, webhookSecret: string): Record<string, string> {
   if (!Number.isInteger(port) || port < 1 || port > 65_535)
     throw new Error('Walk Stripe port is not a loopback TCP port');
-  if (!/^whsec_[A-Za-z0-9_]+$/u.test(webhookSecret)) throw new Error('Walk Stripe webhook secret is not a fixture secret');
+  if (!/^whsec_[A-Za-z0-9_]+$/u.test(webhookSecret))
+    throw new Error('Walk Stripe webhook secret is not a fixture secret');
   return {
     STRIPE_SECRET_KEY: 'sk_test_walk_commerce',
     STRIPE_API_HOST: `http://127.0.0.1:${port}`,
