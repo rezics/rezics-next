@@ -2,6 +2,13 @@ import { spawnSync } from 'node:child_process';
 import { mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, unlinkSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import {
+  captureTypingInputs,
+  readTypingInputReceipt,
+  typingInputsMatch,
+  type TypingInput,
+  type TypingInputReceipt,
+} from './worker-check-typing-inputs.ts';
 
 /** One combined check plus one rerun after that check failed. */
 export const WORKER_CHECK_HOST_RUN_LIMIT = 2;
@@ -13,7 +20,7 @@ export const WORKER_CHECK_HOST_TYPECHECK_REFUSAL =
 export const WORKER_CHECK_HOST_INFRASTRUCTURE_EXIT = 75;
 export const WORKER_CHECK_TESTS_AFTER_LANDING = 'Tests run after landing in the dev verifier.';
 const STAMP_NAME = /^[1-9]\d*$/;
-const TYPECHECK_COMMAND = /\btypecheck\b|scripts\/typecheck\.ts/;
+const TYPECHECK_COMMAND = /(?:^|[\s;|&])(?:[^\s;|&]*\/)?typecheck(?:\.ts|:root)?(?=$|[\s;|&])/;
 const TYPECHECK_FAILURE =
   /error TS\d+|error: script "typecheck" exited|error:\s*"typecheck" exited|error: Failed to run .*typecheck/;
 const TYPING_LOG_CHARACTERS = 8192;
@@ -52,6 +59,9 @@ export type WorkerCheckHostStampRecord = {
   typecheckFailed?: boolean;
   includedTypecheck?: boolean;
   log?: string;
+  typingRequest?: { physicalRunId: string; command: string[]; localPrepared: TypingInput[] };
+  typingInputs?: TypingInputReceipt;
+  typingInputsUnavailable?: string;
 };
 
 /** Controller-owned stamp directory beside the attempt's check-wait file. */
@@ -238,7 +248,33 @@ export function workerCheckHostCommandReached(receipt: WorkerCheckHostCommandRec
 export type WorkerCheckHostSettle = {
   log?: string;
   argv?: readonly string[];
+  worktree?: string;
+  physicalRunId?: string;
 };
+
+/** Called before handoff. It records the caller's generated inputs without changing admission or source custody. */
+export function recordWorkerCheckTypingInputs(
+  env: NodeJS.ProcessEnv,
+  worktree: string,
+  physicalRunId: string,
+  command: readonly string[],
+): void {
+  const directory = env.GOAL_WORKER_CHECK_BUDGET_DIR?.trim();
+  const stamp = env.GOAL_WORKER_CHECK_BUDGET_STAMP?.trim();
+  if (!directory || !stamp || !STAMP_NAME.test(stamp)) return;
+  const record = readWorkerCheckHostStamp(directory, stamp);
+  delete record.typingInputs;
+  delete record.typingInputsUnavailable;
+  const typingRequest = { physicalRunId, command: [...command], localPrepared: [] as TypingInput[] };
+  writeStamp(directory, stamp, { ...record, typingRequest });
+  writeStamp(directory, stamp, {
+    ...record,
+    typingRequest: {
+      ...typingRequest,
+      localPrepared: captureTypingInputs(worktree, ['bun', 'scripts/typecheck.ts']).prepared,
+    },
+  });
+}
 
 /**
  * Give this wrapper run's stamp back when it died with infrastructure exit 75 before the check command ran.
@@ -270,12 +306,30 @@ export function settleWorkerCheckHostBudget(
     throw error;
   }
   const log = details.log ? boundedLog(details.log) : '';
+  let typingInputs: TypingInputReceipt | undefined;
+  let typingInputsUnavailable: string | undefined;
+  if (current.typingRequest) {
+    if (!details.worktree || details.physicalRunId !== current.typingRequest.physicalRunId) {
+      typingInputsUnavailable = 'Compiler input receipt has no matching physical run.';
+    } else {
+      try {
+        typingInputs = readTypingInputReceipt(details.worktree, details.physicalRunId, current.typingRequest.command);
+        if (!typingInputs) typingInputsUnavailable = 'Compiler input closure was not returned by the owning compiler.';
+      } catch (error) {
+        typingInputsUnavailable = String(error);
+      }
+    }
+  }
+  delete current.typingInputs;
+  delete current.typingInputsUnavailable;
   writeStamp(directory, stamp, {
     ...current,
     exitCode,
     includedTypecheck: checkCommandIncludesTypecheck(details.argv, log),
     typecheckFailed: workerCheckHostTypecheckFailed(log, details.argv),
     ...(details.log ? { log: details.log } : {}),
+    ...(typingInputs ? { typingInputs } : {}),
+    ...(typingInputsUnavailable ? { typingInputsUnavailable } : {}),
   });
 }
 
@@ -283,10 +337,15 @@ export type WorkerCheckHostTypingSettlement = { ok: true } | { ok: false; result
 
 const TYPING_SETTLEMENT_FAILED = 'Last check-host run failed its typecheck.';
 const TYPING_SETTLEMENT_CHANGED = 'Worktree content changed after the last check-host typecheck.';
+const TYPING_SETTLEMENT_UNAVAILABLE = 'Compiler input closure is unavailable for the last check-host typecheck.';
 
 /** A typing settlement is the attempt's own failure, never a shared environment fault. */
 export function isTypingSettlementResult(result: string | null | undefined): boolean {
-  return Boolean(result?.startsWith(TYPING_SETTLEMENT_FAILED) || result?.startsWith(TYPING_SETTLEMENT_CHANGED));
+  return Boolean(
+    result?.startsWith(TYPING_SETTLEMENT_FAILED) ||
+    result?.startsWith(TYPING_SETTLEMENT_CHANGED) ||
+    result?.startsWith(TYPING_SETTLEMENT_UNAVAILABLE),
+  );
 }
 
 /**
@@ -309,17 +368,24 @@ export function workerCheckHostTypingSettlement(input: {
   }
   if (names.length === 0) return { ok: true };
   const records = names.map((name) => readWorkerCheckHostStamp(directory, name));
-  const last = records.at(-1);
   const lastTypecheck = records.findLast((record) => record.includedTypecheck);
-  const failed = last?.includedTypecheck === true && last.typecheckFailed === true;
-  const changed =
-    lastTypecheck?.content !== undefined && workerCheckHostContentTree(input.worktree) !== lastTypecheck.content;
-  if (!failed && !changed) return { ok: true };
-  const source = failed ? last : lastTypecheck;
-  const reason = failed ? TYPING_SETTLEMENT_FAILED : TYPING_SETTLEMENT_CHANGED;
+  const failed =
+    lastTypecheck?.typecheckFailed === true ||
+    (lastTypecheck?.typingInputs !== undefined && lastTypecheck.typingInputs.exitCode !== 0);
+  const unavailable = Boolean(lastTypecheck?.typingRequest && !lastTypecheck.typingInputs);
+  const changed = lastTypecheck?.typingInputs
+    ? !typingInputsMatch(input.worktree, lastTypecheck.typingInputs, lastTypecheck.typingRequest?.localPrepared)
+    : lastTypecheck?.content !== undefined && workerCheckHostContentTree(input.worktree) !== lastTypecheck.content;
+  if (!failed && !changed && !unavailable) return { ok: true };
+  const source = lastTypecheck;
+  const reason = failed
+    ? TYPING_SETTLEMENT_FAILED
+    : unavailable
+      ? TYPING_SETTLEMENT_UNAVAILABLE
+      : TYPING_SETTLEMENT_CHANGED;
   return {
     ok: false,
-    result: `${reason} Settlement records a typing failure with that run's log, so this attempt is retried instead of landing.\n${source?.log ? boundedLog(source.log) : '(check log unavailable)'}`,
+    result: `${reason} Settlement records a typing failure with that run's log, so this attempt is retried instead of landing.\n${source?.typingInputsUnavailable ?? (!source?.typingInputs && changed ? 'Legacy evidence has no retained compiler-input closure; its original full content identity is required.' : '')}\n${source?.log ? boundedLog(source.log) : '(check log unavailable)'}`,
   };
 }
 

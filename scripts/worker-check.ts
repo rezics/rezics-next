@@ -51,11 +51,14 @@ import {
   splitEnvironmentCommand,
 } from './check-placement.ts';
 import {
+  checkCommandIncludesTypecheck,
+  recordWorkerCheckTypingInputs,
   refuseExcessWorkerCheckHostRun,
   refuseOrdinaryProductTestCheck,
   settleWorkerCheckHostBudget,
   workerCheckHostCommandReached,
 } from '../tools/goal/src/worker-check-budget.ts';
+import { typingInputsReceiptPath } from '../tools/goal/src/worker-check-typing-inputs.ts';
 import { acquireStackSlot } from './stack-lease.ts';
 import {
   CHECK_RECORD_CUSTODY_VERSION,
@@ -1211,6 +1214,7 @@ export async function runWorkerCheck(
   if (argv.length === 0) throw new Error('A check command is required');
   ownershipFromEnvironment(process.env);
   if (!isPhysicalRunId(physicalRunId)) throw new Error('worker-check: invalid physical run identity');
+  const typingInvocation = checkCommandIncludesTypecheck(argv) ? [...argv] : undefined;
   let localOnly = false;
   const returnPaths: string[] = [];
   while (argv[0]?.startsWith('--') && argv[0] !== '--') {
@@ -1228,6 +1232,7 @@ export async function runWorkerCheck(
   const declaredReturns = validateArtifactDeclarations(returnPaths);
   returnPaths.splice(0, returnPaths.length, ...declaredReturns);
   const root = resolve(cwd);
+  if (typingInvocation) returnPaths.push(typingInputsReceiptPath(physicalRunId));
   const checkId = recordedCheckId ?? (/^[0-9a-f-]{36}$/i.test(logicalCheckId ?? '') ? logicalCheckId! : randomUUID());
   const cancellation = workerCheckCancellation(checkId, root);
   const cancelled = () => executionCancellation(cancellation);
@@ -1257,6 +1262,15 @@ export async function runWorkerCheck(
     }
   };
   const env = { ...process.env };
+  if (typingInvocation) {
+    env.REZICS_TYPING_INPUTS_PHYSICAL = physicalRunId;
+    env.REZICS_TYPING_INPUTS_COMMAND = Buffer.from(JSON.stringify(typingInvocation)).toString('base64');
+    try {
+      recordWorkerCheckTypingInputs(env, root, physicalRunId, typingInvocation);
+    } catch (error) {
+      writeSync(descriptor, `typing inputs unavailable at handoff: ${String(error)}\n`);
+    }
+  }
   env.REMOTE_CHECK_CANCELLATION_FILE = cancellation.file;
   env.REMOTE_CHECK_CANCELLATION_ID = cancellation.id;
   setup(() => applyTaskPriority(root, env));
@@ -1510,10 +1524,18 @@ export async function runWorkerCheck(
         remoteOutputPending[stream] = '';
       }
     };
-    const remoteCommand =
+    const selectedRemoteCommand =
       growthProfileRelative === undefined
         ? [...argv]
         : ['sh', '-c', 'export GROWTH_PROFILE="$PWD/$1"; shift; exec "$@"', 'sh', growthProfileRelative, ...argv];
+    const remoteCommand = typingInvocation
+      ? [
+          'env',
+          `REZICS_TYPING_INPUTS_PHYSICAL=${physicalRunId}`,
+          `REZICS_TYPING_INPUTS_COMMAND=${env.REZICS_TYPING_INPUTS_COMMAND}`,
+          ...selectedRemoteCommand,
+        ]
+      : selectedRemoteCommand;
     const handedOffCommand = withOriginalContext(
       artifactPrepared
         ? [
@@ -3432,6 +3454,8 @@ async function runRecordedCheck(id: string, cwd = process.cwd(), physicalArgumen
       settleWorkerCheckHostBudget(process.env, exitCode, workerCheckHostCommandReached(current.physicalRun), {
         log: join(root, current.log),
         argv: current.argv,
+        worktree: root,
+        physicalRunId,
       });
     });
   };
