@@ -2,8 +2,9 @@
 
 Decision: Account and Agent list assembly uses the consumer-owned `AccountProfilePort`, installed by
 `PublicProfilePage` through `AccountPageApplication` and the concrete Accounts `page-binding` adapter. The application
-owns profile selection, planned response admission and window/action composition; Accounts retains native reader,
-receipt and cursor/focus lifetimes. The [binding contract](../../accounts/public-profile/README.md) describes the seam.
+owns profile selection, planned response admission, window composition and the supported contribution
+watch/reaction/reply/report/lifetime capabilities; Accounts, Threads and Report retain native reader, receipt,
+engine and cursor/focus lifetimes. Ordinary routes bind live adapters. The [binding contract](../../accounts/public-profile/README.md) describes the seam.
 `page-model.ts` and `overview-section.tsx` keep Agent reading and Account assembly out of the Subject renderer's value
 dependency graph. The native outcomes, publication gates and work bounds are unchanged.
 

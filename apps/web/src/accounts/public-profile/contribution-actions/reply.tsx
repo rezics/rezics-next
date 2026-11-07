@@ -1,10 +1,6 @@
 import { useState } from 'react';
 import { m } from '../../../paraglide/messages.js';
-import { draftFetch, PostComposer } from '../../../threads/composer';
-import { replyToThread } from '../../../threads/actions';
-import type { ReplyCommand } from '../../../threads/reply-context-intent';
-import type { CreatedPost } from '../../../threads/actions';
-import type { OperationLease } from '../../../reader/lease';
+import type { OperationLease } from '../../../session';
 import { contributionOperationLeaseId, type ContributionOperation } from './current';
 import {
   contributionCommandTarget,
@@ -13,6 +9,7 @@ import {
   type ContributionAdviceState,
 } from './advice';
 import type { ContributionReference } from './receiver';
+import { useContributionActionCapabilities } from './host';
 import { ContributionAdvicePresentation, type ContributionPresentation } from './presentation';
 
 function isReplyLease(lease: OperationLease<ContributionOperation> | undefined): lease is OperationLease<'reply'> {
@@ -150,6 +147,7 @@ function ContributionReplyVisit({
   canonicalHref: string;
   refreshAdvice?: (() => Promise<void>) | undefined;
 }) {
+  const { Reply } = useContributionActionCapabilities();
   const [initialKey] = useState(() => crypto.randomUUID());
   const [pending, setPending] = useState(false);
   const [admitted, setAdmitted] = useState(ready);
@@ -188,7 +186,7 @@ function ContributionReplyVisit({
       retainChildren={keepOwner && state !== 'available'}
     >
       {keepOwner && target && lease && origin ? (
-        <PostComposer<CreatedPost, ReplyOrigin>
+        <Reply
           initialKey={initialKey}
           localDraft={false}
           canSubmit={currentLease}
@@ -204,33 +202,17 @@ function ContributionReplyVisit({
               </a>
             </p>
           }
+          credential={() => lease.credential()}
+          canDispatch={(command) =>
+            currentLease &&
+            presentation.isCurrent() &&
+            lease.current() &&
+            command.parentId === target.parentId &&
+            JSON.stringify(command.submissionContext) === JSON.stringify(origin)
+          }
           onPendingChange={setPending}
           onIntentLockChange={setIntentLocked}
-          onSubmit={async (command: ReplyCommand<ReplyOrigin>) => {
-            if (
-              !currentLease ||
-              !presentation.isCurrent() ||
-              !lease.current() ||
-              command.parentId !== target.parentId ||
-              JSON.stringify(command.submissionContext) !== JSON.stringify(origin)
-            )
-              throw new Error('The original contribution reply is no longer current');
-            const credential = lease.credential();
-            if (!credential) throw new Error('The original contribution reply is no longer current');
-            const result = await replyToThread({
-              data: {
-                threadId: target.threadId,
-                body: command.body,
-                idempotencyKey: command.idempotencyKey,
-                parentId: target.parentId,
-                ...(command.mediaIds.length ? { mediaIds: command.mediaIds } : {}),
-              },
-              headers: { 'X-CSRF-Token': credential },
-              fetch: draftFetch(command.body),
-            });
-            return result.ok ? { ok: true as const, value: result.post } : result;
-          }}
-          onSuccess={(_post: CreatedPost) => {
+          onSuccess={() => {
             if (presentation.isCurrent() && lease.current()) void refreshAdvice?.();
           }}
         />

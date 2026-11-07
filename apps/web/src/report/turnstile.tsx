@@ -1,6 +1,7 @@
 import { useEffect, useLayoutEffect, useRef, type RefObject } from 'react';
 
-export type VerificationConfig = { sitekey: string; scriptUrl: string };
+import type { VerificationConfig } from './contract/contribution-actions';
+export type { VerificationConfig } from './contract/contribution-actions';
 type Turnstile = {
   render(
     container: HTMLElement,

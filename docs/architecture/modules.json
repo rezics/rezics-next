@@ -1328,7 +1328,9 @@
         "apps/web/src/threads/byline-time.ts",
         "apps/web/src/threads/community-entry.ts",
         "apps/web/src/threads/post-command-lifetime.ts",
-        "apps/web/src/threads/thread-reading-context.ts"
+        "apps/web/src/threads/thread-reading-context.ts",
+        "apps/web/src/threads/contract/contribution-actions.ts",
+        "apps/web/src/threads/index.ts"
       ],
       "allowedDependencies": [
         "client",
@@ -1494,7 +1496,9 @@
         "apps/web/src/shell/collection-presentation.tsx",
         "apps/web/src/session/auth-page-routes.ts",
         "apps/web/src/session/csrf.ts",
-        "apps/web/src/features/count.ts"
+        "apps/web/src/features/count.ts",
+        "apps/web/src/report/contract/contribution-actions.ts",
+        "apps/web/src/report/index.ts"
       ],
       "allowedDependencies": [
         "content-edition-contract",

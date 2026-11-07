@@ -50,9 +50,11 @@ Decision: Recent Search mounts `RecentSearchBinding` beside the Library applicat
 ## Public module entry
 
 `session/index.ts` is the public browser adapter entry for observation and read/operation/address leases.
-It also exports the installed `sessionQuery`, `useSession`, `sessionCsrfToken` and `AnonymousSessionContext` for
-consumer-owned application composition. These are the original producer bindings, without a second fetch, cache
-or provider. Settings and Inbox bind them through their own shell ports rather than importing `query.ts`.
+It also exports `normalizeSessionObservation`, `ReaderNavigationContext` and the installed `sessionQuery`,
+`useSession`, `sessionCsrfToken` and `AnonymousSessionContext` for consumer-owned application composition,
+including public-profile contribution action lifetime. These are the original producer bindings, not another
+session policy, without a second fetch, cache or provider. Settings and Inbox bind them through their own shell
+ports rather than importing `query.ts`.
 `session/reading-policy.ts` is a pure entry for the existing public/personal query defaults, credential-mode keys and
 platform-closed error/problem recognition. It loads no React observer, query cache or session fetch. Native and
 browser readers share the original error class, including its serialized route-boundary recognition.

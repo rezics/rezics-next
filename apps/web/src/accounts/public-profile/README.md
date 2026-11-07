@@ -12,11 +12,15 @@ capabilities; it imports no Accounts implementation. `page-model.ts` owns the sh
 context without loading the Subject renderer. Optional catalogue Terms advice remains a Subject renderer extension.
 Shared section components live in `overview-section.tsx`, so Account assembly need not evaluate the Overview graph.
 
-Accounts binds the existing collection visit, contribution route controls and contribution action host. The concrete
-binding supplies the existing native action wire and preserves the exact page, read, source, action selection,
-publication and row identities used by reader retirement and receipts. The root still mounts the existing route,
-action cohort and reader-response scopes around the Subject page. Their disclosure, verification, observation,
-continuation and work-budget rules are unchanged.
+Accounts binds the existing collection visit, contribution route controls and contribution action host. The page
+application declares watch, reaction, reply, report and session-lifetime capabilities on `AccountProfilePort`.
+Threads and Report supply the existing engines through public adapters; the ordinary public-profile route and
+stories bind those adapters with `bindAccountProfilePage`. The host uses the session facade for observation and
+leases, without a second provider, store, per-row read or Router requirement. Isolated mounts keep QueryClient and
+browser address. The concrete binding preserves the exact page, read, source, action selection, publication and row
+identities used by reader retirement and receipts. The root still mounts the existing route, action cohort and
+reader-response scopes around the Subject page. Their disclosure, verification, observation, continuation and
+work-budget rules are unchanged.
 
 The named collection route mounts `AccountCollectionWindowsScope` above cursor-keyed pages and calls
 `useAccountCollectionWindows`. The page application plans the response and supplies only an admitted profile/window
@@ -32,5 +36,7 @@ and keyboard focus handoff. A bare continuation still selects exactly one distin
 its opaque cursor, planned limit and native outcome unchanged.
 
 Focused application tests cover publication matching, equivalent versus missing profile projections, empty final
-windows, native failure states and exact contribution receipt inputs. Existing continuation and installed host tests
-retain their assertions. Native, browser and root acceptance run in the integration verifier.
+windows, native failure states and exact contribution receipt inputs. Existing public-contribution-actions host,
+adapter and lifetime tests remain the fewest that pin capability composition; stories keep named states only.
+Existing continuation and installed host tests retain their assertions. Native, browser and root acceptance run in
+the integration verifier.

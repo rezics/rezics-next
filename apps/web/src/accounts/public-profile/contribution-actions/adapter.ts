@@ -1,16 +1,25 @@
-import type { ReactionKind } from '../../../threads/reaction-request';
+import type { ContributionReactionKind } from '../../../features/pages/account-profile-port';
 import type { ContributionAdviceState } from './advice';
 import type { AuthorContributionActionsResponse, ContributionReference } from './wire';
 
 type Advice = AuthorContributionActionsResponse;
 type Section<T> = { notice: ContributionAdviceState } | { value: T };
 type Reaction = {
-  counts: Partial<Record<ReactionKind, number>>;
-  value: ReactionKind | null;
-  watermark: Advice['reactions']['reactionsAsOf'];
+  counts: Partial<Record<ContributionReactionKind, number>>;
+  value: ContributionReactionKind | null;
+  watermark: { epoch: number; position: string };
 };
-const reactionKinds: readonly ReactionKind[] = ['upvote', 'downvote', 'like', 'love', 'laugh', 'insightful', 'sad'];
-const reactionKind = (value: string): ReactionKind | undefined => reactionKinds.find((kind) => kind === value);
+const reactionKinds: readonly ContributionReactionKind[] = [
+  'upvote',
+  'downvote',
+  'like',
+  'love',
+  'laugh',
+  'insightful',
+  'sad',
+];
+const reactionKind = (value: string): ContributionReactionKind | undefined =>
+  reactionKinds.find((kind) => kind === value);
 
 const notice = (state: string): ContributionAdviceState =>
   state === 'sign_in_required' ? 'sign_in_required' : state === 'not_applicable' ? 'not_applicable' : 'unavailable';
