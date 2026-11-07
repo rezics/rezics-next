@@ -7,6 +7,7 @@ import { authManagementPageHref } from '../auth-management';
 import { carriesSession } from '../../session/csrf';
 import { prepareSession, sessionSubject, viewerCredential } from '../../session/request';
 import { managedAccountsException } from '../managed-accounts-read';
+import { serverSettingsTimer } from './ambient.ts';
 import { withManagedReadDeadline } from '../managed-read-deadline';
 import {
   managementSchema,
@@ -100,6 +101,7 @@ export async function loadManagedAccountActions(
           { headers: { authorization, 'cache-control': 'no-store' }, fetch: { cache: 'no-store', signal } },
         ),
       signal,
+      serverSettingsTimer(),
     );
     if (result.error || result.status !== 200) return failure(result.status, result.error?.value, result.headers);
     // A hidden native resource is a denial, not an empty successful capability response.
@@ -213,6 +215,7 @@ export async function loadManagedAccountDetail(
             : {},
         }),
       signal,
+      serverSettingsTimer(),
     );
     if (result.error || !result.data)
       return { ok: false, failure: detailFailure(result.status, result.error?.value, result.headers) };
@@ -310,7 +313,7 @@ export async function loadAccountRenameRegionResult(
   request: Request,
   sessionEnv: Partial<SessionEnv>,
 ): Promise<AccountRenameReadResult> {
-  await withManagedReadDeadline(() => prepareSession(request, sessionEnv), request.signal);
+  await withManagedReadDeadline(() => prepareSession(request, sessionEnv), request.signal, serverSettingsTimer());
   const authorization = viewerCredential(request);
   const accountId = sessionSubject(request);
   return authorization && accountId
@@ -337,6 +340,7 @@ export async function readAccountRenameContextResult(
     withManagedReadDeadline(
       (signal) => createEditableProfileSource(client).read(authorization, accountId, signal),
       signal,
+      serverSettingsTimer(),
     ),
     withManagedReadDeadline(
       (signal) =>
@@ -345,6 +349,7 @@ export async function readAccountRenameContextResult(
           { headers: { authorization, 'cache-control': 'no-store' }, fetch: { cache: 'no-store', signal } },
         ),
       signal,
+      serverSettingsTimer(),
     ),
   ]);
   const failures: AccountRenameFailure[] = [];

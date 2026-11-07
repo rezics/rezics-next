@@ -6,7 +6,9 @@ import { m } from '../paraglide/messages.js';
 import { getLocale } from '../paraglide/runtime.js';
 import { searchRetryAt, useSearchRetryWait } from '../search/search-recovery-retry';
 import { useSettingsSession } from './adapters/shell';
+import { useSettingsAmbient } from './adapters/ambient-view.tsx';
 import { withVerificationDeadline } from './verification-request-deadline';
+import type { SettingsAmbient, SettingsTimerHandle } from './ports/ambient';
 import type { VerificationSearchFailure, VerificationSearchResult } from './verification-core';
 
 export type VerificationSubject = { id: string; title: string; type: string };
@@ -26,12 +28,15 @@ export class VerificationSubjectSearch {
   private state = idle;
   private enabled = false;
   private composing = false;
-  private timer: ReturnType<typeof setTimeout> | undefined;
+  private timer: SettingsTimerHandle | undefined;
   private request: AbortController | undefined;
   private episode = 0;
   private revision = 0;
   private listeners = new Set<() => void>();
-  constructor(private load: Search) {}
+  constructor(
+    private load: Search,
+    private ambient: SettingsAmbient,
+  ) {}
   snapshot = () => this.state;
   subscribe = (listener: () => void) => {
     this.listeners.add(listener);
@@ -45,7 +50,7 @@ export class VerificationSubjectSearch {
   }
   private cancel() {
     this.revision++;
-    clearTimeout(this.timer);
+    this.timer?.cancel();
     this.timer = undefined;
     const request = this.request;
     this.request = undefined;
@@ -83,7 +88,7 @@ export class VerificationSubjectSearch {
     this.update({ query, phase: !this.composing && query.trim() ? 'pending' : 'idle', subjects: [] });
     if (!this.composing && query.trim()) {
       const revision = this.revision;
-      this.timer = setTimeout(() => {
+      this.timer = this.ambient.timer.schedule(() => {
         if (revision !== this.revision) return;
         this.timer = undefined;
         void this.send(episode, revision, false);
@@ -110,7 +115,7 @@ export class VerificationSubjectSearch {
       this.state.phase !== 'failed' ||
       !this.state.query.trim() ||
       this.state.failure?.retryable === false ||
-      (this.state.retryAt !== undefined && Date.now() < this.state.retryAt)
+      (this.state.retryAt !== undefined && this.ambient.now() < this.state.retryAt)
     )
       return;
     this.cancel();
@@ -140,12 +145,16 @@ export class VerificationSubjectSearch {
     this.request = request;
     this.update({ query, phase: 'loading', subjects: [] });
     try {
-      const result = await withVerificationDeadline((signal) => this.load(query.trim(), signal), request.signal);
+      const result = await withVerificationDeadline(
+        (signal) => this.load(query.trim(), signal),
+        request.signal,
+        this.ambient.timer,
+      );
       if (this.request !== request || request.signal.aborted || episode !== this.episode || revision !== this.revision)
         return;
       if (result.ok) this.update({ query, phase: 'ready', subjects: result.value });
       else {
-        const retryAt = searchRetryAt(result.failure.retryAfter ?? null, Date.now());
+        const retryAt = searchRetryAt(result.failure.retryAfter ?? null, this.ambient.now());
         this.update({
           query,
           phase: 'failed',
@@ -211,11 +220,12 @@ export function VerificationSubjectChooser(props: Props) {
 /** The chooser view; stories and the production consumer both pass the transport explicitly. */
 export function VerificationSubjectChooserView({ selected, onSelect, disabled = false, search }: Props) {
   const id = useId();
+  const ambient = useSettingsAmbient();
   const input = useRef<HTMLInputElement>(null);
   const change = useRef<HTMLButtonElement>(null);
   const focus = useRef<'input' | 'change' | null>(null);
   const highlighted = useRef<VerificationSubject | undefined>(undefined);
-  const [lookup] = useState(() => new VerificationSubjectSearch(search));
+  const [lookup] = useState(() => new VerificationSubjectSearch(search, ambient));
   const state = useSyncExternalStore(lookup.subscribe, lookup.snapshot, lookup.snapshot);
   const [open, setOpen] = useState(false);
   const locale = getLocale();

@@ -7,6 +7,10 @@ import type { ProfileAttempt } from '../src/settings/profile-write';
 import type { ProfileValues, ProfileSaveResult } from '../src/settings/profile-data';
 import { EditableProfileReadError } from '../src/settings/editable-profile-source';
 import { m } from '../src/paraglide/messages.js';
+import { createBrowserSettingsAmbient } from '../src/settings/adapters/ambient';
+import { performanceAmbientTree } from './performance-ambient';
+
+const settingsAmbient = createBrowserSettingsAmbient();
 
 const profile: ProfileValues = {
   accountId: '00000000-0000-7000-8000-000000000002',
@@ -25,6 +29,7 @@ test('review captures the exact draft, recoverable refusal keeps it, and unknown
   const writes: ProfileAttempt[] = [];
   const editor = new AccountProfileEditor(
     {
+      ambient: settingsAmbient,
       read: async () => current,
       save: async (attempt) => {
         writes.push(attempt);
@@ -70,6 +75,7 @@ test('a retired target or session cancels approval and ignores an old save respo
   let writes = 0;
   const editor = new AccountProfileEditor(
     {
+      ambient: settingsAmbient,
       isCurrent: () => active,
       read: async () => profile,
       save: async () => {
@@ -90,6 +96,7 @@ test('a retired target or session cancels approval and ignores an old save respo
   let resolve!: (result: ProfileSaveResult) => void;
   const pending = new AccountProfileEditor(
     {
+      ambient: settingsAmbient,
       read: async () => profile,
       save: () =>
         new Promise((done) => {
@@ -114,6 +121,7 @@ test('failed managed readback preserves visible acknowledgement separately from 
   for (const acknowledged of [true, false]) {
     const editor = new AccountProfileEditor(
       {
+        ambient: settingsAmbient,
         read: async () => {
           throw new EditableProfileReadError(503);
         },
@@ -125,12 +133,14 @@ test('failed managed readback preserves visible acknowledgement separately from 
     await editor.submit('profile');
     await editor.confirm();
     const html = renderToStaticMarkup(
-      createElement(AccountProfileView, {
-        presentation: profilePresentation,
-        accountId: profile.accountId,
-        editor,
-        page: { state: 'unavailable' },
-      }),
+      performanceAmbientTree(
+        createElement(AccountProfileView, {
+          presentation: profilePresentation,
+          accountId: profile.accountId,
+          editor,
+          page: { state: 'unavailable' },
+        }),
+      ),
     );
     expect(html.includes(m.settings_profile_acknowledged_stale())).toBe(acknowledged);
     expect(html.includes(m.settings_profile_retry_save())).toBe(!acknowledged);
@@ -144,6 +154,7 @@ test('a managed read failure without a retained command shows its Retry-After wa
   const { AccountProfileView } = await import('../src/accounts/profile-editor/page');
   let reads = 0;
   const editor = new AccountProfileEditor({
+    ambient: settingsAmbient,
     read: async () => {
       reads++;
       throw new EditableProfileReadError(503, { status: 429, code: 'rate_limited', retryAfter: '120' });
@@ -154,12 +165,14 @@ test('a managed read failure without a retained command shows its Retry-After wa
   expect(reads).toBe(1);
   const render = (target: AccountProfileEditor) =>
     renderToStaticMarkup(
-      createElement(AccountProfileView, {
-        presentation: profilePresentation,
-        accountId: profile.accountId,
-        editor: target,
-        page: { state: 'unavailable' },
-      }),
+      performanceAmbientTree(
+        createElement(AccountProfileView, {
+          presentation: profilePresentation,
+          accountId: profile.accountId,
+          editor: target,
+          page: { state: 'unavailable' },
+        }),
+      ),
     );
   const reloadControl = (html: string) =>
     html.match(new RegExp(`<button([^>]*)>${m.settings_profile_reload_current()}</button>`))?.[1];
@@ -171,6 +184,7 @@ test('a managed read failure without a retained command shows its Retry-After wa
   await editor.reload();
   expect(reads).toBe(1);
   const unlimited = new AccountProfileEditor({
+    ambient: settingsAmbient,
     read: async () => {
       throw new EditableProfileReadError(503);
     },

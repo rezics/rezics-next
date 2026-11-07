@@ -39,8 +39,13 @@ import { RecentSearchBinding } from '../session/recent-search-binding';
 import { OwnVotesReturnProvider } from '../ratings/own-votes/return';
 import { pageRenderBinding } from '../features/catalogue/page-render-binding';
 import { installSemanticRenderPort } from '../features/pages/subject-page-application';
+import { InboxAmbientProvider } from '../inbox/adapters/ambient-view.tsx';
+import { SettingsAmbientProvider } from '../settings/adapters/ambient-view.tsx';
+import { createPerformanceAmbient } from '../session/performance-ambient';
 
 installSemanticRenderPort(pageRenderBinding);
+
+const performanceAmbient = createPerformanceAmbient();
 
 export const commerceNavigation = createNavigation([
   ...contextsNavigation,
@@ -248,11 +253,15 @@ function Root({ children }: { children: ReactNode }) {
           </a>
         </div>
         <ReaderNavigationContext value={readerNavigation}>
-          <LocaleNavigationProvider>
-            <AppShell navigation={commerceNavigation} subjectPurchase={subjectPurchaseRegions}>
-              {platformClosed ? <ClosedPage /> : children}
-            </AppShell>
-          </LocaleNavigationProvider>
+          <SettingsAmbientProvider ambient={performanceAmbient.settings}>
+            <InboxAmbientProvider ambient={performanceAmbient.inbox}>
+              <LocaleNavigationProvider>
+                <AppShell navigation={commerceNavigation} subjectPurchase={subjectPurchaseRegions}>
+                  {platformClosed ? <ClosedPage /> : children}
+                </AppShell>
+              </LocaleNavigationProvider>
+            </InboxAmbientProvider>
+          </SettingsAmbientProvider>
         </ReaderNavigationContext>
         <Scripts />
       </body>

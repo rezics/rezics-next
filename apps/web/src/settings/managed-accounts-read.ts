@@ -1,4 +1,6 @@
+import { serverSettingsTimer } from './adapters/ambient';
 import { withManagedReadDeadline } from './managed-read-deadline';
+import type { SettingsAmbient } from './ports/ambient';
 import type { ManagedReaderCurrent } from './managed-session-reader';
 import type { KernelClient } from '@rezics/client';
 import * as v from 'valibot';
@@ -115,6 +117,7 @@ export async function loadManagedAccounts(
           fetch: { cache: 'no-store', signal },
         }),
       signal,
+      serverSettingsTimer(),
     );
     if (result.error) return managedAccountsFailure(result.status, result.error.value, result.headers);
     const parsed = v.safeParse(schema, result.data);
@@ -219,9 +222,10 @@ export class ManagedAccountsInventory {
   constructor(
     private readonly viewerId: string,
     private readonly read: ManagedAccountsIO,
+    private readonly ambient: SettingsAmbient,
     private readonly current: ManagedReaderCurrent = () => true,
-    private readonly now: () => number = Date.now,
   ) {}
+  private now = () => this.ambient.now();
   snapshot = () => {
     this.live();
     return this.value;
@@ -251,7 +255,11 @@ export class ManagedAccountsInventory {
   private async request(cursors: ManagedAccountsCursors): Promise<ManagedAccountsResult> {
     try {
       if (!this.live()) return managedAccountsFailure(null);
-      const result = await withManagedReadDeadline((signal) => this.read(cursors, signal), this.lifetime.signal);
+      const result = await withManagedReadDeadline(
+        (signal) => this.read(cursors, signal),
+        this.lifetime.signal,
+        this.ambient.timer,
+      );
       if (result.ok && (result.page.account.id !== this.viewerId || result.page.account.kind !== 'actor'))
         return { ok: false, kind: 'denied', status: null, code: null };
       return result;

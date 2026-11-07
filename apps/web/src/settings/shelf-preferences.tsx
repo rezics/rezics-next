@@ -36,8 +36,10 @@ import { useSettingsCurrent, useSettingsReadCurrent, useSettingsSessionOwner } f
 import { ShelfTypeDefaults } from './shelf-type-defaults/editor';
 import type { ShelfTypesCurrentRead } from './ports/library';
 import { useSettingsNavigationDraft } from './reading-navigation';
+import { useSettingsAmbient } from './adapters/ambient-view.tsx';
 import { preferenceRetryDeadline, usePreferenceRetry } from './preference-failure-retry';
 import { withManagedReadDeadline } from './managed-read-deadline';
+import type { SettingsAmbient } from './ports/ambient';
 import { nativePreferenceFailureDetails } from './collection-privacy-data';
 
 const personalColumn = {
@@ -58,7 +60,6 @@ const appColumns = [...shelfColumnIds];
 const tabs = [...shelfPreferenceTabs];
 const fields = [...shelfPreferenceSortFields];
 const defaultSortChoice = '__default';
-const uuid = () => crypto.randomUUID();
 
 type ShelfDraft = {
   layout: 'grid' | 'list' | 'table';
@@ -121,8 +122,8 @@ type ShelfOwner = {
   onVersionChange: (version: number) => void;
 };
 
-function shelfResponse(reason?: ShelfIssue, failure?: NativePreferenceFailure): ShelfResponseState {
-  return { reason, failure, retryAt: preferenceRetryDeadline(failure?.retryAfter) };
+function shelfResponse(now: number, reason?: ShelfIssue, failure?: NativePreferenceFailure): ShelfResponseState {
+  return { reason, failure, retryAt: preferenceRetryDeadline(failure?.retryAfter, now) };
 }
 
 function shelfTransportFailure(error: unknown): NativePreferenceFailure {
@@ -422,6 +423,7 @@ export class ShelfPreferenceDraftRecovery {
     initial: ReadingPreferences,
     private io: ReadingIO,
     private owner: ShelfOwner,
+    private ambient: SettingsAmbient,
   ) {
     const shelf = initial.shelf ?? {};
     this.state = {
@@ -435,8 +437,8 @@ export class ShelfPreferenceDraftRecovery {
       confirmedWrite: null,
       writeReceipt: null,
       phase: 'idle',
-      readResponse: shelfResponse(),
-      writeResponse: shelfResponse(),
+      readResponse: this.response(),
+      writeResponse: this.response(),
       readBusy: false,
       writeBusy: false,
     };
@@ -498,8 +500,12 @@ export class ShelfPreferenceDraftRecovery {
     return this.state.current && this.editable();
   }
 
+  private response(reason?: ShelfIssue, failure?: NativePreferenceFailure) {
+    return shelfResponse(this.ambient.now(), reason, failure);
+  }
+
   private waiting(response: ShelfResponseState) {
-    return response.retryAt > Date.now();
+    return response.retryAt > this.ambient.now();
   }
 
   edit(next: Partial<ShelfDraft>, dirtyKey: string) {
@@ -551,7 +557,7 @@ export class ShelfPreferenceDraftRecovery {
     this.update({ phase: 'saving', writeBusy: true });
     let result: Awaited<ReturnType<ReadingIO['save']>>;
     try {
-      result = await withManagedReadDeadline(() => this.io.save(pending.input));
+      result = await withManagedReadDeadline(() => this.io.save(pending.input), undefined, this.ambient.timer);
     } catch (error) {
       result = { ok: false, reason: 'unavailable', failure: shelfTransportFailure(error) };
     }
@@ -568,7 +574,7 @@ export class ShelfPreferenceDraftRecovery {
         confirmedWrite: null,
         writeReceipt: null,
         phase: uncertain ? 'uncertain' : result.reason === 'conflict' ? 'conflict' : 'failed',
-        writeResponse: shelfResponse(reason, result.failure),
+        writeResponse: this.response(reason, result.failure),
         writeBusy: false,
         current: false,
         advice: result.reason === 'forbidden' ? deniedShelfUpdate(this.state.advice) : this.state.advice,
@@ -586,7 +592,7 @@ export class ShelfPreferenceDraftRecovery {
         writeReceipt: null,
         current: false,
         writeBusy: false,
-        writeResponse: shelfResponse('write:unknown_outcome'),
+        writeResponse: this.response('write:unknown_outcome'),
       });
       return;
     }
@@ -605,7 +611,7 @@ export class ShelfPreferenceDraftRecovery {
         confirmedWrite: pending,
         writeReceipt: { shelf, version: receipt.version },
         phase: 'review',
-        writeResponse: shelfResponse(),
+        writeResponse: this.response(),
         writeBusy: false,
       });
       this.owner.onVersionChange(Math.max(this.owner.version(), receipt.version));
@@ -630,7 +636,7 @@ export class ShelfPreferenceDraftRecovery {
       confirmedWrite: needsReview ? pending : null,
       writeReceipt: null,
       phase: needsReview ? 'review' : 'saved',
-      writeResponse: shelfResponse(),
+      writeResponse: this.response(),
       writeBusy: false,
     });
     this.owner.onVersionChange(Math.max(this.owner.version(), receipt.version));
@@ -672,7 +678,7 @@ export class ShelfPreferenceDraftRecovery {
       Object.keys(shelf).length > 0 &&
       !choiceAdmitted(this.state.draft, this.state.advice, this.state.dirty, this.state.known.shelf)
     ) {
-      this.update({ phase: 'failed', writeResponse: shelfResponse('write:invalid') });
+      this.update({ phase: 'failed', writeResponse: this.response('write:invalid') });
       return;
     }
     if (shelf?.layouts) {
@@ -682,7 +688,7 @@ export class ShelfPreferenceDraftRecovery {
         Object.keys(shelf.layouts).length > maxLayouts ||
         Object.values(merged).filter((value) => value !== null).length > maxLayouts
       ) {
-        this.update({ phase: 'failed', writeResponse: shelfResponse('write:invalid') });
+        this.update({ phase: 'failed', writeResponse: this.response('write:invalid') });
         return;
       }
     }
@@ -694,7 +700,7 @@ export class ShelfPreferenceDraftRecovery {
       input: Object.freeze({
         expectedVersion: this.state.known.version,
         shelf: frozenShelfPatch(shelf),
-        idempotencyKey: uuid(),
+        idempotencyKey: this.ambient.id(),
       }),
       draft: this.state.draft,
       dirty: new Set(this.state.dirty),
@@ -740,7 +746,7 @@ export class ShelfPreferenceDraftRecovery {
     this.update({ readBusy: true });
     let page: Awaited<ReturnType<ReadingIO['read']>>;
     try {
-      page = await withManagedReadDeadline(() => this.io.read());
+      page = await withManagedReadDeadline(() => this.io.read(), undefined, this.ambient.timer);
     } catch (error) {
       if (this.active(generation) && this.owner.canRead())
         this.update({
@@ -749,7 +755,7 @@ export class ShelfPreferenceDraftRecovery {
             : this.state.confirmedWrite || this.state.comparison
               ? 'review'
               : 'failed',
-          readResponse: shelfResponse('read:unavailable', shelfTransportFailure(error)),
+          readResponse: this.response('read:unavailable', shelfTransportFailure(error)),
           readBusy: false,
           current: false,
           advice: undefined,
@@ -765,7 +771,7 @@ export class ShelfPreferenceDraftRecovery {
           : this.state.confirmedWrite || this.state.comparison
             ? 'review'
             : 'failed',
-        readResponse: shelfResponse(read.issue ?? 'read:unavailable', read.failure),
+        readResponse: this.response(read.issue ?? 'read:unavailable', read.failure),
         readBusy: false,
         current: false,
         advice: undefined,
@@ -780,7 +786,7 @@ export class ShelfPreferenceDraftRecovery {
           : this.state.confirmedWrite || this.state.comparison
             ? 'review'
             : 'conflict',
-        readResponse: shelfResponse('stale_version'),
+        readResponse: this.response('stale_version'),
         readBusy: false,
         current: false,
         advice: undefined,
@@ -794,7 +800,7 @@ export class ShelfPreferenceDraftRecovery {
     ) {
       this.update({
         phase: 'review',
-        readResponse: shelfResponse('read:inconsistent'),
+        readResponse: this.response('read:inconsistent'),
         readBusy: false,
         current: false,
         advice: undefined,
@@ -815,7 +821,7 @@ export class ShelfPreferenceDraftRecovery {
           : read.issue
             ? 'failed'
             : 'review',
-      readResponse: shelfResponse(read.issue, read.failure),
+      readResponse: this.response(read.issue, read.failure),
       readBusy: false,
     });
     this.owner.onVersionChange(Math.max(this.owner.version(), current.version));
@@ -930,6 +936,7 @@ export function ShelfPreferencesCard({
   onVersionChange: (version: number) => void;
   readTypes?: (cursor?: string) => Promise<ShelfTypesCurrentRead>;
 }) {
+  const ambient = useSettingsAmbient();
   const writeCurrent = useSettingsCurrent(csrfToken, !!io);
   const readCurrent = useSettingsReadCurrent(csrfToken, !!io);
   const sessionOwner = useSettingsSessionOwner(csrfToken);
@@ -947,16 +954,21 @@ export function ShelfPreferencesCard({
   ownerRef.current = { version, writeCurrent, readCurrent, onVersionChange, token: episode.token };
   const controller = useMemo(
     () =>
-      new ShelfPreferenceDraftRecovery(initial, io, {
-        isCurrent: () => ownerRef.current.token === episode.token,
-        canRead: () => ownerRef.current.token === episode.token && ownerRef.current.readCurrent(),
-        canWrite: () => ownerRef.current.token === episode.token && ownerRef.current.writeCurrent(),
-        version: () => ownerRef.current.version,
-        onVersionChange: (next) => {
-          if (ownerRef.current.token === episode.token) ownerRef.current.onVersionChange(next);
+      new ShelfPreferenceDraftRecovery(
+        initial,
+        io,
+        {
+          isCurrent: () => ownerRef.current.token === episode.token,
+          canRead: () => ownerRef.current.token === episode.token && ownerRef.current.readCurrent(),
+          canWrite: () => ownerRef.current.token === episode.token && ownerRef.current.writeCurrent(),
+          version: () => ownerRef.current.version,
+          onVersionChange: (next) => {
+            if (ownerRef.current.token === episode.token) ownerRef.current.onVersionChange(next);
+          },
         },
-      }),
-    [episode.token, io],
+        ambient,
+      ),
+    [ambient, episode.token, io],
   );
   useEffect(() => {
     controller.activate();
@@ -977,8 +989,8 @@ export function ShelfPreferencesCard({
   const canWrite = writeCurrent() && controller.canSubmit();
   const writeRetryWaiting = usePreferenceRetry(state.writeResponse.failure, state.writeResponse.retryAt);
   const readRetryWaiting = usePreferenceRetry(state.readResponse.failure, state.readResponse.retryAt);
-  const writeRetrySeconds = Math.max(1, Math.ceil((state.writeResponse.retryAt - Date.now()) / 1000));
-  const readRetrySeconds = Math.max(1, Math.ceil((state.readResponse.retryAt - Date.now()) / 1000));
+  const writeRetrySeconds = Math.max(1, Math.ceil((state.writeResponse.retryAt - ambient.now()) / 1000));
+  const readRetrySeconds = Math.max(1, Math.ceil((state.readResponse.retryAt - ambient.now()) / 1000));
   const disabled = !canEdit || state.writeBusy || state.readBusy;
   const unavailableColumns = unsupportedShelfColumns(state.known.shelf);
   const unavailableSorts = unsupportedShelfSorts(state.known.shelf);

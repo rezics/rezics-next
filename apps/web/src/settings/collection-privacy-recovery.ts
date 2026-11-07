@@ -12,7 +12,7 @@ import {
   type CollectionPrivacyRead,
 } from './collection-privacy-data';
 import { withManagedReadDeadline } from './managed-read-deadline';
-import { preferenceRetryDeadline } from './preference-failure-retry';
+import { preferenceRetryDeadline, type SettingsAmbient } from './ports/ambient';
 
 export type VisibilityAttempt = Readonly<{
   collectionId: string;
@@ -84,9 +84,9 @@ export class CollectionPrivacyEditor extends Observable<EditorState> {
   constructor(
     current: OwnedCollection,
     private io: CollectionPrivacyIO,
+    private ambient: SettingsAmbient,
     isCurrent: () => boolean = () => true,
     private canWrite: () => boolean = isCurrent,
-    private now: () => number = Date.now,
   ) {
     super(
       {
@@ -105,6 +105,7 @@ export class CollectionPrivacyEditor extends Observable<EditorState> {
   hasCurrentUpdateAdvice = () => !!this.state.current?.allowedVisibilityActions.length;
   commandRetryDeadline = () => this.commandRetryAt;
   currentReadRetryDeadline = () => this.currentReadRetryAt;
+  private now = () => this.ambient.now();
   private commandWaiting = () => this.commandRetryAt > this.now();
   private currentReadWaiting = () => this.currentReadRetryAt > this.now();
   private retainCommandWait = (failure: NativePreferenceFailure | undefined) => {
@@ -200,7 +201,7 @@ export class CollectionPrivacyEditor extends Observable<EditorState> {
       collectionId: current.id,
       revision: current.revision,
       visibility: this.state.desired,
-      idempotencyKey: crypto.randomUUID(),
+      idempotencyKey: this.ambient.id(),
     });
     this.update({ attempt });
     await this.send(false);
@@ -257,7 +258,7 @@ export class CollectionPrivacyEditor extends Observable<EditorState> {
     const generation = ++this.generation;
     this.update({ phase: 'saving', failure: undefined, nativeFailure: undefined });
     try {
-      const answer = await withManagedReadDeadline(() => this.io.save(attempt));
+      const answer = await withManagedReadDeadline(() => this.io.save(attempt), undefined, this.ambient.timer);
       if (!this.live() || !this.canWrite() || generation !== this.generation) return;
       if (!answer.ok) {
         this.retainCommandWait(answer.failure);
@@ -319,7 +320,11 @@ export class CollectionPrivacyEditor extends Observable<EditorState> {
         nativeFailure: undefined,
       });
       if (readWaiting) return;
-      const read = await withManagedReadDeadline(() => this.io.read(attempt.collectionId));
+      const read = await withManagedReadDeadline(
+        () => this.io.read(attempt.collectionId),
+        undefined,
+        this.ambient.timer,
+      );
       if (!this.live() || generation !== this.generation) return;
       if (!read.ok) {
         this.retainCurrentReadWait(read.failure);
@@ -387,7 +392,7 @@ export class CollectionPrivacyEditor extends Observable<EditorState> {
     const receipt = this.state.receipt;
     this.update({ phase: 'reloading', nativeFailure: undefined });
     try {
-      const read = await withManagedReadDeadline(() => this.io.read(collectionId));
+      const read = await withManagedReadDeadline(() => this.io.read(collectionId), undefined, this.ambient.timer);
       if (!this.live() || generation !== this.generation) return;
       if (!read.ok) {
         this.retainCurrentReadWait(read.failure);
@@ -476,13 +481,14 @@ export class CollectionPrivacyPager extends Observable<PageState> {
   private retryWait = 0;
   constructor(
     private read: CollectionPrivacyPageRead,
+    private ambient: SettingsAmbient,
     isCurrent: () => boolean = () => true,
-    private now: () => number = Date.now,
   ) {
     super({ collections: [], next: null, window: 0, loaded: false, loading: false, failure: null }, isCurrent);
   }
   retryDeadline = () => this.retryWait;
   restartDeadline = () => this.retryWait;
+  private now = () => this.ambient.now();
   private waitingFor = () => this.retryWait > this.now();
   private retainRetryWait = (failure: NativePreferenceFailure | undefined) => {
     this.retryWait = Math.max(this.retryWait, preferenceRetryDeadline(failure?.retryAfter, this.now()));
@@ -544,7 +550,7 @@ export class CollectionPrivacyPager extends Observable<PageState> {
       ...(request.replace ? { restarting: true } : {}),
     });
     try {
-      const read = await withManagedReadDeadline(() => this.read(request.cursor));
+      const read = await withManagedReadDeadline(() => this.read(request.cursor), undefined, this.ambient.timer);
       if (!this.live() || generation !== this.generation) return;
       if (!read.ok) {
         this.retainRetryWait(read.failure);

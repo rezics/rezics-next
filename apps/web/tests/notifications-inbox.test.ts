@@ -8,6 +8,10 @@ import { ReporterStatusView } from '../src/moderation/reporter-status-view';
 import type { ReporterStatus } from '../src/moderation/reporter-status-model';
 import { getLocale } from '../src/paraglide/runtime.js';
 import type { InboxPage } from '../src/inbox/inbox-read';
+import { createBrowserInboxAmbient } from '../src/inbox/adapters/ambient';
+import { performanceAmbientTree } from './performance-ambient';
+
+const inboxAmbient = createBrowserInboxAmbient();
 import {
   emptyInboxPagination,
   nextInboxPage,
@@ -266,7 +270,9 @@ test('a reporter notice keeps its admitted status destination with withheld targ
       expect(calls).toEqual(['GET /v1/accounts/reporter-1/notifications']);
       const destination = await loadReporterStatus(client, report, 'Bearer reporter');
       expect(destination).toEqual(submission);
-      const html = renderToStaticMarkup(createElement(ReporterStatusView, { report: destination! }));
+      const html = renderToStaticMarkup(
+        performanceAmbientTree(createElement(ReporterStatusView, { report: destination! })),
+      );
       expect(html).toContain(submission.evidence!);
       expect(html).toContain(submission.target.id);
       expect(html).toContain('Spam');
@@ -388,7 +394,7 @@ test('Changing or losing the signed-in viewer immediately removes prior inbox ro
       items: [{ ...notice({ id: 'alice-old' }), text: 'Older Alice reply', unavailable: false }],
       next: null,
     });
-    client.setQueryData(unreadCountQueryFor(alice).queryKey, {
+    client.setQueryData(unreadCountQueryFor(alice, inboxAmbient.now).queryKey, {
       signedIn: true,
       state: 'ready',
       count: 7,
@@ -405,7 +411,7 @@ test('Changing or losing the signed-in viewer immediately removes prior inbox ro
     session('signed-in', 'bob');
     const bob = store.snapshot()!;
     expect(client.getQueryData(inboxPageQuery(bob).queryKey)).toBeUndefined();
-    expect(client.getQueryData(unreadCountQueryFor(bob).queryKey)).toBeUndefined();
+    expect(client.getQueryData(unreadCountQueryFor(bob, inboxAmbient.now).queryKey)).toBeUndefined();
     latePage.resolve('alice rows');
     lateCount.resolve(7);
     expect(await page).toBe('AbortError');
@@ -417,7 +423,7 @@ test('Changing or losing the signed-in viewer immediately removes prior inbox ro
     for (const lostState of ['unknown', 'signed-out', 'unavailable']) {
       session(lostState, null);
       expect(store.snapshot()).toBeNull();
-      expect(unreadCountQueryFor(store.snapshot()).enabled).toBe(false);
+      expect(unreadCountQueryFor(store.snapshot(), inboxAmbient.now).enabled).toBe(false);
       session('signed-in', 'bob');
       expect(store.snapshot()).not.toBe(bob);
     }
@@ -449,16 +455,23 @@ test('stale seen outcomes cannot invalidate the next viewer badge or dispatch an
       client.setQueryData(['session'], { state: 'signed-in', subject: 'alice', csrfToken: 'same-token' });
       const alice = store.snapshot()!;
       const pending = deferred<{ signedIn: boolean }>();
-      const oldMark = markInboxViewerSeen(client, alice, aliceAttempt, 'same-token', async ({ data, headers }) => {
-        commands.push({ ...data, token: new Headers(headers).get('X-CSRF-Token') });
-        return pending.promise;
-      }).catch((error: Error) => error.name);
+      const oldMark = markInboxViewerSeen(
+        client,
+        alice,
+        aliceAttempt,
+        'same-token',
+        inboxAmbient.now,
+        async ({ data, headers }) => {
+          commands.push({ ...data, token: new Headers(headers).get('X-CSRF-Token') });
+          return pending.promise;
+        },
+      ).catch((error: Error) => error.name);
       client.setQueryData(['session'], { state: 'unknown', subject: null, csrfToken: null });
       client.setQueryData(['session'], { state: 'signed-in', subject: 'bob', csrfToken: 'same-token' });
       const bob = store.snapshot()!;
-      const bobCountKey = unreadCountQueryFor(bob).queryKey;
+      const bobCountKey = unreadCountQueryFor(bob, inboxAmbient.now).queryKey;
       const bobPageKey = inboxPageQuery(bob).queryKey;
-      const aliceCountKey = unreadCountQueryFor(alice).queryKey;
+      const aliceCountKey = unreadCountQueryFor(alice, inboxAmbient.now).queryKey;
       client.setQueryData(bobCountKey, {
         signedIn: true,
         state: 'ready',
@@ -489,12 +502,14 @@ test('stale seen outcomes cannot invalidate the next viewer badge or dispatch an
         if (commands.length === 2) throw new Error('Response lost');
         return { signedIn: true };
       };
-      await expect(markInboxViewerSeen(client, alice, aliceAttempt, 'bob-token', retry)).rejects.toThrow(
-        'Inbox viewer changed',
+      await expect(
+        markInboxViewerSeen(client, alice, aliceAttempt, 'bob-token', inboxAmbient.now, retry),
+      ).rejects.toThrow('Inbox viewer changed');
+      await expect(markInboxViewerSeen(client, bob, bobAttempt, 'same-token', inboxAmbient.now, retry)).rejects.toThrow(
+        'Response lost',
       );
-      await expect(markInboxViewerSeen(client, bob, bobAttempt, 'same-token', retry)).rejects.toThrow('Response lost');
       client.setQueryData(['session'], { state: 'signed-in', subject: 'bob', csrfToken: 'bob-refreshed-token' });
-      await markInboxViewerSeen(client, bob, bobAttempt, 'bob-refreshed-token', retry);
+      await markInboxViewerSeen(client, bob, bobAttempt, 'bob-refreshed-token', inboxAmbient.now, retry);
       expect(commands).toEqual([
         { ...aliceAttempt, token: 'same-token' },
         { ...bobAttempt, token: 'same-token' },
@@ -708,7 +723,7 @@ test('discarded page responses cannot repopulate a restarted chain or outlive a 
     try {
       client.setQueryData(['session'], { state: 'signed-in', subject: 'alice', csrfToken: 'same-token' });
       const viewer = store.snapshot()!;
-      const countKey = unreadCountQueryFor(viewer).queryKey;
+      const countKey = unreadCountQueryFor(viewer, inboxAmbient.now).queryKey;
       client.setQueryData(countKey, {
         signedIn: true,
         state: 'ready',
@@ -831,7 +846,7 @@ test('Retain native failure metadata when marking Inbox notices seen with origin
       const client = new QueryClient();
       client.setQueryData(['session'], { state: 'signed-in', subject: 'alice', csrfToken: token });
       const viewer = inboxViewerStore(client).snapshot()!;
-      const countKey = unreadCountQueryFor(viewer).queryKey;
+      const countKey = unreadCountQueryFor(viewer, inboxAmbient.now).queryKey;
       client.setQueryData(countKey, {
         signedIn: true,
         state: 'ready',
@@ -851,7 +866,7 @@ test('Retain native failure metadata when marking Inbox notices seen with origin
           // Server functions need only serialize plain data: no Error prototype/custom-property support.
           return JSON.parse(JSON.stringify(result)) as typeof result;
         };
-        const failure = await markInboxViewerSeen(client, viewer, attempt, token, send).catch(
+        const failure = await markInboxViewerSeen(client, viewer, attempt, token, inboxAmbient.now, send).catch(
           (error: unknown) => error,
         );
         expect(failure).toBeInstanceOf(InboxSeenError);
@@ -870,7 +885,7 @@ test('Retain native failure metadata when marking Inbox notices seen with origin
         expect(client.getQueryData(countKey)).toMatchObject({ count: 7 });
         // Only an explicit retry with the original intent can confirm and invalidate.
         nativeStatus = 204;
-        await markInboxViewerSeen(client, viewer, attempt, token, send);
+        await markInboxViewerSeen(client, viewer, attempt, token, inboxAmbient.now, send);
         expect(client.getQueryState(countKey)?.isInvalidated).toBe(true);
         expect(calls).toEqual(
           Array(2).fill({ key: JSON.stringify(attempt.idempotencyKey), body: { through: attempt.through } }),
@@ -932,12 +947,12 @@ test('seen failure envelopes bound diagnostics, preserve non-204 uncertainty, an
       return late.promise;
     };
     const attempt = { through: 'alice-original', idempotencyKey: 'alice-key' };
-    const pending = markInboxViewerSeen(client, alice, attempt, 'alice-token', send).catch(
+    const pending = markInboxViewerSeen(client, alice, attempt, 'alice-token', inboxAmbient.now, send).catch(
       (error: Error) => error.name,
     );
     client.setQueryData(['session'], { state: 'signed-in', subject: 'bob', csrfToken: 'bob-token' });
     const bob = store.snapshot()!;
-    client.setQueryData(unreadCountQueryFor(bob).queryKey, {
+    client.setQueryData(unreadCountQueryFor(bob, inboxAmbient.now).queryKey, {
       signedIn: true,
       state: 'ready',
       count: 2,
@@ -947,11 +962,11 @@ test('seen failure envelopes bound diagnostics, preserve non-204 uncertainty, an
     });
     late.resolve({ signedIn: true, failure: { status: 429, code: 'rate_limited', retryAfter: '30' } });
     expect(await pending).toBe('AbortError');
-    await expect(markInboxViewerSeen(client, alice, attempt, 'bob-token', send)).rejects.toThrow(
+    await expect(markInboxViewerSeen(client, alice, attempt, 'bob-token', inboxAmbient.now, send)).rejects.toThrow(
       'Inbox viewer changed',
     );
     expect(sends).toBe(1);
-    expect(client.getQueryState(unreadCountQueryFor(bob).queryKey)?.isInvalidated).toBe(false);
+    expect(client.getQueryState(unreadCountQueryFor(bob, inboxAmbient.now).queryKey)?.isInvalidated).toBe(false);
   } finally {
     unsubscribe();
     client.clear();
@@ -977,12 +992,14 @@ test('validated acknowledgement stays consumed when later current reads fail, an
       };
       if (kind === 'loaded') {
         const attempt = { through: 'displayed', idempotencyKey: crypto.randomUUID() };
-        await expect(markInboxViewerSeen(client, viewer, attempt, 'alice-token', send)).resolves.toMatchObject({
+        await expect(
+          markInboxViewerSeen(client, viewer, attempt, 'alice-token', inboxAmbient.now, send),
+        ).resolves.toMatchObject({
           page: true,
           count: true,
         });
         await expect(
-          markInboxViewerSeen(client, viewer, attempt, 'alice-token', async () => {
+          markInboxViewerSeen(client, viewer, attempt, 'alice-token', inboxAmbient.now, async () => {
             sends.push('rejected');
             return { signedIn: true, failure: { status: 503, retryable: true, code: 'deadline_exceeded' } };
           }),
@@ -993,12 +1010,14 @@ test('validated acknowledgement stays consumed when later current reads fail, an
           noticeId: 'chosen',
           idempotencyKey: crypto.randomUUID(),
         });
-        await expect(markInboxViewerNoticeSeen(client, viewer, attempt, 'alice-token', send)).resolves.toMatchObject({
+        await expect(
+          markInboxViewerNoticeSeen(client, viewer, attempt, 'alice-token', inboxAmbient.now, send),
+        ).resolves.toMatchObject({
           page: true,
           count: true,
         });
         await expect(
-          markInboxViewerNoticeSeen(client, viewer, attempt, 'alice-token', async () => {
+          markInboxViewerNoticeSeen(client, viewer, attempt, 'alice-token', inboxAmbient.now, async () => {
             sends.push('rejected');
             return { signedIn: true, failure: { status: 503, retryable: true, code: 'deadline_exceeded' } };
           }),

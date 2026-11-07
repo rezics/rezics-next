@@ -5,6 +5,7 @@ import { expect, userEvent, within } from 'storybook/test';
 import { automation, detailExample, human, organization } from '../../accounts/management/story-api';
 import { m } from '../../paraglide/messages.js';
 import { ManagedAccountDetailCard } from '../../settings/managed-account-detail';
+import { useSettingsAmbient } from '../../settings/adapters/ambient-view.tsx';
 import { ManagedAccountReader, type DetailRead, type DetailSection } from '../../settings/managed-account-detail-read';
 
 import { sessionQuery } from '../../session/query';
@@ -28,6 +29,7 @@ function Example(props: ExampleProps) {
 
 // Illustrative native DTOs for component review, not proof of native authorization or completed operations.
 function ConnectedDetail({ member = false, paging = false, failed, waiting = false, long = false }: ExampleProps) {
+  const ambient = useSettingsAmbient();
   const client = useQueryClient();
   useState(() => {
     client.setQueryData(sessionQuery.queryKey, {
@@ -75,8 +77,8 @@ function ConnectedDetail({ member = false, paging = false, failed, waiting = fal
       }
       return { ok: true, viewerId: input.viewerId, value };
     };
-    return new ManagedAccountReader(human.id, organization.id, read);
-  }, [member, paging, failed, waiting, long]);
+    return new ManagedAccountReader(human.id, organization.id, read, ambient);
+  }, [ambient, member, paging, failed, waiting, long]);
   useEffect(() => {
     let active = true;
     void reader.load().then(() => {

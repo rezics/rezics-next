@@ -7,6 +7,7 @@ import { m } from '../paraglide/messages.js';
 import { useSettingsDisposal, useSettingsSessionOwner } from './settings-session-owner';
 import { useSettingsNavigationDraft } from './reading-navigation';
 import { usePreferenceRetry } from './preferences';
+import { useSettingsAmbient } from './adapters/ambient-view.tsx';
 import { WatchController, type WatchReturnReceipt } from './watch-controller';
 import { readWatchInventory, removeWatchSubscription } from './actions';
 import type { WatchManagementIO } from './watch-native';
@@ -29,7 +30,11 @@ type WatchesSectionProps = {
   onVisitTarget?: (receipt: WatchReturnReceipt, href: string) => boolean;
 };
 
-function createController(io: WatchManagementIO, owner: NonNullable<ReturnType<typeof useSettingsSessionOwner>>) {
+function createController(
+  io: WatchManagementIO,
+  owner: NonNullable<ReturnType<typeof useSettingsSessionOwner>>,
+  ambient: ReturnType<typeof useSettingsAmbient>,
+) {
   return new WatchController(
     io,
     {
@@ -38,6 +43,7 @@ function createController(io: WatchManagementIO, owner: NonNullable<ReturnType<t
       credential: owner.credential,
       subscribe: owner.subscribe,
     },
+    ambient,
     owner,
   );
 }
@@ -48,11 +54,16 @@ export function WatchesSection({
   initialReturn = null,
   onVisitTarget,
 }: WatchesSectionProps) {
+  const ambient = useSettingsAmbient();
   const owner = useSettingsSessionOwner(undefined);
-  const [entry, setEntry] = useState(() => ({ io, owner, controller: owner ? createController(io, owner) : null }));
+  const [entry, setEntry] = useState(() => ({
+    io,
+    owner,
+    controller: owner ? createController(io, owner, ambient) : null,
+  }));
   if (!owner) return null;
   if (entry.io !== io || entry.owner !== owner) {
-    setEntry({ io, owner, controller: createController(io, owner) });
+    setEntry({ io, owner, controller: createController(io, owner, ambient) });
     return null;
   }
   if (!entry.controller) return null;

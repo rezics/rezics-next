@@ -1,3 +1,4 @@
+import { serverSettingsTimer } from '../../settings/adapters/ambient';
 import type { KernelClient } from '@rezics/client';
 import * as v from 'valibot';
 import {
@@ -134,6 +135,7 @@ export async function writeTarget(
         fetch: { cache: 'no-store', signal: bounded },
       }),
     signal,
+    serverSettingsTimer(),
   );
   if (result.error || !result.data)
     return {

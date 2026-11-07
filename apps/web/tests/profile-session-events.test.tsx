@@ -4,6 +4,10 @@ import { act, createElement, StrictMode, useLayoutEffect, useState } from 'react
 import * as start from '../.storybook/react-start';
 import type { ProfileReadResult, ProfileSaveResult, ProfileValues } from '../src/settings/profile-data';
 import type { ProfileAttempt, ProfileEditor } from '../src/settings/profile-write';
+import { createBrowserSettingsAmbient } from '../src/settings/adapters/ambient';
+import { performanceAmbientTree } from './performance-ambient';
+
+const settingsAmbient = createBrowserSettingsAmbient();
 
 function deferred<T>() {
   let resolve!: (value: T) => void;

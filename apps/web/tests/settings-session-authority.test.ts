@@ -11,6 +11,9 @@ import {
   sendReading,
 } from '../src/settings/reading-preferences';
 import type { PreferenceChange, PreferenceWriteResult, SettingsPage } from '../src/settings/preferences';
+import { createBrowserSettingsAmbient } from '../src/settings/adapters/ambient';
+
+const settingsAmbient = createBrowserSettingsAmbient();
 
 mock.module('@tanstack/react-start', () => start);
 mock.module('@tanstack/react-start/server', () => ({
@@ -44,11 +47,15 @@ function deferred<T>() {
 test('retirement scrubs retained Collection rows, drafts and attempts and ignores late page and command results', async () => {
   const page = deferred<CollectionPrivacyRead<{ collections: OwnedCollection[]; next: string | null }>>();
   const write = deferred<CollectionVisibilityWrite>();
-  const pager = new CollectionPrivacyPager(() => page.promise);
-  const editor = new CollectionPrivacyEditor(privateRow, {
-    read: async () => ({ ok: true, value: privateRow }),
-    save: () => write.promise,
-  });
+  const pager = new CollectionPrivacyPager(() => page.promise, settingsAmbient);
+  const editor = new CollectionPrivacyEditor(
+    privateRow,
+    {
+      read: async () => ({ ok: true, value: privateRow }),
+      save: () => write.promise,
+    },
+    settingsAmbient,
+  );
   const loading = pager.load();
   const saving = editor.edit('public');
   expect(editor.snapshot().attempt).toMatchObject({ collectionId: privateRow.id, visibility: 'public' });
@@ -100,6 +107,7 @@ test('a stale writable receipt cannot restore edit authority after the viewer re
       advice: readingAdviceFor({ spoilerLevel: 0, suitability: 'blur' }),
     },
     { spoilerLevel: 1, suitability: 'blur' },
+    settingsAmbient.id,
   )!;
   const io = {
     async save(_change: Readonly<PreferenceChange>): Promise<PreferenceWriteResult> {
@@ -119,7 +127,7 @@ test('a stale writable receipt cannot restore edit authority after the viewer re
       throw new Error('stale read');
     },
   };
-  const result = await sendReading(io, input, false, () => 0);
+  const result = await sendReading(io, input, false, () => 0, settingsAmbient.timer);
   expect(result.kind).toBe('confirmed');
   expect(current).toBe(false);
   expect(owner.isCurrent()).toBe(false);

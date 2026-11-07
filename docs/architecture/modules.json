@@ -1274,7 +1274,10 @@
         "apps/web/src/settings/ports/accounts.ts",
         "apps/web/src/settings/ports/profile-editor.ts",
         "apps/web/src/settings/ports/profile-editor-view.ts",
+        "apps/web/src/settings/ports/ambient.ts",
         "apps/web/src/settings/adapters/accounts-browser.tsx",
+        "apps/web/src/settings/adapters/ambient.ts",
+        "apps/web/src/settings/adapters/ambient-view.tsx",
         "apps/web/src/settings/managed-account-capabilities.tsx",
         "apps/web/src/settings/ports/library.ts",
         "apps/web/src/settings/adapters/library.ts",
@@ -1282,7 +1285,10 @@
         "apps/web/src/settings/shelf-preferences-current.tsx",
         "apps/web/src/inbox/ports/library.ts",
         "apps/web/src/inbox/adapters/library.ts",
-        "apps/web/src/inbox/adapters/library-view.tsx"
+        "apps/web/src/inbox/adapters/library-view.tsx",
+        "apps/web/src/inbox/ports/ambient.ts",
+        "apps/web/src/inbox/adapters/ambient.ts",
+        "apps/web/src/inbox/adapters/ambient-view.tsx"
       ],
       "allowedDependencies": ["client", "ui", "web-app", "web-content", "web-library", "web-search"],
       "capabilities": ["account-settings"]
@@ -1488,6 +1494,7 @@
         "apps/web/src/kernel/platform-closed.ts",
         "apps/web/src/session/query.ts",
         "apps/web/src/session/guard.ts",
+        "apps/web/src/session/performance-ambient.ts",
         "apps/web/src/shell/page-heading.tsx",
         "apps/web/src/shell/head.ts",
         "apps/web/src/shell/head-context.ts",

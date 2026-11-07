@@ -7,6 +7,7 @@ import type {
   SettingsPage,
 } from './preferences';
 import { withManagedReadDeadline } from './managed-read-deadline';
+import type { SettingsId, SettingsTimer } from './ports/ambient';
 
 export type ReadingValues = Pick<ReadingPreferences, 'spoilerLevel' | 'suitability'>;
 export type ReadingIO = {
@@ -30,18 +31,22 @@ export function rebaseReading(base: ReadingValues, draft: ReadingValues, current
 }
 
 /** Capture just the changed reading fields; a notification version is never a reading baseline. */
-export function readingMutation(known: ReadingPreferences, draft: ReadingValues): Readonly<PreferenceChange> | null {
+export function readingMutation(
+  known: ReadingPreferences,
+  draft: ReadingValues,
+  id: SettingsId,
+): Readonly<PreferenceChange> | null {
   if (sameReading(known, draft)) return null;
   return Object.freeze({
     expectedVersion: known.version,
     ...(known.spoilerLevel !== draft.spoilerLevel ? { spoilerLevel: draft.spoilerLevel } : {}),
     ...(known.suitability !== draft.suitability ? { suitability: draft.suitability } : {}),
-    idempotencyKey: crypto.randomUUID(),
+    idempotencyKey: id(),
   });
 }
 
 /** Native defaults with the reviewed version; never a browser-invented default. */
-export function readingReset(known: ReadingPreferences): Readonly<PreferenceChange> | null {
+export function readingReset(known: ReadingPreferences, id: SettingsId): Readonly<PreferenceChange> | null {
   const defaults = readingDefaults(known.advice);
   if (!defaults || !ownerMayChangeReading(known.advice) || !validReading(known, known.version)) return null;
   const supported = known.advice!.reading.supported;
@@ -52,7 +57,7 @@ export function readingReset(known: ReadingPreferences): Readonly<PreferenceChan
     expectedVersion: known.version,
     spoilerLevel: defaults.spoilerLevel,
     suitability: defaults.suitability,
-    idempotencyKey: crypto.randomUUID(),
+    idempotencyKey: id(),
   });
 }
 
@@ -143,9 +148,10 @@ function validReading(preferences: ReadingPreferences, minimumVersion: number): 
 export async function readReading(
   io: Pick<ReadingIO, 'read'>,
   minimumVersion: number | (() => number),
+  timer: SettingsTimer,
 ): Promise<ReadingReadback> {
   try {
-    const page = await withManagedReadDeadline(() => io.read());
+    const page = await withManagedReadDeadline(() => io.read(), undefined, timer);
     if (!page.signedIn) return { ok: false, reason: 'forbidden' };
     if (!('preferences' in page)) {
       const { failure } = page;
@@ -180,11 +186,12 @@ export async function sendReading(
   input: Readonly<PreferenceChange>,
   recovering: boolean,
   currentVersion: () => number,
+  timer: SettingsTimer,
   canReadCurrent: () => boolean = () => true,
 ): Promise<ReadingAttemptResult> {
   let result: PreferenceWriteResult;
   try {
-    result = await withManagedReadDeadline(() => io.save(input));
+    result = await withManagedReadDeadline(() => io.save(input), undefined, timer);
   } catch {
     return { kind: 'uncertain', reason: 'unavailable' };
   }
@@ -206,7 +213,7 @@ export async function sendReading(
   )
     return { kind: 'uncertain', reason: 'unavailable' };
   if (!canReadCurrent()) return { kind: 'confirmed-read-failed', receipt, reason: 'unavailable' };
-  const current = await readReading(io, () => Math.max(receipt.version, currentVersion()));
+  const current = await readReading(io, () => Math.max(receipt.version, currentVersion()), timer);
   if (!current.ok)
     return {
       kind: 'confirmed-read-failed',

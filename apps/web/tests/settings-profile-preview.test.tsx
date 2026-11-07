@@ -6,6 +6,10 @@ import { ProfilePreview } from '../src/settings/profile-preview';
 import { ProfileEditor } from '../src/settings/profile-write';
 import { profileChanges, profileHasLocalPreview, type ProfileValues } from '../src/settings/profile-data';
 import { m } from '../src/paraglide/messages.js';
+import { createBrowserSettingsAmbient } from '../src/settings/adapters/ambient';
+import { performanceAmbientTree } from './performance-ambient';
+
+const settingsAmbient = createBrowserSettingsAmbient();
 
 const draft: ComponentProps<typeof ProfilePreview> = {
   displayName: 'Unsaved name',
@@ -30,7 +34,9 @@ test('only approved safe supplied destinations become links, even with stale app
       `https://example.test/${'x'.repeat(2048)}`,
     ].map((url) => ({ url, valid: true })),
   ]) {
-    const html = renderToStaticMarkup(<ProfilePreview {...draft} links={[{ ...link, label: 'Rejected' }]} />);
+    const html = renderToStaticMarkup(
+      performanceAmbientTree(<ProfilePreview {...draft} links={[{ ...link, label: 'Rejected' }]} />),
+    );
     expect(html).not.toContain('<a ');
     expect(html).toContain(m.settings_profile_preview_invalid_link());
   }
@@ -125,6 +131,7 @@ test('matching current fields do not mark the local preview as saved while the o
   };
   const editor = new ProfileEditor(
     {
+      ambient: settingsAmbient,
       read: async () => initial,
       save: async () => {
         throw new Error('Response lost');
@@ -144,14 +151,16 @@ test('matching current fields do not mark the local preview as saved while the o
   expect(changed).toBe(false);
   expect(profileHasLocalPreview(changed, false, snapshot.attempt, snapshot.acknowledged)).toBe(true);
   const html = renderToStaticMarkup(
-    createElement(ProfilePreview, {
-      displayName: draft!.displayName,
-      biography: draft!.biography,
-      avatar: draft!.avatar,
-      localAvatarUrl: null,
-      hasUnsavedChanges: profileHasLocalPreview(changed, false, snapshot.attempt, snapshot.acknowledged),
-      links: [],
-    }),
+    performanceAmbientTree(
+      createElement(ProfilePreview, {
+        displayName: draft!.displayName,
+        biography: draft!.biography,
+        avatar: draft!.avatar,
+        localAvatarUrl: null,
+        hasUnsavedChanges: profileHasLocalPreview(changed, false, snapshot.attempt, snapshot.acknowledged),
+        links: [],
+      }),
+    ),
   );
   expect(html).toContain(m.settings_profile_preview_draft());
   expect(html).not.toContain(m.settings_profile_preview_saved());
@@ -167,7 +176,9 @@ test('a clean or confirmed current profile displays the saved preview while pend
   ] as const) {
     const hasUnsavedChanges = profileHasLocalPreview(changed, localAvatar, attempt, acknowledged);
     expect(hasUnsavedChanges).toBe(local);
-    const html = renderToStaticMarkup(<ProfilePreview {...draft} hasUnsavedChanges={hasUnsavedChanges} />);
+    const html = renderToStaticMarkup(
+      performanceAmbientTree(<ProfilePreview {...draft} hasUnsavedChanges={hasUnsavedChanges} />),
+    );
     expect(html).toContain(local ? m.settings_profile_preview_draft() : m.settings_profile_preview_saved());
   }
 });

@@ -8,7 +8,7 @@ import {
   type VerificationFailure,
   type VerificationInput,
 } from './verification-core';
-import { preferenceRetryDeadline } from './preference-failure-retry';
+import { preferenceRetryDeadline, type SettingsAmbient } from './ports/ambient';
 
 export type VerificationSnapshot = {
   accountId: string;
@@ -123,6 +123,7 @@ export class VerificationRecovery {
   constructor(
     readonly accountId: string,
     private io: VerificationRecoveryIO,
+    private ambient: SettingsAmbient,
     private isCurrent: () => boolean = () => true,
     private canWrite: () => boolean = isCurrent,
   ) {}
@@ -157,10 +158,10 @@ export class VerificationRecovery {
     return this.state.phase === 'sending' || this.state.phase === 'reading';
   }
   private readWaiting() {
-    return this.state.readRetryAt > Date.now();
+    return this.state.readRetryAt > this.ambient.now();
   }
   private commandWaiting() {
-    return this.state.commandRetryAt > Date.now();
+    return this.state.commandRetryAt > this.ambient.now();
   }
   private older(request: AgentVerificationRequest) {
     if (!this.latest) return false;
@@ -185,7 +186,7 @@ export class VerificationRecovery {
     const input = frozen({
       ...draft,
       links: draft.links.map((link) => ({ ...link })),
-      idempotencyKey: crypto.randomUUID(),
+      idempotencyKey: this.ambient.id(),
     });
     this.update({ attempt: frozen({ kind: 'request' as const, input, requestId: null, receipt: null }) });
     await this.send(false);
@@ -206,7 +207,7 @@ export class VerificationRecovery {
     this.update({
       attempt: frozen({
         kind: 'withdraw' as const,
-        input: { idempotencyKey: crypto.randomUUID() },
+        input: { idempotencyKey: this.ambient.id() },
         requestId: this.state.current!.verificationRequest!.id,
         receipt: null,
       }),
@@ -248,13 +249,16 @@ export class VerificationRecovery {
             ? this.io.request(this.accountId, attempt.input, signal)
             : this.io.withdraw(this.accountId, attempt.input, signal),
         this.lifetime.signal,
+        this.ambient.timer,
       );
     } catch (error) {
       const failure = verificationFailureFromException(error);
       if (this.live(epoch))
         this.update({
           phase: 'uncertain',
-          ...(failure === undefined ? {} : { failure, commandRetryAt: preferenceRetryDeadline(failure.retryAfter) }),
+          ...(failure === undefined
+            ? {}
+            : { failure, commandRetryAt: preferenceRetryDeadline(failure.retryAfter, this.ambient.now()) }),
         });
       return;
     }
@@ -270,7 +274,7 @@ export class VerificationRecovery {
         phase: uncertain ? 'uncertain' : 'refused',
         attempt: uncertain ? attempt : null,
         failure,
-        commandRetryAt: preferenceRetryDeadline(failure.retryAfter),
+        commandRetryAt: preferenceRetryDeadline(failure.retryAfter, this.ambient.now()),
       });
       return;
     }
@@ -312,7 +316,11 @@ export class VerificationRecovery {
     this.update({ phase: 'reading', readStatus: 'reading', current: null, failure: undefined, readRetryAt: 0 });
     let current: VerificationSnapshot;
     try {
-      current = await withVerificationDeadline((signal) => this.io.read(this.accountId, signal), this.lifetime.signal);
+      current = await withVerificationDeadline(
+        (signal) => this.io.read(this.accountId, signal),
+        this.lifetime.signal,
+        this.ambient.timer,
+      );
       if (
         current.accountId !== this.accountId ||
         (current.verificationRequest && current.verificationRequest.accountId !== this.accountId)
@@ -327,7 +335,7 @@ export class VerificationRecovery {
           phase: this.state.attempt ? 'uncertain' : 'unavailable',
           readStatus: 'error',
           failure,
-          readRetryAt: preferenceRetryDeadline(failure?.retryAfter),
+          readRetryAt: preferenceRetryDeadline(failure?.retryAfter, this.ambient.now()),
         });
       return;
     }

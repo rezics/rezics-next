@@ -7,6 +7,7 @@ import { chromium, type Browser } from 'playwright';
 import { Button } from '@rezics/ui/shadcn/button';
 import { m } from '../src/paraglide/messages.js';
 import { getLocale, locales, setLocale } from '../src/paraglide/runtime.js';
+import { performanceAmbientTree } from './performance-ambient';
 
 mock.module('cloudflare:workers', () => ({ env: {} }));
 
@@ -45,7 +46,7 @@ const unavailable: Item = {
 };
 
 function markup(items: Item[]) {
-  return renderToStaticMarkup(createElement(InboxRows, { page: { items, next: null } }));
+  return renderToStaticMarkup(performanceAmbientTree(createElement(InboxRows, { page: { items, next: null } })));
 }
 
 function continuationButton(tree: ReactNode) {
@@ -131,7 +132,7 @@ test('a sparse continuation preserves its callback and loading disables only the
   expect(availableHandler).toBe(onLoadMore);
   expect(availableButton?.props.disabled).toBe(false);
   expect(availableButton?.props.className).toContain('min-h-11');
-  expect(renderToStaticMarkup(available)).toContain(m.inbox_load_more());
+  expect(renderToStaticMarkup(performanceAmbientTree(available))).toContain(m.inbox_load_more());
   expect(loadingButton?.props.onClick).toBe(onLoadMore);
   expect(loadingButton?.props.disabled).toBe(true);
   expect(continuationButton(withoutCallback)).toBeUndefined();

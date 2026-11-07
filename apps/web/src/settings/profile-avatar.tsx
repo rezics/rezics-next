@@ -22,6 +22,7 @@ import {
   type AvatarUpload,
 } from './profile-avatar-upload';
 import { ProfileAvatarCrop } from './profile-avatar-crop.tsx';
+import { useSettingsAmbient } from './adapters/ambient-view.tsx';
 import { usePreferenceRetry } from './preferences';
 
 export function useProfileAvatarUpload(
@@ -131,6 +132,7 @@ export function ProfileAvatar({
   saving?: boolean;
 }) {
   const id = useId();
+  const ambient = useSettingsAmbient();
   const input = useRef<HTMLInputElement>(null);
   const choose = useRef<HTMLButtonElement>(null);
   const { state, controller } = upload;
@@ -188,14 +190,14 @@ export function ProfileAvatar({
           {waiting && state.retryAt ? (
             <p role="status">
               {m.settings_profile_avatar_retry_after({
-                seconds: Math.max(1, Math.ceil((state.retryAt - Date.now()) / 1000)),
+                seconds: Math.max(1, Math.ceil((state.retryAt - ambient.now()) / 1000)),
               })}
             </p>
           ) : null}
           {adviceWaiting && state.adviceRetryAt ? (
             <p role="status">
               {m.settings_profile_avatar_retry_after({
-                seconds: Math.max(1, Math.ceil((state.adviceRetryAt - Date.now()) / 1000)),
+                seconds: Math.max(1, Math.ceil((state.adviceRetryAt - ambient.now()) / 1000)),
               })}
             </p>
           ) : null}

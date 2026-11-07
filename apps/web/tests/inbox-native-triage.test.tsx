@@ -4,6 +4,10 @@ import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { getLocale } from '../src/paraglide/runtime.js';
 import { threadLocation } from '../src/threads/thread-href';
+import { createBrowserInboxAmbient } from '../src/inbox/adapters/ambient';
+import { performanceAmbientTree } from './performance-ambient';
+
+const inboxAmbient = createBrowserInboxAmbient();
 import {
   emptyInboxPagination,
   nextInboxPage,
@@ -136,15 +140,15 @@ test('Inbox uses one composed page for current disclosure, installed kinds and a
 
 test('list and detail share available actor identity while withheld and system labels stay distinct', async () => {
   const resolved = await resolveInboxItems(nativeInboxEnvelope(composed, null, 'alice'));
-  const list = renderToStaticMarkup(createElement(InboxRows, { page: resolved }));
+  const list = renderToStaticMarkup(performanceAmbientTree(createElement(InboxRows, { page: resolved })));
   const availableDetail = renderToStaticMarkup(
-    createElement(InboxNoticeDetailView, { notice: composed[0]!, selection: 'all' }),
+    performanceAmbientTree(createElement(InboxNoticeDetailView, { notice: composed[0]!, selection: 'all' })),
   );
   const withheldDetail = renderToStaticMarkup(
-    createElement(InboxNoticeDetailView, { notice: composed[1]!, selection: 'all' }),
+    performanceAmbientTree(createElement(InboxNoticeDetailView, { notice: composed[1]!, selection: 'all' })),
   );
   const systemDetail = renderToStaticMarkup(
-    createElement(InboxNoticeDetailView, { notice: composed[4]!, selection: 'all' }),
+    performanceAmbientTree(createElement(InboxNoticeDetailView, { notice: composed[4]!, selection: 'all' })),
   );
 
   expect(list).toContain('Momo');
@@ -317,12 +321,14 @@ test('a consumed acknowledgement does not offer command retry, and a native send
     nativeInboxEnvelope([notice('chosen', 'reply'), notice('neighbor', 'mention')], null, 'alice'),
   );
   const confirmed = renderToStaticMarkup(
-    createElement(InboxRows, {
-      page: resolved,
-      onMarkSeen: () => {},
-      onRetrySeen: () => {},
-      confirmedNoticeId: 'chosen',
-    }),
+    performanceAmbientTree(
+      createElement(InboxRows, {
+        page: resolved,
+        onMarkSeen: () => {},
+        onRetrySeen: () => {},
+        confirmedNoticeId: 'chosen',
+      }),
+    ),
   );
   expect(confirmed).toContain(m.inbox_notice_marked_seen());
   expect(confirmed).not.toContain(m.inbox_notice_seen_retry());
@@ -350,14 +356,14 @@ test('a consumed acknowledgement does not offer command retry, and a native send
       idempotencyKey: crypto.randomUUID(),
     });
     await expect(
-      markInboxViewerNoticeSeen(client, viewer, attempt, 'alice-token', async ({ data }) => {
+      markInboxViewerNoticeSeen(client, viewer, attempt, 'alice-token', inboxAmbient.now, async ({ data }) => {
         sends.push(data);
         return { signedIn: true };
       }),
     ).resolves.toMatchObject({ page: true, count: true });
     expect(invalidations).toBe(2);
     await expect(
-      markInboxViewerNoticeSeen(client, viewer, attempt, 'alice-token', async ({ data }) => {
+      markInboxViewerNoticeSeen(client, viewer, attempt, 'alice-token', inboxAmbient.now, async ({ data }) => {
         sends.push(data);
         return { signedIn: true, failure: { status: 503, retryable: true, code: 'deadline_exceeded' } };
       }),
@@ -445,7 +451,10 @@ test('concurrent unread-count consumers for one viewer episode share one native 
   try {
     client.setQueryData(sessionQuery.queryKey, { state: 'signed-in', subject: 'alice', csrfToken: 'alice-token' });
     const viewer = store.snapshot()!;
-    const pending = Promise.all([fetchInboxUnreadCount(viewer), fetchInboxUnreadCount(viewer)]);
+    const pending = Promise.all([
+      fetchInboxUnreadCount(viewer, inboxAmbient.now),
+      fetchInboxUnreadCount(viewer, inboxAmbient.now),
+    ]);
     expect(loads).toBe(1);
     release();
     const [first, second] = await pending;
