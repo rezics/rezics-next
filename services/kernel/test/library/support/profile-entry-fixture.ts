@@ -28,7 +28,6 @@ import { systemClock, type KernelClock } from '../../../src/clock.ts';
 import { composeLibraryDomain } from '../../../src/composition/library.ts';
 import { createPool } from '../../../src/database/pool.ts';
 import { createKernel } from '../../../src/http/kernel.ts';
-import { composeLibraryDomain } from '../../../src/composition/library.ts';
 import { actionCatalogue } from '../../../src/http/request.ts';
 import { runCommand } from '../../../src/command/command.ts';
 import { createEntryCommands } from '../../../src/library/entries.ts';
@@ -209,8 +208,7 @@ export async function createProfileEntryFixture(
     // native test database is loaded; route outcomes are asserted by the command tests themselves.
     await kernel.handle(new Request('http://kernel.test/v1/definitions/active'));
     expect(access).toBeDefined();
-    // Native command fixtures exercise the same disclosure capability as the server.
-    composeLibraryDomain({ pool, access });
+    // Native commands use the domain installed with lazy Access above.
     const projection = linkProjection(pool);
     const partitions = new Set([0]);
     const mappedHomes = new Set<number>();

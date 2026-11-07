@@ -33,6 +33,9 @@ erasure participant lists and work/policy vocabulary belong to Access contract l
 those same identities. SQL descriptors stay on their defining Access leaves. Acceptance remains typing only; focused
 composition, forwarding and constructor-identity tests preserve existing behaviour assertions and run after landing.
 
+Decision: the profile entry fixture composes its native Library domain once when lazy Access is ready, preserving its
+Pool, route key and selected clock for entry, session and growth commands through startup.
+
 Decision: Collection directory/list/order authorization consumes Library `AuthorizationCapability.specializeCollectionList` and Access's funded collection-update preparation bound. Access adapters own the catalogue residual, permission SQL and inverse membership limit (1000); Library directory SQL binds only the admitted curator/public parameter map. Collection mutation and Progress descriptors stay independent. Fewest tests: owner/public/unavailable list outcomes, preparation memberships, directory public-floor bytes, unchanged order/read assertions.
 
 Decision: native Collection preparation consumes Library's `PreparationWorkCapability` and `ScopeWorkCapability`.
