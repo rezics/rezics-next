@@ -2680,29 +2680,24 @@ accept the underscore field separators tmux prints when the host has no locale.
 Manager events are committed to SQLite and signaled through filesystem notifications. Inbox waiting has no sleep loop.
 The control plane's manager wakeup path is event-driven: the opening tells a manager to end the turn when no decision
 is pending. When an event is delivered, the host steers it into the manager's active turn or starts a new turn on the
-persisted thread; if the app-server has not loaded that thread, the host resumes it once and starts the turn there. The
-opening also states the manager's outputs (ready briefs in its backlog and decisions), the stopped-task hour, the
-message limits, and that the brief and continuation are read once per session. The host counts `clock.sleep` items per manager and UTC hour;
+persisted thread; if the app-server has not loaded that thread, the host resumes it once, then steers an already active
+turn or starts a new one. The opening also states the manager's outputs (ready briefs in its backlog and decisions),
+the stopped-task hour, the message limits, and that the brief and continuation are read once per session. The host
+counts `clock.sleep` items per manager and UTC hour;
 the eleventh in an hour sends the supermanager one `environment` alarm and the manager one correction. The
 turns-without-decision limit counts consecutive completed turns. A turn in which a ready brief in the Goal's backlog was
 written or moved back (by modification or status time), or a brief the backlog run dispatched was written, counts as a
 decision, as any control-plane command already does; a decision resets the count to zero.
-This controller behavior does not disable native Goal continuation. The installed `codex-cli 0.164.0` experimental
-bindings, generated with `codex app-server generate-ts --experimental`, expose no persistent idle-continuation setting
-in `ThreadGoalSetParams` or `ThreadSettingsUpdateParams`. `ThreadForkParams.deferGoalContinuation`
-only delays the fork's first continuation; automatic continuation resumes after the next explicit turn. Regenerating
-those bindings from this installed CLI still yields only `threadId`, `origin`, `objective`, `status` and `tokenBudget`
-on `ThreadGoalSetParams`, and no continuation field on `ThreadSettingsUpdateParams`. The provider
-must add a persistent policy that keeps an active Goal and its budget tracked while waiting for an explicit controller
-turn. That policy must survive thread resume and explicit inbox turns without changing the objective, budget, usage,
-thread or worker sessions; it must leave autonomous controller work running. Integration requires a provider API that
-acknowledges the policy and restores it after host recovery. Until that prerequisite is available, retain active Goals
-and the supported inbox wakeup path; do not send an invented configuration key or treat the opening prompt as scheduler
-control. Resident startup and recovery send only those five `thread/goal/set` fields, keep the existing thread through
-resume, and parse 0.164.0's ANSI-colored `readyz:` line (`NO_COLOR=1` and CSI stripping) so the host can connect.
-The recovery test covers controller dispatch, not suppression of native provider turns. See the
+For Codex managers, the host pauses the existing native Goal after a completed turn when no inbox event needs delivery.
+The managed manager remains running on the same thread with its objective, token budget and usage. When an inbox event
+arrives, the host sets that Goal active, then delivers the event through the existing start-or-steer path. If Goal
+activation starts a turn before the explicit start request, the host resumes the thread and steers that turn, so the
+event is delivered once. A completed turn returns the Goal to paused when no new event is waiting. Recovery reads the
+persisted Goal status and only reactivates it to deliver pending inbox events; idle polling creates no model turns.
+Focused fake-app-server tests pin the pause/reactivation and turn-race request behavior; they do not exercise provider
+scheduling. See the
 [official OpenAI Goal lifecycle documentation](https://developers.openai.com/cookbook/examples/codex/using_goals_in_codex)
-for the independent native continuation behavior.
+for native continuation behavior.
 Managers receive only decisions requiring judgment; gates, merges and mechanical reruns do not wake them. Completion is
 a proposal: `manager complete <goal>` records the request and returns immediately while the host checks that all scoped
 tasks are merged and the main gate passes in an isolated checkout. The gate checks the main commit captured when it

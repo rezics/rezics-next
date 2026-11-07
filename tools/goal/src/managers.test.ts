@@ -10,7 +10,7 @@ import { defaultPolicy, type ControlPolicy } from './policy.ts';
 import type { ProcessIdentity } from './process.ts';
 import { temporaryDirectory } from './test-support.ts';
 
-async function setup(policy?: ControlPolicy) {
+async function setup(policy?: ControlPolicy, options: { autoTurnOnGoalActivation?: boolean } = {}) {
   const temporary = temporaryDirectory();
   const db = openDb(join(temporary.path, 'state.sqlite'));
   const log = join(temporary.path, 'rpc.jsonl');
@@ -19,6 +19,7 @@ async function setup(policy?: ControlPolicy) {
     ...process.env,
     FAKE_RPC_LOG: log,
     FAKE_RPC_FAIL_FILE: failFile,
+    FAKE_RPC_AUTO_TURN_ON_GOAL_ACTIVATION: options.autoTurnOnGoalActivation ? '1' : '0',
   });
   await client.initialize();
   const inbox = new SqliteManagerInbox(db, temporary.path);
@@ -545,8 +546,8 @@ test('JSON-RPC errors propagate and an exiting app-server rejects pending reques
   }
 });
 
-test('An active resident manager waits without provider-generated idle turns while autonomous controller work continues.', async () => {
-  const s = await setup();
+test('A Codex manager pauses native Goal while idle and wakes once for an inbox event.', async () => {
+  const s = await setup(undefined, { autoTurnOnGoalActivation: true });
   try {
     const manager = await s.managers.start(s.spec);
     await s.notify({
@@ -561,7 +562,7 @@ test('An active resident manager waits without provider-generated idle turns whi
       status: 'running',
       activeTurnId: null,
       usage: { total: { totalTokens: 500 } },
-      goalState: { status: 'active', objective: s.spec.objective, tokenBudget: s.spec.budget },
+      goalState: { status: 'paused', objective: s.spec.objective, tokenBudget: s.spec.budget },
     });
     expect(s.requests().find((r) => r.method === 'thread/goal/set')?.params).toEqual({
       threadId: manager.threadId,
@@ -570,31 +571,64 @@ test('An active resident manager waits without provider-generated idle turns whi
       status: 'active',
       tokenBudget: s.spec.budget,
     });
-    await s.managers.start({ ...s.spec, id: 'second' });
-    expect(s.managers.get('second')).toMatchObject({ status: 'running', threadId: 'thread-2' });
+    await s.managers.wake(manager.id);
+    await s.managers.flush();
     expect(
       s.requests().filter((r) => r.method === 'turn/start' && r.params.threadId === manager.threadId),
     ).toHaveLength(1);
-    expect(s.requests().filter((r) => r.method === 'turn/start')).toHaveLength(2);
-    expect(
-      s
-        .requests()
-        .some((r) =>
-          ['thread/fork', 'thread/goal/clear', 'thread/settings/update', 'turn/interrupt'].includes(r.method),
-        ),
-    ).toBe(false);
-    expect(s.requests().some((r) => r.method === 'thread/goal/set' && r.params.status === 'paused')).toBe(false);
     s.inbox.deliver({ managerId: manager.id, kind: 'instruction', summary: 'Choose the next brief' });
     await s.managers.wake(manager.id);
+    await s.managers.flush();
     const wakes = s.requests().filter((r) => r.method === 'turn/start' && r.params.threadId === manager.threadId);
     expect(wakes).toHaveLength(2);
-    expect(wakes[1].params.input).toEqual([{ type: 'text', text: 'Choose the next brief', text_elements: [] }]);
+    expect(wakes[1].params).toMatchObject({
+      threadId: manager.threadId,
+      model: 'gpt-6.1-sol',
+      effort: 'high',
+      input: [{ type: 'text', text: 'Choose the next brief', text_elements: [] }],
+    });
+    expect(s.requests().filter((r) => r.method === 'turn/steer')).toEqual([
+      expect.objectContaining({
+        params: {
+          threadId: manager.threadId,
+          expectedTurnId: 'turn-2',
+          input: [{ type: 'text', text: 'Choose the next brief', text_elements: [] }],
+        },
+      }),
+    ]);
+    expect(s.requests().filter((r) => r.method === 'thread/goal/set').map((r) => r.params.status)).toEqual([
+      'active',
+      'paused',
+      'active',
+    ]);
+    expect(s.inbox.notifications(manager.id)).toHaveLength(0);
     expect(s.managers.get(manager.id)).toMatchObject({
       threadId: manager.threadId,
       status: 'running',
+      activeTurnId: 'turn-2',
       usage: { total: { totalTokens: 500 } },
       goalState: { status: 'active', objective: s.spec.objective, tokenBudget: s.spec.budget },
     });
+    await s.notify({
+      method: 'turn/completed',
+      params: { threadId: manager.threadId, turn: { id: 'turn-2', status: 'completed' } },
+    });
+    expect(s.managers.get(manager.id)).toMatchObject({
+      status: 'running',
+      activeTurnId: null,
+      goalState: { status: 'paused' },
+    });
+    expect(s.managers.get(manager.id).turns).toBe(2);
+    await s.managers.wake(manager.id);
+    expect(
+      s.requests().filter((r) => r.method === 'turn/start' && r.params.threadId === manager.threadId),
+    ).toHaveLength(2);
+    expect(s.requests().filter((r) => r.method === 'thread/goal/set').map((r) => r.params.status)).toEqual([
+      'active',
+      'paused',
+      'active',
+      'paused',
+    ]);
   } finally {
     await s.close();
   }
@@ -619,15 +653,21 @@ test('Inbox decisions wake the existing thread once before and after host recove
       status: 'running',
       activeTurnId: null,
       usage: { total: { totalTokens: 900 } },
-      goalState: { status: 'active', objective: s.spec.objective, tokenBudget: s.spec.budget },
+      goalState: { status: 'paused', objective: s.spec.objective, tokenBudget: s.spec.budget },
     });
     expect(s.requests().filter((r) => r.method === 'turn/start')).toHaveLength(1);
     s.inbox.deliver({ managerId: state.id, kind: 'instruction', summary: 'Decide before the host stops' });
     await s.managers.wake(state.id);
     expect(s.requests().filter((r) => r.method === 'turn/start')).toHaveLength(2);
+    expect(s.managers.get(state.id)).toMatchObject({ goalState: { status: 'active' } });
     await s.notify({
       method: 'turn/completed',
       params: { threadId: state.threadId, turn: { id: 'turn-2', status: 'completed' } },
+    });
+    expect(s.managers.get(state.id)).toMatchObject({
+      status: 'running',
+      activeTurnId: null,
+      goalState: { status: 'paused' },
     });
     s.inbox.record(state.id, { kind: 'merged' });
     await s.managers.wake(state.id);
@@ -667,7 +707,13 @@ test('Inbox decisions wake the existing thread once before and after host recove
     await recovered.flush();
     expect(s.requests().filter((r) => r.method === 'turn/start')).toHaveLength(3);
     expect(s.requests().filter((r) => r.method === 'turn/steer')).toHaveLength(0);
-    expect(s.requests().filter((r) => r.method === 'thread/goal/set')).toHaveLength(1);
+    expect(s.requests().filter((r) => r.method === 'thread/goal/set').map((request) => request.params.status)).toEqual([
+      'active',
+      'paused',
+      'active',
+      'paused',
+      'active',
+    ]);
     expect(s.requests().some((r) => ['thread/fork', 'thread/goal/clear', 'turn/interrupt'].includes(r.method))).toBe(
       false,
     );
